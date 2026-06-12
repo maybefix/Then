@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Then UI Mockup v2</title>
+    <style>
+      :root {
+        --bg: #151617;
+        --bar: #1b1c1e;
+        --panel: #202225;
+        --panel-strong: #25282c;
+        --panel-soft: #1c1e21;
+        --border: #34383d;
+        --border-soft: #2a2d31;
+        --text: #e9ecef;
+        --muted: #9ba3aa;
+        --dim: #6f777f;
+        --blue: #1670c8;
+        --blue-soft: rgba(22, 112, 200, 0.24);
+        --green: #78c783;
+        --amber: #d8b260;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #0f1011;
+        color: var(--text);
+        font-family:
+          "Segoe UI",
+          "Noto Sans JP",
+          system-ui,
+          sans-serif;
+      }
+
+      .window {
+        width: 1440px;
+        height: 900px;
+        overflow: hidden;
+        border: 1px solid #2e3236;
+        border-radius: 9px;
+        background: var(--bg);
+        box-shadow: 0 28px 70px rgba(0, 0, 0, 0.42);
+      }
+
+      .titlebar,
+      .crumbbar,
+      .statusbar {
+        display: flex;
+        align-items: center;
+        border-bottom: 1px solid var(--border-soft);
+        background: linear-gradient(180deg, #1f2123, #191a1c);
+      }
+
+      .titlebar {
+        height: 52px;
+        padding: 0 18px;
+        gap: 18px;
+      }
+
+      .hamburger,
+      .icon {
+        display: grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        border-radius: 5px;
+        color: #b7bec5;
+      }
+
+      .hamburger {
+        font-size: 25px;
+      }
+
+      .brand {
+        font-size: 18px;
+        font-weight: 720;
+      }
+
+      .title-spacer {
+        flex: 1;
+      }
+
+      .window-actions {
+        display: flex;
+        gap: 18px;
+        color: #c0c5ca;
+        font-size: 18px;
+      }
+
+      .crumbbar {
+        position: relative;
+        height: 50px;
+        padding: 0 18px 0 88px;
+        gap: 10px;
+        color: #c7ccd1;
+      }
+
+      .crumb {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 32px;
+        padding: 0 4px;
+        border-radius: 4px;
+        font-size: 15px;
+      }
+
+      .crumb.active {
+        color: #f2f4f6;
+        font-weight: 650;
+      }
+
+      .chev {
+        color: #808891;
+        font-size: 20px;
+      }
+
+      .toolbar {
+        display: flex;
+        margin-left: auto;
+        gap: 14px;
+        color: #9da5ad;
+      }
+
+      .popover {
+        position: absolute;
+        top: 42px;
+        left: 116px;
+        z-index: 6;
+        width: 290px;
+        padding: 7px;
+        border: 1px solid #454a51;
+        border-radius: 7px;
+        background: #222529;
+        box-shadow: 0 22px 44px rgba(0, 0, 0, 0.48);
+      }
+
+      .popover::before {
+        position: absolute;
+        top: -8px;
+        left: 32px;
+        width: 14px;
+        height: 14px;
+        border-top: 1px solid #454a51;
+        border-left: 1px solid #454a51;
+        background: #222529;
+        content: "";
+        transform: rotate(45deg);
+      }
+
+      .menu-row {
+        display: grid;
+        grid-template-columns: 25px minmax(0, 1fr);
+        align-items: center;
+        height: 36px;
+        gap: 9px;
+        padding: 0 9px;
+        border-radius: 5px;
+        color: #c8cdd2;
+        font-size: 14px;
+      }
+
+      .menu-row.active {
+        background: var(--blue-soft);
+        color: #f5f8fb;
+        outline: 1px solid rgba(22, 112, 200, 0.62);
+      }
+
+      .fileicon,
+      .foldericon {
+        width: 15px;
+        height: 17px;
+        border: 1.5px solid currentColor;
+        border-radius: 2px;
+        opacity: 0.82;
+      }
+
+      .foldericon {
+        width: 18px;
+        height: 14px;
+        border-radius: 3px;
+      }
+
+      .menu-scroll {
+        position: absolute;
+        top: 52px;
+        right: 10px;
+        width: 5px;
+        height: 96px;
+        border-radius: 99px;
+        background: #686f77;
+      }
+
+      .workspace {
+        display: grid;
+        height: 766px;
+        grid-template-columns: 64px 250px minmax(0, 1fr) 330px;
+      }
+
+      .activity {
+        border-right: 1px solid var(--border-soft);
+        background: #1b1d20;
+      }
+
+      .activity .slot {
+        display: grid;
+        width: 64px;
+        height: 60px;
+        place-items: center;
+        border-left: 3px solid transparent;
+        color: #a9b0b7;
+        font-size: 24px;
+      }
+
+      .activity .slot.on {
+        border-left-color: var(--blue);
+        color: #f1f4f6;
+        background: #202328;
+      }
+
+      .tabs-panel,
+      .snippets-panel {
+        min-width: 0;
+        border-right: 1px solid var(--border);
+        background: var(--panel);
+      }
+
+      .panel-head {
+        display: flex;
+        height: 48px;
+        align-items: center;
+        gap: 8px;
+        padding: 0 14px;
+        border-bottom: 1px solid var(--border-soft);
+        color: #d7dce0;
+        font-weight: 650;
+      }
+
+      .toggle {
+        display: grid;
+        width: 28px;
+        height: 28px;
+        margin-left: auto;
+        place-items: center;
+        border: 1px solid #3a3f45;
+        border-radius: 5px;
+        color: #aeb6be;
+        font-size: 13px;
+      }
+
+      .tab-list {
+        padding: 9px 0;
+      }
+
+      .tab {
+        position: relative;
+        display: grid;
+        grid-template-columns: 18px minmax(0, 1fr) 12px 22px;
+        align-items: center;
+        min-height: 48px;
+        gap: 8px;
+        padding: 0 9px 0 14px;
+        border-left: 3px solid transparent;
+        color: #bbc2c8;
+        font-size: 14px;
+      }
+
+      .tab.on {
+        border-left-color: var(--blue);
+        background: #292d32;
+        color: #f1f4f6;
+      }
+
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+      }
+
+      .dot.green {
+        background: var(--green);
+      }
+
+      .dot.amber {
+        background: var(--amber);
+      }
+
+      .close {
+        color: #858d95;
+      }
+
+      .new-tab {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 40px;
+        margin: 8px 12px;
+        padding: 0 8px;
+        color: #aeb6be;
+        font-size: 14px;
+      }
+
+      .editor {
+        position: relative;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 46% 14%, rgba(255, 255, 255, 0.04), transparent 34%),
+          linear-gradient(135deg, #1d2022, #17191b);
+      }
+
+      .editor::before {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 53%;
+        width: 1px;
+        background: repeating-linear-gradient(
+          to bottom,
+          rgba(137, 149, 160, 0.32) 0 8px,
+          transparent 8px 15px
+        );
+        content: "";
+      }
+
+      .caret {
+        position: absolute;
+        top: 52%;
+        left: calc(53% - 6px);
+        width: 13px;
+        height: 2px;
+        background: #1d8dff;
+        box-shadow: 0 0 0 1px rgba(29, 141, 255, 0.2);
+      }
+
+      .vertical-page {
+        position: absolute;
+        inset: 70px 84px 70px 78px;
+        color: #d7d4ce;
+        font-family: "Yu Mincho", "Noto Serif JP", serif;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+      }
+
+      .manuscript {
+        width: 700px;
+        height: 620px;
+        margin: 0 auto;
+        overflow: hidden;
+        font-size: 19px;
+        line-height: 2.05;
+        letter-spacing: 0;
+        white-space: pre-wrap;
+      }
+
+      .manuscript pre {
+        margin: 0;
+        font: inherit;
+        white-space: pre-wrap;
+      }
+
+      .snippets-panel {
+        border-right: 0;
+        border-left: 1px solid var(--border);
+      }
+
+      .search {
+        display: flex;
+        height: 38px;
+        align-items: center;
+        gap: 8px;
+        margin: 12px 14px;
+        padding: 0 11px;
+        border: 1px solid #393e44;
+        border-radius: 6px;
+        background: #1c1f23;
+        color: #7f8892;
+        font-size: 14px;
+      }
+
+      .snippet-top {
+        display: flex;
+        align-items: center;
+        padding: 4px 14px 10px;
+        color: #9fa8b1;
+        font-size: 13px;
+      }
+
+      .add {
+        margin-left: auto;
+        padding: 7px 12px;
+        border-radius: 5px;
+        background: var(--blue);
+        color: white;
+      }
+
+      .section {
+        padding: 10px 14px 5px;
+        color: #b5bdc5;
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .badge {
+        display: inline-grid;
+        min-width: 22px;
+        height: 22px;
+        margin-left: 6px;
+        place-items: center;
+        border-radius: 50%;
+        background: #343941;
+        color: #c7cdd3;
+        font-size: 12px;
+      }
+
+      .card {
+        margin: 7px 14px 10px;
+        padding: 13px 13px 12px;
+        border: 1px solid #3b4148;
+        border-radius: 6px;
+        background: #24272c;
+      }
+
+      .card-title {
+        display: flex;
+        align-items: center;
+        color: #eceff1;
+        font-size: 15px;
+        font-weight: 700;
+      }
+
+      .card-title span {
+        margin-left: auto;
+        color: #7f8891;
+        font-weight: 500;
+      }
+
+      .preview {
+        margin-top: 7px;
+        color: #aeb6bd;
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .tags {
+        display: flex;
+        gap: 6px;
+        margin-top: 10px;
+      }
+
+      .tag {
+        padding: 2px 6px;
+        border: 1px solid #246eb6;
+        border-radius: 4px;
+        color: #8bc6ff;
+        font-size: 12px;
+      }
+
+      .statusbar {
+        height: 32px;
+        padding: 0 18px;
+        gap: 18px;
+        border-top: 1px solid var(--border-soft);
+        border-bottom: 0;
+        color: #a8b0b8;
+        font-size: 12px;
+      }
+
+      .statusbar .grow {
+        flex: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="window">
+      <div class="titlebar">
+        <div class="hamburger">☰</div>
+        <div class="brand">Then</div>
+        <div class="title-spacer"></div>
+        <div class="window-actions"><span>−</span><span>□</span><span>×</span></div>
+      </div>
+
+      <div class="crumbbar">
+        <span class="chev">›</span>
+        <span class="crumb">Drafts</span>
+        <span class="chev">›</span>
+        <span class="crumb">novel.txt</span>
+        <span class="chev">›</span>
+        <span class="crumb active"># 第一章</span>
+        <span class="chev">›</span>
+        <span class="crumb active">## 目覚め</span>
+        <div class="toolbar"><span>↶</span><span>↷</span><span>⌕</span><span>⚙</span></div>
+        <div class="popover">
+          <div class="menu-row"><span>↑</span><span>上へ移動</span></div>
+          <div class="menu-row"><span class="foldericon"></span><span>Ideas</span></div>
+          <div class="menu-row"><span class="foldericon"></span><span>Characters</span></div>
+          <div class="menu-row"><span class="foldericon"></span><span>World</span></div>
+          <div class="menu-row"><span class="foldericon"></span><span>Drafts</span></div>
+          <div class="menu-row"><span class="fileicon"></span><span>novel.txt</span></div>
+          <div class="menu-row"><span class="fileicon"></span><span>notes.txt</span></div>
+          <div class="menu-row active"><span class="fileicon"></span><span>archive.md</span></div>
+          <div class="menu-row"><span>＋</span><span>新しいファイル</span></div>
+          <div class="menu-scroll"></div>
+        </div>
+      </div>
+
+      <div class="workspace">
+        <div class="activity">
+          <div class="slot on">▱</div>
+          <div class="slot">⌗</div>
+          <div class="slot">▥</div>
+          <div class="slot">＋</div>
+        </div>
+
+        <aside class="tabs-panel">
+          <div class="panel-head">タブ <span class="toggle">◀</span></div>
+          <div class="tab-list">
+            <div class="tab on"><span class="fileicon"></span><span>novel.txt</span><span class="dot green"></span><span class="close">×</span></div>
+            <div class="tab"><span class="fileicon"></span><span>notes.txt</span><span class="dot amber"></span><span class="close">×</span></div>
+            <div class="tab"><span class="fileicon"></span><span>archive.md</span><span></span><span class="close">×</span></div>
+            <div class="tab"><span class="fileicon"></span><span>outline.txt</span><span></span><span class="close">×</span></div>
+          </div>
+          <div class="new-tab">＋ 新しいタブ</div>
+        </aside>
+
+        <main class="editor">
+          <div class="vertical-page">
+            <article class="manuscript">
+              <pre># 第一章
+## 目覚め
+
+静寂のなかで、目はゆっくりと開いた。
+天井の木目が、まだ焦点を結ばない。
+視界の端に、薄い朝の光が揺れている。
+手足は思うように動かなかった。
+ただ、窓の向こうで鳥が一度だけ鳴いた。
+それが現実だと、私はその音で知った。
+
+  記憶のどこかに、置いてきた痛みがある。
+木のきしむ音が、やけに大きく響く。
+何かを思い出そうとすると、
+胸のあたりに鈍い熱がかかった。
+けれど、進まなければならない気がした。
+理由はわからない。ただ、そう感じた。</pre>
+            </article>
+          </div>
+          <div class="caret"></div>
+        </main>
+
+        <aside class="snippets-panel">
+          <div class="panel-head">スニペット <span class="toggle">▶</span></div>
+          <div class="search">⌕ スニペットを検索</div>
+          <div class="snippet-top">12 件のスニペット <span class="add">＋ 追加</span></div>
+          <div class="section">導入 <span class="badge">3</span></div>
+          <div class="card">
+            <div class="card-title">朝の描写 <span>⋮ ✎</span></div>
+            <div class="preview">薄明かりが窓を透けて、部屋のすみに静かに落ちていた。</div>
+            <div class="tags"><span class="tag">情景</span><span class="tag">導入</span></div>
+          </div>
+          <div class="card">
+            <div class="card-title">目覚め <span>⋮ ✎</span></div>
+            <div class="preview">静寂のなかで、目はゆっくりと開いた。天井の木目が...</div>
+            <div class="tags"><span class="tag">心理</span></div>
+          </div>
+          <div class="card">
+            <div class="card-title">違和感 <span>⋮ ✎</span></div>
+            <div class="preview">どこかがおかしいと、最初に気づいたのは音のなさだった。</div>
+            <div class="tags"><span class="tag">心理</span><span class="tag">導入</span></div>
+          </div>
+        </aside>
+      </div>
+
+      <div class="statusbar">
+        <span>● 保存済み</span>
+        <span>txt</span>
+        <span>UTF-8</span>
+        <span>LF</span>
+        <span class="grow"></span>
+        <span>12,840字</span>
+        <span>Drafts/novel.txt</span>
+      </div>
+    </div>
+  </body>
+</html>

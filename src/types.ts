@@ -1,0 +1,133 @@
+export type Snippet = {
+  id: string;
+  title: string;
+  text: string;
+  category: string;
+  tags: string[];
+};
+
+export type EditorSettings = {
+  editorFontFamily: string;
+  uiFontFamily: string;
+  fontSize: number;
+  lineHeight: number;
+  typewriterScroll: boolean;
+  typewriterOffset: number;
+  snippetStorageMode: "workspace" | "profile";
+};
+
+export type SaveStatus = "loading" | "saved" | "dirty" | "saving" | "error";
+
+export type DocumentTab = {
+  id: string;
+  kind: "file" | "scratch";
+  path: string | null;
+  name: string;
+  /**
+   * TODO(Then): migrate these fields to text/savedText after the editor and
+   * file I/O stop depending on Markdown-specific names.
+   */
+  markdown: string;
+  savedMarkdown: string;
+  saveStatus: SaveStatus;
+  documentKey: string;
+  activeOutlineLine: number | null;
+};
+
+export type AppState = {
+  /**
+   * TODO(Then): rename to text after all persistence readers can handle both
+   * the old brew state and the new Then state.
+   */
+  markdown: string;
+  snippets: Snippet[];
+  profileSnippets: Snippet[];
+  settings: EditorSettings;
+  lastWorkspacePath: string | null;
+  lastFilePath: string | null;
+  recentWorkspaces: WorkspaceRecord[];
+};
+
+export type TextDocument = {
+  path: string;
+  name: string;
+  content: string;
+};
+
+export type MarkdownDocument = TextDocument;
+
+export type ProjectFolder = {
+  path: string;
+  name: string;
+  children: ProjectEntry[];
+};
+
+export type ProjectEntry = {
+  path: string;
+  name: string;
+  kind: "folder" | "file";
+  children: ProjectEntry[];
+};
+
+export type WorkspaceRecord = {
+  path: string;
+  name: string;
+  lastOpenedAt: number;
+};
+
+export type WorkspaceAlert = {
+  path: string;
+  message: string;
+} | null;
+
+export type OutlineItem = {
+  id: string;
+  title: string;
+  level: number;
+  line: number;
+  children: OutlineItem[];
+};
+
+export type FlatOutlineItem = OutlineItem & {
+  parents: OutlineItem[];
+};
+
+export type BreadcrumbDropTarget = {
+  folderPath: string;
+  entryPath: string;
+  position: "before" | "after";
+} | null;
+
+export type AppDialog =
+  | {
+      type: "input";
+      title: string;
+      label: string;
+      value: string;
+      confirmLabel: string;
+      placeholder?: string;
+      error: string;
+      resolve: (value: string | null) => void;
+    }
+  | {
+      type: "confirm";
+      title: string;
+      message: string;
+      detail?: string;
+      confirmLabel: string;
+      danger?: boolean;
+      resolve: (value: boolean) => void;
+    };
+
+export type FontOption = {
+  label: string;
+  cssFamily: string;
+};
+
+export type SnippetDraft = {
+  id: string | null;
+  title: string;
+  text: string;
+  category: string;
+  tags: string;
+};

@@ -1,0 +1,268 @@
+/*
+ * Silkdown default theme. Override via the listed CSS variables.
+ * Import alongside the silkdown extension:
+ *   import "@silkdown/core/theme.css";
+ */
+
+:root {
+  --silkdown-h1-size: 2em;
+  --silkdown-h2-size: 1.5em;
+  --silkdown-h3-size: 1.25em;
+  --silkdown-h4-size: 1.1em;
+  --silkdown-h5-size: 1em;
+  --silkdown-h6-size: 0.9em;
+  --silkdown-heading-weight: 700;
+  --silkdown-heading-line-height: 1.25;
+  --silkdown-heading-margin-top: 0.6em;
+  --silkdown-heading-margin-bottom: 0.3em;
+
+  --silkdown-code-bg: rgba(135, 131, 120, 0.15);
+  --silkdown-code-color: inherit;
+
+  --silkdown-blockquote-border: 3px solid currentColor;
+  --silkdown-blockquote-padding: 0.6em;
+  --silkdown-blockquote-color: rgba(0, 0, 0, 0.65);
+
+  --silkdown-link-color: #2563eb;
+  --silkdown-hr-color: rgba(0, 0, 0, 0.15);
+  --silkdown-mark-opacity: 0.4;
+}
+
+.sd-h1,
+.sd-h2,
+.sd-h3,
+.sd-h4,
+.sd-h5,
+.sd-h6 {
+  font-weight: var(--silkdown-heading-weight);
+  line-height: var(--silkdown-heading-line-height);
+}
+
+.sd-h1 {
+  font-size: var(--silkdown-h1-size);
+}
+.sd-h2 {
+  font-size: var(--silkdown-h2-size);
+}
+.sd-h3 {
+  font-size: var(--silkdown-h3-size);
+}
+.sd-h4 {
+  font-size: var(--silkdown-h4-size);
+}
+.sd-h5 {
+  font-size: var(--silkdown-h5-size);
+}
+.sd-h6 {
+  font-size: var(--silkdown-h6-size);
+}
+
+.sd-blockquote {
+  border-left: var(--silkdown-blockquote-border);
+  padding-left: var(--silkdown-blockquote-padding);
+  color: var(--silkdown-blockquote-color);
+}
+
+.sd-link {
+  color: var(--silkdown-link-color);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/*
+ * Revealed markers (** * ~~ ` # >) — drawn but visually receded so the prose
+ * stays primary, like Typora's muted markup. Resets weight/style so a `**`
+ * inside a strong span doesn't render bold.
+ */
+.sd-mark {
+  opacity: var(--silkdown-mark-opacity);
+  font-weight: normal;
+  font-style: normal;
+}
+
+.sd-hr-rendered {
+  position: relative;
+}
+
+.sd-hr-rendered::after {
+  content: "";
+  display: block;
+  height: 0;
+  border-top: 1px solid var(--silkdown-hr-color);
+}
+
+.sd-image-widget {
+  max-width: 100%;
+  height: auto;
+}
+
+.sd-task-checkbox {
+  margin-right: 0.4em;
+  cursor: pointer;
+}
+
+/*
+ * Fenced code block. Lang-markdown handles syntax highlighting via the
+ * codeLanguages it was given; we add monospace, background, and rounded
+ * corners. The first/last classes round only the outer corners.
+ */
+.sd-code-block {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.92em;
+  background: var(--silkdown-code-bg, rgba(135, 131, 120, 0.15));
+  padding: 0 0.8em;
+}
+
+.sd-code-block-first {
+  padding-top: 0.6em;
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
+}
+
+.sd-code-block-last {
+  padding-bottom: 0.6em;
+  border-bottom-left-radius: 4px;
+  border-bottom-right-radius: 4px;
+}
+
+.cm-line.cm-atomic-h1 {
+  font-size: var(--silkdown-h1-size);
+  font-weight: var(--silkdown-heading-weight);
+  line-height: var(--silkdown-heading-line-height);
+  letter-spacing: 0;
+  padding-top: 0.15em;
+  padding-bottom: 0.1em;
+}
+
+.cm-line.cm-atomic-h2 {
+  font-size: var(--silkdown-h2-size);
+  font-weight: var(--silkdown-heading-weight);
+  line-height: 1.35;
+  padding-top: 0.15em;
+  padding-bottom: 0.1em;
+}
+
+.cm-line.cm-atomic-h3 {
+  font-size: var(--silkdown-h3-size);
+  font-weight: 650;
+  line-height: 1.4;
+  padding-top: 0.12em;
+}
+
+.cm-line.cm-atomic-h4,
+.cm-line.cm-atomic-h5,
+.cm-line.cm-atomic-h6 {
+  font-weight: 650;
+  padding-top: 0.08em;
+}
+
+.cm-line.cm-atomic-blockquote {
+  padding-left: var(--silkdown-blockquote-padding);
+  border-left: var(--silkdown-blockquote-border);
+  color: var(--silkdown-blockquote-color);
+}
+
+.cm-line.cm-atomic-fenced-code {
+  padding-right: 0.8em;
+  padding-left: 0.8em;
+  background: var(--silkdown-code-bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.92em;
+}
+
+.cm-atomic-strong {
+  font-weight: 700;
+}
+
+.cm-atomic-em {
+  font-style: italic;
+}
+
+.cm-atomic-inline-code {
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  background: var(--silkdown-code-bg);
+  color: var(--silkdown-code-color);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.95em;
+}
+
+.cm-atomic-strike {
+  text-decoration: line-through;
+}
+
+.cm-atomic-strong-mark,
+.cm-atomic-em-mark,
+.cm-atomic-strike-mark {
+  color: currentColor;
+  opacity: var(--silkdown-mark-opacity);
+}
+
+.cm-atomic-strong-mark {
+  font-weight: 700;
+}
+
+.cm-atomic-em-mark {
+  font-style: italic;
+}
+
+.cm-atomic-strike-mark {
+  text-decoration: line-through;
+}
+
+.cm-atomic-link {
+  color: var(--silkdown-link-color);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+
+.cm-atomic-link::after {
+  display: inline-block;
+  width: 0.78em;
+  height: 0.78em;
+  margin-left: 0.32em;
+  background-color: currentColor;
+  content: "";
+  cursor: pointer;
+  mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 5H8.2C7.08 5 6.52 5 6.09 5.22C5.72 5.41 5.41 5.72 5.22 6.09C5 6.52 5 7.08 5 8.2V15.8C5 16.92 5 17.48 5.22 17.91C5.41 18.28 5.72 18.59 6.09 18.78C6.52 19 7.08 19 8.2 19H15.8C16.92 19 17.48 19 17.91 18.78C18.28 18.59 18.59 18.28 18.78 17.91C19 17.48 19 16.92 19 15.8V14M20 9V4M20 4H15M20 4L13 11' stroke='%23000000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  mask-repeat: no-repeat;
+  mask-size: contain;
+  vertical-align: -0.02em;
+}
+
+.cm-atomic-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.35em 0;
+  border-radius: 4px;
+}
+
+.cm-atomic-list-marker {
+  display: inline-block;
+  width: 0.9em;
+  margin-right: 0.3em;
+  text-align: right;
+  text-indent: 0;
+}
+
+.cm-atomic-bullet {
+  font-weight: 700;
+  opacity: 0.82;
+}
+
+.cm-atomic-task-checkbox {
+  width: 0.9em;
+  height: 0.9em;
+  margin: 0 0.3em 0 0;
+  padding: 0;
+  accent-color: currentColor;
+  cursor: pointer;
+  vertical-align: -0.15em;
+}
+
+.cm-line.cm-atomic-task-done {
+  opacity: 0.68;
+  text-decoration: line-through;
+}

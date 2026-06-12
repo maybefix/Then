@@ -1,0 +1,216 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+.app { display: flex; flex-direction: column; height: 560px; background: var(--color-background-tertiary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden; position: relative; }
+.topbar { display: flex; align-items: center; gap: 6px; padding: 0 14px; height: 36px; background: var(--color-background-primary); border-bottom: 0.5px solid var(--color-border-tertiary); font-size: 12px; color: var(--color-text-secondary); flex-shrink: 0; }
+.crumb { color: var(--color-text-tertiary); }
+.crumb.active { color: var(--color-text-primary); font-weight: 500; }
+.crumb-sep { color: var(--color-border-primary); font-size: 10px; }
+.main { display: flex; flex: 1; overflow: hidden; }
+.editor-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.editor { flex: 1; padding: 32px 40px; overflow-y: auto; background: var(--color-background-primary); font-size: 15px; line-height: 1.85; color: var(--color-text-primary); outline: none; }
+.editor h1 { font-size: 22px; font-weight: 500; margin-bottom: 22px; }
+.editor p { margin-bottom: 16px; }
+.editor p.inserted { border-left: 2px solid #378add; padding-left: 10px; color: var(--color-text-secondary); }
+.drop-line { height: 2px; background: #378add; border-radius: 1px; margin: 4px 0; pointer-events: none; }
+.statusbar { display: flex; align-items: center; gap: 14px; padding: 0 14px; height: 28px; background: var(--color-background-secondary); border-top: 0.5px solid var(--color-border-tertiary); font-size: 11px; color: var(--color-text-tertiary); flex-shrink: 0; }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: #63c074; }
+.statusbar .right { margin-left: auto; }
+.snippet-panel { width: 224px; border-left: 0.5px solid var(--color-border-tertiary); background: var(--color-background-primary); display: flex; flex-direction: column; flex-shrink: 0; }
+.panel-header { display: flex; align-items: center; padding: 10px 12px; gap: 6px; border-bottom: 0.5px solid var(--color-border-tertiary); }
+.panel-title { font-size: 13px; font-weight: 500; color: var(--color-text-primary); flex: 1; }
+.panel-count { font-size: 11px; color: var(--color-text-tertiary); background: var(--color-background-secondary); padding: 1px 6px; border-radius: 10px; }
+.panel-add { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: none; background: transparent; color: var(--color-text-secondary); cursor: pointer; border-radius: 4px; font-size: 15px; }
+.panel-add:hover { background: var(--color-background-secondary); }
+.panel-search { padding: 8px 10px; border-bottom: 0.5px solid var(--color-border-tertiary); }
+.search-wrap { position: relative; }
+.search-wrap input { width: 100%; font-size: 12px; padding: 4px 8px 4px 26px; border: 0.5px solid var(--color-border-tertiary); border-radius: 5px; background: var(--color-background-secondary); color: var(--color-text-primary); font-family: var(--font-sans); outline: none; }
+.search-wrap .ti { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-size: 13px; color: var(--color-text-tertiary); pointer-events: none; }
+.snippets-list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.snippet-card { padding: 9px 10px; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); cursor: grab; background: var(--color-background-primary); transition: border-color 0.1s, background 0.1s; user-select: none; }
+.snippet-card:hover { border-color: var(--color-border-secondary); background: var(--color-background-secondary); }
+.snippet-card.dragging { opacity: 0.4; border-style: dashed; }
+.sn-title { font-size: 12px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sn-preview { font-size: 11px; color: var(--color-text-secondary); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sn-meta { margin-top: 5px; font-size: 10px; color: var(--color-text-tertiary); }
+.toast { position: absolute; bottom: 36px; left: 50%; transform: translateX(-50%); background: var(--color-background-primary); border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); padding: 6px 14px; font-size: 12px; color: var(--color-text-primary); opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap; }
+.toast.show { opacity: 1; }
+</style>
+
+<h2 class="sr-only">WYSIWYGエディタのモックアップ。スニペットを任意の位置にドラッグ挿入できます。</h2>
+
+<div class="app" id="app">
+  <div class="topbar">
+    <i class="ti ti-file-text" aria-hidden="true" style="font-size:14px;"></i>
+    <span class="crumb">第一章 準備</span>
+    <span class="crumb-sep">›</span>
+    <span class="crumb active">剣士の目覚め</span>
+    <div style="margin-left:auto; display:flex; gap:10px; align-items:center;">
+      <i class="ti ti-history" aria-hidden="true" style="font-size:14px; color:var(--color-text-tertiary); cursor:pointer;"></i>
+      <i class="ti ti-layout-sidebar-right" aria-hidden="true" style="font-size:14px; color:var(--color-text-tertiary); cursor:pointer;"></i>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="editor-wrap">
+      <div class="editor" id="editor-area" contenteditable="true" spellcheck="false">
+        <h1>剣士の目覚め</h1>
+        <p>夜明け前の静寂の中、エリアスは汗ばんだ額を拭いながら起き上がった。また同じ夢だった。蒼穹の封印の扉、その向こうから響く無数の叫び声。</p>
+        <p>十七年間、一度も会ったことのない父の声も、その中に混じっているような気がした。</p>
+        <p>窓の外では、ハルト村の朝が静かに始まろうとしていた。鶏の鳴き声、パン屋の煙突から立ち上る煙。いつもと変わらぬ光景のはずなのに、今日は何かが違った。</p>
+        <p>壁に掛けてあった祖父の形見の剣が、微かに光を放っていた。</p>
+        <p style="color:var(--color-text-tertiary); font-style:italic;">「また始まったか」</p>
+      </div>
+      <div class="statusbar">
+        <div class="status-dot"></div>
+        <span>保存済み</span>
+        <div class="right"><span id="char-count">514文字</span></div>
+      </div>
+    </div>
+
+    <div class="snippet-panel">
+      <div class="panel-header">
+        <span class="panel-title">スニペット</span>
+        <span class="panel-count">4</span>
+        <button class="panel-add" aria-label="新しいスニペット"><i class="ti ti-plus" aria-hidden="true"></i></button>
+      </div>
+      <div class="panel-search">
+        <div class="search-wrap">
+          <i class="ti ti-search" aria-hidden="true"></i>
+          <input type="text" placeholder="スニペットを検索..." />
+        </div>
+      </div>
+      <div class="snippets-list">
+        <div class="snippet-card" draggable="true" data-text="夜明けの光が、山の稜線を白く縁どり始めた頃" data-label="旅立ちの夜明け">
+          <div class="sn-title">旅立ちの夜明け</div>
+          <div class="sn-preview">夜明けの光が、山の稜線を白く縁どり始めた頃</div>
+          <div class="sn-meta">23文字</div>
+        </div>
+        <div class="snippet-card" draggable="true" data-text="主人公は決断する。しかしその足は、一歩踏み出すことを躊躇っていた。" data-label="内面の葛藤">
+          <div class="sn-title">内面の葛藤</div>
+          <div class="sn-preview">主人公は決断する。しかしその足は、一歩踏み出すことを躊躇っていた。</div>
+          <div class="sn-meta">36文字</div>
+        </div>
+        <div class="snippet-card" draggable="true" data-text="「お前には、まだ知らないことがある」老人は静かに言った。" data-label="謎めいた台詞">
+          <div class="sn-title">謎めいた台詞</div>
+          <div class="sn-preview">「お前には、まだ知らないことがある」老人は静かに言った。</div>
+          <div class="sn-meta">29文字</div>
+        </div>
+        <div class="snippet-card" draggable="true" data-text="霧の中から現れた影は、かつて見た夢の中の人物と瓜二つだった。" data-label="霧の中の影">
+          <div class="sn-title">霧の中の影</div>
+          <div class="sn-preview">霧の中から現れた影は、かつて見た夢の中の人物と瓜二つだった。</div>
+          <div class="sn-meta">32文字</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+const editor = document.getElementById('editor-area');
+const toast = document.getElementById('toast');
+let dragging = null;
+let dropIndicator = null;
+let savedRange = null;
+
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+function makeInsertedP(text) {
+  const p = document.createElement('p');
+  p.className = 'inserted';
+  p.textContent = text;
+  return p;
+}
+
+function removeDropIndicator() {
+  if (dropIndicator && dropIndicator.parentNode) {
+    dropIndicator.parentNode.removeChild(dropIndicator);
+  }
+  dropIndicator = null;
+}
+
+function getBlockAtY(y) {
+  const children = Array.from(editor.children);
+  for (let i = 0; i < children.length; i++) {
+    const rect = children[i].getBoundingClientRect();
+    const mid = rect.top + rect.height / 2;
+    if (y < mid) return { before: children[i], index: i };
+  }
+  return { before: null, index: children.length };
+}
+
+function showDropIndicator(y) {
+  removeDropIndicator();
+  const { before } = getBlockAtY(y);
+  dropIndicator = document.createElement('div');
+  dropIndicator.className = 'drop-line';
+  if (before) {
+    editor.insertBefore(dropIndicator, before);
+  } else {
+    editor.appendChild(dropIndicator);
+  }
+}
+
+document.querySelectorAll('.snippet-card').forEach(card => {
+  card.addEventListener('dragstart', e => {
+    dragging = card;
+    setTimeout(() => card.classList.add('dragging'), 0);
+    e.dataTransfer.effectAllowed = 'copy';
+  });
+  card.addEventListener('dragend', () => {
+    card.classList.remove('dragging');
+    dragging = null;
+    removeDropIndicator();
+  });
+  card.addEventListener('dblclick', () => {
+    const text = card.dataset.text;
+    const label = card.dataset.label;
+    editor.focus();
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
+      const range = sel.getRangeAt(0);
+      const p = makeInsertedP(text);
+      let ref = range.startContainer;
+      while (ref && ref.parentNode !== editor) ref = ref.parentNode;
+      if (ref && ref.parentNode === editor) {
+        editor.insertBefore(p, ref.nextSibling);
+      } else {
+        editor.appendChild(p);
+      }
+    } else {
+      editor.appendChild(makeInsertedP(text));
+    }
+    showToast(`「${label}」を挿入しました`);
+  });
+});
+
+editor.addEventListener('dragover', e => {
+  if (!dragging) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+  showDropIndicator(e.clientY);
+});
+
+editor.addEventListener('dragleave', e => {
+  if (!editor.contains(e.relatedTarget)) removeDropIndicator();
+});
+
+editor.addEventListener('drop', e => {
+  if (!dragging) return;
+  e.preventDefault();
+  const { before } = getBlockAtY(e.clientY);
+  removeDropIndicator();
+  const p = makeInsertedP(dragging.dataset.text);
+  if (before) {
+    editor.insertBefore(p, before);
+  } else {
+    editor.appendChild(p);
+  }
+  showToast(`「${dragging.dataset.label}」を挿入しました`);
+});
+</script>

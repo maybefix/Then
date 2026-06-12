@@ -1,0 +1,11 @@
+node_modules/
+dist/
+/.edge-ui-check*/
+ui-check*.png
+src-tauri/target/
+src-tauri/gen/
+
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
