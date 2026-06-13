@@ -547,71 +547,73 @@ function PlotManagerModal({
           </button>
         </header>
         <div ref={listRef} className="plotManagerList" onWheel={handleManagerWheel}>
-          {visualCards.map((card) => {
-            const index = cards.findIndex((item) => item.id === card.id);
+          <div className="plotManagerTrack">
+            {visualCards.map((card) => {
+              const index = cards.findIndex((item) => item.id === card.id);
 
-            return (
-              <section className="plotManagerItem" key={card.id}>
-                <div className="plotManagerOrder">
-                  <strong>{card.num}</strong>
-                  <button
-                    className="plotToolButton"
-                    type="button"
-                    aria-label={`${card.num} を前へ`}
-                    title="前へ"
-                    disabled={index === 0}
-                    onClick={() => onMove(card.id, -1)}
-                  >
-                    <PlotIcon name="up" />
-                  </button>
-                  <button
-                    className="plotToolButton"
-                    type="button"
-                    aria-label={`${card.num} を後ろへ`}
-                    title="後ろへ"
-                    disabled={index === cards.length - 1}
-                    onClick={() => onMove(card.id, 1)}
-                  >
-                    <PlotIcon name="down" />
-                  </button>
-                  <button
-                    className="plotToolButton dangerPlotToolButton"
-                    type="button"
-                    aria-label={`${card.num} を削除`}
-                    title="削除"
-                    onClick={() => onDelete(card.id)}
-                  >
-                    <PlotIcon name="trash" />
-                  </button>
-                </div>
-                <div className="modalForm plotManagerFields">
-                  <label>
-                    <span>タイトル</span>
-                    <textarea
-                      className="plotManagerTitle"
-                      value={card.title}
-                      rows={1}
-                      wrap="off"
-                      onChange={(event) =>
-                        onChange(card.id, {
-                          title: event.currentTarget.value.replace(/\r?\n/g, " "),
-                        })
-                      }
-                    />
-                  </label>
-                  <label>
-                    <span>本文</span>
-                    <textarea
-                      className="plotManagerBody"
-                      value={card.body}
-                      rows={12}
-                      onChange={(event) => onChange(card.id, { body: event.currentTarget.value })}
-                    />
-                  </label>
-                </div>
-              </section>
-            );
-          })}
+              return (
+                <section className="plotManagerItem" key={card.id}>
+                  <div className="plotManagerOrder">
+                    <strong>{card.num}</strong>
+                    <button
+                      className="plotToolButton"
+                      type="button"
+                      aria-label={`${card.num} を前へ`}
+                      title="前へ"
+                      disabled={index === 0}
+                      onClick={() => onMove(card.id, -1)}
+                    >
+                      <PlotIcon name="up" />
+                    </button>
+                    <button
+                      className="plotToolButton"
+                      type="button"
+                      aria-label={`${card.num} を後ろへ`}
+                      title="後ろへ"
+                      disabled={index === cards.length - 1}
+                      onClick={() => onMove(card.id, 1)}
+                    >
+                      <PlotIcon name="down" />
+                    </button>
+                    <button
+                      className="plotToolButton dangerPlotToolButton"
+                      type="button"
+                      aria-label={`${card.num} を削除`}
+                      title="削除"
+                      onClick={() => onDelete(card.id)}
+                    >
+                      <PlotIcon name="trash" />
+                    </button>
+                  </div>
+                  <div className="modalForm plotManagerFields">
+                    <label>
+                      <span>タイトル</span>
+                      <textarea
+                        className="plotManagerTitle"
+                        value={card.title}
+                        rows={1}
+                        wrap="off"
+                        onChange={(event) =>
+                          onChange(card.id, {
+                            title: event.currentTarget.value.replace(/\r?\n/g, " "),
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      <span>本文</span>
+                      <textarea
+                        className="plotManagerBody"
+                        value={card.body}
+                        rows={12}
+                        onChange={(event) => onChange(card.id, { body: event.currentTarget.value })}
+                      />
+                    </label>
+                  </div>
+                </section>
+              );
+            })}
+          </div>
         </div>
         <footer className="modalActions">
           <button type="button" onClick={onClose}>
