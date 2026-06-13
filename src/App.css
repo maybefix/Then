@@ -2743,13 +2743,15 @@ body {
 
 .plotManagerItem {
   display: flex;
-  width: 440px;
-  min-width: 440px;
-  flex: 0 0 440px;
+  width: clamp(260px, 29vw, 320px);
+  min-width: clamp(260px, 29vw, 320px);
+  max-height: 100%;
+  flex: 0 0 clamp(260px, 29vw, 320px);
   flex-direction: row-reverse;
   align-items: stretch;
   gap: 12px;
   padding: 12px 14px;
+  overflow: hidden;
   border: 0.5px solid var(--border-subtle);
   border-width: 0 0.5px 0 0;
   border-radius: 0;
@@ -2783,6 +2785,7 @@ body {
 .plotManagerFields {
   display: flex;
   min-height: 0;
+  padding: 0;
   flex: 1 1 auto;
   flex-direction: row-reverse;
   align-items: stretch;
@@ -2792,6 +2795,8 @@ body {
 .plotManagerFields label {
   display: flex;
   min-width: 0;
+  min-height: 0;
+  flex: 0 0 auto;
   flex-direction: row-reverse;
   align-items: stretch;
   gap: 4px;
@@ -2806,8 +2811,10 @@ body {
 }
 
 .plotManagerFields textarea {
+  width: auto;
   height: 100%;
   min-height: 0;
+  max-height: 100%;
   border: 0.5px solid var(--border-subtle);
   border-radius: 6px;
   resize: none;
@@ -2822,13 +2829,15 @@ body {
 
 .plotManagerTitle {
   width: 3.1em;
+  flex: 0 0 3.1em;
   overflow: hidden;
   color: var(--accent-strong);
   font-weight: 600;
 }
 
 .plotManagerBody {
-  width: 17em;
+  width: clamp(9em, 13vw, 12em);
+  flex: 0 0 clamp(9em, 13vw, 12em);
   overflow: auto;
 }
 
