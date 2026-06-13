@@ -127,8 +127,10 @@ function closestLine(node: Node | null): HTMLElement | null {
 
 function currentLine(editor: HTMLElement): HTMLElement | null {
   const sel = window.getSelection();
-  if (!sel || sel.rangeCount === 0) return getLines(editor)[0] ?? null;
-  return closestLine(sel.focusNode) ?? getLines(editor)[0] ?? null;
+  if (!sel || sel.rangeCount === 0 || !sel.focusNode || !editor.contains(sel.focusNode)) {
+    return null;
+  }
+  return closestLine(sel.focusNode);
 }
 
 function offsetInLine(line: HTMLElement, node: Node | null, nodeOffset: number): number {
@@ -205,6 +207,7 @@ function setCaretInLine(line: HTMLElement, offset: number): void {
 
 function globalCaretOffset(editor: HTMLElement): number {
   const line = currentLine(editor);
+  if (!line) return readText(editor).length;
   const lines = getLines(editor);
   let pos = 0;
   for (const item of lines) {
@@ -212,6 +215,31 @@ function globalCaretOffset(editor: HTMLElement): number {
     pos += lineText(item).length + 1;
   }
   return readText(editor).length;
+}
+
+function selectionTextOffset(editor: HTMLElement): number | null {
+  const selection = window.getSelection();
+  if (
+    !selection ||
+    selection.rangeCount === 0 ||
+    !selection.focusNode ||
+    !editor.contains(selection.focusNode)
+  ) {
+    return null;
+  }
+
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  try {
+    range.setEnd(selection.focusNode, selection.focusOffset);
+  } catch {
+    return null;
+  }
+
+  return range
+    .toString()
+    .replace(/\r\n?/g, "\n")
+    .replace(/\u200B/g, "").length;
 }
 
 function globalOffsetForNode(editor: HTMLElement, node: Node | null, nodeOffset: number): number {
@@ -320,7 +348,8 @@ function normalizeAfterNativeInput(editor: HTMLElement, countEl: HTMLElement | n
   const directTextNodes = Array.from(editor.childNodes).filter((node) => node.nodeType === Node.TEXT_NODE && (node.nodeValue?.length ?? 0) > 0);
   if (directTextNodes.length === 0) return;
 
-  const caret = globalCaretOffset(editor);
+  const caret = selectionTextOffset(editor);
+  if (caret === null) return;
   const text = editor.innerText.replace(/\r\n?/g, "\n").replace(/\n$/, "");
   setEditorText(editor, text, countEl);
   setCaretByGlobalOffset(editor, caret);
@@ -431,7 +460,7 @@ export function VerticalTextEditor({
   const centerCaret = (instant = false) => {
     const scroller = scrollerRef.current;
     const editor = editorRef.current;
-    if (!scroller || !editor || document.activeElement !== editor) return;
+    if (!scroller || !editor || document.activeElement !== editor || composingRef.current) return;
     const rect = caretRect(editor, !composingRef.current);
     if (!rect) return;
     const s = scroller.getBoundingClientRect();
@@ -501,16 +530,41 @@ export function VerticalTextEditor({
     if (!scroller || !editor) return;
 
     setEditorText(editor, textRef.current, null);
+    let mutationFrame: number | null = null;
+
+    // Native contenteditable edits can mutate text without going through our line helpers.
+    // Re-derive Markdown classes from the settled DOM so stale heading/list styles do not remain.
+    const scheduleLineClassRefresh = () => {
+      if (mutationFrame !== null) return;
+      mutationFrame = requestAnimationFrame(() => {
+        mutationFrame = null;
+        if (composingRef.current) {
+          updateStatus(editor, null);
+          return;
+        }
+        normalizeAfterNativeInput(editor, null, composingRef.current);
+        updateAllLineClasses(editor, null);
+      });
+    };
+
+    const mutationObserver = new MutationObserver(scheduleLineClassRefresh);
+    mutationObserver.observe(editor, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
 
     const handleBeforeInput = (event: InputEvent) => {
+      if (composingRef.current || event.isComposing) return;
       if (event.inputType === "insertParagraph" || event.inputType === "insertLineBreak") {
         event.preventDefault();
         splitCurrentLine(editor, null, centerCaret, emitChange);
       }
     };
 
-    const handleInput = () => {
-      if (!composingRef.current) {
+    const handleInput = (event: Event) => {
+      const inputEvent = event instanceof InputEvent ? event : null;
+      if (!composingRef.current && !inputEvent?.isComposing) {
         normalizeAfterNativeInput(editor, null, composingRef.current);
         const line = currentLine(editor);
         if (line) updateLineClass(line);
@@ -519,7 +573,6 @@ export function VerticalTextEditor({
         centerCaret();
       } else {
         updateStatus(editor, null);
-        centerCaret();
       }
     };
 
@@ -530,7 +583,6 @@ export function VerticalTextEditor({
 
     const handleCompositionUpdate = () => {
       updateStatus(editor, null);
-      centerCaret();
     };
 
     const handleCompositionEnd = () => {
@@ -611,6 +663,8 @@ export function VerticalTextEditor({
     onReady(handle);
 
     return () => {
+      mutationObserver.disconnect();
+      if (mutationFrame !== null) cancelAnimationFrame(mutationFrame);
       editor.removeEventListener("beforeinput", handleBeforeInput);
       editor.removeEventListener("input", handleInput);
       editor.removeEventListener("compositionstart", handleCompositionStart);
@@ -633,7 +687,7 @@ export function VerticalTextEditor({
         <div
           ref={editorRef}
           className="verticalTypewriterEditor"
-          contentEditable
+          contentEditable="plaintext-only"
           spellCheck={false}
           data-placeholder={"# 見出し\n- リスト項目\nここに入力……"}
           data-empty="true"
