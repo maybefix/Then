@@ -1,9 +1,15 @@
 :root {
   color: #f0f2ef;
   background: #181917;
-  font-family:
+  --ui-font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     "Noto Sans JP", sans-serif;
+  --editor-font-family:
+    "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", YuMincho, serif;
+  --editor-font-size: 24px;
+  --editor-line-height: 2.3;
+  font-family:
+    var(--ui-font-family);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -970,9 +976,9 @@ textarea {
   block-size: auto;
   height: 100%;
   padding: 10vh 50vw;
-  font-family: "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", YuMincho, serif;
-  font-size: 24px;
-  line-height: 2.3;
+  font-family: var(--editor-font-family);
+  font-size: var(--editor-font-size);
+  line-height: var(--editor-line-height);
   letter-spacing: 0.06em;
   outline: none;
   caret-color: #e8b04b;
@@ -1590,20 +1596,20 @@ textarea {
 
 /* Sidebar refresh */
 :root {
-  --bg-root: #0f0f11;
-  --bg-primary: #0f0f11;
-  --bg-secondary: #16161a;
-  --bg-tertiary: #1c1c21;
-  --bg-panel: #16161a;
-  --bg-panel-strong: #1c1c21;
-  --border-subtle: #222228;
-  --border-strong: #2a2a30;
-  --text-primary: #d9d4c6;
-  --text-secondary: #b8b0a0;
-  --text-muted: #6a6a72;
-  --text-faint: #44444c;
-  --accent: #c9a84a;
-  --accent-strong: #ead9a8;
+  --bg-root: #101112;
+  --bg-primary: #111214;
+  --bg-secondary: #191a1f;
+  --bg-tertiary: #202126;
+  --bg-panel: #17181d;
+  --bg-panel-strong: #202126;
+  --border-subtle: #2b2c34;
+  --border-strong: #3a3a44;
+  --text-primary: #eee6d3;
+  --text-secondary: #cfc5ae;
+  --text-muted: #8a8791;
+  --text-faint: #595864;
+  --accent: #d4ad52;
+  --accent-strong: #f0d48b;
   --success: #7e9c4a;
   --warning: #c9a84a;
   --danger: #d97373;
@@ -1633,7 +1639,7 @@ body {
   gap: 8px;
   padding: 0 10px 0 8px;
   border-bottom: 0.5px solid var(--border-subtle);
-  background: var(--bg-root);
+  background: #121316;
   color: var(--text-muted);
   font-size: 12px;
 }
@@ -1737,7 +1743,7 @@ body {
   flex-direction: column;
   overflow: hidden;
   border-right: 0.5px solid var(--border-subtle);
-  background: var(--bg-panel);
+  background: #17181d;
   color: var(--text-secondary);
 }
 
@@ -1859,7 +1865,7 @@ body {
 }
 
 .activeTreeItem {
-  background: rgba(201, 168, 74, 0.08);
+  background: rgba(212, 173, 82, 0.12);
   color: var(--text-primary);
 }
 
@@ -2080,25 +2086,26 @@ body {
 }
 
 .editor {
-  background: var(--bg-root);
+  background: #0f1012;
   color: var(--text-primary);
   caret-color: var(--accent);
 }
 
 .editorContent {
-  background: var(--bg-root);
+  background: #0f1012;
 }
 
 .verticalTypewriterShell {
-  background: var(--bg-root);
+  background: #0f1012;
   color: #e9e4d6;
 }
 
 .verticalTypewriterEditor {
   padding: 12vh 50vw;
   color: #e9e4d6;
-  font-size: 21px;
-  line-height: 2.4;
+  font-family: var(--editor-font-family);
+  font-size: var(--editor-font-size);
+  line-height: var(--editor-line-height);
   letter-spacing: 0.05em;
   caret-color: var(--accent);
 }
@@ -2134,7 +2141,7 @@ body {
   flex-direction: column;
   overflow: hidden;
   border-left: 0.5px solid var(--border-subtle);
-  background: var(--bg-panel);
+  background: #17181d;
   color: var(--text-secondary);
   transition:
     width 180ms ease,
@@ -2158,7 +2165,7 @@ body {
   padding: 2px;
   border: 0.5px solid var(--border-subtle);
   border-radius: 7px;
-  background: var(--bg-panel-strong);
+  background: #1d1e24;
 }
 
 .rightTab {
@@ -2178,8 +2185,8 @@ body {
 }
 
 .activeRightTab {
-  background: #e8e3d4;
-  color: #1a1a1a;
+  background: #f0e7d2;
+  color: #171411;
 }
 
 .activeRightTab:hover {
@@ -2211,7 +2218,7 @@ body {
 
 .ideaSearch svg {
   position: absolute;
-  top: 50%;
+  top: 17px;
   left: 12px;
   width: 16px;
   height: 16px;
@@ -2255,7 +2262,7 @@ body {
   padding: 10px 12px;
   border: 0.5px solid var(--border-subtle);
   border-radius: 8px;
-  background: var(--bg-panel-strong);
+  background: #1d1e24;
   cursor: grab;
   user-select: none;
   transition:
@@ -2266,7 +2273,7 @@ body {
 
 .ideaCard:hover {
   border-color: var(--border-strong);
-  background: #202025;
+  background: #23242b;
 }
 
 .ideaCard:active {
@@ -2407,17 +2414,25 @@ body {
 .plotPane {
   min-width: 0;
   flex: 1;
-  overflow-x: auto;
+  overflow-x: scroll;
   overflow-y: hidden;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--border-strong) rgba(255, 255, 255, 0.04);
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
 }
 
 .plotPane::-webkit-scrollbar {
-  height: 5px;
+  height: 8px;
+}
+
+.plotPane::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .plotPane::-webkit-scrollbar-thumb {
   border: 0;
-  border-radius: 2px;
+  border-radius: 4px;
   background: var(--border-strong);
 }
 
@@ -2426,10 +2441,9 @@ body {
   width: max-content;
   min-width: 100%;
   height: 100%;
-  flex-direction: row-reverse;
+  flex-direction: row;
   align-items: stretch;
-  justify-content: flex-start;
-  margin-left: auto;
+  justify-content: flex-end;
   padding: 12px 16px;
   writing-mode: horizontal-tb;
 }
@@ -2440,10 +2454,11 @@ body {
   flex: 0 0 auto;
   flex-direction: column;
   align-items: flex-end;
+  overflow: visible;
   padding: 0 9px;
 }
 
-.plotCard + .plotCard {
+.plotCard:not(:last-child) {
   border-right: 0.5px solid var(--border-subtle);
 }
 
@@ -2459,7 +2474,7 @@ body {
   background: var(--bg-panel-strong);
   color: var(--text-primary);
   cursor: pointer;
-  font-family: "Noto Serif JP", "Hiragino Mincho ProN", serif;
+  font-family: var(--editor-font-family);
   font-size: 15px;
   font-weight: 600;
   letter-spacing: 0.2em;
@@ -2479,25 +2494,44 @@ body {
   align-items: stretch;
   justify-content: flex-start;
   gap: 0.9em;
-  overflow: hidden;
+  overflow: visible;
   writing-mode: horizontal-tb;
+}
+
+.expandedPlotCard,
+.expandedPlotCard .plotCardContent {
+  width: max-content;
+  min-width: max-content;
 }
 
 .plotCardTitle,
 .plotCardBody {
+  display: block;
+  margin: 0;
+  border: 0;
+  background: transparent;
   writing-mode: vertical-rl;
   text-orientation: mixed;
+  resize: none;
   outline: none;
   border-radius: 4px;
-  font-family: "Noto Serif JP", "Hiragino Mincho ProN", serif;
+  font-family: var(--editor-font-family);
   letter-spacing: 0.04em;
   white-space: pre-wrap;
+  scrollbar-width: none;
+}
+
+.plotCardTitle::-webkit-scrollbar,
+.plotCardBody::-webkit-scrollbar {
+  display: none;
 }
 
 .plotCardTitle {
   height: 100%;
+  width: 1.9em;
+  min-width: 1.9em;
   max-width: 1.9em;
-  flex: 0 0 auto;
+  flex: 0 0 1.9em;
   overflow: hidden;
   padding: 2px;
   color: var(--text-primary);
@@ -2507,17 +2541,27 @@ body {
   white-space: nowrap;
 }
 
+.plotCardTitle:read-only {
+  cursor: default;
+}
+
 .expandedPlotCard .plotCardTitle {
   color: var(--accent-strong);
 }
 
 .plotCardBody {
+  width: max(2.05em, calc(var(--plot-body-columns, 1) * 2.05em));
+  min-width: max(2.05em, calc(var(--plot-body-columns, 1) * 2.05em));
+  max-width: none;
   height: 100%;
-  overflow: hidden;
+  flex: 0 0 auto;
+  overflow: visible;
   padding: 2px;
   color: #b4afa0;
   font-size: 14px;
   line-height: 2.05;
+  overflow-wrap: anywhere;
+  word-break: break-all;
 }
 
 .plotCardTitle:focus,
@@ -2526,10 +2570,10 @@ body {
   color: var(--text-primary);
 }
 
-.plotCardTitle:empty::before,
-.plotCardBody:empty::before {
+.plotCardTitle::placeholder,
+.plotCardBody::placeholder {
   color: var(--text-faint);
-  content: attr(data-placeholder);
+  opacity: 1;
 }
 
 .plotCardToggle {
