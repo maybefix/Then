@@ -30,6 +30,8 @@ struct ProjectEntry {
 struct ProjectConfig {
     order: BTreeMap<String, Vec<String>>,
     snippets: Vec<SnippetConfig>,
+    #[serde(default, rename = "plotCards")]
+    plot_cards: Vec<PlotCardConfig>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -39,6 +41,15 @@ struct SnippetConfig {
     text: String,
     category: String,
     tags: Vec<String>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+struct PlotCardConfig {
+    id: String,
+    num: String,
+    title: String,
+    body: String,
+    expanded: bool,
 }
 
 fn debug_log(message: &str) {
@@ -71,7 +82,9 @@ pub fn run() {
             delete_project_entry,
             reorder_project_entries,
             load_project_snippets,
-            save_project_snippets
+            save_project_snippets,
+            load_project_plot_cards,
+            save_project_plot_cards
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -347,6 +360,31 @@ fn save_project_snippets(root_path: String, snippets: Vec<SnippetConfig>) -> Res
 
     let mut config = load_project_config(&root)?;
     config.snippets = snippets;
+    save_project_config(&root, &config)
+}
+
+#[tauri::command]
+fn load_project_plot_cards(root_path: String) -> Result<Vec<PlotCardConfig>, String> {
+    let root = PathBuf::from(root_path);
+    if !root.is_dir() {
+        return Err("project root does not exist".to_string());
+    }
+
+    Ok(load_project_config(&root)?.plot_cards)
+}
+
+#[tauri::command]
+fn save_project_plot_cards(
+    root_path: String,
+    plot_cards: Vec<PlotCardConfig>,
+) -> Result<(), String> {
+    let root = PathBuf::from(root_path);
+    if !root.is_dir() {
+        return Err("project root does not exist".to_string());
+    }
+
+    let mut config = load_project_config(&root)?;
+    config.plot_cards = plot_cards;
     save_project_config(&root, &config)
 }
 

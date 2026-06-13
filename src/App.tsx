@@ -27,6 +27,7 @@ import type {
   FlatOutlineItem,
   FontOption,
   OutlineItem,
+  PlotCard,
   ProjectEntry,
   ProjectFolder,
   SaveStatus,
@@ -105,6 +106,30 @@ const htmlIdeaSnippets: Snippet[] = [
     text: "風呂のシーンはテンポよく、1分で終わらせる緊張感を持たせたい。",
     category: "",
     tags: [],
+  },
+];
+
+const defaultPlotCards: PlotCard[] = [
+  {
+    id: "plot-1",
+    num: "001",
+    title: "縦書きプロットテストです",
+    body: "",
+    expanded: false,
+  },
+  {
+    id: "plot-2",
+    num: "002",
+    title: "縦書きプロットテストです",
+    body: "",
+    expanded: false,
+  },
+  {
+    id: "plot-3",
+    num: "003",
+    title: "縦書きプロットテストです",
+    body: "これは縦書きプロットテストです。ちゃんと書けていることを確かめるためにあります。",
+    expanded: false,
   },
 ];
 
@@ -254,6 +279,25 @@ function ensureHtmlIdeaSamples(snippets: Snippet[]): Snippet[] {
     snippets.length === 4 && snippets.every((snippet) => /^s[1-4]$/.test(snippet.id));
 
   return hasOnlyLegacyDefaults ? [...htmlIdeaSnippets, ...snippets] : snippets;
+}
+
+function normalizePlotCards(value: unknown): PlotCard[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter((card): card is Partial<PlotCard> & { id: string } =>
+      Boolean(card) && typeof card === "object" && typeof card.id === "string",
+    )
+    .map((card, index) => ({
+      id: card.id,
+      num:
+        typeof card.num === "string" && card.num.trim()
+          ? card.num
+          : String(index + 1).padStart(3, "0"),
+      title: typeof card.title === "string" ? card.title : "",
+      body: typeof card.body === "string" ? card.body : "",
+      expanded: Boolean(card.expanded),
+    }));
 }
 
 function parseTextOutline(text: string): OutlineItem[] {
@@ -450,6 +494,17 @@ async function saveWorkspaceSnippets(folderPath: string, snippets: Snippet[]): P
   await invoke("save_project_snippets", { rootPath: folderPath, snippets });
 }
 
+async function loadWorkspacePlotCards(folderPath: string): Promise<PlotCard[]> {
+  if (!isTauriRuntime()) return defaultPlotCards;
+  const plotCards = await invoke<PlotCard[]>("load_project_plot_cards", { rootPath: folderPath });
+  return normalizePlotCards(plotCards);
+}
+
+async function saveWorkspacePlotCards(folderPath: string, plotCards: PlotCard[]): Promise<void> {
+  if (!isTauriRuntime()) return;
+  await invoke("save_project_plot_cards", { rootPath: folderPath, plotCards });
+}
+
 export default function App() {
   const saveTimerRef = useRef<number | null>(null);
   const toastTimerRef = useRef<number | null>(null);
@@ -478,6 +533,8 @@ export default function App() {
   const [activeTabId, setActiveTabId] = useState("initial-document-tab");
   const [projectFolder, setProjectFolder] = useState<ProjectFolder | null>(null);
   const [snippetWorkspacePath, setSnippetWorkspacePath] = useState<string | null>(null);
+  const [plotWorkspacePath, setPlotWorkspacePath] = useState<string | null>(null);
+  const [plotCards, setPlotCards] = useState<PlotCard[]>(() => defaultPlotCards);
   const [focusedFolderPath, setFocusedFolderPath] = useState<string | null>(null);
   const [workspaceAlert, setWorkspaceAlert] = useState<WorkspaceAlert>(null);
   const [query, setQuery] = useState("");
@@ -714,6 +771,8 @@ export default function App() {
       didMountEditorRef.current = false;
       setProjectFolder(null);
       setSnippetWorkspacePath(null);
+      setPlotWorkspacePath(null);
+      setPlotCards(defaultPlotCards);
       setFocusedFolderPath(null);
       replaceActiveTab(createScratchDocumentTab("", { documentKey: `scratch-${Date.now()}` }));
       setWorkspaceAlert(alert);
@@ -742,9 +801,12 @@ export default function App() {
             state.settings.snippetStorageMode === "workspace"
               ? await loadWorkspaceSnippets(folder.path)
               : state.snippets;
+          const restoredPlotCards = await loadWorkspacePlotCards(folder.path);
           setSnippetWorkspacePath(
             state.settings.snippetStorageMode === "workspace" ? folder.path : null,
           );
+          setPlotWorkspacePath(folder.path);
+          setPlotCards(restoredPlotCards);
 
           const restoredState: AppState = {
             ...state,
@@ -861,6 +923,19 @@ export default function App() {
   }, [isHydrated, projectFolder, settings.snippetStorageMode, snippetWorkspacePath, snippets]);
 
   useEffect(() => {
+    if (!isHydrated || !projectFolder) return;
+    if (plotWorkspacePath !== projectFolder.path) return;
+
+    const timer = window.setTimeout(() => {
+      saveWorkspacePlotCards(projectFolder.path, plotCards).catch(() => {
+        setLastError("ワークスペースのプロット保存に失敗しました");
+      });
+    }, 700);
+
+    return () => window.clearTimeout(timer);
+  }, [isHydrated, plotCards, plotWorkspacePath, projectFolder]);
+
+  useEffect(() => {
     if (!isHydrated || !isTauriRuntime()) return;
     if (settings.snippetStorageMode !== "workspace") return;
     if (!currentFilePath || !activeWorkspaceRootPath) return;
@@ -877,13 +952,16 @@ export default function App() {
             folderPath: activeWorkspaceRootPath,
           }),
       loadWorkspaceSnippets(activeWorkspaceRootPath),
+      loadWorkspacePlotCards(activeWorkspaceRootPath),
     ])
-      .then(([folder, workspaceSnippets]) => {
+      .then(([folder, workspaceSnippets, workspacePlotCards]) => {
         if (isCancelled) return;
         setProjectFolder(folder);
         setFocusedFolderPath(null);
         setWorkspaceAlert(null);
         setSnippetWorkspacePath(folder.path);
+        setPlotWorkspacePath(folder.path);
+        setPlotCards(workspacePlotCards);
         setAppState((current) => ({
           ...current,
           snippets: workspaceSnippets,
@@ -1299,9 +1377,12 @@ export default function App() {
         options.loadWorkspaceSnippets && settings.snippetStorageMode === "workspace"
           ? await loadWorkspaceSnippets(folder.path)
           : null;
+      const nextPlotCards = await loadWorkspacePlotCards(folder.path);
       if (nextSnippets) {
         setSnippetWorkspacePath(folder.path);
       }
+      setPlotWorkspacePath(folder.path);
+      setPlotCards(nextPlotCards);
       setAppState((current) => ({
         ...current,
         snippets: nextSnippets ?? current.snippets,
@@ -1487,7 +1568,10 @@ export default function App() {
         settings.snippetStorageMode === "workspace"
           ? await loadWorkspaceSnippets(folder.path)
           : snippets;
+      const restoredPlotCards = await loadWorkspacePlotCards(folder.path);
       setSnippetWorkspacePath(settings.snippetStorageMode === "workspace" ? folder.path : null);
+      setPlotWorkspacePath(folder.path);
+      setPlotCards(restoredPlotCards);
       setAppState((current) => ({
         ...current,
         snippets: restoredSnippets,
@@ -1551,7 +1635,10 @@ export default function App() {
         settings.snippetStorageMode === "workspace"
           ? await loadWorkspaceSnippets(folder.path)
           : snippets;
+      const restoredPlotCards = await loadWorkspacePlotCards(folder.path);
       setSnippetWorkspacePath(settings.snippetStorageMode === "workspace" ? folder.path : null);
+      setPlotWorkspacePath(folder.path);
+      setPlotCards(restoredPlotCards);
       const firstFile = findFirstTextFile(folder.children);
       setAppState((current) => ({
         ...current,
@@ -2708,7 +2795,7 @@ export default function App() {
                 </div>
                 <div className="rightSidebarBody">
                   {rightSidebarTab === "plot" ? (
-                    <PlotPane />
+                    <PlotPane cards={plotCards} onCardsChange={setPlotCards} />
                   ) : (
                     <IdeaPane
                       snippets={filteredSnippets}

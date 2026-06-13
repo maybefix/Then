@@ -6,42 +6,13 @@ import {
   type ChangeEvent,
   type CompositionEvent,
   type CSSProperties,
+  type Dispatch,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  type SetStateAction,
   type WheelEvent,
 } from "react";
-
-type PlotCard = {
-  id: string;
-  num: string;
-  title: string;
-  body: string;
-  expanded: boolean;
-};
-
-const initialPlotCards: PlotCard[] = [
-  {
-    id: "plot-1",
-    num: "001",
-    title: "縦書きプロットテストです",
-    body: "",
-    expanded: false,
-  },
-  {
-    id: "plot-2",
-    num: "002",
-    title: "縦書きプロットテストです",
-    body: "",
-    expanded: false,
-  },
-  {
-    id: "plot-3",
-    num: "003",
-    title: "縦書きプロットテストです",
-    body: "これは縦書きプロットテストです。ちゃんと書けていることを確かめるためにあります。",
-    expanded: false,
-  },
-];
+import type { PlotCard } from "../../types";
 
 type PlotIconName = "grip" | "trash" | "list" | "up" | "down";
 
@@ -137,8 +108,12 @@ function PlotIcon({ name }: { name: PlotIconName }) {
   }
 }
 
-export function PlotPane() {
-  const [cards, setCards] = useState<PlotCard[]>(initialPlotCards);
+type PlotPaneProps = {
+  cards: PlotCard[];
+  onCardsChange: Dispatch<SetStateAction<PlotCard[]>>;
+};
+
+export function PlotPane({ cards, onCardsChange }: PlotPaneProps) {
   const [bodyColumns, setBodyColumns] = useState<Record<string, number>>({});
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
   const [isManagerOpen, setIsManagerOpen] = useState(false);
@@ -252,7 +227,7 @@ export function PlotPane() {
   };
 
   const toggleCard = (cardId: string) => {
-    setCards((current) =>
+    onCardsChange((current) =>
       current.map((card) =>
         card.id === cardId ? { ...card, expanded: !card.expanded } : card,
       ),
@@ -260,7 +235,7 @@ export function PlotPane() {
   };
 
   const updateCard = (cardId: string, patch: Partial<Pick<PlotCard, "title" | "body">>) => {
-    setCards((current) =>
+    onCardsChange((current) =>
       current.map((card) => (card.id === cardId ? { ...card, ...patch } : card)),
     );
   };
@@ -268,7 +243,7 @@ export function PlotPane() {
   const moveCard = (draggedId: string, targetId: string) => {
     if (draggedId === targetId) return;
 
-    setCards((current) => {
+    onCardsChange((current) => {
       const visualOrder = [...current].reverse();
       const draggedIndex = visualOrder.findIndex((card) => card.id === draggedId);
       const targetVisualIndex = visualOrder.findIndex((card) => card.id === targetId);
@@ -288,7 +263,7 @@ export function PlotPane() {
   };
 
   const moveCardByIndex = (cardId: string, direction: -1 | 1) => {
-    setCards((current) => {
+    onCardsChange((current) => {
       const currentIndex = current.findIndex((card) => card.id === cardId);
       const nextIndex = currentIndex + direction;
 
@@ -309,11 +284,11 @@ export function PlotPane() {
     const label = card.title.trim() || card.num;
     if (!window.confirm(`プロット「${label}」を削除しますか？`)) return;
 
-    setCards((current) => renumberPlotCards(current.filter((item) => item.id !== cardId)));
+    onCardsChange((current) => renumberPlotCards(current.filter((item) => item.id !== cardId)));
   };
 
   const addCard = () => {
-    setCards((current) => {
+    onCardsChange((current) => {
       const nextIndex = current.length + 1;
       return [
         ...current,

@@ -6,6 +6,14 @@ export type Snippet = {
   tags: string[];
 };
 
+export type PlotCard = {
+  id: string;
+  num: string;
+  title: string;
+  body: string;
+  expanded: boolean;
+};
+
 export type EditorSettings = {
   editorFontFamily: string;
   uiFontFamily: string;
