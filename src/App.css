@@ -2705,7 +2705,8 @@ body {
   overflow-x: auto;
   overflow-y: hidden;
   padding: 0 18px 12px;
-  flex-direction: row-reverse;
+  flex-direction: row;
+  justify-content: flex-end;
   scrollbar-color: var(--border-strong) rgba(255, 255, 255, 0.04);
   scrollbar-width: thin;
 }
@@ -2727,14 +2728,14 @@ body {
   display: flex;
   min-width: max-content;
   flex: 0 0 auto;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 10px;
-  padding: 0 12px;
+  flex-direction: row-reverse;
+  align-items: stretch;
+  gap: 12px;
+  padding: 12px 14px;
   border: 0.5px solid var(--border-subtle);
   border-width: 0 0.5px 0 0;
   border-radius: 0;
-  background: rgba(255, 255, 255, 0.025);
+  background: #17181d;
 }
 
 .plotManagerItem:first-child {
@@ -2743,16 +2744,22 @@ body {
 
 .plotManagerOrder {
   display: flex;
+  width: 34px;
   flex: 0 0 auto;
+  flex-direction: column;
   align-items: center;
   gap: 6px;
+  padding: 4px 0;
+  border-left: 0.5px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.015);
 }
 
 .plotManagerOrder strong {
   color: var(--accent-strong);
   font-family: var(--editor-font-family);
   font-size: 13px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
+  writing-mode: vertical-rl;
 }
 
 .plotManagerFields {
@@ -2761,7 +2768,7 @@ body {
   flex: 1 1 auto;
   flex-direction: row-reverse;
   align-items: stretch;
-  gap: 8px;
+  gap: 10px;
 }
 
 .plotManagerFields label {
@@ -2777,12 +2784,16 @@ body {
   color: var(--text-muted);
   font-size: 11px;
   letter-spacing: 0.06em;
+  padding-top: 2px;
 }
 
 .plotManagerFields textarea {
   height: 100%;
   min-height: 0;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 6px;
   resize: none;
+  background: #1b1c22;
   writing-mode: vertical-rl;
   text-orientation: mixed;
   font-family: var(--editor-font-family);
@@ -2792,14 +2803,14 @@ body {
 }
 
 .plotManagerTitle {
-  width: 2.5em;
+  width: 3.1em;
   overflow: hidden;
   color: var(--accent-strong);
   font-weight: 600;
 }
 
 .plotManagerBody {
-  width: 9em;
+  width: 12em;
   overflow: auto;
 }
 

@@ -512,6 +512,31 @@ function PlotManagerModal({
   onDelete,
   onMove,
 }: PlotManagerModalProps) {
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const visualCards = [...cards].reverse();
+
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+
+    list.scrollLeft = Math.max(0, list.scrollWidth - list.clientWidth);
+  }, [cards.length]);
+
+  const handleManagerWheel = (event: WheelEvent<HTMLDivElement>) => {
+    const list = event.currentTarget;
+    const maxScrollLeft = list.scrollWidth - list.clientWidth;
+
+    if (maxScrollLeft <= 0) return;
+
+    const dominantDelta =
+      Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+
+    if (dominantDelta === 0) return;
+
+    event.preventDefault();
+    list.scrollLeft = Math.min(maxScrollLeft, Math.max(0, list.scrollLeft - dominantDelta));
+  };
+
   return (
     <div className="modalBackdrop" role="presentation">
       <section className="modal plotManagerModal" aria-label="プロットを管理" role="dialog" aria-modal="true">
@@ -521,66 +546,72 @@ function PlotManagerModal({
             ×
           </button>
         </header>
-        <div className="plotManagerList">
-          {cards.map((card, index) => (
-            <section className="plotManagerItem" key={card.id}>
-              <div className="plotManagerOrder">
-                <strong>{card.num}</strong>
-                <button
-                  className="plotToolButton"
-                  type="button"
-                  aria-label={`${card.num} を前へ`}
-                  title="前へ"
-                  disabled={index === 0}
-                  onClick={() => onMove(card.id, -1)}
-                >
-                  <PlotIcon name="up" />
-                </button>
-                <button
-                  className="plotToolButton"
-                  type="button"
-                  aria-label={`${card.num} を後ろへ`}
-                  title="後ろへ"
-                  disabled={index === cards.length - 1}
-                  onClick={() => onMove(card.id, 1)}
-                >
-                  <PlotIcon name="down" />
-                </button>
-                <button
-                  className="plotToolButton dangerPlotToolButton"
-                  type="button"
-                  aria-label={`${card.num} を削除`}
-                  title="削除"
-                  onClick={() => onDelete(card.id)}
-                >
-                  <PlotIcon name="trash" />
-                </button>
-              </div>
-              <div className="modalForm plotManagerFields">
-                <label>
-                  <span>タイトル</span>
-                  <textarea
-                    className="plotManagerTitle"
-                    value={card.title}
-                    rows={1}
-                    wrap="off"
-                    onChange={(event) =>
-                      onChange(card.id, { title: event.currentTarget.value.replace(/\r?\n/g, " ") })
-                    }
-                  />
-                </label>
-                <label>
-                  <span>本文</span>
-                  <textarea
-                    className="plotManagerBody"
-                    value={card.body}
-                    rows={12}
-                    onChange={(event) => onChange(card.id, { body: event.currentTarget.value })}
-                  />
-                </label>
-              </div>
-            </section>
-          ))}
+        <div ref={listRef} className="plotManagerList" onWheel={handleManagerWheel}>
+          {visualCards.map((card) => {
+            const index = cards.findIndex((item) => item.id === card.id);
+
+            return (
+              <section className="plotManagerItem" key={card.id}>
+                <div className="plotManagerOrder">
+                  <strong>{card.num}</strong>
+                  <button
+                    className="plotToolButton"
+                    type="button"
+                    aria-label={`${card.num} を前へ`}
+                    title="前へ"
+                    disabled={index === 0}
+                    onClick={() => onMove(card.id, -1)}
+                  >
+                    <PlotIcon name="up" />
+                  </button>
+                  <button
+                    className="plotToolButton"
+                    type="button"
+                    aria-label={`${card.num} を後ろへ`}
+                    title="後ろへ"
+                    disabled={index === cards.length - 1}
+                    onClick={() => onMove(card.id, 1)}
+                  >
+                    <PlotIcon name="down" />
+                  </button>
+                  <button
+                    className="plotToolButton dangerPlotToolButton"
+                    type="button"
+                    aria-label={`${card.num} を削除`}
+                    title="削除"
+                    onClick={() => onDelete(card.id)}
+                  >
+                    <PlotIcon name="trash" />
+                  </button>
+                </div>
+                <div className="modalForm plotManagerFields">
+                  <label>
+                    <span>タイトル</span>
+                    <textarea
+                      className="plotManagerTitle"
+                      value={card.title}
+                      rows={1}
+                      wrap="off"
+                      onChange={(event) =>
+                        onChange(card.id, {
+                          title: event.currentTarget.value.replace(/\r?\n/g, " "),
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>本文</span>
+                    <textarea
+                      className="plotManagerBody"
+                      value={card.body}
+                      rows={12}
+                      onChange={(event) => onChange(card.id, { body: event.currentTarget.value })}
+                    />
+                  </label>
+                </div>
+              </section>
+            );
+          })}
         </div>
         <footer className="modalActions">
           <button type="button" onClick={onClose}>
