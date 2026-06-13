@@ -2448,6 +2448,15 @@ body {
   writing-mode: horizontal-tb;
 }
 
+.plotTrackActions {
+  display: grid;
+  flex: 0 0 40px;
+  align-self: center;
+  justify-items: center;
+  gap: 8px;
+  margin: 0 8px;
+}
+
 .plotCard {
   display: flex;
   min-width: 0;
@@ -2458,8 +2467,72 @@ body {
   padding: 0 9px;
 }
 
+.draggingPlotCard {
+  opacity: 0.45;
+}
+
 .plotCard:not(:last-child) {
   border-right: 0.5px solid var(--border-subtle);
+}
+
+.plotCardToolbar {
+  display: grid;
+  flex: 0 0 auto;
+  align-self: flex-end;
+  justify-items: center;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.plotToolButton {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.plotToolButton:hover:not(:disabled) {
+  background: rgba(201, 168, 74, 0.08);
+  color: var(--accent);
+}
+
+.plotToolButton:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.plotToolButton svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.plotToolButton svg circle {
+  fill: currentColor;
+  stroke: none;
+}
+
+.plotDragHandle {
+  cursor: grab;
+}
+
+.plotDragHandle:active {
+  cursor: grabbing;
+}
+
+.dangerPlotToolButton:hover:not(:disabled) {
+  background: rgba(217, 115, 115, 0.1);
+  color: var(--danger);
 }
 
 .plotCardNum {
@@ -2615,6 +2688,60 @@ body {
 .plotAddButton:hover {
   border-color: rgba(201, 168, 74, 0.5);
   color: var(--accent);
+}
+
+.plotModal {
+  width: min(640px, calc(100vw - 48px));
+}
+
+.plotManagerModal {
+  width: min(820px, calc(100vw - 48px));
+  max-height: min(760px, calc(100vh - 48px));
+}
+
+.plotManagerList {
+  display: grid;
+  min-height: 0;
+  gap: 10px;
+  overflow: auto;
+  padding: 0 18px 12px;
+}
+
+.plotManagerItem {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.plotManagerOrder {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 6px;
+}
+
+.plotManagerOrder strong {
+  color: var(--accent-strong);
+  font-family: var(--editor-font-family);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+.plotManagerFields {
+  gap: 8px;
+}
+
+.plotManagerFields textarea {
+  min-height: 96px;
+}
+
+.plotModalActions {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
 }
 
 .rightSidebar .snippetPanel {
