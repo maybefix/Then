@@ -2693,18 +2693,20 @@ body {
 }
 
 .plotManagerModal {
+  display: grid;
   width: min(860px, calc(100vw - 48px));
-  max-height: min(760px, calc(100vh - 48px));
+  height: min(700px, calc(100vh - 56px));
+  max-height: calc(100vh - 56px);
+  grid-template-rows: 46px minmax(0, 1fr) auto;
 }
 
 .plotManagerList {
   display: block;
-  height: min(520px, calc(100vh - 210px));
-  min-height: 360px;
+  min-height: 0;
   max-width: 100%;
   overflow-x: scroll;
   overflow-y: hidden;
-  padding: 0 18px 14px;
+  padding: 16px 18px 14px;
   scrollbar-color: var(--border-strong) rgba(255, 255, 255, 0.04);
   scrollbar-width: thin;
   scrollbar-gutter: stable;
@@ -2722,6 +2724,12 @@ body {
 .plotManagerList::-webkit-scrollbar-thumb {
   border-radius: 4px;
   background: var(--border-strong);
+}
+
+.plotManagerModal .modalActions {
+  padding: 10px 14px 12px;
+  border-top: 0.5px solid var(--border-subtle);
+  background: #202126;
 }
 
 .plotManagerTrack {
