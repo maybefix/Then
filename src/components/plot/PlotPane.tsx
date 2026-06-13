@@ -6,9 +6,8 @@ import {
   type ChangeEvent,
   type CompositionEvent,
   type CSSProperties,
-  type DragEvent,
-  type FormEvent,
   type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   type WheelEvent,
 } from "react";
 
@@ -44,7 +43,7 @@ const initialPlotCards: PlotCard[] = [
   },
 ];
 
-type PlotIconName = "grip" | "edit" | "trash" | "list" | "up" | "down";
+type PlotIconName = "grip" | "trash" | "list" | "up" | "down";
 
 type PlotCardStyle = CSSProperties & {
   "--plot-body-columns"?: number;
@@ -102,13 +101,6 @@ function PlotIcon({ name }: { name: PlotIconName }) {
           <circle cx="15" cy="18" r="1.2" />
         </svg>
       );
-    case "edit":
-      return (
-        <svg {...common}>
-          <path d="M12 20h9" />
-          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-        </svg>
-      );
     case "trash":
       return (
         <svg {...common}>
@@ -149,12 +141,12 @@ export function PlotPane() {
   const [cards, setCards] = useState<PlotCard[]>(initialPlotCards);
   const [bodyColumns, setBodyColumns] = useState<Record<string, number>>({});
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
-  const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [isManagerOpen, setIsManagerOpen] = useState(false);
   const paneRef = useRef<HTMLDivElement | null>(null);
   const bodyRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
   const composingCardIds = useRef<Set<string>>(new Set());
   const isPinnedToRightRef = useRef(true);
+  const draggingCardIdRef = useRef<string | null>(null);
 
   const visualCards = [...cards].reverse();
 
@@ -200,6 +192,40 @@ export function PlotPane() {
 
     pane.scrollLeft = Math.max(0, pane.scrollWidth - pane.clientWidth);
   }, [bodyColumns, cards.length]);
+
+  useLayoutEffect(() => {
+    if (!draggingCardId) return;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const draggedId = draggingCardIdRef.current;
+      if (!draggedId) return;
+
+      const target = document
+        .elementFromPoint(event.clientX, event.clientY)
+        ?.closest<HTMLElement>("[data-plot-card-id]");
+      const targetId = target?.dataset.plotCardId;
+
+      if (targetId && targetId !== draggedId) {
+        event.preventDefault();
+        moveCard(draggedId, targetId);
+      }
+    };
+
+    const handlePointerUp = () => {
+      draggingCardIdRef.current = null;
+      setDraggingCardId(null);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: false });
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, [draggingCardId]);
 
   const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
     const pane = event.currentTarget;
@@ -281,7 +307,6 @@ export function PlotPane() {
     if (!window.confirm(`プロット「${label}」を削除しますか？`)) return;
 
     setCards((current) => renumberPlotCards(current.filter((item) => item.id !== cardId)));
-    setEditingCardId((current) => (current === cardId ? null : current));
   };
 
   const addCard = () => {
@@ -300,24 +325,10 @@ export function PlotPane() {
     });
   };
 
-  const handleCardDragStart = (cardId: string, event: DragEvent<HTMLButtonElement>) => {
+  const handleCardDragStart = (cardId: string, event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
     setDraggingCardId(cardId);
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", cardId);
-  };
-
-  const handleCardDragOver = (event: DragEvent<HTMLElement>) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-  };
-
-  const handleCardDrop = (targetId: string, event: DragEvent<HTMLElement>) => {
-    event.preventDefault();
-    const draggedId = draggingCardId ?? event.dataTransfer.getData("text/plain");
-    if (draggedId) {
-      moveCard(draggedId, targetId);
-    }
-    setDraggingCardId(null);
+    draggingCardIdRef.current = cardId;
   };
 
   const handleBodyChange = (cardId: string, event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -361,8 +372,6 @@ export function PlotPane() {
       : 1,
   });
 
-  const editingCard = cards.find((card) => card.id === editingCardId) ?? null;
-
   return (
     <>
       <div
@@ -399,30 +408,18 @@ export function PlotPane() {
                 draggingCardId === card.id ? "draggingPlotCard" : ""
               }`}
               key={card.id}
+              data-plot-card-id={card.id}
               style={getPlotCardStyle(card)}
-              onDragOver={handleCardDragOver}
-              onDrop={(event) => handleCardDrop(card.id, event)}
             >
               <div className="plotCardToolbar">
                 <button
                   className="plotToolButton plotDragHandle"
                   type="button"
-                  draggable
                   aria-label={`${card.num} をドラッグして並び替え`}
                   title="ドラッグして並び替え"
-                  onDragStart={(event) => handleCardDragStart(card.id, event)}
-                  onDragEnd={() => setDraggingCardId(null)}
+                  onPointerDown={(event) => handleCardDragStart(card.id, event)}
                 >
                   <PlotIcon name="grip" />
-                </button>
-                <button
-                  className="plotToolButton"
-                  type="button"
-                  aria-label={`${card.num} を編集`}
-                  title="プロットを編集"
-                  onClick={() => setEditingCardId(card.id)}
-                >
-                  <PlotIcon name="edit" />
                 </button>
                 <button
                   className="plotToolButton dangerPlotToolButton"
@@ -484,14 +481,6 @@ export function PlotPane() {
           ))}
         </div>
       </div>
-      {editingCard && (
-        <PlotEditorModal
-          card={editingCard}
-          onClose={() => setEditingCardId(null)}
-          onDelete={() => deleteCard(editingCard.id)}
-          onChange={updateCard}
-        />
-      )}
       {isManagerOpen && (
         <PlotManagerModal
           cards={cards}
@@ -502,60 +491,6 @@ export function PlotPane() {
         />
       )}
     </>
-  );
-}
-
-type PlotEditorModalProps = {
-  card: PlotCard;
-  onClose: () => void;
-  onDelete: () => void;
-  onChange: (cardId: string, patch: Partial<Pick<PlotCard, "title" | "body">>) => void;
-};
-
-function PlotEditorModal({ card, onClose, onDelete, onChange }: PlotEditorModalProps) {
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    onClose();
-  };
-
-  return (
-    <div className="modalBackdrop" role="presentation">
-      <section className="modal plotModal" aria-label="プロットを編集" role="dialog" aria-modal="true">
-        <header className="modalHeader">
-          <h2>プロットを編集</h2>
-          <button className="modalClose" type="button" aria-label="閉じる" onClick={onClose}>
-            ×
-          </button>
-        </header>
-        <form className="modalForm" onSubmit={handleSubmit}>
-          <label>
-            <span>タイトル</span>
-            <input
-              value={card.title}
-              onChange={(event) => onChange(card.id, { title: event.currentTarget.value })}
-            />
-          </label>
-          <label>
-            <span>本文</span>
-            <textarea
-              value={card.body}
-              rows={9}
-              onChange={(event) => onChange(card.id, { body: event.currentTarget.value })}
-            />
-          </label>
-          <footer className="modalActions plotModalActions">
-            <button className="dangerAction" type="button" onClick={onDelete}>
-              削除
-            </button>
-            <span />
-            <button type="button" onClick={onClose}>
-              閉じる
-            </button>
-            <button type="submit">反映</button>
-          </footer>
-        </form>
-      </section>
-    </div>
   );
 }
 
@@ -621,16 +556,22 @@ function PlotManagerModal({
               <div className="modalForm plotManagerFields">
                 <label>
                   <span>タイトル</span>
-                  <input
+                  <textarea
+                    className="plotManagerTitle"
                     value={card.title}
-                    onChange={(event) => onChange(card.id, { title: event.currentTarget.value })}
+                    rows={1}
+                    wrap="off"
+                    onChange={(event) =>
+                      onChange(card.id, { title: event.currentTarget.value.replace(/\r?\n/g, " ") })
+                    }
                   />
                 </label>
                 <label>
                   <span>本文</span>
                   <textarea
+                    className="plotManagerBody"
                     value={card.body}
-                    rows={4}
+                    rows={12}
                     onChange={(event) => onChange(card.id, { body: event.currentTarget.value })}
                   />
                 </label>

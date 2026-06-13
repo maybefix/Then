@@ -2524,6 +2524,8 @@ body {
 
 .plotDragHandle {
   cursor: grab;
+  touch-action: none;
+  user-select: none;
 }
 
 .plotDragHandle:active {
@@ -2690,37 +2692,59 @@ body {
   color: var(--accent);
 }
 
-.plotModal {
-  width: min(640px, calc(100vw - 48px));
-}
-
 .plotManagerModal {
-  width: min(820px, calc(100vw - 48px));
+  width: min(860px, calc(100vw - 48px));
   max-height: min(760px, calc(100vh - 48px));
 }
 
 .plotManagerList {
-  display: grid;
-  min-height: 0;
-  gap: 10px;
-  overflow: auto;
+  display: flex;
+  height: min(520px, calc(100vh - 210px));
+  min-height: 360px;
+  gap: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
   padding: 0 18px 12px;
+  flex-direction: row-reverse;
+  scrollbar-color: var(--border-strong) rgba(255, 255, 255, 0.04);
+  scrollbar-width: thin;
+}
+
+.plotManagerList::-webkit-scrollbar {
+  height: 8px;
+}
+
+.plotManagerList::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.plotManagerList::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: var(--border-strong);
 }
 
 .plotManagerItem {
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  gap: 12px;
-  padding: 12px;
+  display: flex;
+  min-width: max-content;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 0 12px;
   border: 0.5px solid var(--border-subtle);
-  border-radius: 8px;
+  border-width: 0 0.5px 0 0;
+  border-radius: 0;
   background: rgba(255, 255, 255, 0.025);
 }
 
+.plotManagerItem:first-child {
+  border-left: 0.5px solid var(--border-subtle);
+}
+
 .plotManagerOrder {
-  display: grid;
-  align-content: start;
-  justify-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
   gap: 6px;
 }
 
@@ -2732,16 +2756,51 @@ body {
 }
 
 .plotManagerFields {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: row-reverse;
+  align-items: stretch;
   gap: 8px;
 }
 
-.plotManagerFields textarea {
-  min-height: 96px;
+.plotManagerFields label {
+  display: flex;
+  min-width: 0;
+  flex-direction: row-reverse;
+  align-items: stretch;
+  gap: 4px;
 }
 
-.plotModalActions {
-  display: grid;
-  grid-template-columns: auto 1fr auto auto;
+.plotManagerFields label span {
+  writing-mode: vertical-rl;
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+.plotManagerFields textarea {
+  height: 100%;
+  min-height: 0;
+  resize: none;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-family: var(--editor-font-family);
+  line-height: 2.05;
+  letter-spacing: 0.04em;
+  white-space: pre-wrap;
+}
+
+.plotManagerTitle {
+  width: 2.5em;
+  overflow: hidden;
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.plotManagerBody {
+  width: 9em;
+  overflow: auto;
 }
 
 .rightSidebar .snippetPanel {
