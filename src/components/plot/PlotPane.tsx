@@ -270,15 +270,18 @@ export function PlotPane() {
 
     setCards((current) => {
       const visualOrder = [...current].reverse();
+      const draggedIndex = visualOrder.findIndex((card) => card.id === draggedId);
+      const targetVisualIndex = visualOrder.findIndex((card) => card.id === targetId);
       const draggedCard = visualOrder.find((card) => card.id === draggedId);
-      if (!draggedCard) return current;
+      if (!draggedCard || draggedIndex < 0 || targetVisualIndex < 0) return current;
 
       const withoutDragged = visualOrder.filter((card) => card.id !== draggedId);
       const targetIndex = withoutDragged.findIndex((card) => card.id === targetId);
       if (targetIndex < 0) return current;
 
       const nextVisualOrder = [...withoutDragged];
-      nextVisualOrder.splice(targetIndex, 0, draggedCard);
+      const insertIndex = draggedIndex < targetVisualIndex ? targetIndex + 1 : targetIndex;
+      nextVisualOrder.splice(insertIndex, 0, draggedCard);
 
       return renumberPlotCards([...nextVisualOrder].reverse());
     });
