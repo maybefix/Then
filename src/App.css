@@ -1587,3 +1587,1082 @@ textarea {
   background: #a5a8a2;
   background-clip: content-box;
 }
+
+/* Sidebar refresh */
+:root {
+  --bg-root: #0f0f11;
+  --bg-primary: #0f0f11;
+  --bg-secondary: #16161a;
+  --bg-tertiary: #1c1c21;
+  --bg-panel: #16161a;
+  --bg-panel-strong: #1c1c21;
+  --border-subtle: #222228;
+  --border-strong: #2a2a30;
+  --text-primary: #d9d4c6;
+  --text-secondary: #b8b0a0;
+  --text-muted: #6a6a72;
+  --text-faint: #44444c;
+  --accent: #c9a84a;
+  --accent-strong: #ead9a8;
+  --success: #7e9c4a;
+  --warning: #c9a84a;
+  --danger: #d97373;
+  --documentbar-height: 36px;
+  --statusbar-height: 26px;
+  --left-sidebar-width: 220px;
+  --right-sidebar-width: 280px;
+}
+
+body {
+  background: var(--bg-root);
+}
+
+.appShell {
+  min-width: 920px;
+  min-height: 520px;
+  background: var(--bg-root);
+  color: var(--text-primary);
+}
+
+.appFrame {
+  border: 0;
+  background: var(--bg-root);
+}
+
+.topbar {
+  gap: 8px;
+  padding: 0 10px 0 8px;
+  border-bottom: 0.5px solid var(--border-subtle);
+  background: var(--bg-root);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.appName {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.menuButton,
+.iconButton,
+.sidebarIconButton {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.menuButton:hover,
+.menuButton[aria-expanded="true"],
+.iconButton:hover,
+.sidebarIconButton:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+}
+
+.iconButton svg,
+.sidebarIconButton svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.breadcrumbs {
+  gap: 7px;
+  font-size: 12px;
+}
+
+.breadcrumbFolderButton {
+  max-width: 260px;
+  height: 26px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.breadcrumbFolderButton:hover,
+.breadcrumbFolderButton[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.activeCrumb {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.crumbSeparator,
+.outlineSeparator {
+  color: var(--text-faint);
+}
+
+.menuPopover {
+  border-color: var(--border-strong);
+  background: var(--bg-panel-strong);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.46);
+}
+
+.menuPopover button,
+.emptyMenuMessage {
+  color: var(--text-secondary);
+}
+
+.menuPopover button:hover,
+.menuPopover .activeMenuItem {
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text-primary);
+}
+
+.workspace {
+  min-height: 0;
+  background: var(--bg-root);
+}
+
+.workspaceSidebar {
+  display: flex;
+  width: var(--left-sidebar-width);
+  min-width: var(--left-sidebar-width);
+  height: 100%;
+  flex: 0 0 var(--left-sidebar-width);
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 0.5px solid var(--border-subtle);
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+}
+
+.sidebarHeader,
+.rightSidebarHeader {
+  display: flex;
+  min-height: 42px;
+  flex: 0 0 42px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 12px;
+}
+
+.sidebarHeaderLabel {
+  flex: 1;
+  color: var(--text-faint);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+
+.sidebarHeaderActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.sidebarButtonSvg,
+.toolSvgIcon,
+.treeChevronIcon,
+.treeSvgIcon,
+.searchSvgIcon {
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sidebarButtonSvg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.7;
+}
+
+.toolSvgIcon {
+  width: 13px;
+  height: 13px;
+  stroke-width: 1.8;
+}
+
+.treeChevronIcon {
+  width: 11px;
+  height: 11px;
+  stroke-width: 2;
+}
+
+.treeSvgIcon {
+  width: 13px;
+  height: 13px;
+  stroke-width: 1.5;
+  opacity: 0.82;
+}
+
+.searchSvgIcon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.6;
+}
+
+.sidebarScroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 0 8px;
+}
+
+.sidebarSection {
+  padding: 0;
+}
+
+.sidebarSection + .sidebarSection {
+  border-top: 0.5px solid var(--border-subtle);
+}
+
+.sidebarSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 5px;
+  color: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+.tree {
+  padding: 0 0 4px;
+}
+
+.treeNode,
+.treeChildren {
+  min-width: 0;
+}
+
+.treeItem {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  color: var(--text-muted);
+  transition:
+    background 100ms ease,
+    color 100ms ease;
+}
+
+.treeItem:hover,
+.focusedTreeItem {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+}
+
+.activeTreeItem {
+  background: rgba(201, 168, 74, 0.08);
+  color: var(--text-primary);
+}
+
+.treeItemPrimary {
+  display: grid;
+  min-width: 0;
+  min-height: 27px;
+  grid-template-columns: 12px 15px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+
+.treeChevron {
+  display: inline-grid;
+  width: 12px;
+  place-items: center;
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+.treeItemName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.treeActiveDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.treeItemTools {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding-right: 4px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.treeItem:hover .treeItemTools,
+.treeItem:focus-within .treeItemTools {
+  opacity: 1;
+}
+
+.treeItemTools button {
+  display: inline-grid;
+  width: 20px;
+  height: 22px;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.treeItemTools button:hover {
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--accent);
+}
+
+.scratchTreeItem {
+  margin-top: 6px;
+}
+
+.sidebarEmptyState,
+.outlineEmptyState {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.sidebarEmptyState button {
+  width: 100%;
+  min-height: 30px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.sidebarEmptyState button:hover {
+  border-color: var(--text-faint);
+  color: var(--text-primary);
+}
+
+.outlineSidebarSection {
+  display: flex;
+  min-height: 180px;
+  flex-direction: column;
+}
+
+.sidebarSearch {
+  position: relative;
+  display: block;
+  padding: 3px 10px 8px;
+}
+
+.sidebarSearch .searchSvgIcon {
+  position: absolute;
+  top: 50%;
+  left: 19px;
+  color: var(--text-faint);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.sidebarSearch input {
+  width: 100%;
+  height: 30px;
+  padding: 0 9px 0 27px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 6px;
+  outline: none;
+  background: var(--bg-panel-strong);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.sidebarSearch input:focus {
+  border-color: rgba(201, 168, 74, 0.5);
+}
+
+.outlineSidebarList {
+  display: grid;
+  gap: 1px;
+  padding: 0 6px 8px;
+}
+
+.outlineSidebarItem {
+  display: grid;
+  min-width: 0;
+  min-height: 28px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.outlineSidebarItem:hover,
+.activeOutlineSidebarItem {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-primary);
+}
+
+.activeOutlineSidebarItem {
+  color: var(--accent-strong);
+}
+
+.outlineSidebarItem span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outlineLevelMark {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.sidebarFooter {
+  flex: 0 0 auto;
+  padding: 9px 12px;
+  border-top: 0.5px solid var(--border-subtle);
+}
+
+.sidebarFooterActions {
+  display: grid;
+  gap: 7px;
+}
+
+.sidebarAddButton {
+  display: inline-flex;
+  width: 100%;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.sidebarAddButton:hover {
+  border-color: var(--text-faint);
+  color: var(--text-primary);
+}
+
+.editorColumn {
+  min-width: 0;
+  background: var(--bg-root);
+}
+
+.editor {
+  background: var(--bg-root);
+  color: var(--text-primary);
+  caret-color: var(--accent);
+}
+
+.editorContent {
+  background: var(--bg-root);
+}
+
+.verticalTypewriterShell {
+  background: var(--bg-root);
+  color: #e9e4d6;
+}
+
+.verticalTypewriterEditor {
+  padding: 12vh 50vw;
+  color: #e9e4d6;
+  font-size: 21px;
+  line-height: 2.4;
+  letter-spacing: 0.05em;
+  caret-color: var(--accent);
+}
+
+.verticalTypewriterEditor .line.heading {
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.verticalTypewriterGuide {
+  border-left-color: rgba(201, 168, 74, 0.12);
+}
+
+.statusbar {
+  gap: 8px;
+  padding: 0 14px;
+  border-top: 0.5px solid var(--border-subtle);
+  background: var(--bg-root);
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.statusPath {
+  color: var(--text-faint);
+}
+
+.rightSidebar {
+  display: flex;
+  width: var(--right-sidebar-width);
+  min-width: var(--right-sidebar-width);
+  height: 100%;
+  flex: 0 0 var(--right-sidebar-width);
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 0.5px solid var(--border-subtle);
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  transition:
+    width 180ms ease,
+    min-width 180ms ease,
+    flex-basis 180ms ease;
+}
+
+.wideRightSidebar {
+  width: 480px;
+  min-width: 480px;
+  flex-basis: 480px;
+}
+
+.rightSidebarHeader {
+  padding: 0 10px 0 12px;
+}
+
+.rightTabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 7px;
+  background: var(--bg-panel-strong);
+}
+
+.rightTab {
+  min-width: 58px;
+  height: 26px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rightTab:hover {
+  color: var(--text-primary);
+}
+
+.activeRightTab {
+  background: #e8e3d4;
+  color: #1a1a1a;
+}
+
+.activeRightTab:hover {
+  color: #1a1a1a;
+}
+
+.rightSidebarBody {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.ideaPane {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 14px 14px;
+}
+
+.ideaSearch {
+  position: relative;
+  display: block;
+  flex: 0 0 auto;
+  padding: 0 0 10px;
+}
+
+.ideaSearch svg {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.55;
+  color: var(--text-faint);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.ideaSearch input {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px 0 36px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 6px;
+  outline: none;
+  background: var(--bg-panel-strong);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.ideaSearch input:focus {
+  border-color: rgba(201, 168, 74, 0.5);
+}
+
+.ideaList {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+}
+
+.ideaCard {
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-panel-strong);
+  cursor: grab;
+  user-select: none;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    opacity 120ms ease;
+}
+
+.ideaCard:hover {
+  border-color: var(--border-strong);
+  background: #202025;
+}
+
+.ideaCard:active {
+  cursor: grabbing;
+}
+
+.draggingIdeaCard {
+  border-style: dashed;
+  opacity: 0.45;
+}
+
+.ideaMetaRow {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+
+.ideaMeta {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.ideaTools {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.ideaCard:hover .ideaTools,
+.ideaCard:focus-within .ideaTools {
+  opacity: 1;
+}
+
+.ideaTools button {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.ideaTools button:disabled {
+  cursor: default;
+  opacity: 0.3;
+}
+
+.ideaTools button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text-primary);
+}
+
+.ideaTools svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.ideaText {
+  min-height: 32px;
+  outline: none;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+.ideaText:focus {
+  background: rgba(201, 168, 74, 0.05);
+  color: var(--text-primary);
+}
+
+.ideaText:empty::before {
+  color: var(--text-faint);
+  content: attr(data-placeholder);
+}
+
+.ideaTagList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.ideaTagList span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ideaAdd {
+  display: inline-flex;
+  min-height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0.5px dashed var(--border-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.ideaAdd:hover {
+  border-color: rgba(201, 168, 74, 0.5);
+  color: var(--accent);
+}
+
+.ideaAdd svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.plotPane {
+  min-width: 0;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.plotPane::-webkit-scrollbar {
+  height: 5px;
+}
+
+.plotPane::-webkit-scrollbar-thumb {
+  border: 0;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+
+.plotTrack {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  height: 100%;
+  flex-direction: row-reverse;
+  align-items: stretch;
+  justify-content: flex-start;
+  margin-left: auto;
+  padding: 12px 16px;
+  writing-mode: horizontal-tb;
+}
+
+.plotCard {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 0 9px;
+}
+
+.plotCard + .plotCard {
+  border-right: 0.5px solid var(--border-subtle);
+}
+
+.plotCardNum {
+  writing-mode: vertical-rl;
+  min-width: 30px;
+  flex: 0 0 auto;
+  align-self: flex-end;
+  margin-bottom: 16px;
+  padding: 10px 5px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-panel-strong);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: "Noto Serif JP", "Hiragino Mincho ProN", serif;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+}
+
+.expandedPlotCard .plotCardNum {
+  border-color: rgba(201, 168, 74, 0.5);
+  color: var(--accent);
+}
+
+.plotCardContent {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: row-reverse;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0.9em;
+  overflow: hidden;
+  writing-mode: horizontal-tb;
+}
+
+.plotCardTitle,
+.plotCardBody {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  outline: none;
+  border-radius: 4px;
+  font-family: "Noto Serif JP", "Hiragino Mincho ProN", serif;
+  letter-spacing: 0.04em;
+  white-space: pre-wrap;
+}
+
+.plotCardTitle {
+  height: 100%;
+  max-width: 1.9em;
+  flex: 0 0 auto;
+  overflow: hidden;
+  padding: 2px;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 2.05;
+  white-space: nowrap;
+}
+
+.expandedPlotCard .plotCardTitle {
+  color: var(--accent-strong);
+}
+
+.plotCardBody {
+  height: 100%;
+  overflow: hidden;
+  padding: 2px;
+  color: #b4afa0;
+  font-size: 14px;
+  line-height: 2.05;
+}
+
+.plotCardTitle:focus,
+.plotCardBody:focus {
+  background: rgba(201, 168, 74, 0.05);
+  color: var(--text-primary);
+}
+
+.plotCardTitle:empty::before,
+.plotCardBody:empty::before {
+  color: var(--text-faint);
+  content: attr(data-placeholder);
+}
+
+.plotCardToggle {
+  display: inline-grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  place-items: center;
+  margin-top: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 20px;
+}
+
+.plotCardToggle:hover {
+  background: rgba(201, 168, 74, 0.08);
+  color: var(--accent);
+}
+
+.plotAddButton {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+  align-self: center;
+  margin: 0 8px;
+  border: 0.5px dashed var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.plotAddButton:hover {
+  border-color: rgba(201, 168, 74, 0.5);
+  color: var(--accent);
+}
+
+.rightSidebar .snippetPanel {
+  width: 100%;
+  min-width: 0;
+  flex: 1;
+  border-left: 0;
+  background: transparent;
+}
+
+.rightSidebar .panelHeader {
+  height: 50px;
+  flex-basis: 50px;
+  padding: 8px 14px 6px;
+}
+
+.rightSidebar .panelHeader h2 {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.rightSidebar .panelCount {
+  background: var(--bg-panel-strong);
+  color: var(--text-muted);
+}
+
+.rightSidebar .addButton {
+  width: 28px;
+  height: 28px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+.rightSidebar .panelSearch {
+  padding: 0 14px 10px;
+}
+
+.rightSidebar .searchIcon {
+  left: 12px;
+  width: 16px;
+  height: 16px;
+}
+
+.rightSidebar .searchBox input {
+  height: 34px;
+  padding: 0 10px 0 36px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-panel-strong);
+  font-size: 12px;
+}
+
+.rightSidebar .snippetList {
+  gap: 10px;
+  padding: 0 14px 14px;
+}
+
+.rightSidebar .snippetCard {
+  padding: 10px 12px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-panel-strong);
+}
+
+.rightSidebar .snippetCard:hover {
+  border-color: var(--border-strong);
+  background: #202025;
+}
+
+.rightSidebar .snippetTitle {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.rightSidebar .snippetPreview {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.rightSidebar .snippetMeta {
+  margin-top: 7px;
+  font-size: 11px;
+}
+
+.newTabStart h1 {
+  color: var(--text-primary);
+}
+
+.newTabEyebrow {
+  color: var(--accent);
+}

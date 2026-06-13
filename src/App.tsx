@@ -14,9 +14,9 @@ import { VerticalTextEditor, type TextEditorHandle } from "./VerticalTextEditor"
 import { AppDialogModal } from "./components/dialogs/AppDialogModal";
 import { SettingsModal } from "./components/dialogs/SettingsModal";
 import { MetadataPanel } from "./components/editor/MetadataPanel";
-import { DocumentTabs } from "./components/layout/DocumentTabs";
-import { SnippetModal } from "./components/snippets/SnippetModal";
-import { SnippetPane } from "./components/snippets/SnippetPane";
+import { WorkspaceSidebar } from "./components/layout/WorkspaceSidebar";
+import { PlotPane } from "./components/plot/PlotPane";
+import { IdeaPane } from "./components/snippets/IdeaPane";
 import { StatusBar } from "./components/status/StatusBar";
 import type {
   AppDialog,
@@ -31,7 +31,6 @@ import type {
   ProjectFolder,
   SaveStatus,
   Snippet,
-  SnippetDraft,
   TextDocument,
   WorkspaceAlert,
   WorkspaceRecord,
@@ -92,7 +91,25 @@ const initialMarkdown = `# ${documentData.title}
 > 「また始まったか」
 `;
 
+const htmlIdeaSnippets: Snippet[] = [
+  {
+    id: "idea-sample-1",
+    title: "主人公が改札の前で一瞬立ち止まる描写",
+    text: "主人公が改札の前で一瞬立ち止まる描写を入れる。",
+    category: "",
+    tags: [],
+  },
+  {
+    id: "idea-sample-2",
+    title: "風呂のシーン",
+    text: "風呂のシーンはテンポよく、1分で終わらせる緊張感を持たせたい。",
+    category: "",
+    tags: [],
+  },
+];
+
 const defaultSnippets: Snippet[] = [
+  ...htmlIdeaSnippets,
   {
     id: "s1",
     title: "旅立ちの夜明け",
@@ -203,6 +220,40 @@ function createDefaultState(): AppState {
 
 function getTextLength(text: string): number {
   return Array.from(text).length;
+}
+
+function parseInlineIdeaTags(text: string): string[] {
+  const tags = new Set<string>();
+  const matches = text.matchAll(/(?:^|\s)#([^\s#.,;:!?()[\]{}「」『』、。]+)/g);
+
+  for (const match of matches) {
+    const tag = match[1]?.trim();
+    if (tag) tags.add(tag);
+  }
+
+  return Array.from(tags);
+}
+
+function createIdeaTitle(text: string): string {
+  const cleaned = text
+    .replace(/(?:^|\s)#([^\s#.,;:!?()[\]{}「」『』、。]+)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned) return "Idea";
+  return Array.from(cleaned).slice(0, 28).join("");
+}
+
+function ensureHtmlIdeaSamples(snippets: Snippet[]): Snippet[] {
+  const hasHtmlIdeaSample = htmlIdeaSnippets.some((sample) =>
+    snippets.some((snippet) => snippet.id === sample.id || snippet.text === sample.text),
+  );
+  if (hasHtmlIdeaSample) return snippets;
+
+  const hasOnlyLegacyDefaults =
+    snippets.length === 4 && snippets.every((snippet) => /^s[1-4]$/.test(snippet.id));
+
+  return hasOnlyLegacyDefaults ? [...htmlIdeaSnippets, ...snippets] : snippets;
 }
 
 function parseTextOutline(text: string): OutlineItem[] {
@@ -324,15 +375,17 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
       )
     : [];
 
-  const profileSnippets = Array.isArray(value?.profileSnippets)
+  const profileSnippets = ensureHtmlIdeaSamples(Array.isArray(value?.profileSnippets)
     ? value.profileSnippets
     : Array.isArray(value?.snippets)
       ? value.snippets
-      : defaultSnippets;
+      : defaultSnippets);
 
   return {
     markdown: typeof value?.markdown === "string" ? value.markdown : initialMarkdown,
-    snippets: Array.isArray(value?.snippets) ? value.snippets : profileSnippets,
+    snippets: ensureHtmlIdeaSamples(
+      Array.isArray(value?.snippets) ? value.snippets : profileSnippets,
+    ),
     profileSnippets,
     settings: {
       ...defaultSettings,
@@ -397,16 +450,6 @@ async function saveWorkspaceSnippets(folderPath: string, snippets: Snippet[]): P
   await invoke("save_project_snippets", { rootPath: folderPath, snippets });
 }
 
-function createEmptyDraft(): SnippetDraft {
-  return {
-    id: null,
-    title: "",
-    text: "",
-    category: "",
-    tags: "",
-  };
-}
-
 export default function App() {
   const saveTimerRef = useRef<number | null>(null);
   const toastTimerRef = useRef<number | null>(null);
@@ -449,14 +492,16 @@ export default function App() {
   const [editorSelectionHead, setEditorSelectionHead] = useState(0);
   const [dropIndicatorTop, setDropIndicatorTop] = useState<number | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [isSnippetModalOpen, setIsSnippetModalOpen] = useState(false);
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const [activeBreadcrumbPath, setActiveBreadcrumbPath] = useState<string | null>(null);
   const [isOutlineMenuOpen, setIsOutlineMenuOpen] = useState(false);
   const [appDialog, setAppDialog] = useState<AppDialog | null>(null);
   const [systemFonts, setSystemFonts] = useState<FontOption[]>(fallbackFontOptions);
-  const [draft, setDraft] = useState<SnippetDraft>(() => createEmptyDraft());
   const [isMetadataOpen, setIsMetadataOpen] = useState(false);
+  const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
+  const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
+  const [isRightSidebarWide, setIsRightSidebarWide] = useState(false);
+  const [rightSidebarTab, setRightSidebarTab] = useState<"idea" | "plot">("plot");
 
   const activeTab = useMemo(
     () => openTabs.find((tab) => tab.id === activeTabId) ?? openTabs[0] ?? null,
@@ -631,6 +676,10 @@ export default function App() {
     () => findActiveOutlineChain(outlineItems, activeEditorLine),
     [activeEditorLine, outlineItems],
   );
+  const activeOutlineIds = useMemo(
+    () => new Set(activeOutlineChain.map((item) => item.id)),
+    [activeOutlineChain],
+  );
   const filteredOutlineItems = useMemo(() => {
     const normalized = outlineQuery.trim().toLowerCase();
     if (!normalized) return outlineFlatItems;
@@ -646,11 +695,13 @@ export default function App() {
     if (!normalized) return snippets;
 
     return snippets.filter((snippet) => {
+      const inlineTags = parseInlineIdeaTags(snippet.text);
       return (
         snippet.title.toLowerCase().includes(normalized) ||
         snippet.text.toLowerCase().includes(normalized) ||
         snippet.category.toLowerCase().includes(normalized) ||
-        snippet.tags.some((tag) => tag.toLowerCase().includes(normalized))
+        snippet.tags.some((tag) => tag.toLowerCase().includes(normalized)) ||
+        inlineTags.some((tag) => tag.toLowerCase().includes(normalized))
       );
     });
   }, [query, snippets]);
@@ -1968,28 +2019,6 @@ export default function App() {
     setDraggingId(null);
   };
 
-  const handleDraftChange =
-    (key: keyof SnippetDraft) =>
-    (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      setDraft((current) => ({ ...current, [key]: event.target.value }));
-    };
-
-  const startCreateSnippet = () => {
-    setDraft(createEmptyDraft());
-    setIsSnippetModalOpen(true);
-  };
-
-  const startEditSnippet = (snippet: Snippet) => {
-    setDraft({
-      id: snippet.id,
-      title: snippet.title,
-      text: snippet.text,
-      category: snippet.category,
-      tags: snippet.tags.join(", "),
-    });
-    setIsSnippetModalOpen(true);
-  };
-
   const updateSnippetList = (updater: (snippets: Snippet[]) => Snippet[]) => {
     setAppState((current) => {
       const nextSnippets = updater(current.snippets);
@@ -2004,39 +2033,42 @@ export default function App() {
     });
   };
 
-  const saveSnippetDraft = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const createIdea = () => {
+    const id = `idea-${Date.now()}`;
+    setQuery("");
+    updateSnippetList((currentSnippets) => [
+      {
+        id,
+        title: "Idea",
+        text: "",
+        category: "",
+        tags: [],
+      },
+      ...currentSnippets,
+    ]);
+    showToast("Ideaを追加しました");
+  };
 
-    const title = draft.title.trim();
-    const text = draft.text.trim();
-    if (!title || !text) return;
-
-    const snippet: Snippet = {
-      id: draft.id ?? `snippet-${Date.now()}`,
-      title,
-      text,
-      category: draft.category.trim(),
-      tags: draft.tags
-        .split(",")
-        .map((tag) => tag.trim())
-        .filter(Boolean),
-    };
-
-    updateSnippetList((currentSnippets) => {
-      const exists = currentSnippets.some((item) => item.id === snippet.id);
-      return exists
-        ? currentSnippets.map((item) => (item.id === snippet.id ? snippet : item))
-        : [snippet, ...currentSnippets];
-    });
-    setDraft(createEmptyDraft());
-    setIsSnippetModalOpen(false);
-    showToast(`「${snippet.title}」を保存しました`);
+  const updateIdeaText = (snippetId: string, text: string) => {
+    updateSnippetList((currentSnippets) =>
+      currentSnippets.map((snippet) =>
+        snippet.id === snippetId
+          ? {
+              ...snippet,
+              title: createIdeaTitle(text),
+              text,
+              category: "",
+              tags: parseInlineIdeaTags(text),
+            }
+          : snippet,
+      ),
+    );
   };
 
   const deleteSnippet = async (snippet: Snippet) => {
     const shouldDelete = await requestConfirm({
-      title: "スニペットを削除",
-      message: "このスニペットを削除しますか？",
+      title: "Ideaを削除",
+      message: "このIdeaを削除しますか？",
       detail: snippet.title,
       confirmLabel: "削除",
       danger: true,
@@ -2046,9 +2078,6 @@ export default function App() {
     updateSnippetList((currentSnippets) =>
       currentSnippets.filter((item) => item.id !== snippet.id),
     );
-    if (draft.id === snippet.id) {
-      setDraft(createEmptyDraft());
-    }
     showToast(`「${snippet.title}」を削除しました`);
   };
 
@@ -2195,6 +2224,20 @@ export default function App() {
                 </div>
               )}
             </div>
+            {isLeftSidebarCollapsed && (
+              <button
+                className="iconButton"
+                type="button"
+                aria-label="左サイドバーを表示"
+                title="左サイドバーを表示"
+                onClick={() => setIsLeftSidebarCollapsed(false)}
+              >
+                <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <line x1="9" y1="3" x2="9" y2="21" />
+                </svg>
+              </button>
+            )}
             <span className="appName">Then</span>
             <nav
               className="breadcrumbs"
@@ -2471,6 +2514,20 @@ export default function App() {
               )}
             </nav>
             <div className="topbarActions">
+              {isRightSidebarCollapsed && (
+                <button
+                  className="iconButton"
+                  type="button"
+                  aria-label="右サイドバーを表示"
+                  title="右サイドバーを表示"
+                  onClick={() => setIsRightSidebarCollapsed(false)}
+                >
+                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <line x1="15" y1="3" x2="15" y2="21" />
+                  </svg>
+                </button>
+              )}
               <button className="iconButton" type="button" aria-label="履歴">
                 ↶
               </button>
@@ -2486,13 +2543,30 @@ export default function App() {
           </header>
 
           <div className="workspace">
-            <DocumentTabs
-              openTabs={openTabs}
-              activeTabId={activeTabId}
-              onActivateTab={activateDocumentTab}
-              onCloseTab={(tabId) => void closeDocumentTab(tabId)}
-              onNewTab={handleNewTab}
-            />
+            {!isLeftSidebarCollapsed && (
+              <WorkspaceSidebar
+                projectFolder={projectFolder}
+                currentFilePath={currentFilePath}
+                currentFileName={currentFileName}
+                focusedFolderPath={focusedFolderPath}
+                outlineItems={filteredOutlineItems}
+                outlineCount={outlineFlatItems.length}
+                outlineQuery={outlineQuery}
+                activeOutlineIds={activeOutlineIds}
+                onOutlineQueryChange={setOutlineQuery}
+                onJumpOutline={jumpToOutlineItem}
+                onOpenProjectFolder={handleOpenProjectFolder}
+                onNewDocument={handleNewDocument}
+                onCreateFile={(folderPath) => void handleCreateProjectFile(folderPath)}
+                onCreateFolder={(folderPath) => void handleCreateProjectFolder(folderPath)}
+                onSelectFile={(path) => void handleProjectFileSelect(path)}
+                onSelectFolder={(path) => void handleProjectFolderSelect(path)}
+                onOpenFileInNewTab={(path) => void handleProjectFileSelectInNewTab(path)}
+                onRenameEntry={(entry) => void handleRenameProjectEntry(entry)}
+                onDeleteEntry={(entry) => void handleDeleteProjectEntry(entry)}
+                onCollapse={() => setIsLeftSidebarCollapsed(true)}
+              />
+            )}
             <div className="editorColumn">
               <div className="editorFrame">
                 <div
@@ -2582,19 +2656,77 @@ export default function App() {
               />
             </div>
 
-            <SnippetPane
-              snippets={filteredSnippets}
-              query={query}
-              draggingId={draggingId}
-              onQueryChange={setQuery}
-              onCreate={startCreateSnippet}
-              onDragStart={handleSnippetDragStart}
-              onDragEnd={handleSnippetDragEnd}
-              onDoubleClick={handleSnippetDoubleClick}
-              onMove={moveSnippet}
-              onEdit={startEditSnippet}
-              onDelete={deleteSnippet}
-            />
+            {!isRightSidebarCollapsed && (
+              <aside
+                className={`rightSidebar ${isRightSidebarWide ? "wideRightSidebar" : ""}`}
+                aria-label="補助ペイン"
+              >
+                <div className="rightSidebarHeader">
+                  <div className="rightTabs" role="tablist" aria-label="補助ペイン">
+                    <button
+                      className={`rightTab ${rightSidebarTab === "idea" ? "activeRightTab" : ""}`}
+                      type="button"
+                      role="tab"
+                      aria-selected={rightSidebarTab === "idea"}
+                      onClick={() => setRightSidebarTab("idea")}
+                    >
+                      Idea
+                    </button>
+                    <button
+                      className={`rightTab ${rightSidebarTab === "plot" ? "activeRightTab" : ""}`}
+                      type="button"
+                      role="tab"
+                      aria-selected={rightSidebarTab === "plot"}
+                      onClick={() => setRightSidebarTab("plot")}
+                    >
+                      Plot
+                    </button>
+                  </div>
+                  <button
+                    className="sidebarIconButton"
+                    type="button"
+                    aria-label={isRightSidebarWide ? "ペイン幅を戻す" : "ペイン幅を拡張"}
+                    title={isRightSidebarWide ? "ペイン幅を戻す" : "ペイン幅を拡張"}
+                    onClick={() => setIsRightSidebarWide((isWide) => !isWide)}
+                  >
+                    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+                      <polyline points={isRightSidebarWide ? "9 18 15 12 9 6" : "15 18 9 12 15 6"} />
+                    </svg>
+                  </button>
+                  <button
+                    className="sidebarIconButton"
+                    type="button"
+                    aria-label="右サイドバーを畳む"
+                    title="右サイドバーを畳む"
+                    onClick={() => setIsRightSidebarCollapsed(true)}
+                  >
+                    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="rightSidebarBody">
+                  {rightSidebarTab === "plot" ? (
+                    <PlotPane />
+                  ) : (
+                    <IdeaPane
+                      snippets={filteredSnippets}
+                      query={query}
+                      draggingId={draggingId}
+                      onQueryChange={setQuery}
+                      onCreate={createIdea}
+                      onTextChange={updateIdeaText}
+                      onDragStart={handleSnippetDragStart}
+                      onDragEnd={handleSnippetDragEnd}
+                      onDoubleClick={handleSnippetDoubleClick}
+                      onMove={moveSnippet}
+                      onDelete={deleteSnippet}
+                    />
+                  )}
+                </div>
+              </aside>
+            )}
           </div>
 
           <div className={`toast ${toast ? "showToast" : ""}`} role="status">
@@ -2607,15 +2739,6 @@ export default function App() {
               onClose={closeAppDialog}
               onSubmit={submitAppDialog}
               onValueChange={updateAppDialogValue}
-            />
-          )}
-
-          {isSnippetModalOpen && (
-            <SnippetModal
-              draft={draft}
-              onClose={() => setIsSnippetModalOpen(false)}
-              onSubmit={saveSnippetDraft}
-              onDraftChange={handleDraftChange}
             />
           )}
 
