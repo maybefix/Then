@@ -32,6 +32,7 @@ export type TextEditorHandle = {
 
 type VerticalTextEditorProps = {
   text: string;
+  typewriterOffset: number;
   onReady: (editor: TextEditorHandle | null) => void;
   onTextChange: (text: string) => void;
   onSelectionChange: () => void;
@@ -1242,6 +1243,7 @@ function centerDelayFrames(eventType: string): number {
 
 export function VerticalTextEditor({
   text,
+  typewriterOffset,
   onReady,
   onTextChange,
   onSelectionChange,
@@ -1253,7 +1255,7 @@ export function VerticalTextEditor({
   const onTextChangeRef = useRef(onTextChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
   const composingRef = useRef(false);
-  const typewriterOffsetRef = useRef(50);
+  const typewriterOffsetRef = useRef(typewriterOffset);
 
   useEffect(() => {
     onTextChangeRef.current = onTextChange;
@@ -1262,6 +1264,10 @@ export function VerticalTextEditor({
   useEffect(() => {
     onSelectionChangeRef.current = onSelectionChange;
   }, [onSelectionChange]);
+
+  useEffect(() => {
+    typewriterOffsetRef.current = Number.isFinite(typewriterOffset) ? typewriterOffset : 50;
+  }, [typewriterOffset]);
 
   const handle = useMemo<TextEditorHandle>(
     () => ({

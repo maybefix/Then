@@ -1149,7 +1149,7 @@ textarea {
 
 .verticalTypewriterGuide {
   position: absolute;
-  left: 50%;
+  left: var(--typewriter-guide-position, 50%);
   top: 0;
   bottom: 0;
   width: 0;

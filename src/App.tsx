@@ -2231,6 +2231,7 @@ export default function App() {
             "--ui-font-family": settings.uiFontFamily,
             "--editor-font-size": `${settings.fontSize}px`,
             "--editor-line-height": settings.lineHeight,
+            "--typewriter-guide-position": `${settings.typewriterOffset}%`,
           } as React.CSSProperties
         }
       >
@@ -2719,6 +2720,7 @@ export default function App() {
                           <VerticalTextEditor
                             key={documentKey}
                             text={editorText}
+                            typewriterOffset={settings.typewriterOffset}
                             onReady={handleEditorReady}
                             onTextChange={handleTextChange}
                             onSelectionChange={handleSelectionChange}
