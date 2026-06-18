@@ -971,90 +971,180 @@ textarea {
 
 .verticalTypewriterEditor {
   position: relative;
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-  block-size: auto;
+  min-width: 100%;
+  height: 100%;
+}
+
+.verticalTypewriterEditor .pm-root {
+  position: relative;
+  min-width: max-content;
   height: 100%;
   padding: 10vh 50vw;
+  outline: none;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
   font-family: var(--editor-font-family);
   font-size: var(--editor-font-size);
   line-height: var(--editor-line-height);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   outline: none;
   caret-color: #e8b04b;
-  white-space: pre-wrap;
-  word-break: break-all;
 }
 
-.verticalTypewriterEditor[data-empty="true"]::before {
+.verticalTypewriterEditor .pm-root[data-empty="true"]::before {
   content: attr(data-placeholder);
   position: absolute;
   color: rgba(233, 228, 214, 0.28);
+  white-space: pre-wrap;
   pointer-events: none;
   user-select: none;
 }
 
-.verticalTypewriterEditor .line {
+.verticalTypewriterEditor .pm-root p {
+  position: relative;
+  min-block-size: 1lh;
+  margin: 0;
+  contain: layout style;
+  contain-intrinsic-block-size: auto 2.6em;
+  contain-intrinsic-inline-size: auto 82vh;
+  content-visibility: auto;
+  overflow-clip-margin: 4em;
   white-space: pre-wrap;
-  min-block-size: 1em;
+  word-break: break-all;
 }
 
-.verticalTypewriterEditor .line.blank {
-  min-block-size: 1em;
+.verticalTypewriterEditor .pm-root p.blank {
+  min-block-size: 1lh;
 }
 
-.verticalTypewriterEditor .line.heading {
+.verticalTypewriterEditor .pm-root p.heading {
   font-weight: 600;
   color: #f1dfb8;
   line-height: 1.95;
 }
 
-.verticalTypewriterEditor .line.h1 {
+.verticalTypewriterEditor .pm-root p.h1 {
   font-size: 1.55em;
 }
 
-.verticalTypewriterEditor .line.h2 {
+.verticalTypewriterEditor .pm-root p.h2 {
   font-size: 1.38em;
 }
 
-.verticalTypewriterEditor .line.h3 {
+.verticalTypewriterEditor .pm-root p.h3 {
   font-size: 1.22em;
 }
 
-.verticalTypewriterEditor .line.h4 {
+.verticalTypewriterEditor .pm-root p.h4 {
   font-size: 1.12em;
 }
 
-.verticalTypewriterEditor .line.h5 {
+.verticalTypewriterEditor .pm-root p.h5 {
   font-size: 1.06em;
 }
 
-.verticalTypewriterEditor .line.h6 {
+.verticalTypewriterEditor .pm-root p.h6 {
   font-size: 1em;
 }
 
-.verticalTypewriterEditor .line.list-line {
+.verticalTypewriterEditor .pm-root p.list-line {
   line-height: 2.15;
 }
 
-.verticalTypewriterEditor .line.list-line[data-level="0"] {
+.verticalTypewriterEditor .pm-root p.list-line[data-level="0"] {
   padding-inline-start: 0.6em;
 }
 
-.verticalTypewriterEditor .line.list-line[data-level="1"] {
+.verticalTypewriterEditor .pm-root p.list-line[data-level="1"] {
   padding-inline-start: 1.5em;
 }
 
-.verticalTypewriterEditor .line.list-line[data-level="2"] {
+.verticalTypewriterEditor .pm-root p.list-line[data-level="2"] {
   padding-inline-start: 2.4em;
 }
 
-.verticalTypewriterEditor .line.list-line[data-level="3"] {
+.verticalTypewriterEditor .pm-root p.list-line[data-level="3"] {
   padding-inline-start: 3.3em;
 }
 
-.verticalTypewriterEditor .line.list-line[data-level="4"] {
+.verticalTypewriterEditor .pm-root p.list-line[data-level="4"] {
   padding-inline-start: 4.2em;
+}
+
+.verticalTypewriterEditor .pm-root p.jitsuki,
+.verticalTypewriterEditor .pm-root p.align-start,
+.verticalTypewriterEditor .pm-root p.align-center,
+.verticalTypewriterEditor .pm-root p.align-end {
+  display: flex;
+  min-height: 62vh;
+}
+
+.verticalTypewriterEditor .pm-root p.jitsuki,
+.verticalTypewriterEditor .pm-root p.align-end {
+  justify-content: flex-end;
+}
+
+.verticalTypewriterEditor .pm-root p.align-center {
+  justify-content: center;
+}
+
+.verticalTypewriterEditor .pm-root p.align-start {
+  justify-content: flex-start;
+}
+
+.verticalTypewriterEditor .pm-root p.active-line {
+  background: none;
+}
+
+.verticalTypewriterEditor .mk-hidden {
+  display: none;
+}
+
+.verticalTypewriterEditor .ruby-base {
+  position: relative;
+  color: #e7ddc4;
+}
+
+.verticalTypewriterEditor .ruby-base::after {
+  content: attr(data-rt);
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  color: var(--accent);
+  font-size: 0.5em;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  pointer-events: none;
+  text-orientation: upright;
+  transform: translateY(-50%);
+  user-select: none;
+  white-space: nowrap;
+  writing-mode: vertical-rl;
+}
+
+.verticalTypewriterEditor .em-goma,
+.verticalTypewriterEditor .em-auto {
+  text-emphasis: filled sesame var(--accent);
+  -webkit-text-emphasis: filled sesame var(--accent);
+}
+
+.verticalTypewriterEditor .em-dot {
+  text-emphasis: filled dot var(--accent);
+  -webkit-text-emphasis: filled dot var(--accent);
+}
+
+.verticalTypewriterEditor .tcy {
+  text-combine-upright: all;
+  -webkit-text-combine: horizontal;
+}
+
+.verticalTypewriterEditor .bold {
+  color: #ead9a8;
+  font-weight: 700;
+}
+
+.verticalTypewriterEditor .mk-cmd {
+  color: var(--accent-strong);
 }
 
 .verticalTypewriterGuide {
@@ -2100,7 +2190,7 @@ body {
   color: #e9e4d6;
 }
 
-.verticalTypewriterEditor {
+.verticalTypewriterEditor .pm-root {
   padding: 12vh 50vw;
   color: #e9e4d6;
   font-family: var(--editor-font-family);
@@ -2110,7 +2200,7 @@ body {
   caret-color: var(--accent);
 }
 
-.verticalTypewriterEditor .line.heading {
+.verticalTypewriterEditor .pm-root p.heading {
   color: var(--accent-strong);
   font-weight: 700;
 }
