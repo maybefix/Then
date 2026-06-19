@@ -4,6 +4,7 @@ import {
   DragEvent,
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -82,6 +83,68 @@ const scratchFileName = "無題.txt";
 const newTabName = "新しいタブ";
 const scratchWorkspaceName = "一時ファイル";
 const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
+
+type LayoutDirection = "start" | "center" | "end";
+
+type EditorSelectionSnapshot = {
+  from: number;
+  to: number;
+  text: string;
+};
+
+type EditorContextMenuState = EditorSelectionSnapshot & {
+  x: number;
+  y: number;
+};
+
+type NotationModalState =
+  | {
+      type: "ruby";
+      selection: EditorSelectionSnapshot;
+      reading: string;
+      error: string;
+    }
+  | {
+      type: "direction";
+      selection: EditorSelectionSnapshot;
+    };
+
+const customNotationSpecs = [
+  {
+    id: "ruby",
+    label: "ルビ",
+    syntax: "[本文 (rb,ルビ)]",
+    description: "選択範囲に読みを付けます",
+  },
+  {
+    id: "tcy",
+    label: "縦中横",
+    syntax: "[本文 (tcy)]",
+    description: "選択範囲を縦書き中の横組みにします",
+  },
+  {
+    id: "emphasis",
+    label: "圏点",
+    syntax: "[本文 (em,goma)]",
+    description: "選択範囲に圏点を付けます",
+  },
+  {
+    id: "direction",
+    label: "文章方向",
+    syntax: "[(al:start|center|end)]",
+    description: "右クリック位置または選択範囲を含む行の文末に配置指示を付けます",
+  },
+] as const;
+
+const directionOptions: Array<{
+  value: LayoutDirection;
+  label: string;
+  description: string;
+}> = [
+  { value: "start", label: "行頭", description: "対象行の文末に行頭揃え指示を付けます" },
+  { value: "center", label: "中央", description: "対象行の文末に中央揃え指示を付けます" },
+  { value: "end", label: "行末", description: "対象行の文末に行末揃え指示を付けます" },
+];
 
 function debugLog(message: string, data?: unknown): void {
   const timestamp = new Date().toISOString();
@@ -357,6 +420,200 @@ function createFontOptions(fontFamilies: string[]): FontOption[] {
   );
 }
 
+function normalizeSelectionRange(
+  selection: { from: number; to: number },
+  text: string,
+): EditorSelectionSnapshot {
+  const from = Math.max(0, Math.min(text.length, Math.min(selection.from, selection.to)));
+  const to = Math.max(from, Math.min(text.length, Math.max(selection.from, selection.to)));
+
+  return {
+    from,
+    to,
+    text: text.slice(from, to),
+  };
+}
+
+function sanitizeNotationArgument(value: string): string {
+  return value.replace(/[\r\n\])]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function canWrapInlineSelection(selection: EditorSelectionSnapshot): boolean {
+  return selection.from < selection.to && !selection.text.includes("\n");
+}
+
+function stripDirectionMarkers(line: string): string {
+  return line.replace(/\[\(al:(?:start|center|end)\)\]/g, "").replace(/^>>\s*/, "");
+}
+
+function applyDirectionToLine(line: string, direction: LayoutDirection): string {
+  const cleaned = stripDirectionMarkers(line);
+  return `${cleaned}[(al:${direction})]`;
+}
+
+function applyDirectionToSelection(
+  text: string,
+  selection: EditorSelectionSnapshot,
+  direction: LayoutDirection,
+): { from: number; to: number; insert: string; cursorPos: number } {
+  const rangeStart = selection.from;
+  const rangeEnd = selection.to > selection.from ? selection.to : selection.from;
+  const start = text.lastIndexOf("\n", Math.max(0, rangeStart - 1)) + 1;
+  const normalizedEnd = rangeEnd > rangeStart && text[rangeEnd - 1] === "\n"
+    ? rangeEnd - 1
+    : rangeEnd;
+  const nextBreak = text.indexOf("\n", normalizedEnd);
+  const end = nextBreak === -1 ? text.length : nextBreak;
+  const insert = text
+    .slice(start, end)
+    .split("\n")
+    .map((line) => applyDirectionToLine(line, direction))
+    .join("\n");
+
+  return {
+    from: start,
+    to: end,
+    insert,
+    cursorPos: start + insert.length,
+  };
+}
+
+function rangesTouch(
+  selectionFrom: number,
+  selectionTo: number,
+  markupFrom: number,
+  markupTo: number,
+): boolean {
+  if (selectionFrom === selectionTo) {
+    return markupFrom <= selectionFrom && selectionFrom <= markupTo;
+  }
+
+  return markupFrom < selectionTo && markupTo > selectionFrom;
+}
+
+function pushClearReplacement(
+  replacements: Array<{ from: number; to: number; insert: string }>,
+  from: number,
+  to: number,
+  insert: string,
+): void {
+  if (to <= from) return;
+  if (replacements.some((item) => from < item.to && to > item.from)) return;
+  replacements.push({ from, to, insert });
+}
+
+function clearNotationInLine(
+  line: string,
+  selectionFrom: number,
+  selectionTo: number,
+): { text: string; changed: boolean } {
+  const replacements: Array<{ from: number; to: number; insert: string }> = [];
+  let match: RegExpExecArray | null;
+
+  const layout = /\[([^\[\]\n]*?)\s*\((rb|em|tcy)(?:,([^)]*))?\)\]/g;
+  while ((match = layout.exec(line))) {
+    const full = match[0];
+    const from = match.index;
+    const to = from + full.length;
+    if (rangesTouch(selectionFrom, selectionTo, from, to)) {
+      pushClearReplacement(replacements, from, to, match[1].replace(/\s+$/, ""));
+    }
+  }
+
+  const pipeRuby = /｜([^《》｜]+)《([^《》]+)》/g;
+  while ((match = pipeRuby.exec(line))) {
+    const from = match.index;
+    const to = from + match[0].length;
+    if (rangesTouch(selectionFrom, selectionTo, from, to)) {
+      pushClearReplacement(replacements, from, to, match[1]);
+    }
+  }
+
+  const kanjiRuby = /([一-龠々〆ヶ]+)《([^《》]+)》/g;
+  while ((match = kanjiRuby.exec(line))) {
+    const from = match.index;
+    const to = from + match[0].length;
+    if (rangesTouch(selectionFrom, selectionTo, from, to)) {
+      pushClearReplacement(replacements, from, to, match[1]);
+    }
+  }
+
+  const emphasis = /《《([^《》]+)》》/g;
+  while ((match = emphasis.exec(line))) {
+    const from = match.index;
+    const to = from + match[0].length;
+    if (rangesTouch(selectionFrom, selectionTo, from, to)) {
+      pushClearReplacement(replacements, from, to, match[1]);
+    }
+  }
+
+  const bold = /\*\*([^*]+)\*\*/g;
+  while ((match = bold.exec(line))) {
+    const from = match.index;
+    const to = from + match[0].length;
+    if (rangesTouch(selectionFrom, selectionTo, from, to)) {
+      pushClearReplacement(replacements, from, to, match[1]);
+    }
+  }
+
+  const align = /\[\(al:(?:start|center|end)\)\]/g;
+  while ((match = align.exec(line))) {
+    pushClearReplacement(replacements, match.index, match.index + match[0].length, "");
+  }
+
+  if (replacements.length === 0) {
+    return { text: line, changed: false };
+  }
+
+  replacements.sort((left, right) => right.from - left.from);
+  let next = line;
+  for (const replacement of replacements) {
+    next = `${next.slice(0, replacement.from)}${replacement.insert}${next.slice(replacement.to)}`;
+  }
+
+  return { text: next, changed: true };
+}
+
+function clearNotationFromSelection(
+  text: string,
+  selection: EditorSelectionSnapshot,
+): { from: number; to: number; insert: string; cursorPos: number; changed: boolean } {
+  const rangeStart = selection.from;
+  const rangeEnd = selection.to > selection.from ? selection.to : selection.from;
+  const start = text.lastIndexOf("\n", Math.max(0, rangeStart - 1)) + 1;
+  const normalizedEnd = rangeEnd > rangeStart && text[rangeEnd - 1] === "\n"
+    ? rangeEnd - 1
+    : rangeEnd;
+  const nextBreak = text.indexOf("\n", normalizedEnd);
+  const end = nextBreak === -1 ? text.length : nextBreak;
+  const lines = text.slice(start, end).split("\n");
+  let offset = start;
+  let changed = false;
+
+  const insert = lines
+    .map((line) => {
+      const lineStart = offset;
+      const lineEnd = lineStart + line.length;
+      offset = lineEnd + 1;
+      const localFrom = Math.max(0, Math.min(line.length, selection.from - lineStart));
+      const localTo = selection.from === selection.to
+        ? localFrom
+        : Math.max(0, Math.min(line.length, selection.to - lineStart));
+      const result = clearNotationInLine(line, localFrom, localTo);
+      changed = changed || result.changed;
+      return result.text;
+    })
+    .join("\n");
+
+  return {
+    from: start,
+    to: end,
+    insert,
+    cursorPos: Math.min(start + insert.length, selection.from),
+    changed,
+  };
+}
+
 function normalizeState(value: Partial<AppState> | null | undefined): AppState {
   const settings = (value?.settings ?? {}) as Partial<EditorSettings>;
   const recentWorkspaces = Array.isArray(value?.recentWorkspaces)
@@ -462,6 +719,7 @@ export default function App() {
   const draggingSnippetRef = useRef<Snippet | null>(null);
   const editorInstanceRef = useRef<TextEditorHandle | null>(null);
   const editorShellRef = useRef<HTMLDivElement | null>(null);
+  const editorContextMenuRef = useRef<HTMLDivElement | null>(null);
   const fileMenuRef = useRef<HTMLDivElement | null>(null);
   const breadcrumbMenuRef = useRef<HTMLDivElement | null>(null);
   const didMountEditorRef = useRef(false);
@@ -506,6 +764,9 @@ export default function App() {
     useState<BreadcrumbDropTarget>(null);
   const [charCount, setCharCount] = useState(0);
   const [editorSelectionHead, setEditorSelectionHead] = useState(0);
+  const [editorContextMenu, setEditorContextMenu] =
+    useState<EditorContextMenuState | null>(null);
+  const [notationModal, setNotationModal] = useState<NotationModalState | null>(null);
   const [dropIndicatorTop, setDropIndicatorTop] = useState<number | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
@@ -1121,12 +1382,17 @@ export default function App() {
       if (!breadcrumbMenuRef.current?.contains(target)) {
         setActiveBreadcrumbPath(null);
       }
+      if (!editorContextMenuRef.current?.contains(target)) {
+        setEditorContextMenu(null);
+      }
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setIsFileMenuOpen(false);
       setActiveBreadcrumbPath(null);
+      setEditorContextMenu(null);
+      setNotationModal(null);
     };
 
     window.addEventListener("pointerdown", handlePointerDown);
@@ -1281,6 +1547,225 @@ export default function App() {
       setToast("");
       toastTimerRef.current = null;
     }, 2200);
+  };
+
+  const closeEditorContextMenu = () => {
+    setEditorContextMenu(null);
+  };
+
+  const writeClipboardText = async (text: string) => {
+    if (!navigator.clipboard?.writeText) {
+      throw new Error("Clipboard write is not available");
+    }
+    await navigator.clipboard.writeText(text);
+  };
+
+  const readClipboardText = async () => {
+    if (!navigator.clipboard?.readText) {
+      throw new Error("Clipboard read is not available");
+    }
+    return navigator.clipboard.readText();
+  };
+
+  const handleEditorContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest(".verticalTypewriterShell")) return;
+
+    const editor = editorInstanceRef.current;
+    if (!editor) return;
+
+    event.preventDefault();
+    setIsFileMenuOpen(false);
+    setActiveBreadcrumbPath(null);
+    setIsOutlineMenuOpen(false);
+
+    const currentText = editor.getValue();
+    let snapshot = normalizeSelectionRange(editor.getSelection(), currentText);
+    if (snapshot.from === snapshot.to) {
+      const pointOffset = editor.positionFromPoint(event.clientX, event.clientY);
+      if (pointOffset !== null) {
+        snapshot = normalizeSelectionRange({ from: pointOffset, to: pointOffset }, currentText);
+      }
+    }
+
+    setEditorContextMenu({
+      ...snapshot,
+      x: Math.min(event.clientX, window.innerWidth - 236),
+      y: Math.min(event.clientY, window.innerHeight - 292),
+    });
+  };
+
+  const copyEditorSelection = async (selection: EditorSelectionSnapshot | null) => {
+    if (!selection || selection.from === selection.to) {
+      showToast("コピーする範囲を選択してください");
+      return;
+    }
+
+    try {
+      await writeClipboardText(selection.text);
+      showToast("コピーしました");
+    } catch {
+      showToast("クリップボードへコピーできませんでした");
+    } finally {
+      closeEditorContextMenu();
+    }
+  };
+
+  const cutEditorSelection = async (selection: EditorSelectionSnapshot | null) => {
+    const editor = editorInstanceRef.current;
+    if (!editor || !selection || selection.from === selection.to) {
+      showToast("切り取る範囲を選択してください");
+      return;
+    }
+
+    try {
+      await writeClipboardText(selection.text);
+      editor.replaceRange(selection.from, selection.to, "", selection.from);
+      editor.focus();
+      showToast("切り取りました");
+    } catch {
+      showToast("クリップボードへ切り取れませんでした");
+    } finally {
+      closeEditorContextMenu();
+    }
+  };
+
+  const pasteIntoEditorSelection = async (selection: EditorSelectionSnapshot | null) => {
+    const editor = editorInstanceRef.current;
+    if (!editor || !selection) return;
+
+    try {
+      const pastedText = await readClipboardText();
+      if (!pastedText) return;
+      editor.replaceRange(
+        selection.from,
+        selection.to,
+        pastedText,
+        selection.from + pastedText.length,
+      );
+      editor.focus();
+      showToast("貼り付けました");
+    } catch {
+      showToast("クリップボードから貼り付けできませんでした");
+    } finally {
+      closeEditorContextMenu();
+    }
+  };
+
+  const applyInlineNotation = (
+    selection: EditorSelectionSnapshot,
+    notation: "ruby" | "tcy" | "emphasis",
+    argument = "",
+  ) => {
+    const editor = editorInstanceRef.current;
+    if (!editor) return false;
+
+    const currentSelection = normalizeSelectionRange(selection, editor.getValue());
+    if (!canWrapInlineSelection(currentSelection)) {
+      showToast("単一行の範囲を選択してください");
+      return false;
+    }
+
+    const arg = sanitizeNotationArgument(argument);
+    if (notation === "ruby" && !arg) {
+      setNotationModal((current) =>
+        current?.type === "ruby" ? { ...current, error: "ルビを入力してください" } : current,
+      );
+      return false;
+    }
+
+    const method =
+      notation === "ruby" ? `rb,${arg}` : notation === "emphasis" ? "em,goma" : "tcy";
+    const insert = `[${currentSelection.text} (${method})]`;
+
+    editor.replaceRange(
+      currentSelection.from,
+      currentSelection.to,
+      insert,
+      currentSelection.from + insert.length,
+    );
+    editor.focus();
+    showToast(`${customNotationSpecs.find((item) => item.id === notation)?.label}を反映しました`);
+    return true;
+  };
+
+  const applyDirectionNotation = (
+    selection: EditorSelectionSnapshot,
+    direction: LayoutDirection,
+  ) => {
+    const editor = editorInstanceRef.current;
+    if (!editor) return false;
+
+    const currentText = editor.getValue();
+    const currentSelection = normalizeSelectionRange(selection, currentText);
+    const replacement = applyDirectionToSelection(currentText, currentSelection, direction);
+
+    editor.replaceRange(
+      replacement.from,
+      replacement.to,
+      replacement.insert,
+      replacement.cursorPos,
+    );
+    editor.focus();
+    showToast("文章方向を反映しました");
+    return true;
+  };
+
+  const clearSelectionNotation = (selection: EditorSelectionSnapshot | null) => {
+    const editor = editorInstanceRef.current;
+    if (!editor || !selection) return false;
+
+    const currentText = editor.getValue();
+    const currentSelection = normalizeSelectionRange(selection, currentText);
+    const replacement = clearNotationFromSelection(currentText, currentSelection);
+
+    if (!replacement.changed) {
+      showToast("クリアできる記法がありません");
+      closeEditorContextMenu();
+      return false;
+    }
+
+    editor.replaceRange(
+      replacement.from,
+      replacement.to,
+      replacement.insert,
+      replacement.cursorPos,
+    );
+    editor.focus();
+    showToast("記法をクリアしました");
+    closeEditorContextMenu();
+    return true;
+  };
+
+  const openRubyNotationModal = (selection: EditorSelectionSnapshot | null) => {
+    if (!selection || !canWrapInlineSelection(selection)) {
+      showToast("ルビを付ける単一行の範囲を選択してください");
+      closeEditorContextMenu();
+      return;
+    }
+    setNotationModal({ type: "ruby", selection, reading: "", error: "" });
+    closeEditorContextMenu();
+  };
+
+  const openDirectionNotationModal = (selection: EditorSelectionSnapshot | null) => {
+    if (!selection) return;
+    setNotationModal({ type: "direction", selection });
+    closeEditorContextMenu();
+  };
+
+  const submitRubyNotation = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (notationModal?.type !== "ruby") return;
+    if (applyInlineNotation(notationModal.selection, "ruby", notationModal.reading)) {
+      setNotationModal(null);
+    }
+  };
+
+  const chooseDirectionNotation = (direction: LayoutDirection) => {
+    if (notationModal?.type !== "direction") return;
+    if (applyDirectionNotation(notationModal.selection, direction)) {
+      setNotationModal(null);
+    }
   };
 
   const requestInput = ({
@@ -2793,6 +3278,7 @@ export default function App() {
                 <div
                   ref={editorShellRef}
                   className="editor"
+                  onContextMenu={handleEditorContextMenu}
                   onDragOverCapture={handleEditorDragOver}
                   onDragLeave={handleEditorDragLeave}
                   onDropCapture={handleEditorDrop}
@@ -2869,6 +3355,99 @@ export default function App() {
                     }`}
                     style={dropIndicatorTop === null ? undefined : { top: dropIndicatorTop }}
                   />
+                  {editorContextMenu && (
+                    <div
+                      ref={editorContextMenuRef}
+                      className="editorContextMenu"
+                      role="menu"
+                      style={{ left: editorContextMenu.x, top: editorContextMenu.y }}
+                    >
+                      <div className="contextMenuSection">
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={editorContextMenu.from === editorContextMenu.to}
+                          onClick={() => void copyEditorSelection(editorContextMenu)}
+                        >
+                          コピー
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={editorContextMenu.from === editorContextMenu.to}
+                          onClick={() => void cutEditorSelection(editorContextMenu)}
+                        >
+                          切り取り
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => void pasteIntoEditorSelection(editorContextMenu)}
+                        >
+                          貼り付け
+                        </button>
+                      </div>
+                      <div className="contextMenuDivider" role="separator" />
+                      <div className="contextMenuSection">
+                        <span className="contextMenuLabel">独自記法</span>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={!canWrapInlineSelection(editorContextMenu)}
+                          title={customNotationSpecs[0].syntax}
+                          onClick={() => openRubyNotationModal(editorContextMenu)}
+                        >
+                          ルビ...
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={!canWrapInlineSelection(editorContextMenu)}
+                          title={customNotationSpecs[1].syntax}
+                          onClick={() => {
+                            if (applyInlineNotation(editorContextMenu, "tcy")) {
+                              closeEditorContextMenu();
+                            }
+                          }}
+                        >
+                          縦中横
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={!canWrapInlineSelection(editorContextMenu)}
+                          title={customNotationSpecs[2].syntax}
+                          onClick={() => {
+                            if (applyInlineNotation(editorContextMenu, "emphasis")) {
+                              closeEditorContextMenu();
+                            }
+                          }}
+                        >
+                          圏点
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          title="選択範囲または行の独自記法を外します"
+                          onClick={() => clearSelectionNotation(editorContextMenu)}
+                        >
+                          記法をクリア
+                        </button>
+                      </div>
+                      <div className="contextMenuDivider" role="separator" />
+                      <div className="contextMenuSection">
+                        <span className="contextMenuLabel">行指示</span>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          title={customNotationSpecs[3].syntax}
+                          onClick={() => openDirectionNotationModal(editorContextMenu)}
+                        >
+                          文章方向...
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               <StatusBar
@@ -2956,6 +3535,88 @@ export default function App() {
           <div className={`toast ${toast ? "showToast" : ""}`} role="status">
             {toast}
           </div>
+
+          {notationModal && (
+            <div className="modalBackdrop" role="presentation">
+              <section
+                className="modal compactModal notationModal"
+                aria-label={
+                  notationModal.type === "ruby" ? "ルビを追加" : "行指示を選択"
+                }
+                role="dialog"
+                aria-modal="true"
+              >
+                <header className="modalHeader">
+                  <h2>{notationModal.type === "ruby" ? "ルビ" : "行指示"}</h2>
+                  <button
+                    className="modalClose"
+                    type="button"
+                    aria-label="閉じる"
+                    onClick={() => setNotationModal(null)}
+                  >
+                    ×
+                  </button>
+                </header>
+                {notationModal.type === "ruby" ? (
+                  <form className="modalForm" onSubmit={submitRubyNotation}>
+                    <label>
+                      <span>対象</span>
+                      <input value={notationModal.selection.text} readOnly />
+                    </label>
+                    <label>
+                      <span>ルビ</span>
+                      <input
+                        autoFocus
+                        value={notationModal.reading}
+                        placeholder="読みを入力"
+                        onChange={(event) =>
+                          setNotationModal((current) =>
+                            current?.type === "ruby"
+                              ? { ...current, reading: event.target.value, error: "" }
+                              : current,
+                          )
+                        }
+                      />
+                    </label>
+                    <p className="notationSyntax">{customNotationSpecs[0].syntax}</p>
+                    {notationModal.error && (
+                      <p className="dialogError" role="alert">
+                        {notationModal.error}
+                      </p>
+                    )}
+                    <footer className="modalActions">
+                      <button type="button" onClick={() => setNotationModal(null)}>
+                        キャンセル
+                      </button>
+                      <button type="submit">反映</button>
+                    </footer>
+                  </form>
+                ) : (
+                  <div className="modalForm">
+                    <div className="notationChoiceList">
+                      {directionOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          className="notationChoiceButton"
+                          onClick={() => chooseDirectionNotation(option.value)}
+                        >
+                          <span>{option.label}</span>
+                          <small>{option.description}</small>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="notationSyntax">{customNotationSpecs[3].syntax}</p>
+                    <footer className="modalActions">
+                      <button type="button" onClick={() => setNotationModal(null)}>
+                        キャンセル
+                      </button>
+                    </footer>
+                  </div>
+                )}
+              </section>
+            </div>
+          )}
 
           {appDialog && (
             <AppDialogModal

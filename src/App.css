@@ -336,6 +336,66 @@ textarea {
   color: var(--text-primary);
 }
 
+.editorContextMenu {
+  position: fixed;
+  z-index: 30;
+  display: grid;
+  width: 220px;
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-panel-strong);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.46);
+  color: var(--text-secondary);
+  font-family: var(--ui-font-family);
+  font-size: 12px;
+  writing-mode: horizontal-tb;
+}
+
+.contextMenuSection {
+  display: grid;
+  gap: 1px;
+}
+
+.contextMenuLabel {
+  padding: 5px 8px 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.contextMenuDivider {
+  height: 1px;
+  margin: 5px 3px;
+  background: var(--border-subtle);
+}
+
+.editorContextMenu button {
+  display: flex;
+  width: 100%;
+  min-height: 28px;
+  align-items: center;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.editorContextMenu button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text-primary);
+}
+
+.editorContextMenu button:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
 .menuPopover button span:last-child {
   min-width: 0;
   overflow: hidden;
@@ -1086,21 +1146,23 @@ textarea {
 .verticalTypewriterEditor .pm-root p.align-start,
 .verticalTypewriterEditor .pm-root p.align-center,
 .verticalTypewriterEditor .pm-root p.align-end {
-  display: flex;
-  min-height: 62vh;
+  min-inline-size: 62vh;
 }
 
 .verticalTypewriterEditor .pm-root p.jitsuki,
 .verticalTypewriterEditor .pm-root p.align-end {
-  justify-content: flex-end;
+  text-align: end;
+  text-align-last: auto;
 }
 
 .verticalTypewriterEditor .pm-root p.align-center {
-  justify-content: center;
+  text-align: center;
+  text-align-last: auto;
 }
 
 .verticalTypewriterEditor .pm-root p.align-start {
-  justify-content: flex-start;
+  text-align: start;
+  text-align-last: auto;
 }
 
 .verticalTypewriterEditor .pm-root p.active-line {
@@ -1115,11 +1177,7 @@ textarea {
 }
 
 .verticalTypewriterEditor .pm-root p.heading,
-.verticalTypewriterEditor .pm-root p.list-line,
-.verticalTypewriterEditor .pm-root p.align-start,
-.verticalTypewriterEditor .pm-root p.align-center,
-.verticalTypewriterEditor .pm-root p.align-end,
-.verticalTypewriterEditor .pm-root p.jitsuki {
+.verticalTypewriterEditor .pm-root p.list-line {
   text-align: start;
   text-align-last: auto;
 }
@@ -1228,7 +1286,7 @@ textarea {
   top: 0;
   width: 0;
   height: 0;
-  z-index: 40;
+  z-index: 1;
   pointer-events: none;
   user-select: none;
   contain: layout style paint;
@@ -1786,6 +1844,59 @@ textarea {
   margin: -4px 0 0;
   color: var(--danger);
   font-size: 12px;
+}
+
+.notationModal .modalForm input[readonly] {
+  background: #222521;
+  color: var(--text-secondary);
+}
+
+.notationSyntax {
+  margin: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.14);
+  color: var(--text-muted);
+  font-family: Consolas, "Yu Gothic", monospace;
+  font-size: 11px;
+}
+
+.notationChoiceList {
+  display: grid;
+  gap: 7px;
+}
+
+.notationChoiceButton {
+  display: grid;
+  width: 100%;
+  min-height: 50px;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.notationChoiceButton:hover {
+  border-color: var(--border-strong);
+  background: #353834;
+  color: var(--text-primary);
+}
+
+.notationChoiceButton span {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.notationChoiceButton small {
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
 ::-webkit-scrollbar {
