@@ -1237,6 +1237,12 @@ textarea {
   white-space: nowrap;
 }
 
+.statusAst {
+  min-width: 0;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
 .snippetPanel {
   display: flex;
   width: var(--snippet-width);
@@ -1759,7 +1765,8 @@ body {
 .menuButton:hover,
 .menuButton[aria-expanded="true"],
 .iconButton:hover,
-.sidebarIconButton:hover {
+.sidebarIconButton:hover,
+.activeSidebarIconButton {
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-primary);
 }
@@ -1848,10 +1855,14 @@ body {
 }
 
 .sidebarHeaderLabel {
+  min-width: 0;
   flex: 1;
+  overflow: hidden;
   color: var(--text-faint);
   font-size: 11px;
   letter-spacing: 0.05em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sidebarHeaderActions {
@@ -1938,14 +1949,46 @@ body {
 }
 
 .treeItem {
+  position: relative;
   display: grid;
   min-width: 0;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   color: var(--text-muted);
   transition:
     background 100ms ease,
     color 100ms ease;
+}
+
+.treeItem::before,
+.treeItem::after {
+  position: absolute;
+  right: 7px;
+  left: 7px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent-strong);
+  box-shadow: 0 0 0 3px rgba(109, 166, 217, 0.12);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+}
+
+.treeItem::before {
+  top: -1px;
+}
+
+.treeItem::after {
+  bottom: -1px;
+}
+
+.treeDrop-before::before,
+.treeDrop-after::after {
+  opacity: 1;
+}
+
+.draggingTreeEntry {
+  opacity: 0.45;
 }
 
 .treeItem:hover,
@@ -1963,7 +2006,7 @@ body {
   display: grid;
   min-width: 0;
   min-height: 27px;
-  grid-template-columns: 12px 15px minmax(0, 1fr) auto;
+  grid-template-columns: 12px 15px minmax(0, 1fr);
   align-items: center;
   gap: 5px;
   border: 0;
@@ -1973,6 +2016,8 @@ body {
   font: inherit;
   font-size: 12px;
   text-align: left;
+  touch-action: none;
+  user-select: none;
 }
 
 .treeChevron {
@@ -1991,43 +2036,48 @@ body {
 }
 
 .treeActiveDot {
+  position: absolute;
+  top: 50%;
+  right: 6px;
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
+  transform: translateY(-50%);
 }
 
-.treeItemTools {
-  display: inline-flex;
-  align-items: center;
-  gap: 1px;
-  padding-right: 4px;
-  opacity: 0;
-  transition: opacity 120ms ease;
+.draggingTreeEntry .treeItemPrimary {
+  cursor: grabbing;
 }
 
-.treeItem:hover .treeItemTools,
-.treeItem:focus-within .treeItemTools {
-  opacity: 1;
+.treeContextMenu {
+  position: fixed;
+  z-index: 80;
+  display: grid;
+  min-width: 164px;
+  padding: 5px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-panel-strong);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.34);
 }
 
-.treeItemTools button {
-  display: inline-grid;
-  width: 20px;
-  height: 22px;
-  place-items: center;
+.treeContextMenu button {
+  min-height: 28px;
+  padding: 0 10px;
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   cursor: pointer;
+  font: inherit;
   font-size: 12px;
-  line-height: 1;
+  text-align: left;
 }
 
-.treeItemTools button:hover {
-  background: rgba(255, 255, 255, 0.055);
-  color: var(--accent);
+.treeContextMenu button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
 }
 
 .scratchTreeItem {
@@ -2064,6 +2114,14 @@ body {
   flex-direction: column;
 }
 
+.outlineExplorerSection,
+.projectSearchModeSection,
+.projectSearchSidebarSection {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+}
+
 .sidebarSearch {
   position: relative;
   display: block;
@@ -2072,10 +2130,9 @@ body {
 
 .sidebarSearch .searchSvgIcon {
   position: absolute;
-  top: 50%;
+  top: 11px;
   left: 19px;
   color: var(--text-faint);
-  transform: translateY(-50%);
   pointer-events: none;
 }
 
@@ -2137,6 +2194,117 @@ body {
 .outlineLevelMark {
   color: var(--text-faint);
   font-size: 10px;
+}
+
+.outlineTree {
+  padding-top: 3px;
+}
+
+.outlineTreeChildren {
+  min-width: 0;
+}
+
+.outlineTreeNode {
+  min-width: 0;
+}
+
+.outlineTreeItem {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 25px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+
+.outlineTreeItem:hover,
+.activeOutlineTreeItem {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-primary);
+}
+
+.activeOutlineTreeItem {
+  color: var(--accent-strong);
+}
+
+.outlineTreeItem span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.treeHint {
+  min-height: 22px;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 22px;
+}
+
+.treeHintError {
+  color: var(--danger);
+}
+
+.projectSearchList {
+  display: grid;
+  gap: 3px;
+  padding: 0 6px 10px;
+}
+
+.projectSearchResultItem {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.projectSearchResultItem:hover {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-primary);
+}
+
+.projectSearchResultMeta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.projectSearchResultMeta span:first-child,
+.projectSearchResultTitle,
+.projectSearchResultExcerpt {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectSearchResultTitle {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.projectSearchResultExcerpt {
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
 .sidebarFooter {

@@ -1,5 +1,17 @@
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import type {
-  FlatOutlineItem,
+  DocumentOutlineItem,
+  ProjectAst,
+  ProjectSearchResult,
+} from "../../editor/ast/types";
+import type {
+  BreadcrumbDropTarget,
   OutlineItem,
   ProjectEntry,
   ProjectFolder,
@@ -10,12 +22,17 @@ type WorkspaceSidebarProps = {
   currentFilePath: string | null;
   currentFileName: string;
   focusedFolderPath: string | null;
-  outlineItems: FlatOutlineItem[];
-  outlineCount: number;
-  outlineQuery: string;
+  activeDocumentOutline: OutlineItem[];
   activeOutlineIds: ReadonlySet<string>;
-  onOutlineQueryChange: (value: string) => void;
+  projectAst: ProjectAst | null;
+  projectSearchQuery: string;
+  projectSearchResults: ProjectSearchResult[];
+  isProjectSearchMode: boolean;
+  onProjectSearchModeChange: (value: boolean) => void;
+  onProjectSearchQueryChange: (value: string) => void;
+  onOpenProjectSearchResult: (result: ProjectSearchResult) => void;
   onJumpOutline: (item: OutlineItem) => void;
+  onJumpProjectOutline: (path: string, item: DocumentOutlineItem) => void;
   onOpenProjectFolder: () => void;
   onNewDocument: () => void;
   onCreateFile: (folderPath?: string) => void;
@@ -25,7 +42,29 @@ type WorkspaceSidebarProps = {
   onOpenFileInNewTab: (path: string) => void;
   onRenameEntry: (entry: ProjectFolder | ProjectEntry) => void;
   onDeleteEntry: (entry: ProjectEntry) => void;
+  onReorderEntry: (
+    folderPath: string,
+    draggedPath: string,
+    targetPath: string,
+    position: "before" | "after",
+  ) => void;
   onCollapse: () => void;
+};
+
+type TreeContextMenu = {
+  x: number;
+  y: number;
+  entry: ProjectFolder | ProjectEntry;
+  isRoot: boolean;
+} | null;
+
+type PointerDragState = {
+  pointerId: number;
+  folderPath: string;
+  entryPath: string;
+  startX: number;
+  startY: number;
+  isDragging: boolean;
 };
 
 function isProjectEntry(entry: ProjectFolder | ProjectEntry): entry is ProjectEntry {
@@ -34,6 +73,15 @@ function isProjectEntry(entry: ProjectFolder | ProjectEntry): entry is ProjectEn
 
 function getEntryKind(entry: ProjectFolder | ProjectEntry): ProjectEntry["kind"] | "folder" {
   return isProjectEntry(entry) ? entry.kind : "folder";
+}
+
+function getProjectAstStatusLabel(projectAst: ProjectAst | null): string {
+  if (!projectAst) return "未構築";
+  if (projectAst.status === "empty") return "0";
+  if (projectAst.status === "indexing" || projectAst.status === "partial") {
+    return `${projectAst.indexedCount}/${projectAst.files.length}`;
+  }
+  return String(projectAst.indexedCount);
 }
 
 type SidebarIconName =
@@ -152,12 +200,17 @@ export function WorkspaceSidebar({
   currentFilePath,
   currentFileName,
   focusedFolderPath,
-  outlineItems,
-  outlineCount,
-  outlineQuery,
+  activeDocumentOutline,
   activeOutlineIds,
-  onOutlineQueryChange,
+  projectAst,
+  projectSearchQuery,
+  projectSearchResults,
+  isProjectSearchMode,
+  onProjectSearchModeChange,
+  onProjectSearchQueryChange,
+  onOpenProjectSearchResult,
   onJumpOutline,
+  onJumpProjectOutline,
   onOpenProjectFolder,
   onNewDocument,
   onCreateFile,
@@ -167,11 +220,280 @@ export function WorkspaceSidebar({
   onOpenFileInNewTab,
   onRenameEntry,
   onDeleteEntry,
+  onReorderEntry,
   onCollapse,
 }: WorkspaceSidebarProps) {
+  const [contextMenu, setContextMenu] = useState<TreeContextMenu>(null);
+  const [draggingEntryPath, setDraggingEntryPath] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<BreadcrumbDropTarget>(null);
+  const pointerDragRef = useRef<PointerDragState | null>(null);
+  const dropTargetRef = useRef<BreadcrumbDropTarget>(null);
+  const suppressNextClickRef = useRef(false);
+  const projectAstFiles = new Map(
+    projectAst?.files.map((file) => [file.path, file] as const) ?? [],
+  );
+
+  useEffect(() => {
+    if (!contextMenu) return undefined;
+
+    const close = () => setContextMenu(null);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [contextMenu]);
+
+  const resetPointerDrag = () => {
+    pointerDragRef.current = null;
+    setDraggingEntryPath(null);
+    dropTargetRef.current = null;
+    setDropTarget(null);
+  };
+
+  const updateDropTarget = (nextDropTarget: BreadcrumbDropTarget) => {
+    dropTargetRef.current = nextDropTarget;
+    setDropTarget(nextDropTarget);
+  };
+
+  const updateDropTargetFromPoint = (
+    clientX: number,
+    clientY: number,
+    dragState: PointerDragState,
+  ) => {
+    const element = document.elementFromPoint(clientX, clientY);
+    const row = element?.closest<HTMLElement>("[data-tree-entry-path][data-tree-folder-path]");
+    if (!row) {
+      updateDropTarget(null);
+      return;
+    }
+
+    const targetFolderPath = row.dataset.treeFolderPath;
+    const targetEntryPath = row.dataset.treeEntryPath;
+    if (
+      !targetFolderPath ||
+      !targetEntryPath ||
+      targetFolderPath !== dragState.folderPath ||
+      targetEntryPath === dragState.entryPath
+    ) {
+      updateDropTarget(null);
+      return;
+    }
+
+    const rect = row.getBoundingClientRect();
+    updateDropTarget({
+      folderPath: targetFolderPath,
+      entryPath: targetEntryPath,
+      position: clientY < rect.top + rect.height / 2 ? "before" : "after",
+    });
+  };
+
+  const handleTreePointerDown = (
+    event: ReactPointerEvent<HTMLElement>,
+    folderPath: string | null,
+    entryPath: string,
+  ) => {
+    if (!folderPath || event.button !== 0) return;
+
+    pointerDragRef.current = {
+      pointerId: event.pointerId,
+      folderPath,
+      entryPath,
+      startX: event.clientX,
+      startY: event.clientY,
+      isDragging: false,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleTreePointerMove = (event: ReactPointerEvent<HTMLElement>) => {
+    const dragState = pointerDragRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+    const distance = Math.hypot(
+      event.clientX - dragState.startX,
+      event.clientY - dragState.startY,
+    );
+    if (!dragState.isDragging && distance < 4) return;
+
+    dragState.isDragging = true;
+    setDraggingEntryPath(dragState.entryPath);
+    updateDropTargetFromPoint(event.clientX, event.clientY, dragState);
+    event.preventDefault();
+  };
+
+  const handleTreePointerUp = (event: ReactPointerEvent<HTMLElement>) => {
+    const dragState = pointerDragRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+    if (dragState.isDragging) {
+      suppressNextClickRef.current = true;
+      window.setTimeout(() => {
+        suppressNextClickRef.current = false;
+      }, 0);
+      const activeDropTarget = dropTargetRef.current;
+      if (activeDropTarget) {
+        onReorderEntry(
+          activeDropTarget.folderPath,
+          dragState.entryPath,
+          activeDropTarget.entryPath,
+          activeDropTarget.position,
+        );
+      }
+    }
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    resetPointerDrag();
+  };
+
+  const handleTreeItemClick = (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    entry: ProjectFolder | ProjectEntry,
+    isFolder: boolean,
+  ) => {
+    if (suppressNextClickRef.current) {
+      event.preventDefault();
+      return;
+    }
+    isFolder ? onSelectFolder(entry.path) : onSelectFile(entry.path);
+  };
+
+  const openContextMenu = (
+    event: ReactMouseEvent<HTMLElement>,
+    entry: ProjectFolder | ProjectEntry,
+    isRoot: boolean,
+  ) => {
+    event.preventDefault();
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      entry,
+      isRoot,
+    });
+  };
+
+  const closeContextMenuAndRun = (action: () => void) => {
+    setContextMenu(null);
+    action();
+  };
+
+  const renderContextMenu = (): JSX.Element | null => {
+    if (!contextMenu) return null;
+
+    const { entry, isRoot, x, y } = contextMenu;
+    const kind = getEntryKind(entry);
+
+    return (
+      <div
+        className="treeContextMenu"
+        style={{ left: x, top: y }}
+        role="menu"
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() =>
+            closeContextMenuAndRun(() =>
+              kind === "folder" ? onSelectFolder(entry.path) : onSelectFile(entry.path),
+            )
+          }
+        >
+          開く
+        </button>
+        {kind === "file" && (
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => closeContextMenuAndRun(() => onOpenFileInNewTab(entry.path))}
+          >
+            新しいタブで開く
+          </button>
+        )}
+        {kind === "folder" && (
+          <>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => closeContextMenuAndRun(() => onCreateFile(entry.path))}
+            >
+              ファイルを追加
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => closeContextMenuAndRun(() => onCreateFolder(entry.path))}
+            >
+              フォルダを追加
+            </button>
+          </>
+        )}
+        {!isRoot && (
+          <>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => closeContextMenuAndRun(() => onRenameEntry(entry))}
+            >
+              リネーム
+            </button>
+            {isProjectEntry(entry) && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => closeContextMenuAndRun(() => onDeleteEntry(entry))}
+              >
+                削除
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
+
+  const renderOutlineItems = (
+    filePath: string | null,
+    items: DocumentOutlineItem[] | OutlineItem[],
+    depth: number,
+  ): JSX.Element[] => {
+    return items.map((item) => {
+      const isActive = filePath === currentFilePath && activeOutlineIds.has(item.id);
+      return (
+        <div className="outlineTreeNode" key={`${filePath ?? "scratch"}:${item.id}`}>
+          <button
+            className={`outlineTreeItem ${isActive ? "activeOutlineTreeItem" : ""}`}
+            style={{ paddingLeft: `${12 + depth * 14}px` }}
+            type="button"
+            title={item.title}
+            onClick={() =>
+              filePath ? onJumpProjectOutline(filePath, item) : onJumpOutline(item)
+            }
+          >
+            <span className="outlineLevelMark">H{item.level}</span>
+            <span>{item.title}</span>
+          </button>
+          {item.children.length > 0 && (
+            <div className="outlineTreeChildren">
+              {renderOutlineItems(filePath, item.children, depth + 1)}
+            </div>
+          )}
+        </div>
+      );
+    });
+  };
+
   const renderEntry = (
     entry: ProjectFolder | ProjectEntry,
     depth: number,
+    parentFolderPath: string | null,
   ): JSX.Element => {
     const kind = getEntryKind(entry);
     const isRoot = !isProjectEntry(entry);
@@ -179,31 +501,45 @@ export function WorkspaceSidebar({
     const hasChildren = isFolder && entry.children.length > 0;
     const isActive = entry.path === currentFilePath;
     const isFocused = entry.path === focusedFolderPath;
+    const isDraggable = Boolean(parentFolderPath && isProjectEntry(entry));
+    const dropClass =
+      dropTarget?.entryPath === entry.path ? `treeDrop-${dropTarget.position}` : "";
     const rowClass = [
       "treeItem",
+      dropClass,
+      draggingEntryPath === entry.path ? "draggingTreeEntry" : "",
       isActive ? "activeTreeItem" : "",
       isFocused && !isActive ? "focusedTreeItem" : "",
       isFolder ? "folderTreeItem" : "fileTreeItem",
     ]
       .filter(Boolean)
       .join(" ");
+    const astFile = !isFolder ? projectAstFiles.get(entry.path) : null;
+    const outline = astFile?.documentAst?.outline ?? [];
 
     return (
       <div className="treeNode" key={entry.path}>
-        <div className={rowClass}>
+        <div
+          className={rowClass}
+          data-tree-entry-path={isDraggable ? entry.path : undefined}
+          data-tree-folder-path={parentFolderPath ?? undefined}
+          onContextMenu={(event) => openContextMenu(event, entry, isRoot)}
+          onPointerDown={(event) => handleTreePointerDown(event, parentFolderPath, entry.path)}
+          onPointerMove={handleTreePointerMove}
+          onPointerUp={handleTreePointerUp}
+          onPointerCancel={resetPointerDrag}
+        >
           <button
             className="treeItemPrimary"
             type="button"
             style={{ paddingLeft: `${12 + depth * 14}px` }}
             title={entry.path}
-            onClick={() =>
-              isFolder ? onSelectFolder(entry.path) : onSelectFile(entry.path)
-            }
+            onClick={(event) => handleTreeItemClick(event, entry, isFolder)}
           >
             <span className="treeChevron">
-              {isFolder && (
+              {(isFolder || outline.length > 0) && (
                 <SidebarIcon
-                  name={hasChildren ? "chevronDown" : "chevronRight"}
+                  name={hasChildren || outline.length > 0 ? "chevronDown" : "chevronRight"}
                   className="treeChevronIcon"
                 />
               )}
@@ -215,77 +551,119 @@ export function WorkspaceSidebar({
             <span className="treeItemName">{entry.name}</span>
             {isActive && <span className="treeActiveDot" aria-hidden="true" />}
           </button>
-          <div className="treeItemTools" aria-label={`${entry.name} の操作`}>
-            {isFolder ? (
-              <>
-                <button
-                  type="button"
-                  aria-label={`${entry.name} にファイルを追加`}
-                  title="ファイルを追加"
-                  onClick={() => onCreateFile(entry.path)}
-                >
-                  <SidebarIcon name="plus" className="toolSvgIcon" />
-                </button>
-                <button
-                  type="button"
-                  aria-label={`${entry.name} にフォルダを追加`}
-                  title="フォルダを追加"
-                  onClick={() => onCreateFolder(entry.path)}
-                >
-                  <SidebarIcon name="folderPlus" className="toolSvgIcon" />
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                aria-label={`${entry.name} を新しいタブで開く`}
-                title="新しいタブで開く"
-                onClick={() => onOpenFileInNewTab(entry.path)}
-              >
-                <SidebarIcon name="external" className="toolSvgIcon" />
-              </button>
-            )}
-            {!isRoot && (
-              <>
-                <button
-                  type="button"
-                  aria-label={`${entry.name} をリネーム`}
-                  title="リネーム"
-                  onClick={() => onRenameEntry(entry)}
-                >
-                  <SidebarIcon name="edit" className="toolSvgIcon" />
-                </button>
-                {isProjectEntry(entry) && (
-                  <button
-                    type="button"
-                    aria-label={`${entry.name} を削除`}
-                    title="削除"
-                    onClick={() => onDeleteEntry(entry)}
-                  >
-                    <SidebarIcon name="trash" className="toolSvgIcon" />
-                  </button>
-                )}
-              </>
-            )}
-          </div>
         </div>
-        {hasChildren && (
+        {isFolder && hasChildren && (
           <div className="treeChildren">
-            {entry.children.map((child) => renderEntry(child, depth + 1))}
+            {entry.children.map((child) => renderEntry(child, depth + 1, entry.path))}
+          </div>
+        )}
+        {!isFolder && outline.length > 0 && (
+          <div className="outlineTreeChildren">
+            {renderOutlineItems(entry.path, outline, depth + 1)}
+          </div>
+        )}
+        {!isFolder && astFile?.status === "pending" && (
+          <div className="treeHint" style={{ paddingLeft: `${40 + depth * 14}px` }}>
+            AST構築中
+          </div>
+        )}
+        {!isFolder && astFile?.status === "error" && (
+          <div className="treeHint treeHintError" style={{ paddingLeft: `${40 + depth * 14}px` }}>
+            読み込み失敗
           </div>
         )}
       </div>
     );
   };
 
-  const emptyOutlineMessage = outlineQuery.trim()
-    ? "一致する見出しがありません"
-    : "見出しがありません";
+  const renderOutlineMode = () => (
+    <section className="sidebarSection outlineExplorerSection" aria-label="アウトライン">
+      <div className="tree outlineTree">
+        {projectFolder ? (
+          renderEntry(projectFolder, 0, null)
+        ) : (
+          <>
+            <div className="sidebarEmptyState">
+              <span>フォルダ未選択</span>
+              <button type="button" onClick={onOpenProjectFolder}>
+                フォルダを開く
+              </button>
+            </div>
+            <div className="treeItem activeTreeItem scratchTreeItem">
+              <button className="treeItemPrimary" type="button" title={currentFileName}>
+                <span className="treeChevron" aria-hidden="true" />
+                <SidebarIcon name="file" className="treeSvgIcon" />
+                <span className="treeItemName">{currentFileName}</span>
+                <span className="treeActiveDot" aria-hidden="true" />
+              </button>
+            </div>
+            {activeDocumentOutline.length > 0 ? (
+              <div className="outlineTreeChildren">
+                {renderOutlineItems(null, activeDocumentOutline, 1)}
+              </div>
+            ) : (
+              <div className="outlineEmptyState">見出しがありません</div>
+            )}
+          </>
+        )}
+      </div>
+    </section>
+  );
+
+  const emptyProjectSearchMessage = !projectFolder
+    ? "フォルダ未選択"
+    : !projectSearchQuery.trim()
+      ? "語句を入力"
+      : projectAst?.status === "indexing" && !projectSearchResults.length
+        ? "AST構築中"
+        : "一致する本文がありません";
+
+  const renderProjectSearchMode = () => (
+    <section className="sidebarSection projectSearchModeSection" aria-label="プロジェクト検索">
+      <div className="sidebarSectionHeader">
+        <span>プロジェクト検索</span>
+        <span>{getProjectAstStatusLabel(projectAst)}</span>
+      </div>
+      <label className="sidebarSearch">
+        <SidebarIcon name="search" className="searchSvgIcon" />
+        <input
+          value={projectSearchQuery}
+          onChange={(event) => onProjectSearchQueryChange(event.target.value)}
+          placeholder="プロジェクトを検索"
+          type="search"
+        />
+      </label>
+      <div className="projectSearchList">
+        {projectSearchResults.length ? (
+          projectSearchResults.map((result) => (
+            <button
+              className="projectSearchResultItem"
+              key={result.id}
+              type="button"
+              title={result.path}
+              onClick={() => onOpenProjectSearchResult(result)}
+            >
+              <span className="projectSearchResultMeta">
+                <span>{result.name}</span>
+                <span>{result.line}行</span>
+              </span>
+              <span className="projectSearchResultTitle">
+                {result.title ?? result.name}
+              </span>
+              <span className="projectSearchResultExcerpt">{result.excerpt}</span>
+            </button>
+          ))
+        ) : (
+          <div className="outlineEmptyState">{emptyProjectSearchMessage}</div>
+        )}
+      </div>
+    </section>
+  );
 
   return (
-    <aside className="workspaceSidebar" aria-label="ファイル構造とアウトライン">
+    <aside className="workspaceSidebar" aria-label="アウトライン">
       <div className="sidebarHeader">
-        <span className="sidebarHeaderLabel">構成</span>
+        <span className="sidebarHeaderLabel">Outline</span>
         <div className="sidebarHeaderActions">
           <button
             className="sidebarIconButton"
@@ -319,6 +697,18 @@ export function WorkspaceSidebar({
             <SidebarIcon name="folder" className="sidebarButtonSvg" />
           </button>
           <button
+            className={`sidebarIconButton ${
+              isProjectSearchMode ? "activeSidebarIconButton" : ""
+            }`}
+            type="button"
+            aria-label="プロジェクト検索"
+            title="プロジェクト検索"
+            aria-pressed={isProjectSearchMode}
+            onClick={() => onProjectSearchModeChange(!isProjectSearchMode)}
+          >
+            <SidebarIcon name="search" className="sidebarButtonSvg" />
+          </button>
+          <button
             className="sidebarIconButton"
             type="button"
             aria-label="左サイドバーを畳む"
@@ -331,71 +721,7 @@ export function WorkspaceSidebar({
       </div>
 
       <div className="sidebarScroll">
-        <section className="sidebarSection" aria-label="ファイル">
-          <div className="sidebarSectionHeader">
-            <span>ファイル</span>
-            {projectFolder && <span>{projectFolder.children.length}</span>}
-          </div>
-          <div className="tree">
-            {projectFolder ? (
-              renderEntry(projectFolder, 0)
-            ) : (
-              <div className="sidebarEmptyState">
-                <span>フォルダ未選択</span>
-                <button type="button" onClick={onOpenProjectFolder}>
-                  フォルダを開く
-                </button>
-              </div>
-            )}
-            {!projectFolder && (
-              <div className="treeItem activeTreeItem scratchTreeItem">
-                <button className="treeItemPrimary" type="button" title={currentFileName}>
-                  <span className="treeChevron" aria-hidden="true" />
-                  <SidebarIcon name="file" className="treeSvgIcon" />
-                  <span className="treeItemName">{currentFileName}</span>
-                  <span className="treeActiveDot" aria-hidden="true" />
-                </button>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="sidebarSection outlineSidebarSection" aria-label="アウトライン">
-          <div className="sidebarSectionHeader">
-            <span>アウトライン</span>
-            <span>{outlineCount}</span>
-          </div>
-          <label className="sidebarSearch">
-            <SidebarIcon name="search" className="searchSvgIcon" />
-            <input
-              value={outlineQuery}
-              onChange={(event) => onOutlineQueryChange(event.target.value)}
-              placeholder="見出しを検索"
-              type="search"
-            />
-          </label>
-          <div className="outlineSidebarList">
-            {outlineItems.length ? (
-              outlineItems.map((item) => (
-                <button
-                  className={`outlineSidebarItem ${
-                    activeOutlineIds.has(item.id) ? "activeOutlineSidebarItem" : ""
-                  }`}
-                  key={item.id}
-                  style={{ paddingLeft: `${10 + (item.level - 1) * 14}px` }}
-                  type="button"
-                  onClick={() => onJumpOutline(item)}
-                  title={item.title}
-                >
-                  <span className="outlineLevelMark">H{item.level}</span>
-                  <span>{item.title}</span>
-                </button>
-              ))
-            ) : (
-              <div className="outlineEmptyState">{emptyOutlineMessage}</div>
-            )}
-          </div>
-        </section>
+        {isProjectSearchMode ? renderProjectSearchMode() : renderOutlineMode()}
       </div>
 
       <div className="sidebarFooter">
@@ -418,6 +744,7 @@ export function WorkspaceSidebar({
           </button>
         </div>
       </div>
+      {renderContextMenu()}
     </aside>
   );
 }

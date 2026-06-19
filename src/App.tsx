@@ -15,9 +15,27 @@ import { AppDialogModal } from "./components/dialogs/AppDialogModal";
 import { SettingsModal } from "./components/dialogs/SettingsModal";
 import { MetadataPanel } from "./components/editor/MetadataPanel";
 import { WorkspaceSidebar } from "./components/layout/WorkspaceSidebar";
+import {
+  createDocumentAst,
+  findActiveOutlineChain,
+  flattenOutline,
+  getLineNumberAtOffset,
+} from "./editor/ast/documentAst";
+import {
+  collectProjectTextFiles,
+  createProjectAstSkeleton,
+  markProjectAstFileError,
+  searchProjectAst,
+  upsertProjectAstDocument,
+} from "./editor/ast/projectAst";
 import { PlotPane } from "./components/plot/PlotPane";
 import { IdeaPane } from "./components/snippets/IdeaPane";
 import { StatusBar } from "./components/status/StatusBar";
+import type {
+  DocumentOutlineItem,
+  ProjectAst,
+  ProjectSearchResult,
+} from "./editor/ast/types";
 import type {
   AppDialog,
   AppState,
@@ -300,75 +318,6 @@ function normalizePlotCards(value: unknown): PlotCard[] {
     }));
 }
 
-function parseTextOutline(text: string): OutlineItem[] {
-  const roots: OutlineItem[] = [];
-  const stack: OutlineItem[] = [];
-  const lines = text.split(/\r?\n/);
-
-  lines.forEach((line, index) => {
-    const match = line.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/);
-    if (!match) return;
-
-    const level = match[1].length;
-    const title = match[2].trim();
-    if (!title) return;
-
-    const item: OutlineItem = {
-      id: `${index}-${level}-${title}`,
-      title,
-      level,
-      line: index + 1,
-      children: [],
-    };
-
-    while (stack.length && stack[stack.length - 1].level >= level) {
-      stack.pop();
-    }
-
-    const parent = stack[stack.length - 1];
-    if (parent) {
-      parent.children.push(item);
-    } else {
-      roots.push(item);
-    }
-    stack.push(item);
-  });
-
-  return roots;
-}
-
-function flattenOutline(items: OutlineItem[], parents: OutlineItem[] = []): FlatOutlineItem[] {
-  return items.flatMap((item) => [
-    { ...item, parents },
-    ...flattenOutline(item.children, [...parents, item]),
-  ]);
-}
-
-function findActiveOutlineChain(items: OutlineItem[], lineNumber: number): OutlineItem[] {
-  let activeChain: OutlineItem[] = [];
-
-  const visit = (outlineItems: OutlineItem[], parents: OutlineItem[]) => {
-    for (const item of outlineItems) {
-      if (item.line > lineNumber) break;
-      const chain = [...parents, item];
-      activeChain = chain;
-      visit(item.children, chain);
-    }
-  };
-
-  visit(items, []);
-  return activeChain;
-}
-
-function getLineNumberAtOffset(text: string, offset: number): number {
-  const clamped = Math.max(0, Math.min(offset, text.length));
-  let line = 1;
-  for (let index = 0; index < clamped; index += 1) {
-    if (text[index] === "\n") line += 1;
-  }
-  return line;
-}
-
 function quoteCssFontFamily(family: string): string {
   const escaped = family.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
   return `"${escaped}"`;
@@ -518,6 +467,12 @@ export default function App() {
   const suppressNextEditorUpdateRef = useRef(false);
   const lastSavedMarkdownRef = useRef(initialMarkdown);
   const breadcrumbDragEntryRef = useRef<{ folderPath: string; entryPath: string } | null>(null);
+  const projectAstBuildIdRef = useRef(0);
+  const activeDocumentSnapshotRef = useRef<{
+    path: string | null;
+    name: string;
+    text: string;
+  } | null>(null);
 
   const [appState, setAppState] = useState<AppState>(() => createDefaultState());
   const [isHydrated, setIsHydrated] = useState(false);
@@ -532,6 +487,7 @@ export default function App() {
   ]);
   const [activeTabId, setActiveTabId] = useState("initial-document-tab");
   const [projectFolder, setProjectFolder] = useState<ProjectFolder | null>(null);
+  const [projectAst, setProjectAst] = useState<ProjectAst | null>(null);
   const [snippetWorkspacePath, setSnippetWorkspacePath] = useState<string | null>(null);
   const [plotWorkspacePath, setPlotWorkspacePath] = useState<string | null>(null);
   const [plotCards, setPlotCards] = useState<PlotCard[]>(() => defaultPlotCards);
@@ -539,6 +495,8 @@ export default function App() {
   const [workspaceAlert, setWorkspaceAlert] = useState<WorkspaceAlert>(null);
   const [query, setQuery] = useState("");
   const [outlineQuery, setOutlineQuery] = useState("");
+  const [projectSearchQuery, setProjectSearchQuery] = useState("");
+  const [isProjectSearchMode, setIsProjectSearchMode] = useState(false);
   const [toast, setToast] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingBreadcrumbEntryPath, setDraggingBreadcrumbEntryPath] =
@@ -723,8 +681,25 @@ export default function App() {
   }, [currentFilePath, projectFolder]);
   const frontMatter = useMemo(() => parseFrontMatter(markdown), [markdown]);
   const editorText = frontMatter.body;
-  const outlineItems = useMemo(() => parseTextOutline(editorText), [editorText]);
-  const outlineFlatItems = useMemo(() => flattenOutline(outlineItems), [outlineItems]);
+  activeDocumentSnapshotRef.current = {
+    path: currentFilePath,
+    name: currentFileName,
+    text: editorText,
+  };
+  const activeDocumentAst = useMemo(
+    () =>
+      createDocumentAst({
+        path: currentFilePath,
+        name: currentFileName,
+        text: editorText,
+      }),
+    [currentFileName, currentFilePath, editorText],
+  );
+  const outlineItems = activeDocumentAst.outline;
+  const outlineFlatItems = useMemo<FlatOutlineItem[]>(
+    () => flattenOutline(outlineItems),
+    [outlineItems],
+  );
   const activeEditorLine = useMemo(
     () => getLineNumberAtOffset(editorText, editorSelectionHead),
     [editorSelectionHead, editorText],
@@ -742,6 +717,15 @@ export default function App() {
     if (!normalized) return outlineFlatItems;
     return outlineFlatItems.filter((item) => item.title.toLowerCase().includes(normalized));
   }, [outlineFlatItems, outlineQuery]);
+  const projectSearchResults = useMemo(
+    () => searchProjectAst(projectAst, projectSearchQuery),
+    [projectAst, projectSearchQuery],
+  );
+  const projectAstSummary = useMemo(() => {
+    if (!projectAst) return null;
+    if (projectAst.status === "empty") return "AST 0/0";
+    return `AST ${projectAst.indexedCount}/${projectAst.files.length}`;
+  }, [projectAst]);
   const breadcrumbTrail = useMemo(
     () => findPathToEntry(projectFolder, focusedFolderPath ?? currentFilePath),
     [currentFilePath, focusedFolderPath, projectFolder],
@@ -762,6 +746,102 @@ export default function App() {
       );
     });
   }, [query, snippets]);
+
+  useEffect(() => {
+    if (!projectFolder) {
+      projectAstBuildIdRef.current += 1;
+      setProjectAst(null);
+      setProjectSearchQuery("");
+      return;
+    }
+
+    setProjectAst((current) => createProjectAstSkeleton(projectFolder, current));
+  }, [projectFolder]);
+
+  useEffect(() => {
+    if (!projectFolder || !currentFilePath) return;
+    if (!findProjectEntry(projectFolder.children, currentFilePath)) return;
+
+    setProjectAst((current) =>
+      current && current.rootPath === projectFolder.path
+        ? upsertProjectAstDocument(current, {
+            path: currentFilePath,
+            name: currentFileName,
+            text: editorText,
+          })
+        : current,
+    );
+  }, [currentFileName, currentFilePath, editorText, projectFolder]);
+
+  useEffect(() => {
+    if (!isHydrated || !isTauriRuntime() || !projectFolder) return;
+
+    const files = collectProjectTextFiles(projectFolder);
+    if (!files.length) return;
+
+    let isCancelled = false;
+    const buildId = projectAstBuildIdRef.current + 1;
+    projectAstBuildIdRef.current = buildId;
+    setProjectAst((current) => createProjectAstSkeleton(projectFolder, current));
+
+    const indexFiles = async () => {
+      for (const file of files) {
+        if (isCancelled || projectAstBuildIdRef.current !== buildId) return;
+
+        const activeSnapshot = activeDocumentSnapshotRef.current;
+        if (activeSnapshot?.path === file.path) {
+          setProjectAst((current) =>
+            current && current.rootPath === projectFolder.path
+              ? upsertProjectAstDocument(current, {
+                  path: file.path,
+                  name: activeSnapshot.name || file.name,
+                  text: activeSnapshot.text,
+                })
+              : current,
+          );
+          continue;
+        }
+
+        try {
+          const document = await invoke<TextDocument>("read_text_file", { path: file.path });
+          if (isCancelled || projectAstBuildIdRef.current !== buildId) return;
+
+          const latestActiveSnapshot = activeDocumentSnapshotRef.current;
+          const text =
+            latestActiveSnapshot?.path === document.path
+              ? latestActiveSnapshot.text
+              : parseFrontMatter(document.content).body;
+          const name =
+            latestActiveSnapshot?.path === document.path
+              ? latestActiveSnapshot.name
+              : document.name;
+
+          setProjectAst((current) =>
+            current && current.rootPath === projectFolder.path
+              ? upsertProjectAstDocument(current, {
+                  path: document.path,
+                  name,
+                  text,
+                })
+              : current,
+          );
+        } catch (error) {
+          if (isCancelled || projectAstBuildIdRef.current !== buildId) return;
+          setProjectAst((current) =>
+            current && current.rootPath === projectFolder.path
+              ? markProjectAstFileError(current, file.path, error)
+              : current,
+          );
+        }
+      }
+    };
+
+    void indexFiles();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isHydrated, projectFolder]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -1700,6 +1780,32 @@ export default function App() {
     }
   };
 
+  const jumpToEditorLine = (line: number) => {
+    const targetLine = Math.max(1, line);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        editorInstanceRef.current?.jumpToLine(targetLine);
+        editorInstanceRef.current?.focus();
+      });
+    });
+  };
+
+  const handleProjectSearchResultOpen = async (result: ProjectSearchResult) => {
+    if (result.path !== currentFilePath) {
+      await handleProjectFileSelect(result.path);
+    }
+    jumpToEditorLine(result.line);
+    showToast(`「${result.name}」${result.line}行へ移動しました`);
+  };
+
+  const handleProjectOutlineJump = async (path: string, item: DocumentOutlineItem) => {
+    if (path !== currentFilePath) {
+      await handleProjectFileSelect(path);
+    }
+    jumpToEditorLine(item.line);
+    setFocusedFolderPath(null);
+  };
+
   const handleProjectFileSelectInNewTab = async (path: string) => {
     if (!path) return;
     const existingTab = openTabs.find((tab) => tab.path === path);
@@ -1990,6 +2096,24 @@ export default function App() {
     setBreadcrumbDropTarget(null);
     setDraggingBreadcrumbEntryPath(null);
     breadcrumbDragEntryRef.current = null;
+  };
+
+  const handleSidebarEntryReorder = async (
+    folderPath: string,
+    draggedPath: string,
+    targetPath: string,
+    position: "before" | "after",
+  ) => {
+    if (!projectFolder) return;
+
+    const children = getFolderChildren(projectFolder, folderPath);
+    const nextOrder = movePathToDropPosition(
+      children.map((entry) => entry.path),
+      draggedPath,
+      targetPath,
+      position,
+    );
+    if (nextOrder) await saveProjectEntryOrder(folderPath, nextOrder);
   };
 
   const jumpToOutlineItem = (item: OutlineItem) => {
@@ -2637,12 +2761,17 @@ export default function App() {
                 currentFilePath={currentFilePath}
                 currentFileName={currentFileName}
                 focusedFolderPath={focusedFolderPath}
-                outlineItems={filteredOutlineItems}
-                outlineCount={outlineFlatItems.length}
-                outlineQuery={outlineQuery}
+                activeDocumentOutline={outlineItems}
                 activeOutlineIds={activeOutlineIds}
-                onOutlineQueryChange={setOutlineQuery}
+                projectAst={projectAst}
+                projectSearchQuery={projectSearchQuery}
+                projectSearchResults={projectSearchResults}
+                isProjectSearchMode={isProjectSearchMode}
+                onProjectSearchModeChange={setIsProjectSearchMode}
                 onJumpOutline={jumpToOutlineItem}
+                onJumpProjectOutline={(path, item) => void handleProjectOutlineJump(path, item)}
+                onProjectSearchQueryChange={setProjectSearchQuery}
+                onOpenProjectSearchResult={(result) => void handleProjectSearchResultOpen(result)}
                 onOpenProjectFolder={handleOpenProjectFolder}
                 onNewDocument={handleNewDocument}
                 onCreateFile={(folderPath) => void handleCreateProjectFile(folderPath)}
@@ -2652,6 +2781,9 @@ export default function App() {
                 onOpenFileInNewTab={(path) => void handleProjectFileSelectInNewTab(path)}
                 onRenameEntry={(entry) => void handleRenameProjectEntry(entry)}
                 onDeleteEntry={(entry) => void handleDeleteProjectEntry(entry)}
+                onReorderEntry={(folderPath, draggedPath, targetPath, position) =>
+                  void handleSidebarEntryReorder(folderPath, draggedPath, targetPath, position)
+                }
                 onCollapse={() => setIsLeftSidebarCollapsed(true)}
               />
             )}
@@ -2742,6 +2874,7 @@ export default function App() {
                 currentFilePath={currentFilePath}
                 lastError={lastError}
                 charCount={charCount}
+                projectAstSummary={projectAstSummary}
               />
             </div>
 
