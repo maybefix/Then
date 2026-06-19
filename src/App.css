@@ -987,6 +987,13 @@ textarea {
   font-size: var(--editor-font-size);
   line-height: var(--editor-line-height);
   letter-spacing: 0.05em;
+  line-break: strict;
+  overflow-wrap: normal;
+  word-break: normal;
+  text-justify: inter-character;
+  text-spacing-trim: trim-start;
+  font-feature-settings: "halt" 1, "chws" 1;
+  font-kerning: normal;
   outline: none;
   caret-color: #e8b04b;
 }
@@ -1010,7 +1017,11 @@ textarea {
   content-visibility: auto;
   overflow-clip-margin: 4em;
   white-space: pre-wrap;
-  word-break: break-all;
+  line-break: strict;
+  overflow-wrap: normal;
+  word-break: normal;
+  text-justify: inter-character;
+  text-spacing-trim: trim-start;
 }
 
 .verticalTypewriterEditor .pm-root p.blank {
@@ -1096,6 +1107,38 @@ textarea {
   background: none;
 }
 
+.verticalTypewriterEditor .pm-root p.ks-justify {
+  text-align: justify;
+  text-align-last: auto;
+  text-justify: inter-character;
+  word-spacing: normal;
+}
+
+.verticalTypewriterEditor .pm-root p.heading,
+.verticalTypewriterEditor .pm-root p.list-line,
+.verticalTypewriterEditor .pm-root p.align-start,
+.verticalTypewriterEditor .pm-root p.align-center,
+.verticalTypewriterEditor .pm-root p.align-end,
+.verticalTypewriterEditor .pm-root p.jitsuki {
+  text-align: start;
+  text-align-last: auto;
+}
+
+.verticalTypewriterEditor .ks-no-split,
+.verticalTypewriterEditor .ks-line-head-ban,
+.verticalTypewriterEditor .ks-line-end-ban,
+.verticalTypewriterEditor .ks-punct-trim {
+  line-break: strict;
+  overflow-wrap: normal;
+  white-space: nowrap;
+  word-break: keep-all;
+}
+
+.verticalTypewriterEditor .ks-punct-trim {
+  text-spacing-trim: trim-start;
+  font-feature-settings: "halt" 1, "chws" 1;
+}
+
 .verticalTypewriterEditor .mk-hidden {
   display: none;
 }
@@ -1134,8 +1177,40 @@ textarea {
 }
 
 .verticalTypewriterEditor .tcy {
+  display: inline;
+  font-family: inherit;
+  font-feature-settings: "tnum" 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  line-height: 1;
+  margin-inline-end: 0.08em;
+  margin-inline-start: 0.06em;
+  overflow-wrap: normal;
+  padding-inline: 0.015em;
   text-combine-upright: all;
+  text-orientation: mixed;
+  white-space: nowrap;
+  word-break: keep-all;
   -webkit-text-combine: horizontal;
+}
+
+.verticalTypewriterEditor .tcy[data-tcy-len="2"] {
+  font-size: 0.96em;
+}
+
+.verticalTypewriterEditor .tcy[data-tcy-kind="num"] {
+  font-feature-settings: "fwid" 1;
+  font-variant-east-asian: full-width;
+  font-variant-numeric: normal;
+  font-size: 0.97em;
+  margin-inline-end: 0.18em;
+}
+
+.verticalTypewriterEditor .tcy[data-tcy-kind="punct"] {
+  font-feature-settings: normal;
+  font-size: 0.96em;
+  margin-inline-end: 0.14em;
+  margin-inline-start: 0.05em;
 }
 
 .verticalTypewriterEditor .bold {
@@ -1145,6 +1220,49 @@ textarea {
 
 .verticalTypewriterEditor .mk-cmd {
   color: var(--accent-strong);
+}
+
+.visibleLineBreakLayer {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  z-index: 40;
+  pointer-events: none;
+  user-select: none;
+  contain: layout style paint;
+  overflow: hidden;
+  writing-mode: horizontal-tb;
+  text-orientation: mixed;
+  direction: ltr;
+}
+
+.visibleLineBreakMark {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1em;
+  block-size: 1em;
+  color: rgba(232, 176, 75, 0.58);
+  font-family: var(--ui-font-family);
+  font-size: 11px;
+  letter-spacing: 0;
+  line-height: 1;
+  opacity: 0.82;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  writing-mode: horizontal-tb;
+}
+
+.visibleLineBreakMark.blank {
+  color: rgba(142, 174, 204, 0.56);
+}
+
+.visibleLineBreakMark.active {
+  opacity: 0.95;
 }
 
 .verticalTypewriterGuide {

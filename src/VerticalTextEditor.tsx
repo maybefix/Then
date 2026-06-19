@@ -33,6 +33,7 @@ export type TextEditorHandle = {
 type VerticalTextEditorProps = {
   text: string;
   typewriterOffset: number;
+  showLineBreakMarks: boolean;
   onReady: (editor: TextEditorHandle | null) => void;
   onTextChange: (text: string) => void;
   onSelectionChange: () => void;
@@ -769,6 +770,179 @@ function decorationRange(
   return merged;
 }
 
+const KINSOKU_LINE_HEAD_FORBIDDEN = new Set(
+  Array.from(
+    "、。，．・：；？！!?‼⁇⁈⁉" +
+      "）〕］｝〉》」』】〗〙〛’”" +
+      "ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶ々ゝゞヽヾ〻〃ー",
+  ),
+);
+const KINSOKU_LINE_END_FORBIDDEN = new Set(Array.from("（〔［｛〈《「『【〖〘〚‘“"));
+const KINSOKU_PUNCTUATION = new Set(
+  Array.from(
+    "、。，．・：；？！!?‼⁇⁈⁉" +
+      "（〔［｛〈《「『【〖〘〚‘“" +
+      "）〕］｝〉》」』】〗〙〛’”",
+  ),
+);
+const KINSOKU_DIGIT = /^[0-9０-９]$/;
+
+type CharacterRange = {
+  ch: string;
+  from: number;
+  to: number;
+};
+
+function characterRanges(text: string): CharacterRange[] {
+  const ranges: CharacterRange[] = [];
+  let offset = 0;
+
+  for (const ch of Array.from(text)) {
+    ranges.push({ ch, from: offset, to: offset + ch.length });
+    offset += ch.length;
+  }
+
+  return ranges;
+}
+
+function inlineMarkupRanges(line: LineNode): Array<{ from: number; to: number }> {
+  return line.inlineMarkups.map((markup) => ({
+    from: markup.fullRange.offset,
+    to: markup.fullRange.offset + markup.fullRange.length,
+  }));
+}
+
+function overlapsProtectedRange(
+  from: number,
+  to: number,
+  protectedRanges: Array<{ from: number; to: number }>,
+): boolean {
+  return protectedRanges.some((range) => from < range.to && to > range.from);
+}
+
+function pushKinsokuRange(
+  out: Decoration[],
+  contentStart: number,
+  from: number,
+  to: number,
+  className: string,
+  protectedRanges: Array<{ from: number; to: number }>,
+): void {
+  if (to <= from || overlapsProtectedRange(from, to, protectedRanges)) return;
+  out.push(Decoration.inline(contentStart + from, contentStart + to, { class: className }));
+}
+
+function pushKinsokuDecos(out: Decoration[], line: LineNode, contentStart: number): void {
+  if (!line.source) return;
+
+  const protectedRanges = inlineMarkupRanges(line);
+  const chars = characterRanges(line.source);
+  if (chars.length === 0) return;
+
+  for (let i = 0; i < chars.length; i += 1) {
+    const ch = chars[i].ch;
+
+    if (ch === "…" || ch === "‥" || ch === "―") {
+      let end = i + 1;
+      while (end < chars.length && chars[end].ch === ch) end += 1;
+      if (end - i >= 2) {
+        pushKinsokuRange(
+          out,
+          contentStart,
+          chars[i].from,
+          chars[end - 1].to,
+          "ks-no-split",
+          protectedRanges,
+        );
+      }
+      i = end - 1;
+      continue;
+    }
+
+    if ((ch === "〳" || ch === "〴") && i + 1 < chars.length && chars[i + 1].ch === "〵") {
+      pushKinsokuRange(
+        out,
+        contentStart,
+        chars[i].from,
+        chars[i + 1].to,
+        "ks-no-split",
+        protectedRanges,
+      );
+      i += 1;
+      continue;
+    }
+
+    if (KINSOKU_DIGIT.test(ch)) {
+      let end = i + 1;
+      while (end < chars.length && KINSOKU_DIGIT.test(chars[end].ch)) end += 1;
+      if (end - i >= 2) {
+        pushKinsokuRange(
+          out,
+          contentStart,
+          chars[i].from,
+          chars[end - 1].to,
+          "ks-no-split",
+          protectedRanges,
+        );
+      }
+      i = end - 1;
+    }
+  }
+
+  for (let i = 1; i < chars.length; i += 1) {
+    if (!KINSOKU_LINE_HEAD_FORBIDDEN.has(chars[i].ch)) continue;
+
+    let end = i + 1;
+    while (end < chars.length && KINSOKU_LINE_HEAD_FORBIDDEN.has(chars[end].ch)) end += 1;
+    pushKinsokuRange(
+      out,
+      contentStart,
+      chars[i - 1].from,
+      chars[end - 1].to,
+      "ks-line-head-ban",
+      protectedRanges,
+    );
+    i = end - 1;
+  }
+
+  for (let i = 0; i < chars.length - 1; i += 1) {
+    if (!KINSOKU_LINE_END_FORBIDDEN.has(chars[i].ch)) continue;
+
+    pushKinsokuRange(
+      out,
+      contentStart,
+      chars[i].from,
+      chars[i + 1].to,
+      "ks-line-end-ban",
+      protectedRanges,
+    );
+  }
+
+  for (let i = 0; i < chars.length; i += 1) {
+    const prev = i > 0 ? chars[i - 1].ch : "";
+    const next = i + 1 < chars.length ? chars[i + 1].ch : "";
+    const boundary = i === 0 || i === chars.length - 1;
+    if (
+      KINSOKU_PUNCTUATION.has(chars[i].ch) &&
+      (KINSOKU_PUNCTUATION.has(prev) || KINSOKU_PUNCTUATION.has(next) || boundary)
+    ) {
+      pushKinsokuRange(
+        out,
+        contentStart,
+        chars[i].from,
+        chars[i].to,
+        "ks-punct-trim",
+        protectedRanges,
+      );
+    }
+  }
+}
+
+function shouldJustifyLine(line: LineNode): boolean {
+  if (line.kind !== "paragraph" || line.jitsuki || line.align) return false;
+  return Array.from(line.text || line.source).length >= 8;
+}
+
 function addInlineDecoration(
   out: Decoration[],
   contentStart: number,
@@ -823,11 +997,22 @@ function pushInlineDecos(markup: InlineMarkup, contentStart: number, out: Decora
   if (markup.type === "tcy") {
     const contentOffset = markup.contentRange.offset;
     const contentEnd = contentOffset + markup.contentRange.length;
+    const tcyText = markup.contentText.replace(/[\uFE0E\uFE0F]/g, "");
+    const tcyLength = Array.from(tcyText).length;
+    const attrs: Record<string, string> = {
+      class: "tcy ks-no-split",
+      "data-tcy-len": String(Math.min(4, tcyLength)),
+    };
+
+    if (/^[0-9０-９]+$/.test(tcyText)) {
+      attrs["data-tcy-kind"] = "num";
+    } else if (/^[!?！？‼⁇⁈⁉]+$/.test(tcyText)) {
+      attrs["data-tcy-kind"] = "punct";
+    }
+
     addInlineDecoration(out, contentStart, fullStart, contentOffset, "mk-hidden");
     out.push(
-      Decoration.inline(contentStart + contentOffset, contentStart + contentEnd, {
-        class: "tcy",
-      }),
+      Decoration.inline(contentStart + contentOffset, contentStart + contentEnd, attrs),
     );
     addInlineDecoration(out, contentStart, contentEnd, fullEnd, "mk-hidden");
     return;
@@ -879,6 +1064,7 @@ function pushLineDecos(
   if (line.kind === "blank") classes.push("blank");
   if (line.kind === "heading") classes.push("heading", `h${line.level}`);
   if (line.kind === "list") classes.push("list-line");
+  if (shouldJustifyLine(line)) classes.push("ks-justify");
   if (line.align) classes.push(`align-${line.align}`);
   if (line.jitsuki) classes.push("jitsuki");
   if (active) classes.push("active-line");
@@ -888,9 +1074,11 @@ function pushLineDecos(
 
   out.push(Decoration.node(nodeStart, nodeStart + node.nodeSize, attrs));
 
+  const contentStart = nodeStart + 1;
+  pushKinsokuDecos(out, line, contentStart);
+
   if (active) return;
 
-  const contentStart = nodeStart + 1;
   if (line.marker) {
     out.push(
       Decoration.inline(contentStart, contentStart + line.marker.length, {
@@ -1180,6 +1368,101 @@ function selectionColumnAnchor(view: EditorView): { rect: DOMRect | null; source
   return { rect: rect || coordsAtSelectionStable(view), source: rect ? "range-prev" : "coords" };
 }
 
+function inlineTextNodeIsPainted(node: Node, root: Element): boolean {
+  let element = node.parentElement;
+
+  while (element && element !== root) {
+    const style = getComputedStyle(element);
+    if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
+      return false;
+    }
+    element = element.parentElement;
+  }
+
+  return true;
+}
+
+function domTextCharRect(textNode: Node, offset: number): DOMRect | null {
+  try {
+    const value = textNode.nodeValue;
+    if (!value || offset < 0 || offset >= value.length) return null;
+
+    const doc = textNode.ownerDocument || document;
+    const range = doc.createRange();
+    range.setStart(textNode, offset);
+    range.setEnd(textNode, offset + 1);
+    const rects = Array.from(range.getClientRects()).filter(rectHasArea);
+    return rects.length ? rects[rects.length - 1] : null;
+  } catch {
+    return null;
+  }
+}
+
+function lastPaintedTextRectInBlock(element: Element): DOMRect | null {
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (!node.nodeValue || node.nodeValue.length === 0) return NodeFilter.FILTER_REJECT;
+      return inlineTextNodeIsPainted(node, element)
+        ? NodeFilter.FILTER_ACCEPT
+        : NodeFilter.FILTER_REJECT;
+    },
+  });
+  const nodes: Node[] = [];
+
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+
+  for (let nodeIndex = nodes.length - 1; nodeIndex >= 0; nodeIndex -= 1) {
+    const textNode = nodes[nodeIndex];
+    const value = textNode.nodeValue || "";
+    for (let offset = value.length - 1; offset >= 0; offset -= 1) {
+      const rect = domTextCharRect(textNode, offset);
+      if (rect && rectHasArea(rect)) return rect;
+    }
+  }
+
+  return null;
+}
+
+function blockFallbackEndRect(element: Element): DOMRect | null {
+  const rect = element.getBoundingClientRect();
+  if (!rectHasArea(rect)) return null;
+
+  const lineHeight = lineHeightPx(element) || 16;
+  const width = Math.max(1, Math.min(rect.width || lineHeight, lineHeight));
+
+  return new DOMRect(
+    rect.right - width,
+    rect.top,
+    width,
+    Math.max(1, Math.min(rect.height || lineHeight, lineHeight)),
+  );
+}
+
+function paragraphEndRect(editor: Editor, index: number): DOMRect | null {
+  if (index < 0 || index >= editor.state.doc.childCount) return null;
+
+  const element = editor.view.dom.children[index];
+  if (!(element instanceof Element)) return null;
+
+  const paintedRect = lastPaintedTextRectInBlock(element);
+  if (paintedRect && rectHasArea(paintedRect)) return paintedRect;
+
+  const nodeStart = pmStartAtIndex(editor.state.doc, index);
+  if (nodeStart === null) return blockFallbackEndRect(element);
+
+  const node = editor.state.doc.child(index);
+  const length = node.content.size;
+  const maxScan = Math.min(length, 64);
+
+  for (let step = 0; step < maxScan; step += 1) {
+    const from = nodeStart + length - step;
+    const rect = domRangeRect(editor.view, from, from + 1, true);
+    if (rect && rectHasArea(rect)) return rect;
+  }
+
+  return blockFallbackEndRect(element);
+}
+
 function centerCaretForEditor(
   editor: Editor,
   scroller: HTMLElement,
@@ -1244,18 +1527,23 @@ function centerDelayFrames(eventType: string): number {
 export function VerticalTextEditor({
   text,
   typewriterOffset,
+  showLineBreakMarks,
   onReady,
   onTextChange,
   onSelectionChange,
 }: VerticalTextEditorProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const editorHostRef = useRef<HTMLDivElement | null>(null);
+  const lineBreakLayerRef = useRef<HTMLDivElement | null>(null);
   const tiptapRef = useRef<Editor | null>(null);
   const textRef = useRef(text);
   const onTextChangeRef = useRef(onTextChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
   const composingRef = useRef(false);
   const typewriterOffsetRef = useRef(typewriterOffset);
+  const showLineBreakMarksRef = useRef(showLineBreakMarks);
+  const renderLineBreakMarksRef = useRef<(() => void) | null>(null);
+  const requestLineBreakMarksRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     onTextChangeRef.current = onTextChange;
@@ -1268,6 +1556,15 @@ export function VerticalTextEditor({
   useEffect(() => {
     typewriterOffsetRef.current = Number.isFinite(typewriterOffset) ? typewriterOffset : 50;
   }, [typewriterOffset]);
+
+  useEffect(() => {
+    showLineBreakMarksRef.current = showLineBreakMarks;
+    if (showLineBreakMarks) {
+      requestLineBreakMarksRef.current?.();
+    } else {
+      renderLineBreakMarksRef.current?.();
+    }
+  }, [showLineBreakMarks]);
 
   const handle = useMemo<TextEditorHandle>(
     () => ({
@@ -1300,6 +1597,7 @@ export function VerticalTextEditor({
         onTextChangeRef.current(next);
         onSelectionChangeRef.current();
         if (scroller) centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, true);
+        requestLineBreakMarksRef.current?.();
       },
       jumpToLine: (line) => {
         const editor = tiptapRef.current;
@@ -1312,6 +1610,7 @@ export function VerticalTextEditor({
         editor.commands.setTextSelection(pos);
         onSelectionChangeRef.current();
         if (scroller) centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, true);
+        requestLineBreakMarksRef.current?.();
       },
       positionFromPoint: (x, y) => {
         const editor = tiptapRef.current;
@@ -1327,6 +1626,7 @@ export function VerticalTextEditor({
 
         typewriterOffsetRef.current = Number.isFinite(offsetPercent) ? offsetPercent : 50;
         centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, false);
+        requestLineBreakMarksRef.current?.();
       },
       isComposing: () => isEditorComposing(tiptapRef.current, composingRef),
     }),
@@ -1344,6 +1644,7 @@ export function VerticalTextEditor({
     requestAnimationFrame(() => {
       const scroller = scrollerRef.current;
       if (scroller) centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, true);
+      requestLineBreakMarksRef.current?.();
     });
   }, [text]);
 
@@ -1360,6 +1661,8 @@ export function VerticalTextEditor({
     let lastVisibleCenter = -1;
     let centerFrame: number | null = null;
     let visibleFrame: number | null = null;
+    let lineBreakFrame: number | null = null;
+    let lineBreakQueued = false;
 
     const requestCenterCaret = (instant: boolean, eventType: string) => {
       const editor = tiptapRef.current;
@@ -1417,8 +1720,77 @@ export function VerticalTextEditor({
             .setMeta(astKey, { visibleCenter: index } satisfies AstMeta)
             .setMeta("addToHistory", false),
         );
+        requestLineBreakMarks();
       });
     };
+
+    const renderLineBreakMarks = () => {
+      lineBreakQueued = false;
+      lineBreakFrame = null;
+      const layer = lineBreakLayerRef.current;
+      const currentEditor = tiptapRef.current;
+      if (!layer) return;
+
+      layer.textContent = "";
+
+      const scrollerRect = scroller.getBoundingClientRect();
+      layer.style.left = `${snapScrollValue(scrollerRect.left)}px`;
+      layer.style.top = `${snapScrollValue(scrollerRect.top)}px`;
+      layer.style.width = `${snapScrollValue(scrollerRect.width)}px`;
+      layer.style.height = `${snapScrollValue(scrollerRect.height)}px`;
+
+      if (
+        !showLineBreakMarksRef.current ||
+        !currentEditor ||
+        isEditorComposing(currentEditor, composingRef)
+      ) {
+        return;
+      }
+
+      const state = astKey.getState(currentEditor.state);
+      if (!state) return;
+
+      const estimatedCenter = estimateVisibleCenterIndex(currentEditor, scroller);
+      const visibleCenter = estimatedCenter >= 0 ? estimatedCenter : state.visibleCenter;
+      const activeIndex = activeLineIndex(currentEditor.state);
+      const fragment = document.createDocumentFragment();
+
+      for (const range of decorationRange(state.activeIndex, state.lines.length, visibleCenter)) {
+        const to = Math.min(range.to, state.lines.length, currentEditor.state.doc.childCount);
+
+        for (let index = range.from; index < to; index += 1) {
+          const line = state.lines[index];
+          if (!line) continue;
+
+          const rect = paragraphEndRect(currentEditor, index);
+          if (!rect) continue;
+
+          const mark = document.createElement("span");
+          const blank = line.source.length === 0;
+          mark.className = `visibleLineBreakMark${blank ? " blank" : ""}${
+            index === activeIndex ? " active" : ""
+          }`;
+          mark.textContent = "↵";
+          mark.style.left = `${snapScrollValue((rect.left + rect.right) / 2 - scrollerRect.left)}px`;
+          mark.style.top = `${snapScrollValue(
+            (blank ? (rect.top + rect.bottom) / 2 : rect.bottom + 8) - scrollerRect.top,
+          )}px`;
+          fragment.appendChild(mark);
+        }
+      }
+
+      layer.appendChild(fragment);
+    };
+
+    const requestLineBreakMarks = () => {
+      if (!showLineBreakMarksRef.current || lineBreakQueued) return;
+
+      lineBreakQueued = true;
+      lineBreakFrame = requestAnimationFrame(renderLineBreakMarks);
+    };
+
+    renderLineBreakMarksRef.current = renderLineBreakMarks;
+    requestLineBreakMarksRef.current = requestLineBreakMarks;
 
     const editor = new Editor({
       element: host,
@@ -1442,11 +1814,13 @@ export function VerticalTextEditor({
           requestCenterCaret(true, "update");
         }
         requestVisibleWindow();
+        requestLineBreakMarks();
       },
       onSelectionUpdate: () => {
         onSelectionChangeRef.current();
         requestCenterCaret(false, "selection");
         requestVisibleWindow();
+        requestLineBreakMarks();
       },
     });
 
@@ -1458,6 +1832,7 @@ export function VerticalTextEditor({
       const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
       scroller.scrollLeft -= delta;
       requestVisibleWindow();
+      requestLineBreakMarks();
     };
 
     const handleMouseDown = (event: MouseEvent) => {
@@ -1469,10 +1844,12 @@ export function VerticalTextEditor({
       const lastNode = editor.state.doc.child(lastIndex);
       editor.commands.setTextSelection((pmStartAtIndex(editor.state.doc, lastIndex) ?? 0) + 1 + lastNode.content.size);
       requestCenterCaret(true, "scroller-mousedown");
+      requestLineBreakMarks();
     };
 
     const handleCompositionStart = () => {
       composingRef.current = true;
+      renderLineBreakMarks();
     };
 
     const handleCompositionUpdate = () => {
@@ -1483,11 +1860,18 @@ export function VerticalTextEditor({
       composingRef.current = false;
       requestCenterCaret(true, "compositionend");
       requestVisibleWindow();
+      requestLineBreakMarks();
     };
 
     const handleResize = () => {
       requestCenterCaret(true, "resize");
       requestVisibleWindow();
+      requestLineBreakMarks();
+    };
+
+    const handleScroll = () => {
+      requestVisibleWindow();
+      requestLineBreakMarks();
     };
 
     scroller.addEventListener("wheel", handleWheel, { passive: false });
@@ -1495,15 +1879,17 @@ export function VerticalTextEditor({
     editor.view.dom.addEventListener("compositionstart", handleCompositionStart);
     editor.view.dom.addEventListener("compositionupdate", handleCompositionUpdate);
     editor.view.dom.addEventListener("compositionend", handleCompositionEnd);
-    scroller.addEventListener("scroll", requestVisibleWindow, { passive: true });
+    scroller.addEventListener("scroll", handleScroll, { passive: true });
     window.addEventListener("resize", handleResize);
 
     editor.commands.focus("start");
     requestCenterCaret(true, "initial");
     requestVisibleWindow();
+    requestLineBreakMarks();
     document.fonts?.ready.then(() => {
       requestCenterCaret(true, "font-ready");
       requestVisibleWindow();
+      requestLineBreakMarks();
     });
 
     onReady(handle);
@@ -1514,10 +1900,14 @@ export function VerticalTextEditor({
       editor.view.dom.removeEventListener("compositionstart", handleCompositionStart);
       editor.view.dom.removeEventListener("compositionupdate", handleCompositionUpdate);
       editor.view.dom.removeEventListener("compositionend", handleCompositionEnd);
-      scroller.removeEventListener("scroll", requestVisibleWindow);
+      scroller.removeEventListener("scroll", handleScroll);
       window.removeEventListener("resize", handleResize);
       if (centerFrame !== null) cancelAnimationFrame(centerFrame);
       if (visibleFrame !== null) cancelAnimationFrame(visibleFrame);
+      if (lineBreakFrame !== null) cancelAnimationFrame(lineBreakFrame);
+      renderLineBreakMarksRef.current = null;
+      requestLineBreakMarksRef.current = null;
+      if (lineBreakLayerRef.current) lineBreakLayerRef.current.textContent = "";
       editor.destroy();
       if (tiptapRef.current === editor) tiptapRef.current = null;
       onReady(null);
@@ -1528,6 +1918,7 @@ export function VerticalTextEditor({
     <div className="verticalTypewriterShell">
       <div ref={scrollerRef} className="verticalTypewriterScroller">
         <div ref={editorHostRef} className="verticalTypewriterEditor" />
+        <div ref={lineBreakLayerRef} className="visibleLineBreakLayer" aria-hidden="true" />
       </div>
       <div className="verticalTypewriterGuide" />
     </div>

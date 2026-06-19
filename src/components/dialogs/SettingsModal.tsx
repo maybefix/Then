@@ -87,6 +87,16 @@ export function SettingsModal({
             />
             <span>タイプライタースクロール</span>
           </label>
+          <label className="checkSetting">
+            <input
+              checked={settings.showLineBreakMarks}
+              type="checkbox"
+              onChange={(event) =>
+                onUpdateSettings("showLineBreakMarks", event.target.checked)
+              }
+            />
+            <span>改行記号を表示</span>
+          </label>
           <label>
             <span>スニペット保存先</span>
             <select

@@ -190,6 +190,7 @@ const defaultSettings: EditorSettings = {
   lineHeight: 1.82,
   typewriterScroll: true,
   typewriterOffset: 46,
+  showLineBreakMarks: false,
   snippetStorageMode: "workspace",
 };
 
@@ -2853,6 +2854,7 @@ export default function App() {
                             key={documentKey}
                             text={editorText}
                             typewriterOffset={settings.typewriterOffset}
+                            showLineBreakMarks={settings.showLineBreakMarks}
                             onReady={handleEditorReady}
                             onTextChange={handleTextChange}
                             onSelectionChange={handleSelectionChange}

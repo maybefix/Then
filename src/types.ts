@@ -21,6 +21,7 @@ export type EditorSettings = {
   lineHeight: number;
   typewriterScroll: boolean;
   typewriterOffset: number;
+  showLineBreakMarks: boolean;
   snippetStorageMode: "workspace" | "profile";
 };
 
