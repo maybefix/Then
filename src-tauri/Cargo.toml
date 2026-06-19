@@ -1,6 +1,6 @@
 [package]
 name = "brew"
-version = "0.2.4"
+version = "0.2.5"
 description = "Markdown writing editor with snippets"
 authors = ["local"]
 edition = "2021"
