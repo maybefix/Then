@@ -1052,7 +1052,6 @@ textarea {
   word-break: normal;
   text-justify: inter-character;
   text-spacing-trim: trim-start;
-  font-feature-settings: "halt" 1, "chws" 1;
   font-kerning: normal;
   outline: none;
   caret-color: #e8b04b;
@@ -1194,7 +1193,6 @@ textarea {
 
 .verticalTypewriterEditor .ks-punct-trim {
   text-spacing-trim: trim-start;
-  font-feature-settings: "halt" 1, "chws" 1;
 }
 
 .verticalTypewriterEditor .mk-hidden {
@@ -1253,22 +1251,40 @@ textarea {
 }
 
 .verticalTypewriterEditor .tcy[data-tcy-len="2"] {
-  font-size: 0.96em;
+  font-size: 1em;
 }
 
 .verticalTypewriterEditor .tcy[data-tcy-kind="num"] {
   font-feature-settings: "fwid" 1;
   font-variant-east-asian: full-width;
   font-variant-numeric: normal;
-  font-size: 0.97em;
-  margin-inline-end: 0.18em;
+  font-size: 1em;
 }
 
 .verticalTypewriterEditor .tcy[data-tcy-kind="punct"] {
   font-feature-settings: normal;
-  font-size: 0.96em;
+  font-size: 1em;
   margin-inline-end: 0.14em;
   margin-inline-start: 0.05em;
+}
+
+.verticalTypewriterEditor .tcy[data-tcy-kind="punct"][data-tcy-atom="1"] {
+  font-feature-settings: normal;
+  font-size: inherit;
+  font-variant-numeric: normal;
+  line-height: inherit;
+  margin-inline: 0;
+  padding-inline: 0;
+  user-select: auto;
+  -webkit-user-select: auto;
+}
+
+.verticalTypewriterEditor .tcy-boundary[data-tcy-kind="punct"] {
+  display: inline;
+  font-size: 1em;
+  line-height: inherit;
+  text-decoration: none;
+  white-space: pre;
 }
 
 .verticalTypewriterEditor .bold {

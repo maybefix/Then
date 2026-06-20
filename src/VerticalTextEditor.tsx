@@ -957,6 +957,36 @@ function findMarker(markup: InlineMarkup, role: string): InlineMarker | undefine
   return markup.markers.find((marker) => marker.role === role);
 }
 
+function pushPunctTcyBoundary(
+  out: Decoration[],
+  position: number,
+  markup: InlineMarkup,
+): void {
+  out.push(
+    Decoration.widget(
+      position,
+      () => {
+        const boundary = document.createElement("span");
+        boundary.className = "tcy-boundary nyoze-special-inline-boundary";
+        boundary.dataset.tcyBoundary = "after";
+        boundary.dataset.tcyNode = "layoutTcy";
+        boundary.dataset.tcyKind = "punct";
+        boundary.dataset.nyozeSpecialInlineBoundary = "after";
+        boundary.dataset.nyozeSpecialInlineNode = "layoutTcy";
+        boundary.dataset.nyozeSpecialInlineBoundaryPos = String(position);
+        boundary.contentEditable = "true";
+        boundary.spellcheck = false;
+        boundary.textContent = "\u2060";
+        return boundary;
+      },
+      {
+        side: -1,
+        key: `punct-tcy-boundary-${markup.id}-${position}`,
+      },
+    ),
+  );
+}
+
 function pushInlineDecos(markup: InlineMarkup, contentStart: number, out: Decoration[]): void {
   const fullStart = markup.fullRange.offset;
   const fullEnd = fullStart + markup.fullRange.length;
@@ -1004,16 +1034,24 @@ function pushInlineDecos(markup: InlineMarkup, contentStart: number, out: Decora
       "data-tcy-len": String(Math.min(4, tcyLength)),
     };
 
+    const isPunct = /^[!?！？‼⁇⁈⁉]+$/.test(tcyText);
+
     if (/^[0-9０-９]+$/.test(tcyText)) {
       attrs["data-tcy-kind"] = "num";
-    } else if (/^[!?！？‼⁇⁈⁉]+$/.test(tcyText)) {
+    } else if (isPunct) {
       attrs["data-tcy-kind"] = "punct";
+      attrs["data-tcy-atom"] = "1";
+      attrs.contenteditable = "false";
+      attrs.draggable = "false";
     }
 
     addInlineDecoration(out, contentStart, fullStart, contentOffset, "mk-hidden");
     out.push(
       Decoration.inline(contentStart + contentOffset, contentStart + contentEnd, attrs),
     );
+    if (isPunct) {
+      pushPunctTcyBoundary(out, contentStart + contentEnd, markup);
+    }
     addInlineDecoration(out, contentStart, contentEnd, fullEnd, "mk-hidden");
     return;
   }
