@@ -33,6 +33,7 @@ import { PlotPane } from "./components/plot/PlotPane";
 import { IdeaPane } from "./components/snippets/IdeaPane";
 import { StatusBar } from "./components/status/StatusBar";
 import type {
+  DocumentAst,
   DocumentOutlineItem,
   ProjectAst,
   ProjectSearchResult,
@@ -85,6 +86,8 @@ const scratchWorkspaceName = "一時ファイル";
 const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
 
 type LayoutDirection = "start" | "center" | "end";
+
+type WorkspaceSearchScope = "file" | "project";
 
 type EditorSelectionSnapshot = {
   from: number;
@@ -614,6 +617,96 @@ function clearNotationFromSelection(
   };
 }
 
+function replaceLiteralMatches(
+  text: string,
+  rawQuery: string,
+  replacement: string,
+): { text: string; count: number } {
+  const query = rawQuery.trim();
+  if (!query) return { text, count: 0 };
+
+  const haystack = text.toLocaleLowerCase();
+  const needle = query.toLocaleLowerCase();
+  const chunks: string[] = [];
+  let from = 0;
+  let count = 0;
+
+  while (from <= text.length) {
+    const index = haystack.indexOf(needle, from);
+    if (index < 0) break;
+    chunks.push(text.slice(from, index), replacement);
+    from = index + query.length;
+    count += 1;
+  }
+
+  if (count === 0) return { text, count: 0 };
+  chunks.push(text.slice(from));
+  return { text: chunks.join(""), count };
+}
+
+function replaceMarkdownBodyMatches(
+  markdown: string,
+  query: string,
+  replacement: string,
+): { markdown: string; count: number } {
+  const frontMatter = parseFrontMatter(markdown);
+  const result = replaceLiteralMatches(frontMatter.body, query, replacement);
+  if (result.count === 0) return { markdown, count: 0 };
+  return {
+    markdown: updateMarkdownBody(markdown, result.text),
+    count: result.count,
+  };
+}
+
+function collectDocumentSearchMatches(
+  documentAst: DocumentAst,
+  rawQuery: string,
+  path: string | null,
+  name: string,
+  maxResults = 80,
+): ProjectSearchResult[] {
+  const query = rawQuery.trim();
+  if (!query) return [];
+
+  const normalizedQuery = query.toLocaleLowerCase();
+  const results: ProjectSearchResult[] = [];
+
+  for (const block of documentAst.blocks) {
+    const source = block.source;
+    const normalizedSource = source.toLocaleLowerCase();
+    let from = 0;
+    let matchIndex = 0;
+
+    while (from <= normalizedSource.length) {
+      const index = normalizedSource.indexOf(normalizedQuery, from);
+      if (index < 0) break;
+
+      const line = block.lineIndex + 1;
+      const headingChain = findActiveOutlineChain(documentAst.outline, line);
+      results.push({
+        id: `current:${path ?? "scratch"}:${line}:${index}:${matchIndex}:${normalizedQuery}`,
+        kind: "fullText",
+        path: path ?? "",
+        name,
+        line,
+        column: index + 1,
+        title: headingChain[headingChain.length - 1]?.title ?? null,
+        excerpt: source,
+        headingChain,
+        matchStart: index,
+        matchLength: query.length,
+        score: index === 0 ? 70 : 50,
+      });
+
+      if (results.length >= maxResults) return results;
+      from = index + Math.max(1, normalizedQuery.length);
+      matchIndex += 1;
+    }
+  }
+
+  return results;
+}
+
 function normalizeState(value: Partial<AppState> | null | undefined): AppState {
   const settings = (value?.settings ?? {}) as Partial<EditorSettings>;
   const recentWorkspaces = Array.isArray(value?.recentWorkspaces)
@@ -755,6 +848,9 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [outlineQuery, setOutlineQuery] = useState("");
   const [projectSearchQuery, setProjectSearchQuery] = useState("");
+  const [searchScope, setSearchScope] = useState<WorkspaceSearchScope>("project");
+  const [projectReplaceValue, setProjectReplaceValue] = useState("");
+  const [isProjectReplacing, setIsProjectReplacing] = useState(false);
   const [isProjectSearchMode, setIsProjectSearchMode] = useState(false);
   const [toast, setToast] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -979,9 +1075,23 @@ export default function App() {
     if (!normalized) return outlineFlatItems;
     return outlineFlatItems.filter((item) => item.title.toLowerCase().includes(normalized));
   }, [outlineFlatItems, outlineQuery]);
+  const currentFileSearchResults = useMemo(
+    () =>
+      collectDocumentSearchMatches(
+        activeDocumentAst,
+        projectSearchQuery,
+        currentFilePath,
+        currentFileName,
+      ),
+    [activeDocumentAst, currentFileName, currentFilePath, projectSearchQuery],
+  );
   const projectSearchResults = useMemo(
-    () => searchProjectAst(projectAst, projectSearchQuery),
+    () => searchProjectAst(projectAst, projectSearchQuery, "fullText"),
     [projectAst, projectSearchQuery],
+  );
+  const workspaceSearchResults = useMemo(
+    () => (searchScope === "file" ? currentFileSearchResults : projectSearchResults),
+    [currentFileSearchResults, projectSearchResults, searchScope],
   );
   const projectAstSummary = useMemo(() => {
     if (!projectAst) return null;
@@ -2277,11 +2387,130 @@ export default function App() {
   };
 
   const handleProjectSearchResultOpen = async (result: ProjectSearchResult) => {
-    if (result.path !== currentFilePath) {
+    if (result.path && result.path !== currentFilePath) {
       await handleProjectFileSelect(result.path);
     }
     jumpToEditorLine(result.line);
     showToast(`「${result.name}」${result.line}行へ移動しました`);
+  };
+
+  const handleReplaceInCurrentFile = () => {
+    if (!projectSearchQuery.trim()) {
+      showToast("検索語句を入力してください");
+      return;
+    }
+
+    const result = replaceMarkdownBodyMatches(markdown, projectSearchQuery, projectReplaceValue);
+    if (result.count === 0) {
+      showToast("置換できる一致がありません");
+      return;
+    }
+
+    setActiveMarkdown(result.markdown);
+    setSaveStatus("dirty");
+    showToast(`${result.count}件をファイル内で置換しました`);
+  };
+
+  const handleReplaceInProject = async () => {
+    if (!projectFolder) {
+      showToast("先にフォルダを開いてください");
+      return;
+    }
+    if (!isTauriRuntime()) {
+      showToast("プロジェクト置換はTauri版で利用できます");
+      return;
+    }
+    if (!projectSearchQuery.trim()) {
+      showToast("検索語句を入力してください");
+      return;
+    }
+
+    const shouldReplace = await requestConfirm({
+      title: "プロジェクト全体を置換",
+      message: "開いているフォルダ内のテキストファイルを保存しながら置換します。",
+      detail: `検索: ${projectSearchQuery} / 置換: ${projectReplaceValue || "空文字"}`,
+      confirmLabel: "置換",
+      danger: true,
+    });
+    if (!shouldReplace) return;
+
+    setIsProjectReplacing(true);
+    setLastError("");
+    try {
+      const files = collectProjectTextFiles(projectFolder);
+      const savedDocuments: TextDocument[] = [];
+      let totalCount = 0;
+
+      for (const file of files) {
+        const openTab = openTabs.find((tab) => tab.path === file.path);
+        const sourceMarkdown =
+          openTab?.path === currentFilePath
+            ? markdown
+            : openTab?.markdown ??
+              (await invoke<TextDocument>("read_text_file", { path: file.path })).content;
+        const result = replaceMarkdownBodyMatches(
+          sourceMarkdown,
+          projectSearchQuery,
+          projectReplaceValue,
+        );
+        if (result.count === 0) continue;
+
+        const document = await invoke<TextDocument>("save_text_file", {
+          path: file.path,
+          content: result.markdown,
+        });
+        savedDocuments.push(document);
+        totalCount += result.count;
+        setProjectAst((current) =>
+          current && current.rootPath === projectFolder.path
+            ? upsertProjectAstDocument(current, {
+                path: document.path,
+                name: document.name,
+                text: parseFrontMatter(document.content).body,
+              })
+            : current,
+        );
+      }
+
+      if (!savedDocuments.length) {
+        showToast("置換できる一致がありません");
+        return;
+      }
+
+      const savedByPath = new Map(savedDocuments.map((document) => [document.path, document]));
+      setOpenTabs((current) =>
+        current.map((tab) => {
+          if (!tab.path) return tab;
+          const document = savedByPath.get(tab.path);
+          if (!document) return tab;
+          return {
+            ...tab,
+            markdown: document.content,
+            savedMarkdown: document.content,
+            name: document.name,
+            saveStatus: "saved",
+          };
+        }),
+      );
+
+      const activeSavedDocument = currentFilePath ? savedByPath.get(currentFilePath) : null;
+      if (activeSavedDocument) {
+        lastSavedMarkdownRef.current = activeSavedDocument.content;
+        setAppState((current) => ({
+          ...current,
+          markdown: activeSavedDocument.content,
+          lastFilePath: activeSavedDocument.path,
+        }));
+        setSaveStatus("saved");
+      }
+
+      showToast(`${totalCount}件をプロジェクト全体で置換しました`);
+    } catch (error) {
+      setLastError(String(error));
+      setSaveStatus("error");
+    } finally {
+      setIsProjectReplacing(false);
+    }
   };
 
   const handleProjectOutlineJump = async (path: string, item: DocumentOutlineItem) => {
@@ -3246,18 +3475,26 @@ export default function App() {
                 projectFolder={projectFolder}
                 currentFilePath={currentFilePath}
                 currentFileName={currentFileName}
+                currentFileCharCount={getTextLength(editorText)}
                 focusedFolderPath={focusedFolderPath}
                 activeDocumentOutline={outlineItems}
                 activeOutlineIds={activeOutlineIds}
                 projectAst={projectAst}
                 projectSearchQuery={projectSearchQuery}
-                projectSearchResults={projectSearchResults}
+                projectSearchResults={workspaceSearchResults}
+                searchScope={searchScope}
+                projectReplaceValue={projectReplaceValue}
+                isProjectReplacing={isProjectReplacing}
                 isProjectSearchMode={isProjectSearchMode}
                 onProjectSearchModeChange={setIsProjectSearchMode}
                 onJumpOutline={jumpToOutlineItem}
                 onJumpProjectOutline={(path, item) => void handleProjectOutlineJump(path, item)}
                 onProjectSearchQueryChange={setProjectSearchQuery}
+                onSearchScopeChange={setSearchScope}
+                onProjectReplaceValueChange={setProjectReplaceValue}
                 onOpenProjectSearchResult={(result) => void handleProjectSearchResultOpen(result)}
+                onReplaceInCurrentFile={handleReplaceInCurrentFile}
+                onReplaceInProject={() => void handleReplaceInProject()}
                 onOpenProjectFolder={handleOpenProjectFolder}
                 onNewDocument={handleNewDocument}
                 onCreateFile={(folderPath) => void handleCreateProjectFile(folderPath)}

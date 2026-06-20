@@ -14,6 +14,7 @@ import type {
   ProjectAst,
   ProjectAstFile,
   ProjectAstStatus,
+  ProjectSearchMode,
   ProjectSearchResult,
 } from "./types";
 
@@ -222,17 +223,85 @@ function resultId(
   line: number,
   column: number,
   query: string,
+  matchIndex = 0,
 ): string {
-  return hash16(`${path}|${kind}|${line}|${column}|${query}`);
+  return hash16(`${path}|${kind}|${line}|${column}|${query}|${matchIndex}`);
+}
+
+function collectLineMatches(text: string, query: string): number[] {
+  const matches: number[] = [];
+  if (!query) return matches;
+
+  const normalized = normalizeSearchText(text);
+  let from = 0;
+  while (from <= normalized.length) {
+    const index = normalized.indexOf(query, from);
+    if (index < 0) break;
+    matches.push(index);
+    from = index + Math.max(1, query.length);
+  }
+  return matches;
+}
+
+function searchProjectAstFullText(
+  projectAst: ProjectAst,
+  rawQuery: string,
+  query: string,
+  maxResults: number,
+): ProjectSearchResult[] {
+  const results: ProjectSearchResult[] = [];
+  const rawQueryLength = rawQuery.trim().length;
+
+  for (const file of projectAst.files) {
+    const documentAst = file.documentAst;
+    if (!documentAst) continue;
+
+    for (const block of documentAst.blocks) {
+      const matches = collectLineMatches(block.source, query);
+      if (!matches.length) continue;
+
+      const line = block.lineIndex + 1;
+      const headingChain = findActiveOutlineChain(documentAst.outline, line);
+      matches.forEach((index, matchIndex) => {
+        results.push({
+          id: resultId(file.path, "fullText", line, index + 1, query, matchIndex),
+          kind: "fullText",
+          path: file.path,
+          name: file.name,
+          line,
+          column: index + 1,
+          title: headingChain[headingChain.length - 1]?.title ?? null,
+          excerpt: createExcerpt(block.source, index, rawQueryLength),
+          headingChain,
+          matchStart: index,
+          matchLength: rawQueryLength,
+          score: index === 0 ? 70 : 50,
+        });
+      });
+    }
+  }
+
+  return results
+    .sort((left, right) => {
+      const nameCompare = left.name.localeCompare(right.name, "ja");
+      if (nameCompare !== 0) return nameCompare;
+      if (left.line !== right.line) return left.line - right.line;
+      return left.column - right.column;
+    })
+    .slice(0, maxResults);
 }
 
 export function searchProjectAst(
   projectAst: ProjectAst | null,
   rawQuery: string,
+  mode: ProjectSearchMode = "structured",
   maxResults = DEFAULT_MAX_PROJECT_SEARCH_RESULTS,
 ): ProjectSearchResult[] {
   const query = normalizeSearchText(rawQuery.trim());
   if (!projectAst || !query) return [];
+  if (mode === "fullText") {
+    return searchProjectAstFullText(projectAst, rawQuery, query, maxResults);
+  }
 
   const results: ProjectSearchResult[] = [];
 

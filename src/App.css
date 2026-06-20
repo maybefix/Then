@@ -1940,7 +1940,7 @@ textarea {
   --danger: #d97373;
   --documentbar-height: 36px;
   --statusbar-height: 26px;
-  --left-sidebar-width: 220px;
+  --left-sidebar-width: 275px;
   --right-sidebar-width: 280px;
 }
 
@@ -2235,7 +2235,7 @@ body {
   display: grid;
   min-width: 0;
   min-height: 27px;
-  grid-template-columns: 12px 15px minmax(0, 1fr);
+  grid-template-columns: 12px 15px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 5px;
   border: 0;
@@ -2245,8 +2245,17 @@ body {
   font: inherit;
   font-size: 12px;
   text-align: left;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
+}
+
+.treeDragHandle {
+  display: inline-grid;
+  width: 15px;
+  height: 24px;
+  place-items: center;
+  cursor: grab;
+  touch-action: none;
 }
 
 .treeChevron {
@@ -2264,15 +2273,18 @@ body {
   white-space: nowrap;
 }
 
+.treeItemCharCount {
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .treeActiveDot {
-  position: absolute;
-  top: 50%;
-  right: 6px;
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
-  transform: translateY(-50%);
 }
 
 .draggingTreeEntry .treeItemPrimary {
@@ -2353,13 +2365,19 @@ body {
 
 .sidebarSearch {
   position: relative;
-  display: block;
+  display: grid;
+  gap: 4px;
   padding: 3px 10px 8px;
+}
+
+.searchFieldLabel {
+  color: var(--text-faint);
+  font-size: 10px;
 }
 
 .sidebarSearch .searchSvgIcon {
   position: absolute;
-  top: 11px;
+  bottom: 17px;
   left: 19px;
   color: var(--text-faint);
   pointer-events: none;
@@ -2379,6 +2397,122 @@ body {
 
 .sidebarSearch input:focus {
   border-color: rgba(201, 168, 74, 0.5);
+}
+
+.projectSearchModes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 0 10px 8px;
+}
+
+.projectSearchModes button,
+.projectReplaceActions button {
+  min-width: 0;
+  min-height: 25px;
+  padding: 0 6px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 5px;
+  background: var(--bg-panel-strong);
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.projectSearchModes button:hover,
+.projectReplaceActions button:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.projectSearchModes .activeProjectSearchMode {
+  border-color: rgba(201, 168, 74, 0.55);
+  color: var(--accent-strong);
+}
+
+.projectReplaceDisclosure {
+  display: grid;
+  gap: 7px;
+  padding: 0 10px 10px;
+  border-bottom: 0.5px solid var(--border-subtle);
+}
+
+.projectReplaceToggle {
+  display: flex;
+  min-width: 0;
+  min-height: 25px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.projectReplaceToggle:hover,
+.projectReplaceToggle[aria-expanded="true"] {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.projectReplaceToggleIcon {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.projectReplacePanel {
+  display: grid;
+  gap: 7px;
+  padding: 0;
+}
+
+.projectReplacePanel label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.projectReplacePanel input {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 5px;
+  outline: none;
+  background: var(--bg-panel-strong);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.projectReplacePanel input:focus {
+  border-color: rgba(201, 168, 74, 0.5);
+}
+
+.projectReplaceActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.projectReplaceActions button:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .outlineSidebarList {

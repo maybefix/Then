@@ -21,16 +21,24 @@ type WorkspaceSidebarProps = {
   projectFolder: ProjectFolder | null;
   currentFilePath: string | null;
   currentFileName: string;
+  currentFileCharCount: number;
   focusedFolderPath: string | null;
   activeDocumentOutline: OutlineItem[];
   activeOutlineIds: ReadonlySet<string>;
   projectAst: ProjectAst | null;
   projectSearchQuery: string;
   projectSearchResults: ProjectSearchResult[];
+  searchScope: WorkspaceSearchScope;
+  projectReplaceValue: string;
+  isProjectReplacing: boolean;
   isProjectSearchMode: boolean;
   onProjectSearchModeChange: (value: boolean) => void;
   onProjectSearchQueryChange: (value: string) => void;
+  onSearchScopeChange: (value: WorkspaceSearchScope) => void;
+  onProjectReplaceValueChange: (value: string) => void;
   onOpenProjectSearchResult: (result: ProjectSearchResult) => void;
+  onReplaceInCurrentFile: () => void;
+  onReplaceInProject: () => void;
   onJumpOutline: (item: OutlineItem) => void;
   onJumpProjectOutline: (path: string, item: DocumentOutlineItem) => void;
   onOpenProjectFolder: () => void;
@@ -67,6 +75,8 @@ type PointerDragState = {
   isDragging: boolean;
 };
 
+type WorkspaceSearchScope = "file" | "project";
+
 function isProjectEntry(entry: ProjectFolder | ProjectEntry): entry is ProjectEntry {
   return "kind" in entry;
 }
@@ -82,6 +92,10 @@ function getProjectAstStatusLabel(projectAst: ProjectAst | null): string {
     return `${projectAst.indexedCount}/${projectAst.files.length}`;
   }
   return String(projectAst.indexedCount);
+}
+
+function formatCharCount(value: number): string {
+  return `${new Intl.NumberFormat("ja-JP").format(value)}字`;
 }
 
 type SidebarIconName =
@@ -199,16 +213,24 @@ export function WorkspaceSidebar({
   projectFolder,
   currentFilePath,
   currentFileName,
+  currentFileCharCount,
   focusedFolderPath,
   activeDocumentOutline,
   activeOutlineIds,
   projectAst,
   projectSearchQuery,
   projectSearchResults,
+  searchScope,
+  projectReplaceValue,
+  isProjectReplacing,
   isProjectSearchMode,
   onProjectSearchModeChange,
   onProjectSearchQueryChange,
+  onSearchScopeChange,
+  onProjectReplaceValueChange,
   onOpenProjectSearchResult,
+  onReplaceInCurrentFile,
+  onReplaceInProject,
   onJumpOutline,
   onJumpProjectOutline,
   onOpenProjectFolder,
@@ -226,6 +248,7 @@ export function WorkspaceSidebar({
   const [contextMenu, setContextMenu] = useState<TreeContextMenu>(null);
   const [draggingEntryPath, setDraggingEntryPath] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<BreadcrumbDropTarget>(null);
+  const [isReplaceExpanded, setIsReplaceExpanded] = useState(false);
   const pointerDragRef = useRef<PointerDragState | null>(null);
   const dropTargetRef = useRef<BreadcrumbDropTarget>(null);
   const suppressNextClickRef = useRef(false);
@@ -516,6 +539,8 @@ export function WorkspaceSidebar({
       .join(" ");
     const astFile = !isFolder ? projectAstFiles.get(entry.path) : null;
     const outline = astFile?.documentAst?.outline ?? [];
+    const charCountLabel =
+      !isFolder && astFile?.status === "indexed" ? formatCharCount(astFile.textLength) : null;
 
     return (
       <div className="treeNode" key={entry.path}>
@@ -524,10 +549,6 @@ export function WorkspaceSidebar({
           data-tree-entry-path={isDraggable ? entry.path : undefined}
           data-tree-folder-path={parentFolderPath ?? undefined}
           onContextMenu={(event) => openContextMenu(event, entry, isRoot)}
-          onPointerDown={(event) => handleTreePointerDown(event, parentFolderPath, entry.path)}
-          onPointerMove={handleTreePointerMove}
-          onPointerUp={handleTreePointerUp}
-          onPointerCancel={resetPointerDrag}
         >
           <button
             className="treeItemPrimary"
@@ -544,11 +565,21 @@ export function WorkspaceSidebar({
                 />
               )}
             </span>
-            <SidebarIcon
-              name={isFolder ? (isRoot ? "book" : "folder") : "file"}
-              className="treeSvgIcon"
-            />
+            <span
+              className="treeDragHandle"
+              title={isDraggable ? "ドラッグして並び替え" : undefined}
+              onPointerDown={(event) => handleTreePointerDown(event, parentFolderPath, entry.path)}
+              onPointerMove={handleTreePointerMove}
+              onPointerUp={handleTreePointerUp}
+              onPointerCancel={resetPointerDrag}
+            >
+              <SidebarIcon
+                name={isFolder ? (isRoot ? "book" : "folder") : "file"}
+                className="treeSvgIcon"
+              />
+            </span>
             <span className="treeItemName">{entry.name}</span>
+            {charCountLabel && <span className="treeItemCharCount">{charCountLabel}</span>}
             {isActive && <span className="treeActiveDot" aria-hidden="true" />}
           </button>
         </div>
@@ -594,6 +625,7 @@ export function WorkspaceSidebar({
                 <span className="treeChevron" aria-hidden="true" />
                 <SidebarIcon name="file" className="treeSvgIcon" />
                 <span className="treeItemName">{currentFileName}</span>
+                <span className="treeItemCharCount">{formatCharCount(currentFileCharCount)}</span>
                 <span className="treeActiveDot" aria-hidden="true" />
               </button>
             </div>
@@ -611,28 +643,95 @@ export function WorkspaceSidebar({
   );
 
   const emptyProjectSearchMessage = !projectFolder
-    ? "フォルダ未選択"
+    ? searchScope === "project"
+      ? "フォルダ未選択"
+      : "検索語句を入力"
     : !projectSearchQuery.trim()
-      ? "語句を入力"
-      : projectAst?.status === "indexing" && !projectSearchResults.length
+      ? "検索語句を入力"
+      : searchScope === "project" &&
+          projectAst?.status === "indexing" &&
+          !projectSearchResults.length
         ? "AST構築中"
-        : "一致する本文がありません";
+        : searchScope === "file"
+          ? "ファイル内に一致がありません"
+          : "プロジェクト内に一致がありません";
 
   const renderProjectSearchMode = () => (
-    <section className="sidebarSection projectSearchModeSection" aria-label="プロジェクト検索">
+    <section className="sidebarSection projectSearchModeSection" aria-label="検索と置換">
       <div className="sidebarSectionHeader">
-        <span>プロジェクト検索</span>
+        <span>検索と置換</span>
         <span>{getProjectAstStatusLabel(projectAst)}</span>
       </div>
       <label className="sidebarSearch">
+        <span className="searchFieldLabel">検索語句</span>
         <SidebarIcon name="search" className="searchSvgIcon" />
         <input
           value={projectSearchQuery}
           onChange={(event) => onProjectSearchQueryChange(event.target.value)}
-          placeholder="プロジェクトを検索"
+          placeholder="検索する文字列"
           type="search"
         />
       </label>
+      <div className="projectSearchModes" role="group" aria-label="検索範囲">
+        <button
+          className={searchScope === "file" ? "activeProjectSearchMode" : ""}
+          type="button"
+          aria-pressed={searchScope === "file"}
+          onClick={() => onSearchScopeChange("file")}
+        >
+          ファイル内を検索
+        </button>
+        <button
+          className={searchScope === "project" ? "activeProjectSearchMode" : ""}
+          type="button"
+          aria-pressed={searchScope === "project"}
+          onClick={() => onSearchScopeChange("project")}
+        >
+          プロジェクト内を検索
+        </button>
+      </div>
+      <div className="projectReplaceDisclosure">
+        <button
+          className="projectReplaceToggle"
+          type="button"
+          aria-expanded={isReplaceExpanded}
+          onClick={() => setIsReplaceExpanded((current) => !current)}
+        >
+          <span>{isReplaceExpanded ? "置換を隠す" : "置換を表示"}</span>
+          <SidebarIcon
+            name={isReplaceExpanded ? "chevronDown" : "chevronRight"}
+            className="projectReplaceToggleIcon"
+          />
+        </button>
+        {isReplaceExpanded && (
+          <div className="projectReplacePanel">
+            <label>
+              <span>置換後</span>
+              <input
+                value={projectReplaceValue}
+                onChange={(event) => onProjectReplaceValueChange(event.target.value)}
+                placeholder="置換する文字列"
+              />
+            </label>
+            <div className="projectReplaceActions">
+              <button
+                type="button"
+                disabled={isProjectReplacing || !projectSearchQuery.trim()}
+                onClick={onReplaceInCurrentFile}
+              >
+                ファイル内を置換
+              </button>
+              <button
+                type="button"
+                disabled={isProjectReplacing || !projectFolder || !projectSearchQuery.trim()}
+                onClick={onReplaceInProject}
+              >
+                プロジェクト内を置換
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
       <div className="projectSearchList">
         {projectSearchResults.length ? (
           projectSearchResults.map((result) => (
@@ -645,7 +744,7 @@ export function WorkspaceSidebar({
             >
               <span className="projectSearchResultMeta">
                 <span>{result.name}</span>
-                <span>{result.line}行</span>
+                <span>{result.line}行:{result.column}</span>
               </span>
               <span className="projectSearchResultTitle">
                 {result.title ?? result.name}

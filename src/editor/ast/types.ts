@@ -108,7 +108,9 @@ export type ProjectAst = {
   updatedAt: number;
 };
 
-export type ProjectSearchResultKind = "heading" | "body";
+export type ProjectSearchMode = "structured" | "fullText";
+
+export type ProjectSearchResultKind = "heading" | "body" | "fullText";
 
 export type ProjectSearchResult = {
   id: string;
