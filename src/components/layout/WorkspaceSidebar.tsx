@@ -590,12 +590,12 @@ export function WorkspaceSidebar({
         )}
         {!isFolder && outline.length > 0 && (
           <div className="outlineTreeChildren">
-            {renderOutlineItems(entry.path, outline, depth + 1)}
+            {renderOutlineItems(entry.path, outline, depth + 2)}
           </div>
         )}
         {!isFolder && astFile?.status === "pending" && (
           <div className="treeHint" style={{ paddingLeft: `${40 + depth * 14}px` }}>
-            AST構築中
+            見出しを解析中
           </div>
         )}
         {!isFolder && astFile?.status === "error" && (
@@ -651,7 +651,7 @@ export function WorkspaceSidebar({
       : searchScope === "project" &&
           projectAst?.status === "indexing" &&
           !projectSearchResults.length
-        ? "AST構築中"
+        ? "検索用の索引を作成中"
         : searchScope === "file"
           ? "ファイル内に一致がありません"
           : "プロジェクト内に一致がありません";

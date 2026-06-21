@@ -102,6 +102,23 @@ type EditorContextMenuState = EditorSelectionSnapshot & {
   y: number;
 };
 
+type QueuedDocumentSave = {
+  tabId: string;
+  path: string;
+  content: string;
+  waiters: Array<{
+    resolve: (document: TextDocument) => void;
+    reject: (error: unknown) => void;
+  }>;
+};
+
+type DocumentSaveRequest = Omit<QueuedDocumentSave, "waiters">;
+
+type DocumentSaveQueue = {
+  running: boolean;
+  pending: QueuedDocumentSave | null;
+};
+
 type NotationModalState =
   | {
       type: "ruby";
@@ -291,6 +308,7 @@ function createScratchDocumentTab(
     name: options.name ?? scratchFileName,
     markdown,
     savedMarkdown: options.savedMarkdown ?? "",
+    editorRevision: null,
     saveStatus: options.saveStatus ?? "dirty",
     documentKey: options.documentKey ?? id,
     activeOutlineLine: null,
@@ -305,6 +323,7 @@ function createFileDocumentTab(document: TextDocument): DocumentTab {
     name: document.name,
     markdown: document.content,
     savedMarkdown: document.content,
+    editorRevision: null,
     saveStatus: "saved",
     documentKey: document.path,
     activeOutlineLine: null,
@@ -813,6 +832,8 @@ async function saveWorkspacePlotCards(folderPath: string, plotCards: PlotCard[])
 
 export default function App() {
   const saveTimerRef = useRef<number | null>(null);
+  const activeTabIdRef = useRef("initial-document-tab");
+  const documentSaveQueuesRef = useRef<Map<string, DocumentSaveQueue>>(new Map());
   const toastTimerRef = useRef<number | null>(null);
   const typewriterScrollFrameRef = useRef<number | null>(null);
   const draggingSnippetRef = useRef<Snippet | null>(null);
@@ -844,6 +865,7 @@ export default function App() {
     }),
   ]);
   const [activeTabId, setActiveTabId] = useState("initial-document-tab");
+  activeTabIdRef.current = activeTabId;
   const [projectFolder, setProjectFolder] = useState<ProjectFolder | null>(null);
   const [projectAst, setProjectAst] = useState<ProjectAst | null>(null);
   const [snippetWorkspacePath, setSnippetWorkspacePath] = useState<string | null>(null);
@@ -1004,8 +1026,8 @@ export default function App() {
     [patchActiveTab],
   );
   const setActiveMarkdown = useCallback(
-    (nextMarkdown: string) => {
-      patchActiveTab((tab) => ({ ...tab, markdown: nextMarkdown }));
+    (nextMarkdown: string, editorRevision: number | null = null) => {
+      patchActiveTab((tab) => ({ ...tab, markdown: nextMarkdown, editorRevision }));
       setAppState((current) =>
         current.markdown === nextMarkdown ? current : { ...current, markdown: nextMarkdown },
       );
@@ -1015,19 +1037,97 @@ export default function App() {
   const markActiveTabSaved = useCallback(
     (savedMarkdown: string, name?: string) => {
       lastSavedMarkdownRef.current = savedMarkdown;
-      patchActiveTab((tab) => ({
-        ...tab,
-        markdown: savedMarkdown,
-        savedMarkdown,
-        name: name ?? tab.name,
-        saveStatus: "saved",
-      }));
-      setAppState((current) =>
-        current.markdown === savedMarkdown ? current : { ...current, markdown: savedMarkdown },
-      );
+      patchActiveTab((tab) => {
+        const savedLatestRevision = tab.markdown === savedMarkdown;
+        return {
+          ...tab,
+          savedMarkdown,
+          name: name ?? tab.name,
+          saveStatus: savedLatestRevision ? "saved" : "dirty",
+        };
+      });
     },
     [patchActiveTab],
   );
+
+  const enqueueDocumentSave = useCallback((request: DocumentSaveRequest): Promise<TextDocument> => {
+    return new Promise<TextDocument>((resolve, reject) => {
+      const queues = documentSaveQueuesRef.current;
+      let queue = queues.get(request.tabId);
+      const queuedRequest: QueuedDocumentSave = {
+        ...request,
+        waiters: [{ resolve, reject }],
+      };
+
+      if (!queue) {
+        queue = { running: false, pending: null };
+        queues.set(request.tabId, queue);
+      }
+
+      if (queue.running) {
+        if (queue.pending) queuedRequest.waiters.push(...queue.pending.waiters);
+        queue.pending = queuedRequest;
+        return;
+      }
+
+      const runQueue = async (firstRequest: QueuedDocumentSave) => {
+        if (!queue) return;
+        queue.running = true;
+        let currentRequest: QueuedDocumentSave | null = firstRequest;
+
+        while (currentRequest) {
+          const savingRequest: QueuedDocumentSave = currentRequest;
+          setOpenTabs((current) =>
+            current.map((tab) =>
+              tab.id === savingRequest.tabId ? { ...tab, saveStatus: "saving" } : tab,
+            ),
+          );
+
+          try {
+            const document = await invoke<TextDocument>("save_text_file", {
+              path: savingRequest.path,
+              content: savingRequest.content,
+            });
+
+            if (activeTabIdRef.current === savingRequest.tabId) {
+              lastSavedMarkdownRef.current = document.content;
+            }
+
+            setOpenTabs((current) =>
+              current.map((tab) => {
+                if (tab.id !== savingRequest.tabId) return tab;
+                const savedLatestRevision = tab.markdown === document.content;
+                return {
+                  ...tab,
+                  savedMarkdown: document.content,
+                  name: document.name,
+                  saveStatus: savedLatestRevision ? "saved" : "dirty",
+                };
+              }),
+            );
+            setLastError("");
+            savingRequest.waiters.forEach((waiter) => waiter.resolve(document));
+          } catch (error) {
+            setLastError(String(error));
+            setOpenTabs((current) =>
+              current.map((tab) =>
+                tab.id === savingRequest.tabId ? { ...tab, saveStatus: "error" } : tab,
+              ),
+            );
+            savingRequest.waiters.forEach((waiter) => waiter.reject(error));
+          }
+
+          currentRequest = queue.pending;
+          queue.pending = null;
+        }
+
+        queue.running = false;
+        queues.delete(request.tabId);
+      };
+
+      void runQueue(queuedRequest);
+    });
+  }, []);
 
   const { snippets, settings } = appState;
   const markdown = activeTab?.markdown ?? appState.markdown;
@@ -1100,11 +1200,6 @@ export default function App() {
     () => (searchScope === "file" ? currentFileSearchResults : projectSearchResults),
     [currentFileSearchResults, projectSearchResults, searchScope],
   );
-  const projectAstSummary = useMemo(() => {
-    if (!projectAst) return null;
-    if (projectAst.status === "empty") return "AST 0/0";
-    return `AST ${projectAst.indexedCount}/${projectAst.files.length}`;
-  }, [projectAst]);
   const breadcrumbTrail = useMemo(
     () => findPathToEntry(projectFolder, focusedFolderPath ?? currentFilePath),
     [currentFilePath, focusedFolderPath, projectFolder],
@@ -1460,23 +1555,15 @@ export default function App() {
 
     setSaveStatus("dirty");
     const timer = window.setTimeout(() => {
-      setSaveStatus("saving");
-      invoke<TextDocument>("save_text_file", {
+      void enqueueDocumentSave({
+        tabId: activeTabId,
         path: currentFilePath,
         content: markdown,
-      })
-        .then((document) => {
-          markActiveTabSaved(document.content, document.name);
-          setLastError("");
-        })
-        .catch((error) => {
-          setLastError(String(error));
-          setSaveStatus("error");
-        });
+      }).catch(() => undefined);
     }, 700);
 
     return () => window.clearTimeout(timer);
-  }, [currentFilePath, isHydrated, markActiveTabSaved, markdown, setSaveStatus]);
+  }, [activeTabId, currentFilePath, enqueueDocumentSave, isHydrated, markdown, setSaveStatus]);
 
   useEffect(() => {
     return () => {
@@ -1591,7 +1678,7 @@ export default function App() {
     scheduleTypewriterScroll();
   }, [scheduleTypewriterScroll, settings.typewriterScroll]);
 
-  const handleTextChange = useCallback((nextText: string) => {
+  const handleTextChange = useCallback((nextText: string, editorRevision: number) => {
     didMountEditorRef.current = true;
     setCharCount(getTextLength(nextText));
     if (suppressNextEditorUpdateRef.current) {
@@ -1600,7 +1687,7 @@ export default function App() {
     }
     const nextFullText = updateMarkdownBody(markdown, nextText);
     if (markdown !== nextFullText) {
-      setActiveMarkdown(nextFullText);
+      setActiveMarkdown(nextFullText, editorRevision);
     }
     if (!currentFilePath) {
       setSaveStatus("dirty");
@@ -2160,7 +2247,8 @@ export default function App() {
     setSaveStatus("saving");
     try {
       const document = currentFilePath
-        ? await invoke<TextDocument>("save_text_file", {
+        ? await enqueueDocumentSave({
+            tabId: activeTabId,
             path: currentFilePath,
             content: markdown,
           })
@@ -2494,6 +2582,7 @@ export default function App() {
             ...tab,
             markdown: document.content,
             savedMarkdown: document.content,
+            editorRevision: null,
             name: document.name,
             saveStatus: "saved",
           };
@@ -3584,6 +3673,7 @@ export default function App() {
                           <VerticalTextEditor
                             key={documentKey}
                             text={editorText}
+                            editorRevision={activeTab?.editorRevision ?? null}
                             typewriterOffset={settings.typewriterOffset}
                             showLineBreakMarks={settings.showLineBreakMarks}
                             onReady={handleEditorReady}
@@ -3700,7 +3790,6 @@ export default function App() {
                 currentFilePath={currentFilePath}
                 lastError={lastError}
                 charCount={charCount}
-                projectAstSummary={projectAstSummary}
               />
             </div>
 

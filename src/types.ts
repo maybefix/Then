@@ -33,6 +33,22 @@ export const appThemeValues = [
   "nec-dark",
   "fujitsu-light",
   "fujitsu-dark",
+  "paper-light",
+  "paper-dark",
+  "one-hundred-light",
+  "precious-light",
+  "evergreen-light",
+  "express-light",
+  "express-dark",
+  "education-light",
+  "education-dark",
+  "water-light",
+  "water-dark",
+  "hands-light",
+  "hands-dark",
+  "dandelion-dark",
+  "commerce-light",
+  "commerce-dark",
 ] as const;
 
 export type AppTheme = (typeof appThemeValues)[number];
@@ -62,6 +78,8 @@ export type DocumentTab = {
    */
   markdown: string;
   savedMarkdown: string;
+  /** Last editor-originated revision, or null for external document updates. */
+  editorRevision: number | null;
   saveStatus: SaveStatus;
   documentKey: string;
   activeOutlineLine: number | null;
