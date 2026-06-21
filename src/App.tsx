@@ -14,6 +14,7 @@ import {
 import { VerticalTextEditor, type TextEditorHandle } from "./VerticalTextEditor";
 import { AppDialogModal } from "./components/dialogs/AppDialogModal";
 import { SettingsModal } from "./components/dialogs/SettingsModal";
+import { ThemePickerModal } from "./components/dialogs/ThemePickerModal";
 import { MetadataPanel } from "./components/editor/MetadataPanel";
 import { WorkspaceSidebar } from "./components/layout/WorkspaceSidebar";
 import {
@@ -56,6 +57,7 @@ import type {
   WorkspaceAlert,
   WorkspaceRecord,
 } from "./types";
+import { appThemeValues } from "./types";
 import {
   appendFrontMatterProperty,
   composeMarkdown,
@@ -250,6 +252,7 @@ const defaultSnippets: Snippet[] = [
 ];
 
 const defaultSettings: EditorSettings = {
+  theme: "dark",
   editorFontFamily: toCssFontFamilyValue("Noto Serif JP"),
   uiFontFamily: toCssFontFamilyValue("Segoe UI"),
   fontSize: 15,
@@ -744,6 +747,9 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
       ),
       snippetStorageMode:
         settings.snippetStorageMode === "profile" ? "profile" : "workspace",
+      theme: appThemeValues.includes(settings.theme as EditorSettings["theme"])
+        ? (settings.theme as EditorSettings["theme"])
+        : "dark",
     },
     lastWorkspacePath:
       typeof value?.lastWorkspacePath === "string" ? value.lastWorkspacePath : null,
@@ -865,6 +871,7 @@ export default function App() {
   const [notationModal, setNotationModal] = useState<NotationModalState | null>(null);
   const [dropIndicatorTop, setDropIndicatorTop] = useState<number | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isThemePickerModalOpen, setIsThemePickerModalOpen] = useState(false);
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const [activeBreadcrumbPath, setActiveBreadcrumbPath] = useState<string | null>(null);
   const [isOutlineMenuOpen, setIsOutlineMenuOpen] = useState(false);
@@ -3064,6 +3071,7 @@ export default function App() {
   return (
       <main
         className="appShell"
+        data-theme={settings.theme}
         style={
           {
             "--editor-font-family": settings.editorFontFamily,
@@ -3869,10 +3877,24 @@ export default function App() {
               settings={settings}
               systemFonts={systemFonts}
               onClose={() => setIsSettingsModalOpen(false)}
+              onOpenThemePicker={() => {
+                setIsSettingsModalOpen(false);
+                setIsThemePickerModalOpen(true);
+              }}
               onUpdateSettings={updateSettings}
               onSnippetStorageModeChange={(mode) =>
                 void handleSnippetStorageModeChange(mode)
               }
+            />
+          )}
+          {isThemePickerModalOpen && (
+            <ThemePickerModal
+              selectedTheme={settings.theme}
+              onClose={() => {
+                setIsThemePickerModalOpen(false);
+                setIsSettingsModalOpen(true);
+              }}
+              onSelect={(theme) => updateSettings("theme", theme)}
             />
           )}
         </section>

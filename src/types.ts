@@ -14,7 +14,31 @@ export type PlotCard = {
   expanded: boolean;
 };
 
+export const appThemeValues = [
+  "dark",
+  "notion",
+  "standard",
+  "claude",
+  "apple-light",
+  "apple-dark",
+  "smarthr-light",
+  "yamaha-light",
+  "yamaha-dark",
+  "sony-dark",
+  "ana-light",
+  "ana-dark",
+  "nissan-light",
+  "nissan-dark",
+  "nec-light",
+  "nec-dark",
+  "fujitsu-light",
+  "fujitsu-dark",
+] as const;
+
+export type AppTheme = (typeof appThemeValues)[number];
+
 export type EditorSettings = {
+  theme: AppTheme;
   editorFontFamily: string;
   uiFontFamily: string;
   fontSize: number;
