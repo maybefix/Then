@@ -14,6 +14,7 @@ import {
 import { VerticalTextEditor, type TextEditorHandle } from "./VerticalTextEditor";
 import { AppDialogModal } from "./components/dialogs/AppDialogModal";
 import { SettingsModal } from "./components/dialogs/SettingsModal";
+import { ThemePickerModal } from "./components/dialogs/ThemePickerModal";
 import { MetadataPanel } from "./components/editor/MetadataPanel";
 import { WorkspaceSidebar } from "./components/layout/WorkspaceSidebar";
 import {
@@ -22,6 +23,10 @@ import {
   flattenOutline,
   getLineNumberAtOffset,
 } from "./editor/ast/documentAst";
+import {
+  moveHeadingSection,
+  type HeadingDropPosition,
+} from "./editor/ast/headingMove";
 import {
   collectProjectTextFiles,
   createProjectAstSkeleton,
@@ -56,6 +61,7 @@ import type {
   WorkspaceAlert,
   WorkspaceRecord,
 } from "./types";
+import { appThemeValues } from "./types";
 import {
   appendFrontMatterProperty,
   composeMarkdown,
@@ -75,6 +81,7 @@ import {
   replaceFolderChildren,
   upsertRecentWorkspace,
 } from "./utils/projectTree";
+import { logHeadingDnd } from "./utils/headingDndDiagnostics";
 
 const SNIPPET_DRAG_MIME = "application/x-brew-snippet-id";
 const BREADCRUMB_ENTRY_DRAG_MIME = "application/x-brew-project-entry-path";
@@ -100,6 +107,28 @@ type EditorContextMenuState = EditorSelectionSnapshot & {
   y: number;
 };
 
+type QueuedDocumentSave = {
+  tabId: string;
+  path: string;
+  content: string;
+  waiters: Array<{
+    resolve: (document: TextDocument) => void;
+    reject: (error: unknown) => void;
+  }>;
+};
+
+type DocumentSaveRequest = Omit<QueuedDocumentSave, "waiters">;
+
+type DocumentSaveQueue = {
+  running: boolean;
+  pending: QueuedDocumentSave | null;
+};
+
+type HeadingMoveDocuments = {
+  sourceDocument: TextDocument;
+  targetDocument: TextDocument | null;
+};
+
 type NotationModalState =
   | {
       type: "ruby";
@@ -116,19 +145,19 @@ const customNotationSpecs = [
   {
     id: "ruby",
     label: "ルビ",
-    syntax: "[本文 (rb,ルビ)]",
+    syntax: "[本文(rb,ルビ)]",
     description: "選択範囲に読みを付けます",
   },
   {
     id: "tcy",
     label: "縦中横",
-    syntax: "[本文 (tcy)]",
+    syntax: "[本文(tcy)]",
     description: "選択範囲を縦書き中の横組みにします",
   },
   {
     id: "emphasis",
     label: "圏点",
-    syntax: "[本文 (em,goma)]",
+    syntax: "[本文(em,goma)]",
     description: "選択範囲に圏点を付けます",
   },
   {
@@ -250,6 +279,7 @@ const defaultSnippets: Snippet[] = [
 ];
 
 const defaultSettings: EditorSettings = {
+  theme: "dark",
   editorFontFamily: toCssFontFamilyValue("Noto Serif JP"),
   uiFontFamily: toCssFontFamilyValue("Segoe UI"),
   fontSize: 15,
@@ -288,6 +318,7 @@ function createScratchDocumentTab(
     name: options.name ?? scratchFileName,
     markdown,
     savedMarkdown: options.savedMarkdown ?? "",
+    editorRevision: null,
     saveStatus: options.saveStatus ?? "dirty",
     documentKey: options.documentKey ?? id,
     activeOutlineLine: null,
@@ -302,6 +333,7 @@ function createFileDocumentTab(document: TextDocument): DocumentTab {
     name: document.name,
     markdown: document.content,
     savedMarkdown: document.content,
+    editorRevision: null,
     saveStatus: "saved",
     documentKey: document.path,
     activeOutlineLine: null,
@@ -744,6 +776,9 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
       ),
       snippetStorageMode:
         settings.snippetStorageMode === "profile" ? "profile" : "workspace",
+      theme: appThemeValues.includes(settings.theme as EditorSettings["theme"])
+        ? (settings.theme as EditorSettings["theme"])
+        : "dark",
     },
     lastWorkspacePath:
       typeof value?.lastWorkspacePath === "string" ? value.lastWorkspacePath : null,
@@ -807,6 +842,9 @@ async function saveWorkspacePlotCards(folderPath: string, plotCards: PlotCard[])
 
 export default function App() {
   const saveTimerRef = useRef<number | null>(null);
+  const activeTabIdRef = useRef("initial-document-tab");
+  const documentSaveQueuesRef = useRef<Map<string, DocumentSaveQueue>>(new Map());
+  const headingMoveInProgressRef = useRef(false);
   const toastTimerRef = useRef<number | null>(null);
   const typewriterScrollFrameRef = useRef<number | null>(null);
   const draggingSnippetRef = useRef<Snippet | null>(null);
@@ -838,6 +876,7 @@ export default function App() {
     }),
   ]);
   const [activeTabId, setActiveTabId] = useState("initial-document-tab");
+  activeTabIdRef.current = activeTabId;
   const [projectFolder, setProjectFolder] = useState<ProjectFolder | null>(null);
   const [projectAst, setProjectAst] = useState<ProjectAst | null>(null);
   const [snippetWorkspacePath, setSnippetWorkspacePath] = useState<string | null>(null);
@@ -865,6 +904,7 @@ export default function App() {
   const [notationModal, setNotationModal] = useState<NotationModalState | null>(null);
   const [dropIndicatorTop, setDropIndicatorTop] = useState<number | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isThemePickerModalOpen, setIsThemePickerModalOpen] = useState(false);
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const [activeBreadcrumbPath, setActiveBreadcrumbPath] = useState<string | null>(null);
   const [isOutlineMenuOpen, setIsOutlineMenuOpen] = useState(false);
@@ -997,8 +1037,8 @@ export default function App() {
     [patchActiveTab],
   );
   const setActiveMarkdown = useCallback(
-    (nextMarkdown: string) => {
-      patchActiveTab((tab) => ({ ...tab, markdown: nextMarkdown }));
+    (nextMarkdown: string, editorRevision: number | null = null) => {
+      patchActiveTab((tab) => ({ ...tab, markdown: nextMarkdown, editorRevision }));
       setAppState((current) =>
         current.markdown === nextMarkdown ? current : { ...current, markdown: nextMarkdown },
       );
@@ -1008,19 +1048,97 @@ export default function App() {
   const markActiveTabSaved = useCallback(
     (savedMarkdown: string, name?: string) => {
       lastSavedMarkdownRef.current = savedMarkdown;
-      patchActiveTab((tab) => ({
-        ...tab,
-        markdown: savedMarkdown,
-        savedMarkdown,
-        name: name ?? tab.name,
-        saveStatus: "saved",
-      }));
-      setAppState((current) =>
-        current.markdown === savedMarkdown ? current : { ...current, markdown: savedMarkdown },
-      );
+      patchActiveTab((tab) => {
+        const savedLatestRevision = tab.markdown === savedMarkdown;
+        return {
+          ...tab,
+          savedMarkdown,
+          name: name ?? tab.name,
+          saveStatus: savedLatestRevision ? "saved" : "dirty",
+        };
+      });
     },
     [patchActiveTab],
   );
+
+  const enqueueDocumentSave = useCallback((request: DocumentSaveRequest): Promise<TextDocument> => {
+    return new Promise<TextDocument>((resolve, reject) => {
+      const queues = documentSaveQueuesRef.current;
+      let queue = queues.get(request.tabId);
+      const queuedRequest: QueuedDocumentSave = {
+        ...request,
+        waiters: [{ resolve, reject }],
+      };
+
+      if (!queue) {
+        queue = { running: false, pending: null };
+        queues.set(request.tabId, queue);
+      }
+
+      if (queue.running) {
+        if (queue.pending) queuedRequest.waiters.push(...queue.pending.waiters);
+        queue.pending = queuedRequest;
+        return;
+      }
+
+      const runQueue = async (firstRequest: QueuedDocumentSave) => {
+        if (!queue) return;
+        queue.running = true;
+        let currentRequest: QueuedDocumentSave | null = firstRequest;
+
+        while (currentRequest) {
+          const savingRequest: QueuedDocumentSave = currentRequest;
+          setOpenTabs((current) =>
+            current.map((tab) =>
+              tab.id === savingRequest.tabId ? { ...tab, saveStatus: "saving" } : tab,
+            ),
+          );
+
+          try {
+            const document = await invoke<TextDocument>("save_text_file", {
+              path: savingRequest.path,
+              content: savingRequest.content,
+            });
+
+            if (activeTabIdRef.current === savingRequest.tabId) {
+              lastSavedMarkdownRef.current = document.content;
+            }
+
+            setOpenTabs((current) =>
+              current.map((tab) => {
+                if (tab.id !== savingRequest.tabId) return tab;
+                const savedLatestRevision = tab.markdown === document.content;
+                return {
+                  ...tab,
+                  savedMarkdown: document.content,
+                  name: document.name,
+                  saveStatus: savedLatestRevision ? "saved" : "dirty",
+                };
+              }),
+            );
+            setLastError("");
+            savingRequest.waiters.forEach((waiter) => waiter.resolve(document));
+          } catch (error) {
+            setLastError(String(error));
+            setOpenTabs((current) =>
+              current.map((tab) =>
+                tab.id === savingRequest.tabId ? { ...tab, saveStatus: "error" } : tab,
+              ),
+            );
+            savingRequest.waiters.forEach((waiter) => waiter.reject(error));
+          }
+
+          currentRequest = queue.pending;
+          queue.pending = null;
+        }
+
+        queue.running = false;
+        queues.delete(request.tabId);
+      };
+
+      void runQueue(queuedRequest);
+    });
+  }, []);
 
   const { snippets, settings } = appState;
   const markdown = activeTab?.markdown ?? appState.markdown;
@@ -1093,14 +1211,9 @@ export default function App() {
     () => (searchScope === "file" ? currentFileSearchResults : projectSearchResults),
     [currentFileSearchResults, projectSearchResults, searchScope],
   );
-  const projectAstSummary = useMemo(() => {
-    if (!projectAst) return null;
-    if (projectAst.status === "empty") return "AST 0/0";
-    return `AST ${projectAst.indexedCount}/${projectAst.files.length}`;
-  }, [projectAst]);
   const breadcrumbTrail = useMemo(
-    () => findPathToEntry(projectFolder, focusedFolderPath ?? currentFilePath),
-    [currentFilePath, focusedFolderPath, projectFolder],
+    () => findPathToEntry(projectFolder, currentFilePath),
+    [currentFilePath, projectFolder],
   );
 
   const filteredSnippets = useMemo(() => {
@@ -1453,23 +1566,15 @@ export default function App() {
 
     setSaveStatus("dirty");
     const timer = window.setTimeout(() => {
-      setSaveStatus("saving");
-      invoke<TextDocument>("save_text_file", {
+      void enqueueDocumentSave({
+        tabId: activeTabId,
         path: currentFilePath,
         content: markdown,
-      })
-        .then((document) => {
-          markActiveTabSaved(document.content, document.name);
-          setLastError("");
-        })
-        .catch((error) => {
-          setLastError(String(error));
-          setSaveStatus("error");
-        });
+      }).catch(() => undefined);
     }, 700);
 
     return () => window.clearTimeout(timer);
-  }, [currentFilePath, isHydrated, markActiveTabSaved, markdown, setSaveStatus]);
+  }, [activeTabId, currentFilePath, enqueueDocumentSave, isHydrated, markdown, setSaveStatus]);
 
   useEffect(() => {
     return () => {
@@ -1584,7 +1689,7 @@ export default function App() {
     scheduleTypewriterScroll();
   }, [scheduleTypewriterScroll, settings.typewriterScroll]);
 
-  const handleTextChange = useCallback((nextText: string) => {
+  const handleTextChange = useCallback((nextText: string, editorRevision: number) => {
     didMountEditorRef.current = true;
     setCharCount(getTextLength(nextText));
     if (suppressNextEditorUpdateRef.current) {
@@ -1593,7 +1698,7 @@ export default function App() {
     }
     const nextFullText = updateMarkdownBody(markdown, nextText);
     if (markdown !== nextFullText) {
-      setActiveMarkdown(nextFullText);
+      setActiveMarkdown(nextFullText, editorRevision);
     }
     if (!currentFilePath) {
       setSaveStatus("dirty");
@@ -1786,7 +1891,7 @@ export default function App() {
 
     const method =
       notation === "ruby" ? `rb,${arg}` : notation === "emphasis" ? "em,goma" : "tcy";
-    const insert = `[${currentSelection.text} (${method})]`;
+    const insert = `[${currentSelection.text}(${method})]`;
 
     editor.replaceRange(
       currentSelection.from,
@@ -2153,7 +2258,8 @@ export default function App() {
     setSaveStatus("saving");
     try {
       const document = currentFilePath
-        ? await invoke<TextDocument>("save_text_file", {
+        ? await enqueueDocumentSave({
+            tabId: activeTabId,
             path: currentFilePath,
             content: markdown,
           })
@@ -2487,6 +2593,7 @@ export default function App() {
             ...tab,
             markdown: document.content,
             savedMarkdown: document.content,
+            editorRevision: null,
             name: document.name,
             saveStatus: "saved",
           };
@@ -2831,6 +2938,160 @@ export default function App() {
     if (nextOrder) await saveProjectEntryOrder(folderPath, nextOrder);
   };
 
+  const handleHeadingMove = async (
+    sourcePath: string,
+    sourceLine: number,
+    sourceBlockId: string,
+    targetPath: string,
+    targetLine: number | null,
+    targetBlockId: string | null,
+    position: HeadingDropPosition,
+  ) => {
+    logHeadingDnd("reorder-handler-reached", {
+      sourcePath,
+      sourceLine,
+      sourceBlockId,
+      targetPath,
+      targetLine,
+      targetBlockId,
+      position,
+    });
+    if (headingMoveInProgressRef.current) {
+      showToast("見出しを移動中です");
+      return;
+    }
+    const affectedTabs = openTabs.filter(
+      (tab) => tab.path === sourcePath || tab.path === targetPath,
+    );
+    if (affectedTabs.some((tab) => tab.saveStatus === "saving")) {
+      showToast("保存完了後に見出しを移動してください");
+      return;
+    }
+    headingMoveInProgressRef.current = true;
+
+    const readMarkdown = async (path: string) => {
+      const openTab = openTabs.find((tab) => tab.path === path);
+      if (openTab) return openTab.markdown;
+      return (await invoke<TextDocument>("read_text_file", { path })).content;
+    };
+
+    try {
+      const sourceMarkdown = await readMarkdown(sourcePath);
+      const targetMarkdown =
+        sourcePath === targetPath ? sourceMarkdown : await readMarkdown(targetPath);
+      const move = moveHeadingSection({
+        sourceMarkdown,
+        targetMarkdown,
+        sourceLine,
+        targetLine,
+        position,
+        sameDocument: sourcePath === targetPath,
+      });
+      logHeadingDnd("reorder-transform-complete", {
+        sourceBlockId,
+        targetBlockId,
+        changed: move.changed,
+        movedTitle: move.movedTitle,
+      });
+      if (!move.changed) {
+        showToast("見出しの移動先が同じため変更はありません");
+        return;
+      }
+
+      logHeadingDnd("reorder-save-start", { sourceBlockId, targetBlockId });
+      const saved = await invoke<HeadingMoveDocuments>("save_heading_move", {
+        sourcePath,
+        targetPath,
+        sourceContent: move.sourceMarkdown,
+        targetContent: move.targetMarkdown,
+      });
+      const savedDocuments = [saved.sourceDocument, saved.targetDocument].filter(
+        (document): document is TextDocument => document !== null,
+      );
+      logHeadingDnd("reorder-save-complete", {
+        sourceBlockId,
+        targetBlockId,
+        savedPaths: savedDocuments.map((document) => document.path),
+      });
+      const savedByPath = new Map(
+        savedDocuments.map((document) => [document.path, document] as const),
+      );
+
+      setOpenTabs((current) =>
+        current.map((tab) => {
+          if (!tab.path) return tab;
+          const document = savedByPath.get(tab.path);
+          if (!document) return tab;
+          return {
+            ...tab,
+            markdown: document.content,
+            savedMarkdown: document.content,
+            editorRevision: null,
+            name: document.name,
+            saveStatus: "saved",
+          };
+        }),
+      );
+      setProjectAst((current) => {
+        if (!current || current.rootPath !== projectFolder?.path) return current;
+        return savedDocuments.reduce(
+          (next, document) =>
+            upsertProjectAstDocument(next, {
+              path: document.path,
+              name: document.name,
+              text: parseFrontMatter(document.content).body,
+            }),
+          current,
+        );
+      });
+
+      const activeDocument = currentFilePath ? savedByPath.get(currentFilePath) : null;
+      if (activeDocument) {
+        lastSavedMarkdownRef.current = activeDocument.content;
+        setAppState((current) => ({
+          ...current,
+          markdown: activeDocument.content,
+          lastFilePath: activeDocument.path,
+        }));
+      }
+      logHeadingDnd("state-update-scheduled", {
+        sourceBlockId,
+        targetBlockId,
+        updatedTabPaths: savedDocuments.map((document) => document.path),
+      });
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          const outlineRows = Array.from(
+            document.querySelectorAll<HTMLElement>("[data-outline-block-id]"),
+          );
+          const movedRows = outlineRows
+            .filter((row) => row.dataset.outlineBlockId === sourceBlockId)
+            .map((row) => ({
+              path: row.dataset.outlineFilePath ?? null,
+              line: Number(row.dataset.outlineHeadingLine ?? 0),
+            }));
+          logHeadingDnd("state-dom-updated", {
+            sourceBlockId,
+            targetBlockId,
+            outlineRowCount: outlineRows.length,
+            movedRows,
+          });
+        });
+      });
+      setLastError("");
+      showToast(
+        sourcePath === targetPath
+          ? `見出し「${move.movedTitle}」を移動しました`
+          : `見出し「${move.movedTitle}」を「${saved.targetDocument?.name ?? targetPath}」へ移動しました`,
+      );
+    } catch (error) {
+      setLastError(String(error));
+      showToast(error instanceof Error ? error.message : "見出しを移動できませんでした");
+    } finally {
+      headingMoveInProgressRef.current = false;
+    }
+  };
+
   const jumpToOutlineItem = (item: OutlineItem) => {
     const view = getEditorView();
     if (!view) return;
@@ -3064,6 +3325,7 @@ export default function App() {
   return (
       <main
         className="appShell"
+        data-theme={settings.theme}
         style={
           {
             "--editor-font-family": settings.editorFontFamily,
@@ -3489,6 +3751,25 @@ export default function App() {
                 onProjectSearchModeChange={setIsProjectSearchMode}
                 onJumpOutline={jumpToOutlineItem}
                 onJumpProjectOutline={(path, item) => void handleProjectOutlineJump(path, item)}
+                onMoveHeading={(
+                  sourcePath,
+                  sourceLine,
+                  sourceBlockId,
+                  targetPath,
+                  targetLine,
+                  targetBlockId,
+                  position,
+                ) =>
+                  void handleHeadingMove(
+                    sourcePath,
+                    sourceLine,
+                    sourceBlockId,
+                    targetPath,
+                    targetLine,
+                    targetBlockId,
+                    position,
+                  )
+                }
                 onProjectSearchQueryChange={setProjectSearchQuery}
                 onSearchScopeChange={setSearchScope}
                 onProjectReplaceValueChange={setProjectReplaceValue}
@@ -3576,6 +3857,7 @@ export default function App() {
                           <VerticalTextEditor
                             key={documentKey}
                             text={editorText}
+                            editorRevision={activeTab?.editorRevision ?? null}
                             typewriterOffset={settings.typewriterOffset}
                             showLineBreakMarks={settings.showLineBreakMarks}
                             onReady={handleEditorReady}
@@ -3692,7 +3974,6 @@ export default function App() {
                 currentFilePath={currentFilePath}
                 lastError={lastError}
                 charCount={charCount}
-                projectAstSummary={projectAstSummary}
               />
             </div>
 
@@ -3869,10 +4150,24 @@ export default function App() {
               settings={settings}
               systemFonts={systemFonts}
               onClose={() => setIsSettingsModalOpen(false)}
+              onOpenThemePicker={() => {
+                setIsSettingsModalOpen(false);
+                setIsThemePickerModalOpen(true);
+              }}
               onUpdateSettings={updateSettings}
               onSnippetStorageModeChange={(mode) =>
                 void handleSnippetStorageModeChange(mode)
               }
+            />
+          )}
+          {isThemePickerModalOpen && (
+            <ThemePickerModal
+              selectedTheme={settings.theme}
+              onClose={() => {
+                setIsThemePickerModalOpen(false);
+                setIsSettingsModalOpen(true);
+              }}
+              onSelect={(theme) => updateSettings("theme", theme)}
             />
           )}
         </section>

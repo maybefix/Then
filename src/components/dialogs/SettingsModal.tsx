@@ -1,9 +1,11 @@
 import type { EditorSettings, FontOption } from "../../types";
+import { getThemeDefinition } from "../../themes";
 
 type SettingsModalProps = {
   settings: EditorSettings;
   systemFonts: FontOption[];
   onClose: () => void;
+  onOpenThemePicker: () => void;
   onUpdateSettings: <Key extends keyof EditorSettings>(
     key: Key,
     value: EditorSettings[Key],
@@ -15,6 +17,7 @@ export function SettingsModal({
   settings,
   systemFonts,
   onClose,
+  onOpenThemePicker,
   onUpdateSettings,
   onSnippetStorageModeChange,
 }: SettingsModalProps) {
@@ -28,6 +31,20 @@ export function SettingsModal({
           </button>
         </header>
         <div className="modalForm">
+          <div className="themeSettingRow">
+            <span className={`themePreview themePreview-${settings.theme}`} aria-hidden="true">
+              <i />
+              <b />
+            </span>
+            <span className="themeSettingCopy">
+              <small>テーマ</small>
+              <strong>{getThemeDefinition(settings.theme).label}</strong>
+              <span>{getThemeDefinition(settings.theme).description}</span>
+            </span>
+            <button className="themePickerButton" type="button" onClick={onOpenThemePicker}>
+              テーマを選ぶ
+            </button>
+          </div>
           <label>
             <span>本文フォント</span>
             <select

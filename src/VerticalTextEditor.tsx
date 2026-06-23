@@ -32,10 +32,11 @@ export type TextEditorHandle = {
 
 type VerticalTextEditorProps = {
   text: string;
+  editorRevision: number | null;
   typewriterOffset: number;
   showLineBreakMarks: boolean;
   onReady: (editor: TextEditorHandle | null) => void;
-  onTextChange: (text: string) => void;
+  onTextChange: (text: string, editorRevision: number) => void;
   onSelectionChange: () => void;
 };
 
@@ -150,6 +151,7 @@ type RawMarkup =
 
 type AstMeta = {
   visibleCenter?: number;
+  rebuild?: boolean;
 };
 
 type EditorViewWithInput = EditorView & {
@@ -793,6 +795,28 @@ type CharacterRange = {
   to: number;
 };
 
+type BreakableTokenKind =
+  | "url"
+  | "email"
+  | "path"
+  | "uuid"
+  | "hash"
+  | "number"
+  | "identifier"
+  | "longAscii"
+  | "longDash"
+  | "longLeader";
+
+type BreakableToken = {
+  from: number;
+  to: number;
+  text: string;
+  kind: BreakableTokenKind;
+  breakpoints: number[];
+};
+
+const MAX_TOKEN_BREAKPOINTS = 16;
+
 function characterRanges(text: string): CharacterRange[] {
   const ranges: CharacterRange[] = [];
   let offset = 0;
@@ -820,6 +844,170 @@ function overlapsProtectedRange(
   return protectedRanges.some((range) => from < range.to && to > range.from);
 }
 
+function tokenBreakpoints(text: string, kind: BreakableTokenKind): number[] {
+  const prioritized: Array<{ pos: number; priority: number }> = [];
+  const schemeEnd = kind === "url" ? text.indexOf("://") + 3 : -1;
+  const add = (pos: number, priority: number) => {
+    if (pos <= 0 || pos >= text.length) return;
+    prioritized.push({ pos, priority });
+  };
+
+  if (kind === "number" || kind === "hash") {
+    for (let pos = 4; pos < text.length; pos += 4) add(pos, 1);
+  } else if (kind === "uuid") {
+    for (let i = 0; i < text.length; i += 1) {
+      if (text[i] === "-") add(i + 1, 0);
+    }
+  } else if (kind === "longDash" || kind === "longLeader") {
+    for (let pos = 2; pos < text.length; pos += 2) add(pos, 0);
+  } else {
+    for (let i = 0; i < text.length; i += 1) {
+      const ch = text[i];
+      if (ch === "/" || ch === "\\") {
+        if (schemeEnd > 0 && i < schemeEnd) continue;
+        add(i + 1, 0);
+      } else if (ch === "?" || ch === "&" || ch === "#") {
+        add(i, 0);
+      } else if (ch === "@") {
+        add(i, 0);
+        add(i + 1, 0);
+      } else if (ch === "." || ch === "-" || ch === "_") {
+        add(i + 1, 1);
+      } else if (ch === "=") {
+        add(i, 1);
+        add(i + 1, 1);
+      }
+    }
+    for (let pos = 8; pos < text.length; pos += 8) add(pos, 2);
+  }
+
+  const selected = new Map<number, number>();
+  for (const item of prioritized) {
+    const current = selected.get(item.pos);
+    if (current === undefined || item.priority < current) selected.set(item.pos, item.priority);
+  }
+
+  return Array.from(selected, ([pos, priority]) => ({ pos, priority }))
+    .sort((left, right) => left.priority - right.priority || left.pos - right.pos)
+    .slice(0, MAX_TOKEN_BREAKPOINTS)
+    .map((item) => item.pos)
+    .sort((left, right) => left - right);
+}
+
+function classifyAsciiToken(text: string): BreakableTokenKind {
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(text)) return "url";
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(text)) return "email";
+  if (/^(?:[a-z]:[\\/]|\.{0,2}[\\/])/i.test(text)) return "path";
+  if (/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(text)) return "uuid";
+  if (/^[0-9a-f]{24,}$/i.test(text)) return "hash";
+  if (/^\d{5,}$/.test(text)) return "number";
+  if (/^[a-z_$][a-z0-9_$.-]*$/i.test(text)) return "identifier";
+  return "longAscii";
+}
+
+function findBreakableTokens(
+  text: string,
+  protectedRanges: Array<{ from: number; to: number }>,
+): BreakableToken[] {
+  const tokens: BreakableToken[] = [];
+  const add = (from: number, value: string, kind: BreakableTokenKind) => {
+    const to = from + value.length;
+    if (
+      to <= from ||
+      overlapsProtectedRange(from, to, protectedRanges) ||
+      tokens.some((token) => from < token.to && to > token.from)
+    ) {
+      return;
+    }
+    tokens.push({ from, to, text: value, kind, breakpoints: tokenBreakpoints(value, kind) });
+  };
+
+  const patterns: Array<{ regex: RegExp; kind?: BreakableTokenKind }> = [
+    { regex: /\b[a-z][a-z0-9+.-]*:\/\/[A-Za-z0-9._~:/?#[\]@!$&'()*+,;=%-]+/gi, kind: "url" },
+    { regex: /\b[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, kind: "email" },
+    { regex: /\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/gi, kind: "uuid" },
+    { regex: /(?:[A-Za-z]:[\\/]|\.{0,2}[\\/])[A-Za-z0-9._~!$&'()+,;=@%\\/-]{8,}/g, kind: "path" },
+    { regex: /[!-~]{24,}/g },
+    { regex: /[0-9０-９]{5,}/g, kind: "number" },
+    { regex: /[…‥]{3,}/g, kind: "longLeader" },
+    { regex: /―{3,}/g, kind: "longDash" },
+  ];
+
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.regex.exec(text))) {
+      add(match.index, match[0], pattern.kind ?? classifyAsciiToken(match[0]));
+    }
+  }
+
+  return tokens.sort((left, right) => left.from - right.from || left.to - right.to);
+}
+
+function pushTokenBreakWidget(
+  out: Decoration[],
+  position: number,
+  kind: BreakableTokenKind | "tcyRejected",
+): void {
+  out.push(
+    Decoration.widget(
+      position,
+      () => {
+        const wbr = document.createElement("wbr");
+        wbr.dataset.ksBreak = "preferred";
+        wbr.dataset.ksTokenKind = kind;
+        wbr.setAttribute("aria-hidden", "true");
+        return wbr;
+      },
+      {
+        side: -1,
+        key: `ks-wbr-${kind}-${position}`,
+        ignoreSelection: true,
+      },
+    ),
+  );
+}
+
+function pushBreakableTokenDecos(
+  out: Decoration[],
+  contentStart: number,
+  tokens: BreakableToken[],
+): void {
+  for (const token of tokens) {
+    out.push(
+      Decoration.inline(contentStart + token.from, contentStart + token.to, {
+        class: "ks-breakable-token",
+        "data-ks-token-kind": token.kind,
+      }),
+    );
+    for (const offset of token.breakpoints) {
+      pushTokenBreakWidget(out, contentStart + token.from + offset, token.kind);
+    }
+  }
+}
+
+function pushParagraphIndentAnchor(
+  out: Decoration[],
+  line: LineNode,
+  contentStart: number,
+  chars: CharacterRange[],
+  markupRanges: Array<{ from: number; to: number }>,
+): void {
+  if (line.kind !== "paragraph") return;
+
+  let indentLength = 0;
+  while (indentLength < chars.length && chars[indentLength].ch === "　") indentLength += 1;
+  if (indentLength < 1 || indentLength > 2 || indentLength >= chars.length) return;
+
+  const to = chars[indentLength].to;
+  if (overlapsProtectedRange(0, to, markupRanges)) return;
+
+  out.push(
+    Decoration.inline(contentStart, contentStart + to, {
+      class: "ks-indent-anchor",
+    }),
+  );
+}
+
 function pushKinsokuRange(
   out: Decoration[],
   contentStart: number,
@@ -835,9 +1023,17 @@ function pushKinsokuRange(
 function pushKinsokuDecos(out: Decoration[], line: LineNode, contentStart: number): void {
   if (!line.source) return;
 
-  const protectedRanges = inlineMarkupRanges(line);
+  const markupRanges = inlineMarkupRanges(line);
+  const breakableTokens = findBreakableTokens(line.source, markupRanges);
+  const protectedRanges = [
+    ...markupRanges,
+    ...breakableTokens.map((token) => ({ from: token.from, to: token.to })),
+  ];
   const chars = characterRanges(line.source);
   if (chars.length === 0) return;
+
+  pushBreakableTokenDecos(out, contentStart, breakableTokens);
+  pushParagraphIndentAnchor(out, line, contentStart, chars, markupRanges);
 
   for (let i = 0; i < chars.length; i += 1) {
     const ch = chars[i].ch;
@@ -845,13 +1041,13 @@ function pushKinsokuDecos(out: Decoration[], line: LineNode, contentStart: numbe
     if (ch === "…" || ch === "‥" || ch === "―") {
       let end = i + 1;
       while (end < chars.length && chars[end].ch === ch) end += 1;
-      if (end - i >= 2) {
+      if (end - i === 2) {
         pushKinsokuRange(
           out,
           contentStart,
           chars[i].from,
           chars[end - 1].to,
-          "ks-no-split",
+          "ks-keep-short",
           protectedRanges,
         );
       }
@@ -865,7 +1061,7 @@ function pushKinsokuDecos(out: Decoration[], line: LineNode, contentStart: numbe
         contentStart,
         chars[i].from,
         chars[i + 1].to,
-        "ks-no-split",
+        "ks-keep-short",
         protectedRanges,
       );
       i += 1;
@@ -875,13 +1071,13 @@ function pushKinsokuDecos(out: Decoration[], line: LineNode, contentStart: numbe
     if (KINSOKU_DIGIT.test(ch)) {
       let end = i + 1;
       while (end < chars.length && KINSOKU_DIGIT.test(chars[end].ch)) end += 1;
-      if (end - i >= 2) {
+      if (end - i >= 2 && end - i <= 4) {
         pushKinsokuRange(
           out,
           contentStart,
           chars[i].from,
           chars[end - 1].to,
-          "ks-no-split",
+          "ks-keep-short",
           protectedRanges,
         );
       }
@@ -894,11 +1090,12 @@ function pushKinsokuDecos(out: Decoration[], line: LineNode, contentStart: numbe
 
     let end = i + 1;
     while (end < chars.length && KINSOKU_LINE_HEAD_FORBIDDEN.has(chars[end].ch)) end += 1;
+    const protectedEnd = Math.min(end, i + 2);
     pushKinsokuRange(
       out,
       contentStart,
       chars[i - 1].from,
-      chars[end - 1].to,
+      chars[protectedEnd - 1].to,
       "ks-line-head-ban",
       protectedRanges,
     );
@@ -1029,8 +1226,9 @@ function pushInlineDecos(markup: InlineMarkup, contentStart: number, out: Decora
     const contentEnd = contentOffset + markup.contentRange.length;
     const tcyText = markup.contentText.replace(/[\uFE0E\uFE0F]/g, "");
     const tcyLength = Array.from(tcyText).length;
+    const acceptsTcy = tcyLength <= 4;
     const attrs: Record<string, string> = {
-      class: "tcy ks-no-split",
+      class: acceptsTcy ? "tcy ks-tcy" : "tcy-rejected ks-breakable-token",
       "data-tcy-len": String(Math.min(4, tcyLength)),
     };
 
@@ -1040,16 +1238,27 @@ function pushInlineDecos(markup: InlineMarkup, contentStart: number, out: Decora
       attrs["data-tcy-kind"] = "num";
     } else if (isPunct) {
       attrs["data-tcy-kind"] = "punct";
-      attrs["data-tcy-atom"] = "1";
-      attrs.contenteditable = "false";
-      attrs.draggable = "false";
+      if (acceptsTcy) {
+        attrs["data-tcy-atom"] = "1";
+        attrs.contenteditable = "false";
+        attrs.draggable = "false";
+      }
     }
 
     addInlineDecoration(out, contentStart, fullStart, contentOffset, "mk-hidden");
     out.push(
       Decoration.inline(contentStart + contentOffset, contentStart + contentEnd, attrs),
     );
-    if (isPunct) {
+    if (!acceptsTcy) {
+      const ranges = characterRanges(markup.contentText);
+      for (let index = 4; index < ranges.length; index += 4) {
+        pushTokenBreakWidget(
+          out,
+          contentStart + contentOffset + ranges[index].from,
+          "tcyRejected",
+        );
+      }
+    } else if (isPunct) {
       pushPunctTcyBoundary(out, contentStart + contentEnd, markup);
     }
     addInlineDecoration(out, contentStart, contentEnd, fullEnd, "mk-hidden");
@@ -1179,7 +1388,11 @@ function applyAst(
 
   if (!tr.docChanged) {
     const activeIndex = activeLineIndex(newState);
-    if (activeIndex === value.activeIndex && visibleCenter === value.visibleCenter) {
+    if (
+      meta?.rebuild !== true &&
+      activeIndex === value.activeIndex &&
+      visibleCenter === value.visibleCenter
+    ) {
       return value;
     }
 
@@ -1195,6 +1408,15 @@ function applyAst(
   const diff = diffLines(value.lines, newTexts);
   const lines = incrementalLines(value.lines, newTexts, diff);
   const activeIndex = activeLineIndex(newState);
+
+  if (tr.getMeta("composition") !== undefined) {
+    return {
+      lines,
+      activeIndex,
+      visibleCenter,
+      decoSet: value.decoSet.map(tr.mapping, newState.doc),
+    };
+  }
 
   return {
     lines,
@@ -1564,6 +1786,7 @@ function centerDelayFrames(eventType: string): number {
 
 export function VerticalTextEditor({
   text,
+  editorRevision,
   typewriterOffset,
   showLineBreakMarks,
   onReady,
@@ -1577,6 +1800,7 @@ export function VerticalTextEditor({
   const textRef = useRef(text);
   const onTextChangeRef = useRef(onTextChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
+  const localRevisionRef = useRef(0);
   const composingRef = useRef(false);
   const typewriterOffsetRef = useRef(typewriterOffset);
   const showLineBreakMarksRef = useRef(showLineBreakMarks);
@@ -1632,7 +1856,8 @@ export function VerticalTextEditor({
         setSelectionByTextOffset(editor, nextCursor);
         updateEmptyAttribute(editor);
         textRef.current = next;
-        onTextChangeRef.current(next);
+        const nextRevision = ++localRevisionRef.current;
+        onTextChangeRef.current(next, nextRevision);
         onSelectionChangeRef.current();
         if (scroller) centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, true);
         requestLineBreakMarksRef.current?.();
@@ -1672,19 +1897,29 @@ export function VerticalTextEditor({
   );
 
   useEffect(() => {
-    textRef.current = text;
     const editor = tiptapRef.current;
-    if (!editor || docToText(editor.state.doc) === text) return;
+    if (!editor) return;
+
+    const editorText = docToText(editor.state.doc);
+    if (editorText === text) {
+      textRef.current = text;
+      return;
+    }
+
+    if (editorRevision !== null && editorRevision <= localRevisionRef.current) {
+      return;
+    }
 
     editor.commands.setContent(textToDoc(text), false);
     setSelectionByTextOffset(editor, 0);
+    textRef.current = text;
     updateEmptyAttribute(editor);
     requestAnimationFrame(() => {
       const scroller = scrollerRef.current;
       if (scroller) centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, true);
       requestLineBreakMarksRef.current?.();
     });
-  }, [text]);
+  }, [editorRevision, text]);
 
   useEffect(() => {
     const host = editorHostRef.current;
@@ -1700,6 +1935,7 @@ export function VerticalTextEditor({
     let centerFrame: number | null = null;
     let visibleFrame: number | null = null;
     let lineBreakFrame: number | null = null;
+    let compositionFrame: number | null = null;
     let lineBreakQueued = false;
 
     const requestCenterCaret = (instant: boolean, eventType: string) => {
@@ -1846,7 +2082,8 @@ export function VerticalTextEditor({
         const next = docToText(currentEditor.state.doc);
         updateEmptyAttribute(currentEditor);
         textRef.current = next;
-        onTextChangeRef.current(next);
+        const nextRevision = ++localRevisionRef.current;
+        onTextChangeRef.current(next, nextRevision);
         onSelectionChangeRef.current();
         if (!isEditorComposing(currentEditor, composingRef)) {
           requestCenterCaret(true, "update");
@@ -1876,6 +2113,10 @@ export function VerticalTextEditor({
     const handleMouseDown = (event: MouseEvent) => {
       if (event.target !== scroller) return;
 
+      const scrollerRect = scroller.getBoundingClientRect();
+      const scrollbarHeight = scroller.offsetHeight - scroller.clientHeight;
+      if (scrollbarHeight > 0 && event.clientY >= scrollerRect.bottom - scrollbarHeight) return;
+
       event.preventDefault();
       editor.commands.focus();
       const lastIndex = Math.max(0, editor.state.doc.childCount - 1);
@@ -1896,6 +2137,16 @@ export function VerticalTextEditor({
 
     const handleCompositionEnd = () => {
       composingRef.current = false;
+      if (compositionFrame !== null) cancelAnimationFrame(compositionFrame);
+      compositionFrame = requestAnimationFrame(() => {
+        compositionFrame = null;
+        if (tiptapRef.current !== editor) return;
+        editor.view.dispatch(
+          editor.state.tr
+            .setMeta(astKey, { rebuild: true } satisfies AstMeta)
+            .setMeta("addToHistory", false),
+        );
+      });
       requestCenterCaret(true, "compositionend");
       requestVisibleWindow();
       requestLineBreakMarks();
@@ -1943,6 +2194,7 @@ export function VerticalTextEditor({
       if (centerFrame !== null) cancelAnimationFrame(centerFrame);
       if (visibleFrame !== null) cancelAnimationFrame(visibleFrame);
       if (lineBreakFrame !== null) cancelAnimationFrame(lineBreakFrame);
+      if (compositionFrame !== null) cancelAnimationFrame(compositionFrame);
       renderLineBreakMarksRef.current = null;
       requestLineBreakMarksRef.current = null;
       if (lineBreakLayerRef.current) lineBreakLayerRef.current.textContent = "";

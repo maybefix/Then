@@ -55,6 +55,7 @@ export type LineNode = {
 
 export type DocumentOutlineItem = {
   id: string;
+  blockId: string;
   title: string;
   level: number;
   line: number;

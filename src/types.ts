@@ -14,7 +14,55 @@ export type PlotCard = {
   expanded: boolean;
 };
 
+export const appThemeValues = [
+  "dark",
+  "notion",
+  "standard",
+  "claude",
+  "apple-light",
+  "apple-dark",
+  "smarthr-light",
+  "yamaha-light",
+  "yamaha-dark",
+  "sony-dark",
+  "ana-light",
+  "ana-dark",
+  "nissan-light",
+  "nissan-dark",
+  "nec-light",
+  "nec-dark",
+  "fujitsu-light",
+  "fujitsu-dark",
+  "paper-light",
+  "paper-dark",
+  "one-hundred-light",
+  "precious-light",
+  "evergreen-light",
+  "express-light",
+  "express-dark",
+  "education-light",
+  "education-dark",
+  "water-light",
+  "water-dark",
+  "hands-light",
+  "hands-dark",
+  "dandelion-dark",
+  "commerce-light",
+  "commerce-dark",
+  "air-light",
+  "air-dark",
+  "passion-light",
+  "passion-dark",
+  "tech-light",
+  "tech-dark",
+  "energy-light",
+  "energy-dark",
+] as const;
+
+export type AppTheme = (typeof appThemeValues)[number];
+
 export type EditorSettings = {
+  theme: AppTheme;
   editorFontFamily: string;
   uiFontFamily: string;
   fontSize: number;
@@ -38,6 +86,8 @@ export type DocumentTab = {
    */
   markdown: string;
   savedMarkdown: string;
+  /** Last editor-originated revision, or null for external document updates. */
+  editorRevision: number | null;
   saveStatus: SaveStatus;
   documentKey: string;
   activeOutlineLine: number | null;
@@ -91,6 +141,7 @@ export type WorkspaceAlert = {
 
 export type OutlineItem = {
   id: string;
+  blockId: string;
   title: string;
   level: number;
   line: number;

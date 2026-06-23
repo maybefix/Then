@@ -5,7 +5,6 @@ type StatusBarProps = {
   currentFilePath: string | null;
   lastError: string;
   charCount: number;
-  projectAstSummary: string | null;
 };
 
 const statusLabels: Record<SaveStatus, string> = {
@@ -21,7 +20,6 @@ export function StatusBar({
   currentFilePath,
   lastError,
   charCount,
-  projectAstSummary,
 }: StatusBarProps) {
   return (
     <footer className={`statusbar status-${saveStatus}`}>
@@ -31,7 +29,6 @@ export function StatusBar({
         {currentFilePath ?? "保存先未指定"}
       </span>
       {lastError && <span className="statusError">{lastError}</span>}
-      {projectAstSummary && <span className="statusAst">{projectAstSummary}</span>}
       <span className="statusRight">{charCount}文字</span>
     </footer>
   );

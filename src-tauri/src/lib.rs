@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
@@ -9,6 +10,13 @@ struct TextDocument {
     path: String,
     name: String,
     content: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HeadingMoveDocuments {
+    source_document: TextDocument,
+    target_document: Option<TextDocument>,
 }
 
 #[derive(Serialize)]
@@ -68,6 +76,8 @@ pub fn run() {
             read_text_file,
             save_text_file_dialog,
             save_text_file,
+            save_heading_move,
+            log_heading_dnd,
             open_markdown_file_dialog,
             read_markdown_file,
             save_markdown_file_dialog,
@@ -159,6 +169,76 @@ fn save_text_file(path: String, content: String) -> Result<TextDocument, String>
     let path = PathBuf::from(path);
     write_text_file(&path, &content)?;
     read_text_document(&path)
+}
+
+#[tauri::command]
+fn save_heading_move(
+    source_path: String,
+    target_path: String,
+    source_content: String,
+    target_content: String,
+) -> Result<HeadingMoveDocuments, String> {
+    let source = PathBuf::from(source_path);
+    let target = PathBuf::from(target_path);
+    if !source.is_file() || !target.is_file() {
+        return Err("heading move source or target does not exist".to_string());
+    }
+    if !is_supported_text_extension(&source) || !is_supported_text_extension(&target) {
+        return Err("heading move supports only text and markdown files".to_string());
+    }
+
+    if source == target {
+        write_text_file(&source, &source_content)?;
+        return Ok(HeadingMoveDocuments {
+            source_document: read_text_document(&source)?,
+            target_document: None,
+        });
+    }
+
+    let original_target = std::fs::read_to_string(&target)
+        .map_err(|error| format!("failed to back up heading move target: {error}"))?;
+    write_text_file(&target, &target_content)?;
+    if let Err(source_error) = write_text_file(&source, &source_content) {
+        let rollback_result = write_text_file(&target, &original_target);
+        return Err(match rollback_result {
+            Ok(()) => format!("failed to save heading move source; target was restored: {source_error}"),
+            Err(rollback_error) => format!(
+                "failed to save heading move source and restore target: {source_error}; {rollback_error}"
+            ),
+        });
+    }
+
+    Ok(HeadingMoveDocuments {
+        source_document: read_text_document(&source)?,
+        target_document: Some(read_text_document(&target)?),
+    })
+}
+
+#[tauri::command]
+fn log_heading_dnd(
+    stage: String,
+    details: serde_json::Value,
+    reset: bool,
+) -> Result<(), String> {
+    let path = std::env::temp_dir().join("then-heading-dnd.log");
+    let mut options = std::fs::OpenOptions::new();
+    options.create(true).write(true);
+    if reset {
+        options.truncate(true);
+    } else {
+        options.append(true);
+    }
+    let mut file = options
+        .open(&path)
+        .map_err(|error| format!("failed to open heading drag log: {error}"))?;
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or_default();
+    writeln!(file, "{timestamp}\t{stage}\t{details}")
+        .map_err(|error| format!("failed to write heading drag log: {error}"))?;
+    eprintln!("[heading-dnd] {stage} {details}");
+    Ok(())
 }
 
 #[tauri::command]

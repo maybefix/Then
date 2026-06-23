@@ -2,6 +2,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -16,6 +17,7 @@ import type {
   ProjectEntry,
   ProjectFolder,
 } from "../../types";
+import { logHeadingDnd } from "../../utils/headingDndDiagnostics";
 
 type WorkspaceSidebarProps = {
   projectFolder: ProjectFolder | null;
@@ -41,6 +43,15 @@ type WorkspaceSidebarProps = {
   onReplaceInProject: () => void;
   onJumpOutline: (item: OutlineItem) => void;
   onJumpProjectOutline: (path: string, item: DocumentOutlineItem) => void;
+  onMoveHeading: (
+    sourcePath: string,
+    sourceLine: number,
+    sourceBlockId: string,
+    targetPath: string,
+    targetLine: number | null,
+    targetBlockId: string | null,
+    position: "before" | "after" | "append",
+  ) => void;
   onOpenProjectFolder: () => void;
   onNewDocument: () => void;
   onCreateFile: (folderPath?: string) => void;
@@ -75,7 +86,30 @@ type PointerDragState = {
   isDragging: boolean;
 };
 
+type HeadingDragState = {
+  sourcePath: string;
+  sourceLine: number;
+  sourceBlockId: string;
+};
+
+type HeadingDropTarget =
+  | {
+      kind: "heading";
+      path: string;
+      line: number;
+      blockId: string;
+      position: "before" | "after";
+    }
+  | {
+      kind: "file";
+      path: string;
+      position: "append";
+    }
+  | null;
+
 type WorkspaceSearchScope = "file" | "project";
+
+const HEADING_DRAG_MIME = "application/x-then-heading";
 
 function isProjectEntry(entry: ProjectFolder | ProjectEntry): entry is ProjectEntry {
   return "kind" in entry;
@@ -233,6 +267,7 @@ export function WorkspaceSidebar({
   onReplaceInProject,
   onJumpOutline,
   onJumpProjectOutline,
+  onMoveHeading,
   onOpenProjectFolder,
   onNewDocument,
   onCreateFile,
@@ -248,8 +283,21 @@ export function WorkspaceSidebar({
   const [contextMenu, setContextMenu] = useState<TreeContextMenu>(null);
   const [draggingEntryPath, setDraggingEntryPath] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<BreadcrumbDropTarget>(null);
+  const [draggingHeading, setDraggingHeading] = useState<{
+    path: string;
+    line: number;
+  } | null>(null);
+  const [headingDropTarget, setHeadingDropTarget] = useState<HeadingDropTarget>(null);
+  const [collapsedFolderPaths, setCollapsedFolderPaths] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [collapsedOutlinePaths, setCollapsedOutlinePaths] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [isReplaceExpanded, setIsReplaceExpanded] = useState(false);
   const pointerDragRef = useRef<PointerDragState | null>(null);
+  const headingDragRef = useRef<HeadingDragState | null>(null);
+  const lastHeadingDragOverRef = useRef("");
   const dropTargetRef = useRef<BreadcrumbDropTarget>(null);
   const suppressNextClickRef = useRef(false);
   const projectAstFiles = new Map(
@@ -331,7 +379,6 @@ export function WorkspaceSidebar({
       startY: event.clientY,
       isDragging: false,
     };
-    event.currentTarget.setPointerCapture(event.pointerId);
   };
 
   const handleTreePointerMove = (event: ReactPointerEvent<HTMLElement>) => {
@@ -344,7 +391,10 @@ export function WorkspaceSidebar({
     );
     if (!dragState.isDragging && distance < 4) return;
 
-    dragState.isDragging = true;
+    if (!dragState.isDragging) {
+      dragState.isDragging = true;
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
     setDraggingEntryPath(dragState.entryPath);
     updateDropTargetFromPoint(event.clientX, event.clientY, dragState);
     event.preventDefault();
@@ -380,12 +430,189 @@ export function WorkspaceSidebar({
     event: ReactMouseEvent<HTMLButtonElement>,
     entry: ProjectFolder | ProjectEntry,
     isFolder: boolean,
+    hasOutline: boolean,
   ) => {
     if (suppressNextClickRef.current) {
       event.preventDefault();
       return;
     }
-    isFolder ? onSelectFolder(entry.path) : onSelectFile(entry.path);
+    if (isFolder) {
+      setCollapsedFolderPaths((current) => {
+        const next = new Set(current);
+        if (next.has(entry.path)) {
+          next.delete(entry.path);
+        } else {
+          next.add(entry.path);
+        }
+        return next;
+      });
+      return;
+    }
+    if (
+      hasOutline &&
+      (event.target as HTMLElement).closest("[data-tree-outline-disclosure]")
+    ) {
+      setCollapsedOutlinePaths((current) => {
+        const next = new Set(current);
+        if (next.has(entry.path)) {
+          next.delete(entry.path);
+        } else {
+          next.add(entry.path);
+        }
+        return next;
+      });
+      return;
+    }
+    onSelectFile(entry.path);
+  };
+
+  const resetHeadingDrag = () => {
+    headingDragRef.current = null;
+    lastHeadingDragOverRef.current = "";
+    setDraggingHeading(null);
+    setHeadingDropTarget(null);
+  };
+
+  const handleHeadingDragStart = (
+    event: ReactDragEvent<HTMLButtonElement>,
+    sourcePath: string,
+    sourceLine: number,
+    sourceBlockId: string,
+  ) => {
+    headingDragRef.current = { sourcePath, sourceLine, sourceBlockId };
+    setDraggingHeading({ path: sourcePath, line: sourceLine });
+    setHeadingDropTarget(null);
+    suppressNextClickRef.current = true;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData(
+      HEADING_DRAG_MIME,
+      JSON.stringify({ sourcePath, sourceLine, sourceBlockId }),
+    );
+    logHeadingDnd("dragstart", {
+      sourcePath,
+      sourceLine,
+      sourceBlockId,
+      dataTransferTypes: Array.from(event.dataTransfer.types),
+    });
+  };
+
+  const handleHeadingDragOver = (
+    event: ReactDragEvent<HTMLButtonElement>,
+    path: string,
+    line: number,
+    blockId: string,
+  ) => {
+    if (!headingDragRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+    const rect = event.currentTarget.getBoundingClientRect();
+    const position = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+    setHeadingDropTarget({
+      kind: "heading",
+      path,
+      line,
+      blockId,
+      position,
+    });
+    const targetKey = `${path}:${blockId}:${position}`;
+    if (lastHeadingDragOverRef.current !== targetKey) {
+      lastHeadingDragOverRef.current = targetKey;
+      logHeadingDnd("dragover", {
+        sourceBlockId: headingDragRef.current.sourceBlockId,
+        targetPath: path,
+        targetLine: line,
+        targetBlockId: blockId,
+        position,
+      });
+    }
+  };
+
+  const handleHeadingDrop = (
+    event: ReactDragEvent<HTMLButtonElement>,
+    targetPath: string,
+    targetLine: number,
+    targetBlockId: string,
+  ) => {
+    const source = headingDragRef.current;
+    if (!source) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const position = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+    logHeadingDnd("drop", {
+      sourceBlockId: source.sourceBlockId,
+      targetPath,
+      targetLine,
+      targetBlockId,
+      position,
+    });
+    onMoveHeading(
+      source.sourcePath,
+      source.sourceLine,
+      source.sourceBlockId,
+      targetPath,
+      targetLine,
+      targetBlockId,
+      position,
+    );
+    resetHeadingDrag();
+  };
+
+  const handleHeadingFileDragOver = (
+    event: ReactDragEvent<HTMLElement>,
+    path: string,
+  ) => {
+    if (!headingDragRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+    setHeadingDropTarget({ kind: "file", path, position: "append" });
+    const targetKey = `${path}:append`;
+    if (lastHeadingDragOverRef.current !== targetKey) {
+      lastHeadingDragOverRef.current = targetKey;
+      logHeadingDnd("dragover", {
+        sourceBlockId: headingDragRef.current.sourceBlockId,
+        targetPath: path,
+        targetLine: null,
+        targetBlockId: null,
+        position: "append",
+      });
+    }
+  };
+
+  const handleHeadingFileDrop = (
+    event: ReactDragEvent<HTMLElement>,
+    targetPath: string,
+  ) => {
+    const source = headingDragRef.current;
+    if (!source) return;
+    event.preventDefault();
+    event.stopPropagation();
+    logHeadingDnd("drop", {
+      sourceBlockId: source.sourceBlockId,
+      targetPath,
+      targetLine: null,
+      targetBlockId: null,
+      position: "append",
+    });
+    onMoveHeading(
+      source.sourcePath,
+      source.sourceLine,
+      source.sourceBlockId,
+      targetPath,
+      null,
+      null,
+      "append",
+    );
+    resetHeadingDrag();
+  };
+
+  const handleHeadingDragEnd = () => {
+    resetHeadingDrag();
+    window.setTimeout(() => {
+      suppressNextClickRef.current = false;
+    }, 0);
   };
 
   const openContextMenu = (
@@ -489,16 +716,71 @@ export function WorkspaceSidebar({
   ): JSX.Element[] => {
     return items.map((item) => {
       const isActive = filePath === currentFilePath && activeOutlineIds.has(item.id);
+      const isDragging =
+        filePath !== null &&
+        draggingHeading?.path === filePath &&
+        draggingHeading.line === item.line;
+      const targetPosition =
+        filePath !== null &&
+        headingDropTarget?.kind === "heading" &&
+        headingDropTarget.path === filePath &&
+        headingDropTarget.line === item.line
+          ? headingDropTarget.position
+          : null;
       return (
         <div className="outlineTreeNode" key={`${filePath ?? "scratch"}:${item.id}`}>
           <button
-            className={`outlineTreeItem ${isActive ? "activeOutlineTreeItem" : ""}`}
+            className={[
+              "outlineTreeItem",
+              isActive ? "activeOutlineTreeItem" : "",
+              isDragging ? "draggingHeadingItem" : "",
+              targetPosition ? `headingDrop-${targetPosition}` : "",
+            ].filter(Boolean).join(" ")}
+            data-outline-file-path={filePath ?? undefined}
+            data-outline-heading-line={filePath ? item.line : undefined}
+            data-outline-block-id={filePath ? item.blockId : undefined}
+            draggable={Boolean(filePath)}
             style={{ paddingLeft: `${12 + depth * 14}px` }}
             type="button"
             title={item.title}
-            onClick={() =>
-              filePath ? onJumpProjectOutline(filePath, item) : onJumpOutline(item)
+            onClick={(event) => {
+              if (suppressNextClickRef.current) {
+                event.preventDefault();
+                return;
+              }
+              filePath ? onJumpProjectOutline(filePath, item) : onJumpOutline(item);
+            }}
+            onPointerDown={() => {
+              if (!filePath) return;
+              logHeadingDnd("pointerdown", {
+                sourcePath: filePath,
+                sourceLine: item.line,
+                sourceBlockId: item.blockId,
+              });
+              logHeadingDnd("block-id-acquired", {
+                sourceBlockId: item.blockId,
+                outlineId: item.id,
+              });
+            }}
+            onDragStart={
+              filePath
+                ? (event) =>
+                    handleHeadingDragStart(event, filePath, item.line, item.blockId)
+                : undefined
             }
+            onDragOver={
+              filePath
+                ? (event) =>
+                    handleHeadingDragOver(event, filePath, item.line, item.blockId)
+                : undefined
+            }
+            onDrop={
+              filePath
+                ? (event) =>
+                    handleHeadingDrop(event, filePath, item.line, item.blockId)
+                : undefined
+            }
+            onDragEnd={filePath ? handleHeadingDragEnd : undefined}
           >
             <span className="outlineLevelMark">H{item.level}</span>
             <span>{item.title}</span>
@@ -522,14 +804,23 @@ export function WorkspaceSidebar({
     const isRoot = !isProjectEntry(entry);
     const isFolder = kind === "folder";
     const hasChildren = isFolder && entry.children.length > 0;
+    const isFolderExpanded = isFolder && !collapsedFolderPaths.has(entry.path);
     const isActive = entry.path === currentFilePath;
     const isFocused = entry.path === focusedFolderPath;
     const isDraggable = Boolean(parentFolderPath && isProjectEntry(entry));
     const dropClass =
       dropTarget?.entryPath === entry.path ? `treeDrop-${dropTarget.position}` : "";
+    const headingFileDropClass =
+      !isFolder &&
+      headingDropTarget?.kind === "file" &&
+      headingDropTarget.path === entry.path
+        ? "headingFileDropTarget"
+        : "";
     const rowClass = [
       "treeItem",
+      isDraggable ? "draggableTreeItem" : "",
       dropClass,
+      headingFileDropClass,
       draggingEntryPath === entry.path ? "draggingTreeEntry" : "",
       isActive ? "activeTreeItem" : "",
       isFocused && !isActive ? "focusedTreeItem" : "",
@@ -539,6 +830,8 @@ export function WorkspaceSidebar({
       .join(" ");
     const astFile = !isFolder ? projectAstFiles.get(entry.path) : null;
     const outline = astFile?.documentAst?.outline ?? [];
+    const hasOutline = outline.length > 0;
+    const isOutlineExpanded = hasOutline && !collapsedOutlinePaths.has(entry.path);
     const charCountLabel =
       !isFolder && astFile?.status === "indexed" ? formatCharCount(astFile.textLength) : null;
 
@@ -548,19 +841,58 @@ export function WorkspaceSidebar({
           className={rowClass}
           data-tree-entry-path={isDraggable ? entry.path : undefined}
           data-tree-folder-path={parentFolderPath ?? undefined}
+          data-outline-file-row={!isFolder ? "true" : undefined}
+          data-outline-file-path={!isFolder ? entry.path : undefined}
+          onDragOver={
+            !isFolder
+              ? (event) => handleHeadingFileDragOver(event, entry.path)
+              : undefined
+          }
+          onDrop={
+            !isFolder
+              ? (event) => handleHeadingFileDrop(event, entry.path)
+              : undefined
+          }
+          onPointerDown={
+            isDraggable
+              ? (event) => handleTreePointerDown(event, parentFolderPath, entry.path)
+              : undefined
+          }
+          onPointerMove={isDraggable ? handleTreePointerMove : undefined}
+          onPointerUp={isDraggable ? handleTreePointerUp : undefined}
+          onPointerCancel={isDraggable ? resetPointerDrag : undefined}
           onContextMenu={(event) => openContextMenu(event, entry, isRoot)}
         >
           <button
             className="treeItemPrimary"
             type="button"
+            aria-expanded={
+              isFolder && hasChildren
+                ? isFolderExpanded
+                : hasOutline
+                  ? isOutlineExpanded
+                  : undefined
+            }
             style={{ paddingLeft: `${12 + depth * 14}px` }}
             title={entry.path}
-            onClick={(event) => handleTreeItemClick(event, entry, isFolder)}
+            onClick={(event) => handleTreeItemClick(event, entry, isFolder, hasOutline)}
           >
-            <span className="treeChevron">
-              {(isFolder || outline.length > 0) && (
+            <span
+              className="treeChevron"
+              data-tree-outline-disclosure={!isFolder && hasOutline ? "true" : undefined}
+              title={!isFolder && hasOutline ? "見出しを展開・折りたたみ" : undefined}
+            >
+              {(hasChildren || hasOutline) && (
                 <SidebarIcon
-                  name={hasChildren || outline.length > 0 ? "chevronDown" : "chevronRight"}
+                  name={
+                    isFolder
+                      ? isFolderExpanded && hasChildren
+                        ? "chevronDown"
+                        : "chevronRight"
+                      : isOutlineExpanded
+                        ? "chevronDown"
+                        : "chevronRight"
+                  }
                   className="treeChevronIcon"
                 />
               )}
@@ -568,10 +900,6 @@ export function WorkspaceSidebar({
             <span
               className="treeDragHandle"
               title={isDraggable ? "ドラッグして並び替え" : undefined}
-              onPointerDown={(event) => handleTreePointerDown(event, parentFolderPath, entry.path)}
-              onPointerMove={handleTreePointerMove}
-              onPointerUp={handleTreePointerUp}
-              onPointerCancel={resetPointerDrag}
             >
               <SidebarIcon
                 name={isFolder ? (isRoot ? "book" : "folder") : "file"}
@@ -583,19 +911,19 @@ export function WorkspaceSidebar({
             {isActive && <span className="treeActiveDot" aria-hidden="true" />}
           </button>
         </div>
-        {isFolder && hasChildren && (
+        {isFolder && hasChildren && isFolderExpanded && (
           <div className="treeChildren">
             {entry.children.map((child) => renderEntry(child, depth + 1, entry.path))}
           </div>
         )}
-        {!isFolder && outline.length > 0 && (
+        {!isFolder && hasOutline && isOutlineExpanded && (
           <div className="outlineTreeChildren">
-            {renderOutlineItems(entry.path, outline, depth + 1)}
+            {renderOutlineItems(entry.path, outline, depth + 2)}
           </div>
         )}
         {!isFolder && astFile?.status === "pending" && (
           <div className="treeHint" style={{ paddingLeft: `${40 + depth * 14}px` }}>
-            AST構築中
+            見出しを解析中
           </div>
         )}
         {!isFolder && astFile?.status === "error" && (
@@ -651,7 +979,7 @@ export function WorkspaceSidebar({
       : searchScope === "project" &&
           projectAst?.status === "indexing" &&
           !projectSearchResults.length
-        ? "AST構築中"
+        ? "検索用の索引を作成中"
         : searchScope === "file"
           ? "ファイル内に一致がありません"
           : "プロジェクト内に一致がありません";
