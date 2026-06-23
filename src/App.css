@@ -1022,12 +1022,37 @@ textarea {
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior: none;
-  scrollbar-width: none;
+  scrollbar-color: var(--border-strong) rgba(255, 255, 255, 0.035);
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
   cursor: text;
 }
 
 .verticalTypewriterScroller::-webkit-scrollbar {
-  display: none;
+  display: block;
+  width: 10px;
+  height: 10px;
+}
+
+.verticalTypewriterScroller::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.verticalTypewriterScroller::-webkit-scrollbar-thumb {
+  min-width: 40px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--border-strong);
+  background-clip: content-box;
+}
+
+.verticalTypewriterScroller::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+  background-clip: content-box;
+}
+
+.verticalTypewriterScroller::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .verticalTypewriterEditor {
@@ -2285,6 +2310,10 @@ body {
   user-select: none;
 }
 
+.draggableTreeItem .treeItemPrimary {
+  cursor: grab;
+}
+
 .treeDragHandle {
   display: inline-grid;
   width: 15px;
@@ -2300,6 +2329,10 @@ body {
   place-items: center;
   color: var(--text-faint);
   font-size: 13px;
+}
+
+.treeChevron[data-tree-outline-disclosure]:hover {
+  color: var(--accent-strong);
 }
 
 .treeItemName {
@@ -2608,6 +2641,7 @@ body {
 }
 
 .outlineTreeItem {
+  position: relative;
   display: grid;
   width: 100%;
   min-width: 0;
@@ -2622,6 +2656,47 @@ body {
   font: inherit;
   font-size: 12px;
   text-align: left;
+}
+
+.outlineTreeItem::before,
+.outlineTreeItem::after {
+  position: absolute;
+  z-index: 2;
+  right: 8px;
+  left: 8px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--accent-strong);
+  box-shadow: 0 0 0 3px rgba(109, 166, 217, 0.16);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+}
+
+.outlineTreeItem::before {
+  top: -1px;
+}
+
+.outlineTreeItem::after {
+  bottom: -1px;
+}
+
+.headingDrop-before::before,
+.headingDrop-after::after {
+  opacity: 1;
+}
+
+.draggingHeadingItem {
+  opacity: 0.42;
+}
+
+.headingFileDropTarget {
+  background: rgba(109, 166, 217, 0.1);
+  color: var(--text-primary);
+}
+
+.headingFileDropTarget::after {
+  opacity: 1;
 }
 
 .outlineTreeItem:hover,
@@ -2915,8 +2990,9 @@ body {
 }
 
 .ideaCard {
+  position: relative;
   flex: 0 0 auto;
-  padding: 10px 12px;
+  padding: 10px 12px 38px;
   border: 0.5px solid var(--border-subtle);
   border-radius: 8px;
   background: #1d1e24;
@@ -2942,31 +3018,23 @@ body {
   opacity: 0.45;
 }
 
-.ideaMetaRow {
-  display: flex;
-  min-height: 20px;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 5px;
-}
-
-.ideaMeta {
-  color: var(--text-faint);
-  font-size: 10px;
-}
-
 .ideaTools {
+  position: absolute;
+  z-index: 1;
+  right: 8px;
+  bottom: 7px;
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  margin-left: auto;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 120ms ease;
 }
 
 .ideaCard:hover .ideaTools,
 .ideaCard:focus-within .ideaTools {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .ideaTools button {
@@ -3045,6 +3113,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 6px;
+  margin-top: 10px;
   border: 0.5px dashed var(--border-strong);
   border-radius: 8px;
   background: transparent;
@@ -5149,6 +5218,346 @@ body {
   --silkdown-link-color: #82d3f7;
 }
 
+/* Air: adapted from Suzuka Point Getters' cyan-to-deep-blue recruiting palette. */
+.appShell[data-theme="air-light"] {
+  --on-accent: #fff;
+  --brand-gradient: linear-gradient(90deg, #0077c5 0%, #0057ad 48%, #003bb1 100%);
+  --bg-root: #eaf8ff;
+  --bg-primary: #fff;
+  --bg-secondary: #f4fbff;
+  --bg-tertiary: #d9f1fc;
+  --bg-panel: #fff;
+  --bg-panel-strong: #eef9ff;
+  --border-subtle: #c7e5f3;
+  --border-strong: #7dbbd8;
+  --text-primary: #060523;
+  --text-secondary: #293b57;
+  --text-muted: #577087;
+  --text-faint: #829aae;
+  --accent: #0062b1;
+  --accent-strong: #003bb1;
+  --success: #168442;
+  --warning: #8b6b00;
+  --danger: #c83f45;
+  --accent-soft: rgba(0, 157, 255, 0.12);
+  --accent-border: rgba(0, 98, 177, 0.5);
+  --editor-bg: #fff;
+  --card-bg: #fff;
+  --card-hover: #eaf8ff;
+  --topbar-bg: var(--brand-gradient);
+  --sidebar-bg: #eaf8ff;
+  --topbar-text-primary: #fff;
+  --topbar-text-secondary: #f1fbff;
+  --topbar-text-muted: #d5effb;
+  --topbar-text-faint: #a9d4e8;
+  --radius-control: 8px;
+  --radius-card: 14px;
+  --radius-button: 999px;
+  --silkdown-link-color: #0057ad;
+}
+
+.appShell[data-theme="air-dark"] {
+  color-scheme: dark;
+  --on-accent: #052236;
+  --brand-gradient: linear-gradient(90deg, #00b7ff 0%, #57d0ff 48%, #17bfe5 100%);
+  --bg-root: #060523;
+  --bg-primary: #0d1230;
+  --bg-secondary: #151b3d;
+  --bg-tertiary: #202750;
+  --bg-panel: #101634;
+  --bg-panel-strong: #1a2145;
+  --border-subtle: #303969;
+  --border-strong: #50659a;
+  --text-primary: #f5fbff;
+  --text-secondary: #d4e8f3;
+  --text-muted: #9dbbcb;
+  --text-faint: #6d8798;
+  --accent: #57d0ff;
+  --accent-strong: #8ee0ff;
+  --success: #66d47f;
+  --warning: #e2d65d;
+  --danger: #ff7e82;
+  --overlay: rgba(2, 3, 18, 0.78);
+  --control-hover: rgba(87, 208, 255, 0.1);
+  --accent-soft: rgba(87, 208, 255, 0.15);
+  --accent-border: rgba(87, 208, 255, 0.58);
+  --editor-bg: #060523;
+  --card-bg: #101634;
+  --card-hover: #1a2145;
+  --topbar-bg: linear-gradient(90deg, #060523 7%, #313080 45%, #2d1b51 100%);
+  --sidebar-bg: #0d1230;
+  --radius-control: 8px;
+  --radius-card: 14px;
+  --radius-button: 999px;
+  --silkdown-link-color: #8ee0ff;
+}
+
+/* Passion: adapted from Dainichi Consultant's crimson and coral recruitment palette. */
+.appShell[data-theme="passion-light"] {
+  --on-accent: #fff;
+  --brand-gradient: linear-gradient(145deg, #a91f31 0%, #c02537 52%, #c83c45 100%);
+  --bg-root: #fff1f1;
+  --bg-primary: #fff;
+  --bg-secondary: #fff8f4;
+  --bg-tertiary: #f7e3e4;
+  --bg-panel: #fff;
+  --bg-panel-strong: #fff7f7;
+  --border-subtle: #ead5d7;
+  --border-strong: #c99ca1;
+  --text-primary: #2d333d;
+  --text-secondary: #555b66;
+  --text-muted: #717688;
+  --text-faint: #9d9fab;
+  --accent: #c02537;
+  --accent-strong: #98182a;
+  --success: #287c50;
+  --warning: #9b6500;
+  --danger: #b52232;
+  --accent-soft: rgba(192, 37, 55, 0.11);
+  --accent-border: rgba(192, 37, 55, 0.5);
+  --editor-bg: #fff;
+  --card-bg: #fff;
+  --card-hover: #fff1f1;
+  --topbar-bg: var(--brand-gradient);
+  --sidebar-bg: #fff1f1;
+  --topbar-text-primary: #fff;
+  --topbar-text-secondary: #fff6f6;
+  --topbar-text-muted: #f6d9dc;
+  --topbar-text-faint: #dfa9af;
+  --radius-control: 4px;
+  --radius-card: 8px;
+  --radius-button: 4px;
+  --silkdown-link-color: #a91f31;
+}
+
+.appShell[data-theme="passion-dark"] {
+  color-scheme: dark;
+  --on-accent: #fff;
+  --brand-gradient: linear-gradient(145deg, #841929 0%, #a92436 52%, #c03943 100%);
+  --bg-root: #180b0e;
+  --bg-primary: #241014;
+  --bg-secondary: #31171c;
+  --bg-tertiary: #432028;
+  --bg-panel: #291318;
+  --bg-panel-strong: #371a20;
+  --border-subtle: #57303a;
+  --border-strong: #80505a;
+  --text-primary: #fff7f5;
+  --text-secondary: #ead8d7;
+  --text-muted: #c4a3a5;
+  --text-faint: #8f6e73;
+  --accent: #f06b6b;
+  --accent-strong: #ff9a8c;
+  --success: #72bd8b;
+  --warning: #e2b862;
+  --danger: #ff7f82;
+  --overlay: rgba(10, 3, 5, 0.78);
+  --control-hover: rgba(240, 107, 107, 0.1);
+  --accent-soft: rgba(240, 107, 107, 0.15);
+  --accent-border: rgba(240, 107, 107, 0.58);
+  --editor-bg: #180b0e;
+  --card-bg: #291318;
+  --card-hover: #371a20;
+  --topbar-bg: var(--brand-gradient);
+  --sidebar-bg: #241014;
+  --radius-control: 4px;
+  --radius-card: 8px;
+  --radius-button: 4px;
+  --silkdown-link-color: #ff9a8c;
+}
+
+/* Tech: adapted from Giken Service's near-black navy and steel-blue palette. */
+.appShell[data-theme="tech-light"] {
+  --on-accent: #fff;
+  --bg-root: #f2f2f2;
+  --bg-primary: #fff;
+  --bg-secondary: #f7f7f7;
+  --bg-tertiary: #e8edf3;
+  --bg-panel: #fff;
+  --bg-panel-strong: #f4f6f8;
+  --border-subtle: #d8dee6;
+  --border-strong: #9caec2;
+  --text-primary: #000220;
+  --text-secondary: #37384a;
+  --text-muted: #656b79;
+  --text-faint: #9499a4;
+  --accent: #466f9f;
+  --accent-strong: #274f7e;
+  --success: #207c51;
+  --warning: #926400;
+  --danger: #c43d45;
+  --accent-soft: rgba(116, 153, 199, 0.14);
+  --accent-border: rgba(70, 111, 159, 0.5);
+  --editor-bg: #fff;
+  --card-bg: #fff;
+  --card-hover: #edf2f7;
+  --topbar-bg: #000220;
+  --sidebar-bg: #f2f2f2;
+  --topbar-text-primary: #fff;
+  --topbar-text-secondary: #eef4fb;
+  --topbar-text-muted: #c6d4e4;
+  --topbar-text-faint: #8499b4;
+  --radius-control: 0;
+  --radius-card: 2px;
+  --radius-button: 0;
+  --silkdown-link-color: #274f7e;
+}
+
+.appShell[data-theme="tech-dark"] {
+  color-scheme: dark;
+  --on-accent: #07101e;
+  --bg-root: #00010a;
+  --bg-primary: #000220;
+  --bg-secondary: #0b102c;
+  --bg-tertiary: #171d3a;
+  --bg-panel: #080b24;
+  --bg-panel-strong: #121833;
+  --border-subtle: #29324d;
+  --border-strong: #4c5d78;
+  --text-primary: #f7f9fc;
+  --text-secondary: #d6deea;
+  --text-muted: #a0adbf;
+  --text-faint: #707e92;
+  --accent: #7499c7;
+  --accent-strong: #a3c1e2;
+  --success: #65bd8b;
+  --warning: #d9b762;
+  --danger: #e8797f;
+  --overlay: rgba(0, 1, 10, 0.8);
+  --control-hover: rgba(116, 153, 199, 0.1);
+  --accent-soft: rgba(116, 153, 199, 0.15);
+  --accent-border: rgba(116, 153, 199, 0.58);
+  --editor-bg: #00010a;
+  --card-bg: #080b24;
+  --card-hover: #121833;
+  --topbar-bg: #000220;
+  --sidebar-bg: #05081d;
+  --radius-control: 0;
+  --radius-card: 2px;
+  --radius-button: 0;
+  --silkdown-link-color: #a3c1e2;
+}
+
+/* Energy: adapted from Horie Electrical's amber-to-vermilion system. */
+.appShell[data-theme="energy-light"] {
+  --on-accent: #18181b;
+  --brand-gradient: linear-gradient(90deg, #ffa125 0%, #f58228 48%, #f15f2e 100%);
+  --action-gradient: linear-gradient(90deg, #a8440b 0%, #b53a13 48%, #a92d18 100%);
+  --action-text: #fff;
+  --bg-root: #f0efec;
+  --bg-primary: #fff;
+  --bg-secondary: #faf7f1;
+  --bg-tertiary: #e2e1dd;
+  --bg-panel: #fff;
+  --bg-panel-strong: #f8f5ef;
+  --border-subtle: #d9d5cc;
+  --border-strong: #b9aa98;
+  --text-primary: #18181b;
+  --text-secondary: #444;
+  --text-muted: #666;
+  --text-faint: #888;
+  --accent: #c94c20;
+  --accent-strong: #a43a17;
+  --success: #287b50;
+  --warning: #8b6500;
+  --danger: #c53d31;
+  --accent-soft: rgba(255, 161, 37, 0.16);
+  --accent-border: rgba(241, 95, 46, 0.5);
+  --editor-bg: #fff;
+  --card-bg: #fff;
+  --card-hover: #fff5e7;
+  --topbar-bg: var(--brand-gradient);
+  --sidebar-bg: #f0efec;
+  --topbar-text-primary: #18181b;
+  --topbar-text-secondary: #28231e;
+  --topbar-text-muted: #4a3828;
+  --topbar-text-faint: #72523a;
+  --radius-control: 8px;
+  --radius-card: 16px;
+  --radius-button: 999px;
+  --silkdown-link-color: #a43a17;
+}
+
+.appShell[data-theme="energy-dark"] {
+  color-scheme: dark;
+  --on-accent: #18181b;
+  --brand-gradient: linear-gradient(90deg, #ffa125 0%, #f58228 48%, #f15f2e 100%);
+  --action-gradient: linear-gradient(90deg, #a8440b 0%, #b53a13 48%, #a92d18 100%);
+  --action-text: #fff;
+  --bg-root: #17100c;
+  --bg-primary: #211710;
+  --bg-secondary: #2c1f16;
+  --bg-tertiary: #3b2a1d;
+  --bg-panel: #271b13;
+  --bg-panel-strong: #342419;
+  --border-subtle: #4c3829;
+  --border-strong: #735440;
+  --text-primary: #fff8ef;
+  --text-secondary: #eadccc;
+  --text-muted: #bea996;
+  --text-faint: #887565;
+  --accent: #ffa125;
+  --accent-strong: #ffc166;
+  --success: #72bd8a;
+  --warning: #e1bd5b;
+  --danger: #f07a69;
+  --overlay: rgba(9, 5, 2, 0.8);
+  --control-hover: rgba(255, 161, 37, 0.1);
+  --accent-soft: rgba(255, 161, 37, 0.15);
+  --accent-border: rgba(255, 161, 37, 0.58);
+  --editor-bg: #17100c;
+  --card-bg: #271b13;
+  --card-hover: #342419;
+  --topbar-bg: linear-gradient(90deg, #54230f 0%, #a63d19 55%, #f15f2e 100%);
+  --topbar-text-primary: #fff8ef;
+  --topbar-text-secondary: #f5e2d4;
+  --topbar-text-muted: #e4b9a1;
+  --topbar-text-faint: #b7785e;
+  --sidebar-bg: #211710;
+  --radius-control: 8px;
+  --radius-card: 16px;
+  --radius-button: 999px;
+  --silkdown-link-color: #ffc166;
+}
+
+.appShell:is([data-theme^="air-"], [data-theme^="passion-"], [data-theme^="energy-"]) :is(
+  .themePickerButton,
+  .modalActions button,
+  .sidebarAddButton,
+  .newTabActions button,
+  .addButton,
+  .ideaAdd,
+  .plotAddButton
+) {
+  border-color: transparent;
+  background: var(--action-gradient, var(--brand-gradient));
+  color: var(--action-text, var(--on-accent));
+}
+
+.appShell:is([data-theme^="air-"], [data-theme^="passion-"], [data-theme^="energy-"]) :is(
+  .themePickerButton,
+  .modalActions button,
+  .sidebarAddButton,
+  .newTabActions button,
+  .addButton,
+  .ideaAdd,
+  .plotAddButton
+):hover {
+  filter: brightness(1.06);
+}
+
+.appShell[data-theme^="energy-"] .activeRightTab {
+  border-color: transparent;
+  background: var(--action-gradient);
+  color: #fff;
+}
+
+.appShell[data-theme^="energy-"] .activeRightTab:hover {
+  background: var(--action-gradient);
+  color: #fff;
+  filter: brightness(1.06);
+}
+
 /* Commerce preserves dentsu's outline/neumorphic button language. */
 .appShell[data-theme^="commerce-"] .themePickerButton,
 .appShell[data-theme^="commerce-"] .modalActions button,
@@ -5238,3 +5647,32 @@ body {
 .themePreview-commerce-dark::before { background: #292e32; }
 .themePreview-commerce-dark i { background: #f5f6f7; }
 .themePreview-commerce-dark b { background: #42b8ee; }
+.themePreview-air-light { background: #fff; }
+.themePreview-air-light::before { background: #eaf8ff; }
+.themePreview-air-light i { background: #060523; }
+.themePreview-air-light b { background: linear-gradient(90deg, #00b7ff, #003bb1); }
+.themePreview-air-dark { border-color: #303969; background: #060523; }
+.themePreview-air-dark::before { background: #101634; }
+.themePreview-air-dark i { background: #f5fbff; }
+.themePreview-air-dark b { background: linear-gradient(90deg, #00b7ff, #57d0ff); }
+.themePreview-passion-light::before { background: #fff1f1; }
+.themePreview-passion-light i { background: #2d333d; }
+.themePreview-passion-light b { background: linear-gradient(145deg, #c02537, #e95353); }
+.themePreview-passion-dark { border-color: #57303a; background: #180b0e; }
+.themePreview-passion-dark::before { background: #291318; }
+.themePreview-passion-dark i { background: #fff7f5; }
+.themePreview-passion-dark b { background: linear-gradient(145deg, #c02537, #e95353); }
+.themePreview-tech-light::before { background: #f2f2f2; }
+.themePreview-tech-light i { background: #000220; }
+.themePreview-tech-light b { background: #7499c7; }
+.themePreview-tech-dark { border-color: #29324d; background: #00010a; }
+.themePreview-tech-dark::before { background: #080b24; }
+.themePreview-tech-dark i { background: #f7f9fc; }
+.themePreview-tech-dark b { background: #7499c7; }
+.themePreview-energy-light::before { background: #f0efec; }
+.themePreview-energy-light i { background: #18181b; }
+.themePreview-energy-light b { background: linear-gradient(90deg, #ffa125, #f15f2e); }
+.themePreview-energy-dark { border-color: #4c3829; background: #17100c; }
+.themePreview-energy-dark::before { background: #271b13; }
+.themePreview-energy-dark i { background: #fff8ef; }
+.themePreview-energy-dark b { background: linear-gradient(90deg, #ffa125, #f15f2e); }

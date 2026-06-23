@@ -24,6 +24,10 @@ import {
   getLineNumberAtOffset,
 } from "./editor/ast/documentAst";
 import {
+  moveHeadingSection,
+  type HeadingDropPosition,
+} from "./editor/ast/headingMove";
+import {
   collectProjectTextFiles,
   createProjectAstSkeleton,
   markProjectAstFileError,
@@ -77,6 +81,7 @@ import {
   replaceFolderChildren,
   upsertRecentWorkspace,
 } from "./utils/projectTree";
+import { logHeadingDnd } from "./utils/headingDndDiagnostics";
 
 const SNIPPET_DRAG_MIME = "application/x-brew-snippet-id";
 const BREADCRUMB_ENTRY_DRAG_MIME = "application/x-brew-project-entry-path";
@@ -119,6 +124,11 @@ type DocumentSaveQueue = {
   pending: QueuedDocumentSave | null;
 };
 
+type HeadingMoveDocuments = {
+  sourceDocument: TextDocument;
+  targetDocument: TextDocument | null;
+};
+
 type NotationModalState =
   | {
       type: "ruby";
@@ -135,19 +145,19 @@ const customNotationSpecs = [
   {
     id: "ruby",
     label: "ルビ",
-    syntax: "[本文 (rb,ルビ)]",
+    syntax: "[本文(rb,ルビ)]",
     description: "選択範囲に読みを付けます",
   },
   {
     id: "tcy",
     label: "縦中横",
-    syntax: "[本文 (tcy)]",
+    syntax: "[本文(tcy)]",
     description: "選択範囲を縦書き中の横組みにします",
   },
   {
     id: "emphasis",
     label: "圏点",
-    syntax: "[本文 (em,goma)]",
+    syntax: "[本文(em,goma)]",
     description: "選択範囲に圏点を付けます",
   },
   {
@@ -834,6 +844,7 @@ export default function App() {
   const saveTimerRef = useRef<number | null>(null);
   const activeTabIdRef = useRef("initial-document-tab");
   const documentSaveQueuesRef = useRef<Map<string, DocumentSaveQueue>>(new Map());
+  const headingMoveInProgressRef = useRef(false);
   const toastTimerRef = useRef<number | null>(null);
   const typewriterScrollFrameRef = useRef<number | null>(null);
   const draggingSnippetRef = useRef<Snippet | null>(null);
@@ -1201,8 +1212,8 @@ export default function App() {
     [currentFileSearchResults, projectSearchResults, searchScope],
   );
   const breadcrumbTrail = useMemo(
-    () => findPathToEntry(projectFolder, focusedFolderPath ?? currentFilePath),
-    [currentFilePath, focusedFolderPath, projectFolder],
+    () => findPathToEntry(projectFolder, currentFilePath),
+    [currentFilePath, projectFolder],
   );
 
   const filteredSnippets = useMemo(() => {
@@ -1880,7 +1891,7 @@ export default function App() {
 
     const method =
       notation === "ruby" ? `rb,${arg}` : notation === "emphasis" ? "em,goma" : "tcy";
-    const insert = `[${currentSelection.text} (${method})]`;
+    const insert = `[${currentSelection.text}(${method})]`;
 
     editor.replaceRange(
       currentSelection.from,
@@ -2927,6 +2938,160 @@ export default function App() {
     if (nextOrder) await saveProjectEntryOrder(folderPath, nextOrder);
   };
 
+  const handleHeadingMove = async (
+    sourcePath: string,
+    sourceLine: number,
+    sourceBlockId: string,
+    targetPath: string,
+    targetLine: number | null,
+    targetBlockId: string | null,
+    position: HeadingDropPosition,
+  ) => {
+    logHeadingDnd("reorder-handler-reached", {
+      sourcePath,
+      sourceLine,
+      sourceBlockId,
+      targetPath,
+      targetLine,
+      targetBlockId,
+      position,
+    });
+    if (headingMoveInProgressRef.current) {
+      showToast("見出しを移動中です");
+      return;
+    }
+    const affectedTabs = openTabs.filter(
+      (tab) => tab.path === sourcePath || tab.path === targetPath,
+    );
+    if (affectedTabs.some((tab) => tab.saveStatus === "saving")) {
+      showToast("保存完了後に見出しを移動してください");
+      return;
+    }
+    headingMoveInProgressRef.current = true;
+
+    const readMarkdown = async (path: string) => {
+      const openTab = openTabs.find((tab) => tab.path === path);
+      if (openTab) return openTab.markdown;
+      return (await invoke<TextDocument>("read_text_file", { path })).content;
+    };
+
+    try {
+      const sourceMarkdown = await readMarkdown(sourcePath);
+      const targetMarkdown =
+        sourcePath === targetPath ? sourceMarkdown : await readMarkdown(targetPath);
+      const move = moveHeadingSection({
+        sourceMarkdown,
+        targetMarkdown,
+        sourceLine,
+        targetLine,
+        position,
+        sameDocument: sourcePath === targetPath,
+      });
+      logHeadingDnd("reorder-transform-complete", {
+        sourceBlockId,
+        targetBlockId,
+        changed: move.changed,
+        movedTitle: move.movedTitle,
+      });
+      if (!move.changed) {
+        showToast("見出しの移動先が同じため変更はありません");
+        return;
+      }
+
+      logHeadingDnd("reorder-save-start", { sourceBlockId, targetBlockId });
+      const saved = await invoke<HeadingMoveDocuments>("save_heading_move", {
+        sourcePath,
+        targetPath,
+        sourceContent: move.sourceMarkdown,
+        targetContent: move.targetMarkdown,
+      });
+      const savedDocuments = [saved.sourceDocument, saved.targetDocument].filter(
+        (document): document is TextDocument => document !== null,
+      );
+      logHeadingDnd("reorder-save-complete", {
+        sourceBlockId,
+        targetBlockId,
+        savedPaths: savedDocuments.map((document) => document.path),
+      });
+      const savedByPath = new Map(
+        savedDocuments.map((document) => [document.path, document] as const),
+      );
+
+      setOpenTabs((current) =>
+        current.map((tab) => {
+          if (!tab.path) return tab;
+          const document = savedByPath.get(tab.path);
+          if (!document) return tab;
+          return {
+            ...tab,
+            markdown: document.content,
+            savedMarkdown: document.content,
+            editorRevision: null,
+            name: document.name,
+            saveStatus: "saved",
+          };
+        }),
+      );
+      setProjectAst((current) => {
+        if (!current || current.rootPath !== projectFolder?.path) return current;
+        return savedDocuments.reduce(
+          (next, document) =>
+            upsertProjectAstDocument(next, {
+              path: document.path,
+              name: document.name,
+              text: parseFrontMatter(document.content).body,
+            }),
+          current,
+        );
+      });
+
+      const activeDocument = currentFilePath ? savedByPath.get(currentFilePath) : null;
+      if (activeDocument) {
+        lastSavedMarkdownRef.current = activeDocument.content;
+        setAppState((current) => ({
+          ...current,
+          markdown: activeDocument.content,
+          lastFilePath: activeDocument.path,
+        }));
+      }
+      logHeadingDnd("state-update-scheduled", {
+        sourceBlockId,
+        targetBlockId,
+        updatedTabPaths: savedDocuments.map((document) => document.path),
+      });
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          const outlineRows = Array.from(
+            document.querySelectorAll<HTMLElement>("[data-outline-block-id]"),
+          );
+          const movedRows = outlineRows
+            .filter((row) => row.dataset.outlineBlockId === sourceBlockId)
+            .map((row) => ({
+              path: row.dataset.outlineFilePath ?? null,
+              line: Number(row.dataset.outlineHeadingLine ?? 0),
+            }));
+          logHeadingDnd("state-dom-updated", {
+            sourceBlockId,
+            targetBlockId,
+            outlineRowCount: outlineRows.length,
+            movedRows,
+          });
+        });
+      });
+      setLastError("");
+      showToast(
+        sourcePath === targetPath
+          ? `見出し「${move.movedTitle}」を移動しました`
+          : `見出し「${move.movedTitle}」を「${saved.targetDocument?.name ?? targetPath}」へ移動しました`,
+      );
+    } catch (error) {
+      setLastError(String(error));
+      showToast(error instanceof Error ? error.message : "見出しを移動できませんでした");
+    } finally {
+      headingMoveInProgressRef.current = false;
+    }
+  };
+
   const jumpToOutlineItem = (item: OutlineItem) => {
     const view = getEditorView();
     if (!view) return;
@@ -3586,6 +3751,25 @@ export default function App() {
                 onProjectSearchModeChange={setIsProjectSearchMode}
                 onJumpOutline={jumpToOutlineItem}
                 onJumpProjectOutline={(path, item) => void handleProjectOutlineJump(path, item)}
+                onMoveHeading={(
+                  sourcePath,
+                  sourceLine,
+                  sourceBlockId,
+                  targetPath,
+                  targetLine,
+                  targetBlockId,
+                  position,
+                ) =>
+                  void handleHeadingMove(
+                    sourcePath,
+                    sourceLine,
+                    sourceBlockId,
+                    targetPath,
+                    targetLine,
+                    targetBlockId,
+                    position,
+                  )
+                }
                 onProjectSearchQueryChange={setProjectSearchQuery}
                 onSearchScopeChange={setSearchScope}
                 onProjectReplaceValueChange={setProjectReplaceValue}

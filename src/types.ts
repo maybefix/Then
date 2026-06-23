@@ -49,6 +49,14 @@ export const appThemeValues = [
   "dandelion-dark",
   "commerce-light",
   "commerce-dark",
+  "air-light",
+  "air-dark",
+  "passion-light",
+  "passion-dark",
+  "tech-light",
+  "tech-dark",
+  "energy-light",
+  "energy-dark",
 ] as const;
 
 export type AppTheme = (typeof appThemeValues)[number];
@@ -133,6 +141,7 @@ export type WorkspaceAlert = {
 
 export type OutlineItem = {
   id: string;
+  blockId: string;
   title: string;
   level: number;
   line: number;

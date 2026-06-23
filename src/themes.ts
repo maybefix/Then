@@ -27,6 +27,10 @@ export const themeCatalog: ThemeDefinition[] = [
   { id: "water-light", label: "Water", description: "白とサステナブルティール", mode: "light" },
   { id: "hands-light", label: "Hands", description: "実用的な白と深緑", mode: "light" },
   { id: "commerce-light", label: "Commerce", description: "ソフトグレーと立体的なピル", mode: "light" },
+  { id: "air-light", label: "Air", description: "空色と深いブルーのグラデーション", mode: "light" },
+  { id: "passion-light", label: "Passion", description: "深紅とコーラルのグラデーション", mode: "light" },
+  { id: "tech-light", label: "Tech", description: "濃紺とスチールブルー", mode: "light" },
+  { id: "energy-light", label: "Energy", description: "黄橙と朱色のグラデーション", mode: "light" },
   { id: "dark", label: "Default", description: "グレーブルー", mode: "dark" },
   { id: "apple-dark", label: "Apple", description: "ブラックとブライトブルー", mode: "dark" },
   { id: "yamaha-dark", label: "Resonance", description: "深い紫とラベンダー", mode: "dark" },
@@ -42,6 +46,10 @@ export const themeCatalog: ThemeDefinition[] = [
   { id: "hands-dark", label: "Hands", description: "森林のダークグリーン", mode: "dark" },
   { id: "dandelion-dark", label: "Dandelion", description: "チャコールとクラフトゴールド", mode: "dark" },
   { id: "commerce-dark", label: "Commerce", description: "チャコールと立体的なピル", mode: "dark" },
+  { id: "air-dark", label: "Air", description: "夜空とブライトシアンのグラデーション", mode: "dark" },
+  { id: "passion-dark", label: "Passion", description: "ワインレッドとコーラルのグラデーション", mode: "dark" },
+  { id: "tech-dark", label: "Tech", description: "ブルーブラックとスチールブルー", mode: "dark" },
+  { id: "energy-dark", label: "Energy", description: "焦茶と電光オレンジのグラデーション", mode: "dark" },
 ];
 
 export const getThemeDefinition = (theme: AppTheme) =>

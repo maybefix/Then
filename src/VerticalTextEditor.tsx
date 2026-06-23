@@ -2113,6 +2113,10 @@ export function VerticalTextEditor({
     const handleMouseDown = (event: MouseEvent) => {
       if (event.target !== scroller) return;
 
+      const scrollerRect = scroller.getBoundingClientRect();
+      const scrollbarHeight = scroller.offsetHeight - scroller.clientHeight;
+      if (scrollbarHeight > 0 && event.clientY >= scrollerRect.bottom - scrollbarHeight) return;
+
       event.preventDefault();
       editor.commands.focus();
       const lastIndex = Math.max(0, editor.state.doc.childCount - 1);

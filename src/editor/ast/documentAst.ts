@@ -550,6 +550,7 @@ export function buildOutlineFromBlocks(blocks: LineNode[], sourceId = "document"
 
     const item: DocumentOutlineItem = {
       id: `${sourceId}:${block.lineIndex + 1}:${block.level}:${hash16(title)}`,
+      blockId: block.id,
       title,
       level: block.level,
       line: block.lineIndex + 1,

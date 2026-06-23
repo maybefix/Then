@@ -25,18 +25,6 @@ function parseInlineTags(text: string): string[] {
   return Array.from(tags);
 }
 
-function getIdeaMeta(snippet: Snippet): string {
-  const timestamp = snippet.id.match(/(\d{13})$/)?.[1];
-  if (!timestamp) return "Idea";
-
-  const date = new Date(Number(timestamp));
-  if (Number.isNaN(date.getTime())) return "Idea";
-
-  return [date.getHours(), date.getMinutes()]
-    .map((value) => String(value).padStart(2, "0"))
-    .join(":");
-}
-
 function PlusIcon() {
   return (
     <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
@@ -125,29 +113,26 @@ export function IdeaPane({
               onDoubleClick={() => onDoubleClick(snippet)}
               title="ダブルクリックで挿入"
             >
-              <div className="ideaMetaRow">
-                <span className="ideaMeta">{getIdeaMeta(snippet)}</span>
-                <div className="ideaTools" aria-label="Ideaの操作">
-                  <button
-                    type="button"
-                    aria-label="上へ"
-                    disabled={index === 0}
-                    onClick={() => onMove(snippet.id, -1)}
-                  >
-                    <ArrowUpIcon />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="下へ"
-                    disabled={index === snippets.length - 1}
-                    onClick={() => onMove(snippet.id, 1)}
-                  >
-                    <ArrowDownIcon />
-                  </button>
-                  <button type="button" aria-label="削除" onClick={() => onDelete(snippet)}>
-                    <TrashIcon />
-                  </button>
-                </div>
+              <div className="ideaTools" aria-label="Ideaの操作">
+                <button
+                  type="button"
+                  aria-label="上へ"
+                  disabled={index === 0}
+                  onClick={() => onMove(snippet.id, -1)}
+                >
+                  <ArrowUpIcon />
+                </button>
+                <button
+                  type="button"
+                  aria-label="下へ"
+                  disabled={index === snippets.length - 1}
+                  onClick={() => onMove(snippet.id, 1)}
+                >
+                  <ArrowDownIcon />
+                </button>
+                <button type="button" aria-label="削除" onClick={() => onDelete(snippet)}>
+                  <TrashIcon />
+                </button>
               </div>
               <div
                 className="ideaText"
@@ -172,11 +157,12 @@ export function IdeaPane({
           );
         })}
 
-        <button className="ideaAdd" type="button" onClick={onCreate}>
-          <PlusIcon />
-          <span>アイデアを追加</span>
-        </button>
       </div>
+
+      <button className="ideaAdd" type="button" onClick={onCreate}>
+        <PlusIcon />
+        <span>アイデアを追加</span>
+      </button>
     </section>
   );
 }
