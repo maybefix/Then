@@ -56,6 +56,44 @@ function takeInlines(inlines: ExportInline[], length: number): [ExportInline[], 
   return [head, tail];
 }
 
+// Markdown-like paragraph interpretation for export: a run of consecutive
+// non-blank, non-heading lines becomes ONE paragraph whose original line breaks
+// are kept as soft breaks; blank lines act as paragraph separators (and are
+// dropped, since the paragraph gap already separates them). Headings and lines
+// with a different alignment stay as their own block.
+function mergeSoftBreaks(blocks: ExportBlock[]): ExportBlock[] {
+  const out: ExportBlock[] = [];
+  let pending: ExportBlock | null = null;
+  const flush = () => {
+    if (pending) out.push(pending);
+    pending = null;
+  };
+  for (const block of blocks) {
+    if (block.kind === "blank") {
+      flush();
+      continue;
+    }
+    if (block.kind === "heading") {
+      flush();
+      out.push(block);
+      continue;
+    }
+    if (pending && pending.align === block.align) {
+      pending.inlines.push({ kind: "break", text: "" }, ...block.inlines);
+    } else {
+      flush();
+      pending = {
+        kind: "paragraph",
+        level: block.level,
+        align: block.align,
+        inlines: [...block.inlines],
+      };
+    }
+  }
+  flush();
+  return out;
+}
+
 function firstHeading(blocks: ExportBlock[], fallback: string): string {
   const heading = blocks.find((block) => block.kind === "heading");
   if (!heading) return fallback;
@@ -80,10 +118,11 @@ export function createLinkedExportDocument(
         text: loaded.content,
       });
       const converted = createExportDocument(ast, job.layout.body.fontFamily);
+      const blocks = mergeSoftBreaks(converted.blocks);
       return {
         source,
-        blocks: converted.blocks,
-        chapterTitle: source.title || firstHeading(converted.blocks, converted.title),
+        blocks,
+        chapterTitle: source.title || firstHeading(blocks, converted.title),
       };
     });
 
@@ -318,6 +357,7 @@ export function exportInlineHtml(inline: ExportInline): string {
     case "ruby": return `<ruby>${text}<rp>（</rp><rt>${escapeHtml(inline.reading)}</rt><rp>）</rp></ruby>`;
     case "emphasis": return `<span class="then-emphasis then-emphasis-${inline.style}">${text}</span>`;
     case "tcy": return `<span class="then-tcy">${text}</span>`;
+    case "break": return "<br>";
   }
 }
 

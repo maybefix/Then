@@ -58,6 +58,8 @@ function inlineXml(font: ExportFontFamily, inline: ExportInline): string {
       return normalRun(font, inline.text, `<w:em w:val="${inline.style === "dot" ? "dot" : "comma"}"/>`);
     case "tcy":
       return normalRun(font, inline.text, '<w:eastAsianLayout w:vert="1" w:vertCompress="1"/>');
+    case "break":
+      return "<w:r><w:br/></w:r>";
   }
 }
 

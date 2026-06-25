@@ -3,7 +3,7 @@ import Document from "@tiptap/extension-document";
 import History from "@tiptap/extension-history";
 import Paragraph from "@tiptap/extension-paragraph";
 import Text from "@tiptap/extension-text";
-import type { Node as PMNode } from "@tiptap/pm/model";
+import { Fragment, Slice, type Node as PMNode } from "@tiptap/pm/model";
 import { baseKeymap } from "@tiptap/pm/commands";
 import { keymap } from "@tiptap/pm/keymap";
 import {
@@ -2076,6 +2076,22 @@ export function VerticalTextEditor({
           class: "pm-root",
           spellcheck: "false",
           "data-placeholder": PLACEHOLDER,
+        },
+        // Each paragraph is one editor line, so copy/paste must use a single
+        // newline per line. The ProseMirror default puts a blank line ("\n\n")
+        // between blocks, which is why copying spaced the lines out.
+        clipboardTextSerializer: (slice) =>
+          slice.content.textBetween(0, slice.content.size, "\n"),
+        clipboardTextParser: (text, _context, _plain, view) => {
+          const { schema } = view.state;
+          const nodes = normalizeText(text)
+            .split("\n")
+            .map((line) =>
+              line.length > 0
+                ? schema.nodes.paragraph.create(null, schema.text(line))
+                : schema.nodes.paragraph.create(),
+            );
+          return new Slice(Fragment.fromArray(nodes), 1, 1);
         },
       },
       onUpdate: ({ editor: currentEditor }) => {

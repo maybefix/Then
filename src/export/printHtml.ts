@@ -27,6 +27,8 @@ function inlineHtml(inline: ExportInline): string {
       return `<span class="emphasis emphasis-${inline.style}">${text}</span>`;
     case "tcy":
       return `<span class="tcy">${text}</span>`;
+    case "break":
+      return "<br>";
   }
 }
 
