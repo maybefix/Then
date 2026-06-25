@@ -5,7 +5,6 @@ import { exportBlockHtml } from "../../export/linkedDocument";
 import {
   prepareExportDocx,
   prepareExportPdf,
-  prepareExportPreview,
 } from "../../export/typesetClient";
 import type {
   ExportErrorKind,
@@ -138,6 +137,24 @@ function footerText(
   return footer.customText ?? "";
 }
 
+function base64Utf8(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  const chunk = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunk));
+  }
+  return btoa(binary);
+}
+
+// URL of the bundled Vivliostyle Viewer rendering the flowing export HTML. The
+// same engine and document are used for the PDF, so the preview is WYSIWYG.
+function vivliostyleViewerSrc(html: string): string {
+  const dataUrl = `data:text/html;charset=utf-8;base64,${base64Utf8(html)}`;
+  const params = `src=${encodeURIComponent(dataUrl)}&bookMode=true&spreadView=true&renderAllPages=true`;
+  return `/vendor/vivliostyle-viewer/index.html#${params}`;
+}
+
 function PreviewPage({
   document,
   page,
@@ -196,10 +213,7 @@ export function LinkedExportScreen({
   const [viewState, setViewState] = useState<ExportViewState>(sourceError ? "preview-error" : "no-preview");
   const [activeTab, setActiveTab] = useState<"files" | "settings" | "preview">("files");
   const [openSections, setOpenSections] = useState(() => new Set(["page"]));
-  const [previewDocument, setPreviewDocument] = useState<LinkedExportDocument | null>(null);
-  const [previewPages, setPreviewPages] = useState<ExportPageModel[]>([]);
-  const [spreadIndex, setSpreadIndex] = useState(0);
-  const [zoom, setZoom] = useState(90);
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [failure, setFailure] = useState<ExportFailure | null>(sourceError ? {
     kind: "source-read",
     message: "本文ファイルを読み込めませんでした",
@@ -223,8 +237,6 @@ export function LinkedExportScreen({
     layout,
   }), [format, layout, sources, title]);
   const includedCount = sources.filter((source) => source.enabled).length;
-  // Vertical Japanese books are right-bound: odd pages appear on the right.
-  const visiblePages = previewPages.slice(spreadIndex, spreadIndex + 2).reverse();
 
   const patchLayout = (updater: (current: ExportLayoutProfile) => ExportLayoutProfile) => {
     setLayout((current) => updater(cloneLayout(current)));
@@ -270,13 +282,12 @@ export function LinkedExportScreen({
   const refreshPreview = () => {
     setFailure(null);
     setViewState("preview-loading");
-    // Typesetting runs in a worker so the spinner keeps animating and the window
-    // stays responsive while the manuscript is laid out.
-    void prepareExportPreview(job, sources)
-      .then(({ document, pages }) => {
-        setPreviewDocument(document);
-        setPreviewPages(pages);
-        setSpreadIndex(0);
+    // The HTML is built off-thread, then rendered by the bundled Vivliostyle
+    // Viewer — the exact same engine and document the PDF uses, so the preview
+    // matches the output page-for-page.
+    void prepareExportPdf(job, sources)
+      .then((assets) => {
+        setPreviewSrc(vivliostyleViewerSrc(assets.vivliostyleHtml));
         setViewState("preview-ready");
         setActiveTab("preview");
       })
@@ -459,13 +470,7 @@ export function LinkedExportScreen({
             <div className="exportPreviewToolbar">
               <button type="button" className="exportRefreshButton" onClick={refreshPreview} disabled={includedCount === 0}>↻ プレビュー更新</button>
               <span className="exportToolbarSpacer" />
-              <button type="button" onClick={() => setSpreadIndex(Math.max(0, spreadIndex - 2))} disabled={spreadIndex === 0}>‹</button>
-              <span>{previewPages.length ? `${previewPages[spreadIndex]?.pageNumber ?? 1}–${previewPages[Math.min(spreadIndex + 1, previewPages.length - 1)]?.pageNumber ?? 1} / ${previewPages.length}` : "-- / --"}</span>
-              <button type="button" onClick={() => setSpreadIndex(Math.min(Math.max(0, previewPages.length - 1), spreadIndex + 2))} disabled={spreadIndex + 2 >= previewPages.length}>›</button>
-              <i />
-              <button type="button" onClick={() => setZoom(Math.max(50, zoom - 10))}>−</button>
-              <span>{zoom}%</span>
-              <button type="button" onClick={() => setZoom(Math.min(200, zoom + 10))}>＋</button>
+              <span className="exportPreviewEngineTag">Vivliostyle 組版（出力と同じ）</span>
             </div>
             <div className="exportPreviewStage">
               {viewState === "no-preview" && (
@@ -478,10 +483,13 @@ export function LinkedExportScreen({
               {viewState === "preview-loading" && (
                 <div className="exportEmptyState"><span className="exportSpinner"/><strong>プレビュー生成中…</strong><p>本文を連結して組版しています</p></div>
               )}
-              {viewState === "preview-ready" && previewDocument && (
-                <div className="exportPreviewSpread" style={{ transform: `scale(${zoom / 100})` }}>
-                  {visiblePages.map((page) => <PreviewPage key={page.pageNumber} document={previewDocument} page={page} />)}
-                </div>
+              {viewState === "preview-ready" && previewSrc && (
+                <iframe
+                  key={previewSrc}
+                  className="exportVivliostyleFrame"
+                  src={previewSrc}
+                  title="組版プレビュー"
+                />
               )}
               {viewState === "preview-error" && failure && (
                 <div className="exportErrorState" role="alert">

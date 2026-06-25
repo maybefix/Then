@@ -6197,6 +6197,33 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
     color-mix(in srgb, var(--bg-root) 88%, #05070a);
 }
 
+/* The Vivliostyle Viewer iframe fills the whole preview stage. */
+.exportVivliostyleFrame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+  display: block;
+}
+.exportPreviewStage:has(.exportVivliostyleFrame) {
+  padding: 0;
+  overflow: hidden;
+  align-items: stretch;
+  justify-content: stretch;
+}
+.exportPreviewEngineTag {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* The export window reuses the main window's theme variables by carrying the
+   appShell class; neutralize appShell's desktop min size for this window. */
+.appShell.exportWindowRoot,
+.appShell.exportWindowLoadState {
+  min-width: 0;
+  min-height: 0;
+}
+
 .exportEmptyState,
 .exportErrorState {
   display: flex;

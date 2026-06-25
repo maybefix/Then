@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import {
   LinkedExportScreen,
   type PreparedDocxExport,
@@ -72,6 +72,8 @@ function bytesToBase64(bytes: Uint8Array): string {
 export default function ExportWindowApp() {
   const [payload, setPayload] = useState<ExportWindowPayload | null>(previewFixture);
   const [loadError, setLoadError] = useState("");
+  const [theme, setTheme] = useState("dark");
+  const [uiFont, setUiFont] = useState("");
   const printViewportRef = useRef<HTMLDivElement>(null);
 
   const loadPayload = useCallback(async () => {
@@ -95,6 +97,20 @@ export default function ExportWindowApp() {
     }).then((unlisten) => { dispose = unlisten; });
     return () => dispose?.();
   }, [loadPayload]);
+
+  // Match the main window's theme colours and UI font.
+  useEffect(() => {
+    if (previewFixture) return;
+    void invoke<{ settings?: { theme?: string; uiFontFamily?: string } } | null>("load_app_state")
+      .then((state) => {
+        const settings = state?.settings;
+        if (settings?.theme) setTheme(settings.theme);
+        if (settings?.uiFontFamily) setUiFont(settings.uiFontFamily);
+      })
+      .catch(() => {});
+  }, []);
+
+  const themeStyle = uiFont ? ({ "--ui-font-family": uiFont } as CSSProperties) : undefined;
 
   // Active PDF engine: Vivliostyle lays out the flowing HTML (CSS Paged Media)
   // in a hidden bundled-viewer webview, then WebView2 PrintToPdf serializes it.
@@ -176,12 +192,12 @@ export default function ExportWindowApp() {
   };
 
   if (loadError) {
-    return <main className="exportWindowLoadState"><strong>エクスポート画面を開けませんでした</strong><pre>{loadError}</pre><button type="button" onClick={() => void loadPayload()}>再試行</button></main>;
+    return <main className="appShell exportWindowLoadState" data-theme={theme} style={themeStyle}><strong>エクスポート画面を開けませんでした</strong><pre>{loadError}</pre><button type="button" onClick={() => void loadPayload()}>再試行</button></main>;
   }
-  if (!payload) return <main className="exportWindowLoadState"><span className="exportSpinner"/><strong>本文ファイルを読み込んでいます…</strong></main>;
+  if (!payload) return <main className="appShell exportWindowLoadState" data-theme={theme} style={themeStyle}><span className="exportSpinner"/><strong>本文ファイルを読み込んでいます…</strong></main>;
 
   return (
-    <main className="exportWindowRoot">
+    <main className="appShell exportWindowRoot" data-theme={theme} style={themeStyle}>
       <LinkedExportScreen
         key={payload.requestId}
         title={payload.title}
