@@ -42,18 +42,37 @@ function normalRun(font: ExportFontFamily, text: string, extra = ""): string {
   return `<w:r>${runProperties(font, extra)}${textElement(text)}</w:r>`;
 }
 
-function rubyRun(
-  font: ExportFontFamily,
-  inline: Extract<ExportInline, { kind: "ruby" }>,
-): string {
-  return `<w:ruby><w:rubyPr><w:rubyAlign w:val="center"/><w:hps w:val="10"/><w:hpsRaise w:val="0"/><w:hpsBaseText w:val="20"/><w:lid w:val="ja-JP"/></w:rubyPr><w:rt>${normalRun(font, inline.reading, '<w:sz w:val="10"/><w:szCs w:val="10"/>')}</w:rt><w:rubyBase>${normalRun(font, inline.text)}</w:rubyBase></w:ruby>`;
+function bodyPointSize(document: LinkedExportDocument): number {
+  const body = document.layout.body;
+  return body.fontSizeUnit === "Q" ? body.fontSize * 0.711_319 : body.fontSize;
 }
 
-function inlineXml(font: ExportFontFamily, inline: ExportInline): string {
+function bodyHalfPoints(document: LinkedExportDocument): number {
+  return Math.max(12, Math.round(bodyPointSize(document) * 2));
+}
+
+function rubyRun(
+  font: ExportFontFamily,
+  baseHalfPoints: number,
+  inline: Extract<ExportInline, { kind: "ruby" }>,
+): string {
+  // Ruby (furigana) is ~half the base size and must be RAISED above the base —
+  // hpsRaise:0 makes Word overlap the ruby on the body text. hpsBaseText must be
+  // the real body size, not a fixed 10pt, or the ruby misaligns at other sizes.
+  const rubySize = Math.max(10, Math.round(baseHalfPoints / 2));
+  const rt = normalRun(
+    font,
+    inline.reading,
+    `<w:sz w:val="${rubySize}"/><w:szCs w:val="${rubySize}"/>`,
+  );
+  return `<w:ruby><w:rubyPr><w:rubyAlign w:val="center"/><w:hps w:val="${rubySize}"/><w:hpsRaise w:val="${baseHalfPoints}"/><w:hpsBaseText w:val="${baseHalfPoints}"/><w:lid w:val="ja-JP"/></w:rubyPr><w:rt>${rt}</w:rt><w:rubyBase>${normalRun(font, inline.text)}</w:rubyBase></w:ruby>`;
+}
+
+function inlineXml(font: ExportFontFamily, baseHalfPoints: number, inline: ExportInline): string {
   switch (inline.kind) {
     case "text": return normalRun(font, inline.text);
     case "bold": return normalRun(font, inline.text, "<w:b/><w:bCs/>");
-    case "ruby": return rubyRun(font, inline);
+    case "ruby": return rubyRun(font, baseHalfPoints, inline);
     case "emphasis":
       return normalRun(font, inline.text, `<w:em w:val="${inline.style === "dot" ? "dot" : "comma"}"/>`);
     case "tcy":
@@ -63,14 +82,14 @@ function inlineXml(font: ExportFontFamily, inline: ExportInline): string {
   }
 }
 
-function paragraphXml(font: ExportFontFamily, block: ExportBlock): string {
+function paragraphXml(font: ExportFontFamily, baseHalfPoints: number, block: ExportBlock): string {
   if (block.kind === "blank") return "<w:p/>";
   const style = block.kind === "heading"
     ? `<w:pStyle w:val="Heading${Math.max(1, Math.min(6, block.level))}"/>`
     : "";
   const align = `<w:jc w:val="${block.align}"/>`;
   const keep = block.kind === "heading" ? "<w:keepNext/><w:keepLines/>" : "";
-  return `<w:p><w:pPr>${style}${align}${keep}<w:widowControl/></w:pPr>${block.inlines.map((inline) => inlineXml(font, inline)).join("")}</w:p>`;
+  return `<w:p><w:pPr>${style}${align}${keep}<w:widowControl/></w:pPr>${block.inlines.map((inline) => inlineXml(font, baseHalfPoints, inline)).join("")}</w:p>`;
 }
 
 function mmToTwips(mm: number): number {
@@ -258,8 +277,9 @@ function sectionProperties(
 
 function documentXml(document: LinkedExportDocument, parts: SectionParts[]): string {
   const font = document.layout.body.fontFamily;
+  const half = bodyHalfPoints(document);
   const sections = document.sections.map((section, index) => {
-    const paragraphs = section.blocks.map((block) => paragraphXml(font, block)).join("\n");
+    const paragraphs = section.blocks.map((block) => paragraphXml(font, half, block)).join("\n");
     if (index === document.sections.length - 1) return paragraphs;
     return `${paragraphs}<w:p><w:pPr>${sectionProperties(document, index, parts[index])}</w:pPr></w:p>`;
   }).join("\n");
@@ -270,10 +290,8 @@ function documentXml(document: LinkedExportDocument, parts: SectionParts[]): str
 
 function stylesXml(document: LinkedExportDocument): string {
   const font = wordFontName(document.layout.body.fontFamily);
-  const pointSize = document.layout.body.fontSizeUnit === "Q"
-    ? document.layout.body.fontSize * 0.711_319
-    : document.layout.body.fontSize;
-  const halfPoints = Math.max(12, Math.round(pointSize * 2));
+  const pointSize = bodyPointSize(document);
+  const halfPoints = bodyHalfPoints(document);
   const lineTwips = Math.round(pointSize * document.layout.body.lineHeight * 20);
   const headings = [1.6, 1.4, 1.25, 1.15, 1.08, 1]
     .map((scale, index) => `<w:style w:type="paragraph" w:styleId="Heading${index + 1}"><w:name w:val="heading ${index + 1}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:keepLines/><w:spacing w:before="240" w:after="120"/></w:pPr><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:eastAsia="${font}"/><w:b/><w:sz w:val="${Math.round(halfPoints * scale)}"/><w:szCs w:val="${Math.round(halfPoints * scale)}"/><w:lang w:val="ja-JP" w:eastAsia="ja-JP"/></w:rPr></w:style>`)
