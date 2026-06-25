@@ -144,13 +144,15 @@ dependencies = [
 
 [[package]]
 name = "brew"
-version = "0.2.8"
+version = "0.3.0"
 dependencies = [
+ "base64 0.22.1",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
+ "webview2-com",
  "windows",
 ]
 

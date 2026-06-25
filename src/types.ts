@@ -1,3 +1,5 @@
+import type { ExportFontFamily } from "./export/types";
+
 export type Snippet = {
   id: string;
   title: string;
@@ -65,6 +67,7 @@ export type EditorSettings = {
   theme: AppTheme;
   editorFontFamily: string;
   uiFontFamily: string;
+  exportFontFamily: ExportFontFamily;
   fontSize: number;
   lineHeight: number;
   typewriterScroll: boolean;

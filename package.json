@@ -1,7 +1,7 @@
 {
   "name": "then",
   "private": true,
-  "version": "0.2.8",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,6 +9,7 @@
     "build": "tsc && vite build",
     "test:heading-move": "node scripts/test-heading-move.mjs",
     "test:heading-dnd-ui": "node scripts/test-heading-dnd-ui.mjs",
+    "test:export": "node scripts/verify-export.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
@@ -32,6 +33,7 @@
     "@tiptap/extension-text": "^2.11.5",
     "@tiptap/pm": "^2.11.5",
     "codemirror": "^6.0.2",
+    "jszip": "^3.10.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

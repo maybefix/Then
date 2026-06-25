@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import {
   ChangeEvent,
   DragEvent,
@@ -82,6 +83,10 @@ import {
   upsertRecentWorkspace,
 } from "./utils/projectTree";
 import { logHeadingDnd } from "./utils/headingDndDiagnostics";
+import {
+  exportFontFamilies,
+  type LoadedExportSource,
+} from "./export/types";
 
 const SNIPPET_DRAG_MIME = "application/x-brew-snippet-id";
 const BREADCRUMB_ENTRY_DRAG_MIME = "application/x-brew-project-entry-path";
@@ -282,6 +287,7 @@ const defaultSettings: EditorSettings = {
   theme: "dark",
   editorFontFamily: toCssFontFamilyValue("Noto Serif JP"),
   uiFontFamily: toCssFontFamilyValue("Segoe UI"),
+  exportFontFamily: "Noto Serif CJK JP",
   fontSize: 15,
   lineHeight: 1.82,
   typewriterScroll: true,
@@ -774,6 +780,11 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         settings.uiFontFamily,
         defaultSettings.uiFontFamily,
       ),
+      exportFontFamily: exportFontFamilies.some(
+        (fontFamily) => fontFamily === settings.exportFontFamily,
+      )
+        ? settings.exportFontFamily as EditorSettings["exportFontFamily"]
+        : defaultSettings.exportFontFamily,
       snippetStorageMode:
         settings.snippetStorageMode === "profile" ? "profile" : "workspace",
       theme: appThemeValues.includes(settings.theme as EditorSettings["theme"])
@@ -2316,6 +2327,63 @@ export default function App() {
     }
   };
 
+  const handleOpenLinkedExport = async () => {
+    if (!isTauriRuntime()) {
+      showToast("エクスポート画面はTauri版で利用できます");
+      return;
+    }
+
+    setLastError("");
+    try {
+      const projectFiles = projectFolder ? collectProjectTextFiles(projectFolder) : [];
+      const candidates = projectFiles.length > 0
+        ? projectFiles
+        : [{ path: currentFilePath ?? "", name: currentFileName }];
+      const sources: LoadedExportSource[] = [];
+      const readErrors: string[] = [];
+
+      for (const [index, file] of candidates.entries()) {
+        try {
+          const openTab = openTabs.find((tab) => tab.path === file.path);
+          const rawContent = file.path
+            ? openTab?.markdown ?? (await invoke<TextDocument>("read_text_file", { path: file.path })).content
+            : markdown;
+          const content = parseFrontMatter(rawContent).body;
+          const extension = file.name.match(/\.([^.]+)$/)?.[1]?.toLowerCase() ?? "txt";
+          sources.push({
+            id: file.path || `active-document-${index}`,
+            path: file.path,
+            extension,
+            displayName: file.name,
+            chars: content.replace(/\s/g, "").length,
+            enabled: true,
+            order: index,
+            startMode: index === 0 ? "continue" : "new-page",
+            markupMode: "then-markup",
+            content,
+          });
+        } catch (error) {
+          readErrors.push(`${file.name}: ${String(error)}`);
+        }
+      }
+
+      if (sources.length === 0) throw new Error(readErrors.join("\n") || "出力できる本文ファイルがありません");
+      const workspaceTitle = projectFolder?.name
+        ?? currentFileName.replace(/\.(?:txt|md)$/i, "")
+        ?? "本文連結";
+      await invoke("open_export_window", {
+        payload: {
+          requestId: String(Date.now()),
+          title: workspaceTitle,
+          sources,
+          sourceError: readErrors.length > 0 ? readErrors.join("\n") : undefined,
+        },
+      });
+    } catch (error) {
+      setLastError(String(error));
+    }
+  };
+
   const handleOpenProjectFolder = async () => {
     if (!isTauriRuntime()) {
       showToast("フォルダを開く機能はTauri版で利用できます");
@@ -2481,6 +2549,15 @@ export default function App() {
       setSaveStatus("error");
     }
   };
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let dispose: (() => void) | undefined;
+    void listen<string>("then-open-export-source", (event) => {
+      void handleProjectFileSelect(event.payload);
+    }).then((unlisten) => { dispose = unlisten; });
+    return () => dispose?.();
+  }, [currentFilePath, openTabs]);
 
   const jumpToEditorLine = (line: number) => {
     const targetLine = Math.max(1, line);
@@ -3377,6 +3454,14 @@ export default function App() {
                     onClick={() => closeFileMenuAndRun(handleSaveAs)}
                   >
                     別名で保存
+                  </button>
+                  <div className="menuDivider" role="separator" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => closeFileMenuAndRun(handleOpenLinkedExport)}
+                  >
+                    エクスポート…
                   </button>
                   <div className="menuDivider" role="separator" />
                   <button

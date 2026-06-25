@@ -68,6 +68,66 @@ textarea {
   font-family: var(--ui-font-family);
 }
 
+.printExportViewport {
+  display: none;
+}
+
+body.thenPdfExporting {
+  margin: 0;
+  background: #fff;
+}
+
+html[data-export-paginated="true"] {
+  background: #fff !important;
+}
+
+body.thenPdfExporting .appFrame {
+  display: none !important;
+}
+
+body.thenPdfExporting .appShell {
+  display: block;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: visible;
+  background: #fff;
+}
+
+body.thenPdfExporting .printExportViewport {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 100vh;
+  overflow: visible;
+  background: #fff;
+}
+
+@media print {
+  body.thenPdfExporting,
+  body.thenPdfExporting .appShell,
+  body.thenPdfExporting .printExportViewport {
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  body.thenPdfExporting .appFrame {
+    display: none !important;
+  }
+
+  body.thenPdfExporting .printExportViewport {
+    display: block !important;
+  }
+
+  body.thenPdfExporting .then-export-page {
+    margin: 0 !important;
+    box-shadow: none !important;
+  }
+}
+
 .appFrame {
   position: relative;
   display: flex;
@@ -5676,3 +5736,838 @@ body {
 .themePreview-energy-dark::before { background: #271b13; }
 .themePreview-energy-dark i { background: #fff8ef; }
 .themePreview-energy-dark b { background: linear-gradient(90deg, #ffa125, #f15f2e); }
+
+/* Linked PDF/DOCX export workspace */
+.exportModalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1700;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: color-mix(in srgb, var(--overlay) 88%, #05070a);
+  backdrop-filter: blur(5px);
+}
+
+.exportWindowRoot {
+  width: 100vw;
+  height: 100vh;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-root);
+}
+
+.exportWindowRoot .exportModalBackdrop {
+  position: absolute;
+  padding: 0;
+  background: var(--bg-root);
+  backdrop-filter: none;
+}
+
+.exportWindowRoot .linkedExportScreen {
+  width: 100vw;
+  height: 100vh;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.exportWindowLoadState {
+  display: grid;
+  width: 100vw;
+  height: 100vh;
+  place-content: center;
+  gap: 12px;
+  background: var(--bg-root);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.exportWindowLoadState pre {
+  max-width: 680px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--danger);
+  white-space: pre-wrap;
+}
+
+.exportWindowLoadState button {
+  justify-self: center;
+  padding: 7px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
+  display: none !important;
+}
+
+.linkedExportScreen {
+  position: relative;
+  display: flex;
+  width: min(1240px, calc(100vw - 32px));
+  height: min(820px, calc(100vh - 36px));
+  min-width: 0;
+  min-height: 500px;
+  overflow: hidden;
+  flex-direction: column;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--bg-primary);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.58);
+  color: var(--text-primary);
+}
+
+.exportModalHeader {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 11px 16px 10px 19px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-panel-strong);
+}
+
+.exportModalHeader h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.exportModalHeader p {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.exportHeaderActions,
+.exportFormatSwitch,
+.exportResponsiveTabs,
+.exportModalFooter,
+.exportPreviewToolbar,
+.exportSourceMainRow,
+.exportSourceMeta,
+.exportPanelHeading > div,
+.exportProgressMeta {
+  display: flex;
+  align-items: center;
+}
+
+.exportHeaderActions {
+  gap: 10px;
+}
+
+.exportHeaderActions > span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.exportFormatSwitch {
+  padding: 3px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.exportFormatSwitch button,
+.exportResponsiveTabs button,
+.exportPillGroup button {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.exportFormatSwitch button {
+  padding: 5px 14px;
+  font-size: 11px;
+}
+
+.exportFormatSwitch button.active,
+.exportResponsiveTabs button.active,
+.exportPillGroup button.active {
+  background: var(--accent);
+  color: var(--on-accent, #fff);
+  font-weight: 650;
+}
+
+.exportCloseButton {
+  width: 31px;
+  height: 31px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 17px;
+}
+
+.exportResponsiveTabs {
+  display: none;
+  gap: 4px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.exportResponsiveTabs button {
+  flex: 1;
+  padding: 7px;
+  font-size: 11px;
+}
+
+.exportModalBody {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.exportFilesPanel,
+.exportSettingsPanel {
+  display: flex;
+  min-height: 0;
+  flex: 0 0 auto;
+  flex-direction: column;
+  background: var(--bg-secondary);
+}
+
+.exportFilesPanel {
+  width: 292px;
+  border-right: 1px solid var(--border-subtle);
+}
+
+.exportSettingsPanel {
+  width: 320px;
+  overflow-y: auto;
+  border-left: 1px solid var(--border-subtle);
+}
+
+.exportPanelHeading {
+  flex: 0 0 auto;
+  padding: 13px 14px 9px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.exportPanelHeading > div {
+  gap: 8px;
+}
+
+.exportPanelHeading strong {
+  font-size: 12px;
+}
+
+.exportPanelHeading span,
+.exportExtensionBadge {
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.exportPanelHeading span {
+  padding: 1px 8px;
+}
+
+.exportPanelHeading p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.exportSourceList {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.exportSourceRow {
+  margin-bottom: 6px;
+  padding: 9px 9px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  background: var(--bg-panel-strong);
+  transition: opacity 120ms, border-color 120ms;
+}
+
+.exportSourceRow.disabled {
+  opacity: 0.48;
+  background: transparent;
+}
+
+.exportSourceMainRow {
+  min-width: 0;
+  gap: 7px;
+}
+
+.exportDragHandle {
+  color: var(--text-muted);
+  cursor: grab;
+  font-size: 12px;
+  letter-spacing: -2px;
+}
+
+.exportSourceMainRow input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+.exportSourceName {
+  min-width: 0;
+  overflow: hidden;
+  flex: 1;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 11px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exportSourceName:hover {
+  color: var(--accent-strong);
+}
+
+.exportExtensionBadge {
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.exportExtensionBadge.ext-md {
+  border-color: rgba(173, 120, 220, 0.45);
+  background: rgba(173, 120, 220, 0.12);
+  color: #cba1ec;
+}
+
+.exportMoveButtons {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+}
+
+.exportMoveButtons button {
+  width: 20px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 8px;
+}
+
+.exportMoveButtons button:disabled {
+  opacity: 0.25;
+}
+
+.exportSourceMeta {
+  gap: 8px;
+  padding: 7px 0 0 25px;
+  color: var(--text-muted);
+  font-size: 9.5px;
+}
+
+.exportSourceMeta label {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+}
+
+.exportSourceMeta select {
+  min-width: 0;
+  flex: 1;
+  padding: 4px 5px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.exportPanelFoot {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: space-between;
+  padding: 9px 13px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 9.5px;
+}
+
+.exportPreviewPanel {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.exportPreviewToolbar {
+  min-height: 45px;
+  flex: 0 0 auto;
+  gap: 5px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.exportPreviewToolbar button,
+.exportRefreshButton {
+  min-width: 27px;
+  min-height: 27px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.exportPreviewToolbar button:disabled {
+  opacity: .35;
+}
+
+.exportPreviewToolbar span {
+  min-width: 42px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  text-align: center;
+}
+
+.exportPreviewToolbar .exportRefreshButton {
+  padding: 5px 11px;
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border-subtle));
+  color: var(--accent-strong);
+}
+
+.exportToolbarSpacer {
+  flex: 1;
+}
+
+.exportPreviewToolbar i {
+  width: 1px;
+  height: 18px;
+  margin: 0 3px;
+  background: var(--border-subtle);
+}
+
+.exportPreviewStage {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  overflow: auto;
+  flex: 1;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 28px 18px;
+  background:
+    repeating-linear-gradient(45deg, rgba(255,255,255,.018), rgba(255,255,255,.018) 10px, transparent 10px, transparent 20px),
+    color-mix(in srgb, var(--bg-root) 88%, #05070a);
+}
+
+.exportEmptyState,
+.exportErrorState {
+  display: flex;
+  width: min(420px, 90%);
+  margin: auto;
+  align-items: center;
+  flex-direction: column;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.exportEmptyState > span:first-child,
+.exportErrorState > span:first-child {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 13px;
+  place-items: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+  background: var(--bg-panel-strong);
+  font-size: 20px;
+}
+
+.exportEmptyState strong,
+.exportErrorState strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.exportEmptyState p,
+.exportErrorState p {
+  margin: 7px 0 15px;
+  font-size: 10.5px;
+  line-height: 1.65;
+}
+
+.exportEmptyState button,
+.exportErrorState button,
+.exportPresetButtons button {
+  padding: 7px 11px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 10.5px;
+}
+
+.exportErrorState > span:first-child {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  color: var(--danger);
+}
+
+.exportErrorState .exportLogToggle {
+  border: 0;
+  background: transparent;
+}
+
+.exportErrorState pre {
+  width: 100%;
+  max-height: 120px;
+  overflow: auto;
+  margin: 0 0 12px;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: #101218;
+  color: #d7b7b7;
+  font: 9px/1.55 ui-monospace, Consolas, monospace;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.exportErrorState > div {
+  display: flex;
+  gap: 8px;
+}
+
+.exportSpinner {
+  display: inline-block;
+  width: 25px;
+  height: 25px;
+  margin-bottom: 12px;
+  border: 2px solid var(--border-subtle);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: export-spin 800ms linear infinite;
+}
+
+@keyframes export-spin { to { transform: rotate(360deg); } }
+
+.exportPreviewSpread {
+  display: flex;
+  width: min(590px, 100%);
+  gap: 2px;
+  transform-origin: top center;
+  filter: drop-shadow(0 14px 30px rgba(0, 0, 0, .5));
+  transition: transform 120ms;
+}
+
+.exportPreviewPaper {
+  position: relative;
+  width: calc(50% - 1px);
+  overflow: hidden;
+  flex: 0 0 calc(50% - 1px);
+  background: #f6f3ec;
+  color: #23211c;
+}
+
+.exportPreviewContent {
+  position: absolute;
+  overflow: hidden;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  line-break: strict;
+}
+
+.exportPreviewContent .then-block {
+  margin: 0 0 .8em;
+}
+
+.exportPreviewContent .then-heading {
+  font-size: 1.25em;
+  font-weight: 700;
+}
+
+.exportPreviewContent .then-align-center { text-align: center; }
+.exportPreviewContent .then-align-end { text-align: end; }
+.exportPreviewContent .then-tcy { text-combine-upright: all; }
+.exportPreviewContent .then-emphasis { text-emphasis-position: over right; }
+.exportPreviewContent .then-emphasis-auto,
+.exportPreviewContent .then-emphasis-goma { text-emphasis-style: sesame; }
+.exportPreviewContent .then-emphasis-dot { text-emphasis-style: dot; }
+.exportPreviewContent rt { font-size: .5em; }
+
+.exportPreviewHeader,
+.exportPreviewFooter {
+  position: absolute;
+  z-index: 2;
+  right: 7%;
+  left: 7%;
+  color: #8d877e;
+  font: 8px/1.2 "Noto Serif CJK JP", serif;
+  text-align: center;
+}
+
+.exportPreviewHeader { top: 3.6%; }
+.exportPreviewFooter { bottom: 3.2%; }
+.exportPreviewFooter-top-center { top: 3.6%; bottom: auto; }
+.exportPreviewFooter-outer { right: 5%; left: auto; width: auto; }
+.exportPreviewPaper:nth-child(1) .exportPreviewFooter-outer { right: auto; left: 5%; }
+.exportPreviewFooter-inner { right: auto; left: 5%; width: auto; }
+.exportPreviewPaper:nth-child(1) .exportPreviewFooter-inner { right: 5%; left: auto; }
+
+.exportBlankPageLabel {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #aaa49a;
+  font-size: 9px;
+}
+
+.exportSettingsSectionHeader {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 13px;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.exportSettingsSectionHeader span { font-size: 11.5px; font-weight: 650; }
+.exportSettingsSectionHeader small { overflow: hidden; color: var(--text-muted); font-size: 9px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+
+.exportSettingsContent {
+  display: flex;
+  gap: 10px;
+  padding: 12px 13px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-direction: column;
+  background: color-mix(in srgb, var(--bg-panel-strong) 76%, transparent);
+}
+
+.exportSettingsContent label,
+.exportFieldLabel {
+  display: flex;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 9.5px;
+  flex-direction: column;
+}
+
+.exportSettingsContent input,
+.exportSettingsContent select {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.exportSettingsContent input:disabled { opacity: .42; }
+
+.exportFieldGrid {
+  display: grid;
+  gap: 7px;
+}
+
+.exportFieldGrid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.exportFieldGrid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.exportHelp {
+  margin: -2px 0 0;
+  color: var(--text-muted);
+  font-size: 8.5px;
+  line-height: 1.5;
+}
+
+.exportPillGroup {
+  display: flex;
+  gap: 5px;
+}
+
+.exportPillGroup button {
+  flex: 1;
+  padding: 6px;
+  border: 1px solid var(--border-subtle);
+  font-size: 10px;
+}
+
+.exportSettingsContent .exportCheckRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+  flex-direction: row;
+}
+
+.exportCheckRow input {
+  width: auto;
+  accent-color: var(--accent);
+}
+
+.exportPresetButtons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.exportPresetButtons button:last-child { grid-column: 1 / -1; }
+
+.exportModalFooter {
+  min-height: 56px;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 9px 13px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-panel-strong);
+}
+
+.exportModalFooter button,
+.exportCompleteCard button {
+  padding: 8px 13px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 10.5px;
+}
+
+.exportModalFooter button.primary,
+.exportCompleteCard button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent, #fff);
+  font-weight: 650;
+}
+
+.exportModalFooter button:disabled { cursor: not-allowed; opacity: .4; }
+.exportSavedLabel { min-width: 0; flex: 1; color: var(--success); font-size: 10px; }
+
+.exportProgressOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: rgba(7, 9, 12, .82);
+  backdrop-filter: blur(4px);
+}
+
+.exportProgressOverlay > div {
+  width: min(380px, calc(100% - 40px));
+  padding: 24px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 13px;
+  background: var(--bg-panel-strong);
+  text-align: center;
+  box-shadow: 0 22px 55px rgba(0, 0, 0, .45);
+}
+
+.exportProgressOverlay strong {
+  display: block;
+  font-size: 13px;
+}
+
+.exportProgressOverlay p {
+  margin: 7px 0 14px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+.exportProgressBar {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--bg-tertiary);
+}
+
+.exportProgressBar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-strong));
+  transition: width 180ms;
+}
+
+.exportProgressMeta {
+  justify-content: space-between;
+  margin-top: 7px;
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.exportCompleteCard > span {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  margin: 0 auto 13px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--success) 48%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--success) 13%, transparent);
+  color: var(--success);
+  font-size: 21px;
+}
+
+.exportCompleteCard > div {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+@media (max-width: 1100px) {
+  .linkedExportScreen { width: min(760px, calc(100vw - 24px)); }
+  .exportResponsiveTabs { display: flex; }
+  .exportFilesPanel,
+  .exportPreviewPanel,
+  .exportSettingsPanel { display: none; width: 100%; border: 0; }
+  .exportFilesPanel.mobileActive,
+  .exportPreviewPanel.mobileActive,
+  .exportSettingsPanel.mobileActive { display: flex; flex: 1; }
+  .exportSettingsPanel.mobileActive { overflow-y: auto; }
+}
+
+@media (max-width: 620px) {
+  .exportModalBackdrop { padding: 6px; }
+  .linkedExportScreen { width: calc(100vw - 12px); height: calc(100vh - 12px); min-height: 0; }
+  .exportModalHeader { min-height: 58px; padding-inline: 12px; }
+  .exportHeaderActions > span { display: none; }
+  .exportModalFooter { flex-wrap: wrap; }
+  .exportSavedLabel { flex-basis: 100%; }
+  .exportModalFooter button { flex: 1; padding-inline: 6px; }
+}

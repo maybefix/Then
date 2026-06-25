@@ -1,4 +1,5 @@
 import type { EditorSettings, FontOption } from "../../types";
+import { exportFontFamilies, type ExportFontFamily } from "../../export/types";
 import { getThemeDefinition } from "../../themes";
 
 type SettingsModalProps = {
@@ -67,6 +68,21 @@ export function SettingsModal({
               {systemFonts.map((font) => (
                 <option key={font.label} value={font.cssFamily}>
                   {font.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>DOCX・PDF出力フォント</span>
+            <select
+              value={settings.exportFontFamily}
+              onChange={(event) =>
+                onUpdateSettings("exportFontFamily", event.target.value as ExportFontFamily)
+              }
+            >
+              {exportFontFamilies.map((fontFamily) => (
+                <option key={fontFamily} value={fontFamily}>
+                  {fontFamily}
                 </option>
               ))}
             </select>

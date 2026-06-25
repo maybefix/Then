@@ -2,7 +2,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use tauri::Manager;
+use std::sync::Mutex;
+use std::time::Duration;
+use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 
 #[derive(Serialize)]
@@ -11,6 +13,15 @@ struct TextDocument {
     name: String,
     content: String,
 }
+
+#[derive(Serialize)]
+struct ExportResult {
+    path: String,
+    name: String,
+}
+
+#[derive(Default)]
+struct ExportWindowState(Mutex<Option<serde_json::Value>>);
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -68,6 +79,7 @@ fn debug_log(message: &str) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(ExportWindowState::default())
         .invoke_handler(tauri::generate_handler![
             load_app_state,
             save_app_state,
@@ -76,6 +88,13 @@ pub fn run() {
             read_text_file,
             save_text_file_dialog,
             save_text_file,
+            save_export_file_dialog,
+            pick_export_path,
+            export_pdf,
+            open_export_window,
+            get_export_window_payload,
+            open_export_location,
+            focus_source_in_main,
             save_heading_move,
             log_heading_dnd,
             open_markdown_file_dialog,
@@ -169,6 +188,298 @@ fn save_text_file(path: String, content: String) -> Result<TextDocument, String>
     let path = PathBuf::from(path);
     write_text_file(&path, &content)?;
     read_text_document(&path)
+}
+
+// Must be async: synchronous commands run on the main thread, and
+// WebviewWindowBuilder::build() blocks waiting on the main-thread event loop, so
+// building a window from a sync command deadlocks — the new webview is created
+// but never navigates (stays blank/white) and the command never returns. Running
+// async moves this off the main thread so build() can complete.
+#[tauri::command]
+async fn open_export_window(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, ExportWindowState>,
+    payload: serde_json::Value,
+) -> Result<(), String> {
+    *state
+        .0
+        .lock()
+        .map_err(|_| "エクスポート画面の状態を更新できませんでした".to_string())? =
+        Some(payload.clone());
+
+    if let Some(window) = app.get_webview_window("linked-export") {
+        window
+            .emit("then-export-payload", payload)
+            .map_err(|error| format!("エクスポート画面を更新できませんでした: {error}"))?;
+        window
+            .show()
+            .map_err(|error| format!("エクスポート画面を表示できませんでした: {error}"))?;
+        window
+            .set_focus()
+            .map_err(|error| format!("エクスポート画面を前面に移動できませんでした: {error}"))?;
+        return Ok(());
+    }
+
+    // NOTE: WebviewUrl::App takes a path (PathBuf), so a "?view=export" query
+    // string here is not resolved and the webview ends up on about:blank (blank
+    // white, frozen window). The export view is selected by the window label
+    // ("linked-export") on the frontend instead — see main.tsx.
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        "linked-export",
+        tauri::WebviewUrl::App("index.html".into()),
+    )
+    .title("Then - エクスポート")
+    .inner_size(1240.0, 820.0)
+    .min_inner_size(720.0, 560.0)
+    .center()
+    // The WebView2 drag-and-drop handler must be disabled here, exactly as the
+    // main window does via "dragDropEnabled": false in tauri.conf.json. With the
+    // default handler enabled, this second webview freezes on Windows: it stays
+    // blank/white and stops processing window messages, so it cannot even be
+    // closed.
+    .disable_drag_drop_handler()
+    .build()
+    .map_err(|error| format!("エクスポート画面を開けませんでした: {error}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn get_export_window_payload(
+    state: tauri::State<'_, ExportWindowState>,
+) -> Result<Option<serde_json::Value>, String> {
+    state
+        .0
+        .lock()
+        .map_err(|_| "エクスポート画面の状態を取得できませんでした".to_string())
+        .map(|payload| payload.clone())
+}
+
+#[tauri::command]
+fn open_export_location(path: String) -> Result<(), String> {
+    let path = PathBuf::from(path);
+    #[cfg(windows)]
+    {
+        std::process::Command::new("explorer.exe")
+            .arg("/select,")
+            .arg(&path)
+            .spawn()
+            .map_err(|error| format!("保存先を開けませんでした: {error}"))?;
+        return Ok(());
+    }
+    #[cfg(not(windows))]
+    {
+        let target = path.parent().unwrap_or(&path);
+        std::process::Command::new("xdg-open")
+            .arg(target)
+            .spawn()
+            .map_err(|error| format!("保存先を開けませんでした: {error}"))?;
+        Ok(())
+    }
+}
+
+#[tauri::command]
+fn focus_source_in_main(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "編集画面が見つかりませんでした".to_string())?;
+    window
+        .emit("then-open-export-source", path)
+        .map_err(|error| format!("本文ファイルを編集画面へ渡せませんでした: {error}"))?;
+    window
+        .show()
+        .map_err(|error| format!("編集画面を表示できませんでした: {error}"))?;
+    window
+        .set_focus()
+        .map_err(|error| format!("編集画面を前面に移動できませんでした: {error}"))?;
+    Ok(())
+}
+
+fn ensure_extension(mut path: PathBuf, extension: &str) -> PathBuf {
+    let normalized = extension.trim_start_matches('.');
+    if path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.eq_ignore_ascii_case(normalized))
+        != Some(true)
+    {
+        path.set_extension(normalized);
+    }
+    path
+}
+
+fn export_result(path: &Path) -> ExportResult {
+    ExportResult {
+        path: path.to_string_lossy().into_owned(),
+        name: path
+            .file_name()
+            .map(|value| value.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+    }
+}
+
+#[tauri::command]
+fn save_export_file_dialog(
+    app: tauri::AppHandle,
+    data_base64: String,
+    file_name: String,
+    extension: String,
+    description: String,
+) -> Result<Option<ExportResult>, String> {
+    use base64::Engine;
+
+    let Some(path) = app
+        .dialog()
+        .file()
+        .add_filter(&description, &[extension.as_str()])
+        .set_file_name(&file_name)
+        .blocking_save_file()
+    else {
+        return Ok(None);
+    };
+
+    let path = ensure_extension(dialog_path_to_path_buf(path)?, &extension);
+    let data = base64::engine::general_purpose::STANDARD
+        .decode(data_base64)
+        .map_err(|error| format!("エクスポートデータを復号できませんでした: {error}"))?;
+    std::fs::write(&path, data)
+        .map_err(|error| format!("{} を保存できませんでした: {error}", path.display()))?;
+    Ok(Some(export_result(&path)))
+}
+
+#[tauri::command]
+fn pick_export_path(
+    app: tauri::AppHandle,
+    file_name: String,
+    extension: String,
+    description: String,
+) -> Result<Option<ExportResult>, String> {
+    let Some(path) = app
+        .dialog()
+        .file()
+        .add_filter(&description, &[extension.as_str()])
+        .set_file_name(&file_name)
+        .blocking_save_file()
+    else {
+        return Ok(None);
+    };
+    let path = ensure_extension(dialog_path_to_path_buf(path)?, &extension);
+    Ok(Some(export_result(&path)))
+}
+
+#[tauri::command]
+async fn export_pdf(
+    webview: tauri::WebviewWindow,
+    path: String,
+    page_width_mm: f64,
+    page_height_mm: f64,
+    margin_top_mm: f64,
+    margin_right_mm: f64,
+    margin_bottom_mm: f64,
+    margin_left_mm: f64,
+) -> Result<ExportResult, String> {
+    if !page_width_mm.is_finite()
+        || !page_height_mm.is_finite()
+        || !(20.0..=2_000.0).contains(&page_width_mm)
+        || !(20.0..=2_000.0).contains(&page_height_mm)
+        || [margin_top_mm, margin_right_mm, margin_bottom_mm, margin_left_mm]
+            .iter()
+            .any(|margin| !margin.is_finite() || *margin < 0.0)
+        || margin_left_mm + margin_right_mm >= page_width_mm
+        || margin_top_mm + margin_bottom_mm >= page_height_mm
+    {
+        return Err("PDF用紙サイズが不正です".to_string());
+    }
+    let output_path = PathBuf::from(&path);
+    let result = export_result(&output_path);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use webview2_com::Microsoft::Web::WebView2::Win32::{
+            ICoreWebView2Environment6, ICoreWebView2_7,
+        };
+        use webview2_com::PrintToPdfCompletedHandler;
+        use windows::core::{Interface, PCWSTR};
+
+        let wide_path: Vec<u16> = output_path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let (sender, receiver) = std::sync::mpsc::channel::<Result<(), String>>();
+
+        webview
+            .with_webview(move |platform_webview| {
+                let callback_sender = sender.clone();
+                let print_result = unsafe {
+                    platform_webview
+                        .controller()
+                        .CoreWebView2()
+                        .and_then(|core| core.cast::<ICoreWebView2_7>())
+                        .and_then(|core| {
+                            let environment = platform_webview
+                                .environment()
+                                .cast::<ICoreWebView2Environment6>()?;
+                            let settings = environment.CreatePrintSettings()?;
+                            settings.SetScaleFactor(1.0)?;
+                            settings.SetPageWidth(page_width_mm / 25.4)?;
+                            settings.SetPageHeight(page_height_mm / 25.4)?;
+                            settings.SetMarginTop(margin_top_mm / 25.4)?;
+                            settings.SetMarginBottom(margin_bottom_mm / 25.4)?;
+                            settings.SetMarginLeft(margin_left_mm / 25.4)?;
+                            settings.SetMarginRight(margin_right_mm / 25.4)?;
+                            settings.SetShouldPrintBackgrounds(true)?;
+                            settings.SetShouldPrintHeaderAndFooter(false)?;
+                            let handler = PrintToPdfCompletedHandler::create(Box::new(
+                                move |error, succeeded| {
+                                    let outcome = error
+                                        .map_err(|error| format!("WebView2 PDF出力に失敗しました: {error}"))
+                                        .and_then(|_| {
+                                            if succeeded {
+                                                Ok(())
+                                            } else {
+                                                Err("WebView2がPDF出力を完了できませんでした".to_string())
+                                            }
+                                        });
+                                    let _ = callback_sender.send(outcome);
+                                    Ok(())
+                                },
+                            ));
+                            core.PrintToPdf(
+                                PCWSTR(wide_path.as_ptr()),
+                                &settings,
+                                &handler,
+                            )
+                        })
+                };
+
+                if let Err(error) = print_result {
+                    let _ = sender.send(Err(format!("WebView2 PDF出力を開始できませんでした: {error}")));
+                }
+            })
+            .map_err(|error| format!("WebView2へ接続できませんでした: {error}"))?;
+
+        tauri::async_runtime::spawn_blocking(move || {
+            receiver
+                .recv_timeout(Duration::from_secs(90))
+                .map_err(|error| format!("WebView2 PDF出力がタイムアウトしました: {error}"))?
+        })
+        .await
+        .map_err(|error| format!("PDF出力処理に失敗しました: {error}"))??;
+
+        if !output_path.is_file() {
+            return Err("PDFファイルが生成されませんでした".to_string());
+        }
+        return Ok(result);
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = webview;
+        let _ = path;
+        Err("PDF出力は現在Windows版でのみ利用できます".to_string())
+    }
 }
 
 #[tauri::command]

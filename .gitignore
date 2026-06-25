@@ -4,6 +4,8 @@ dist/
 ui-check*.png
 src-tauri/target/
 src-tauri/gen/
+test-artifacts/
+/tmp/
 
 *.log
 *.tmp
