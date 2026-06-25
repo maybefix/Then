@@ -1,6 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   LinkedExportScreen,
@@ -163,9 +162,9 @@ export default function ExportWindowApp() {
         title={payload.title}
         initialSources={payload.sources}
         sourceError={payload.sourceError}
-        onClose={() => void getCurrentWebviewWindow().close()}
+        onClose={() => void invoke("close_export_window")}
         onOpenSource={(path) => {
-          void invoke("focus_source_in_main", { path }).then(() => getCurrentWebviewWindow().close());
+          void invoke("focus_source_in_main", { path }).then(() => invoke("close_export_window"));
         }}
         onExportPdf={exportPdf}
         onExportDocx={exportDocx}

@@ -5804,6 +5804,20 @@ body {
   color: var(--text-primary);
 }
 
+/*
+ * During PDF export the print pages are stacked into .printExportViewport, which
+ * lives inside .exportWindowRoot. That root is normally height:100vh with
+ * overflow:hidden, which would clip the multi-page stack down to a single screen
+ * height and make WebView2 PrintToPdf emit only one page. Release the clip so the
+ * root grows to the full document height and every page is printed.
+ */
+body.thenPdfExporting .exportWindowRoot {
+  display: block;
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
 body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   display: none !important;
 }

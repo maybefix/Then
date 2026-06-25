@@ -95,6 +95,7 @@ pub fn run() {
             get_export_window_payload,
             open_export_location,
             focus_source_in_main,
+            close_export_window,
             save_heading_move,
             log_heading_dnd,
             open_markdown_file_dialog,
@@ -292,6 +293,21 @@ fn focus_source_in_main(app: tauri::AppHandle, path: String) -> Result<(), Strin
     window
         .set_focus()
         .map_err(|error| format!("編集画面を前面に移動できませんでした: {error}"))?;
+    Ok(())
+}
+
+// The export window closes itself through this command instead of the frontend
+// WebviewWindow.close() API, because that API requires the core:window:allow-close
+// capability which this app does not grant — so the close/×/cancel buttons would
+// otherwise be silently rejected by the ACL. App-defined commands are not ACL
+// gated, so closing from Rust always works.
+#[tauri::command]
+fn close_export_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("linked-export") {
+        window
+            .close()
+            .map_err(|error| format!("エクスポート画面を閉じられませんでした: {error}"))?;
+    }
     Ok(())
 }
 
