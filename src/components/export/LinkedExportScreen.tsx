@@ -29,6 +29,7 @@ import {
 export type PreparedPdfExport = {
   css: string;
   markup: string;
+  vivliostyleHtml: string;
   pageCount: number;
   layout: ExportLayoutProfile;
   title: string;

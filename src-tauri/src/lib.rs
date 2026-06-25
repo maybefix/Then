@@ -80,6 +80,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(ExportWindowState::default())
+        .manage(ViewerExportState::default())
         .invoke_handler(tauri::generate_handler![
             load_app_state,
             save_app_state,
@@ -91,6 +92,9 @@ pub fn run() {
             save_export_file_dialog,
             pick_export_path,
             export_pdf,
+            export_pdf_vivliostyle,
+            get_viewer_doc,
+            viewer_render_done,
             open_export_window,
             get_export_window_payload,
             open_export_location,
@@ -383,6 +387,263 @@ fn pick_export_path(
     Ok(Some(export_result(&path)))
 }
 
+// Drives WebView2 PrintToPdf on a specific webview. Shared by the native export
+// path (prints the export window) and the Vivliostyle path (prints the hidden
+// viewer webview after Vivliostyle has laid the pages out).
+#[cfg(windows)]
+async fn print_webview_to_pdf(
+    webview: tauri::WebviewWindow,
+    output_path: PathBuf,
+    page_width_mm: f64,
+    page_height_mm: f64,
+    margin_top_mm: f64,
+    margin_right_mm: f64,
+    margin_bottom_mm: f64,
+    margin_left_mm: f64,
+) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2Environment6, ICoreWebView2_7,
+    };
+    use webview2_com::PrintToPdfCompletedHandler;
+    use windows::core::{Interface, PCWSTR};
+
+    let wide_path: Vec<u16> = output_path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let (sender, receiver) = std::sync::mpsc::channel::<Result<(), String>>();
+
+    webview
+        .with_webview(move |platform_webview| {
+            let callback_sender = sender.clone();
+            let print_result = unsafe {
+                platform_webview
+                    .controller()
+                    .CoreWebView2()
+                    .and_then(|core| core.cast::<ICoreWebView2_7>())
+                    .and_then(|core| {
+                        let environment = platform_webview
+                            .environment()
+                            .cast::<ICoreWebView2Environment6>()?;
+                        let settings = environment.CreatePrintSettings()?;
+                        settings.SetScaleFactor(1.0)?;
+                        settings.SetPageWidth(page_width_mm / 25.4)?;
+                        settings.SetPageHeight(page_height_mm / 25.4)?;
+                        settings.SetMarginTop(margin_top_mm / 25.4)?;
+                        settings.SetMarginBottom(margin_bottom_mm / 25.4)?;
+                        settings.SetMarginLeft(margin_left_mm / 25.4)?;
+                        settings.SetMarginRight(margin_right_mm / 25.4)?;
+                        settings.SetShouldPrintBackgrounds(true)?;
+                        settings.SetShouldPrintHeaderAndFooter(false)?;
+                        let handler = PrintToPdfCompletedHandler::create(Box::new(
+                            move |error, succeeded| {
+                                let outcome = error
+                                    .map_err(|error| format!("WebView2 PDF出力に失敗しました: {error}"))
+                                    .and_then(|_| {
+                                        if succeeded {
+                                            Ok(())
+                                        } else {
+                                            Err("WebView2がPDF出力を完了できませんでした".to_string())
+                                        }
+                                    });
+                                let _ = callback_sender.send(outcome);
+                                Ok(())
+                            },
+                        ));
+                        core.PrintToPdf(PCWSTR(wide_path.as_ptr()), &settings, &handler)
+                    })
+            };
+
+            if let Err(error) = print_result {
+                let _ = sender.send(Err(format!("WebView2 PDF出力を開始できませんでした: {error}")));
+            }
+        })
+        .map_err(|error| format!("WebView2へ接続できませんでした: {error}"))?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        receiver
+            .recv_timeout(Duration::from_secs(90))
+            .map_err(|error| format!("WebView2 PDF出力がタイムアウトしました: {error}"))?
+    })
+    .await
+    .map_err(|error| format!("PDF出力処理に失敗しました: {error}"))??;
+
+    Ok(())
+}
+
+// State for the Vivliostyle export flow: the source HTML served to the hidden
+// viewer webview, and the one-shot channel the viewer signals when CSS paged
+// layout is complete.
+#[derive(Default)]
+struct ViewerExportState {
+    html: Mutex<Option<String>>,
+    done: Mutex<Option<std::sync::mpsc::Sender<Result<(), String>>>>,
+}
+
+// Runs inside the hidden Vivliostyle viewer webview (injected before page
+// scripts). On first load it pulls the document and reloads the viewer with it
+// as the src; once Vivliostyle reports completion it signals the backend.
+const VIEWER_INIT_SCRIPT: &str = r#"(function(){
+  try {
+    if (String(location.pathname).indexOf('vivliostyle-viewer/index.html') < 0) return;
+    function invoke(c,a){ return window.__TAURI_INTERNALS__.invoke(c, a||{}); }
+    function done(ok,err){ try{ invoke('viewer_render_done',{ok:ok,error:String(err||'')}); }catch(e){} }
+    if (String(location.hash).indexOf('src=') >= 0) {
+      var n=0;
+      var iv=setInterval(function(){
+        n++;
+        var b=document.body;
+        var st=b?b.getAttribute('data-vivliostyle-viewer-status'):null;
+        if(st==='complete'){ clearInterval(iv); done(true,''); }
+        else if(n>600){ clearInterval(iv); done(false,'viewer timeout status='+st); }
+      },150);
+      return;
+    }
+    invoke('get_viewer_doc').then(function(html){
+      var dataUrl='data:text/html;charset=utf-8;base64,'+btoa(unescape(encodeURIComponent(html)));
+      location.hash='src='+encodeURIComponent(dataUrl)+'&renderAllPages=true&bookMode=true&spreadView=false';
+      location.reload();
+    }).catch(function(e){ done(false,'get_viewer_doc '+e); });
+  } catch(e) {
+    try{ window.__TAURI_INTERNALS__.invoke('viewer_render_done',{ok:false,error:'init '+e}); }catch(_){}
+  }
+})();"#;
+
+#[tauri::command]
+fn get_viewer_doc(state: tauri::State<'_, ViewerExportState>) -> Result<String, String> {
+    state
+        .html
+        .lock()
+        .map_err(|_| "Vivliostyle文書の取得に失敗しました".to_string())?
+        .clone()
+        .ok_or_else(|| "Vivliostyle文書が設定されていません".to_string())
+}
+
+#[tauri::command]
+fn viewer_render_done(
+    state: tauri::State<'_, ViewerExportState>,
+    ok: bool,
+    error: String,
+) -> Result<(), String> {
+    if let Some(sender) = state
+        .done
+        .lock()
+        .map_err(|_| "Vivliostyle状態の更新に失敗しました".to_string())?
+        .take()
+    {
+        let outcome = if ok {
+            Ok(())
+        } else if error.is_empty() {
+            Err("Vivliostyleの組版に失敗しました".to_string())
+        } else {
+            Err(error)
+        };
+        let _ = sender.send(outcome);
+    }
+    Ok(())
+}
+
+// PDF export via Vivliostyle: lay the flowing HTML out with the bundled
+// Vivliostyle Viewer in a hidden webview (CSS Paged Media), then serialize the
+// rendered pages with WebView2 PrintToPdf. No Node/Chromium sidecar is used.
+#[tauri::command]
+async fn export_pdf_vivliostyle(
+    app: tauri::AppHandle,
+    html: String,
+    path: String,
+    page_width_mm: f64,
+    page_height_mm: f64,
+) -> Result<ExportResult, String> {
+    if !page_width_mm.is_finite()
+        || !page_height_mm.is_finite()
+        || !(20.0..=2_000.0).contains(&page_width_mm)
+        || !(20.0..=2_000.0).contains(&page_height_mm)
+    {
+        return Err("PDF用紙サイズが不正です".to_string());
+    }
+    let output_path = PathBuf::from(&path);
+    let result = export_result(&output_path);
+
+    #[cfg(windows)]
+    {
+        let state = app.state::<ViewerExportState>();
+        let (sender, receiver) = std::sync::mpsc::channel::<Result<(), String>>();
+        *state
+            .html
+            .lock()
+            .map_err(|_| "Vivliostyle文書を設定できませんでした".to_string())? = Some(html);
+        *state
+            .done
+            .lock()
+            .map_err(|_| "Vivliostyle状態を設定できませんでした".to_string())? = Some(sender);
+
+        if let Some(existing) = app.get_webview_window("linked-export-viewer") {
+            let _ = existing.close();
+        }
+
+        let viewer = tauri::WebviewWindowBuilder::new(
+            &app,
+            "linked-export-viewer",
+            tauri::WebviewUrl::App("vendor/vivliostyle-viewer/index.html".into()),
+        )
+        .title("Vivliostyle")
+        .inner_size(900.0, 1200.0)
+        .visible(false)
+        .disable_drag_drop_handler()
+        .initialization_script(VIEWER_INIT_SCRIPT)
+        .build()
+        .map_err(|error| format!("Vivliostyleビューアを開けませんでした: {error}"))?;
+
+        let render = tauri::async_runtime::spawn_blocking(move || {
+            receiver.recv_timeout(Duration::from_secs(120))
+        })
+        .await
+        .map_err(|error| format!("Vivliostyle待機に失敗しました: {error}"))?;
+
+        // Always clear the per-export state and the hidden viewer.
+        if let Ok(mut guard) = state.html.lock() {
+            *guard = None;
+        }
+        if let Ok(mut guard) = state.done.lock() {
+            *guard = None;
+        }
+
+        let render = render
+            .map_err(|error| format!("Vivliostyle組版がタイムアウトしました: {error}"))?;
+        if let Err(message) = render {
+            let _ = viewer.close();
+            return Err(message);
+        }
+
+        let print = print_webview_to_pdf(
+            viewer.clone(),
+            output_path.clone(),
+            page_width_mm,
+            page_height_mm,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        )
+        .await;
+        let _ = viewer.close();
+        print?;
+
+        if !output_path.is_file() {
+            return Err("PDFファイルが生成されませんでした".to_string());
+        }
+        return Ok(result);
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = (app, html);
+        Err("PDF出力は現在Windows版でのみ利用できます".to_string())
+    }
+}
+
 #[tauri::command]
 async fn export_pdf(
     webview: tauri::WebviewWindow,
@@ -411,78 +672,17 @@ async fn export_pdf(
 
     #[cfg(windows)]
     {
-        use std::os::windows::ffi::OsStrExt;
-        use webview2_com::Microsoft::Web::WebView2::Win32::{
-            ICoreWebView2Environment6, ICoreWebView2_7,
-        };
-        use webview2_com::PrintToPdfCompletedHandler;
-        use windows::core::{Interface, PCWSTR};
-
-        let wide_path: Vec<u16> = output_path
-            .as_os_str()
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
-        let (sender, receiver) = std::sync::mpsc::channel::<Result<(), String>>();
-
-        webview
-            .with_webview(move |platform_webview| {
-                let callback_sender = sender.clone();
-                let print_result = unsafe {
-                    platform_webview
-                        .controller()
-                        .CoreWebView2()
-                        .and_then(|core| core.cast::<ICoreWebView2_7>())
-                        .and_then(|core| {
-                            let environment = platform_webview
-                                .environment()
-                                .cast::<ICoreWebView2Environment6>()?;
-                            let settings = environment.CreatePrintSettings()?;
-                            settings.SetScaleFactor(1.0)?;
-                            settings.SetPageWidth(page_width_mm / 25.4)?;
-                            settings.SetPageHeight(page_height_mm / 25.4)?;
-                            settings.SetMarginTop(margin_top_mm / 25.4)?;
-                            settings.SetMarginBottom(margin_bottom_mm / 25.4)?;
-                            settings.SetMarginLeft(margin_left_mm / 25.4)?;
-                            settings.SetMarginRight(margin_right_mm / 25.4)?;
-                            settings.SetShouldPrintBackgrounds(true)?;
-                            settings.SetShouldPrintHeaderAndFooter(false)?;
-                            let handler = PrintToPdfCompletedHandler::create(Box::new(
-                                move |error, succeeded| {
-                                    let outcome = error
-                                        .map_err(|error| format!("WebView2 PDF出力に失敗しました: {error}"))
-                                        .and_then(|_| {
-                                            if succeeded {
-                                                Ok(())
-                                            } else {
-                                                Err("WebView2がPDF出力を完了できませんでした".to_string())
-                                            }
-                                        });
-                                    let _ = callback_sender.send(outcome);
-                                    Ok(())
-                                },
-                            ));
-                            core.PrintToPdf(
-                                PCWSTR(wide_path.as_ptr()),
-                                &settings,
-                                &handler,
-                            )
-                        })
-                };
-
-                if let Err(error) = print_result {
-                    let _ = sender.send(Err(format!("WebView2 PDF出力を開始できませんでした: {error}")));
-                }
-            })
-            .map_err(|error| format!("WebView2へ接続できませんでした: {error}"))?;
-
-        tauri::async_runtime::spawn_blocking(move || {
-            receiver
-                .recv_timeout(Duration::from_secs(90))
-                .map_err(|error| format!("WebView2 PDF出力がタイムアウトしました: {error}"))?
-        })
-        .await
-        .map_err(|error| format!("PDF出力処理に失敗しました: {error}"))??;
+        print_webview_to_pdf(
+            webview,
+            output_path.clone(),
+            page_width_mm,
+            page_height_mm,
+            margin_top_mm,
+            margin_right_mm,
+            margin_bottom_mm,
+            margin_left_mm,
+        )
+        .await?;
 
         if !output_path.is_file() {
             return Err("PDFファイルが生成されませんでした".to_string());

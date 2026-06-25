@@ -96,7 +96,33 @@ export default function ExportWindowApp() {
     return () => dispose?.();
   }, [loadPayload]);
 
+  // Active PDF engine: Vivliostyle lays out the flowing HTML (CSS Paged Media)
+  // in a hidden bundled-viewer webview, then WebView2 PrintToPdf serializes it.
   const exportPdf = async (
+    assets: PreparedPdfExport,
+    onProgress: (progress: ExportProgress) => void,
+  ): Promise<ExportResult> => {
+    const destination = await invoke<ExportResult | null>("pick_export_path", {
+      fileName: exportFileName(assets.title, "pdf"),
+      extension: "pdf",
+      description: "PDF文書",
+    });
+    if (!destination) throw new Error("保存先の選択をキャンセルしました");
+    const [widthMm, heightMm] = resolvePageDimensions(assets.layout);
+    onProgress({ percent: 45, currentPage: assets.pageCount, totalPages: assets.pageCount, message: "Vivliostyleで組版しています" });
+    const result = await invoke<ExportResult>("export_pdf_vivliostyle", {
+      html: assets.vivliostyleHtml,
+      path: destination.path,
+      pageWidthMm: widthMm,
+      pageHeightMm: heightMm,
+    });
+    onProgress({ percent: 92, currentPage: assets.pageCount, totalPages: assets.pageCount, message: "PDFファイルを生成しています" });
+    return result;
+  };
+
+  // Native fallback engine: our own pagination + WebView2 PrintToPdf. Retained
+  // (not wired) so the previous output path is preserved.
+  const exportPdfNative = async (
     assets: PreparedPdfExport,
     onProgress: (progress: ExportProgress) => void,
   ): Promise<ExportResult> => {
@@ -115,8 +141,6 @@ export default function ExportWindowApp() {
     window.document.documentElement.setAttribute("data-export-paginated", "true");
     try {
       onProgress({ percent: 40, currentPage: assets.pageCount, totalPages: assets.pageCount, message: "紙面を組版しています" });
-      // Pages were serialized off-thread; here we only inject markup and wait
-      // for fonts/paint before handing the DOM to WebView2 PrintToPdf.
       await applyPrintAssets(assets.css, assets.markup, viewport);
       onProgress({ percent: 68, currentPage: assets.pageCount, totalPages: assets.pageCount, message: "PDFファイルを生成しています" });
       return await invoke<ExportResult>("export_pdf", {
@@ -134,6 +158,7 @@ export default function ExportWindowApp() {
       viewport.replaceChildren();
     }
   };
+  void exportPdfNative;
 
   const exportDocx = async (
     assets: PreparedDocxExport,

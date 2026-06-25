@@ -21,6 +21,8 @@ export type PreviewAssets = {
 export type PrintAssets = {
   css: string;
   markup: string;
+  // Flowing HTML for the Vivliostyle viewer engine (CSS Paged Media).
+  vivliostyleHtml: string;
   pageCount: number;
 };
 
@@ -125,11 +127,13 @@ export async function prepareExportPdf(
   }
   const { createLinkedExportDocument, paginateLinkedDocument, buildLinkedPrintCss, buildLinkedPrintMarkup } =
     await import("./linkedDocument");
+  const { buildLinkedVivliostyleHtml } = await import("./vivliostyleHtml");
   const document = createLinkedExportDocument(job, sources);
   const pages = paginateLinkedDocument(document);
   return {
     css: buildLinkedPrintCss(document, baseUrl),
     markup: buildLinkedPrintMarkup(document, pages),
+    vivliostyleHtml: buildLinkedVivliostyleHtml(document, baseUrl),
     pageCount: pages.length,
   };
 }

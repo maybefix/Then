@@ -10,6 +10,7 @@ import {
   paginateLinkedDocument,
 } from "./linkedDocument";
 import type { ExportJob, LoadedExportSource } from "./types";
+import { buildLinkedVivliostyleHtml } from "./vivliostyleHtml";
 import { generateVerticalDocx } from "./wordprocessingMl";
 
 type TypesetRequest =
@@ -38,7 +39,12 @@ ctx.onmessage = async (event) => {
       const pages = paginateLinkedDocument(document);
       const css = buildLinkedPrintCss(document, request.baseUrl);
       const markup = buildLinkedPrintMarkup(document, pages);
-      ctx.postMessage({ id: request.id, ok: true, result: { css, markup, pageCount: pages.length } });
+      const vivliostyleHtml = buildLinkedVivliostyleHtml(document, request.baseUrl);
+      ctx.postMessage({
+        id: request.id,
+        ok: true,
+        result: { css, markup, vivliostyleHtml, pageCount: pages.length },
+      });
       return;
     }
     // docx
