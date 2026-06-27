@@ -108,22 +108,10 @@ function PlotIcon({ name }: { name: PlotIconName }) {
   }
 }
 
-type PlotPaneProps = {
-  cards: PlotCard[];
-  onCardsChange: Dispatch<SetStateAction<PlotCard[]>>;
-};
-
-export function PlotPane({ cards, onCardsChange }: PlotPaneProps) {
+function usePlotBodyColumns(cards: PlotCard[], forceExpanded: boolean) {
   const [bodyColumns, setBodyColumns] = useState<Record<string, number>>({});
-  const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
-  const [isManagerOpen, setIsManagerOpen] = useState(false);
-  const paneRef = useRef<HTMLDivElement | null>(null);
   const bodyRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
   const composingCardIds = useRef<Set<string>>(new Set());
-  const isPinnedToRightRef = useRef(true);
-  const draggingCardIdRef = useRef<string | null>(null);
-
-  const visualCards = [...cards].reverse();
 
   const setBodyRef = useCallback(
     (cardId: string) => (element: HTMLTextAreaElement | null) => {
@@ -137,29 +125,87 @@ export function PlotPane({ cards, onCardsChange }: PlotPaneProps) {
     [],
   );
 
-  const setCardColumns = (cardId: string, columns: number) => {
+  const setCardColumns = useCallback((cardId: string, columns: number) => {
     setBodyColumns((current) =>
       current[cardId] === columns ? current : { ...current, [cardId]: columns },
     );
-  };
+  }, []);
 
-  const syncBodyColumns = (cardId: string, text: string, element?: HTMLElement | null) => {
-    if (composingCardIds.current.has(cardId)) return;
+  const syncBodyColumns = useCallback(
+    (cardId: string, text: string, element?: HTMLElement | null) => {
+      if (composingCardIds.current.has(cardId)) return;
 
-    const rowsPerColumn = element ? getRowsPerColumn(element) : DEFAULT_ROWS_PER_COLUMN;
-    const columns = estimatePlotColumns(text, rowsPerColumn);
-    setCardColumns(cardId, columns);
-  };
+      const rowsPerColumn = element ? getRowsPerColumn(element) : DEFAULT_ROWS_PER_COLUMN;
+      const columns = estimatePlotColumns(text, rowsPerColumn);
+      setCardColumns(cardId, columns);
+    },
+    [setCardColumns],
+  );
 
   useLayoutEffect(() => {
     cards.forEach((card) => {
-      if (!card.expanded) return;
+      if (!forceExpanded && !card.expanded) return;
       if (composingCardIds.current.has(card.id)) return;
 
       const element = bodyRefs.current.get(card.id);
       syncBodyColumns(card.id, card.body, element);
     });
-  }, [cards]);
+  }, [cards, forceExpanded, syncBodyColumns]);
+
+  return { bodyColumns, setBodyRef, syncBodyColumns, composingCardIds };
+}
+
+type PlotBoardProps = {
+  cards: PlotCard[];
+  onCardsChange: Dispatch<SetStateAction<PlotCard[]>>;
+  /** When true every card is rendered expanded and the collapse toggle is hidden. */
+  forceExpanded?: boolean;
+  onOpenManager?: () => void;
+  className?: string;
+};
+
+function PlotBoard({
+  cards,
+  onCardsChange,
+  forceExpanded = false,
+  onOpenManager,
+  className,
+}: PlotBoardProps) {
+  const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
+  const paneRef = useRef<HTMLDivElement | null>(null);
+  const isPinnedToRightRef = useRef(true);
+  const draggingCardIdRef = useRef<string | null>(null);
+  const { bodyColumns, setBodyRef, syncBodyColumns, composingCardIds } = usePlotBodyColumns(
+    cards,
+    forceExpanded,
+  );
+
+  const visualCards = [...cards].reverse();
+
+  const moveCard = useCallback(
+    (draggedId: string, targetId: string) => {
+      if (draggedId === targetId) return;
+
+      onCardsChange((current) => {
+        const visualOrder = [...current].reverse();
+        const draggedIndex = visualOrder.findIndex((card) => card.id === draggedId);
+        const targetVisualIndex = visualOrder.findIndex((card) => card.id === targetId);
+        const draggedCard = visualOrder.find((card) => card.id === draggedId);
+        if (!draggedCard || draggedIndex < 0 || targetVisualIndex < 0) return current;
+
+        const withoutDragged = visualOrder.filter((card) => card.id !== draggedId);
+        const targetIndex = withoutDragged.findIndex((card) => card.id === targetId);
+        if (targetIndex < 0) return current;
+
+        const nextVisualOrder = [...withoutDragged];
+        const insertIndex = draggedIndex < targetVisualIndex ? targetIndex + 1 : targetIndex;
+        nextVisualOrder.splice(insertIndex, 0, draggedCard);
+
+        return renumberPlotCards([...nextVisualOrder].reverse());
+      });
+    },
+    [onCardsChange],
+  );
 
   useLayoutEffect(() => {
     const pane = paneRef.current;
@@ -200,7 +246,7 @@ export function PlotPane({ cards, onCardsChange }: PlotPaneProps) {
       window.removeEventListener("pointerup", handlePointerUp);
       window.removeEventListener("pointercancel", handlePointerUp);
     };
-  }, [draggingCardId]);
+  }, [draggingCardId, moveCard]);
 
   const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
     const pane = event.currentTarget;
@@ -227,6 +273,8 @@ export function PlotPane({ cards, onCardsChange }: PlotPaneProps) {
   };
 
   const toggleCard = (cardId: string) => {
+    if (forceExpanded) return;
+
     onCardsChange((current) =>
       current.map((card) =>
         card.id === cardId ? { ...card, expanded: !card.expanded } : card,
@@ -238,43 +286,6 @@ export function PlotPane({ cards, onCardsChange }: PlotPaneProps) {
     onCardsChange((current) =>
       current.map((card) => (card.id === cardId ? { ...card, ...patch } : card)),
     );
-  };
-
-  const moveCard = (draggedId: string, targetId: string) => {
-    if (draggedId === targetId) return;
-
-    onCardsChange((current) => {
-      const visualOrder = [...current].reverse();
-      const draggedIndex = visualOrder.findIndex((card) => card.id === draggedId);
-      const targetVisualIndex = visualOrder.findIndex((card) => card.id === targetId);
-      const draggedCard = visualOrder.find((card) => card.id === draggedId);
-      if (!draggedCard || draggedIndex < 0 || targetVisualIndex < 0) return current;
-
-      const withoutDragged = visualOrder.filter((card) => card.id !== draggedId);
-      const targetIndex = withoutDragged.findIndex((card) => card.id === targetId);
-      if (targetIndex < 0) return current;
-
-      const nextVisualOrder = [...withoutDragged];
-      const insertIndex = draggedIndex < targetVisualIndex ? targetIndex + 1 : targetIndex;
-      nextVisualOrder.splice(insertIndex, 0, draggedCard);
-
-      return renumberPlotCards([...nextVisualOrder].reverse());
-    });
-  };
-
-  const moveCardByIndex = (cardId: string, direction: -1 | 1) => {
-    onCardsChange((current) => {
-      const currentIndex = current.findIndex((card) => card.id === cardId);
-      const nextIndex = currentIndex + direction;
-
-      if (currentIndex < 0 || nextIndex < 0 || nextIndex >= current.length) return current;
-
-      const nextCards = [...current];
-      const [card] = nextCards.splice(currentIndex, 1);
-      nextCards.splice(nextIndex, 0, card);
-
-      return renumberPlotCards(nextCards);
-    });
   };
 
   const deleteCard = (cardId: string) => {
@@ -297,7 +308,7 @@ export function PlotPane({ cards, onCardsChange }: PlotPaneProps) {
           num: String(nextIndex).padStart(3, "0"),
           title: "",
           body: "",
-          expanded: false,
+          expanded: forceExpanded,
         },
       ];
     });
@@ -344,50 +355,54 @@ export function PlotPane({ cards, onCardsChange }: PlotPaneProps) {
     event.currentTarget.blur();
   };
 
-  const getPlotCardStyle = (card: PlotCard): PlotCardStyle => ({
-    "--plot-body-columns": card.expanded
+  const getPlotCardStyle = (card: PlotCard, expanded: boolean): PlotCardStyle => ({
+    "--plot-body-columns": expanded
       ? bodyColumns[card.id] ?? estimatePlotColumns(card.body)
       : 1,
   });
 
   return (
-    <>
-      <div
-        ref={paneRef}
-        className="plotPane"
-        aria-label="Plot"
-        onScroll={handleScroll}
-        onWheel={handleWheel}
-      >
-        <div className="plotTrack">
-          <div className="plotTrackActions">
-            <button
-              className="plotAddButton"
-              type="button"
-              aria-label="プロットを追加"
-              title="プロットを追加"
-              onClick={addCard}
-            >
-              ＋
-            </button>
+    <div
+      ref={paneRef}
+      className={`plotPane ${className ?? ""}`.trim()}
+      aria-label="Plot"
+      onScroll={handleScroll}
+      onWheel={handleWheel}
+    >
+      <div className="plotTrack">
+        <div className="plotTrackActions">
+          <button
+            className="plotAddButton"
+            type="button"
+            aria-label="プロットを追加"
+            title="プロットを追加"
+            onClick={addCard}
+          >
+            ＋
+          </button>
+          {onOpenManager && (
             <button
               className="plotToolButton"
               type="button"
               aria-label="プロットを管理"
               title="プロットを管理"
-              onClick={() => setIsManagerOpen(true)}
+              onClick={onOpenManager}
             >
               <PlotIcon name="list" />
             </button>
-          </div>
-          {visualCards.map((card) => (
+          )}
+        </div>
+        {visualCards.map((card) => {
+          const expanded = forceExpanded || card.expanded;
+
+          return (
             <article
-              className={`plotCard ${card.expanded ? "expandedPlotCard" : ""} ${
+              className={`plotCard ${expanded ? "expandedPlotCard" : ""} ${
                 draggingCardId === card.id ? "draggingPlotCard" : ""
               }`}
               key={card.id}
               data-plot-card-id={card.id}
-              style={getPlotCardStyle(card)}
+              style={getPlotCardStyle(card, expanded)}
             >
               <div className="plotCardToolbar">
                 <button
@@ -413,7 +428,8 @@ export function PlotPane({ cards, onCardsChange }: PlotPaneProps) {
                 className="plotCardNum"
                 type="button"
                 onClick={() => toggleCard(card.id)}
-                title="クリックで展開/折りたたみ"
+                title={forceExpanded ? undefined : "クリックで展開/折りたたみ"}
+                aria-disabled={forceExpanded || undefined}
               >
                 {card.num}
               </button>
@@ -422,15 +438,15 @@ export function PlotPane({ cards, onCardsChange }: PlotPaneProps) {
                   className="plotCardTitle"
                   value={card.title}
                   placeholder="タイトル…"
-                  readOnly={!card.expanded}
+                  readOnly={!expanded}
                   spellCheck={false}
-                  tabIndex={card.expanded ? 0 : -1}
+                  tabIndex={expanded ? 0 : -1}
                   wrap="off"
                   aria-label={`${card.num} タイトル`}
                   onChange={(event) => handleTitleChange(card.id, event)}
                   onKeyDown={handleTitleKeyDown}
                 />
-                {card.expanded && (
+                {expanded && (
                   <textarea
                     ref={setBodyRef(card.id)}
                     className="plotCardBody"
@@ -446,26 +462,45 @@ export function PlotPane({ cards, onCardsChange }: PlotPaneProps) {
                   />
                 )}
               </div>
-              <button
-                className="plotCardToggle"
-                type="button"
-                aria-label={card.expanded ? "折りたたむ" : "展開する"}
-                title={card.expanded ? "折りたたむ" : "展開する"}
-                onClick={() => toggleCard(card.id)}
-              >
-                {card.expanded ? "›" : "‹"}
-              </button>
+              {!forceExpanded && (
+                <button
+                  className="plotCardToggle"
+                  type="button"
+                  aria-label={card.expanded ? "折りたたむ" : "展開する"}
+                  title={card.expanded ? "折りたたむ" : "展開する"}
+                  onClick={() => toggleCard(card.id)}
+                >
+                  {card.expanded ? "›" : "‹"}
+                </button>
+              )}
             </article>
-          ))}
-        </div>
+          );
+        })}
       </div>
+    </div>
+  );
+}
+
+type PlotPaneProps = {
+  cards: PlotCard[];
+  onCardsChange: Dispatch<SetStateAction<PlotCard[]>>;
+};
+
+export function PlotPane({ cards, onCardsChange }: PlotPaneProps) {
+  const [isManagerOpen, setIsManagerOpen] = useState(false);
+
+  return (
+    <>
+      <PlotBoard
+        cards={cards}
+        onCardsChange={onCardsChange}
+        onOpenManager={() => setIsManagerOpen(true)}
+      />
       {isManagerOpen && (
         <PlotManagerModal
           cards={cards}
+          onCardsChange={onCardsChange}
           onClose={() => setIsManagerOpen(false)}
-          onChange={updateCard}
-          onDelete={deleteCard}
-          onMove={moveCardByIndex}
         />
       )}
     </>
@@ -474,122 +509,31 @@ export function PlotPane({ cards, onCardsChange }: PlotPaneProps) {
 
 type PlotManagerModalProps = {
   cards: PlotCard[];
+  onCardsChange: Dispatch<SetStateAction<PlotCard[]>>;
   onClose: () => void;
-  onChange: (cardId: string, patch: Partial<Pick<PlotCard, "title" | "body">>) => void;
-  onDelete: (cardId: string) => void;
-  onMove: (cardId: string, direction: -1 | 1) => void;
 };
 
-function PlotManagerModal({
-  cards,
-  onClose,
-  onChange,
-  onDelete,
-  onMove,
-}: PlotManagerModalProps) {
-  const listRef = useRef<HTMLDivElement | null>(null);
-  const visualCards = [...cards].reverse();
-
-  useLayoutEffect(() => {
-    const list = listRef.current;
-    if (!list) return;
-
-    list.scrollLeft = Math.max(0, list.scrollWidth - list.clientWidth);
-  }, [cards.length]);
-
-  const handleManagerWheel = (event: WheelEvent<HTMLDivElement>) => {
-    const list = event.currentTarget;
-    const maxScrollLeft = list.scrollWidth - list.clientWidth;
-
-    if (maxScrollLeft <= 0) return;
-
-    const dominantDelta =
-      Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-
-    if (dominantDelta === 0) return;
-
-    event.preventDefault();
-    list.scrollLeft = Math.min(maxScrollLeft, Math.max(0, list.scrollLeft - dominantDelta));
-  };
-
+function PlotManagerModal({ cards, onCardsChange, onClose }: PlotManagerModalProps) {
   return (
     <div className="modalBackdrop" role="presentation">
-      <section className="modal plotManagerModal" aria-label="プロットを管理" role="dialog" aria-modal="true">
+      <section
+        className="modal plotManagerModal"
+        aria-label="プロットを管理"
+        role="dialog"
+        aria-modal="true"
+      >
         <header className="modalHeader">
           <h2>プロットを管理</h2>
           <button className="modalClose" type="button" aria-label="閉じる" onClick={onClose}>
             ×
           </button>
         </header>
-        <div ref={listRef} className="plotManagerList" onWheel={handleManagerWheel}>
-          <div className="plotManagerTrack">
-            {visualCards.map((card) => {
-              const index = cards.findIndex((item) => item.id === card.id);
-
-              return (
-                <section className="plotManagerItem" key={card.id}>
-                  <div className="plotManagerOrder">
-                    <strong>{card.num}</strong>
-                    <button
-                      className="plotToolButton"
-                      type="button"
-                      aria-label={`${card.num} を前へ`}
-                      title="前へ"
-                      disabled={index === 0}
-                      onClick={() => onMove(card.id, -1)}
-                    >
-                      <PlotIcon name="up" />
-                    </button>
-                    <button
-                      className="plotToolButton"
-                      type="button"
-                      aria-label={`${card.num} を後ろへ`}
-                      title="後ろへ"
-                      disabled={index === cards.length - 1}
-                      onClick={() => onMove(card.id, 1)}
-                    >
-                      <PlotIcon name="down" />
-                    </button>
-                    <button
-                      className="plotToolButton dangerPlotToolButton"
-                      type="button"
-                      aria-label={`${card.num} を削除`}
-                      title="削除"
-                      onClick={() => onDelete(card.id)}
-                    >
-                      <PlotIcon name="trash" />
-                    </button>
-                  </div>
-                  <div className="modalForm plotManagerFields">
-                    <label>
-                      <span>タイトル</span>
-                      <textarea
-                        className="plotManagerTitle"
-                        value={card.title}
-                        rows={1}
-                        wrap="off"
-                        onChange={(event) =>
-                          onChange(card.id, {
-                            title: event.currentTarget.value.replace(/\r?\n/g, " "),
-                          })
-                        }
-                      />
-                    </label>
-                    <label>
-                      <span>本文</span>
-                      <textarea
-                        className="plotManagerBody"
-                        value={card.body}
-                        rows={12}
-                        onChange={(event) => onChange(card.id, { body: event.currentTarget.value })}
-                      />
-                    </label>
-                  </div>
-                </section>
-              );
-            })}
-          </div>
-        </div>
+        <PlotBoard
+          cards={cards}
+          onCardsChange={onCardsChange}
+          forceExpanded
+          className="plotManagerBoard"
+        />
         <footer className="modalActions">
           <button type="button" onClick={onClose}>
             閉じる

@@ -1798,7 +1798,20 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .settingsModal {
+  display: flex;
   width: min(560px, 100%);
+  flex-direction: column;
+}
+
+.settingsModal .modalForm {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.settingsModal .modalActions {
+  padding: 10px 14px 12px;
+  border-top: 0.5px solid var(--border-subtle);
+  background: var(--bg-secondary);
 }
 
 .compactModal {
@@ -3486,145 +3499,15 @@ body {
   grid-template-rows: 46px minmax(0, 1fr) auto;
 }
 
-.plotManagerList {
-  display: block;
+.plotManagerBoard {
   min-height: 0;
-  max-width: 100%;
-  overflow-x: scroll;
-  overflow-y: hidden;
-  padding: 16px 18px 14px;
-  scrollbar-color: var(--border-strong) rgba(255, 255, 255, 0.04);
-  scrollbar-width: thin;
-  scrollbar-gutter: stable;
-  overscroll-behavior: contain;
-}
-
-.plotManagerList::-webkit-scrollbar {
-  height: 8px;
-}
-
-.plotManagerList::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.plotManagerList::-webkit-scrollbar-thumb {
-  border-radius: 4px;
-  background: var(--border-strong);
+  background: var(--bg-secondary);
 }
 
 .plotManagerModal .modalActions {
   padding: 10px 14px 12px;
   border-top: 0.5px solid var(--border-subtle);
   background: #202126;
-}
-
-.plotManagerTrack {
-  display: flex;
-  width: max-content;
-  min-width: 100%;
-  height: 100%;
-  flex-direction: row;
-  justify-content: flex-end;
-}
-
-.plotManagerItem {
-  display: flex;
-  width: clamp(260px, 29vw, 320px);
-  min-width: clamp(260px, 29vw, 320px);
-  max-height: 100%;
-  flex: 0 0 clamp(260px, 29vw, 320px);
-  flex-direction: row-reverse;
-  align-items: stretch;
-  gap: 12px;
-  padding: 12px 14px;
-  overflow: hidden;
-  border: 0.5px solid var(--border-subtle);
-  border-width: 0 0.5px 0 0;
-  border-radius: 0;
-  background: #17181d;
-}
-
-.plotManagerItem:first-child {
-  border-left: 0.5px solid var(--border-subtle);
-}
-
-.plotManagerOrder {
-  display: flex;
-  width: 34px;
-  flex: 0 0 auto;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 0;
-  border-left: 0.5px solid var(--border-subtle);
-  background: rgba(255, 255, 255, 0.015);
-}
-
-.plotManagerOrder strong {
-  color: var(--accent-strong);
-  font-family: var(--editor-font-family);
-  font-size: 13px;
-  letter-spacing: 0.12em;
-  writing-mode: vertical-rl;
-}
-
-.plotManagerFields {
-  display: flex;
-  min-height: 0;
-  padding: 0;
-  flex: 1 1 auto;
-  flex-direction: row-reverse;
-  align-items: stretch;
-  gap: 10px;
-}
-
-.plotManagerFields label {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 0 0 auto;
-  flex-direction: row-reverse;
-  align-items: stretch;
-  gap: 4px;
-}
-
-.plotManagerFields label span {
-  writing-mode: vertical-rl;
-  color: var(--text-muted);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  padding-top: 2px;
-}
-
-.plotManagerFields textarea {
-  width: auto;
-  height: 100%;
-  min-height: 0;
-  max-height: 100%;
-  border: 0.5px solid var(--border-subtle);
-  border-radius: 6px;
-  resize: none;
-  background: #1b1c22;
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-  font-family: var(--editor-font-family);
-  line-height: 2.05;
-  letter-spacing: 0.04em;
-  white-space: pre-wrap;
-}
-
-.plotManagerTitle {
-  width: 3.1em;
-  flex: 0 0 3.1em;
-  overflow: hidden;
-  color: var(--accent-strong);
-  font-weight: 600;
-}
-
-.plotManagerBody {
-  width: clamp(9em, 13vw, 12em);
-  flex: 0 0 clamp(9em, 13vw, 12em);
-  overflow: auto;
 }
 
 .rightSidebar .snippetPanel {
@@ -4300,6 +4183,9 @@ body {
 }
 
 .appShell[data-theme="claude"] {
+  --radius-control: 8px;
+  --radius-card: 10px;
+  --radius-button: 8px;
   --bg-root: #f5f0e8;
   --bg-primary: #faf9f5;
   --bg-secondary: #f5f0e8;
@@ -4331,6 +4217,12 @@ body {
   --silkdown-code-bg: rgba(184, 95, 69, 0.1);
 }
 
+/* Claude らしく、見出しはコーラルではなく本文と同じニュートラルにし、
+   コーラルはアクティブ状態やリンクなどの控えめなアクセントに限定する。 */
+.appShell[data-theme="claude"] .verticalTypewriterEditor .pm-root p.heading {
+  color: var(--text-primary);
+}
+
 .appShell[data-theme] .appFrame,
 .appShell[data-theme] .workspace,
 .appShell[data-theme] .editorColumn { background: var(--bg-root); }
@@ -4355,8 +4247,7 @@ body {
   color: var(--topbar-text-faint);
 }
 .appShell[data-theme] .workspaceSidebar,
-.appShell[data-theme] .rightSidebar,
-.appShell[data-theme] .plotManagerItem { background: var(--sidebar-bg); }
+.appShell[data-theme] .rightSidebar { background: var(--sidebar-bg); }
 .appShell[data-theme] .iconButton,
 .appShell[data-theme] .sidebarIconButton {
   color: var(--navigation-icon);
@@ -4388,13 +4279,11 @@ body {
 .appShell[data-theme] .modalForm select,
 .appShell[data-theme] .modalForm textarea,
 .appShell[data-theme] .ideaSearch input,
-.appShell[data-theme] .projectSearchInput,
-.appShell[data-theme] .plotManagerFields textarea {
+.appShell[data-theme] .projectSearchInput {
   border-radius: var(--radius-control);
 }
 .appShell[data-theme] .rightTabs,
 .appShell[data-theme] .ideaCard,
-.appShell[data-theme] .plotManagerFields textarea,
 .appShell[data-theme] .rightSidebar .snippetCard,
 .appShell[data-theme] .notationModal .modalForm input[readonly] { background: var(--card-bg); }
 .appShell[data-theme] .rightTabs,
@@ -4477,8 +4366,8 @@ body {
 .appShell[data-theme] .plotCardTitle:focus,
 .appShell[data-theme] .plotCardBody:focus { background: var(--accent-soft); }
 .appShell[data-theme] .plotCardBody { color: var(--text-secondary); }
-.appShell[data-theme] .plotManagerModal .modalActions,
-.appShell[data-theme] .plotManagerOrder { background: var(--bg-secondary); }
+.appShell[data-theme] .plotManagerModal .modalActions { background: var(--bg-secondary); }
+.appShell[data-theme] .plotManagerBoard { background: var(--sidebar-bg); }
 .appShell[data-theme] .dangerPlotToolButton:hover:not(:disabled) { background: var(--danger-soft); }
 .appShell[data-theme] .toast {
   background: var(--bg-panel);
@@ -5644,7 +5533,6 @@ body {
 
 .appShell[data-theme^="commerce-"] .ideaCard,
 .appShell[data-theme^="commerce-"] .rightSidebar .snippetCard,
-.appShell[data-theme^="commerce-"] .plotManagerItem,
 .appShell[data-theme^="commerce-"] .themeOption,
 .appShell[data-theme^="commerce-"] .themeSettingRow {
   border-color: transparent;

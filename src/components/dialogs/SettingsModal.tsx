@@ -157,12 +157,12 @@ export function SettingsModal({
               }
             />
           </label>
-          <footer className="modalActions">
-            <button type="button" onClick={onClose}>
-              閉じる
-            </button>
-          </footer>
         </div>
+        <footer className="modalActions">
+          <button type="button" onClick={onClose}>
+            閉じる
+          </button>
+        </footer>
       </section>
     </div>
   );
