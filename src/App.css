@@ -1397,8 +1397,8 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .verticalTypewriterEditor .bold {
-  color: #ead9a8;
   font-weight: 700;
+  font-synthesis-weight: auto;
 }
 
 .verticalTypewriterEditor .mk-cmd {
@@ -1939,7 +1939,7 @@ body.thenPdfExporting .printExportViewport {
 
 .modalActions button[type="submit"],
 .modalActions button:hover {
-  background: #353834;
+  /*background: #353834;*/
   color: var(--text-primary);
 }
 
@@ -2361,7 +2361,7 @@ body {
 }
 
 .activeTreeItem {
-  background: rgba(212, 173, 82, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--text-primary);
 }
 
@@ -2465,6 +2465,371 @@ body {
 
 .scratchTreeItem {
   margin-top: 6px;
+}
+
+/* ファイル行は右端に進捗バッジを置くため 2 カラムにする。 */
+.fileTreeItem {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+/* ===== 進捗ラベル ===== */
+.fileProgressControl {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.fileProgressBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 20px;
+  padding: 0 7px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.fileProgressBadge:hover {
+  color: var(--text-primary);
+}
+
+.fileProgressBadgeCompact {
+  min-height: 16px;
+  padding: 2px;
+  margin-right: 8px;
+  border-color: transparent;
+}
+
+.fileProgressBadgeCompact:hover {
+  border-color: var(--border-strong);
+}
+
+.fileProgressLabel {
+  letter-spacing: 0.02em;
+}
+
+.progressDot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--progress-color, #9aa4ad);
+}
+
+.progressDot-todo {
+  --progress-color: #9aa4ad;
+  background: transparent;
+  border: 1.5px solid #9aa4ad;
+  box-sizing: border-box;
+}
+
+.progressDot-writing {
+  --progress-color: #4a90d9;
+}
+
+.progressDot-revising {
+  --progress-color: #d8a13a;
+}
+
+.progressDot-done {
+  --progress-color: #45ab78;
+}
+
+.fileProgressMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 90;
+  display: grid;
+  min-width: 128px;
+  padding: 5px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-panel-strong);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.34);
+}
+
+.fileProgressMenu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+
+.fileProgressMenu button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.fileProgressMenu button.activeProgressOption {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* ===== ナビゲータ方式 ===== */
+.navigatorSection {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 4px 0 8px;
+}
+
+.navigatorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 10px 8px;
+}
+
+.navigatorBackButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 0 8px 0 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.navigatorBackButton:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+.navigatorBackIcon {
+  width: 16px;
+  height: 16px;
+}
+
+.navigatorFolderTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.navigatorFolderTitle span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navigatorList {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.navigatorItem {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  border-radius: 6px;
+}
+
+.navigatorItem:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.navigatorFolderItem {
+  gap: 6px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+
+.navigatorFolderItem:hover {
+  color: var(--text-primary);
+}
+
+.navigatorItemName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navigatorItemChevron {
+  width: 14px;
+  height: 14px;
+  margin-left: auto;
+  color: var(--text-faint);
+}
+
+.navigatorFileItemActive {
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent));
+}
+
+.navigatorFileButton {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+  padding: 6px 4px 6px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.navigatorFileButton:hover {
+  color: var(--text-primary);
+}
+
+.navigatorFileRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.navigatorItemPreview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--preview-lines, 1);
+  padding-left: 21px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.navigatorCurrentFile {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0 8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.navigatorCurrentFileActive {
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
+}
+
+.navigatorFileName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navigatorFilePreview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--preview-lines, 2);
+  margin: 6px 12px 8px;
+  padding-bottom: 8px;
+  border-bottom: 0.5px solid var(--border-strong);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.navigatorHeadingList {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.navigatorHeadingItem {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 10px 6px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.navigatorHeadingItem:hover {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+}
+
+.navigatorHeadingItemActive {
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent));
+  color: var(--text-primary);
+}
+
+.navigatorHeadingTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.navigatorHeadingTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navigatorHeadingPreview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--preview-lines, 1);
+  color: var(--text-faint);
+  font-size: 10.5px;
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .sidebarEmptyState,

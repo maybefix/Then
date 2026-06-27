@@ -131,6 +131,36 @@ export function SettingsModal({
             <span>改行記号を表示</span>
           </label>
           <label>
+            <span>ファイル表示方式</span>
+            <select
+              value={settings.sidebarMode}
+              onChange={(event) =>
+                onUpdateSettings(
+                  "sidebarMode",
+                  event.target.value as EditorSettings["sidebarMode"],
+                )
+              }
+            >
+              <option value="tree">ファイルツリー</option>
+              <option value="navigator">ナビゲータ</option>
+            </select>
+          </label>
+          <label>
+            <span>ナビゲータのプレビュー行数</span>
+            <select
+              value={settings.navigatorPreviewLines}
+              disabled={settings.sidebarMode !== "navigator"}
+              onChange={(event) =>
+                onUpdateSettings("navigatorPreviewLines", Number(event.target.value))
+              }
+            >
+              <option value={0}>なし</option>
+              <option value={1}>1行</option>
+              <option value={2}>2行</option>
+              <option value={3}>3行</option>
+            </select>
+          </label>
+          <label>
             <span>スニペット保存先</span>
             <select
               value={settings.snippetStorageMode}
