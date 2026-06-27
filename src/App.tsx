@@ -63,7 +63,12 @@ import type {
   WorkspaceAlert,
   WorkspaceRecord,
 } from "./types";
-import { appThemeValues, fileProgressStatuses } from "./types";
+import {
+  appThemeValues,
+  fileProgressStatuses,
+  DEFAULT_NAVIGATOR_PREVIEW_LINES,
+  NAVIGATOR_PREVIEW_LINE_CHOICES,
+} from "./types";
 import {
   appendFrontMatterProperty,
   composeMarkdown,
@@ -299,6 +304,7 @@ const defaultSettings: EditorSettings = {
   showLineBreakMarks: false,
   snippetStorageMode: "workspace",
   sidebarMode: "tree",
+  navigatorPreviewLines: DEFAULT_NAVIGATOR_PREVIEW_LINES,
 };
 
 const fallbackFontFamilies = [
@@ -800,6 +806,11 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
       snippetStorageMode:
         settings.snippetStorageMode === "profile" ? "profile" : "workspace",
       sidebarMode: settings.sidebarMode === "navigator" ? "navigator" : "tree",
+      navigatorPreviewLines: NAVIGATOR_PREVIEW_LINE_CHOICES.includes(
+        settings.navigatorPreviewLines as number,
+      )
+        ? (settings.navigatorPreviewLines as number)
+        : DEFAULT_NAVIGATOR_PREVIEW_LINES,
       theme: appThemeValues.includes(settings.theme as EditorSettings["theme"])
         ? (settings.theme as EditorSettings["theme"])
         : "dark",
@@ -3873,6 +3884,7 @@ export default function App() {
                 activeOutlineIds={activeOutlineIds}
                 projectAst={projectAst}
                 sidebarMode={settings.sidebarMode}
+                navigatorPreviewLines={settings.navigatorPreviewLines}
                 fileProgress={appState.fileProgress}
                 onSetFileProgress={handleSetFileProgress}
                 projectSearchQuery={projectSearchQuery}

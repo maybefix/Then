@@ -2719,13 +2719,17 @@ body {
 }
 
 .navigatorItemPreview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--preview-lines, 1);
   padding-left: 21px;
   color: var(--text-faint);
   font-size: 10.5px;
   line-height: 1.45;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .navigatorCurrentFile {
@@ -2758,12 +2762,17 @@ body {
 }
 
 .navigatorFilePreview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--preview-lines, 2);
   margin: 6px 12px 8px;
   padding-bottom: 8px;
   border-bottom: 0.5px solid var(--border-strong);
   color: var(--text-muted);
   font-size: 11px;
   line-height: 1.5;
+  overflow: hidden;
+  word-break: break-word;
 }
 
 .navigatorHeadingList {
@@ -2811,12 +2820,16 @@ body {
 }
 
 .navigatorHeadingPreview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--preview-lines, 1);
   color: var(--text-faint);
   font-size: 10.5px;
   line-height: 1.45;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .sidebarEmptyState,

@@ -2,6 +2,7 @@ import {
   useEffect,
   useState,
   useRef,
+  type CSSProperties,
   type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -37,6 +38,7 @@ type WorkspaceSidebarProps = {
   activeOutlineIds: ReadonlySet<string>;
   projectAst: ProjectAst | null;
   sidebarMode: SidebarMode;
+  navigatorPreviewLines: number;
   fileProgress: Record<string, FileProgressStatus>;
   onSetFileProgress: (path: string, status: FileProgressStatus) => void;
   projectSearchQuery: string;
@@ -390,6 +392,7 @@ export function WorkspaceSidebar({
   activeOutlineIds,
   projectAst,
   sidebarMode,
+  navigatorPreviewLines,
   fileProgress,
   onSetFileProgress,
   projectSearchQuery,
@@ -1142,12 +1145,23 @@ export function WorkspaceSidebar({
     const location =
       navigatorLocation ?? { kind: "folder" as const, path: projectFolder.path };
 
+    // プレビュー行数（0 = なし）。行数に応じて取得文字数を増やし、
+    // 視覚的なクランプは CSS の line-clamp で行う。
+    const previewLines = navigatorPreviewLines;
+    const showPreview = previewLines > 0;
+    const previewMaxChars = Math.max(previewLines, 1) * 40;
+    const previewStyle = {
+      "--preview-lines": previewLines,
+    } as CSSProperties;
+
     if (location.kind === "file") {
       const astFile = projectAstFiles.get(location.path) ?? null;
       const sourceLines = getFileSourceLines(astFile);
       const fileName = astFile?.name ?? location.path.split(/[\\/]/).pop() ?? location.path;
       const outline = astFile?.documentAst?.outline ?? [];
-      const filePreview = buildFilePreview(sourceLines.join("\n"));
+      const filePreview = showPreview
+        ? buildFilePreview(sourceLines.join("\n"), previewMaxChars)
+        : "";
       const parentPath = findParentPath(projectFolder, location.path);
       const status = getFileProgress(fileProgress, location.path);
 
@@ -1193,13 +1207,19 @@ export function WorkspaceSidebar({
             <SidebarIcon name="file" className="treeSvgIcon" />
             <span className="navigatorFileName">{fileName}</span>
           </button>
-          {filePreview && <p className="navigatorFilePreview">{filePreview}</p>}
+          {filePreview && (
+            <p className="navigatorFilePreview" style={previewStyle}>
+              {filePreview}
+            </p>
+          )}
           <div className="navigatorHeadingList">
             {flatHeadings.length > 0 ? (
               flatHeadings.map(({ item, depth }) => {
                 const isActive =
                   location.path === currentFilePath && activeOutlineIds.has(item.id);
-                const preview = buildHeadingPreview(sourceLines, item.line);
+                const preview = showPreview
+                  ? buildHeadingPreview(sourceLines, item.line, previewMaxChars)
+                  : "";
                 return (
                   <button
                     key={item.id}
@@ -1216,7 +1236,9 @@ export function WorkspaceSidebar({
                       <span className="navigatorHeadingTitle">{item.title}</span>
                     </span>
                     {preview && (
-                      <span className="navigatorHeadingPreview">{preview}</span>
+                      <span className="navigatorHeadingPreview" style={previewStyle}>
+                        {preview}
+                      </span>
                     )}
                   </button>
                 );
@@ -1284,7 +1306,9 @@ export function WorkspaceSidebar({
           ))}
           {files.map((file) => {
             const astFile = projectAstFiles.get(file.path) ?? null;
-            const preview = buildFilePreview(getFileSourceLines(astFile).join("\n"), 60);
+            const preview = showPreview
+              ? buildFilePreview(getFileSourceLines(astFile).join("\n"), previewMaxChars)
+              : "";
             const status = getFileProgress(fileProgress, file.path);
             return (
               <div
@@ -1306,7 +1330,11 @@ export function WorkspaceSidebar({
                     <SidebarIcon name="file" className="treeSvgIcon" />
                     <span className="navigatorItemName">{file.name}</span>
                   </span>
-                  {preview && <span className="navigatorItemPreview">{preview}</span>}
+                  {preview && (
+                    <span className="navigatorItemPreview" style={previewStyle}>
+                      {preview}
+                    </span>
+                  )}
                 </button>
                 <FileProgressControl
                   status={status}
