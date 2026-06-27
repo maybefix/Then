@@ -243,6 +243,7 @@ const defaultPlotCards: PlotCard[] = [
     title: "縦書きプロットテストです",
     body: "",
     expanded: false,
+    managerCollapsed: false,
   },
   {
     id: "plot-2",
@@ -251,6 +252,7 @@ const defaultPlotCards: PlotCard[] = [
     title: "縦書きプロットテストです",
     body: "",
     expanded: false,
+    managerCollapsed: false,
   },
   {
     id: "plot-3",
@@ -259,6 +261,7 @@ const defaultPlotCards: PlotCard[] = [
     title: "縦書きプロットテストです",
     body: "これは縦書きプロットテストです。ちゃんと書けていることを確かめるためにあります。",
     expanded: false,
+    managerCollapsed: false,
   },
 ];
 
@@ -382,10 +385,6 @@ function createDefaultState(): AppState {
   };
 }
 
-function getTextLength(text: string): number {
-  return Array.from(text).length;
-}
-
 /** 空白文字（半角・全角スペース、タブ、改行など）を除いた文字（コードポイント）。 */
 const WHITESPACE_PATTERN = /[\s　]/g;
 
@@ -453,6 +452,7 @@ function normalizePlotCards(value: unknown): PlotCard[] {
         title: typeof card.title === "string" ? card.title : "",
         body: typeof card.body === "string" ? card.body : "",
         expanded: Boolean(card.expanded),
+        managerCollapsed: Boolean(card.managerCollapsed),
       };
     });
 }
@@ -4187,13 +4187,14 @@ export default function App() {
                 projectFolder={projectFolder}
                 currentFilePath={currentFilePath}
                 currentFileName={currentFileName}
-                currentFileCharCount={getTextLength(editorText)}
+                currentFileCharCount={countDisplayCharacters(editorText, settings.countWhitespace)}
                 focusedFolderPath={focusedFolderPath}
                 activeDocumentOutline={outlineItems}
                 activeOutlineIds={activeOutlineIds}
                 projectAst={projectAst}
                 sidebarMode={settings.sidebarMode}
                 navigatorPreviewLines={settings.navigatorPreviewLines}
+                countWhitespace={settings.countWhitespace}
                 fileProgress={appState.fileProgress}
                 onSetFileProgress={handleSetFileProgress}
                 projectSearchQuery={projectSearchQuery}

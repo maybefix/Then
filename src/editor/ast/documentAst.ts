@@ -587,6 +587,7 @@ export function createDocumentAst(input: DocumentAstInput): DocumentAst {
     textHash: hash16(normalized),
     semanticHash,
     textLength: Array.from(normalized).length,
+    visibleTextLength: Array.from(normalized.replace(/[\s　]/g, "")).length,
     lineCount: blocks.length,
     blocks,
     outline,

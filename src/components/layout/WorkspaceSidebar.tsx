@@ -39,6 +39,8 @@ type WorkspaceSidebarProps = {
   projectAst: ProjectAst | null;
   sidebarMode: SidebarMode;
   navigatorPreviewLines: number;
+  /** 文字数カウントに空白文字を含めるか。false なら空白を除いた文字数を表示する。 */
+  countWhitespace: boolean;
   fileProgress: Record<string, FileProgressStatus>;
   onSetFileProgress: (path: string, status: FileProgressStatus) => void;
   projectSearchQuery: string;
@@ -393,6 +395,7 @@ export function WorkspaceSidebar({
   projectAst,
   sidebarMode,
   navigatorPreviewLines,
+  countWhitespace,
   fileProgress,
   onSetFileProgress,
   projectSearchQuery,
@@ -984,7 +987,9 @@ export function WorkspaceSidebar({
     const hasOutline = outline.length > 0;
     const isOutlineExpanded = hasOutline && !collapsedOutlinePaths.has(entry.path);
     const charCountLabel =
-      !isFolder && astFile?.status === "indexed" ? formatCharCount(astFile.textLength) : null;
+      !isFolder && astFile?.status === "indexed"
+        ? formatCharCount(countWhitespace ? astFile.textLength : astFile.visibleTextLength)
+        : null;
 
     return (
       <div className="treeNode" key={entry.path}>

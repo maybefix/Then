@@ -75,6 +75,8 @@ struct PlotCardConfig {
     title: String,
     body: String,
     expanded: bool,
+    #[serde(default, rename = "managerCollapsed")]
+    manager_collapsed: bool,
 }
 
 fn debug_log(message: &str) {
