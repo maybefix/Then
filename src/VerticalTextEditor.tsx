@@ -166,6 +166,9 @@ const ACTIVE_BUILD_RADIUS = 72;
 const VISIBLE_BUILD_RADIUS = 72;
 const VISIBLE_UPDATE_STEP = 12;
 const SCROLL_EPS = 0.75;
+// 着地後の再センタリング: スクロールが何フレーム静止したら補正するか／最大補正回数。
+const SETTLE_STABLE_FRAMES = 2;
+const SETTLE_MAX_CORRECTIONS = 3;
 const PLACEHOLDER = "# 見出し\n- リスト項目\nここに入力……";
 
 const astKey = new PluginKey<AstPluginState>("then-layout-ast");
@@ -1946,6 +1949,7 @@ export function VerticalTextEditor({
     let visibleFrame: number | null = null;
     let lineBreakFrame: number | null = null;
     let compositionFrame: number | null = null;
+    let settleFrame: number | null = null;
     let lineBreakQueued = false;
 
     const requestCenterCaret = (instant: boolean, eventType: string) => {
@@ -1980,11 +1984,62 @@ export function VerticalTextEditor({
               typewriterOffsetRef.current,
               shouldInstant,
             );
+            // スムーズスクロール中は可視ウィンドウの再装飾で列幅が動き、最終位置が
+            // 中央からずれることがある。着地後に一度だけ測り直して補正する。
+            if (!shouldInstant) requestSettleRecenter();
           }
         });
       };
 
       wait();
+    };
+
+    // スムーズスクロールが落ち着くのを待ってから、残った中央ずれを瞬時補正する。
+    // スクロールが2フレーム静止したら 1 回測り直し、まだ動けば最大数回まで再補正する。
+    const requestSettleRecenter = () => {
+      if (settleFrame !== null) cancelAnimationFrame(settleFrame);
+
+      let lastLeft = Number.NaN;
+      let stableFrames = 0;
+      let corrections = 0;
+
+      const tick = () => {
+        settleFrame = requestAnimationFrame(() => {
+          settleFrame = null;
+          const editor = tiptapRef.current;
+          const currentScroller = scrollerRef.current;
+          if (!editor || !currentScroller || isEditorComposing(editor, composingRef)) return;
+
+          const current = currentScroller.scrollLeft;
+          if (Number.isNaN(lastLeft) || Math.abs(current - lastLeft) > 0.5) {
+            // まだスクロール（または再装飾）で動いている。静止を待つ。
+            lastLeft = current;
+            stableFrames = 0;
+            tick();
+            return;
+          }
+
+          stableFrames += 1;
+          if (stableFrames < SETTLE_STABLE_FRAMES) {
+            tick();
+            return;
+          }
+
+          // 静止した。瞬時に測り直して中央へ寄せ直す。
+          const before = currentScroller.scrollLeft;
+          centerCaretForEditor(editor, currentScroller, typewriterOffsetRef.current, true);
+          const moved = Math.abs(currentScroller.scrollLeft - before) > SCROLL_EPS;
+          corrections += 1;
+          if (moved && corrections < SETTLE_MAX_CORRECTIONS) {
+            // 補正で動いた＝再装飾で更にずれた可能性。落ち着いたら再度確認する。
+            lastLeft = currentScroller.scrollLeft;
+            stableFrames = 0;
+            tick();
+          }
+        });
+      };
+
+      tick();
     };
 
     const requestVisibleWindow = () => {
@@ -2259,6 +2314,7 @@ export function VerticalTextEditor({
       if (visibleFrame !== null) cancelAnimationFrame(visibleFrame);
       if (lineBreakFrame !== null) cancelAnimationFrame(lineBreakFrame);
       if (compositionFrame !== null) cancelAnimationFrame(compositionFrame);
+      if (settleFrame !== null) cancelAnimationFrame(settleFrame);
       renderLineBreakMarksRef.current = null;
       requestLineBreakMarksRef.current = null;
       if (lineBreakLayerRef.current) lineBreakLayerRef.current.textContent = "";
