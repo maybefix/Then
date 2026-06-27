@@ -50,6 +50,7 @@ import type {
   BreadcrumbDropTarget,
   DocumentTab,
   EditorSettings,
+  FileProgressStatus,
   FlatOutlineItem,
   FontOption,
   OutlineItem,
@@ -62,7 +63,7 @@ import type {
   WorkspaceAlert,
   WorkspaceRecord,
 } from "./types";
-import { appThemeValues } from "./types";
+import { appThemeValues, fileProgressStatuses } from "./types";
 import {
   appendFrontMatterProperty,
   composeMarkdown,
@@ -297,6 +298,7 @@ const defaultSettings: EditorSettings = {
   typewriterOffset: 46,
   showLineBreakMarks: false,
   snippetStorageMode: "workspace",
+  sidebarMode: "tree",
 };
 
 const fallbackFontFamilies = [
@@ -366,6 +368,7 @@ function createDefaultState(): AppState {
     lastWorkspacePath: null,
     lastFilePath: null,
     recentWorkspaces: [],
+    fileProgress: {},
   };
 }
 
@@ -796,6 +799,7 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         : defaultSettings.exportFontFamily,
       snippetStorageMode:
         settings.snippetStorageMode === "profile" ? "profile" : "workspace",
+      sidebarMode: settings.sidebarMode === "navigator" ? "navigator" : "tree",
       theme: appThemeValues.includes(settings.theme as EditorSettings["theme"])
         ? (settings.theme as EditorSettings["theme"])
         : "dark",
@@ -804,7 +808,24 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
       typeof value?.lastWorkspacePath === "string" ? value.lastWorkspacePath : null,
     lastFilePath: typeof value?.lastFilePath === "string" ? value.lastFilePath : null,
     recentWorkspaces,
+    fileProgress: normalizeFileProgress(value?.fileProgress),
   };
+}
+
+function normalizeFileProgress(
+  value: unknown,
+): Record<string, FileProgressStatus> {
+  if (!value || typeof value !== "object") return {};
+  const result: Record<string, FileProgressStatus> = {};
+  for (const [path, status] of Object.entries(value as Record<string, unknown>)) {
+    if (
+      typeof path === "string" &&
+      fileProgressStatuses.includes(status as FileProgressStatus)
+    ) {
+      result[path] = status as FileProgressStatus;
+    }
+  }
+  return result;
 }
 
 async function loadStoredState(): Promise<AppState> {
@@ -3382,6 +3403,21 @@ export default function App() {
     }));
   };
 
+  const handleSetFileProgress = (path: string, status: FileProgressStatus) => {
+    setAppState((current) => {
+      const nextProgress = { ...current.fileProgress };
+      // "todo"（既定値）は保存せずキーを削除し、状態を肥大化させない。
+      if (status === "todo") {
+        if (!(path in nextProgress)) return current;
+        delete nextProgress[path];
+      } else {
+        if (nextProgress[path] === status) return current;
+        nextProgress[path] = status;
+      }
+      return { ...current, fileProgress: nextProgress };
+    });
+  };
+
   const handleSnippetStorageModeChange = async (
     mode: EditorSettings["snippetStorageMode"],
   ) => {
@@ -3836,6 +3872,9 @@ export default function App() {
                 activeDocumentOutline={outlineItems}
                 activeOutlineIds={activeOutlineIds}
                 projectAst={projectAst}
+                sidebarMode={settings.sidebarMode}
+                fileProgress={appState.fileProgress}
+                onSetFileProgress={handleSetFileProgress}
                 projectSearchQuery={projectSearchQuery}
                 projectSearchResults={workspaceSearchResults}
                 searchScope={searchScope}

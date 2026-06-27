@@ -131,6 +131,21 @@ export function SettingsModal({
             <span>改行記号を表示</span>
           </label>
           <label>
+            <span>ファイル表示方式</span>
+            <select
+              value={settings.sidebarMode}
+              onChange={(event) =>
+                onUpdateSettings(
+                  "sidebarMode",
+                  event.target.value as EditorSettings["sidebarMode"],
+                )
+              }
+            >
+              <option value="tree">ファイルツリー</option>
+              <option value="navigator">ナビゲータ</option>
+            </select>
+          </label>
+          <label>
             <span>スニペット保存先</span>
             <select
               value={settings.snippetStorageMode}

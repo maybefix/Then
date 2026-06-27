@@ -1,7 +1,7 @@
 import {
   useEffect,
-  useRef,
   useState,
+  useRef,
   type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -9,15 +9,23 @@ import {
 import type {
   DocumentOutlineItem,
   ProjectAst,
+  ProjectAstFile,
   ProjectSearchResult,
 } from "../../editor/ast/types";
 import type {
   BreadcrumbDropTarget,
+  FileProgressStatus,
   OutlineItem,
   ProjectEntry,
   ProjectFolder,
+  SidebarMode,
 } from "../../types";
+import { fileProgressLabels, fileProgressStatuses } from "../../types";
 import { logHeadingDnd } from "../../utils/headingDndDiagnostics";
+import {
+  buildFilePreview,
+  buildHeadingPreview,
+} from "../../utils/previewText";
 
 type WorkspaceSidebarProps = {
   projectFolder: ProjectFolder | null;
@@ -28,6 +36,9 @@ type WorkspaceSidebarProps = {
   activeDocumentOutline: OutlineItem[];
   activeOutlineIds: ReadonlySet<string>;
   projectAst: ProjectAst | null;
+  sidebarMode: SidebarMode;
+  fileProgress: Record<string, FileProgressStatus>;
+  onSetFileProgress: (path: string, status: FileProgressStatus) => void;
   projectSearchQuery: string;
   projectSearchResults: ProjectSearchResult[];
   searchScope: WorkspaceSearchScope;
@@ -130,6 +141,132 @@ function getProjectAstStatusLabel(projectAst: ProjectAst | null): string {
 
 function formatCharCount(value: number): string {
   return `${new Intl.NumberFormat("ja-JP").format(value)}字`;
+}
+
+function getFileProgress(
+  progress: Record<string, FileProgressStatus>,
+  path: string,
+): FileProgressStatus {
+  return progress[path] ?? "todo";
+}
+
+/** AST のブロック列から編集ソースを行配列として復元する。 */
+function getFileSourceLines(astFile: ProjectAstFile | null | undefined): string[] {
+  const blocks = astFile?.documentAst?.blocks;
+  if (!blocks || blocks.length === 0) return [];
+  return blocks.map((block) => block.source);
+}
+
+/** ファイルパスからツリー上のフォルダノードを探す（root も含む）。 */
+function findFolderNode(
+  root: ProjectFolder,
+  path: string,
+): ProjectFolder | ProjectEntry | null {
+  if (root.path === path) return root;
+  const stack: ProjectEntry[] = [...root.children];
+  while (stack.length) {
+    const entry = stack.pop()!;
+    if (entry.kind === "folder") {
+      if (entry.path === path) return entry;
+      stack.push(...entry.children);
+    }
+  }
+  return null;
+}
+
+/** 指定パスの親フォルダのパスを返す（root もしくは未発見なら null）。 */
+function findParentPath(root: ProjectFolder, targetPath: string): string | null {
+  if (root.path === targetPath) return null;
+  const visit = (
+    folderPath: string,
+    children: ProjectEntry[],
+  ): string | null => {
+    for (const child of children) {
+      if (child.path === targetPath) return folderPath;
+      if (child.kind === "folder") {
+        const found = visit(child.path, child.children);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+  return visit(root.path, root.children);
+}
+
+const PROGRESS_DOT_CLASS: Record<FileProgressStatus, string> = {
+  todo: "progressDot-todo",
+  writing: "progressDot-writing",
+  revising: "progressDot-revising",
+  done: "progressDot-done",
+};
+
+type FileProgressControlProps = {
+  status: FileProgressStatus;
+  onChange: (status: FileProgressStatus) => void;
+  compact?: boolean;
+};
+
+function FileProgressControl({ status, onChange, compact }: FileProgressControlProps) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const close = () => setIsOpen(false);
+    window.addEventListener("pointerdown", close);
+    return () => window.removeEventListener("pointerdown", close);
+  }, [isOpen]);
+
+  return (
+    <span className="fileProgressControl">
+      <button
+        type="button"
+        className={[
+          "fileProgressBadge",
+          `fileProgressBadge-${status}`,
+          compact ? "fileProgressBadgeCompact" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        title={`進捗: ${fileProgressLabels[status]}`}
+        aria-label={`進捗: ${fileProgressLabels[status]}`}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setIsOpen((current) => !current);
+        }}
+      >
+        <span className={`progressDot ${PROGRESS_DOT_CLASS[status]}`} aria-hidden="true" />
+        {!compact && <span className="fileProgressLabel">{fileProgressLabels[status]}</span>}
+      </button>
+      {isOpen && (
+        <div
+          className="fileProgressMenu"
+          role="menu"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          {fileProgressStatuses.map((option) => (
+            <button
+              key={option}
+              type="button"
+              role="menuitemradio"
+              aria-checked={option === status}
+              className={option === status ? "activeProgressOption" : ""}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onChange(option);
+                setIsOpen(false);
+              }}
+            >
+              <span className={`progressDot ${PROGRESS_DOT_CLASS[option]}`} aria-hidden="true" />
+              <span>{fileProgressLabels[option]}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
+  );
 }
 
 type SidebarIconName =
@@ -252,6 +389,9 @@ export function WorkspaceSidebar({
   activeDocumentOutline,
   activeOutlineIds,
   projectAst,
+  sidebarMode,
+  fileProgress,
+  onSetFileProgress,
   projectSearchQuery,
   projectSearchResults,
   searchScope,
@@ -295,6 +435,9 @@ export function WorkspaceSidebar({
     () => new Set(),
   );
   const [isReplaceExpanded, setIsReplaceExpanded] = useState(false);
+  const [navigatorLocation, setNavigatorLocation] = useState<
+    { kind: "folder" | "file"; path: string } | null
+  >(null);
   const pointerDragRef = useRef<PointerDragState | null>(null);
   const headingDragRef = useRef<HeadingDragState | null>(null);
   const lastHeadingDragOverRef = useRef("");
@@ -319,6 +462,11 @@ export function WorkspaceSidebar({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [contextMenu]);
+
+  // プロジェクトフォルダが切り替わったらナビゲータをルートに戻す。
+  useEffect(() => {
+    setNavigatorLocation(null);
+  }, [projectFolder?.path]);
 
   const resetPointerDrag = () => {
     pointerDragRef.current = null;
@@ -910,6 +1058,13 @@ export function WorkspaceSidebar({
             {charCountLabel && <span className="treeItemCharCount">{charCountLabel}</span>}
             {isActive && <span className="treeActiveDot" aria-hidden="true" />}
           </button>
+          {!isFolder && (
+            <FileProgressControl
+              status={getFileProgress(fileProgress, entry.path)}
+              onChange={(status) => onSetFileProgress(entry.path, status)}
+              compact
+            />
+          )}
         </div>
         {isFolder && hasChildren && isFolderExpanded && (
           <div className="treeChildren">
@@ -969,6 +1124,202 @@ export function WorkspaceSidebar({
       </div>
     </section>
   );
+
+  const renderNavigatorMode = () => {
+    if (!projectFolder) {
+      return (
+        <section className="sidebarSection navigatorSection" aria-label="ナビゲータ">
+          <div className="sidebarEmptyState">
+            <span>フォルダ未選択</span>
+            <button type="button" onClick={onOpenProjectFolder}>
+              フォルダを開く
+            </button>
+          </div>
+        </section>
+      );
+    }
+
+    const location =
+      navigatorLocation ?? { kind: "folder" as const, path: projectFolder.path };
+
+    if (location.kind === "file") {
+      const astFile = projectAstFiles.get(location.path) ?? null;
+      const sourceLines = getFileSourceLines(astFile);
+      const fileName = astFile?.name ?? location.path.split(/[\\/]/).pop() ?? location.path;
+      const outline = astFile?.documentAst?.outline ?? [];
+      const filePreview = buildFilePreview(sourceLines.join("\n"));
+      const parentPath = findParentPath(projectFolder, location.path);
+      const status = getFileProgress(fileProgress, location.path);
+
+      const flatHeadings: { item: DocumentOutlineItem; depth: number }[] = [];
+      const flatten = (items: DocumentOutlineItem[], depth: number) => {
+        for (const item of items) {
+          flatHeadings.push({ item, depth });
+          flatten(item.children, depth + 1);
+        }
+      };
+      flatten(outline, 0);
+
+      return (
+        <section className="sidebarSection navigatorSection" aria-label="ナビゲータ">
+          <div className="navigatorHeader">
+            <button
+              className="navigatorBackButton"
+              type="button"
+              title="フォルダへ戻る"
+              onClick={() =>
+                setNavigatorLocation({
+                  kind: "folder",
+                  path: parentPath ?? projectFolder.path,
+                })
+              }
+            >
+              <SidebarIcon name="chevronLeft" className="navigatorBackIcon" />
+              <span>戻る</span>
+            </button>
+            <FileProgressControl
+              status={status}
+              onChange={(next) => onSetFileProgress(location.path, next)}
+            />
+          </div>
+          <button
+            className={`navigatorCurrentFile ${
+              location.path === currentFilePath ? "navigatorCurrentFileActive" : ""
+            }`}
+            type="button"
+            title={location.path}
+            onClick={() => onSelectFile(location.path)}
+          >
+            <SidebarIcon name="file" className="treeSvgIcon" />
+            <span className="navigatorFileName">{fileName}</span>
+          </button>
+          {filePreview && <p className="navigatorFilePreview">{filePreview}</p>}
+          <div className="navigatorHeadingList">
+            {flatHeadings.length > 0 ? (
+              flatHeadings.map(({ item, depth }) => {
+                const isActive =
+                  location.path === currentFilePath && activeOutlineIds.has(item.id);
+                const preview = buildHeadingPreview(sourceLines, item.line);
+                return (
+                  <button
+                    key={item.id}
+                    className={`navigatorHeadingItem ${
+                      isActive ? "navigatorHeadingItemActive" : ""
+                    }`}
+                    type="button"
+                    title={item.title}
+                    style={{ paddingLeft: `${12 + depth * 12}px` }}
+                    onClick={() => onJumpProjectOutline(location.path, item)}
+                  >
+                    <span className="navigatorHeadingTitleRow">
+                      <span className="outlineLevelMark">H{item.level}</span>
+                      <span className="navigatorHeadingTitle">{item.title}</span>
+                    </span>
+                    {preview && (
+                      <span className="navigatorHeadingPreview">{preview}</span>
+                    )}
+                  </button>
+                );
+              })
+            ) : (
+              <div className="outlineEmptyState">見出しがありません</div>
+            )}
+          </div>
+        </section>
+      );
+    }
+
+    // フォルダ表示。
+    const folderNode = findFolderNode(projectFolder, location.path);
+    const children: ProjectEntry[] =
+      folderNode && "children" in folderNode ? folderNode.children : [];
+    const folders = children.filter((child) => child.kind === "folder");
+    const files = children.filter((child) => child.kind === "file");
+    const isRootFolder = location.path === projectFolder.path;
+    const parentPath = isRootFolder ? null : findParentPath(projectFolder, location.path);
+    const folderName = isRootFolder
+      ? projectFolder.name
+      : folderNode?.name ?? location.path.split(/[\\/]/).pop() ?? location.path;
+
+    return (
+      <section className="sidebarSection navigatorSection" aria-label="ナビゲータ">
+        <div className="navigatorHeader">
+          {!isRootFolder && (
+            <button
+              className="navigatorBackButton"
+              type="button"
+              title="親フォルダへ戻る"
+              onClick={() =>
+                setNavigatorLocation({
+                  kind: "folder",
+                  path: parentPath ?? projectFolder.path,
+                })
+              }
+            >
+              <SidebarIcon name="chevronLeft" className="navigatorBackIcon" />
+              <span>戻る</span>
+            </button>
+          )}
+          <span className="navigatorFolderTitle" title={location.path}>
+            <SidebarIcon name={isRootFolder ? "book" : "folder"} className="treeSvgIcon" />
+            <span>{folderName}</span>
+          </span>
+        </div>
+        <div className="navigatorList">
+          {folders.length === 0 && files.length === 0 && (
+            <div className="outlineEmptyState">空のフォルダ</div>
+          )}
+          {folders.map((folder) => (
+            <button
+              key={folder.path}
+              className="navigatorItem navigatorFolderItem"
+              type="button"
+              title={folder.path}
+              onClick={() => setNavigatorLocation({ kind: "folder", path: folder.path })}
+            >
+              <SidebarIcon name="folder" className="treeSvgIcon" />
+              <span className="navigatorItemName">{folder.name}</span>
+              <SidebarIcon name="chevronRight" className="navigatorItemChevron" />
+            </button>
+          ))}
+          {files.map((file) => {
+            const astFile = projectAstFiles.get(file.path) ?? null;
+            const preview = buildFilePreview(getFileSourceLines(astFile).join("\n"), 60);
+            const status = getFileProgress(fileProgress, file.path);
+            return (
+              <div
+                key={file.path}
+                className={`navigatorItem navigatorFileItem ${
+                  file.path === currentFilePath ? "navigatorFileItemActive" : ""
+                }`}
+              >
+                <button
+                  className="navigatorFileButton"
+                  type="button"
+                  title={file.path}
+                  onClick={() => {
+                    onSelectFile(file.path);
+                    setNavigatorLocation({ kind: "file", path: file.path });
+                  }}
+                >
+                  <span className="navigatorFileRow">
+                    <SidebarIcon name="file" className="treeSvgIcon" />
+                    <span className="navigatorItemName">{file.name}</span>
+                  </span>
+                  {preview && <span className="navigatorItemPreview">{preview}</span>}
+                </button>
+                <FileProgressControl
+                  status={status}
+                  onChange={(next) => onSetFileProgress(file.path, next)}
+                  compact
+                />
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    );
+  };
 
   const emptyProjectSearchMessage = !projectFolder
     ? searchScope === "project"
@@ -1148,7 +1499,11 @@ export function WorkspaceSidebar({
       </div>
 
       <div className="sidebarScroll">
-        {isProjectSearchMode ? renderProjectSearchMode() : renderOutlineMode()}
+        {isProjectSearchMode
+          ? renderProjectSearchMode()
+          : sidebarMode === "navigator"
+            ? renderNavigatorMode()
+            : renderOutlineMode()}
       </div>
 
       <div className="sidebarFooter">

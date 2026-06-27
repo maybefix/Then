@@ -67,6 +67,28 @@ export const appThemeValues = [
 
 export type AppTheme = (typeof appThemeValues)[number];
 
+/** 左サイドバーのファイル表示方式。 */
+export type SidebarMode = "tree" | "navigator";
+
+/** ファイルごとの進捗ラベル。デフォルトは "todo"（未着手）。 */
+export type FileProgressStatus = "todo" | "writing" | "revising" | "done";
+
+export const fileProgressStatuses: readonly FileProgressStatus[] = [
+  "todo",
+  "writing",
+  "revising",
+  "done",
+] as const;
+
+export const fileProgressLabels: Record<FileProgressStatus, string> = {
+  todo: "未着手",
+  writing: "執筆中",
+  revising: "推敲中",
+  done: "完了",
+};
+
+export const DEFAULT_FILE_PROGRESS: FileProgressStatus = "todo";
+
 export type EditorSettings = {
   theme: AppTheme;
   editorFontFamily: string;
@@ -78,6 +100,7 @@ export type EditorSettings = {
   typewriterOffset: number;
   showLineBreakMarks: boolean;
   snippetStorageMode: "workspace" | "profile";
+  sidebarMode: SidebarMode;
 };
 
 export type SaveStatus = "loading" | "saved" | "dirty" | "saving" | "error";
@@ -112,6 +135,8 @@ export type AppState = {
   lastWorkspacePath: string | null;
   lastFilePath: string | null;
   recentWorkspaces: WorkspaceRecord[];
+  /** ファイルパスごとの進捗ラベル。未登録は "todo"（未着手）として扱う。 */
+  fileProgress: Record<string, FileProgressStatus>;
 };
 
 export type TextDocument = {
