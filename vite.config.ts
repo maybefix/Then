@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   clearScreen: false,
   server: {
-    port: 1420,
+    port: Number(process.env.PORT) || 1420,
     strictPort: true,
     watch: {
       ignored: ["**/.edge-ui-check*/**", "**/src-tauri/target/**"],

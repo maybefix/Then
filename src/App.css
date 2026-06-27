@@ -1397,8 +1397,8 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .verticalTypewriterEditor .bold {
-  color: #ead9a8;
   font-weight: 700;
+  font-synthesis-weight: auto;
 }
 
 .verticalTypewriterEditor .mk-cmd {
@@ -1939,7 +1939,7 @@ body.thenPdfExporting .printExportViewport {
 
 .modalActions button[type="submit"],
 .modalActions button:hover {
-  background: #353834;
+  /*background: #353834;*/
   color: var(--text-primary);
 }
 
