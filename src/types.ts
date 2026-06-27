@@ -103,6 +103,18 @@ export type EditorSettings = {
   sidebarMode: SidebarMode;
   /** ナビゲータ方式のプレビュー表示行数。0 は「なし」（プレビュー非表示）。 */
   navigatorPreviewLines: number;
+  /** 文字数カウントに空白文字（スペース・タブ・改行など）を含めるか。 */
+  countWhitespace: boolean;
+};
+
+/**
+ * ファイルごとに保存するカーソル位置。`length` は保存時点の本文長で、
+ * 次回起動時に本文長が一致すれば `offset` を復元し、外部編集などで
+ * 食い違う場合は先頭へフォールバックする。
+ */
+export type CursorPosition = {
+  offset: number;
+  length: number;
 };
 
 /** ナビゲータのプレビュー行数として選べる値（0 = なし）。 */
@@ -143,6 +155,8 @@ export type AppState = {
   recentWorkspaces: WorkspaceRecord[];
   /** ファイルパスごとの進捗ラベル。未登録は "todo"（未着手）として扱う。 */
   fileProgress: Record<string, FileProgressStatus>;
+  /** ファイルパスごとに記憶した最後のカーソル位置。 */
+  cursorPositions: Record<string, CursorPosition>;
 };
 
 export type TextDocument = {

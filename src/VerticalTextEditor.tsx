@@ -35,6 +35,8 @@ type VerticalTextEditorProps = {
   editorRevision: number | null;
   typewriterOffset: number;
   showLineBreakMarks: boolean;
+  /** マウント時に復元するカーソル位置（本文先頭からの文字オフセット）。 */
+  initialSelectionOffset?: number;
   onReady: (editor: TextEditorHandle | null) => void;
   onTextChange: (text: string, editorRevision: number) => void;
   onSelectionChange: () => void;
@@ -1789,6 +1791,7 @@ export function VerticalTextEditor({
   editorRevision,
   typewriterOffset,
   showLineBreakMarks,
+  initialSelectionOffset,
   onReady,
   onTextChange,
   onSelectionChange,
@@ -1798,6 +1801,10 @@ export function VerticalTextEditor({
   const lineBreakLayerRef = useRef<HTMLDivElement | null>(null);
   const tiptapRef = useRef<Editor | null>(null);
   const textRef = useRef(text);
+  // マウント時に一度だけ参照する復元位置。以後プロップが変化しても再適用しない。
+  const initialSelectionRef = useRef(
+    Number.isFinite(initialSelectionOffset) ? Math.max(0, initialSelectionOffset as number) : 0,
+  );
   const onTextChangeRef = useRef(onTextChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
   const localRevisionRef = useRef(0);
@@ -2187,7 +2194,13 @@ export function VerticalTextEditor({
     scroller.addEventListener("scroll", handleScroll, { passive: true });
     window.addEventListener("resize", handleResize);
 
-    editor.commands.focus("start");
+    const initialOffset = Math.min(initialSelectionRef.current, docToText(editor.state.doc).length);
+    if (initialOffset > 0) {
+      setSelectionByTextOffset(editor, initialOffset);
+      editor.commands.focus();
+    } else {
+      editor.commands.focus("start");
+    }
     requestCenterCaret(true, "initial");
     requestVisibleWindow();
     requestLineBreakMarks();

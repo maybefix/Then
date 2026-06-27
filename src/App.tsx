@@ -14,6 +14,7 @@ import {
 } from "react";
 import { VerticalTextEditor, type TextEditorHandle } from "./VerticalTextEditor";
 import { AppDialogModal } from "./components/dialogs/AppDialogModal";
+import { CommandPalette, type PaletteCommand } from "./components/dialogs/CommandPalette";
 import { SettingsModal } from "./components/dialogs/SettingsModal";
 import { ThemePickerModal } from "./components/dialogs/ThemePickerModal";
 import { MetadataPanel } from "./components/editor/MetadataPanel";
@@ -48,6 +49,7 @@ import type {
   AppDialog,
   AppState,
   BreadcrumbDropTarget,
+  CursorPosition,
   DocumentTab,
   EditorSettings,
   FileProgressStatus,
@@ -305,6 +307,7 @@ const defaultSettings: EditorSettings = {
   snippetStorageMode: "workspace",
   sidebarMode: "tree",
   navigatorPreviewLines: DEFAULT_NAVIGATOR_PREVIEW_LINES,
+  countWhitespace: true,
 };
 
 const fallbackFontFamilies = [
@@ -375,11 +378,24 @@ function createDefaultState(): AppState {
     lastFilePath: null,
     recentWorkspaces: [],
     fileProgress: {},
+    cursorPositions: {},
   };
 }
 
 function getTextLength(text: string): number {
   return Array.from(text).length;
+}
+
+/** 空白文字（半角・全角スペース、タブ、改行など）を除いた文字（コードポイント）。 */
+const WHITESPACE_PATTERN = /[\s　]/g;
+
+/**
+ * 文字数カウント。`includeWhitespace` が false の場合は空白文字を除外する。
+ * サロゲートペアを 1 文字として数えるため Array.from を用いる。
+ */
+function countDisplayCharacters(text: string, includeWhitespace: boolean): number {
+  const target = includeWhitespace ? text : text.replace(WHITESPACE_PATTERN, "");
+  return Array.from(target).length;
 }
 
 function parseInlineIdeaTags(text: string): string[] {
@@ -673,6 +689,99 @@ function clearNotationFromSelection(
   };
 }
 
+type SelectionEdit = {
+  from: number;
+  to: number;
+  insert: string;
+  cursorPos: number;
+};
+
+/** Ctrl+B 用。選択範囲を `**…**` で囲む／外すトグル。複数行は対象外。 */
+function toggleBoldSelection(
+  text: string,
+  selection: EditorSelectionSnapshot,
+): SelectionEdit | null {
+  const { from, to } = selection;
+  if (from === to) {
+    return { from, to, insert: "****", cursorPos: from + 2 };
+  }
+
+  const inner = text.slice(from, to);
+  if (inner.includes("\n")) return null;
+
+  if (text.slice(from - 2, from) === "**" && text.slice(to, to + 2) === "**") {
+    return { from: from - 2, to: to + 2, insert: inner, cursorPos: from - 2 + inner.length };
+  }
+
+  if (inner.length >= 4 && inner.startsWith("**") && inner.endsWith("**")) {
+    const stripped = inner.slice(2, -2);
+    return { from, to, insert: stripped, cursorPos: from + stripped.length };
+  }
+
+  const insert = `**${inner}**`;
+  return { from, to, insert, cursorPos: from + insert.length };
+}
+
+/** Ctrl+I 用。選択範囲に圏点 `[…(em,goma)]` を付ける／外すトグル。複数行は対象外。 */
+function toggleEmphasisSelection(
+  text: string,
+  selection: EditorSelectionSnapshot,
+): SelectionEdit | null {
+  const { from, to } = selection;
+  if (from >= to) return null;
+
+  const inner = text.slice(from, to);
+  if (inner.includes("\n")) return null;
+
+  const enclosed = text.slice(to).match(/^\(em[^)]*\)\]/);
+  if (text[from - 1] === "[" && enclosed) {
+    return {
+      from: from - 1,
+      to: to + enclosed[0].length,
+      insert: inner,
+      cursorPos: from - 1 + inner.length,
+    };
+  }
+
+  const selfMatch = inner.match(/^\[(.+)\(em[^)]*\)\]$/);
+  if (selfMatch) {
+    return { from, to, insert: selfMatch[1], cursorPos: from + selfMatch[1].length };
+  }
+
+  const insert = `[${inner}(em,goma)]`;
+  return { from, to, insert, cursorPos: from + insert.length };
+}
+
+/**
+ * Ctrl+数字 用。選択範囲を含む各行の見出しレベルを設定する。
+ * `level` が 0 の場合は見出しマーカーを除去する。
+ */
+function applyHeadingToSelection(
+  text: string,
+  selection: EditorSelectionSnapshot,
+  level: number,
+): SelectionEdit {
+  const rangeStart = selection.from;
+  const rangeEnd = selection.to > selection.from ? selection.to : selection.from;
+  const start = text.lastIndexOf("\n", Math.max(0, rangeStart - 1)) + 1;
+  const normalizedEnd =
+    rangeEnd > rangeStart && text[rangeEnd - 1] === "\n" ? rangeEnd - 1 : rangeEnd;
+  const nextBreak = text.indexOf("\n", normalizedEnd);
+  const end = nextBreak === -1 ? text.length : nextBreak;
+
+  const insert = text
+    .slice(start, end)
+    .split("\n")
+    .map((line) => {
+      const body = line.replace(/^#{1,6}[ \t]*/, "");
+      if (level <= 0) return body;
+      return `${"#".repeat(Math.min(6, level))} ${body}`;
+    })
+    .join("\n");
+
+  return { from: start, to: end, insert, cursorPos: start + insert.length };
+}
+
 function replaceLiteralMatches(
   text: string,
   rawQuery: string,
@@ -814,13 +923,40 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
       theme: appThemeValues.includes(settings.theme as EditorSettings["theme"])
         ? (settings.theme as EditorSettings["theme"])
         : "dark",
+      countWhitespace:
+        typeof settings.countWhitespace === "boolean"
+          ? settings.countWhitespace
+          : defaultSettings.countWhitespace,
     },
     lastWorkspacePath:
       typeof value?.lastWorkspacePath === "string" ? value.lastWorkspacePath : null,
     lastFilePath: typeof value?.lastFilePath === "string" ? value.lastFilePath : null,
     recentWorkspaces,
     fileProgress: normalizeFileProgress(value?.fileProgress),
+    cursorPositions: normalizeCursorPositions(value?.cursorPositions),
   };
+}
+
+function normalizeCursorPositions(
+  value: unknown,
+): Record<string, CursorPosition> {
+  if (!value || typeof value !== "object") return {};
+  const result: Record<string, CursorPosition> = {};
+  for (const [path, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof path !== "string" || !entry || typeof entry !== "object") continue;
+    const { offset, length } = entry as Partial<CursorPosition>;
+    if (
+      typeof offset === "number" &&
+      Number.isFinite(offset) &&
+      offset >= 0 &&
+      typeof length === "number" &&
+      Number.isFinite(length) &&
+      length >= 0
+    ) {
+      result[path] = { offset: Math.floor(offset), length: Math.floor(length) };
+    }
+  }
+  return result;
 }
 
 function normalizeFileProgress(
@@ -956,6 +1092,7 @@ export default function App() {
   const [notationModal, setNotationModal] = useState<NotationModalState | null>(null);
   const [dropIndicatorTop, setDropIndicatorTop] = useState<number | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isThemePickerModalOpen, setIsThemePickerModalOpen] = useState(false);
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const [activeBreadcrumbPath, setActiveBreadcrumbPath] = useState<string | null>(null);
@@ -1214,6 +1351,14 @@ export default function App() {
     name: currentFileName,
     text: editorText,
   };
+  // 前回終了時のカーソル位置。保存時点の本文長が現在と一致する場合のみ復元し、
+  // 外部編集などで食い違う場合は先頭へフォールバックする。
+  const initialSelectionOffset = useMemo(() => {
+    if (!currentFilePath) return 0;
+    const saved = appState.cursorPositions[currentFilePath];
+    if (!saved || saved.length !== editorText.length) return 0;
+    return Math.min(saved.offset, editorText.length);
+  }, [appState.cursorPositions, currentFilePath, editorText]);
   const activeDocumentAst = useMemo(
     () =>
       createDocumentAst({
@@ -1526,6 +1671,29 @@ export default function App() {
     }, 700);
   }, [appState, isHydrated]);
 
+  // カーソル位置の記憶。移動が落ち着いた後に現在ファイルの位置を保存する。
+  useEffect(() => {
+    if (!isHydrated || !currentFilePath) return;
+    const path = currentFilePath;
+    const offset = editorSelectionHead;
+    const length = editorText.length;
+
+    const timer = window.setTimeout(() => {
+      setAppState((current) => {
+        const previous = current.cursorPositions[path];
+        if (previous && previous.offset === offset && previous.length === length) {
+          return current;
+        }
+        return {
+          ...current,
+          cursorPositions: { ...current.cursorPositions, [path]: { offset, length } },
+        };
+      });
+    }, 600);
+
+    return () => window.clearTimeout(timer);
+  }, [currentFilePath, editorSelectionHead, editorText, isHydrated]);
+
   useEffect(() => {
     if (!isHydrated || !projectFolder || settings.snippetStorageMode !== "workspace") return;
     if (snippetWorkspacePath !== projectFolder.path) return;
@@ -1743,7 +1911,7 @@ export default function App() {
 
   const handleTextChange = useCallback((nextText: string, editorRevision: number) => {
     didMountEditorRef.current = true;
-    setCharCount(getTextLength(nextText));
+    setCharCount(countDisplayCharacters(nextText, settings.countWhitespace));
     if (suppressNextEditorUpdateRef.current) {
       suppressNextEditorUpdateRef.current = false;
       return;
@@ -1755,11 +1923,11 @@ export default function App() {
     if (!currentFilePath) {
       setSaveStatus("dirty");
     }
-  }, [currentFilePath, markdown, setActiveMarkdown, setSaveStatus]);
+  }, [currentFilePath, markdown, setActiveMarkdown, setSaveStatus, settings.countWhitespace]);
 
   useEffect(() => {
-    setCharCount(getTextLength(editorText));
-  }, [editorText]);
+    setCharCount(countDisplayCharacters(editorText, settings.countWhitespace));
+  }, [editorText, settings.countWhitespace]);
 
   const updateFrontMatter = useCallback((metadata: string) => {
     const nextMarkdown = composeMarkdown(metadata, parseFrontMatter(markdown).body);
@@ -2004,6 +2172,92 @@ export default function App() {
     return true;
   };
 
+  // --- キーボードショートカット / コマンドパレット用の編集アクション ---
+  // いずれも現在のエディタ選択をその場で読み取って適用する。
+
+  const getCurrentEditorSelection = (): EditorSelectionSnapshot | null => {
+    const editor = editorInstanceRef.current;
+    if (!editor) return null;
+    return normalizeSelectionRange(editor.getSelection(), editor.getValue());
+  };
+
+  const applyBoldShortcut = () => {
+    const editor = editorInstanceRef.current;
+    if (!editor) return;
+    const text = editor.getValue();
+    const selection = normalizeSelectionRange(editor.getSelection(), text);
+    const edit = toggleBoldSelection(text, selection);
+    if (!edit) {
+      showToast("太字にする単一行の範囲を選択してください");
+      return;
+    }
+    editor.replaceRange(edit.from, edit.to, edit.insert, edit.cursorPos);
+    editor.focus();
+  };
+
+  const applyEmphasisShortcut = () => {
+    const editor = editorInstanceRef.current;
+    if (!editor) return;
+    const text = editor.getValue();
+    const selection = normalizeSelectionRange(editor.getSelection(), text);
+    const edit = toggleEmphasisSelection(text, selection);
+    if (!edit) {
+      showToast("圏点を付ける単一行の範囲を選択してください");
+      return;
+    }
+    editor.replaceRange(edit.from, edit.to, edit.insert, edit.cursorPos);
+    editor.focus();
+  };
+
+  const applyHeadingShortcut = (level: number) => {
+    const editor = editorInstanceRef.current;
+    if (!editor) return;
+    const text = editor.getValue();
+    const selection = normalizeSelectionRange(editor.getSelection(), text);
+    const edit = applyHeadingToSelection(text, selection, level);
+    editor.replaceRange(edit.from, edit.to, edit.insert, edit.cursorPos);
+    editor.focus();
+    showToast(level <= 0 ? "見出しを解除しました" : `見出し${level}を設定しました`);
+  };
+
+  // 最新のクロージャを常に参照するため、ハンドラ本体は ref 経由で呼び出す。
+  const editorShortcutHandlerRef = useRef<(event: KeyboardEvent) => void>(() => {});
+  editorShortcutHandlerRef.current = (event: KeyboardEvent) => {
+    const mod = event.ctrlKey || event.metaKey;
+    if (!mod || event.altKey) return;
+    const key = event.key;
+
+    // Ctrl+P：コマンドパレット。印刷ダイアログの既定動作を抑止する。
+    if (key === "p" || key === "P") {
+      event.preventDefault();
+      setIsCommandPaletteOpen((open) => !open);
+      return;
+    }
+
+    // 以降はエディタにフォーカスがある場合のみ。
+    const editorFocused = Boolean(
+      (document.activeElement as Element | null)?.closest?.(".pm-root"),
+    );
+    if (!editorFocused) return;
+
+    if (key === "b" || key === "B") {
+      event.preventDefault();
+      applyBoldShortcut();
+    } else if (key === "i" || key === "I") {
+      event.preventDefault();
+      applyEmphasisShortcut();
+    } else if (/^[0-6]$/.test(key)) {
+      event.preventDefault();
+      applyHeadingShortcut(Number(key));
+    }
+  };
+
+  useEffect(() => {
+    const listener = (event: KeyboardEvent) => editorShortcutHandlerRef.current(event);
+    window.addEventListener("keydown", listener, { capture: true });
+    return () => window.removeEventListener("keydown", listener, { capture: true });
+  }, []);
+
   const openRubyNotationModal = (selection: EditorSelectionSnapshot | null) => {
     if (!selection || !canWrapInlineSelection(selection)) {
       showToast("ルビを付ける単一行の範囲を選択してください");
@@ -2033,6 +2287,60 @@ export default function App() {
     if (applyDirectionNotation(notationModal.selection, direction)) {
       setNotationModal(null);
     }
+  };
+
+  const buildPaletteCommands = (): PaletteCommand[] => {
+    const selection = getCurrentEditorSelection();
+    const canWrap = selection ? canWrapInlineSelection(selection) : false;
+    const wrapDisabled = canWrap ? undefined : "単一行の範囲を選択してください";
+
+    const headingCommands: PaletteCommand[] = [1, 2, 3, 4, 5, 6].map((level) => ({
+      id: `heading-${level}`,
+      label: `見出し${level}`,
+      hint: `Ctrl+${level}`,
+      run: () => applyHeadingShortcut(level),
+    }));
+
+    return [
+      { id: "bold", label: "太字", hint: "Ctrl+B", run: applyBoldShortcut },
+      {
+        id: "emphasis",
+        label: "圏点（傍点）",
+        hint: "Ctrl+I",
+        disabledReason: wrapDisabled,
+        run: applyEmphasisShortcut,
+      },
+      {
+        id: "ruby",
+        label: "ルビ…",
+        hint: customNotationSpecs[0].syntax,
+        disabledReason: wrapDisabled,
+        run: () => openRubyNotationModal(getCurrentEditorSelection()),
+      },
+      {
+        id: "tcy",
+        label: "縦中横",
+        hint: customNotationSpecs[1].syntax,
+        disabledReason: wrapDisabled,
+        run: () => {
+          const target = getCurrentEditorSelection();
+          if (target) applyInlineNotation(target, "tcy");
+        },
+      },
+      ...headingCommands,
+      { id: "heading-clear", label: "見出しを解除", hint: "Ctrl+0", run: () => applyHeadingShortcut(0) },
+      {
+        id: "direction",
+        label: "文章方向…",
+        hint: customNotationSpecs[3].syntax,
+        run: () => openDirectionNotationModal(getCurrentEditorSelection()),
+      },
+      {
+        id: "clear-notation",
+        label: "記法をクリア",
+        run: () => clearSelectionNotation(getCurrentEditorSelection()),
+      },
+    ];
   };
 
   const requestInput = ({
@@ -4005,6 +4313,7 @@ export default function App() {
                             editorRevision={activeTab?.editorRevision ?? null}
                             typewriterOffset={settings.typewriterOffset}
                             showLineBreakMarks={settings.showLineBreakMarks}
+                            initialSelectionOffset={initialSelectionOffset}
                             onReady={handleEditorReady}
                             onTextChange={handleTextChange}
                             onSelectionChange={handleSelectionChange}
@@ -4290,6 +4599,12 @@ export default function App() {
             />
           )}
 
+          {isCommandPaletteOpen && (
+            <CommandPalette
+              commands={buildPaletteCommands()}
+              onClose={() => setIsCommandPaletteOpen(false)}
+            />
+          )}
           {isSettingsModalOpen && (
             <SettingsModal
               settings={settings}
