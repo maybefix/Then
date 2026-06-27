@@ -17,7 +17,13 @@ export type PlotCard = {
   num: string;
   title: string;
   body: string;
+  /** 右サイドバーでの展開状態。 */
   expanded: boolean;
+  /**
+   * プロット管理画面での折りたたみ状態。右サイドバーの `expanded` とは独立し、
+   * 前回起動時の状態を引き継ぐために保存する。true = 折りたたみ。
+   */
+  managerCollapsed: boolean;
 };
 
 export const appThemeValues = [

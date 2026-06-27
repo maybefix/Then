@@ -193,16 +193,15 @@ function PlotBoard({
     null,
   );
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
-  // 管理画面では展開状態を保存データに反映せず、ここでローカルに折りたたみを管理する。
-  const [localCollapsed, setLocalCollapsed] = useState<Set<string>>(() => new Set());
   const paneRef = useRef<HTMLDivElement | null>(null);
   const isPinnedToRightRef = useRef(true);
   const draggingCardIdRef = useRef<string | null>(null);
 
   // セクションは本文表示、章は配下セクションの表示可否を表す共通の「展開」状態。
+  // 管理画面は card.managerCollapsed（右サイドバーの expanded とは独立・保存対象）を見る。
   const isCardExpanded = useCallback(
-    (card: PlotCard) => (managerMode ? !localCollapsed.has(card.id) : card.expanded),
-    [managerMode, localCollapsed],
+    (card: PlotCard) => (managerMode ? !card.managerCollapsed : card.expanded),
+    [managerMode],
   );
 
   const { bodyColumns, setBodyRef, syncBodyColumns, composingCardIds } = usePlotBodyColumns(
@@ -342,12 +341,11 @@ function PlotBoard({
 
   const toggleCard = (cardId: string) => {
     if (managerMode) {
-      setLocalCollapsed((current) => {
-        const next = new Set(current);
-        if (next.has(cardId)) next.delete(cardId);
-        else next.add(cardId);
-        return next;
-      });
+      onCardsChange((current) =>
+        current.map((card) =>
+          card.id === cardId ? { ...card, managerCollapsed: !card.managerCollapsed } : card,
+        ),
+      );
       return;
     }
 
@@ -395,6 +393,7 @@ function PlotBoard({
           title: "",
           body: "",
           expanded: false,
+          managerCollapsed: false,
         },
       ]),
     );
@@ -411,6 +410,7 @@ function PlotBoard({
           title: "",
           body: "",
           expanded: true,
+          managerCollapsed: false,
         },
       ]),
     );

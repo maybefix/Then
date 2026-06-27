@@ -70,6 +70,8 @@ export type DocumentAst = {
   textHash: string;
   semanticHash: string;
   textLength: number;
+  /** 空白文字（半角・全角スペース、タブ、改行など）を除いた文字数。 */
+  visibleTextLength: number;
   lineCount: number;
   blocks: LineNode[];
   outline: DocumentOutlineItem[];
@@ -87,6 +89,8 @@ export type ProjectAstFile = {
   semanticHash: string | null;
   lineCount: number;
   textLength: number;
+  /** 空白文字を除いた文字数。 */
+  visibleTextLength: number;
   outlineCount: number;
   indexedAt: number | null;
   error: string | null;
