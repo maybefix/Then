@@ -1809,6 +1809,9 @@ export function VerticalTextEditor({
   const onSelectionChangeRef = useRef(onSelectionChange);
   const localRevisionRef = useRef(0);
   const composingRef = useRef(false);
+  // マウスでのドラッグ範囲選択中は true。ドラッグ中はタイプライターの
+  // 再センタリングを抑制し、ドラッグ終了時に一度だけセンタリングする。
+  const pointerDraggingRef = useRef(false);
   const typewriterOffsetRef = useRef(typewriterOffset);
   const showLineBreakMarksRef = useRef(showLineBreakMarks);
   const renderLineBreakMarksRef = useRef<(() => void) | null>(null);
@@ -2116,7 +2119,9 @@ export function VerticalTextEditor({
       },
       onSelectionUpdate: () => {
         onSelectionChangeRef.current();
-        requestCenterCaret(false, "selection");
+        if (!pointerDraggingRef.current) {
+          requestCenterCaret(false, "selection");
+        }
         requestVisibleWindow();
         requestLineBreakMarks();
       },
@@ -2186,8 +2191,23 @@ export function VerticalTextEditor({
       requestLineBreakMarks();
     };
 
+    // 本文上での左ボタンドラッグ中は再センタリングを止め、離した時に一度だけ寄せる。
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      pointerDraggingRef.current = true;
+    };
+
+    const handlePointerUp = () => {
+      if (!pointerDraggingRef.current) return;
+      pointerDraggingRef.current = false;
+      requestCenterCaret(false, "drag-end");
+      requestLineBreakMarks();
+    };
+
     scroller.addEventListener("wheel", handleWheel, { passive: false });
     scroller.addEventListener("mousedown", handleMouseDown);
+    editor.view.dom.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("pointerup", handlePointerUp);
     editor.view.dom.addEventListener("compositionstart", handleCompositionStart);
     editor.view.dom.addEventListener("compositionupdate", handleCompositionUpdate);
     editor.view.dom.addEventListener("compositionend", handleCompositionEnd);
@@ -2215,6 +2235,8 @@ export function VerticalTextEditor({
     return () => {
       scroller.removeEventListener("wheel", handleWheel);
       scroller.removeEventListener("mousedown", handleMouseDown);
+      editor.view.dom.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("pointerup", handlePointerUp);
       editor.view.dom.removeEventListener("compositionstart", handleCompositionStart);
       editor.view.dom.removeEventListener("compositionupdate", handleCompositionUpdate);
       editor.view.dom.removeEventListener("compositionend", handleCompositionEnd);

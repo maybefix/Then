@@ -1816,7 +1816,8 @@ body.thenPdfExporting .printExportViewport {
   overflow: hidden;
   border: 1px solid var(--border-strong);
   border-radius: 10px;
-  background: #292b28;
+  background: var(--bg-panel);
+  color: var(--text-primary);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
 }
 
@@ -1854,7 +1855,7 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .commandPaletteItem.active {
-  background: var(--bg-panel-strong);
+  background: var(--accent-soft, var(--bg-panel-strong));
 }
 
 .commandPaletteItem.disabled {
