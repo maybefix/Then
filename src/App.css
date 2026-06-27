@@ -3281,6 +3281,7 @@ body {
   justify-items: center;
   gap: 5px;
   margin-bottom: 8px;
+  padding-right: 2px;
 }
 
 .plotToolButton {
@@ -3331,18 +3332,13 @@ body {
   cursor: grabbing;
 }
 
-.dangerPlotToolButton:hover:not(:disabled) {
-  background: rgba(217, 115, 115, 0.1);
-  color: var(--danger);
-}
-
 .plotCardNum {
   writing-mode: vertical-rl;
   min-width: 30px;
   flex: 0 0 auto;
   align-self: flex-end;
   margin-bottom: 16px;
-  padding: 10px 5px;
+  padding: 10px 1px;
   border: 0.5px solid var(--border-strong);
   border-radius: 6px;
   background: var(--bg-panel-strong);
@@ -3470,6 +3466,21 @@ body {
   color: var(--accent);
 }
 
+/* カードの右クリックメニュー（章へ移動／削除）。 */
+.plotContextMenu {
+  width: auto;
+  min-width: 168px;
+}
+
+.plotContextMenu .plotContextDanger {
+  color: var(--danger);
+}
+
+.plotContextMenu .plotContextDanger:hover:not(:disabled) {
+  background: rgba(217, 115, 115, 0.12);
+  color: var(--danger);
+}
+
 .plotAddButton {
   display: inline-grid;
   width: 32px;
@@ -3508,6 +3519,156 @@ body {
   padding: 10px 14px 12px;
   border-top: 0.5px solid var(--border-subtle);
   background: #202126;
+}
+
+/* 章ラベル（プロットの上位概念）。トラック内で縦帯として表示する。
+   セクションカードと縦方向のリズム（ツールバー高さ・番号/ブックマーク帯・余白）を揃える。 */
+.plotChapterBand {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 0 9px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+}
+
+.plotChapterMark {
+  display: inline-grid;
+  min-width: 33px;
+  min-height: 57px;
+  flex: 0 0 auto;
+  place-items: center;
+  margin-bottom: 16px;
+}
+
+.plotChapterMark svg {
+  width: 18px;
+  height: 18px;
+  fill: var(--accent);
+  stroke: none;
+}
+
+.plotChapterTitle {
+  width: 1.9em;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 4px 2px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  resize: none;
+  overflow: hidden;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  color: var(--accent-strong);
+  font-family: var(--editor-font-family);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.85;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+
+.plotChapterTitle::-webkit-scrollbar {
+  display: none;
+}
+
+.plotChapterTitle::placeholder {
+  color: var(--accent);
+  opacity: 0.5;
+}
+
+.collapsedPlotChapterBand {
+  background: var(--bg-panel-strong);
+}
+
+.collapsedPlotChapterBand .plotChapterMark svg {
+  fill: var(--text-muted);
+}
+
+.collapsedPlotChapterBand .plotChapterTitle {
+  color: var(--text-secondary);
+}
+
+.plotChapterCount {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  min-width: 20px;
+  margin-top: 8px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* セクションを別の章へ移動するピッカー。 */
+.plotMoveModal {
+  display: flex;
+  flex-direction: column;
+}
+
+.plotMoveModal .modalForm {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.plotMoveModal .modalActions {
+  padding: 10px 14px 12px;
+  border-top: 0.5px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.plotMoveEmpty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.plotMoveList {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plotMoveOption {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control, 6px);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: start;
+}
+
+.plotMoveOption:hover:not(:disabled) {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+}
+
+.plotMoveOption:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.plotMoveOption small {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-size: 11px;
 }
 
 .rightSidebar .snippetPanel {
@@ -4182,39 +4343,91 @@ body {
   --silkdown-code-bg: rgba(135, 131, 120, 0.15);
 }
 
+/* Claude.ai 寄せのカラースキーム。
+   ベースは温かいアイボリー、面（カード/入力/エディタ）は白に近づけ、
+   境界はほぼ見えないヘアライン、コーラルは差し色に限定する。 */
 .appShell[data-theme="claude"] {
-  --radius-control: 8px;
-  --radius-card: 10px;
-  --radius-button: 8px;
-  --bg-root: #f5f0e8;
+  --radius-control: 12px;
+  --radius-card: 16px;
+  --radius-button: 10px;
+  --bg-root: #faf9f5;
   --bg-primary: #faf9f5;
-  --bg-secondary: #f5f0e8;
-  --bg-tertiary: #efe9de;
-  --bg-panel: #faf9f5;
-  --bg-panel-strong: #f1ebe2;
-  --border-subtle: #e3dcd2;
-  --border-strong: #cbbfb2;
-  --text-primary: #141413;
-  --text-secondary: #3d3d3a;
-  --text-muted: #6c6a64;
-  --text-faint: #8e8b82;
-  --accent: #a9583e;
-  --accent-strong: #843f2c;
+  --bg-secondary: #f0eee6;
+  --bg-tertiary: #ffffff;
+  --bg-panel: #ffffff;
+  --bg-panel-strong: #f0eee6;
+  --border-subtle: #ebe8df;
+  --border-strong: #dcd7cb;
+  --text-primary: #1a1915;
+  --text-secondary: #3c3a34;
+  --text-muted: #73706a;
+  --text-faint: #a8a49b;
+  --accent: #c96a48;
+  --accent-strong: #b0512f;
   --success: #3f8255;
   --warning: #9f7015;
   --danger: #b23f3f;
-  --accent-soft: rgba(184, 95, 69, 0.11);
-  --accent-border: rgba(184, 95, 69, 0.44);
-  --overlay: rgba(36, 31, 27, 0.34);
-  --shadow-popover: 0 12px 32px rgba(36, 31, 27, 0.14);
-  --shadow-modal: 0 18px 54px rgba(36, 31, 27, 0.18);
-  --control-hover: rgba(61, 52, 45, 0.07);
+  --accent-soft: rgba(201, 106, 72, 0.1);
+  --accent-border: rgba(201, 106, 72, 0.4);
+  --overlay: rgba(40, 34, 28, 0.3);
+  --shadow-popover: 0 8px 30px rgba(40, 34, 28, 0.1);
+  --shadow-modal: 0 18px 50px rgba(40, 34, 28, 0.16);
+  --control-hover: rgba(30, 25, 20, 0.05);
   --editor-bg: #faf9f5;
-  --card-bg: #faf9f5;
-  --card-hover: #efe9de;
+  --card-bg: #ffffff;
+  --card-hover: #f4f2ea;
   --topbar-bg: #faf9f5;
-  --sidebar-bg: #f5f0e8;
-  --silkdown-code-bg: rgba(184, 95, 69, 0.1);
+  --sidebar-bg: #f0eee6;
+  --silkdown-code-bg: rgba(201, 106, 72, 0.1);
+}
+
+/* Claude らしいボタン: ヘアライン＋ごく淡い影、面は白。 */
+.appShell[data-theme="claude"] .modalActions button,
+.appShell[data-theme="claude"] .themePickerButton,
+.appShell[data-theme="claude"] .sidebarAddButton,
+.appShell[data-theme="claude"] .addButton,
+.appShell[data-theme="claude"] .newTabActions button,
+.appShell[data-theme="claude"] .ideaAdd {
+  border-color: transparent;
+  background: var(--bg-panel);
+  box-shadow: 0 1px 2px rgba(40, 34, 28, 0.04), 0 0 0 0.5px rgba(40, 34, 28, 0.13);
+}
+
+.appShell[data-theme="claude"] .modalActions button:hover,
+.appShell[data-theme="claude"] .themePickerButton:hover,
+.appShell[data-theme="claude"] .sidebarAddButton:hover,
+.appShell[data-theme="claude"] .addButton:hover,
+.appShell[data-theme="claude"] .newTabActions button:hover,
+.appShell[data-theme="claude"] .ideaAdd:hover {
+  background: var(--bg-panel);
+  box-shadow: 0 2px 8px rgba(40, 34, 28, 0.07), 0 0 0 0.5px rgba(40, 34, 28, 0.28);
+}
+
+/* Claude のチャット入力枠に倣った入力フィールド（透明境界＋ソフトシャドウ）。 */
+.appShell[data-theme="claude"] .modalForm input,
+.appShell[data-theme="claude"] .modalForm select,
+.appShell[data-theme="claude"] .modalForm textarea,
+.appShell[data-theme="claude"] .ideaSearch input,
+.appShell[data-theme="claude"] .projectSearchInput {
+  border-color: transparent;
+  background: var(--bg-panel);
+  box-shadow: 0 4px 20px rgba(20, 20, 19, 0.035), 0 0 0 0.5px rgba(40, 34, 28, 0.15);
+}
+
+.appShell[data-theme="claude"] .modalForm input:hover,
+.appShell[data-theme="claude"] .modalForm select:hover,
+.appShell[data-theme="claude"] .modalForm textarea:hover {
+  box-shadow: 0 4px 20px rgba(20, 20, 19, 0.035), 0 0 0 0.5px rgba(40, 34, 28, 0.3);
+}
+
+.appShell[data-theme="claude"] .modalForm input:focus,
+.appShell[data-theme="claude"] .modalForm select:focus,
+.appShell[data-theme="claude"] .modalForm textarea:focus,
+.appShell[data-theme="claude"] .modalForm input:focus-visible,
+.appShell[data-theme="claude"] .modalForm select:focus-visible,
+.appShell[data-theme="claude"] .modalForm textarea:focus-visible {
+  border-color: transparent;
+  box-shadow: 0 4px 20px rgba(20, 20, 19, 0.075), 0 0 0 0.5px var(--accent-border);
 }
 
 /* Claude らしく、見出しはコーラルではなく本文と同じニュートラルにし、
@@ -4368,7 +4581,6 @@ body {
 .appShell[data-theme] .plotCardBody { color: var(--text-secondary); }
 .appShell[data-theme] .plotManagerModal .modalActions { background: var(--bg-secondary); }
 .appShell[data-theme] .plotManagerBoard { background: var(--sidebar-bg); }
-.appShell[data-theme] .dangerPlotToolButton:hover:not(:disabled) { background: var(--danger-soft); }
 .appShell[data-theme] .toast {
   background: var(--bg-panel);
   box-shadow: var(--shadow-popover);

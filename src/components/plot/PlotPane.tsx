@@ -8,13 +8,14 @@ import {
   type CSSProperties,
   type Dispatch,
   type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type SetStateAction,
   type WheelEvent,
 } from "react";
 import type { PlotCard } from "../../types";
 
-type PlotIconName = "grip" | "trash" | "list" | "up" | "down";
+type PlotIconName = "grip" | "list" | "bookmark";
 
 type PlotCardStyle = CSSProperties & {
   "--plot-body-columns"?: number;
@@ -50,8 +51,37 @@ const getRowsPerColumn = (element: HTMLElement) => {
   return Math.max(1, Math.floor(availableHeight / glyphAdvance));
 };
 
-const renumberPlotCards = (cards: PlotCard[]) =>
-  cards.map((card, index) => ({ ...card, num: String(index + 1).padStart(3, "0") }));
+const renumberPlotCards = (cards: PlotCard[]) => {
+  let sectionIndex = 0;
+  return cards.map((card) => {
+    if (card.kind === "chapter") return { ...card, num: "" };
+    sectionIndex += 1;
+    return { ...card, num: String(sectionIndex).padStart(3, "0") };
+  });
+};
+
+/** 章ごとに [章カード, ...配下のセクション] をまとめたグループ列を返す。
+ *  先頭の章ラベルが付く前のセクション群は chapter=null の「冒頭」グループになる。 */
+type PlotChapterGroup = { chapter: PlotCard | null; sections: PlotCard[] };
+
+const groupByChapter = (cards: PlotCard[]): PlotChapterGroup[] => {
+  const groups: PlotChapterGroup[] = [];
+  let current: PlotChapterGroup = { chapter: null, sections: [] };
+  let hasCurrent = false;
+
+  for (const card of cards) {
+    if (card.kind === "chapter") {
+      if (hasCurrent || current.sections.length > 0) groups.push(current);
+      current = { chapter: card, sections: [] };
+      hasCurrent = true;
+    } else {
+      current.sections.push(card);
+    }
+  }
+  if (hasCurrent || current.sections.length > 0) groups.push(current);
+
+  return groups;
+};
 
 function PlotIcon({ name }: { name: PlotIconName }) {
   const common = {
@@ -72,16 +102,6 @@ function PlotIcon({ name }: { name: PlotIconName }) {
           <circle cx="15" cy="18" r="1.2" />
         </svg>
       );
-    case "trash":
-      return (
-        <svg {...common}>
-          <path d="M3 6h18" />
-          <path d="M8 6V4h8v2" />
-          <path d="M19 6l-1 14H6L5 6" />
-          <path d="M10 11v5" />
-          <path d="M14 11v5" />
-        </svg>
-      );
     case "list":
       return (
         <svg {...common}>
@@ -93,22 +113,16 @@ function PlotIcon({ name }: { name: PlotIconName }) {
           <path d="M3 18h.01" />
         </svg>
       );
-    case "up":
+    case "bookmark":
       return (
         <svg {...common}>
-          <path d="m6 15 6-6 6 6" />
-        </svg>
-      );
-    case "down":
-      return (
-        <svg {...common}>
-          <path d="m6 9 6 6 6-6" />
+          <path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" />
         </svg>
       );
   }
 }
 
-function usePlotBodyColumns(cards: PlotCard[], forceExpanded: boolean) {
+function usePlotBodyColumns(cards: PlotCard[], isExpanded: (card: PlotCard) => boolean) {
   const [bodyColumns, setBodyColumns] = useState<Record<string, number>>({});
   const bodyRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
   const composingCardIds = useRef<Set<string>>(new Set());
@@ -144,13 +158,14 @@ function usePlotBodyColumns(cards: PlotCard[], forceExpanded: boolean) {
 
   useLayoutEffect(() => {
     cards.forEach((card) => {
-      if (!forceExpanded && !card.expanded) return;
+      if (card.kind === "chapter") return;
+      if (!isExpanded(card)) return;
       if (composingCardIds.current.has(card.id)) return;
 
       const element = bodyRefs.current.get(card.id);
       syncBodyColumns(card.id, card.body, element);
     });
-  }, [cards, forceExpanded, syncBodyColumns]);
+  }, [cards, isExpanded, syncBodyColumns]);
 
   return { bodyColumns, setBodyRef, syncBodyColumns, composingCardIds };
 }
@@ -158,8 +173,8 @@ function usePlotBodyColumns(cards: PlotCard[], forceExpanded: boolean) {
 type PlotBoardProps = {
   cards: PlotCard[];
   onCardsChange: Dispatch<SetStateAction<PlotCard[]>>;
-  /** When true every card is rendered expanded and the collapse toggle is hidden. */
-  forceExpanded?: boolean;
+  /** 管理画面モード: 折りたたみ状態を保存データではなくローカルに持ち、初期は全展開。 */
+  managerMode?: boolean;
   onOpenManager?: () => void;
   className?: string;
 };
@@ -167,20 +182,54 @@ type PlotBoardProps = {
 function PlotBoard({
   cards,
   onCardsChange,
-  forceExpanded = false,
+  managerMode = false,
   onOpenManager,
   className,
 }: PlotBoardProps) {
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
+  const [movingCardId, setMovingCardId] = useState<string | null>(null);
+  const [deletingCardId, setDeletingCardId] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ cardId: string; x: number; y: number } | null>(
+    null,
+  );
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  // 管理画面では展開状態を保存データに反映せず、ここでローカルに折りたたみを管理する。
+  const [localCollapsed, setLocalCollapsed] = useState<Set<string>>(() => new Set());
   const paneRef = useRef<HTMLDivElement | null>(null);
   const isPinnedToRightRef = useRef(true);
   const draggingCardIdRef = useRef<string | null>(null);
+
+  // セクションは本文表示、章は配下セクションの表示可否を表す共通の「展開」状態。
+  const isCardExpanded = useCallback(
+    (card: PlotCard) => (managerMode ? !localCollapsed.has(card.id) : card.expanded),
+    [managerMode, localCollapsed],
+  );
+
   const { bodyColumns, setBodyRef, syncBodyColumns, composingCardIds } = usePlotBodyColumns(
     cards,
-    forceExpanded,
+    isCardExpanded,
   );
 
   const visualCards = [...cards].reverse();
+
+  // 章ごとのセクション数と、折りたたまれた章の配下セクション（描画しない）を求める。
+  const sectionCountByChapter = new Map<string, number>();
+  const hiddenSectionIds = new Set<string>();
+  {
+    let currentChapter: PlotCard | null = null;
+    for (const card of cards) {
+      if (card.kind === "chapter") {
+        currentChapter = card;
+        sectionCountByChapter.set(card.id, 0);
+      } else if (currentChapter) {
+        sectionCountByChapter.set(
+          currentChapter.id,
+          (sectionCountByChapter.get(currentChapter.id) ?? 0) + 1,
+        );
+        if (!isCardExpanded(currentChapter)) hiddenSectionIds.add(card.id);
+      }
+    }
+  }
 
   const moveCard = useCallback(
     (draggedId: string, targetId: string) => {
@@ -213,6 +262,25 @@ function PlotBoard({
 
     pane.scrollLeft = Math.max(0, pane.scrollWidth - pane.clientWidth);
   }, [bodyColumns, cards.length]);
+
+  useLayoutEffect(() => {
+    if (!contextMenu) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!contextMenuRef.current?.contains(event.target as Node)) setContextMenu(null);
+    };
+    const handleKeyDown = (event: WindowEventMap["keydown"]) => {
+      if (event.key === "Escape") setContextMenu(null);
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [contextMenu]);
 
   useLayoutEffect(() => {
     if (!draggingCardId) return;
@@ -273,7 +341,15 @@ function PlotBoard({
   };
 
   const toggleCard = (cardId: string) => {
-    if (forceExpanded) return;
+    if (managerMode) {
+      setLocalCollapsed((current) => {
+        const next = new Set(current);
+        if (next.has(cardId)) next.delete(cardId);
+        else next.add(cardId);
+        return next;
+      });
+      return;
+    }
 
     onCardsChange((current) =>
       current.map((card) =>
@@ -289,28 +365,80 @@ function PlotBoard({
   };
 
   const deleteCard = (cardId: string) => {
-    const card = cards.find((item) => item.id === cardId);
-    if (!card) return;
+    setDeletingCardId(cardId);
+  };
 
-    const label = card.title.trim() || card.num;
-    if (!window.confirm(`プロット「${label}」を削除しますか？`)) return;
+  const confirmDelete = () => {
+    if (!deletingCardId) return;
+    const id = deletingCardId;
+    onCardsChange((current) => renumberPlotCards(current.filter((item) => item.id !== id)));
+    setDeletingCardId(null);
+  };
 
-    onCardsChange((current) => renumberPlotCards(current.filter((item) => item.id !== cardId)));
+  const handleCardContextMenu = (cardId: string, event: ReactMouseEvent<HTMLElement>) => {
+    // 編集可能なテキスト欄ではブラウザ標準メニュー（コピー/貼り付け）を優先する。
+    if ((event.target as HTMLElement).closest("textarea:not([readonly]), input:not([readonly])")) {
+      return;
+    }
+    event.preventDefault();
+    setContextMenu({ cardId, x: event.clientX, y: event.clientY });
   };
 
   const addCard = () => {
-    onCardsChange((current) => {
-      const nextIndex = current.length + 1;
-      return [
+    onCardsChange((current) =>
+      renumberPlotCards([
         ...current,
         {
           id: `plot-${Date.now()}`,
-          num: String(nextIndex).padStart(3, "0"),
+          kind: "section",
+          num: "",
           title: "",
           body: "",
-          expanded: forceExpanded,
+          expanded: false,
         },
-      ];
+      ]),
+    );
+  };
+
+  const addChapter = () => {
+    onCardsChange((current) =>
+      renumberPlotCards([
+        ...current,
+        {
+          id: `chapter-${Date.now()}`,
+          kind: "chapter",
+          num: "",
+          title: "",
+          body: "",
+          expanded: true,
+        },
+      ]),
+    );
+  };
+
+  /** セクションを指定章（chapterId===null は冒頭グループ）の末尾へ移動する。 */
+  const moveSectionToChapter = (sectionId: string, chapterId: string | null) => {
+    onCardsChange((current) => {
+      const section = current.find((card) => card.id === sectionId);
+      if (!section || section.kind !== "section") return current;
+
+      const without = current.filter((card) => card.id !== sectionId);
+
+      let insertAt: number;
+      if (chapterId === null) {
+        const firstChapter = without.findIndex((card) => card.kind === "chapter");
+        insertAt = firstChapter === -1 ? without.length : firstChapter;
+      } else {
+        const chapterIndex = without.findIndex((card) => card.id === chapterId);
+        if (chapterIndex === -1) return current;
+        let end = chapterIndex + 1;
+        while (end < without.length && without[end].kind !== "chapter") end += 1;
+        insertAt = end;
+      }
+
+      const next = [...without];
+      next.splice(insertAt, 0, section);
+      return renumberPlotCards(next);
     });
   };
 
@@ -362,121 +490,358 @@ function PlotBoard({
   });
 
   return (
-    <div
-      ref={paneRef}
-      className={`plotPane ${className ?? ""}`.trim()}
-      aria-label="Plot"
-      onScroll={handleScroll}
-      onWheel={handleWheel}
-    >
-      <div className="plotTrack">
-        <div className="plotTrackActions">
-          <button
-            className="plotAddButton"
-            type="button"
-            aria-label="プロットを追加"
-            title="プロットを追加"
-            onClick={addCard}
-          >
-            ＋
-          </button>
-          {onOpenManager && (
+    <>
+      <div
+        ref={paneRef}
+        className={`plotPane ${className ?? ""}`.trim()}
+        aria-label="Plot"
+        onScroll={handleScroll}
+        onWheel={handleWheel}
+      >
+        <div className="plotTrack">
+          <div className="plotTrackActions">
+            <button
+              className="plotAddButton"
+              type="button"
+              aria-label="プロットを追加"
+              title="プロットを追加"
+              onClick={addCard}
+            >
+              ＋
+            </button>
             <button
               className="plotToolButton"
               type="button"
-              aria-label="プロットを管理"
-              title="プロットを管理"
-              onClick={onOpenManager}
+              aria-label="章を追加"
+              title="章を追加"
+              onClick={addChapter}
             >
-              <PlotIcon name="list" />
+              <PlotIcon name="bookmark" />
             </button>
-          )}
-        </div>
-        {visualCards.map((card) => {
-          const expanded = forceExpanded || card.expanded;
-
-          return (
-            <article
-              className={`plotCard ${expanded ? "expandedPlotCard" : ""} ${
-                draggingCardId === card.id ? "draggingPlotCard" : ""
-              }`}
-              key={card.id}
-              data-plot-card-id={card.id}
-              style={getPlotCardStyle(card, expanded)}
-            >
-              <div className="plotCardToolbar">
-                <button
-                  className="plotToolButton plotDragHandle"
-                  type="button"
-                  aria-label={`${card.num} をドラッグして並び替え`}
-                  title="ドラッグして並び替え"
-                  onPointerDown={(event) => handleCardDragStart(card.id, event)}
-                >
-                  <PlotIcon name="grip" />
-                </button>
-                <button
-                  className="plotToolButton dangerPlotToolButton"
-                  type="button"
-                  aria-label={`${card.num} を削除`}
-                  title="プロットを削除"
-                  onClick={() => deleteCard(card.id)}
-                >
-                  <PlotIcon name="trash" />
-                </button>
-              </div>
+            {onOpenManager && (
               <button
-                className="plotCardNum"
+                className="plotToolButton"
                 type="button"
-                onClick={() => toggleCard(card.id)}
-                title={forceExpanded ? undefined : "クリックで展開/折りたたみ"}
-                aria-disabled={forceExpanded || undefined}
+                aria-label="プロットを管理"
+                title="プロットを管理"
+                onClick={onOpenManager}
               >
-                {card.num}
+                <PlotIcon name="list" />
               </button>
-              <div className="plotCardContent">
-                <textarea
-                  className="plotCardTitle"
-                  value={card.title}
-                  placeholder="タイトル…"
-                  readOnly={!expanded}
-                  spellCheck={false}
-                  tabIndex={expanded ? 0 : -1}
-                  wrap="off"
-                  aria-label={`${card.num} タイトル`}
-                  onChange={(event) => handleTitleChange(card.id, event)}
-                  onKeyDown={handleTitleKeyDown}
-                />
-                {expanded && (
+            )}
+          </div>
+          {visualCards.map((card) => {
+            if (card.kind === "chapter") {
+              const chapterOpen = isCardExpanded(card);
+              const count = sectionCountByChapter.get(card.id) ?? 0;
+
+              return (
+                <section
+                  className={`plotChapterBand ${chapterOpen ? "" : "collapsedPlotChapterBand"} ${
+                    draggingCardId === card.id ? "draggingPlotCard" : ""
+                  }`}
+                  key={card.id}
+                  data-plot-card-id={card.id}
+                  onContextMenu={(event) => handleCardContextMenu(card.id, event)}
+                >
+                  <div className="plotCardToolbar">
+                    <button
+                      className="plotToolButton plotDragHandle"
+                      type="button"
+                      aria-label="章をドラッグして並び替え"
+                      title="ドラッグして並び替え"
+                      onPointerDown={(event) => handleCardDragStart(card.id, event)}
+                    >
+                      <PlotIcon name="grip" />
+                    </button>
+                  </div>
+                  <span className="plotChapterMark" aria-hidden="true">
+                    <PlotIcon name="bookmark" />
+                  </span>
                   <textarea
-                    ref={setBodyRef(card.id)}
-                    className="plotCardBody"
-                    value={card.body}
-                    placeholder="本文…"
-                    aria-multiline="true"
-                    aria-label={`${card.num} 本文`}
+                    className="plotChapterTitle"
+                    value={card.title}
+                    placeholder="章のタイトル…"
                     spellCheck={false}
-                    wrap="soft"
-                    onChange={(event) => handleBodyChange(card.id, event)}
-                    onCompositionStart={() => handleBodyCompositionStart(card.id)}
-                    onCompositionEnd={(event) => handleBodyCompositionEnd(card.id, event)}
+                    wrap="off"
+                    aria-label="章のタイトル"
+                    onChange={(event) => handleTitleChange(card.id, event)}
+                    onKeyDown={handleTitleKeyDown}
                   />
-                )}
-              </div>
-              {!forceExpanded && (
+                  {!chapterOpen && count > 0 && (
+                    <span className="plotChapterCount" aria-hidden="true">
+                      {count}
+                    </span>
+                  )}
+                  <button
+                    className="plotCardToggle"
+                    type="button"
+                    aria-label={chapterOpen ? "章を折りたたむ" : "章を展開する"}
+                    title={chapterOpen ? "章を折りたたむ" : "章を展開する"}
+                    onClick={() => toggleCard(card.id)}
+                  >
+                    {chapterOpen ? "›" : "‹"}
+                  </button>
+                </section>
+              );
+            }
+
+            if (hiddenSectionIds.has(card.id)) return null;
+
+            const expanded = isCardExpanded(card);
+
+            return (
+              <article
+                className={`plotCard ${expanded ? "expandedPlotCard" : ""} ${
+                  draggingCardId === card.id ? "draggingPlotCard" : ""
+                }`}
+                key={card.id}
+                data-plot-card-id={card.id}
+                style={getPlotCardStyle(card, expanded)}
+                onContextMenu={(event) => handleCardContextMenu(card.id, event)}
+              >
+                <div className="plotCardToolbar">
+                  <button
+                    className="plotToolButton plotDragHandle"
+                    type="button"
+                    aria-label={`${card.num} をドラッグして並び替え`}
+                    title="ドラッグして並び替え"
+                    onPointerDown={(event) => handleCardDragStart(card.id, event)}
+                  >
+                    <PlotIcon name="grip" />
+                  </button>
+                </div>
+                <button
+                  className="plotCardNum"
+                  type="button"
+                  onClick={() => toggleCard(card.id)}
+                  title="クリックで展開/折りたたみ"
+                >
+                  {card.num}
+                </button>
+                <div className="plotCardContent">
+                  <textarea
+                    className="plotCardTitle"
+                    value={card.title}
+                    placeholder="タイトル…"
+                    readOnly={!expanded}
+                    spellCheck={false}
+                    tabIndex={expanded ? 0 : -1}
+                    wrap="off"
+                    aria-label={`${card.num} タイトル`}
+                    onChange={(event) => handleTitleChange(card.id, event)}
+                    onKeyDown={handleTitleKeyDown}
+                  />
+                  {expanded && (
+                    <textarea
+                      ref={setBodyRef(card.id)}
+                      className="plotCardBody"
+                      value={card.body}
+                      placeholder="本文…"
+                      aria-multiline="true"
+                      aria-label={`${card.num} 本文`}
+                      spellCheck={false}
+                      wrap="soft"
+                      onChange={(event) => handleBodyChange(card.id, event)}
+                      onCompositionStart={() => handleBodyCompositionStart(card.id)}
+                      onCompositionEnd={(event) => handleBodyCompositionEnd(card.id, event)}
+                    />
+                  )}
+                </div>
                 <button
                   className="plotCardToggle"
                   type="button"
-                  aria-label={card.expanded ? "折りたたむ" : "展開する"}
-                  title={card.expanded ? "折りたたむ" : "展開する"}
+                  aria-label={expanded ? "折りたたむ" : "展開する"}
+                  title={expanded ? "折りたたむ" : "展開する"}
                   onClick={() => toggleCard(card.id)}
                 >
-                  {card.expanded ? "›" : "‹"}
+                  {expanded ? "›" : "‹"}
                 </button>
-              )}
-            </article>
-          );
-        })}
+              </article>
+            );
+          })}
+        </div>
       </div>
+      {movingCardId && (
+        <PlotMoveModal
+          cards={cards}
+          sectionId={movingCardId}
+          onClose={() => setMovingCardId(null)}
+          onMove={(chapterId) => {
+            moveSectionToChapter(movingCardId, chapterId);
+            setMovingCardId(null);
+          }}
+        />
+      )}
+      {deletingCardId && (
+        <PlotDeleteDialog
+          card={cards.find((card) => card.id === deletingCardId) ?? null}
+          onCancel={() => setDeletingCardId(null)}
+          onConfirm={confirmDelete}
+        />
+      )}
+      {contextMenu &&
+        (() => {
+          const card = cards.find((item) => item.id === contextMenu.cardId);
+          if (!card) return null;
+          const isChapter = card.kind === "chapter";
+
+          return (
+            <div
+              ref={contextMenuRef}
+              className="editorContextMenu plotContextMenu"
+              role="menu"
+              style={{ left: contextMenu.x, top: contextMenu.y }}
+            >
+              <div className="contextMenuSection">
+                {!isChapter && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMovingCardId(card.id);
+                      setContextMenu(null);
+                    }}
+                  >
+                    章へ移動…
+                  </button>
+                )}
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="plotContextDanger"
+                  onClick={() => {
+                    setContextMenu(null);
+                    deleteCard(card.id);
+                  }}
+                >
+                  {isChapter ? "章を削除" : "削除"}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+    </>
+  );
+}
+
+type PlotMoveModalProps = {
+  cards: PlotCard[];
+  sectionId: string;
+  onClose: () => void;
+  onMove: (chapterId: string | null) => void;
+};
+
+function PlotMoveModal({ cards, sectionId, onClose, onMove }: PlotMoveModalProps) {
+  const groups = groupByChapter(cards);
+  const currentChapterId =
+    groups.find((group) => group.sections.some((section) => section.id === sectionId))?.chapter?.id ??
+    null;
+  const hasLeadingGroup = groups.some((group) => group.chapter === null);
+
+  const options: { id: string | null; label: string }[] = [];
+  if (hasLeadingGroup) {
+    options.push({ id: null, label: "冒頭（章なし）" });
+  }
+  for (const group of groups) {
+    if (!group.chapter) continue;
+    options.push({ id: group.chapter.id, label: group.chapter.title.trim() || "（無題の章）" });
+  }
+
+  return (
+    <div className="modalBackdrop" role="presentation" onClick={onClose}>
+      <section
+        className="modal compactModal plotMoveModal"
+        aria-label="章へ移動"
+        role="dialog"
+        aria-modal="true"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="modalHeader">
+          <h2>章へ移動</h2>
+          <button className="modalClose" type="button" aria-label="閉じる" onClick={onClose}>
+            ×
+          </button>
+        </header>
+        <div className="modalForm">
+          {options.length === 0 ? (
+            <p className="plotMoveEmpty">章がありません。先に「章を追加」してください。</p>
+          ) : (
+            <ul className="plotMoveList">
+              {options.map((option) => (
+                <li key={option.id ?? "__lead__"}>
+                  <button
+                    className="plotMoveOption"
+                    type="button"
+                    disabled={option.id === currentChapterId}
+                    onClick={() => onMove(option.id)}
+                  >
+                    <span>{option.label}</span>
+                    {option.id === currentChapterId && <small>現在の章</small>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <footer className="modalActions">
+          <button type="button" onClick={onClose}>
+            閉じる
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+type PlotDeleteDialogProps = {
+  card: PlotCard | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+};
+
+function PlotDeleteDialog({ card, onCancel, onConfirm }: PlotDeleteDialogProps) {
+  if (!card) return null;
+
+  const isChapter = card.kind === "chapter";
+  const label = card.title.trim() || (isChapter ? "（無題の章）" : card.num);
+
+  return (
+    <div className="modalBackdrop" role="presentation" onClick={onCancel}>
+      <section
+        className="modal compactModal"
+        aria-label={isChapter ? "章を削除" : "プロットを削除"}
+        role="dialog"
+        aria-modal="true"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="modalHeader">
+          <h2>{isChapter ? "章を削除" : "プロットを削除"}</h2>
+          <button className="modalClose" type="button" aria-label="閉じる" onClick={onCancel}>
+            ×
+          </button>
+        </header>
+        <div className="modalForm">
+          <div className="dialogMessage">
+            <p>
+              {isChapter ? `章「${label}」を削除しますか？` : `プロット「${label}」を削除しますか？`}
+            </p>
+            <span>
+              {isChapter
+                ? "配下のプロットは前の章に統合されます。この操作は取り消せません。"
+                : "この操作は取り消せません。"}
+            </span>
+          </div>
+          <footer className="modalActions">
+            <button type="button" onClick={onCancel}>
+              キャンセル
+            </button>
+            <button className="dangerAction" type="button" onClick={onConfirm}>
+              削除
+            </button>
+          </footer>
+        </div>
+      </section>
     </div>
   );
 }
@@ -531,7 +896,7 @@ function PlotManagerModal({ cards, onCardsChange, onClose }: PlotManagerModalPro
         <PlotBoard
           cards={cards}
           onCardsChange={onCardsChange}
-          forceExpanded
+          managerMode
           className="plotManagerBoard"
         />
         <footer className="modalActions">

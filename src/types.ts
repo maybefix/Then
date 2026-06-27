@@ -8,8 +8,12 @@ export type Snippet = {
   tags: string[];
 };
 
+export type PlotCardKind = "section" | "chapter";
+
 export type PlotCard = {
   id: string;
+  /** "section" は通常のプロット、"chapter" は章ラベル（本文なし）。 */
+  kind: PlotCardKind;
   num: string;
   title: string;
   body: string;

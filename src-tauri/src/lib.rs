@@ -62,9 +62,15 @@ struct SnippetConfig {
     tags: Vec<String>,
 }
 
+fn default_plot_card_kind() -> String {
+    "section".to_string()
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 struct PlotCardConfig {
     id: String,
+    #[serde(default = "default_plot_card_kind")]
+    kind: String,
     num: String,
     title: String,
     body: String,

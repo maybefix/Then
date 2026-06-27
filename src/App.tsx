@@ -230,6 +230,7 @@ const htmlIdeaSnippets: Snippet[] = [
 const defaultPlotCards: PlotCard[] = [
   {
     id: "plot-1",
+    kind: "section",
     num: "001",
     title: "縦書きプロットテストです",
     body: "",
@@ -237,6 +238,7 @@ const defaultPlotCards: PlotCard[] = [
   },
   {
     id: "plot-2",
+    kind: "section",
     num: "002",
     title: "縦書きプロットテストです",
     body: "",
@@ -244,6 +246,7 @@ const defaultPlotCards: PlotCard[] = [
   },
   {
     id: "plot-3",
+    kind: "section",
     num: "003",
     title: "縦書きプロットテストです",
     body: "これは縦書きプロットテストです。ちゃんと書けていることを確かめるためにあります。",
@@ -411,16 +414,22 @@ function normalizePlotCards(value: unknown): PlotCard[] {
     .filter((card): card is Partial<PlotCard> & { id: string } =>
       Boolean(card) && typeof card === "object" && typeof card.id === "string",
     )
-    .map((card, index) => ({
-      id: card.id,
-      num:
-        typeof card.num === "string" && card.num.trim()
-          ? card.num
-          : String(index + 1).padStart(3, "0"),
-      title: typeof card.title === "string" ? card.title : "",
-      body: typeof card.body === "string" ? card.body : "",
-      expanded: Boolean(card.expanded),
-    }));
+    .map((card, index) => {
+      const kind = card.kind === "chapter" ? "chapter" : "section";
+      return {
+        id: card.id,
+        kind,
+        num:
+          kind === "chapter"
+            ? ""
+            : typeof card.num === "string" && card.num.trim()
+              ? card.num
+              : String(index + 1).padStart(3, "0"),
+        title: typeof card.title === "string" ? card.title : "",
+        body: typeof card.body === "string" ? card.body : "",
+        expanded: Boolean(card.expanded),
+      };
+    });
 }
 
 function quoteCssFontFamily(family: string): string {
