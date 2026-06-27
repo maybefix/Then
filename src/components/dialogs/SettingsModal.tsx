@@ -130,6 +130,16 @@ export function SettingsModal({
             />
             <span>改行記号を表示</span>
           </label>
+          <label className="checkSetting">
+            <input
+              checked={settings.countWhitespace}
+              type="checkbox"
+              onChange={(event) =>
+                onUpdateSettings("countWhitespace", event.target.checked)
+              }
+            />
+            <span>文字数に空白を含める</span>
+          </label>
           <label>
             <span>ファイル表示方式</span>
             <select
