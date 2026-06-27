@@ -2361,7 +2361,7 @@ body {
 }
 
 .activeTreeItem {
-  background: rgba(212, 173, 82, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--text-primary);
 }
 
@@ -2689,7 +2689,7 @@ body {
 }
 
 .navigatorFileItemActive {
-  background: rgba(212, 173, 82, 0.12);
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent));
 }
 
 .navigatorFileButton {
@@ -2751,7 +2751,7 @@ body {
 }
 
 .navigatorCurrentFileActive {
-  background: rgba(212, 173, 82, 0.14);
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
 }
 
 .navigatorFileName {
@@ -2800,7 +2800,7 @@ body {
 }
 
 .navigatorHeadingItemActive {
-  background: rgba(212, 173, 82, 0.12);
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent));
   color: var(--text-primary);
 }
 
