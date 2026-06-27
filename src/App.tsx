@@ -1968,8 +1968,9 @@ export default function App() {
     if (editor) {
       setEditorSelectionHead(editor.getSelection().head);
     }
-    scheduleTypewriterScroll();
-  }, [scheduleTypewriterScroll]);
+    // 選択変化に伴うタイプライター再センタリングはエディタ内部に一本化した。
+    // App 側の scheduleTypewriterScroll は設定・オフセット変更時の再適用専用に残す。
+  }, []);
 
   const showToast = (message: string) => {
     setToast(message);
