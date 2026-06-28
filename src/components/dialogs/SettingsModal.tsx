@@ -101,6 +101,21 @@ export function SettingsModal({
               ))}
             </select>
           </label>
+          <label>
+            <span>本文方向</span>
+            <select
+              value={settings.writingMode}
+              onChange={(event) =>
+                onUpdateSettings(
+                  "writingMode",
+                  event.target.value as EditorSettings["writingMode"],
+                )
+              }
+            >
+              <option value="vertical-rl">縦書き</option>
+              <option value="horizontal-tb">横書き</option>
+            </select>
+          </label>
           <div className="modalFormGrid">
             <label>
               <span>文字サイズ</span>

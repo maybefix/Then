@@ -34,6 +34,7 @@ export const appThemeValues = [
   "apple-light",
   "apple-dark",
   "smarthr-light",
+  "life-light",
   "yamaha-light",
   "yamaha-dark",
   "sony-dark",
@@ -76,6 +77,9 @@ export type AppTheme = (typeof appThemeValues)[number];
 /** 左サイドバーのファイル表示方式。 */
 export type SidebarMode = "tree" | "navigator";
 
+/** 本文エディタの書字方向。 */
+export type WritingMode = "vertical-rl" | "horizontal-tb";
+
 /** ファイルごとの進捗ラベル。デフォルトは "todo"（未着手）。 */
 export type FileProgressStatus = "todo" | "writing" | "revising" | "done";
 
@@ -104,6 +108,7 @@ export type EditorSettings = {
   exportFontFamily: ExportFontFamily;
   fontSize: number;
   lineHeight: number;
+  writingMode: WritingMode;
   typewriterScroll: boolean;
   typewriterOffset: number;
   showLineBreakMarks: boolean;
@@ -131,8 +136,8 @@ export type CursorPosition = {
 export const NAVIGATOR_PREVIEW_LINE_CHOICES: readonly number[] = [0, 1, 2, 3] as const;
 export const DEFAULT_NAVIGATOR_PREVIEW_LINES = 2;
 
-/** UI 表示倍率の選択肢（小／標準／大／特大）。 */
-export const UI_FONT_SCALE_CHOICES: readonly number[] = [0.85, 1, 1.15, 1.3] as const;
+/** UI 表示倍率の選択肢。 */
+export const UI_FONT_SCALE_CHOICES: readonly number[] = [0.85, 1, 1.05, 1.1, 1.15, 1.3] as const;
 export const UI_FONT_SCALE_MIN = 0.7;
 export const UI_FONT_SCALE_MAX = 1.6;
 

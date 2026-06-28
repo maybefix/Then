@@ -25,7 +25,7 @@ export function ThemePickerModal({
             <h2>テーマを選択</h2>
             <p>選択内容はすぐにプレビューされ、自動的に保存されます。</p>
           </div>
-          <button className="modalClose" type="button" aria-label="設定に戻る" onClick={onClose}>
+          <button className="modalClose" type="button" aria-label="テーマ選択を閉じる" onClick={onClose}>
             ×
           </button>
         </header>
@@ -63,7 +63,7 @@ export function ThemePickerModal({
           ))}
         </div>
         <footer className="modalActions themePickerActions">
-          <button type="button" onClick={onClose}>設定に戻る</button>
+          <button type="button" onClick={onClose}>閉じる</button>
         </footer>
       </section>
     </div>

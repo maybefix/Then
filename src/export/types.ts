@@ -26,6 +26,8 @@ export type ExportStartMode = "continue" | "new-page" | "odd-page" | "even-page"
 
 export type ExportPageSize = "B6" | "A5" | "A6" | "B5" | "A4" | "custom";
 
+export type ExportWritingMode = "vertical-rl" | "horizontal-tb";
+
 export type ExportSourceFile = {
   id: string;
   path: string;
@@ -56,7 +58,7 @@ export type ExportLayoutProfile = {
     facingPages: boolean;
   };
   body: {
-    writingMode: "vertical-rl";
+    writingMode: ExportWritingMode;
     columns: 1 | 2;
     columnGapMm: number;
     fontFamily: ExportFontFamily;

@@ -13,6 +13,7 @@ export const themeCatalog: ThemeDefinition[] = [
   { id: "claude", label: "Claude", description: "クリームとコーラル", mode: "light" },
   { id: "apple-light", label: "Apple", description: "ミニマルな白とブルー", mode: "light" },
   { id: "smarthr-light", label: "Worker", description: "Stone系とプロダクトブルー", mode: "light" },
+  { id: "life-light", label: "Life", description: "淡い業務UIとメディカルブルー", mode: "light" },
   { id: "yamaha-light", label: "Resonance", description: "白とロイヤルバイオレット", mode: "light" },
   { id: "ana-light", label: "BlueSky", description: "清潔な白とブルー", mode: "light" },
   { id: "nissan-light", label: "Drive", description: "構造的な白とレッド", mode: "light" },

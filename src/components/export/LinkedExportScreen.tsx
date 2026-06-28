@@ -88,7 +88,9 @@ function readLastLayout(): ExportLayoutProfile | null {
     const stored = localStorage.getItem(LAST_LAYOUT_KEY);
     if (!stored) return null;
     const parsed = JSON.parse(stored) as ExportLayoutProfile;
-    return parsed?.body?.writingMode === "vertical-rl" ? parsed : null;
+    return parsed?.body?.writingMode === "vertical-rl" || parsed?.body?.writingMode === "horizontal-tb"
+      ? parsed
+      : null;
   } catch {
     return null;
   }
@@ -151,7 +153,7 @@ function base64Utf8(value: string): string {
 // same engine and document are used for the PDF, so the preview is WYSIWYG.
 function vivliostyleViewerSrc(html: string): string {
   const dataUrl = `data:text/html;charset=utf-8;base64,${base64Utf8(html)}`;
-  const params = `src=${encodeURIComponent(dataUrl)}&bookMode=true&spreadView=true&renderAllPages=true`;
+  const params = `src=${dataUrl}&bookMode=true&spreadView=true&renderAllPages=true`;
   return `/vendor/vivliostyle-viewer/index.html#${params}`;
 }
 
@@ -176,6 +178,7 @@ function PreviewPage({
     lineHeight: document.layout.body.lineHeight,
     columnCount: document.layout.body.columns,
     columnGap: `${document.layout.body.columnGapMm / width * 100}%`,
+    writingMode: document.layout.body.writingMode,
   };
   return (
     <div className="exportPreviewPaper" style={{ aspectRatio: `${width} / ${height}` }}>
@@ -301,7 +304,7 @@ export function LinkedExportScreen({
       });
   };
 
-  const applyPreset = (preset: "standard" | "doujin" | "a5-2col") => {
+  const applyPreset = (preset: "standard" | "doujin" | "a5-2col" | "a4-horizontal") => {
     const next = cloneLayout(DEFAULT_EXPORT_LAYOUT);
     if (preset === "doujin") {
       next.name = "同人誌 B6・1段";
@@ -318,6 +321,17 @@ export function LinkedExportScreen({
       next.body.columns = 2;
       next.body.columnGapMm = 8;
       next.body.fontSize = 11.5;
+    } else if (preset === "a4-horizontal") {
+      next.name = "A4・横書き";
+      next.page.size = "A4";
+      next.page.marginTopMm = 20;
+      next.page.marginBottomMm = 20;
+      next.page.marginInnerMm = 22;
+      next.page.marginOuterMm = 18;
+      next.body.writingMode = "horizontal-tb";
+      next.body.columns = 1;
+      next.body.fontSize = 13;
+      next.body.lineHeight = 1.75;
     }
     patchLayout(() => next);
   };
@@ -388,7 +402,8 @@ export function LinkedExportScreen({
 
   const [pageWidth, pageHeight] = resolvePageDimensions(layout);
   const pageSummary = `${layout.page.size}・余白 ${layout.page.marginTopMm}mm`;
-  const bodySummary = `${layout.body.fontFamily.includes("Serif") ? "明朝" : "ゴシック"} ${layout.body.fontSize}${layout.body.fontSizeUnit}・${layout.body.columns}段`;
+  const directionLabel = layout.body.writingMode === "horizontal-tb" ? "横書き" : "縦書き";
+  const bodySummary = `${directionLabel}・${layout.body.fontFamily.includes("Serif") ? "明朝" : "ゴシック"} ${layout.body.fontSize}${layout.body.fontSizeUnit}・${layout.body.columns}段`;
 
   return (
     <div className="exportModalBackdrop" role="presentation">
@@ -534,6 +549,11 @@ export function LinkedExportScreen({
 
             {renderSectionHeader("body", "本文設定", bodySummary)}
             {openSections.has("body") && <div className="exportSettingsContent">
+              <span className="exportFieldLabel">本文方向</span>
+              <div className="exportPillGroup">
+                <button type="button" className={layout.body.writingMode === "vertical-rl" ? "active" : ""} onClick={() => patchLayout((next) => { next.body.writingMode = "vertical-rl"; return next; })}>縦書き</button>
+                <button type="button" className={layout.body.writingMode === "horizontal-tb" ? "active" : ""} onClick={() => patchLayout((next) => { next.body.writingMode = "horizontal-tb"; return next; })}>横書き</button>
+              </div>
               <label>本文フォント<select value={layout.body.fontFamily} onChange={(event) => patchLayout((next) => { next.body.fontFamily = event.target.value as ExportLayoutProfile["body"]["fontFamily"]; return next; })}><option value="Noto Serif CJK JP">源ノ明朝（明朝体）</option><option value="Noto Sans CJK JP">源ノ角ゴシック（ゴシック体）</option></select></label>
               <div className="exportFieldGrid two"><label>文字サイズ (Q)<input type="number" min="6" step="0.5" value={layout.body.fontSize} onChange={(event) => patchLayout((next) => { next.body.fontSize = Number(event.target.value); next.body.fontSizeUnit = "Q"; return next; })}/></label><label>行間<input type="number" min="1" step="0.05" value={layout.body.lineHeight} onChange={(event) => patchLayout((next) => { next.body.lineHeight = Number(event.target.value); return next; })}/></label></div>
               <span className="exportFieldLabel">段組</span><div className="exportPillGroup"><button type="button" className={layout.body.columns === 1 ? "active" : ""} onClick={() => patchLayout((next) => { next.body.columns = 1; return next; })}>1段</button><button type="button" className={layout.body.columns === 2 ? "active" : ""} onClick={() => patchLayout((next) => { next.body.columns = 2; return next; })}>2段</button></div>
@@ -557,7 +577,7 @@ export function LinkedExportScreen({
             </div>}
 
             {renderSectionHeader("preset", "プリセット", layout.name ?? "カスタム")}
-            {openSections.has("preset") && <div className="exportSettingsContent exportPresetButtons"><button type="button" onClick={() => applyPreset("standard")}>標準・縦書き文庫</button><button type="button" onClick={() => applyPreset("doujin")}>同人誌 B6・1段</button><button type="button" onClick={() => applyPreset("a5-2col")}>A5・2段組</button><button type="button" onClick={() => { const stored = readLastLayout(); if (stored) patchLayout(() => stored); }}>前回設定を読み込む</button><button type="button" onClick={saveLayout}>この設定を保存</button></div>}
+            {openSections.has("preset") && <div className="exportSettingsContent exportPresetButtons"><button type="button" onClick={() => applyPreset("standard")}>標準・縦書き文庫</button><button type="button" onClick={() => applyPreset("doujin")}>同人誌 B6・1段</button><button type="button" onClick={() => applyPreset("a5-2col")}>A5・2段組</button><button type="button" onClick={() => applyPreset("a4-horizontal")}>A4・横書き</button><button type="button" onClick={() => { const stored = readLastLayout(); if (stored) patchLayout(() => stored); }}>前回設定を読み込む</button><button type="button" onClick={saveLayout}>この設定を保存</button></div>}
           </aside>
         </div>
 

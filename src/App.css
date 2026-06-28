@@ -682,49 +682,6 @@ body.thenPdfExporting .printExportViewport {
   background: var(--border-subtle);
 }
 
-.menuFileIcon {
-  position: relative;
-  width: 12px;
-  height: 14px;
-  flex: 0 0 12px;
-  border: 1px solid var(--text-faint);
-  border-radius: 2px;
-}
-
-.menuFileIcon::after {
-  position: absolute;
-  top: -1px;
-  right: -1px;
-  width: 4px;
-  height: 4px;
-  border-bottom: 1px solid var(--text-faint);
-  border-left: 1px solid var(--text-faint);
-  background: var(--bg-panel);
-  content: "";
-}
-
-.menuFolderIcon {
-  position: relative;
-  width: 14px;
-  height: 12px;
-  flex: 0 0 14px;
-  border: 1px solid var(--text-faint);
-  border-radius: 2px;
-}
-
-.menuFolderIcon::before {
-  position: absolute;
-  top: -4px;
-  left: -1px;
-  width: 7px;
-  height: 4px;
-  border: 1px solid var(--text-faint);
-  border-bottom: 0;
-  border-radius: 2px 2px 0 0;
-  background: var(--bg-panel);
-  content: "";
-}
-
 .topbarActions {
   display: inline-flex;
   align-items: center;
@@ -755,6 +712,35 @@ body.thenPdfExporting .printExportViewport {
 .addButton:hover {
   background: #353834;
   color: var(--text-primary);
+}
+
+.activeIconButton {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent-strong);
+}
+
+.topbarSvgIcon,
+.menuSvgIcon,
+.workspaceSwitcherBookIcon,
+.workspaceFolderTreeIcon {
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.topbarSvgIcon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.8;
+}
+
+.menuSvgIcon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  stroke-width: 1.65;
 }
 
 .workspace {
@@ -1667,6 +1653,83 @@ body.thenPdfExporting .printExportViewport {
   width: 0;
   border-left: 1px solid rgba(232, 176, 75, 0.14);
   pointer-events: none;
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterScroller {
+  writing-mode: horizontal-tb;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor {
+  min-width: 100%;
+  height: auto;
+  min-height: 100%;
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root {
+  box-sizing: border-box;
+  width: min(760px, calc(100% - 64px));
+  min-width: 0;
+  min-height: 100%;
+  height: auto;
+  margin: 0 auto;
+  padding: max(160px, 65vh) 0 max(220px, 72vh);
+  writing-mode: horizontal-tb;
+  text-orientation: mixed;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+  text-justify: auto;
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p {
+  contain-intrinsic-inline-size: auto 100%;
+  contain-intrinsic-block-size: auto 2.2em;
+  text-justify: auto;
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.jitsuki,
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.align-start,
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.align-center,
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.align-end {
+  min-inline-size: 0;
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .ruby-base::after {
+  top: auto;
+  right: auto;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  writing-mode: horizontal-tb;
+  text-orientation: mixed;
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .em-goma,
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .em-auto,
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .em-dot {
+  text-emphasis-position: over;
+  -webkit-text-emphasis-position: over;
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .tcy,
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .tcy-rejected,
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .tcy-boundary {
+  margin-inline: 0;
+  padding-inline: 0;
+  text-combine-upright: none;
+  -webkit-text-combine: none;
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterGuide {
+  left: 0;
+  right: 0;
+  top: var(--typewriter-guide-position, 50%);
+  bottom: auto;
+  width: auto;
+  height: 0;
+  border-left: 0;
+  border-top: 1px solid rgba(232, 176, 75, 0.14);
 }
 
 .asideLine {
@@ -4608,6 +4671,39 @@ body {
   --radius-button: 6px;
 }
 
+.appShell[data-theme="life-light"] {
+  --bg-root: #eef4fb;
+  --bg-primary: #f8fbff;
+  --bg-secondary: #edf3fb;
+  --bg-tertiary: #dfeaf7;
+  --bg-panel: #fff;
+  --bg-panel-strong: #f3f8fe;
+  --border-subtle: #c8d6e6;
+  --border-strong: #8fa9c7;
+  --text-primary: #26364a;
+  --text-secondary: #4c5f76;
+  --text-muted: #6d7f92;
+  --text-faint: #9aaabc;
+  --accent: #432fd8;
+  --accent-strong: #2217b8;
+  --success: #23835c;
+  --warning: #a06f00;
+  --danger: #c33142;
+  --accent-soft: rgba(47, 115, 216, 0.12);
+  --accent-border: rgba(47, 115, 216, 0.52);
+  --editor-bg: #fff;
+  --card-bg: #fff;
+  --card-hover: #f2f7fd;
+  --topbar-bg: #e7ecfb;
+  --sidebar-bg: #edeffc;
+  --selection-bg: #2f4bd8;
+  --selection-text: #fff;
+  --radius-control: 3px;
+  --radius-card: 3px;
+  --radius-button: 3px;
+  --silkdown-link-color: #1754b8;
+}
+
 .appShell[data-theme="yamaha-light"] {
   --bg-root: #f6f6f6;
   --bg-primary: #fff;
@@ -5124,6 +5220,9 @@ body {
   color: var(--text-faint);
 }
 .appShell[data-theme] .verticalTypewriterGuide { border-left-color: var(--accent-soft); }
+.appShell[data-theme][data-writing-mode="horizontal-tb"] .verticalTypewriterGuide {
+  border-top-color: var(--accent-soft);
+}
 .appShell[data-theme] .menuPopover,
 .appShell[data-theme] .editorContextMenu {
   border-color: var(--border-strong);
@@ -5427,6 +5526,10 @@ body {
 .themePreview-smarthr-light::before { background: #f8f7f6; }
 .themePreview-smarthr-light i { background: #23221e; }
 .themePreview-smarthr-light b { background: #0077c7; }
+.themePreview-life-light { background: #f7fbff; }
+.themePreview-life-light::before { background: #e7f0fb; }
+.themePreview-life-light i { background: #26364a; }
+.themePreview-life-light b { background: #2f73d8; box-shadow: 5px 0 0 #f5c842; }
 .themePreview-yamaha-light::before { background: #f6f6f6; }
 .themePreview-yamaha-light i { background: #333; }
 .themePreview-yamaha-light b { background: #4b1e78; }
@@ -7113,7 +7216,6 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
 .exportPreviewContent {
   position: absolute;
   overflow: hidden;
-  writing-mode: vertical-rl;
   text-orientation: mixed;
   line-break: strict;
 }
@@ -7130,7 +7232,9 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
 .exportPreviewContent .then-align-center { text-align: center; }
 .exportPreviewContent .then-align-end { text-align: end; }
 .exportPreviewContent .then-tcy { text-combine-upright: all; }
+.exportPreviewContent[style*="horizontal-tb"] .then-tcy { text-combine-upright: none; }
 .exportPreviewContent .then-emphasis { text-emphasis-position: over right; }
+.exportPreviewContent[style*="horizontal-tb"] .then-emphasis { text-emphasis-position: over; }
 .exportPreviewContent .then-emphasis-auto,
 .exportPreviewContent .then-emphasis-goma { text-emphasis-style: sesame; }
 .exportPreviewContent .then-emphasis-dot { text-emphasis-style: dot; }
