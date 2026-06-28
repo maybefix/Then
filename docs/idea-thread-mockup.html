@@ -1,0 +1,1202 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Then Idea Thread Mockup</title>
+  <style>
+    :root {
+      --canvas: #11100f;
+      --panel: #181715;
+      --panel-2: #201e1b;
+      --panel-3: #27231f;
+      --editor: #f7f2e8;
+      --editor-ink: #25221e;
+      --text: #f5f0e8;
+      --text-2: #c9c0b6;
+      --text-3: #8f877e;
+      --line: #36312c;
+      --line-2: #4b423a;
+      --accent: #cc785c;
+      --accent-2: #e8a55a;
+      --teal: #5db8a6;
+      --danger: #d56a6a;
+      --focus: rgba(204, 120, 92, 0.32);
+      --shadow: 0 16px 50px rgba(0, 0, 0, 0.3);
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--canvas);
+      color: var(--text);
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+      letter-spacing: 0;
+    }
+
+    button {
+      border: 0;
+    }
+
+    .app {
+      display: grid;
+      min-height: 100vh;
+      grid-template-rows: 44px minmax(0, 1fr);
+    }
+
+    .topbar {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+      background: #151311;
+      padding: 0 14px;
+    }
+
+    .brand {
+      display: inline-flex;
+      min-width: 0;
+      align-items: center;
+      gap: 10px;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .brandMark {
+      display: grid;
+      width: 22px;
+      height: 22px;
+      place-items: center;
+      border: 1px solid var(--line-2);
+      border-radius: 6px;
+      color: var(--accent);
+    }
+
+    .topMeta {
+      overflow: hidden;
+      color: var(--text-3);
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .workspace {
+      display: grid;
+      min-height: 0;
+      grid-template-columns: minmax(420px, 1fr) minmax(360px, 440px);
+    }
+
+    .editorArea {
+      display: grid;
+      min-width: 0;
+      min-height: 0;
+      grid-template-rows: 40px minmax(0, 1fr);
+      border-right: 1px solid var(--line);
+      background: #141210;
+    }
+
+    .editorToolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+      padding: 0 14px;
+    }
+
+    .fileName {
+      color: var(--text-2);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .statusRow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-3);
+      font-size: 12px;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--teal);
+    }
+
+    .manuscriptWrap {
+      min-height: 0;
+      overflow: auto;
+      padding: 28px;
+    }
+
+    .manuscript {
+      width: min(720px, 100%);
+      min-height: calc(100vh - 120px);
+      margin: 0 auto;
+      border: 1px solid #ddd1bf;
+      border-radius: 8px;
+      background: var(--editor);
+      box-shadow: var(--shadow);
+      color: var(--editor-ink);
+      padding: 38px 44px;
+      line-height: 1.9;
+      white-space: pre-wrap;
+    }
+
+    .manuscript h1 {
+      margin: 0 0 28px;
+      font-size: 22px;
+      line-height: 1.5;
+    }
+
+    .manuscriptText {
+      min-height: 360px;
+      outline: none;
+    }
+
+    .ideaShell {
+      display: grid;
+      min-width: 0;
+      min-height: 0;
+      grid-template-rows: auto minmax(0, 1fr);
+      background: var(--panel);
+    }
+
+    .ideaHeader {
+      border-bottom: 1px solid var(--line);
+      padding: 12px 14px;
+    }
+
+    .ideaHeaderTop {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .paneTitle {
+      min-width: 0;
+    }
+
+    .paneTitle h2 {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.3;
+    }
+
+    .paneTitle p {
+      margin: 3px 0 0;
+      color: var(--text-3);
+      font-size: 12px;
+    }
+
+    .segmented {
+      display: inline-flex;
+      flex: 0 0 auto;
+      gap: 2px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #13110f;
+      padding: 2px;
+    }
+
+    .segmented button {
+      height: 26px;
+      min-width: 34px;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--text-3);
+      cursor: pointer;
+      font-size: 12px;
+      padding: 0 8px;
+    }
+
+    .segmented button.isActive {
+      background: var(--panel-3);
+      color: var(--text);
+    }
+
+    .toolbarGrid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+    }
+
+    .searchBox,
+    .quickInput,
+    .fragmentInput {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      outline: none;
+      background: #141210;
+      color: var(--text);
+    }
+
+    .searchBox {
+      height: 34px;
+      padding: 0 10px;
+      font-size: 12px;
+    }
+
+    .searchBox:focus,
+    .quickInput:focus,
+    .fragmentInput:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--focus);
+    }
+
+    .filters {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding: 10px 0 0;
+      scrollbar-width: none;
+    }
+
+    .filters::-webkit-scrollbar {
+      display: none;
+    }
+
+    .filterChip {
+      height: 26px;
+      flex: 0 0 auto;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--text-3);
+      cursor: pointer;
+      font-size: 12px;
+      padding: 0 10px;
+    }
+
+    .filterChip.isActive {
+      border-color: rgba(204, 120, 92, 0.55);
+      background: rgba(204, 120, 92, 0.12);
+      color: var(--text);
+    }
+
+    .ideaBody {
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .threadListView,
+    .threadDetailView {
+      display: grid;
+      height: 100%;
+      min-height: 0;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .composer {
+      border-bottom: 1px solid var(--line);
+      padding: 12px 14px;
+    }
+
+    .quickInput,
+    .fragmentInput {
+      min-height: 66px;
+      max-height: 150px;
+      resize: vertical;
+      padding: 9px 10px;
+      line-height: 1.55;
+    }
+
+    .composerActions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .subtleMeta {
+      color: var(--text-3);
+      font-size: 11px;
+    }
+
+    .buttonRow {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .iconButton,
+    .textButton,
+    .primaryButton {
+      display: inline-grid;
+      height: 30px;
+      align-items: center;
+      border-radius: 6px;
+      cursor: pointer;
+      line-height: 1;
+    }
+
+    .iconButton {
+      width: 30px;
+      place-items: center;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-3);
+    }
+
+    .iconButton:hover,
+    .textButton:hover {
+      border-color: var(--line-2);
+      background: var(--panel-2);
+      color: var(--text);
+    }
+
+    .iconButton.isOn {
+      color: var(--accent-2);
+    }
+
+    .iconButton svg {
+      width: 15px;
+      height: 15px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.8;
+    }
+
+    .textButton,
+    .primaryButton {
+      grid-auto-flow: column;
+      gap: 6px;
+      justify-content: center;
+      border: 1px solid var(--line);
+      font-size: 12px;
+      padding: 0 10px;
+    }
+
+    .textButton {
+      background: transparent;
+      color: var(--text-2);
+    }
+
+    .primaryButton {
+      border-color: transparent;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 650;
+    }
+
+    .primaryButton:hover {
+      background: #b96950;
+    }
+
+    .scrollArea {
+      min-height: 0;
+      overflow: auto;
+      padding: 10px 14px 14px;
+    }
+
+    .threadCard {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #1b1916;
+      padding: 10px;
+      transition: border-color 120ms ease, background 120ms ease;
+    }
+
+    .threadCard + .threadCard {
+      margin-top: 8px;
+    }
+
+    .threadCard:hover,
+    .threadCard.isSelected {
+      border-color: var(--line-2);
+      background: #211e1b;
+    }
+
+    .threadMainButton {
+      min-width: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      padding: 0;
+      text-align: left;
+    }
+
+    .threadTitle {
+      display: block;
+      overflow: hidden;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 650;
+      line-height: 1.45;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .threadSummary {
+      display: -webkit-box;
+      margin-top: 5px;
+      overflow: hidden;
+      color: var(--text-2);
+      font-size: 12px;
+      line-height: 1.55;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+
+    .cardMeta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .pill {
+      display: inline-flex;
+      min-width: 0;
+      max-width: 100%;
+      height: 20px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--text-3);
+      font-size: 11px;
+      padding: 0 7px;
+    }
+
+    .pill.hot {
+      border-color: rgba(232, 165, 90, 0.38);
+      color: #e8b978;
+    }
+
+    .pill.used {
+      border-color: rgba(93, 184, 166, 0.38);
+      color: #89d5c7;
+    }
+
+    .threadActions {
+      display: grid;
+      align-content: start;
+      gap: 4px;
+    }
+
+    .emptyState {
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      color: var(--text-3);
+      font-size: 12px;
+      line-height: 1.7;
+      padding: 18px;
+      text-align: center;
+    }
+
+    .detailTop {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 14px 12px;
+    }
+
+    .detailNav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .detailTitleRow {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: start;
+    }
+
+    .detailTitleInput {
+      width: 100%;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      outline: none;
+      background: transparent;
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.4;
+      padding: 3px 4px;
+    }
+
+    .detailTitleInput:focus {
+      border-color: var(--line-2);
+      background: #141210;
+      box-shadow: 0 0 0 3px var(--focus);
+    }
+
+    .detailStats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .fragmentList {
+      display: grid;
+      gap: 8px;
+    }
+
+    .fragment {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #1b1916;
+      padding: 10px;
+    }
+
+    .fragment.isUsed {
+      border-color: rgba(93, 184, 166, 0.38);
+    }
+
+    .fragmentBody {
+      color: var(--text-2);
+      font-size: 13px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+    }
+
+    .fragmentFooter {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .combinedPreview {
+      margin-top: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #151311;
+      padding: 10px;
+    }
+
+    .combinedPreviewTitle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+      color: var(--text-3);
+      font-size: 11px;
+    }
+
+    .combinedText {
+      max-height: 130px;
+      overflow: auto;
+      color: var(--text-2);
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      max-width: min(420px, calc(100vw - 36px));
+      transform: translateY(18px);
+      border: 1px solid var(--line-2);
+      border-radius: 8px;
+      background: #201d1a;
+      box-shadow: var(--shadow);
+      color: var(--text);
+      opacity: 0;
+      padding: 10px 12px;
+      pointer-events: none;
+      transition: opacity 160ms ease, transform 160ms ease;
+    }
+
+    .toast.isVisible {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    @media (max-width: 900px) {
+      .workspace {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(320px, 46vh) minmax(420px, 1fr);
+      }
+
+      .editorArea {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .manuscriptWrap {
+        padding: 14px;
+      }
+
+      .manuscript {
+        min-height: 320px;
+        padding: 24px;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .topMeta,
+      .subtleMeta {
+        display: none;
+      }
+
+      .toolbarGrid,
+      .threadCard {
+        grid-template-columns: 1fr;
+      }
+
+      .threadActions {
+        grid-auto-flow: column;
+        justify-content: start;
+      }
+
+      .composerActions,
+      .fragmentFooter {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .buttonRow {
+        flex-wrap: wrap;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brandMark" aria-hidden="true">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+            <path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <span>Then / Idea threads</span>
+      </div>
+      <div class="topMeta">Threadで断片を育て、本文へ差し込む右サイドバー案</div>
+    </header>
+
+    <main class="workspace">
+      <section class="editorArea" aria-label="本文">
+        <div class="editorToolbar">
+          <span class="fileName">第2章.md</span>
+          <span class="statusRow"><span class="dot"></span><span id="insertCount">0件挿入</span></span>
+        </div>
+        <div class="manuscriptWrap">
+          <article class="manuscript">
+            <h1>第2章　雨の前</h1>
+            <div id="manuscriptText" class="manuscriptText">駅前の広場には、まだ昼の熱が残っていた。
+
+通りの向こうで信号が変わり、人の流れだけが先に夕方へ進んでいく。</div>
+          </article>
+        </div>
+      </section>
+
+      <aside class="ideaShell" aria-label="Idea thread">
+        <header class="ideaHeader">
+          <div class="ideaHeaderTop">
+            <div class="paneTitle">
+              <h2>Idea threads</h2>
+              <p id="paneSubtitle">3 threads</p>
+            </div>
+            <div class="segmented" aria-label="表示">
+              <button id="threadsTab" class="isActive" type="button">一覧</button>
+              <button id="detailTab" type="button">詳細</button>
+            </div>
+          </div>
+          <div class="toolbarGrid">
+            <input id="searchInput" class="searchBox" type="search" placeholder="検索" aria-label="検索">
+            <button id="newThreadButton" class="primaryButton" type="button">新規</button>
+          </div>
+          <div id="filterBar" class="filters" aria-label="フィルタ"></div>
+        </header>
+
+        <div class="ideaBody">
+          <section id="threadListView" class="threadListView">
+            <div class="composer">
+              <textarea id="quickThreadInput" class="quickInput" placeholder="親題を入力"></textarea>
+              <div class="composerActions">
+                <span class="subtleMeta">親題はThread一覧の見出しになります</span>
+                <button id="createThreadButton" class="primaryButton" type="button">Thread作成</button>
+              </div>
+            </div>
+            <div id="threadList" class="scrollArea"></div>
+          </section>
+
+          <section id="threadDetailView" class="threadDetailView" hidden>
+            <div class="detailTop">
+              <div class="detailNav">
+                <button id="backButton" class="textButton" type="button">一覧へ</button>
+                <div class="buttonRow">
+                  <button id="threadStarButton" class="iconButton" type="button" aria-label="スター">
+                    <svg viewBox="0 0 24 24"><polygon points="12 3 15 9 22 9.8 17 14.5 18.2 21.4 12 18.1 5.8 21.4 7 14.5 2 9.8 9 9"/></svg>
+                  </button>
+                  <button id="insertThreadButton" class="textButton" type="button">結合して本文へ</button>
+                </div>
+              </div>
+              <div class="detailTitleRow">
+                <input id="threadTitleInput" class="detailTitleInput" aria-label="Thread title">
+              </div>
+              <div id="detailStats" class="detailStats"></div>
+              <div class="combinedPreview">
+                <div class="combinedPreviewTitle">
+                  <span>結合プレビュー</span>
+                  <button id="copyThreadButton" class="textButton" type="button">本文へ</button>
+                </div>
+                <div id="combinedText" class="combinedText"></div>
+              </div>
+            </div>
+            <div class="composer">
+              <textarea id="fragmentInput" class="fragmentInput" placeholder="断片を追加"></textarea>
+              <div class="composerActions">
+                <span class="subtleMeta">断片は作成順で並びます</span>
+                <button id="createFragmentButton" class="primaryButton" type="button">断片追加</button>
+              </div>
+            </div>
+            <div id="fragmentList" class="scrollArea"></div>
+          </section>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status"></div>
+
+  <script>
+    const icons = {
+      star: '<svg viewBox="0 0 24 24"><polygon points="12 3 15 9 22 9.8 17 14.5 18.2 21.4 12 18.1 5.8 21.4 7 14.5 2 9.8 9 9"/></svg>',
+      arrow: '<svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>',
+      archive: '<svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M6 7v13h12V7"/><path d="M9 11h6"/></svg>',
+      check: '<svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>'
+    };
+
+    const state = {
+      filter: "active",
+      query: "",
+      selectedId: "thread-rain",
+      inserted: 0,
+      isComposing: false,
+      threads: [
+        {
+          id: "thread-rain",
+          title: "雨が降る前の駅前",
+          starred: true,
+          status: "active",
+          tags: ["場面", "導入"],
+          createdAt: "2026-06-20T09:12:00.000Z",
+          updatedAt: "2026-06-28T10:02:00.000Z",
+          fragments: [
+            { id: "frag-1", body: "湿った風だけが先に着いていて、誰もまだ傘を開いていない。", used: false, createdAt: "2026-06-20T09:13:00.000Z" },
+            { id: "frag-2", body: "主人公は雨を待っているのではなく、雨で誰かが足止めされるのを待っている。", used: false, createdAt: "2026-06-21T15:08:00.000Z" },
+            { id: "frag-3", body: "信号機の青だけが、妙に水っぽく見える。", used: true, createdAt: "2026-06-24T22:32:00.000Z" }
+          ]
+        },
+        {
+          id: "thread-room",
+          title: "部屋に残されたメモ",
+          starred: false,
+          status: "active",
+          tags: ["小道具", "伏線"],
+          createdAt: "2026-06-18T07:44:00.000Z",
+          updatedAt: "2026-06-27T21:16:00.000Z",
+          fragments: [
+            { id: "frag-4", body: "メモは文章ではなく、駅名だけが三つ並んでいる。", used: false, createdAt: "2026-06-18T07:45:00.000Z" },
+            { id: "frag-5", body: "紙の端だけが日焼けしていて、長く壁に貼られていたことが分かる。", used: false, createdAt: "2026-06-27T21:16:00.000Z" }
+          ]
+        },
+        {
+          id: "thread-dialogue",
+          title: "再会時の会話",
+          starred: false,
+          status: "used",
+          tags: ["台詞"],
+          createdAt: "2026-06-15T01:20:00.000Z",
+          updatedAt: "2026-06-22T13:40:00.000Z",
+          fragments: [
+            { id: "frag-6", body: "「久しぶり」と言うには、互いに知りすぎていた。", used: true, createdAt: "2026-06-15T01:20:00.000Z" },
+            { id: "frag-7", body: "相手は謝らず、こちらも責めなかった。そこだけが昔と違っている。", used: true, createdAt: "2026-06-22T13:40:00.000Z" }
+          ]
+        },
+        {
+          id: "thread-town",
+          title: "町の名前を出さない",
+          starred: false,
+          status: "hold",
+          tags: ["方針"],
+          createdAt: "2026-06-10T12:00:00.000Z",
+          updatedAt: "2026-06-12T12:00:00.000Z",
+          fragments: [
+            { id: "frag-8", body: "地名を明かさず、駅の構造と湿度だけで土地を感じさせる。", used: false, createdAt: "2026-06-10T12:00:00.000Z" }
+          ]
+        }
+      ]
+    };
+
+    const els = {
+      paneSubtitle: document.getElementById("paneSubtitle"),
+      filterBar: document.getElementById("filterBar"),
+      searchInput: document.getElementById("searchInput"),
+      threadList: document.getElementById("threadList"),
+      threadListView: document.getElementById("threadListView"),
+      threadDetailView: document.getElementById("threadDetailView"),
+      threadsTab: document.getElementById("threadsTab"),
+      detailTab: document.getElementById("detailTab"),
+      quickThreadInput: document.getElementById("quickThreadInput"),
+      createThreadButton: document.getElementById("createThreadButton"),
+      newThreadButton: document.getElementById("newThreadButton"),
+      backButton: document.getElementById("backButton"),
+      threadTitleInput: document.getElementById("threadTitleInput"),
+      detailStats: document.getElementById("detailStats"),
+      threadStarButton: document.getElementById("threadStarButton"),
+      insertThreadButton: document.getElementById("insertThreadButton"),
+      copyThreadButton: document.getElementById("copyThreadButton"),
+      combinedText: document.getElementById("combinedText"),
+      fragmentInput: document.getElementById("fragmentInput"),
+      createFragmentButton: document.getElementById("createFragmentButton"),
+      fragmentList: document.getElementById("fragmentList"),
+      manuscriptText: document.getElementById("manuscriptText"),
+      insertCount: document.getElementById("insertCount"),
+      toast: document.getElementById("toast")
+    };
+
+    const filters = [
+      ["active", "進行中"],
+      ["all", "すべて"],
+      ["starred", "スター"],
+      ["used", "使用済み"],
+      ["hold", "保留"]
+    ];
+
+    function getSelectedThread() {
+      return state.threads.find((thread) => thread.id === state.selectedId) ?? state.threads[0] ?? null;
+    }
+
+    function formatRelative(iso) {
+      const date = new Date(iso);
+      const now = new Date("2026-06-28T12:00:00.000Z");
+      const diff = Math.max(0, now.getTime() - date.getTime());
+      const days = Math.floor(diff / 86400000);
+      if (days === 0) return "今日";
+      if (days === 1) return "昨日";
+      return `${days}日前`;
+    }
+
+    function summarize(thread) {
+      return thread.fragments.map((fragment) => fragment.body).join(" ").slice(0, 120);
+    }
+
+    function combinedBody(thread) {
+      return [thread.title, "", ...thread.fragments.map((fragment) => fragment.body)].join("\n");
+    }
+
+    function visibleThreads() {
+      const query = state.query.trim().toLowerCase();
+      return state.threads
+        .filter((thread) => {
+          if (state.filter === "active" && thread.status !== "active") return false;
+          if (state.filter === "starred" && !thread.starred) return false;
+          if (state.filter === "used" && thread.status !== "used") return false;
+          if (state.filter === "hold" && thread.status !== "hold") return false;
+          if (!query) return true;
+          const haystack = [
+            thread.title,
+            thread.tags.join(" "),
+            thread.status,
+            ...thread.fragments.map((fragment) => fragment.body)
+          ].join(" ").toLowerCase();
+          return haystack.includes(query);
+        })
+        .sort((a, b) => {
+          if (a.starred !== b.starred) return a.starred ? -1 : 1;
+          return b.updatedAt.localeCompare(a.updatedAt);
+        });
+    }
+
+    function renderFilters() {
+      els.filterBar.innerHTML = "";
+      filters.forEach(([id, label]) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `filterChip${state.filter === id ? " isActive" : ""}`;
+        button.textContent = label;
+        button.addEventListener("click", () => {
+          state.filter = id;
+          render();
+        });
+        els.filterBar.appendChild(button);
+      });
+    }
+
+    function renderThreadList() {
+      const threads = visibleThreads();
+      els.paneSubtitle.textContent = `${threads.length} threads`;
+      els.threadList.innerHTML = "";
+      if (threads.length === 0) {
+        els.threadList.innerHTML = '<div class="emptyState">該当するThreadはありません</div>';
+        return;
+      }
+      threads.forEach((thread) => {
+        const usedCount = thread.fragments.filter((fragment) => fragment.used).length;
+        const card = document.createElement("article");
+        card.className = `threadCard${thread.id === state.selectedId ? " isSelected" : ""}`;
+        card.innerHTML = `
+          <button class="threadMainButton" type="button">
+            <span class="threadTitle">${escapeHtml(thread.title)}</span>
+            <span class="threadSummary">${escapeHtml(summarize(thread))}</span>
+            <span class="cardMeta">
+              <span class="pill${thread.starred ? " hot" : ""}">${thread.starred ? "starred" : thread.status}</span>
+              <span class="pill">${thread.fragments.length} fragments</span>
+              <span class="pill${usedCount ? " used" : ""}">${usedCount} used</span>
+              <span class="pill">${formatRelative(thread.updatedAt)}</span>
+              ${thread.tags.map((tag) => `<span class="pill">#${escapeHtml(tag)}</span>`).join("")}
+            </span>
+          </button>
+          <div class="threadActions">
+            <button class="iconButton${thread.starred ? " isOn" : ""}" type="button" data-action="star" aria-label="スター">${icons.star}</button>
+            <button class="iconButton" type="button" data-action="insert" aria-label="本文へ">${icons.arrow}</button>
+            <button class="iconButton" type="button" data-action="hold" aria-label="保留">${icons.archive}</button>
+          </div>
+        `;
+        card.querySelector(".threadMainButton").addEventListener("click", () => {
+          state.selectedId = thread.id;
+          showDetail();
+        });
+        card.querySelector('[data-action="star"]').addEventListener("click", () => {
+          thread.starred = !thread.starred;
+          thread.updatedAt = new Date().toISOString();
+          render();
+        });
+        card.querySelector('[data-action="insert"]').addEventListener("click", () => insertText(combinedBody(thread), thread));
+        card.querySelector('[data-action="hold"]').addEventListener("click", () => {
+          thread.status = thread.status === "hold" ? "active" : "hold";
+          thread.updatedAt = new Date().toISOString();
+          render();
+        });
+        els.threadList.appendChild(card);
+      });
+    }
+
+    function renderDetail() {
+      const thread = getSelectedThread();
+      if (!thread) {
+        showList();
+        return;
+      }
+
+      els.threadTitleInput.value = thread.title;
+      els.threadStarButton.classList.toggle("isOn", thread.starred);
+      els.detailStats.innerHTML = `
+        <span class="pill${thread.starred ? " hot" : ""}">${thread.starred ? "starred" : thread.status}</span>
+        <span class="pill">${thread.fragments.length} fragments</span>
+        <span class="pill">${formatRelative(thread.updatedAt)} 更新</span>
+        ${thread.tags.map((tag) => `<span class="pill">#${escapeHtml(tag)}</span>`).join("")}
+      `;
+      els.combinedText.textContent = combinedBody(thread);
+      els.fragmentList.innerHTML = "";
+      if (thread.fragments.length === 0) {
+        els.fragmentList.innerHTML = '<div class="emptyState">断片はまだありません</div>';
+        return;
+      }
+      thread.fragments.forEach((fragment) => {
+        const item = document.createElement("article");
+        item.className = `fragment${fragment.used ? " isUsed" : ""}`;
+        item.innerHTML = `
+          <div class="fragmentBody">${escapeHtml(fragment.body)}</div>
+          <div class="fragmentFooter">
+            <span class="subtleMeta">${formatRelative(fragment.createdAt)}</span>
+            <div class="buttonRow">
+              <button class="textButton" type="button" data-action="insert">本文へ</button>
+              <button class="iconButton${fragment.used ? " isOn" : ""}" type="button" data-action="used" aria-label="使用済み">${icons.check}</button>
+            </div>
+          </div>
+        `;
+        item.querySelector('[data-action="insert"]').addEventListener("click", () => {
+          fragment.used = true;
+          if (thread.fragments.every((entry) => entry.used)) thread.status = "used";
+          insertText(fragment.body, thread);
+        });
+        item.querySelector('[data-action="used"]').addEventListener("click", () => {
+          fragment.used = !fragment.used;
+          thread.status = thread.fragments.every((entry) => entry.used) ? "used" : "active";
+          thread.updatedAt = new Date().toISOString();
+          render();
+        });
+        els.fragmentList.appendChild(item);
+      });
+    }
+
+    function render() {
+      renderFilters();
+      renderThreadList();
+      renderDetail();
+      els.insertCount.textContent = `${state.inserted}件挿入`;
+    }
+
+    function showList() {
+      els.threadListView.hidden = false;
+      els.threadDetailView.hidden = true;
+      els.threadsTab.classList.add("isActive");
+      els.detailTab.classList.remove("isActive");
+    }
+
+    function showDetail() {
+      els.threadListView.hidden = true;
+      els.threadDetailView.hidden = false;
+      els.threadsTab.classList.remove("isActive");
+      els.detailTab.classList.add("isActive");
+      render();
+    }
+
+    function createThreadFromInput() {
+      const title = els.quickThreadInput.value.trim();
+      if (!title) return;
+      const now = new Date().toISOString();
+      const thread = {
+        id: `thread-${Date.now()}`,
+        title,
+        starred: false,
+        status: "active",
+        tags: parseTags(title),
+        createdAt: now,
+        updatedAt: now,
+        fragments: []
+      };
+      state.threads.unshift(thread);
+      state.selectedId = thread.id;
+      els.quickThreadInput.value = "";
+      showDetail();
+      els.fragmentInput.focus();
+      toast("Threadを作成しました");
+    }
+
+    function createFragmentFromInput() {
+      const thread = getSelectedThread();
+      const body = els.fragmentInput.value.trim();
+      if (!thread || !body) return;
+      const now = new Date().toISOString();
+      thread.fragments.push({ id: `fragment-${Date.now()}`, body, used: false, createdAt: now });
+      thread.status = "active";
+      thread.updatedAt = now;
+      thread.tags = Array.from(new Set([...thread.tags, ...parseTags(body)]));
+      els.fragmentInput.value = "";
+      render();
+      toast("断片を追加しました");
+    }
+
+    function insertText(text, thread) {
+      const current = els.manuscriptText.textContent.trimEnd();
+      els.manuscriptText.textContent = `${current}\n\n${text}`;
+      state.inserted += 1;
+      if (thread) {
+        thread.updatedAt = new Date().toISOString();
+      }
+      render();
+      toast("本文へ挿入しました");
+    }
+
+    function parseTags(text) {
+      const matches = text.matchAll(/(?:^|\s)#([^\s#.,;:!?()[\]{}「」『』、。]+)/g);
+      return Array.from(new Set(Array.from(matches).map((match) => match[1]).filter(Boolean)));
+    }
+
+    function escapeHtml(value) {
+      return value.replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      })[char]);
+    }
+
+    let toastTimer = null;
+    function toast(message) {
+      els.toast.textContent = message;
+      els.toast.classList.add("isVisible");
+      window.clearTimeout(toastTimer);
+      toastTimer = window.setTimeout(() => {
+        els.toast.classList.remove("isVisible");
+      }, 1500);
+    }
+
+    els.searchInput.addEventListener("input", () => {
+      state.query = els.searchInput.value;
+      render();
+    });
+    els.createThreadButton.addEventListener("click", createThreadFromInput);
+    els.newThreadButton.addEventListener("click", () => {
+      showList();
+      els.quickThreadInput.focus();
+    });
+    els.backButton.addEventListener("click", showList);
+    els.threadsTab.addEventListener("click", showList);
+    els.detailTab.addEventListener("click", showDetail);
+    els.createFragmentButton.addEventListener("click", createFragmentFromInput);
+    els.threadStarButton.addEventListener("click", () => {
+      const thread = getSelectedThread();
+      if (!thread) return;
+      thread.starred = !thread.starred;
+      thread.updatedAt = new Date().toISOString();
+      render();
+    });
+    els.insertThreadButton.addEventListener("click", () => {
+      const thread = getSelectedThread();
+      if (thread) insertText(combinedBody(thread), thread);
+    });
+    els.copyThreadButton.addEventListener("click", () => {
+      const thread = getSelectedThread();
+      if (thread) insertText(combinedBody(thread), thread);
+    });
+    els.threadTitleInput.addEventListener("input", () => {
+      const thread = getSelectedThread();
+      if (!thread) return;
+      thread.title = els.threadTitleInput.value;
+      thread.updatedAt = new Date().toISOString();
+      renderThreadList();
+    });
+
+    [els.quickThreadInput, els.fragmentInput].forEach((input) => {
+      input.addEventListener("compositionstart", () => {
+        state.isComposing = true;
+      });
+      input.addEventListener("compositionend", () => {
+        state.isComposing = false;
+      });
+      input.addEventListener("keydown", (event) => {
+        if (state.isComposing) return;
+        if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+          event.preventDefault();
+          if (input === els.quickThreadInput) createThreadFromInput();
+          if (input === els.fragmentInput) createFragmentFromInput();
+        }
+      });
+    });
+
+    render();
+  </script>
+</body>
+</html>
