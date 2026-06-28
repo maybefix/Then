@@ -48,18 +48,103 @@ struct ProjectEntry {
 #[derive(Default, Deserialize, Serialize)]
 struct ProjectConfig {
     order: BTreeMap<String, Vec<String>>,
+    /// 旧 Idea（フラット付箋）。`ideaThreads` への移行用に読み込むだけで、
+    /// 保存時にはクリアされる。
+    #[serde(default)]
     snippets: Vec<SnippetConfig>,
+    #[serde(default, rename = "ideaThreads")]
+    idea_threads: Vec<IdeaThreadConfig>,
     #[serde(default, rename = "plotCards")]
     plot_cards: Vec<PlotCardConfig>,
 }
 
+/// 旧 Idea スキーマ。移行（`migrate_snippets_to_threads`）でのみ参照する。
+#[allow(dead_code)]
 #[derive(Clone, Deserialize, Serialize)]
 struct SnippetConfig {
     id: String,
     title: String,
     text: String,
+    #[serde(default)]
     category: String,
+    #[serde(default)]
     tags: Vec<String>,
+}
+
+fn default_thread_kind() -> String {
+    "thread".to_string()
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct IdeaFragmentConfig {
+    id: String,
+    body: String,
+    #[serde(default)]
+    used: bool,
+    #[serde(default)]
+    created_at: i64,
+    #[serde(default)]
+    updated_at: i64,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct IdeaThreadConfig {
+    id: String,
+    #[serde(default = "default_thread_kind")]
+    kind: String,
+    title: String,
+    #[serde(default)]
+    starred: bool,
+    #[serde(default)]
+    created_at: i64,
+    #[serde(default)]
+    updated_at: i64,
+    #[serde(default)]
+    fragments: Vec<IdeaFragmentConfig>,
+}
+
+fn now_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+/// 旧 Idea（フラット付箋）を 1 つのインボックス・スレッドへ移行する。
+fn migrate_snippets_to_threads(snippets: &[SnippetConfig]) -> Vec<IdeaThreadConfig> {
+    let now = now_millis();
+    let fragments = snippets
+        .iter()
+        .filter_map(|snippet| {
+            let body = if !snippet.text.trim().is_empty() {
+                snippet.text.clone()
+            } else {
+                snippet.title.clone()
+            };
+            if body.trim().is_empty() {
+                return None;
+            }
+            Some(IdeaFragmentConfig {
+                id: snippet.id.clone(),
+                body,
+                used: false,
+                created_at: now,
+                updated_at: now,
+            })
+        })
+        .collect();
+
+    vec![IdeaThreadConfig {
+        id: "idea-inbox".to_string(),
+        kind: "inbox".to_string(),
+        title: "インボックス".to_string(),
+        starred: false,
+        created_at: now,
+        updated_at: now,
+        fragments,
+    }]
 }
 
 fn default_plot_card_kind() -> String {
@@ -957,24 +1042,33 @@ fn reorder_project_entries(
 }
 
 #[tauri::command]
-fn load_project_snippets(root_path: String) -> Result<Vec<SnippetConfig>, String> {
+fn load_project_snippets(root_path: String) -> Result<Vec<IdeaThreadConfig>, String> {
     let root = PathBuf::from(root_path);
     if !root.is_dir() {
         return Err("project root does not exist".to_string());
     }
 
-    Ok(load_project_config(&root)?.snippets)
+    let config = load_project_config(&root)?;
+    if !config.idea_threads.is_empty() {
+        Ok(config.idea_threads)
+    } else if !config.snippets.is_empty() {
+        Ok(migrate_snippets_to_threads(&config.snippets))
+    } else {
+        Ok(Vec::new())
+    }
 }
 
 #[tauri::command]
-fn save_project_snippets(root_path: String, snippets: Vec<SnippetConfig>) -> Result<(), String> {
+fn save_project_snippets(root_path: String, snippets: Vec<IdeaThreadConfig>) -> Result<(), String> {
     let root = PathBuf::from(root_path);
     if !root.is_dir() {
         return Err("project root does not exist".to_string());
     }
 
     let mut config = load_project_config(&root)?;
-    config.snippets = snippets;
+    config.idea_threads = snippets;
+    // 旧スキーマは移行後に残さない。
+    config.snippets = Vec::new();
     save_project_config(&root, &config)
 }
 

@@ -1,28 +1,52 @@
-import type { ChangeEvent, DragEvent } from "react";
-import type { Snippet } from "../../types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { DragEvent, KeyboardEvent } from "react";
+import type { IdeaThread } from "../../types";
+
+type IdeaFilter = "all" | "unused" | "starred";
 
 type IdeaPaneProps = {
-  snippets: Snippet[];
-  query: string;
+  threads: IdeaThread[];
+  /** ドラッグ中の断片 ID（見た目用）。 */
   draggingId: string | null;
-  onQueryChange: (value: string) => void;
-  onCreate: () => void;
-  onTextChange: (snippetId: string, text: string) => void;
-  onDragStart: (event: DragEvent<HTMLDivElement>, snippet: Snippet) => void;
-  onDragEnd: () => void;
-  onDoubleClick: (snippet: Snippet) => void;
-  onMove: (snippetId: string, direction: -1 | 1) => void;
-  onDelete: (snippet: Snippet) => void;
+  onCapture: (body: string, destId: string) => void;
+  /** 新規スレッドを作成し、その ID を返す。 */
+  onCreateThread: () => string;
+  onRenameThread: (threadId: string, title: string) => void;
+  onToggleStar: (threadId: string) => void;
+  onDeleteThread: (threadId: string) => void;
+  onAddFragment: (threadId: string, body: string) => void;
+  onUpdateFragment: (threadId: string, fragmentId: string, body: string) => void;
+  onToggleUsed: (threadId: string, fragmentId: string) => void;
+  onDeleteFragment: (threadId: string, fragmentId: string) => void;
+  onMoveFragment: (fromThreadId: string, fragmentId: string, toThreadId: string) => void;
+  onInsertFragment: (threadId: string, fragmentId: string) => void;
+  onInsertThread: (threadId: string) => void;
+  onFragmentDragStart: (
+    event: DragEvent<HTMLElement>,
+    threadId: string,
+    fragmentId: string,
+  ) => void;
+  onFragmentDragEnd: () => void;
 };
 
-function parseInlineTags(text: string): string[] {
-  const tags = new Set<string>();
-  const matches = text.matchAll(/(?:^|\s)#([^\s#.,;:!?()[\]{}「」『』、。]+)/g);
-  for (const match of matches) {
-    const tag = match[1]?.trim();
-    if (tag) tags.add(tag);
-  }
-  return Array.from(tags);
+const FILTERS: Array<[IdeaFilter, string]> = [
+  ["all", "すべて"],
+  ["unused", "未使用"],
+  ["starred", "スター"],
+];
+
+function relativeTime(timestamp: number): string {
+  const diff = Math.max(0, Date.now() - timestamp);
+  const days = Math.floor(diff / 86_400_000);
+  if (days <= 0) return "今日";
+  if (days === 1) return "昨日";
+  if (days < 7) return `${days}日前`;
+  return `${Math.floor(days / 7)}週間前`;
+}
+
+function summarize(thread: IdeaThread): string {
+  const pick = thread.fragments.find((fragment) => !fragment.used) ?? thread.fragments[0];
+  return pick ? pick.body : "（断片なし）";
 }
 
 function PlusIcon() {
@@ -34,27 +58,53 @@ function PlusIcon() {
   );
 }
 
-function SearchIcon() {
+function SendIcon() {
   return (
     <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-      <circle cx="10.5" cy="10.5" r="7.25" />
-      <path d="m16 16 5 5" />
+      <path d="M5 12h14" />
+      <path d="m13 6 6 6-6 6" />
     </svg>
   );
 }
 
-function ArrowUpIcon() {
+function ChevronRightIcon() {
   return (
     <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-      <polyline points="18 15 12 9 6 15" />
+      <path d="m9 6 6 6-6 6" />
     </svg>
   );
 }
 
-function ArrowDownIcon() {
+function ChevronLeftIcon() {
   return (
     <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-      <polyline points="6 9 12 15 18 9" />
+      <path d="m15 6-6 6 6 6" />
+    </svg>
+  );
+}
+
+function StarIcon() {
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+      <polygon points="12 3 15 9 22 9.8 17 14.5 18.2 21.4 12 18.1 5.8 21.4 7 14.5 2 9.8 9 9" />
+    </svg>
+  );
+}
+
+function InsertAllIcon() {
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+      <path d="M4 6h12M4 12h8M4 18h8" />
+      <path d="m15 13 4 4 4-4" />
+      <path d="M19 17V7" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+      <path d="m5 12 4 4L19 6" />
     </svg>
   );
 }
@@ -62,107 +112,488 @@ function ArrowDownIcon() {
 function TrashIcon() {
   return (
     <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-      <polyline points="3 6 5 6 21 6" />
-      <path d="M8 6V4h8v2" />
-      <path d="M19 6 18 20H6L5 6" />
+      <path d="M4 7h16" />
+      <path d="M9 7V4h6v3" />
+      <path d="m6 7 1 13h10l1-13" />
+    </svg>
+  );
+}
+
+function GripIcon() {
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" className="ideaGripGlyph">
+      <circle cx="9" cy="6" r="1.4" />
+      <circle cx="15" cy="6" r="1.4" />
+      <circle cx="9" cy="12" r="1.4" />
+      <circle cx="15" cy="12" r="1.4" />
+      <circle cx="9" cy="18" r="1.4" />
+      <circle cx="15" cy="18" r="1.4" />
     </svg>
   );
 }
 
 export function IdeaPane({
-  snippets,
-  query,
+  threads,
   draggingId,
-  onQueryChange,
-  onCreate,
-  onTextChange,
-  onDragStart,
-  onDragEnd,
-  onDoubleClick,
-  onMove,
-  onDelete,
+  onCapture,
+  onCreateThread,
+  onRenameThread,
+  onToggleStar,
+  onDeleteThread,
+  onAddFragment,
+  onUpdateFragment,
+  onToggleUsed,
+  onDeleteFragment,
+  onMoveFragment,
+  onInsertFragment,
+  onInsertThread,
+  onFragmentDragStart,
+  onFragmentDragEnd,
 }: IdeaPaneProps) {
-  const handleQueryChange = (event: ChangeEvent<HTMLInputElement>) => {
-    onQueryChange(event.target.value);
+  const inbox = useMemo(() => threads.find((thread) => thread.kind === "inbox"), [threads]);
+  const inboxId = inbox?.id ?? "";
+
+  const [view, setView] = useState<"list" | "detail">("list");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<IdeaFilter>("all");
+  const [query, setQuery] = useState("");
+  const [destId, setDestId] = useState<string>(inboxId);
+  const [captureText, setCaptureText] = useState("");
+  const [fragmentText, setFragmentText] = useState("");
+
+  const composingRef = useRef(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const fragmentListRef = useRef<HTMLDivElement>(null);
+  const focusTitleRef = useRef(false);
+
+  const selected = useMemo(
+    () => threads.find((thread) => thread.id === selectedId) ?? null,
+    [threads, selectedId],
+  );
+
+  // 追加先が消えていたらインボックスへ戻す。
+  useEffect(() => {
+    if (!threads.some((thread) => thread.id === destId)) {
+      setDestId(inboxId);
+    }
+  }, [threads, destId, inboxId]);
+
+  // 選択中スレッドが消えたら一覧へ戻す。
+  useEffect(() => {
+    if (view === "detail" && !selected) {
+      setView("list");
+      setSelectedId(null);
+    }
+  }, [view, selected]);
+
+  // 新規スレッド作成直後はタイトルへフォーカス。
+  useEffect(() => {
+    if (view === "detail" && focusTitleRef.current && titleInputRef.current) {
+      focusTitleRef.current = false;
+      titleInputRef.current.focus();
+      titleInputRef.current.select();
+    }
+  }, [view, selectedId]);
+
+  const visibleThreads = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    const matchesQuery = (thread: IdeaThread) => {
+      if (!normalized) return true;
+      if (thread.title.toLowerCase().includes(normalized)) return true;
+      return thread.fragments.some((fragment) =>
+        fragment.body.toLowerCase().includes(normalized),
+      );
+    };
+    const matchesFilter = (thread: IdeaThread) => {
+      if (thread.kind === "inbox") return true;
+      if (filter === "starred") return thread.starred;
+      if (filter === "unused") return thread.fragments.some((fragment) => !fragment.used);
+      return true;
+    };
+    return threads
+      .filter((thread) => matchesFilter(thread) && matchesQuery(thread))
+      .sort((a, b) => {
+        if (a.kind === "inbox") return -1;
+        if (b.kind === "inbox") return 1;
+        return 0;
+      });
+  }, [threads, filter, query]);
+
+  const threadCount = threads.filter((thread) => thread.kind !== "inbox").length;
+  const fragmentCount = threads.reduce((total, thread) => total + thread.fragments.length, 0);
+
+  const handleComposerKeyDown = (
+    event: KeyboardEvent<HTMLTextAreaElement>,
+    submit: () => void,
+  ) => {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    if (composingRef.current || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    submit();
+  };
+
+  const submitCapture = () => {
+    const body = captureText.trim();
+    if (!body) return;
+    onCapture(body, destId || inboxId);
+    setCaptureText("");
+  };
+
+  const submitFragment = () => {
+    const body = fragmentText.trim();
+    if (!body || !selected) return;
+    onAddFragment(selected.id, body);
+    setFragmentText("");
+    requestAnimationFrame(() => {
+      const list = fragmentListRef.current;
+      if (list) list.scrollTop = list.scrollHeight;
+    });
+  };
+
+  const openThread = (threadId: string) => {
+    setSelectedId(threadId);
+    setView("detail");
+  };
+
+  const handleCreateThread = () => {
+    const id = onCreateThread();
+    focusTitleRef.current = true;
+    openThread(id);
   };
 
   return (
     <section className="ideaPane" aria-label="Idea">
-      <label className="ideaSearch">
-        <SearchIcon />
-        <input
-          value={query}
-          onChange={handleQueryChange}
-          placeholder="Ideaを検索..."
-          type="search"
-        />
-      </label>
-
-      <div className="ideaList">
-        {snippets.map((snippet, index) => {
-          const inlineTags = parseInlineTags(snippet.text);
-          const allTags = Array.from(new Set([...snippet.tags, ...inlineTags]));
-
-          return (
-            <div
-              className={`ideaCard ${draggingId === snippet.id ? "draggingIdeaCard" : ""}`}
-              draggable
-              key={snippet.id}
-              onDragStart={(event) => onDragStart(event, snippet)}
-              onDragEnd={onDragEnd}
-              onDoubleClick={() => onDoubleClick(snippet)}
-              title="ダブルクリックで挿入"
-            >
-              <div className="ideaTools" aria-label="Ideaの操作">
-                <button
-                  type="button"
-                  aria-label="上へ"
-                  disabled={index === 0}
-                  onClick={() => onMove(snippet.id, -1)}
-                >
-                  <ArrowUpIcon />
-                </button>
-                <button
-                  type="button"
-                  aria-label="下へ"
-                  disabled={index === snippets.length - 1}
-                  onClick={() => onMove(snippet.id, 1)}
-                >
-                  <ArrowDownIcon />
-                </button>
-                <button type="button" aria-label="削除" onClick={() => onDelete(snippet)}>
-                  <TrashIcon />
+      <div className="ideaStage">
+        <div className={`ideaTrack ${view === "detail" ? "showDetail" : ""}`}>
+          {/* ① 一覧ビュー */}
+          <section className="ideaView" aria-label="スレッド一覧">
+            <div className="ideaViewTop">
+              <div className="ideaPaneHead">
+                <h2>
+                  Idea <span className="ideaCount">{threadCount} スレッド / {fragmentCount} 断片</span>
+                </h2>
+                <button className="ideaNewThread" type="button" onClick={handleCreateThread}>
+                  <PlusIcon />
+                  <span>スレッド</span>
                 </button>
               </div>
-              <div
-                className="ideaText"
-                contentEditable
-                data-placeholder="Idea..."
-                spellCheck={false}
-                onBlur={(event) =>
-                  onTextChange(snippet.id, event.currentTarget.textContent ?? "")
-                }
-                suppressContentEditableWarning
-              >
-                {snippet.text}
+
+              <div className="ideaCapture">
+                <div className="ideaCaptureBox">
+                  <textarea
+                    value={captureText}
+                    rows={1}
+                    placeholder="思いついたことをそのまま書く…（Enter で追加 / Shift+Enter で改行）"
+                    onChange={(event) => setCaptureText(event.target.value)}
+                    onCompositionStart={() => (composingRef.current = true)}
+                    onCompositionEnd={() => (composingRef.current = false)}
+                    onKeyDown={(event) => handleComposerKeyDown(event, submitCapture)}
+                  />
+                  <div className="ideaCaptureRow">
+                    <select
+                      className="ideaDestSelect"
+                      aria-label="追加先スレッド"
+                      value={destId}
+                      onChange={(event) => setDestId(event.target.value)}
+                    >
+                      {threads.map((thread) => (
+                        <option key={thread.id} value={thread.id}>
+                          {thread.kind === "inbox" ? "▾ " : ""}
+                          {thread.title}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      className="ideaPrimaryBtn"
+                      type="button"
+                      disabled={!captureText.trim()}
+                      onClick={submitCapture}
+                    >
+                      <SendIcon />
+                      <span>追加</span>
+                    </button>
+                  </div>
+                </div>
               </div>
-              {allTags.length > 0 && (
-                <div className="ideaTagList" aria-label="タグ">
-                  {allTags.map((tag) => (
-                    <span key={tag}>#{tag}</span>
+
+              <div className="ideaFilterRow">
+                <input
+                  className="ideaSearchInput"
+                  type="search"
+                  value={query}
+                  placeholder="検索"
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+                <div className="ideaChips" aria-label="フィルタ">
+                  {FILTERS.map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`ideaChip ${filter === value ? "isActive" : ""}`}
+                      onClick={() => setFilter(value)}
+                    >
+                      {label}
+                    </button>
                   ))}
                 </div>
+              </div>
+            </div>
+
+            <div className="ideaScroll">
+              {visibleThreads.length === 0 ? (
+                <div className="ideaEmpty">該当するスレッドがありません</div>
+              ) : (
+                visibleThreads.map((thread) => {
+                  const unused = thread.fragments.filter((fragment) => !fragment.used).length;
+                  return (
+                    <article
+                      key={thread.id}
+                      className={`ideaThreadRow ${thread.kind === "inbox" ? "isInbox" : ""}`}
+                      onClick={() => openThread(thread.id)}
+                    >
+                      <div className="ideaRowMain">
+                        <div className="ideaRowTitle">
+                          {thread.starred && (
+                            <span className="ideaRowStar" aria-label="スター">
+                              <StarIcon />
+                            </span>
+                          )}
+                          {thread.title}
+                        </div>
+                        <div className="ideaRowSummary">{summarize(thread)}</div>
+                        <div className="ideaRowMeta">
+                          <span>{thread.fragments.length} 断片</span>
+                          {unused > 0 ? (
+                            <span className="unused">{unused} 未使用</span>
+                          ) : (
+                            <span>消化済み</span>
+                          )}
+                          <span>{relativeTime(thread.updatedAt)}</span>
+                        </div>
+                      </div>
+                      <div className="ideaRowChevron">
+                        <ChevronRightIcon />
+                      </div>
+                    </article>
+                  );
+                })
               )}
             </div>
-          );
-        })}
+          </section>
 
+          {/* ② 詳細ビュー */}
+          <section className="ideaView" aria-label="スレッド詳細">
+            {selected && (
+              <>
+                <div className="ideaViewTop ideaDetailTop">
+                  <div className="ideaDetailNav">
+                    <button
+                      className="ideaBackBtn"
+                      type="button"
+                      onClick={() => setView("list")}
+                    >
+                      <ChevronLeftIcon />
+                      <span>一覧</span>
+                    </button>
+                    <div className="ideaDetailActions">
+                      {selected.kind !== "inbox" && (
+                        <button
+                          className={`ideaIconBtn ${selected.starred ? "isOn" : ""}`}
+                          type="button"
+                          aria-label="スター"
+                          title="スター"
+                          onClick={() => onToggleStar(selected.id)}
+                        >
+                          <StarIcon />
+                        </button>
+                      )}
+                      <button
+                        className="ideaIconBtn"
+                        type="button"
+                        aria-label="未使用をまとめて本文へ"
+                        title="未使用をまとめて本文へ"
+                        onClick={() => onInsertThread(selected.id)}
+                      >
+                        <InsertAllIcon />
+                      </button>
+                      {selected.kind !== "inbox" && (
+                        <button
+                          className="ideaIconBtn"
+                          type="button"
+                          aria-label="スレッドを削除"
+                          title="スレッドを削除"
+                          onClick={() => onDeleteThread(selected.id)}
+                        >
+                          <TrashIcon />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <input
+                    ref={titleInputRef}
+                    className="ideaDetailTitle"
+                    aria-label="スレッド名"
+                    value={selected.title}
+                    readOnly={selected.kind === "inbox"}
+                    onChange={(event) => onRenameThread(selected.id, event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        event.currentTarget.blur();
+                      }
+                    }}
+                  />
+
+                  <div className="ideaDetailStats">
+                    <span>{selected.fragments.length} 断片</span>
+                    {selected.fragments.some((fragment) => !fragment.used) ? (
+                      <span className="unused">
+                        {selected.fragments.filter((fragment) => !fragment.used).length} 未使用
+                      </span>
+                    ) : (
+                      <span>消化済み</span>
+                    )}
+                    <span>{relativeTime(selected.updatedAt)} 更新</span>
+                  </div>
+
+                  <div className="ideaCapture ideaCaptureInline">
+                    <div className="ideaCaptureBox">
+                      <textarea
+                        value={fragmentText}
+                        rows={1}
+                        placeholder="このスレッドに断片を追加…（Enter で追加）"
+                        onChange={(event) => setFragmentText(event.target.value)}
+                        onCompositionStart={() => (composingRef.current = true)}
+                        onCompositionEnd={() => (composingRef.current = false)}
+                        onKeyDown={(event) => handleComposerKeyDown(event, submitFragment)}
+                      />
+                      <div className="ideaCaptureRow">
+                        <span className="ideaCaptureHint">作成順に下へ積まれます</span>
+                        <button
+                          className="ideaPrimaryBtn"
+                          type="button"
+                          disabled={!fragmentText.trim()}
+                          onClick={submitFragment}
+                        >
+                          <PlusIcon />
+                          <span>断片を追加</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="ideaScroll" ref={fragmentListRef}>
+                  {selected.fragments.length === 0 ? (
+                    <div className="ideaEmpty">
+                      まだ断片がありません。
+                      <br />
+                      上の入力欄から書き溜めましょう。
+                    </div>
+                  ) : (
+                    selected.fragments.map((fragment) => (
+                      <article
+                        key={fragment.id}
+                        className={`ideaFragment ${fragment.used ? "isUsed" : ""} ${
+                          draggingId === fragment.id ? "isDragging" : ""
+                        }`}
+                      >
+                        <span
+                          className="ideaDragHandle"
+                          draggable
+                          title="ドラッグで本文へ"
+                          onDragStart={(event) =>
+                            onFragmentDragStart(event, selected.id, fragment.id)
+                          }
+                          onDragEnd={onFragmentDragEnd}
+                        >
+                          <GripIcon />
+                        </span>
+                        <div>
+                          <div
+                            className="ideaFragmentBody"
+                            contentEditable
+                            spellCheck={false}
+                            suppressContentEditableWarning
+                            onBlur={(event) => {
+                              const next = event.currentTarget.textContent ?? "";
+                              if (next.trim()) {
+                                onUpdateFragment(selected.id, fragment.id, next);
+                              } else {
+                                event.currentTarget.textContent = fragment.body;
+                              }
+                            }}
+                          >
+                            {fragment.body}
+                          </div>
+                          <div className="ideaFragmentFoot">
+                            <span className="ideaFragmentTime">
+                              {relativeTime(fragment.createdAt)}
+                            </span>
+                            <span className="ideaFragmentBtns">
+                              <select
+                                className="ideaMoveSelect"
+                                aria-label="別スレッドへ移動"
+                                title="別スレッドへ移動"
+                                value=""
+                                onChange={(event) => {
+                                  if (event.target.value) {
+                                    onMoveFragment(
+                                      selected.id,
+                                      fragment.id,
+                                      event.target.value,
+                                    );
+                                  }
+                                }}
+                              >
+                                <option value="">→ 移動…</option>
+                                {threads
+                                  .filter((thread) => thread.id !== selected.id)
+                                  .map((thread) => (
+                                    <option key={thread.id} value={thread.id}>
+                                      {thread.kind === "inbox" ? "▾ " : ""}
+                                      {thread.title}
+                                    </option>
+                                  ))}
+                              </select>
+                              <button
+                                className="ideaTextBtn"
+                                type="button"
+                                onClick={() => onInsertFragment(selected.id, fragment.id)}
+                              >
+                                本文へ
+                              </button>
+                              <button
+                                className={`ideaMiniIcon ${fragment.used ? "isOn" : ""}`}
+                                type="button"
+                                aria-label="使用済み"
+                                title="使用済み"
+                                onClick={() => onToggleUsed(selected.id, fragment.id)}
+                              >
+                                <CheckIcon />
+                              </button>
+                              <button
+                                className="ideaMiniIcon"
+                                type="button"
+                                aria-label="削除"
+                                title="削除"
+                                onClick={() => onDeleteFragment(selected.id, fragment.id)}
+                              >
+                                <TrashIcon />
+                              </button>
+                            </span>
+                          </div>
+                        </div>
+                      </article>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+          </section>
+        </div>
       </div>
-
-      <button className="ideaAdd" type="button" onClick={onCreate}>
-        <PlusIcon />
-        <span>アイデアを追加</span>
-      </button>
     </section>
   );
 }

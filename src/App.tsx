@@ -55,6 +55,8 @@ import type {
   FileProgressStatus,
   FlatOutlineItem,
   FontOption,
+  IdeaFragment,
+  IdeaThread,
   OutlineItem,
   PlotCard,
   ProjectEntry,
@@ -330,22 +332,32 @@ const initialMarkdown = `# ${documentData.title}
 > 「また始まったか」
 `;
 
-const htmlIdeaSnippets: Snippet[] = [
-  {
-    id: "idea-sample-1",
-    title: "主人公が改札の前で一瞬立ち止まる描写",
-    text: "主人公が改札の前で一瞬立ち止まる描写を入れる。",
-    category: "",
-    tags: [],
-  },
-  {
-    id: "idea-sample-2",
-    title: "風呂のシーン",
-    text: "風呂のシーンはテンポよく、1分で終わらせる緊張感を持たせたい。",
-    category: "",
-    tags: [],
-  },
-];
+const INBOX_THREAD_ID = "idea-inbox";
+
+let ideaIdCounter = 0;
+
+function nextIdeaId(prefix: string): string {
+  ideaIdCounter += 1;
+  return `${prefix}-${Date.now().toString(36)}-${ideaIdCounter}`;
+}
+
+function makeIdeaFragment(body: string, used = false): IdeaFragment {
+  const now = Date.now();
+  return { id: nextIdeaId("frag"), body, used, createdAt: now, updatedAt: now };
+}
+
+function makeInboxThread(fragments: IdeaFragment[] = []): IdeaThread {
+  const now = Date.now();
+  return {
+    id: INBOX_THREAD_ID,
+    kind: "inbox",
+    title: "インボックス",
+    starred: false,
+    createdAt: now,
+    updatedAt: now,
+    fragments,
+  };
+}
 
 const defaultPlotCards: PlotCard[] = [
   {
@@ -377,37 +389,104 @@ const defaultPlotCards: PlotCard[] = [
   },
 ];
 
-const defaultSnippets: Snippet[] = [
-  ...htmlIdeaSnippets,
-  {
-    id: "s1",
-    title: "旅立ちの夜明け",
-    text: "夜明けの光が、山の稜線を白く縁どり始めた頃",
-    category: "情景",
-    tags: ["朝", "旅立ち"],
-  },
-  {
-    id: "s2",
-    title: "内面の葛藤",
-    text: "主人公は決断する。しかしその足は、一歩踏み出すことを躊躇っていた。",
-    category: "心理",
-    tags: ["葛藤"],
-  },
-  {
-    id: "s3",
-    title: "謎めいた台詞",
-    text: "「お前には、まだ知らないことがある」老人は静かに言った。",
-    category: "台詞",
-    tags: ["伏線"],
-  },
-  {
-    id: "s4",
-    title: "霧の中の影",
-    text: "霧の中から現れた影は、かつて見た夢の中の人物と瓜二つだった。",
-    category: "情景",
-    tags: ["霧", "夢"],
-  },
-];
+function defaultIdeaThreads(): IdeaThread[] {
+  const now = Date.now();
+  return [
+    makeInboxThread([
+      makeIdeaFragment("主人公が改札の前で一瞬立ち止まる描写を入れる。"),
+      makeIdeaFragment("風呂のシーンはテンポよく、1分で終わらせる緊張感を持たせたい。"),
+    ]),
+    {
+      id: "idea-sample-scene",
+      kind: "thread",
+      title: "旅立ちの朝（場面）",
+      starred: false,
+      createdAt: now,
+      updatedAt: now,
+      fragments: [
+        makeIdeaFragment("夜明けの光が、山の稜線を白く縁どり始めた頃。"),
+        makeIdeaFragment("主人公は決断する。しかしその足は、一歩踏み出すことを躊躇っていた。"),
+      ],
+    },
+    {
+      id: "idea-sample-foreshadow",
+      kind: "thread",
+      title: "老人の台詞（伏線）",
+      starred: false,
+      createdAt: now,
+      updatedAt: now,
+      fragments: [
+        makeIdeaFragment("「お前には、まだ知らないことがある」老人は静かに言った。"),
+      ],
+    },
+  ];
+}
+
+/** 値を {@link IdeaThread}[] へ正規化する。旧フラット Snippet[] からの移行も担う。 */
+function normalizeIdeaThreads(value: unknown): IdeaThread[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    return [makeInboxThread()];
+  }
+
+  const looksLegacy = value.some(
+    (entry) =>
+      entry &&
+      typeof entry === "object" &&
+      "text" in (entry as Record<string, unknown>) &&
+      !("fragments" in (entry as Record<string, unknown>)),
+  );
+
+  let threads: IdeaThread[];
+  if (looksLegacy) {
+    const fragments = (value as Snippet[])
+      .map((snippet) =>
+        makeIdeaFragment(
+          typeof snippet?.text === "string" && snippet.text.trim()
+            ? snippet.text
+            : String(snippet?.title ?? "").trim(),
+        ),
+      )
+      .filter((fragment) => fragment.body.trim().length > 0);
+    threads = [makeInboxThread(fragments)];
+  } else {
+    threads = (value as Array<Partial<IdeaThread>>)
+      .filter((thread) => thread && typeof thread === "object")
+      .map((thread) => {
+        const now = Date.now();
+        const fragments = Array.isArray(thread.fragments)
+          ? thread.fragments
+              .filter((fragment) => fragment && typeof fragment.body === "string")
+              .map((fragment) => ({
+                id: typeof fragment.id === "string" ? fragment.id : nextIdeaId("frag"),
+                body: fragment.body,
+                used: Boolean(fragment.used),
+                createdAt:
+                  typeof fragment.createdAt === "number" ? fragment.createdAt : now,
+                updatedAt:
+                  typeof fragment.updatedAt === "number" ? fragment.updatedAt : now,
+              }))
+          : [];
+        return {
+          id: typeof thread.id === "string" ? thread.id : nextIdeaId("thread"),
+          kind: thread.kind === "inbox" ? "inbox" : "thread",
+          title: typeof thread.title === "string" ? thread.title : "スレッド",
+          starred: Boolean(thread.starred),
+          createdAt: typeof thread.createdAt === "number" ? thread.createdAt : now,
+          updatedAt: typeof thread.updatedAt === "number" ? thread.updatedAt : now,
+          fragments,
+        } satisfies IdeaThread;
+      });
+  }
+
+  // インボックスを必ず1つ、先頭に置く。
+  const inboxes = threads.filter((thread) => thread.kind === "inbox");
+  const others = threads.filter((thread) => thread.kind !== "inbox");
+  const inbox =
+    inboxes.length > 0
+      ? { ...inboxes[0], id: INBOX_THREAD_ID, fragments: inboxes.flatMap((t) => t.fragments) }
+      : makeInboxThread();
+  return [inbox, ...others];
+}
 
 const defaultSettings: EditorSettings = {
   theme: "dark",
@@ -504,10 +583,11 @@ function isDirtyDocumentTab(tab: DocumentTab): boolean {
 }
 
 function createDefaultState(): AppState {
+  const threads = defaultIdeaThreads();
   return {
     markdown: initialMarkdown,
-    snippets: defaultSnippets,
-    profileSnippets: defaultSnippets,
+    snippets: threads,
+    profileSnippets: threads,
     settings: defaultSettings,
     lastWorkspacePath: null,
     lastFilePath: null,
@@ -529,39 +609,6 @@ function countDisplayCharacters(text: string, includeWhitespace: boolean): numbe
   return Array.from(target).length;
 }
 
-function parseInlineIdeaTags(text: string): string[] {
-  const tags = new Set<string>();
-  const matches = text.matchAll(/(?:^|\s)#([^\s#.,;:!?()[\]{}「」『』、。]+)/g);
-
-  for (const match of matches) {
-    const tag = match[1]?.trim();
-    if (tag) tags.add(tag);
-  }
-
-  return Array.from(tags);
-}
-
-function createIdeaTitle(text: string): string {
-  const cleaned = text
-    .replace(/(?:^|\s)#([^\s#.,;:!?()[\]{}「」『』、。]+)/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!cleaned) return "Idea";
-  return Array.from(cleaned).slice(0, 28).join("");
-}
-
-function ensureHtmlIdeaSamples(snippets: Snippet[]): Snippet[] {
-  const hasHtmlIdeaSample = htmlIdeaSnippets.some((sample) =>
-    snippets.some((snippet) => snippet.id === sample.id || snippet.text === sample.text),
-  );
-  if (hasHtmlIdeaSample) return snippets;
-
-  const hasOnlyLegacyDefaults =
-    snippets.length === 4 && snippets.every((snippet) => /^s[1-4]$/.test(snippet.id));
-
-  return hasOnlyLegacyDefaults ? [...htmlIdeaSnippets, ...snippets] : snippets;
-}
 
 function normalizePlotCards(value: unknown): PlotCard[] {
   if (!Array.isArray(value)) return [];
@@ -1016,17 +1063,19 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
       )
     : [];
 
-  const profileSnippets = ensureHtmlIdeaSamples(Array.isArray(value?.profileSnippets)
-    ? value.profileSnippets
-    : Array.isArray(value?.snippets)
-      ? value.snippets
-      : defaultSnippets);
+  const profileSnippets = normalizeIdeaThreads(
+    Array.isArray(value?.profileSnippets)
+      ? value.profileSnippets
+      : Array.isArray(value?.snippets)
+        ? value.snippets
+        : defaultIdeaThreads(),
+  );
 
   return {
     markdown: typeof value?.markdown === "string" ? value.markdown : initialMarkdown,
-    snippets: ensureHtmlIdeaSamples(
-      Array.isArray(value?.snippets) ? value.snippets : profileSnippets,
-    ),
+    snippets: Array.isArray(value?.snippets)
+      ? normalizeIdeaThreads(value.snippets)
+      : profileSnippets,
     profileSnippets,
     settings: {
       ...defaultSettings,
@@ -1150,13 +1199,13 @@ async function loadSystemFonts(): Promise<FontOption[]> {
   return fallbackFontOptions;
 }
 
-async function loadWorkspaceSnippets(folderPath: string): Promise<Snippet[]> {
-  if (!isTauriRuntime()) return defaultSnippets;
-  const snippets = await invoke<Snippet[]>("load_project_snippets", { rootPath: folderPath });
-  return snippets.length ? snippets : defaultSnippets;
+async function loadWorkspaceSnippets(folderPath: string): Promise<IdeaThread[]> {
+  if (!isTauriRuntime()) return defaultIdeaThreads();
+  const loaded = await invoke<IdeaThread[]>("load_project_snippets", { rootPath: folderPath });
+  return loaded.length ? normalizeIdeaThreads(loaded) : defaultIdeaThreads();
 }
 
-async function saveWorkspaceSnippets(folderPath: string, snippets: Snippet[]): Promise<void> {
+async function saveWorkspaceSnippets(folderPath: string, snippets: IdeaThread[]): Promise<void> {
   if (!isTauriRuntime()) return;
   await invoke("save_project_snippets", { rootPath: folderPath, snippets });
 }
@@ -1179,7 +1228,11 @@ export default function App() {
   const headingMoveInProgressRef = useRef(false);
   const toastTimerRef = useRef<number | null>(null);
   const typewriterScrollFrameRef = useRef<number | null>(null);
-  const draggingSnippetRef = useRef<Snippet | null>(null);
+  const draggingSnippetRef = useRef<{
+    threadId: string;
+    fragmentId: string;
+    body: string;
+  } | null>(null);
   const editorInstanceRef = useRef<TextEditorHandle | null>(null);
   const editorShellRef = useRef<HTMLDivElement | null>(null);
   const editorContextMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1216,7 +1269,6 @@ export default function App() {
   const [plotCards, setPlotCards] = useState<PlotCard[]>(() => defaultPlotCards);
   const [focusedFolderPath, setFocusedFolderPath] = useState<string | null>(null);
   const [workspaceAlert, setWorkspaceAlert] = useState<WorkspaceAlert>(null);
-  const [query, setQuery] = useState("");
   const [outlineQuery, setOutlineQuery] = useState("");
   const [projectSearchQuery, setProjectSearchQuery] = useState("");
   const [searchScope, setSearchScope] = useState<WorkspaceSearchScope>("project");
@@ -1567,22 +1619,6 @@ export default function App() {
     () => findPathToEntry(projectFolder, currentFilePath),
     [currentFilePath, projectFolder],
   );
-
-  const filteredSnippets = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    if (!normalized) return snippets;
-
-    return snippets.filter((snippet) => {
-      const inlineTags = parseInlineIdeaTags(snippet.text);
-      return (
-        snippet.title.toLowerCase().includes(normalized) ||
-        snippet.text.toLowerCase().includes(normalized) ||
-        snippet.category.toLowerCase().includes(normalized) ||
-        snippet.tags.some((tag) => tag.toLowerCase().includes(normalized)) ||
-        inlineTags.some((tag) => tag.toLowerCase().includes(normalized))
-      );
-    });
-  }, [query, snippets]);
 
   useEffect(() => {
     if (!projectFolder) {
@@ -3846,19 +3882,25 @@ export default function App() {
     return Array.from(event.dataTransfer.types).includes(SNIPPET_DRAG_MIME);
   };
 
-  const getDraggedSnippet = (event: DragEvent<HTMLElement>) => {
+  const getDraggedFragment = (event: DragEvent<HTMLElement>) => {
     if (draggingSnippetRef.current) return draggingSnippetRef.current;
 
-    const snippetId = event.dataTransfer.getData(SNIPPET_DRAG_MIME);
-    if (!snippetId) return null;
-    return snippets.find((snippet) => snippet.id === snippetId) ?? null;
+    const fragmentId = event.dataTransfer.getData(SNIPPET_DRAG_MIME);
+    if (!fragmentId) return null;
+    for (const thread of snippets) {
+      const fragment = thread.fragments.find((item) => item.id === fragmentId);
+      if (fragment) {
+        return { threadId: thread.id, fragmentId, body: fragment.body };
+      }
+    }
+    return null;
   };
 
   const getEditorView = () => {
     return editorInstanceRef.current;
   };
 
-  const insertSnippetParagraph = (snippet: Snippet, pos?: number) => {
+  const insertParagraph = (text: string, pos?: number) => {
     const view = getEditorView();
     if (!view) return false;
 
@@ -3870,36 +3912,30 @@ export default function App() {
     const after = insertTo < doc.length ? doc.slice(insertTo, insertTo + 1) : "\n";
     const prefix = before === "\n" ? "" : "\n";
     const suffix = after === "\n" ? "" : "\n";
-    const insertedText = `${prefix}${snippet.text}${suffix}`;
-    const cursorPos = insertFrom + prefix.length + snippet.text.length;
+    const insertedText = `${prefix}${text}${suffix}`;
+    const cursorPos = insertFrom + prefix.length + text.length;
 
     view.replaceRange(insertFrom, insertTo, insertedText, cursorPos);
     view.focus();
     return true;
   };
 
-  const commitInsertion = (snippet: Snippet) => {
-    showToast(`「${snippet.title}」を挿入しました`);
-  };
-
-  const handleSnippetDoubleClick = (snippet: Snippet) => {
-    if (insertSnippetParagraph(snippet)) {
-      commitInsertion(snippet);
-    }
-  };
-
-  const handleSnippetDragStart = (
-    event: DragEvent<HTMLDivElement>,
-    snippet: Snippet,
+  const handleFragmentDragStart = (
+    event: DragEvent<HTMLElement>,
+    threadId: string,
+    fragmentId: string,
   ) => {
-    draggingSnippetRef.current = snippet;
-    setDraggingId(snippet.id);
+    const thread = snippets.find((item) => item.id === threadId);
+    const fragment = thread?.fragments.find((item) => item.id === fragmentId);
+    if (!fragment) return;
+    draggingSnippetRef.current = { threadId, fragmentId, body: fragment.body };
+    setDraggingId(fragmentId);
     event.dataTransfer.effectAllowed = "copy";
-    event.dataTransfer.setData(SNIPPET_DRAG_MIME, snippet.id);
-    event.dataTransfer.setData("text/plain", snippet.text);
+    event.dataTransfer.setData(SNIPPET_DRAG_MIME, fragmentId);
+    event.dataTransfer.setData("text/plain", fragment.body);
   };
 
-  const handleSnippetDragEnd = () => {
+  const handleFragmentDragEnd = () => {
     draggingSnippetRef.current = null;
     setDraggingId(null);
     clearDropIndicator();
@@ -3926,10 +3962,10 @@ export default function App() {
   };
 
   const handleEditorDrop = (event: DragEvent<HTMLDivElement>) => {
-    const snippet = getDraggedSnippet(event);
+    const dragged = getDraggedFragment(event);
     const view = getEditorView();
 
-    if (!snippet || !view) return;
+    if (!dragged || !view) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -3937,88 +3973,208 @@ export default function App() {
     const resolvedPos = view.positionFromPoint(event.clientX, event.clientY);
     clearDropIndicator();
 
-    if (insertSnippetParagraph(snippet, resolvedPos ?? undefined)) {
-      commitInsertion(snippet);
+    if (insertParagraph(dragged.body, resolvedPos ?? undefined)) {
+      markFragmentUsed(dragged.threadId, dragged.fragmentId, true);
+      showToast("本文へ挿入しました");
     }
     draggingSnippetRef.current = null;
     setDraggingId(null);
   };
 
-  const updateSnippetList = (updater: (snippets: Snippet[]) => Snippet[]) => {
+  const updateIdeaThreads = (updater: (threads: IdeaThread[]) => IdeaThread[]) => {
     setAppState((current) => {
-      const nextSnippets = updater(current.snippets);
+      const nextThreads = updater(current.snippets);
       return {
         ...current,
-        snippets: nextSnippets,
+        snippets: nextThreads,
         profileSnippets:
           current.settings.snippetStorageMode === "profile"
-            ? nextSnippets
+            ? nextThreads
             : current.profileSnippets,
       };
     });
   };
 
-  const createIdea = () => {
-    const id = `idea-${Date.now()}`;
-    setQuery("");
-    updateSnippetList((currentSnippets) => [
-      {
-        id,
-        title: "Idea",
-        text: "",
-        category: "",
-        tags: [],
-      },
-      ...currentSnippets,
-    ]);
-    showToast("Ideaを追加しました");
-  };
-
-  const updateIdeaText = (snippetId: string, text: string) => {
-    updateSnippetList((currentSnippets) =>
-      currentSnippets.map((snippet) =>
-        snippet.id === snippetId
-          ? {
-              ...snippet,
-              title: createIdeaTitle(text),
-              text,
-              category: "",
-              tags: parseInlineIdeaTags(text),
-            }
-          : snippet,
+  /** スレッドを id で見つけて差し替える（updatedAt を更新）。 */
+  const patchThread = (threadId: string, patch: (thread: IdeaThread) => IdeaThread) => {
+    updateIdeaThreads((threads) =>
+      threads.map((thread) =>
+        thread.id === threadId ? { ...patch(thread), updatedAt: Date.now() } : thread,
       ),
     );
   };
 
-  const deleteSnippet = async (snippet: Snippet) => {
+  const captureFragment = (body: string, destId: string) => {
+    const text = body.trim();
+    if (!text) return;
+    const dest = snippets.find((thread) => thread.id === destId) ?? snippets[0];
+    if (!dest) return;
+    patchThread(dest.id, (thread) => {
+      const fragment = makeIdeaFragment(text);
+      const fragments =
+        thread.kind === "inbox"
+          ? [fragment, ...thread.fragments]
+          : [...thread.fragments, fragment];
+      return { ...thread, fragments };
+    });
+    showToast(`「${dest.title}」に追加しました`);
+  };
+
+  const addFragment = (threadId: string, body: string) => {
+    const text = body.trim();
+    if (!text) return;
+    patchThread(threadId, (thread) => ({
+      ...thread,
+      fragments: [...thread.fragments, makeIdeaFragment(text)],
+    }));
+  };
+
+  const updateFragmentBody = (threadId: string, fragmentId: string, body: string) => {
+    const text = body.trim();
+    if (!text) return;
+    patchThread(threadId, (thread) => ({
+      ...thread,
+      fragments: thread.fragments.map((fragment) =>
+        fragment.id === fragmentId
+          ? { ...fragment, body: text, updatedAt: Date.now() }
+          : fragment,
+      ),
+    }));
+  };
+
+  const markFragmentUsed = (threadId: string, fragmentId: string, used: boolean) => {
+    patchThread(threadId, (thread) => ({
+      ...thread,
+      fragments: thread.fragments.map((fragment) =>
+        fragment.id === fragmentId
+          ? { ...fragment, used, updatedAt: Date.now() }
+          : fragment,
+      ),
+    }));
+  };
+
+  const toggleFragmentUsed = (threadId: string, fragmentId: string) => {
+    const thread = snippets.find((item) => item.id === threadId);
+    const fragment = thread?.fragments.find((item) => item.id === fragmentId);
+    if (!fragment) return;
+    markFragmentUsed(threadId, fragmentId, !fragment.used);
+  };
+
+  const deleteFragment = (threadId: string, fragmentId: string) => {
+    patchThread(threadId, (thread) => ({
+      ...thread,
+      fragments: thread.fragments.filter((fragment) => fragment.id !== fragmentId),
+    }));
+    showToast("断片を削除しました");
+  };
+
+  const moveFragment = (fromThreadId: string, fragmentId: string, toThreadId: string) => {
+    if (fromThreadId === toThreadId) return;
+    const fromThread = snippets.find((thread) => thread.id === fromThreadId);
+    const fragment = fromThread?.fragments.find((item) => item.id === fragmentId);
+    const toThread = snippets.find((thread) => thread.id === toThreadId);
+    if (!fragment || !toThread) return;
+
+    const now = Date.now();
+    updateIdeaThreads((threads) =>
+      threads.map((thread) => {
+        if (thread.id === fromThreadId) {
+          return {
+            ...thread,
+            fragments: thread.fragments.filter((item) => item.id !== fragmentId),
+            updatedAt: now,
+          };
+        }
+        if (thread.id === toThreadId) {
+          return {
+            ...thread,
+            fragments: [...thread.fragments, { ...fragment, updatedAt: now }],
+            updatedAt: now,
+          };
+        }
+        return thread;
+      }),
+    );
+    showToast(`「${toThread.title}」へ移動しました`);
+  };
+
+  const createIdeaThread = (): string => {
+    const id = nextIdeaId("thread");
+    const now = Date.now();
+    updateIdeaThreads((threads) => {
+      const thread: IdeaThread = {
+        id,
+        kind: "thread",
+        title: "新しいスレッド",
+        starred: false,
+        createdAt: now,
+        updatedAt: now,
+        fragments: [],
+      };
+      const inboxIndex = threads.findIndex((item) => item.kind === "inbox");
+      const next = [...threads];
+      next.splice(inboxIndex >= 0 ? inboxIndex + 1 : 0, 0, thread);
+      return next;
+    });
+    return id;
+  };
+
+  const renameIdeaThread = (threadId: string, title: string) => {
+    patchThread(threadId, (thread) =>
+      thread.kind === "inbox" ? thread : { ...thread, title },
+    );
+  };
+
+  const toggleThreadStar = (threadId: string) => {
+    patchThread(threadId, (thread) => ({ ...thread, starred: !thread.starred }));
+  };
+
+  const deleteIdeaThread = async (threadId: string) => {
+    const thread = snippets.find((item) => item.id === threadId);
+    if (!thread || thread.kind === "inbox") return;
     const shouldDelete = await requestConfirm({
-      title: "Ideaを削除",
-      message: "このIdeaを削除しますか？",
-      detail: snippet.title,
+      title: "スレッドを削除",
+      message: `「${thread.title}」を削除しますか？`,
+      detail: `断片 ${thread.fragments.length} 件もまとめて削除されます。`,
       confirmLabel: "削除",
       danger: true,
     });
     if (!shouldDelete) return;
-
-    updateSnippetList((currentSnippets) =>
-      currentSnippets.filter((item) => item.id !== snippet.id),
-    );
-    showToast(`「${snippet.title}」を削除しました`);
+    updateIdeaThreads((threads) => threads.filter((item) => item.id !== threadId));
+    showToast("スレッドを削除しました");
   };
 
-  const moveSnippet = (snippetId: string, direction: -1 | 1) => {
-    updateSnippetList((currentSnippets) => {
-      const index = currentSnippets.findIndex((snippet) => snippet.id === snippetId);
-      const targetIndex = index + direction;
-      if (index < 0 || targetIndex < 0 || targetIndex >= currentSnippets.length) {
-        return currentSnippets;
-      }
+  const insertFragmentToEditor = (threadId: string, fragmentId: string) => {
+    const thread = snippets.find((item) => item.id === threadId);
+    const fragment = thread?.fragments.find((item) => item.id === fragmentId);
+    if (!fragment) return;
+    if (insertParagraph(fragment.body)) {
+      markFragmentUsed(threadId, fragmentId, true);
+      showToast("本文へ挿入しました");
+    }
+  };
 
-      const next = [...currentSnippets];
-      const [snippet] = next.splice(index, 1);
-      next.splice(targetIndex, 0, snippet);
-      return next;
-    });
+  const insertThreadToEditor = (threadId: string) => {
+    const thread = snippets.find((item) => item.id === threadId);
+    if (!thread) return;
+    const pending = thread.fragments.filter((fragment) => !fragment.used);
+    if (pending.length === 0) {
+      showToast("未使用の断片がありません");
+      return;
+    }
+    if (insertParagraph(pending.map((fragment) => fragment.body).join("\n"))) {
+      const pendingIds = new Set(pending.map((fragment) => fragment.id));
+      const now = Date.now();
+      patchThread(threadId, (current) => ({
+        ...current,
+        fragments: current.fragments.map((fragment) =>
+          pendingIds.has(fragment.id)
+            ? { ...fragment, used: true, updatedAt: now }
+            : fragment,
+        ),
+      }));
+      showToast(`${pending.length} 件を本文へ挿入しました`);
+    }
   };
 
   const updateSettings = <Key extends keyof EditorSettings>(
@@ -5017,17 +5173,22 @@ export default function App() {
                     <PlotPane cards={plotCards} onCardsChange={setPlotCards} />
                   ) : (
                     <IdeaPane
-                      snippets={filteredSnippets}
-                      query={query}
+                      threads={snippets}
                       draggingId={draggingId}
-                      onQueryChange={setQuery}
-                      onCreate={createIdea}
-                      onTextChange={updateIdeaText}
-                      onDragStart={handleSnippetDragStart}
-                      onDragEnd={handleSnippetDragEnd}
-                      onDoubleClick={handleSnippetDoubleClick}
-                      onMove={moveSnippet}
-                      onDelete={deleteSnippet}
+                      onCapture={captureFragment}
+                      onCreateThread={createIdeaThread}
+                      onRenameThread={renameIdeaThread}
+                      onToggleStar={toggleThreadStar}
+                      onDeleteThread={deleteIdeaThread}
+                      onAddFragment={addFragment}
+                      onUpdateFragment={updateFragmentBody}
+                      onToggleUsed={toggleFragmentUsed}
+                      onDeleteFragment={deleteFragment}
+                      onMoveFragment={moveFragment}
+                      onInsertFragment={insertFragmentToEditor}
+                      onInsertThread={insertThreadToEditor}
+                      onFragmentDragStart={handleFragmentDragStart}
+                      onFragmentDragEnd={handleFragmentDragEnd}
                     />
                   )}
                 </div>

@@ -1,11 +1,42 @@
 import type { ExportFontFamily } from "./export/types";
 
+/**
+ * 旧 Idea（フラットな付箋）モデル。スレッド型へ移行済みだが、
+ * ワークスペース/プロファイルに保存された旧データの移行（マイグレーション）
+ * のために型を残している。
+ */
 export type Snippet = {
   id: string;
   title: string;
   text: string;
   category: string;
   tags: string[];
+};
+
+/** スレッド内の1断片（メモの最小単位）。 */
+export type IdeaFragment = {
+  id: string;
+  body: string;
+  /** 本文へ挿入済み（消化済み）かどうか。 */
+  used: boolean;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type IdeaThreadKind = "inbox" | "thread";
+
+/**
+ * Idea のスレッド。`inbox` は未整理メモの常設受け皿で、削除・改名不可。
+ * `thread` は場面・伏線・方針などのトピック単位の束。
+ */
+export type IdeaThread = {
+  id: string;
+  kind: IdeaThreadKind;
+  title: string;
+  starred: boolean;
+  createdAt: number;
+  updatedAt: number;
+  fragments: IdeaFragment[];
 };
 
 export type PlotCardKind = "section" | "chapter";
@@ -167,8 +198,12 @@ export type AppState = {
    * the old brew state and the new Then state.
    */
   markdown: string;
-  snippets: Snippet[];
-  profileSnippets: Snippet[];
+  /**
+   * Idea スレッド一覧。フィールド名は永続化キー(`snippets`)互換のため維持しているが、
+   * 中身は新しい {@link IdeaThread} モデル。
+   */
+  snippets: IdeaThread[];
+  profileSnippets: IdeaThread[];
   settings: EditorSettings;
   lastWorkspacePath: string | null;
   lastFilePath: string | null;
