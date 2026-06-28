@@ -168,14 +168,6 @@ body.thenPdfExporting .printExportViewport {
   background: var(--bg-primary);
 }
 
-.appName {
-  color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 750;
-  letter-spacing: 0;
-  margin-right: 8px;
-}
-
 .topbar {
   display: flex;
   height: var(--documentbar-height);
@@ -309,6 +301,194 @@ body.thenPdfExporting .printExportViewport {
   max-height: min(520px, calc((100vh - 96px) / var(--ui-font-scale, 1)));
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+.workspaceSwitcherButton {
+  font-weight: 650;
+}
+
+.workspaceSwitcherBookIcon {
+  display: block;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.workspaceSwitcherPopover {
+  left: 0;
+  width: clamp(300px, 34vw, 420px);
+  min-width: 300px;
+  max-width: calc(100vw - 28px);
+  max-height: min(540px, calc((100vh - 96px) / var(--ui-font-scale, 1)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.workspaceSwitcherHeader {
+  display: grid;
+  gap: 3px;
+  padding: 7px 8px 9px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.workspaceSwitcherTitle {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspaceSwitcherPath,
+.workspaceRecordPath {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspaceSwitcherSearch {
+  display: flex;
+  min-width: 0;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 4px 4px;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+}
+
+.workspaceSwitcherSearch input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.workspaceSwitcherSearch input::placeholder {
+  color: var(--text-faint);
+}
+
+.workspaceSwitcherSectionLabel {
+  padding: 8px 8px 4px;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.workspaceSwitcherList {
+  display: grid;
+  gap: 2px;
+}
+
+.workspaceFolderTree {
+  display: grid;
+  gap: 2px;
+}
+
+.workspaceFolderTreeNode {
+  display: grid;
+  gap: 2px;
+}
+
+.workspaceFolderTreeRow {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+}
+
+.workspaceFolderDisclosure {
+  display: inline-grid !important;
+  width: 20px;
+  min-width: 20px !important;
+  min-height: 28px !important;
+  place-items: center;
+  padding: 0 !important;
+  color: var(--text-faint) !important;
+}
+
+.workspaceFolderDisclosure:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.workspaceFolderTreeButton {
+  min-width: 0;
+}
+
+.workspaceFolderTreeButton span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activeWorkspaceFolderTreeButton {
+  background: var(--accent-soft) !important;
+  color: var(--text-primary) !important;
+}
+
+.workspaceFolderTreeIcon {
+  display: block;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.workspaceRecordButton {
+  display: grid !important;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px !important;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.workspaceRecordText {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.workspaceRecordName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspaceRecordBadge {
+  display: inline-flex;
+  min-height: 20px;
+  align-items: center;
+  padding: 0 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-faint);
+  font-size: 11px;
 }
 
 .outlinePopover {
@@ -2211,12 +2391,6 @@ body {
   background: #121316;
   color: var(--text-muted);
   font-size: 12px;
-}
-
-.appName {
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 650;
 }
 
 .menuButton,
@@ -4920,9 +5094,6 @@ body {
   background: var(--topbar-bg);
   color: var(--topbar-text-muted);
   backdrop-filter: var(--topbar-backdrop);
-}
-.appShell[data-theme] .topbar .appName {
-  color: var(--topbar-text-primary);
 }
 .appShell[data-theme] .topbar .menuButton,
 .appShell[data-theme] .topbar .iconButton,

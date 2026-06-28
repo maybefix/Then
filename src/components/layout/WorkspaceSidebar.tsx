@@ -1391,7 +1391,7 @@ export function WorkspaceSidebar({
           aria-pressed={searchScope === "file"}
           onClick={() => onSearchScopeChange("file")}
         >
-          ファイル内を検索
+          このファイルを検索
         </button>
         <button
           className={searchScope === "project" ? "activeProjectSearchMode" : ""}
@@ -1399,7 +1399,7 @@ export function WorkspaceSidebar({
           aria-pressed={searchScope === "project"}
           onClick={() => onSearchScopeChange("project")}
         >
-          プロジェクト内を検索
+          プロジェクトで検索
         </button>
       </div>
       <div className="projectReplaceDisclosure">
@@ -1431,14 +1431,14 @@ export function WorkspaceSidebar({
                 disabled={isProjectReplacing || !projectSearchQuery.trim()}
                 onClick={onReplaceInCurrentFile}
               >
-                ファイル内を置換
+                ファイル内で置換
               </button>
               <button
                 type="button"
                 disabled={isProjectReplacing || !projectFolder || !projectSearchQuery.trim()}
                 onClick={onReplaceInProject}
               >
-                プロジェクト内を置換
+                プロジェクト全置換
               </button>
             </div>
           </div>

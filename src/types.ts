@@ -109,6 +109,8 @@ export type EditorSettings = {
   showLineBreakMarks: boolean;
   snippetStorageMode: "workspace" | "profile";
   sidebarMode: SidebarMode;
+  /** プロジェクト切替メニューでフォルダパスを表示するか。 */
+  showWorkspacePaths: boolean;
   /** ナビゲータ方式のプレビュー表示行数。0 は「なし」（プレビュー非表示）。 */
   navigatorPreviewLines: number;
   /** 文字数カウントに空白文字（スペース・タブ・改行など）を含めるか。 */
@@ -242,6 +244,15 @@ export type AppDialog =
       confirmLabel: string;
       danger?: boolean;
       resolve: (value: boolean) => void;
+    }
+  | {
+      type: "choice";
+      title: string;
+      message: string;
+      detail?: string;
+      primaryLabel: string;
+      secondaryLabel: string;
+      resolve: (value: "primary" | "secondary" | null) => void;
     };
 
 export type FontOption = {

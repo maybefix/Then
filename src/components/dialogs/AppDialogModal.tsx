@@ -6,6 +6,7 @@ type AppDialogModalProps = {
   onClose: () => void;
   onSubmit: (event?: FormEvent<HTMLFormElement>) => void;
   onValueChange: (value: string) => void;
+  onChoice: (value: "primary" | "secondary") => void;
 };
 
 export function AppDialogModal({
@@ -13,6 +14,7 @@ export function AppDialogModal({
   onClose,
   onSubmit,
   onValueChange,
+  onChoice,
 }: AppDialogModalProps) {
   return (
     <div className="modalBackdrop" role="presentation">
@@ -51,7 +53,7 @@ export function AppDialogModal({
               <button type="submit">{dialog.confirmLabel}</button>
             </footer>
           </form>
-        ) : (
+        ) : dialog.type === "confirm" ? (
           <form className="modalForm" onSubmit={onSubmit}>
             <div className="dialogMessage">
               <p>{dialog.message}</p>
@@ -66,7 +68,22 @@ export function AppDialogModal({
               </button>
             </footer>
           </form>
-        )}
+        ) : dialog.type === "choice" ? (
+          <div className="modalForm">
+            <div className="dialogMessage">
+              <p>{dialog.message}</p>
+              {dialog.detail && <span>{dialog.detail}</span>}
+            </div>
+            <footer className="modalActions">
+              <button type="button" onClick={() => onChoice("secondary")}>
+                {dialog.secondaryLabel}
+              </button>
+              <button type="button" onClick={() => onChoice("primary")}>
+                {dialog.primaryLabel}
+              </button>
+            </footer>
+          </div>
+        ) : null}
       </section>
     </div>
   );

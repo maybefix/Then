@@ -154,6 +154,16 @@ export function SettingsModal({
             />
             <span>文字数に空白を含める</span>
           </label>
+          <label className="checkSetting">
+            <input
+              checked={settings.showWorkspacePaths}
+              type="checkbox"
+              onChange={(event) =>
+                onUpdateSettings("showWorkspacePaths", event.target.checked)
+              }
+            />
+            <span>プロジェクト切替にパスを表示</span>
+          </label>
           <label>
             <span>ファイル表示方式</span>
             <select

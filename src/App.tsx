@@ -312,6 +312,7 @@ const defaultSettings: EditorSettings = {
   showLineBreakMarks: false,
   snippetStorageMode: "workspace",
   sidebarMode: "tree",
+  showWorkspacePaths: true,
   navigatorPreviewLines: DEFAULT_NAVIGATOR_PREVIEW_LINES,
   countWhitespace: true,
 };
@@ -349,6 +350,23 @@ function createScratchDocumentTab(
     documentKey: options.documentKey ?? id,
     activeOutlineLine: null,
   };
+}
+
+function normalizePathForCompare(path: string): string {
+  return path.replace(/[\\/]+/g, "\\").replace(/\\+$/, "").toLocaleLowerCase();
+}
+
+function isSamePath(left: string, right: string): boolean {
+  return normalizePathForCompare(left) === normalizePathForCompare(right);
+}
+
+function isPathInsideFolder(path: string, folderPath: string): boolean {
+  const normalizedPath = normalizePathForCompare(path);
+  const normalizedFolder = normalizePathForCompare(folderPath);
+  return (
+    normalizedPath !== normalizedFolder &&
+    normalizedPath.startsWith(`${normalizedFolder}\\`)
+  );
 }
 
 function createFileDocumentTab(document: TextDocument): DocumentTab {
@@ -922,6 +940,10 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
       snippetStorageMode:
         settings.snippetStorageMode === "profile" ? "profile" : "workspace",
       sidebarMode: settings.sidebarMode === "navigator" ? "navigator" : "tree",
+      showWorkspacePaths:
+        typeof settings.showWorkspacePaths === "boolean"
+          ? settings.showWorkspacePaths
+          : defaultSettings.showWorkspacePaths,
       navigatorPreviewLines: NAVIGATOR_PREVIEW_LINE_CHOICES.includes(
         settings.navigatorPreviewLines as number,
       )
@@ -1103,6 +1125,10 @@ export default function App() {
   const [isThemePickerModalOpen, setIsThemePickerModalOpen] = useState(false);
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const [activeBreadcrumbPath, setActiveBreadcrumbPath] = useState<string | null>(null);
+  const [isWorkspaceSwitcherOpen, setIsWorkspaceSwitcherOpen] = useState(false);
+  const [workspaceSwitcherQuery, setWorkspaceSwitcherQuery] = useState("");
+  const [collapsedWorkspaceFolderPaths, setCollapsedWorkspaceFolderPaths] =
+    useState<ReadonlySet<string>>(() => new Set());
   const [isOutlineMenuOpen, setIsOutlineMenuOpen] = useState(false);
   const [appDialog, setAppDialog] = useState<AppDialog | null>(null);
   const [systemFonts, setSystemFonts] = useState<FontOption[]>(fallbackFontOptions);
@@ -1115,6 +1141,33 @@ export default function App() {
   const activeTab = useMemo(
     () => openTabs.find((tab) => tab.id === activeTabId) ?? openTabs[0] ?? null,
     [activeTabId, openTabs],
+  );
+  const visibleRecentWorkspaces = useMemo(() => {
+    const normalizedQuery = workspaceSwitcherQuery.trim().toLocaleLowerCase();
+    if (!normalizedQuery) return appState.recentWorkspaces;
+    return appState.recentWorkspaces.filter((workspace) =>
+      `${workspace.name}\n${workspace.path}`.toLocaleLowerCase().includes(normalizedQuery),
+    );
+  }, [appState.recentWorkspaces, workspaceSwitcherQuery]);
+  const findKnownParentWorkspace = useCallback(
+    (path: string): WorkspaceRecord | null => {
+      const candidates = new Map<string, WorkspaceRecord>();
+      if (projectFolder) {
+        candidates.set(normalizePathForCompare(projectFolder.path), {
+          path: projectFolder.path,
+          name: projectFolder.name,
+          lastOpenedAt: Date.now(),
+        });
+      }
+      for (const workspace of appState.recentWorkspaces) {
+        candidates.set(normalizePathForCompare(workspace.path), workspace);
+      }
+
+      return Array.from(candidates.values())
+        .filter((workspace) => isPathInsideFolder(path, workspace.path))
+        .sort((left, right) => right.path.length - left.path.length)[0] ?? null;
+    },
+    [appState.recentWorkspaces, projectFolder],
   );
   const patchActiveTab = useCallback(
     (updater: (tab: DocumentTab) => DocumentTab) => {
@@ -1207,28 +1260,6 @@ export default function App() {
   const setSaveStatus = useCallback(
     (nextStatus: SaveStatus) => {
       patchActiveTab((tab) => ({ ...tab, saveStatus: nextStatus }));
-    },
-    [patchActiveTab],
-  );
-  const setCurrentFilePath = useCallback(
-    (path: string | null) => {
-      patchActiveTab((tab) => ({
-        ...tab,
-        kind: path ? "file" : "scratch",
-        path,
-      }));
-    },
-    [patchActiveTab],
-  );
-  const setCurrentFileName = useCallback(
-    (name: string) => {
-      patchActiveTab((tab) => ({ ...tab, name }));
-    },
-    [patchActiveTab],
-  );
-  const setDocumentKey = useCallback(
-    (documentKey: string) => {
-      patchActiveTab((tab) => ({ ...tab, documentKey }));
     },
     [patchActiveTab],
   );
@@ -1823,6 +1854,7 @@ export default function App() {
       }
       if (!breadcrumbMenuRef.current?.contains(target)) {
         setActiveBreadcrumbPath(null);
+        setIsWorkspaceSwitcherOpen(false);
       }
       if (!editorContextMenuRef.current?.contains(target)) {
         setEditorContextMenu(null);
@@ -1833,6 +1865,7 @@ export default function App() {
       if (event.key !== "Escape") return;
       setIsFileMenuOpen(false);
       setActiveBreadcrumbPath(null);
+      setIsWorkspaceSwitcherOpen(false);
       setEditorContextMenu(null);
       setNotationModal(null);
     };
@@ -1855,6 +1888,7 @@ export default function App() {
 
     if (event.key === "Escape") {
       setActiveBreadcrumbPath(null);
+      setIsWorkspaceSwitcherOpen(false);
       setIsOutlineMenuOpen(false);
       event.preventDefault();
       return;
@@ -2020,6 +2054,7 @@ export default function App() {
     event.preventDefault();
     setIsFileMenuOpen(false);
     setActiveBreadcrumbPath(null);
+    setIsWorkspaceSwitcherOpen(false);
     setIsOutlineMenuOpen(false);
 
     const currentText = editor.getValue();
@@ -2308,6 +2343,20 @@ export default function App() {
       hint: `Ctrl+${level}`,
       run: () => applyHeadingShortcut(level),
     }));
+    const workspaceCommands: PaletteCommand[] = [
+      {
+        id: "workspace-open",
+        label: "別のプロジェクトを開く...",
+        hint: "Workspace",
+        run: () => void openWorkspace(),
+      },
+      ...appState.recentWorkspaces.map((workspace) => ({
+        id: `workspace-open-${workspace.path}`,
+        label: `プロジェクトを開く: ${workspace.name}`,
+        hint: settings.showWorkspacePaths ? workspace.path : "Workspace",
+        run: () => void openWorkspace(workspace.path),
+      })),
+    ];
 
     return [
       { id: "bold", label: "太字", hint: "Ctrl+B", run: applyBoldShortcut },
@@ -2348,6 +2397,7 @@ export default function App() {
         label: "記法をクリア",
         run: () => clearSelectionNotation(getCurrentEditorSelection()),
       },
+      ...workspaceCommands,
     ];
   };
 
@@ -2402,13 +2452,40 @@ export default function App() {
       });
     });
 
+  const requestChoice = ({
+    title,
+    message,
+    detail,
+    primaryLabel,
+    secondaryLabel,
+  }: {
+    title: string;
+    message: string;
+    detail?: string;
+    primaryLabel: string;
+    secondaryLabel: string;
+  }) =>
+    new Promise<"primary" | "secondary" | null>((resolve) => {
+      setAppDialog({
+        type: "choice",
+        title,
+        message,
+        detail,
+        primaryLabel,
+        secondaryLabel,
+        resolve,
+      });
+    });
+
   const closeAppDialog = () => {
     setAppDialog((current) => {
       if (!current) return null;
       if (current.type === "input") {
         current.resolve(null);
-      } else {
+      } else if (current.type === "confirm") {
         current.resolve(false);
+      } else {
+        current.resolve(null);
       }
       return null;
     });
@@ -2420,6 +2497,10 @@ export default function App() {
       if (!current) return null;
       if (current.type === "confirm") {
         current.resolve(true);
+        return null;
+      }
+      if (current.type === "choice") {
+        current.resolve("primary");
         return null;
       }
 
@@ -2438,13 +2519,25 @@ export default function App() {
     );
   };
 
-  const confirmDiscardDirtyDocument = async () => {
-    if (saveStatus !== "dirty" && saveStatus !== "error") return true;
+  const chooseAppDialog = (value: "primary" | "secondary") => {
+    setAppDialog((current) => {
+      if (current?.type !== "choice") return current;
+      current.resolve(value);
+      return null;
+    });
+  };
+
+  const confirmDiscardDirtyWorkspace = async () => {
+    const dirtyTabs = openTabs.filter(isDirtyDocumentTab);
+    if (dirtyTabs.length === 0) return true;
     return requestConfirm({
       title: "未保存の変更があります",
-      message: "現在の変更を破棄して続行しますか？",
-      detail: currentFileName,
-      confirmLabel: "破棄して続行",
+      message:
+        dirtyTabs.length === 1
+          ? "現在の変更を破棄してプロジェクトを切り替えますか？"
+          : `${dirtyTabs.length}個のタブに未保存の変更があります。破棄してプロジェクトを切り替えますか？`,
+      detail: dirtyTabs.map((tab) => tab.name).join(" / "),
+      confirmLabel: "破棄して切り替え",
       danger: true,
     });
   };
@@ -2578,6 +2671,42 @@ export default function App() {
       }
     },
     [currentFilePath, projectFolder, refreshProjectFolder],
+  );
+
+  const toggleWorkspaceFolderCollapse = useCallback((path: string) => {
+    setCollapsedWorkspaceFolderPaths((current) => {
+      const next = new Set(current);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleWorkspaceFolderTreeSelect = useCallback(
+    async (path: string) => {
+      if (!projectFolder || !isTauriRuntime()) return;
+
+      try {
+        const folder = await refreshProjectFolder(path);
+        const selectedFolder =
+          folder?.path === path
+            ? folder
+            : folder
+              ? findProjectEntry(folder.children, path)
+              : null;
+        setFocusedFolderPath(path);
+        setActiveBreadcrumbPath(null);
+        setIsWorkspaceSwitcherOpen(false);
+        showToast(`「${selectedFolder?.name ?? getWorkspaceName(path)}」へ移動しました`);
+      } catch (error) {
+        setLastError(String(error));
+        setSaveStatus("error");
+      }
+    },
+    [projectFolder, refreshProjectFolder],
   );
 
   const handleNewTab = () => {
@@ -2741,18 +2870,102 @@ export default function App() {
     }
   };
 
-  const handleOpenProjectFolder = async () => {
+  const openWorkspaceFolder = async (
+    folder: ProjectFolder,
+    options: { focusFolderPath?: string | null } = {},
+  ) => {
+    const focusedPath = options.focusFolderPath ?? folder.path;
+    const focusedEntry =
+      focusedPath && !isSamePath(focusedPath, folder.path)
+        ? findProjectEntry(folder.children, focusedPath)
+        : null;
+    const preferredFiles =
+      focusedEntry?.kind === "folder" ? focusedEntry.children : folder.children;
+
+    setProjectFolder(folder);
+    setWorkspaceAlert(null);
+    setFocusedFolderPath(focusedPath);
+    setWorkspaceSwitcherQuery("");
+
+    const restoredSnippets =
+      settings.snippetStorageMode === "workspace"
+        ? await loadWorkspaceSnippets(folder.path)
+        : snippets;
+    const restoredPlotCards = await loadWorkspacePlotCards(folder.path);
+    setSnippetWorkspacePath(settings.snippetStorageMode === "workspace" ? folder.path : null);
+    setPlotWorkspacePath(folder.path);
+    setPlotCards(restoredPlotCards);
+
+    const firstFile = findFirstTextFile(preferredFiles) ?? findFirstTextFile(folder.children);
+    if (firstFile) {
+      debugLog("before invoke read_text_file firstFile", {
+        path: firstFile.path,
+      });
+      const document = await invoke<TextDocument>("read_text_file", {
+        path: firstFile.path,
+      });
+      debugLog("after invoke read_text_file firstFile", {
+        path: document.path,
+        contentLength: document.content.length,
+      });
+      const nextTab = createFileDocumentTab(document);
+      setOpenTabs([nextTab]);
+      syncDocumentTabToEditor(nextTab);
+      setFocusedFolderPath(focusedPath);
+      setAppState((current) => ({
+        ...current,
+        snippets: restoredSnippets,
+        markdown: document.content,
+        lastWorkspacePath: folder.path,
+        lastFilePath: document.path,
+        recentWorkspaces: upsertRecentWorkspace(
+          current.recentWorkspaces,
+          folder.path,
+          folder.name,
+        ),
+      }));
+      return;
+    }
+
+    const nextTab = createScratchDocumentTab("", {
+      documentKey: `workspace-empty-${Date.now()}`,
+      saveStatus: "saved",
+      savedMarkdown: "",
+    });
+    setOpenTabs([nextTab]);
+    syncDocumentTabToEditor(nextTab);
+    setFocusedFolderPath(focusedPath);
+    setAppState((current) => ({
+      ...current,
+      snippets: restoredSnippets,
+      markdown: "",
+      lastWorkspacePath: folder.path,
+      lastFilePath: null,
+      recentWorkspaces: upsertRecentWorkspace(
+        current.recentWorkspaces,
+        folder.path,
+        folder.name,
+      ),
+    }));
+  };
+
+  async function openWorkspace(
+    path?: string,
+    options: { skipKnownParentPrompt?: boolean } = {},
+  ) {
     if (!isTauriRuntime()) {
       showToast("フォルダを開く機能はTauri版で利用できます");
       return;
     }
-    if (!(await confirmDiscardDirtyDocument())) return;
+    if (!(await confirmDiscardDirtyWorkspace())) return;
 
     const previousSaveStatus = saveStatus;
     setSaveStatus("loading");
     try {
-      debugLog("before invoke open_project_folder_dialog");
-      const folder = await invoke<ProjectFolder | null>("open_project_folder_dialog");
+      debugLog(path ? "before invoke list_project_text_files" : "before invoke open_project_folder_dialog");
+      const folder = path
+        ? await invoke<ProjectFolder>("list_project_text_files", { folderPath: path })
+        : await invoke<ProjectFolder | null>("open_project_folder_dialog");
       debugLog("after invoke open_project_folder_dialog", {
         selected: Boolean(folder),
         path: folder?.path ?? null,
@@ -2763,68 +2976,51 @@ export default function App() {
         return;
       }
 
-      debugLog("before setProjectFolder", {
-        path: folder.path,
-        children: folder.children.length,
-      });
-      setProjectFolder(folder);
-      setWorkspaceAlert(null);
-      debugLog("after setProjectFolder call");
-      setFocusedFolderPath(folder.path);
-      const restoredSnippets =
-        settings.snippetStorageMode === "workspace"
-          ? await loadWorkspaceSnippets(folder.path)
-          : snippets;
-      const restoredPlotCards = await loadWorkspacePlotCards(folder.path);
-      setSnippetWorkspacePath(settings.snippetStorageMode === "workspace" ? folder.path : null);
-      setPlotWorkspacePath(folder.path);
-      setPlotCards(restoredPlotCards);
-      setAppState((current) => ({
-        ...current,
-        snippets: restoredSnippets,
-        lastWorkspacePath: folder.path,
-        recentWorkspaces: upsertRecentWorkspace(
-          current.recentWorkspaces,
-          folder.path,
-          folder.name,
-        ),
-      }));
-      const firstFile = findFirstTextFile(folder.children);
-      if (firstFile) {
-        debugLog("before invoke read_text_file firstFile", {
-          path: firstFile.path,
-        });
-        const document = await invoke<TextDocument>("read_text_file", {
-          path: firstFile.path,
-        });
-        debugLog("after invoke read_text_file firstFile", {
-          path: document.path,
-          contentLength: document.content.length,
-        });
-        debugLog("before loadDocumentIntoEditor");
-        loadDocumentIntoEditor(document, { replaceActive: true });
-        debugLog("after loadDocumentIntoEditor call");
-        setAppState((current) => ({
-          ...current,
-          lastWorkspacePath: folder.path,
-          lastFilePath: document.path,
-          recentWorkspaces: upsertRecentWorkspace(
-            current.recentWorkspaces,
-            folder.path,
-            folder.name,
-          ),
-        }));
-      } else {
-        setSaveStatus("saved");
-        setCurrentFilePath(null);
-        setCurrentFileName(scratchFileName);
-        setDocumentKey(`workspace-empty-${Date.now()}`);
+      let folderToOpen = folder;
+      let focusFolderPath: string | null = null;
+      if (!path && !options.skipKnownParentPrompt) {
+        const parentWorkspace = findKnownParentWorkspace(folder.path);
+        if (parentWorkspace) {
+          const choice = await requestChoice({
+            title: "フォルダの開き方",
+            message: `「${folder.name}」は「${parentWorkspace.name}」内のフォルダです。`,
+            detail:
+              "独立プロジェクトとして開くと、このフォルダ自身に .then/project.json が作られ、スニペットやプロットも別管理になります。",
+            primaryLabel: `${parentWorkspace.name} を開いて移動`,
+            secondaryLabel: `${folder.name} を独立プロジェクトとして開く`,
+          });
+          if (!choice) {
+            setSaveStatus(previousSaveStatus);
+            return;
+          }
+          if (choice === "primary") {
+            folderToOpen = await invoke<ProjectFolder>("list_project_text_files", {
+              folderPath: parentWorkspace.path,
+            });
+            focusFolderPath = folder.path;
+          }
+        }
       }
-      showToast(`「${folder.name}」を開きました`);
+
+      debugLog("before setProjectFolder", {
+        path: folderToOpen.path,
+        children: folderToOpen.children.length,
+      });
+      await openWorkspaceFolder(folderToOpen, { focusFolderPath });
+      setIsWorkspaceSwitcherOpen(false);
+      showToast(
+        focusFolderPath
+          ? `「${folderToOpen.name}」内の「${folder.name}」へ移動しました`
+          : `「${folderToOpen.name}」を開きました`,
+      );
     } catch (error) {
       setLastError(String(error));
       setSaveStatus("error");
     }
+  }
+
+  const handleOpenProjectFolder = async () => {
+    await openWorkspace();
   };
 
   const handleRetryWorkspaceRestore = async () => {
@@ -3090,6 +3286,7 @@ export default function App() {
 
   const closeBreadcrumbMenuAndRun = (action: () => void | Promise<void>) => {
     setActiveBreadcrumbPath(null);
+    setIsWorkspaceSwitcherOpen(false);
     void action();
   };
 
@@ -3771,6 +3968,63 @@ export default function App() {
     setAppState((current) => ({ ...current, snippets: profileState.profileSnippets }));
   };
 
+  const renderWorkspaceFolderTree = (
+    entry: ProjectFolder | ProjectEntry,
+    depth = 0,
+  ) => {
+    const folders = entry.children.filter((child) => child.kind === "folder");
+    const isRoot = !("kind" in entry);
+    const isCollapsed = collapsedWorkspaceFolderPaths.has(entry.path);
+    const isActive = focusedFolderPath
+      ? isSamePath(focusedFolderPath, entry.path)
+      : isRoot;
+
+    return (
+      <div className="workspaceFolderTreeNode" key={entry.path}>
+        <div className="workspaceFolderTreeRow" style={{ paddingLeft: `${depth * 14}px` }}>
+          <button
+            className="workspaceFolderDisclosure"
+            type="button"
+            aria-label={isCollapsed ? `${entry.name} を展開` : `${entry.name} を折りたたむ`}
+            disabled={folders.length === 0}
+            onClick={() => toggleWorkspaceFolderCollapse(entry.path)}
+          >
+            {folders.length > 0 ? (isCollapsed ? "›" : "⌄") : ""}
+          </button>
+          <button
+            className={`workspaceFolderTreeButton ${
+              isActive ? "activeWorkspaceFolderTreeButton" : ""
+            }`}
+            type="button"
+            role="menuitem"
+            title={entry.path}
+            onClick={() => void handleWorkspaceFolderTreeSelect(entry.path)}
+          >
+            {isRoot ? (
+              <svg
+                className="workspaceFolderTreeIcon"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+              </svg>
+            ) : (
+              <span className="menuFolderIcon" aria-hidden="true" />
+            )}
+            <span>{entry.name}</span>
+          </button>
+        </div>
+        {folders.length > 0 && !isCollapsed && (
+          <div className="workspaceFolderTreeChildren">
+            {folders.map((folder) => renderWorkspaceFolderTree(folder, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
       <main
         className="appShell"
@@ -3885,7 +4139,6 @@ export default function App() {
                 </svg>
               </button>
             )}
-            <span className="appName">Then</span>
             <nav
               className="breadcrumbs"
               aria-label="パンくず"
@@ -3908,23 +4161,134 @@ export default function App() {
                       {isFolder ? (
                         <div className="breadcrumbMenu">
                           <button
-                            className="breadcrumbFolderButton"
+                            className={`breadcrumbFolderButton ${
+                              index === 0 ? "workspaceSwitcherButton" : ""
+                            }`}
                             type="button"
-                            aria-label={`${crumb.name} の項目`}
-                            aria-expanded={activeBreadcrumbPath === crumb.path}
-                            onClick={() =>
+                            aria-label={
+                              index === 0 ? "プロジェクトを切り替え" : `${crumb.name} の項目`
+                            }
+                            aria-expanded={
+                              index === 0
+                                ? isWorkspaceSwitcherOpen
+                                : activeBreadcrumbPath === crumb.path
+                            }
+                            onClick={() => {
+                              if (index === 0) {
+                                setActiveBreadcrumbPath(null);
+                                setIsWorkspaceSwitcherOpen((isOpen) => !isOpen);
+                                return;
+                              }
+                              setIsWorkspaceSwitcherOpen(false);
                               setActiveBreadcrumbPath((path) =>
                                 path === crumb.path ? null : crumb.path,
-                              )
-                            }
+                              );
+                            }}
                             onContextMenu={(event) => {
+                              if (index === 0) return;
                               event.preventDefault();
                               setActiveBreadcrumbPath(crumb.path);
                             }}
                           >
+                            {index === 0 && (
+                              <svg
+                                className="workspaceSwitcherBookIcon"
+                                viewBox="0 0 24 24"
+                                aria-hidden="true"
+                                focusable="false"
+                              >
+                                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                              </svg>
+                            )}
                             <span>{crumb.name}</span>
                           </button>
-                          {activeBreadcrumbPath === crumb.path && (
+                          {index === 0 && isWorkspaceSwitcherOpen && (
+                            <div className="menuPopover workspaceSwitcherPopover" role="menu">
+                              <div className="workspaceSwitcherHeader">
+                                <span className="workspaceSwitcherTitle">{projectFolder.name}</span>
+                                {settings.showWorkspacePaths && (
+                                  <span className="workspaceSwitcherPath">{projectFolder.path}</span>
+                                )}
+                              </div>
+                              <label className="workspaceSwitcherSearch">
+                                <span aria-hidden="true">⌕</span>
+                                <input
+                                  value={workspaceSwitcherQuery}
+                                  onChange={(event) =>
+                                    setWorkspaceSwitcherQuery(event.target.value)
+                                  }
+                                  placeholder="プロジェクトを検索"
+                                  type="search"
+                                />
+                              </label>
+                              <span className="workspaceSwitcherSectionLabel">
+                                現在のプロジェクト
+                              </span>
+                              <div className="workspaceFolderTree">
+                                {renderWorkspaceFolderTree(projectFolder)}
+                              </div>
+                              <div className="menuDivider" role="separator" />
+                              <span className="workspaceSwitcherSectionLabel">
+                                最近開いたプロジェクト
+                              </span>
+                              <div className="workspaceSwitcherList">
+                                {visibleRecentWorkspaces.length ? (
+                                  visibleRecentWorkspaces.map((workspace) => {
+                                    const isActive = workspace.path === projectFolder.path;
+                                    return (
+                                      <button
+                                        key={workspace.path}
+                                        className={
+                                          isActive
+                                            ? "workspaceRecordButton activeMenuItem"
+                                            : "workspaceRecordButton"
+                                        }
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() =>
+                                          closeBreadcrumbMenuAndRun(() =>
+                                            isActive ? undefined : openWorkspace(workspace.path),
+                                          )
+                                        }
+                                      >
+                                        <span className="menuFolderIcon" aria-hidden="true" />
+                                        <span className="workspaceRecordText">
+                                          <span className="workspaceRecordName">
+                                            {workspace.name}
+                                          </span>
+                                          {settings.showWorkspacePaths && (
+                                            <span className="workspaceRecordPath">
+                                              {workspace.path}
+                                            </span>
+                                          )}
+                                        </span>
+                                        {isActive && (
+                                          <span className="workspaceRecordBadge">現在</span>
+                                        )}
+                                      </button>
+                                    );
+                                  })
+                                ) : (
+                                  <span className="emptyMenuMessage">
+                                    一致するプロジェクトがありません
+                                  </span>
+                                )}
+                              </div>
+                              <div className="menuDivider" role="separator" />
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() =>
+                                  closeBreadcrumbMenuAndRun(() => openWorkspace())
+                                }
+                              >
+                                <span className="menuFolderIcon" aria-hidden="true" />
+                                <span>別のフォルダを開く...</span>
+                              </button>
+                            </div>
+                          )}
+                          {index !== 0 && activeBreadcrumbPath === crumb.path && (
                             <div className="menuPopover breadcrumbPopover" role="menu">
                               {children.length ? (
                                 children.map((entry, entryIndex) => {
@@ -4094,13 +4458,81 @@ export default function App() {
               ) : (
                 <div className="breadcrumbMenu">
                   <button
-                    className="breadcrumbFolderButton"
+                    className="breadcrumbFolderButton workspaceSwitcherButton"
                     type="button"
-                    aria-label="フォルダを開く"
-                    onClick={handleOpenProjectFolder}
+                    aria-label="プロジェクトを切り替え"
+                    aria-expanded={isWorkspaceSwitcherOpen}
+                    onClick={() => {
+                      setActiveBreadcrumbPath(null);
+                      setIsWorkspaceSwitcherOpen((isOpen) => !isOpen);
+                    }}
                   >
+                    <svg
+                      className="workspaceSwitcherBookIcon"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                      focusable="false"
+                    >
+                      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                    </svg>
                     <span>{scratchWorkspaceName}</span>
                   </button>
+                  {isWorkspaceSwitcherOpen && (
+                    <div className="menuPopover workspaceSwitcherPopover" role="menu">
+                      <div className="workspaceSwitcherHeader">
+                        <span className="workspaceSwitcherTitle">{scratchWorkspaceName}</span>
+                      </div>
+                      <label className="workspaceSwitcherSearch">
+                        <span aria-hidden="true">⌕</span>
+                        <input
+                          value={workspaceSwitcherQuery}
+                          onChange={(event) => setWorkspaceSwitcherQuery(event.target.value)}
+                          placeholder="プロジェクトを検索"
+                          type="search"
+                        />
+                      </label>
+                      <span className="workspaceSwitcherSectionLabel">
+                        最近開いたプロジェクト
+                      </span>
+                      <div className="workspaceSwitcherList">
+                        {visibleRecentWorkspaces.length ? (
+                          visibleRecentWorkspaces.map((workspace) => (
+                            <button
+                              key={workspace.path}
+                              className="workspaceRecordButton"
+                              type="button"
+                              role="menuitem"
+                              onClick={() =>
+                                closeBreadcrumbMenuAndRun(() => openWorkspace(workspace.path))
+                              }
+                            >
+                              <span className="menuFolderIcon" aria-hidden="true" />
+                              <span className="workspaceRecordText">
+                                <span className="workspaceRecordName">{workspace.name}</span>
+                                {settings.showWorkspacePaths && (
+                                  <span className="workspaceRecordPath">{workspace.path}</span>
+                                )}
+                              </span>
+                            </button>
+                          ))
+                        ) : (
+                          <span className="emptyMenuMessage">
+                            一致するプロジェクトがありません
+                          </span>
+                        )}
+                      </div>
+                      <div className="menuDivider" role="separator" />
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => closeBreadcrumbMenuAndRun(() => openWorkspace())}
+                      >
+                        <span className="menuFolderIcon" aria-hidden="true" />
+                        <span>別のフォルダを開く...</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
               {!projectFolder && (
@@ -4606,6 +5038,7 @@ export default function App() {
               onClose={closeAppDialog}
               onSubmit={submitAppDialog}
               onValueChange={updateAppDialogValue}
+              onChoice={chooseAppDialog}
             />
           )}
 

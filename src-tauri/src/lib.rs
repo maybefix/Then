@@ -1148,19 +1148,34 @@ fn list_project_entries(
 }
 
 fn project_config_path(root: &Path) -> PathBuf {
+    root.join(".then").join("project.json")
+}
+
+fn legacy_project_config_path(root: &Path) -> PathBuf {
     root.join(".brew").join("project.json")
 }
 
 fn load_project_config(root: &Path) -> Result<ProjectConfig, String> {
     let path = project_config_path(root);
-    if !path.exists() {
+    let legacy_path = legacy_project_config_path(root);
+    let (path, should_migrate) = if path.exists() {
+        (path, false)
+    } else if legacy_path.exists() {
+        (legacy_path, true)
+    } else {
         return Ok(ProjectConfig::default());
-    }
+    };
 
     let content = std::fs::read_to_string(&path)
         .map_err(|error| format!("failed to read project config: {error}"))?;
-    serde_json::from_str(&content)
-        .map_err(|error| format!("failed to parse project config: {error}"))
+    let config: ProjectConfig = serde_json::from_str(&content)
+        .map_err(|error| format!("failed to parse project config: {error}"))?;
+
+    if should_migrate {
+        save_project_config(root, &config)?;
+    }
+
+    Ok(config)
 }
 
 fn save_project_config(root: &Path, config: &ProjectConfig) -> Result<(), String> {
@@ -1229,7 +1244,7 @@ fn update_project_config_after_rename(old_path: &Path, new_path: &Path) -> Resul
 fn find_project_root(start: &Path) -> Option<PathBuf> {
     let mut current = start;
     loop {
-        if project_config_path(current).exists() {
+        if project_config_path(current).exists() || legacy_project_config_path(current).exists() {
             return Some(current.to_path_buf());
         }
         current = current.parent()?;
