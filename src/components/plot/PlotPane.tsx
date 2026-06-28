@@ -13,7 +13,15 @@ import {
   type SetStateAction,
   type WheelEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import type { PlotCard } from "../../types";
+
+// Portal target for plot dialogs. PlotPane lives inside the right sidebar, which
+// is scaled by the UI zoom (--ui-font-scale); rendering a modal there would
+// double-zoom it and clip it to the sidebar. Mount at the .appShell root instead
+// so it inherits the theme + scale variables but escapes the chrome zoom.
+const modalRoot = (): HTMLElement =>
+  (document.querySelector(".appShell") as HTMLElement | null) ?? document.body;
 
 type PlotIconName = "grip" | "list" | "bookmark";
 
@@ -748,7 +756,7 @@ function PlotMoveModal({ cards, sectionId, onClose, onMove }: PlotMoveModalProps
     options.push({ id: group.chapter.id, label: group.chapter.title.trim() || "（無題の章）" });
   }
 
-  return (
+  return createPortal(
     <div className="modalBackdrop" role="presentation" onClick={onClose}>
       <section
         className="modal compactModal plotMoveModal"
@@ -790,7 +798,8 @@ function PlotMoveModal({ cards, sectionId, onClose, onMove }: PlotMoveModalProps
           </button>
         </footer>
       </section>
-    </div>
+    </div>,
+    modalRoot(),
   );
 }
 
@@ -806,7 +815,7 @@ function PlotDeleteDialog({ card, onCancel, onConfirm }: PlotDeleteDialogProps) 
   const isChapter = card.kind === "chapter";
   const label = card.title.trim() || (isChapter ? "（無題の章）" : card.num);
 
-  return (
+  return createPortal(
     <div className="modalBackdrop" role="presentation" onClick={onCancel}>
       <section
         className="modal compactModal"
@@ -842,7 +851,8 @@ function PlotDeleteDialog({ card, onCancel, onConfirm }: PlotDeleteDialogProps) 
           </footer>
         </div>
       </section>
-    </div>
+    </div>,
+    modalRoot(),
   );
 }
 
@@ -879,7 +889,7 @@ type PlotManagerModalProps = {
 };
 
 function PlotManagerModal({ cards, onCardsChange, onClose }: PlotManagerModalProps) {
-  return (
+  return createPortal(
     <div className="modalBackdrop" role="presentation">
       <section
         className="modal plotManagerModal"
@@ -905,6 +915,7 @@ function PlotManagerModal({ cards, onCardsChange, onClose }: PlotManagerModalPro
           </button>
         </footer>
       </section>
-    </div>
+    </div>,
+    modalRoot(),
   );
 }

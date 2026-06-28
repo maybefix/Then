@@ -74,6 +74,7 @@ export default function ExportWindowApp() {
   const [loadError, setLoadError] = useState("");
   const [theme, setTheme] = useState("dark");
   const [uiFont, setUiFont] = useState("");
+  const [uiFontScale, setUiFontScale] = useState(1);
   const printViewportRef = useRef<HTMLDivElement>(null);
 
   const loadPayload = useCallback(async () => {
@@ -101,16 +102,22 @@ export default function ExportWindowApp() {
   // Match the main window's theme colours and UI font.
   useEffect(() => {
     if (previewFixture) return;
-    void invoke<{ settings?: { theme?: string; uiFontFamily?: string } } | null>("load_app_state")
+    void invoke<{ settings?: { theme?: string; uiFontFamily?: string; uiFontScale?: number } } | null>("load_app_state")
       .then((state) => {
         const settings = state?.settings;
         if (settings?.theme) setTheme(settings.theme);
         if (settings?.uiFontFamily) setUiFont(settings.uiFontFamily);
+        if (typeof settings?.uiFontScale === "number" && Number.isFinite(settings.uiFontScale)) {
+          setUiFontScale(settings.uiFontScale);
+        }
       })
       .catch(() => {});
   }, []);
 
-  const themeStyle = uiFont ? ({ "--ui-font-family": uiFont } as CSSProperties) : undefined;
+  const themeStyle = {
+    ...(uiFont ? { "--ui-font-family": uiFont } : {}),
+    "--ui-font-scale": uiFontScale,
+  } as CSSProperties;
 
   // Active PDF engine: Vivliostyle lays out the flowing HTML (CSS Paged Media)
   // in a hidden bundled-viewer webview, then WebView2 PrintToPdf serializes it.
