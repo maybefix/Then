@@ -1746,15 +1746,27 @@ body.thenPdfExporting .printExportViewport {
 
 .dropIndicator {
   position: absolute;
-  left: 40px;
   z-index: 2;
-  width: min(720px, calc(100% - 80px));
-  height: 2px;
   border-radius: 2px;
   background: var(--accent-strong);
   box-shadow: 0 0 0 3px rgba(109, 166, 217, 0.12);
   opacity: 0;
   pointer-events: none;
+  transition: opacity 80ms ease;
+}
+
+/* 横書き：行間に水平線 */
+.horizontalDropIndicator {
+  left: 40px;
+  width: min(720px, calc(100% - 80px));
+  height: 2px;
+}
+
+/* 縦書き：列間に垂直線（どの列に入るかを示す） */
+.verticalDropIndicator {
+  top: 24px;
+  bottom: 24px;
+  width: 2px;
 }
 
 .showDropIndicator {
@@ -3758,23 +3770,11 @@ body {
   border-bottom: 0.5px solid var(--border-subtle);
 }
 
-.ideaPaneHead {
+.ideaTopRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   padding: 12px 14px 0;
-}
-
-.ideaPaneHead h2 {
-  margin: 0;
-  font-size: 14px;
-}
-
-.ideaCount {
-  color: var(--text-faint);
-  font-size: 12px;
-  font-weight: 400;
 }
 
 .ideaNewThread {
@@ -3861,7 +3861,8 @@ body {
   height: 26px;
   border: 0.5px solid var(--border-subtle);
   border-radius: 6px;
-  background: var(--bg-panel);
+  /* 投稿欄（.ideaCaptureBox）と同じ背景色に揃える */
+  background: var(--bg-panel-strong);
   color: var(--text-secondary);
   font-size: 12px;
   padding: 0 6px;
@@ -3896,10 +3897,9 @@ body {
   opacity: 0.4;
 }
 
-.ideaFilterRow {
+.ideaChipsRow {
   display: flex;
   align-items: center;
-  gap: 8px;
   padding: 10px 14px 12px;
 }
 
@@ -3907,7 +3907,7 @@ body {
   width: 110px;
   flex: 1 1 110px;
   min-width: 0;
-  height: 26px;
+  height: 28px;
   padding: 0 9px;
   border: 0.5px solid var(--border-subtle);
   border-radius: 6px;
@@ -4320,6 +4320,30 @@ body {
   font-size: 12px;
   line-height: 1.8;
   text-align: center;
+}
+
+/* テーマの角丸トークンに追従（四角ベース/角丸ベースのテーマ両対応） */
+.ideaThreadRow,
+.ideaFragment,
+.ideaEmpty {
+  border-radius: var(--radius-card, 8px);
+}
+
+.ideaCaptureBox,
+.ideaSearchInput,
+.ideaDestSelect,
+.ideaMoveSelect,
+.ideaDetailTitle {
+  border-radius: var(--radius-control, 6px);
+}
+
+.ideaNewThread,
+.ideaPrimaryBtn,
+.ideaChip,
+.ideaIconBtn,
+.ideaBackBtn,
+.ideaMiniIcon {
+  border-radius: var(--radius-button, 6px);
 }
 
 .plotPane {

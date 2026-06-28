@@ -1286,7 +1286,8 @@ export default function App() {
   const [editorContextMenu, setEditorContextMenu] =
     useState<EditorContextMenuState | null>(null);
   const [notationModal, setNotationModal] = useState<NotationModalState | null>(null);
-  const [dropIndicatorTop, setDropIndicatorTop] = useState<number | null>(null);
+  // ドロップ先インジケーターの位置（縦書きは left, 横書きは top の px）。
+  const [dropIndicatorPos, setDropIndicatorPos] = useState<number | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isThemePickerModalOpen, setIsThemePickerModalOpen] = useState(false);
@@ -3875,7 +3876,7 @@ export default function App() {
   };
 
   const clearDropIndicator = () => {
-    setDropIndicatorTop(null);
+    setDropIndicatorPos(null);
   };
 
   const isSnippetDragEvent = (event: DragEvent<HTMLElement>) => {
@@ -3947,9 +3948,20 @@ export default function App() {
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = "copy";
+
     const rect = editorShellRef.current?.getBoundingClientRect();
-    if (rect) {
-      setDropIndicatorTop(event.clientY - rect.top);
+    if (!rect) return;
+
+    const vertical = settings.writingMode.startsWith("vertical");
+    const view = getEditorView();
+    // 実際の挿入位置（キャレット座標）にインジケーターを合わせる。
+    const pos = view?.positionFromPoint(event.clientX, event.clientY) ?? null;
+    const coords = pos !== null ? view?.coordsAtPos(pos) ?? null : null;
+
+    if (vertical) {
+      setDropIndicatorPos((coords ? coords.left : event.clientX) - rect.left);
+    } else {
+      setDropIndicatorPos((coords ? coords.top : event.clientY) - rect.top);
     }
   };
 
@@ -5011,9 +5023,17 @@ export default function App() {
                   </div>
                   <div
                     className={`dropIndicator ${
-                      dropIndicatorTop === null ? "" : "showDropIndicator"
-                    }`}
-                    style={dropIndicatorTop === null ? undefined : { top: dropIndicatorTop }}
+                      settings.writingMode.startsWith("vertical")
+                        ? "verticalDropIndicator"
+                        : "horizontalDropIndicator"
+                    } ${dropIndicatorPos === null ? "" : "showDropIndicator"}`}
+                    style={
+                      dropIndicatorPos === null
+                        ? undefined
+                        : settings.writingMode.startsWith("vertical")
+                          ? { left: dropIndicatorPos }
+                          : { top: dropIndicatorPos }
+                    }
                   />
                   {editorContextMenu && (
                     <div

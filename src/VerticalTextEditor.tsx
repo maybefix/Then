@@ -27,6 +27,10 @@ export type TextEditorHandle = {
   replaceRange: (from: number, to: number, insert: string, cursorPos?: number) => void;
   jumpToLine: (line: number) => void;
   positionFromPoint: (x: number, y: number) => number | null;
+  /** 本文オフセットの画面座標（ビューポート基準）。ドロップ位置表示などに使う。 */
+  coordsAtPos: (
+    offset: number,
+  ) => { left: number; right: number; top: number; bottom: number } | null;
   scrollCaretIntoView: (offsetPercent: number) => void;
   isComposing: () => boolean;
 };
@@ -2008,6 +2012,16 @@ export function VerticalTextEditor({
 
         const result = editor.view.posAtCoords({ left: x, top: y });
         return result ? textOffsetFromPmPos(editor.state.doc, result.pos) : null;
+      },
+      coordsAtPos: (offset) => {
+        const editor = tiptapRef.current;
+        if (!editor) return null;
+        const pos = pmPosFromTextOffset(editor.state.doc, offset);
+        try {
+          return editor.view.coordsAtPos(pos);
+        } catch {
+          return null;
+        }
       },
       scrollCaretIntoView: (offsetPercent) => {
         const editor = tiptapRef.current;

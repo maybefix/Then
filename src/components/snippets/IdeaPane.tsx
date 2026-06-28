@@ -211,9 +211,6 @@ export function IdeaPane({
       });
   }, [threads, filter, query]);
 
-  const threadCount = threads.filter((thread) => thread.kind !== "inbox").length;
-  const fragmentCount = threads.reduce((total, thread) => total + thread.fragments.length, 0);
-
   const handleComposerKeyDown = (
     event: KeyboardEvent<HTMLTextAreaElement>,
     submit: () => void,
@@ -260,10 +257,14 @@ export function IdeaPane({
           {/* ① 一覧ビュー */}
           <section className="ideaView" aria-label="スレッド一覧">
             <div className="ideaViewTop">
-              <div className="ideaPaneHead">
-                <h2>
-                  Idea <span className="ideaCount">{threadCount} スレッド / {fragmentCount} 断片</span>
-                </h2>
+              <div className="ideaTopRow">
+                <input
+                  className="ideaSearchInput"
+                  type="search"
+                  value={query}
+                  placeholder="検索"
+                  onChange={(event) => setQuery(event.target.value)}
+                />
                 <button className="ideaNewThread" type="button" onClick={handleCreateThread}>
                   <PlusIcon />
                   <span>スレッド</span>
@@ -308,14 +309,7 @@ export function IdeaPane({
                 </div>
               </div>
 
-              <div className="ideaFilterRow">
-                <input
-                  className="ideaSearchInput"
-                  type="search"
-                  value={query}
-                  placeholder="検索"
-                  onChange={(event) => setQuery(event.target.value)}
-                />
+              <div className="ideaChipsRow">
                 <div className="ideaChips" aria-label="フィルタ">
                   {FILTERS.map(([value, label]) => (
                     <button
