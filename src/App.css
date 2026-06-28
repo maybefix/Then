@@ -3821,8 +3821,9 @@ body {
 }
 
 .ideaCaptureBox textarea {
+  display: block;
   width: 100%;
-  min-height: 38px;
+  min-height: 46px;
   max-height: 140px;
   resize: none;
   border: 0;
@@ -3843,6 +3844,10 @@ body {
   justify-content: space-between;
   gap: 8px;
   margin-top: 6px;
+}
+
+.ideaCaptureRowEnd {
+  justify-content: flex-end;
 }
 
 .ideaCaptureHint {
@@ -4227,20 +4232,18 @@ body {
   margin-top: 7px;
 }
 
-.ideaFragmentTime {
-  color: var(--text-faint);
-  font-size: 11px;
-}
-
 .ideaFragmentBtns {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 4px;
 }
 
 .ideaMoveSelect {
+  min-width: 0;
+  flex: 0 1 auto;
   height: 24px;
-  max-width: 130px;
+  max-width: 132px;
   border: 0.5px solid var(--border-subtle);
   border-radius: 5px;
   background: var(--bg-panel);

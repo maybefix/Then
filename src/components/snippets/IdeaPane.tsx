@@ -35,15 +35,6 @@ const FILTERS: Array<[IdeaFilter, string]> = [
   ["starred", "スター"],
 ];
 
-function relativeTime(timestamp: number): string {
-  const diff = Math.max(0, Date.now() - timestamp);
-  const days = Math.floor(diff / 86_400_000);
-  if (days <= 0) return "今日";
-  if (days === 1) return "昨日";
-  if (days < 7) return `${days}日前`;
-  return `${Math.floor(days / 7)}週間前`;
-}
-
 function summarize(thread: IdeaThread): string {
   const pick = thread.fragments.find((fragment) => !fragment.used) ?? thread.fragments[0];
   return pick ? pick.body : "（断片なし）";
@@ -190,7 +181,8 @@ export function IdeaPane({
   useEffect(() => {
     if (view === "detail" && focusTitleRef.current && titleInputRef.current) {
       focusTitleRef.current = false;
-      titleInputRef.current.focus();
+      // preventScroll: overflow:hidden のトラックが横スクロールして崩れるのを防ぐ。
+      titleInputRef.current.focus({ preventScroll: true });
       titleInputRef.current.select();
     }
   }, [view, selectedId]);
@@ -282,8 +274,8 @@ export function IdeaPane({
                 <div className="ideaCaptureBox">
                   <textarea
                     value={captureText}
-                    rows={1}
-                    placeholder="思いついたことをそのまま書く…（Enter で追加 / Shift+Enter で改行）"
+                    rows={2}
+                    placeholder="メモを書いて Enter で追加…"
                     onChange={(event) => setCaptureText(event.target.value)}
                     onCompositionStart={() => (composingRef.current = true)}
                     onCompositionEnd={() => (composingRef.current = false)}
@@ -368,7 +360,6 @@ export function IdeaPane({
                           ) : (
                             <span>消化済み</span>
                           )}
-                          <span>{relativeTime(thread.updatedAt)}</span>
                         </div>
                       </div>
                       <div className="ideaRowChevron">
@@ -454,22 +445,20 @@ export function IdeaPane({
                     ) : (
                       <span>消化済み</span>
                     )}
-                    <span>{relativeTime(selected.updatedAt)} 更新</span>
                   </div>
 
                   <div className="ideaCapture ideaCaptureInline">
                     <div className="ideaCaptureBox">
                       <textarea
                         value={fragmentText}
-                        rows={1}
-                        placeholder="このスレッドに断片を追加…（Enter で追加）"
+                        rows={2}
+                        placeholder="断片を書いて Enter で追加…"
                         onChange={(event) => setFragmentText(event.target.value)}
                         onCompositionStart={() => (composingRef.current = true)}
                         onCompositionEnd={() => (composingRef.current = false)}
                         onKeyDown={(event) => handleComposerKeyDown(event, submitFragment)}
                       />
-                      <div className="ideaCaptureRow">
-                        <span className="ideaCaptureHint">作成順に下へ積まれます</span>
+                      <div className="ideaCaptureRow ideaCaptureRowEnd">
                         <button
                           className="ideaPrimaryBtn"
                           type="button"
@@ -477,7 +466,7 @@ export function IdeaPane({
                           onClick={submitFragment}
                         >
                           <PlusIcon />
-                          <span>断片を追加</span>
+                          <span>追加</span>
                         </button>
                       </div>
                     </div>
@@ -528,41 +517,36 @@ export function IdeaPane({
                             {fragment.body}
                           </div>
                           <div className="ideaFragmentFoot">
-                            <span className="ideaFragmentTime">
-                              {relativeTime(fragment.createdAt)}
-                            </span>
+                            <select
+                              className="ideaMoveSelect"
+                              aria-label="別スレッドへ移動"
+                              title="別スレッドへ移動"
+                              value=""
+                              onChange={(event) => {
+                                if (event.target.value) {
+                                  onMoveFragment(selected.id, fragment.id, event.target.value);
+                                }
+                              }}
+                            >
+                              <option value="">移動…</option>
+                              {threads
+                                .filter((thread) => thread.id !== selected.id)
+                                .map((thread) => (
+                                  <option key={thread.id} value={thread.id}>
+                                    {thread.kind === "inbox" ? "▾ " : ""}
+                                    {thread.title}
+                                  </option>
+                                ))}
+                            </select>
                             <span className="ideaFragmentBtns">
-                              <select
-                                className="ideaMoveSelect"
-                                aria-label="別スレッドへ移動"
-                                title="別スレッドへ移動"
-                                value=""
-                                onChange={(event) => {
-                                  if (event.target.value) {
-                                    onMoveFragment(
-                                      selected.id,
-                                      fragment.id,
-                                      event.target.value,
-                                    );
-                                  }
-                                }}
-                              >
-                                <option value="">→ 移動…</option>
-                                {threads
-                                  .filter((thread) => thread.id !== selected.id)
-                                  .map((thread) => (
-                                    <option key={thread.id} value={thread.id}>
-                                      {thread.kind === "inbox" ? "▾ " : ""}
-                                      {thread.title}
-                                    </option>
-                                  ))}
-                              </select>
                               <button
-                                className="ideaTextBtn"
+                                className="ideaMiniIcon"
                                 type="button"
+                                aria-label="本文へ挿入"
+                                title="本文へ挿入"
                                 onClick={() => onInsertFragment(selected.id, fragment.id)}
                               >
-                                本文へ
+                                <SendIcon />
                               </button>
                               <button
                                 className={`ideaMiniIcon ${fragment.used ? "isOn" : ""}`}
