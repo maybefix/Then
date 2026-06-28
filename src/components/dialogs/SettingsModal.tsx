@@ -1,4 +1,5 @@
 import type { EditorSettings, FontOption } from "../../types";
+import { UI_FONT_SCALE_CHOICES } from "../../types";
 import { exportFontFamilies, type ExportFontFamily } from "../../export/types";
 import { getThemeDefinition } from "../../themes";
 
@@ -68,6 +69,19 @@ export function SettingsModal({
               {systemFonts.map((font) => (
                 <option key={font.label} value={font.cssFamily}>
                   {font.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>UI表示サイズ</span>
+            <select
+              value={settings.uiFontScale}
+              onChange={(event) => onUpdateSettings("uiFontScale", Number(event.target.value))}
+            >
+              {UI_FONT_SCALE_CHOICES.map((scale) => (
+                <option key={scale} value={scale}>
+                  {`${Math.round(scale * 100)}%`}
                 </option>
               ))}
             </select>

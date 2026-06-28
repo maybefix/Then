@@ -99,6 +99,8 @@ export type EditorSettings = {
   theme: AppTheme;
   editorFontFamily: string;
   uiFontFamily: string;
+  /** UI（メニュー・サイドバーなど本文以外）の表示倍率。1 が等倍。 */
+  uiFontScale: number;
   exportFontFamily: ExportFontFamily;
   fontSize: number;
   lineHeight: number;
@@ -126,6 +128,11 @@ export type CursorPosition = {
 /** ナビゲータのプレビュー行数として選べる値（0 = なし）。 */
 export const NAVIGATOR_PREVIEW_LINE_CHOICES: readonly number[] = [0, 1, 2, 3] as const;
 export const DEFAULT_NAVIGATOR_PREVIEW_LINES = 2;
+
+/** UI 表示倍率の選択肢（小／標準／大／特大）。 */
+export const UI_FONT_SCALE_CHOICES: readonly number[] = [0.85, 1, 1.15, 1.3] as const;
+export const UI_FONT_SCALE_MIN = 0.7;
+export const UI_FONT_SCALE_MAX = 1.6;
 
 export type SaveStatus = "loading" | "saved" | "dirty" | "saving" | "error";
 

@@ -70,6 +70,8 @@ import {
   fileProgressStatuses,
   DEFAULT_NAVIGATOR_PREVIEW_LINES,
   NAVIGATOR_PREVIEW_LINE_CHOICES,
+  UI_FONT_SCALE_MIN,
+  UI_FONT_SCALE_MAX,
 } from "./types";
 import {
   appendFrontMatterProperty,
@@ -301,6 +303,7 @@ const defaultSettings: EditorSettings = {
   theme: "dark",
   editorFontFamily: toCssFontFamilyValue("Noto Serif JP"),
   uiFontFamily: toCssFontFamilyValue("Segoe UI"),
+  uiFontScale: 1,
   exportFontFamily: "Noto Serif CJK JP",
   fontSize: 15,
   lineHeight: 1.82,
@@ -907,6 +910,10 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         settings.uiFontFamily,
         defaultSettings.uiFontFamily,
       ),
+      uiFontScale:
+        typeof settings.uiFontScale === "number" && Number.isFinite(settings.uiFontScale)
+          ? Math.min(UI_FONT_SCALE_MAX, Math.max(UI_FONT_SCALE_MIN, settings.uiFontScale))
+          : defaultSettings.uiFontScale,
       exportFontFamily: exportFontFamilies.some(
         (fontFamily) => fontFamily === settings.exportFontFamily,
       )
@@ -3772,6 +3779,7 @@ export default function App() {
           {
             "--editor-font-family": settings.editorFontFamily,
             "--ui-font-family": settings.uiFontFamily,
+            "--ui-font-scale": settings.uiFontScale,
             "--editor-font-size": `${settings.fontSize}px`,
             "--editor-line-height": settings.lineHeight,
             "--typewriter-guide-position": `${settings.typewriterOffset}%`,

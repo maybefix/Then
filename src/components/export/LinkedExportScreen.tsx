@@ -421,6 +421,24 @@ export function LinkedExportScreen({
             <div className="exportPanelHeading">
               <div><strong>出力対象ファイル</strong><span>{includedCount} / {sources.length}</span></div>
               <p>⋮⋮ をドラッグで並べ替え・チェックで出力対象を切替</p>
+              <div className="exportSelectAllRow">
+                <button
+                  type="button"
+                  className="exportSelectAllButton"
+                  disabled={includedCount === sources.length}
+                  onClick={() => updateSources((current) => current.map((item) => ({ ...item, enabled: true })))}
+                >
+                  すべて選択
+                </button>
+                <button
+                  type="button"
+                  className="exportSelectAllButton"
+                  disabled={includedCount === 0}
+                  onClick={() => updateSources((current) => current.map((item) => ({ ...item, enabled: false })))}
+                >
+                  すべて解除
+                </button>
+              </div>
             </div>
             <div className="exportSourceList">
               {sources.map((source, index) => (
