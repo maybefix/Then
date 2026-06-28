@@ -68,7 +68,12 @@ function rubyRun(
   return `<w:ruby><w:rubyPr><w:rubyAlign w:val="center"/><w:hps w:val="${rubySize}"/><w:hpsRaise w:val="${baseHalfPoints}"/><w:hpsBaseText w:val="${baseHalfPoints}"/><w:lid w:val="ja-JP"/></w:rubyPr><w:rt>${rt}</w:rt><w:rubyBase>${normalRun(font, inline.text)}</w:rubyBase></w:ruby>`;
 }
 
-function inlineXml(font: ExportFontFamily, baseHalfPoints: number, inline: ExportInline): string {
+function inlineXml(
+  font: ExportFontFamily,
+  baseHalfPoints: number,
+  inline: ExportInline,
+  writingMode: ExportLayoutProfile["body"]["writingMode"],
+): string {
   switch (inline.kind) {
     case "text": return normalRun(font, inline.text);
     case "bold": return normalRun(font, inline.text, "<w:b/><w:bCs/>");
@@ -76,20 +81,27 @@ function inlineXml(font: ExportFontFamily, baseHalfPoints: number, inline: Expor
     case "emphasis":
       return normalRun(font, inline.text, `<w:em w:val="${inline.style === "dot" ? "dot" : "comma"}"/>`);
     case "tcy":
-      return normalRun(font, inline.text, '<w:eastAsianLayout w:vert="1" w:vertCompress="1"/>');
+      return writingMode === "vertical-rl"
+        ? normalRun(font, inline.text, '<w:eastAsianLayout w:vert="1" w:vertCompress="1"/>')
+        : normalRun(font, inline.text);
     case "break":
       return "<w:r><w:br/></w:r>";
   }
 }
 
-function paragraphXml(font: ExportFontFamily, baseHalfPoints: number, block: ExportBlock): string {
+function paragraphXml(
+  font: ExportFontFamily,
+  baseHalfPoints: number,
+  block: ExportBlock,
+  writingMode: ExportLayoutProfile["body"]["writingMode"],
+): string {
   if (block.kind === "blank") return "<w:p/>";
   const style = block.kind === "heading"
     ? `<w:pStyle w:val="Heading${Math.max(1, Math.min(6, block.level))}"/>`
     : "";
   const align = `<w:jc w:val="${block.align}"/>`;
   const keep = block.kind === "heading" ? "<w:keepNext/><w:keepLines/>" : "";
-  return `<w:p><w:pPr>${style}${align}${keep}<w:widowControl/></w:pPr>${block.inlines.map((inline) => inlineXml(font, baseHalfPoints, inline)).join("")}</w:p>`;
+  return `<w:p><w:pPr>${style}${align}${keep}<w:widowControl/></w:pPr>${block.inlines.map((inline) => inlineXml(font, baseHalfPoints, inline, writingMode)).join("")}</w:p>`;
 }
 
 function mmToTwips(mm: number): number {
@@ -272,14 +284,19 @@ function sectionProperties(
   const startNumber = sectionIndex === 0
     ? `<w:pgNumType w:start="${Math.max(1, Math.round(layout.footer.startPageNumber))}"/>`
     : "";
-  return `<w:sectPr>${references}<w:type w:val="${type}"/><w:pgSz w:w="${mmToTwips(widthMm)}" w:h="${mmToTwips(heightMm)}"/><w:pgMar w:top="${mmToTwips(layout.page.marginTopMm)}" w:right="${mmToTwips(layout.page.marginInnerMm)}" w:bottom="${mmToTwips(layout.page.marginBottomMm)}" w:left="${mmToTwips(layout.page.marginOuterMm)}" w:header="567" w:footer="567" w:gutter="0"/><w:textDirection w:val="tbRl"/><w:cols w:num="${layout.body.columns}" w:space="${mmToTwips(layout.body.columnGapMm)}"/>${startNumber}${firstPageDifferent ? "<w:titlePg/>" : ""}</w:sectPr>`;
+  const textDirection = layout.body.writingMode === "vertical-rl"
+    ? '<w:textDirection w:val="tbRl"/>'
+    : "";
+  return `<w:sectPr>${references}<w:type w:val="${type}"/><w:pgSz w:w="${mmToTwips(widthMm)}" w:h="${mmToTwips(heightMm)}"/><w:pgMar w:top="${mmToTwips(layout.page.marginTopMm)}" w:right="${mmToTwips(layout.page.marginInnerMm)}" w:bottom="${mmToTwips(layout.page.marginBottomMm)}" w:left="${mmToTwips(layout.page.marginOuterMm)}" w:header="567" w:footer="567" w:gutter="0"/>${textDirection}<w:cols w:num="${layout.body.columns}" w:space="${mmToTwips(layout.body.columnGapMm)}"/>${startNumber}${firstPageDifferent ? "<w:titlePg/>" : ""}</w:sectPr>`;
 }
 
 function documentXml(document: LinkedExportDocument, parts: SectionParts[]): string {
   const font = document.layout.body.fontFamily;
   const half = bodyHalfPoints(document);
   const sections = document.sections.map((section, index) => {
-    const paragraphs = section.blocks.map((block) => paragraphXml(font, half, block)).join("\n");
+    const paragraphs = section.blocks
+      .map((block) => paragraphXml(font, half, block, document.layout.body.writingMode))
+      .join("\n");
     if (index === document.sections.length - 1) return paragraphs;
     return `${paragraphs}<w:p><w:pPr>${sectionProperties(document, index, parts[index])}</w:pPr></w:p>`;
   }).join("\n");

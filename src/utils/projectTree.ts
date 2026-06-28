@@ -159,3 +159,23 @@ export function upsertRecentWorkspace(
     ...records.filter((record) => record.path !== path),
   ].slice(0, 12);
 }
+
+function normalizePathForCompare(path: string): string {
+  return path.replace(/[\\/]+/g, "\\").replace(/\\+$/, "").toLocaleLowerCase();
+}
+
+function isPathInsideFolder(path: string, folderPath: string): boolean {
+  const normalizedPath = normalizePathForCompare(path);
+  const normalizedFolder = normalizePathForCompare(folderPath);
+  return (
+    normalizedPath !== normalizedFolder &&
+    normalizedPath.startsWith(`${normalizedFolder}\\`)
+  );
+}
+
+export function removeNestedRecentWorkspaces(
+  records: WorkspaceRecord[],
+  rootPath: string,
+): WorkspaceRecord[] {
+  return records.filter((record) => !isPathInsideFolder(record.path, rootPath));
+}

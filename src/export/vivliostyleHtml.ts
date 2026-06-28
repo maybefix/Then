@@ -69,8 +69,7 @@ function footerContent(layout: ExportLayoutProfile, title: string): string | nul
 
 // Maps the footer page-number position to a pair of @page margin boxes. "outer"
 // and "inner" depend on the spread side, so they are emitted per :recto/:verso.
-// Margin boxes must be horizontal even though the page body is vertical-rl,
-// otherwise the running header/page number is laid out top-to-bottom.
+// Margin boxes stay horizontal regardless of the body writing mode.
 const MARGIN_BOX_STYLE = "font-size: 8pt; color: #555; writing-mode: horizontal-tb; text-orientation: mixed;";
 
 function footerBoxes(layout: ExportLayoutProfile, content: string): string {
@@ -95,6 +94,9 @@ export function buildLinkedVivliostyleHtml(
   const body = layout.body;
   const page = layout.page;
   const fontUrl = new URL(`/fonts/${fontFile(body.fontFamily)}`, baseUrl).href;
+  const isHorizontal = body.writingMode === "horizontal-tb";
+  const emphasisPosition = isHorizontal ? "over" : "over right";
+  const tcyStyle = isHorizontal ? "none" : "all";
 
   const header = headerContent(layout, document.title);
   const footer = footerContent(layout, document.title);
@@ -141,7 +143,7 @@ ${footerBox}
   font-family: "${body.fontFamily}", serif;
   font-size: ${bodyFontSize(body)};
   line-height: ${body.lineHeight};
-  writing-mode: vertical-rl;
+  writing-mode: ${body.writingMode};
   text-orientation: mixed;
   orphans: 2; widows: 2;
 }
@@ -164,10 +166,10 @@ h3 { font-size: 1.15em; }
 .then-align-end { text-align: end; }
 ruby { ruby-align: center; ruby-position: over; }
 rt { font-size: 0.5em; }
-.then-emphasis { text-emphasis-position: over right; }
+.then-emphasis { text-emphasis-position: ${emphasisPosition}; }
 .then-emphasis-auto, .then-emphasis-goma { text-emphasis-style: sesame; }
 .then-emphasis-dot { text-emphasis-style: dot; }
-.then-tcy { text-combine-upright: all; }
+.then-tcy { text-combine-upright: ${tcyStyle}; }
 strong { font-weight: 700; }
 </style>
 </head>

@@ -89,6 +89,7 @@ import {
   getWorkspaceName,
   movePathInOrder,
   movePathToDropPosition,
+  removeNestedRecentWorkspaces,
   replaceFolderChildren,
   upsertRecentWorkspace,
 } from "./utils/projectTree";
@@ -192,6 +193,115 @@ const directionOptions: Array<{
   { value: "center", label: "中央", description: "対象行の文末に中央揃え指示を付けます" },
   { value: "end", label: "行末", description: "対象行の文末に行末揃え指示を付けます" },
 ];
+
+type AppIconName =
+  | "book"
+  | "export"
+  | "file"
+  | "folder"
+  | "horizontal"
+  | "menu"
+  | "panelLeft"
+  | "panelRight"
+  | "settings"
+  | "theme"
+  | "vertical";
+
+function AppIcon({ name, className = "" }: { name: AppIconName; className?: string }) {
+  const common = {
+    className,
+    viewBox: "0 0 24 24",
+    "aria-hidden": true,
+    focusable: false,
+  };
+
+  switch (name) {
+    case "book":
+      return (
+        <svg {...common}>
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+        </svg>
+      );
+    case "export":
+      return (
+        <svg {...common}>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <path d="M7 10l5 5 5-5" />
+          <path d="M12 15V3" />
+        </svg>
+      );
+    case "file":
+      return (
+        <svg {...common}>
+          <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z" />
+          <path d="M14 2v6h6" />
+        </svg>
+      );
+    case "folder":
+      return (
+        <svg {...common}>
+          <path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" />
+        </svg>
+      );
+    case "horizontal":
+      return (
+        <svg {...common}>
+          <path d="M4 7h16" />
+          <path d="M4 12h16" />
+          <path d="M4 17h10" />
+        </svg>
+      );
+    case "menu":
+      return (
+        <svg {...common}>
+          <path d="M4 6h16" />
+          <path d="M4 12h16" />
+          <path d="M4 18h16" />
+        </svg>
+      );
+    case "panelLeft":
+      return (
+        <svg {...common}>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M9 3v18" />
+        </svg>
+      );
+    case "panelRight":
+      return (
+        <svg {...common}>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M15 3v18" />
+        </svg>
+      );
+    case "settings":
+      return (
+        <svg {...common}>
+          <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
+          <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.04.04a2 2 0 1 1-2.83 2.83l-.04-.04a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.06A1.7 1.7 0 0 0 8.97 19.4a1.7 1.7 0 0 0-1.88.34l-.04.04a2 2 0 1 1-2.83-2.83l.04-.04A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.06A1.7 1.7 0 0 0 4.6 8.97a1.7 1.7 0 0 0-.34-1.88l-.04-.04a2 2 0 1 1 2.83-2.83l.04.04A1.7 1.7 0 0 0 8.97 4.6 1.7 1.7 0 0 0 10 3.06V3a2 2 0 1 1 4 0v.06a1.7 1.7 0 0 0 1.03 1.54 1.7 1.7 0 0 0 1.88-.34l.04-.04a2 2 0 1 1 2.83 2.83l-.04.04a1.7 1.7 0 0 0-.34 1.88A1.7 1.7 0 0 0 20.94 10H21a2 2 0 1 1 0 4h-.06A1.7 1.7 0 0 0 19.4 15z" />
+        </svg>
+      );
+    case "theme":
+      return (
+        <svg {...common}>
+          <circle cx="13.5" cy="6.5" r="2.5" />
+          <circle cx="7.5" cy="10.5" r="2.5" />
+          <circle cx="16.5" cy="14.5" r="2.5" />
+          <path d="M12 22a9 9 0 1 1 8.8-10.9 2.4 2.4 0 0 1-2.35 2.9H17a2 2 0 0 0 0 4h.35A2.4 2.4 0 0 1 19.7 21 9.1 9.1 0 0 1 12 22z" />
+        </svg>
+      );
+    case "vertical":
+      return (
+        <svg {...common}>
+          <path d="M7 4v16" />
+          <path d="M12 4v16" />
+          <path d="M17 4v10" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
 
 function debugLog(message: string, data?: unknown): void {
   const timestamp = new Date().toISOString();
@@ -307,6 +417,7 @@ const defaultSettings: EditorSettings = {
   exportFontFamily: "Noto Serif CJK JP",
   fontSize: 15,
   lineHeight: 1.82,
+  writingMode: "vertical-rl",
   typewriterScroll: true,
   typewriterOffset: 46,
   showLineBreakMarks: false,
@@ -956,6 +1067,10 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         typeof settings.countWhitespace === "boolean"
           ? settings.countWhitespace
           : defaultSettings.countWhitespace,
+      writingMode:
+        settings.writingMode === "horizontal-tb" || settings.writingMode === "vertical-rl"
+          ? settings.writingMode
+          : defaultSettings.writingMode,
     },
     lastWorkspacePath:
       typeof value?.lastWorkspacePath === "string" ? value.lastWorkspacePath : null,
@@ -1123,6 +1238,8 @@ export default function App() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isThemePickerModalOpen, setIsThemePickerModalOpen] = useState(false);
+  const [shouldReturnToSettingsAfterThemePicker, setShouldReturnToSettingsAfterThemePicker] =
+    useState(false);
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const [activeBreadcrumbPath, setActiveBreadcrumbPath] = useState<string | null>(null);
   const [isWorkspaceSwitcherOpen, setIsWorkspaceSwitcherOpen] = useState(false);
@@ -1612,7 +1729,7 @@ export default function App() {
             ...state,
             snippets: restoredSnippets,
             recentWorkspaces: upsertRecentWorkspace(
-              state.recentWorkspaces,
+              removeNestedRecentWorkspaces(state.recentWorkspaces, folder.path),
               folder.path,
               folder.name,
             ),
@@ -1790,11 +1907,6 @@ export default function App() {
           snippets: workspaceSnippets,
           lastWorkspacePath: folder.path,
           lastFilePath: currentFilePath,
-          recentWorkspaces: upsertRecentWorkspace(
-            current.recentWorkspaces,
-            folder.path,
-            folder.name,
-          ),
         }));
       })
       .catch((error) => {
@@ -2596,9 +2708,6 @@ export default function App() {
       markdown: document.content,
       lastWorkspacePath: projectFolder?.path ?? current.lastWorkspacePath,
       lastFilePath: document.path,
-      recentWorkspaces: projectFolder
-        ? upsertRecentWorkspace(current.recentWorkspaces, projectFolder.path, projectFolder.name)
-        : current.recentWorkspaces,
     }));
     setLastError("");
   }, [openDocumentInTab, projectFolder, replaceActiveTabWithDocument]);
@@ -2606,7 +2715,10 @@ export default function App() {
   const setWorkspaceFromDocumentPath = useCallback(
     async (document: TextDocument, options: { loadWorkspaceSnippets?: boolean } = {}) => {
       if (!isTauriRuntime()) return null;
-      const folderPath = getParentPath(document.path);
+      const folderPath =
+        projectFolder && findContainingFolderPath(projectFolder, document.path)
+          ? projectFolder.path
+          : getParentPath(document.path);
       if (!folderPath) return null;
 
       const folder = await invoke<ProjectFolder>("list_project_text_files", {
@@ -2630,15 +2742,10 @@ export default function App() {
         snippets: nextSnippets ?? current.snippets,
         lastWorkspacePath: folder.path,
         lastFilePath: document.path,
-        recentWorkspaces: upsertRecentWorkspace(
-          current.recentWorkspaces,
-          folder.path,
-          folder.name,
-        ),
       }));
       return folder;
     },
-    [settings.snippetStorageMode],
+    [projectFolder, settings.snippetStorageMode],
   );
 
   const refreshProjectFolder = useCallback(async (_folderPath: string) => {
@@ -2919,7 +3026,7 @@ export default function App() {
         lastWorkspacePath: folder.path,
         lastFilePath: document.path,
         recentWorkspaces: upsertRecentWorkspace(
-          current.recentWorkspaces,
+          removeNestedRecentWorkspaces(current.recentWorkspaces, folder.path),
           folder.path,
           folder.name,
         ),
@@ -2942,7 +3049,7 @@ export default function App() {
       lastWorkspacePath: folder.path,
       lastFilePath: null,
       recentWorkspaces: upsertRecentWorkspace(
-        current.recentWorkspaces,
+        removeNestedRecentWorkspaces(current.recentWorkspaces, folder.path),
         folder.path,
         folder.name,
       ),
@@ -3049,7 +3156,7 @@ export default function App() {
         lastWorkspacePath: folder.path,
         lastFilePath: firstFile?.path ?? null,
         recentWorkspaces: upsertRecentWorkspace(
-          current.recentWorkspaces,
+          removeNestedRecentWorkspaces(current.recentWorkspaces, folder.path),
           folder.path,
           folder.name,
         ),
@@ -4001,17 +4108,9 @@ export default function App() {
             onClick={() => void handleWorkspaceFolderTreeSelect(entry.path)}
           >
             {isRoot ? (
-              <svg
-                className="workspaceFolderTreeIcon"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-              </svg>
+              <AppIcon name="book" className="workspaceFolderTreeIcon" />
             ) : (
-              <span className="menuFolderIcon" aria-hidden="true" />
+              <AppIcon name="folder" className="workspaceFolderTreeIcon" />
             )}
             <span>{entry.name}</span>
           </button>
@@ -4029,6 +4128,7 @@ export default function App() {
       <main
         className="appShell"
         data-theme={settings.theme}
+        data-writing-mode={settings.writingMode}
         style={
           {
             "--editor-font-family": settings.editorFontFamily,
@@ -4050,7 +4150,7 @@ export default function App() {
                 aria-expanded={isFileMenuOpen}
                 onClick={() => setIsFileMenuOpen((isOpen) => !isOpen)}
               >
-                ☰
+                <AppIcon name="menu" className="topbarSvgIcon" />
               </button>
               {isFileMenuOpen && (
                 <div className="menuPopover fileMenuPopover" role="menu">
@@ -4090,31 +4190,6 @@ export default function App() {
                   >
                     エクスポート…
                   </button>
-                  <div className="menuDivider" role="separator" />
-                  <button
-                    type="button"
-                    role="menuitem"
-                    disabled={openTabs.length <= 1}
-                    onClick={() => closeFileMenuAndRun(() => activateRelativeDocumentTab(-1))}
-                  >
-                    前のタブ
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    disabled={openTabs.length <= 1}
-                    onClick={() => closeFileMenuAndRun(() => activateRelativeDocumentTab(1))}
-                  >
-                    次のタブ
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => closeFileMenuAndRun(() => closeDocumentTab())}
-                  >
-                    タブを閉じる
-                  </button>
-                  <div className="menuDivider" role="separator" />
                   <button
                     type="button"
                     role="menuitem"
@@ -4133,10 +4208,7 @@ export default function App() {
                 title="左サイドバーを表示"
                 onClick={() => setIsLeftSidebarCollapsed(false)}
               >
-                <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <line x1="9" y1="3" x2="9" y2="21" />
-                </svg>
+                <AppIcon name="panelLeft" className="topbarSvgIcon" />
               </button>
             )}
             <nav
@@ -4191,15 +4263,10 @@ export default function App() {
                             }}
                           >
                             {index === 0 && (
-                              <svg
+                              <AppIcon
+                                name="book"
                                 className="workspaceSwitcherBookIcon"
-                                viewBox="0 0 24 24"
-                                aria-hidden="true"
-                                focusable="false"
-                              >
-                                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-                              </svg>
+                              />
                             )}
                             <span>{crumb.name}</span>
                           </button>
@@ -4252,7 +4319,7 @@ export default function App() {
                                           )
                                         }
                                       >
-                                        <span className="menuFolderIcon" aria-hidden="true" />
+                                        <AppIcon name="folder" className="menuSvgIcon" />
                                         <span className="workspaceRecordText">
                                           <span className="workspaceRecordName">
                                             {workspace.name}
@@ -4283,7 +4350,7 @@ export default function App() {
                                   closeBreadcrumbMenuAndRun(() => openWorkspace())
                                 }
                               >
-                                <span className="menuFolderIcon" aria-hidden="true" />
+                                <AppIcon name="folder" className="menuSvgIcon" />
                                 <span>別のフォルダを開く...</span>
                               </button>
                             </div>
@@ -4340,13 +4407,9 @@ export default function App() {
                                           : void handleProjectFolderSelect(entry.path)
                                       }
                                     >
-                                      <span
-                                        className={
-                                          entry.kind === "folder"
-                                            ? "menuFolderIcon"
-                                            : "menuFileIcon"
-                                        }
-                                        aria-hidden="true"
+                                      <AppIcon
+                                        name={entry.kind === "folder" ? "folder" : "file"}
+                                        className="menuSvgIcon"
                                       />
                                       <span>{entry.name}</span>
                                     </button>
@@ -4467,15 +4530,7 @@ export default function App() {
                       setIsWorkspaceSwitcherOpen((isOpen) => !isOpen);
                     }}
                   >
-                    <svg
-                      className="workspaceSwitcherBookIcon"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                      focusable="false"
-                    >
-                      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-                    </svg>
+                    <AppIcon name="book" className="workspaceSwitcherBookIcon" />
                     <span>{scratchWorkspaceName}</span>
                   </button>
                   {isWorkspaceSwitcherOpen && (
@@ -4507,7 +4562,7 @@ export default function App() {
                                 closeBreadcrumbMenuAndRun(() => openWorkspace(workspace.path))
                               }
                             >
-                              <span className="menuFolderIcon" aria-hidden="true" />
+                              <AppIcon name="folder" className="menuSvgIcon" />
                               <span className="workspaceRecordText">
                                 <span className="workspaceRecordName">{workspace.name}</span>
                                 {settings.showWorkspacePaths && (
@@ -4528,7 +4583,7 @@ export default function App() {
                         role="menuitem"
                         onClick={() => closeBreadcrumbMenuAndRun(() => openWorkspace())}
                       >
-                        <span className="menuFolderIcon" aria-hidden="true" />
+                        <AppIcon name="folder" className="menuSvgIcon" />
                         <span>別のフォルダを開く...</span>
                       </button>
                     </div>
@@ -4601,22 +4656,55 @@ export default function App() {
                   title="右サイドバーを表示"
                   onClick={() => setIsRightSidebarCollapsed(false)}
                 >
-                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-                    <rect x="3" y="3" width="18" height="18" rx="2" />
-                    <line x1="15" y1="3" x2="15" y2="21" />
-                  </svg>
+                  <AppIcon name="panelRight" className="topbarSvgIcon" />
                 </button>
               )}
-              <button className="iconButton" type="button" aria-label="履歴">
-                ↶
+              <button
+                className="iconButton"
+                type="button"
+                aria-label="エクスポート"
+                title="エクスポート"
+                onClick={() => void handleOpenLinkedExport()}
+              >
+                <AppIcon name="export" className="topbarSvgIcon" />
+              </button>
+              <button
+                className={`iconButton ${settings.writingMode === "horizontal-tb" ? "activeIconButton" : ""}`}
+                type="button"
+                aria-label={settings.writingMode === "horizontal-tb" ? "縦書きに切り替え" : "横書きに切り替え"}
+                title={settings.writingMode === "horizontal-tb" ? "縦書きに切り替え" : "横書きに切り替え"}
+                onClick={() =>
+                  updateSettings(
+                    "writingMode",
+                    settings.writingMode === "horizontal-tb" ? "vertical-rl" : "horizontal-tb",
+                  )
+                }
+              >
+                <AppIcon
+                  name={settings.writingMode === "horizontal-tb" ? "horizontal" : "vertical"}
+                  className="topbarSvgIcon"
+                />
+              </button>
+              <button
+                className="iconButton"
+                type="button"
+                aria-label="テーマを選択"
+                title="テーマを選択"
+                onClick={() => {
+                  setShouldReturnToSettingsAfterThemePicker(false);
+                  setIsThemePickerModalOpen(true);
+                }}
+              >
+                <AppIcon name="theme" className="topbarSvgIcon" />
               </button>
               <button
                 className="iconButton"
                 type="button"
                 aria-label="設定"
+                title="設定"
                 onClick={() => setIsSettingsModalOpen(true)}
               >
-                ⚙
+                <AppIcon name="settings" className="topbarSvgIcon" />
               </button>
             </div>
           </header>
@@ -4753,6 +4841,7 @@ export default function App() {
                             key={documentKey}
                             text={editorText}
                             editorRevision={activeTab?.editorRevision ?? null}
+                            writingMode={settings.writingMode}
                             typewriterOffset={settings.typewriterOffset}
                             showLineBreakMarks={settings.showLineBreakMarks}
                             initialSelectionOffset={initialSelectionOffset}
@@ -5055,6 +5144,7 @@ export default function App() {
               onClose={() => setIsSettingsModalOpen(false)}
               onOpenThemePicker={() => {
                 setIsSettingsModalOpen(false);
+                setShouldReturnToSettingsAfterThemePicker(true);
                 setIsThemePickerModalOpen(true);
               }}
               onUpdateSettings={updateSettings}
@@ -5068,7 +5158,10 @@ export default function App() {
               selectedTheme={settings.theme}
               onClose={() => {
                 setIsThemePickerModalOpen(false);
-                setIsSettingsModalOpen(true);
+                if (shouldReturnToSettingsAfterThemePicker) {
+                  setShouldReturnToSettingsAfterThemePicker(false);
+                  setIsSettingsModalOpen(true);
+                }
               }}
               onSelect={(theme) => updateSettings("theme", theme)}
             />

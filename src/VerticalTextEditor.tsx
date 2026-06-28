@@ -18,6 +18,7 @@ import {
   type EditorView,
 } from "@tiptap/pm/view";
 import { useEffect, useMemo, useRef } from "react";
+import type { WritingMode } from "./types";
 
 export type TextEditorHandle = {
   focus: () => void;
@@ -33,6 +34,7 @@ export type TextEditorHandle = {
 type VerticalTextEditorProps = {
   text: string;
   editorRevision: number | null;
+  writingMode: WritingMode;
   typewriterOffset: number;
   showLineBreakMarks: boolean;
   /** マウント時に復元するカーソル位置（本文先頭からの文字オフセット）。 */
@@ -1533,6 +1535,43 @@ function snapScrollValue(value: number): number {
   return Math.round(value * dpr) / dpr;
 }
 
+function isHorizontalWriting(writingMode: WritingMode): boolean {
+  return writingMode === "horizontal-tb";
+}
+
+function scrollAxis(writingMode: WritingMode): {
+  get: (element: HTMLElement) => number;
+  set: (element: HTMLElement, value: number) => void;
+  scrollTo: (element: HTMLElement, value: number, behavior: ScrollBehavior) => void;
+  viewportStart: (rect: DOMRect) => number;
+  viewportSize: (rect: DOMRect) => number;
+  rectCenter: (rect: DOMRect) => number;
+} {
+  if (isHorizontalWriting(writingMode)) {
+    return {
+      get: (element) => element.scrollTop,
+      set: (element, value) => {
+        element.scrollTop = value;
+      },
+      scrollTo: (element, value, behavior) => element.scrollTo({ top: value, behavior }),
+      viewportStart: (rect) => rect.top,
+      viewportSize: (rect) => rect.height,
+      rectCenter: (rect) => (rect.top + rect.bottom) / 2,
+    };
+  }
+
+  return {
+    get: (element) => element.scrollLeft,
+    set: (element, value) => {
+      element.scrollLeft = value;
+    },
+    scrollTo: (element, value, behavior) => element.scrollTo({ left: value, behavior }),
+    viewportStart: (rect) => rect.left,
+    viewportSize: (rect) => rect.width,
+    rectCenter: (rect) => (rect.left + rect.right) / 2,
+  };
+}
+
 function nonEmptyRect(rect: DOMRect | null): DOMRect | null {
   if (!rect) return null;
   if (rect.width === 0 && rect.height === 0 && rect.left === 0 && rect.top === 0) return null;
@@ -1558,7 +1597,7 @@ function activeBlockElement(view: EditorView): Element | null {
   return element instanceof Element ? element : null;
 }
 
-function activeBlockColumnRect(view: EditorView): DOMRect | null {
+function activeBlockColumnRect(view: EditorView, writingMode: WritingMode): DOMRect | null {
   const element = activeBlockElement(view);
   if (!element) return null;
 
@@ -1566,6 +1605,16 @@ function activeBlockColumnRect(view: EditorView): DOMRect | null {
   if (!rectHasArea(rect)) return null;
 
   const lineHeight = lineHeightPx(element);
+  if (isHorizontalWriting(writingMode)) {
+    const height = Math.max(1, Math.min(rect.height || lineHeight || 1, lineHeight || rect.height || 1));
+    return new DOMRect(
+      rect.left,
+      rect.top + rect.height / 2 - height / 2,
+      Math.max(1, rect.width || lineHeight),
+      height,
+    );
+  }
+
   const width = Math.max(1, Math.min(rect.width || lineHeight || 1, lineHeight || rect.width || 1));
 
   return new DOMRect(
@@ -1587,6 +1636,19 @@ function coordsAtSelectionStable(view: EditorView): DOMRect | null {
   } catch {
     return null;
   }
+}
+
+function coordsAtSelectionHead(view: EditorView): DOMRect | null {
+  try {
+    return nonEmptyRect(view.coordsAtPos(selectionSafeHead(view)) as DOMRect);
+  } catch {
+    return null;
+  }
+}
+
+function selectionSafeHead(view: EditorView): number {
+  const max = view.state.doc.content.size;
+  return Math.max(1, Math.min(max, view.state.selection.head));
 }
 
 function domRangeRect(
@@ -1614,14 +1676,22 @@ function domRangeRect(
   }
 }
 
-function selectionColumnAnchor(view: EditorView): { rect: DOMRect | null; source: string } {
+function selectionColumnAnchor(
+  view: EditorView,
+  writingMode: WritingMode,
+): { rect: DOMRect | null; source: string } {
   const selection = view.state.selection;
   const head = selection.head;
   const parentSize = selection.$head.parent ? selection.$head.parent.content.size : 0;
   const parentOffset = selection.$head.parentOffset || 0;
 
   if (parentSize === 0) {
-    return { rect: activeBlockColumnRect(view), source: "block-empty" };
+    return { rect: activeBlockColumnRect(view, writingMode), source: "block-empty" };
+  }
+
+  if (isHorizontalWriting(writingMode)) {
+    const rect = coordsAtSelectionHead(view);
+    if (rect) return { rect, source: "coords-head" };
   }
 
   if (parentOffset === 0) {
@@ -1688,11 +1758,21 @@ function lastPaintedTextRectInBlock(element: Element): DOMRect | null {
   return null;
 }
 
-function blockFallbackEndRect(element: Element): DOMRect | null {
+function blockFallbackEndRect(element: Element, writingMode: WritingMode): DOMRect | null {
   const rect = element.getBoundingClientRect();
   if (!rectHasArea(rect)) return null;
 
   const lineHeight = lineHeightPx(element) || 16;
+  if (isHorizontalWriting(writingMode)) {
+    const height = Math.max(1, Math.min(rect.height || lineHeight, lineHeight));
+    return new DOMRect(
+      rect.right,
+      rect.top + rect.height / 2 - height / 2,
+      1,
+      height,
+    );
+  }
+
   const width = Math.max(1, Math.min(rect.width || lineHeight, lineHeight));
 
   return new DOMRect(
@@ -1703,7 +1783,11 @@ function blockFallbackEndRect(element: Element): DOMRect | null {
   );
 }
 
-function paragraphEndRect(editor: Editor, index: number): DOMRect | null {
+function paragraphEndRect(
+  editor: Editor,
+  index: number,
+  writingMode: WritingMode,
+): DOMRect | null {
   if (index < 0 || index >= editor.state.doc.childCount) return null;
 
   const element = editor.view.dom.children[index];
@@ -1713,7 +1797,7 @@ function paragraphEndRect(editor: Editor, index: number): DOMRect | null {
   if (paintedRect && rectHasArea(paintedRect)) return paintedRect;
 
   const nodeStart = pmStartAtIndex(editor.state.doc, index);
-  if (nodeStart === null) return blockFallbackEndRect(element);
+  if (nodeStart === null) return blockFallbackEndRect(element, writingMode);
 
   const node = editor.state.doc.child(index);
   const length = node.content.size;
@@ -1725,7 +1809,7 @@ function paragraphEndRect(editor: Editor, index: number): DOMRect | null {
     if (rect && rectHasArea(rect)) return rect;
   }
 
-  return blockFallbackEndRect(element);
+  return blockFallbackEndRect(element, writingMode);
 }
 
 function centerCaretForEditor(
@@ -1733,29 +1817,31 @@ function centerCaretForEditor(
   scroller: HTMLElement,
   offsetPercent: number,
   instant: boolean,
+  writingMode: WritingMode,
 ): void {
   if (isEditorComposing(editor)) return;
 
-  const anchor = selectionColumnAnchor(editor.view);
+  const anchor = selectionColumnAnchor(editor.view, writingMode);
   const rect = anchor.rect;
   if (!rect) return;
 
+  const axis = scrollAxis(writingMode);
   const scrollerRect = scroller.getBoundingClientRect();
   const targetRatio = Number.isFinite(offsetPercent) ? offsetPercent / 100 : 0.5;
-  const viewportTarget = scrollerRect.left + scrollerRect.width * targetRatio;
-  const caretCenter = (rect.left + rect.right) / 2;
+  const viewportTarget = axis.viewportStart(scrollerRect) + axis.viewportSize(scrollerRect) * targetRatio;
+  const caretCenter = axis.rectCenter(rect);
   const delta = caretCenter - viewportTarget;
-  const current = scroller.scrollLeft;
+  const current = axis.get(scroller);
   const target = snapScrollValue(current + delta);
 
   if (Math.abs(target - current) < SCROLL_EPS) return;
 
   if (instant) {
-    scroller.scrollLeft = target;
+    axis.set(scroller, target);
     return;
   }
 
-  scroller.scrollTo({ left: target, behavior: "smooth" });
+  axis.scrollTo(scroller, target, "smooth");
 }
 
 function domLineIndexFromElement(root: HTMLElement, element: Element | null): number {
@@ -1769,13 +1855,23 @@ function domLineIndexFromElement(root: HTMLElement, element: Element | null): nu
   return Array.prototype.indexOf.call(root.children, current);
 }
 
-function estimateVisibleCenterIndex(editor: Editor, scroller: HTMLElement): number {
+function estimateVisibleCenterIndex(
+  editor: Editor,
+  scroller: HTMLElement,
+  writingMode: WritingMode,
+): number {
   const rect = scroller.getBoundingClientRect();
-  const points = [
-    [rect.left + rect.width / 2, rect.top + rect.height / 2],
-    [rect.left + rect.width * 0.35, rect.top + rect.height / 2],
-    [rect.left + rect.width * 0.65, rect.top + rect.height / 2],
-  ];
+  const points = isHorizontalWriting(writingMode)
+    ? [
+        [rect.left + rect.width / 2, rect.top + rect.height / 2],
+        [rect.left + rect.width / 2, rect.top + rect.height * 0.35],
+        [rect.left + rect.width / 2, rect.top + rect.height * 0.65],
+      ]
+    : [
+        [rect.left + rect.width / 2, rect.top + rect.height / 2],
+        [rect.left + rect.width * 0.35, rect.top + rect.height / 2],
+        [rect.left + rect.width * 0.65, rect.top + rect.height / 2],
+      ];
 
   for (const [x, y] of points) {
     const index = domLineIndexFromElement(editor.view.dom, document.elementFromPoint(x, y));
@@ -1792,6 +1888,7 @@ function centerDelayFrames(eventType: string): number {
 export function VerticalTextEditor({
   text,
   editorRevision,
+  writingMode,
   typewriterOffset,
   showLineBreakMarks,
   initialSelectionOffset,
@@ -1815,6 +1912,7 @@ export function VerticalTextEditor({
   // マウスでのドラッグ範囲選択中は true。ジェスチャ中は再センタリングを抑制し、
   // pointerup 時にキャレットが collapsed なら一度だけ寄せ、範囲が残るなら据え置く。
   const pointerDraggingRef = useRef(false);
+  const writingModeRef = useRef<WritingMode>(writingMode);
   const typewriterOffsetRef = useRef(typewriterOffset);
   const showLineBreakMarksRef = useRef(showLineBreakMarks);
   const renderLineBreakMarksRef = useRef<(() => void) | null>(null);
@@ -1831,6 +1929,18 @@ export function VerticalTextEditor({
   useEffect(() => {
     typewriterOffsetRef.current = Number.isFinite(typewriterOffset) ? typewriterOffset : 50;
   }, [typewriterOffset]);
+
+  useEffect(() => {
+    writingModeRef.current = writingMode;
+    const editor = tiptapRef.current;
+    const scroller = scrollerRef.current;
+    if (editor && scroller && !isEditorComposing(editor, composingRef)) {
+      requestAnimationFrame(() => {
+        centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, true, writingModeRef.current);
+        requestLineBreakMarksRef.current?.();
+      });
+    }
+  }, [writingMode]);
 
   useEffect(() => {
     showLineBreakMarksRef.current = showLineBreakMarks;
@@ -1872,7 +1982,9 @@ export function VerticalTextEditor({
         const nextRevision = ++localRevisionRef.current;
         onTextChangeRef.current(next, nextRevision);
         onSelectionChangeRef.current();
-        if (scroller) centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, true);
+        if (scroller) {
+          centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, true, writingModeRef.current);
+        }
         requestLineBreakMarksRef.current?.();
       },
       jumpToLine: (line) => {
@@ -1885,7 +1997,9 @@ export function VerticalTextEditor({
         editor.commands.focus();
         editor.commands.setTextSelection(pos);
         onSelectionChangeRef.current();
-        if (scroller) centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, true);
+        if (scroller) {
+          centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, true, writingModeRef.current);
+        }
         requestLineBreakMarksRef.current?.();
       },
       positionFromPoint: (x, y) => {
@@ -1901,7 +2015,7 @@ export function VerticalTextEditor({
         if (!editor || !scroller || isEditorComposing(editor, composingRef)) return;
 
         typewriterOffsetRef.current = Number.isFinite(offsetPercent) ? offsetPercent : 50;
-        centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, false);
+        centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, false, writingModeRef.current);
         requestLineBreakMarksRef.current?.();
       },
       isComposing: () => isEditorComposing(tiptapRef.current, composingRef),
@@ -1929,7 +2043,9 @@ export function VerticalTextEditor({
     updateEmptyAttribute(editor);
     requestAnimationFrame(() => {
       const scroller = scrollerRef.current;
-      if (scroller) centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, true);
+      if (scroller) {
+        centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, true, writingModeRef.current);
+      }
       requestLineBreakMarksRef.current?.();
     });
   }, [editorRevision, text]);
@@ -1952,6 +2068,20 @@ export function VerticalTextEditor({
     let settleFrame: number | null = null;
     let lineBreakQueued = false;
 
+    const syncVisibleWindow = (editor: Editor, currentScroller: HTMLElement): boolean => {
+      const index = estimateVisibleCenterIndex(editor, currentScroller, writingModeRef.current);
+      if (index < 0 || Math.abs(index - lastVisibleCenter) < VISIBLE_UPDATE_STEP) return false;
+
+      lastVisibleCenter = index;
+      editor.view.dispatch(
+        editor.state.tr
+          .setMeta(astKey, { visibleCenter: index } satisfies AstMeta)
+          .setMeta("addToHistory", false),
+      );
+      requestLineBreakMarks();
+      return true;
+    };
+
     const requestCenterCaret = (instant: boolean, eventType: string) => {
       const editor = tiptapRef.current;
       if (!editor || isEditorComposing(editor, composingRef)) return;
@@ -1970,23 +2100,51 @@ export function VerticalTextEditor({
             return;
           }
 
-          centerQueued = false;
-          centerWaitFrames = 1;
           const shouldInstant = centerInstant;
           centerInstant = false;
           centerEventType = "unknown";
           const currentEditor = tiptapRef.current;
           const currentScroller = scrollerRef.current;
           if (currentEditor && currentScroller) {
+            if (syncVisibleWindow(currentEditor, currentScroller)) {
+              centerFrame = requestAnimationFrame(() => {
+                centerFrame = null;
+                const delayedInstant = shouldInstant || centerInstant;
+                centerInstant = false;
+                centerQueued = false;
+                centerWaitFrames = 1;
+                centerEventType = "unknown";
+                const settledEditor = tiptapRef.current;
+                const settledScroller = scrollerRef.current;
+                if (!settledEditor || !settledScroller) return;
+
+                centerCaretForEditor(
+                  settledEditor,
+                  settledScroller,
+                  typewriterOffsetRef.current,
+                  delayedInstant,
+                  writingModeRef.current,
+                );
+                if (!delayedInstant) requestSettleRecenter();
+              });
+              return;
+            }
+
+            centerQueued = false;
+            centerWaitFrames = 1;
             centerCaretForEditor(
               currentEditor,
               currentScroller,
               typewriterOffsetRef.current,
               shouldInstant,
+              writingModeRef.current,
             );
             // スムーズスクロール中は可視ウィンドウの再装飾で列幅が動き、最終位置が
             // 中央からずれることがある。着地後に一度だけ測り直して補正する。
             if (!shouldInstant) requestSettleRecenter();
+          } else {
+            centerQueued = false;
+            centerWaitFrames = 1;
           }
         });
       };
@@ -1999,7 +2157,7 @@ export function VerticalTextEditor({
     const requestSettleRecenter = () => {
       if (settleFrame !== null) cancelAnimationFrame(settleFrame);
 
-      let lastLeft = Number.NaN;
+      let lastPosition = Number.NaN;
       let stableFrames = 0;
       let corrections = 0;
 
@@ -2010,10 +2168,11 @@ export function VerticalTextEditor({
           const currentScroller = scrollerRef.current;
           if (!editor || !currentScroller || isEditorComposing(editor, composingRef)) return;
 
-          const current = currentScroller.scrollLeft;
-          if (Number.isNaN(lastLeft) || Math.abs(current - lastLeft) > 0.5) {
+          const axis = scrollAxis(writingModeRef.current);
+          const current = axis.get(currentScroller);
+          if (Number.isNaN(lastPosition) || Math.abs(current - lastPosition) > 0.5) {
             // まだスクロール（または再装飾）で動いている。静止を待つ。
-            lastLeft = current;
+            lastPosition = current;
             stableFrames = 0;
             tick();
             return;
@@ -2026,13 +2185,19 @@ export function VerticalTextEditor({
           }
 
           // 静止した。瞬時に測り直して中央へ寄せ直す。
-          const before = currentScroller.scrollLeft;
-          centerCaretForEditor(editor, currentScroller, typewriterOffsetRef.current, true);
-          const moved = Math.abs(currentScroller.scrollLeft - before) > SCROLL_EPS;
+          const before = axis.get(currentScroller);
+          centerCaretForEditor(
+            editor,
+            currentScroller,
+            typewriterOffsetRef.current,
+            true,
+            writingModeRef.current,
+          );
+          const moved = Math.abs(axis.get(currentScroller) - before) > SCROLL_EPS;
           corrections += 1;
           if (moved && corrections < SETTLE_MAX_CORRECTIONS) {
             // 補正で動いた＝再装飾で更にずれた可能性。落ち着いたら再度確認する。
-            lastLeft = currentScroller.scrollLeft;
+            lastPosition = axis.get(currentScroller);
             stableFrames = 0;
             tick();
           }
@@ -2049,17 +2214,9 @@ export function VerticalTextEditor({
 
       visibleQueued = true;
       visibleFrame = requestAnimationFrame(() => {
+        visibleFrame = null;
         visibleQueued = false;
-        const index = estimateVisibleCenterIndex(editor, currentScroller);
-        if (index < 0 || Math.abs(index - lastVisibleCenter) < VISIBLE_UPDATE_STEP) return;
-
-        lastVisibleCenter = index;
-        editor.view.dispatch(
-          editor.state.tr
-            .setMeta(astKey, { visibleCenter: index } satisfies AstMeta)
-            .setMeta("addToHistory", false),
-        );
-        requestLineBreakMarks();
+        syncVisibleWindow(editor, currentScroller);
       });
     };
 
@@ -2089,7 +2246,8 @@ export function VerticalTextEditor({
       const state = astKey.getState(currentEditor.state);
       if (!state) return;
 
-      const estimatedCenter = estimateVisibleCenterIndex(currentEditor, scroller);
+      const mode = writingModeRef.current;
+      const estimatedCenter = estimateVisibleCenterIndex(currentEditor, scroller, mode);
       const visibleCenter = estimatedCenter >= 0 ? estimatedCenter : state.visibleCenter;
       const activeIndex = activeLineIndex(currentEditor.state);
       const fragment = document.createDocumentFragment();
@@ -2101,7 +2259,7 @@ export function VerticalTextEditor({
           const line = state.lines[index];
           if (!line) continue;
 
-          const rect = paragraphEndRect(currentEditor, index);
+          const rect = paragraphEndRect(currentEditor, index, mode);
           if (!rect) continue;
 
           const mark = document.createElement("span");
@@ -2110,10 +2268,17 @@ export function VerticalTextEditor({
             index === activeIndex ? " active" : ""
           }`;
           mark.textContent = "↵";
-          mark.style.left = `${snapScrollValue((rect.left + rect.right) / 2 - scrollerRect.left)}px`;
-          mark.style.top = `${snapScrollValue(
-            (blank ? (rect.top + rect.bottom) / 2 : rect.bottom + 8) - scrollerRect.top,
-          )}px`;
+          if (isHorizontalWriting(mode)) {
+            mark.style.left = `${snapScrollValue(
+              (blank ? (rect.left + rect.right) / 2 : rect.right + 8) - scrollerRect.left,
+            )}px`;
+            mark.style.top = `${snapScrollValue((rect.top + rect.bottom) / 2 - scrollerRect.top)}px`;
+          } else {
+            mark.style.left = `${snapScrollValue((rect.left + rect.right) / 2 - scrollerRect.left)}px`;
+            mark.style.top = `${snapScrollValue(
+              (blank ? (rect.top + rect.bottom) / 2 : rect.bottom + 8) - scrollerRect.top,
+            )}px`;
+          }
           fragment.appendChild(mark);
         }
       }
@@ -2190,7 +2355,11 @@ export function VerticalTextEditor({
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
       const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
-      scroller.scrollLeft -= delta;
+      if (isHorizontalWriting(writingModeRef.current)) {
+        scroller.scrollTop += delta;
+      } else {
+        scroller.scrollLeft -= delta;
+      }
       requestVisibleWindow();
       requestLineBreakMarks();
     };
@@ -2199,8 +2368,13 @@ export function VerticalTextEditor({
       if (event.target !== scroller) return;
 
       const scrollerRect = scroller.getBoundingClientRect();
-      const scrollbarHeight = scroller.offsetHeight - scroller.clientHeight;
-      if (scrollbarHeight > 0 && event.clientY >= scrollerRect.bottom - scrollbarHeight) return;
+      if (isHorizontalWriting(writingModeRef.current)) {
+        const scrollbarWidth = scroller.offsetWidth - scroller.clientWidth;
+        if (scrollbarWidth > 0 && event.clientX >= scrollerRect.right - scrollbarWidth) return;
+      } else {
+        const scrollbarHeight = scroller.offsetHeight - scroller.clientHeight;
+        if (scrollbarHeight > 0 && event.clientY >= scrollerRect.bottom - scrollbarHeight) return;
+      }
 
       event.preventDefault();
       editor.commands.focus();

@@ -143,10 +143,12 @@ function pageCapacity(layout: ExportLayoutProfile): { page: number; line: number
   const fontMm = layout.body.fontSizeUnit === "Q"
     ? layout.body.fontSize * 0.25
     : layout.body.fontSize * 0.352_778;
-  const charactersPerLine = Math.max(8, Math.floor(contentHeight / Math.max(1.5, fontMm)));
+  const lineMeasure = layout.body.writingMode === "horizontal-tb" ? contentWidth : contentHeight;
+  const blockMeasure = layout.body.writingMode === "horizontal-tb" ? contentHeight : contentWidth;
+  const charactersPerLine = Math.max(8, Math.floor(lineMeasure / Math.max(1.5, fontMm)));
   const lines = Math.max(
     4,
-    Math.floor(contentWidth / Math.max(2, fontMm * layout.body.lineHeight)),
+    Math.floor(blockMeasure / Math.max(2, fontMm * layout.body.lineHeight)),
   );
   return {
     line: charactersPerLine,
@@ -429,6 +431,11 @@ export function buildLinkedPrintCss(document: LinkedExportDocument, baseUrl = wi
   const evenRight = document.layout.page.marginOuterMm;
   const oddLeft = document.layout.page.marginOuterMm;
   const oddRight = document.layout.page.marginInnerMm;
+  const isHorizontal = body.writingMode === "horizontal-tb";
+  const contentWritingMode = body.writingMode;
+  const emphasisPosition = isHorizontal ? "over" : "over right";
+  const tcyStyle = isHorizontal ? "none" : "all";
+  const headingFirstMargin = isHorizontal ? "margin-top:1.4em;" : "margin-left:1.4em;";
   return `
 @font-face { font-family:"${body.fontFamily}"; src:url("${fontUrl}") format("opentype"); font-display:block; }
 @page { size:${widthMm}mm ${heightMm}mm; margin:0; }
@@ -437,10 +444,10 @@ export function buildLinkedPrintCss(document: LinkedExportDocument, baseUrl = wi
 .then-export-page:last-child { break-after:auto; page-break-after:auto; }
 .then-page-even .then-page-content { inset:${document.layout.page.marginTopMm}mm ${evenRight}mm ${document.layout.page.marginBottomMm}mm ${evenLeft}mm; }
 .then-page-odd .then-page-content { inset:${document.layout.page.marginTopMm}mm ${oddRight}mm ${document.layout.page.marginBottomMm}mm ${oddLeft}mm; }
-.then-page-content { position:absolute; writing-mode:vertical-rl; text-orientation:mixed; font-family:"${body.fontFamily}",serif; font-size:${fontSize}; line-height:${body.lineHeight}; line-break:strict; word-break:normal; overflow:hidden; column-count:${body.columns}; column-gap:${body.columnGapMm}mm; column-fill:auto; }
+.then-page-content { position:absolute; writing-mode:${contentWritingMode}; text-orientation:mixed; font-family:"${body.fontFamily}",serif; font-size:${fontSize}; line-height:${body.lineHeight}; line-break:strict; word-break:normal; overflow:hidden; column-count:${body.columns}; column-gap:${body.columnGapMm}mm; column-fill:auto; }
 .then-block { margin:0 0 .9em; padding:0; text-align:start; }
 .then-heading { font-weight:700; break-after:avoid; }
-.then-heading:first-child { font-size:1.35em; margin-left:1.4em; }
+.then-heading:first-child { font-size:1.35em; ${headingFirstMargin} }
 .then-align-center { text-align:center; }
 .then-align-end { text-align:end; }
 .then-page-header { position:absolute; z-index:2; top:5mm; left:10mm; right:10mm; text-align:center; color:#666; font:2.6mm/1.3 "${body.fontFamily}",serif; }
@@ -451,10 +458,10 @@ export function buildLinkedPrintCss(document: LinkedExportDocument, baseUrl = wi
 .then-footer-right { right:5mm; bottom:4mm; }
 ruby { ruby-align:center; ruby-position:over; }
 rt { font-size:.5em; }
-.then-emphasis { text-emphasis-position:over right; }
+.then-emphasis { text-emphasis-position:${emphasisPosition}; }
 .then-emphasis-auto,.then-emphasis-goma { text-emphasis-style:sesame; }
 .then-emphasis-dot { text-emphasis-style:dot; }
-.then-tcy { text-combine-upright:all; }
+.then-tcy { text-combine-upright:${tcyStyle}; }
 strong { font-weight:700; }
 `;
 }
