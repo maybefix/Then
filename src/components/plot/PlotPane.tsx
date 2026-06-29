@@ -214,7 +214,7 @@ function PlotBoard({
   const paneRef = useRef<HTMLDivElement | null>(null);
   const isPinnedToRightRef = useRef(true);
   const draggingCardIdRef = useRef<string | null>(null);
-  // 直前の scrollWidth。左側にカードが伸縮した分を補正して見た目を動かさないために使う。
+  // 初回表示で先頭（右端）に合わせたかどうかの判定に使う直前の scrollWidth。
   const prevScrollWidthRef = useRef(0);
 
   // セクションは本文表示、章は配下セクションの表示可否を表す共通の「展開」状態。
@@ -279,24 +279,12 @@ function PlotBoard({
     const pane = paneRef.current;
     if (!pane) return;
 
-    const prevWidth = prevScrollWidthRef.current;
-    const nextWidth = pane.scrollWidth;
-    const maxScrollLeft = Math.max(0, nextWidth - pane.clientWidth);
-
-    if (isPinnedToRightRef.current) {
-      // 右端（縦書きの先頭側）に張り付いていたら、その位置を維持する。
-      pane.scrollLeft = maxScrollLeft;
-    } else if (prevWidth && nextWidth !== prevWidth) {
-      // カードが左側へ伸縮しても柱（見えている位置）が動かないよう、増減分だけ補正する。
-      // これは「勝手に別の場所へスクロール」ではなく、見た目を据え置くための補正。
-      pane.scrollLeft = Math.max(
-        0,
-        Math.min(maxScrollLeft, pane.scrollLeft + (nextWidth - prevWidth)),
-      );
+    if (prevScrollWidthRef.current === 0) {
+      // 初回のみ：縦書きの先頭（右端）を表示する。以降の開閉・編集では自動移動しない。
+      pane.scrollLeft = Math.max(0, pane.scrollWidth - pane.clientWidth);
     }
-
-    prevScrollWidthRef.current = nextWidth;
-  }, [bodyColumns, cards]);
+    prevScrollWidthRef.current = pane.scrollWidth;
+  }, [bodyColumns, cards.length]);
 
   useLayoutEffect(() => {
     if (!contextMenu) return;
@@ -375,7 +363,37 @@ function PlotBoard({
     isPinnedToRightRef.current = maxScrollLeft <= 0 || Math.abs(pane.scrollLeft - maxScrollLeft) < 2;
   };
 
+  /** トグル対象カードの柱（番号バッジ）の画面位置。再レイアウト後に同じ位置へ戻すための基準。 */
+  const numScreenRight = (cardId: string): number | null => {
+    const pane = paneRef.current;
+    const numEl = pane?.querySelector<HTMLElement>(
+      `[data-plot-card-id="${CSS.escape(cardId)}"] .plotCardNum`,
+    );
+    if (!pane || !numEl) return null;
+    return numEl.getBoundingClientRect().right - pane.getBoundingClientRect().left;
+  };
+
   const toggleCard = (cardId: string) => {
+    // トグル前に柱の画面位置を記録。開閉で本文幅が変わっても柱の見た目位置を据え置く。
+    // 再レイアウトが複数フレームに分かれても追従できるよう、数フレーム合わせ直す。
+    const pane = paneRef.current;
+    const beforeRight = numScreenRight(cardId);
+    if (pane && beforeRight !== null) {
+      let frames = 4;
+      const repin = () => {
+        const currentRight = numScreenRight(cardId);
+        if (currentRight !== null) {
+          const maxScrollLeft = Math.max(0, pane.scrollWidth - pane.clientWidth);
+          pane.scrollLeft = Math.max(
+            0,
+            Math.min(maxScrollLeft, pane.scrollLeft + (currentRight - beforeRight)),
+          );
+        }
+        if (--frames > 0) requestAnimationFrame(repin);
+      };
+      requestAnimationFrame(repin);
+    }
+
     if (managerMode) {
       onCardsChange((current) =>
         current.map((card) =>
