@@ -15,6 +15,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import type { PlotCard } from "../../types";
+import { getScaledFixedMenuPosition } from "../../utils/contextMenuPosition";
 
 // Portal target for plot dialogs. PlotPane lives inside the right sidebar, which
 // is scaled by the UI zoom (--ui-font-scale); rendering a modal there would
@@ -29,6 +30,8 @@ type PlotCardStyle = CSSProperties & {
   "--plot-body-columns"?: number;
 };
 
+const PLOT_CONTEXT_MENU_WIDTH = 180;
+const PLOT_CONTEXT_MENU_HEIGHT = 92;
 const DEFAULT_ROWS_PER_COLUMN = 24;
 
 const countTextUnits = (text: string) => Array.from(text).length;
@@ -65,6 +68,13 @@ const renumberPlotCards = (cards: PlotCard[]) => {
     if (card.kind === "chapter") return { ...card, num: "" };
     sectionIndex += 1;
     return { ...card, num: String(sectionIndex).padStart(3, "0") };
+  });
+};
+
+const getPlotContextMenuStyle = (x: number, y: number): CSSProperties => {
+  return getScaledFixedMenuPosition(x, y, {
+    width: PLOT_CONTEXT_MENU_WIDTH,
+    height: PLOT_CONTEXT_MENU_HEIGHT,
   });
 };
 
@@ -204,6 +214,9 @@ function PlotBoard({
   const paneRef = useRef<HTMLDivElement | null>(null);
   const isPinnedToRightRef = useRef(true);
   const draggingCardIdRef = useRef<string | null>(null);
+  // 展開直後にそのカードの柱（右端）へスクロールを合わせるための予約。
+  const pendingExpandScrollRef = useRef<string | null>(null);
+  const [expandTick, setExpandTick] = useState(0);
 
   // セクションは本文表示、章は配下セクションの表示可否を表す共通の「展開」状態。
   // 管理画面は card.managerCollapsed（右サイドバーの expanded とは独立・保存対象）を見る。
@@ -265,10 +278,32 @@ function PlotBoard({
 
   useLayoutEffect(() => {
     const pane = paneRef.current;
-    if (!pane || !isPinnedToRightRef.current) return;
+    if (!pane) return;
 
-    pane.scrollLeft = Math.max(0, pane.scrollWidth - pane.clientWidth);
-  }, [bodyColumns, cards.length]);
+    const maxScrollLeft = Math.max(0, pane.scrollWidth - pane.clientWidth);
+
+    // 展開予約があれば、そのカードの柱（右端）をビューポート右端へ寄せる。
+    // 縦書きでは柱が読み始め（起点）なので、本文は左へ読み進める形になる。
+    const pendingId = pendingExpandScrollRef.current;
+    if (pendingId) {
+      const cardEl = pane.querySelector<HTMLElement>(
+        `[data-plot-card-id="${CSS.escape(pendingId)}"]`,
+      );
+      if (cardEl) {
+        const paneRect = pane.getBoundingClientRect();
+        const cardRect = cardEl.getBoundingClientRect();
+        const cardRightInContent = pane.scrollLeft + (cardRect.right - paneRect.left);
+        const target = cardRightInContent - pane.clientWidth;
+        pane.scrollLeft = Math.max(0, Math.min(maxScrollLeft, target));
+        pendingExpandScrollRef.current = null;
+        isPinnedToRightRef.current = Math.abs(pane.scrollLeft - maxScrollLeft) < 2;
+        return;
+      }
+    }
+
+    if (!isPinnedToRightRef.current) return;
+    pane.scrollLeft = maxScrollLeft;
+  }, [bodyColumns, cards.length, expandTick]);
 
   useLayoutEffect(() => {
     if (!contextMenu) return;
@@ -348,6 +383,14 @@ function PlotBoard({
   };
 
   const toggleCard = (cardId: string) => {
+    const card = cards.find((item) => item.id === cardId);
+    // これから「展開」になる場合だけ、柱起点へのスクロールを予約する。
+    const willExpand = managerMode ? card?.managerCollapsed === true : card?.expanded === false;
+    if (willExpand) {
+      pendingExpandScrollRef.current = cardId;
+      setExpandTick((tick) => tick + 1);
+    }
+
     if (managerMode) {
       onCardsChange((current) =>
         current.map((card) =>
@@ -382,11 +425,8 @@ function PlotBoard({
   };
 
   const handleCardContextMenu = (cardId: string, event: ReactMouseEvent<HTMLElement>) => {
-    // 編集可能なテキスト欄ではブラウザ標準メニュー（コピー/貼り付け）を優先する。
-    if ((event.target as HTMLElement).closest("textarea:not([readonly]), input:not([readonly])")) {
-      return;
-    }
     event.preventDefault();
+    event.stopPropagation();
     setContextMenu({ cardId, x: event.clientX, y: event.clientY });
   };
 
@@ -689,7 +729,8 @@ function PlotBoard({
         />
       )}
       {contextMenu &&
-        (() => {
+        createPortal(
+          (() => {
           const card = cards.find((item) => item.id === contextMenu.cardId);
           if (!card) return null;
           const isChapter = card.kind === "chapter";
@@ -699,7 +740,7 @@ function PlotBoard({
               ref={contextMenuRef}
               className="editorContextMenu plotContextMenu"
               role="menu"
-              style={{ left: contextMenu.x, top: contextMenu.y }}
+              style={getPlotContextMenuStyle(contextMenu.x, contextMenu.y)}
             >
               <div className="contextMenuSection">
                 {!isChapter && (
@@ -728,7 +769,9 @@ function PlotBoard({
               </div>
             </div>
           );
-        })()}
+        })(),
+          modalRoot(),
+        )}
     </>
   );
 }
