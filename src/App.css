@@ -3690,6 +3690,7 @@ body {
 
 .rightTabs {
   display: inline-flex;
+  flex: 0 0 auto;
   gap: 2px;
   padding: 2px;
   border: 0.5px solid var(--border-subtle);
@@ -3697,16 +3698,58 @@ body {
   background: #1d1e24;
 }
 
+.plotPaneHeaderActions,
+.rightSidebarChromeActions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+.plotPaneHeaderActions {
+  margin-left: auto;
+  padding-left: 2px;
+}
+
+.pushRightSidebarChromeActions {
+  margin-left: auto;
+}
+
+.plotHeaderActionButton {
+  color: var(--text-muted);
+}
+
+.plotHeaderActionButton span {
+  line-height: 1;
+}
+
+.plotHeaderActionButton svg {
+  width: 15px;
+  height: 15px;
+}
+
 .rightTab {
-  min-width: 58px;
+  display: grid;
+  width: 28px;
+  min-width: 28px;
   height: 26px;
+  place-items: center;
   border: 0;
   border-radius: 5px;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
+  line-height: 1;
+}
+
+.rightTab svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
 }
 
 .rightTab:hover {
@@ -4395,15 +4438,6 @@ body {
   writing-mode: horizontal-tb;
 }
 
-.plotTrackActions {
-  display: grid;
-  flex: 0 0 40px;
-  align-self: center;
-  justify-items: center;
-  gap: 8px;
-  margin: 0 8px;
-}
-
 .plotCard {
   display: flex;
   min-width: 0;
@@ -4627,27 +4661,6 @@ body {
 .plotContextMenu .plotContextDanger:hover:not(:disabled) {
   background: rgba(217, 115, 115, 0.12);
   color: var(--danger);
-}
-
-.plotAddButton {
-  display: inline-grid;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  place-items: center;
-  align-self: center;
-  margin: 0 8px;
-  border: 0.5px dashed var(--border-strong);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-faint);
-  cursor: pointer;
-  font-size: 16px;
-}
-
-.plotAddButton:hover {
-  border-color: rgba(201, 168, 74, 0.5);
-  color: var(--accent);
 }
 
 .plotManagerModal {
@@ -5694,7 +5707,6 @@ body {
 .appShell[data-theme] .newTabActions button,
 .appShell[data-theme] .addButton,
 .appShell[data-theme] .ideaAdd,
-.appShell[data-theme] .plotAddButton,
 .appShell[data-theme] .themePickerButton {
   border-radius: var(--radius-button);
 }
@@ -5752,7 +5764,6 @@ body {
 .appShell[data-theme] .modalForm select:focus,
 .appShell[data-theme] .modalForm textarea:focus,
 .appShell[data-theme] .ideaAdd:hover,
-.appShell[data-theme] .plotAddButton:hover,
 .appShell[data-theme] .expandedPlotCard .plotCardNum { border-color: var(--accent-border); }
 .appShell[data-theme] .projectSearchInput:focus,
 .appShell[data-theme] .modalForm input:focus-visible,
@@ -6567,6 +6578,105 @@ body {
   --silkdown-link-color: #82d3f7;
 }
 
+/* Promise: adapted from Iwate Bank's deep green, trust-first public banking palette. */
+.appShell[data-theme="promise-light"] {
+  --on-accent: #fff;
+  --brand-gradient: linear-gradient(135deg, #005f38 0%, #00834f 48%, #58bd7c 100%);
+  --action-gradient: linear-gradient(135deg, #006b3f 0%, #00834f 58%, #34a865 100%);
+  --action-text: #fff;
+  --bg-root: #eaf4ee;
+  --bg-primary: #fbfffc;
+  --bg-secondary: #f3faf5;
+  --bg-tertiary: #dceee4;
+  --bg-panel: #fbfffc;
+  --bg-panel-strong: #eff8f2;
+  --border-subtle: rgba(0, 88, 51, 0.09);
+  --border-strong: rgba(0, 88, 51, 0.18);
+  --text-primary: #10241b;
+  --text-secondary: #34483d;
+  --text-muted: #64766d;
+  --text-faint: #91a099;
+  --accent: #006b3f;
+  --accent-strong: #004f31;
+  --success: #207b4c;
+  --warning: #8b6500;
+  --danger: #bd3f45;
+  --control-hover: rgba(0, 107, 63, 0.08);
+  --accent-soft: rgba(0, 107, 63, 0.12);
+  --accent-border: rgba(0, 107, 63, 0.38);
+  --danger-soft: rgba(189, 63, 69, 0.09);
+  --editor-bg:
+    radial-gradient(circle at 82% 12%, rgba(88, 189, 124, 0.2), transparent 34%),
+    linear-gradient(135deg, #ffffff 0%, #f6fcf8 50%, #eaf4ee 100%);
+  --card-bg: #fbfffc;
+  --card-hover: #eef8f2;
+  --topbar-bg: var(--brand-gradient);
+  --sidebar-bg: linear-gradient(180deg, #f8fdf9 0%, #eaf4ee 100%);
+  --sidebar-socket-bg: #eaf4ee;
+  --sidebar-socket-top-bg: #f8fdf9;
+  --topbar-text-primary: #fff;
+  --topbar-text-secondary: #f3fff8;
+  --topbar-text-muted: #d8f2e2;
+  --topbar-text-faint: #aee0c2;
+  --radius-control: 14px;
+  --radius-card: 24px;
+  --radius-button: 999px;
+  --shadow-popover: 0 14px 34px rgba(0, 74, 44, 0.12);
+  --shadow-modal: 0 24px 60px rgba(0, 74, 44, 0.16);
+  --silkdown-code-bg: rgba(0, 107, 63, 0.08);
+  --silkdown-link-color: #005f38;
+}
+
+.appShell[data-theme="promise-dark"] {
+  color-scheme: dark;
+  --on-accent: #062015;
+  --brand-gradient: linear-gradient(135deg, #052819 0%, #006b3f 56%, #72d995 100%);
+  --action-gradient: linear-gradient(135deg, #48c176 0%, #72d995 48%, #b4f0c3 100%);
+  --action-text: #062015;
+  --bg-root: #06120d;
+  --bg-primary: #0b1d14;
+  --bg-secondary: #10271b;
+  --bg-tertiary: #183523;
+  --bg-panel: #0d2117;
+  --bg-panel-strong: #143020;
+  --border-subtle: rgba(180, 240, 195, 0.09);
+  --border-strong: rgba(180, 240, 195, 0.18);
+  --text-primary: #f4fff7;
+  --text-secondary: #d5ebdd;
+  --text-muted: #9db5a7;
+  --text-faint: #718779;
+  --accent: #72d995;
+  --accent-strong: #b4f0c3;
+  --success: #79d996;
+  --warning: #e0c264;
+  --danger: #f07b7f;
+  --overlay: rgba(3, 10, 7, 0.78);
+  --control-hover: rgba(114, 217, 149, 0.1);
+  --accent-soft: rgba(114, 217, 149, 0.15);
+  --accent-border: rgba(114, 217, 149, 0.48);
+  --danger-soft: rgba(240, 123, 127, 0.14);
+  --editor-bg:
+    radial-gradient(circle at 80% 10%, rgba(114, 217, 149, 0.16), transparent 34%),
+    linear-gradient(135deg, #0d2117 0%, #0a1a12 54%, #06120d 100%);
+  --card-bg: #0f261a;
+  --card-hover: #173322;
+  --topbar-bg: var(--brand-gradient);
+  --topbar-text-primary: #f4fff7;
+  --topbar-text-secondary: #e4f8eb;
+  --topbar-text-muted: #bfeaca;
+  --topbar-text-faint: #87c99c;
+  --sidebar-bg: linear-gradient(180deg, #0b1d14 0%, #07150f 100%);
+  --sidebar-socket-bg: #07150f;
+  --sidebar-socket-top-bg: #0b1d14;
+  --radius-control: 14px;
+  --radius-card: 24px;
+  --radius-button: 999px;
+  --shadow-popover: 0 16px 38px rgba(0, 0, 0, 0.32);
+  --shadow-modal: 0 26px 70px rgba(0, 0, 0, 0.42);
+  --silkdown-code-bg: rgba(114, 217, 149, 0.11);
+  --silkdown-link-color: #b4f0c3;
+}
+
 /* Air: adapted from Suzuka Point Getters' cyan-to-deep-blue recruiting palette. */
 .appShell[data-theme="air-light"] {
   --on-accent: #fff;
@@ -6869,30 +6979,139 @@ body {
   --silkdown-link-color: #ffc166;
 }
 
-.appShell:is([data-theme^="air-"], [data-theme^="passion-"], [data-theme^="energy-"]) :is(
+.appShell:is([data-theme^="promise-"], [data-theme^="air-"], [data-theme^="passion-"], [data-theme^="energy-"]) :is(
   .themePickerButton,
   .modalActions button,
   .sidebarAddButton,
   .newTabActions button,
   .addButton,
-  .ideaAdd,
-  .plotAddButton
+  .ideaAdd
 ) {
   border-color: transparent;
   background: var(--action-gradient, var(--brand-gradient));
   color: var(--action-text, var(--on-accent));
 }
 
-.appShell:is([data-theme^="air-"], [data-theme^="passion-"], [data-theme^="energy-"]) :is(
+.appShell:is([data-theme^="promise-"], [data-theme^="air-"], [data-theme^="passion-"], [data-theme^="energy-"]) :is(
   .themePickerButton,
   .modalActions button,
   .sidebarAddButton,
   .newTabActions button,
   .addButton,
-  .ideaAdd,
-  .plotAddButton
+  .ideaAdd
 ):hover {
   filter: brightness(1.06);
+}
+
+.appShell[data-theme^="promise-"] .appFrame {
+  border-color: transparent;
+  border-radius: 0;
+}
+
+.appShell[data-theme^="promise-"] .workspace,
+.appShell[data-theme^="promise-"] .editorColumn {
+  background: var(--editor-bg);
+}
+
+.appShell[data-theme^="promise-"] .workspace {
+  position: relative;
+}
+
+.appShell[data-theme^="promise-"] :is(.workspaceSidebar, .editorColumn, .rightSidebar) {
+  position: relative;
+}
+
+.appShell[data-theme^="promise-"] .workspaceSidebar,
+.appShell[data-theme^="promise-"] .rightSidebar {
+  z-index: 2;
+}
+
+.appShell[data-theme^="promise-"] .editorColumn {
+  z-index: 1;
+  overflow: visible;
+}
+
+.appShell[data-theme^="promise-"] .workspace:has(.rightSidebar) .editorColumn::after {
+  position: absolute;
+  right: calc(-1 * var(--radius-card));
+  bottom: 0;
+  z-index: 0;
+  width: var(--radius-card);
+  height: var(--radius-card);
+  background: var(--sidebar-socket-bg);
+  content: "";
+  pointer-events: none;
+}
+
+/* Mirror the bottom socket at the top corners, where each sidebar's inner
+   radius would otherwise leave a wedge of editor-bg exposed against the flat
+   topbar — a seam made obvious by the topbar's contrast. The editorFrame's
+   ::before/::after anchor to the same inner edges as the editorColumn (it
+   spans the editor width) and overhang into the sidebars; the sidebar paints
+   over them except in the rounded-corner wedge, which they fill. The fill
+   matches the sidebar gradient's TOP stop, not the bottom one the lower
+   socket uses, so the seam disappears while the rounded corner stays. */
+.appShell[data-theme^="promise-"] .editorFrame {
+  position: relative;
+}
+
+.appShell[data-theme^="promise-"] .workspace:has(.workspaceSidebar) .editorFrame::before,
+.appShell[data-theme^="promise-"] .workspace:has(.rightSidebar) .editorFrame::after {
+  position: absolute;
+  top: 0;
+  z-index: 0;
+  width: var(--radius-card);
+  height: var(--radius-card);
+  background: var(--sidebar-socket-top-bg);
+  content: "";
+  pointer-events: none;
+}
+
+.appShell[data-theme^="promise-"] .workspace:has(.workspaceSidebar) .editorFrame::before {
+  left: calc(-1 * var(--radius-card));
+}
+
+.appShell[data-theme^="promise-"] .workspace:has(.rightSidebar) .editorFrame::after {
+  right: calc(-1 * var(--radius-card));
+}
+
+.appShell[data-theme^="promise-"] .workspaceSidebar {
+  border-radius: 0 var(--radius-card) var(--radius-card) 0;
+}
+
+.appShell[data-theme^="promise-"] .rightSidebar {
+  border-radius: var(--radius-card) 0 0 var(--radius-card);
+}
+
+.appShell[data-theme^="promise-"] :is(.editorFrame, .editor, .editorContent, .verticalTypewriterShell) {
+  border-radius: 18px 18px 0 0;
+}
+
+.appShell[data-theme^="promise-"] .statusbar {
+  border-top-color: color-mix(in srgb, var(--accent) 10%, transparent);
+  /* Let the editorColumn's gradient show through so the bar reads as part of
+     the editor surface. Re-painting var(--editor-bg) here re-anchors the
+     radial gradient to the 26px bar and leaves a visible seam. */
+  background: transparent;
+  padding-right: calc(14px + var(--radius-card));
+}
+
+.appShell[data-theme^="promise-"] .sidebarFooter {
+  padding-bottom: 12px;
+}
+
+.appShell[data-theme^="promise-"] :is(.menuPopover, .editorContextMenu) {
+  border-radius: var(--radius-card);
+}
+
+.appShell[data-theme^="promise-"] :is(.editor, .editorContent, .verticalTypewriterShell) {
+  overflow: hidden;
+}
+
+.appShell[data-theme^="promise-"] :is(.activeRightTab, .exportProgressBar i) {
+  border-color: transparent;
+  background: var(--action-gradient);
+  color: var(--action-text);
 }
 
 .appShell[data-theme^="energy-"] .activeRightTab {
@@ -6913,8 +7132,7 @@ body {
 .appShell[data-theme^="commerce-"] .sidebarAddButton,
 .appShell[data-theme^="commerce-"] .newTabActions button,
 .appShell[data-theme^="commerce-"] .addButton,
-.appShell[data-theme^="commerce-"] .ideaAdd,
-.appShell[data-theme^="commerce-"] .plotAddButton {
+.appShell[data-theme^="commerce-"] .ideaAdd {
   border: 1px solid currentColor;
   background: transparent;
   box-shadow: -2px -2px 5px rgba(255, 255, 255, 0.82), 8px 8px 18px rgba(0, 0, 0, 0.2);
@@ -6926,8 +7144,7 @@ body {
 .appShell[data-theme="commerce-dark"] .sidebarAddButton,
 .appShell[data-theme="commerce-dark"] .newTabActions button,
 .appShell[data-theme="commerce-dark"] .addButton,
-.appShell[data-theme="commerce-dark"] .ideaAdd,
-.appShell[data-theme="commerce-dark"] .plotAddButton {
+.appShell[data-theme="commerce-dark"] .ideaAdd {
   box-shadow: -2px -2px 5px rgba(255, 255, 255, 0.055), 8px 8px 18px rgba(0, 0, 0, 0.48);
 }
 
@@ -6995,6 +7212,14 @@ body {
 .themePreview-commerce-dark::before { background: #292e32; }
 .themePreview-commerce-dark i { background: #f5f6f7; }
 .themePreview-commerce-dark b { background: #42b8ee; }
+.themePreview-promise-light { background: #fbfffc; }
+.themePreview-promise-light::before { background: #eaf4ee; }
+.themePreview-promise-light i { background: #10241b; }
+.themePreview-promise-light b { background: linear-gradient(135deg, #006b3f, #58bd7c); }
+.themePreview-promise-dark { border-color: #21402c; background: #06120d; }
+.themePreview-promise-dark::before { background: #0f261a; }
+.themePreview-promise-dark i { background: #f4fff7; }
+.themePreview-promise-dark b { background: linear-gradient(135deg, #48c176, #b4f0c3); }
 .themePreview-air-light { background: #fff; }
 .themePreview-air-light::before { background: #eaf8ff; }
 .themePreview-air-light i { background: #060523; }
