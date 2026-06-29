@@ -6612,8 +6612,8 @@ body {
   --card-hover: #eef8f2;
   --topbar-bg: var(--brand-gradient);
   --sidebar-bg: linear-gradient(180deg, #f8fdf9 0%, #eaf4ee 100%);
-  --sidebar-socket-bg: #eaf4ee;
-  --sidebar-socket-top-bg: #f8fdf9;
+  --canvas-bg: #d6e8de;
+  --card-float-shadow: 0 4px 14px rgba(0, 74, 44, 0.08);
   --topbar-text-primary: #fff;
   --topbar-text-secondary: #f3fff8;
   --topbar-text-muted: #d8f2e2;
@@ -6666,8 +6666,8 @@ body {
   --topbar-text-muted: #bfeaca;
   --topbar-text-faint: #87c99c;
   --sidebar-bg: linear-gradient(180deg, #0b1d14 0%, #07150f 100%);
-  --sidebar-socket-bg: #07150f;
-  --sidebar-socket-top-bg: #0b1d14;
+  --canvas-bg: #05100b;
+  --card-float-shadow: 0 6px 18px rgba(0, 0, 0, 0.34);
   --radius-control: 14px;
   --radius-card: 24px;
   --radius-button: 999px;
@@ -7008,92 +7008,43 @@ body {
   border-radius: 0;
 }
 
-.appShell[data-theme^="promise-"] .workspace,
+/* Promise: the left sidebar, editor and right sidebar float as rounded cards
+   on one flat canvas, separated by a gap. Because every rounded corner now
+   reveals the SAME backdrop colour, no seam can form between panels — this is
+   why the old per-corner "socket" patches are gone entirely. The editor
+   gradient is painted once, on .editorColumn; inner layers stay transparent so
+   it never re-anchors to a smaller box and re-seams (the bug that showed at the
+   statusbar and scroll edges). */
+.appShell[data-theme^="promise-"] .workspace {
+  gap: 8px;
+  padding: 8px;
+  background: var(--canvas-bg);
+}
+
+.appShell[data-theme^="promise-"] :is(.workspaceSidebar, .editorColumn, .rightSidebar) {
+  border: none;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  box-shadow: var(--card-float-shadow);
+}
+
 .appShell[data-theme^="promise-"] .editorColumn {
   background: var(--editor-bg);
 }
 
-.appShell[data-theme^="promise-"] .workspace {
-  position: relative;
+.appShell[data-theme^="promise-"] :is(.workspaceSidebar, .rightSidebar) {
+  background: var(--sidebar-bg);
 }
 
-.appShell[data-theme^="promise-"] :is(.workspaceSidebar, .editorColumn, .rightSidebar) {
-  position: relative;
-}
-
-.appShell[data-theme^="promise-"] .workspaceSidebar,
-.appShell[data-theme^="promise-"] .rightSidebar {
-  z-index: 2;
-}
-
-.appShell[data-theme^="promise-"] .editorColumn {
-  z-index: 1;
-  overflow: visible;
-}
-
-.appShell[data-theme^="promise-"] .workspace:has(.rightSidebar) .editorColumn::after {
-  position: absolute;
-  right: calc(-1 * var(--radius-card));
-  bottom: 0;
-  z-index: 0;
-  width: var(--radius-card);
-  height: var(--radius-card);
-  background: var(--sidebar-socket-bg);
-  content: "";
-  pointer-events: none;
-}
-
-/* Mirror the bottom socket at the top corners, where each sidebar's inner
-   radius would otherwise leave a wedge of editor-bg exposed against the flat
-   topbar — a seam made obvious by the topbar's contrast. The editorFrame's
-   ::before/::after anchor to the same inner edges as the editorColumn (it
-   spans the editor width) and overhang into the sidebars; the sidebar paints
-   over them except in the rounded-corner wedge, which they fill. The fill
-   matches the sidebar gradient's TOP stop, not the bottom one the lower
-   socket uses, so the seam disappears while the rounded corner stays. */
-.appShell[data-theme^="promise-"] .editorFrame {
-  position: relative;
-}
-
-.appShell[data-theme^="promise-"] .workspace:has(.workspaceSidebar) .editorFrame::before,
-.appShell[data-theme^="promise-"] .workspace:has(.rightSidebar) .editorFrame::after {
-  position: absolute;
-  top: 0;
-  z-index: 0;
-  width: var(--radius-card);
-  height: var(--radius-card);
-  background: var(--sidebar-socket-top-bg);
-  content: "";
-  pointer-events: none;
-}
-
-.appShell[data-theme^="promise-"] .workspace:has(.workspaceSidebar) .editorFrame::before {
-  left: calc(-1 * var(--radius-card));
-}
-
-.appShell[data-theme^="promise-"] .workspace:has(.rightSidebar) .editorFrame::after {
-  right: calc(-1 * var(--radius-card));
-}
-
-.appShell[data-theme^="promise-"] .workspaceSidebar {
-  border-radius: 0 var(--radius-card) var(--radius-card) 0;
-}
-
-.appShell[data-theme^="promise-"] .rightSidebar {
-  border-radius: var(--radius-card) 0 0 var(--radius-card);
-}
-
-.appShell[data-theme^="promise-"] :is(.editorFrame, .editor, .editorContent, .verticalTypewriterShell) {
-  border-radius: 18px 18px 0 0;
+.appShell[data-theme^="promise-"] :is(.editor, .editorContent, .verticalTypewriterShell) {
+  background: transparent;
 }
 
 .appShell[data-theme^="promise-"] .statusbar {
+  /* Bottom of the editor card. Transparent so the card's single gradient shows
+     through; a hairline (not a fill) divides it from the editor. */
   border-top-color: color-mix(in srgb, var(--accent) 10%, transparent);
-  /* Let the editorColumn's gradient show through so the bar reads as part of
-     the editor surface. Re-painting var(--editor-bg) here re-anchors the
-     radial gradient to the 26px bar and leaves a visible seam. */
   background: transparent;
-  padding-right: calc(14px + var(--radius-card));
 }
 
 .appShell[data-theme^="promise-"] .sidebarFooter {
