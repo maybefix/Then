@@ -214,9 +214,8 @@ function PlotBoard({
   const paneRef = useRef<HTMLDivElement | null>(null);
   const isPinnedToRightRef = useRef(true);
   const draggingCardIdRef = useRef<string | null>(null);
-  // 展開直後にそのカードの柱（右端）へスクロールを合わせるための予約。
-  const pendingExpandScrollRef = useRef<string | null>(null);
-  const [expandTick, setExpandTick] = useState(0);
+  // 直前の scrollWidth。左側にカードが伸縮した分を補正して見た目を動かさないために使う。
+  const prevScrollWidthRef = useRef(0);
 
   // セクションは本文表示、章は配下セクションの表示可否を表す共通の「展開」状態。
   // 管理画面は card.managerCollapsed（右サイドバーの expanded とは独立・保存対象）を見る。
@@ -280,30 +279,24 @@ function PlotBoard({
     const pane = paneRef.current;
     if (!pane) return;
 
-    const maxScrollLeft = Math.max(0, pane.scrollWidth - pane.clientWidth);
+    const prevWidth = prevScrollWidthRef.current;
+    const nextWidth = pane.scrollWidth;
+    const maxScrollLeft = Math.max(0, nextWidth - pane.clientWidth);
 
-    // 展開予約があれば、そのカードの柱（右端）をビューポート右端へ寄せる。
-    // 縦書きでは柱が読み始め（起点）なので、本文は左へ読み進める形になる。
-    const pendingId = pendingExpandScrollRef.current;
-    if (pendingId) {
-      const cardEl = pane.querySelector<HTMLElement>(
-        `[data-plot-card-id="${CSS.escape(pendingId)}"]`,
+    if (isPinnedToRightRef.current) {
+      // 右端（縦書きの先頭側）に張り付いていたら、その位置を維持する。
+      pane.scrollLeft = maxScrollLeft;
+    } else if (prevWidth && nextWidth !== prevWidth) {
+      // カードが左側へ伸縮しても柱（見えている位置）が動かないよう、増減分だけ補正する。
+      // これは「勝手に別の場所へスクロール」ではなく、見た目を据え置くための補正。
+      pane.scrollLeft = Math.max(
+        0,
+        Math.min(maxScrollLeft, pane.scrollLeft + (nextWidth - prevWidth)),
       );
-      if (cardEl) {
-        const paneRect = pane.getBoundingClientRect();
-        const cardRect = cardEl.getBoundingClientRect();
-        const cardRightInContent = pane.scrollLeft + (cardRect.right - paneRect.left);
-        const target = cardRightInContent - pane.clientWidth;
-        pane.scrollLeft = Math.max(0, Math.min(maxScrollLeft, target));
-        pendingExpandScrollRef.current = null;
-        isPinnedToRightRef.current = Math.abs(pane.scrollLeft - maxScrollLeft) < 2;
-        return;
-      }
     }
 
-    if (!isPinnedToRightRef.current) return;
-    pane.scrollLeft = maxScrollLeft;
-  }, [bodyColumns, cards.length, expandTick]);
+    prevScrollWidthRef.current = nextWidth;
+  }, [bodyColumns, cards]);
 
   useLayoutEffect(() => {
     if (!contextMenu) return;
@@ -383,14 +376,6 @@ function PlotBoard({
   };
 
   const toggleCard = (cardId: string) => {
-    const card = cards.find((item) => item.id === cardId);
-    // これから「展開」になる場合だけ、柱起点へのスクロールを予約する。
-    const willExpand = managerMode ? card?.managerCollapsed === true : card?.expanded === false;
-    if (willExpand) {
-      pendingExpandScrollRef.current = cardId;
-      setExpandTick((tick) => tick + 1);
-    }
-
     if (managerMode) {
       onCardsChange((current) =>
         current.map((card) =>
