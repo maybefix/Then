@@ -19,6 +19,12 @@ type IdeaPaneProps = {
   onToggleUsed: (threadId: string, fragmentId: string) => void;
   onDeleteFragment: (threadId: string, fragmentId: string) => void;
   onMoveFragment: (fromThreadId: string, fragmentId: string, toThreadId: string) => void;
+  onReorderFragment: (
+    threadId: string,
+    fragmentId: string,
+    targetFragmentId: string,
+    position: "before" | "after",
+  ) => void;
   onInsertFragment: (threadId: string, fragmentId: string) => void;
   onInsertThread: (threadId: string) => void;
   onFragmentDragStart: (
@@ -136,6 +142,7 @@ export function IdeaPane({
   onToggleUsed,
   onDeleteFragment,
   onMoveFragment,
+  onReorderFragment,
   onInsertFragment,
   onInsertThread,
   onFragmentDragStart,
@@ -156,6 +163,12 @@ export function IdeaPane({
   const titleInputRef = useRef<HTMLInputElement>(null);
   const fragmentListRef = useRef<HTMLDivElement>(null);
   const focusTitleRef = useRef(false);
+  const fragmentDragSourceRef = useRef<{ threadId: string; fragmentId: string } | null>(null);
+  const lastReorderRef = useRef<string | null>(null);
+  const [reorderTarget, setReorderTarget] = useState<{
+    fragmentId: string;
+    position: "before" | "after";
+  } | null>(null);
 
   const selected = useMemo(
     () => threads.find((thread) => thread.id === selectedId) ?? null,
@@ -248,6 +261,56 @@ export function IdeaPane({
     const id = onCreateThread();
     focusTitleRef.current = true;
     openThread(id);
+  };
+
+  const handleFragmentDragStartLocal = (
+    event: DragEvent<HTMLElement>,
+    threadId: string,
+    fragmentId: string,
+  ) => {
+    fragmentDragSourceRef.current = { threadId, fragmentId };
+    lastReorderRef.current = null;
+    event.dataTransfer.effectAllowed = "copyMove";
+    onFragmentDragStart(event, threadId, fragmentId);
+  };
+
+  const handleFragmentDragEndLocal = () => {
+    fragmentDragSourceRef.current = null;
+    lastReorderRef.current = null;
+    setReorderTarget(null);
+    onFragmentDragEnd();
+  };
+
+  const handleFragmentDragOver = (
+    event: DragEvent<HTMLElement>,
+    threadId: string,
+    targetFragmentId: string,
+  ) => {
+    const source = fragmentDragSourceRef.current;
+    if (!source || source.threadId !== threadId || source.fragmentId === targetFragmentId) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const position = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+    const reorderKey = `${source.fragmentId}:${targetFragmentId}:${position}`;
+    setReorderTarget({ fragmentId: targetFragmentId, position });
+
+    if (lastReorderRef.current === reorderKey) return;
+    lastReorderRef.current = reorderKey;
+    onReorderFragment(threadId, source.fragmentId, targetFragmentId, position);
+  };
+
+  const handleFragmentDrop = (event: DragEvent<HTMLElement>) => {
+    if (!fragmentDragSourceRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    lastReorderRef.current = null;
+    setReorderTarget(null);
   };
 
   return (
@@ -480,16 +543,24 @@ export function IdeaPane({
                         key={fragment.id}
                         className={`ideaFragment ${fragment.used ? "isUsed" : ""} ${
                           draggingId === fragment.id ? "isDragging" : ""
+                        } ${
+                          reorderTarget?.fragmentId === fragment.id
+                            ? `isReorderTarget isReorder${reorderTarget.position}`
+                            : ""
                         }`}
+                        onDragOver={(event) =>
+                          handleFragmentDragOver(event, selected.id, fragment.id)
+                        }
+                        onDrop={handleFragmentDrop}
                       >
                         <span
                           className="ideaDragHandle"
                           draggable
-                          title="ドラッグで本文へ"
+                          title="ドラッグで並び替え / 本文へ"
                           onDragStart={(event) =>
-                            onFragmentDragStart(event, selected.id, fragment.id)
+                            handleFragmentDragStartLocal(event, selected.id, fragment.id)
                           }
-                          onDragEnd={onFragmentDragEnd}
+                          onDragEnd={handleFragmentDragEndLocal}
                         >
                           <GripIcon />
                         </span>

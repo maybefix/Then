@@ -96,6 +96,7 @@ import {
   upsertRecentWorkspace,
 } from "./utils/projectTree";
 import { logHeadingDnd } from "./utils/headingDndDiagnostics";
+import { getScaledFixedMenuPosition } from "./utils/contextMenuPosition";
 import {
   exportFontFamilies,
   type LoadedExportSource,
@@ -109,6 +110,8 @@ const scratchFileName = "無題.txt";
 const newTabName = "新しいタブ";
 const scratchWorkspaceName = "一時ファイル";
 const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
+const EDITOR_CONTEXT_MENU_WIDTH = 236;
+const EDITOR_CONTEXT_MENU_HEIGHT = 292;
 
 type LayoutDirection = "start" | "center" | "end";
 
@@ -2217,8 +2220,8 @@ export default function App() {
 
     setEditorContextMenu({
       ...snapshot,
-      x: Math.min(event.clientX, window.innerWidth - 236),
-      y: Math.min(event.clientY, window.innerHeight - 292),
+      x: event.clientX,
+      y: event.clientY,
     });
   };
 
@@ -3931,7 +3934,7 @@ export default function App() {
     if (!fragment) return;
     draggingSnippetRef.current = { threadId, fragmentId, body: fragment.body };
     setDraggingId(fragmentId);
-    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.effectAllowed = "copyMove";
     event.dataTransfer.setData(SNIPPET_DRAG_MIME, fragmentId);
     event.dataTransfer.setData("text/plain", fragment.body);
   };
@@ -4108,6 +4111,41 @@ export default function App() {
       }),
     );
     showToast(`「${toThread.title}」へ移動しました`);
+  };
+
+  const reorderFragment = (
+    threadId: string,
+    fragmentId: string,
+    targetFragmentId: string,
+    position: "before" | "after",
+  ) => {
+    if (fragmentId === targetFragmentId) return;
+
+    updateIdeaThreads((threads) =>
+      threads.map((thread) => {
+        if (thread.id !== threadId) return thread;
+
+        const moving = thread.fragments.find((fragment) => fragment.id === fragmentId);
+        if (!moving || !thread.fragments.some((fragment) => fragment.id === targetFragmentId)) {
+          return thread;
+        }
+
+        const withoutMoving = thread.fragments.filter((fragment) => fragment.id !== fragmentId);
+        const targetIndex = withoutMoving.findIndex(
+          (fragment) => fragment.id === targetFragmentId,
+        );
+        if (targetIndex < 0) return thread;
+
+        const insertIndex = position === "after" ? targetIndex + 1 : targetIndex;
+        const fragments = [...withoutMoving];
+        fragments.splice(insertIndex, 0, moving);
+
+        const orderChanged = fragments.some(
+          (fragment, index) => fragment.id !== thread.fragments[index]?.id,
+        );
+        return orderChanged ? { ...thread, fragments, updatedAt: Date.now() } : thread;
+      }),
+    );
   };
 
   const createIdeaThread = (): string => {
@@ -5040,7 +5078,10 @@ export default function App() {
                       ref={editorContextMenuRef}
                       className="editorContextMenu"
                       role="menu"
-                      style={{ left: editorContextMenu.x, top: editorContextMenu.y }}
+                      style={getScaledFixedMenuPosition(editorContextMenu.x, editorContextMenu.y, {
+                        width: EDITOR_CONTEXT_MENU_WIDTH,
+                        height: EDITOR_CONTEXT_MENU_HEIGHT,
+                      })}
                     >
                       <div className="contextMenuSection">
                         <button
@@ -5205,6 +5246,7 @@ export default function App() {
                       onToggleUsed={toggleFragmentUsed}
                       onDeleteFragment={deleteFragment}
                       onMoveFragment={moveFragment}
+                      onReorderFragment={reorderFragment}
                       onInsertFragment={insertFragmentToEditor}
                       onInsertThread={insertThreadToEditor}
                       onFragmentDragStart={handleFragmentDragStart}
