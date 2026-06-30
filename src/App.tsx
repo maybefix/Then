@@ -45,6 +45,7 @@ import {
 import { ReferenceLayer } from "./components/references/ReferenceLayer";
 import { ReferencePane } from "./components/references/ReferencePane";
 import { IdeaPane } from "./components/snippets/IdeaPane";
+import { QuickIdeaModal } from "./components/snippets/QuickIdeaModal";
 import { StatusBar } from "./components/status/StatusBar";
 import type {
   DocumentAst,
@@ -1506,6 +1507,7 @@ export default function App() {
   const [dropIndicatorPos, setDropIndicatorPos] = useState<number | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isQuickIdeaModalOpen, setIsQuickIdeaModalOpen] = useState(false);
   const [isThemePickerModalOpen, setIsThemePickerModalOpen] = useState(false);
   const [shouldReturnToSettingsAfterThemePicker, setShouldReturnToSettingsAfterThemePicker] =
     useState(false);
@@ -2565,6 +2567,7 @@ export default function App() {
       setIsWorkspaceSwitcherOpen(false);
       setEditorContextMenu(null);
       setNotationModal(null);
+      setIsQuickIdeaModalOpen(false);
     };
 
     window.addEventListener("pointerdown", handlePointerDown);
@@ -2964,8 +2967,17 @@ export default function App() {
   const editorShortcutHandlerRef = useRef<(event: KeyboardEvent) => void>(() => {});
   editorShortcutHandlerRef.current = (event: KeyboardEvent) => {
     const mod = event.ctrlKey || event.metaKey;
-    if (!mod || event.altKey) return;
     const key = event.key;
+
+    // Ctrl+Alt+I：Idea ペインを開かずにメモを追加する。
+    if (mod && event.altKey && !event.shiftKey && (key === "i" || key === "I")) {
+      event.preventDefault();
+      setIsCommandPaletteOpen(false);
+      setIsQuickIdeaModalOpen(true);
+      return;
+    }
+
+    if (!mod || event.altKey) return;
 
     // Ctrl+P：コマンドパレット。印刷ダイアログの既定動作を抑止する。
     if (key === "p" || key === "P") {
@@ -3063,6 +3075,12 @@ export default function App() {
         hint: "Ctrl+I",
         disabledReason: wrapDisabled,
         run: applyEmphasisShortcut,
+      },
+      {
+        id: "idea-quick-capture",
+        label: "Idea にメモを追加…",
+        hint: "Ctrl+Alt+I",
+        run: () => setIsQuickIdeaModalOpen(true),
       },
       {
         id: "ruby",
@@ -5979,6 +5997,13 @@ export default function App() {
             <CommandPalette
               commands={buildPaletteCommands()}
               onClose={() => setIsCommandPaletteOpen(false)}
+            />
+          )}
+          {isQuickIdeaModalOpen && (
+            <QuickIdeaModal
+              threads={snippets}
+              onCapture={captureFragment}
+              onClose={() => setIsQuickIdeaModalOpen(false)}
             />
           )}
           {isSettingsModalOpen && (

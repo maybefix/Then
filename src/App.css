@@ -79,7 +79,8 @@ textarea {
 .rightSidebar,
 .statusbar,
 .editorContextMenu,
-.modal {
+.modal,
+.quickIdeaModal {
   zoom: var(--ui-font-scale, 1);
 }
 
@@ -2167,6 +2168,54 @@ body.thenPdfExporting .printExportViewport {
   color: var(--text-muted);
   font-size: 13px;
   text-align: center;
+}
+
+.quickIdeaBackdrop {
+  place-items: start center;
+  padding: 0 24px;
+  padding-top: min(16vh, 132px);
+}
+
+.quickIdeaModal {
+  width: min(680px, calc((100vw - 72px) / var(--ui-font-scale, 1)));
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.44);
+}
+
+.quickIdeaCaptureBox {
+  padding: 22px 22px 18px;
+  border: 0;
+  border-radius: inherit;
+  background: var(--bg-panel);
+}
+
+.quickIdeaModal .quickIdeaCaptureBox textarea {
+  min-height: 190px;
+  max-height: min(420px, calc((100vh - 320px) / var(--ui-font-scale, 1)));
+  font-size: 17px;
+  line-height: 1.75;
+}
+
+.quickIdeaModal .ideaCaptureRow {
+  margin-top: 14px;
+}
+
+.quickIdeaModal .quickIdeaDestSelect {
+  max-width: 68%;
+  height: 42px;
+  border-radius: 21px;
+  padding: 0 16px;
+  font-size: 15px;
+}
+
+.quickIdeaModal .quickIdeaSubmit {
+  height: 42px;
+  border-radius: 21px;
+  padding: 0 22px;
+  font-size: 15px;
 }
 
 .settingsModal .modalForm {
