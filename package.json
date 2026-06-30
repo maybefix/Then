@@ -1,7 +1,7 @@
 {
   "name": "then",
   "private": true,
-  "version": "0.3.4",
+  "version": "0.3.5",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -34,6 +34,7 @@
     "@tiptap/pm": "^2.11.5",
     "codemirror": "^6.0.2",
     "jszip": "^3.10.1",
+    "pdfjs-dist": "^6.1.200",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

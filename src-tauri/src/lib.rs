@@ -14,6 +14,23 @@ struct TextDocument {
     content: String,
 }
 
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReferenceFileInfo {
+    source_path: String,
+    name: String,
+    kind: String,
+    size: u64,
+    imported: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReferenceBinary {
+    mime: String,
+    data_base64: String,
+}
+
 #[derive(Serialize)]
 struct ExportResult {
     path: String,
@@ -164,6 +181,49 @@ struct PlotCardConfig {
     manager_collapsed: bool,
 }
 
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReferenceCardConfig {
+    id: String,
+    source_path: String,
+    kind: String,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    z_index: i64,
+    collapsed: bool,
+    pinned: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    scroll_top: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    zoom: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    page: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    editing: Option<bool>,
+}
+
+fn default_reference_layout_version() -> i64 {
+    1
+}
+
+fn default_reference_layout_name() -> String {
+    "default".to_string()
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+struct ReferenceLayoutConfig {
+    #[serde(default = "default_reference_layout_version")]
+    version: i64,
+    #[serde(default = "default_reference_layout_name")]
+    name: String,
+    #[serde(default)]
+    cards: Vec<ReferenceCardConfig>,
+    #[serde(default)]
+    recent: Vec<ReferenceFileInfo>,
+}
+
 fn debug_log(message: &str) {
     eprintln!("[folder-debug] {message}");
 }
@@ -211,7 +271,15 @@ pub fn run() {
             load_project_snippets,
             save_project_snippets,
             load_project_plot_cards,
-            save_project_plot_cards
+            save_project_plot_cards,
+            load_reference_layout,
+            save_reference_layout,
+            pick_reference_file,
+            list_reference_candidates,
+            delete_imported_reference,
+            read_reference_text,
+            save_reference_text,
+            read_reference_binary
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -1097,6 +1165,141 @@ fn save_project_plot_cards(
     save_project_config(&root, &config)
 }
 
+#[tauri::command]
+fn load_reference_layout(root_path: String) -> Result<ReferenceLayoutConfig, String> {
+    let root = PathBuf::from(root_path);
+    if !root.is_dir() {
+        return Err("project root does not exist".to_string());
+    }
+
+    let path = reference_layout_path(&root);
+    if !path.exists() {
+        return Ok(default_reference_layout());
+    }
+
+    let content = std::fs::read_to_string(&path)
+        .map_err(|error| format!("failed to read reference layout: {error}"))?;
+    serde_json::from_str(&content).or_else(|_| Ok(default_reference_layout()))
+}
+
+#[tauri::command]
+fn save_reference_layout(
+    root_path: String,
+    layout: ReferenceLayoutConfig,
+) -> Result<(), String> {
+    let root = PathBuf::from(root_path);
+    if !root.is_dir() {
+        return Err("project root does not exist".to_string());
+    }
+
+    save_reference_layout_file(&root, &layout)
+}
+
+#[tauri::command]
+fn pick_reference_file(
+    app: tauri::AppHandle,
+    root_path: String,
+) -> Result<Option<ReferenceFileInfo>, String> {
+    let root = PathBuf::from(root_path);
+    if !root.is_dir() {
+        return Err("project root does not exist".to_string());
+    }
+
+    let Some(path) = app
+        .dialog()
+        .file()
+        .add_filter("Reference", &["txt", "md", "png", "jpg", "jpeg", "webp", "pdf"])
+        .blocking_pick_file()
+    else {
+        return Ok(None);
+    };
+
+    let path = dialog_path_to_path_buf(path)?;
+    if !is_supported_reference_extension(&path) {
+        return Err("unsupported reference file type".to_string());
+    }
+
+    let imported = import_reference_file(&root, &path)?;
+    reference_file_info(&root, &imported).map(Some)
+}
+
+#[tauri::command]
+fn list_reference_candidates(root_path: String) -> Result<Vec<ReferenceFileInfo>, String> {
+    let root = PathBuf::from(root_path);
+    if !root.is_dir() {
+        return Err("project root does not exist".to_string());
+    }
+
+    let mut files = Vec::new();
+    collect_reference_candidates(&root, &root, &mut files)?;
+    files.sort_by_key(|file| file.source_path.to_lowercase());
+    Ok(files)
+}
+
+#[tauri::command]
+fn delete_imported_reference(root_path: String, source_path: String) -> Result<(), String> {
+    let root = PathBuf::from(root_path);
+    if !root.is_dir() {
+        return Err("project root does not exist".to_string());
+    }
+
+    let path = resolve_reference_source_path(&root, &source_path)?;
+    let imports_dir = reference_imports_dir(
+        &root
+            .canonicalize()
+            .map_err(|error| format!("failed to resolve project root: {error}"))?,
+    )
+    .canonicalize()
+    .map_err(|error| format!("failed to resolve reference import directory: {error}"))?;
+    if !path.starts_with(&imports_dir) {
+        return Err("only imported reference files can be deleted".to_string());
+    }
+
+    std::fs::remove_file(&path)
+        .map_err(|error| format!("failed to delete imported reference: {error}"))
+}
+
+#[tauri::command]
+fn read_reference_text(root_path: String, source_path: String) -> Result<String, String> {
+    let root = PathBuf::from(root_path);
+    let path = resolve_reference_source_path(&root, &source_path)?;
+    if !matches!(reference_kind_for_path(&path).as_str(), "text" | "markdown") {
+        return Err("reference is not a text file".to_string());
+    }
+
+    std::fs::read_to_string(&path).map_err(|error| format!("failed to read reference text: {error}"))
+}
+
+#[tauri::command]
+fn save_reference_text(root_path: String, source_path: String, text: String) -> Result<(), String> {
+    let root = PathBuf::from(root_path);
+    let path = resolve_reference_source_path(&root, &source_path)?;
+    if !matches!(reference_kind_for_path(&path).as_str(), "text" | "markdown") {
+        return Err("reference is not a text file".to_string());
+    }
+
+    write_text_file(&path, &text)
+}
+
+#[tauri::command]
+fn read_reference_binary(root_path: String, source_path: String) -> Result<ReferenceBinary, String> {
+    use base64::Engine;
+
+    let root = PathBuf::from(root_path);
+    let path = resolve_reference_source_path(&root, &source_path)?;
+    let kind = reference_kind_for_path(&path);
+    if !matches!(kind.as_str(), "image" | "pdf") {
+        return Err("reference is not a binary preview file".to_string());
+    }
+
+    let data = std::fs::read(&path)
+        .map_err(|error| format!("failed to read reference binary: {error}"))?;
+    Ok(ReferenceBinary {
+        mime: reference_mime_for_path(&path),
+        data_base64: base64::engine::general_purpose::STANDARD.encode(data),
+    })
+}
+
 fn dialog_path_to_path_buf(path: tauri_plugin_dialog::FilePath) -> Result<PathBuf, String> {
     path.into_path()
         .map_err(|error| format!("selected path is not available as a local file: {error}"))
@@ -1245,6 +1448,16 @@ fn project_config_path(root: &Path) -> PathBuf {
     root.join(".then").join("project.json")
 }
 
+fn reference_layout_path(root: &Path) -> PathBuf {
+    root.join(".then")
+        .join("reference-layouts")
+        .join("default.json")
+}
+
+fn reference_imports_dir(root: &Path) -> PathBuf {
+    root.join(".then").join("references").join("imports")
+}
+
 fn legacy_project_config_path(root: &Path) -> PathBuf {
     root.join(".brew").join("project.json")
 }
@@ -1283,6 +1496,248 @@ fn save_project_config(root: &Path, config: &ProjectConfig) -> Result<(), String
         .map_err(|error| format!("failed to serialize project config: {error}"))?;
     std::fs::write(path, content)
         .map_err(|error| format!("failed to write project config: {error}"))
+}
+
+fn default_reference_layout() -> ReferenceLayoutConfig {
+    ReferenceLayoutConfig {
+        version: 1,
+        name: "default".to_string(),
+        cards: Vec::new(),
+        recent: Vec::new(),
+    }
+}
+
+fn save_reference_layout_file(root: &Path, layout: &ReferenceLayoutConfig) -> Result<(), String> {
+    let path = reference_layout_path(root);
+    let parent = path
+        .parent()
+        .ok_or_else(|| "reference layout directory does not exist".to_string())?;
+    std::fs::create_dir_all(parent)
+        .map_err(|error| format!("failed to create reference layout directory: {error}"))?;
+
+    let content = serde_json::to_string_pretty(layout)
+        .map_err(|error| format!("failed to serialize reference layout: {error}"))?;
+    let tmp_path = path.with_extension("json.tmp");
+    let bak_path = path.with_extension("json.bak");
+
+    std::fs::write(&tmp_path, content)
+        .map_err(|error| format!("failed to write temporary reference layout: {error}"))?;
+    let tmp_content = std::fs::read_to_string(&tmp_path)
+        .map_err(|error| format!("failed to verify temporary reference layout: {error}"))?;
+    let _: ReferenceLayoutConfig = serde_json::from_str(&tmp_content)
+        .map_err(|error| format!("temporary reference layout is invalid: {error}"))?;
+
+    if path.exists() {
+        std::fs::copy(&path, &bak_path)
+            .map_err(|error| format!("failed to back up reference layout: {error}"))?;
+        std::fs::remove_file(&path)
+            .map_err(|error| format!("failed to replace old reference layout: {error}"))?;
+    }
+
+    std::fs::rename(&tmp_path, &path)
+        .map_err(|error| format!("failed to promote reference layout: {error}"))
+}
+
+fn collect_reference_candidates(
+    root: &Path,
+    folder: &Path,
+    files: &mut Vec<ReferenceFileInfo>,
+) -> Result<(), String> {
+    for entry in std::fs::read_dir(folder)
+        .map_err(|error| format!("failed to read reference candidates: {error}"))?
+    {
+        let entry = entry.map_err(|error| format!("failed to read reference entry: {error}"))?;
+        let path = entry.path();
+        let name = path.file_name().and_then(|value| value.to_str()).unwrap_or("");
+
+        if name == ".then" || name == ".brew" {
+            continue;
+        }
+
+        if path.is_dir() {
+            collect_reference_candidates(root, &path, files)?;
+            continue;
+        }
+
+        if path.is_file() && is_supported_reference_extension(&path) {
+            files.push(reference_file_info(root, &path)?);
+        }
+    }
+
+    Ok(())
+}
+
+fn reference_file_info(root: &Path, path: &Path) -> Result<ReferenceFileInfo, String> {
+    let resolved = resolve_reference_absolute_path(root, path)?;
+    let metadata = std::fs::metadata(&resolved)
+        .map_err(|error| format!("failed to read reference metadata: {error}"))?;
+    Ok(ReferenceFileInfo {
+        source_path: project_relative_path(root, &resolved)?,
+        name: resolved
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("reference")
+            .to_string(),
+        kind: reference_kind_for_path(&resolved),
+        size: metadata.len(),
+        imported: is_imported_reference(root, &resolved)?,
+    })
+}
+
+fn import_reference_file(root: &Path, source: &Path) -> Result<PathBuf, String> {
+    let source = source
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve reference source: {error}"))?;
+
+    let root = root
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve project root: {error}"))?;
+    if source.starts_with(&root) {
+        return Ok(source);
+    }
+
+    let imports_dir = reference_imports_dir(&root);
+    std::fs::create_dir_all(&imports_dir)
+        .map_err(|error| format!("failed to create reference import directory: {error}"))?;
+
+    let file_name = source
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "reference file name is not valid unicode".to_string())?;
+    let destination = unique_reference_import_path(&imports_dir, file_name);
+    std::fs::copy(&source, &destination)
+        .map_err(|error| format!("failed to copy reference into project: {error}"))?;
+    Ok(destination)
+}
+
+fn unique_reference_import_path(imports_dir: &Path, file_name: &str) -> PathBuf {
+    let mut path = imports_dir.join(file_name);
+    if !path.exists() {
+        return path;
+    }
+
+    let stem = Path::new(file_name)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("reference");
+    let extension = Path::new(file_name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("");
+    let mut index = 2;
+
+    loop {
+        let next_name = if extension.is_empty() {
+            format!("{stem}-{index}")
+        } else {
+            format!("{stem}-{index}.{extension}")
+        };
+        path = imports_dir.join(next_name);
+        if !path.exists() {
+            return path;
+        }
+        index += 1;
+    }
+}
+
+fn is_imported_reference(root: &Path, path: &Path) -> Result<bool, String> {
+    let root = root
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve project root: {error}"))?;
+    let path = path
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve reference path: {error}"))?;
+    let imports_dir = reference_imports_dir(&root);
+    Ok(imports_dir.exists()
+        && imports_dir
+            .canonicalize()
+            .map(|dir| path.starts_with(dir))
+            .unwrap_or(false))
+}
+
+fn resolve_reference_source_path(root: &Path, source_path: &str) -> Result<PathBuf, String> {
+    if source_path.trim().is_empty() {
+        return Err("reference path is required".to_string());
+    }
+    if Path::new(source_path).is_absolute() {
+        return Err("reference path must be project-relative".to_string());
+    }
+    resolve_reference_absolute_path(root, &root.join(source_path))
+}
+
+fn resolve_reference_absolute_path(root: &Path, path: &Path) -> Result<PathBuf, String> {
+    let root = root
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve project root: {error}"))?;
+    let path = path
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve reference path: {error}"))?;
+    if !path.starts_with(&root) {
+        return Err("reference file must be inside the project folder".to_string());
+    }
+    if !path.is_file() {
+        return Err("reference file does not exist".to_string());
+    }
+    if !is_supported_reference_extension(&path) {
+        return Err("unsupported reference file type".to_string());
+    }
+    Ok(path)
+}
+
+fn project_relative_path(root: &Path, path: &Path) -> Result<String, String> {
+    let root = root
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve project root: {error}"))?;
+    let relative = path
+        .strip_prefix(&root)
+        .map_err(|error| format!("failed to make reference path relative: {error}"))?;
+    Ok(relative
+        .components()
+        .map(|component| component.as_os_str().to_string_lossy().to_string())
+        .collect::<Vec<_>>()
+        .join("/"))
+}
+
+fn is_supported_reference_extension(path: &Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_lowercase())
+            .as_deref(),
+        Some("txt" | "md" | "png" | "jpg" | "jpeg" | "webp" | "pdf")
+    )
+}
+
+fn reference_kind_for_path(path: &Path) -> String {
+    match path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_lowercase())
+        .as_deref()
+    {
+        Some("txt") => "text",
+        Some("md") => "markdown",
+        Some("png" | "jpg" | "jpeg" | "webp") => "image",
+        Some("pdf") => "pdf",
+        _ => "unknown",
+    }
+    .to_string()
+}
+
+fn reference_mime_for_path(path: &Path) -> String {
+    match path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_lowercase())
+        .as_deref()
+    {
+        Some("png") => "image/png",
+        Some("jpg" | "jpeg") => "image/jpeg",
+        Some("webp") => "image/webp",
+        Some("pdf") => "application/pdf",
+        _ => "application/octet-stream",
+    }
+    .to_string()
 }
 
 fn update_project_config_after_rename(old_path: &Path, new_path: &Path) -> Result<(), String> {

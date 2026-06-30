@@ -744,6 +744,7 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .workspace {
+  position: relative;
   display: flex;
   min-height: 0;
   flex: 1;
@@ -2549,6 +2550,7 @@ body {
 }
 
 .workspace {
+  position: relative;
   min-height: 0;
   background: var(--bg-root);
 }
@@ -3615,6 +3617,7 @@ body {
 }
 
 .editor {
+  position: relative;
   background: #0f1012;
   color: var(--text-primary);
   caret-color: var(--accent);
@@ -3770,6 +3773,573 @@ body {
   min-height: 0;
   flex: 1;
   overflow: hidden;
+}
+
+/* ===== 資料レイヤー ===== */
+.referenceLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 75;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.referenceCard {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  min-width: 220px;
+  min-height: 44px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 0.5px solid color-mix(in srgb, var(--border-strong) 80%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-panel) 96%, transparent);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.22);
+  color: var(--text-primary);
+  pointer-events: auto;
+}
+
+.focusedReferenceCard {
+  border-color: color-mix(in srgb, var(--accent) 54%, var(--border-strong));
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+}
+
+.pinnedReferenceCard .referenceCardHeader {
+  color: var(--accent-strong);
+}
+
+.collapsedReferenceCard {
+  height: 36px;
+}
+
+.referenceCardHeader {
+  display: flex;
+  height: 36px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 11px;
+  border-bottom: 0.5px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-panel-strong) 90%, transparent);
+  cursor: grab;
+  user-select: none;
+}
+
+.referenceCardHeader:active {
+  cursor: grabbing;
+}
+
+.referenceCardHeader strong {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.referenceCardActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.referenceCardActions button,
+.referenceBodyToolbar button,
+.referenceRowActions button {
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.referenceCardActions button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0;
+}
+
+.referenceCardActions button:hover,
+.referenceBodyToolbar button:hover:not(:disabled),
+.referenceRowActions button:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.referenceRowActions .dangerReferenceButton {
+  color: var(--danger);
+}
+
+.referenceRowActions .dangerReferenceButton:hover {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border-strong));
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.referenceCardActions button svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.referenceCardBody {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  background: var(--bg-panel);
+}
+
+.referenceBodyToolbar {
+  display: flex;
+  min-height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 0.5px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.referenceBodyToolbar button {
+  height: 24px;
+  padding: 0 8px;
+}
+
+.referenceBodyToolbar button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.referenceTextPreview,
+.referenceImageScroller,
+.referencePdfScroller {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.referenceTextPreview {
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.referenceTextPreview pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+}
+
+.referenceTextEditor {
+  min-height: 0;
+  flex: 1;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font: 13px/1.65 var(--ui-font-family);
+  padding: 12px 14px;
+}
+
+.referenceMarkdown h3,
+.referenceMarkdown h4,
+.referenceMarkdown h5,
+.referenceMarkdown h6,
+.referenceMarkdown p {
+  margin: 0 0 8px;
+}
+
+.referenceMarkdown h3 {
+  font-size: 15px;
+}
+
+.referenceMarkdown h4 {
+  font-size: 13px;
+}
+
+.referenceMarkdown h5,
+.referenceMarkdown h6 {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.referenceMarkdown code {
+  border-radius: 4px;
+  background: var(--silkdown-code-bg, var(--bg-panel-strong));
+  padding: 1px 4px;
+  font-size: 0.92em;
+}
+
+.referenceCodeBlock {
+  margin: 0 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--silkdown-code-bg, var(--bg-panel-strong));
+}
+
+.referenceCodeBlock figcaption {
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 4px 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.referenceCodeBlock pre {
+  margin: 0;
+  overflow: auto;
+  padding: 8px;
+}
+
+.referenceCodeBlock code {
+  display: block;
+  min-width: max-content;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: var(--text-primary);
+  font: 12px/1.55 var(--mono-font-family, ui-monospace, SFMono-Regular, Consolas, monospace);
+  white-space: pre;
+}
+
+.referenceTableScroller {
+  max-width: 100%;
+  margin: 0 0 10px;
+  overflow: auto;
+}
+
+.referenceMarkdownTable {
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.referenceMarkdownTable th,
+.referenceMarkdownTable td {
+  border: 1px solid var(--border-subtle);
+  padding: 5px 7px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.referenceMarkdownTable th {
+  background: var(--bg-panel-strong);
+  font-weight: 700;
+}
+
+.referenceTask {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0 0 8px;
+}
+
+.referenceTask input {
+  margin-top: 4px;
+}
+
+.referenceMarkdownBlank {
+  height: 8px;
+}
+
+.referenceMarkdownImage {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 8px 0;
+  border-radius: 6px;
+}
+
+.referenceMissingImage {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.referenceImageScroller {
+  display: grid;
+  place-items: start center;
+  padding: 10px;
+  background:
+    linear-gradient(45deg, rgba(128, 128, 128, 0.11) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(128, 128, 128, 0.11) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(128, 128, 128, 0.11) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(128, 128, 128, 0.11) 75%);
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-size: 16px 16px;
+}
+
+.referenceImageScroller img {
+  max-width: 100%;
+  height: auto;
+  transform-origin: top center;
+}
+
+.referencePdfScroller {
+  padding: 10px;
+  background: color-mix(in srgb, var(--bg-root) 82%, black);
+}
+
+.referencePdfScroller canvas {
+  display: block;
+  max-width: none;
+  margin: 0 auto;
+  background: white;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+}
+
+.referencePlaceholder,
+.referenceError {
+  padding: 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.referenceError {
+  color: var(--danger);
+}
+
+.referenceResizeHandle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+}
+
+.referenceResizeHandle::after {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 7px;
+  height: 7px;
+  border-right: 1px solid var(--text-faint);
+  border-bottom: 1px solid var(--text-faint);
+  content: "";
+}
+
+.referencePane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.referencePaneTop {
+  flex: 0 0 auto;
+  padding: 12px 12px 10px;
+  border-bottom: 0.5px solid var(--border-subtle);
+}
+
+.referenceSearchRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.referenceSearch {
+  display: flex;
+  height: 32px;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-panel-strong);
+  padding: 0 9px;
+}
+
+.referenceSearch svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.referenceSearch input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: 12px/1.4 var(--ui-font-family);
+}
+
+.referenceTopAddButton {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-panel-strong);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.referenceTopAddButton:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.referenceTopAddButton svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+}
+
+.referencePaneSection {
+  flex: 0 0 auto;
+  padding: 12px 12px 0;
+}
+
+.referenceCandidatesSection {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.referenceSectionHeader {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 2px 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.referenceList {
+  display: flex;
+  max-height: 100%;
+  flex-direction: column;
+  gap: 6px;
+  overflow: auto;
+}
+
+.referenceRow {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  padding: 8px;
+}
+
+.referenceKindIcon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.referenceKindIcon svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.referenceKind-pdf {
+  color: var(--danger);
+}
+
+.referenceKind-image {
+  color: #6f58d9;
+}
+
+.referenceRowMain {
+  min-width: 0;
+}
+
+.referenceRowMain strong,
+.referenceRowMain span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.referenceRowMain strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.referenceRowMain span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.referenceRowActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.referenceActionButton {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  padding: 0;
+}
+
+.referenceActionButton svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.activeReferenceIconButton {
+  color: var(--accent-strong);
+}
+
+.referenceEmpty {
+  margin: 0;
+  border: 0.5px dashed var(--border-subtle);
+  border-radius: 8px;
+  padding: 14px;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 /* ===== Idea（スレッド二段ナビ） ===== */

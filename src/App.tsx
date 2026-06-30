@@ -42,6 +42,8 @@ import {
   PlotPane,
   PlotPaneHeaderActions,
 } from "./components/plot/PlotPane";
+import { ReferenceLayer } from "./components/references/ReferenceLayer";
+import { ReferencePane } from "./components/references/ReferencePane";
 import { IdeaPane } from "./components/snippets/IdeaPane";
 import { StatusBar } from "./components/status/StatusBar";
 import type {
@@ -66,6 +68,10 @@ import type {
   PlotCard,
   ProjectEntry,
   ProjectFolder,
+  ReferenceCardState,
+  ReferenceFileInfo,
+  ReferenceKind,
+  ReferenceLayout,
   SaveStatus,
   Snippet,
   TextDocument,
@@ -117,6 +123,15 @@ const scratchWorkspaceName = "一時ファイル";
 const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
 const EDITOR_CONTEXT_MENU_WIDTH = 236;
 const EDITOR_CONTEXT_MENU_HEIGHT = 292;
+const defaultReferenceLayout: ReferenceLayout = {
+  version: 1,
+  name: "default",
+  cards: [],
+  recent: [],
+};
+const PINNED_REFERENCE_Z_BASE = 10000;
+const NORMAL_REFERENCE_Z_LIMIT = PINNED_REFERENCE_Z_BASE - 1;
+const MAX_RECENT_REFERENCES = 30;
 
 type LayoutDirection = "start" | "center" | "end";
 
@@ -567,6 +582,15 @@ function isPathInsideFolder(path: string, folderPath: string): boolean {
   );
 }
 
+function toProjectRelativePath(rootPath: string, path: string): string {
+  const normalizedRoot = rootPath.replace(/[\\/]+/g, "/").replace(/\/+$/, "");
+  const normalizedPath = path.replace(/[\\/]+/g, "/");
+  if (normalizedPath.toLocaleLowerCase().startsWith(`${normalizedRoot.toLocaleLowerCase()}/`)) {
+    return normalizedPath.slice(normalizedRoot.length + 1);
+  }
+  return normalizedPath;
+}
+
 function createFileDocumentTab(document: TextDocument): DocumentTab {
   return {
     id: `file:${document.path}`,
@@ -642,6 +666,171 @@ function normalizePlotCards(value: unknown): PlotCard[] {
         managerCollapsed: Boolean(card.managerCollapsed),
       };
     });
+}
+
+function referenceKindFromPath(path: string): ReferenceKind {
+  const extension = path.split(".").pop()?.toLocaleLowerCase();
+  if (extension === "txt") return "text";
+  if (extension === "md") return "markdown";
+  if (extension === "png" || extension === "jpg" || extension === "jpeg" || extension === "webp") {
+    return "image";
+  }
+  if (extension === "pdf") return "pdf";
+  return "unknown";
+}
+
+function referenceNameFromPath(sourcePath: string): string {
+  return sourcePath.split(/[\\/]/).filter(Boolean).pop() ?? sourcePath;
+}
+
+function isReferenceFileInfo(value: unknown): value is ReferenceFileInfo {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Partial<Record<keyof ReferenceFileInfo, unknown>>;
+  return (
+    typeof record.sourcePath === "string" &&
+    typeof record.name === "string" &&
+    (record.kind === "text" ||
+      record.kind === "markdown" ||
+      record.kind === "image" ||
+      record.kind === "pdf" ||
+      record.kind === "unknown") &&
+    typeof record.size === "number"
+  );
+}
+
+function makeReferenceFileInfo(
+  sourcePath: string,
+  kind: ReferenceKind = referenceKindFromPath(sourcePath),
+): ReferenceFileInfo {
+  return {
+    sourcePath,
+    name: referenceNameFromPath(sourcePath),
+    kind,
+    size: 0,
+    imported: sourcePath.replace(/[\\]+/g, "/").startsWith(".then/references/imports/"),
+  };
+}
+
+function mergeReferenceFiles(...groups: ReferenceFileInfo[][]): ReferenceFileInfo[] {
+  const merged = new Map<string, ReferenceFileInfo>();
+  for (const group of groups) {
+    for (const file of group) {
+      const key = file.sourcePath.toLocaleLowerCase();
+      if (!merged.has(key)) merged.set(key, file);
+    }
+  }
+  return [...merged.values()];
+}
+
+function upsertRecentReference(
+  layout: ReferenceLayout,
+  file: ReferenceFileInfo,
+): ReferenceLayout {
+  const key = file.sourcePath.toLocaleLowerCase();
+  return {
+    ...layout,
+    recent: [
+      file,
+      ...layout.recent.filter((item) => item.sourcePath.toLocaleLowerCase() !== key),
+    ].slice(0, MAX_RECENT_REFERENCES),
+  };
+}
+
+function referenceInitialSize(kind: ReferenceKind): Pick<ReferenceCardState, "width" | "height"> {
+  if (kind === "image") return { width: 360, height: 260 };
+  if (kind === "pdf") return { width: 320, height: 280 };
+  return { width: 320, height: 420 };
+}
+
+function isReferenceCardRecord(
+  value: unknown,
+): value is Partial<ReferenceCardState> & { id: string; sourcePath: string } {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return typeof record.id === "string" && typeof record.sourcePath === "string";
+}
+
+function clampReferenceCardToStage(
+  card: ReferenceCardState,
+  stageWidth: number,
+  stageHeight: number,
+): ReferenceCardState {
+  const width = Math.max(220, Math.min(card.width, Math.max(240, stageWidth - 24)));
+  const height = Math.max(140, Math.min(card.height, Math.max(180, stageHeight - 24)));
+  return {
+    ...card,
+    width,
+    height,
+    x: Math.max(0, Math.min(card.x, Math.max(0, stageWidth - width - 12))),
+    y: Math.max(0, Math.min(card.y, Math.max(0, stageHeight - height - 12))),
+  };
+}
+
+function normalizeReferenceLayout(
+  value: unknown,
+  stageSize: { width: number; height: number } = { width: 1200, height: 800 },
+): ReferenceLayout {
+  const raw = value as Partial<ReferenceLayout> | null;
+  const cards: unknown[] = Array.isArray(raw?.cards) ? raw.cards : [];
+  const recent: unknown[] = Array.isArray(raw?.recent) ? raw.recent : [];
+  const normalizedCards = cards
+    .filter(isReferenceCardRecord)
+    .map((card, index) => {
+      const kind =
+        card.kind === "text" ||
+        card.kind === "markdown" ||
+        card.kind === "image" ||
+        card.kind === "pdf" ||
+        card.kind === "unknown"
+          ? card.kind
+          : referenceKindFromPath(card.sourcePath);
+      const size = referenceInitialSize(kind);
+      return clampReferenceCardToStage(
+        {
+          id: card.id,
+          sourcePath: card.sourcePath,
+          kind,
+          x: typeof card.x === "number" ? card.x : 72 + index * 32,
+          y: typeof card.y === "number" ? card.y : 96 + index * 32,
+          width: typeof card.width === "number" ? card.width : size.width,
+          height: typeof card.height === "number" ? card.height : size.height,
+          zIndex: typeof card.zIndex === "number" ? card.zIndex : index + 1,
+          collapsed: Boolean(card.collapsed),
+          pinned: Boolean(card.pinned),
+          scrollTop: typeof card.scrollTop === "number" ? card.scrollTop : undefined,
+          zoom: typeof card.zoom === "number" ? card.zoom : undefined,
+          page: typeof card.page === "number" ? card.page : undefined,
+          editing: false,
+        },
+        stageSize.width,
+        stageSize.height,
+      );
+    });
+  const normalizedRecent = recent
+    .filter(isReferenceFileInfo)
+    .map((file) => ({
+      ...file,
+      imported: Boolean(file.imported),
+    }));
+  return {
+    version: 1,
+    name: typeof raw?.name === "string" && raw.name.trim() ? raw.name : "default",
+    recent: mergeReferenceFiles(
+      normalizedRecent,
+      normalizedCards.map((card) => makeReferenceFileInfo(card.sourcePath, card.kind)),
+    )
+      .slice(0, MAX_RECENT_REFERENCES),
+    cards: normalizedCards,
+  };
+}
+
+function nextReferenceZIndex(cards: ReferenceCardState[], pinned: boolean): number {
+  const maxZ = cards
+    .filter((card) => (pinned ? card.pinned : !card.pinned))
+    .reduce((max, card) => Math.max(max, card.zIndex), pinned ? PINNED_REFERENCE_Z_BASE : 0);
+  return pinned
+    ? Math.max(PINNED_REFERENCE_Z_BASE, maxZ + 1)
+    : Math.min(NORMAL_REFERENCE_Z_LIMIT, maxZ + 1);
 }
 
 function quoteCssFontFamily(family: string): string {
@@ -1229,8 +1418,26 @@ async function saveWorkspacePlotCards(folderPath: string, plotCards: PlotCard[])
   await invoke("save_project_plot_cards", { rootPath: folderPath, plotCards });
 }
 
+async function loadReferenceLayout(folderPath: string): Promise<ReferenceLayout> {
+  if (!isTauriRuntime()) return defaultReferenceLayout;
+  const layout = await invoke<ReferenceLayout>("load_reference_layout", { rootPath: folderPath });
+  return normalizeReferenceLayout(layout);
+}
+
+async function saveReferenceLayout(folderPath: string, layout: ReferenceLayout): Promise<void> {
+  if (!isTauriRuntime()) return;
+  await invoke("save_reference_layout", { rootPath: folderPath, layout });
+}
+
+async function listReferenceCandidates(folderPath: string): Promise<ReferenceFileInfo[]> {
+  if (!isTauriRuntime()) return [];
+  return await invoke<ReferenceFileInfo[]>("list_reference_candidates", { rootPath: folderPath });
+}
+
 export default function App() {
   const saveTimerRef = useRef<number | null>(null);
+  const referenceSaveTimerRef = useRef<number | null>(null);
+  const referenceLayoutLoadedRootRef = useRef<string | null>(null);
   const activeTabIdRef = useRef("initial-document-tab");
   const documentSaveQueuesRef = useRef<Map<string, DocumentSaveQueue>>(new Map());
   const headingMoveInProgressRef = useRef(false);
@@ -1246,6 +1453,7 @@ export default function App() {
   const editorContextMenuRef = useRef<HTMLDivElement | null>(null);
   const fileMenuRef = useRef<HTMLDivElement | null>(null);
   const breadcrumbMenuRef = useRef<HTMLDivElement | null>(null);
+  const workspaceRef = useRef<HTMLDivElement | null>(null);
   const didMountEditorRef = useRef(false);
   const suppressNextEditorUpdateRef = useRef(false);
   const lastSavedMarkdownRef = useRef(initialMarkdown);
@@ -1314,8 +1522,12 @@ export default function App() {
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
   const [isRightSidebarWide, setIsRightSidebarWide] = useState(false);
-  const [rightSidebarTab, setRightSidebarTab] = useState<"idea" | "plot">("plot");
+  const [rightSidebarTab, setRightSidebarTab] = useState<"idea" | "plot" | "reference">("plot");
   const [isPlotManagerOpen, setIsPlotManagerOpen] = useState(false);
+  const [referenceLayout, setReferenceLayout] =
+    useState<ReferenceLayout>(() => defaultReferenceLayout);
+  const [referenceCandidates, setReferenceCandidates] = useState<ReferenceFileInfo[]>([]);
+  const [referenceQuery, setReferenceQuery] = useState("");
 
   const addPlotSection = useCallback(() => {
     setPlotCards((current) => appendPlotSection(current));
@@ -1324,6 +1536,226 @@ export default function App() {
   const addPlotChapter = useCallback(() => {
     setPlotCards((current) => appendPlotChapter(current));
   }, []);
+
+  const patchReferenceLayout = useCallback(
+    (updater: (layout: ReferenceLayout) => ReferenceLayout) => {
+      setReferenceLayout((current) => updater(current));
+    },
+    [],
+  );
+
+  const focusReferenceCard = useCallback((cardId: string) => {
+    setReferenceLayout((current) => {
+      const stage = workspaceRef.current?.getBoundingClientRect();
+      return {
+        ...current,
+        cards: current.cards.map((card) => {
+          if (card.id !== cardId) return card;
+          const width = card.width;
+          const height = card.height;
+          return {
+            ...card,
+            collapsed: false,
+            zIndex: nextReferenceZIndex(current.cards, card.pinned),
+            x: stage ? Math.max(0, (stage.width - width) / 2) : card.x,
+            y: stage ? Math.max(0, (stage.height - height) / 2) : card.y,
+          };
+        }),
+      };
+    });
+  }, []);
+
+  const closeReferenceCard = useCallback((cardId: string) => {
+    setReferenceLayout((current) => ({
+      ...current,
+      cards: current.cards.filter((card) => card.id !== cardId),
+    }));
+  }, []);
+
+  const pinReferenceCard = useCallback((cardId: string, pinned: boolean) => {
+    setReferenceLayout((current) => ({
+      ...current,
+      cards: current.cards.map((card) =>
+        card.id === cardId
+          ? { ...card, pinned, zIndex: nextReferenceZIndex(current.cards, pinned) }
+          : card,
+      ),
+    }));
+  }, []);
+
+  const openReferenceCard = useCallback(
+    (sourcePath: string, fileInfo?: ReferenceFileInfo) => {
+      if (!projectFolder) {
+        showToast("先にフォルダを開いてください");
+        return;
+      }
+
+      setReferenceLayout((current) => {
+        const file = fileInfo ?? makeReferenceFileInfo(sourcePath);
+        const nextLayout = upsertRecentReference(current, file);
+        const existing = current.cards.find((card) => card.sourcePath === sourcePath);
+        if (existing) {
+          return {
+            ...nextLayout,
+            cards: nextLayout.cards.map((card) =>
+              card.id === existing.id
+                ? {
+                    ...card,
+                    zIndex: nextReferenceZIndex(nextLayout.cards, card.pinned),
+                    collapsed: false,
+                  }
+                : card,
+            ),
+          };
+        }
+
+        const index = nextLayout.cards.length;
+        const kind = file.kind;
+        const size = referenceInitialSize(kind);
+        const stageRect = workspaceRef.current?.getBoundingClientRect();
+        const editorRect = editorShellRef.current?.getBoundingClientRect();
+        const originX = editorRect && stageRect ? editorRect.left - stageRect.left : 0;
+        const originY = editorRect && stageRect ? editorRect.top - stageRect.top : 0;
+        const card = clampReferenceCardToStage(
+          {
+            id: `ref-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+            sourcePath,
+            kind,
+            x: originX + 72 + index * 32,
+            y: originY + 96 + index * 32,
+            width: size.width,
+            height: size.height,
+            zIndex: nextReferenceZIndex(nextLayout.cards, false),
+            collapsed: false,
+            pinned: false,
+            page: kind === "pdf" ? 1 : undefined,
+            zoom: kind === "image" || kind === "pdf" ? 1 : undefined,
+          },
+          stageRect?.width ?? 1200,
+          stageRect?.height ?? 800,
+        );
+        return { ...nextLayout, cards: [...nextLayout.cards, card] };
+      });
+      setRightSidebarTab("reference");
+    },
+    [projectFolder],
+  );
+
+  const handleAddReference = useCallback(async () => {
+    if (!projectFolder) {
+      showToast("先にフォルダを開いてください");
+      return;
+    }
+    if (!isTauriRuntime()) {
+      showToast("資料の追加はTauri版で利用できます");
+      return;
+    }
+
+    try {
+      const file = await invoke<ReferenceFileInfo | null>("pick_reference_file", {
+        rootPath: projectFolder.path,
+      });
+      if (!file) return;
+      setReferenceCandidates((current) =>
+        mergeReferenceFiles([file], current).sort((left, right) =>
+          left.sourcePath.localeCompare(right.sourcePath),
+        ),
+      );
+      openReferenceCard(file.sourcePath, file);
+    } catch (error) {
+      setLastError(String(error));
+      showToast("資料を追加できませんでした");
+    }
+  }, [openReferenceCard, projectFolder]);
+
+  const handleDeleteImportedReference = useCallback(
+    async (sourcePath: string) => {
+      if (!projectFolder) return;
+      const fileName = sourcePath.split(/[\\/]/).filter(Boolean).pop() ?? sourcePath;
+      const confirmed = await new Promise<boolean>((resolve) => {
+        setAppDialog({
+          type: "confirm",
+          title: "資料を削除",
+          message: `「${fileName}」を資料ライブラリから削除しますか？`,
+          detail:
+            "取り込んだコピーだけを削除します。元ファイルが別の場所にある場合、その元ファイルは削除されません。",
+          confirmLabel: "削除",
+          danger: true,
+          resolve,
+        });
+      });
+      if (!confirmed) return;
+
+      try {
+        await invoke("delete_imported_reference", {
+          rootPath: projectFolder.path,
+          sourcePath,
+        });
+        const deletedKey = sourcePath.toLocaleLowerCase();
+        setReferenceLayout((current) => ({
+          ...current,
+          cards: current.cards.filter(
+            (card) => card.sourcePath.toLocaleLowerCase() !== deletedKey,
+          ),
+          recent: current.recent.filter(
+            (file) => file.sourcePath.toLocaleLowerCase() !== deletedKey,
+          ),
+        }));
+        setReferenceCandidates((current) =>
+          current.filter((file) => file.sourcePath.toLocaleLowerCase() !== deletedKey),
+        );
+        showToast(`「${fileName}」を削除しました`);
+      } catch (error) {
+        setLastError(String(error));
+        showToast("資料を削除できませんでした");
+      }
+    },
+    [projectFolder],
+  );
+
+  const returnFocusToEditor = useCallback(() => {
+    editorInstanceRef.current?.focus();
+  }, []);
+
+  const handleReferenceTextSaved = useCallback(
+    (sourcePath: string, text: string) => {
+      if (!projectFolder) return;
+      const file = collectProjectTextFiles(projectFolder).find(
+        (item) =>
+          toProjectRelativePath(projectFolder.path, item.path).toLocaleLowerCase() ===
+          sourcePath.toLocaleLowerCase(),
+      );
+      if (!file) return;
+
+      setProjectAst((current) =>
+        current && current.rootPath === projectFolder.path
+          ? upsertProjectAstDocument(current, {
+              path: file.path,
+              name: file.name,
+              text: parseFrontMatter(text).body,
+            })
+          : current,
+      );
+
+      setOpenTabs((current) =>
+        current.map((tab) => {
+          if (tab.path !== file.path) return tab;
+          if (tab.id === activeTabIdRef.current) {
+            lastSavedMarkdownRef.current = text;
+            setAppState((state) => ({ ...state, markdown: text }));
+          }
+          return {
+            ...tab,
+            markdown: text,
+            savedMarkdown: text,
+            saveStatus: "saved",
+            editorRevision: null,
+          };
+        }),
+      );
+    },
+    [projectFolder],
+  );
 
   const activeTab = useMemo(
     () => openTabs.find((tab) => tab.id === activeTabId) ?? openTabs[0] ?? null,
@@ -1637,17 +2069,112 @@ export default function App() {
     () => findPathToEntry(projectFolder, currentFilePath),
     [currentFilePath, projectFolder],
   );
+  const sortedReferenceCandidates = useMemo(() => {
+    const candidates = mergeReferenceFiles(referenceLayout.recent, referenceCandidates);
+    const recentIndex = new Map(
+      referenceLayout.recent.map((file, index) => [file.sourcePath.toLocaleLowerCase(), index]),
+    );
+    if (!projectFolder) return candidates;
+    const manuscriptPaths = new Set(
+      collectProjectTextFiles(projectFolder).map((file) =>
+        toProjectRelativePath(projectFolder.path, file.path).toLocaleLowerCase(),
+      ),
+    );
+    return candidates
+      .filter((file) => !manuscriptPaths.has(file.sourcePath.toLocaleLowerCase()))
+      .sort((left, right) => {
+        const leftIsManuscript = manuscriptPaths.has(left.sourcePath.toLocaleLowerCase());
+        const rightIsManuscript = manuscriptPaths.has(right.sourcePath.toLocaleLowerCase());
+        if (leftIsManuscript !== rightIsManuscript) return leftIsManuscript ? 1 : -1;
+        const leftRecentIndex = recentIndex.get(left.sourcePath.toLocaleLowerCase());
+        const rightRecentIndex = recentIndex.get(right.sourcePath.toLocaleLowerCase());
+        if (leftRecentIndex !== undefined && rightRecentIndex !== undefined) {
+          return leftRecentIndex - rightRecentIndex;
+        }
+        if (leftRecentIndex !== undefined) return -1;
+        if (rightRecentIndex !== undefined) return 1;
+        return left.sourcePath.localeCompare(right.sourcePath);
+      });
+  }, [projectFolder, referenceCandidates, referenceLayout.recent]);
 
   useEffect(() => {
     if (!projectFolder) {
       projectAstBuildIdRef.current += 1;
       setProjectAst(null);
       setProjectSearchQuery("");
+      referenceLayoutLoadedRootRef.current = null;
+      setReferenceLayout(defaultReferenceLayout);
+      setReferenceCandidates([]);
+      setReferenceQuery("");
       return;
     }
 
     setProjectAst((current) => createProjectAstSkeleton(projectFolder, current));
   }, [projectFolder]);
+
+  useEffect(() => {
+    if (!isHydrated || !projectFolder) return;
+
+    let isCancelled = false;
+    const rootPath = projectFolder.path;
+    referenceLayoutLoadedRootRef.current = null;
+
+    const loadReferences = async () => {
+      try {
+        const rect = editorShellRef.current?.getBoundingClientRect();
+        const [layout, candidates] = await Promise.all([
+          loadReferenceLayout(rootPath),
+          listReferenceCandidates(rootPath),
+        ]);
+        if (isCancelled) return;
+        const normalizedLayout = normalizeReferenceLayout(layout, {
+          width: rect?.width ?? 1200,
+          height: rect?.height ?? 800,
+        });
+        setReferenceLayout(normalizedLayout);
+        setReferenceCandidates(mergeReferenceFiles(normalizedLayout.recent, candidates));
+        referenceLayoutLoadedRootRef.current = rootPath;
+      } catch (error) {
+        if (isCancelled) return;
+        setReferenceLayout(defaultReferenceLayout);
+        setReferenceCandidates([]);
+        referenceLayoutLoadedRootRef.current = rootPath;
+        setLastError(String(error));
+      }
+    };
+
+    void loadReferences();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isHydrated, projectFolder]);
+
+  useEffect(() => {
+    const rootPath = projectFolder?.path ?? null;
+    if (!isHydrated || !rootPath || referenceLayoutLoadedRootRef.current !== rootPath) return;
+
+    if (referenceSaveTimerRef.current) {
+      window.clearTimeout(referenceSaveTimerRef.current);
+    }
+
+    referenceSaveTimerRef.current = window.setTimeout(() => {
+      saveReferenceLayout(rootPath, referenceLayout)
+        .catch((error) => {
+          setLastError(String(error));
+        })
+        .finally(() => {
+          referenceSaveTimerRef.current = null;
+        });
+    }, 700);
+
+    return () => {
+      if (referenceSaveTimerRef.current) {
+        window.clearTimeout(referenceSaveTimerRef.current);
+        referenceSaveTimerRef.current = null;
+      }
+    };
+  }, [isHydrated, projectFolder?.path, referenceLayout]);
 
   useEffect(() => {
     if (!projectFolder || !currentFilePath) return;
@@ -1744,6 +2271,10 @@ export default function App() {
       setSnippetWorkspacePath(null);
       setPlotWorkspacePath(null);
       setPlotCards(defaultPlotCards);
+      referenceLayoutLoadedRootRef.current = null;
+      setReferenceLayout(defaultReferenceLayout);
+      setReferenceCandidates([]);
+      setReferenceQuery("");
       setFocusedFolderPath(null);
       replaceActiveTab(createScratchDocumentTab("", { documentKey: `scratch-${Date.now()}` }));
       setWorkspaceAlert(alert);
@@ -4929,7 +5460,7 @@ export default function App() {
             </div>
           </header>
 
-          <div className="workspace">
+          <div className="workspace" ref={workspaceRef}>
             {!isLeftSidebarCollapsed && (
               <WorkspaceSidebar
                 projectFolder={projectFolder}
@@ -5232,6 +5763,23 @@ export default function App() {
                         <path d="M17.5 8.8c-1.1-.1-2.2.1-3.4.7" />
                       </svg>
                     </button>
+                    <button
+                      className={`rightTab ${rightSidebarTab === "reference" ? "activeRightTab" : ""}`}
+                      type="button"
+                      role="tab"
+                      aria-label="資料"
+                      aria-selected={rightSidebarTab === "reference"}
+                      title="資料"
+                      onClick={() => setRightSidebarTab("reference")}
+                    >
+                      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+                        <path d="M7 3.5h7l3 3V20a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 6 20V5A1.5 1.5 0 0 1 7.5 3.5Z" />
+                        <path d="M14 3.5V7h3.5" />
+                        <path d="M9 11h6" />
+                        <path d="M9 14h6" />
+                        <path d="M9 17h4" />
+                      </svg>
+                    </button>
                   </div>
                   {rightSidebarTab === "plot" && (
                     <PlotPaneHeaderActions
@@ -5278,6 +5826,26 @@ export default function App() {
                       isManagerOpen={isPlotManagerOpen}
                       onManagerOpenChange={setIsPlotManagerOpen}
                     />
+                  ) : rightSidebarTab === "reference" ? (
+                    <ReferencePane
+                      cards={referenceLayout.cards}
+                      candidates={sortedReferenceCandidates}
+                      query={referenceQuery}
+                      onQueryChange={setReferenceQuery}
+                      onAddReference={() => void handleAddReference()}
+                      onOpenReference={(sourcePath) => {
+                        const file = sortedReferenceCandidates.find(
+                          (item) => item.sourcePath === sourcePath,
+                        );
+                        openReferenceCard(sourcePath, file);
+                      }}
+                      onFocusReference={focusReferenceCard}
+                      onCloseReference={closeReferenceCard}
+                      onPinReference={pinReferenceCard}
+                      onDeleteImportedReference={(sourcePath) =>
+                        void handleDeleteImportedReference(sourcePath)
+                      }
+                    />
                   ) : (
                     <IdeaPane
                       threads={snippets}
@@ -5302,6 +5870,13 @@ export default function App() {
                 </div>
               </aside>
             )}
+            <ReferenceLayer
+              rootPath={projectFolder?.path ?? null}
+              layout={referenceLayout}
+              onLayoutChange={patchReferenceLayout}
+              onReturnFocusToEditor={returnFocusToEditor}
+              onTextSaved={handleReferenceTextSaved}
+            />
           </div>
 
           <div className={`toast ${toast ? "showToast" : ""}`} role="status">

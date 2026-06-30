@@ -57,6 +57,45 @@ export type PlotCard = {
   managerCollapsed: boolean;
 };
 
+export type ReferenceKind = "text" | "markdown" | "image" | "pdf" | "unknown";
+
+export type ReferenceCardState = {
+  id: string;
+  sourcePath: string;
+  kind: ReferenceKind;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  zIndex: number;
+  collapsed: boolean;
+  pinned: boolean;
+  scrollTop?: number;
+  zoom?: number;
+  page?: number;
+  editing?: boolean;
+};
+
+export type ReferenceLayout = {
+  version: 1;
+  name: string;
+  cards: ReferenceCardState[];
+  recent: ReferenceFileInfo[];
+};
+
+export type ReferenceFileInfo = {
+  sourcePath: string;
+  name: string;
+  kind: ReferenceKind;
+  size: number;
+  imported: boolean;
+};
+
+export type ReferenceBinary = {
+  mime: string;
+  dataBase64: string;
+};
+
 export const appThemeValues = [
   "dark",
   "notion",
