@@ -1314,6 +1314,14 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         typeof settings.countWhitespace === "boolean"
           ? settings.countWhitespace
           : defaultSettings.countWhitespace,
+      typewriterScroll:
+        typeof settings.typewriterScroll === "boolean"
+          ? settings.typewriterScroll
+          : defaultSettings.typewriterScroll,
+      typewriterOffset:
+        typeof settings.typewriterOffset === "number" && Number.isFinite(settings.typewriterOffset)
+          ? Math.min(65, Math.max(30, settings.typewriterOffset))
+          : defaultSettings.typewriterOffset,
       writingMode:
         settings.writingMode === "horizontal-tb" || settings.writingMode === "vertical-rl"
           ? settings.writingMode
@@ -2646,7 +2654,13 @@ export default function App() {
   }, [applyTypewriterScroll, settings.typewriterScroll]);
 
   useEffect(() => {
-    if (!settings.typewriterScroll) return;
+    if (!settings.typewriterScroll) {
+      if (typewriterScrollFrameRef.current) {
+        window.cancelAnimationFrame(typewriterScrollFrameRef.current);
+        typewriterScrollFrameRef.current = null;
+      }
+      return;
+    }
     scheduleTypewriterScroll();
   }, [scheduleTypewriterScroll, settings.typewriterScroll]);
 
@@ -5611,6 +5625,7 @@ export default function App() {
                             text={editorText}
                             editorRevision={activeTab?.editorRevision ?? null}
                             writingMode={settings.writingMode}
+                            typewriterScroll={settings.typewriterScroll}
                             typewriterOffset={settings.typewriterOffset}
                             showLineBreakMarks={settings.showLineBreakMarks}
                             initialSelectionOffset={initialSelectionOffset}
