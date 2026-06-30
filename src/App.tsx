@@ -36,7 +36,12 @@ import {
   searchProjectAst,
   upsertProjectAstDocument,
 } from "./editor/ast/projectAst";
-import { PlotPane } from "./components/plot/PlotPane";
+import {
+  appendPlotChapter,
+  appendPlotSection,
+  PlotPane,
+  PlotPaneHeaderActions,
+} from "./components/plot/PlotPane";
 import { IdeaPane } from "./components/snippets/IdeaPane";
 import { StatusBar } from "./components/status/StatusBar";
 import type {
@@ -1310,6 +1315,15 @@ export default function App() {
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
   const [isRightSidebarWide, setIsRightSidebarWide] = useState(false);
   const [rightSidebarTab, setRightSidebarTab] = useState<"idea" | "plot">("plot");
+  const [isPlotManagerOpen, setIsPlotManagerOpen] = useState(false);
+
+  const addPlotSection = useCallback(() => {
+    setPlotCards((current) => appendPlotSection(current));
+  }, []);
+
+  const addPlotChapter = useCallback(() => {
+    setPlotCards((current) => appendPlotChapter(current));
+  }, []);
 
   const activeTab = useMemo(
     () => openTabs.find((tab) => tab.id === activeTabId) ?? openTabs[0] ?? null,
@@ -5190,48 +5204,80 @@ export default function App() {
                       className={`rightTab ${rightSidebarTab === "idea" ? "activeRightTab" : ""}`}
                       type="button"
                       role="tab"
+                      aria-label="Idea"
                       aria-selected={rightSidebarTab === "idea"}
+                      title="Idea"
                       onClick={() => setRightSidebarTab("idea")}
                     >
-                      Idea
+                      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+                        <path d="M9 18h6" />
+                        <path d="M10 22h4" />
+                        <path d="M8.4 14.6c-1.7-1.2-2.6-3-2.6-5.1A6.2 6.2 0 0 1 12 3.3a6.2 6.2 0 0 1 6.2 6.2c0 2.1-.9 3.9-2.6 5.1-.8.6-1.2 1.3-1.3 2.2H9.7c-.1-.9-.5-1.6-1.3-2.2Z" />
+                      </svg>
                     </button>
                     <button
                       className={`rightTab ${rightSidebarTab === "plot" ? "activeRightTab" : ""}`}
                       type="button"
                       role="tab"
+                      aria-label="Plot"
                       aria-selected={rightSidebarTab === "plot"}
+                      title="Plot"
                       onClick={() => setRightSidebarTab("plot")}
                     >
-                      Plot
+                      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+                        <path d="M4 5.5c2.3-.9 4.8-.6 8 1.1v12c-3.2-1.7-5.7-2-8-1.1v-12Z" />
+                        <path d="M20 5.5c-2.3-.9-4.8-.6-8 1.1v12c3.2-1.7 5.7-2 8-1.1v-12Z" />
+                        <path d="M12 6.6v12" />
+                        <path d="M6.5 8.8c1.1-.1 2.2.1 3.4.7" />
+                        <path d="M17.5 8.8c-1.1-.1-2.2.1-3.4.7" />
+                      </svg>
                     </button>
                   </div>
-                  <button
-                    className="sidebarIconButton"
-                    type="button"
-                    aria-label={isRightSidebarWide ? "ペイン幅を戻す" : "ペイン幅を拡張"}
-                    title={isRightSidebarWide ? "ペイン幅を戻す" : "ペイン幅を拡張"}
-                    onClick={() => setIsRightSidebarWide((isWide) => !isWide)}
+                  {rightSidebarTab === "plot" && (
+                    <PlotPaneHeaderActions
+                      onAddSection={addPlotSection}
+                      onAddChapter={addPlotChapter}
+                      onOpenManager={() => setIsPlotManagerOpen(true)}
+                    />
+                  )}
+                  <div
+                    className={`rightSidebarChromeActions ${
+                      rightSidebarTab === "plot" ? "" : "pushRightSidebarChromeActions"
+                    }`}
                   >
-                    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-                      <polyline points={isRightSidebarWide ? "9 18 15 12 9 6" : "15 18 9 12 15 6"} />
-                    </svg>
-                  </button>
-                  <button
-                    className="sidebarIconButton"
-                    type="button"
-                    aria-label="右サイドバーを畳む"
-                    title="右サイドバーを畳む"
-                    onClick={() => setIsRightSidebarCollapsed(true)}
-                  >
-                    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-                      <line x1="18" y1="6" x2="6" y2="18" />
-                      <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                  </button>
+                    <button
+                      className="sidebarIconButton"
+                      type="button"
+                      aria-label={isRightSidebarWide ? "ペイン幅を戻す" : "ペイン幅を拡張"}
+                      title={isRightSidebarWide ? "ペイン幅を戻す" : "ペイン幅を拡張"}
+                      onClick={() => setIsRightSidebarWide((isWide) => !isWide)}
+                    >
+                      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+                        <polyline points={isRightSidebarWide ? "9 18 15 12 9 6" : "15 18 9 12 15 6"} />
+                      </svg>
+                    </button>
+                    <button
+                      className="sidebarIconButton"
+                      type="button"
+                      aria-label="右サイドバーを畳む"
+                      title="右サイドバーを畳む"
+                      onClick={() => setIsRightSidebarCollapsed(true)}
+                    >
+                      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
                 <div className="rightSidebarBody">
                   {rightSidebarTab === "plot" ? (
-                    <PlotPane cards={plotCards} onCardsChange={setPlotCards} />
+                    <PlotPane
+                      cards={plotCards}
+                      onCardsChange={setPlotCards}
+                      isManagerOpen={isPlotManagerOpen}
+                      onManagerOpenChange={setIsPlotManagerOpen}
+                    />
                   ) : (
                     <IdeaPane
                       threads={snippets}

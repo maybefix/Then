@@ -33,6 +33,7 @@ type PlotCardStyle = CSSProperties & {
 const PLOT_CONTEXT_MENU_WIDTH = 180;
 const PLOT_CONTEXT_MENU_HEIGHT = 92;
 const DEFAULT_ROWS_PER_COLUMN = 24;
+const SCROLL_PIN_TOLERANCE = 16;
 
 const countTextUnits = (text: string) => Array.from(text).length;
 
@@ -62,7 +63,7 @@ const getRowsPerColumn = (element: HTMLElement) => {
   return Math.max(1, Math.floor(availableHeight / glyphAdvance));
 };
 
-const renumberPlotCards = (cards: PlotCard[]) => {
+export const renumberPlotCards = (cards: PlotCard[]) => {
   let sectionIndex = 0;
   return cards.map((card) => {
     if (card.kind === "chapter") return { ...card, num: "" };
@@ -70,6 +71,34 @@ const renumberPlotCards = (cards: PlotCard[]) => {
     return { ...card, num: String(sectionIndex).padStart(3, "0") };
   });
 };
+
+export const appendPlotSection = (cards: PlotCard[]) =>
+  renumberPlotCards([
+    ...cards,
+    {
+      id: `plot-${Date.now()}`,
+      kind: "section",
+      num: "",
+      title: "",
+      body: "",
+      expanded: false,
+      managerCollapsed: false,
+    },
+  ]);
+
+export const appendPlotChapter = (cards: PlotCard[]) =>
+  renumberPlotCards([
+    ...cards,
+    {
+      id: `chapter-${Date.now()}`,
+      kind: "chapter",
+      num: "",
+      title: "",
+      body: "",
+      expanded: true,
+      managerCollapsed: false,
+    },
+  ]);
 
 const getPlotContextMenuStyle = (x: number, y: number): CSSProperties => {
   return getScaledFixedMenuPosition(x, y, {
@@ -193,7 +222,6 @@ type PlotBoardProps = {
   onCardsChange: Dispatch<SetStateAction<PlotCard[]>>;
   /** 管理画面モード: 折りたたみ状態を保存データではなくローカルに持ち、初期は全展開。 */
   managerMode?: boolean;
-  onOpenManager?: () => void;
   className?: string;
 };
 
@@ -201,7 +229,6 @@ function PlotBoard({
   cards,
   onCardsChange,
   managerMode = false,
-  onOpenManager,
   className,
 }: PlotBoardProps) {
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
@@ -216,6 +243,7 @@ function PlotBoard({
   const draggingCardIdRef = useRef<string | null>(null);
   // 初回表示で先頭（右端）に合わせたかどうかの判定に使う直前の scrollWidth。
   const prevScrollWidthRef = useRef(0);
+  const prevClientWidthRef = useRef(0);
 
   // セクションは本文表示、章は配下セクションの表示可否を表す共通の「展開」状態。
   // 管理画面は card.managerCollapsed（右サイドバーの expanded とは独立・保存対象）を見る。
@@ -279,12 +307,39 @@ function PlotBoard({
     const pane = paneRef.current;
     if (!pane) return;
 
-    if (prevScrollWidthRef.current === 0) {
-      // 初回のみ：縦書きの先頭（右端）を表示する。以降の開閉・編集では自動移動しない。
-      pane.scrollLeft = Math.max(0, pane.scrollWidth - pane.clientWidth);
+    const maxScrollLeft = Math.max(0, pane.scrollWidth - pane.clientWidth);
+    const prevMaxScrollLeft = Math.max(
+      0,
+      prevScrollWidthRef.current - prevClientWidthRef.current,
+    );
+    const wasPinnedBeforeLayout =
+      prevScrollWidthRef.current === 0 ||
+      isPinnedToRightRef.current ||
+      Math.abs(pane.scrollLeft - prevMaxScrollLeft) < SCROLL_PIN_TOLERANCE;
+
+    if (wasPinnedBeforeLayout) {
+      let frames = 4;
+      let frameId = 0;
+      const pinToRight = () => {
+        const nextMaxScrollLeft = Math.max(0, pane.scrollWidth - pane.clientWidth);
+        pane.scrollLeft = nextMaxScrollLeft;
+        isPinnedToRightRef.current = true;
+        prevScrollWidthRef.current = pane.scrollWidth;
+        prevClientWidthRef.current = pane.clientWidth;
+
+        if (--frames > 0) {
+          frameId = requestAnimationFrame(pinToRight);
+        }
+      };
+
+      pinToRight();
+      return () => {
+        if (frameId) cancelAnimationFrame(frameId);
+      };
     }
     prevScrollWidthRef.current = pane.scrollWidth;
-  }, [bodyColumns, cards.length]);
+    prevClientWidthRef.current = pane.clientWidth;
+  }, [bodyColumns, cards, managerMode]);
 
   useLayoutEffect(() => {
     if (!contextMenu) return;
@@ -360,7 +415,8 @@ function PlotBoard({
     if (!pane) return;
 
     const maxScrollLeft = pane.scrollWidth - pane.clientWidth;
-    isPinnedToRightRef.current = maxScrollLeft <= 0 || Math.abs(pane.scrollLeft - maxScrollLeft) < 2;
+    isPinnedToRightRef.current =
+      maxScrollLeft <= 0 || Math.abs(pane.scrollLeft - maxScrollLeft) < SCROLL_PIN_TOLERANCE;
   };
 
   /** トグル対象カードの柱（番号バッジ）の画面位置。再レイアウト後に同じ位置へ戻すための基準。 */
@@ -431,40 +487,6 @@ function PlotBoard({
     event.preventDefault();
     event.stopPropagation();
     setContextMenu({ cardId, x: event.clientX, y: event.clientY });
-  };
-
-  const addCard = () => {
-    onCardsChange((current) =>
-      renumberPlotCards([
-        ...current,
-        {
-          id: `plot-${Date.now()}`,
-          kind: "section",
-          num: "",
-          title: "",
-          body: "",
-          expanded: false,
-          managerCollapsed: false,
-        },
-      ]),
-    );
-  };
-
-  const addChapter = () => {
-    onCardsChange((current) =>
-      renumberPlotCards([
-        ...current,
-        {
-          id: `chapter-${Date.now()}`,
-          kind: "chapter",
-          num: "",
-          title: "",
-          body: "",
-          expanded: true,
-          managerCollapsed: false,
-        },
-      ]),
-    );
   };
 
   /** セクションを指定章（chapterId===null は冒頭グループ）の末尾へ移動する。 */
@@ -550,37 +572,6 @@ function PlotBoard({
         onWheel={handleWheel}
       >
         <div className="plotTrack">
-          <div className="plotTrackActions">
-            <button
-              className="plotAddButton"
-              type="button"
-              aria-label="プロットを追加"
-              title="プロットを追加"
-              onClick={addCard}
-            >
-              ＋
-            </button>
-            <button
-              className="plotToolButton"
-              type="button"
-              aria-label="章を追加"
-              title="章を追加"
-              onClick={addChapter}
-            >
-              <PlotIcon name="bookmark" />
-            </button>
-            {onOpenManager && (
-              <button
-                className="plotToolButton"
-                type="button"
-                aria-label="プロットを管理"
-                title="プロットを管理"
-                onClick={onOpenManager}
-              >
-                <PlotIcon name="list" />
-              </button>
-            )}
-          </div>
           {visualCards.map((card) => {
             if (card.kind === "chapter") {
               const chapterOpen = isCardExpanded(card);
@@ -905,23 +896,74 @@ function PlotDeleteDialog({ card, onCancel, onConfirm }: PlotDeleteDialogProps) 
 type PlotPaneProps = {
   cards: PlotCard[];
   onCardsChange: Dispatch<SetStateAction<PlotCard[]>>;
+  isManagerOpen?: boolean;
+  onManagerOpenChange?: (open: boolean) => void;
 };
 
-export function PlotPane({ cards, onCardsChange }: PlotPaneProps) {
-  const [isManagerOpen, setIsManagerOpen] = useState(false);
+type PlotPaneHeaderActionsProps = {
+  onAddSection: () => void;
+  onAddChapter: () => void;
+  onOpenManager?: () => void;
+};
+
+export function PlotPaneHeaderActions({
+  onAddSection,
+  onAddChapter,
+  onOpenManager,
+}: PlotPaneHeaderActionsProps) {
+  return (
+    <div className="plotPaneHeaderActions" aria-label="プロット操作">
+      <button
+        className="sidebarIconButton plotHeaderActionButton"
+        type="button"
+        aria-label="セクションを追加"
+        title="セクションを追加"
+        onClick={onAddSection}
+      >
+        <span aria-hidden="true">＋</span>
+      </button>
+      <button
+        className="sidebarIconButton plotHeaderActionButton"
+        type="button"
+        aria-label="章を追加"
+        title="章を追加"
+        onClick={onAddChapter}
+      >
+        <PlotIcon name="bookmark" />
+      </button>
+      {onOpenManager && (
+        <button
+          className="sidebarIconButton plotHeaderActionButton"
+          type="button"
+          aria-label="プロットを管理"
+          title="プロットを管理"
+          onClick={onOpenManager}
+        >
+          <PlotIcon name="list" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function PlotPane({
+  cards,
+  onCardsChange,
+  isManagerOpen,
+  onManagerOpenChange,
+}: PlotPaneProps) {
+  const [localManagerOpen, setLocalManagerOpen] = useState(false);
+  const managerOpen = isManagerOpen ?? localManagerOpen;
+  const setManagerOpen = onManagerOpenChange ?? setLocalManagerOpen;
 
   return (
     <>
-      <PlotBoard
-        cards={cards}
-        onCardsChange={onCardsChange}
-        onOpenManager={() => setIsManagerOpen(true)}
-      />
-      {isManagerOpen && (
+      <PlotBoard cards={cards} onCardsChange={onCardsChange} />
+      {managerOpen && (
         <PlotManagerModal
           cards={cards}
           onCardsChange={onCardsChange}
-          onClose={() => setIsManagerOpen(false)}
+          onClose={() => setManagerOpen(false)}
         />
       )}
     </>
@@ -935,6 +977,9 @@ type PlotManagerModalProps = {
 };
 
 function PlotManagerModal({ cards, onCardsChange, onClose }: PlotManagerModalProps) {
+  const addSection = () => onCardsChange((current) => appendPlotSection(current));
+  const addChapter = () => onCardsChange((current) => appendPlotChapter(current));
+
   return createPortal(
     <div className="modalBackdrop" role="presentation">
       <section
@@ -945,6 +990,7 @@ function PlotManagerModal({ cards, onCardsChange, onClose }: PlotManagerModalPro
       >
         <header className="modalHeader">
           <h2>プロットを管理</h2>
+          <PlotPaneHeaderActions onAddSection={addSection} onAddChapter={addChapter} />
           <button className="modalClose" type="button" aria-label="閉じる" onClick={onClose}>
             ×
           </button>
