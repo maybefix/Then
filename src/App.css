@@ -3637,6 +3637,7 @@ body {
 
 .sidebarFooterActions {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
 }
 
@@ -3647,6 +3648,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 6px;
+  padding: 0 10px;
   border: 0.5px solid var(--border-strong);
   border-radius: 6px;
   background: transparent;
@@ -7703,7 +7705,6 @@ body {
 .appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="air-"], [data-theme^="passion-"], [data-theme^="energy-"]) :is(
   .themePickerButton,
   .modalActions button,
-  .sidebarAddButton,
   .newTabActions button,
   .addButton,
   .ideaAdd
@@ -7716,12 +7717,41 @@ body {
 .appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="air-"], [data-theme^="passion-"], [data-theme^="energy-"]) :is(
   .themePickerButton,
   .modalActions button,
-  .sidebarAddButton,
   .newTabActions button,
   .addButton,
   .ideaAdd
 ):hover {
   filter: brightness(1.06);
+}
+
+.appShell:is([data-theme^="promise-"], [data-theme^="air-"], [data-theme^="passion-"], [data-theme^="energy-"]) .sidebarAddButton {
+  border-color: transparent;
+  background: var(--action-gradient, var(--brand-gradient));
+  color: var(--action-text, var(--on-accent));
+}
+
+.appShell:is([data-theme^="promise-"], [data-theme^="air-"], [data-theme^="passion-"], [data-theme^="energy-"]) .sidebarAddButton:hover {
+  filter: brightness(1.06);
+}
+
+.appShell[data-theme^="flat-"] .sidebarFooter .sidebarAddButton {
+  border-color: var(--border-strong);
+  background: transparent;
+  background-image: none;
+  box-shadow: none;
+  color: var(--text-muted);
+  filter: none;
+}
+
+.appShell[data-theme^="flat-"] .sidebarFooter .sidebarAddButton:hover,
+.appShell[data-theme^="flat-"] .sidebarFooter .sidebarAddButton:focus,
+.appShell[data-theme^="flat-"] .sidebarFooter .sidebarAddButton:focus-visible,
+.appShell[data-theme^="flat-"] .sidebarFooter .sidebarAddButton:active {
+  border-color: var(--accent-border);
+  background: var(--control-hover);
+  background-image: none;
+  color: var(--text-primary);
+  filter: none;
 }
 
 .appShell:is([data-theme^="promise-"], [data-theme^="flat-"]) .appFrame {

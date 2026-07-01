@@ -1543,7 +1543,7 @@ export function WorkspaceSidebar({
         <div className="sidebarFooterActions">
           <button className="sidebarAddButton" type="button" onClick={onNewDocument}>
             <SidebarIcon name="plus" className="sidebarButtonSvg" />
-            <span>シートを追加</span>
+            <span>シート</span>
           </button>
           <button
             className="sidebarAddButton"
@@ -1555,7 +1555,7 @@ export function WorkspaceSidebar({
             }
           >
             <SidebarIcon name="folderPlus" className="sidebarButtonSvg" />
-            <span>フォルダを追加</span>
+            <span>フォルダ</span>
           </button>
         </div>
       </div>

@@ -1678,6 +1678,47 @@ export default function App() {
     }
   }, [openReferenceCard, projectFolder]);
 
+  const handleCreateReference = useCallback(async () => {
+    if (!projectFolder) {
+      showToast("先にフォルダを開いてください");
+      return;
+    }
+    if (!isTauriRuntime()) {
+      showToast("資料の作成はTauri版で利用できます");
+      return;
+    }
+
+    const name = await new Promise<string | null>((resolve) => {
+      setAppDialog({
+        type: "input",
+        title: "資料を新規作成",
+        label: "ファイル名（.txt / .md）",
+        value: "新しい資料.md",
+        confirmLabel: "作成",
+        placeholder: "例: 世界観メモ.md",
+        error: "",
+        resolve,
+      });
+    });
+    if (!name) return;
+
+    try {
+      const file = await invoke<ReferenceFileInfo>("create_reference_text_file", {
+        rootPath: projectFolder.path,
+        name,
+      });
+      setReferenceCandidates((current) =>
+        mergeReferenceFiles([file], current).sort((left, right) =>
+          left.sourcePath.localeCompare(right.sourcePath),
+        ),
+      );
+      openReferenceCard(file.sourcePath, file);
+    } catch (error) {
+      setLastError(String(error));
+      showToast("資料を作成できませんでした");
+    }
+  }, [openReferenceCard, projectFolder]);
+
   const handleDeleteImportedReference = useCallback(
     async (sourcePath: string) => {
       if (!projectFolder) return;
@@ -5866,6 +5907,7 @@ export default function App() {
                       query={referenceQuery}
                       onQueryChange={setReferenceQuery}
                       onAddReference={() => void handleAddReference()}
+                      onCreateReference={() => void handleCreateReference()}
                       onOpenReference={(sourcePath) => {
                         const file = sortedReferenceCandidates.find(
                           (item) => item.sourcePath === sourcePath,
