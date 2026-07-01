@@ -527,6 +527,8 @@ const defaultSettings: EditorSettings = {
   snippetStorageMode: "workspace",
   sidebarMode: "tree",
   showWorkspacePaths: true,
+  zoneMode: false,
+  zoneModeOpacity: 0.42,
   navigatorPreviewLines: DEFAULT_NAVIGATOR_PREVIEW_LINES,
   countWhitespace: true,
 };
@@ -1302,6 +1304,14 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         typeof settings.showWorkspacePaths === "boolean"
           ? settings.showWorkspacePaths
           : defaultSettings.showWorkspacePaths,
+      zoneMode:
+        typeof settings.zoneMode === "boolean"
+          ? settings.zoneMode
+          : defaultSettings.zoneMode,
+      zoneModeOpacity:
+        typeof settings.zoneModeOpacity === "number" && Number.isFinite(settings.zoneModeOpacity)
+          ? Math.min(0.85, Math.max(0, settings.zoneModeOpacity))
+          : defaultSettings.zoneModeOpacity,
       navigatorPreviewLines: NAVIGATOR_PREVIEW_LINE_CHOICES.includes(
         settings.navigatorPreviewLines as number,
       )
@@ -4953,6 +4963,7 @@ export default function App() {
         className="appShell"
         data-theme={settings.theme}
         data-writing-mode={settings.writingMode}
+        data-zone-mode={settings.zoneMode ? "true" : undefined}
         style={
           {
             "--editor-font-family": settings.editorFontFamily,
@@ -4961,6 +4972,7 @@ export default function App() {
             "--editor-font-size": `${settings.fontSize}px`,
             "--editor-line-height": settings.lineHeight,
             "--typewriter-guide-position": `${settings.typewriterOffset}%`,
+            "--zone-sidebar-opacity": settings.zoneModeOpacity,
           } as React.CSSProperties
         }
       >

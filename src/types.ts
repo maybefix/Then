@@ -190,6 +190,10 @@ export type EditorSettings = {
   sidebarMode: SidebarMode;
   /** プロジェクト切替メニューでフォルダパスを表示するか。 */
   showWorkspacePaths: boolean;
+  /** 左右サイドバーを通常時に透かし、ホバー時だけ通常表示にする実験モード。 */
+  zoneMode: boolean;
+  /** Zoneモードでサイドバーに適用する通常時の不透明度。 */
+  zoneModeOpacity: number;
   /** ナビゲータ方式のプレビュー表示行数。0 は「なし」（プレビュー非表示）。 */
   navigatorPreviewLines: number;
   /** 文字数カウントに空白文字（スペース・タブ・改行など）を含めるか。 */

@@ -440,6 +440,9 @@ export function WorkspaceSidebar({
   const [collapsedOutlinePaths, setCollapsedOutlinePaths] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
+  const [collapsedOutlineHeadingKeys, setCollapsedOutlineHeadingKeys] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const [isReplaceExpanded, setIsReplaceExpanded] = useState(false);
   const [navigatorLocation, setNavigatorLocation] = useState<
     { kind: "folder" | "file"; path: string } | null
@@ -618,6 +621,21 @@ export function WorkspaceSidebar({
       return;
     }
     onSelectFile(entry.path);
+  };
+
+  const outlineHeadingKey = (filePath: string | null, item: DocumentOutlineItem | OutlineItem) =>
+    `${filePath ?? "scratch"}:${item.id}`;
+
+  const toggleOutlineHeadingCollapse = (key: string) => {
+    setCollapsedOutlineHeadingKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
   };
 
   const resetHeadingDrag = () => {
@@ -869,6 +887,9 @@ export function WorkspaceSidebar({
     depth: number,
   ): JSX.Element[] => {
     return items.map((item) => {
+      const itemKey = outlineHeadingKey(filePath, item);
+      const hasChildren = item.children.length > 0;
+      const isCollapsed = hasChildren && collapsedOutlineHeadingKeys.has(itemKey);
       const isActive = filePath === currentFilePath && activeOutlineIds.has(item.id);
       const isDragging =
         filePath !== null &&
@@ -882,10 +903,12 @@ export function WorkspaceSidebar({
           ? headingDropTarget.position
           : null;
       return (
-        <div className="outlineTreeNode" key={`${filePath ?? "scratch"}:${item.id}`}>
+        <div className="outlineTreeNode" key={itemKey}>
           <button
             className={[
               "outlineTreeItem",
+              hasChildren ? "collapsibleOutlineTreeItem" : "",
+              isCollapsed ? "collapsedOutlineTreeItem" : "",
               isActive ? "activeOutlineTreeItem" : "",
               isDragging ? "draggingHeadingItem" : "",
               targetPosition ? `headingDrop-${targetPosition}` : "",
@@ -894,12 +917,24 @@ export function WorkspaceSidebar({
             data-outline-heading-line={filePath ? item.line : undefined}
             data-outline-block-id={filePath ? item.blockId : undefined}
             draggable={Boolean(filePath)}
-            style={{ paddingLeft: `${12 + depth * 14}px` }}
+            style={
+              {
+                "--outline-item-indent": `${12 + depth * 14}px`,
+                paddingLeft: `${12 + depth * 14}px`,
+              } as CSSProperties
+            }
             type="button"
             title={item.title}
             onClick={(event) => {
               if (suppressNextClickRef.current) {
                 event.preventDefault();
+                return;
+              }
+              if (
+                hasChildren &&
+                (event.target as HTMLElement).closest("[data-outline-heading-disclosure]")
+              ) {
+                toggleOutlineHeadingCollapse(itemKey);
                 return;
               }
               filePath ? onJumpProjectOutline(filePath, item) : onJumpOutline(item);
@@ -936,10 +971,22 @@ export function WorkspaceSidebar({
             }
             onDragEnd={filePath ? handleHeadingDragEnd : undefined}
           >
+            <span
+              className="outlineHeadingDisclosure"
+              data-outline-heading-disclosure={hasChildren ? "true" : undefined}
+              aria-hidden="true"
+            >
+              {hasChildren && (
+                <SidebarIcon
+                  name={isCollapsed ? "chevronRight" : "chevronDown"}
+                  className="treeChevronIcon"
+                />
+              )}
+            </span>
             <span className="outlineLevelMark">H{item.level}</span>
             <span>{item.title}</span>
           </button>
-          {item.children.length > 0 && (
+          {hasChildren && !isCollapsed && (
             <div className="outlineTreeChildren">
               {renderOutlineItems(filePath, item.children, depth + 1)}
             </div>

@@ -3506,6 +3506,27 @@ body {
   text-align: left;
 }
 
+.outlineHeadingDisclosure {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--outline-item-indent, 12px) - 14px);
+  display: inline-grid;
+  width: 12px;
+  height: 24px;
+  place-items: center;
+  color: var(--text-faint);
+}
+
+.collapsibleOutlineTreeItem .outlineHeadingDisclosure {
+  color: var(--text-muted);
+}
+
+.collapsibleOutlineTreeItem:hover .outlineHeadingDisclosure,
+.activeOutlineTreeItem .outlineHeadingDisclosure {
+  color: var(--text-primary);
+}
+
 .outlineTreeItem::before,
 .outlineTreeItem::after {
   position: absolute;
@@ -6275,6 +6296,16 @@ body {
 }
 .appShell[data-theme] .workspaceSidebar,
 .appShell[data-theme] .rightSidebar { background: var(--sidebar-bg); }
+
+.appShell[data-zone-mode="true"] :is(.workspaceSidebar, .rightSidebar) {
+  opacity: var(--zone-sidebar-opacity, 0.42);
+  transition: opacity 140ms ease;
+}
+
+.appShell[data-zone-mode="true"] :is(.workspaceSidebar, .rightSidebar):is(:hover, :focus-within) {
+  opacity: 1;
+}
+
 .appShell[data-theme] .iconButton,
 .appShell[data-theme] .sidebarIconButton {
   color: var(--navigation-icon);
