@@ -16,6 +16,7 @@ import type {
 import type {
   BreadcrumbDropTarget,
   FileProgressStatus,
+  ManuscriptSnapshot,
   OutlineItem,
   ProjectEntry,
   ProjectFolder,
@@ -82,6 +83,11 @@ type WorkspaceSidebarProps = {
     targetPath: string,
     position: "before" | "after",
   ) => void;
+  snapshots: ManuscriptSnapshot[];
+  onCreateSnapshot: () => void;
+  onRenameSnapshot: (snapshot: ManuscriptSnapshot) => void;
+  onRestoreSnapshot: (snapshot: ManuscriptSnapshot) => void;
+  onDeleteSnapshot: (snapshot: ManuscriptSnapshot) => void;
   onCollapse: () => void;
 };
 
@@ -145,6 +151,20 @@ function getProjectAstStatusLabel(projectAst: ProjectAst | null): string {
 
 function formatCharCount(value: number): string {
   return `${new Intl.NumberFormat("ja-JP").format(value)}字`;
+}
+
+function formatSnapshotDate(value: number): string {
+  return new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(value);
+}
+
+function getSnapshotReasonLabel(snapshot: ManuscriptSnapshot): string {
+  return snapshot.reason === "auto-before-restore" ? "復元前の退避" : "手動";
 }
 
 function getFileProgress(
@@ -278,12 +298,14 @@ type SidebarIconName =
   | "chevronDown"
   | "chevronLeft"
   | "chevronRight"
+  | "clock"
   | "edit"
   | "external"
   | "file"
   | "folder"
   | "folderPlus"
   | "plus"
+  | "restore"
   | "search"
   | "trash";
 
@@ -319,6 +341,13 @@ function SidebarIcon({ name, className = "" }: { name: SidebarIconName; classNam
       return (
         <svg {...common}>
           <polyline points="9 18 15 12 9 6" />
+        </svg>
+      );
+    case "clock":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3 2" />
         </svg>
       );
     case "edit":
@@ -362,6 +391,14 @@ function SidebarIcon({ name, className = "" }: { name: SidebarIconName; classNam
         <svg {...common}>
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      );
+    case "restore":
+      return (
+        <svg {...common}>
+          <path d="M3 12a9 9 0 1 0 3-6.7" />
+          <path d="M3 4v6h6" />
+          <path d="M12 7v5l3 2" />
         </svg>
       );
     case "search":
@@ -424,6 +461,11 @@ export function WorkspaceSidebar({
   onRenameEntry,
   onDeleteEntry,
   onReorderEntry,
+  snapshots,
+  onCreateSnapshot,
+  onRenameSnapshot,
+  onRestoreSnapshot,
+  onDeleteSnapshot,
   onCollapse,
 }: WorkspaceSidebarProps) {
   const [contextMenu, setContextMenu] = useState<TreeContextMenu>(null);
@@ -444,6 +486,7 @@ export function WorkspaceSidebar({
     ReadonlySet<string>
   >(() => new Set());
   const [isReplaceExpanded, setIsReplaceExpanded] = useState(false);
+  const [isSnapshotSectionCollapsed, setIsSnapshotSectionCollapsed] = useState(false);
   const [navigatorLocation, setNavigatorLocation] = useState<
     { kind: "folder" | "file"; path: string } | null
   >(null);
@@ -1518,6 +1561,102 @@ export function WorkspaceSidebar({
     </section>
   );
 
+  const renderSnapshotSection = () => (
+    <section className="sidebarSection snapshotSection" aria-label="スナップショット">
+      <div className="snapshotSectionHeader">
+        <button
+          className="snapshotSectionToggle"
+          type="button"
+          aria-expanded={!isSnapshotSectionCollapsed}
+          onClick={() => setIsSnapshotSectionCollapsed((current) => !current)}
+        >
+          <SidebarIcon
+            name={isSnapshotSectionCollapsed ? "chevronRight" : "chevronDown"}
+            className="treeChevronIcon"
+          />
+          <span>チェックポイント</span>
+        </button>
+        <button
+          className="snapshotCreateButton"
+          type="button"
+          aria-label="保存点を作成"
+          title="保存点を作成"
+          disabled={!projectFolder}
+          onClick={onCreateSnapshot}
+        >
+          <SidebarIcon name="plus" className="sidebarButtonSvg" />
+        </button>
+      </div>
+      {!isSnapshotSectionCollapsed && (
+        <div className="snapshotList">
+          {projectFolder ? (
+            snapshots.length > 0 ? (
+              snapshots.map((snapshot) => {
+                const textLength = countWhitespace
+                  ? snapshot.totalTextLength
+                  : snapshot.totalVisibleTextLength;
+                return (
+                  <article className="snapshotItem" key={snapshot.id}>
+                    <div className="snapshotItemIcon" aria-hidden="true">
+                      <SidebarIcon name="clock" className="snapshotClockIcon" />
+                    </div>
+                    <div className="snapshotItemBody">
+                      <div className="snapshotItemTitleRow">
+                        <strong className="snapshotItemTitle" title={snapshot.label}>
+                          {snapshot.label}
+                        </strong>
+                        {snapshot.reason === "auto-before-restore" && (
+                          <span className="snapshotBadge">退避</span>
+                        )}
+                      </div>
+                      <div className="snapshotItemDate">
+                        {formatSnapshotDate(snapshot.createdAt)}
+                      </div>
+                      <div className="snapshotItemMeta">
+                        {getSnapshotReasonLabel(snapshot)}・{snapshot.fileCount}個の原稿 /{" "}
+                        {formatCharCount(textLength)}
+                      </div>
+                    </div>
+                    <div className="snapshotItemActions">
+                      <button
+                        type="button"
+                        title="名前を変更"
+                        aria-label={`${snapshot.label}の名前を変更`}
+                        onClick={() => onRenameSnapshot(snapshot)}
+                      >
+                        <SidebarIcon name="edit" className="snapshotActionIcon" />
+                      </button>
+                      <button
+                        type="button"
+                        title="この保存点に戻す"
+                        aria-label={`${snapshot.label}に戻す`}
+                        onClick={() => onRestoreSnapshot(snapshot)}
+                      >
+                        <SidebarIcon name="restore" className="snapshotActionIcon" />
+                      </button>
+                      <button
+                        type="button"
+                        title="保存点を削除"
+                        aria-label={`${snapshot.label}を削除`}
+                        onClick={() => onDeleteSnapshot(snapshot)}
+                      >
+                        <SidebarIcon name="trash" className="snapshotActionIcon" />
+                      </button>
+                    </div>
+                  </article>
+                );
+              })
+            ) : (
+              <div className="snapshotEmptyState">保存点はまだありません</div>
+            )
+          ) : (
+            <div className="snapshotEmptyState">フォルダを開くと保存点を作成できます</div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+
   return (
     <aside className="workspaceSidebar" aria-label="アウトライン">
       <div className="sidebarHeader">
@@ -1579,11 +1718,11 @@ export function WorkspaceSidebar({
       </div>
 
       <div className="sidebarScroll">
-        {isProjectSearchMode
-          ? renderProjectSearchMode()
-          : sidebarMode === "navigator"
-            ? renderNavigatorMode()
-            : renderOutlineMode()}
+        {isProjectSearchMode ? (
+          renderProjectSearchMode()
+        ) : (
+          sidebarMode === "navigator" ? renderNavigatorMode() : renderOutlineMode()
+        )}
       </div>
 
       <div className="sidebarFooter">
@@ -1606,6 +1745,15 @@ export function WorkspaceSidebar({
           </button>
         </div>
       </div>
+      {!isProjectSearchMode && (
+        <div
+          className={`snapshotDock ${
+            isSnapshotSectionCollapsed ? "collapsedSnapshotDock" : ""
+          }`}
+        >
+          {renderSnapshotSection()}
+        </div>
+      )}
       {renderContextMenu()}
     </aside>
   );

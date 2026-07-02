@@ -3650,6 +3650,225 @@ body {
   font-size: 11px;
 }
 
+.snapshotSection {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-panel-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+}
+
+.snapshotDock {
+  display: flex;
+  min-height: 190px;
+  max-height: 260px;
+  flex: 0 0 214px;
+  flex-direction: column;
+  padding: 10px 12px 12px;
+  border-top: 0.5px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--sidebar-bg, var(--bg-panel)) 88%, var(--bg-root));
+}
+
+.collapsedSnapshotDock {
+  min-height: 60px;
+  max-height: 60px;
+  flex-basis: 58px;
+}
+
+.collapsedSnapshotDock .snapshotSectionHeader {
+  border-bottom: 0;
+}
+
+.snapshotSectionHeader {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 9px 6px;
+  border-bottom: 0.5px solid var(--border-subtle);
+}
+
+.snapshotSectionToggle {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.snapshotCreateButton {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 0;
+}
+
+.snapshotCreateButton:hover {
+  color: var(--text-primary);
+}
+
+.snapshotCreateButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.snapshotCreateButton .sidebarButtonSvg {
+  width: 13px;
+  height: 13px;
+  transform: translate(0, 0);
+}
+
+.collapsedSnapshotDock .snapshotCreateButton {
+  width: 22px;
+  height: 22px;
+}
+
+.collapsedSnapshotDock .snapshotCreateButton .sidebarButtonSvg {
+  width: 12px;
+  height: 12px;
+}
+
+.snapshotList {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  gap: 6px;
+  overflow-y: auto;
+  padding: 8px 9px 9px;
+}
+
+.snapshotItem {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 8px 8px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.snapshotItemIcon {
+  display: inline-grid;
+  width: 18px;
+  height: 22px;
+  place-items: center;
+  color: var(--text-faint);
+}
+
+.snapshotClockIcon {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+}
+
+.snapshotItemBody {
+  min-width: 0;
+}
+
+.snapshotItemTitleRow {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+
+.snapshotItemTitle {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snapshotBadge {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent-strong);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.snapshotItemDate,
+.snapshotItemMeta {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snapshotItemDate {
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.snapshotItemActions {
+  display: inline-flex;
+  align-items: start;
+  gap: 2px;
+}
+
+.snapshotItemActions button {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.snapshotItemActions button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.snapshotActionIcon {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
+.snapshotEmptyState {
+  padding: 12px 0;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .sidebarFooter {
   flex: 0 0 auto;
   padding: 9px 12px;

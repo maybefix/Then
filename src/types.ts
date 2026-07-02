@@ -259,6 +259,8 @@ export type AppState = {
   fileProgress: Record<string, FileProgressStatus>;
   /** ファイルパスごとに記憶した最後のカーソル位置。 */
   cursorPositions: Record<string, CursorPosition>;
+  /** 手動保存点。正本である原稿ASTから復元できる本文だけを保持する。 */
+  snapshots: ManuscriptSnapshot[];
 };
 
 export type TextDocument = {
@@ -286,6 +288,35 @@ export type WorkspaceRecord = {
   path: string;
   name: string;
   lastOpenedAt: number;
+};
+
+export type ManuscriptSnapshotReason = "manual" | "auto-before-restore";
+
+export type ManuscriptSnapshotFile = {
+  path: string;
+  name: string;
+  text: string;
+  textHash: string;
+  semanticHash: string;
+  lineCount: number;
+  textLength: number;
+  visibleTextLength: number;
+  outlineCount: number;
+};
+
+export type ManuscriptSnapshot = {
+  id: string;
+  workspacePath: string;
+  workspaceName: string;
+  createdAt: number;
+  reason: ManuscriptSnapshotReason;
+  label: string;
+  parentIds: string[];
+  projectTree: ProjectFolder;
+  files: ManuscriptSnapshotFile[];
+  fileCount: number;
+  totalTextLength: number;
+  totalVisibleTextLength: number;
 };
 
 export type WorkspaceAlert = {
