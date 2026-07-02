@@ -24,6 +24,7 @@ import {
   findActiveOutlineChain,
   flattenOutline,
   getLineNumberAtOffset,
+  hash16,
 } from "./editor/ast/documentAst";
 import {
   moveHeadingSection,
@@ -65,6 +66,8 @@ import type {
   FontOption,
   IdeaFragment,
   IdeaThread,
+  ManuscriptSnapshot,
+  ManuscriptSnapshotFile,
   OutlineItem,
   PlotCard,
   ProjectEntry,
@@ -527,6 +530,8 @@ const defaultSettings: EditorSettings = {
   snippetStorageMode: "workspace",
   sidebarMode: "tree",
   showWorkspacePaths: true,
+  zoneMode: false,
+  zoneModeOpacity: 0.42,
   navigatorPreviewLines: DEFAULT_NAVIGATOR_PREVIEW_LINES,
   countWhitespace: true,
 };
@@ -627,6 +632,7 @@ function createDefaultState(): AppState {
     recentWorkspaces: [],
     fileProgress: {},
     cursorPositions: {},
+    snapshots: [],
   };
 }
 
@@ -640,6 +646,140 @@ const WHITESPACE_PATTERN = /[\s　]/g;
 function countDisplayCharacters(text: string, includeWhitespace: boolean): number {
   const target = includeWhitespace ? text : text.replace(WHITESPACE_PATTERN, "");
   return Array.from(target).length;
+}
+
+function documentAstToText(documentAst: DocumentAst): string {
+  return documentAst.blocks.map((block) => block.source).join("\n");
+}
+
+function snapshotId(prefix = "snapshot"): string {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+const MAX_AUTO_SHELTER_SNAPSHOTS = 3;
+
+function trimAutoShelterSnapshots(
+  snapshots: ManuscriptSnapshot[],
+  maxCount = MAX_AUTO_SHELTER_SNAPSHOTS,
+): ManuscriptSnapshot[] {
+  const shelterCountsByWorkspace = new Map<string, number>();
+  return snapshots
+    .slice()
+    .sort((left, right) => right.createdAt - left.createdAt)
+    .filter((snapshot) => {
+      if (snapshot.reason !== "auto-before-restore") return true;
+      const key = normalizePathForCompare(snapshot.workspacePath);
+      const count = shelterCountsByWorkspace.get(key) ?? 0;
+      if (count >= maxCount) return false;
+      shelterCountsByWorkspace.set(key, count + 1);
+      return true;
+    });
+}
+
+function normalizeSnapshots(value: unknown): ManuscriptSnapshot[] {
+  if (!Array.isArray(value)) return [];
+
+  const normalized = value
+    .filter((snapshot): snapshot is Partial<ManuscriptSnapshot> =>
+      Boolean(snapshot) && typeof snapshot === "object",
+    )
+    .map((snapshot) => {
+      const files = Array.isArray(snapshot.files)
+        ? snapshot.files
+            .filter((file) =>
+              Boolean(file) &&
+              typeof file === "object" &&
+              typeof file.path === "string" &&
+              typeof file.name === "string" &&
+              typeof file.text === "string",
+            )
+            .map((file) => {
+              const entry = file as Partial<ManuscriptSnapshotFile> & {
+                path: string;
+                name: string;
+                text: string;
+              };
+              return {
+                path: entry.path,
+                name: entry.name,
+                text: entry.text,
+                textHash:
+                  typeof entry.textHash === "string" ? entry.textHash : hash16(entry.text),
+                semanticHash:
+                  typeof entry.semanticHash === "string"
+                    ? entry.semanticHash
+                    : hash16(entry.text),
+                lineCount:
+                  typeof entry.lineCount === "number" && Number.isFinite(entry.lineCount)
+                    ? entry.lineCount
+                    : entry.text.split("\n").length,
+                textLength:
+                  typeof entry.textLength === "number" && Number.isFinite(entry.textLength)
+                    ? entry.textLength
+                    : Array.from(entry.text).length,
+                visibleTextLength:
+                  typeof entry.visibleTextLength === "number" &&
+                  Number.isFinite(entry.visibleTextLength)
+                    ? entry.visibleTextLength
+                    : Array.from(entry.text.replace(WHITESPACE_PATTERN, "")).length,
+                outlineCount:
+                  typeof entry.outlineCount === "number" && Number.isFinite(entry.outlineCount)
+                    ? entry.outlineCount
+                    : 0,
+              };
+            })
+        : [];
+
+      const workspacePath =
+        typeof snapshot.workspacePath === "string" ? snapshot.workspacePath : "";
+      const workspaceName =
+        typeof snapshot.workspaceName === "string" ? snapshot.workspaceName : "プロジェクト";
+
+      return {
+        id: typeof snapshot.id === "string" ? snapshot.id : snapshotId(),
+        workspacePath,
+        workspaceName,
+        createdAt:
+          typeof snapshot.createdAt === "number" && Number.isFinite(snapshot.createdAt)
+            ? snapshot.createdAt
+            : Date.now(),
+        reason:
+          snapshot.reason === "auto-before-restore" ? "auto-before-restore" : "manual",
+        label:
+          typeof snapshot.label === "string" && snapshot.label.trim()
+            ? snapshot.label
+            : "チェックポイント",
+        memo: typeof snapshot.memo === "string" ? snapshot.memo : "",
+        parentIds: Array.isArray(snapshot.parentIds)
+          ? snapshot.parentIds.filter((id): id is string => typeof id === "string")
+          : [],
+        projectTree:
+          snapshot.projectTree &&
+          typeof snapshot.projectTree === "object" &&
+          typeof snapshot.projectTree.path === "string" &&
+          typeof snapshot.projectTree.name === "string" &&
+          Array.isArray(snapshot.projectTree.children)
+            ? snapshot.projectTree
+            : { path: workspacePath, name: workspaceName, children: [] },
+        files,
+        fileCount:
+          typeof snapshot.fileCount === "number" && Number.isFinite(snapshot.fileCount)
+            ? snapshot.fileCount
+            : files.length,
+        totalTextLength:
+          typeof snapshot.totalTextLength === "number" && Number.isFinite(snapshot.totalTextLength)
+            ? snapshot.totalTextLength
+            : files.reduce((sum, file) => sum + file.textLength, 0),
+        totalVisibleTextLength:
+          typeof snapshot.totalVisibleTextLength === "number" &&
+          Number.isFinite(snapshot.totalVisibleTextLength)
+            ? snapshot.totalVisibleTextLength
+            : files.reduce((sum, file) => sum + file.visibleTextLength, 0),
+      } satisfies ManuscriptSnapshot;
+    })
+    .filter((snapshot) => snapshot.workspacePath && snapshot.files.length > 0);
+
+  return trimAutoShelterSnapshots(normalized);
 }
 
 
@@ -1302,6 +1442,14 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         typeof settings.showWorkspacePaths === "boolean"
           ? settings.showWorkspacePaths
           : defaultSettings.showWorkspacePaths,
+      zoneMode:
+        typeof settings.zoneMode === "boolean"
+          ? settings.zoneMode
+          : defaultSettings.zoneMode,
+      zoneModeOpacity:
+        typeof settings.zoneModeOpacity === "number" && Number.isFinite(settings.zoneModeOpacity)
+          ? Math.min(0.85, Math.max(0, settings.zoneModeOpacity))
+          : defaultSettings.zoneModeOpacity,
       navigatorPreviewLines: NAVIGATOR_PREVIEW_LINE_CHOICES.includes(
         settings.navigatorPreviewLines as number,
       )
@@ -1314,6 +1462,14 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         typeof settings.countWhitespace === "boolean"
           ? settings.countWhitespace
           : defaultSettings.countWhitespace,
+      typewriterScroll:
+        typeof settings.typewriterScroll === "boolean"
+          ? settings.typewriterScroll
+          : defaultSettings.typewriterScroll,
+      typewriterOffset:
+        typeof settings.typewriterOffset === "number" && Number.isFinite(settings.typewriterOffset)
+          ? Math.min(65, Math.max(30, settings.typewriterOffset))
+          : defaultSettings.typewriterOffset,
       writingMode:
         settings.writingMode === "horizontal-tb" || settings.writingMode === "vertical-rl"
           ? settings.writingMode
@@ -1325,6 +1481,7 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
     recentWorkspaces,
     fileProgress: normalizeFileProgress(value?.fileProgress),
     cursorPositions: normalizeCursorPositions(value?.cursorPositions),
+    snapshots: normalizeSnapshots(value?.snapshots),
   };
 }
 
@@ -1670,6 +1827,47 @@ export default function App() {
     }
   }, [openReferenceCard, projectFolder]);
 
+  const handleCreateReference = useCallback(async () => {
+    if (!projectFolder) {
+      showToast("先にフォルダを開いてください");
+      return;
+    }
+    if (!isTauriRuntime()) {
+      showToast("資料の作成はTauri版で利用できます");
+      return;
+    }
+
+    const name = await new Promise<string | null>((resolve) => {
+      setAppDialog({
+        type: "input",
+        title: "資料を新規作成",
+        label: "ファイル名（.txt / .md）",
+        value: "新しい資料.md",
+        confirmLabel: "作成",
+        placeholder: "例: 世界観メモ.md",
+        error: "",
+        resolve,
+      });
+    });
+    if (!name) return;
+
+    try {
+      const file = await invoke<ReferenceFileInfo>("create_reference_text_file", {
+        rootPath: projectFolder.path,
+        name,
+      });
+      setReferenceCandidates((current) =>
+        mergeReferenceFiles([file], current).sort((left, right) =>
+          left.sourcePath.localeCompare(right.sourcePath),
+        ),
+      );
+      openReferenceCard(file.sourcePath, file);
+    } catch (error) {
+      setLastError(String(error));
+      showToast("資料を作成できませんでした");
+    }
+  }, [openReferenceCard, projectFolder]);
+
   const handleDeleteImportedReference = useCallback(
     async (sourcePath: string) => {
       if (!projectFolder) return;
@@ -2003,6 +2201,12 @@ export default function App() {
     }
     return getParentPath(currentFilePath);
   }, [currentFilePath, projectFolder]);
+  const currentWorkspaceSnapshots = useMemo(() => {
+    if (!projectFolder) return [];
+    return appState.snapshots
+      .filter((snapshot) => isSamePath(snapshot.workspacePath, projectFolder.path))
+      .sort((left, right) => right.createdAt - left.createdAt);
+  }, [appState.snapshots, projectFolder]);
   const frontMatter = useMemo(() => parseFrontMatter(markdown), [markdown]);
   const editorText = frontMatter.body;
   activeDocumentSnapshotRef.current = {
@@ -2646,7 +2850,13 @@ export default function App() {
   }, [applyTypewriterScroll, settings.typewriterScroll]);
 
   useEffect(() => {
-    if (!settings.typewriterScroll) return;
+    if (!settings.typewriterScroll) {
+      if (typewriterScrollFrameRef.current) {
+        window.cancelAnimationFrame(typewriterScrollFrameRef.current);
+        typewriterScrollFrameRef.current = null;
+      }
+      return;
+    }
     scheduleTypewriterScroll();
   }, [scheduleTypewriterScroll, settings.typewriterScroll]);
 
@@ -3122,12 +3332,14 @@ export default function App() {
     initialValue,
     confirmLabel,
     placeholder,
+    optional = false,
   }: {
     title: string;
     label: string;
     initialValue: string;
     confirmLabel: string;
     placeholder?: string;
+    optional?: boolean;
   }) =>
     new Promise<string | null>((resolve) => {
       setAppDialog({
@@ -3137,6 +3349,7 @@ export default function App() {
         value: initialValue,
         confirmLabel,
         placeholder,
+        optional,
         error: "",
         resolve,
       });
@@ -3220,7 +3433,7 @@ export default function App() {
       }
 
       const value = current.value.trim();
-      if (!value) {
+      if (!value && !current.optional) {
         return { ...current, error: "名前を入力してください" };
       }
       current.resolve(value);
@@ -3315,6 +3528,189 @@ export default function App() {
     setLastError("");
   }, [openDocumentInTab, projectFolder, replaceActiveTabWithDocument]);
 
+  const buildManuscriptSnapshot = useCallback(
+    (
+      label: string,
+      memo: string,
+      reason: ManuscriptSnapshot["reason"],
+      parentIds: string[] = [],
+    ): ManuscriptSnapshot => {
+      if (!projectFolder) {
+        throw new Error("先にフォルダを開いてください");
+      }
+
+      const openTabsByPath = new Map(
+        openTabs
+          .filter((tab): tab is DocumentTab & { path: string } => Boolean(tab.path))
+          .map((tab) => [tab.path, tab] as const),
+      );
+      const astFilesByPath = new Map(
+        projectAst?.rootPath === projectFolder.path
+          ? projectAst.files.map((file) => [file.path, file] as const)
+          : [],
+      );
+      const missing: string[] = [];
+      const files = collectProjectTextFiles(projectFolder).flatMap((file) => {
+        const openTab = openTabsByPath.get(file.path);
+        const documentAst = openTab
+          ? createDocumentAst({
+              path: file.path,
+              name: openTab.name || file.name,
+              text: parseFrontMatter(openTab.markdown).body,
+            })
+          : astFilesByPath.get(file.path)?.documentAst ?? null;
+
+        if (!documentAst) {
+          missing.push(file.name);
+          return [];
+        }
+
+        return [
+          {
+            path: file.path,
+            name: file.name,
+            text: documentAstToText(documentAst),
+            textHash: documentAst.textHash,
+            semanticHash: documentAst.semanticHash,
+            lineCount: documentAst.lineCount,
+            textLength: documentAst.textLength,
+            visibleTextLength: documentAst.visibleTextLength,
+            outlineCount:
+              astFilesByPath.get(file.path)?.outlineCount ?? documentAst.outline.length,
+          } satisfies ManuscriptSnapshotFile,
+        ];
+      });
+
+      if (missing.length > 0) {
+        throw new Error(
+          `チェックポイントを作るには原稿の解析完了が必要です: ${missing.slice(0, 3).join(", ")}${
+            missing.length > 3 ? "..." : ""
+          }`,
+        );
+      }
+      if (files.length === 0) {
+        throw new Error("保存できる原稿がありません");
+      }
+
+      return {
+        id: snapshotId(reason === "manual" ? "snapshot" : "shelter"),
+        workspacePath: projectFolder.path,
+        workspaceName: projectFolder.name,
+        createdAt: Date.now(),
+        reason,
+        label,
+        memo,
+        parentIds,
+        projectTree: projectFolder,
+        files,
+        fileCount: files.length,
+        totalTextLength: files.reduce((sum, file) => sum + file.textLength, 0),
+        totalVisibleTextLength: files.reduce(
+          (sum, file) => sum + file.visibleTextLength,
+          0,
+        ),
+      };
+    },
+    [openTabs, projectAst, projectFolder],
+  );
+
+  const handleCreateManuscriptSnapshot = useCallback(async () => {
+    if (!projectFolder) {
+      showToast("先にフォルダを開いてください");
+      return;
+    }
+
+    const now = new Date();
+    const label = await requestInput({
+      title: "チェックポイントを作成",
+      label: "名前",
+      initialValue: `${now.toLocaleDateString("ja-JP")} ${now.toLocaleTimeString("ja-JP", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })}`,
+      confirmLabel: "作成",
+      placeholder: "例: 終盤改稿前",
+    });
+    if (!label) return;
+
+    const memo = await requestInput({
+      title: "チェックポイントのメモ",
+      label: "メモ",
+      initialValue: "",
+      confirmLabel: "作成",
+      placeholder: "例: 終盤の分岐前。会話のテンポを試す",
+      optional: true,
+    });
+    if (memo === null) return;
+
+    try {
+      const snapshot = buildManuscriptSnapshot(
+        label,
+        memo,
+        "manual",
+        currentWorkspaceSnapshots[0] ? [currentWorkspaceSnapshots[0].id] : [],
+      );
+      setAppState((current) => ({
+        ...current,
+        snapshots: [snapshot, ...current.snapshots],
+      }));
+      showToast("チェックポイントを作成しました");
+    } catch (error) {
+      setLastError(String(error));
+      showToast(error instanceof Error ? error.message : "チェックポイントを作成できませんでした");
+    }
+  }, [buildManuscriptSnapshot, currentWorkspaceSnapshots, projectFolder]);
+
+  const handleDeleteManuscriptSnapshot = useCallback(
+    async (snapshot: ManuscriptSnapshot) => {
+      const shouldDelete = await requestConfirm({
+        title: "チェックポイントを削除",
+        message: `「${snapshot.label}」を削除しますか？`,
+        detail: "削除したチェックポイントには戻れません。",
+        confirmLabel: "削除",
+        danger: true,
+      });
+      if (!shouldDelete) return;
+
+      setAppState((current) => ({
+        ...current,
+        snapshots: current.snapshots.filter((item) => item.id !== snapshot.id),
+      }));
+      showToast("チェックポイントを削除しました");
+    },
+    [],
+  );
+
+  const handleRenameManuscriptSnapshot = useCallback(async (snapshot: ManuscriptSnapshot) => {
+    const label = await requestInput({
+      title: "チェックポイントを編集",
+      label: "名前",
+      initialValue: snapshot.label,
+      confirmLabel: "次へ",
+      placeholder: "例: 終盤改稿前",
+    });
+    if (!label) return;
+
+    const memo = await requestInput({
+      title: "チェックポイントを編集",
+      label: "メモ",
+      initialValue: snapshot.memo,
+      confirmLabel: "変更",
+      placeholder: "例: 終盤の分岐前。会話のテンポを試す",
+      optional: true,
+    });
+    if (memo === null) return;
+    if (label === snapshot.label && memo === snapshot.memo) return;
+
+    setAppState((current) => ({
+      ...current,
+      snapshots: current.snapshots.map((item) =>
+        item.id === snapshot.id ? { ...item, label, memo } : item,
+      ),
+    }));
+    showToast("チェックポイントを変更しました");
+  }, []);
+
   const setWorkspaceFromDocumentPath = useCallback(
     async (document: TextDocument, options: { loadWorkspaceSnippets?: boolean } = {}) => {
       if (!isTauriRuntime()) return null;
@@ -3359,6 +3755,131 @@ export default function App() {
     setProjectFolder(folder);
     return folder;
   }, [projectFolder]);
+
+  const handleRestoreManuscriptSnapshot = useCallback(
+    async (snapshot: ManuscriptSnapshot) => {
+      if (!projectFolder || !isSamePath(snapshot.workspacePath, projectFolder.path)) {
+        showToast("このチェックポイントのプロジェクトを開いてください");
+        return;
+      }
+      if (!isTauriRuntime()) {
+        showToast("チェックポイントへの復元はTauri版で利用できます");
+        return;
+      }
+
+      const shouldRestore = await requestConfirm({
+        title: "チェックポイントに戻す",
+        message: `「${snapshot.label}」に戻しますか？`,
+        detail: "現在の状態は「復元前の退避」として自動保存されます。",
+        confirmLabel: "戻す",
+      });
+      if (!shouldRestore) return;
+
+      try {
+        const shelter = buildManuscriptSnapshot(
+          "復元前の退避",
+          "",
+          "auto-before-restore",
+          currentWorkspaceSnapshots[0] ? [currentWorkspaceSnapshots[0].id] : [],
+        );
+        const restoredDocuments: TextDocument[] = [];
+        const snapshotPathKeys = new Set(
+          snapshot.files.map((file) => normalizePathForCompare(file.path)),
+        );
+        const currentManuscriptFiles = collectProjectTextFiles(projectFolder);
+        const filesToDelete = currentManuscriptFiles.filter(
+          (file) => !snapshotPathKeys.has(normalizePathForCompare(file.path)),
+        );
+
+        for (const file of snapshot.files) {
+          let content = file.text;
+          try {
+            const currentDocument = await invoke<TextDocument>("read_text_file", {
+              path: file.path,
+            });
+            content = composeMarkdown(
+              parseFrontMatter(currentDocument.content).metadata,
+              file.text,
+            );
+          } catch {
+            content = file.text;
+          }
+
+          const document = await invoke<TextDocument>("save_text_file", {
+            path: file.path,
+            content,
+          });
+          restoredDocuments.push(document);
+        }
+
+        for (const file of filesToDelete) {
+          try {
+            await invoke("delete_project_entry", { path: file.path });
+          } catch (error) {
+            if (!String(error).includes("entry does not exist")) {
+              throw error;
+            }
+          }
+        }
+
+        const restoredByPath = new Map(
+          restoredDocuments.map((document) => [document.path, document] as const),
+        );
+        const deletedPathKeys = new Set(
+          filesToDelete.map((file) => normalizePathForCompare(file.path)),
+        );
+        setOpenTabs((current) =>
+          current.flatMap((tab) => {
+            if (!tab.path) return tab;
+            if (deletedPathKeys.has(normalizePathForCompare(tab.path))) return [];
+            const document = restoredByPath.get(tab.path);
+            if (!document) return tab;
+            return [{
+              ...tab,
+              name: document.name,
+              markdown: document.content,
+              savedMarkdown: document.content,
+              saveStatus: "saved",
+              editorRevision: null,
+            }];
+          }),
+        );
+
+        const activeRestored =
+          (currentFilePath ? restoredByPath.get(currentFilePath) : null) ??
+          restoredDocuments[0] ??
+          null;
+        if (activeRestored) {
+          loadDocumentIntoEditor(activeRestored, { replaceActive: true });
+        }
+
+        setAppState((current) => ({
+          ...current,
+          snapshots: trimAutoShelterSnapshots([shelter, ...current.snapshots]),
+          lastWorkspacePath: projectFolder.path,
+          lastFilePath: activeRestored?.path ?? current.lastFilePath,
+          markdown: activeRestored?.content ?? current.markdown,
+        }));
+        await refreshProjectFolder(projectFolder.path);
+        showToast(
+          filesToDelete.length > 0
+            ? `チェックポイントに戻しました（追加ファイル${filesToDelete.length}件を削除）`
+            : "チェックポイントに戻しました",
+        );
+      } catch (error) {
+        setLastError(String(error));
+        showToast(error instanceof Error ? error.message : "チェックポイントに戻せませんでした");
+      }
+    },
+    [
+      buildManuscriptSnapshot,
+      currentFilePath,
+      currentWorkspaceSnapshots,
+      loadDocumentIntoEditor,
+      projectFolder,
+      refreshProjectFolder,
+    ],
+  );
 
   const handleProjectFolderSelect = useCallback(
     async (path: string) => {
@@ -4898,6 +5419,7 @@ export default function App() {
         className="appShell"
         data-theme={settings.theme}
         data-writing-mode={settings.writingMode}
+        data-zone-mode={settings.zoneMode ? "true" : undefined}
         style={
           {
             "--editor-font-family": settings.editorFontFamily,
@@ -4906,6 +5428,7 @@ export default function App() {
             "--editor-font-size": `${settings.fontSize}px`,
             "--editor-line-height": settings.lineHeight,
             "--typewriter-guide-position": `${settings.typewriterOffset}%`,
+            "--zone-sidebar-opacity": settings.zoneModeOpacity,
           } as React.CSSProperties
         }
       >
@@ -5540,6 +6063,11 @@ export default function App() {
                 onReorderEntry={(folderPath, draggedPath, targetPath, position) =>
                   void handleSidebarEntryReorder(folderPath, draggedPath, targetPath, position)
                 }
+                snapshots={currentWorkspaceSnapshots}
+                onCreateSnapshot={() => void handleCreateManuscriptSnapshot()}
+                onRenameSnapshot={(snapshot) => void handleRenameManuscriptSnapshot(snapshot)}
+                onRestoreSnapshot={(snapshot) => void handleRestoreManuscriptSnapshot(snapshot)}
+                onDeleteSnapshot={(snapshot) => void handleDeleteManuscriptSnapshot(snapshot)}
                 onCollapse={() => setIsLeftSidebarCollapsed(true)}
               />
             )}
@@ -5611,6 +6139,7 @@ export default function App() {
                             text={editorText}
                             editorRevision={activeTab?.editorRevision ?? null}
                             writingMode={settings.writingMode}
+                            typewriterScroll={settings.typewriterScroll}
                             typewriterOffset={settings.typewriterOffset}
                             showLineBreakMarks={settings.showLineBreakMarks}
                             initialSelectionOffset={initialSelectionOffset}
@@ -5851,6 +6380,7 @@ export default function App() {
                       query={referenceQuery}
                       onQueryChange={setReferenceQuery}
                       onAddReference={() => void handleAddReference()}
+                      onCreateReference={() => void handleCreateReference()}
                       onOpenReference={(sourcePath) => {
                         const file = sortedReferenceCandidates.find(
                           (item) => item.sourcePath === sourcePath,

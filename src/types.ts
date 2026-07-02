@@ -190,6 +190,10 @@ export type EditorSettings = {
   sidebarMode: SidebarMode;
   /** プロジェクト切替メニューでフォルダパスを表示するか。 */
   showWorkspacePaths: boolean;
+  /** 左右サイドバーを通常時に透かし、ホバー時だけ通常表示にする実験モード。 */
+  zoneMode: boolean;
+  /** Zoneモードでサイドバーに適用する通常時の不透明度。 */
+  zoneModeOpacity: number;
   /** ナビゲータ方式のプレビュー表示行数。0 は「なし」（プレビュー非表示）。 */
   navigatorPreviewLines: number;
   /** 文字数カウントに空白文字（スペース・タブ・改行など）を含めるか。 */
@@ -255,6 +259,8 @@ export type AppState = {
   fileProgress: Record<string, FileProgressStatus>;
   /** ファイルパスごとに記憶した最後のカーソル位置。 */
   cursorPositions: Record<string, CursorPosition>;
+  /** 手動保存点。正本である原稿ASTから復元できる本文だけを保持する。 */
+  snapshots: ManuscriptSnapshot[];
 };
 
 export type TextDocument = {
@@ -282,6 +288,36 @@ export type WorkspaceRecord = {
   path: string;
   name: string;
   lastOpenedAt: number;
+};
+
+export type ManuscriptSnapshotReason = "manual" | "auto-before-restore";
+
+export type ManuscriptSnapshotFile = {
+  path: string;
+  name: string;
+  text: string;
+  textHash: string;
+  semanticHash: string;
+  lineCount: number;
+  textLength: number;
+  visibleTextLength: number;
+  outlineCount: number;
+};
+
+export type ManuscriptSnapshot = {
+  id: string;
+  workspacePath: string;
+  workspaceName: string;
+  createdAt: number;
+  reason: ManuscriptSnapshotReason;
+  label: string;
+  memo: string;
+  parentIds: string[];
+  projectTree: ProjectFolder;
+  files: ManuscriptSnapshotFile[];
+  fileCount: number;
+  totalTextLength: number;
+  totalVisibleTextLength: number;
 };
 
 export type WorkspaceAlert = {
@@ -316,6 +352,7 @@ export type AppDialog =
       value: string;
       confirmLabel: string;
       placeholder?: string;
+      optional?: boolean;
       error: string;
       resolve: (value: string | null) => void;
     }

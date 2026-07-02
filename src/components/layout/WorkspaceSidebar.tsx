@@ -16,6 +16,7 @@ import type {
 import type {
   BreadcrumbDropTarget,
   FileProgressStatus,
+  ManuscriptSnapshot,
   OutlineItem,
   ProjectEntry,
   ProjectFolder,
@@ -82,6 +83,11 @@ type WorkspaceSidebarProps = {
     targetPath: string,
     position: "before" | "after",
   ) => void;
+  snapshots: ManuscriptSnapshot[];
+  onCreateSnapshot: () => void;
+  onRenameSnapshot: (snapshot: ManuscriptSnapshot) => void;
+  onRestoreSnapshot: (snapshot: ManuscriptSnapshot) => void;
+  onDeleteSnapshot: (snapshot: ManuscriptSnapshot) => void;
   onCollapse: () => void;
 };
 
@@ -145,6 +151,20 @@ function getProjectAstStatusLabel(projectAst: ProjectAst | null): string {
 
 function formatCharCount(value: number): string {
   return `${new Intl.NumberFormat("ja-JP").format(value)}字`;
+}
+
+function formatSnapshotDate(value: number): string {
+  return new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+    .format(value)
+    .replace(/\//g, "-")
+    .replace(/\s+/g, " ");
 }
 
 function getFileProgress(
@@ -278,12 +298,14 @@ type SidebarIconName =
   | "chevronDown"
   | "chevronLeft"
   | "chevronRight"
+  | "clock"
   | "edit"
   | "external"
   | "file"
   | "folder"
   | "folderPlus"
   | "plus"
+  | "restore"
   | "search"
   | "trash";
 
@@ -319,6 +341,13 @@ function SidebarIcon({ name, className = "" }: { name: SidebarIconName; classNam
       return (
         <svg {...common}>
           <polyline points="9 18 15 12 9 6" />
+        </svg>
+      );
+    case "clock":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3 2" />
         </svg>
       );
     case "edit":
@@ -362,6 +391,14 @@ function SidebarIcon({ name, className = "" }: { name: SidebarIconName; classNam
         <svg {...common}>
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      );
+    case "restore":
+      return (
+        <svg {...common}>
+          <path d="M3 12a9 9 0 1 0 3-6.7" />
+          <path d="M3 4v6h6" />
+          <path d="M12 7v5l3 2" />
         </svg>
       );
     case "search":
@@ -424,6 +461,11 @@ export function WorkspaceSidebar({
   onRenameEntry,
   onDeleteEntry,
   onReorderEntry,
+  snapshots,
+  onCreateSnapshot,
+  onRenameSnapshot,
+  onRestoreSnapshot,
+  onDeleteSnapshot,
   onCollapse,
 }: WorkspaceSidebarProps) {
   const [contextMenu, setContextMenu] = useState<TreeContextMenu>(null);
@@ -440,7 +482,12 @@ export function WorkspaceSidebar({
   const [collapsedOutlinePaths, setCollapsedOutlinePaths] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
+  const [collapsedOutlineHeadingKeys, setCollapsedOutlineHeadingKeys] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const [isReplaceExpanded, setIsReplaceExpanded] = useState(false);
+  const [isSnapshotSectionCollapsed, setIsSnapshotSectionCollapsed] = useState(false);
+  const [isShelterListExpanded, setIsShelterListExpanded] = useState(false);
   const [navigatorLocation, setNavigatorLocation] = useState<
     { kind: "folder" | "file"; path: string } | null
   >(null);
@@ -618,6 +665,21 @@ export function WorkspaceSidebar({
       return;
     }
     onSelectFile(entry.path);
+  };
+
+  const outlineHeadingKey = (filePath: string | null, item: DocumentOutlineItem | OutlineItem) =>
+    `${filePath ?? "scratch"}:${item.id}`;
+
+  const toggleOutlineHeadingCollapse = (key: string) => {
+    setCollapsedOutlineHeadingKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
   };
 
   const resetHeadingDrag = () => {
@@ -869,6 +931,9 @@ export function WorkspaceSidebar({
     depth: number,
   ): JSX.Element[] => {
     return items.map((item) => {
+      const itemKey = outlineHeadingKey(filePath, item);
+      const hasChildren = item.children.length > 0;
+      const isCollapsed = hasChildren && collapsedOutlineHeadingKeys.has(itemKey);
       const isActive = filePath === currentFilePath && activeOutlineIds.has(item.id);
       const isDragging =
         filePath !== null &&
@@ -882,10 +947,12 @@ export function WorkspaceSidebar({
           ? headingDropTarget.position
           : null;
       return (
-        <div className="outlineTreeNode" key={`${filePath ?? "scratch"}:${item.id}`}>
+        <div className="outlineTreeNode" key={itemKey}>
           <button
             className={[
               "outlineTreeItem",
+              hasChildren ? "collapsibleOutlineTreeItem" : "",
+              isCollapsed ? "collapsedOutlineTreeItem" : "",
               isActive ? "activeOutlineTreeItem" : "",
               isDragging ? "draggingHeadingItem" : "",
               targetPosition ? `headingDrop-${targetPosition}` : "",
@@ -894,12 +961,24 @@ export function WorkspaceSidebar({
             data-outline-heading-line={filePath ? item.line : undefined}
             data-outline-block-id={filePath ? item.blockId : undefined}
             draggable={Boolean(filePath)}
-            style={{ paddingLeft: `${12 + depth * 14}px` }}
+            style={
+              {
+                "--outline-item-indent": `${12 + depth * 14}px`,
+                paddingLeft: `${12 + depth * 14}px`,
+              } as CSSProperties
+            }
             type="button"
             title={item.title}
             onClick={(event) => {
               if (suppressNextClickRef.current) {
                 event.preventDefault();
+                return;
+              }
+              if (
+                hasChildren &&
+                (event.target as HTMLElement).closest("[data-outline-heading-disclosure]")
+              ) {
+                toggleOutlineHeadingCollapse(itemKey);
                 return;
               }
               filePath ? onJumpProjectOutline(filePath, item) : onJumpOutline(item);
@@ -936,10 +1015,22 @@ export function WorkspaceSidebar({
             }
             onDragEnd={filePath ? handleHeadingDragEnd : undefined}
           >
+            <span
+              className="outlineHeadingDisclosure"
+              data-outline-heading-disclosure={hasChildren ? "true" : undefined}
+              aria-hidden="true"
+            >
+              {hasChildren && (
+                <SidebarIcon
+                  name={isCollapsed ? "chevronRight" : "chevronDown"}
+                  className="treeChevronIcon"
+                />
+              )}
+            </span>
             <span className="outlineLevelMark">H{item.level}</span>
             <span>{item.title}</span>
           </button>
-          {item.children.length > 0 && (
+          {hasChildren && !isCollapsed && (
             <div className="outlineTreeChildren">
               {renderOutlineItems(filePath, item.children, depth + 1)}
             </div>
@@ -1368,6 +1459,74 @@ export function WorkspaceSidebar({
           ? "ファイル内に一致がありません"
           : "プロジェクト内に一致がありません";
 
+  const manualSnapshots = snapshots.filter((snapshot) => snapshot.reason === "manual");
+  const shelterSnapshots = snapshots.filter(
+    (snapshot) => snapshot.reason === "auto-before-restore",
+  ).slice(0, 3);
+
+  const renderSnapshotItem = (snapshot: ManuscriptSnapshot) => {
+    const textLength = countWhitespace
+      ? snapshot.totalTextLength
+      : snapshot.totalVisibleTextLength;
+    return (
+      <article className="snapshotItem" key={snapshot.id}>
+        <div className="snapshotItemIcon" aria-hidden="true">
+          <SidebarIcon name="clock" className="snapshotClockIcon" />
+        </div>
+        <div
+          className="snapshotItemBody"
+          title={snapshot.memo ? `${snapshot.label}\n${snapshot.memo}` : snapshot.label}
+        >
+          <div className="snapshotItemTitleRow">
+            <strong className="snapshotItemTitle">
+              {snapshot.label}
+            </strong>
+            {snapshot.reason === "auto-before-restore" && (
+              <span className="snapshotBadge">退避</span>
+            )}
+          </div>
+          {snapshot.memo && (
+            <div className="snapshotItemMemo">
+              {snapshot.memo}
+            </div>
+          )}
+          <div className="snapshotItemDate">
+            {formatSnapshotDate(snapshot.createdAt)}
+          </div>
+          <div className="snapshotItemMeta">
+            {snapshot.fileCount} 原稿 / {formatCharCount(textLength)}
+          </div>
+        </div>
+        <div className="snapshotItemActions">
+          <button
+            type="button"
+            title="名前を変更"
+            aria-label={`${snapshot.label}の名前を変更`}
+            onClick={() => onRenameSnapshot(snapshot)}
+          >
+            <SidebarIcon name="edit" className="snapshotActionIcon" />
+          </button>
+          <button
+            type="button"
+            title="この保存点に戻す"
+            aria-label={`${snapshot.label}に戻す`}
+            onClick={() => onRestoreSnapshot(snapshot)}
+          >
+            <SidebarIcon name="restore" className="snapshotActionIcon" />
+          </button>
+          <button
+            type="button"
+            title="保存点を削除"
+            aria-label={`${snapshot.label}を削除`}
+            onClick={() => onDeleteSnapshot(snapshot)}
+          >
+            <SidebarIcon name="trash" className="snapshotActionIcon" />
+          </button>
+        </div>
+      </article>
+    );
+  };
+
   const renderProjectSearchMode = () => (
     <section className="sidebarSection projectSearchModeSection" aria-label="検索と置換">
       <div className="sidebarSectionHeader">
@@ -1471,6 +1630,76 @@ export function WorkspaceSidebar({
     </section>
   );
 
+  const renderSnapshotSection = () => (
+    <section className="sidebarSection snapshotSection" aria-label="スナップショット">
+      <div className="snapshotSectionHeader">
+        <button
+          className="snapshotSectionToggle"
+          type="button"
+          aria-expanded={!isSnapshotSectionCollapsed}
+          onClick={() => setIsSnapshotSectionCollapsed((current) => !current)}
+        >
+          <SidebarIcon
+            name={isSnapshotSectionCollapsed ? "chevronRight" : "chevronDown"}
+            className="treeChevronIcon"
+          />
+          <span>チェックポイント</span>
+        </button>
+        <button
+          className="snapshotCreateButton"
+          type="button"
+          aria-label="保存点を作成"
+          title="保存点を作成"
+          disabled={!projectFolder}
+          onClick={onCreateSnapshot}
+        >
+          <SidebarIcon name="plus" className="sidebarButtonSvg" />
+        </button>
+      </div>
+      {!isSnapshotSectionCollapsed && (
+        <div className="snapshotList">
+          {projectFolder ? (
+            manualSnapshots.length > 0 || shelterSnapshots.length > 0 ? (
+              <>
+                {manualSnapshots.length > 0 ? (
+                  manualSnapshots.map(renderSnapshotItem)
+                ) : (
+                  <div className="snapshotEmptyState">手動チェックポイントはまだありません</div>
+                )}
+                {shelterSnapshots.length > 0 && (
+                  <div className="shelterSnapshotGroup">
+                    <button
+                      className="shelterSnapshotToggle"
+                      type="button"
+                      aria-expanded={isShelterListExpanded}
+                      onClick={() => setIsShelterListExpanded((current) => !current)}
+                    >
+                      <SidebarIcon
+                        name={isShelterListExpanded ? "chevronDown" : "chevronRight"}
+                        className="treeChevronIcon"
+                      />
+                      <span>復元前の退避</span>
+                      <span>{shelterSnapshots.length}件</span>
+                    </button>
+                    {isShelterListExpanded && (
+                      <div className="shelterSnapshotList">
+                        {shelterSnapshots.map(renderSnapshotItem)}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="snapshotEmptyState">チェックポイントはまだありません</div>
+            )
+          ) : (
+            <div className="snapshotEmptyState">フォルダを開くと保存点を作成できます</div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+
   return (
     <aside className="workspaceSidebar" aria-label="アウトライン">
       <div className="sidebarHeader">
@@ -1532,18 +1761,18 @@ export function WorkspaceSidebar({
       </div>
 
       <div className="sidebarScroll">
-        {isProjectSearchMode
-          ? renderProjectSearchMode()
-          : sidebarMode === "navigator"
-            ? renderNavigatorMode()
-            : renderOutlineMode()}
+        {isProjectSearchMode ? (
+          renderProjectSearchMode()
+        ) : (
+          sidebarMode === "navigator" ? renderNavigatorMode() : renderOutlineMode()
+        )}
       </div>
 
       <div className="sidebarFooter">
         <div className="sidebarFooterActions">
           <button className="sidebarAddButton" type="button" onClick={onNewDocument}>
             <SidebarIcon name="plus" className="sidebarButtonSvg" />
-            <span>シートを追加</span>
+            <span>シート</span>
           </button>
           <button
             className="sidebarAddButton"
@@ -1555,10 +1784,19 @@ export function WorkspaceSidebar({
             }
           >
             <SidebarIcon name="folderPlus" className="sidebarButtonSvg" />
-            <span>フォルダを追加</span>
+            <span>フォルダ</span>
           </button>
         </div>
       </div>
+      {!isProjectSearchMode && (
+        <div
+          className={`snapshotDock ${
+            isSnapshotSectionCollapsed ? "collapsedSnapshotDock" : ""
+          }`}
+        >
+          {renderSnapshotSection()}
+        </div>
+      )}
       {renderContextMenu()}
     </aside>
   );

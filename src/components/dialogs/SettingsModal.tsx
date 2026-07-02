@@ -179,6 +179,30 @@ export function SettingsModal({
             />
             <span>プロジェクト切替にパスを表示</span>
           </label>
+          <label className="checkSetting">
+            <input
+              checked={settings.zoneMode}
+              type="checkbox"
+              onChange={(event) =>
+                onUpdateSettings("zoneMode", event.target.checked)
+              }
+            />
+            <span>Zoneモード</span>
+          </label>
+          <label className="rangeSetting">
+            <span>Zone透明度 {Math.round(settings.zoneModeOpacity * 100)}%</span>
+            <input
+              disabled={!settings.zoneMode}
+              min="0"
+              max="0.85"
+              step="0.05"
+              type="range"
+              value={settings.zoneModeOpacity}
+              onChange={(event) =>
+                onUpdateSettings("zoneModeOpacity", Number(event.target.value))
+              }
+            />
+          </label>
           <label>
             <span>ファイル表示方式</span>
             <select

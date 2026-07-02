@@ -275,6 +275,7 @@ pub fn run() {
             load_reference_layout,
             save_reference_layout,
             pick_reference_file,
+            create_reference_text_file,
             list_reference_candidates,
             delete_imported_reference,
             read_reference_text,
@@ -1224,6 +1225,27 @@ fn pick_reference_file(
 }
 
 #[tauri::command]
+fn create_reference_text_file(root_path: String, name: String) -> Result<ReferenceFileInfo, String> {
+    let root = PathBuf::from(root_path);
+    if !root.is_dir() {
+        return Err("project root does not exist".to_string());
+    }
+
+    let file_name = normalize_reference_text_file_name(&name)?;
+    let root = root
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve project root: {error}"))?;
+    let imports_dir = reference_imports_dir(&root);
+    std::fs::create_dir_all(&imports_dir)
+        .map_err(|error| format!("failed to create reference import directory: {error}"))?;
+
+    let path = unique_reference_import_path(&imports_dir, &file_name);
+    std::fs::write(&path, "")
+        .map_err(|error| format!("failed to create reference file: {error}"))?;
+    reference_file_info(&root, &path)
+}
+
+#[tauri::command]
 fn list_reference_candidates(root_path: String) -> Result<Vec<ReferenceFileInfo>, String> {
     let root = PathBuf::from(root_path);
     if !root.is_dir() {
@@ -1232,6 +1254,10 @@ fn list_reference_candidates(root_path: String) -> Result<Vec<ReferenceFileInfo>
 
     let mut files = Vec::new();
     collect_reference_candidates(&root, &root, &mut files)?;
+    let imports_dir = reference_imports_dir(&root);
+    if imports_dir.is_dir() {
+        collect_reference_candidates(&root, &imports_dir, &mut files)?;
+    }
     files.sort_by_key(|file| file.source_path.to_lowercase());
     Ok(files)
 }
@@ -1844,6 +1870,26 @@ fn normalize_text_file_name(name: &str) -> Result<String, String> {
     } else {
         Ok(format!("{trimmed}.txt"))
     }
+}
+
+fn normalize_reference_text_file_name(name: &str) -> Result<String, String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("file name is required".to_string());
+    }
+
+    if trimmed.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|']) {
+        return Err("file name contains invalid characters".to_string());
+    }
+
+    let lower = trimmed.to_lowercase();
+    if lower.ends_with(".txt") || lower.ends_with(".md") {
+        return Ok(trimmed.to_string());
+    }
+    if !Path::new(trimmed).extension().is_some() {
+        return Ok(format!("{trimmed}.md"));
+    }
+    Err("reference file must be .txt or .md".to_string())
 }
 
 fn is_supported_text_extension(path: &Path) -> bool {

@@ -7,6 +7,7 @@ type ReferencePaneProps = {
   query: string;
   onQueryChange: (query: string) => void;
   onAddReference: () => void;
+  onCreateReference: () => void;
   onOpenReference: (sourcePath: string) => void;
   onFocusReference: (cardId: string) => void;
   onCloseReference: (cardId: string) => void;
@@ -149,6 +150,7 @@ export function ReferencePane({
   query,
   onQueryChange,
   onAddReference,
+  onCreateReference,
   onOpenReference,
   onFocusReference,
   onCloseReference,
@@ -185,8 +187,22 @@ export function ReferencePane({
           <button
             className="referenceTopAddButton"
             type="button"
-            aria-label="資料を追加"
-            title="資料を追加"
+            aria-label="資料を新規作成"
+            title="資料を新規作成"
+            onClick={onCreateReference}
+          >
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+              <path d="M7 3.5h8l3 3V20H7V3.5Z" />
+              <path d="M15 3.5V7h3" />
+              <path d="M12.5 11v5" />
+              <path d="M10 13.5h5" />
+            </svg>
+          </button>
+          <button
+            className="referenceTopAddButton"
+            type="button"
+            aria-label="既存ファイルを資料に追加"
+            title="既存ファイルを資料に追加"
             onClick={onAddReference}
           >
             <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">

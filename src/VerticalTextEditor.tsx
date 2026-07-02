@@ -39,6 +39,7 @@ type VerticalTextEditorProps = {
   text: string;
   editorRevision: number | null;
   writingMode: WritingMode;
+  typewriterScroll: boolean;
   typewriterOffset: number;
   showLineBreakMarks: boolean;
   /** マウント時に復元するカーソル位置（本文先頭からの文字オフセット）。 */
@@ -1893,6 +1894,7 @@ export function VerticalTextEditor({
   text,
   editorRevision,
   writingMode,
+  typewriterScroll,
   typewriterOffset,
   showLineBreakMarks,
   initialSelectionOffset,
@@ -1917,10 +1919,12 @@ export function VerticalTextEditor({
   // pointerup 時にキャレットが collapsed なら一度だけ寄せ、範囲が残るなら据え置く。
   const pointerDraggingRef = useRef(false);
   const writingModeRef = useRef<WritingMode>(writingMode);
+  const typewriterScrollRef = useRef(typewriterScroll);
   const typewriterOffsetRef = useRef(typewriterOffset);
   const showLineBreakMarksRef = useRef(showLineBreakMarks);
   const renderLineBreakMarksRef = useRef<(() => void) | null>(null);
   const requestLineBreakMarksRef = useRef<(() => void) | null>(null);
+  typewriterScrollRef.current = typewriterScroll;
 
   useEffect(() => {
     onTextChangeRef.current = onTextChange;
@@ -1938,11 +1942,14 @@ export function VerticalTextEditor({
     writingModeRef.current = writingMode;
     const editor = tiptapRef.current;
     const scroller = scrollerRef.current;
-    if (editor && scroller && !isEditorComposing(editor, composingRef)) {
+    if (editor && scroller && typewriterScrollRef.current && !isEditorComposing(editor, composingRef)) {
       requestAnimationFrame(() => {
+        if (!typewriterScrollRef.current) return;
         centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, true, writingModeRef.current);
         requestLineBreakMarksRef.current?.();
       });
+    } else {
+      requestLineBreakMarksRef.current?.();
     }
   }, [writingMode]);
 
@@ -1986,7 +1993,7 @@ export function VerticalTextEditor({
         const nextRevision = ++localRevisionRef.current;
         onTextChangeRef.current(next, nextRevision);
         onSelectionChangeRef.current();
-        if (scroller) {
+        if (scroller && typewriterScrollRef.current) {
           centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, true, writingModeRef.current);
         }
         requestLineBreakMarksRef.current?.();
@@ -2001,7 +2008,7 @@ export function VerticalTextEditor({
         editor.commands.focus();
         editor.commands.setTextSelection(pos);
         onSelectionChangeRef.current();
-        if (scroller) {
+        if (scroller && typewriterScrollRef.current) {
           centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, true, writingModeRef.current);
         }
         requestLineBreakMarksRef.current?.();
@@ -2026,7 +2033,7 @@ export function VerticalTextEditor({
       scrollCaretIntoView: (offsetPercent) => {
         const editor = tiptapRef.current;
         const scroller = scrollerRef.current;
-        if (!editor || !scroller || isEditorComposing(editor, composingRef)) return;
+        if (!typewriterScrollRef.current || !editor || !scroller || isEditorComposing(editor, composingRef)) return;
 
         typewriterOffsetRef.current = Number.isFinite(offsetPercent) ? offsetPercent : 50;
         centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, false, writingModeRef.current);
@@ -2057,7 +2064,7 @@ export function VerticalTextEditor({
     updateEmptyAttribute(editor);
     requestAnimationFrame(() => {
       const scroller = scrollerRef.current;
-      if (scroller) {
+      if (scroller && typewriterScrollRef.current) {
         centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, true, writingModeRef.current);
       }
       requestLineBreakMarksRef.current?.();
@@ -2098,7 +2105,7 @@ export function VerticalTextEditor({
 
     const requestCenterCaret = (instant: boolean, eventType: string) => {
       const editor = tiptapRef.current;
-      if (!editor || isEditorComposing(editor, composingRef)) return;
+      if (!typewriterScrollRef.current || !editor || isEditorComposing(editor, composingRef)) return;
 
       centerInstant = centerInstant || instant;
       centerEventType = eventType;
@@ -2111,6 +2118,14 @@ export function VerticalTextEditor({
           centerWaitFrames -= 1;
           if (centerWaitFrames > 0) {
             wait();
+            return;
+          }
+
+          if (!typewriterScrollRef.current) {
+            centerInstant = false;
+            centerQueued = false;
+            centerWaitFrames = 1;
+            centerEventType = "unknown";
             return;
           }
 
@@ -2130,7 +2145,7 @@ export function VerticalTextEditor({
                 centerEventType = "unknown";
                 const settledEditor = tiptapRef.current;
                 const settledScroller = scrollerRef.current;
-                if (!settledEditor || !settledScroller) return;
+                if (!typewriterScrollRef.current || !settledEditor || !settledScroller) return;
 
                 centerCaretForEditor(
                   settledEditor,
@@ -2180,7 +2195,12 @@ export function VerticalTextEditor({
           settleFrame = null;
           const editor = tiptapRef.current;
           const currentScroller = scrollerRef.current;
-          if (!editor || !currentScroller || isEditorComposing(editor, composingRef)) return;
+          if (
+            !typewriterScrollRef.current ||
+            !editor ||
+            !currentScroller ||
+            isEditorComposing(editor, composingRef)
+          ) return;
 
           const axis = scrollAxis(writingModeRef.current);
           const current = axis.get(currentScroller);
@@ -2518,7 +2538,7 @@ export function VerticalTextEditor({
         <div ref={editorHostRef} className="verticalTypewriterEditor" />
         <div ref={lineBreakLayerRef} className="visibleLineBreakLayer" aria-hidden="true" />
       </div>
-      <div className="verticalTypewriterGuide" />
+      {typewriterScroll && <div className="verticalTypewriterGuide" />}
     </div>
   );
 }
