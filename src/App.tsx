@@ -656,10 +656,30 @@ function snapshotId(prefix = "snapshot"): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+const MAX_AUTO_SHELTER_SNAPSHOTS = 3;
+
+function trimAutoShelterSnapshots(
+  snapshots: ManuscriptSnapshot[],
+  maxCount = MAX_AUTO_SHELTER_SNAPSHOTS,
+): ManuscriptSnapshot[] {
+  const shelterCountsByWorkspace = new Map<string, number>();
+  return snapshots
+    .slice()
+    .sort((left, right) => right.createdAt - left.createdAt)
+    .filter((snapshot) => {
+      if (snapshot.reason !== "auto-before-restore") return true;
+      const key = normalizePathForCompare(snapshot.workspacePath);
+      const count = shelterCountsByWorkspace.get(key) ?? 0;
+      if (count >= maxCount) return false;
+      shelterCountsByWorkspace.set(key, count + 1);
+      return true;
+    });
+}
+
 function normalizeSnapshots(value: unknown): ManuscriptSnapshot[] {
   if (!Array.isArray(value)) return [];
 
-  return value
+  const normalized = value
     .filter((snapshot): snapshot is Partial<ManuscriptSnapshot> =>
       Boolean(snapshot) && typeof snapshot === "object",
     )
@@ -729,6 +749,7 @@ function normalizeSnapshots(value: unknown): ManuscriptSnapshot[] {
           typeof snapshot.label === "string" && snapshot.label.trim()
             ? snapshot.label
             : "チェックポイント",
+        memo: typeof snapshot.memo === "string" ? snapshot.memo : "",
         parentIds: Array.isArray(snapshot.parentIds)
           ? snapshot.parentIds.filter((id): id is string => typeof id === "string")
           : [],
@@ -757,6 +778,8 @@ function normalizeSnapshots(value: unknown): ManuscriptSnapshot[] {
       } satisfies ManuscriptSnapshot;
     })
     .filter((snapshot) => snapshot.workspacePath && snapshot.files.length > 0);
+
+  return trimAutoShelterSnapshots(normalized);
 }
 
 
@@ -3309,12 +3332,14 @@ export default function App() {
     initialValue,
     confirmLabel,
     placeholder,
+    optional = false,
   }: {
     title: string;
     label: string;
     initialValue: string;
     confirmLabel: string;
     placeholder?: string;
+    optional?: boolean;
   }) =>
     new Promise<string | null>((resolve) => {
       setAppDialog({
@@ -3324,6 +3349,7 @@ export default function App() {
         value: initialValue,
         confirmLabel,
         placeholder,
+        optional,
         error: "",
         resolve,
       });
@@ -3407,7 +3433,7 @@ export default function App() {
       }
 
       const value = current.value.trim();
-      if (!value) {
+      if (!value && !current.optional) {
         return { ...current, error: "名前を入力してください" };
       }
       current.resolve(value);
@@ -3505,6 +3531,7 @@ export default function App() {
   const buildManuscriptSnapshot = useCallback(
     (
       label: string,
+      memo: string,
       reason: ManuscriptSnapshot["reason"],
       parentIds: string[] = [],
     ): ManuscriptSnapshot => {
@@ -3572,6 +3599,7 @@ export default function App() {
         createdAt: Date.now(),
         reason,
         label,
+        memo,
         parentIds,
         projectTree: projectFolder,
         files,
@@ -3605,9 +3633,20 @@ export default function App() {
     });
     if (!label) return;
 
+    const memo = await requestInput({
+      title: "チェックポイントのメモ",
+      label: "メモ",
+      initialValue: "",
+      confirmLabel: "作成",
+      placeholder: "例: 終盤の分岐前。会話のテンポを試す",
+      optional: true,
+    });
+    if (memo === null) return;
+
     try {
       const snapshot = buildManuscriptSnapshot(
         label,
+        memo,
         "manual",
         currentWorkspaceSnapshots[0] ? [currentWorkspaceSnapshots[0].id] : [],
       );
@@ -3644,21 +3683,32 @@ export default function App() {
 
   const handleRenameManuscriptSnapshot = useCallback(async (snapshot: ManuscriptSnapshot) => {
     const label = await requestInput({
-      title: "チェックポイントの名前を変更",
+      title: "チェックポイントを編集",
       label: "名前",
       initialValue: snapshot.label,
-      confirmLabel: "変更",
+      confirmLabel: "次へ",
       placeholder: "例: 終盤改稿前",
     });
-    if (!label || label === snapshot.label) return;
+    if (!label) return;
+
+    const memo = await requestInput({
+      title: "チェックポイントを編集",
+      label: "メモ",
+      initialValue: snapshot.memo,
+      confirmLabel: "変更",
+      placeholder: "例: 終盤の分岐前。会話のテンポを試す",
+      optional: true,
+    });
+    if (memo === null) return;
+    if (label === snapshot.label && memo === snapshot.memo) return;
 
     setAppState((current) => ({
       ...current,
       snapshots: current.snapshots.map((item) =>
-        item.id === snapshot.id ? { ...item, label } : item,
+        item.id === snapshot.id ? { ...item, label, memo } : item,
       ),
     }));
-    showToast("チェックポイントの名前を変更しました");
+    showToast("チェックポイントを変更しました");
   }, []);
 
   const setWorkspaceFromDocumentPath = useCallback(
@@ -3728,6 +3778,7 @@ export default function App() {
       try {
         const shelter = buildManuscriptSnapshot(
           "復元前の退避",
+          "",
           "auto-before-restore",
           currentWorkspaceSnapshots[0] ? [currentWorkspaceSnapshots[0].id] : [],
         );
@@ -3804,7 +3855,7 @@ export default function App() {
 
         setAppState((current) => ({
           ...current,
-          snapshots: [shelter, ...current.snapshots],
+          snapshots: trimAutoShelterSnapshots([shelter, ...current.snapshots]),
           lastWorkspacePath: projectFolder.path,
           lastFilePath: activeRestored?.path ?? current.lastFilePath,
           markdown: activeRestored?.content ?? current.markdown,

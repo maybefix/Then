@@ -3664,8 +3664,8 @@ body {
 
 .snapshotDock {
   display: flex;
-  min-height: 190px;
-  max-height: 260px;
+  min-height: 300px;
+  max-height: 350px;
   flex: 0 0 214px;
   flex-direction: column;
   padding: 10px 12px 12px;
@@ -3750,6 +3750,7 @@ body {
   display: grid;
   min-height: 0;
   flex: 1;
+  align-content: start;
   gap: 6px;
   overflow-y: auto;
   padding: 8px 9px 9px;
@@ -3758,7 +3759,8 @@ body {
 .snapshotItem {
   display: grid;
   min-width: 0;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-self: start;
+  grid-template-columns: 18px minmax(0, 1fr);
   gap: 8px;
   padding: 8px 8px;
   border: 0.5px solid var(--border-subtle);
@@ -3789,16 +3791,28 @@ body {
 .snapshotItemTitleRow {
   display: flex;
   min-width: 0;
-  align-items: center;
+  align-items: start;
   gap: 5px;
 }
 
 .snapshotItemTitle {
+  display: -webkit-box;
   min-width: 0;
   overflow: hidden;
   color: var(--text-primary);
   font-size: 12px;
   font-weight: 700;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.snapshotItemMemo {
+  min-width: 0;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3833,8 +3847,11 @@ body {
 
 .snapshotItemActions {
   display: inline-flex;
+  grid-column: 2;
   align-items: start;
+  justify-content: end;
   gap: 2px;
+  margin-top: 3px;
 }
 
 .snapshotItemActions button {
@@ -3867,6 +3884,53 @@ body {
   color: var(--text-faint);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.shelterSnapshotGroup {
+  display: grid;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.shelterSnapshotToggle {
+  display: grid;
+  min-width: 0;
+  max-height: 20px;
+  min-height: 20px;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+}
+
+.shelterSnapshotToggle:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.shelterSnapshotToggle span:nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shelterSnapshotToggle span:last-child {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.shelterSnapshotList {
+  display: grid;
+  gap: 6px;
 }
 
 .sidebarFooter {

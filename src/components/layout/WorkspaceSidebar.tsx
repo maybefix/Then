@@ -156,15 +156,15 @@ function formatCharCount(value: number): string {
 function formatSnapshotDate(value: number): string {
   return new Intl.DateTimeFormat("ja-JP", {
     year: "numeric",
-    month: "long",
-    day: "numeric",
+    month: "2-digit",
+    day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(value);
-}
-
-function getSnapshotReasonLabel(snapshot: ManuscriptSnapshot): string {
-  return snapshot.reason === "auto-before-restore" ? "復元前の退避" : "手動";
+    hour12: false,
+  })
+    .format(value)
+    .replace(/\//g, "-")
+    .replace(/\s+/g, " ");
 }
 
 function getFileProgress(
@@ -487,6 +487,7 @@ export function WorkspaceSidebar({
   >(() => new Set());
   const [isReplaceExpanded, setIsReplaceExpanded] = useState(false);
   const [isSnapshotSectionCollapsed, setIsSnapshotSectionCollapsed] = useState(false);
+  const [isShelterListExpanded, setIsShelterListExpanded] = useState(false);
   const [navigatorLocation, setNavigatorLocation] = useState<
     { kind: "folder" | "file"; path: string } | null
   >(null);
@@ -1458,6 +1459,74 @@ export function WorkspaceSidebar({
           ? "ファイル内に一致がありません"
           : "プロジェクト内に一致がありません";
 
+  const manualSnapshots = snapshots.filter((snapshot) => snapshot.reason === "manual");
+  const shelterSnapshots = snapshots.filter(
+    (snapshot) => snapshot.reason === "auto-before-restore",
+  ).slice(0, 3);
+
+  const renderSnapshotItem = (snapshot: ManuscriptSnapshot) => {
+    const textLength = countWhitespace
+      ? snapshot.totalTextLength
+      : snapshot.totalVisibleTextLength;
+    return (
+      <article className="snapshotItem" key={snapshot.id}>
+        <div className="snapshotItemIcon" aria-hidden="true">
+          <SidebarIcon name="clock" className="snapshotClockIcon" />
+        </div>
+        <div
+          className="snapshotItemBody"
+          title={snapshot.memo ? `${snapshot.label}\n${snapshot.memo}` : snapshot.label}
+        >
+          <div className="snapshotItemTitleRow">
+            <strong className="snapshotItemTitle">
+              {snapshot.label}
+            </strong>
+            {snapshot.reason === "auto-before-restore" && (
+              <span className="snapshotBadge">退避</span>
+            )}
+          </div>
+          {snapshot.memo && (
+            <div className="snapshotItemMemo">
+              {snapshot.memo}
+            </div>
+          )}
+          <div className="snapshotItemDate">
+            {formatSnapshotDate(snapshot.createdAt)}
+          </div>
+          <div className="snapshotItemMeta">
+            {snapshot.fileCount} 原稿 / {formatCharCount(textLength)}
+          </div>
+        </div>
+        <div className="snapshotItemActions">
+          <button
+            type="button"
+            title="名前を変更"
+            aria-label={`${snapshot.label}の名前を変更`}
+            onClick={() => onRenameSnapshot(snapshot)}
+          >
+            <SidebarIcon name="edit" className="snapshotActionIcon" />
+          </button>
+          <button
+            type="button"
+            title="この保存点に戻す"
+            aria-label={`${snapshot.label}に戻す`}
+            onClick={() => onRestoreSnapshot(snapshot)}
+          >
+            <SidebarIcon name="restore" className="snapshotActionIcon" />
+          </button>
+          <button
+            type="button"
+            title="保存点を削除"
+            aria-label={`${snapshot.label}を削除`}
+            onClick={() => onDeleteSnapshot(snapshot)}
+          >
+            <SidebarIcon name="trash" className="snapshotActionIcon" />
+          </button>
+        </div>
+      </article>
+    );
+  };
+
   const renderProjectSearchMode = () => (
     <section className="sidebarSection projectSearchModeSection" aria-label="検索と置換">
       <div className="sidebarSectionHeader">
@@ -1590,64 +1659,38 @@ export function WorkspaceSidebar({
       {!isSnapshotSectionCollapsed && (
         <div className="snapshotList">
           {projectFolder ? (
-            snapshots.length > 0 ? (
-              snapshots.map((snapshot) => {
-                const textLength = countWhitespace
-                  ? snapshot.totalTextLength
-                  : snapshot.totalVisibleTextLength;
-                return (
-                  <article className="snapshotItem" key={snapshot.id}>
-                    <div className="snapshotItemIcon" aria-hidden="true">
-                      <SidebarIcon name="clock" className="snapshotClockIcon" />
-                    </div>
-                    <div className="snapshotItemBody">
-                      <div className="snapshotItemTitleRow">
-                        <strong className="snapshotItemTitle" title={snapshot.label}>
-                          {snapshot.label}
-                        </strong>
-                        {snapshot.reason === "auto-before-restore" && (
-                          <span className="snapshotBadge">退避</span>
-                        )}
+            manualSnapshots.length > 0 || shelterSnapshots.length > 0 ? (
+              <>
+                {manualSnapshots.length > 0 ? (
+                  manualSnapshots.map(renderSnapshotItem)
+                ) : (
+                  <div className="snapshotEmptyState">手動チェックポイントはまだありません</div>
+                )}
+                {shelterSnapshots.length > 0 && (
+                  <div className="shelterSnapshotGroup">
+                    <button
+                      className="shelterSnapshotToggle"
+                      type="button"
+                      aria-expanded={isShelterListExpanded}
+                      onClick={() => setIsShelterListExpanded((current) => !current)}
+                    >
+                      <SidebarIcon
+                        name={isShelterListExpanded ? "chevronDown" : "chevronRight"}
+                        className="treeChevronIcon"
+                      />
+                      <span>復元前の退避</span>
+                      <span>{shelterSnapshots.length}件</span>
+                    </button>
+                    {isShelterListExpanded && (
+                      <div className="shelterSnapshotList">
+                        {shelterSnapshots.map(renderSnapshotItem)}
                       </div>
-                      <div className="snapshotItemDate">
-                        {formatSnapshotDate(snapshot.createdAt)}
-                      </div>
-                      <div className="snapshotItemMeta">
-                        {getSnapshotReasonLabel(snapshot)}・{snapshot.fileCount}個の原稿 /{" "}
-                        {formatCharCount(textLength)}
-                      </div>
-                    </div>
-                    <div className="snapshotItemActions">
-                      <button
-                        type="button"
-                        title="名前を変更"
-                        aria-label={`${snapshot.label}の名前を変更`}
-                        onClick={() => onRenameSnapshot(snapshot)}
-                      >
-                        <SidebarIcon name="edit" className="snapshotActionIcon" />
-                      </button>
-                      <button
-                        type="button"
-                        title="この保存点に戻す"
-                        aria-label={`${snapshot.label}に戻す`}
-                        onClick={() => onRestoreSnapshot(snapshot)}
-                      >
-                        <SidebarIcon name="restore" className="snapshotActionIcon" />
-                      </button>
-                      <button
-                        type="button"
-                        title="保存点を削除"
-                        aria-label={`${snapshot.label}を削除`}
-                        onClick={() => onDeleteSnapshot(snapshot)}
-                      >
-                        <SidebarIcon name="trash" className="snapshotActionIcon" />
-                      </button>
-                    </div>
-                  </article>
-                );
-              })
+                    )}
+                  </div>
+                )}
+              </>
             ) : (
-              <div className="snapshotEmptyState">保存点はまだありません</div>
+              <div className="snapshotEmptyState">チェックポイントはまだありません</div>
             )
           ) : (
             <div className="snapshotEmptyState">フォルダを開くと保存点を作成できます</div>

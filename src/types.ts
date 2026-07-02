@@ -311,6 +311,7 @@ export type ManuscriptSnapshot = {
   createdAt: number;
   reason: ManuscriptSnapshotReason;
   label: string;
+  memo: string;
   parentIds: string[];
   projectTree: ProjectFolder;
   files: ManuscriptSnapshotFile[];
@@ -351,6 +352,7 @@ export type AppDialog =
       value: string;
       confirmLabel: string;
       placeholder?: string;
+      optional?: boolean;
       error: string;
       resolve: (value: string | null) => void;
     }
