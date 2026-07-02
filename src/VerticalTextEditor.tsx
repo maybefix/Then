@@ -173,9 +173,6 @@ const ACTIVE_BUILD_RADIUS = 72;
 const VISIBLE_BUILD_RADIUS = 72;
 const VISIBLE_UPDATE_STEP = 12;
 const SCROLL_EPS = 0.75;
-// 着地後の再センタリング: スクロールが何フレーム静止したら補正するか／最大補正回数。
-const SETTLE_STABLE_FRAMES = 2;
-const SETTLE_MAX_CORRECTIONS = 3;
 const PLACEHOLDER = "# 見出し\n- リスト項目\nここに入力……";
 
 const astKey = new PluginKey<AstPluginState>("then-layout-ast");
@@ -1547,7 +1544,6 @@ function isHorizontalWriting(writingMode: WritingMode): boolean {
 function scrollAxis(writingMode: WritingMode): {
   get: (element: HTMLElement) => number;
   set: (element: HTMLElement, value: number) => void;
-  scrollTo: (element: HTMLElement, value: number, behavior: ScrollBehavior) => void;
   viewportStart: (rect: DOMRect) => number;
   viewportSize: (rect: DOMRect) => number;
   rectCenter: (rect: DOMRect) => number;
@@ -1558,7 +1554,6 @@ function scrollAxis(writingMode: WritingMode): {
       set: (element, value) => {
         element.scrollTop = value;
       },
-      scrollTo: (element, value, behavior) => element.scrollTo({ top: value, behavior }),
       viewportStart: (rect) => rect.top,
       viewportSize: (rect) => rect.height,
       rectCenter: (rect) => (rect.top + rect.bottom) / 2,
@@ -1570,7 +1565,6 @@ function scrollAxis(writingMode: WritingMode): {
     set: (element, value) => {
       element.scrollLeft = value;
     },
-    scrollTo: (element, value, behavior) => element.scrollTo({ left: value, behavior }),
     viewportStart: (rect) => rect.left,
     viewportSize: (rect) => rect.width,
     rectCenter: (rect) => (rect.left + rect.right) / 2,
@@ -1817,36 +1811,41 @@ function paragraphEndRect(
   return blockFallbackEndRect(element, writingMode);
 }
 
-function centerCaretForEditor(
+function measureCenterDelta(
   editor: Editor,
   scroller: HTMLElement,
   offsetPercent: number,
-  instant: boolean,
   writingMode: WritingMode,
-): void {
-  if (isEditorComposing(editor)) return;
-
+): number | null {
   const anchor = selectionColumnAnchor(editor.view, writingMode);
   const rect = anchor.rect;
-  if (!rect) return;
+  if (!rect) return null;
 
   const axis = scrollAxis(writingMode);
   const scrollerRect = scroller.getBoundingClientRect();
   const targetRatio = Number.isFinite(offsetPercent) ? offsetPercent / 100 : 0.5;
   const viewportTarget = axis.viewportStart(scrollerRect) + axis.viewportSize(scrollerRect) * targetRatio;
   const caretCenter = axis.rectCenter(rect);
-  const delta = caretCenter - viewportTarget;
+  return caretCenter - viewportTarget;
+}
+
+function centerCaretForEditor(
+  editor: Editor,
+  scroller: HTMLElement,
+  offsetPercent: number,
+  writingMode: WritingMode,
+): void {
+  if (isEditorComposing(editor)) return;
+
+  const delta = measureCenterDelta(editor, scroller, offsetPercent, writingMode);
+  if (delta === null) return;
+
+  const axis = scrollAxis(writingMode);
   const current = axis.get(scroller);
   const target = snapScrollValue(current + delta);
 
   if (Math.abs(target - current) < SCROLL_EPS) return;
-
-  if (instant) {
-    axis.set(scroller, target);
-    return;
-  }
-
-  axis.scrollTo(scroller, target, "smooth");
+  axis.set(scroller, target);
 }
 
 function domLineIndexFromElement(root: HTMLElement, element: Element | null): number {
@@ -1924,6 +1923,8 @@ export function VerticalTextEditor({
   const showLineBreakMarksRef = useRef(showLineBreakMarks);
   const renderLineBreakMarksRef = useRef<(() => void) | null>(null);
   const requestLineBreakMarksRef = useRef<(() => void) | null>(null);
+  const startCenterAnimationRef = useRef<(() => void) | null>(null);
+  const stopCenterAnimationRef = useRef<(() => void) | null>(null);
   typewriterScrollRef.current = typewriterScroll;
 
   useEffect(() => {
@@ -1945,7 +1946,8 @@ export function VerticalTextEditor({
     if (editor && scroller && typewriterScrollRef.current && !isEditorComposing(editor, composingRef)) {
       requestAnimationFrame(() => {
         if (!typewriterScrollRef.current) return;
-        centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, true, writingModeRef.current);
+        stopCenterAnimationRef.current?.();
+        centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, writingModeRef.current);
         requestLineBreakMarksRef.current?.();
       });
     } else {
@@ -1994,7 +1996,8 @@ export function VerticalTextEditor({
         onTextChangeRef.current(next, nextRevision);
         onSelectionChangeRef.current();
         if (scroller && typewriterScrollRef.current) {
-          centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, true, writingModeRef.current);
+          stopCenterAnimationRef.current?.();
+          centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, writingModeRef.current);
         }
         requestLineBreakMarksRef.current?.();
       },
@@ -2009,7 +2012,8 @@ export function VerticalTextEditor({
         editor.commands.setTextSelection(pos);
         onSelectionChangeRef.current();
         if (scroller && typewriterScrollRef.current) {
-          centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, true, writingModeRef.current);
+          stopCenterAnimationRef.current?.();
+          centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, writingModeRef.current);
         }
         requestLineBreakMarksRef.current?.();
       },
@@ -2036,7 +2040,7 @@ export function VerticalTextEditor({
         if (!typewriterScrollRef.current || !editor || !scroller || isEditorComposing(editor, composingRef)) return;
 
         typewriterOffsetRef.current = Number.isFinite(offsetPercent) ? offsetPercent : 50;
-        centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, false, writingModeRef.current);
+        startCenterAnimationRef.current?.();
         requestLineBreakMarksRef.current?.();
       },
       isComposing: () => isEditorComposing(tiptapRef.current, composingRef),
@@ -2065,7 +2069,8 @@ export function VerticalTextEditor({
     requestAnimationFrame(() => {
       const scroller = scrollerRef.current;
       if (scroller && typewriterScrollRef.current) {
-        centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, true, writingModeRef.current);
+        stopCenterAnimationRef.current?.();
+        centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, writingModeRef.current);
       }
       requestLineBreakMarksRef.current?.();
     });
@@ -2078,7 +2083,6 @@ export function VerticalTextEditor({
 
     let centerQueued = false;
     let centerInstant = false;
-    let centerEventType = "initial";
     let centerWaitFrames = 1;
     let visibleQueued = false;
     let lastVisibleCenter = -1;
@@ -2086,8 +2090,68 @@ export function VerticalTextEditor({
     let visibleFrame: number | null = null;
     let lineBreakFrame: number | null = null;
     let compositionFrame: number | null = null;
-    let settleFrame: number | null = null;
+    let centerAnimFrame: number | null = null;
     let lineBreakQueued = false;
+
+    const stopCenterAnimation = () => {
+      if (centerAnimFrame !== null) cancelAnimationFrame(centerAnimFrame);
+      centerAnimFrame = null;
+    };
+
+    const startCenterAnimation = () => {
+      stopCenterAnimation();
+      let lastTime = performance.now();
+      let settledFrames = 0;
+      const deadline = lastTime + 600;
+
+      const step = (now: number) => {
+        centerAnimFrame = null;
+        const editor = tiptapRef.current;
+        const currentScroller = scrollerRef.current;
+        if (!typewriterScrollRef.current || !editor || !currentScroller) return;
+        if (isEditorComposing(editor, composingRef)) return;
+
+        const delta = measureCenterDelta(
+          editor,
+          currentScroller,
+          typewriterOffsetRef.current,
+          writingModeRef.current,
+        );
+        if (delta === null) return;
+
+        const axis = scrollAxis(writingModeRef.current);
+        const current = axis.get(currentScroller);
+        const dpr = window.devicePixelRatio || 1;
+        const minStep = 1 / dpr;
+        const exactTarget = snapScrollValue(current + delta);
+
+        if (Math.abs(exactTarget - current) < minStep / 2) {
+          settledFrames += 1;
+          if (settledFrames >= 2 || now > deadline) return;
+          centerAnimFrame = requestAnimationFrame(step);
+          return;
+        }
+        settledFrames = 0;
+
+        const dt = Math.min(64, now - lastTime);
+        lastTime = now;
+
+        if (Math.abs(delta) <= 2 * minStep || now > deadline) {
+          axis.set(currentScroller, exactTarget);
+        } else {
+          const k = 1 - Math.exp(-dt / 90);
+          const move = Math.sign(delta) * Math.max(Math.abs(delta) * k, minStep);
+          axis.set(currentScroller, snapScrollValue(current + move));
+        }
+
+        centerAnimFrame = requestAnimationFrame(step);
+      };
+
+      centerAnimFrame = requestAnimationFrame(step);
+    };
+
+    startCenterAnimationRef.current = startCenterAnimation;
+    stopCenterAnimationRef.current = stopCenterAnimation;
 
     const syncVisibleWindow = (editor: Editor, currentScroller: HTMLElement): boolean => {
       const index = estimateVisibleCenterIndex(editor, currentScroller, writingModeRef.current);
@@ -2108,7 +2172,6 @@ export function VerticalTextEditor({
       if (!typewriterScrollRef.current || !editor || isEditorComposing(editor, composingRef)) return;
 
       centerInstant = centerInstant || instant;
-      centerEventType = eventType;
       centerWaitFrames = Math.max(centerWaitFrames, centerDelayFrames(eventType));
       if (centerQueued) return;
 
@@ -2125,52 +2188,28 @@ export function VerticalTextEditor({
             centerInstant = false;
             centerQueued = false;
             centerWaitFrames = 1;
-            centerEventType = "unknown";
             return;
           }
 
           const shouldInstant = centerInstant;
           centerInstant = false;
-          centerEventType = "unknown";
           const currentEditor = tiptapRef.current;
           const currentScroller = scrollerRef.current;
           if (currentEditor && currentScroller) {
-            if (syncVisibleWindow(currentEditor, currentScroller)) {
-              centerFrame = requestAnimationFrame(() => {
-                centerFrame = null;
-                const delayedInstant = shouldInstant || centerInstant;
-                centerInstant = false;
-                centerQueued = false;
-                centerWaitFrames = 1;
-                centerEventType = "unknown";
-                const settledEditor = tiptapRef.current;
-                const settledScroller = scrollerRef.current;
-                if (!typewriterScrollRef.current || !settledEditor || !settledScroller) return;
-
-                centerCaretForEditor(
-                  settledEditor,
-                  settledScroller,
-                  typewriterOffsetRef.current,
-                  delayedInstant,
-                  writingModeRef.current,
-                );
-                if (!delayedInstant) requestSettleRecenter();
-              });
-              return;
-            }
-
+            syncVisibleWindow(currentEditor, currentScroller);
             centerQueued = false;
             centerWaitFrames = 1;
-            centerCaretForEditor(
-              currentEditor,
-              currentScroller,
-              typewriterOffsetRef.current,
-              shouldInstant,
-              writingModeRef.current,
-            );
-            // スムーズスクロール中は可視ウィンドウの再装飾で列幅が動き、最終位置が
-            // 中央からずれることがある。着地後に一度だけ測り直して補正する。
-            if (!shouldInstant) requestSettleRecenter();
+            if (shouldInstant) {
+              stopCenterAnimation();
+              centerCaretForEditor(
+                currentEditor,
+                currentScroller,
+                typewriterOffsetRef.current,
+                writingModeRef.current,
+              );
+            } else {
+              startCenterAnimation();
+            }
           } else {
             centerQueued = false;
             centerWaitFrames = 1;
@@ -2179,66 +2218,6 @@ export function VerticalTextEditor({
       };
 
       wait();
-    };
-
-    // スムーズスクロールが落ち着くのを待ってから、残った中央ずれを瞬時補正する。
-    // スクロールが2フレーム静止したら 1 回測り直し、まだ動けば最大数回まで再補正する。
-    const requestSettleRecenter = () => {
-      if (settleFrame !== null) cancelAnimationFrame(settleFrame);
-
-      let lastPosition = Number.NaN;
-      let stableFrames = 0;
-      let corrections = 0;
-
-      const tick = () => {
-        settleFrame = requestAnimationFrame(() => {
-          settleFrame = null;
-          const editor = tiptapRef.current;
-          const currentScroller = scrollerRef.current;
-          if (
-            !typewriterScrollRef.current ||
-            !editor ||
-            !currentScroller ||
-            isEditorComposing(editor, composingRef)
-          ) return;
-
-          const axis = scrollAxis(writingModeRef.current);
-          const current = axis.get(currentScroller);
-          if (Number.isNaN(lastPosition) || Math.abs(current - lastPosition) > 0.5) {
-            // まだスクロール（または再装飾）で動いている。静止を待つ。
-            lastPosition = current;
-            stableFrames = 0;
-            tick();
-            return;
-          }
-
-          stableFrames += 1;
-          if (stableFrames < SETTLE_STABLE_FRAMES) {
-            tick();
-            return;
-          }
-
-          // 静止した。瞬時に測り直して中央へ寄せ直す。
-          const before = axis.get(currentScroller);
-          centerCaretForEditor(
-            editor,
-            currentScroller,
-            typewriterOffsetRef.current,
-            true,
-            writingModeRef.current,
-          );
-          const moved = Math.abs(axis.get(currentScroller) - before) > SCROLL_EPS;
-          corrections += 1;
-          if (moved && corrections < SETTLE_MAX_CORRECTIONS) {
-            // 補正で動いた＝再装飾で更にずれた可能性。落ち着いたら再度確認する。
-            lastPosition = axis.get(currentScroller);
-            stableFrames = 0;
-            tick();
-          }
-        });
-      };
-
-      tick();
     };
 
     const requestVisibleWindow = () => {
@@ -2387,6 +2366,7 @@ export function VerticalTextEditor({
     updateEmptyAttribute(editor);
 
     const handleWheel = (event: WheelEvent) => {
+      stopCenterAnimation();
       event.preventDefault();
       const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
       if (isHorizontalWriting(writingModeRef.current)) {
@@ -2420,6 +2400,7 @@ export function VerticalTextEditor({
     };
 
     const handleCompositionStart = () => {
+      stopCenterAnimation();
       composingRef.current = true;
       renderLineBreakMarks();
     };
@@ -2522,7 +2503,9 @@ export function VerticalTextEditor({
       if (visibleFrame !== null) cancelAnimationFrame(visibleFrame);
       if (lineBreakFrame !== null) cancelAnimationFrame(lineBreakFrame);
       if (compositionFrame !== null) cancelAnimationFrame(compositionFrame);
-      if (settleFrame !== null) cancelAnimationFrame(settleFrame);
+      stopCenterAnimation();
+      if (startCenterAnimationRef.current === startCenterAnimation) startCenterAnimationRef.current = null;
+      if (stopCenterAnimationRef.current === stopCenterAnimation) stopCenterAnimationRef.current = null;
       renderLineBreakMarksRef.current = null;
       requestLineBreakMarksRef.current = null;
       if (lineBreakLayerRef.current) lineBreakLayerRef.current.textContent = "";
