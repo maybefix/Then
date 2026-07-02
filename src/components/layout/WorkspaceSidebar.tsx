@@ -84,6 +84,8 @@ type WorkspaceSidebarProps = {
     position: "before" | "after",
   ) => void;
   snapshots: ManuscriptSnapshot[];
+  isSnapshotSectionCollapsed: boolean;
+  onSnapshotSectionCollapsedChange: (collapsed: boolean) => void;
   onCreateSnapshot: () => void;
   onRenameSnapshot: (snapshot: ManuscriptSnapshot) => void;
   onRestoreSnapshot: (snapshot: ManuscriptSnapshot) => void;
@@ -462,6 +464,8 @@ export function WorkspaceSidebar({
   onDeleteEntry,
   onReorderEntry,
   snapshots,
+  isSnapshotSectionCollapsed,
+  onSnapshotSectionCollapsedChange,
   onCreateSnapshot,
   onRenameSnapshot,
   onRestoreSnapshot,
@@ -486,7 +490,6 @@ export function WorkspaceSidebar({
     ReadonlySet<string>
   >(() => new Set());
   const [isReplaceExpanded, setIsReplaceExpanded] = useState(false);
-  const [isSnapshotSectionCollapsed, setIsSnapshotSectionCollapsed] = useState(false);
   const [isShelterListExpanded, setIsShelterListExpanded] = useState(false);
   const [navigatorLocation, setNavigatorLocation] = useState<
     { kind: "folder" | "file"; path: string } | null
@@ -1637,7 +1640,7 @@ export function WorkspaceSidebar({
           className="snapshotSectionToggle"
           type="button"
           aria-expanded={!isSnapshotSectionCollapsed}
-          onClick={() => setIsSnapshotSectionCollapsed((current) => !current)}
+          onClick={() => onSnapshotSectionCollapsedChange(!isSnapshotSectionCollapsed)}
         >
           <SidebarIcon
             name={isSnapshotSectionCollapsed ? "chevronRight" : "chevronDown"}

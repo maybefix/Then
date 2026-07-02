@@ -534,6 +534,7 @@ const defaultSettings: EditorSettings = {
   zoneModeOpacity: 0.42,
   navigatorPreviewLines: DEFAULT_NAVIGATOR_PREVIEW_LINES,
   countWhitespace: true,
+  checkpointSectionCollapsed: false,
 };
 
 const fallbackFontFamilies = [
@@ -1462,6 +1463,10 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         typeof settings.countWhitespace === "boolean"
           ? settings.countWhitespace
           : defaultSettings.countWhitespace,
+      checkpointSectionCollapsed:
+        typeof settings.checkpointSectionCollapsed === "boolean"
+          ? settings.checkpointSectionCollapsed
+          : defaultSettings.checkpointSectionCollapsed,
       typewriterScroll:
         typeof settings.typewriterScroll === "boolean"
           ? settings.typewriterScroll
@@ -6064,6 +6069,10 @@ export default function App() {
                   void handleSidebarEntryReorder(folderPath, draggedPath, targetPath, position)
                 }
                 snapshots={currentWorkspaceSnapshots}
+                isSnapshotSectionCollapsed={settings.checkpointSectionCollapsed}
+                onSnapshotSectionCollapsedChange={(collapsed) =>
+                  updateSettings("checkpointSectionCollapsed", collapsed)
+                }
                 onCreateSnapshot={() => void handleCreateManuscriptSnapshot()}
                 onRenameSnapshot={(snapshot) => void handleRenameManuscriptSnapshot(snapshot)}
                 onRestoreSnapshot={(snapshot) => void handleRestoreManuscriptSnapshot(snapshot)}

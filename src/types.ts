@@ -198,6 +198,8 @@ export type EditorSettings = {
   navigatorPreviewLines: number;
   /** 文字数カウントに空白文字（スペース・タブ・改行など）を含めるか。 */
   countWhitespace: boolean;
+  /** チェックポイントセクションを折りたたんで表示するか。 */
+  checkpointSectionCollapsed: boolean;
 };
 
 /**
