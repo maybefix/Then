@@ -6,6 +6,7 @@ type AppDialogModalProps = {
   onClose: () => void;
   onSubmit: (event?: FormEvent<HTMLFormElement>) => void;
   onValueChange: (value: string) => void;
+  onFieldValueChange: (fieldId: string, value: string) => void;
   onChoice: (value: "primary" | "secondary") => void;
 };
 
@@ -14,6 +15,7 @@ export function AppDialogModal({
   onClose,
   onSubmit,
   onValueChange,
+  onFieldValueChange,
   onChoice,
 }: AppDialogModalProps) {
   return (
@@ -41,6 +43,40 @@ export function AppDialogModal({
                 onChange={(event) => onValueChange(event.target.value)}
               />
             </label>
+            {dialog.error && (
+              <p className="dialogError" role="alert">
+                {dialog.error}
+              </p>
+            )}
+            <footer className="modalActions">
+              <button type="button" onClick={onClose}>
+                キャンセル
+              </button>
+              <button type="submit">{dialog.confirmLabel}</button>
+            </footer>
+          </form>
+        ) : dialog.type === "multiInput" ? (
+          <form className="modalForm" onSubmit={onSubmit}>
+            {dialog.fields.map((field, index) => (
+              <label key={field.id}>
+                <span>{field.label}</span>
+                {field.multiline ? (
+                  <textarea
+                    autoFocus={index === 0}
+                    value={field.value}
+                    placeholder={field.placeholder}
+                    onChange={(event) => onFieldValueChange(field.id, event.target.value)}
+                  />
+                ) : (
+                  <input
+                    autoFocus={index === 0}
+                    value={field.value}
+                    placeholder={field.placeholder}
+                    onChange={(event) => onFieldValueChange(field.id, event.target.value)}
+                  />
+                )}
+              </label>
+            ))}
             {dialog.error && (
               <p className="dialogError" role="alert">
                 {dialog.error}

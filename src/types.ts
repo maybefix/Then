@@ -359,6 +359,21 @@ export type AppDialog =
       resolve: (value: string | null) => void;
     }
   | {
+      type: "multiInput";
+      title: string;
+      fields: {
+        id: string;
+        label: string;
+        value: string;
+        placeholder?: string;
+        optional?: boolean;
+        multiline?: boolean;
+      }[];
+      confirmLabel: string;
+      error: string;
+      resolve: (value: Record<string, string> | null) => void;
+    }
+  | {
       type: "confirm";
       title: string;
       message: string;

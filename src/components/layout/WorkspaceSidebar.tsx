@@ -88,6 +88,7 @@ type WorkspaceSidebarProps = {
   onSnapshotSectionCollapsedChange: (collapsed: boolean) => void;
   onCreateSnapshot: () => void;
   onRenameSnapshot: (snapshot: ManuscriptSnapshot) => void;
+  onEditSnapshotMemo: (snapshot: ManuscriptSnapshot) => void;
   onRestoreSnapshot: (snapshot: ManuscriptSnapshot) => void;
   onDeleteSnapshot: (snapshot: ManuscriptSnapshot) => void;
   onCollapse: () => void;
@@ -300,16 +301,12 @@ type SidebarIconName =
   | "chevronDown"
   | "chevronLeft"
   | "chevronRight"
-  | "clock"
-  | "edit"
   | "external"
   | "file"
   | "folder"
   | "folderPlus"
   | "plus"
-  | "restore"
-  | "search"
-  | "trash";
+  | "search";
 
 function SidebarIcon({ name, className = "" }: { name: SidebarIconName; className?: string }) {
   const common = {
@@ -343,20 +340,6 @@ function SidebarIcon({ name, className = "" }: { name: SidebarIconName; classNam
       return (
         <svg {...common}>
           <polyline points="9 18 15 12 9 6" />
-        </svg>
-      );
-    case "clock":
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="9" />
-          <path d="M12 7v5l3 2" />
-        </svg>
-      );
-    case "edit":
-      return (
-        <svg {...common}>
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
         </svg>
       );
     case "external":
@@ -395,27 +378,11 @@ function SidebarIcon({ name, className = "" }: { name: SidebarIconName; classNam
           <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
       );
-    case "restore":
-      return (
-        <svg {...common}>
-          <path d="M3 12a9 9 0 1 0 3-6.7" />
-          <path d="M3 4v6h6" />
-          <path d="M12 7v5l3 2" />
-        </svg>
-      );
     case "search":
       return (
         <svg {...common}>
           <circle cx="10.5" cy="10.5" r="7.25" />
           <path d="m16 16 5 5" />
-        </svg>
-      );
-    case "trash":
-      return (
-        <svg {...common}>
-          <polyline points="3 6 5 6 21 6" />
-          <path d="M8 6V4h8v2" />
-          <path d="M19 6 18 20H6L5 6" />
         </svg>
       );
     default:
@@ -468,6 +435,7 @@ export function WorkspaceSidebar({
   onSnapshotSectionCollapsedChange,
   onCreateSnapshot,
   onRenameSnapshot,
+  onEditSnapshotMemo,
   onRestoreSnapshot,
   onDeleteSnapshot,
   onCollapse,
@@ -491,6 +459,12 @@ export function WorkspaceSidebar({
   >(() => new Set());
   const [isReplaceExpanded, setIsReplaceExpanded] = useState(false);
   const [isShelterListExpanded, setIsShelterListExpanded] = useState(false);
+  const [snapshotMenu, setSnapshotMenu] = useState<{
+    id: string;
+    placement: "above" | "below";
+    x: number;
+    y: number;
+  } | null>(null);
   const [navigatorLocation, setNavigatorLocation] = useState<
     { kind: "folder" | "file"; path: string } | null
   >(null);
@@ -518,6 +492,22 @@ export function WorkspaceSidebar({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [contextMenu]);
+
+  useEffect(() => {
+    if (!snapshotMenu) return undefined;
+
+    const close = () => setSnapshotMenu(null);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [snapshotMenu]);
 
   // プロジェクトフォルダが切り替わったらナビゲータをルートに戻す。
   useEffect(() => {
@@ -1295,23 +1285,25 @@ export function WorkspaceSidebar({
               onChange={(next) => onSetFileProgress(location.path, next)}
             />
           </div>
-          <button
-            className={`navigatorCurrentFile ${
-              location.path === currentFilePath ? "navigatorCurrentFileActive" : ""
-            }`}
-            type="button"
-            title={location.path}
-            onClick={() => onSelectFile(location.path)}
-          >
-            <SidebarIcon name="file" className="treeSvgIcon" />
-            <span className="navigatorFileName">{fileName}</span>
-          </button>
-          {filePreview && (
-            <p className="navigatorFilePreview" style={previewStyle}>
-              {filePreview}
-            </p>
-          )}
-          <div className="navigatorHeadingList">
+          <div className="navigatorFileDetailHeader">
+            <button
+              className={`navigatorCurrentFile ${
+                location.path === currentFilePath ? "navigatorCurrentFileActive" : ""
+              }`}
+              type="button"
+              title={location.path}
+              onClick={() => onSelectFile(location.path)}
+            >
+              <SidebarIcon name="file" className="treeSvgIcon" />
+              <span className="navigatorFileName">{fileName}</span>
+            </button>
+            {filePreview && (
+              <p className="navigatorFilePreview" style={previewStyle}>
+                {filePreview}
+              </p>
+            )}
+          </div>
+          <div className="navigatorHeadingList" aria-label={`${fileName}の見出し`}>
             {flatHeadings.length > 0 ? (
               flatHeadings.map(({ item, depth }) => {
                 const isActive =
@@ -1471,11 +1463,14 @@ export function WorkspaceSidebar({
     const textLength = countWhitespace
       ? snapshot.totalTextLength
       : snapshot.totalVisibleTextLength;
+    const isSnapshotMenuOpen = snapshotMenu?.id === snapshot.id;
+    const closeSnapshotMenuAndRun = (action: () => void) => {
+      setSnapshotMenu(null);
+      action();
+    };
+
     return (
       <article className="snapshotItem" key={snapshot.id}>
-        <div className="snapshotItemIcon" aria-hidden="true">
-          <SidebarIcon name="clock" className="snapshotClockIcon" />
-        </div>
         <div
           className="snapshotItemBody"
           title={snapshot.memo ? `${snapshot.label}\n${snapshot.memo}` : snapshot.label}
@@ -1488,43 +1483,89 @@ export function WorkspaceSidebar({
               <span className="snapshotBadge">退避</span>
             )}
           </div>
-          {snapshot.memo && (
-            <div className="snapshotItemMemo">
-              {snapshot.memo}
+        </div>
+        <div className="snapshotItemMenuControl">
+          <button
+            className="snapshotMoreButton"
+            type="button"
+            title="チェックポイントメニュー"
+            aria-label={`${snapshot.label}のメニュー`}
+            aria-expanded={isSnapshotMenuOpen}
+            aria-haspopup="menu"
+            onClick={(event) => {
+              event.stopPropagation();
+              const buttonRect = event.currentTarget.getBoundingClientRect();
+              const shouldOpenAbove = window.innerHeight - buttonRect.bottom < 260;
+              setSnapshotMenu((current) =>
+                current?.id === snapshot.id
+                  ? null
+                  : {
+                      id: snapshot.id,
+                      placement: shouldOpenAbove ? "above" : "below",
+                      x: buttonRect.right,
+                      y: shouldOpenAbove ? buttonRect.top - 4 : buttonRect.bottom + 4,
+                    },
+              );
+            }}
+          >
+            ･･･
+          </button>
+          {isSnapshotMenuOpen && (
+            <div
+              className="snapshotMenu"
+              data-placement={snapshotMenu.placement}
+              style={{ left: snapshotMenu.x, top: snapshotMenu.y }}
+              role="menu"
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <div className="snapshotMenuInfo" role="group" aria-label="チェックポイント情報">
+                <div>
+                  <span>作成日時</span>
+                  <strong>{formatSnapshotDate(snapshot.createdAt)}</strong>
+                </div>
+                <div>
+                  <span>規模</span>
+                  <strong>
+                    {snapshot.fileCount} 原稿 / {formatCharCount(textLength)}
+                  </strong>
+                </div>
+                <div>
+                  <span>メモ</span>
+                  <strong>{snapshot.memo || "なし"}</strong>
+                </div>
+              </div>
+              <div className="snapshotMenuDivider" role="presentation" />
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => closeSnapshotMenuAndRun(() => onRenameSnapshot(snapshot))}
+              >
+                タイトルを編集
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => closeSnapshotMenuAndRun(() => onEditSnapshotMemo(snapshot))}
+              >
+                メモを編集
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => closeSnapshotMenuAndRun(() => onRestoreSnapshot(snapshot))}
+              >
+                復元
+              </button>
+              <button
+                className="snapshotMenuDanger"
+                type="button"
+                role="menuitem"
+                onClick={() => closeSnapshotMenuAndRun(() => onDeleteSnapshot(snapshot))}
+              >
+                削除
+              </button>
             </div>
           )}
-          <div className="snapshotItemDate">
-            {formatSnapshotDate(snapshot.createdAt)}
-          </div>
-          <div className="snapshotItemMeta">
-            {snapshot.fileCount} 原稿 / {formatCharCount(textLength)}
-          </div>
-        </div>
-        <div className="snapshotItemActions">
-          <button
-            type="button"
-            title="名前を変更"
-            aria-label={`${snapshot.label}の名前を変更`}
-            onClick={() => onRenameSnapshot(snapshot)}
-          >
-            <SidebarIcon name="edit" className="snapshotActionIcon" />
-          </button>
-          <button
-            type="button"
-            title="この保存点に戻す"
-            aria-label={`${snapshot.label}に戻す`}
-            onClick={() => onRestoreSnapshot(snapshot)}
-          >
-            <SidebarIcon name="restore" className="snapshotActionIcon" />
-          </button>
-          <button
-            type="button"
-            title="保存点を削除"
-            aria-label={`${snapshot.label}を削除`}
-            onClick={() => onDeleteSnapshot(snapshot)}
-          >
-            <SidebarIcon name="trash" className="snapshotActionIcon" />
-          </button>
         </div>
       </article>
     );

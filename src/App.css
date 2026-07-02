@@ -2688,6 +2688,8 @@ body {
 }
 
 .sidebarScroll {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   flex: 1;
   overflow-y: auto;
@@ -2997,11 +2999,14 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  flex: 1;
   padding: 4px 0 8px;
 }
 
 .navigatorHeader {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
@@ -3053,6 +3058,8 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .navigatorItem {
@@ -3076,7 +3083,7 @@ body {
   color: var(--text-secondary);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: 13.5px;
   text-align: left;
 }
 
@@ -3125,7 +3132,8 @@ body {
   align-items: center;
   gap: 6px;
   min-width: 0;
-  font-size: 12px;
+  font-size: 13.5px;
+  line-height: 1.35;
 }
 
 .navigatorItemPreview {
@@ -3142,6 +3150,13 @@ body {
   word-break: break-word;
 }
 
+.navigatorFileDetailHeader {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--border-strong);
+}
+
 .navigatorCurrentFile {
   display: flex;
   align-items: center;
@@ -3155,7 +3170,7 @@ body {
   color: var(--text-primary);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   text-align: left;
 }
@@ -3172,15 +3187,14 @@ body {
 }
 
 .navigatorFilePreview {
+  margin: 6px 12px 0;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: var(--preview-lines, 2);
-  margin: 6px 12px 8px;
-  padding-bottom: 8px;
-  border-bottom: 0.5px solid var(--border-strong);
   color: var(--text-muted);
   font-size: 11px;
-  line-height: 1.5;
+  padding-left: 24px;
+  line-height: 1.55;
   overflow: hidden;
   word-break: break-word;
 }
@@ -3189,13 +3203,17 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 6px;
 }
 
 .navigatorHeadingItem {
   display: grid;
   gap: 2px;
   min-width: 0;
-  padding: 6px 10px 6px 12px;
+  padding: 6px 10px 8px 12px;
   border: 0;
   background: transparent;
   color: var(--text-secondary);
@@ -3219,7 +3237,7 @@ body {
   align-items: center;
   gap: 6px;
   min-width: 0;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .navigatorHeadingTitle {
@@ -3234,7 +3252,9 @@ body {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: var(--preview-lines, 1);
   color: var(--text-faint);
-  font-size: 10.5px;
+  padding-top: 5px;
+  padding-left: 16px;
+  font-size: 11px;
   line-height: 1.45;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3656,19 +3676,18 @@ body {
   flex: 1;
   flex-direction: column;
   overflow: hidden;
-  border: 0.5px solid var(--border-strong);
-  border-radius: 8px;
-  background: var(--bg-panel-strong);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .snapshotDock {
   display: flex;
-  min-height: 300px;
-  max-height: 350px;
-  flex: 0 0 214px;
+  min-height: 236px;
+  max-height: 292px;
+  flex: 0 0 184px;
   flex-direction: column;
-  padding: 10px 12px 12px;
+  padding: 7px 10px 9px;
   border-top: 0.5px solid var(--border-subtle);
   background: color-mix(in srgb, var(--sidebar-bg, var(--bg-panel)) 88%, var(--bg-root));
 }
@@ -3685,12 +3704,12 @@ body {
 
 .snapshotSectionHeader {
   display: flex;
-  min-height: 36px;
+  min-height: 28px;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 9px 6px;
-  border-bottom: 0.5px solid var(--border-subtle);
+  padding: 0 1px 5px;
+  border-bottom: 0;
 }
 
 .snapshotSectionToggle {
@@ -3700,21 +3719,25 @@ body {
   gap: 6px;
   border: 0;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--text-muted);
   cursor: pointer;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
+}
+
+.snapshotSectionToggle:hover {
+  color: var(--text-primary);
 }
 
 .snapshotCreateButton {
   display: inline-grid;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   place-items: center;
   padding: 0;
-  border: 0.5px solid var(--border-strong);
-  border-radius: 50%;
+  border: 0;
+  border-radius: 5px;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
@@ -3722,6 +3745,7 @@ body {
 }
 
 .snapshotCreateButton:hover {
+  background: rgba(255, 255, 255, 0.06);
   color: var(--text-primary);
 }
 
@@ -3748,79 +3772,63 @@ body {
 
 .snapshotList {
   display: grid;
+  position: relative;
   min-height: 0;
   flex: 1;
   align-content: start;
-  gap: 6px;
+  gap: 2px;
   overflow-y: auto;
-  padding: 8px 9px 9px;
+  padding: 1px 1px 4px;
 }
 
 .snapshotItem {
   display: grid;
+  position: relative;
   min-width: 0;
   align-self: start;
-  grid-template-columns: 18px minmax(0, 1fr);
-  gap: 8px;
-  padding: 8px 8px;
-  border: 0.5px solid var(--border-subtle);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.025);
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+  padding: 1px 0 1px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
 }
 
-.snapshotItemIcon {
-  display: inline-grid;
-  width: 18px;
-  height: 22px;
-  place-items: center;
-  color: var(--text-faint);
-}
-
-.snapshotClockIcon {
-  width: 14px;
-  height: 14px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
+.snapshotItem:hover {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-primary);
 }
 
 .snapshotItemBody {
+  display: grid;
   min-width: 0;
+  align-items: center;
+  min-height: 22px;
 }
 
 .snapshotItemTitleRow {
   display: flex;
   min-width: 0;
-  align-items: start;
+  align-items: center;
   gap: 5px;
 }
 
 .snapshotItemTitle {
-  display: -webkit-box;
+  display: block;
   min-width: 0;
   overflow: hidden;
-  color: var(--text-primary);
+  color: inherit;
   font-size: 12px;
   font-weight: 700;
-  line-height: 1.35;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.snapshotItemMemo {
-  min-width: 0;
-  overflow: hidden;
-  margin-top: 2px;
-  color: var(--text-muted);
-  font-size: 10px;
-  line-height: 1.35;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .snapshotBadge {
   flex: 0 0 auto;
-  padding: 1px 5px;
+  padding: 0 4px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--accent-strong);
@@ -3828,68 +3836,128 @@ body {
   line-height: 1.2;
 }
 
-.snapshotItemDate,
-.snapshotItemMeta {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-muted);
-  font-size: 10px;
-  line-height: 1.45;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.snapshotItemDate {
-  margin-top: 2px;
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-
-.snapshotItemActions {
+.snapshotItemMenuControl {
+  position: relative;
   display: inline-flex;
-  grid-column: 2;
-  align-items: start;
+  align-items: center;
   justify-content: end;
-  gap: 2px;
-  margin-top: 3px;
+  padding-right: 2px;
 }
 
-.snapshotItemActions button {
+.snapshotMoreButton {
   display: inline-grid;
-  width: 22px;
+  min-width: 22px;
   height: 22px;
   place-items: center;
+  padding: 0 4px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 4px;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
 }
 
-.snapshotItemActions button:hover {
+.snapshotMoreButton:hover,
+.snapshotMoreButton[aria-expanded="true"] {
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-primary);
 }
 
-.snapshotActionIcon {
-  width: 13px;
-  height: 13px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
+.snapshotMenu {
+  position: fixed;
+  z-index: 95;
+  display: grid;
+  width: min(248px, calc(100vw - 24px));
+  max-height: min(260px, calc(100vh - 24px));
+  overflow-y: auto;
+  padding: 6px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-panel-strong);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.36);
+  transform: translateX(-100%);
+}
+
+.snapshotMenu[data-placement="above"] {
+  transform: translate(-100%, -100%);
+}
+
+.snapshotMenuInfo {
+  display: grid;
+  gap: 5px;
+  padding: 6px 7px 5px;
+}
+
+.snapshotMenuInfo div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.snapshotMenuInfo span {
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.snapshotMenuInfo strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snapshotMenuDivider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border-subtle);
+}
+
+.snapshotMenu button {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+
+.snapshotMenu button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.snapshotMenu .snapshotMenuDanger {
+  color: var(--danger, #d36a6a);
+}
+
+.snapshotMenu .snapshotMenuDanger:hover {
+  background: color-mix(in srgb, var(--danger, #d36a6a) 14%, transparent);
+  color: var(--danger, #ef8f8f);
 }
 
 .snapshotEmptyState {
-  padding: 12px 0;
+  padding: 8px 0 8px 6px;
   color: var(--text-faint);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .shelterSnapshotGroup {
   display: grid;
-  gap: 6px;
-  padding-top: 2px;
+  gap: 2px;
+  padding-top: 4px;
 }
 
 .shelterSnapshotToggle {
@@ -3900,9 +3968,9 @@ body {
   grid-template-columns: 12px minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
-  padding: 0 6px;
-  border: 0.5px solid var(--border-subtle);
-  border-radius: 6px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 5px;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
@@ -3912,7 +3980,7 @@ body {
 }
 
 .shelterSnapshotToggle:hover {
-  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.035);
   color: var(--text-primary);
 }
 
@@ -3930,7 +3998,7 @@ body {
 
 .shelterSnapshotList {
   display: grid;
-  gap: 6px;
+  gap: 2px;
 }
 
 .sidebarFooter {
@@ -6586,6 +6654,15 @@ body {
 }
 
 .appShell[data-zone-mode="true"] :is(.workspaceSidebar, .rightSidebar):is(:hover, :focus-within) {
+  opacity: 1;
+}
+
+.appShell[data-zone-mode="true"] .statusPath {
+  opacity: var(--zone-sidebar-opacity, 0.42);
+  transition: opacity 140ms ease;
+}
+
+.appShell[data-zone-mode="true"] .statusbar:is(:hover, :focus-within) .statusPath {
   opacity: 1;
 }
 

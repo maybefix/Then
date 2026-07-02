@@ -3360,6 +3360,40 @@ export default function App() {
       });
     });
 
+  const requestMultiInput = ({
+    title,
+    fields,
+    confirmLabel,
+  }: {
+    title: string;
+    fields: {
+      id: string;
+      label: string;
+      initialValue: string;
+      placeholder?: string;
+      optional?: boolean;
+      multiline?: boolean;
+    }[];
+    confirmLabel: string;
+  }) =>
+    new Promise<Record<string, string> | null>((resolve) => {
+      setAppDialog({
+        type: "multiInput",
+        title,
+        fields: fields.map((field) => ({
+          id: field.id,
+          label: field.label,
+          value: field.initialValue,
+          placeholder: field.placeholder,
+          optional: field.optional,
+          multiline: field.multiline,
+        })),
+        confirmLabel,
+        error: "",
+        resolve,
+      });
+    });
+
   const requestConfirm = ({
     title,
     message,
@@ -3415,6 +3449,8 @@ export default function App() {
       if (!current) return null;
       if (current.type === "input") {
         current.resolve(null);
+      } else if (current.type === "multiInput") {
+        current.resolve(null);
       } else if (current.type === "confirm") {
         current.resolve(false);
       } else {
@@ -3436,6 +3472,18 @@ export default function App() {
         current.resolve("primary");
         return null;
       }
+      if (current.type === "multiInput") {
+        const values: Record<string, string> = {};
+        for (const field of current.fields) {
+          const value = field.value.trim();
+          if (!value && !field.optional) {
+            return { ...current, error: `${field.label}を入力してください` };
+          }
+          values[field.id] = value;
+        }
+        current.resolve(values);
+        return null;
+      }
 
       const value = current.value.trim();
       if (!value && !current.optional) {
@@ -3449,6 +3497,20 @@ export default function App() {
   const updateAppDialogValue = (value: string) => {
     setAppDialog((current) =>
       current?.type === "input" ? { ...current, value, error: "" } : current,
+    );
+  };
+
+  const updateAppDialogFieldValue = (fieldId: string, value: string) => {
+    setAppDialog((current) =>
+      current?.type === "multiInput"
+        ? {
+            ...current,
+            fields: current.fields.map((field) =>
+              field.id === fieldId ? { ...field, value } : field,
+            ),
+            error: "",
+          }
+        : current,
     );
   };
 
@@ -3626,32 +3688,35 @@ export default function App() {
     }
 
     const now = new Date();
-    const label = await requestInput({
+    const snapshotDraft = await requestMultiInput({
       title: "チェックポイントを作成",
-      label: "名前",
-      initialValue: `${now.toLocaleDateString("ja-JP")} ${now.toLocaleTimeString("ja-JP", {
-        hour: "2-digit",
-        minute: "2-digit",
-      })}`,
+      fields: [
+        {
+          id: "label",
+          label: "タイトル",
+          initialValue: `${now.toLocaleDateString("ja-JP")} ${now.toLocaleTimeString("ja-JP", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}`,
+          placeholder: "例: 終盤改稿前",
+        },
+        {
+          id: "memo",
+          label: "メモ",
+          initialValue: "",
+          placeholder: "例: 終盤の分岐前。会話のテンポを試す",
+          optional: true,
+          multiline: true,
+        },
+      ],
       confirmLabel: "作成",
-      placeholder: "例: 終盤改稿前",
     });
-    if (!label) return;
-
-    const memo = await requestInput({
-      title: "チェックポイントのメモ",
-      label: "メモ",
-      initialValue: "",
-      confirmLabel: "作成",
-      placeholder: "例: 終盤の分岐前。会話のテンポを試す",
-      optional: true,
-    });
-    if (memo === null) return;
+    if (!snapshotDraft) return;
 
     try {
       const snapshot = buildManuscriptSnapshot(
-        label,
-        memo,
+        snapshotDraft.label,
+        snapshotDraft.memo ?? "",
         "manual",
         currentWorkspaceSnapshots[0] ? [currentWorkspaceSnapshots[0].id] : [],
       );
@@ -3688,32 +3753,50 @@ export default function App() {
 
   const handleRenameManuscriptSnapshot = useCallback(async (snapshot: ManuscriptSnapshot) => {
     const label = await requestInput({
-      title: "チェックポイントを編集",
-      label: "名前",
+      title: "タイトルを編集",
+      label: "タイトル",
       initialValue: snapshot.label,
-      confirmLabel: "次へ",
+      confirmLabel: "変更",
       placeholder: "例: 終盤改稿前",
     });
     if (!label) return;
-
-    const memo = await requestInput({
-      title: "チェックポイントを編集",
-      label: "メモ",
-      initialValue: snapshot.memo,
-      confirmLabel: "変更",
-      placeholder: "例: 終盤の分岐前。会話のテンポを試す",
-      optional: true,
-    });
-    if (memo === null) return;
-    if (label === snapshot.label && memo === snapshot.memo) return;
+    if (label === snapshot.label) return;
 
     setAppState((current) => ({
       ...current,
       snapshots: current.snapshots.map((item) =>
-        item.id === snapshot.id ? { ...item, label, memo } : item,
+        item.id === snapshot.id ? { ...item, label } : item,
       ),
     }));
-    showToast("チェックポイントを変更しました");
+    showToast("チェックポイントのタイトルを変更しました");
+  }, []);
+
+  const handleEditManuscriptSnapshotMemo = useCallback(async (snapshot: ManuscriptSnapshot) => {
+    const result = await requestMultiInput({
+      title: "メモを編集",
+      fields: [
+        {
+          id: "memo",
+          label: "メモ",
+          initialValue: snapshot.memo,
+          placeholder: "例: 終盤の分岐前。会話のテンポを試す",
+          optional: true,
+          multiline: true,
+        },
+      ],
+      confirmLabel: "変更",
+    });
+    if (!result) return;
+    const memo = result.memo ?? "";
+    if (memo === snapshot.memo) return;
+
+    setAppState((current) => ({
+      ...current,
+      snapshots: current.snapshots.map((item) =>
+        item.id === snapshot.id ? { ...item, memo } : item,
+      ),
+    }));
+    showToast("チェックポイントのメモを変更しました");
   }, []);
 
   const setWorkspaceFromDocumentPath = useCallback(
@@ -6075,6 +6158,7 @@ export default function App() {
                 }
                 onCreateSnapshot={() => void handleCreateManuscriptSnapshot()}
                 onRenameSnapshot={(snapshot) => void handleRenameManuscriptSnapshot(snapshot)}
+                onEditSnapshotMemo={(snapshot) => void handleEditManuscriptSnapshotMemo(snapshot)}
                 onRestoreSnapshot={(snapshot) => void handleRestoreManuscriptSnapshot(snapshot)}
                 onDeleteSnapshot={(snapshot) => void handleDeleteManuscriptSnapshot(snapshot)}
                 onCollapse={() => setIsLeftSidebarCollapsed(true)}
@@ -6528,6 +6612,7 @@ export default function App() {
               onClose={closeAppDialog}
               onSubmit={submitAppDialog}
               onValueChange={updateAppDialogValue}
+              onFieldValueChange={updateAppDialogFieldValue}
               onChoice={chooseAppDialog}
             />
           )}
