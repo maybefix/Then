@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useMemo,
   useLayoutEffect,
   useRef,
   useState,
@@ -7,15 +8,22 @@ import {
   type CompositionEvent,
   type CSSProperties,
   type Dispatch,
+  type FocusEvent as ReactFocusEvent,
   type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
   type SetStateAction,
   type WheelEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import type { PlotCard } from "../../types";
+import type { PlotCard, ReferenceFileInfo } from "../../types";
 import { getScaledFixedMenuPosition } from "../../utils/contextMenuPosition";
+import {
+  appendPlotChapter,
+  appendPlotSection,
+  renumberPlotCards,
+} from "./plotCardUtils";
 
 // Portal target for plot dialogs. PlotPane lives inside the right sidebar, which
 // is scaled by the UI zoom (--ui-font-scale); rendering a modal there would
@@ -27,17 +35,108 @@ const modalRoot = (): HTMLElement =>
 type PlotIconName = "grip" | "list" | "bookmark";
 
 type PlotCardStyle = CSSProperties & {
-  "--plot-body-columns"?: number;
+  "--plot-body-width"?: string;
+};
+
+type PlotReferenceSuggestionState = {
+  cardId: string;
+  query: string;
+  from: number;
+  to: number;
+  x: number;
+  y: number;
+  selectedIndex: number;
 };
 
 const PLOT_CONTEXT_MENU_WIDTH = 180;
 const PLOT_CONTEXT_MENU_HEIGHT = 92;
+const PLOT_REFERENCE_SUGGEST_MENU_WIDTH = 136;
+const PLOT_REFERENCE_SUGGEST_MENU_HEIGHT = 340;
 const DEFAULT_ROWS_PER_COLUMN = 24;
+const PLOT_BODY_COLUMN_WIDTH_EM = 2.05;
+const PLOT_REFERENCE_LABEL_MAX_LENGTH = 18;
 const SCROLL_PIN_TOLERANCE = 16;
+const PLOT_REFERENCE_LINK_PATTERN = /@\[\[([^\]]+)\]\]/g;
+
+const referenceKey = (sourcePath: string) => sourcePath.replace(/\\/g, "/").toLocaleLowerCase();
+
+const plotReferenceLabelFromPath = (sourcePath: string) =>
+  sourcePath.split(/[\\/]/).filter(Boolean).pop() ?? sourcePath;
+
+const truncatePlotReferenceLabel = (label: string, maxLength = PLOT_REFERENCE_LABEL_MAX_LENGTH) => {
+  const chars = Array.from(label);
+  if (chars.length <= maxLength) return label;
+  return `${chars.slice(0, Math.max(1, maxLength - 1)).join("")}…`;
+};
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const displayPlotReferenceLinks = (
+  text: string,
+  referenceByPath: Map<string, ReferenceFileInfo>,
+) =>
+  text.replace(PLOT_REFERENCE_LINK_PATTERN, (_match, sourcePath: string) => {
+    const file = referenceByPath.get(referenceKey(sourcePath));
+    return `@${file?.name ?? plotReferenceLabelFromPath(sourcePath)}`;
+  });
+
+const plotReferencePathHint = (sourcePath: string) => {
+  const parts = sourcePath.replace(/\\/g, "/").split("/").filter(Boolean);
+  if (parts.length <= 1) return sourcePath;
+  return parts[parts.length - 2] ?? sourcePath;
+};
+
+const renderHighlightedReferenceText = (text: string, query: string): ReactNode => {
+  const needle = query.trim();
+  if (!needle) return text;
+
+  const index = text.toLocaleLowerCase().indexOf(needle.toLocaleLowerCase());
+  if (index < 0) return text;
+
+  return (
+    <>
+      {text.slice(0, index)}
+      <mark>{text.slice(index, index + needle.length)}</mark>
+      {text.slice(index + needle.length)}
+    </>
+  );
+};
+
+const hydratePlotReferenceLinks = (text: string, referenceCandidates: ReferenceFileInfo[]) => {
+  let hydrated = text;
+  const byLongestName = [...referenceCandidates].sort(
+    (left, right) => countTextUnits(right.name) - countTextUnits(left.name),
+  );
+
+  for (const file of byLongestName) {
+    if (!file.name.trim()) continue;
+    hydrated = hydrated.replace(
+      new RegExp(`@${escapeRegExp(file.name)}`, "g"),
+      `@[[${file.sourcePath.replace(/\\/g, "/")}]]`,
+    );
+  }
+  return hydrated;
+};
+
+const getPlotReferenceMention = (text: string, cursor: number) => {
+  const beforeCursor = text.slice(0, cursor);
+  const match = beforeCursor.match(/(^|[\s　])@([^\s　@\[\]]*)$/);
+  if (!match) return null;
+
+  const prefixLength = match[1].length;
+  return {
+    query: match[2],
+    from: cursor - match[0].length + prefixLength,
+    to: cursor,
+  };
+};
 
 const countTextUnits = (text: string) => Array.from(text).length;
 
-const estimatePlotColumns = (text: string, rowsPerColumn = DEFAULT_ROWS_PER_COLUMN) => {
+const estimatePlotColumns = (
+  text: string,
+  rowsPerColumn = DEFAULT_ROWS_PER_COLUMN,
+) => {
   const rows = Math.max(1, rowsPerColumn);
   const lines = text.split("\n");
 
@@ -47,58 +146,22 @@ const estimatePlotColumns = (text: string, rowsPerColumn = DEFAULT_ROWS_PER_COLU
   );
 };
 
-const getRowsPerColumn = (element: HTMLElement) => {
-  const style = window.getComputedStyle(element);
-  const fontSize = Number.parseFloat(style.fontSize);
-  const letterSpacing = style.letterSpacing === "normal" ? 0 : Number.parseFloat(style.letterSpacing);
-  const paddingTop = Number.parseFloat(style.paddingTop) || 0;
-  const paddingBottom = Number.parseFloat(style.paddingBottom) || 0;
-  const availableHeight = element.clientHeight - paddingTop - paddingBottom;
-  const glyphAdvance = fontSize + (Number.isFinite(letterSpacing) ? letterSpacing : 0);
+const measureBodyWidth = (element: HTMLElement) => {
+  const previousWidth = element.style.width;
+  const previousMinWidth = element.style.minWidth;
+  const previousFlexBasis = element.style.flexBasis;
 
-  if (!Number.isFinite(glyphAdvance) || glyphAdvance <= 0 || availableHeight <= 0) {
-    return DEFAULT_ROWS_PER_COLUMN;
-  }
+  element.style.width = `${PLOT_BODY_COLUMN_WIDTH_EM}em`;
+  element.style.minWidth = `${PLOT_BODY_COLUMN_WIDTH_EM}em`;
+  element.style.flexBasis = "auto";
+  const width = Math.ceil(element.scrollWidth);
 
-  return Math.max(1, Math.floor(availableHeight / glyphAdvance));
+  element.style.width = previousWidth;
+  element.style.minWidth = previousMinWidth;
+  element.style.flexBasis = previousFlexBasis;
+
+  return Math.max(1, width);
 };
-
-export const renumberPlotCards = (cards: PlotCard[]) => {
-  let sectionIndex = 0;
-  return cards.map((card) => {
-    if (card.kind === "chapter") return { ...card, num: "" };
-    sectionIndex += 1;
-    return { ...card, num: String(sectionIndex).padStart(3, "0") };
-  });
-};
-
-export const appendPlotSection = (cards: PlotCard[]) =>
-  renumberPlotCards([
-    ...cards,
-    {
-      id: `plot-${Date.now()}`,
-      kind: "section",
-      num: "",
-      title: "",
-      body: "",
-      expanded: false,
-      managerCollapsed: false,
-    },
-  ]);
-
-export const appendPlotChapter = (cards: PlotCard[]) =>
-  renumberPlotCards([
-    ...cards,
-    {
-      id: `chapter-${Date.now()}`,
-      kind: "chapter",
-      num: "",
-      title: "",
-      body: "",
-      expanded: true,
-      managerCollapsed: false,
-    },
-  ]);
 
 const getPlotContextMenuStyle = (x: number, y: number): CSSProperties => {
   return getScaledFixedMenuPosition(x, y, {
@@ -169,13 +232,17 @@ function PlotIcon({ name }: { name: PlotIconName }) {
   }
 }
 
-function usePlotBodyColumns(cards: PlotCard[], isExpanded: (card: PlotCard) => boolean) {
-  const [bodyColumns, setBodyColumns] = useState<Record<string, number>>({});
-  const bodyRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
+function usePlotBodyWidths(
+  cards: PlotCard[],
+  isExpanded: (card: PlotCard) => boolean,
+  bodyTextForLayout: (card: PlotCard) => string,
+) {
+  const [bodyWidths, setBodyWidths] = useState<Record<string, number>>({});
+  const bodyRefs = useRef<Map<string, HTMLElement>>(new Map());
   const composingCardIds = useRef<Set<string>>(new Set());
 
   const setBodyRef = useCallback(
-    (cardId: string) => (element: HTMLTextAreaElement | null) => {
+    (cardId: string) => (element: HTMLElement | null) => {
       if (element) {
         bodyRefs.current.set(cardId, element);
         return;
@@ -186,21 +253,20 @@ function usePlotBodyColumns(cards: PlotCard[], isExpanded: (card: PlotCard) => b
     [],
   );
 
-  const setCardColumns = useCallback((cardId: string, columns: number) => {
-    setBodyColumns((current) =>
-      current[cardId] === columns ? current : { ...current, [cardId]: columns },
+  const setCardWidth = useCallback((cardId: string, width: number) => {
+    setBodyWidths((current) =>
+      current[cardId] === width ? current : { ...current, [cardId]: width },
     );
   }, []);
 
-  const syncBodyColumns = useCallback(
-    (cardId: string, text: string, element?: HTMLElement | null) => {
+  const syncBodyWidth = useCallback(
+    (cardId: string, element?: HTMLElement | null) => {
       if (composingCardIds.current.has(cardId)) return;
+      if (!element) return;
 
-      const rowsPerColumn = element ? getRowsPerColumn(element) : DEFAULT_ROWS_PER_COLUMN;
-      const columns = estimatePlotColumns(text, rowsPerColumn);
-      setCardColumns(cardId, columns);
+      setCardWidth(cardId, measureBodyWidth(element));
     },
-    [setCardColumns],
+    [setCardWidth],
   );
 
   useLayoutEffect(() => {
@@ -210,16 +276,19 @@ function usePlotBodyColumns(cards: PlotCard[], isExpanded: (card: PlotCard) => b
       if (composingCardIds.current.has(card.id)) return;
 
       const element = bodyRefs.current.get(card.id);
-      syncBodyColumns(card.id, card.body, element);
+      syncBodyWidth(card.id, element);
     });
-  }, [cards, isExpanded, syncBodyColumns]);
+  }, [cards, isExpanded, bodyTextForLayout, syncBodyWidth]);
 
-  return { bodyColumns, setBodyRef, syncBodyColumns, composingCardIds };
+  return { bodyWidths, setBodyRef, syncBodyWidth, composingCardIds, bodyRefs };
 }
 
 type PlotBoardProps = {
   cards: PlotCard[];
   onCardsChange: Dispatch<SetStateAction<PlotCard[]>>;
+  referenceCandidates?: ReferenceFileInfo[];
+  onOpenReference?: (sourcePath: string, fileInfo: ReferenceFileInfo) => void;
+  onMissingReference?: () => void;
   /** 管理画面モード: 折りたたみ状態を保存データではなくローカルに持ち、初期は全展開。 */
   managerMode?: boolean;
   className?: string;
@@ -228,12 +297,19 @@ type PlotBoardProps = {
 function PlotBoard({
   cards,
   onCardsChange,
+  referenceCandidates = [],
+  onOpenReference,
+  onMissingReference,
   managerMode = false,
   className,
 }: PlotBoardProps) {
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
   const [movingCardId, setMovingCardId] = useState<string | null>(null);
   const [deletingCardId, setDeletingCardId] = useState<string | null>(null);
+  const [editingBodyCardId, setEditingBodyCardId] = useState<string | null>(null);
+  const [bodyDrafts, setBodyDrafts] = useState<Record<string, string>>({});
+  const [referenceSuggestion, setReferenceSuggestion] =
+    useState<PlotReferenceSuggestionState | null>(null);
   const [contextMenu, setContextMenu] = useState<{ cardId: string; x: number; y: number } | null>(
     null,
   );
@@ -252,10 +328,44 @@ function PlotBoard({
     [managerMode],
   );
 
-  const { bodyColumns, setBodyRef, syncBodyColumns, composingCardIds } = usePlotBodyColumns(
+  const isEditingBody = useCallback(
+    (card: PlotCard) => managerMode || editingBodyCardId === card.id,
+    [editingBodyCardId, managerMode],
+  );
+
+  const referenceByPath = useMemo(
+    () => new Map(referenceCandidates.map((file) => [referenceKey(file.sourcePath), file])),
+    [referenceCandidates],
+  );
+
+  const getBodyDraft = useCallback(
+    (card: PlotCard) =>
+      bodyDrafts[card.id] ?? displayPlotReferenceLinks(card.body, referenceByPath),
+    [bodyDrafts, referenceByPath],
+  );
+
+  const getBodyTextForLayout = useCallback(
+    (card: PlotCard) =>
+      isEditingBody(card) ? getBodyDraft(card) : displayPlotReferenceLinks(card.body, referenceByPath),
+    [getBodyDraft, isEditingBody, referenceByPath],
+  );
+
+  const { bodyWidths, setBodyRef, syncBodyWidth, composingCardIds, bodyRefs } = usePlotBodyWidths(
     cards,
     isCardExpanded,
+    getBodyTextForLayout,
   );
+
+  const filteredReferenceSuggestions = useMemo(() => {
+    if (!referenceSuggestion) return [];
+    const query = referenceSuggestion.query.trim().toLocaleLowerCase();
+    return referenceCandidates
+      .filter((file) => {
+        if (!query) return true;
+        return `${file.name}\n${file.sourcePath}`.toLocaleLowerCase().includes(query);
+      })
+      .slice(0, 8);
+  }, [referenceCandidates, referenceSuggestion]);
 
   const visualCards = [...cards].reverse();
 
@@ -339,7 +449,7 @@ function PlotBoard({
     }
     prevScrollWidthRef.current = pane.scrollWidth;
     prevClientWidthRef.current = pane.clientWidth;
-  }, [bodyColumns, cards, managerMode]);
+  }, [bodyWidths, cards, managerMode]);
 
   useLayoutEffect(() => {
     if (!contextMenu) return;
@@ -359,6 +469,36 @@ function PlotBoard({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [contextMenu]);
+
+  useLayoutEffect(() => {
+    if (!referenceSuggestion) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest(".plotReferenceSuggestMenu")) return;
+      setReferenceSuggestion(null);
+    };
+    const handleKeyDown = (event: WindowEventMap["keydown"]) => {
+      if (event.key === "Escape") setReferenceSuggestion(null);
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [referenceSuggestion]);
+
+  useLayoutEffect(() => {
+    if (!editingBodyCardId) return;
+    const element = bodyRefs.current.get(editingBodyCardId);
+    if (!(element instanceof HTMLTextAreaElement)) return;
+    element.focus();
+    const cursor = element.value.length;
+    element.setSelectionRange(cursor, cursor);
+  }, [editingBodyCardId]);
 
   useLayoutEffect(() => {
     if (!draggingCardId) return;
@@ -522,12 +662,16 @@ function PlotBoard({
   };
 
   const handleBodyChange = (cardId: string, event: ChangeEvent<HTMLTextAreaElement>) => {
-    const body = event.currentTarget.value;
+    const draft = event.currentTarget.value;
+    const body = hydratePlotReferenceLinks(draft, referenceCandidates);
+    setBodyDrafts((current) => ({ ...current, [cardId]: draft }));
     updateCard(cardId, { body });
 
     if (!composingCardIds.current.has(cardId)) {
-      syncBodyColumns(cardId, body, event.currentTarget);
+      syncBodyWidth(cardId, event.currentTarget);
     }
+
+    updateReferenceSuggestion(cardId, event.currentTarget);
   };
 
   const handleBodyCompositionStart = (cardId: string) => {
@@ -539,9 +683,182 @@ function PlotBoard({
     event: CompositionEvent<HTMLTextAreaElement>,
   ) => {
     composingCardIds.current.delete(cardId);
-    const body = event.currentTarget.value;
+    const draft = event.currentTarget.value;
+    const body = hydratePlotReferenceLinks(draft, referenceCandidates);
+    setBodyDrafts((current) => ({ ...current, [cardId]: draft }));
     updateCard(cardId, { body });
-    syncBodyColumns(cardId, body, event.currentTarget);
+    syncBodyWidth(cardId, event.currentTarget);
+    updateReferenceSuggestion(cardId, event.currentTarget);
+  };
+
+  const updateReferenceSuggestion = (cardId: string, element: HTMLTextAreaElement) => {
+    const text = element.value;
+    const mention = getPlotReferenceMention(text, element.selectionStart);
+    if (!mention || referenceCandidates.length === 0) {
+      setReferenceSuggestion(null);
+      return;
+    }
+
+    const cardRect =
+      element.closest<HTMLElement>("[data-plot-card-id]")?.getBoundingClientRect() ??
+      element.getBoundingClientRect();
+    const x = Math.max(8, cardRect.left - PLOT_REFERENCE_SUGGEST_MENU_WIDTH - 10);
+    const y = Math.max(
+      8,
+      Math.min(window.innerHeight - PLOT_REFERENCE_SUGGEST_MENU_HEIGHT - 8, cardRect.top + 8),
+    );
+    setReferenceSuggestion({
+      cardId,
+      ...mention,
+      x,
+      y,
+      selectedIndex: 0,
+    });
+  };
+
+  const insertReferenceLink = (file: ReferenceFileInfo) => {
+    const suggestion = referenceSuggestion;
+    if (!suggestion) return;
+    const replacement = `@${file.name}`;
+    const nextCursor = suggestion.from + replacement.length;
+    const currentCard = cards.find((card) => card.id === suggestion.cardId);
+    if (!currentCard) return;
+    const currentDraft = getBodyDraft(currentCard);
+    const nextDraft =
+      currentDraft.slice(0, suggestion.from) + replacement + currentDraft.slice(suggestion.to);
+    const nextBody = hydratePlotReferenceLinks(nextDraft, referenceCandidates);
+
+    setBodyDrafts((current) => ({ ...current, [suggestion.cardId]: nextDraft }));
+
+    onCardsChange((current) =>
+      current.map((card) =>
+        card.id === suggestion.cardId
+          ? { ...card, body: nextBody }
+          : card,
+      ),
+    );
+
+    setReferenceSuggestion(null);
+    window.requestAnimationFrame(() => {
+      const element = bodyRefs.current.get(suggestion.cardId);
+      if (element instanceof HTMLTextAreaElement) {
+        element.focus();
+        element.setSelectionRange(nextCursor, nextCursor);
+        syncBodyWidth(suggestion.cardId, element);
+      }
+    });
+  };
+
+  const deletePreviousReferenceToken = (
+    cardId: string,
+    event: KeyboardEvent<HTMLTextAreaElement>,
+  ) => {
+    if (event.nativeEvent.isComposing) return false;
+
+    const element = event.currentTarget;
+    const cursor = element.selectionStart;
+    if (cursor !== element.selectionEnd || cursor === 0) return false;
+
+    const card = cards.find((item) => item.id === cardId);
+    if (!card) return false;
+
+    const tokens = Array.from(card.body.matchAll(PLOT_REFERENCE_LINK_PATTERN))
+      .map((match) => {
+        const sourcePath = match[1];
+        const file = referenceByPath.get(referenceKey(sourcePath));
+        return `@${file?.name ?? plotReferenceLabelFromPath(sourcePath)}`;
+      })
+      .filter((token, index, all) => token.length > 1 && all.indexOf(token) === index)
+      .sort((left, right) => countTextUnits(right) - countTextUnits(left));
+
+    const beforeCursor = element.value.slice(0, cursor);
+    const token = tokens.find((candidate) => beforeCursor.endsWith(candidate));
+    if (!token) return false;
+
+    const from = cursor - token.length;
+    const nextDraft = element.value.slice(0, from) + element.value.slice(cursor);
+    const nextBody = hydratePlotReferenceLinks(nextDraft, referenceCandidates);
+
+    event.preventDefault();
+    setBodyDrafts((current) => ({ ...current, [cardId]: nextDraft }));
+    updateCard(cardId, { body: nextBody });
+    setReferenceSuggestion(null);
+
+    window.requestAnimationFrame(() => {
+      element.focus();
+      element.setSelectionRange(from, from);
+      syncBodyWidth(cardId, element);
+    });
+
+    return true;
+  };
+
+  const handleBodyKeyDown = (cardId: string, event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Backspace" && deletePreviousReferenceToken(cardId, event)) return;
+
+    if (!referenceSuggestion || referenceSuggestion.cardId !== cardId) return;
+
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      if (event.nativeEvent.isComposing) return;
+      event.preventDefault();
+      const direction = event.key === "ArrowDown" ? 1 : -1;
+      setReferenceSuggestion((current) => {
+        if (!current) return current;
+        const count = filteredReferenceSuggestions.length;
+        if (count === 0) return current;
+        return {
+          ...current,
+          selectedIndex: (current.selectedIndex + direction + count) % count,
+        };
+      });
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === "Tab") {
+      if (event.nativeEvent.isComposing) return;
+      const file = filteredReferenceSuggestions[referenceSuggestion.selectedIndex];
+      if (!file) return;
+      event.preventDefault();
+      insertReferenceLink(file);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setReferenceSuggestion(null);
+    }
+  };
+
+  const handleBodyFocus = (cardId: string, event: ReactFocusEvent<HTMLTextAreaElement>) => {
+    const card = cards.find((item) => item.id === cardId);
+    if (card) {
+      const draft = getBodyDraft(card);
+      setBodyDrafts((current) => ({ ...current, [cardId]: draft }));
+    }
+    setEditingBodyCardId(cardId);
+    updateReferenceSuggestion(cardId, event.currentTarget);
+  };
+
+  const handleBodyBlur = () => {
+    setReferenceSuggestion(null);
+    if (!managerMode) {
+      setBodyDrafts((current) => {
+        if (!editingBodyCardId) return current;
+        const next = { ...current };
+        delete next[editingBodyCardId];
+        return next;
+      });
+      setEditingBodyCardId(null);
+    }
+  };
+
+  const handleReferenceClick = (sourcePath: string) => {
+    const file = referenceByPath.get(referenceKey(sourcePath));
+    if (!file) {
+      onMissingReference?.();
+      return;
+    }
+    onOpenReference?.(file.sourcePath, file);
   };
 
   const handleTitleChange = (cardId: string, event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -557,10 +874,38 @@ function PlotBoard({
   };
 
   const getPlotCardStyle = (card: PlotCard, expanded: boolean): PlotCardStyle => ({
-    "--plot-body-columns": expanded
-      ? bodyColumns[card.id] ?? estimatePlotColumns(card.body)
-      : 1,
+    "--plot-body-width": expanded
+      ? bodyWidths[card.id] !== undefined
+        ? `${bodyWidths[card.id]}px`
+        : `${estimatePlotColumns(getBodyTextForLayout(card)) * PLOT_BODY_COLUMN_WIDTH_EM}em`
+      : `${PLOT_BODY_COLUMN_WIDTH_EM}em`,
   });
+
+  const renderPlotBodyPreview = (card: PlotCard) => (
+    <div
+      ref={setBodyRef(card.id)}
+      className={`plotCardBody plotCardBodyPreview ${
+        card.body.trim() ? "" : "emptyPlotBodyPreview"
+      }`}
+      role="textbox"
+      tabIndex={0}
+      aria-label={`${card.num} 本文`}
+      onClick={() => setEditingBodyCardId(card.id)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") setEditingBodyCardId(card.id);
+      }}
+    >
+      {card.body.trim() ? (
+        <PlotBodyLinks
+          body={card.body}
+          referenceByPath={referenceByPath}
+          onReferenceClick={handleReferenceClick}
+        />
+      ) : (
+        "本文…"
+      )}
+    </div>
+  );
 
   return (
     <>
@@ -674,17 +1019,23 @@ function PlotBoard({
                     onChange={(event) => handleTitleChange(card.id, event)}
                     onKeyDown={handleTitleKeyDown}
                   />
-                  {expanded && (
+                  {expanded && !managerMode && editingBodyCardId !== card.id
+                    ? renderPlotBodyPreview(card)
+                    : expanded && (
                     <textarea
                       ref={setBodyRef(card.id)}
                       className="plotCardBody"
-                      value={card.body}
+                      value={getBodyDraft(card)}
                       placeholder="本文…"
                       aria-multiline="true"
                       aria-label={`${card.num} 本文`}
                       spellCheck={false}
                       wrap="soft"
+                      onFocus={(event) => handleBodyFocus(card.id, event)}
+                      onBlur={handleBodyBlur}
                       onChange={(event) => handleBodyChange(card.id, event)}
+                      onKeyDown={(event) => handleBodyKeyDown(card.id, event)}
+                      onSelect={(event) => updateReferenceSuggestion(card.id, event.currentTarget)}
                       onCompositionStart={() => handleBodyCompositionStart(card.id)}
                       onCompositionEnd={(event) => handleBodyCompositionEnd(card.id, event)}
                     />
@@ -766,8 +1117,98 @@ function PlotBoard({
         })(),
           modalRoot(),
         )}
+      {referenceSuggestion &&
+        filteredReferenceSuggestions.length > 0 &&
+        createPortal(
+          <div
+            className="plotReferenceSuggestMenu"
+            role="listbox"
+            style={{
+              left: referenceSuggestion.x,
+              top: referenceSuggestion.y,
+            }}
+            onMouseDown={(event) => event.preventDefault()}
+            onWheel={(event) => {
+              const dominantDelta =
+                Math.abs(event.deltaX) > Math.abs(event.deltaY)
+                  ? event.deltaX
+                  : event.deltaY;
+              if (dominantDelta === 0) return;
+              event.preventDefault();
+              event.currentTarget.scrollLeft -= dominantDelta;
+            }}
+          >
+            {filteredReferenceSuggestions.map((file, index) => (
+              <button
+                key={file.sourcePath}
+                className={
+                  index === referenceSuggestion.selectedIndex
+                    ? "activePlotReferenceSuggestion"
+                    : ""
+                }
+                type="button"
+                role="option"
+                aria-selected={index === referenceSuggestion.selectedIndex}
+                title={file.sourcePath}
+                onMouseEnter={() =>
+                  setReferenceSuggestion((current) =>
+                    current ? { ...current, selectedIndex: index } : current,
+                  )
+                }
+                onClick={() => insertReferenceLink(file)}
+              >
+                <strong>
+                  {renderHighlightedReferenceText(file.name, referenceSuggestion.query)}
+                </strong>
+                <small>{plotReferencePathHint(file.sourcePath)}</small>
+              </button>
+            ))}
+            <div className="plotReferenceSuggestHint">Enter 挿入 / Esc 閉じる</div>
+          </div>,
+          modalRoot(),
+        )}
     </>
   );
+}
+
+function PlotBodyLinks({
+  body,
+  referenceByPath,
+  onReferenceClick,
+}: {
+  body: string;
+  referenceByPath: Map<string, ReferenceFileInfo>;
+  onReferenceClick: (sourcePath: string) => void;
+}) {
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+
+  for (const match of body.matchAll(PLOT_REFERENCE_LINK_PATTERN)) {
+    const sourcePath = match[1];
+    const index = match.index ?? 0;
+    if (index > lastIndex) nodes.push(body.slice(lastIndex, index));
+
+    const file = referenceByPath.get(referenceKey(sourcePath));
+    const label = truncatePlotReferenceLabel(file?.name ?? "空リンク");
+    nodes.push(
+      <button
+        className={`plotReferenceLink ${file ? "" : "missingPlotReferenceLink"}`}
+        key={`${sourcePath}-${index}`}
+        type="button"
+        title={file ? file.sourcePath : sourcePath}
+        onClick={(event) => {
+          event.stopPropagation();
+          onReferenceClick(sourcePath);
+        }}
+      >
+        @{label}
+      </button>,
+    );
+    lastIndex = index + match[0].length;
+  }
+
+  if (lastIndex < body.length) nodes.push(body.slice(lastIndex));
+  return <>{nodes}</>;
 }
 
 type PlotMoveModalProps = {
@@ -896,6 +1337,9 @@ function PlotDeleteDialog({ card, onCancel, onConfirm }: PlotDeleteDialogProps) 
 type PlotPaneProps = {
   cards: PlotCard[];
   onCardsChange: Dispatch<SetStateAction<PlotCard[]>>;
+  referenceCandidates?: ReferenceFileInfo[];
+  onOpenReference?: (sourcePath: string, fileInfo: ReferenceFileInfo) => void;
+  onMissingReference?: () => void;
   isManagerOpen?: boolean;
   onManagerOpenChange?: (open: boolean) => void;
 };
@@ -949,6 +1393,9 @@ export function PlotPaneHeaderActions({
 export function PlotPane({
   cards,
   onCardsChange,
+  referenceCandidates,
+  onOpenReference,
+  onMissingReference,
   isManagerOpen,
   onManagerOpenChange,
 }: PlotPaneProps) {
@@ -958,11 +1405,20 @@ export function PlotPane({
 
   return (
     <>
-      <PlotBoard cards={cards} onCardsChange={onCardsChange} />
+      <PlotBoard
+        cards={cards}
+        onCardsChange={onCardsChange}
+        referenceCandidates={referenceCandidates}
+        onOpenReference={onOpenReference}
+        onMissingReference={onMissingReference}
+      />
       {managerOpen && (
         <PlotManagerModal
           cards={cards}
           onCardsChange={onCardsChange}
+          referenceCandidates={referenceCandidates}
+          onOpenReference={onOpenReference}
+          onMissingReference={onMissingReference}
           onClose={() => setManagerOpen(false)}
         />
       )}
@@ -973,10 +1429,20 @@ export function PlotPane({
 type PlotManagerModalProps = {
   cards: PlotCard[];
   onCardsChange: Dispatch<SetStateAction<PlotCard[]>>;
+  referenceCandidates?: ReferenceFileInfo[];
+  onOpenReference?: (sourcePath: string, fileInfo: ReferenceFileInfo) => void;
+  onMissingReference?: () => void;
   onClose: () => void;
 };
 
-function PlotManagerModal({ cards, onCardsChange, onClose }: PlotManagerModalProps) {
+function PlotManagerModal({
+  cards,
+  onCardsChange,
+  referenceCandidates,
+  onOpenReference,
+  onMissingReference,
+  onClose,
+}: PlotManagerModalProps) {
   const addSection = () => onCardsChange((current) => appendPlotSection(current));
   const addChapter = () => onCardsChange((current) => appendPlotChapter(current));
 
@@ -998,6 +1464,9 @@ function PlotManagerModal({ cards, onCardsChange, onClose }: PlotManagerModalPro
         <PlotBoard
           cards={cards}
           onCardsChange={onCardsChange}
+          referenceCandidates={referenceCandidates}
+          onOpenReference={onOpenReference}
+          onMissingReference={onMissingReference}
           managerMode
           className="plotManagerBoard"
         />

@@ -38,11 +38,14 @@ import {
   upsertProjectAstDocument,
 } from "./editor/ast/projectAst";
 import {
-  appendPlotChapter,
-  appendPlotSection,
   PlotPane,
   PlotPaneHeaderActions,
 } from "./components/plot/PlotPane";
+import {
+  appendPlotChapter,
+  appendPlotSection,
+  replacePlotReferencePath,
+} from "./components/plot/plotCardUtils";
 import { ReferenceLayer } from "./components/references/ReferenceLayer";
 import { ReferencePane } from "./components/references/ReferencePane";
 import { IdeaPane } from "./components/snippets/IdeaPane";
@@ -875,6 +878,51 @@ function upsertRecentReference(
       file,
       ...layout.recent.filter((item) => item.sourcePath.toLocaleLowerCase() !== key),
     ].slice(0, MAX_RECENT_REFERENCES),
+  };
+}
+
+function retargetReferenceSourcePath(
+  sourcePath: string,
+  oldSourcePath: string,
+  newSourcePath: string,
+): string | null {
+  const normalizedSourcePath = sourcePath.replace(/\\/g, "/");
+  const normalizedOldPath = oldSourcePath.replace(/\\/g, "/");
+  const normalizedNewPath = newSourcePath.replace(/\\/g, "/");
+  if (!normalizedOldPath || !normalizedNewPath) return null;
+  if (normalizedSourcePath === normalizedOldPath) return normalizedNewPath;
+  if (normalizedSourcePath.startsWith(`${normalizedOldPath}/`)) {
+    return `${normalizedNewPath}${normalizedSourcePath.slice(normalizedOldPath.length)}`;
+  }
+  return null;
+}
+
+function retargetReferenceFileInfo(
+  file: ReferenceFileInfo,
+  oldSourcePath: string,
+  newSourcePath: string,
+): ReferenceFileInfo {
+  const sourcePath = retargetReferenceSourcePath(file.sourcePath, oldSourcePath, newSourcePath);
+  if (!sourcePath) return file;
+  return {
+    ...file,
+    sourcePath,
+    name: referenceNameFromPath(sourcePath),
+    kind: referenceKindFromPath(sourcePath),
+  };
+}
+
+function retargetReferenceCard(
+  card: ReferenceCardState,
+  oldSourcePath: string,
+  newSourcePath: string,
+): ReferenceCardState {
+  const sourcePath = retargetReferenceSourcePath(card.sourcePath, oldSourcePath, newSourcePath);
+  if (!sourcePath) return card;
+  return {
+    ...card,
+    sourcePath,
+    kind: referenceKindFromPath(sourcePath),
   };
 }
 
@@ -1748,7 +1796,12 @@ export default function App() {
   }, []);
 
   const openReferenceCard = useCallback(
-    (sourcePath: string, fileInfo?: ReferenceFileInfo) => {
+    (
+      sourcePath: string,
+      fileInfo?: ReferenceFileInfo,
+      options: { switchToReferenceTab?: boolean } = {},
+    ) => {
+      const { switchToReferenceTab = true } = options;
       if (!projectFolder) {
         showToast("先にフォルダを開いてください");
         return;
@@ -1800,7 +1853,7 @@ export default function App() {
         );
         return { ...nextLayout, cards: [...nextLayout.cards, card] };
       });
-      setRightSidebarTab("reference");
+      if (switchToReferenceTab) setRightSidebarTab("reference");
     },
     [projectFolder],
   );
@@ -2307,6 +2360,17 @@ export default function App() {
         return left.sourcePath.localeCompare(right.sourcePath);
       });
   }, [projectFolder, referenceCandidates, referenceLayout.recent]);
+
+  const openPlotReference = useCallback(
+    (sourcePath: string, fileInfo: ReferenceFileInfo) => {
+      const file =
+        sortedReferenceCandidates.find(
+          (item) => item.sourcePath.toLocaleLowerCase() === sourcePath.toLocaleLowerCase(),
+        ) ?? fileInfo;
+      openReferenceCard(file.sourcePath, file, { switchToReferenceTab: false });
+    },
+    [openReferenceCard, sortedReferenceCandidates],
+  );
 
   useEffect(() => {
     if (!projectFolder) {
@@ -4685,6 +4749,30 @@ export default function App() {
         path: entry.path,
         name,
       });
+      const oldReferencePath = toProjectRelativePath(projectFolder.path, entry.path);
+      const newReferencePath = toProjectRelativePath(projectFolder.path, document.path);
+      if (oldReferencePath && newReferencePath) {
+        setPlotCards((current) =>
+          current.map((card) => ({
+            ...card,
+            body: replacePlotReferencePath(card.body, oldReferencePath, newReferencePath),
+          })),
+        );
+        setReferenceLayout((current) => ({
+          ...current,
+          cards: current.cards.map((card) =>
+            retargetReferenceCard(card, oldReferencePath, newReferencePath),
+          ),
+          recent: current.recent.map((file) =>
+            retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
+          ),
+        }));
+        setReferenceCandidates((current) =>
+          current.map((file) =>
+            retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
+          ),
+        );
+      }
       const parentFolderPath =
         findContainingFolderPath(projectFolder, entry.path) ?? projectFolder.path;
       await refreshProjectFolder(parentFolderPath);
@@ -6463,6 +6551,9 @@ export default function App() {
                     <PlotPane
                       cards={plotCards}
                       onCardsChange={setPlotCards}
+                      referenceCandidates={sortedReferenceCandidates}
+                      onOpenReference={openPlotReference}
+                      onMissingReference={() => showToast("存在しないファイルです")}
                       isManagerOpen={isPlotManagerOpen}
                       onManagerOpenChange={setIsPlotManagerOpen}
                     />

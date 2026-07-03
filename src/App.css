@@ -5595,8 +5595,8 @@ body {
 }
 
 .plotCardBody {
-  width: max(2.05em, calc(var(--plot-body-columns, 1) * 2.05em));
-  min-width: max(2.05em, calc(var(--plot-body-columns, 1) * 2.05em));
+  width: max(2.05em, var(--plot-body-width, 2.05em));
+  min-width: max(2.05em, var(--plot-body-width, 2.05em));
   max-width: none;
   height: 100%;
   flex: 0 0 auto;
@@ -5607,6 +5607,140 @@ body {
   line-height: 2.05;
   overflow-wrap: anywhere;
   word-break: break-all;
+}
+
+.plotCardBodyPreview {
+  cursor: text;
+  user-select: text;
+}
+
+.emptyPlotBodyPreview {
+  color: var(--text-faint);
+}
+
+.plotReferenceLink {
+  display: inline;
+  margin: 0;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(201, 168, 74, 0.12);
+  color: var(--accent-strong);
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  padding: 0 1px;
+  text-align: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+  writing-mode: inherit;
+}
+
+.plotReferenceLink:hover {
+  background: rgba(201, 168, 74, 0.2);
+  color: var(--accent);
+}
+
+.missingPlotReferenceLink {
+  background: rgba(190, 92, 92, 0.12);
+  color: var(--danger);
+}
+
+.plotReferenceSuggestMenu {
+  position: fixed;
+  z-index: 12000;
+  display: flex;
+  width: 136px;
+  max-width: calc(100vw - 16px);
+  height: auto;
+  max-height: min(340px, calc(100vh - 24px));
+  flex-direction: row-reverse;
+  align-items: flex-start;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-popover);
+  padding: 4px;
+  writing-mode: horizontal-tb;
+}
+
+.plotReferenceSuggestMenu button {
+  display: flex;
+  width: 3.4em;
+  min-width: 3.4em;
+  height: min(20.5em, calc(100vh - 40px));
+  max-height: 20.5em;
+  align-items: flex-start;
+  justify-content: flex-start;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  gap: 4px;
+  line-height: 1.55;
+  padding: 8px 6px;
+  text-align: start;
+  text-orientation: mixed;
+  writing-mode: vertical-rl;
+}
+
+.plotReferenceSuggestMenu button:hover,
+.plotReferenceSuggestMenu .activePlotReferenceSuggestion {
+  background: var(--accent-soft);
+}
+
+.plotReferenceSuggestMenu strong {
+  display: block;
+  height: 72%;
+  max-height: 72%;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: clip;
+  white-space: nowrap;
+  writing-mode: vertical-rl;
+}
+
+.plotReferenceSuggestMenu small {
+  display: block;
+  height: 28%;
+  max-height: 28%;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.35;
+  text-overflow: clip;
+  white-space: nowrap;
+  writing-mode: vertical-rl;
+}
+
+.plotReferenceSuggestMenu mark {
+  border-radius: 2px;
+  background: rgba(201, 168, 74, 0.26);
+  color: inherit;
+  padding: 0;
+}
+
+.plotReferenceSuggestHint {
+  display: flex;
+  width: 2.4em;
+  min-width: 2.4em;
+  height: min(20.5em, calc(100vh - 40px));
+  max-height: 20.5em;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+  padding: 6px 4px;
+  text-align: center;
+  white-space: nowrap;
+  writing-mode: vertical-rl;
 }
 
 .plotCardTitle:focus,
