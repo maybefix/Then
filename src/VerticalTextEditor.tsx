@@ -24,6 +24,7 @@ export type TextEditorHandle = {
   focus: () => void;
   getValue: () => string;
   getSelection: () => { from: number; to: number; head: number };
+  selectRange: (from: number, to: number) => void;
   replaceRange: (from: number, to: number, insert: string, cursorPos?: number) => void;
   jumpToLine: (line: number) => void;
   positionFromPoint: (x: number, y: number) => number | null;
@@ -1976,6 +1977,26 @@ export function VerticalTextEditor({
       getSelection: () => {
         const editor = tiptapRef.current;
         return editor ? getTextSelection(editor) : { from: 0, to: 0, head: 0 };
+      },
+      selectRange: (from, to) => {
+        const editor = tiptapRef.current;
+        const scroller = scrollerRef.current;
+        if (!editor) return;
+
+        const current = docToText(editor.state.doc);
+        const start = Math.max(0, Math.min(current.length, from));
+        const end = Math.max(start, Math.min(current.length, to));
+        editor.commands.focus();
+        editor.commands.setTextSelection({
+          from: pmPosFromTextOffset(editor.state.doc, start),
+          to: pmPosFromTextOffset(editor.state.doc, end),
+        });
+        onSelectionChangeRef.current();
+        if (scroller && typewriterScrollRef.current) {
+          stopCenterAnimationRef.current?.();
+          centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, writingModeRef.current);
+        }
+        requestLineBreakMarksRef.current?.();
       },
       replaceRange: (from, to, insert, cursorPos) => {
         const editor = tiptapRef.current;

@@ -282,6 +282,227 @@ function ReferenceCardBody({
   return <div className="referenceCardBody referencePlaceholder">未対応の資料です</div>;
 }
 
+export function ReferenceReadOnlyPreview({
+  rootPath,
+  sourcePath,
+  kind,
+  title,
+}: {
+  rootPath: string;
+  sourcePath: string;
+  kind: ReferenceKind;
+  title?: string;
+}) {
+  if (isTextualReference(kind)) {
+    return <ReadOnlyTextReferencePreview rootPath={rootPath} sourcePath={sourcePath} kind={kind} />;
+  }
+  if (kind === "image") {
+    return <ReadOnlyImageReferencePreview rootPath={rootPath} sourcePath={sourcePath} title={title} />;
+  }
+  if (kind === "pdf") {
+    return <ReadOnlyPdfReferencePreview rootPath={rootPath} sourcePath={sourcePath} />;
+  }
+  return <div className="referenceReadOnlyPreview referencePlaceholder">未対応の資料です</div>;
+}
+
+function ReadOnlyTextReferencePreview({
+  rootPath,
+  sourcePath,
+  kind,
+}: {
+  rootPath: string;
+  sourcePath: string;
+  kind: ReferenceKind;
+}) {
+  const [text, setText] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    invoke<string>("read_reference_text", {
+      rootPath,
+      sourcePath,
+    })
+      .then((value) => {
+        if (!cancelled) setText(value);
+      })
+      .catch((reason) => {
+        if (!cancelled) setError(String(reason));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [rootPath, sourcePath]);
+
+  if (loading) {
+    return <div className="referenceReadOnlyPreview referencePlaceholder">読み込み中...</div>;
+  }
+  if (error) {
+    return <div className="referenceReadOnlyPreview referenceError">{error}</div>;
+  }
+
+  return (
+    <div className="referenceReadOnlyPreview referenceTextPreview">
+      {kind === "markdown" ? (
+        <MarkdownLite rootPath={rootPath} sourcePath={sourcePath} text={text} />
+      ) : (
+        <pre>{text}</pre>
+      )}
+    </div>
+  );
+}
+
+function ReadOnlyImageReferencePreview({
+  rootPath,
+  sourcePath,
+  title,
+}: {
+  rootPath: string;
+  sourcePath: string;
+  title?: string;
+}) {
+  const [src, setSrc] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setSrc("");
+    setError("");
+    invoke<ReferenceBinary>("read_reference_binary", {
+      rootPath,
+      sourcePath,
+    })
+      .then((binary) => {
+        if (!cancelled) setSrc(binaryDataUrl(binary));
+      })
+      .catch((reason) => {
+        if (!cancelled) setError(String(reason));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [rootPath, sourcePath]);
+
+  if (error) {
+    return <div className="referenceReadOnlyPreview referenceError">{error}</div>;
+  }
+
+  return (
+    <div className="referenceReadOnlyPreview referenceImageScroller">
+      {src ? <img src={src} alt={title ?? ""} /> : <div className="referencePlaceholder">読み込み中...</div>}
+    </div>
+  );
+}
+
+function ReadOnlyPdfReferencePreview({
+  rootPath,
+  sourcePath,
+}: {
+  rootPath: string;
+  sourcePath: string;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
+  const [page, setPage] = useState(1);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setPdf(null);
+    setPage(1);
+    setError("");
+    const loadPdf = async () => {
+      const [binary, pdfjs] = await Promise.all([
+        invoke<ReferenceBinary>("read_reference_binary", {
+          rootPath,
+          sourcePath,
+        }),
+        import("pdfjs-dist"),
+      ]);
+      pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+      return await pdfjs.getDocument({ data: base64ToUint8Array(binary.dataBase64) }).promise;
+    };
+
+    loadPdf()
+      .then((document) => {
+        if (!cancelled) setPdf(document);
+      })
+      .catch((reason) => {
+        if (!cancelled) setError(String(reason));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [rootPath, sourcePath]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !pdf) return;
+    let cancelled = false;
+
+    pdf.getPage(Math.min(page, pdf.numPages))
+      .then((pdfPage) => {
+        if (cancelled) return;
+        const viewport = pdfPage.getViewport({ scale: 1 });
+        const context = canvas.getContext("2d");
+        if (!context) return;
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        void pdfPage.render({ canvas, canvasContext: context, viewport }).promise.catch((reason) => {
+          if (!cancelled) setError(String(reason));
+        });
+      })
+      .catch((reason) => {
+        if (!cancelled) setError(String(reason));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pdf, page]);
+
+  if (error) {
+    return <div className="referenceReadOnlyPreview referenceError">{error}</div>;
+  }
+
+  const numPages = pdf?.numPages ?? 0;
+
+  return (
+    <div className="referenceReadOnlyPreview referenceReadOnlyPdf">
+      <div className="referencePdfMiniNav">
+        <button
+          type="button"
+          aria-label="前のページ"
+          disabled={!pdf || page <= 1}
+          onClick={() => setPage((value) => Math.max(1, value - 1))}
+        >
+          前
+        </button>
+        <span>
+          {pdf ? page : "-"} / {numPages || "-"}
+        </span>
+        <button
+          type="button"
+          aria-label="次のページ"
+          disabled={!pdf || page >= numPages}
+          onClick={() => setPage((value) => (pdf ? Math.min(pdf.numPages, value + 1) : value))}
+        >
+          次
+        </button>
+      </div>
+      <div className="referencePdfScroller">
+        {pdf ? <canvas ref={canvasRef} /> : <div className="referencePlaceholder">読み込み中...</div>}
+      </div>
+    </div>
+  );
+}
+
 function TextReferenceBody({
   rootPath,
   card,

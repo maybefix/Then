@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default desktop permissions for Then windows.",
+  "windows": ["main", "linked-export", "linked-export-viewer", "idea-canvas"],
+  "permissions": ["core:default", "dialog:default"]
+}

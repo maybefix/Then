@@ -14,7 +14,6 @@ import type {
   ProjectSearchResult,
 } from "../../editor/ast/types";
 import type {
-  BreadcrumbDropTarget,
   FileProgressStatus,
   ManuscriptSnapshot,
   OutlineItem,
@@ -77,6 +76,7 @@ type WorkspaceSidebarProps = {
   onOpenFileInNewTab: (path: string) => void;
   onRenameEntry: (entry: ProjectFolder | ProjectEntry) => void;
   onDeleteEntry: (entry: ProjectEntry) => void;
+  onMoveEntry: (sourcePath: string, targetFolderPath: string) => void;
   onReorderEntry: (
     folderPath: string,
     draggedPath: string,
@@ -109,6 +109,20 @@ type PointerDragState = {
   startY: number;
   isDragging: boolean;
 };
+
+type TreeDropTarget =
+  | {
+      kind: "reorder";
+      folderPath: string;
+      entryPath: string;
+      position: "before" | "after";
+    }
+  | {
+      kind: "moveInto";
+      folderPath: string;
+      entryPath: string;
+    }
+  | null;
 
 type HeadingDragState = {
   sourcePath: string;
@@ -168,6 +182,19 @@ function formatSnapshotDate(value: number): string {
     .format(value)
     .replace(/\//g, "-")
     .replace(/\s+/g, " ");
+}
+
+function normalizeSidebarPath(path: string): string {
+  return path.replace(/[\\/]+/g, "\\").replace(/\\+$/, "").toLocaleLowerCase();
+}
+
+function isSidebarPathInside(path: string, folderPath: string): boolean {
+  const normalizedPath = normalizeSidebarPath(path);
+  const normalizedFolder = normalizeSidebarPath(folderPath);
+  return (
+    normalizedPath !== normalizedFolder &&
+    normalizedPath.startsWith(`${normalizedFolder}\\`)
+  );
 }
 
 function getFileProgress(
@@ -429,6 +456,7 @@ export function WorkspaceSidebar({
   onOpenFileInNewTab,
   onRenameEntry,
   onDeleteEntry,
+  onMoveEntry,
   onReorderEntry,
   snapshots,
   isSnapshotSectionCollapsed,
@@ -442,7 +470,7 @@ export function WorkspaceSidebar({
 }: WorkspaceSidebarProps) {
   const [contextMenu, setContextMenu] = useState<TreeContextMenu>(null);
   const [draggingEntryPath, setDraggingEntryPath] = useState<string | null>(null);
-  const [dropTarget, setDropTarget] = useState<BreadcrumbDropTarget>(null);
+  const [dropTarget, setDropTarget] = useState<TreeDropTarget>(null);
   const [draggingHeading, setDraggingHeading] = useState<{
     path: string;
     line: number;
@@ -471,7 +499,7 @@ export function WorkspaceSidebar({
   const pointerDragRef = useRef<PointerDragState | null>(null);
   const headingDragRef = useRef<HeadingDragState | null>(null);
   const lastHeadingDragOverRef = useRef("");
-  const dropTargetRef = useRef<BreadcrumbDropTarget>(null);
+  const dropTargetRef = useRef<TreeDropTarget>(null);
   const suppressNextClickRef = useRef(false);
   const projectAstFiles = new Map(
     projectAst?.files.map((file) => [file.path, file] as const) ?? [],
@@ -521,7 +549,7 @@ export function WorkspaceSidebar({
     setDropTarget(null);
   };
 
-  const updateDropTarget = (nextDropTarget: BreadcrumbDropTarget) => {
+  const updateDropTarget = (nextDropTarget: TreeDropTarget) => {
     dropTargetRef.current = nextDropTarget;
     setDropTarget(nextDropTarget);
   };
@@ -532,27 +560,49 @@ export function WorkspaceSidebar({
     dragState: PointerDragState,
   ) => {
     const element = document.elementFromPoint(clientX, clientY);
-    const row = element?.closest<HTMLElement>("[data-tree-entry-path][data-tree-folder-path]");
+    const row = element?.closest<HTMLElement>("[data-tree-entry-path]");
     if (!row) {
       updateDropTarget(null);
       return;
     }
 
-    const targetFolderPath = row.dataset.treeFolderPath;
+    const targetParentFolderPath = row.dataset.treeFolderPath;
     const targetEntryPath = row.dataset.treeEntryPath;
+    const targetEntryKind = row.dataset.treeEntryKind;
     if (
-      !targetFolderPath ||
       !targetEntryPath ||
-      targetFolderPath !== dragState.folderPath ||
-      targetEntryPath === dragState.entryPath
+      targetEntryPath === dragState.entryPath ||
+      (targetEntryKind === "folder" &&
+        isSidebarPathInside(targetEntryPath, dragState.entryPath))
     ) {
       updateDropTarget(null);
       return;
     }
 
     const rect = row.getBoundingClientRect();
+    const offset = clientY - rect.top;
+    const isMiddleFolderDrop =
+      targetEntryKind === "folder" &&
+      targetEntryPath !== dragState.folderPath &&
+      offset > rect.height * 0.28 &&
+      offset < rect.height * 0.72;
+    if (isMiddleFolderDrop) {
+      updateDropTarget({
+        kind: "moveInto",
+        folderPath: targetEntryPath,
+        entryPath: targetEntryPath,
+      });
+      return;
+    }
+
+    if (!targetParentFolderPath || targetParentFolderPath !== dragState.folderPath) {
+      updateDropTarget(null);
+      return;
+    }
+
     updateDropTarget({
-      folderPath: targetFolderPath,
+      kind: "reorder",
+      folderPath: targetParentFolderPath,
       entryPath: targetEntryPath,
       position: clientY < rect.top + rect.height / 2 ? "before" : "after",
     });
@@ -604,13 +654,15 @@ export function WorkspaceSidebar({
         suppressNextClickRef.current = false;
       }, 0);
       const activeDropTarget = dropTargetRef.current;
-      if (activeDropTarget) {
+      if (activeDropTarget?.kind === "reorder") {
         onReorderEntry(
           activeDropTarget.folderPath,
           dragState.entryPath,
           activeDropTarget.entryPath,
           activeDropTarget.position,
         );
+      } else if (activeDropTarget?.kind === "moveInto") {
+        onMoveEntry(dragState.entryPath, activeDropTarget.folderPath);
       }
     }
 
@@ -1047,7 +1099,11 @@ export function WorkspaceSidebar({
     const isFocused = entry.path === focusedFolderPath;
     const isDraggable = Boolean(parentFolderPath && isProjectEntry(entry));
     const dropClass =
-      dropTarget?.entryPath === entry.path ? `treeDrop-${dropTarget.position}` : "";
+      dropTarget?.entryPath === entry.path
+        ? dropTarget.kind === "moveInto"
+          ? "treeDrop-into"
+          : `treeDrop-${dropTarget.position}`
+        : "";
     const headingFileDropClass =
       !isFolder &&
       headingDropTarget?.kind === "file" &&
@@ -1079,7 +1135,8 @@ export function WorkspaceSidebar({
       <div className="treeNode" key={entry.path}>
         <div
           className={rowClass}
-          data-tree-entry-path={isDraggable ? entry.path : undefined}
+          data-tree-entry-path={entry.path}
+          data-tree-entry-kind={kind}
           data-tree-folder-path={parentFolderPath ?? undefined}
           data-outline-file-row={!isFolder ? "true" : undefined}
           data-outline-file-path={!isFolder ? entry.path : undefined}
@@ -1804,7 +1861,11 @@ export function WorkspaceSidebar({
         </div>
       </div>
 
-      <div className="sidebarScroll">
+      <div
+        className={`sidebarScroll ${
+          isProjectSearchMode ? "projectSearchSidebarScroll" : ""
+        }`}
+      >
         {isProjectSearchMode ? (
           renderProjectSearchMode()
         ) : (

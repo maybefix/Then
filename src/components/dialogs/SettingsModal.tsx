@@ -118,6 +118,38 @@ export function SettingsModal({
           </label>
           <div className="modalFormGrid">
             <label>
+              <span>Canvas node 既定方向</span>
+              <select
+                value={settings.canvasDefaultWritingMode}
+                onChange={(event) =>
+                  onUpdateSettings(
+                    "canvasDefaultWritingMode",
+                    event.target.value as EditorSettings["canvasDefaultWritingMode"],
+                  )
+                }
+              >
+                <option value="horizontal-tb">横書き</option>
+                <option value="vertical-rl">縦書き</option>
+              </select>
+            </label>
+            <label>
+              <span>Canvas node 既定フォント</span>
+              <select
+                value={settings.canvasDefaultFontSource}
+                onChange={(event) =>
+                  onUpdateSettings(
+                    "canvasDefaultFontSource",
+                    event.target.value as EditorSettings["canvasDefaultFontSource"],
+                  )
+                }
+              >
+                <option value="ui">UIフォント</option>
+                <option value="editor">本文フォント</option>
+              </select>
+            </label>
+          </div>
+          <div className="modalFormGrid">
+            <label>
               <span>文字サイズ</span>
               <input
                 min="12"

@@ -42,6 +42,21 @@ import {
   PlotPaneHeaderActions,
 } from "./components/plot/PlotPane";
 import {
+  createCanvasDocument,
+  createCanvasEdge,
+  createCanvasGroupNode,
+  createCanvasTextNode,
+  createIdeaOriginRef,
+  normalizeCanvasDocument,
+  type CanvasBoardSummary,
+  type CanvasCopyToIdeaRequest,
+  type CanvasFocusIdeaRequest,
+  type CanvasNode,
+  type CanvasScope,
+  type CanvasWindowPayload,
+  type JsonCanvasDocument,
+} from "./canvasTypes";
+import {
   appendPlotChapter,
   appendPlotSection,
   replacePlotReferencePath,
@@ -68,6 +83,7 @@ import type {
   FlatOutlineItem,
   FontOption,
   IdeaFragment,
+  IdeaOriginRef,
   IdeaThread,
   ManuscriptSnapshot,
   ManuscriptSnapshotFile,
@@ -139,6 +155,7 @@ const defaultReferenceLayout: ReferenceLayout = {
 const PINNED_REFERENCE_Z_BASE = 10000;
 const NORMAL_REFERENCE_Z_LIMIT = PINNED_REFERENCE_Z_BASE - 1;
 const MAX_RECENT_REFERENCES = 30;
+const CANVAS_NEW_THREAD_TARGET = "__new__";
 
 type LayoutDirection = "start" | "center" | "end";
 
@@ -153,6 +170,23 @@ type EditorSelectionSnapshot = {
 type EditorContextMenuState = EditorSelectionSnapshot & {
   x: number;
   y: number;
+};
+
+type EditorFindMatch = {
+  id: string;
+  from: number;
+  to: number;
+  line: number;
+  column: number;
+  excerpt: string;
+};
+
+type EditorFindState = {
+  open: boolean;
+  query: string;
+  replaceValue: string;
+  showReplace: boolean;
+  activeIndex: number;
 };
 
 type QueuedDocumentSave = {
@@ -175,6 +209,15 @@ type DocumentSaveQueue = {
 type HeadingMoveDocuments = {
   sourceDocument: TextDocument;
   targetDocument: TextDocument | null;
+};
+
+type MoveProjectEntryResult = {
+  projectFolder: ProjectFolder;
+  movedDocument: TextDocument | null;
+  oldPath: string;
+  newPath: string;
+  oldParentPath: string;
+  newParentPath: string;
 };
 
 type NotationModalState =
@@ -228,6 +271,7 @@ const directionOptions: Array<{
 
 type AppIconName =
   | "book"
+  | "canvas"
   | "export"
   | "file"
   | "folder"
@@ -253,6 +297,15 @@ function AppIcon({ name, className = "" }: { name: AppIconName; className?: stri
         <svg {...common}>
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
           <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+        </svg>
+      );
+    case "canvas":
+      return (
+        <svg {...common}>
+          <rect x="4" y="5" width="7" height="6" rx="1.5" />
+          <rect x="13" y="13" width="7" height="6" rx="1.5" />
+          <path d="M11 8h3.5A2.5 2.5 0 0 1 17 10.5V13" />
+          <path d="M13 16H9.5A2.5 2.5 0 0 1 7 13.5V11" />
         </svg>
       );
     case "export":
@@ -371,9 +424,36 @@ function nextIdeaId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${ideaIdCounter}`;
 }
 
-function makeIdeaFragment(body: string, used = false): IdeaFragment {
+function normalizeIdeaOriginRef(value: unknown): IdeaOriginRef | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const origin = value as Partial<IdeaOriginRef>;
+  if (origin.source !== "canvas") return undefined;
+  if (typeof origin.sourceId !== "string" || typeof origin.sourceBoardId !== "string") {
+    return undefined;
+  }
+  return {
+    source: "canvas",
+    sourceId: origin.sourceId,
+    sourceBoardId: origin.sourceBoardId,
+    sourceBoardScope: origin.sourceBoardScope === "global" ? "global" : "project",
+    copiedAt: typeof origin.copiedAt === "number" ? origin.copiedAt : Date.now(),
+  };
+}
+
+function makeIdeaFragment(
+  body: string,
+  used = false,
+  originRef?: IdeaOriginRef,
+): IdeaFragment {
   const now = Date.now();
-  return { id: nextIdeaId("frag"), body, used, createdAt: now, updatedAt: now };
+  return {
+    id: nextIdeaId("frag"),
+    body,
+    used,
+    createdAt: now,
+    updatedAt: now,
+    originRef,
+  };
 }
 
 function makeInboxThread(fragments: IdeaFragment[] = []): IdeaThread {
@@ -494,6 +574,9 @@ function normalizeIdeaThreads(value: unknown): IdeaThread[] {
                   typeof fragment.createdAt === "number" ? fragment.createdAt : now,
                 updatedAt:
                   typeof fragment.updatedAt === "number" ? fragment.updatedAt : now,
+                originRef: normalizeIdeaOriginRef(
+                  (fragment as Partial<IdeaFragment>).originRef,
+                ),
               }))
           : [];
         return {
@@ -527,6 +610,8 @@ const defaultSettings: EditorSettings = {
   fontSize: 15,
   lineHeight: 1.82,
   writingMode: "vertical-rl",
+  canvasDefaultWritingMode: "horizontal-tb",
+  canvasDefaultFontSource: "ui",
   typewriterScroll: true,
   typewriterOffset: 46,
   showLineBreakMarks: false,
@@ -590,6 +675,18 @@ function isPathInsideFolder(path: string, folderPath: string): boolean {
     normalizedPath !== normalizedFolder &&
     normalizedPath.startsWith(`${normalizedFolder}\\`)
   );
+}
+
+function retargetFilesystemPath(path: string, oldPath: string, newPath: string): string | null {
+  const comparablePath = normalizePathForCompare(path);
+  const comparableOldPath = normalizePathForCompare(oldPath);
+  if (comparablePath === comparableOldPath) return newPath;
+  if (!comparablePath.startsWith(`${comparableOldPath}\\`)) return null;
+
+  const stablePath = path.replace(/[\\/]+/g, "\\").replace(/\\+$/, "");
+  const stableOldPath = oldPath.replace(/[\\/]+/g, "\\").replace(/\\+$/, "");
+  const suffix = stablePath.slice(stableOldPath.length);
+  return `${newPath.replace(/[\\/]+$/, "")}${suffix}`;
 }
 
 function toProjectRelativePath(rootPath: string, path: string): string {
@@ -1438,6 +1535,46 @@ function collectDocumentSearchMatches(
   return results;
 }
 
+function collectEditorFindMatches(
+  documentAst: DocumentAst,
+  rawQuery: string,
+  maxResults = 500,
+): EditorFindMatch[] {
+  const query = rawQuery.trim();
+  if (!query) return [];
+
+  const normalizedQuery = query.toLocaleLowerCase();
+  const matches: EditorFindMatch[] = [];
+
+  for (const block of documentAst.blocks) {
+    const source = block.source;
+    const normalizedSource = source.toLocaleLowerCase();
+    let from = 0;
+    let matchIndex = 0;
+
+    while (from <= normalizedSource.length) {
+      const index = normalizedSource.indexOf(normalizedQuery, from);
+      if (index < 0) break;
+
+      const absoluteFrom = block.from + index;
+      matches.push({
+        id: `editor-find:${block.lineIndex}:${index}:${matchIndex}:${normalizedQuery}`,
+        from: absoluteFrom,
+        to: absoluteFrom + query.length,
+        line: block.lineIndex + 1,
+        column: index + 1,
+        excerpt: source,
+      });
+
+      if (matches.length >= maxResults) return matches;
+      from = index + Math.max(1, normalizedQuery.length);
+      matchIndex += 1;
+    }
+  }
+
+  return matches;
+}
+
 function normalizeState(value: Partial<AppState> | null | undefined): AppState {
   const settings = (value?.settings ?? {}) as Partial<EditorSettings>;
   const recentWorkspaces = Array.isArray(value?.recentWorkspaces)
@@ -1527,6 +1664,15 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         settings.writingMode === "horizontal-tb" || settings.writingMode === "vertical-rl"
           ? settings.writingMode
           : defaultSettings.writingMode,
+      canvasDefaultWritingMode:
+        settings.canvasDefaultWritingMode === "horizontal-tb" ||
+        settings.canvasDefaultWritingMode === "vertical-rl"
+          ? settings.canvasDefaultWritingMode
+          : defaultSettings.canvasDefaultWritingMode,
+      canvasDefaultFontSource:
+        settings.canvasDefaultFontSource === "editor" || settings.canvasDefaultFontSource === "ui"
+          ? settings.canvasDefaultFontSource
+          : defaultSettings.canvasDefaultFontSource,
     },
     lastWorkspacePath:
       typeof value?.lastWorkspacePath === "string" ? value.lastWorkspacePath : null,
@@ -1645,6 +1791,75 @@ async function listReferenceCandidates(folderPath: string): Promise<ReferenceFil
   return await invoke<ReferenceFileInfo[]>("list_reference_candidates", { rootPath: folderPath });
 }
 
+async function listCanvasBoards(
+  scope: CanvasScope,
+  rootPath: string | null,
+): Promise<CanvasBoardSummary[]> {
+  if (!isTauriRuntime()) return [];
+  return await invoke<CanvasBoardSummary[]>("list_canvas_boards", { scope, rootPath });
+}
+
+async function createCanvasBoard(
+  scope: CanvasScope,
+  rootPath: string | null,
+  name: string,
+): Promise<CanvasBoardSummary> {
+  if (!isTauriRuntime()) {
+    return {
+      id: "browser-preview",
+      name,
+      path: "",
+      scope,
+      updatedAt: Date.now(),
+      nodeCount: 0,
+      edgeCount: 0,
+    };
+  }
+  return await invoke<CanvasBoardSummary>("create_canvas_board", { scope, rootPath, name });
+}
+
+async function loadCanvasBoard(
+  scope: CanvasScope,
+  rootPath: string | null,
+  boardId: string,
+): Promise<JsonCanvasDocument> {
+  if (!isTauriRuntime()) return createCanvasDocument("Idea Board", scope);
+  const board = await invoke<unknown>("load_canvas_board", { scope, rootPath, boardId });
+  return normalizeCanvasDocument(board, "Idea Board", scope);
+}
+
+async function saveCanvasBoard(
+  scope: CanvasScope,
+  rootPath: string | null,
+  boardId: string,
+  board: JsonCanvasDocument,
+): Promise<void> {
+  if (!isTauriRuntime()) return;
+  await invoke("save_canvas_board", { scope, rootPath, boardId, board });
+}
+
+async function ensureCanvasBoard(
+  scope: CanvasScope,
+  rootPath: string | null,
+  name: string,
+): Promise<CanvasBoardSummary> {
+  const boards = await listCanvasBoards(scope, rootPath);
+  if (boards.length > 0) return boards[0];
+  return await createCanvasBoard(scope, rootPath, name);
+}
+
+function nextCanvasPlacement(board: JsonCanvasDocument) {
+  const textNodes = board.nodes.filter((node) => node.type === "text");
+  if (textNodes.length === 0) return { x: 120, y: 120 };
+  const last = textNodes.reduce((rightmost, node) =>
+    node.x + node.width > rightmost.x + rightmost.width ? node : rightmost,
+  );
+  return {
+    x: last.x + 32,
+    y: last.y + 32,
+  };
+}
+
 export default function App() {
   const saveTimerRef = useRef<number | null>(null);
   const referenceSaveTimerRef = useRef<number | null>(null);
@@ -1652,6 +1867,7 @@ export default function App() {
   const activeTabIdRef = useRef("initial-document-tab");
   const documentSaveQueuesRef = useRef<Map<string, DocumentSaveQueue>>(new Map());
   const headingMoveInProgressRef = useRef(false);
+  const projectEntryPathChangeInProgressRef = useRef(false);
   const toastTimerRef = useRef<number | null>(null);
   const typewriterScrollFrameRef = useRef<number | null>(null);
   const draggingSnippetRef = useRef<{
@@ -1662,6 +1878,7 @@ export default function App() {
   const editorInstanceRef = useRef<TextEditorHandle | null>(null);
   const editorShellRef = useRef<HTMLDivElement | null>(null);
   const editorContextMenuRef = useRef<HTMLDivElement | null>(null);
+  const editorFindInputRef = useRef<HTMLInputElement | null>(null);
   const fileMenuRef = useRef<HTMLDivElement | null>(null);
   const breadcrumbMenuRef = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
@@ -1702,6 +1919,13 @@ export default function App() {
   const [projectReplaceValue, setProjectReplaceValue] = useState("");
   const [isProjectReplacing, setIsProjectReplacing] = useState(false);
   const [isProjectSearchMode, setIsProjectSearchMode] = useState(false);
+  const [editorFind, setEditorFind] = useState<EditorFindState>({
+    open: false,
+    query: "",
+    replaceValue: "",
+    showReplace: false,
+    activeIndex: 0,
+  });
   const [toast, setToast] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingBreadcrumbEntryPath, setDraggingBreadcrumbEntryPath] =
@@ -1736,6 +1960,11 @@ export default function App() {
   const [isRightSidebarWide, setIsRightSidebarWide] = useState(false);
   const [rightSidebarTab, setRightSidebarTab] = useState<"idea" | "plot" | "reference">("plot");
   const [isPlotManagerOpen, setIsPlotManagerOpen] = useState(false);
+  const [ideaFocusRequest, setIdeaFocusRequest] = useState<{
+    threadId: string;
+    fragmentId?: string;
+    nonce: number;
+  } | null>(null);
   const [referenceLayout, setReferenceLayout] =
     useState<ReferenceLayout>(() => defaultReferenceLayout);
   const [referenceCandidates, setReferenceCandidates] = useState<ReferenceFileInfo[]>([]);
@@ -2321,6 +2550,22 @@ export default function App() {
       ),
     [activeDocumentAst, currentFileName, currentFilePath, projectSearchQuery],
   );
+  const editorFindMatches = useMemo(
+    () => collectEditorFindMatches(activeDocumentAst, editorFind.query),
+    [activeDocumentAst, editorFind.query],
+  );
+  const activeEditorFindIndex =
+    editorFindMatches.length === 0
+      ? -1
+      : Math.min(editorFind.activeIndex, editorFindMatches.length - 1);
+  useEffect(() => {
+    if (!editorFind.open) return;
+    if (editorFind.activeIndex < editorFindMatches.length) return;
+    setEditorFind((current) => ({
+      ...current,
+      activeIndex: Math.max(0, editorFindMatches.length - 1),
+    }));
+  }, [editorFind.activeIndex, editorFind.open, editorFindMatches.length]);
   const projectSearchResults = useMemo(
     () => searchProjectAst(projectAst, projectSearchQuery, "fullText"),
     [projectAst, projectSearchQuery],
@@ -2789,6 +3034,7 @@ export default function App() {
 
   useEffect(() => {
     if (!isHydrated || !didMountEditorRef.current || !currentFilePath) return;
+    if (projectEntryPathChangeInProgressRef.current) return;
     if (markdown === lastSavedMarkdownRef.current) {
       setSaveStatus("saved");
       return;
@@ -2796,6 +3042,7 @@ export default function App() {
 
     setSaveStatus("dirty");
     const timer = window.setTimeout(() => {
+      if (projectEntryPathChangeInProgressRef.current) return;
       void enqueueDocumentSave({
         tabId: activeTabId,
         path: currentFilePath,
@@ -3003,6 +3250,50 @@ export default function App() {
       setToast("");
       toastTimerRef.current = null;
     }, 2200);
+  };
+
+  const openIdeaCanvasBoard = async (
+    scope: CanvasScope = projectFolder ? "project" : "global",
+    boardId?: string,
+    selectNodeId?: string,
+  ) => {
+    if (scope === "project" && !projectFolder) {
+      showToast("Project Canvas はプロジェクトを開いている時に利用できます");
+      return;
+    }
+
+    if (!isTauriRuntime()) {
+      window.open("?view=canvas", "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    const payload: CanvasWindowPayload = {
+      requestId: String(Date.now()),
+      rootPath: scope === "project" ? projectFolder?.path ?? null : null,
+      workspaceName: scope === "project" ? projectFolder?.name ?? "Project" : "Global",
+      scope,
+      boardId,
+      selectNodeId,
+      theme: settings.theme,
+      editorFontFamily: settings.editorFontFamily,
+      uiFontFamily: settings.uiFontFamily,
+      uiFontScale: settings.uiFontScale,
+      canvasDefaultWritingMode: settings.canvasDefaultWritingMode,
+      canvasDefaultFontSource: settings.canvasDefaultFontSource,
+      ideaThreads: snippets.map((thread) => ({
+        id: thread.id,
+        kind: thread.kind,
+        title: thread.title,
+      })),
+      referenceFiles: scope === "project" ? sortedReferenceCandidates : [],
+    };
+
+    try {
+      await invoke("open_canvas_window", { payload });
+    } catch (error) {
+      setLastError(String(error));
+      showToast("Idea Board を開けませんでした");
+    }
   };
 
   const closeEditorContextMenu = () => {
@@ -3242,6 +3533,96 @@ export default function App() {
     showToast(level <= 0 ? "見出しを解除しました" : `見出し${level}を設定しました`);
   };
 
+  const focusEditorFindInput = () => {
+    window.requestAnimationFrame(() => {
+      editorFindInputRef.current?.focus();
+      editorFindInputRef.current?.select();
+    });
+  };
+
+  const selectEditorFindMatch = (match: EditorFindMatch | null | undefined) => {
+    const editor = editorInstanceRef.current;
+    if (!editor || !match) return;
+    editor.selectRange(match.from, match.to);
+  };
+
+  const openEditorFind = () => {
+    const editor = editorInstanceRef.current;
+    if (!editor) return;
+    let nextQuery = editorFind.query;
+    const selection = normalizeSelectionRange(editor.getSelection(), editor.getValue());
+    if (selection.from !== selection.to && !selection.text.includes("\n")) {
+      nextQuery = selection.text;
+    }
+    setEditorFind((current) => ({
+      ...current,
+      open: true,
+      query: nextQuery,
+      activeIndex: 0,
+    }));
+    focusEditorFindInput();
+  };
+
+  const closeEditorFind = () => {
+    setEditorFind((current) => ({ ...current, open: false }));
+    editorInstanceRef.current?.focus();
+  };
+
+  const moveEditorFindMatch = (delta: number) => {
+    if (editorFindMatches.length === 0) return;
+    const currentIndex = activeEditorFindIndex < 0 ? 0 : activeEditorFindIndex;
+    const nextIndex =
+      (currentIndex + delta + editorFindMatches.length) % editorFindMatches.length;
+    setEditorFind((current) => ({ ...current, activeIndex: nextIndex }));
+    selectEditorFindMatch(editorFindMatches[nextIndex]);
+  };
+
+  const replaceActiveEditorFindMatch = () => {
+    const editor = editorInstanceRef.current;
+    if (!editor || activeEditorFindIndex < 0) return;
+    const match = editorFindMatches[activeEditorFindIndex];
+    editor.replaceRange(
+      match.from,
+      match.to,
+      editorFind.replaceValue,
+      match.from + editorFind.replaceValue.length,
+    );
+    setEditorFind((current) => ({
+      ...current,
+      activeIndex: Math.min(current.activeIndex, Math.max(0, editorFindMatches.length - 2)),
+    }));
+  };
+
+  const replaceAllEditorFindMatches = () => {
+    const editor = editorInstanceRef.current;
+    if (!editor || !editorFind.query.trim()) return;
+    const currentText = editor.getValue();
+    const result = replaceLiteralMatches(currentText, editorFind.query, editorFind.replaceValue);
+    if (result.count === 0) {
+      showToast("置換できる一致がありません");
+      return;
+    }
+    editor.replaceRange(0, currentText.length, result.text, 0);
+    setEditorFind((current) => ({ ...current, activeIndex: 0 }));
+    showToast(`${result.count}件を置換しました`);
+  };
+
+  const handleEditorFindQueryChange = (value: string) => {
+    setEditorFind((current) => ({ ...current, query: value, activeIndex: 0 }));
+  };
+
+  const handleEditorFindKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeEditorFind();
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      moveEditorFindMatch(event.shiftKey ? -1 : 1);
+    }
+  };
+
   // 最新のクロージャを常に参照するため、ハンドラ本体は ref 経由で呼び出す。
   const editorShortcutHandlerRef = useRef<(event: KeyboardEvent) => void>(() => {});
   editorShortcutHandlerRef.current = (event: KeyboardEvent) => {
@@ -3256,7 +3637,21 @@ export default function App() {
       return;
     }
 
+    if (mod && event.altKey && !event.shiftKey && (key === "b" || key === "B")) {
+      event.preventDefault();
+      setIsCommandPaletteOpen(false);
+      void openIdeaCanvasBoard(projectFolder ? "project" : "global");
+      return;
+    }
+
     if (!mod || event.altKey) return;
+
+    if (key === "f" || key === "F") {
+      event.preventDefault();
+      setIsCommandPaletteOpen(false);
+      openEditorFind();
+      return;
+    }
 
     // Ctrl+P：コマンドパレット。印刷ダイアログの既定動作を抑止する。
     if (key === "p" || key === "P") {
@@ -3360,6 +3755,25 @@ export default function App() {
         label: "Idea にメモを追加…",
         hint: "Ctrl+Alt+I",
         run: () => setIsQuickIdeaModalOpen(true),
+      },
+      {
+        id: "idea-board-open",
+        label: "Idea Board を開く",
+        hint: "Ctrl+Alt+B",
+        run: () => void openIdeaCanvasBoard(projectFolder ? "project" : "global"),
+      },
+      {
+        id: "idea-board-project",
+        label: "Project Canvas を開く",
+        hint: "Canvas",
+        disabledReason: projectFolder ? undefined : "プロジェクトを開いてください",
+        run: () => void openIdeaCanvasBoard("project"),
+      },
+      {
+        id: "idea-board-global",
+        label: "Global Canvas を開く",
+        hint: "Canvas",
+        run: () => void openIdeaCanvasBoard("global"),
       },
       {
         id: "ruby",
@@ -4735,16 +5149,40 @@ export default function App() {
 
   const handleRenameProjectEntry = async (entry: ProjectFolder | ProjectEntry) => {
     if (!projectFolder) return;
+    const isFolderEntry = !("kind" in entry) || entry.kind === "folder";
     const name = await requestInput({
       title: "名前を変更",
-      label: "kind" in entry && entry.kind === "folder" ? "フォルダ名" : "テキストファイル名",
+      label: isFolderEntry ? "フォルダ名" : "テキストファイル名",
       initialValue: entry.name,
       confirmLabel: "変更",
     });
     if (!name || name.trim() === entry.name) return;
 
+    projectEntryPathChangeInProgressRef.current = true;
     setSaveStatus("loading");
     try {
+      const affectedTabs = openTabs.filter((tab) => {
+        if (!tab.path) return false;
+        return isFolderEntry
+          ? isSamePath(tab.path, entry.path) || isPathInsideFolder(tab.path, entry.path)
+          : isSamePath(tab.path, entry.path);
+      });
+      const activeWasDirty = activeTab ? isDirtyDocumentTab(activeTab) : false;
+      const activeWillBeRetargeted = currentFilePath
+        ? Boolean(retargetFilesystemPath(currentFilePath, entry.path, entry.path))
+        : false;
+      await Promise.all(
+        affectedTabs
+          .filter(isDirtyDocumentTab)
+          .map((tab) =>
+            enqueueDocumentSave({
+              tabId: tab.id,
+              path: tab.path!,
+              content: tab.markdown,
+            }),
+          ),
+      );
+
       const document = await invoke<TextDocument>("rename_project_entry", {
         path: entry.path,
         name,
@@ -4776,34 +5214,96 @@ export default function App() {
       const parentFolderPath =
         findContainingFolderPath(projectFolder, entry.path) ?? projectFolder.path;
       await refreshProjectFolder(parentFolderPath);
-      if ("kind" in entry && entry.kind === "file") {
-        setOpenTabs((current) =>
-          current.map((tab) =>
-            tab.path === entry.path
-              ? {
-                  ...tab,
-                  id: `file:${document.path}`,
-                  kind: "file",
-                  path: document.path,
-                  name: document.name,
-                  documentKey: document.path,
-                }
-              : tab,
-          ),
-        );
-      }
-      if (entry.path === currentFilePath) {
-        loadDocumentIntoEditor(document, { replaceActive: true });
-      } else if (entry.path === focusedFolderPath) {
-        setFocusedFolderPath(document.path);
-        setSaveStatus(currentFilePath ? "saved" : "dirty");
+
+      const activeNewPath = currentFilePath
+        ? retargetFilesystemPath(currentFilePath, entry.path, document.path)
+        : null;
+      if (activeNewPath) setActiveTabId(`file:${activeNewPath}`);
+      setOpenTabs((current) =>
+        current.map((tab) => {
+          if (!tab.path) return tab;
+          const nextPath = retargetFilesystemPath(tab.path, entry.path, document.path);
+          if (!nextPath) return tab;
+          const isRenamedFile = !isFolderEntry && isSamePath(nextPath, document.path);
+          return {
+            ...tab,
+            id: `file:${nextPath}`,
+            kind: "file",
+            path: nextPath,
+            name: isRenamedFile
+              ? document.name
+              : nextPath.split(/[\\/]/).pop() ?? tab.name,
+            markdown: isRenamedFile ? document.content : tab.markdown,
+            savedMarkdown: isRenamedFile ? document.content : tab.savedMarkdown,
+            saveStatus: "saved",
+            documentKey: nextPath,
+          };
+        }),
+      );
+
+      if (activeNewPath) {
+        setAppState((current) => ({
+          ...current,
+          markdown: !isFolderEntry && isSamePath(activeNewPath, document.path)
+            ? document.content
+            : current.markdown,
+          lastFilePath: activeNewPath,
+        }));
+        if (!isFolderEntry && isSamePath(activeNewPath, document.path)) {
+          lastSavedMarkdownRef.current = document.content;
+        }
       } else {
-        setSaveStatus(currentFilePath ? "saved" : "dirty");
+        setAppState((current) => ({
+          ...current,
+          lastFilePath: current.lastFilePath
+            ? retargetFilesystemPath(current.lastFilePath, entry.path, document.path) ??
+              current.lastFilePath
+            : current.lastFilePath,
+        }));
       }
+
+      setAppState((current) => {
+        const retargetRecord = <T,>(record: Record<string, T>): Record<string, T> => {
+          const next: Record<string, T> = {};
+          for (const [path, value] of Object.entries(record)) {
+            next[retargetFilesystemPath(path, entry.path, document.path) ?? path] = value;
+          }
+          return next;
+        };
+        return {
+          ...current,
+          fileProgress: retargetRecord(current.fileProgress),
+          cursorPositions: retargetRecord(current.cursorPositions),
+        };
+      });
+
+      setFocusedFolderPath((current) =>
+        current ? retargetFilesystemPath(current, entry.path, document.path) ?? current : current,
+      );
+      if (isFolderEntry) {
+        setCollapsedWorkspaceFolderPaths((current) => {
+          const next = new Set<string>();
+          for (const path of current) {
+            next.add(retargetFilesystemPath(path, entry.path, document.path) ?? path);
+          }
+          return next;
+        });
+      }
+      projectAstBuildIdRef.current += 1;
+      setProjectAst(null);
+      setSaveStatus(
+        currentFilePath
+          ? activeWillBeRetargeted || !activeWasDirty
+            ? "saved"
+            : "dirty"
+          : "dirty",
+      );
       showToast(`「${entry.name}」をリネームしました`);
     } catch (error) {
       setLastError(String(error));
       setSaveStatus("error");
+    } finally {
+      projectEntryPathChangeInProgressRef.current = false;
     }
   };
 
@@ -4864,6 +5364,158 @@ export default function App() {
     } catch (error) {
       setLastError(String(error));
       setSaveStatus("error");
+    }
+  };
+
+  const handleMoveProjectEntryToFolder = async (
+    sourcePath: string,
+    targetFolderPath: string,
+  ) => {
+    if (!projectFolder) return;
+    const sourceEntry = findProjectEntry(projectFolder.children, sourcePath);
+    if (!sourceEntry) return;
+
+    const sourceParentPath =
+      findContainingFolderPath(projectFolder, sourcePath) ?? projectFolder.path;
+    if (isSamePath(sourceParentPath, targetFolderPath)) return;
+    if (
+      sourceEntry.kind === "folder" &&
+      (isSamePath(sourcePath, targetFolderPath) ||
+        isPathInsideFolder(targetFolderPath, sourcePath))
+    ) {
+      showToast("フォルダを自分自身の中へ移動できません");
+      return;
+    }
+
+    projectEntryPathChangeInProgressRef.current = true;
+    setSaveStatus("loading");
+    try {
+      const affectedTabs = openTabs.filter((tab) => {
+        if (!tab.path) return false;
+        return sourceEntry.kind === "folder"
+          ? isSamePath(tab.path, sourcePath) || isPathInsideFolder(tab.path, sourcePath)
+          : isSamePath(tab.path, sourcePath);
+      });
+      await Promise.all(
+        affectedTabs
+          .filter(isDirtyDocumentTab)
+          .map((tab) =>
+            enqueueDocumentSave({
+              tabId: tab.id,
+              path: tab.path!,
+              content: tab.markdown,
+            }),
+          ),
+      );
+
+      const result = await invoke<MoveProjectEntryResult>("move_project_entry", {
+        rootPath: projectFolder.path,
+        sourcePath,
+        targetFolderPath,
+      });
+      const oldReferencePath = toProjectRelativePath(projectFolder.path, result.oldPath);
+      const newReferencePath = toProjectRelativePath(projectFolder.path, result.newPath);
+      if (oldReferencePath && newReferencePath) {
+        setPlotCards((current) =>
+          current.map((card) => ({
+            ...card,
+            body: replacePlotReferencePath(card.body, oldReferencePath, newReferencePath),
+          })),
+        );
+        setReferenceLayout((current) => ({
+          ...current,
+          cards: current.cards.map((card) =>
+            retargetReferenceCard(card, oldReferencePath, newReferencePath),
+          ),
+          recent: current.recent.map((file) =>
+            retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
+          ),
+        }));
+        setReferenceCandidates((current) =>
+          current.map((file) =>
+            retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
+          ),
+        );
+      }
+
+      const activeNewPath = currentFilePath
+        ? retargetFilesystemPath(currentFilePath, result.oldPath, result.newPath)
+        : null;
+      const nextActiveTabId = activeNewPath ? `file:${activeNewPath}` : activeTabIdRef.current;
+      setOpenTabs((current) =>
+        current.map((tab) => {
+          if (!tab.path) return tab;
+          const nextPath = retargetFilesystemPath(tab.path, result.oldPath, result.newPath);
+          if (!nextPath) return tab;
+          const movedDocument =
+            result.movedDocument && isSamePath(result.movedDocument.path, nextPath)
+              ? result.movedDocument
+              : null;
+          return {
+            ...tab,
+            id: `file:${nextPath}`,
+            kind: "file",
+            path: nextPath,
+            name: movedDocument?.name ?? nextPath.split(/[\\/]/).pop() ?? tab.name,
+            markdown: movedDocument?.content ?? tab.markdown,
+            savedMarkdown: movedDocument?.content ?? tab.savedMarkdown,
+            saveStatus: "saved",
+            documentKey: nextPath,
+          };
+        }),
+      );
+      if (activeNewPath) {
+        setActiveTabId(nextActiveTabId);
+        setAppState((current) => ({
+          ...current,
+          markdown: result.movedDocument?.content ?? current.markdown,
+          lastFilePath: activeNewPath,
+        }));
+        lastSavedMarkdownRef.current =
+          result.movedDocument?.content ?? activeTab?.savedMarkdown ?? lastSavedMarkdownRef.current;
+      }
+
+      setAppState((current) => {
+        const retargetRecord = <T,>(record: Record<string, T>): Record<string, T> => {
+          const next: Record<string, T> = {};
+          for (const [path, value] of Object.entries(record)) {
+            next[retargetFilesystemPath(path, result.oldPath, result.newPath) ?? path] = value;
+          }
+          return next;
+        };
+        return {
+          ...current,
+          fileProgress: retargetRecord(current.fileProgress),
+          cursorPositions: retargetRecord(current.cursorPositions),
+          lastFilePath: current.lastFilePath
+            ? retargetFilesystemPath(current.lastFilePath, result.oldPath, result.newPath) ??
+              current.lastFilePath
+            : current.lastFilePath,
+        };
+      });
+      setFocusedFolderPath(
+        sourceEntry.kind === "folder" ? result.newPath : result.newParentPath,
+      );
+      if (sourceEntry.kind === "folder") {
+        setCollapsedWorkspaceFolderPaths((current) => {
+          const next = new Set<string>();
+          for (const path of current) {
+            next.add(retargetFilesystemPath(path, result.oldPath, result.newPath) ?? path);
+          }
+          return next;
+        });
+      }
+      projectAstBuildIdRef.current += 1;
+      setProjectAst(null);
+      setProjectFolder(result.projectFolder);
+      setLastError("");
+      setSaveStatus(activeNewPath || currentFilePath ? "saved" : "dirty");
+      showToast(`「${sourceEntry.name}」を移動しました`);
+    } catch (error) {
+      setLastError(String(error));
+      setSaveStatus("error");
+    } finally {
+      projectEntryPathChangeInProgressRef.current = false;
     }
   };
 
@@ -5486,6 +6138,211 @@ export default function App() {
       showToast(`${pending.length} 件を本文へ挿入しました`);
     }
   };
+
+  const openCanvasOrigin = (origin: IdeaOriginRef) => {
+    void openIdeaCanvasBoard(origin.sourceBoardScope, origin.sourceBoardId, origin.sourceId);
+  };
+
+  const sendIdeaFragmentToCanvas = async (threadId: string, fragmentId: string) => {
+    const thread = snippets.find((item) => item.id === threadId);
+    const fragment = thread?.fragments.find((item) => item.id === fragmentId);
+    if (!thread || !fragment) return;
+    if (!isTauriRuntime()) {
+      showToast("Canvas 送信はTauri版で利用できます");
+      return;
+    }
+
+    const scope: CanvasScope = projectFolder ? "project" : "global";
+    const rootPath = scope === "project" ? projectFolder?.path ?? null : null;
+    try {
+      const summary = await ensureCanvasBoard(
+        scope,
+        rootPath,
+        scope === "project" ? `${projectFolder?.name ?? "Project"} Board` : "Global Idea Board",
+      );
+      const board = await loadCanvasBoard(scope, rootPath, summary.id);
+      const position = nextCanvasPlacement(board);
+      const node = createCanvasTextNode(fragment.body, {
+        ...position,
+        writingMode: settings.canvasDefaultWritingMode,
+        fontSource: settings.canvasDefaultFontSource,
+        thenOrigin: {
+          source: "idea",
+          sourceId: fragment.id,
+          sourceThreadId: thread.id,
+          sourceWorkspacePath: projectFolder?.path ?? "",
+          copiedAt: Date.now(),
+        },
+      });
+      await saveCanvasBoard(scope, rootPath, summary.id, {
+        ...board,
+        nodes: [...board.nodes, node],
+      });
+      showToast("Canvas へ送信しました");
+      await openIdeaCanvasBoard(scope, summary.id, node.id);
+    } catch (error) {
+      setLastError(String(error));
+      showToast("Canvas へ送信できませんでした");
+    }
+  };
+
+  const sendIdeaThreadToCanvas = async (threadId: string) => {
+    const thread = snippets.find((item) => item.id === threadId);
+    if (!thread) return;
+    if (!isTauriRuntime()) {
+      showToast("Canvas 送信はTauri版で利用できます");
+      return;
+    }
+
+    const scope: CanvasScope = projectFolder ? "project" : "global";
+    const rootPath = scope === "project" ? projectFolder?.path ?? null : null;
+    try {
+      const summary = await ensureCanvasBoard(
+        scope,
+        rootPath,
+        scope === "project" ? `${projectFolder?.name ?? "Project"} Board` : "Global Idea Board",
+      );
+      const board = await loadCanvasBoard(scope, rootPath, summary.id);
+      const position = nextCanvasPlacement(board);
+      const copiedAt = Date.now();
+      const group = createCanvasGroupNode(thread.title, {
+        x: position.x,
+        y: position.y,
+        width: Math.max(520, thread.fragments.length * 180),
+        height: 310,
+        thenOrigin: {
+          source: "idea",
+          sourceId: thread.id,
+          sourceThreadId: thread.id,
+          sourceWorkspacePath: projectFolder?.path ?? "",
+          copiedAt,
+        },
+      });
+      const nodes: CanvasNode[] = thread.fragments.map((fragment, index) =>
+        createCanvasTextNode(fragment.body, {
+          x: group.x + 28 + index * 210,
+          y: group.y + 72,
+          width: 180,
+          height: 170,
+          writingMode: settings.canvasDefaultWritingMode,
+          fontSource: settings.canvasDefaultFontSource,
+          thenOrigin: {
+            source: "idea",
+            sourceId: fragment.id,
+            sourceThreadId: thread.id,
+            sourceWorkspacePath: projectFolder?.path ?? "",
+            copiedAt,
+          },
+        }),
+      );
+      const edges = nodes.slice(1).map((node, index) => createCanvasEdge(nodes[index].id, node.id));
+      await saveCanvasBoard(scope, rootPath, summary.id, {
+        ...board,
+        nodes: [...board.nodes, group, ...nodes],
+        edges: [...board.edges, ...edges],
+      });
+      showToast("Thread を Canvas へ送信しました");
+      await openIdeaCanvasBoard(scope, summary.id, group.id);
+    } catch (error) {
+      setLastError(String(error));
+      showToast("Thread を Canvas へ送信できませんでした");
+    }
+  };
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+
+    let unlistenCopy: (() => void) | null = null;
+    let unlistenFocus: (() => void) | null = null;
+
+    void listen<CanvasCopyToIdeaRequest>("then-canvas-copy-to-idea", (event) => {
+      const request = event.payload;
+      const items = request.items
+        .map((item) => ({ ...item, text: item.text }))
+        .filter((item) => item.text.trim().length > 0);
+      if (items.length === 0) return;
+
+      const copiedAt = Date.now();
+      const newThreadId =
+        request.targetThreadId === CANVAS_NEW_THREAD_TARGET ? nextIdeaId("thread") : null;
+      updateIdeaThreads((threads) => {
+        if (newThreadId) {
+          const now = Date.now();
+          const thread: IdeaThread = {
+            id: newThreadId,
+            kind: "thread",
+            title: request.threadTitle?.trim() || request.boardName || "Canvas から",
+            starred: false,
+            createdAt: now,
+            updatedAt: now,
+            fragments: items.map((item) =>
+              makeIdeaFragment(
+                item.text,
+                false,
+                createIdeaOriginRef(request.boardScope, request.boardId, item.nodeId, copiedAt),
+              ),
+            ),
+          };
+          const inboxIndex = threads.findIndex((item) => item.kind === "inbox");
+          const next = [...threads];
+          next.splice(inboxIndex >= 0 ? inboxIndex + 1 : 0, 0, thread);
+          return next;
+        }
+
+        const fallback = threads.find((thread) => thread.kind === "inbox") ?? threads[0];
+        const targetId = threads.some((thread) => thread.id === request.targetThreadId)
+          ? request.targetThreadId
+          : fallback?.id;
+        if (!targetId) return threads;
+        return threads.map((thread) =>
+          thread.id === targetId
+            ? {
+                ...thread,
+                fragments: [
+                  ...thread.fragments,
+                  ...items.map((item) =>
+                    makeIdeaFragment(
+                      item.text,
+                      false,
+                      createIdeaOriginRef(
+                        request.boardScope,
+                        request.boardId,
+                        item.nodeId,
+                        copiedAt,
+                      ),
+                    ),
+                  ),
+                ],
+                updatedAt: copiedAt,
+              }
+            : thread,
+        );
+      });
+      setRightSidebarTab("idea");
+      setIsRightSidebarCollapsed(false);
+      if (newThreadId) setIdeaFocusRequest({ threadId: newThreadId, nonce: copiedAt });
+      showToast(`${items.length} 件を Idea へ取り込みました`);
+    }).then((unlisten) => {
+      unlistenCopy = unlisten;
+    });
+
+    void listen<CanvasFocusIdeaRequest>("then-canvas-focus-idea", (event) => {
+      setRightSidebarTab("idea");
+      setIsRightSidebarCollapsed(false);
+      setIdeaFocusRequest({
+        threadId: event.payload.threadId,
+        fragmentId: event.payload.fragmentId,
+        nonce: Date.now(),
+      });
+    }).then((unlisten) => {
+      unlistenFocus = unlisten;
+    });
+
+    return () => {
+      unlistenCopy?.();
+      unlistenFocus?.();
+    };
+  }, []);
 
   const updateSettings = <Key extends keyof EditorSettings>(
     key: Key,
@@ -6137,6 +6994,15 @@ export default function App() {
                 <AppIcon name="export" className="topbarSvgIcon" />
               </button>
               <button
+                className="iconButton"
+                type="button"
+                aria-label="Idea Board を開く"
+                title="Idea Board を開く"
+                onClick={() => void openIdeaCanvasBoard(projectFolder ? "project" : "global")}
+              >
+                <AppIcon name="canvas" className="topbarSvgIcon" />
+              </button>
+              <button
                 className={`iconButton ${settings.writingMode === "horizontal-tb" ? "activeIconButton" : ""}`}
                 type="button"
                 aria-label={settings.writingMode === "horizontal-tb" ? "縦書きに切り替え" : "横書きに切り替え"}
@@ -6236,6 +7102,9 @@ export default function App() {
                 onOpenFileInNewTab={(path) => void handleProjectFileSelectInNewTab(path)}
                 onRenameEntry={(entry) => void handleRenameProjectEntry(entry)}
                 onDeleteEntry={(entry) => void handleDeleteProjectEntry(entry)}
+                onMoveEntry={(sourcePath, targetFolderPath) =>
+                  void handleMoveProjectEntryToFolder(sourcePath, targetFolderPath)
+                }
                 onReorderEntry={(folderPath, draggedPath, targetPath, position) =>
                   void handleSidebarEntryReorder(folderPath, draggedPath, targetPath, position)
                 }
@@ -6328,6 +7197,107 @@ export default function App() {
                             onTextChange={handleTextChange}
                             onSelectionChange={handleSelectionChange}
                           />
+                        )}
+                        {editorFind.open && (
+                          <section
+                            className="editorFindPopover"
+                            aria-label="ファイル内検索と置換"
+                            onMouseDown={(event) => event.stopPropagation()}
+                          >
+                            <div className="editorFindRow">
+                              <input
+                                ref={editorFindInputRef}
+                                value={editorFind.query}
+                                type="search"
+                                aria-label="検索語句"
+                                placeholder="検索"
+                                onChange={(event) => handleEditorFindQueryChange(event.target.value)}
+                                onKeyDown={handleEditorFindKeyDown}
+                              />
+                              <span className="editorFindCount">
+                                {editorFind.query.trim()
+                                  ? editorFindMatches.length
+                                    ? `${activeEditorFindIndex + 1}/${editorFindMatches.length}`
+                                    : "0/0"
+                                  : ""}
+                              </span>
+                              <button
+                                type="button"
+                                title="前の一致"
+                                aria-label="前の一致"
+                                disabled={editorFindMatches.length === 0}
+                                onClick={() => moveEditorFindMatch(-1)}
+                              >
+                                ↑
+                              </button>
+                              <button
+                                type="button"
+                                title="次の一致"
+                                aria-label="次の一致"
+                                disabled={editorFindMatches.length === 0}
+                                onClick={() => moveEditorFindMatch(1)}
+                              >
+                                ↓
+                              </button>
+                              <button
+                                type="button"
+                                title={editorFind.showReplace ? "置換を隠す" : "置換を表示"}
+                                aria-label={editorFind.showReplace ? "置換を隠す" : "置換を表示"}
+                                aria-pressed={editorFind.showReplace}
+                                onClick={() =>
+                                  setEditorFind((current) => ({
+                                    ...current,
+                                    showReplace: !current.showReplace,
+                                  }))
+                                }
+                              >
+                                ≡
+                              </button>
+                              <button
+                                type="button"
+                                title="閉じる"
+                                aria-label="閉じる"
+                                onClick={closeEditorFind}
+                              >
+                                ×
+                              </button>
+                            </div>
+                            {editorFind.showReplace && (
+                              <div className="editorFindRow editorReplaceRow">
+                                <input
+                                  value={editorFind.replaceValue}
+                                  aria-label="置換後"
+                                  placeholder="置換"
+                                  onChange={(event) =>
+                                    setEditorFind((current) => ({
+                                      ...current,
+                                      replaceValue: event.target.value,
+                                    }))
+                                  }
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Escape") {
+                                      event.preventDefault();
+                                      closeEditorFind();
+                                    }
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  disabled={activeEditorFindIndex < 0}
+                                  onClick={replaceActiveEditorFindMatch}
+                                >
+                                  置換
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={editorFindMatches.length === 0}
+                                  onClick={replaceAllEditorFindMatches}
+                                >
+                                  すべて
+                                </button>
+                              </div>
+                            )}
+                          </section>
                         )}
                       </>
                     )}
@@ -6516,9 +7486,24 @@ export default function App() {
                       onOpenManager={() => setIsPlotManagerOpen(true)}
                     />
                   )}
+                  {rightSidebarTab === "idea" && (
+                    <div className="plotPaneHeaderActions" aria-label="Idea 操作">
+                      <button
+                        className="sidebarIconButton plotHeaderActionButton"
+                        type="button"
+                        aria-label="Idea Board を開く"
+                        title="Idea Board を開く"
+                        onClick={() => void openIdeaCanvasBoard(projectFolder ? "project" : "global")}
+                      >
+                        <AppIcon name="canvas" />
+                      </button>
+                    </div>
+                  )}
                   <div
                     className={`rightSidebarChromeActions ${
-                      rightSidebarTab === "plot" ? "" : "pushRightSidebarChromeActions"
+                      rightSidebarTab === "plot" || rightSidebarTab === "idea"
+                        ? ""
+                        : "pushRightSidebarChromeActions"
                     }`}
                   >
                     <button
@@ -6582,6 +7567,7 @@ export default function App() {
                     <IdeaPane
                       threads={snippets}
                       draggingId={draggingId}
+                      focusRequest={ideaFocusRequest}
                       onCapture={captureFragment}
                       onCreateThread={createIdeaThread}
                       onRenameThread={renameIdeaThread}
@@ -6595,6 +7581,11 @@ export default function App() {
                       onReorderFragment={reorderFragment}
                       onInsertFragment={insertFragmentToEditor}
                       onInsertThread={insertThreadToEditor}
+                      onSendFragmentToCanvas={(threadId, fragmentId) =>
+                        void sendIdeaFragmentToCanvas(threadId, fragmentId)
+                      }
+                      onSendThreadToCanvas={(threadId) => void sendIdeaThreadToCanvas(threadId)}
+                      onOpenCanvasOrigin={openCanvasOrigin}
                       onFragmentDragStart={handleFragmentDragStart}
                       onFragmentDragEnd={handleFragmentDragEnd}
                     />

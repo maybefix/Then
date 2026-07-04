@@ -79,6 +79,7 @@ textarea {
 .rightSidebar,
 .statusbar,
 .editorContextMenu,
+.editorFindPopover,
 .modal,
 .quickIdeaModal {
   zoom: var(--ui-font-scale, 1);
@@ -1056,12 +1057,96 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .editorContent {
+  position: relative;
   display: flex;
   width: 100%;
   min-width: 100%;
   height: 100%;
   min-height: 100%;
   justify-content: flex-end;
+}
+
+.editorFindPopover {
+  position: absolute;
+  z-index: 12;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  min-width: 452px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  color: var(--text-primary);
+}
+
+.editorFindRow {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 54px 34px 34px 34px 34px;
+  align-items: center;
+  min-height: 46px;
+}
+
+.editorFindRow + .editorFindRow {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.editorFindRow input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  padding: 0 14px;
+}
+
+.editorFindRow input::placeholder {
+  color: var(--text-muted);
+}
+
+.editorFindCount {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.editorFindRow button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-left: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.editorFindRow button:hover:not(:disabled),
+.editorFindRow button[aria-pressed="true"] {
+  background: var(--control-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-primary);
+}
+
+.editorFindRow button:disabled {
+  cursor: default;
+  opacity: 0.34;
+}
+
+.editorReplaceRow {
+  grid-template-columns: minmax(180px, 1fr) 72px 72px;
+}
+
+.editorReplaceRow button {
+  width: auto;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 .metadataPanel {
@@ -2382,11 +2467,11 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .dialogMessage span {
-  overflow: hidden;
   color: var(--text-muted);
   font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .dialogError {
@@ -2696,6 +2781,10 @@ body {
   padding: 0 0 8px;
 }
 
+.projectSearchSidebarScroll {
+  overflow: hidden;
+}
+
 .sidebarSection {
   padding: 0;
 }
@@ -2760,6 +2849,12 @@ body {
 .treeDrop-before::before,
 .treeDrop-after::after {
   opacity: 1;
+}
+
+.treeDrop-into {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-strong) 56%, transparent);
 }
 
 .draggingTreeEntry {
@@ -3618,8 +3713,13 @@ body {
 
 .projectSearchList {
   display: grid;
+  min-height: 0;
+  flex: 1;
+  align-content: start;
   gap: 3px;
+  overflow-y: auto;
   padding: 0 6px 10px;
+  overscroll-behavior: contain;
 }
 
 .projectSearchResultItem {
@@ -4525,6 +4625,75 @@ body {
   margin: 0 auto;
   background: white;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+}
+
+.referenceReadOnlyPreview {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+}
+
+.referenceReadOnlyPreview.referenceTextPreview,
+.referenceReadOnlyPreview.referenceImageScroller,
+.referenceReadOnlyPreview.referencePdfScroller {
+  flex: none;
+}
+
+.referenceReadOnlyPreview.referenceImageScroller,
+.referenceReadOnlyPreview.referencePdfScroller {
+  height: 100%;
+}
+
+.referenceReadOnlyPreview.referencePdfScroller canvas {
+  max-width: 100%;
+  height: auto;
+}
+
+.referenceReadOnlyPreview.referenceReadOnlyPdf {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.referenceReadOnlyPdf .referencePdfMiniNav {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 68%, transparent);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.referenceReadOnlyPdf .referencePdfMiniNav button {
+  min-width: 28px;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 72%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bg-panel) 88%, var(--bg-root));
+  color: var(--text-primary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.referenceReadOnlyPdf .referencePdfMiniNav button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.referenceReadOnlyPdf .referencePdfScroller {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.referenceReadOnlyPdf .referencePdfScroller canvas {
+  max-width: 100%;
+  height: auto;
 }
 
 .referencePlaceholder,
@@ -9009,6 +9178,977 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
 .appShell.exportWindowLoadState {
   min-width: 0;
   min-height: 0;
+}
+
+.canvasWindowRoot {
+  --canvas-bg: color-mix(in srgb, var(--bg-root) 94%, #05070a);
+  --canvas-toolbar-bg: color-mix(in srgb, var(--bg-panel) 90%, var(--bg-root));
+  --canvas-toolbar-border: color-mix(in srgb, var(--border-subtle) 78%, transparent);
+  --canvas-toolbar-control: color-mix(in srgb, var(--bg-panel-strong) 82%, var(--bg-root));
+  --canvas-toolbar-control-hover: color-mix(in srgb, var(--accent-soft) 68%, var(--bg-panel-strong));
+  --canvas-board-bg: color-mix(in srgb, var(--bg-root) 86%, var(--bg-secondary));
+  --canvas-grid-minor: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  --canvas-grid-major: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  --canvas-node-bg: color-mix(in srgb, var(--bg-panel-strong) 88%, var(--bg-root));
+  --canvas-node-bg-active: color-mix(in srgb, var(--bg-panel-strong) 82%, var(--accent-soft));
+  --canvas-node-text: var(--text-primary);
+  --canvas-node-muted: var(--text-secondary);
+  --canvas-group-bg: color-mix(in srgb, var(--warning) 13%, var(--bg-panel));
+  --canvas-group-border: color-mix(in srgb, var(--warning) 62%, var(--border-subtle));
+  --canvas-group-text: color-mix(in srgb, var(--warning) 62%, var(--text-primary));
+  --canvas-inspector-bg: color-mix(in srgb, var(--bg-panel) 94%, var(--bg-root));
+  --canvas-inspector-section: color-mix(in srgb, var(--bg-panel-strong) 72%, transparent);
+  --canvas-focus-ring: color-mix(in srgb, var(--accent) 42%, transparent);
+  --canvas-shadow: color-mix(in srgb, #000 24%, transparent);
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--canvas-bg);
+  color: var(--text-primary);
+  font-feature-settings: "lnum", "locl" 0;
+}
+
+.canvasTopbar,
+.canvasInspector {
+  zoom: var(--ui-font-scale, 1);
+}
+
+.canvasTopbar {
+  display: flex;
+  height: 72px;
+  flex: 0 0 72px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--canvas-toolbar-border);
+  background: var(--canvas-toolbar-bg);
+  color: var(--text-primary);
+}
+
+.canvasSaveStatus {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.canvasToolbarCluster,
+.canvasScopeSwitch,
+.canvasToolGroup,
+.canvasZoomControls,
+.canvasSendControls {
+  display: inline-flex;
+  box-sizing: border-box;
+  min-height: 52px;
+  height: 52px;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: 6px;
+  background: var(--canvas-toolbar-control);
+}
+
+.canvasBoardCluster {
+  flex: 1 1 360px;
+  gap: 4px;
+  min-width: 220px;
+  max-width: 410px;
+  padding-left: 6px;
+}
+
+.canvasScopeSwitch button,
+.canvasToolGroup button,
+.canvasZoomControls button,
+.canvasSendControls button,
+.canvasIconButton {
+  display: inline-grid;
+  box-sizing: border-box;
+  height: 44px;
+  min-width: 28px;
+  gap: 6px;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.canvasScopeSwitch button {
+  padding: 0 10px;
+}
+
+.canvasToolGroup {
+  align-items: center;
+  padding: 3px;
+}
+
+.canvasToolGroup button {
+  width: 58px;
+  min-width: 58px;
+  height: 44px;
+  grid-template-rows: 17px 1fr;
+  gap: 3px;
+  padding: 4px 6px 5px;
+  line-height: 1;
+}
+
+.canvasToolGroup button span {
+  display: block;
+  font-size: 11px;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.canvasIconButton {
+  width: 44px;
+}
+
+.canvasTopbar > .canvasIconButton,
+.canvasStyleHost > .canvasIconButton,
+.canvasHelpHost > .canvasIconButton,
+.canvasReferenceHost > .canvasIconButton {
+  height: 52px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.canvasStyleHost,
+.canvasHelpHost,
+.canvasReferenceHost {
+  position: relative;
+  display: inline-flex;
+  height: 52px;
+  align-items: center;
+}
+
+.canvasScopeSwitch button:hover,
+.canvasToolGroup button:hover,
+.canvasZoomControls button:hover,
+.canvasSendControls button:hover,
+.canvasIconButton:hover {
+  background: var(--canvas-toolbar-control-hover);
+  color: var(--text-primary);
+}
+
+.canvasScopeSwitch button.isActive,
+.canvasToolGroup button.isActive,
+.canvasIconButton.isActive {
+  background: var(--accent);
+  color: var(--selection-text);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 68%, transparent);
+}
+
+.canvasScopeSwitch button:disabled,
+.canvasSendControls button:disabled,
+.canvasIconButton:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.canvasToolGroup svg,
+.canvasIconButton svg,
+.canvasPrimaryAction svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.canvasSendControls select {
+  height: 44px;
+  min-width: 0;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-root));
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+}
+
+.canvasSendPanel select,
+.canvasInspectorField input {
+  height: 30px;
+  min-width: 150px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-root));
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+}
+
+.canvasSendControls {
+  flex: 0 1 320px;
+  min-width: 220px;
+  margin-left: auto;
+}
+
+.canvasSendControls select {
+  width: min(190px, 15vw);
+  flex: 1 1 auto;
+}
+
+.canvasSendControls select:focus,
+.canvasSendPanel select:focus,
+.canvasInspectorField input:focus {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--canvas-focus-ring);
+}
+
+.canvasBoardMenuHost {
+  position: relative;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.canvasBoardTitleButton {
+  display: flex;
+  width: 100%;
+  height: 44px;
+  min-width: 0;
+  align-items: center;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-root));
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 10px;
+  text-align: left;
+}
+
+.canvasBoardTitleButton span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvasBoardTitleButton:hover,
+.canvasBoardTitleButton[aria-expanded="true"] {
+  border-color: var(--accent-border);
+  background: color-mix(in srgb, var(--accent-soft) 46%, var(--bg-primary));
+}
+
+.canvasBoardMenu {
+  position: absolute;
+  z-index: 35;
+  top: 50px;
+  left: 0;
+  display: grid;
+  width: min(360px, 72vw);
+  max-height: 320px;
+  overflow: auto;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: 8px;
+  background: var(--canvas-inspector-bg);
+  box-shadow: 0 18px 42px var(--canvas-shadow);
+}
+
+.canvasBoardMenu button {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  align-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 8px;
+  text-align: left;
+}
+
+.canvasBoardMenu button:hover,
+.canvasBoardMenu button.isActive {
+  background: var(--canvas-toolbar-control-hover);
+  color: var(--text-primary);
+}
+
+.canvasBoardMenu button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvasZoomControls span {
+  min-width: 46px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.dangerCanvasButton:hover {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+
+.canvasStylePopover,
+.canvasReferencePopover,
+.canvasHelpPopover {
+  position: absolute;
+  z-index: 30;
+  top: 58px;
+  right: 0;
+  padding: 12px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: 8px;
+  background: var(--canvas-inspector-bg);
+  box-shadow: 0 18px 42px var(--canvas-shadow);
+  color: var(--text-primary);
+}
+
+.canvasHelpPopover {
+  width: 330px;
+}
+
+.canvasReferencePopover {
+  display: grid;
+  width: 320px;
+  gap: 8px;
+}
+
+.canvasStylePopover {
+  display: grid;
+  width: 240px;
+  gap: 10px;
+}
+
+.canvasStylePopover h2,
+.canvasReferencePopover h2,
+.canvasHelpPopover h2 {
+  margin: 0 0 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 720;
+  letter-spacing: 0;
+}
+
+.canvasStylePopover h2 {
+  margin-bottom: 0;
+}
+
+.canvasStylePopover p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.canvasReferencePopover input {
+  height: 32px;
+  min-width: 0;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-root));
+  color: var(--text-primary);
+  outline: none;
+  padding: 0 8px;
+}
+
+.canvasReferenceList {
+  display: grid;
+  max-height: 320px;
+  overflow: auto;
+  gap: 4px;
+}
+
+.canvasReferenceList p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.canvasReferenceList button {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 2px 8px;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.canvasReferenceList button:hover {
+  border-color: var(--canvas-toolbar-border);
+  background: var(--canvas-toolbar-control-hover);
+}
+
+.canvasReferenceList button span {
+  grid-row: 1 / 3;
+  align-self: center;
+  color: var(--accent-strong);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.canvasReferenceList button strong,
+.canvasReferenceList button small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvasReferenceList button strong {
+  font-size: 12px;
+}
+
+.canvasReferenceList button small {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.canvasStylePopover section {
+  display: grid;
+  gap: 6px;
+}
+
+.canvasStylePopover section > span {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.canvasStylePopover section > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.canvasStylePopover button {
+  height: 32px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: 5px;
+  background: var(--canvas-toolbar-control);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.canvasStylePopover button:hover {
+  background: var(--canvas-toolbar-control-hover);
+  color: var(--text-primary);
+}
+
+.canvasStylePopover button.isActive {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--selection-text);
+}
+
+.canvasHelpPopover ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.canvasHelpPopover li {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.canvasSaveStatus {
+  display: inline-flex;
+  min-width: 112px;
+  margin-left: auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  text-align: right;
+}
+
+.canvasSaveStatus i {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.canvasWorkspace {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.canvasViewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background-color: var(--canvas-board-bg);
+  background-image:
+    linear-gradient(var(--canvas-grid-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--canvas-grid-major) 1px, transparent 1px),
+    linear-gradient(var(--canvas-grid-minor) 1px, transparent 1px),
+    linear-gradient(90deg, var(--canvas-grid-minor) 1px, transparent 1px);
+  background-position: 0 0, 0 0, 0 0, 0 0;
+  background-size: 112px 112px, 112px 112px, 28px 28px, 28px 28px;
+  cursor: grab;
+}
+
+.canvasViewport:active {
+  cursor: grabbing;
+}
+
+.canvasWorld {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+
+.canvasEdgeLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvasEdge path {
+  fill: none;
+  stroke: color-mix(in srgb, var(--accent) 68%, var(--text-secondary));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+  pointer-events: stroke;
+}
+
+.canvasEdge text {
+  fill: var(--text-secondary);
+  font-size: 13px;
+  paint-order: stroke;
+  stroke: var(--canvas-board-bg);
+  stroke-width: 4px;
+}
+
+.canvasEdge.isSelected path {
+  stroke: var(--accent-strong);
+  stroke-width: 4;
+}
+
+.canvasEdge.isDashed .canvasEdgeLine {
+  stroke-dasharray: 10 8;
+}
+
+.canvasNode {
+  position: absolute;
+  display: flex;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 72%, transparent);
+  border-radius: 6px;
+  color: var(--canvas-node-text);
+  box-shadow: 0 12px 30px var(--canvas-shadow);
+  cursor: move;
+}
+
+.canvasTextNode {
+  flex-direction: column;
+  padding: 12px;
+  background: var(--canvas-node-bg);
+}
+
+.canvasTextNode textarea {
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--canvas-node-text) !important;
+  -webkit-text-fill-color: var(--canvas-node-text);
+  font-family: var(--canvas-node-font-family, var(--ui-font-family));
+  font-size: 14px;
+  line-height: 1.55;
+  opacity: 1;
+  overflow: auto;
+  overflow-wrap: break-word;
+  text-align: start;
+  text-orientation: mixed;
+  writing-mode: var(--canvas-node-writing-mode, horizontal-tb);
+}
+
+.canvasTextNode.isVerticalWriting textarea {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.canvasGroupNode {
+  z-index: 0;
+  align-items: flex-start;
+  padding: 10px;
+  border: 1px dashed var(--canvas-group-border);
+  background: var(--canvas-group-bg);
+  box-shadow: none;
+}
+
+.canvasGroupNode input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--canvas-group-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.canvasTextNode {
+  z-index: 2;
+}
+
+.canvasReferenceNode {
+  z-index: 2;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 6px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--bg-panel-strong) 92%, var(--accent-soft));
+}
+
+.canvasReferenceNode header,
+.canvasReferenceNode footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.canvasReferenceNode header span {
+  color: var(--accent-strong);
+}
+
+.canvasReferenceNode header i {
+  font-style: normal;
+  opacity: 0.72;
+}
+
+.canvasReferenceTitle,
+.canvasReferenceNode footer span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.canvasReferenceTitle {
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.canvasReferenceNode footer span:first-child {
+  white-space: nowrap;
+}
+
+.canvasReferenceNode footer span:last-child {
+  flex: 0 0 auto;
+}
+
+.canvasReferencePreview {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 68%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--bg-panel) 88%, var(--bg-root));
+  cursor: auto;
+}
+
+.canvasReferencePreview .referenceTextPreview {
+  padding: 10px;
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.canvasReferencePreview .referenceImageScroller,
+.canvasReferencePreview .referencePdfScroller {
+  padding: 8px;
+}
+
+.canvasReferencePreview .referencePlaceholder,
+.canvasReferencePreview .referenceError {
+  display: grid;
+  height: 100%;
+  min-height: 96px;
+  place-items: center;
+  padding: 12px;
+  text-align: center;
+}
+
+.canvasReferencePreview .referenceMarkdown h3 {
+  font-size: 13px;
+}
+
+.canvasReferencePreview .referenceMarkdown h4,
+.canvasReferencePreview .referenceMarkdown h5,
+.canvasReferencePreview .referenceMarkdown h6,
+.canvasReferencePreview .referenceMarkdown p {
+  font-size: 12px;
+}
+
+.canvasNode.canvasGroupNode.isSelected {
+  border-color: var(--accent-strong);
+  background: var(--canvas-group-bg);
+  box-shadow:
+    inset 0 0 0 1px var(--accent-strong),
+    0 14px 36px color-mix(in srgb, var(--canvas-shadow) 62%, transparent);
+}
+
+.canvasNode.isInSelectedGroup {
+  border-color: color-mix(in srgb, var(--accent-strong) 52%, var(--border-strong));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent),
+    0 12px 30px var(--canvas-shadow);
+}
+
+.canvasNode.isSelected {
+  border-color: var(--accent-strong);
+  background: var(--canvas-node-bg-active);
+  box-shadow:
+    0 0 0 3px var(--canvas-focus-ring),
+    0 14px 34px var(--canvas-shadow);
+}
+
+.canvasNode.isEdgeSource {
+  border-color: var(--success);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--success) 30%, transparent),
+    0 14px 34px var(--canvas-shadow);
+}
+
+.canvasOriginButton {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 3;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--accent-border) 72%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent-soft) 82%, var(--bg-panel));
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.canvasResizeHandle {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 14px;
+  height: 14px;
+  border-right: 2px solid color-mix(in srgb, var(--text-primary) 58%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--text-primary) 58%, transparent);
+  cursor: nwse-resize;
+}
+
+.canvasEmptyHint {
+  position: absolute;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--canvas-node-bg);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.canvasInspector {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-left: 1px solid var(--canvas-toolbar-border);
+  background: var(--canvas-inspector-bg);
+  color: var(--text-primary);
+  overflow: auto;
+}
+
+.canvasInspectorSection {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 72%, transparent);
+  border-radius: 8px;
+  background: var(--canvas-inspector-section);
+}
+
+.canvasInspectorEyebrow {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.canvasInspectorField span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.canvasInspectorField {
+  display: grid;
+  gap: 6px;
+}
+
+.canvasPrimaryAction,
+.canvasWideAction {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.canvasPrimaryAction {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--selection-text);
+  padding: 0 10px;
+}
+
+.canvasPrimaryAction:hover {
+  background: color-mix(in srgb, var(--accent) 84%, var(--text-primary));
+}
+
+.canvasPrimaryAction:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.canvasWideAction {
+  width: 100%;
+}
+
+.canvasSendPanel p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.canvasSendPanel select {
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 1120px) {
+  .canvasToolGroup button span,
+  .canvasPrimaryAction span {
+    display: none;
+  }
+
+  .canvasWorkspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.canvasModalBackdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, #000 28%, transparent);
+}
+
+.canvasRenameModal {
+  display: grid;
+  width: min(420px, calc(100vw - 40px));
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: 8px;
+  background: var(--canvas-inspector-bg);
+  box-shadow: 0 22px 60px var(--canvas-shadow);
+  color: var(--text-primary);
+}
+
+.canvasRenameModal header,
+.canvasRenameModal footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.canvasRenameModal h2 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.canvasRenameModal label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.canvasRenameModal input {
+  height: 36px;
+  min-width: 0;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-root));
+  color: var(--text-primary);
+  outline: none;
+  padding: 0 10px;
+}
+
+.canvasRenameModal button {
+  min-width: 72px;
+  height: 32px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: 5px;
+  background: var(--canvas-toolbar-control);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.canvasRenameModal header button {
+  min-width: 32px;
+  font-size: 18px;
+}
+
+.canvasRenameModal button[type="submit"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--selection-text);
+}
+
+.ideaFragment.isFocusedOrigin {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 2px rgba(140, 201, 238, 0.22);
 }
 
 .exportEmptyState,

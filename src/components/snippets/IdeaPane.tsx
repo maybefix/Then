@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent, KeyboardEvent } from "react";
-import type { IdeaThread } from "../../types";
+import type { IdeaOriginRef, IdeaThread } from "../../types";
 
 type IdeaFilter = "all" | "unused" | "starred";
 
@@ -8,6 +8,11 @@ type IdeaPaneProps = {
   threads: IdeaThread[];
   /** ドラッグ中の断片 ID（見た目用）。 */
   draggingId: string | null;
+  focusRequest?: {
+    threadId: string;
+    fragmentId?: string;
+    nonce: number;
+  } | null;
   onCapture: (body: string, destId: string) => void;
   /** 新規スレッドを作成し、その ID を返す。 */
   onCreateThread: () => string;
@@ -27,6 +32,9 @@ type IdeaPaneProps = {
   ) => void;
   onInsertFragment: (threadId: string, fragmentId: string) => void;
   onInsertThread: (threadId: string) => void;
+  onSendFragmentToCanvas?: (threadId: string, fragmentId: string) => void;
+  onSendThreadToCanvas?: (threadId: string) => void;
+  onOpenCanvasOrigin?: (origin: IdeaOriginRef) => void;
   onFragmentDragStart: (
     event: DragEvent<HTMLElement>,
     threadId: string,
@@ -106,6 +114,32 @@ function CheckIcon() {
   );
 }
 
+function CanvasSendIcon() {
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+      <rect x="4" y="5" width="7" height="6" rx="1.5" />
+      <rect x="13" y="13" width="7" height="6" rx="1.5" />
+      <path d="M11 8h3.5A2.5 2.5 0 0 1 17 10.5V13" />
+      <path d="M13 16H9.5A2.5 2.5 0 0 1 7 13.5V11" />
+      <path d="M4 18h5" />
+      <path d="m7 15 3 3-3 3" />
+    </svg>
+  );
+}
+
+function CanvasOriginIcon() {
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+      <rect x="4" y="5" width="7" height="6" rx="1.5" />
+      <rect x="13" y="13" width="7" height="6" rx="1.5" />
+      <path d="M11 8h3.5A2.5 2.5 0 0 1 17 10.5V13" />
+      <path d="M13 16H9.5A2.5 2.5 0 0 1 7 13.5V11" />
+      <path d="M20 6h-5" />
+      <path d="m17 3-3 3 3 3" />
+    </svg>
+  );
+}
+
 function TrashIcon() {
   return (
     <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
@@ -132,6 +166,7 @@ function GripIcon() {
 export function IdeaPane({
   threads,
   draggingId,
+  focusRequest,
   onCapture,
   onCreateThread,
   onRenameThread,
@@ -145,6 +180,9 @@ export function IdeaPane({
   onReorderFragment,
   onInsertFragment,
   onInsertThread,
+  onSendFragmentToCanvas,
+  onSendThreadToCanvas,
+  onOpenCanvasOrigin,
   onFragmentDragStart,
   onFragmentDragEnd,
 }: IdeaPaneProps) {
@@ -158,13 +196,16 @@ export function IdeaPane({
   const [destId, setDestId] = useState<string>(inboxId);
   const [captureText, setCaptureText] = useState("");
   const [fragmentText, setFragmentText] = useState("");
+  const [focusedFragmentId, setFocusedFragmentId] = useState<string | null>(null);
 
   const composingRef = useRef(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const fragmentListRef = useRef<HTMLDivElement>(null);
   const focusTitleRef = useRef(false);
   const fragmentDragSourceRef = useRef<{ threadId: string; fragmentId: string } | null>(null);
   const lastReorderRef = useRef<string | null>(null);
+  const lastFocusNonceRef = useRef<number | null>(null);
   const [reorderTarget, setReorderTarget] = useState<{
     fragmentId: string;
     position: "before" | "after";
@@ -199,6 +240,49 @@ export function IdeaPane({
       titleInputRef.current.select();
     }
   }, [view, selectedId]);
+
+  useEffect(() => {
+    if (stageRef.current) {
+      stageRef.current.scrollLeft = 0;
+    }
+  }, [view, selectedId]);
+
+  useEffect(() => {
+    if (!focusRequest || lastFocusNonceRef.current === focusRequest.nonce) return;
+    lastFocusNonceRef.current = focusRequest.nonce;
+    setSelectedId(focusRequest.threadId);
+    setView("detail");
+    setFocusedFragmentId(focusRequest.fragmentId ?? null);
+  }, [focusRequest]);
+
+  useEffect(() => {
+    if (!focusedFragmentId) return;
+    const frame = requestAnimationFrame(() => {
+      const selector = `[data-idea-fragment-id="${CSS.escape(focusedFragmentId)}"]`;
+      const list = fragmentListRef.current;
+      const target = list?.querySelector<HTMLElement>(selector);
+      if (stageRef.current) {
+        stageRef.current.scrollLeft = 0;
+      }
+      if (list && target) {
+        const listRect = list.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        const targetCenter = targetRect.top - listRect.top + list.scrollTop + targetRect.height / 2;
+        list.scrollTo({
+          top: Math.max(0, targetCenter - list.clientHeight / 2),
+          behavior: "smooth",
+        });
+      }
+      if (stageRef.current) {
+        stageRef.current.scrollLeft = 0;
+      }
+    });
+    const timer = window.setTimeout(() => setFocusedFragmentId(null), 2200);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [focusedFragmentId, selectedId]);
 
   const visibleThreads = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -315,7 +399,7 @@ export function IdeaPane({
 
   return (
     <section className="ideaPane" aria-label="Idea">
-      <div className="ideaStage">
+      <div className="ideaStage" ref={stageRef}>
         <div className={`ideaTrack ${view === "detail" ? "showDetail" : ""}`}>
           {/* ① 一覧ビュー */}
           <section className="ideaView" aria-label="スレッド一覧">
@@ -464,6 +548,17 @@ export function IdeaPane({
                       >
                         <InsertAllIcon />
                       </button>
+                      {onSendThreadToCanvas && (
+                        <button
+                          className="ideaIconBtn"
+                          type="button"
+                          aria-label="スレッドを Canvas へ送る"
+                          title="スレッドを Canvas へ送る"
+                          onClick={() => onSendThreadToCanvas(selected.id)}
+                        >
+                          <CanvasSendIcon />
+                        </button>
+                      )}
                       {selected.kind !== "inbox" && (
                         <button
                           className="ideaIconBtn"
@@ -544,10 +639,13 @@ export function IdeaPane({
                         className={`ideaFragment ${fragment.used ? "isUsed" : ""} ${
                           draggingId === fragment.id ? "isDragging" : ""
                         } ${
+                          focusedFragmentId === fragment.id ? "isFocusedOrigin" : ""
+                        } ${
                           reorderTarget?.fragmentId === fragment.id
                             ? `isReorderTarget isReorder${reorderTarget.position}`
                             : ""
                         }`}
+                        data-idea-fragment-id={fragment.id}
                         onDragOver={(event) =>
                           handleFragmentDragOver(event, selected.id, fragment.id)
                         }
@@ -613,6 +711,28 @@ export function IdeaPane({
                               >
                                 <SendIcon />
                               </button>
+                              {onSendFragmentToCanvas && (
+                                <button
+                                  className="ideaMiniIcon"
+                                  type="button"
+                                  aria-label="Canvas へ送る"
+                                  title="Canvas へ送る"
+                                  onClick={() => onSendFragmentToCanvas(selected.id, fragment.id)}
+                                >
+                                  <CanvasSendIcon />
+                                </button>
+                              )}
+                              {fragment.originRef && onOpenCanvasOrigin && (
+                                <button
+                                  className="ideaMiniIcon"
+                                  type="button"
+                                  aria-label="元 Canvas を開く"
+                                  title="元 Canvas を開く"
+                                  onClick={() => onOpenCanvasOrigin(fragment.originRef!)}
+                                >
+                                  <CanvasOriginIcon />
+                                </button>
+                              )}
                               <button
                                 className={`ideaMiniIcon ${fragment.used ? "isOn" : ""}`}
                                 type="button"

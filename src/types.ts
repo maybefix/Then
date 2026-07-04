@@ -14,6 +14,16 @@ export type Snippet = {
 };
 
 /** スレッド内の1断片（メモの最小単位）。 */
+export type CanvasScope = "project" | "global";
+
+export type IdeaOriginRef = {
+  source: "canvas";
+  sourceId: string;
+  sourceBoardId: string;
+  sourceBoardScope: CanvasScope;
+  copiedAt: number;
+};
+
 export type IdeaFragment = {
   id: string;
   body: string;
@@ -21,6 +31,7 @@ export type IdeaFragment = {
   used: boolean;
   createdAt: number;
   updatedAt: number;
+  originRef?: IdeaOriginRef;
 };
 
 export type IdeaThreadKind = "inbox" | "thread";
@@ -154,6 +165,9 @@ export type SidebarMode = "tree" | "navigator";
 /** 本文エディタの書字方向。 */
 export type WritingMode = "vertical-rl" | "horizontal-tb";
 
+/** Canvas の text node に適用するフォント種別。 */
+export type CanvasNodeFontSource = "ui" | "editor";
+
 /** ファイルごとの進捗ラベル。デフォルトは "todo"（未着手）。 */
 export type FileProgressStatus = "todo" | "writing" | "revising" | "done";
 
@@ -200,6 +214,10 @@ export type EditorSettings = {
   countWhitespace: boolean;
   /** チェックポイントセクションを折りたたんで表示するか。 */
   checkpointSectionCollapsed: boolean;
+  /** Canvas text node の既定書字方向。 */
+  canvasDefaultWritingMode: WritingMode;
+  /** Canvas text node の既定フォント種別。 */
+  canvasDefaultFontSource: CanvasNodeFontSource;
 };
 
 /**

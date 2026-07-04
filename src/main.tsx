@@ -2,8 +2,29 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import CanvasWindowApp from "./CanvasWindowApp";
 import ExportWindowApp from "./ExportWindowApp";
 import "./App.css";
+
+function installWebviewNativeShortcutGuards(): void {
+  window.addEventListener(
+    "contextmenu",
+    (event) => {
+      event.preventDefault();
+    },
+    { capture: true },
+  );
+  window.addEventListener(
+    "keydown",
+    (event) => {
+      const mod = event.ctrlKey || event.metaKey;
+      if (mod && !event.altKey && (event.key === "f" || event.key === "F")) {
+        event.preventDefault();
+      }
+    },
+    { capture: true },
+  );
+}
 
 // The dedicated export window loads plain index.html (a "?view=export" query is
 // dropped by Tauri's WebviewUrl::App path resolution), so it is identified by
@@ -21,10 +42,25 @@ function detectExportWindow(): boolean {
   return false;
 }
 
+function detectCanvasWindow(): boolean {
+  if (new URLSearchParams(window.location.search).get("view") === "canvas") return true;
+  try {
+    if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
+      return getCurrentWebviewWindow().label === "idea-canvas";
+    }
+  } catch {
+    // not running inside a Tauri webview
+  }
+  return false;
+}
+
 const isExportWindow = detectExportWindow();
+const isCanvasWindow = detectCanvasWindow();
+
+installWebviewNativeShortcutGuards();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    {isExportWindow ? <ExportWindowApp /> : <App />}
+    {isCanvasWindow ? <CanvasWindowApp /> : isExportWindow ? <ExportWindowApp /> : <App />}
   </React.StrictMode>,
 );

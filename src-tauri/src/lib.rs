@@ -40,6 +40,9 @@ struct ExportResult {
 #[derive(Default)]
 struct ExportWindowState(Mutex<Option<serde_json::Value>>);
 
+#[derive(Default)]
+struct CanvasWindowState(Mutex<Option<serde_json::Value>>);
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HeadingMoveDocuments {
@@ -60,6 +63,17 @@ struct ProjectEntry {
     name: String,
     kind: String,
     children: Vec<ProjectEntry>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MoveProjectEntryResult {
+    project_folder: ProjectFolder,
+    moved_document: Option<TextDocument>,
+    old_path: String,
+    new_path: String,
+    old_parent_path: String,
+    new_parent_path: String,
 }
 
 #[derive(Default, Deserialize, Serialize)]
@@ -103,6 +117,8 @@ struct IdeaFragmentConfig {
     created_at: i64,
     #[serde(default)]
     updated_at: i64,
+    #[serde(default, rename = "originRef", skip_serializing_if = "Option::is_none")]
+    origin_ref: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -149,6 +165,7 @@ fn migrate_snippets_to_threads(snippets: &[SnippetConfig]) -> Vec<IdeaThreadConf
                 used: false,
                 created_at: now,
                 updated_at: now,
+                origin_ref: None,
             })
         })
         .collect();
@@ -224,16 +241,84 @@ struct ReferenceLayoutConfig {
     recent: Vec<ReferenceFileInfo>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CanvasBoardSummary {
+    id: String,
+    name: String,
+    path: String,
+    scope: String,
+    updated_at: i64,
+    node_count: usize,
+    edge_count: usize,
+}
+
 fn debug_log(message: &str) {
     eprintln!("[folder-debug] {message}");
 }
+
+const LINKED_CHILD_WINDOW_LABELS: &[&str] = &["linked-export", "linked-export-viewer", "idea-canvas"];
+
+const DISABLE_NATIVE_WEBVIEW_UI_SCRIPT: &str = r#"(function(){
+  window.addEventListener('contextmenu', function(event){ event.preventDefault(); }, true);
+  window.addEventListener('keydown', function(event){
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && String(event.key).toLowerCase() === 'f') {
+      event.preventDefault();
+    }
+  }, true);
+})();"#;
+
+fn close_linked_child_windows(app: &tauri::AppHandle) {
+    for label in LINKED_CHILD_WINDOW_LABELS {
+        if let Some(window) = app.get_webview_window(label) {
+            let _ = window.close();
+        }
+    }
+}
+
+#[cfg(windows)]
+fn disable_webview_native_ui(webview: &tauri::WebviewWindow) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings3;
+    use windows::core::Interface;
+
+    let _ = webview.with_webview(|platform_webview| {
+        unsafe {
+            if let Ok(settings) = platform_webview
+                .controller()
+                .CoreWebView2()
+                .and_then(|core| core.Settings())
+            {
+                let _ = settings.SetAreDefaultContextMenusEnabled(false);
+                if let Ok(settings3) = settings.cast::<ICoreWebView2Settings3>() {
+                    let _ = settings3.SetAreBrowserAcceleratorKeysEnabled(false);
+                }
+            }
+        }
+    });
+}
+
+#[cfg(not(windows))]
+fn disable_webview_native_ui(_webview: &tauri::WebviewWindow) {}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(ExportWindowState::default())
+        .manage(CanvasWindowState::default())
         .manage(ViewerExportState::default())
+        .setup(|app| {
+            if let Some(main_window) = app.get_webview_window("main") {
+                disable_webview_native_ui(&main_window);
+                let app_handle = app.handle().clone();
+                main_window.on_window_event(move |event| {
+                    if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                        close_linked_child_windows(&app_handle);
+                    }
+                });
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             load_app_state,
             save_app_state,
@@ -250,6 +335,8 @@ pub fn run() {
             viewer_render_done,
             open_export_window,
             get_export_window_payload,
+            open_canvas_window,
+            get_canvas_window_payload,
             open_export_location,
             focus_source_in_main,
             close_export_window,
@@ -267,6 +354,7 @@ pub fn run() {
             create_project_folder,
             rename_project_entry,
             delete_project_entry,
+            move_project_entry,
             reorder_project_entries,
             load_project_snippets,
             save_project_snippets,
@@ -280,7 +368,11 @@ pub fn run() {
             delete_imported_reference,
             read_reference_text,
             save_reference_text,
-            read_reference_binary
+            read_reference_binary,
+            list_canvas_boards,
+            create_canvas_board,
+            load_canvas_board,
+            save_canvas_board
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -400,6 +492,7 @@ async fn open_export_window(
     .inner_size(1240.0, 820.0)
     .min_inner_size(720.0, 560.0)
     .center()
+    .initialization_script(DISABLE_NATIVE_WEBVIEW_UI_SCRIPT)
     // The WebView2 drag-and-drop handler must be disabled here, exactly as the
     // main window does via "dragDropEnabled": false in tauri.conf.json. With the
     // default handler enabled, this second webview freezes on Windows: it stays
@@ -407,6 +500,10 @@ async fn open_export_window(
     // closed.
     .disable_drag_drop_handler()
     .build()
+    .map(|window| {
+        disable_webview_native_ui(&window);
+        window
+    })
     .map_err(|error| format!("エクスポート画面を開けませんでした: {error}"))?;
     Ok(())
 }
@@ -419,6 +516,61 @@ fn get_export_window_payload(
         .0
         .lock()
         .map_err(|_| "エクスポート画面の状態を取得できませんでした".to_string())
+        .map(|payload| payload.clone())
+}
+
+#[tauri::command]
+async fn open_canvas_window(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, CanvasWindowState>,
+    payload: serde_json::Value,
+) -> Result<(), String> {
+    *state
+        .0
+        .lock()
+        .map_err(|_| "Canvas画面の状態を更新できませんでした".to_string())? = Some(payload.clone());
+
+    if let Some(window) = app.get_webview_window("idea-canvas") {
+        window
+            .emit("then-canvas-payload", payload)
+            .map_err(|error| format!("Canvas画面を更新できませんでした: {error}"))?;
+        window
+            .show()
+            .map_err(|error| format!("Canvas画面を表示できませんでした: {error}"))?;
+        window
+            .set_focus()
+            .map_err(|error| format!("Canvas画面を前面に移動できませんでした: {error}"))?;
+        return Ok(());
+    }
+
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        "idea-canvas",
+        tauri::WebviewUrl::App("index.html".into()),
+    )
+    .title("Then - Idea Board")
+    .inner_size(1180.0, 780.0)
+    .min_inner_size(820.0, 560.0)
+    .center()
+    .initialization_script(DISABLE_NATIVE_WEBVIEW_UI_SCRIPT)
+    .disable_drag_drop_handler()
+    .build()
+    .map(|window| {
+        disable_webview_native_ui(&window);
+        window
+    })
+    .map_err(|error| format!("Canvas画面を開けませんでした: {error}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn get_canvas_window_payload(
+    state: tauri::State<'_, CanvasWindowState>,
+) -> Result<Option<serde_json::Value>, String> {
+    state
+        .0
+        .lock()
+        .map_err(|_| "Canvas画面の状態を取得できませんでした".to_string())
         .map(|payload| payload.clone())
 }
 
@@ -602,12 +754,15 @@ async fn print_webview_to_pdf(
                         let handler = PrintToPdfCompletedHandler::create(Box::new(
                             move |error, succeeded| {
                                 let outcome = error
-                                    .map_err(|error| format!("WebView2 PDF出力に失敗しました: {error}"))
+                                    .map_err(|error| {
+                                        format!("WebView2 PDF出力に失敗しました: {error}")
+                                    })
                                     .and_then(|_| {
                                         if succeeded {
                                             Ok(())
                                         } else {
-                                            Err("WebView2がPDF出力を完了できませんでした".to_string())
+                                            Err("WebView2がPDF出力を完了できませんでした"
+                                                .to_string())
                                         }
                                     });
                                 let _ = callback_sender.send(outcome);
@@ -619,7 +774,9 @@ async fn print_webview_to_pdf(
             };
 
             if let Err(error) = print_result {
-                let _ = sender.send(Err(format!("WebView2 PDF出力を開始できませんでした: {error}")));
+                let _ = sender.send(Err(format!(
+                    "WebView2 PDF出力を開始できませんでした: {error}"
+                )));
             }
         })
         .map_err(|error| format!("WebView2へ接続できませんでした: {error}"))?;
@@ -756,6 +913,10 @@ async fn export_pdf_vivliostyle(
         .disable_drag_drop_handler()
         .initialization_script(VIEWER_INIT_SCRIPT)
         .build()
+        .map(|window| {
+            disable_webview_native_ui(&window);
+            window
+        })
         .map_err(|error| format!("Vivliostyleビューアを開けませんでした: {error}"))?;
 
         let render = tauri::async_runtime::spawn_blocking(move || {
@@ -772,8 +933,8 @@ async fn export_pdf_vivliostyle(
             *guard = None;
         }
 
-        let render = render
-            .map_err(|error| format!("Vivliostyle組版がタイムアウトしました: {error}"))?;
+        let render =
+            render.map_err(|error| format!("Vivliostyle組版がタイムアウトしました: {error}"))?;
         if let Err(message) = render {
             let _ = viewer.close();
             return Err(message);
@@ -821,9 +982,14 @@ async fn export_pdf(
         || !page_height_mm.is_finite()
         || !(20.0..=2_000.0).contains(&page_width_mm)
         || !(20.0..=2_000.0).contains(&page_height_mm)
-        || [margin_top_mm, margin_right_mm, margin_bottom_mm, margin_left_mm]
-            .iter()
-            .any(|margin| !margin.is_finite() || *margin < 0.0)
+        || [
+            margin_top_mm,
+            margin_right_mm,
+            margin_bottom_mm,
+            margin_left_mm,
+        ]
+        .iter()
+        .any(|margin| !margin.is_finite() || *margin < 0.0)
         || margin_left_mm + margin_right_mm >= page_width_mm
         || margin_top_mm + margin_bottom_mm >= page_height_mm
     {
@@ -904,11 +1070,7 @@ fn save_heading_move(
 }
 
 #[tauri::command]
-fn log_heading_dnd(
-    stage: String,
-    details: serde_json::Value,
-    reset: bool,
-) -> Result<(), String> {
+fn log_heading_dnd(stage: String, details: serde_json::Value, reset: bool) -> Result<(), String> {
     let path = std::env::temp_dir().join("then-heading-dnd.log");
     let mut options = std::fs::OpenOptions::new();
     options.create(true).write(true);
@@ -937,10 +1099,15 @@ fn open_project_folder_dialog(app: tauri::AppHandle) -> Result<Option<ProjectFol
         debug_log("after blocking_pick_folder selected_path=None");
         return Ok(None);
     };
-    debug_log(&format!("after blocking_pick_folder selected_path={path:?}"));
+    debug_log(&format!(
+        "after blocking_pick_folder selected_path={path:?}"
+    ));
 
     let path = dialog_path_to_path_buf(path)?;
-    debug_log(&format!("before list_project_folder path={}", path.display()));
+    debug_log(&format!(
+        "before list_project_folder path={}",
+        path.display()
+    ));
     let folder = list_project_folder(&path)?;
     debug_log(&format!(
         "after list_project_folder path={} children={}",
@@ -1029,7 +1196,8 @@ fn rename_project_entry(path: String, name: String) -> Result<TextDocument, Stri
         return Err("entry with that name already exists".to_string());
     }
 
-    std::fs::rename(&path, &next_path).map_err(|error| format!("failed to rename entry: {error}"))?;
+    std::fs::rename(&path, &next_path)
+        .map_err(|error| format!("failed to rename entry: {error}"))?;
     update_project_config_after_rename(&path, &next_path)?;
 
     if next_path.is_file() {
@@ -1056,11 +1224,115 @@ fn delete_project_entry(path: String) -> Result<(), String> {
     }
 
     if path.is_dir() {
-        return std::fs::remove_dir(&path)
-            .map_err(|error| format!("failed to delete folder; only empty folders can be deleted: {error}"));
+        return std::fs::remove_dir(&path).map_err(|error| {
+            format!("failed to delete folder; only empty folders can be deleted: {error}")
+        });
     }
 
     Err("entry does not exist".to_string())
+}
+
+#[tauri::command]
+fn move_project_entry(
+    root_path: String,
+    source_path: String,
+    target_folder_path: String,
+) -> Result<MoveProjectEntryResult, String> {
+    let root = PathBuf::from(root_path);
+    let source = PathBuf::from(source_path);
+    let target_folder = PathBuf::from(target_folder_path);
+
+    if !root.is_dir() {
+        return Err("project root does not exist".to_string());
+    }
+    if !source.exists() {
+        return Err("entry does not exist".to_string());
+    }
+    if !target_folder.is_dir() {
+        return Err("target folder does not exist".to_string());
+    }
+    if source.is_file() && !is_supported_text_extension(&source) {
+        return Err("only text files can be moved in the project tree".to_string());
+    }
+
+    let root_canonical = root
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve project root: {error}"))?;
+    let source_canonical = source
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve entry path: {error}"))?;
+    let target_canonical = target_folder
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve target folder: {error}"))?;
+
+    if !source_canonical.starts_with(&root_canonical)
+        || !target_canonical.starts_with(&root_canonical)
+    {
+        return Err("entry move must stay inside the project root".to_string());
+    }
+    if source_canonical == root_canonical {
+        return Err("project root cannot be moved".to_string());
+    }
+
+    let old_parent = source
+        .parent()
+        .ok_or_else(|| "entry parent does not exist".to_string())?
+        .to_path_buf();
+    let old_parent_canonical = old_parent
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve entry parent: {error}"))?;
+    if old_parent_canonical == target_canonical {
+        return Err("entry is already in that folder".to_string());
+    }
+
+    let file_name = source
+        .file_name()
+        .ok_or_else(|| "entry name does not exist".to_string())?;
+    let next_path = target_folder.join(file_name);
+    if next_path.exists() {
+        return Err("entry with that name already exists in target folder".to_string());
+    }
+
+    let source_is_dir = source.is_dir();
+    if source_is_dir && target_canonical.starts_with(&source_canonical) {
+        return Err("folder cannot be moved into itself or its descendants".to_string());
+    }
+
+    let config_updates = prepare_project_config_after_move(
+        &root,
+        &source,
+        &next_path,
+        &old_parent,
+        &target_folder,
+        source_is_dir,
+    )?;
+
+    std::fs::rename(&source, &next_path)
+        .map_err(|error| format!("failed to move entry: {error}"))?;
+    if let Err(config_error) = save_project_config(&root, &config_updates) {
+        return match std::fs::rename(&next_path, &source) {
+            Ok(()) => Err(format!("failed to update project config after move: {config_error}")),
+            Err(rollback_error) => Err(format!(
+                "failed to update project config after move and rollback failed: {config_error}; {rollback_error}"
+            )),
+        };
+    }
+
+    let moved_document = if next_path.is_file() {
+        Some(read_text_document(&next_path)?)
+    } else {
+        None
+    };
+    let project_folder = list_project_folder(&root)?;
+
+    Ok(MoveProjectEntryResult {
+        project_folder,
+        moved_document,
+        old_path: source.to_string_lossy().to_string(),
+        new_path: next_path.to_string_lossy().to_string(),
+        old_parent_path: old_parent.to_string_lossy().to_string(),
+        new_parent_path: target_folder.to_string_lossy().to_string(),
+    })
 }
 
 #[tauri::command]
@@ -1184,16 +1456,114 @@ fn load_reference_layout(root_path: String) -> Result<ReferenceLayoutConfig, Str
 }
 
 #[tauri::command]
-fn save_reference_layout(
-    root_path: String,
-    layout: ReferenceLayoutConfig,
-) -> Result<(), String> {
+fn save_reference_layout(root_path: String, layout: ReferenceLayoutConfig) -> Result<(), String> {
     let root = PathBuf::from(root_path);
     if !root.is_dir() {
         return Err("project root does not exist".to_string());
     }
 
     save_reference_layout_file(&root, &layout)
+}
+
+#[tauri::command]
+fn list_canvas_boards(
+    app: tauri::AppHandle,
+    scope: String,
+    root_path: Option<String>,
+) -> Result<Vec<CanvasBoardSummary>, String> {
+    let dir = canvas_boards_dir(&app, &scope, root_path)?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|error| format!("failed to create canvas board directory: {error}"))?;
+
+    let mut boards = Vec::new();
+    for entry in std::fs::read_dir(&dir)
+        .map_err(|error| format!("failed to read canvas board directory: {error}"))?
+    {
+        let entry = entry.map_err(|error| format!("failed to read canvas board entry: {error}"))?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        if path
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|extension| extension.eq_ignore_ascii_case("canvas"))
+            != Some(true)
+        {
+            continue;
+        }
+        boards.push(canvas_board_summary(&path, &scope)?);
+    }
+
+    boards.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+    Ok(boards)
+}
+
+#[tauri::command]
+fn create_canvas_board(
+    app: tauri::AppHandle,
+    scope: String,
+    root_path: Option<String>,
+    name: String,
+) -> Result<CanvasBoardSummary, String> {
+    let dir = canvas_boards_dir(&app, &scope, root_path)?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|error| format!("failed to create canvas board directory: {error}"))?;
+
+    let label = if name.trim().is_empty() {
+        "Idea Board".to_string()
+    } else {
+        name.trim().to_string()
+    };
+    let path = unique_canvas_board_path(&dir, &label);
+    let now = now_millis();
+    let board = serde_json::json!({
+        "nodes": [],
+        "edges": [],
+        "then": {
+            "version": 1,
+            "name": label,
+            "scope": scope,
+            "createdAt": now,
+            "updatedAt": now
+        }
+    });
+    write_canvas_board_file(&path, &board)?;
+    canvas_board_summary(&path, &scope)
+}
+
+#[tauri::command]
+fn load_canvas_board(
+    app: tauri::AppHandle,
+    scope: String,
+    root_path: Option<String>,
+    board_id: String,
+) -> Result<serde_json::Value, String> {
+    let dir = canvas_boards_dir(&app, &scope, root_path)?;
+    let path = canvas_board_path(&dir, &board_id)?;
+    if !path.exists() {
+        return Err("canvas board does not exist".to_string());
+    }
+
+    let content = std::fs::read_to_string(&path)
+        .map_err(|error| format!("failed to read canvas board: {error}"))?;
+    serde_json::from_str(&content).map_err(|error| format!("failed to parse canvas board: {error}"))
+}
+
+#[tauri::command]
+fn save_canvas_board(
+    app: tauri::AppHandle,
+    scope: String,
+    root_path: Option<String>,
+    board_id: String,
+    mut board: serde_json::Value,
+) -> Result<(), String> {
+    let dir = canvas_boards_dir(&app, &scope, root_path)?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|error| format!("failed to create canvas board directory: {error}"))?;
+    let path = canvas_board_path(&dir, &board_id)?;
+    stamp_canvas_board(&mut board, &scope)?;
+    write_canvas_board_file(&path, &board)
 }
 
 #[tauri::command]
@@ -1209,7 +1579,10 @@ fn pick_reference_file(
     let Some(path) = app
         .dialog()
         .file()
-        .add_filter("Reference", &["txt", "md", "png", "jpg", "jpeg", "webp", "pdf"])
+        .add_filter(
+            "Reference",
+            &["txt", "md", "png", "jpg", "jpeg", "webp", "pdf"],
+        )
         .blocking_pick_file()
     else {
         return Ok(None);
@@ -1225,7 +1598,10 @@ fn pick_reference_file(
 }
 
 #[tauri::command]
-fn create_reference_text_file(root_path: String, name: String) -> Result<ReferenceFileInfo, String> {
+fn create_reference_text_file(
+    root_path: String,
+    name: String,
+) -> Result<ReferenceFileInfo, String> {
     let root = PathBuf::from(root_path);
     if !root.is_dir() {
         return Err("project root does not exist".to_string());
@@ -1293,7 +1669,8 @@ fn read_reference_text(root_path: String, source_path: String) -> Result<String,
         return Err("reference is not a text file".to_string());
     }
 
-    std::fs::read_to_string(&path).map_err(|error| format!("failed to read reference text: {error}"))
+    std::fs::read_to_string(&path)
+        .map_err(|error| format!("failed to read reference text: {error}"))
 }
 
 #[tauri::command]
@@ -1308,7 +1685,10 @@ fn save_reference_text(root_path: String, source_path: String, text: String) -> 
 }
 
 #[tauri::command]
-fn read_reference_binary(root_path: String, source_path: String) -> Result<ReferenceBinary, String> {
+fn read_reference_binary(
+    root_path: String,
+    source_path: String,
+) -> Result<ReferenceBinary, String> {
     use base64::Engine;
 
     let root = PathBuf::from(root_path);
@@ -1480,6 +1860,10 @@ fn reference_layout_path(root: &Path) -> PathBuf {
         .join("default.json")
 }
 
+fn project_canvas_boards_dir(root: &Path) -> PathBuf {
+    root.join(".then").join("boards")
+}
+
 fn reference_imports_dir(root: &Path) -> PathBuf {
     root.join(".then").join("references").join("imports")
 }
@@ -1564,6 +1948,183 @@ fn save_reference_layout_file(root: &Path, layout: &ReferenceLayoutConfig) -> Re
         .map_err(|error| format!("failed to promote reference layout: {error}"))
 }
 
+fn canvas_boards_dir(
+    app: &tauri::AppHandle,
+    scope: &str,
+    root_path: Option<String>,
+) -> Result<PathBuf, String> {
+    match scope {
+        "project" => {
+            let root_path =
+                root_path.ok_or_else(|| "project canvas requires a project root".to_string())?;
+            let root = PathBuf::from(root_path);
+            if !root.is_dir() {
+                return Err("project root does not exist".to_string());
+            }
+            Ok(project_canvas_boards_dir(&root))
+        }
+        "global" => {
+            let dir = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| format!("failed to resolve app data directory: {error}"))?;
+            Ok(dir.join("boards"))
+        }
+        _ => Err("unknown canvas scope".to_string()),
+    }
+}
+
+fn sanitize_canvas_board_id(value: &str) -> String {
+    let mut id = String::new();
+    let mut last_dash = false;
+    for ch in value.trim().to_lowercase().chars() {
+        let normalized = if ch.is_alphanumeric() || ch == '_' {
+            Some(ch)
+        } else if ch.is_whitespace() || ch == '-' {
+            Some('-')
+        } else {
+            None
+        };
+        if let Some(next) = normalized {
+            if next == '-' {
+                if !last_dash && !id.is_empty() {
+                    id.push('-');
+                    last_dash = true;
+                }
+            } else {
+                id.push(next);
+                last_dash = false;
+            }
+        }
+    }
+    let trimmed = id.trim_matches('-').to_string();
+    if trimmed.is_empty() {
+        format!("idea-board-{}", now_millis())
+    } else {
+        trimmed
+    }
+}
+
+fn canvas_board_path(dir: &Path, board_id: &str) -> Result<PathBuf, String> {
+    let sanitized = sanitize_canvas_board_id(board_id);
+    if sanitized != board_id {
+        return Err("canvas board id is invalid".to_string());
+    }
+    Ok(dir.join(format!("{sanitized}.canvas")))
+}
+
+fn unique_canvas_board_path(dir: &Path, name: &str) -> PathBuf {
+    let base = sanitize_canvas_board_id(name);
+    let mut index = 1;
+    loop {
+        let id = if index == 1 {
+            base.clone()
+        } else {
+            format!("{base}-{index}")
+        };
+        let path = dir.join(format!("{id}.canvas"));
+        if !path.exists() {
+            return path;
+        }
+        index += 1;
+    }
+}
+
+fn canvas_board_summary(path: &Path, scope: &str) -> Result<CanvasBoardSummary, String> {
+    let id = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("idea-board")
+        .to_string();
+    let content = std::fs::read_to_string(path).unwrap_or_default();
+    let value: serde_json::Value = serde_json::from_str(&content).unwrap_or_default();
+    let name = value
+        .pointer("/then/name")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(id.as_str())
+        .to_string();
+    let updated_at = value
+        .pointer("/then/updatedAt")
+        .and_then(|value| value.as_i64())
+        .unwrap_or_else(|| {
+            path.metadata()
+                .and_then(|metadata| metadata.modified())
+                .ok()
+                .and_then(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|duration| duration.as_millis() as i64)
+                .unwrap_or(0)
+        });
+    let node_count = value
+        .get("nodes")
+        .and_then(|value| value.as_array())
+        .map(|items| items.len())
+        .unwrap_or(0);
+    let edge_count = value
+        .get("edges")
+        .and_then(|value| value.as_array())
+        .map(|items| items.len())
+        .unwrap_or(0);
+
+    Ok(CanvasBoardSummary {
+        id,
+        name,
+        path: path.to_string_lossy().to_string(),
+        scope: scope.to_string(),
+        updated_at,
+        node_count,
+        edge_count,
+    })
+}
+
+fn stamp_canvas_board(board: &mut serde_json::Value, scope: &str) -> Result<(), String> {
+    let object = board
+        .as_object_mut()
+        .ok_or_else(|| "canvas board must be a JSON object".to_string())?;
+    object
+        .entry("nodes")
+        .or_insert_with(|| serde_json::Value::Array(Vec::new()));
+    object
+        .entry("edges")
+        .or_insert_with(|| serde_json::Value::Array(Vec::new()));
+
+    let then = object
+        .entry("then")
+        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+    if !then.is_object() {
+        *then = serde_json::Value::Object(serde_json::Map::new());
+    }
+    let then_object = then
+        .as_object_mut()
+        .ok_or_else(|| "canvas board metadata is invalid".to_string())?;
+    then_object.insert("version".to_string(), serde_json::json!(1));
+    then_object.insert("scope".to_string(), serde_json::json!(scope));
+    then_object.insert("updatedAt".to_string(), serde_json::json!(now_millis()));
+    if !then_object
+        .get("name")
+        .and_then(|value| value.as_str())
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false)
+    {
+        then_object.insert("name".to_string(), serde_json::json!("Idea Board"));
+    }
+    if !then_object.contains_key("createdAt") {
+        then_object.insert("createdAt".to_string(), serde_json::json!(now_millis()));
+    }
+    Ok(())
+}
+
+fn write_canvas_board_file(path: &Path, board: &serde_json::Value) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| "canvas board directory does not exist".to_string())?;
+    std::fs::create_dir_all(parent)
+        .map_err(|error| format!("failed to create canvas board directory: {error}"))?;
+    let content = serde_json::to_string_pretty(board)
+        .map_err(|error| format!("failed to serialize canvas board: {error}"))?;
+    std::fs::write(path, content).map_err(|error| format!("failed to write canvas board: {error}"))
+}
+
 fn collect_reference_candidates(
     root: &Path,
     folder: &Path,
@@ -1574,7 +2135,10 @@ fn collect_reference_candidates(
     {
         let entry = entry.map_err(|error| format!("failed to read reference entry: {error}"))?;
         let path = entry.path();
-        let name = path.file_name().and_then(|value| value.to_str()).unwrap_or("");
+        let name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("");
 
         if name == ".then" || name == ".brew" {
             continue;
@@ -1816,6 +2380,73 @@ fn update_project_config_after_rename(old_path: &Path, new_path: &Path) -> Resul
     save_project_config(&root, &config)
 }
 
+fn project_entry_names_in_display_order(
+    root: &Path,
+    folder: &Path,
+    config: &ProjectConfig,
+) -> Result<Vec<String>, String> {
+    Ok(list_project_entries(root, folder, config)?
+        .into_iter()
+        .map(|entry| entry.name)
+        .collect())
+}
+
+fn prepare_project_config_after_move(
+    root: &Path,
+    old_path: &Path,
+    new_path: &Path,
+    old_parent: &Path,
+    new_parent: &Path,
+    source_is_dir: bool,
+) -> Result<ProjectConfig, String> {
+    let old_name = old_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "entry name is not valid unicode".to_string())?;
+    let new_name = new_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "entry name is not valid unicode".to_string())?;
+
+    let mut config = load_project_config(root)?;
+    let old_parent_order = project_entry_names_in_display_order(root, old_parent, &config)?
+        .into_iter()
+        .filter(|name| name != old_name)
+        .collect::<Vec<_>>();
+    let mut new_parent_order = project_entry_names_in_display_order(root, new_parent, &config)?
+        .into_iter()
+        .filter(|name| name != new_name)
+        .collect::<Vec<_>>();
+    new_parent_order.push(new_name.to_string());
+
+    if source_is_dir {
+        let old_key = project_order_key(root, old_path)?;
+        let new_key = project_order_key(root, new_path)?;
+        let old_prefix = format!("{old_key}/");
+        let new_prefix = format!("{new_key}/");
+        let mut next_order = BTreeMap::new();
+
+        for (key, value) in config.order {
+            let next_key = if key == old_key {
+                new_key.clone()
+            } else if key.starts_with(&old_prefix) {
+                format!("{}{}", new_prefix, &key[old_prefix.len()..])
+            } else {
+                key
+            };
+            next_order.insert(next_key, value);
+        }
+        config.order = next_order;
+    }
+
+    let old_parent_key = project_order_key(root, old_parent)?;
+    let new_parent_key = project_order_key(root, new_parent)?;
+    config.order.insert(old_parent_key, old_parent_order);
+    config.order.insert(new_parent_key, new_parent_order);
+
+    Ok(config)
+}
+
 fn find_project_root(start: &Path) -> Option<PathBuf> {
     let mut current = start;
     loop {
@@ -1983,7 +2614,7 @@ fn collect_windows_font_families(
 ) -> Result<(), String> {
     use windows::Win32::Foundation::LPARAM;
     use windows::Win32::Graphics::Gdi::{
-        CreateCompatibleDC, DeleteDC, EnumFontFamiliesExW, LOGFONTW, DEFAULT_CHARSET,
+        CreateCompatibleDC, DeleteDC, EnumFontFamiliesExW, DEFAULT_CHARSET, LOGFONTW,
     };
 
     unsafe extern "system" fn enum_font_family(
@@ -2036,7 +2667,10 @@ fn collect_windows_font_families(
 
 #[cfg(target_os = "windows")]
 fn wide_null_terminated_to_string(value: &[u16]) -> String {
-    let end = value.iter().position(|code_unit| *code_unit == 0).unwrap_or(value.len());
+    let end = value
+        .iter()
+        .position(|code_unit| *code_unit == 0)
+        .unwrap_or(value.len());
 
     String::from_utf16_lossy(&value[..end]).trim().to_string()
 }
