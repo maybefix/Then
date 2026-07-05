@@ -51,6 +51,7 @@ import {
   normalizeCanvasDocument,
   type CanvasBoardSummary,
   type CanvasCopyToIdeaRequest,
+  type CanvasCopyToPlotRequest,
   type CanvasFocusIdeaRequest,
   type CanvasNode,
   type CanvasScope,
@@ -60,6 +61,7 @@ import {
 import {
   appendPlotChapter,
   appendPlotSection,
+  renumberPlotCards,
   replacePlotReferencePath,
 } from "./components/plot/plotCardUtils";
 import { ReferenceLayer } from "./components/references/ReferenceLayer";
@@ -6437,9 +6439,44 @@ export default function App() {
       unlistenFocus = unlisten;
     });
 
+    let unlistenCopyToPlot: (() => void) | null = null;
+    void listen<CanvasCopyToPlotRequest>("then-canvas-copy-to-plot", (event) => {
+      const items = event.payload.items.filter((item) => item.text.trim().length > 0);
+      if (items.length === 0) return;
+
+      const stamp = Date.now().toString(36);
+      setPlotCards((current) =>
+        renumberPlotCards([
+          ...current,
+          ...items.map((item, index) => {
+            // 複数行のカードは1行目をタイトル、残りを本文に。1行だけなら本文のみ。
+            const lines = item.text.trim().split("\n");
+            const [firstLine, ...rest] = lines;
+            const title = lines.length > 1 ? firstLine.trim() : "";
+            const body = lines.length > 1 ? rest.join("\n").trim() : firstLine.trim();
+            return {
+              id: `plot-${stamp}-${index}`,
+              kind: "section" as const,
+              num: "",
+              title,
+              body,
+              expanded: false,
+              managerCollapsed: false,
+            };
+          }),
+        ]),
+      );
+      setRightSidebarTab("plot");
+      setIsRightSidebarCollapsed(false);
+      showToast(`${items.length} 件をプロットへ追加しました`);
+    }).then((unlisten) => {
+      unlistenCopyToPlot = unlisten;
+    });
+
     return () => {
       unlistenCopy?.();
       unlistenFocus?.();
+      unlistenCopyToPlot?.();
     };
   }, []);
 
