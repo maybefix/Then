@@ -495,6 +495,7 @@ function PlotBoard({
     if (!editingBodyCardId) return;
     const element = bodyRefs.current.get(editingBodyCardId);
     if (!(element instanceof HTMLTextAreaElement)) return;
+    if (document.activeElement === element) return;
     element.focus();
     const cursor = element.value.length;
     element.setSelectionRange(cursor, cursor);
@@ -890,7 +891,11 @@ function PlotBoard({
       role="textbox"
       tabIndex={0}
       aria-label={`${card.num} 本文`}
-      onClick={() => setEditingBodyCardId(card.id)}
+      onClick={() => {
+        const selection = window.getSelection();
+        if (selection && !selection.isCollapsed) return;
+        setEditingBodyCardId(card.id);
+      }}
       onKeyDown={(event) => {
         if (event.key === "Enter") setEditingBodyCardId(card.id);
       }}
