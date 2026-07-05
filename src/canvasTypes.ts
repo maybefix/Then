@@ -134,6 +134,13 @@ export type CanvasCopyToIdeaRequest = {
   items: CanvasCopyToIdeaItem[];
 };
 
+export type CanvasCopyToPlotRequest = {
+  boardId: string;
+  boardScope: CanvasScope;
+  boardName: string;
+  items: CanvasCopyToIdeaItem[];
+};
+
 export type CanvasFocusIdeaRequest = {
   threadId: string;
   fragmentId?: string;
