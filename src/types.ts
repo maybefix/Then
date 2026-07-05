@@ -304,6 +304,38 @@ export type ProjectEntry = {
   children: ProjectEntry[];
 };
 
+export type DeleteProjectEntryPlan = {
+  rootPath: string;
+  rootName: string;
+  rootKind: "folder" | "file";
+  fileCount: number;
+  folderCount: number;
+  textFileCount: number;
+  nonTextFileCount: number;
+  emptyFolderCount: number;
+  totalBytes: number;
+  paths: string[];
+  filePaths: string[];
+  folderPaths: string[];
+  textFilePaths: string[];
+  nonTextFilePaths: string[];
+  warnings: string[];
+};
+
+export type DeleteProjectEntryResult = {
+  deletedRootPath: string;
+  deletedRootName: string;
+  deletedPaths: string[];
+  deletedFilePaths: string[];
+  deletedFolderPaths: string[];
+  deletedTextFilePaths: string[];
+  deletedNonTextFilePaths: string[];
+  movedToTrash: boolean;
+  trashPath: string | null;
+  fallbackUsed: "none" | "appTrash" | "permanentDelete";
+  completedAt: number;
+};
+
 export type WorkspaceRecord = {
   path: string;
   name: string;

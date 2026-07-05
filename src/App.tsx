@@ -34,6 +34,7 @@ import {
   collectProjectTextFiles,
   createProjectAstSkeleton,
   markProjectAstFileError,
+  removeProjectAstPaths,
   searchProjectAst,
   upsertProjectAstDocument,
 } from "./editor/ast/projectAst";
@@ -77,6 +78,8 @@ import type {
   AppState,
   BreadcrumbDropTarget,
   CursorPosition,
+  DeleteProjectEntryPlan,
+  DeleteProjectEntryResult,
   DocumentTab,
   EditorSettings,
   FileProgressStatus,
@@ -123,6 +126,7 @@ import {
   getFolderChildren,
   getParentPath,
   getWorkspaceName,
+  isPathSameOrInside,
   movePathInOrder,
   movePathToDropPosition,
   removeNestedRecentWorkspaces,
@@ -4357,6 +4361,11 @@ export default function App() {
           (file) => !snapshotPathKeys.has(normalizePathForCompare(file.path)),
         );
 
+        await invoke("ensure_project_folder_tree", {
+          rootPath: projectFolder.path,
+          tree: snapshot.projectTree,
+        });
+
         for (const file of snapshot.files) {
           let content = file.text;
           try {
@@ -4380,7 +4389,10 @@ export default function App() {
 
         for (const file of filesToDelete) {
           try {
-            await invoke("delete_project_entry", { path: file.path });
+            await invoke("delete_project_entry_to_trash", {
+              rootPath: projectFolder.path,
+              path: file.path,
+            });
           } catch (error) {
             if (!String(error).includes("entry does not exist")) {
               throw error;
@@ -4426,7 +4438,21 @@ export default function App() {
           lastFilePath: activeRestored?.path ?? current.lastFilePath,
           markdown: activeRestored?.content ?? current.markdown,
         }));
-        await refreshProjectFolder(projectFolder.path);
+        projectAstBuildIdRef.current += 1;
+        const refreshedFolder = await refreshProjectFolder(projectFolder.path);
+        setProjectAst((current) => {
+          const base = refreshedFolder ? createProjectAstSkeleton(refreshedFolder, current) : current;
+          if (!base) return base;
+          return restoredDocuments.reduce(
+            (next, document) =>
+              upsertProjectAstDocument(next, {
+                path: document.path,
+                name: document.name,
+                text: parseFrontMatter(document.content).body,
+              }),
+            base,
+          );
+        });
         showToast(
           filesToDelete.length > 0
             ? `チェックポイントに戻しました（追加ファイル${filesToDelete.length}件を削除）`
@@ -5309,13 +5335,42 @@ export default function App() {
 
   const handleDeleteProjectEntry = async (entry: ProjectEntry) => {
     if (!projectFolder) return;
+    if (!isTauriRuntime()) {
+      showToast("ファイル削除はTauri版で利用できます");
+      return;
+    }
+    let plan: DeleteProjectEntryPlan;
+    try {
+      plan = await invoke<DeleteProjectEntryPlan>("plan_delete_project_entry", {
+        rootPath: projectFolder.path,
+        path: entry.path,
+      });
+    } catch (error) {
+      setLastError(String(error));
+      showToast("削除対象を確認できませんでした");
+      return;
+    }
+
+    const affectedDirtyTabs = openTabs.filter(
+      (tab) =>
+        tab.path &&
+        isPathSameOrInside(tab.path, entry.path) &&
+        tab.saveStatus !== "saved",
+    );
+    const countSummary =
+      plan.rootKind === "folder"
+        ? `配下のテキストファイル ${plan.textFileCount} 件、その他ファイル ${plan.nonTextFileCount} 件、フォルダ ${Math.max(0, plan.folderCount - 1)} 件をThenのTrashへ移動します。`
+        : "ファイルをThenのTrashへ移動します。";
+    const dirtySummary =
+      affectedDirtyTabs.length > 0
+        ? ` 未保存のタブ ${affectedDirtyTabs.length} 件は閉じられ、未保存内容は破棄されます。`
+        : "";
+    const warningSummary =
+      plan.warnings.length > 0 ? ` 注意: ${plan.warnings.slice(0, 2).join(" / ")}` : "";
     const shouldDelete = await requestConfirm({
       title: "項目を削除",
       message: `「${entry.name}」を削除しますか？`,
-      detail:
-        entry.kind === "folder"
-          ? "空のフォルダだけ削除できます。"
-          : "削除したファイルはこの操作では復元できません。",
+      detail: `${countSummary} チェックポイントには影響しません。${dirtySummary}${warningSummary}`,
       confirmLabel: "削除",
       danger: true,
     });
@@ -5323,17 +5378,56 @@ export default function App() {
 
     setSaveStatus("loading");
     try {
-      await invoke("delete_project_entry", { path: entry.path });
+      const result = await invoke<DeleteProjectEntryResult>("delete_project_entry_to_trash", {
+        rootPath: projectFolder.path,
+        path: entry.path,
+      });
+      projectAstBuildIdRef.current += 1;
+      setProjectAst((current) =>
+        current ? removeProjectAstPaths(current, result.deletedPaths) : current,
+      );
       const parentFolderPath =
         findContainingFolderPath(projectFolder, entry.path) ?? projectFolder.path;
       const refreshed = await refreshProjectFolder(parentFolderPath);
-      if (entry.path === focusedFolderPath) {
-        setFocusedFolderPath(null);
+      if (refreshed) {
+        setProjectAst((current) => createProjectAstSkeleton(refreshed, current));
       }
-      if (entry.path !== currentFilePath) {
-        setOpenTabs((current) => current.filter((tab) => tab.path !== entry.path));
-      }
-      if (entry.path === currentFilePath) {
+
+      const activeWasDeleted = currentFilePath
+        ? isPathSameOrInside(currentFilePath, entry.path)
+        : false;
+      const nextFocusedFolder =
+        focusedFolderPath && isPathSameOrInside(focusedFolderPath, entry.path)
+          ? getParentPath(entry.path) ?? projectFolder.path
+          : focusedFolderPath;
+      setFocusedFolderPath(nextFocusedFolder);
+      setActiveBreadcrumbPath((path) =>
+        path && isPathSameOrInside(path, entry.path)
+          ? getParentPath(entry.path) ?? projectFolder.path
+          : path,
+      );
+
+      setOpenTabs((current) =>
+        current.filter((tab) => !tab.path || !isPathSameOrInside(tab.path, entry.path)),
+      );
+      setAppState((current) => {
+        const nextCursorPositions = { ...current.cursorPositions };
+        for (const path of Object.keys(nextCursorPositions)) {
+          if (isPathSameOrInside(path, entry.path)) {
+            delete nextCursorPositions[path];
+          }
+        }
+        return {
+          ...current,
+          cursorPositions: nextCursorPositions,
+          lastFilePath:
+            current.lastFilePath && isPathSameOrInside(current.lastFilePath, entry.path)
+              ? null
+              : current.lastFilePath,
+        };
+      });
+
+      if (activeWasDeleted) {
         const nextFile = refreshed ? findFirstTextFile(refreshed.children) : null;
         if (nextFile) {
           const document = await invoke<TextDocument>("read_text_file", {
@@ -5360,10 +5454,15 @@ export default function App() {
       } else {
         setSaveStatus(currentFilePath ? "saved" : "dirty");
       }
-      showToast(`「${entry.name}」を削除しました`);
+      showToast(
+        result.fallbackUsed === "appTrash"
+          ? `「${entry.name}」をThenのTrashへ移動しました`
+          : `「${entry.name}」をゴミ箱へ移動しました`,
+      );
     } catch (error) {
       setLastError(String(error));
       setSaveStatus("error");
+      showToast("削除できませんでした");
     }
   };
 

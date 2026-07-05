@@ -50,14 +50,14 @@ struct HeadingMoveDocuments {
     target_document: Option<TextDocument>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct ProjectFolder {
     path: String,
     name: String,
     children: Vec<ProjectEntry>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct ProjectEntry {
     path: String,
     name: String,
@@ -74,6 +74,42 @@ struct MoveProjectEntryResult {
     new_path: String,
     old_parent_path: String,
     new_parent_path: String,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeleteProjectEntryPlan {
+    root_path: String,
+    root_name: String,
+    root_kind: String,
+    file_count: usize,
+    folder_count: usize,
+    text_file_count: usize,
+    non_text_file_count: usize,
+    empty_folder_count: usize,
+    total_bytes: u64,
+    paths: Vec<String>,
+    file_paths: Vec<String>,
+    folder_paths: Vec<String>,
+    text_file_paths: Vec<String>,
+    non_text_file_paths: Vec<String>,
+    warnings: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeleteProjectEntryResult {
+    deleted_root_path: String,
+    deleted_root_name: String,
+    deleted_paths: Vec<String>,
+    deleted_file_paths: Vec<String>,
+    deleted_folder_paths: Vec<String>,
+    deleted_text_file_paths: Vec<String>,
+    deleted_non_text_file_paths: Vec<String>,
+    moved_to_trash: bool,
+    trash_path: Option<String>,
+    fallback_used: String,
+    completed_at: i64,
 }
 
 #[derive(Default, Deserialize, Serialize)]
@@ -353,7 +389,10 @@ pub fn run() {
             create_markdown_file,
             create_project_folder,
             rename_project_entry,
+            plan_delete_project_entry,
+            delete_project_entry_to_trash,
             delete_project_entry,
+            ensure_project_folder_tree,
             move_project_entry,
             reorder_project_entries,
             load_project_snippets,
@@ -1216,6 +1255,63 @@ fn rename_project_entry(path: String, name: String) -> Result<TextDocument, Stri
 }
 
 #[tauri::command]
+fn plan_delete_project_entry(
+    root_path: String,
+    path: String,
+) -> Result<DeleteProjectEntryPlan, String> {
+    let root = PathBuf::from(root_path);
+    let target = PathBuf::from(path);
+    create_delete_project_entry_plan(&root, &target)
+}
+
+#[tauri::command]
+fn delete_project_entry_to_trash(
+    app: tauri::AppHandle,
+    root_path: String,
+    path: String,
+) -> Result<DeleteProjectEntryResult, String> {
+    let root = PathBuf::from(root_path);
+    let target = PathBuf::from(path);
+    let plan = create_delete_project_entry_plan(&root, &target)?;
+    let source_was_dir = target.is_dir();
+    let (trash_path, fallback_used) = match move_project_entry_to_system_trash(&root, &target) {
+        Ok(()) => (None, "none".to_string()),
+        Err(_) => (
+            Some(move_project_entry_to_app_trash(&app, &root, &target)?),
+            "appTrash".to_string(),
+        ),
+    };
+    cleanup_project_config_after_delete(&root, &target, source_was_dir)?;
+
+    Ok(DeleteProjectEntryResult {
+        deleted_root_path: plan.root_path,
+        deleted_root_name: plan.root_name,
+        deleted_paths: plan.paths,
+        deleted_file_paths: plan.file_paths,
+        deleted_folder_paths: plan.folder_paths,
+        deleted_text_file_paths: plan.text_file_paths,
+        deleted_non_text_file_paths: plan.non_text_file_paths,
+        moved_to_trash: true,
+        trash_path: trash_path.map(|path| path.to_string_lossy().to_string()),
+        fallback_used,
+        completed_at: now_millis(),
+    })
+}
+
+#[tauri::command]
+fn ensure_project_folder_tree(root_path: String, tree: ProjectFolder) -> Result<(), String> {
+    let root = PathBuf::from(root_path);
+    if !root.is_dir() {
+        return Err("project root does not exist".to_string());
+    }
+    let root_canonical = root
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve project root: {error}"))?;
+
+    ensure_project_folder_tree_entry(&root, &root_canonical, &tree)
+}
+
+#[tauri::command]
 fn delete_project_entry(path: String) -> Result<(), String> {
     let path = PathBuf::from(path);
     if path.is_file() {
@@ -1231,6 +1327,345 @@ fn delete_project_entry(path: String) -> Result<(), String> {
 
     Err("entry does not exist".to_string())
 }
+
+fn create_delete_project_entry_plan(
+    root: &Path,
+    target: &Path,
+) -> Result<DeleteProjectEntryPlan, String> {
+    validate_project_delete_target(root, target)?;
+
+    let root_name = target
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("項目")
+        .to_string();
+    let root_kind = if target.is_dir() { "folder" } else { "file" }.to_string();
+    let mut plan = DeleteProjectEntryPlan {
+        root_path: target.to_string_lossy().to_string(),
+        root_name,
+        root_kind,
+        file_count: 0,
+        folder_count: 0,
+        text_file_count: 0,
+        non_text_file_count: 0,
+        empty_folder_count: 0,
+        total_bytes: 0,
+        paths: Vec::new(),
+        file_paths: Vec::new(),
+        folder_paths: Vec::new(),
+        text_file_paths: Vec::new(),
+        non_text_file_paths: Vec::new(),
+        warnings: Vec::new(),
+    };
+
+    collect_delete_plan_entry(target, &mut plan)?;
+    Ok(plan)
+}
+
+fn validate_project_delete_target(root: &Path, target: &Path) -> Result<(), String> {
+    if !root.is_dir() {
+        return Err("project root does not exist".to_string());
+    }
+    if !target.exists() {
+        return Err("entry does not exist".to_string());
+    }
+
+    let root_canonical = root
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve project root: {error}"))?;
+    let target_canonical = target
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve entry path: {error}"))?;
+
+    if target_canonical == root_canonical {
+        return Err("project root cannot be deleted from the file tree".to_string());
+    }
+    if !target_canonical.starts_with(&root_canonical) {
+        return Err("entry delete must stay inside the project root".to_string());
+    }
+    if has_reserved_project_component(&target_canonical) {
+        return Err("app-managed project entries cannot be deleted".to_string());
+    }
+
+    Ok(())
+}
+
+fn has_reserved_project_component(path: &Path) -> bool {
+    path.components().any(|component| {
+        let value = component.as_os_str().to_string_lossy();
+        value == ".brew" || value == ".then"
+    })
+}
+
+fn collect_delete_plan_entry(
+    path: &Path,
+    plan: &mut DeleteProjectEntryPlan,
+) -> Result<(), String> {
+    plan.paths.push(path.to_string_lossy().to_string());
+
+    if path.is_file() {
+        plan.file_count += 1;
+        plan.file_paths.push(path.to_string_lossy().to_string());
+        match std::fs::metadata(path) {
+            Ok(metadata) => {
+                plan.total_bytes = plan.total_bytes.saturating_add(metadata.len());
+            }
+            Err(error) => plan
+                .warnings
+                .push(format!("failed to inspect file size: {}: {error}", path.display())),
+        }
+        if is_supported_text_extension(path) {
+            plan.text_file_count += 1;
+            plan.text_file_paths
+                .push(path.to_string_lossy().to_string());
+        } else {
+            plan.non_text_file_count += 1;
+            plan.non_text_file_paths
+                .push(path.to_string_lossy().to_string());
+        }
+        return Ok(());
+    }
+
+    if path.is_dir() {
+        plan.folder_count += 1;
+        plan.folder_paths.push(path.to_string_lossy().to_string());
+        let entries = std::fs::read_dir(path)
+            .map_err(|error| format!("failed to read delete target folder: {error}"))?;
+        let mut child_count = 0usize;
+        for entry in entries {
+            let entry = entry.map_err(|error| format!("failed to read folder entry: {error}"))?;
+            let child_path = entry.path();
+            if child_path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .is_some_and(|name| name == ".brew" || name == ".then")
+            {
+                plan.warnings.push(format!(
+                    "app-managed entry will not be counted: {}",
+                    child_path.display()
+                ));
+                continue;
+            }
+            child_count += 1;
+            collect_delete_plan_entry(&child_path, plan)?;
+        }
+        if child_count == 0 {
+            plan.empty_folder_count += 1;
+        }
+        return Ok(());
+    }
+
+    plan.warnings
+        .push(format!("unsupported entry type: {}", path.display()));
+    Ok(())
+}
+
+fn move_project_entry_to_app_trash(
+    app: &tauri::AppHandle,
+    root: &Path,
+    target: &Path,
+) -> Result<PathBuf, String> {
+    validate_project_delete_target(root, target)?;
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("failed to resolve app data directory: {error}"))?;
+    let workspace_key = hash_path_for_trash(root);
+    let trash_root = app_data.join("trash").join(workspace_key);
+    std::fs::create_dir_all(&trash_root)
+        .map_err(|error| format!("failed to create app trash directory: {error}"))?;
+
+    let target_name = target
+        .file_name()
+        .ok_or_else(|| "entry name is not available".to_string())?;
+    let trash_id = format!("{}-{}", now_millis(), sanitize_trash_name(&target_name.to_string_lossy()));
+    let trash_path = trash_root.join(trash_id);
+
+    match std::fs::rename(target, &trash_path) {
+        Ok(()) => Ok(trash_path),
+        Err(rename_error) => {
+            copy_entry_recursively(target, &trash_path).map_err(|copy_error| {
+                format!(
+                    "failed to move entry to app trash: {rename_error}; copy fallback failed: {copy_error}"
+                )
+            })?;
+            if target.is_dir() {
+                std::fs::remove_dir_all(target)
+                    .map_err(|error| format!("failed to remove original folder after trash copy: {error}"))?;
+            } else {
+                std::fs::remove_file(target)
+                    .map_err(|error| format!("failed to remove original file after trash copy: {error}"))?;
+            }
+            Ok(trash_path)
+        }
+    }
+}
+
+#[cfg(windows)]
+fn move_project_entry_to_system_trash(root: &Path, target: &Path) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::Shell::{
+        SHFileOperationW, SHFILEOPSTRUCTW, FO_DELETE, FOF_ALLOWUNDO, FOF_NOCONFIRMATION,
+        FOF_NOERRORUI, FOF_SILENT,
+    };
+
+    validate_project_delete_target(root, target)?;
+    let mut from = target
+        .as_os_str()
+        .encode_wide()
+        .chain([0, 0])
+        .collect::<Vec<u16>>();
+    let flags = (FOF_ALLOWUNDO.0 | FOF_NOCONFIRMATION.0 | FOF_NOERRORUI.0 | FOF_SILENT.0) as u16;
+    let mut operation = SHFILEOPSTRUCTW {
+        hwnd: HWND::default(),
+        wFunc: FO_DELETE,
+        pFrom: PCWSTR(from.as_mut_ptr()),
+        pTo: PCWSTR::null(),
+        fFlags: flags,
+        fAnyOperationsAborted: false.into(),
+        hNameMappings: std::ptr::null_mut(),
+        lpszProgressTitle: PCWSTR::null(),
+    };
+    let code = unsafe { SHFileOperationW(&mut operation) };
+    if code == 0 && !operation.fAnyOperationsAborted.as_bool() {
+        Ok(())
+    } else {
+        Err(format!("system trash operation failed: code={code}"))
+    }
+}
+
+#[cfg(not(windows))]
+fn move_project_entry_to_system_trash(_root: &Path, _target: &Path) -> Result<(), String> {
+    Err("system trash is not implemented on this platform".to_string())
+}
+
+fn copy_entry_recursively(source: &Path, target: &Path) -> Result<(), String> {
+    if source.is_file() {
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|error| format!("failed to create trash parent directory: {error}"))?;
+        }
+        std::fs::copy(source, target)
+            .map_err(|error| format!("failed to copy file to trash: {error}"))?;
+        return Ok(());
+    }
+
+    if source.is_dir() {
+        std::fs::create_dir_all(target)
+            .map_err(|error| format!("failed to create trash folder: {error}"))?;
+        for entry in std::fs::read_dir(source)
+            .map_err(|error| format!("failed to read folder for trash copy: {error}"))?
+        {
+            let entry = entry.map_err(|error| format!("failed to read folder entry: {error}"))?;
+            let child_source = entry.path();
+            let child_target = target.join(entry.file_name());
+            copy_entry_recursively(&child_source, &child_target)?;
+        }
+        return Ok(());
+    }
+
+    Err("unsupported entry type for trash copy".to_string())
+}
+
+fn ensure_project_folder_tree_entry(
+    root: &Path,
+    root_canonical: &Path,
+    folder: &ProjectFolder,
+) -> Result<(), String> {
+    let path = PathBuf::from(&folder.path);
+    let target = if path == root { root.to_path_buf() } else { path };
+    let parent = target
+        .parent()
+        .ok_or_else(|| "folder parent does not exist".to_string())?;
+    let parent_canonical = if parent.exists() {
+        parent
+            .canonicalize()
+            .map_err(|error| format!("failed to resolve folder parent: {error}"))?
+    } else {
+        parent.to_path_buf()
+    };
+    if !parent_canonical.starts_with(root_canonical) && target != root {
+        return Err("folder tree restore must stay inside project root".to_string());
+    }
+    if has_reserved_project_component(&target) {
+        return Err("app-managed project entries cannot be restored from checkpoint".to_string());
+    }
+
+    std::fs::create_dir_all(&target)
+        .map_err(|error| format!("failed to restore checkpoint folder: {error}"))?;
+    for entry in &folder.children {
+        if entry.kind == "folder" {
+            ensure_project_folder_tree_entry(
+                root,
+                root_canonical,
+                &ProjectFolder {
+                    path: entry.path.clone(),
+                    name: entry.name.clone(),
+                    children: entry.children.clone(),
+                },
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn cleanup_project_config_after_delete(
+    root: &Path,
+    deleted_path: &Path,
+    deleted_was_dir: bool,
+) -> Result<(), String> {
+    let mut config = load_project_config(root)?;
+    let deleted_name = deleted_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_string();
+    if let Some(parent) = deleted_path.parent() {
+        let parent_key = project_order_key(root, parent)?;
+        if let Some(order) = config.order.get_mut(&parent_key) {
+            order.retain(|name| name != &deleted_name);
+        }
+    }
+
+    if deleted_was_dir {
+        let deleted_key = project_order_key(root, deleted_path)?;
+        let deleted_prefix = format!("{deleted_key}/");
+        config
+            .order
+            .retain(|key, _| key != &deleted_key && !key.starts_with(&deleted_prefix));
+    }
+
+    save_project_config(root, &config)
+}
+
+fn hash_path_for_trash(path: &Path) -> String {
+    let value = path.to_string_lossy();
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in value.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}")
+}
+
+fn sanitize_trash_name(name: &str) -> String {
+    let sanitized = name
+        .chars()
+        .map(|char| match char {
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '_',
+            value if value.is_control() => '_',
+            value => value,
+        })
+        .collect::<String>();
+    if sanitized.trim().is_empty() {
+        "entry".to_string()
+    } else {
+        sanitized
+    }
+}
+
 
 #[tauri::command]
 fn move_project_entry(

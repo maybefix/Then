@@ -3,6 +3,7 @@ import type {
   ProjectFolder,
   TextDocument,
 } from "../../types";
+import { isPathSameOrInside } from "../../utils/projectTree";
 import {
   createDocumentAst,
   findActiveOutlineChain,
@@ -192,6 +193,21 @@ export function markProjectAstFileError(
           indexedAt: Date.now(),
         }
       : file,
+  );
+
+  return recomputeProjectAst({
+    ...projectAst,
+    files,
+  });
+}
+
+export function removeProjectAstPaths(
+  projectAst: ProjectAst,
+  deletedPaths: string[],
+): ProjectAst {
+  if (deletedPaths.length === 0) return projectAst;
+  const files = projectAst.files.filter(
+    (file) => !deletedPaths.some((deletedPath) => isPathSameOrInside(file.path, deletedPath)),
   );
 
   return recomputeProjectAst({
