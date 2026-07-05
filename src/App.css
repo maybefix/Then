@@ -10624,12 +10624,31 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   accent-color: var(--accent);
 }
 
-.exportPresetButtons {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.exportPresetSaveRow {
+  display: flex;
+  gap: 6px;
 }
 
-.exportPresetButtons button:last-child { grid-column: 1 / -1; }
+.exportPresetSaveRow input {
+  min-width: 0;
+  flex: 1;
+}
+
+.exportPresetSaveRow .exportBtn {
+  flex: 0 0 auto;
+}
+
+.exportPresetDelete {
+  overflow: hidden;
+  color: var(--danger);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exportPresetDelete:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--border-subtle));
+  color: var(--danger);
+}
 
 .exportModalFooter {
   min-height: 56px;

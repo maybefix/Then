@@ -71,6 +71,23 @@ type LinkedExportScreenProps = {
 };
 
 const LAST_LAYOUT_KEY = "then-linked-export-layout-v1";
+const SAVED_PRESETS_KEY = "then-linked-export-presets-v1";
+
+type SavedPreset = { name: string; layout: ExportLayoutProfile };
+
+function readSavedPresets(): SavedPreset[] {
+  try {
+    const stored = localStorage.getItem(SAVED_PRESETS_KEY);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored) as SavedPreset[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((preset) =>
+      typeof preset?.name === "string" &&
+      (preset.layout?.body?.writingMode === "vertical-rl" || preset.layout?.body?.writingMode === "horizontal-tb"));
+  } catch {
+    return [];
+  }
+}
 
 const startModeLabels: Record<ExportStartMode, string> = {
   continue: "前の続き",
@@ -232,6 +249,9 @@ export function LinkedExportScreen({
   });
   const [completed, setCompleted] = useState<{ result: ExportResult; format: ExportFormat; pageCount: number } | null>(null);
   const [savedLabel, setSavedLabel] = useState("");
+  const [savedPresets, setSavedPresets] = useState<SavedPreset[]>(readSavedPresets);
+  const [presetChoice, setPresetChoice] = useState("");
+  const [presetName, setPresetName] = useState("");
   const dragIndexRef = useRef<number | null>(null);
 
   const job = useMemo<ExportJob>(() => ({
@@ -247,6 +267,9 @@ export function LinkedExportScreen({
     // Keep the current preview on screen and flag it as stale instead of
     // dropping back to the empty state on every tweak.
     if (viewState === "preview-ready" || viewState === "preview-loading") setPreviewStale(true);
+    // Manual edits detach the layout from the selected preset. applyPresetChoice
+    // re-selects afterwards within the same batch, so preset loads keep theirs.
+    setPresetChoice("");
   };
 
   const toggleSection = (name: string) => {
@@ -340,10 +363,51 @@ export function LinkedExportScreen({
     patchLayout(() => next);
   };
 
-  const saveLayout = () => {
-    localStorage.setItem(LAST_LAYOUT_KEY, JSON.stringify(layout));
-    setSavedLabel("設定を保存しました");
-    window.setTimeout(() => setSavedLabel(""), 1800);
+  const flashSavedLabel = (message: string) => {
+    setSavedLabel(message);
+    window.setTimeout(() => setSavedLabel(""), 2400);
+  };
+
+  const applyPresetChoice = (value: string) => {
+    if (!value) return;
+    if (value.startsWith("builtin:")) {
+      applyPreset(value.slice("builtin:".length) as Parameters<typeof applyPreset>[0]);
+    } else if (value === "last") {
+      const stored = readLastLayout();
+      if (!stored) return;
+      patchLayout(() => stored);
+    } else if (value.startsWith("saved:")) {
+      const preset = savedPresets.find((item) => item.name === value.slice("saved:".length));
+      if (!preset) return;
+      patchLayout(() => cloneLayout(preset.layout));
+    }
+    setPresetChoice(value);
+  };
+
+  const persistPresets = (next: SavedPreset[]) => {
+    setSavedPresets(next);
+    localStorage.setItem(SAVED_PRESETS_KEY, JSON.stringify(next));
+  };
+
+  const saveNamedPreset = () => {
+    const name = presetName.trim();
+    if (!name) return;
+    const snapshot = cloneLayout(layout);
+    snapshot.name = name;
+    const overwrite = savedPresets.some((item) => item.name === name);
+    persistPresets([...savedPresets.filter((item) => item.name !== name), { name, layout: snapshot }]);
+    setLayout(snapshot);
+    setPresetChoice(`saved:${name}`);
+    setPresetName("");
+    flashSavedLabel(overwrite ? `「${name}」を上書き保存しました` : `「${name}」として保存しました`);
+  };
+
+  const deleteNamedPreset = () => {
+    if (!presetChoice.startsWith("saved:")) return;
+    const name = presetChoice.slice("saved:".length);
+    persistPresets(savedPresets.filter((item) => item.name !== name));
+    setPresetChoice("");
+    flashSavedLabel(`「${name}」を削除しました`);
   };
 
   const runExport = async (targetFormat: ExportFormat) => {
@@ -582,7 +646,45 @@ export function LinkedExportScreen({
             </div>}
 
             {renderSectionHeader("preset", "プリセット", layout.name ?? "カスタム")}
-            {openSections.has("preset") && <div className="exportSettingsContent exportPresetButtons"><button type="button" className="exportBtn" onClick={() => applyPreset("standard")}>標準・縦書き文庫</button><button type="button" className="exportBtn" onClick={() => applyPreset("doujin")}>同人誌 B6・1段</button><button type="button" className="exportBtn" onClick={() => applyPreset("a5-2col")}>A5・2段組</button><button type="button" className="exportBtn" onClick={() => applyPreset("a4-horizontal")}>A4・横書き</button><button type="button" className="exportBtn" onClick={() => { const stored = readLastLayout(); if (stored) patchLayout(() => stored); }}>前回設定を読み込む</button><button type="button" className="exportBtn" onClick={saveLayout}>この設定を保存</button></div>}
+            {openSections.has("preset") && <div className="exportSettingsContent">
+              <label>設定を呼び出す
+                <select value={presetChoice} onChange={(event) => applyPresetChoice(event.target.value)}>
+                  <option value="">選択して適用...</option>
+                  <optgroup label="標準プリセット">
+                    <option value="builtin:standard">標準・縦書き文庫</option>
+                    <option value="builtin:doujin">同人誌 B6・1段</option>
+                    <option value="builtin:a5-2col">A5・2段組</option>
+                    <option value="builtin:a4-horizontal">A4・横書き</option>
+                    <option value="last" disabled={!readLastLayout()}>前回の書き出し設定</option>
+                  </optgroup>
+                  {savedPresets.length > 0 && <optgroup label="保存した設定">
+                    {savedPresets.map((preset) => <option key={preset.name} value={`saved:${preset.name}`}>{preset.name}</option>)}
+                  </optgroup>}
+                </select>
+              </label>
+              {presetChoice.startsWith("saved:") && (
+                <button type="button" className="exportBtn exportPresetDelete" onClick={deleteNamedPreset}>
+                  「{presetChoice.slice("saved:".length)}」を削除
+                </button>
+              )}
+              <span className="exportFieldLabel">現在の設定を別名で保存</span>
+              <div className="exportPresetSaveRow">
+                <input
+                  type="text"
+                  placeholder="設定名（例: 文庫用）"
+                  maxLength={40}
+                  value={presetName}
+                  onChange={(event) => setPresetName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.nativeEvent.isComposing) saveNamedPreset();
+                  }}
+                />
+                <button type="button" className="exportBtn" disabled={!presetName.trim()} onClick={saveNamedPreset}>保存</button>
+              </div>
+              {savedPresets.some((item) => item.name === presetName.trim()) && (
+                <p className="exportHelp">同名の設定があるため上書き保存されます</p>
+              )}
+            </div>}
           </aside>
         </div>
 
