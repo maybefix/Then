@@ -214,6 +214,7 @@ export function LinkedExportScreen({
   const [sources, setSources] = useState(() => withOrder(initialSources));
   const [layout, setLayout] = useState(() => initialLayout(initialSources));
   const [viewState, setViewState] = useState<ExportViewState>(sourceError ? "preview-error" : "no-preview");
+  const [previewStale, setPreviewStale] = useState(false);
   const [activeTab, setActiveTab] = useState<"files" | "settings" | "preview">("files");
   const [openSections, setOpenSections] = useState(() => new Set(["page"]));
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
@@ -243,7 +244,9 @@ export function LinkedExportScreen({
 
   const patchLayout = (updater: (current: ExportLayoutProfile) => ExportLayoutProfile) => {
     setLayout((current) => updater(cloneLayout(current)));
-    if (viewState === "preview-ready") setViewState("no-preview");
+    // Keep the current preview on screen and flag it as stale instead of
+    // dropping back to the empty state on every tweak.
+    if (viewState === "preview-ready" || viewState === "preview-loading") setPreviewStale(true);
   };
 
   const toggleSection = (name: string) => {
@@ -257,7 +260,7 @@ export function LinkedExportScreen({
 
   const updateSources = (updater: (current: LoadedExportSource[]) => LoadedExportSource[]) => {
     setSources((current) => withOrder(updater(current)));
-    if (viewState === "preview-ready") setViewState("no-preview");
+    if (viewState === "preview-ready" || viewState === "preview-loading") setPreviewStale(true);
   };
 
   const moveSource = (index: number, direction: -1 | 1) => {
@@ -284,6 +287,7 @@ export function LinkedExportScreen({
 
   const refreshPreview = () => {
     setFailure(null);
+    setPreviewStale(false);
     setViewState("preview-loading");
     // The HTML is built off-thread, then rendered by the bundled Vivliostyle
     // Viewer — the exact same engine and document the PDF uses, so the preview
@@ -383,6 +387,8 @@ export function LinkedExportScreen({
       });
       setCompleted({ result, format: targetFormat, pageCount });
       setViewState("pdf-complete");
+      // 書き出しに成功したレイアウトを次回の初期値として自動保存する。
+      localStorage.setItem(LAST_LAYOUT_KEY, JSON.stringify(nextJob.layout));
     } catch (error) {
       setFailure({
         kind: errorKindFor(targetFormat),
@@ -394,9 +400,10 @@ export function LinkedExportScreen({
   };
 
   const renderSectionHeader = (id: string, label: string, summary: string) => (
-    <button type="button" className="exportSettingsSectionHeader" onClick={() => toggleSection(id)}>
-      <span>{openSections.has(id) ? "▾" : "▸"} {label}</span>
+    <button type="button" className="exportSettingsSectionHeader" aria-expanded={openSections.has(id)} onClick={() => toggleSection(id)}>
+      <span>{label}</span>
       <small>{summary}</small>
+      <span className="exportSectionChevron" aria-hidden="true">{openSections.has(id) ? "▾" : "▸"}</span>
     </button>
   );
 
@@ -409,18 +416,11 @@ export function LinkedExportScreen({
     <div className="exportModalBackdrop" role="presentation">
       <section className="linkedExportScreen" aria-labelledby="linked-export-title">
         <header className="exportModalHeader">
-          <div>
+          <div className="exportHeaderTitle">
             <h2 id="linked-export-title">エクスポート</h2>
             <p>本文ファイルを連結して書き出します</p>
           </div>
-          <div className="exportHeaderActions">
-            <span>出力形式</span>
-            <div className="exportFormatSwitch" role="group" aria-label="出力形式">
-              <button type="button" className={format === "pdf" ? "active" : ""} onClick={() => setFormat("pdf")}>PDF</button>
-              <button type="button" className={format === "docx" ? "active" : ""} onClick={() => setFormat("docx")}>DOCX</button>
-            </div>
-            <button type="button" className="exportCloseButton" onClick={onClose} aria-label="閉じる">×</button>
-          </div>
+          <button type="button" className="exportCloseButton" onClick={onClose} aria-label="閉じる">×</button>
         </header>
 
         <nav className="exportResponsiveTabs" aria-label="エクスポート画面">
@@ -433,13 +433,12 @@ export function LinkedExportScreen({
 
         <div className="exportModalBody">
           <aside className={`exportFilesPanel ${activeTab === "files" ? "mobileActive" : ""}`}>
-            <div className="exportPanelHeading">
+            <div className="exportPanelHeading" title="⋮⋮ をドラッグまたは ▲▼ で並べ替え・チェックで出力対象を切替">
               <div><strong>出力対象ファイル</strong><span>{includedCount} / {sources.length}</span></div>
-              <p>⋮⋮ をドラッグで並べ替え・チェックで出力対象を切替</p>
               <div className="exportSelectAllRow">
                 <button
                   type="button"
-                  className="exportSelectAllButton"
+                  className="exportBtn exportSelectAllButton"
                   disabled={includedCount === sources.length}
                   onClick={() => updateSources((current) => current.map((item) => ({ ...item, enabled: true })))}
                 >
@@ -447,7 +446,7 @@ export function LinkedExportScreen({
                 </button>
                 <button
                   type="button"
-                  className="exportSelectAllButton"
+                  className="exportBtn exportSelectAllButton"
                   disabled={includedCount === 0}
                   onClick={() => updateSources((current) => current.map((item) => ({ ...item, enabled: false })))}
                 >
@@ -501,16 +500,22 @@ export function LinkedExportScreen({
 
           <section className={`exportPreviewPanel ${activeTab === "preview" ? "mobileActive" : ""}`}>
             <div className="exportPreviewToolbar">
-              <button type="button" className="exportRefreshButton" onClick={refreshPreview} disabled={includedCount === 0}>↻ プレビュー更新</button>
+              <button type="button" className={`exportBtn exportRefreshButton${previewStale && viewState === "preview-ready" ? " stale" : ""}`} onClick={refreshPreview} disabled={includedCount === 0}>↻ プレビュー更新</button>
               <span className="exportToolbarSpacer" />
               <span className="exportPreviewEngineTag">Vivliostyle 組版（出力と同じ）</span>
             </div>
+            {previewStale && viewState === "preview-ready" && (
+              <div className="exportStaleBanner" role="status">
+                <span>設定が変更されました — 表示中のプレビューは更新前の内容です</span>
+                <button type="button" className="exportBtn" onClick={refreshPreview} disabled={includedCount === 0}>↻ 更新</button>
+              </div>
+            )}
             <div className="exportPreviewStage">
               {viewState === "no-preview" && (
                 <div className="exportEmptyState">
                   <span>▤</span><strong>まだプレビューがありません</strong>
                   <p>「プレビュー更新」を押すと、出力対象ファイルを連結して組版プレビューを生成します。</p>
-                  <button type="button" onClick={refreshPreview}>↻ プレビュー更新</button>
+                  <button type="button" className="exportBtn" onClick={refreshPreview} disabled={includedCount === 0}>↻ プレビュー更新</button>
                 </div>
               )}
               {viewState === "preview-loading" && (
@@ -530,7 +535,7 @@ export function LinkedExportScreen({
                   <p>本文の連結結果を紙面に流し込む処理でエラーが発生しました。設定と本文記法を確認してください。</p>
                   <button type="button" className="exportLogToggle" onClick={() => setShowErrorDetail((value) => !value)}>{showErrorDetail ? "▾" : "▸"} 詳細ログを表示</button>
                   {showErrorDetail && <pre>[{failure.kind}] {failure.detail}</pre>}
-                  <div>{failure.sourcePath && <button type="button" onClick={() => onOpenSource(failure.sourcePath!)}>該当ファイルを開く</button>}<button type="button" onClick={refreshPreview}>↻ 再試行</button></div>
+                  <div>{failure.sourcePath && <button type="button" className="exportBtn" onClick={() => onOpenSource(failure.sourcePath!)}>該当ファイルを開く</button>}<button type="button" className="exportBtn" onClick={refreshPreview}>↻ 再試行</button></div>
                 </div>
               )}
             </div>
@@ -577,23 +582,22 @@ export function LinkedExportScreen({
             </div>}
 
             {renderSectionHeader("preset", "プリセット", layout.name ?? "カスタム")}
-            {openSections.has("preset") && <div className="exportSettingsContent exportPresetButtons"><button type="button" onClick={() => applyPreset("standard")}>標準・縦書き文庫</button><button type="button" onClick={() => applyPreset("doujin")}>同人誌 B6・1段</button><button type="button" onClick={() => applyPreset("a5-2col")}>A5・2段組</button><button type="button" onClick={() => applyPreset("a4-horizontal")}>A4・横書き</button><button type="button" onClick={() => { const stored = readLastLayout(); if (stored) patchLayout(() => stored); }}>前回設定を読み込む</button><button type="button" onClick={saveLayout}>この設定を保存</button></div>}
+            {openSections.has("preset") && <div className="exportSettingsContent exportPresetButtons"><button type="button" className="exportBtn" onClick={() => applyPreset("standard")}>標準・縦書き文庫</button><button type="button" className="exportBtn" onClick={() => applyPreset("doujin")}>同人誌 B6・1段</button><button type="button" className="exportBtn" onClick={() => applyPreset("a5-2col")}>A5・2段組</button><button type="button" className="exportBtn" onClick={() => applyPreset("a4-horizontal")}>A4・横書き</button><button type="button" className="exportBtn" onClick={() => { const stored = readLastLayout(); if (stored) patchLayout(() => stored); }}>前回設定を読み込む</button><button type="button" className="exportBtn" onClick={saveLayout}>この設定を保存</button></div>}
           </aside>
         </div>
 
         <footer className="exportModalFooter">
-          <span className="exportSavedLabel">{savedLabel}</span>
-          <button type="button" onClick={onClose}>キャンセル</button>
-          <button type="button" onClick={saveLayout}>設定を保存</button>
-          <button type="button" className={format === "docx" ? "primary" : ""} onClick={() => void runExport("docx")} disabled={includedCount === 0}>DOCXを書き出す</button>
-          <button type="button" className={format === "pdf" ? "primary" : ""} onClick={() => void runExport("pdf")} disabled={includedCount === 0}>PDFを書き出す</button>
+          <span className={`exportSavedLabel${savedLabel ? " saved" : ""}`}>{savedLabel || "レイアウト設定は書き出し時に自動保存されます"}</span>
+          <button type="button" className="exportBtn ghost" onClick={onClose}>キャンセル</button>
+          <button type="button" className="exportBtn" onClick={() => void runExport("docx")} disabled={includedCount === 0}>DOCXを書き出す</button>
+          <button type="button" className="exportBtn primary" onClick={() => void runExport("pdf")} disabled={includedCount === 0}>PDFを書き出す</button>
         </footer>
 
         {viewState === "pdf-generating" && (
           <div className="exportProgressOverlay"><div><span className="exportSpinner"/><strong>{format.toUpperCase()}生成中…</strong><p>{progress.message}</p><div className="exportProgressBar"><i style={{ width: `${progress.percent}%` }}/></div><div className="exportProgressMeta"><span>{progress.currentPage} / {progress.totalPages} ページ</span><span>{Math.round(progress.percent)}%</span></div></div></div>
         )}
         {viewState === "pdf-complete" && completed && (
-          <div className="exportProgressOverlay"><div className="exportCompleteCard"><span>✓</span><strong>{completed.format.toUpperCase()}を書き出しました</strong><p>全 {completed.pageCount} ページ・{includedCount} ファイルを連結しました。<br/>{completed.result.name}</p><div><button type="button" onClick={onClose}>閉じる</button><button type="button" className="primary" onClick={() => onOpenResult(completed.result.path)}>保存先を開く</button></div></div></div>
+          <div className="exportProgressOverlay"><div className="exportCompleteCard"><span>✓</span><strong>{completed.format.toUpperCase()}を書き出しました</strong><p>全 {completed.pageCount} ページ・{includedCount} ファイルを連結しました。<br/>{completed.result.name}</p><div><button type="button" className="exportBtn" onClick={onClose}>閉じる</button><button type="button" className="exportBtn primary" onClick={() => onOpenResult(completed.result.path)}>保存先を開く</button></div></div></div>
         )}
       </section>
     </div>
