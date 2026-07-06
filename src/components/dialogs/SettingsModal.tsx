@@ -213,6 +213,26 @@ export function SettingsModal({
           </label>
           <label className="checkSetting">
             <input
+              checked={settings.canvasOpensInWindow}
+              type="checkbox"
+              onChange={(event) =>
+                onUpdateSettings("canvasOpensInWindow", event.target.checked)
+              }
+            />
+            <span>キャンバスを別ウィンドウで開く</span>
+          </label>
+          <label className="checkSetting">
+            <input
+              checked={settings.exportOpensInWindow}
+              type="checkbox"
+              onChange={(event) =>
+                onUpdateSettings("exportOpensInWindow", event.target.checked)
+              }
+            />
+            <span>エクスポートを別ウィンドウで開く</span>
+          </label>
+          <label className="checkSetting">
+            <input
               checked={settings.zoneMode}
               type="checkbox"
               onChange={(event) =>

@@ -218,6 +218,10 @@ export type EditorSettings = {
   canvasDefaultWritingMode: WritingMode;
   /** Canvas text node の既定フォント種別。 */
   canvasDefaultFontSource: CanvasNodeFontSource;
+  /** キャンバスをメイン画面のモードではなく別ウィンドウで開くか。 */
+  canvasOpensInWindow: boolean;
+  /** エクスポートをメイン画面のモードではなく別ウィンドウで開くか。 */
+  exportOpensInWindow: boolean;
 };
 
 /**

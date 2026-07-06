@@ -3,9 +3,13 @@ import { listen } from "@tauri-apps/api/event";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import {
   LinkedExportScreen,
-  type PreparedDocxExport,
   type PreparedPdfExport,
 } from "./components/export/LinkedExportScreen";
+import {
+  exportDocxWithDialog,
+  exportFileName,
+  exportPdfWithVivliostyle,
+} from "./export/exportHostActions";
 import { applyPrintAssets } from "./export/nativePrint";
 import type {
   ExportResult,
@@ -54,20 +58,6 @@ const previewFixture: ExportWindowPayload | null =
       })),
     }
   : null;
-
-function exportFileName(title: string, extension: "docx" | "pdf"): string {
-  const safeTitle = title.replace(/[<>:\"/\\|?*\u0000-\u001f]/g, "_").trim() || "本文連結";
-  return `${safeTitle}.${extension}`;
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  const chunkSize = 0x8000;
-  let binary = "";
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
-  }
-  return btoa(binary);
-}
 
 export default function ExportWindowApp() {
   const [payload, setPayload] = useState<ExportWindowPayload | null>(previewFixture);
@@ -121,27 +111,7 @@ export default function ExportWindowApp() {
 
   // Active PDF engine: Vivliostyle lays out the flowing HTML (CSS Paged Media)
   // in a hidden bundled-viewer webview, then WebView2 PrintToPdf serializes it.
-  const exportPdf = async (
-    assets: PreparedPdfExport,
-    onProgress: (progress: ExportProgress) => void,
-  ): Promise<ExportResult> => {
-    const destination = await invoke<ExportResult | null>("pick_export_path", {
-      fileName: exportFileName(assets.title, "pdf"),
-      extension: "pdf",
-      description: "PDF文書",
-    });
-    if (!destination) throw new Error("保存先の選択をキャンセルしました");
-    const [widthMm, heightMm] = resolvePageDimensions(assets.layout);
-    onProgress({ percent: 45, currentPage: assets.pageCount, totalPages: assets.pageCount, message: "Vivliostyleで組版しています" });
-    const result = await invoke<ExportResult>("export_pdf_vivliostyle", {
-      html: assets.vivliostyleHtml,
-      path: destination.path,
-      pageWidthMm: widthMm,
-      pageHeightMm: heightMm,
-    });
-    onProgress({ percent: 92, currentPage: assets.pageCount, totalPages: assets.pageCount, message: "PDFファイルを生成しています" });
-    return result;
-  };
+  const exportPdf = exportPdfWithVivliostyle;
 
   // Native fallback engine: our own pagination + WebView2 PrintToPdf. Retained
   // (not wired) so the previous output path is preserved.
@@ -183,20 +153,7 @@ export default function ExportWindowApp() {
   };
   void exportPdfNative;
 
-  const exportDocx = async (
-    assets: PreparedDocxExport,
-    onProgress: (progress: ExportProgress) => void,
-  ): Promise<ExportResult> => {
-    onProgress({ percent: 76, currentPage: 0, totalPages: 0, message: "保存データを準備しています" });
-    const result = await invoke<ExportResult | null>("save_export_file_dialog", {
-      dataBase64: bytesToBase64(assets.bytes),
-      fileName: exportFileName(assets.title, "docx"),
-      extension: "docx",
-      description: "Word文書",
-    });
-    if (!result) throw new Error("保存先の選択をキャンセルしました");
-    return result;
-  };
+  const exportDocx = exportDocxWithDialog;
 
   if (loadError) {
     return <main className="appShell exportWindowLoadState" data-theme={theme} style={themeStyle}><strong>エクスポート画面を開けませんでした</strong><pre>{loadError}</pre><button type="button" onClick={() => void loadPayload()}>再試行</button></main>;

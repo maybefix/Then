@@ -141,6 +141,12 @@ import {
   exportFontFamilies,
   type LoadedExportSource,
 } from "./export/types";
+import CanvasWindowApp from "./CanvasWindowApp";
+import { LinkedExportScreen } from "./components/export/LinkedExportScreen";
+import {
+  exportDocxWithDialog,
+  exportPdfWithVivliostyle,
+} from "./export/exportHostActions";
 
 const SNIPPET_DRAG_MIME = "application/x-brew-snippet-id";
 const BREADCRUMB_ENTRY_DRAG_MIME = "application/x-brew-project-entry-path";
@@ -629,6 +635,8 @@ const defaultSettings: EditorSettings = {
   navigatorPreviewLines: DEFAULT_NAVIGATOR_PREVIEW_LINES,
   countWhitespace: true,
   checkpointSectionCollapsed: false,
+  canvasOpensInWindow: false,
+  exportOpensInWindow: false,
 };
 
 const fallbackFontFamilies = [
@@ -1679,6 +1687,14 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         settings.canvasDefaultFontSource === "editor" || settings.canvasDefaultFontSource === "ui"
           ? settings.canvasDefaultFontSource
           : defaultSettings.canvasDefaultFontSource,
+      canvasOpensInWindow:
+        typeof settings.canvasOpensInWindow === "boolean"
+          ? settings.canvasOpensInWindow
+          : defaultSettings.canvasOpensInWindow,
+      exportOpensInWindow:
+        typeof settings.exportOpensInWindow === "boolean"
+          ? settings.exportOpensInWindow
+          : defaultSettings.exportOpensInWindow,
     },
     lastWorkspacePath:
       typeof value?.lastWorkspacePath === "string" ? value.lastWorkspacePath : null,
@@ -1964,6 +1980,19 @@ export default function App() {
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
   const [isRightSidebarWide, setIsRightSidebarWide] = useState(false);
+  /**
+   * メイン画面のモード。write=本文（左右サイドバー）、canvas=キャンバス（右のみ）、
+   * export=エクスポート（サイドバーなし）。canvas/export は設定により別ウィンドウ
+   * 起動へ切り替わる。
+   */
+  const [appMode, setAppMode] = useState<"write" | "canvas" | "export">("write");
+  const [canvasEmbedPayload, setCanvasEmbedPayload] = useState<CanvasWindowPayload | null>(null);
+  const [exportEmbedPayload, setExportEmbedPayload] = useState<{
+    requestId: string;
+    title: string;
+    sources: LoadedExportSource[];
+    sourceError?: string;
+  } | null>(null);
   const [rightSidebarTab, setRightSidebarTab] = useState<"idea" | "plot" | "reference">("plot");
   const [isPlotManagerOpen, setIsPlotManagerOpen] = useState(false);
   const [ideaFocusRequest, setIdeaFocusRequest] = useState<{
@@ -3268,11 +3297,6 @@ export default function App() {
       return;
     }
 
-    if (!isTauriRuntime()) {
-      window.open("?view=canvas", "_blank", "noopener,noreferrer");
-      return;
-    }
-
     const payload: CanvasWindowPayload = {
       requestId: String(Date.now()),
       rootPath: scope === "project" ? projectFolder?.path ?? null : null,
@@ -3290,9 +3314,27 @@ export default function App() {
         id: thread.id,
         kind: thread.kind,
         title: thread.title,
+        fragments: thread.fragments.map((fragment) => ({
+          id: fragment.id,
+          body: fragment.body,
+          used: fragment.used,
+        })),
       })),
       referenceFiles: scope === "project" ? sortedReferenceCandidates : [],
+      rightSidebarVisible: !isRightSidebarCollapsed,
     };
+
+    if (!settings.canvasOpensInWindow) {
+      // メイン画面のキャンバスモードとして開く。
+      setCanvasEmbedPayload(payload);
+      setAppMode("canvas");
+      return;
+    }
+
+    if (!isTauriRuntime()) {
+      window.open("?view=canvas", "_blank", "noopener,noreferrer");
+      return;
+    }
 
     try {
       await invoke("open_canvas_window", { payload });
@@ -4639,8 +4681,8 @@ export default function App() {
   };
 
   const handleOpenLinkedExport = async () => {
-    if (!isTauriRuntime()) {
-      showToast("エクスポート画面はTauri版で利用できます");
+    if (settings.exportOpensInWindow && !isTauriRuntime()) {
+      showToast("エクスポート画面の別ウィンドウ表示はTauri版で利用できます");
       return;
     }
 
@@ -4682,17 +4724,40 @@ export default function App() {
       const workspaceTitle = projectFolder?.name
         ?? currentFileName.replace(/\.(?:txt|md)$/i, "")
         ?? "本文連結";
-      await invoke("open_export_window", {
-        payload: {
-          requestId: String(Date.now()),
-          title: workspaceTitle,
-          sources,
-          sourceError: readErrors.length > 0 ? readErrors.join("\n") : undefined,
-        },
-      });
+      const payload = {
+        requestId: String(Date.now()),
+        title: workspaceTitle,
+        sources,
+        sourceError: readErrors.length > 0 ? readErrors.join("\n") : undefined,
+      };
+      if (!settings.exportOpensInWindow) {
+        // メイン画面のエクスポートモードとして開く。
+        setExportEmbedPayload(payload);
+        setAppMode("export");
+        return;
+      }
+      await invoke("open_export_window", { payload });
     } catch (error) {
       setLastError(String(error));
     }
+  };
+
+  /** 画面上部のモード切替。canvas/export は設定により別ウィンドウ起動になる。 */
+  const switchAppMode = (mode: "write" | "canvas" | "export") => {
+    if (mode === "write") {
+      setAppMode("write");
+      return;
+    }
+    if (mode === "canvas") {
+      if (!settings.canvasOpensInWindow && canvasEmbedPayload) {
+        // 前回のボード表示を保ったまま戻る。
+        setAppMode("canvas");
+        return;
+      }
+      void openIdeaCanvasBoard(projectFolder ? "project" : "global");
+      return;
+    }
+    void handleOpenLinkedExport();
   };
 
   const openWorkspaceFolder = async (
@@ -4936,6 +5001,14 @@ export default function App() {
     }).then((unlisten) => { dispose = unlisten; });
     return () => dispose?.();
   }, [currentFilePath, openTabs]);
+
+  // プロジェクトを切り替えたら埋め込みモードの内容は古くなるため本文モードへ戻す。
+  const projectPathForModeReset = projectFolder?.path ?? null;
+  useEffect(() => {
+    setCanvasEmbedPayload(null);
+    setExportEmbedPayload(null);
+    setAppMode("write");
+  }, [projectPathForModeReset]);
 
   const jumpToEditorLine = (line: number) => {
     const targetLine = Math.max(1, line);
@@ -6661,7 +6734,7 @@ export default function App() {
                 </div>
               )}
             </div>
-            {isLeftSidebarCollapsed && (
+            {isLeftSidebarCollapsed && appMode === "write" && (
               <button
                 className="iconButton"
                 type="button"
@@ -7109,7 +7182,47 @@ export default function App() {
               )}
             </nav>
             <div className="topbarActions">
-              {isRightSidebarCollapsed && (
+              <div className="modeSwitcher" role="tablist" aria-label="画面モード">
+                <button
+                  className={appMode === "write" ? "isActiveMode" : ""}
+                  type="button"
+                  role="tab"
+                  aria-selected={appMode === "write"}
+                  title="本文モード"
+                  onClick={() => switchAppMode("write")}
+                >
+                  本文
+                </button>
+                <button
+                  className={appMode === "canvas" ? "isActiveMode" : ""}
+                  type="button"
+                  role="tab"
+                  aria-selected={appMode === "canvas"}
+                  title={
+                    settings.canvasOpensInWindow
+                      ? "キャンバスを別ウィンドウで開く"
+                      : "キャンバスモード"
+                  }
+                  onClick={() => switchAppMode("canvas")}
+                >
+                  キャンバス
+                </button>
+                <button
+                  className={appMode === "export" ? "isActiveMode" : ""}
+                  type="button"
+                  role="tab"
+                  aria-selected={appMode === "export"}
+                  title={
+                    settings.exportOpensInWindow
+                      ? "エクスポートを別ウィンドウで開く"
+                      : "エクスポートモード"
+                  }
+                  onClick={() => switchAppMode("export")}
+                >
+                  エクスポート
+                </button>
+              </div>
+              {isRightSidebarCollapsed && appMode !== "export" && (
                 <button
                   className="iconButton"
                   type="button"
@@ -7120,24 +7233,6 @@ export default function App() {
                   <AppIcon name="panelRight" className="topbarSvgIcon" />
                 </button>
               )}
-              <button
-                className="iconButton"
-                type="button"
-                aria-label="エクスポート"
-                title="エクスポート"
-                onClick={() => void handleOpenLinkedExport()}
-              >
-                <AppIcon name="export" className="topbarSvgIcon" />
-              </button>
-              <button
-                className="iconButton"
-                type="button"
-                aria-label="Idea Board を開く"
-                title="Idea Board を開く"
-                onClick={() => void openIdeaCanvasBoard(projectFolder ? "project" : "global")}
-              >
-                <AppIcon name="canvas" className="topbarSvgIcon" />
-              </button>
               <button
                 className={`iconButton ${settings.writingMode === "horizontal-tb" ? "activeIconButton" : ""}`}
                 type="button"
@@ -7179,8 +7274,12 @@ export default function App() {
             </div>
           </header>
 
-          <div className="workspace" ref={workspaceRef}>
-            {!isLeftSidebarCollapsed && (
+          <div
+            className={`workspace ${appMode === "export" ? "modeHiddenPane" : ""}`}
+            ref={workspaceRef}
+            data-app-mode={appMode}
+          >
+            {appMode === "write" && !isLeftSidebarCollapsed && (
               <WorkspaceSidebar
                 projectFolder={projectFolder}
                 currentFilePath={currentFilePath}
@@ -7257,7 +7356,7 @@ export default function App() {
                 onCollapse={() => setIsLeftSidebarCollapsed(true)}
               />
             )}
-            <div className="editorColumn">
+            <div className={`editorColumn ${appMode !== "write" ? "modeHiddenPane" : ""}`}>
               <div className="editorFrame">
                 <div
                   ref={editorShellRef}
@@ -7558,6 +7657,23 @@ export default function App() {
               />
             </div>
 
+            {appMode === "canvas" && canvasEmbedPayload && (
+              <div className="canvasEmbeddedHost">
+                <CanvasWindowApp
+                  embedded
+                  embeddedPayload={canvasEmbedPayload}
+                  liveIdeaThreads={snippets.map((thread) => ({
+                    id: thread.id,
+                    kind: thread.kind,
+                    title: thread.title,
+                  }))}
+                  liveReferenceFiles={
+                    canvasEmbedPayload.scope === "project" ? sortedReferenceCandidates : []
+                  }
+                />
+              </div>
+            )}
+
             {!isRightSidebarCollapsed && (
               <aside
                 className={`rightSidebar ${isRightSidebarWide ? "wideRightSidebar" : ""}`}
@@ -7737,6 +7853,29 @@ export default function App() {
               onTextSaved={handleReferenceTextSaved}
             />
           </div>
+
+          {appMode === "export" && exportEmbedPayload && (
+            <div className="exportEmbeddedHost">
+              <LinkedExportScreen
+                key={exportEmbedPayload.requestId}
+                title={exportEmbedPayload.title}
+                initialSources={exportEmbedPayload.sources}
+                sourceError={exportEmbedPayload.sourceError}
+                onClose={() => {
+                  setAppMode("write");
+                  setExportEmbedPayload(null);
+                }}
+                onOpenSource={(path) => {
+                  setAppMode("write");
+                  setExportEmbedPayload(null);
+                  if (path) void handleProjectFileSelect(path);
+                }}
+                onExportPdf={exportPdfWithVivliostyle}
+                onExportDocx={exportDocxWithDialog}
+                onOpenResult={(path) => void invoke("open_export_location", { path })}
+              />
+            </div>
+          )}
 
           <div className={`toast ${toast ? "showToast" : ""}`} role="status">
             {toast}

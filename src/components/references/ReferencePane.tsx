@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import type { DragEvent, ReactNode } from "react";
+import { REFERENCE_FILE_DRAG_MIME } from "../../canvasTypes";
 import type { ReferenceCardState, ReferenceFileInfo } from "../../types";
 
 type ReferencePaneProps = {
@@ -39,6 +40,13 @@ const formatBytes = (size: number) => {
 
 const fileNameFromPath = (sourcePath: string) =>
   sourcePath.split(/[\\/]/).filter(Boolean).pop() ?? sourcePath;
+
+/** キャンバスモードのキャンバスへドロップして資料ノードを作るためのドラッグ開始。 */
+const startReferenceFileDrag = (event: DragEvent<HTMLElement>, file: ReferenceFileInfo) => {
+  event.dataTransfer.effectAllowed = "copy";
+  event.dataTransfer.setData(REFERENCE_FILE_DRAG_MIME, JSON.stringify(file));
+  event.dataTransfer.setData("text/plain", file.name);
+};
 
 function ReferenceKindIcon({ kind }: { kind: string }) {
   return (
@@ -223,7 +231,24 @@ export function ReferencePane({
             <p className="referenceEmpty">開いている資料はありません</p>
           ) : (
             cards.map((card) => (
-              <article className="referenceRow" key={card.id}>
+              <article
+                className="referenceRow"
+                key={card.id}
+                draggable
+                title="ドラッグでキャンバスへ追加できます"
+                onDragStart={(event) =>
+                  startReferenceFileDrag(
+                    event,
+                    infoByPath.get(card.sourcePath) ?? {
+                      sourcePath: card.sourcePath,
+                      name: fileNameFromPath(card.sourcePath),
+                      kind: card.kind,
+                      size: 0,
+                      imported: false,
+                    },
+                  )
+                }
+              >
                 <ReferenceKindIcon kind={card.kind} />
                 <div className="referenceRowMain">
                   <strong>{fileNameFromPath(card.sourcePath)}</strong>
@@ -269,7 +294,13 @@ export function ReferencePane({
             <p className="referenceEmpty">候補はありません</p>
           ) : (
             filteredCandidates.map((file) => (
-              <article className="referenceRow" key={file.sourcePath}>
+              <article
+                className="referenceRow"
+                key={file.sourcePath}
+                draggable
+                title="ドラッグでキャンバスへ追加できます"
+                onDragStart={(event) => startReferenceFileDrag(event, file)}
+              >
                 <ReferenceKindIcon kind={file.kind} />
                 <div className="referenceRowMain">
                   <strong>{file.name}</strong>

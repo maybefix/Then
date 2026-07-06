@@ -97,11 +97,26 @@ export type CanvasBoardSummary = {
   edgeCount: number;
 };
 
+export type CanvasIdeaFragmentOption = {
+  id: string;
+  body: string;
+  used: boolean;
+};
+
 export type CanvasIdeaThreadOption = {
   id: string;
   kind: "inbox" | "thread";
   title: string;
+  /** 別ウィンドウのサイドパネルでドラッグ投入するための断片一覧（任意）。 */
+  fragments?: CanvasIdeaFragmentOption[];
 };
+
+/**
+ * サイドバー→キャンバスの HTML5 DnD で使う MIME。
+ * Idea 断片は App.tsx 側のドラッグ開始が設定する既存の MIME を共有する。
+ */
+export const IDEA_FRAGMENT_DRAG_MIME = "application/x-brew-snippet-id";
+export const REFERENCE_FILE_DRAG_MIME = "application/x-then-reference-file";
 
 export type CanvasWindowPayload = {
   requestId: string;
@@ -118,6 +133,8 @@ export type CanvasWindowPayload = {
   canvasDefaultFontSource: CanvasNodeFontSource;
   ideaThreads: CanvasIdeaThreadOption[];
   referenceFiles?: ReferenceFileInfo[];
+  /** メイン画面の右サイドバー表示状態。別ウィンドウのサイドパネルへ引き継ぐ。 */
+  rightSidebarVisible?: boolean;
 };
 
 export type CanvasCopyToIdeaItem = {

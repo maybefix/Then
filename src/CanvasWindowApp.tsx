@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type DragEvent as ReactDragEvent,
   type FormEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -18,8 +19,10 @@ import {
   createCanvasGroupNode,
   createCanvasReferenceNode,
   createCanvasTextNode,
+  IDEA_FRAGMENT_DRAG_MIME,
   nextCanvasId,
   normalizeCanvasDocument,
+  REFERENCE_FILE_DRAG_MIME,
   type CanvasBoardSummary,
   type CanvasCopyToIdeaItem,
   type CanvasEdgeConnector,
@@ -28,6 +31,7 @@ import {
   type CanvasEdge,
   type CanvasFocusIdeaRequest,
   type CanvasGroupNode,
+  type CanvasIdeaThreadOption,
   type CanvasNode,
   type CanvasReferenceNode,
   type CanvasScope,
@@ -35,7 +39,7 @@ import {
   type CanvasWindowPayload,
   type JsonCanvasDocument,
 } from "./canvasTypes";
-import type { CanvasNodeFontSource, WritingMode } from "./types";
+import type { CanvasNodeFontSource, ReferenceFileInfo, WritingMode } from "./types";
 import { ReferenceReadOnlyPreview } from "./components/references/ReferenceLayer";
 
 const CANVAS_WIDTH = 6400;
@@ -427,7 +431,8 @@ function CanvasGlyph({
     | "fit"
     | "undo"
     | "redo"
-    | "plot";
+    | "plot"
+    | "panel";
 }) {
   const common = { viewBox: "0 0 24 24", "aria-hidden": true, focusable: false };
   switch (name) {
@@ -571,6 +576,15 @@ function CanvasGlyph({
           <path d="M3 19h.01" />
         </svg>
       );
+    case "panel":
+      return (
+        <svg {...common}>
+          <rect x="3.5" y="5" width="17" height="14" rx="2" />
+          <path d="M14.5 5v14" />
+          <path d="M17 9h1" />
+          <path d="M17 12h1" />
+        </svg>
+      );
     default:
       return (
         <svg {...common}>
@@ -580,7 +594,168 @@ function CanvasGlyph({
   }
 }
 
-export default function CanvasWindowApp() {
+function fragmentPreview(body: string) {
+  const line = body.replace(/\s+/g, " ").trim();
+  return line.length > 64 ? `${line.slice(0, 64)}…` : line;
+}
+
+/**
+ * 別ウィンドウ表示のキャンバスで、メイン画面の右サイドバー相当（Idea・資料）を
+ * 引き継ぐサイドパネル。項目はドラッグまたはクリックでキャンバスへ追加する。
+ */
+function CanvasSidePanel({
+  threads,
+  referenceFiles,
+  onInsertFragment,
+  onInsertReference,
+  onClose,
+}: {
+  threads: CanvasIdeaThreadOption[];
+  referenceFiles: ReferenceFileInfo[];
+  onInsertFragment: (body: string) => void;
+  onInsertReference: (file: ReferenceFileInfo) => void;
+  onClose: () => void;
+}) {
+  const [tab, setTab] = useState<"idea" | "reference">("idea");
+  const [query, setQuery] = useState("");
+  const normalized = query.trim().toLocaleLowerCase();
+
+  const visibleThreads = threads
+    .map((thread) => ({
+      ...thread,
+      fragments: (thread.fragments ?? []).filter((fragment) =>
+        normalized ? fragment.body.toLocaleLowerCase().includes(normalized) : true,
+      ),
+    }))
+    .filter((thread) => !normalized || thread.fragments.length > 0);
+  const visibleFiles = referenceFiles.filter((file) =>
+    normalized
+      ? `${file.name} ${file.sourcePath}`.toLocaleLowerCase().includes(normalized)
+      : true,
+  );
+
+  return (
+    <aside className="canvasSidePanel" aria-label="Idea と資料">
+      <header className="canvasSidePanelHeader">
+        <div className="canvasSidePanelTabs" role="tablist" aria-label="サイドパネル">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "idea"}
+            className={tab === "idea" ? "isActive" : ""}
+            onClick={() => setTab("idea")}
+          >
+            Idea
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "reference"}
+            className={tab === "reference" ? "isActive" : ""}
+            onClick={() => setTab("reference")}
+          >
+            資料
+          </button>
+        </div>
+        <button
+          className="canvasIconButton"
+          type="button"
+          aria-label="サイドパネルを畳む"
+          title="サイドパネルを畳む"
+          onClick={onClose}
+        >
+          ×
+        </button>
+      </header>
+      <input
+        className="canvasSidePanelSearch"
+        value={query}
+        type="search"
+        placeholder={tab === "idea" ? "断片を検索" : "資料を検索"}
+        aria-label={tab === "idea" ? "断片を検索" : "資料を検索"}
+        onChange={(event) => setQuery(event.target.value)}
+      />
+      <div className="canvasSidePanelBody">
+        {tab === "idea" ? (
+          visibleThreads.length === 0 ? (
+            <p className="canvasSidePanelEmpty">Idea 断片がありません</p>
+          ) : (
+            visibleThreads.map((thread) => (
+              <section className="canvasSidePanelGroup" key={thread.id}>
+                <h3>{thread.title}</h3>
+                {thread.fragments.length === 0 ? (
+                  <p className="canvasSidePanelEmpty">断片がありません</p>
+                ) : (
+                  thread.fragments.map((fragment) => (
+                    <button
+                      className={`canvasSidePanelItem ${fragment.used ? "isUsed" : ""}`}
+                      key={fragment.id}
+                      type="button"
+                      draggable
+                      title="ドラッグまたはクリックでキャンバスへ追加"
+                      onDragStart={(event) => {
+                        event.dataTransfer.effectAllowed = "copy";
+                        event.dataTransfer.setData(IDEA_FRAGMENT_DRAG_MIME, fragment.id);
+                        event.dataTransfer.setData("text/plain", fragment.body);
+                      }}
+                      onClick={() => onInsertFragment(fragment.body)}
+                    >
+                      {fragmentPreview(fragment.body)}
+                    </button>
+                  ))
+                )}
+              </section>
+            ))
+          )
+        ) : visibleFiles.length === 0 ? (
+          <p className="canvasSidePanelEmpty">資料がありません</p>
+        ) : (
+          visibleFiles.map((file) => (
+            <button
+              className="canvasSidePanelItem canvasSidePanelFile"
+              key={file.sourcePath}
+              type="button"
+              draggable
+              title={`${file.sourcePath}\nドラッグまたはクリックでキャンバスへ追加`}
+              onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = "copy";
+                event.dataTransfer.setData(REFERENCE_FILE_DRAG_MIME, JSON.stringify(file));
+                event.dataTransfer.setData("text/plain", file.name);
+              }}
+              onClick={() => onInsertReference(file)}
+            >
+              <span>{referenceKindLabel(file.kind)}</span>
+              <strong>{file.name}</strong>
+            </button>
+          ))
+        )}
+      </div>
+      <p className="canvasSidePanelHint">ドラッグでキャンバスの好きな場所に置けます</p>
+    </aside>
+  );
+}
+
+type CanvasWindowAppProps = {
+  /**
+   * メイン画面のキャンバスモードとして描画する場合 true。
+   * ペイロードは Tauri 経由ではなく props から受け取り、外枠（テーマ・フォント変数）
+   * は親の appShell を継承する。
+   */
+  embedded?: boolean;
+  /** embedded 時のペイロード。requestId が変わるとボードを読み直す。 */
+  embeddedPayload?: CanvasWindowPayload | null;
+  /** embedded 時に Idea 送信先セレクトへ反映する最新のスレッド一覧。 */
+  liveIdeaThreads?: CanvasIdeaThreadOption[];
+  /** embedded 時に資料メニューへ反映する最新の資料一覧。 */
+  liveReferenceFiles?: ReferenceFileInfo[];
+};
+
+export default function CanvasWindowApp({
+  embedded = false,
+  embeddedPayload = null,
+  liveIdeaThreads,
+  liveReferenceFiles,
+}: CanvasWindowAppProps = {}) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const saveTimerRef = useRef<number | null>(null);
@@ -594,6 +769,12 @@ export default function CanvasWindowApp() {
   const editSessionRef = useRef<string | null>(null);
   const marqueePointRef = useRef<Point | null>(null);
   const spaceDownRef = useRef(false);
+
+  const pendingSaveRef = useRef<{
+    scope: CanvasScope;
+    rootPath: string | null;
+    boardId: string;
+  } | null>(null);
 
   const [payload, setPayload] = useState<CanvasWindowPayload | null>(null);
   const [scope, setScope] = useState<CanvasScope>("global");
@@ -622,6 +803,8 @@ export default function CanvasWindowApp() {
   const [renameDraft, setRenameDraft] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createDraft, setCreateDraft] = useState("");
+  // 別ウィンドウ表示のときだけ使う Idea・資料サイドパネル。
+  const [isSidePanelOpen, setIsSidePanelOpen] = useState(true);
 
   useEffect(() => {
     boardRef.current = board;
@@ -636,7 +819,8 @@ export default function CanvasWindowApp() {
     () => board?.edges.find((edge) => edge.id === selectedEdgeId) ?? null,
     [board, selectedEdgeId],
   );
-  const referenceFiles = payload?.referenceFiles ?? [];
+  const referenceFiles = liveReferenceFiles ?? payload?.referenceFiles ?? [];
+  const ideaThreadOptions = liveIdeaThreads ?? payload?.ideaThreads ?? [];
   const filteredReferenceFiles = useMemo(() => {
     const normalized = referenceQuery.trim().toLocaleLowerCase();
     if (!normalized) return referenceFiles;
@@ -851,15 +1035,18 @@ export default function CanvasWindowApp() {
     [pan.x, pan.y, zoom],
   );
 
-  const addReferenceNode = (file: (typeof referenceFiles)[number]) => {
-    if (!board) return;
+  const viewportCenterWorld = (): Point => {
     const rect = viewportRef.current?.getBoundingClientRect();
-    const width = 380;
-    const height = 260;
-    const point = screenToWorld(
+    return screenToWorld(
       (rect?.left ?? 0) + (rect?.width ?? window.innerWidth) / 2,
       (rect?.top ?? 0) + (rect?.height ?? window.innerHeight) / 2,
     );
+  };
+
+  const insertReferenceNodeAt = (file: ReferenceFileInfo, point: Point) => {
+    if (!board) return;
+    const width = 380;
+    const height = 260;
     const node = createCanvasReferenceNode(file, {
       x: Math.max(0, point.x - width / 2),
       y: Math.max(0, point.y - height / 2),
@@ -870,9 +1057,65 @@ export default function CanvasWindowApp() {
     patchBoard((current) => ({ ...current, nodes: [...current.nodes, node] }));
     setSelectedIds(new Set([node.id]));
     setSelectedEdgeId(null);
+  };
+
+  const insertIdeaTextNodeAt = (body: string, point: Point) => {
+    if (!board) return;
+    const width = 260;
+    const height = 150;
+    const node = createCanvasTextNode(body, {
+      x: Math.max(0, point.x - width / 2),
+      y: Math.max(0, point.y - height / 2),
+      writingMode: defaultCanvasWritingMode,
+      fontSource: defaultCanvasFontSource,
+    });
+    pushHistory();
+    patchBoard((current) => ({ ...current, nodes: [...current.nodes, node] }));
+    setSelectedIds(new Set([node.id]));
+    setSelectedEdgeId(null);
+  };
+
+  const addReferenceNode = (file: (typeof referenceFiles)[number]) => {
+    insertReferenceNodeAt(file, viewportCenterWorld());
     setTool("select");
     setIsReferenceMenuOpen(false);
     setReferenceQuery("");
+  };
+
+  // 右サイドバー（embedded）／サイドパネル（別ウィンドウ）から Idea 断片・資料を
+  // ドラッグしてキャンバスへ落とす。断片本文は text/plain で受け取る。
+  const canAcceptCanvasDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+    const types = event.dataTransfer.types;
+    return types.includes(IDEA_FRAGMENT_DRAG_MIME) || types.includes(REFERENCE_FILE_DRAG_MIME);
+  };
+
+  const handleViewportDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (!canAcceptCanvasDrop(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleViewportDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (!canAcceptCanvasDrop(event) || !board) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const point = screenToWorld(event.clientX, event.clientY);
+    if (event.dataTransfer.types.includes(REFERENCE_FILE_DRAG_MIME)) {
+      try {
+        const file = JSON.parse(
+          event.dataTransfer.getData(REFERENCE_FILE_DRAG_MIME),
+        ) as ReferenceFileInfo;
+        if (file && typeof file.sourcePath === "string" && file.sourcePath) {
+          insertReferenceNodeAt(file, point);
+        }
+      } catch {
+        // 壊れたドラッグデータは無視する
+      }
+      return;
+    }
+    const body = event.dataTransfer.getData("text/plain");
+    if (!body.trim()) return;
+    insertIdeaTextNodeAt(body, point);
   };
 
   const loadBoardList = useCallback(
@@ -910,6 +1153,10 @@ export default function CanvasWindowApp() {
   );
 
   useEffect(() => {
+    if (embedded) {
+      setPayload(embeddedPayload ?? fallbackPayload);
+      return;
+    }
     if (!isTauriRuntime()) {
       setPayload(fallbackPayload);
       return;
@@ -928,7 +1175,7 @@ export default function CanvasWindowApp() {
     return () => {
       unlistenPayload?.();
     };
-  }, []);
+  }, [embedded, embeddedPayload]);
 
   useEffect(() => {
     if (!payload) return;
@@ -938,8 +1185,10 @@ export default function CanvasWindowApp() {
         payload.ideaThreads[0]?.id ??
         "idea-inbox",
     );
+    // メイン画面の右サイドバー表示状態を別ウィンドウのサイドパネルへ引き継ぐ。
+    if (!embedded) setIsSidePanelOpen(payload.rightSidebarVisible ?? true);
     void loadBoardList(payload.scope, payload.boardId, payload.selectNodeId);
-  }, [payload, loadBoardList]);
+  }, [payload, loadBoardList, embedded]);
 
   useEffect(() => {
     if (!board || !activeBoardId || !payload) return;
@@ -949,9 +1198,11 @@ export default function CanvasWindowApp() {
     }
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     setStatus("保存中");
+    pendingSaveRef.current = { scope, rootPath: payload.rootPath, boardId: activeBoardId };
     saveTimerRef.current = window.setTimeout(() => {
       saveBoard(scope, payload.rootPath, activeBoardId, board)
         .then(async () => {
+          pendingSaveRef.current = null;
           const summaries = await listBoards(scope, payload.rootPath);
           setBoards(summaries);
           setStatus(`保存済み ${formatSaveTime(Date.now())}`);
@@ -969,6 +1220,17 @@ export default function CanvasWindowApp() {
       }
     };
   }, [activeBoardId, board, payload, scope]);
+
+  // モード切替などでアンマウントされる際、デバウンス待ちの保存を取りこぼさない。
+  useEffect(() => {
+    return () => {
+      const pending = pendingSaveRef.current;
+      const currentBoard = boardRef.current;
+      if (!pending || !currentBoard) return;
+      pendingSaveRef.current = null;
+      void saveBoard(pending.scope, pending.rootPath, pending.boardId, currentBoard).catch(() => {});
+    };
+  }, []);
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -1676,9 +1938,9 @@ export default function CanvasWindowApp() {
 
   return (
     <main
-      className="appShell canvasWindowRoot"
-      data-theme={payload?.theme ?? "dark"}
-      style={themeStyle}
+      className={embedded ? "canvasWindowRoot canvasEmbeddedRoot" : "appShell canvasWindowRoot"}
+      data-theme={embedded ? undefined : payload?.theme ?? "dark"}
+      style={embedded ? undefined : themeStyle}
     >
       <header className="canvasTopbar">
         <div className="canvasToolbarCluster canvasScopeSwitch" aria-label="ボードの範囲">
@@ -1812,6 +2074,18 @@ export default function CanvasWindowApp() {
           >
             <CanvasGlyph name="fit" />
           </button>
+          {!embedded && (
+            <button
+              className={`canvasIconButton ${isSidePanelOpen ? "isActive" : ""}`}
+              type="button"
+              title="Idea・資料パネル"
+              aria-label="Idea・資料パネル"
+              aria-expanded={isSidePanelOpen}
+              onClick={() => setIsSidePanelOpen((value) => !value)}
+            >
+              <CanvasGlyph name="panel" />
+            </button>
+          )}
           <div className="canvasHelpHost">
             <button
               className={`canvasIconButton ${isHelpOpen ? "isActive" : ""}`}
@@ -1843,13 +2117,19 @@ export default function CanvasWindowApp() {
         </div>
       </header>
 
-      <section className="canvasWorkspace">
+      <section
+        className={`canvasWorkspace ${
+          !embedded && isSidePanelOpen ? "hasCanvasSidePanel" : ""
+        }`}
+      >
         <div
           ref={viewportRef}
           className="canvasViewport"
           onPointerDown={handleViewportPointerDown}
           onDoubleClick={handleViewportDoubleClick}
           onPointerMove={handleViewportPointerMove}
+          onDragOver={handleViewportDragOver}
+          onDrop={handleViewportDrop}
           onWheel={handleWheel}
           onScroll={(event) => {
             // 移動は pan（transform）で表現する。フォーカス移動などによる
@@ -2137,7 +2417,7 @@ export default function CanvasWindowApp() {
                     onChange={(event) => setTargetThreadId(event.target.value)}
                     aria-label="Idea の送信先スレッド"
                   >
-                    {payload?.ideaThreads.map((thread) => (
+                    {ideaThreadOptions.map((thread) => (
                       <option key={thread.id} value={thread.id}>
                         {thread.kind === "inbox" ? "▾ " : ""}
                         {thread.title}
@@ -2219,6 +2499,15 @@ export default function CanvasWindowApp() {
             </button>
           </div>
         </div>
+        {!embedded && isSidePanelOpen && (
+          <CanvasSidePanel
+            threads={ideaThreadOptions}
+            referenceFiles={referenceFiles}
+            onInsertFragment={(body) => insertIdeaTextNodeAt(body, viewportCenterWorld())}
+            onInsertReference={(file) => insertReferenceNodeAt(file, viewportCenterWorld())}
+            onClose={() => setIsSidePanelOpen(false)}
+          />
+        )}
       </section>
       {isRenameModalOpen && (
         <div className="canvasModalBackdrop" role="presentation">
