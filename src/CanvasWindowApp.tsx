@@ -14,6 +14,7 @@ import {
   type WheelEvent,
 } from "react";
 import {
+  CANVAS_LIVE_DATA_EVENT,
   createCanvasDocument,
   createCanvasEdge,
   createCanvasGroupNode,
@@ -32,6 +33,7 @@ import {
   type CanvasFocusIdeaRequest,
   type CanvasGroupNode,
   type CanvasIdeaThreadOption,
+  type CanvasLiveDataEvent,
   type CanvasNode,
   type CanvasReferenceNode,
   type CanvasScope,
@@ -805,6 +807,12 @@ export default function CanvasWindowApp({
   const [createDraft, setCreateDraft] = useState("");
   // 別ウィンドウ表示のときだけ使う Idea・資料サイドパネル。
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(true);
+  /**
+   * メイン画面から届く Idea・資料の最新一覧（別ウィンドウ用）。payload と違い
+   * ボードの再読込を伴わないため、断片の追加・編集が開いたままのウィンドウにも
+   * 反映される。null の間は payload の内容を使う。
+   */
+  const [livePanelData, setLivePanelData] = useState<CanvasLiveDataEvent | null>(null);
 
   useEffect(() => {
     boardRef.current = board;
@@ -819,8 +827,16 @@ export default function CanvasWindowApp({
     () => board?.edges.find((edge) => edge.id === selectedEdgeId) ?? null,
     [board, selectedEdgeId],
   );
-  const referenceFiles = liveReferenceFiles ?? payload?.referenceFiles ?? [];
-  const ideaThreadOptions = liveIdeaThreads ?? payload?.ideaThreads ?? [];
+  // 優先順: embedded の props > 別ウィンドウのライブイベント > 開いた時点の payload。
+  // 資料一覧のライブ反映は、開いた時点でプロジェクト情報がある（=プレビュー可能な）
+  // ウィンドウに限る。global で開いた場合は従来どおり空のまま。
+  const referenceFiles =
+    liveReferenceFiles ??
+    (payload?.rootPath ? livePanelData?.referenceFiles : undefined) ??
+    payload?.referenceFiles ??
+    [];
+  const ideaThreadOptions =
+    liveIdeaThreads ?? livePanelData?.ideaThreads ?? payload?.ideaThreads ?? [];
   const filteredReferenceFiles = useMemo(() => {
     const normalized = referenceQuery.trim().toLocaleLowerCase();
     if (!normalized) return referenceFiles;
@@ -1187,8 +1203,32 @@ export default function CanvasWindowApp({
     );
     // メイン画面の右サイドバー表示状態を別ウィンドウのサイドパネルへ引き継ぐ。
     if (!embedded) setIsSidePanelOpen(payload.rightSidebarVisible ?? true);
+    // 開き直しの payload は最新のスナップショットなので、古いライブ差分は破棄する。
+    setLivePanelData(null);
     void loadBoardList(payload.scope, payload.boardId, payload.selectNodeId);
   }, [payload, loadBoardList, embedded]);
+
+  // メイン画面からの Idea・資料のライブ更新（別ウィンドウのみ）。ボードには触れない。
+  useEffect(() => {
+    if (embedded || !isTauriRuntime()) return;
+    let dispose: (() => void) | undefined;
+    void listen<CanvasLiveDataEvent>(CANVAS_LIVE_DATA_EVENT, (event) => {
+      setLivePanelData(event.payload);
+    }).then((unlisten) => {
+      dispose = unlisten;
+    });
+    return () => dispose?.();
+  }, [embedded]);
+
+  // ライブ更新で送信先スレッドが消えた場合はインボックス（先頭）へ戻す。
+  useEffect(() => {
+    if (targetThreadId === NEW_THREAD_TARGET || ideaThreadOptions.length === 0) return;
+    if (ideaThreadOptions.some((thread) => thread.id === targetThreadId)) return;
+    setTargetThreadId(
+      ideaThreadOptions.find((thread) => thread.kind === "inbox")?.id ??
+        ideaThreadOptions[0].id,
+    );
+  }, [ideaThreadOptions, targetThreadId]);
 
   useEffect(() => {
     if (!board || !activeBoardId || !payload) return;

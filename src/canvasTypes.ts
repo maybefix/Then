@@ -118,6 +118,17 @@ export type CanvasIdeaThreadOption = {
 export const IDEA_FRAGMENT_DRAG_MIME = "application/x-brew-snippet-id";
 export const REFERENCE_FILE_DRAG_MIME = "application/x-then-reference-file";
 
+/**
+ * メイン画面 → 別ウィンドウキャンバスへ Idea・資料の最新一覧だけを届けるイベント。
+ * then-canvas-payload と違いボードの再読込（選択・undo履歴のリセット）を起こさない。
+ */
+export const CANVAS_LIVE_DATA_EVENT = "then-canvas-live-data";
+
+export type CanvasLiveDataEvent = {
+  ideaThreads: CanvasIdeaThreadOption[];
+  referenceFiles: ReferenceFileInfo[];
+};
+
 export type CanvasWindowPayload = {
   requestId: string;
   rootPath: string | null;

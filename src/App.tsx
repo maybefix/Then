@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emitTo, listen } from "@tauri-apps/api/event";
 import {
   ChangeEvent,
   DragEvent,
@@ -43,6 +43,7 @@ import {
   PlotPaneHeaderActions,
 } from "./components/plot/PlotPane";
 import {
+  CANVAS_LIVE_DATA_EVENT,
   createCanvasDocument,
   createCanvasEdge,
   createCanvasGroupNode,
@@ -53,6 +54,7 @@ import {
   type CanvasCopyToIdeaRequest,
   type CanvasCopyToPlotRequest,
   type CanvasFocusIdeaRequest,
+  type CanvasLiveDataEvent,
   type CanvasNode,
   type CanvasScope,
   type CanvasWindowPayload,
@@ -5009,6 +5011,32 @@ export default function App() {
     setExportEmbedPayload(null);
     setAppMode("write");
   }, [projectPathForModeReset]);
+
+  // 別ウィンドウのキャンバスへ Idea・資料の最新一覧を届ける。断片編集は
+  // キーストロークごとに snippets が変わるためデバウンスする。ウィンドウが
+  // 存在しない場合は誰も受け取らないだけで害はない（ボードの再読込もしない）。
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    const timer = window.setTimeout(() => {
+      const payload: CanvasLiveDataEvent = {
+        ideaThreads: snippets.map((thread) => ({
+          id: thread.id,
+          kind: thread.kind,
+          title: thread.title,
+          fragments: thread.fragments.map((fragment) => ({
+            id: fragment.id,
+            body: fragment.body,
+            used: fragment.used,
+          })),
+        })),
+        referenceFiles: projectFolder ? sortedReferenceCandidates : [],
+      };
+      emitTo("idea-canvas", CANVAS_LIVE_DATA_EVENT, payload).catch(() => {
+        // 対象ウィンドウが無い・閉じた直後などは黙って捨てる
+      });
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [snippets, sortedReferenceCandidates, projectFolder]);
 
   const jumpToEditorLine = (line: number) => {
     const targetLine = Math.max(1, line);
