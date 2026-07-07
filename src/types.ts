@@ -168,6 +168,9 @@ export type WritingMode = "vertical-rl" | "horizontal-tb";
 /** Canvas の text node に適用するフォント種別。 */
 export type CanvasNodeFontSource = "ui" | "editor";
 
+/** プロット表示に適用するフォント種別。 */
+export type PlotFontSource = "ui" | "editor";
+
 /** ファイルごとの進捗ラベル。デフォルトは "todo"（未着手）。 */
 export type FileProgressStatus = "todo" | "writing" | "revising" | "done";
 
@@ -218,6 +221,8 @@ export type EditorSettings = {
   canvasDefaultWritingMode: WritingMode;
   /** Canvas text node の既定フォント種別。 */
   canvasDefaultFontSource: CanvasNodeFontSource;
+  /** プロット表示に使うフォント種別。 */
+  plotFontSource: PlotFontSource;
   /** キャンバスをメイン画面のモードではなく別ウィンドウで開くか。 */
   canvasOpensInWindow: boolean;
   /** エクスポートをメイン画面のモードではなく別ウィンドウで開くか。 */

@@ -6,6 +6,7 @@
     "Noto Sans JP", sans-serif;
   --editor-font-family:
     "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", YuMincho, serif;
+  --plot-font-family: var(--editor-font-family);
   --editor-font-size: 24px;
   --editor-line-height: 2.3;
   --ui-font-scale: 1;
@@ -2176,6 +2177,42 @@ body.thenPdfExporting .printExportViewport {
   flex-direction: column;
 }
 
+.settingsTabList {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 8px 12px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.settingsTabList button {
+  min-width: 0;
+  height: 32px;
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.settingsTabList button:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.settingsTabList button.active,
+.settingsTabList button[aria-selected="true"] {
+  border-color: var(--border-subtle);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+}
+
 .commandPaletteBackdrop {
   place-items: start center;
   padding-top: 12vh;
@@ -2306,6 +2343,11 @@ body.thenPdfExporting .printExportViewport {
 .settingsModal .modalForm {
   min-height: 0;
   overflow-y: auto;
+}
+
+.settingsTabPanel {
+  display: grid;
+  gap: 12px;
 }
 
 .settingsModal .modalActions {
@@ -5688,7 +5730,7 @@ body {
   background: var(--bg-panel-strong);
   color: var(--text-primary);
   cursor: pointer;
-  font-family: var(--editor-font-family);
+  font-family: var(--plot-font-family);
   font-size: 15px;
   font-weight: 600;
   letter-spacing: 0.2em;
@@ -5729,7 +5771,7 @@ body {
   resize: none;
   outline: none;
   border-radius: 4px;
-  font-family: var(--editor-font-family);
+  font-family: var(--plot-font-family);
   letter-spacing: 0.04em;
   white-space: pre-wrap;
   scrollbar-width: none;
@@ -6022,7 +6064,7 @@ body {
   writing-mode: vertical-rl;
   text-orientation: mixed;
   color: var(--accent-strong);
-  font-family: var(--editor-font-family);
+  font-family: var(--plot-font-family);
   font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.08em;

@@ -626,6 +626,7 @@ const defaultSettings: EditorSettings = {
   writingMode: "vertical-rl",
   canvasDefaultWritingMode: "horizontal-tb",
   canvasDefaultFontSource: "ui",
+  plotFontSource: "editor",
   typewriterScroll: true,
   typewriterOffset: 46,
   showLineBreakMarks: false,
@@ -1689,6 +1690,10 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         settings.canvasDefaultFontSource === "editor" || settings.canvasDefaultFontSource === "ui"
           ? settings.canvasDefaultFontSource
           : defaultSettings.canvasDefaultFontSource,
+      plotFontSource:
+        settings.plotFontSource === "editor" || settings.plotFontSource === "ui"
+          ? settings.plotFontSource
+          : defaultSettings.plotFontSource,
       canvasOpensInWindow:
         typeof settings.canvasOpensInWindow === "boolean"
           ? settings.canvasOpensInWindow
@@ -6694,6 +6699,10 @@ export default function App() {
           {
             "--editor-font-family": settings.editorFontFamily,
             "--ui-font-family": settings.uiFontFamily,
+            "--plot-font-family":
+              settings.plotFontSource === "ui"
+                ? settings.uiFontFamily
+                : settings.editorFontFamily,
             "--ui-font-scale": settings.uiFontScale,
             "--editor-font-size": `${settings.fontSize}px`,
             "--editor-line-height": settings.lineHeight,

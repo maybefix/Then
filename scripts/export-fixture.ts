@@ -110,6 +110,23 @@ if (!mixedFirstPageXml?.includes('<w:footerReference w:type="first"')) {
   throw new Error("DOCX first-page footer reference is missing when only the header is hidden");
 }
 
+const staleDisabledHeaderLayout = JSON.parse(JSON.stringify(DEFAULT_EXPORT_LAYOUT));
+staleDisabledHeaderLayout.header.enabled = false;
+staleDisabledHeaderLayout.header.content = "none";
+staleDisabledHeaderLayout.header.hideOnTitlePage = true;
+staleDisabledHeaderLayout.header.hideOnFirstPage = true;
+staleDisabledHeaderLayout.footer.hideOnTitlePage = false;
+staleDisabledHeaderLayout.footer.hideOnFirstPage = false;
+const staleDisabledHeaderDocx = await generateVerticalDocx({
+  ...linkedDocument,
+  layout: staleDisabledHeaderLayout,
+});
+const staleDisabledHeaderZip = await JSZip.loadAsync(staleDisabledHeaderDocx);
+const staleDisabledHeaderXml = await staleDisabledHeaderZip.file("word/document.xml")?.async("string");
+if (staleDisabledHeaderXml?.includes("<w:titlePg/>")) {
+  throw new Error("DOCX stale disabled header hiding created first-page headers/footers");
+}
+
 const printHtml = buildLinkedPrintHtml(linkedDocument, "http://127.0.0.1:1420/");
 if (printHtml.match(/class="then-export-page/g)?.length !== pages.length) throw new Error("print HTML page count differs from pagination model");
 if (printHtml.includes("vivliostyle")) throw new Error("print HTML unexpectedly references Vivliostyle");

@@ -207,11 +207,13 @@ function footerValue(document: LinkedExportDocument): { text: string; isPageFiel
 
 function headerHiddenOnSectionFirstPage(document: LinkedExportDocument, sectionIndex: number): boolean {
   const header = document.layout.header;
+  if (!header.enabled || header.content === "none") return false;
   return header.hideOnTitlePage || (sectionIndex === 0 && header.hideOnFirstPage);
 }
 
 function footerHiddenOnSectionFirstPage(document: LinkedExportDocument, sectionIndex: number): boolean {
   const footer = document.layout.footer;
+  if (!footer.enabled || footer.content === "none") return false;
   return footer.hideOnTitlePage || (sectionIndex === 0 && footer.hideOnFirstPage);
 }
 
