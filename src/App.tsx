@@ -615,6 +615,66 @@ function normalizeIdeaThreads(value: unknown): IdeaThread[] {
   return [inbox, ...others];
 }
 
+function quoteCssFontFamily(family: string): string {
+  const escaped = family.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `"${escaped}"`;
+}
+
+const hiraginoCssFontFamilyAliases = new Map<string, string[]>([
+  ["ヒラギノ角ゴ Pro W3", ["Hiragino Kaku Gothic Pro", "ヒラギノ角ゴ Pro"]],
+  ["ヒラギノ角ゴ Pro W6", ["Hiragino Kaku Gothic Pro", "ヒラギノ角ゴ Pro"]],
+  ["ヒラギノ角ゴ Std W8", ["Hiragino Kaku Gothic Std", "ヒラギノ角ゴ Std"]],
+  ["ヒラギノ明朝 Pro W3", ["Hiragino Mincho Pro", "ヒラギノ明朝 Pro"]],
+  ["ヒラギノ明朝 Pro W6", ["Hiragino Mincho Pro", "ヒラギノ明朝 Pro"]],
+]);
+
+function unquoteSingleCssFontFamily(value: string): string | null {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^"((?:\\.|[^"\\])*)"$/) ?? trimmed.match(/^'((?:\\.|[^'\\])*)'$/);
+  return match ? match[1].replace(/\\(["'\\])/g, "$1").replace(/\\\\/g, "\\") : null;
+}
+
+function resolveCssFontFamilyAlias(family: string): string | null {
+  const label = unquoteSingleCssFontFamily(family) ?? family.trim();
+  const aliases = hiraginoCssFontFamilyAliases.get(label);
+  return aliases ? aliases.map(quoteCssFontFamily).join(", ") : null;
+}
+
+function toCssFontFamilyValue(family: string): string {
+  return resolveCssFontFamilyAlias(family) ?? quoteCssFontFamily(family.trim());
+}
+
+function normalizeStoredFontFamily(value: unknown, fallback: string): string {
+  if (typeof value !== "string") return fallback;
+
+  const fontFamily = value.trim();
+  if (!fontFamily) return fallback;
+  const alias = resolveCssFontFamilyAlias(fontFamily);
+  if (alias) return alias;
+  if (fontFamily.startsWith('"') || fontFamily.startsWith("'") || fontFamily.includes(",")) {
+    return fontFamily;
+  }
+
+  return toCssFontFamilyValue(fontFamily);
+}
+
+function createFontOptions(fontFamilies: string[]): FontOption[] {
+  const uniqueFamilies = new Map<string, FontOption>();
+
+  for (const fontFamily of fontFamilies) {
+    const label = fontFamily.trim();
+    if (!label || uniqueFamilies.has(label)) continue;
+    uniqueFamilies.set(label, {
+      label,
+      cssFamily: toCssFontFamilyValue(label),
+    });
+  }
+
+  return Array.from(uniqueFamilies.values()).sort((left, right) =>
+    left.label.localeCompare(right.label),
+  );
+}
+
 const defaultSettings: EditorSettings = {
   theme: "dark",
   editorFontFamily: toCssFontFamilyValue("Noto Serif JP"),
@@ -1135,44 +1195,6 @@ function nextReferenceZIndex(cards: ReferenceCardState[], pinned: boolean): numb
   return pinned
     ? Math.max(PINNED_REFERENCE_Z_BASE, maxZ + 1)
     : Math.min(NORMAL_REFERENCE_Z_LIMIT, maxZ + 1);
-}
-
-function quoteCssFontFamily(family: string): string {
-  const escaped = family.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  return `"${escaped}"`;
-}
-
-function toCssFontFamilyValue(family: string): string {
-  return quoteCssFontFamily(family.trim());
-}
-
-function normalizeStoredFontFamily(value: unknown, fallback: string): string {
-  if (typeof value !== "string") return fallback;
-
-  const fontFamily = value.trim();
-  if (!fontFamily) return fallback;
-  if (fontFamily.startsWith('"') || fontFamily.startsWith("'") || fontFamily.includes(",")) {
-    return fontFamily;
-  }
-
-  return toCssFontFamilyValue(fontFamily);
-}
-
-function createFontOptions(fontFamilies: string[]): FontOption[] {
-  const uniqueFamilies = new Map<string, FontOption>();
-
-  for (const fontFamily of fontFamilies) {
-    const label = fontFamily.trim();
-    if (!label || uniqueFamilies.has(label)) continue;
-    uniqueFamilies.set(label, {
-      label,
-      cssFamily: toCssFontFamilyValue(label),
-    });
-  }
-
-  return Array.from(uniqueFamilies.values()).sort((left, right) =>
-    left.label.localeCompare(right.label),
-  );
 }
 
 function normalizeSelectionRange(
