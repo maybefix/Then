@@ -190,8 +190,8 @@ export const DEFAULT_EXPORT_LAYOUT: ExportLayoutProfile = {
   header: {
     enabled: true,
     content: "title",
-    hideOnTitlePage: true,
-    hideOnFirstPage: true,
+    hideOnTitlePage: false,
+    hideOnFirstPage: false,
     differentOddEven: false,
   },
   footer: {
@@ -200,8 +200,8 @@ export const DEFAULT_EXPORT_LAYOUT: ExportLayoutProfile = {
     pageNumber: true,
     pageNumberPosition: "bottom-center",
     startPageNumber: 1,
-    hideOnTitlePage: true,
-    hideOnFirstPage: true,
+    hideOnTitlePage: false,
+    hideOnFirstPage: false,
     differentOddEven: false,
   },
 };

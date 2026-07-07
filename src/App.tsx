@@ -7886,6 +7886,7 @@ export default function App() {
             <div className="exportEmbeddedHost">
               <LinkedExportScreen
                 key={exportEmbedPayload.requestId}
+                embedded
                 title={exportEmbedPayload.title}
                 initialSources={exportEmbedPayload.sources}
                 sourceError={exportEmbedPayload.sourceError}

@@ -160,7 +160,7 @@ function sectionStart(nextSection: LinkedExportSection | undefined): string {
 type PartReference = {
   id: string;
   type: "header" | "footer";
-  variant: "default" | "even";
+  variant: "default" | "even" | "first";
   target: string;
 };
 
@@ -205,6 +205,16 @@ function footerValue(document: LinkedExportDocument): { text: string; isPageFiel
   }
 }
 
+function headerHiddenOnSectionFirstPage(document: LinkedExportDocument, sectionIndex: number): boolean {
+  const header = document.layout.header;
+  return header.hideOnTitlePage || (sectionIndex === 0 && header.hideOnFirstPage);
+}
+
+function footerHiddenOnSectionFirstPage(document: LinkedExportDocument, sectionIndex: number): boolean {
+  const footer = document.layout.footer;
+  return footer.hideOnTitlePage || (sectionIndex === 0 && footer.hideOnFirstPage);
+}
+
 function horizontalAlignment(
   position: ExportLayoutProfile["footer"]["pageNumberPosition"],
   even: boolean,
@@ -224,21 +234,40 @@ function buildSectionParts(
   const references: PartReference[] = [];
   const files: SectionParts["files"] = [];
   let relationshipIndex = firstRelationshipId;
-  const variants: Array<"default" | "even"> = document.layout.header.differentOddEven
+  const hasEvenVariant = document.layout.header.differentOddEven
     || ["outer", "inner"].includes(document.layout.footer.pageNumberPosition)
-    ? ["default", "even"]
-    : ["default"];
+    || false;
+  const normalHeaderText = headerValue(document, section, false);
+  const normalFooter = footerValue(document);
+  const topPageNumber = document.layout.footer.enabled
+    && document.layout.footer.pageNumber
+    && document.layout.footer.pageNumberPosition === "top-center";
+  const showFooterInFooter = document.layout.footer.pageNumberPosition !== "top-center"
+    && (normalFooter.text || normalFooter.isPageField);
+  const hasFirstHeaderDifference = (normalHeaderText || topPageNumber)
+    && (headerHiddenOnSectionFirstPage(document, sectionIndex)
+      || footerHiddenOnSectionFirstPage(document, sectionIndex));
+  const hasFirstFooterDifference = showFooterInFooter
+    && footerHiddenOnSectionFirstPage(document, sectionIndex);
+  const useFirstVariant = hasFirstHeaderDifference || hasFirstFooterDifference;
+  const variants: Array<"default" | "even" | "first"> = [
+    "default",
+    ...(hasEvenVariant ? ["even" as const] : []),
+    ...(useFirstVariant ? ["first" as const] : []),
+  ];
 
   for (const variant of variants) {
     const even = variant === "even";
-    const headerText = headerValue(document, section, even);
-    const topPageNumber = document.layout.footer.enabled
-      && document.layout.footer.pageNumber
-      && document.layout.footer.pageNumberPosition === "top-center";
-    if (headerText || topPageNumber) {
-      const target = `header${sectionIndex + 1}${even ? "Even" : ""}.xml`;
+    const first = variant === "first";
+    const headerText = first && headerHiddenOnSectionFirstPage(document, sectionIndex)
+      ? ""
+      : headerValue(document, section, even);
+    const pageNumberInHeader = topPageNumber
+      && !(first && footerHiddenOnSectionFirstPage(document, sectionIndex));
+    if (headerText || pageNumberInHeader) {
+      const target = `header${sectionIndex + 1}${even ? "Even" : first ? "First" : ""}.xml`;
       const paragraphs = [
-        topPageNumber ? paragraphWithValue(font, "", "center", true) : "",
+        pageNumberInHeader ? paragraphWithValue(font, "", "center", true) : "",
         headerText ? paragraphWithValue(font, headerText, "center") : "",
       ].filter(Boolean).join("");
       references.push({ id: `rId${relationshipIndex++}`, type: "header", variant, target });
@@ -249,11 +278,13 @@ function buildSectionParts(
       });
     }
 
-    const footer = footerValue(document);
+    const footer = first && footerHiddenOnSectionFirstPage(document, sectionIndex)
+      ? { text: "", isPageField: false }
+      : normalFooter;
     const showInFooter = document.layout.footer.pageNumberPosition !== "top-center"
       && (footer.text || footer.isPageField);
     if (showInFooter) {
-      const target = `footer${sectionIndex + 1}${even ? "Even" : ""}.xml`;
+      const target = `footer${sectionIndex + 1}${even ? "Even" : first ? "First" : ""}.xml`;
       const align = horizontalAlignment(document.layout.footer.pageNumberPosition, even);
       references.push({ id: `rId${relationshipIndex++}`, type: "footer", variant, target });
       files.push({
@@ -277,10 +308,9 @@ function sectionProperties(
     .map((reference) => `<w:${reference.type}Reference w:type="${reference.variant}" r:id="${reference.id}"/>`)
     .join("");
   const type = sectionStart(document.sections[sectionIndex + 1]);
-  const firstPageDifferent = layout.header.hideOnFirstPage
-    || layout.header.hideOnTitlePage
-    || layout.footer.hideOnFirstPage
-    || layout.footer.hideOnTitlePage;
+  const firstPageDifferent = sectionParts.references.some((reference) => reference.variant === "first")
+    || headerHiddenOnSectionFirstPage(document, sectionIndex)
+    || footerHiddenOnSectionFirstPage(document, sectionIndex);
   const startNumber = sectionIndex === 0
     ? `<w:pgNumType w:start="${Math.max(1, Math.round(layout.footer.startPageNumber))}"/>`
     : "";

@@ -81,6 +81,35 @@ if (!settingsXml?.includes("w:evenAndOddHeaders")) throw new Error("DOCX odd/eve
 if (documentXml.includes("<w:docGrid") || stylesXml?.includes('w:lineRule="exact"')) throw new Error("DOCX contains clipping-prone fixed line geometry");
 if (!stylesXml?.includes('w:lineRule="atLeast"')) throw new Error("DOCX minimum line spacing is missing");
 
+const firstPageOnlyLayout = JSON.parse(JSON.stringify(DEFAULT_EXPORT_LAYOUT));
+firstPageOnlyLayout.header.hideOnTitlePage = false;
+firstPageOnlyLayout.footer.hideOnTitlePage = false;
+firstPageOnlyLayout.header.hideOnFirstPage = true;
+firstPageOnlyLayout.footer.hideOnFirstPage = true;
+const firstPageOnlyDocx = await generateVerticalDocx({
+  ...linkedDocument,
+  layout: firstPageOnlyLayout,
+});
+const firstPageOnlyZip = await JSZip.loadAsync(firstPageOnlyDocx);
+const firstPageOnlyXml = await firstPageOnlyZip.file("word/document.xml")?.async("string");
+const firstPageOnlyTitlePages = firstPageOnlyXml?.match(/<w:titlePg\/>/g)?.length ?? 0;
+if (firstPageOnlyTitlePages !== 1) throw new Error("DOCX first-page hiding leaked to later sections");
+
+const mixedFirstPageLayout = JSON.parse(JSON.stringify(DEFAULT_EXPORT_LAYOUT));
+mixedFirstPageLayout.header.hideOnTitlePage = true;
+mixedFirstPageLayout.footer.hideOnTitlePage = false;
+mixedFirstPageLayout.header.hideOnFirstPage = false;
+mixedFirstPageLayout.footer.hideOnFirstPage = false;
+const mixedFirstPageDocx = await generateVerticalDocx({
+  ...linkedDocument,
+  layout: mixedFirstPageLayout,
+});
+const mixedFirstPageZip = await JSZip.loadAsync(mixedFirstPageDocx);
+const mixedFirstPageXml = await mixedFirstPageZip.file("word/document.xml")?.async("string");
+if (!mixedFirstPageXml?.includes('<w:footerReference w:type="first"')) {
+  throw new Error("DOCX first-page footer reference is missing when only the header is hidden");
+}
+
 const printHtml = buildLinkedPrintHtml(linkedDocument, "http://127.0.0.1:1420/");
 if (printHtml.match(/class="then-export-page/g)?.length !== pages.length) throw new Error("print HTML page count differs from pagination model");
 if (printHtml.includes("vivliostyle")) throw new Error("print HTML unexpectedly references Vivliostyle");

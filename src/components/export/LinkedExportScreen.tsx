@@ -57,6 +57,7 @@ type LinkedExportScreenProps = {
   title: string;
   initialSources: LoadedExportSource[];
   sourceError?: string;
+  embedded?: boolean;
   onClose: () => void;
   onOpenSource: (path: string) => void;
   onExportPdf: (
@@ -70,7 +71,7 @@ type LinkedExportScreenProps = {
   onOpenResult: (path: string) => void;
 };
 
-const LAST_LAYOUT_KEY = "then-linked-export-layout-v1";
+const LAST_LAYOUT_KEY = "then-linked-export-layout-v2";
 const SAVED_PRESETS_KEY = "then-linked-export-presets-v1";
 
 type SavedPreset = { name: string; layout: ExportLayoutProfile };
@@ -94,6 +95,21 @@ const startModeLabels: Record<ExportStartMode, string> = {
   "new-page": "改ページ",
   "odd-page": "奇数ページ開始",
   "even-page": "偶数ページ開始",
+};
+
+const headerContentLabels: Record<ExportLayoutProfile["header"]["content"], string> = {
+  none: "なし",
+  title: "作品名",
+  chapter: "章タイトル",
+  file: "ファイル名",
+  custom: "任意",
+};
+
+const footerContentLabels: Record<ExportLayoutProfile["footer"]["content"], string> = {
+  none: "なし",
+  "page-number": "ページ番号",
+  title: "作品名",
+  custom: "任意",
 };
 
 function cloneLayout(layout: ExportLayoutProfile): ExportLayoutProfile {
@@ -221,6 +237,7 @@ export function LinkedExportScreen({
   title,
   initialSources,
   sourceError,
+  embedded = false,
   onClose,
   onOpenSource,
   onExportPdf,
@@ -475,17 +492,38 @@ export function LinkedExportScreen({
   const pageSummary = `${layout.page.size}・余白 ${layout.page.marginTopMm}mm`;
   const directionLabel = layout.body.writingMode === "horizontal-tb" ? "横書き" : "縦書き";
   const bodySummary = `${directionLabel}・${layout.body.fontFamily.includes("Serif") ? "明朝" : "ゴシック"} ${layout.body.fontSize}${layout.body.fontSizeUnit}・${layout.body.columns}段`;
+  const headerHiddenSummary = [
+    layout.header.hideOnTitlePage ? "章扉" : "",
+    layout.header.hideOnFirstPage ? "先頭" : "",
+  ].filter(Boolean).join("・");
+  const footerHiddenSummary = [
+    layout.footer.hideOnTitlePage ? "章扉" : "",
+    layout.footer.hideOnFirstPage ? "先頭" : "",
+  ].filter(Boolean).join("・");
+  const headerSummary = layout.header.enabled && layout.header.content !== "none"
+    ? `${headerContentLabels[layout.header.content]}${headerHiddenSummary ? `・${headerHiddenSummary}非表示` : ""}`
+    : "なし";
+  const footerSummary = layout.footer.enabled && layout.footer.content !== "none"
+    ? `${footerContentLabels[layout.footer.content]} ${layout.footer.pageNumberPosition}${footerHiddenSummary ? `・${footerHiddenSummary}非表示` : ""}`
+    : "非表示";
+  const showWindowHeader = !embedded;
 
   return (
     <div className="exportModalBackdrop" role="presentation">
-      <section className="linkedExportScreen" aria-labelledby="linked-export-title">
-        <header className="exportModalHeader">
-          <div className="exportHeaderTitle">
-            <h2 id="linked-export-title">エクスポート</h2>
-            <p>本文ファイルを連結して書き出します</p>
-          </div>
-          <button type="button" className="exportCloseButton" onClick={onClose} aria-label="閉じる">×</button>
-        </header>
+      <section
+        className="linkedExportScreen"
+        aria-label={showWindowHeader ? undefined : "エクスポート"}
+        aria-labelledby={showWindowHeader ? "linked-export-title" : undefined}
+      >
+        {showWindowHeader && (
+          <header className="exportModalHeader">
+            <div className="exportHeaderTitle">
+              <h2 id="linked-export-title">エクスポート</h2>
+              <p>本文ファイルを連結して書き出します</p>
+            </div>
+            <button type="button" className="exportCloseButton" onClick={onClose} aria-label="閉じる">×</button>
+          </header>
+        )}
 
         <nav className="exportResponsiveTabs" aria-label="エクスポート画面">
           {(["files", "settings", "preview"] as const).map((tab) => (
@@ -629,14 +667,14 @@ export function LinkedExportScreen({
               <label>段間 (mm)<input type="number" min="0" value={layout.body.columnGapMm} disabled={layout.body.columns === 1} onChange={(event) => patchLayout((next) => { next.body.columnGapMm = Number(event.target.value); return next; })}/></label>
             </div>}
 
-            {renderSectionHeader("header", "ヘッダー", layout.header.enabled ? "表示" : "なし")}
+            {renderSectionHeader("header", "ヘッダー", headerSummary)}
             {openSections.has("header") && <div className="exportSettingsContent">
               <label>表示内容<select value={layout.header.content} onChange={(event) => patchLayout((next) => { next.header.content = event.target.value as ExportLayoutProfile["header"]["content"]; next.header.enabled = next.header.content !== "none"; return next; })}><option value="none">なし</option><option value="title">作品名</option><option value="chapter">現在の章タイトル</option><option value="file">現在のファイル名</option><option value="custom">任意テキスト</option></select></label>
               {layout.header.content === "custom" && <label>ヘッダーに表示する文字列<input type="text" placeholder="例: 作品タイトル・章の名前など" value={layout.header.customText ?? ""} onChange={(event) => patchLayout((next) => { next.header.customText = event.target.value; return next; })}/></label>}
               {([['章扉では非表示','hideOnTitlePage'],['先頭ページでは非表示','hideOnFirstPage'],['奇数・偶数ページで出し分け','differentOddEven']] as const).map(([label, key]) => <label className="exportCheckRow" key={key}><input type="checkbox" checked={layout.header[key]} onChange={() => patchLayout((next) => { next.header[key] = !next.header[key]; return next; })}/>{label}</label>)}
             </div>}
 
-            {renderSectionHeader("footer", "フッター・ページ番号", layout.footer.enabled ? `ページ番号 ${layout.footer.pageNumberPosition}` : "非表示")}
+            {renderSectionHeader("footer", "フッター・ページ番号", footerSummary)}
             {openSections.has("footer") && <div className="exportSettingsContent">
               <label className="exportCheckRow"><input type="checkbox" checked={layout.footer.enabled} onChange={() => patchLayout((next) => { next.footer.enabled = !next.footer.enabled; return next; })}/>ページ番号を表示 <small>（ノンブル）</small></label>
               <label>フッター内容<select value={layout.footer.content} onChange={(event) => patchLayout((next) => { next.footer.content = event.target.value as ExportLayoutProfile["footer"]["content"]; return next; })}><option value="none">なし</option><option value="page-number">ページ番号</option><option value="title">作品名</option><option value="custom">任意テキスト</option></select></label>
