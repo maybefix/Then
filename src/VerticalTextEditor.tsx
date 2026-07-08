@@ -45,6 +45,14 @@ type VerticalTextEditorProps = {
   showLineBreakMarks: boolean;
   /** マウント時に復元するカーソル位置（本文先頭からの文字オフセット）。 */
   initialSelectionOffset?: number;
+  /**
+   * エディタのスクロール領域の内寸（クライアントサイズ, px）と、本文ルート
+   * (.pm-root) の上下パディング実測値を通知する。文字表示幅設定の上限算出に
+   * 使う。アンマウント時は null を通知する。
+   */
+  onViewportSizeChange?: (
+    size: { width: number; height: number; verticalPadding: number } | null,
+  ) => void;
   onReady: (editor: TextEditorHandle | null) => void;
   onTextChange: (text: string, editorRevision: number) => void;
   onSelectionChange: () => void;
@@ -1898,6 +1906,7 @@ export function VerticalTextEditor({
   typewriterOffset,
   showLineBreakMarks,
   initialSelectionOffset,
+  onViewportSizeChange,
   onReady,
   onTextChange,
   onSelectionChange,
@@ -1935,6 +1944,42 @@ export function VerticalTextEditor({
   useEffect(() => {
     onSelectionChangeRef.current = onSelectionChange;
   }, [onSelectionChange]);
+
+  // スクロール領域の内寸（スクロールバー除く）と .pm-root の上下パディング
+  // 実測値を親へ通知する。文字表示幅設定のスライダー上限が常に実際の描画
+  // 上限と一致するようにする（CSS 側のパディング変更に自動追従させるため、
+  // 定数を持たず computed style から読む）。
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    const host = editorHostRef.current;
+    if (!scroller || !host || !onViewportSizeChange) return;
+
+    const report = () => {
+      const pmRoot = host.querySelector<HTMLElement>(".pm-root");
+      const pmRootStyle = pmRoot ? getComputedStyle(pmRoot) : null;
+      const verticalPadding = pmRootStyle
+        ? (Number.parseFloat(pmRootStyle.paddingTop) || 0) +
+          (Number.parseFloat(pmRootStyle.paddingBottom) || 0)
+        : 0;
+      onViewportSizeChange({
+        width: scroller.clientWidth,
+        height: scroller.clientHeight,
+        verticalPadding,
+      });
+    };
+    report();
+    const resizeObserver = new ResizeObserver(report);
+    resizeObserver.observe(scroller);
+    // .pm-root は Tiptap がこのエフェクトより後に生成するため、出現・差し替えを
+    // 直接監視して再実測する（フレーム競合に依存しない）。
+    const mutationObserver = new MutationObserver(report);
+    mutationObserver.observe(host, { childList: true });
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+      onViewportSizeChange(null);
+    };
+  }, [onViewportSizeChange, writingMode]);
 
   useEffect(() => {
     typewriterOffsetRef.current = Number.isFinite(typewriterOffset) ? typewriterOffset : 50;

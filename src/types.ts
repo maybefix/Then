@@ -202,6 +202,14 @@ export type EditorSettings = {
   exportFontFamily: ExportFontFamily;
   fontSize: number;
   lineHeight: number;
+  /**
+   * 横書き時の1行の横幅（px）。null は「最大」（ウィンドウ幅に追従）。
+   * 設定 UI 側で実測した編集領域を上限にするため、ウィンドウからはみ出す
+   * 値は選択できない。
+   */
+  editorMeasureHorizontal: number | null;
+  /** 縦書き時の1列の縦幅（px）。null は「最大」（ウィンドウ高さに追従）。 */
+  editorMeasureVertical: number | null;
   writingMode: WritingMode;
   typewriterScroll: boolean;
   typewriterOffset: number;
@@ -249,6 +257,10 @@ export type CursorPosition = {
 /** ナビゲータのプレビュー行数として選べる値（0 = なし）。 */
 export const NAVIGATOR_PREVIEW_LINE_CHOICES: readonly number[] = [0, 1, 2, 3] as const;
 export const DEFAULT_NAVIGATOR_PREVIEW_LINES = 2;
+
+/** 本文の文字表示幅（px）の下限と横書き既定値。上限は編集領域の実測値。 */
+export const EDITOR_MEASURE_MIN = 240;
+export const DEFAULT_EDITOR_MEASURE_HORIZONTAL = 760;
 
 /** UI 表示倍率の選択肢。 */
 export const UI_FONT_SCALE_CHOICES: readonly number[] = [0.85, 1, 1.05, 1.1, 1.15, 1.3] as const;

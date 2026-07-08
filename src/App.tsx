@@ -111,7 +111,9 @@ import type {
 import {
   appThemeValues,
   fileProgressStatuses,
+  DEFAULT_EDITOR_MEASURE_HORIZONTAL,
   DEFAULT_NAVIGATOR_PREVIEW_LINES,
+  EDITOR_MEASURE_MIN,
   NAVIGATOR_PREVIEW_LINE_CHOICES,
   UI_FONT_SCALE_MIN,
   UI_FONT_SCALE_MAX,
@@ -632,6 +634,15 @@ function toCssFontFamilyValue(family: string): string {
   return resolveCssFontFamilyAlias(family) ?? quoteCssFontFamily(family.trim());
 }
 
+/** 文字表示幅の保存値を正規化する。null は「最大」（編集領域に追従）。 */
+function normalizeEditorMeasure(value: unknown, fallback: number | null): number | null {
+  if (value === null) return null;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(EDITOR_MEASURE_MIN, Math.round(value));
+  }
+  return fallback;
+}
+
 function normalizeStoredFontFamily(value: unknown, fallback: string): string {
   if (typeof value !== "string") return fallback;
 
@@ -671,6 +682,8 @@ const defaultSettings: EditorSettings = {
   exportFontFamily: "Noto Serif CJK JP",
   fontSize: 15,
   lineHeight: 1.82,
+  editorMeasureHorizontal: DEFAULT_EDITOR_MEASURE_HORIZONTAL,
+  editorMeasureVertical: null,
   writingMode: "vertical-rl",
   canvasDefaultWritingMode: "horizontal-tb",
   canvasDefaultFontSource: "ui",
@@ -1706,6 +1719,14 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         settings.plotFontSource === "editor" || settings.plotFontSource === "ui"
           ? settings.plotFontSource
           : defaultSettings.plotFontSource,
+      editorMeasureHorizontal: normalizeEditorMeasure(
+        settings.editorMeasureHorizontal,
+        defaultSettings.editorMeasureHorizontal,
+      ),
+      editorMeasureVertical: normalizeEditorMeasure(
+        settings.editorMeasureVertical,
+        defaultSettings.editorMeasureVertical,
+      ),
       headingFontSource:
         settings.headingFontSource === "custom" || settings.headingFontSource === "body"
           ? settings.headingFontSource
@@ -1991,6 +2012,12 @@ export default function App() {
   // ドロップ先インジケーターの位置（縦書きは left, 横書きは top の px）。
   const [dropIndicatorPos, setDropIndicatorPos] = useState<number | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  /** エディタのスクロール領域の実測内寸。文字表示幅設定の上限算出に使う。 */
+  const [editorViewportSize, setEditorViewportSize] = useState<{
+    width: number;
+    height: number;
+    verticalPadding: number;
+  } | null>(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isQuickIdeaModalOpen, setIsQuickIdeaModalOpen] = useState(false);
   const [isThemePickerModalOpen, setIsThemePickerModalOpen] = useState(false);
@@ -3169,6 +3196,28 @@ export default function App() {
   const handleEditorReady = useCallback((editor: TextEditorHandle | null) => {
     editorInstanceRef.current = editor;
   }, []);
+
+  const handleEditorViewportSizeChange = useCallback(
+    (size: { width: number; height: number; verticalPadding: number } | null) => {
+      setEditorViewportSize(size);
+    },
+    [],
+  );
+
+  /**
+   * 文字表示幅スライダーの上限（px）。実測した編集領域から余白を引いた
+   * 「実際に描画できる最大値」。横書きは左右ガター 64px（App.css の
+   * `calc(100% - 64px)` と対応）、縦書きは .pm-root の上下パディング実測値を
+   * 引く。この値を超える幅は設定 UI 上で選べない。
+   */
+  const editorMeasureLimit = useMemo(() => {
+    if (!editorViewportSize) return null;
+    const available =
+      settings.writingMode === "horizontal-tb"
+        ? editorViewportSize.width - 64
+        : editorViewportSize.height - editorViewportSize.verticalPadding;
+    return Math.max(EDITOR_MEASURE_MIN, Math.floor(available));
+  }, [editorViewportSize, settings.writingMode]);
 
   const handleBreadcrumbKeyDown = useCallback((event: ReactKeyboardEvent<HTMLElement>) => {
     const menu = breadcrumbMenuRef.current?.querySelector(".menuPopover");
@@ -6729,6 +6778,15 @@ export default function App() {
             "--ui-font-scale": settings.uiFontScale,
             "--editor-font-size": `${settings.fontSize}px`,
             "--editor-line-height": settings.lineHeight,
+            // null（最大）のときは実質無制限の値にして CSS の min() 側に任せる。
+            "--editor-measure-h":
+              settings.editorMeasureHorizontal === null
+                ? "100vw"
+                : `${settings.editorMeasureHorizontal}px`,
+            "--editor-measure-v":
+              settings.editorMeasureVertical === null
+                ? "100%"
+                : `${settings.editorMeasureVertical}px`,
             "--editor-heading-font-family":
               settings.headingFontSource === "custom"
                 ? settings.headingFontFamily
@@ -7492,6 +7550,7 @@ export default function App() {
                             typewriterOffset={settings.typewriterOffset}
                             showLineBreakMarks={settings.showLineBreakMarks}
                             initialSelectionOffset={initialSelectionOffset}
+                            onViewportSizeChange={handleEditorViewportSizeChange}
                             onReady={handleEditorReady}
                             onTextChange={handleTextChange}
                             onSelectionChange={handleSelectionChange}
@@ -8056,6 +8115,7 @@ export default function App() {
             <SettingsModal
               settings={settings}
               systemFonts={systemFonts}
+              editorMeasureLimit={editorMeasureLimit}
               onClose={() => setIsSettingsModalOpen(false)}
               onOpenThemePicker={() => {
                 setIsSettingsModalOpen(false);

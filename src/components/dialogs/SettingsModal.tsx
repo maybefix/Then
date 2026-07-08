@@ -1,12 +1,18 @@
 import { useState } from "react";
 import type { EditorSettings, FontOption } from "../../types";
-import { UI_FONT_SCALE_CHOICES } from "../../types";
+import { EDITOR_MEASURE_MIN, UI_FONT_SCALE_CHOICES } from "../../types";
 import { exportFontFamilies, type ExportFontFamily } from "../../export/types";
 import { getThemeDefinition } from "../../themes";
 
 type SettingsModalProps = {
   settings: EditorSettings;
   systemFonts: FontOption[];
+  /**
+   * 文字表示幅スライダーの上限（px）。エディタの編集領域の実測値で、
+   * これを超える幅（＝ウィンドウからはみ出す幅）は選択できない。
+   * エディタ非表示中（実測不能）は null。
+   */
+  editorMeasureLimit: number | null;
   onClose: () => void;
   onOpenThemePicker: () => void;
   onUpdateSettings: <Key extends keyof EditorSettings>(
@@ -29,6 +35,7 @@ const settingsTabs: { id: SettingsTab; label: string }[] = [
 export function SettingsModal({
   settings,
   systemFonts,
+  editorMeasureLimit,
   onClose,
   onOpenThemePicker,
   onUpdateSettings,
@@ -36,6 +43,21 @@ export function SettingsModal({
 }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
   const themeDefinition = getThemeDefinition(settings.theme);
+
+  const isHorizontalWriting = settings.writingMode === "horizontal-tb";
+  const editorMeasureKey = isHorizontalWriting
+    ? "editorMeasureHorizontal"
+    : "editorMeasureVertical";
+  const editorMeasureValue = isHorizontalWriting
+    ? settings.editorMeasureHorizontal
+    : settings.editorMeasureVertical;
+  /** スライダーへ表示する実効値。保存値が現在の上限を超えていれば上限へ丸める。 */
+  const editorMeasureDisplay =
+    editorMeasureLimit === null
+      ? null
+      : editorMeasureValue === null
+        ? editorMeasureLimit
+        : Math.min(editorMeasureValue, editorMeasureLimit);
 
   return (
     <div className="modalBackdrop" role="presentation">
@@ -236,6 +258,33 @@ export function SettingsModal({
                     />
                   </label>
                 </div>
+                <label className="rangeSetting">
+                  <span>
+                    文字表示幅（{isHorizontalWriting ? "横幅" : "縦幅"}）{" "}
+                    {editorMeasureLimit === null
+                      ? "—"
+                      : editorMeasureValue === null || editorMeasureDisplay === editorMeasureLimit
+                        ? "最大"
+                        : `${editorMeasureDisplay}px`}
+                  </span>
+                  <input
+                    disabled={editorMeasureLimit === null}
+                    min={EDITOR_MEASURE_MIN}
+                    max={editorMeasureLimit ?? EDITOR_MEASURE_MIN}
+                    step="1"
+                    type="range"
+                    value={editorMeasureDisplay ?? EDITOR_MEASURE_MIN}
+                    onChange={(event) => {
+                      if (editorMeasureLimit === null) return;
+                      const next = Number(event.target.value);
+                      // 右端 = 上限ぴったりは「最大」（ウィンドウ追従）として保存する。
+                      onUpdateSettings(
+                        editorMeasureKey,
+                        next >= editorMeasureLimit ? null : Math.max(EDITOR_MEASURE_MIN, next),
+                      );
+                    }}
+                  />
+                </label>
                 <label className="checkSetting">
                   <input
                     checked={settings.typewriterScroll}
