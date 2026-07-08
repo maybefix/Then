@@ -1408,7 +1408,9 @@ body.thenPdfExporting .printExportViewport {
   position: relative;
   min-width: max-content;
   height: 100%;
-  padding: 10vh 50vw;
+  /* 上下余白は持たない。文字表示幅（縦幅）は設定値が全高まで使えるように
+     し、余白は段落の margin-inline: auto（中央寄せ）で生まれるものだけ。 */
+  padding: 0 50vw;
   outline: none;
   writing-mode: vertical-rl;
   text-orientation: mixed;
@@ -1440,8 +1442,10 @@ body.thenPdfExporting .printExportViewport {
   min-block-size: 1lh;
   margin: 0;
   /* 縦書きの inline-size = 列の縦幅。100%（= pm-root の content 高さ）を
-     超えないよう min() で保険をかける。 */
+     超えないよう min() で保険をかける。auto マージンで列を上下中央に置き、
+     縦幅を縮めたときは上下均等に縮む（上基点にしない）。 */
   max-inline-size: min(var(--editor-measure-v, 100%), 100%);
+  margin-inline: auto;
   contain: layout style;
   contain-intrinsic-block-size: auto 2.6em;
   contain-intrinsic-inline-size: auto 82vh;
@@ -1778,8 +1782,10 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p {
-  /* 横書きの横幅は .pm-root の width で制御する（縦書き用の縦幅キャップを解除）。 */
+  /* 横書きの横幅は .pm-root の width で制御する（縦書き用の縦幅キャップと
+     中央寄せマージンを解除）。 */
   max-inline-size: none;
+  margin-inline: 0;
   contain-intrinsic-inline-size: auto 100%;
   contain-intrinsic-block-size: auto 2.2em;
   text-justify: auto;
@@ -4207,7 +4213,7 @@ body {
 }
 
 .verticalTypewriterEditor .pm-root {
-  padding: 12vh 50vw;
+  padding: 0 50vw;
   color: #e9e4d6;
   font-family: var(--editor-font-family);
   font-size: var(--editor-font-size);
