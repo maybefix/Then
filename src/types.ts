@@ -259,7 +259,7 @@ export const DEFAULT_NAVIGATOR_PREVIEW_LINES = 2;
 /** 本文の文字表示幅（利用可能領域に対する割合）の範囲と既定値。 */
 export const EDITOR_MEASURE_RATIO_MIN = 0.4;
 export const EDITOR_MEASURE_RATIO_MAX = 1;
-export const EDITOR_MEASURE_RATIO_STEP = 0.05;
+export const EDITOR_MEASURE_RATIO_STEP = 0.01;
 export const DEFAULT_EDITOR_MEASURE_RATIO = 0.85;
 
 /** UI 表示倍率の選択肢。 */

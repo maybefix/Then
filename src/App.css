@@ -1439,9 +1439,10 @@ body.thenPdfExporting .printExportViewport {
   position: relative;
   min-block-size: 1lh;
   margin: 0;
-  /* 縦書きでは inline-size が「列の縦幅」に相当する。利用可能な縦領域
-     (=80vh) に対する割合で決めるので、ウィンドウを超えることはない。 */
-  max-inline-size: calc(80vh * var(--editor-measure-ratio, 1));
+  /* 縦書きでは inline-size が「列の縦幅」に相当する。実際に使えるコンテナ
+     の縦領域（=.pm-root の content-box 高さ）に対する割合で決めるので、
+     ウィンドウやツールバー分を含めても領域を超えることはない。 */
+  max-inline-size: calc(100% * var(--editor-measure-ratio, 1));
   contain: layout style;
   contain-intrinsic-block-size: auto 2.6em;
   contain-intrinsic-inline-size: auto 82vh;
@@ -1518,7 +1519,7 @@ body.thenPdfExporting .printExportViewport {
 .verticalTypewriterEditor .pm-root p.align-start,
 .verticalTypewriterEditor .pm-root p.align-center,
 .verticalTypewriterEditor .pm-root p.align-end {
-  min-inline-size: calc(80vh * var(--editor-measure-ratio, 1));
+  min-inline-size: calc(100% * var(--editor-measure-ratio, 1));
 }
 
 .verticalTypewriterEditor .pm-root p.jitsuki,
