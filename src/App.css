@@ -1431,6 +1431,10 @@ body.thenPdfExporting .printExportViewport {
 .verticalTypewriterEditor .pm-root[data-empty="true"]::before {
   content: attr(data-placeholder);
   position: absolute;
+  /* 空の段落は auto マージンで中央寄せされるため、プレースホルダも同じ
+     オフセット（残り領域の半分）だけインライン方向にずらして入力開始位置に
+     重ねる。段落側の中央寄せ計算と常に一致する。 */
+  inset-inline-start: calc(100% * (1 - var(--editor-measure-v-ratio, 0.75)) / 2);
   color: rgba(233, 228, 214, 0.28);
   white-space: pre-wrap;
   pointer-events: none;
@@ -1779,6 +1783,12 @@ body.thenPdfExporting .printExportViewport {
   letter-spacing: 0;
   overflow-wrap: anywhere;
   text-justify: auto;
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root[data-empty="true"]::before {
+  /* 横書きは .pm-root 自体が幅制御・中央寄せされ段落はずれないため、
+     プレースホルダの中央寄せオフセットは不要。 */
+  inset-inline-start: auto;
 }
 
 .appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p {
