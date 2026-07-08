@@ -203,13 +203,12 @@ export type EditorSettings = {
   fontSize: number;
   lineHeight: number;
   /**
-   * 横書き時の1行の横幅（px）。null は「最大」（ウィンドウ幅に追従）。
-   * 設定 UI 側で実測した編集領域を上限にするため、ウィンドウからはみ出す
-   * 値は選択できない。
+   * 横書き時の1行の横幅。編集領域に対する百分率（30〜100）。比率なので
+   * ウィンドウを縮めても余白の割合が保たれ、はみ出す値は定義上選べない。
    */
-  editorMeasureHorizontal: number | null;
-  /** 縦書き時の1列の縦幅（px）。null は「最大」（ウィンドウ高さに追従）。 */
-  editorMeasureVertical: number | null;
+  editorMeasureHorizontal: number;
+  /** 縦書き時の1列の縦幅。編集領域に対する百分率（30〜100）。 */
+  editorMeasureVertical: number;
   writingMode: WritingMode;
   typewriterScroll: boolean;
   typewriterOffset: number;
@@ -258,9 +257,10 @@ export type CursorPosition = {
 export const NAVIGATOR_PREVIEW_LINE_CHOICES: readonly number[] = [0, 1, 2, 3] as const;
 export const DEFAULT_NAVIGATOR_PREVIEW_LINES = 2;
 
-/** 本文の文字表示幅（px）の下限と横書き既定値。上限は編集領域の実測値。 */
-export const EDITOR_MEASURE_MIN = 240;
-export const DEFAULT_EDITOR_MEASURE_HORIZONTAL = 760;
+/** 本文の文字表示幅（編集領域に対する百分率）の範囲と既定値。 */
+export const EDITOR_MEASURE_PERCENT_MIN = 30;
+export const EDITOR_MEASURE_PERCENT_MAX = 100;
+export const DEFAULT_EDITOR_MEASURE_PERCENT = 75;
 
 /** UI 表示倍率の選択肢。 */
 export const UI_FONT_SCALE_CHOICES: readonly number[] = [0.85, 1, 1.05, 1.1, 1.15, 1.3] as const;

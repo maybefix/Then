@@ -111,9 +111,10 @@ import type {
 import {
   appThemeValues,
   fileProgressStatuses,
-  DEFAULT_EDITOR_MEASURE_HORIZONTAL,
+  DEFAULT_EDITOR_MEASURE_PERCENT,
   DEFAULT_NAVIGATOR_PREVIEW_LINES,
-  EDITOR_MEASURE_MIN,
+  EDITOR_MEASURE_PERCENT_MAX,
+  EDITOR_MEASURE_PERCENT_MIN,
   NAVIGATOR_PREVIEW_LINE_CHOICES,
   UI_FONT_SCALE_MIN,
   UI_FONT_SCALE_MAX,
@@ -634,13 +635,20 @@ function toCssFontFamilyValue(family: string): string {
   return resolveCssFontFamilyAlias(family) ?? quoteCssFontFamily(family.trim());
 }
 
-/** 文字表示幅の保存値を正規化する。null は「最大」（編集領域に追従）。 */
-function normalizeEditorMeasure(value: unknown, fallback: number | null): number | null {
-  if (value === null) return null;
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return Math.max(EDITOR_MEASURE_MIN, Math.round(value));
+/**
+ * 文字表示幅（百分率）の保存値を正規化する。範囲外は旧形式
+ * （px 絶対値や null=最大）の名残とみなし、既定値へ戻す。
+ */
+function normalizeEditorMeasure(value: unknown): number {
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= EDITOR_MEASURE_PERCENT_MIN &&
+    value <= EDITOR_MEASURE_PERCENT_MAX
+  ) {
+    return Math.round(value);
   }
-  return fallback;
+  return DEFAULT_EDITOR_MEASURE_PERCENT;
 }
 
 function normalizeStoredFontFamily(value: unknown, fallback: string): string {
@@ -682,8 +690,8 @@ const defaultSettings: EditorSettings = {
   exportFontFamily: "Noto Serif CJK JP",
   fontSize: 15,
   lineHeight: 1.82,
-  editorMeasureHorizontal: DEFAULT_EDITOR_MEASURE_HORIZONTAL,
-  editorMeasureVertical: null,
+  editorMeasureHorizontal: DEFAULT_EDITOR_MEASURE_PERCENT,
+  editorMeasureVertical: DEFAULT_EDITOR_MEASURE_PERCENT,
   writingMode: "vertical-rl",
   canvasDefaultWritingMode: "horizontal-tb",
   canvasDefaultFontSource: "ui",
@@ -1719,14 +1727,8 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         settings.plotFontSource === "editor" || settings.plotFontSource === "ui"
           ? settings.plotFontSource
           : defaultSettings.plotFontSource,
-      editorMeasureHorizontal: normalizeEditorMeasure(
-        settings.editorMeasureHorizontal,
-        defaultSettings.editorMeasureHorizontal,
-      ),
-      editorMeasureVertical: normalizeEditorMeasure(
-        settings.editorMeasureVertical,
-        defaultSettings.editorMeasureVertical,
-      ),
+      editorMeasureHorizontal: normalizeEditorMeasure(settings.editorMeasureHorizontal),
+      editorMeasureVertical: normalizeEditorMeasure(settings.editorMeasureVertical),
       headingFontSource:
         settings.headingFontSource === "custom" || settings.headingFontSource === "body"
           ? settings.headingFontSource
@@ -3205,10 +3207,9 @@ export default function App() {
   );
 
   /**
-   * 文字表示幅スライダーの上限（px）。実測した編集領域から余白を引いた
-   * 「実際に描画できる最大値」。横書きは左右ガター 64px（App.css の
+   * 文字表示幅 100% に相当する実測px。横書きは左右ガター 64px（App.css の
    * `calc(100% - 64px)` と対応）、縦書きは .pm-root の上下パディング実測値を
-   * 引く。この値を超える幅は設定 UI 上で選べない。
+   * 引いた編集領域。設定 UI で百分率の実寸を表示するために使う。
    */
   const editorMeasureLimit = useMemo(() => {
     if (!editorViewportSize) return null;
@@ -3216,7 +3217,7 @@ export default function App() {
       settings.writingMode === "horizontal-tb"
         ? editorViewportSize.width - 64
         : editorViewportSize.height - editorViewportSize.verticalPadding;
-    return Math.max(EDITOR_MEASURE_MIN, Math.floor(available));
+    return Math.max(0, Math.floor(available));
   }, [editorViewportSize, settings.writingMode]);
 
   const handleBreadcrumbKeyDown = useCallback((event: ReactKeyboardEvent<HTMLElement>) => {
@@ -6778,15 +6779,9 @@ export default function App() {
             "--ui-font-scale": settings.uiFontScale,
             "--editor-font-size": `${settings.fontSize}px`,
             "--editor-line-height": settings.lineHeight,
-            // null（最大）のときは実質無制限の値にして CSS の min() 側に任せる。
-            "--editor-measure-h":
-              settings.editorMeasureHorizontal === null
-                ? "100vw"
-                : `${settings.editorMeasureHorizontal}px`,
-            "--editor-measure-v":
-              settings.editorMeasureVertical === null
-                ? "100%"
-                : `${settings.editorMeasureVertical}px`,
+            // 編集領域に対する比率（0〜1）。CSS 側で実寸に乗算する。
+            "--editor-measure-h-ratio": settings.editorMeasureHorizontal / 100,
+            "--editor-measure-v-ratio": settings.editorMeasureVertical / 100,
             "--editor-heading-font-family":
               settings.headingFontSource === "custom"
                 ? settings.headingFontFamily
