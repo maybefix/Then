@@ -202,12 +202,6 @@ export type EditorSettings = {
   exportFontFamily: ExportFontFamily;
   fontSize: number;
   lineHeight: number;
-  /**
-   * 本文の文字表示幅を、利用可能領域に対する割合（0〜1）で表す。横書きなら
-   * 1行の横幅、縦書きなら1列の縦幅に対応する。割合指定なので実効値が
-   * ウィンドウを超えることはない。
-   */
-  editorMeasureRatio: number;
   writingMode: WritingMode;
   typewriterScroll: boolean;
   typewriterOffset: number;
@@ -255,12 +249,6 @@ export type CursorPosition = {
 /** ナビゲータのプレビュー行数として選べる値（0 = なし）。 */
 export const NAVIGATOR_PREVIEW_LINE_CHOICES: readonly number[] = [0, 1, 2, 3] as const;
 export const DEFAULT_NAVIGATOR_PREVIEW_LINES = 2;
-
-/** 本文の文字表示幅（利用可能領域に対する割合）の範囲と既定値。 */
-export const EDITOR_MEASURE_RATIO_MIN = 0.4;
-export const EDITOR_MEASURE_RATIO_MAX = 1;
-export const EDITOR_MEASURE_RATIO_STEP = 0.01;
-export const DEFAULT_EDITOR_MEASURE_RATIO = 0.85;
 
 /** UI 表示倍率の選択肢。 */
 export const UI_FONT_SCALE_CHOICES: readonly number[] = [0.85, 1, 1.05, 1.1, 1.15, 1.3] as const;

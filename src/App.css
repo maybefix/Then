@@ -1439,10 +1439,6 @@ body.thenPdfExporting .printExportViewport {
   position: relative;
   min-block-size: 1lh;
   margin: 0;
-  /* 縦書きでは inline-size が「列の縦幅」に相当する。実際に使えるコンテナ
-     の縦領域（=.pm-root の content-box 高さ）に対する割合で決めるので、
-     ウィンドウやツールバー分を含めても領域を超えることはない。 */
-  max-inline-size: calc(100% * var(--editor-measure-ratio, 1));
   contain: layout style;
   contain-intrinsic-block-size: auto 2.6em;
   contain-intrinsic-inline-size: auto 82vh;
@@ -1519,7 +1515,7 @@ body.thenPdfExporting .printExportViewport {
 .verticalTypewriterEditor .pm-root p.align-start,
 .verticalTypewriterEditor .pm-root p.align-center,
 .verticalTypewriterEditor .pm-root p.align-end {
-  min-inline-size: calc(100% * var(--editor-measure-ratio, 1));
+  min-inline-size: 62vh;
 }
 
 .verticalTypewriterEditor .pm-root p.jitsuki,
@@ -1763,7 +1759,7 @@ body.thenPdfExporting .printExportViewport {
 
 .appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root {
   box-sizing: border-box;
-  width: calc((100% - 64px) * var(--editor-measure-ratio, 0.85));
+  width: min(760px, calc(100% - 64px));
   min-width: 0;
   min-height: 100%;
   height: auto;
@@ -1777,9 +1773,6 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p {
-  /* 横書きの横幅は .pm-root の width 側で制御する（縦書き用の
-     inline-size クランプは解除）。 */
-  max-inline-size: none;
   contain-intrinsic-inline-size: auto 100%;
   contain-intrinsic-block-size: auto 2.2em;
   text-justify: auto;

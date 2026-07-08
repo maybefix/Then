@@ -112,9 +112,6 @@ import {
   appThemeValues,
   fileProgressStatuses,
   DEFAULT_NAVIGATOR_PREVIEW_LINES,
-  DEFAULT_EDITOR_MEASURE_RATIO,
-  EDITOR_MEASURE_RATIO_MIN,
-  EDITOR_MEASURE_RATIO_MAX,
   NAVIGATOR_PREVIEW_LINE_CHOICES,
   UI_FONT_SCALE_MIN,
   UI_FONT_SCALE_MAX,
@@ -674,7 +671,6 @@ const defaultSettings: EditorSettings = {
   exportFontFamily: "Noto Serif CJK JP",
   fontSize: 15,
   lineHeight: 1.82,
-  editorMeasureRatio: DEFAULT_EDITOR_MEASURE_RATIO,
   writingMode: "vertical-rl",
   canvasDefaultWritingMode: "horizontal-tb",
   canvasDefaultFontSource: "ui",
@@ -1710,14 +1706,6 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         settings.plotFontSource === "editor" || settings.plotFontSource === "ui"
           ? settings.plotFontSource
           : defaultSettings.plotFontSource,
-      editorMeasureRatio:
-        typeof settings.editorMeasureRatio === "number" &&
-        Number.isFinite(settings.editorMeasureRatio)
-          ? Math.min(
-              EDITOR_MEASURE_RATIO_MAX,
-              Math.max(EDITOR_MEASURE_RATIO_MIN, settings.editorMeasureRatio),
-            )
-          : defaultSettings.editorMeasureRatio,
       headingFontSource:
         settings.headingFontSource === "custom" || settings.headingFontSource === "body"
           ? settings.headingFontSource
@@ -6741,7 +6729,6 @@ export default function App() {
             "--ui-font-scale": settings.uiFontScale,
             "--editor-font-size": `${settings.fontSize}px`,
             "--editor-line-height": settings.lineHeight,
-            "--editor-measure-ratio": settings.editorMeasureRatio,
             "--editor-heading-font-family":
               settings.headingFontSource === "custom"
                 ? settings.headingFontFamily
