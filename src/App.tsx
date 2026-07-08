@@ -430,6 +430,14 @@ const initialMarkdown = `# ${documentData.title}
 `;
 
 const INBOX_THREAD_ID = "idea-inbox";
+const sampleIdeaThreadIds = new Set(["idea-sample-scene", "idea-sample-foreshadow"]);
+const sampleIdeaFragmentBodies = new Set([
+  "主人公が改札の前で一瞬立ち止まる描写を入れる。",
+  "風呂のシーンはテンポよく、1分で終わらせる緊張感を持たせたい。",
+  "夜明けの光が、山の稜線を白く縁どり始めた頃。",
+  "主人公は決断する。しかしその足は、一歩踏み出すことを躊躇っていた。",
+  "「お前には、まだ知らないことがある」老人は静かに言った。",
+]);
 
 let ideaIdCounter = 0;
 
@@ -514,36 +522,7 @@ const defaultPlotCards: PlotCard[] = [
 ];
 
 function defaultIdeaThreads(): IdeaThread[] {
-  const now = Date.now();
-  return [
-    makeInboxThread([
-      makeIdeaFragment("主人公が改札の前で一瞬立ち止まる描写を入れる。"),
-      makeIdeaFragment("風呂のシーンはテンポよく、1分で終わらせる緊張感を持たせたい。"),
-    ]),
-    {
-      id: "idea-sample-scene",
-      kind: "thread",
-      title: "旅立ちの朝（場面）",
-      starred: false,
-      createdAt: now,
-      updatedAt: now,
-      fragments: [
-        makeIdeaFragment("夜明けの光が、山の稜線を白く縁どり始めた頃。"),
-        makeIdeaFragment("主人公は決断する。しかしその足は、一歩踏み出すことを躊躇っていた。"),
-      ],
-    },
-    {
-      id: "idea-sample-foreshadow",
-      kind: "thread",
-      title: "老人の台詞（伏線）",
-      starred: false,
-      createdAt: now,
-      updatedAt: now,
-      fragments: [
-        makeIdeaFragment("「お前には、まだ知らないことがある」老人は静かに言った。"),
-      ],
-    },
-  ];
+  return [makeInboxThread()];
 }
 
 /** 値を {@link IdeaThread}[] へ正規化する。旧フラット Snippet[] からの移行も担う。 */
@@ -604,6 +583,15 @@ function normalizeIdeaThreads(value: unknown): IdeaThread[] {
         } satisfies IdeaThread;
       });
   }
+
+  threads = threads
+    .filter((thread) => !sampleIdeaThreadIds.has(thread.id))
+    .map((thread) => ({
+      ...thread,
+      fragments: thread.fragments.filter(
+        (fragment) => !sampleIdeaFragmentBodies.has(fragment.body.trim()),
+      ),
+    }));
 
   // インボックスを必ず1つ、先頭に置く。
   const inboxes = threads.filter((thread) => thread.kind === "inbox");
@@ -1919,6 +1907,8 @@ export default function App() {
   const documentSaveQueuesRef = useRef<Map<string, DocumentSaveQueue>>(new Map());
   const headingMoveInProgressRef = useRef(false);
   const projectEntryPathChangeInProgressRef = useRef(false);
+  const workspaceSwitchInProgressRef = useRef(false);
+  const workspaceSwitchGenerationRef = useRef(0);
   const toastTimerRef = useRef<number | null>(null);
   const typewriterScrollFrameRef = useRef<number | null>(null);
   const draggingSnippetRef = useRef<{
@@ -3047,12 +3037,14 @@ export default function App() {
   useEffect(() => {
     if (!isHydrated || !isTauriRuntime()) return;
     if (settings.snippetStorageMode !== "workspace") return;
+    if (workspaceSwitchInProgressRef.current) return;
     if (!currentFilePath || !activeWorkspaceRootPath) return;
     if (snippetWorkspacePath === activeWorkspaceRootPath && projectFolder?.path === activeWorkspaceRootPath) {
       return;
     }
 
     let isCancelled = false;
+    const workspaceSwitchGeneration = workspaceSwitchGenerationRef.current;
 
     Promise.all([
       projectFolder?.path === activeWorkspaceRootPath
@@ -3065,6 +3057,7 @@ export default function App() {
     ])
       .then(([folder, workspaceSnippets, workspacePlotCards]) => {
         if (isCancelled) return;
+        if (workspaceSwitchGeneration !== workspaceSwitchGenerationRef.current) return;
         setProjectFolder(folder);
         setFocusedFolderPath(null);
         setWorkspaceAlert(null);
@@ -3080,6 +3073,7 @@ export default function App() {
       })
       .catch((error) => {
         if (isCancelled) return;
+        if (workspaceSwitchGeneration !== workspaceSwitchGenerationRef.current) return;
         setLastError(String(error));
         setSaveStatus("error");
       });
@@ -4793,6 +4787,10 @@ export default function App() {
     folder: ProjectFolder,
     options: { focusFolderPath?: string | null } = {},
   ) => {
+    const switchGeneration = workspaceSwitchGenerationRef.current + 1;
+    workspaceSwitchGenerationRef.current = switchGeneration;
+    workspaceSwitchInProgressRef.current = true;
+
     const focusedPath = options.focusFolderPath ?? folder.path;
     const focusedEntry =
       focusedPath && !isSamePath(focusedPath, folder.path)
@@ -4801,71 +4799,64 @@ export default function App() {
     const preferredFiles =
       focusedEntry?.kind === "folder" ? focusedEntry.children : folder.children;
 
-    setProjectFolder(folder);
-    setWorkspaceAlert(null);
-    setFocusedFolderPath(focusedPath);
-    setWorkspaceSwitcherQuery("");
+    try {
+      const restoredSnippets =
+        settings.snippetStorageMode === "workspace"
+          ? await loadWorkspaceSnippets(folder.path)
+          : snippets;
+      const restoredPlotCards = await loadWorkspacePlotCards(folder.path);
+      const firstFile = findFirstTextFile(preferredFiles) ?? findFirstTextFile(folder.children);
+      const firstDocument = firstFile
+        ? await (async () => {
+            debugLog("before invoke read_text_file firstFile", {
+              path: firstFile.path,
+            });
+            const document = await invoke<TextDocument>("read_text_file", {
+              path: firstFile.path,
+            });
+            debugLog("after invoke read_text_file firstFile", {
+              path: document.path,
+              contentLength: document.content.length,
+            });
+            return document;
+          })()
+        : null;
 
-    const restoredSnippets =
-      settings.snippetStorageMode === "workspace"
-        ? await loadWorkspaceSnippets(folder.path)
-        : snippets;
-    const restoredPlotCards = await loadWorkspacePlotCards(folder.path);
-    setSnippetWorkspacePath(settings.snippetStorageMode === "workspace" ? folder.path : null);
-    setPlotWorkspacePath(folder.path);
-    setPlotCards(restoredPlotCards);
+      setProjectFolder(folder);
+      setWorkspaceAlert(null);
+      setFocusedFolderPath(focusedPath);
+      setWorkspaceSwitcherQuery("");
+      setSnippetWorkspacePath(settings.snippetStorageMode === "workspace" ? folder.path : null);
+      setPlotWorkspacePath(folder.path);
+      setPlotCards(restoredPlotCards);
 
-    const firstFile = findFirstTextFile(preferredFiles) ?? findFirstTextFile(folder.children);
-    if (firstFile) {
-      debugLog("before invoke read_text_file firstFile", {
-        path: firstFile.path,
-      });
-      const document = await invoke<TextDocument>("read_text_file", {
-        path: firstFile.path,
-      });
-      debugLog("after invoke read_text_file firstFile", {
-        path: document.path,
-        contentLength: document.content.length,
-      });
-      const nextTab = createFileDocumentTab(document);
+      const nextTab = firstDocument
+        ? createFileDocumentTab(firstDocument)
+        : createScratchDocumentTab("", {
+            documentKey: `workspace-empty-${Date.now()}`,
+            saveStatus: "saved",
+            savedMarkdown: "",
+          });
       setOpenTabs([nextTab]);
       syncDocumentTabToEditor(nextTab);
       setFocusedFolderPath(focusedPath);
       setAppState((current) => ({
         ...current,
         snippets: restoredSnippets,
-        markdown: document.content,
+        markdown: firstDocument?.content ?? "",
         lastWorkspacePath: folder.path,
-        lastFilePath: document.path,
+        lastFilePath: firstDocument?.path ?? null,
         recentWorkspaces: upsertRecentWorkspace(
           removeNestedRecentWorkspaces(current.recentWorkspaces, folder.path),
           folder.path,
           folder.name,
         ),
       }));
-      return;
+    } finally {
+      if (workspaceSwitchGenerationRef.current === switchGeneration) {
+        workspaceSwitchInProgressRef.current = false;
+      }
     }
-
-    const nextTab = createScratchDocumentTab("", {
-      documentKey: `workspace-empty-${Date.now()}`,
-      saveStatus: "saved",
-      savedMarkdown: "",
-    });
-    setOpenTabs([nextTab]);
-    syncDocumentTabToEditor(nextTab);
-    setFocusedFolderPath(focusedPath);
-    setAppState((current) => ({
-      ...current,
-      snippets: restoredSnippets,
-      markdown: "",
-      lastWorkspacePath: folder.path,
-      lastFilePath: null,
-      recentWorkspaces: upsertRecentWorkspace(
-        removeNestedRecentWorkspaces(current.recentWorkspaces, folder.path),
-        folder.path,
-        folder.name,
-      ),
-    }));
   };
 
   async function openWorkspace(
