@@ -112,6 +112,9 @@ import {
   appThemeValues,
   fileProgressStatuses,
   DEFAULT_NAVIGATOR_PREVIEW_LINES,
+  DEFAULT_EDITOR_MEASURE,
+  EDITOR_MEASURE_MIN,
+  EDITOR_MEASURE_MAX,
   NAVIGATOR_PREVIEW_LINE_CHOICES,
   UI_FONT_SCALE_MIN,
   UI_FONT_SCALE_MAX,
@@ -671,10 +674,13 @@ const defaultSettings: EditorSettings = {
   exportFontFamily: "Noto Serif CJK JP",
   fontSize: 15,
   lineHeight: 1.82,
+  editorMeasure: DEFAULT_EDITOR_MEASURE,
   writingMode: "vertical-rl",
   canvasDefaultWritingMode: "horizontal-tb",
   canvasDefaultFontSource: "ui",
   plotFontSource: "editor",
+  headingFontSource: "body",
+  headingFontFamily: toCssFontFamilyValue("Noto Sans JP"),
   typewriterScroll: true,
   typewriterOffset: 46,
   showLineBreakMarks: false,
@@ -1704,6 +1710,18 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         settings.plotFontSource === "editor" || settings.plotFontSource === "ui"
           ? settings.plotFontSource
           : defaultSettings.plotFontSource,
+      editorMeasure:
+        typeof settings.editorMeasure === "number" && Number.isFinite(settings.editorMeasure)
+          ? Math.min(EDITOR_MEASURE_MAX, Math.max(EDITOR_MEASURE_MIN, settings.editorMeasure))
+          : defaultSettings.editorMeasure,
+      headingFontSource:
+        settings.headingFontSource === "custom" || settings.headingFontSource === "body"
+          ? settings.headingFontSource
+          : defaultSettings.headingFontSource,
+      headingFontFamily: normalizeStoredFontFamily(
+        settings.headingFontFamily,
+        defaultSettings.headingFontFamily,
+      ),
       canvasOpensInWindow:
         typeof settings.canvasOpensInWindow === "boolean"
           ? settings.canvasOpensInWindow
@@ -6719,6 +6737,11 @@ export default function App() {
             "--ui-font-scale": settings.uiFontScale,
             "--editor-font-size": `${settings.fontSize}px`,
             "--editor-line-height": settings.lineHeight,
+            "--editor-measure": `${settings.editorMeasure}px`,
+            "--editor-heading-font-family":
+              settings.headingFontSource === "custom"
+                ? settings.headingFontFamily
+                : settings.editorFontFamily,
             "--typewriter-guide-position": `${settings.typewriterOffset}%`,
             "--zone-sidebar-opacity": settings.zoneModeOpacity,
           } as React.CSSProperties

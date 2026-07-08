@@ -1,6 +1,11 @@
 import { useState } from "react";
 import type { EditorSettings, FontOption } from "../../types";
-import { UI_FONT_SCALE_CHOICES } from "../../types";
+import {
+  UI_FONT_SCALE_CHOICES,
+  EDITOR_MEASURE_MIN,
+  EDITOR_MEASURE_MAX,
+  EDITOR_MEASURE_STEP,
+} from "../../types";
 import { exportFontFamilies, type ExportFontFamily } from "../../export/types";
 import { getThemeDefinition } from "../../themes";
 
@@ -152,6 +157,38 @@ export function SettingsModal({
                   </select>
                 </label>
                 <label>
+                  <span>見出し・太字フォント</span>
+                  <select
+                    value={settings.headingFontSource}
+                    onChange={(event) =>
+                      onUpdateSettings(
+                        "headingFontSource",
+                        event.target.value as EditorSettings["headingFontSource"],
+                      )
+                    }
+                  >
+                    <option value="body">本文フォントを使う</option>
+                    <option value="custom">別フォントを指定</option>
+                  </select>
+                </label>
+                {settings.headingFontSource === "custom" && (
+                  <label>
+                    <span>見出し・太字の指定フォント</span>
+                    <select
+                      value={settings.headingFontFamily}
+                      onChange={(event) =>
+                        onUpdateSettings("headingFontFamily", event.target.value)
+                      }
+                    >
+                      {systemFonts.map((font) => (
+                        <option key={font.label} value={font.cssFamily}>
+                          {font.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <label>
                   <span>プロット表示フォント</span>
                   <select
                     value={settings.plotFontSource}
@@ -204,6 +241,24 @@ export function SettingsModal({
                     />
                   </label>
                 </div>
+                <label className="rangeSetting">
+                  <span>
+                    {settings.writingMode === "horizontal-tb"
+                      ? "文字表示幅（横幅）"
+                      : "文字表示幅（縦幅）"}{" "}
+                    {settings.editorMeasure}px
+                  </span>
+                  <input
+                    min={EDITOR_MEASURE_MIN}
+                    max={EDITOR_MEASURE_MAX}
+                    step={EDITOR_MEASURE_STEP}
+                    type="range"
+                    value={settings.editorMeasure}
+                    onChange={(event) =>
+                      onUpdateSettings("editorMeasure", Number(event.target.value))
+                    }
+                  />
+                </label>
                 <label className="checkSetting">
                   <input
                     checked={settings.typewriterScroll}

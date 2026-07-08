@@ -171,6 +171,9 @@ export type CanvasNodeFontSource = "ui" | "editor";
 /** プロット表示に適用するフォント種別。 */
 export type PlotFontSource = "ui" | "editor";
 
+/** 見出し・太字に適用するフォント種別。本文フォントを流用するか個別指定するか。 */
+export type HeadingFontSource = "body" | "custom";
+
 /** ファイルごとの進捗ラベル。デフォルトは "todo"（未着手）。 */
 export type FileProgressStatus = "todo" | "writing" | "revising" | "done";
 
@@ -199,6 +202,12 @@ export type EditorSettings = {
   exportFontFamily: ExportFontFamily;
   fontSize: number;
   lineHeight: number;
+  /**
+   * 本文の文字表示幅（インラインサイズ, px）。横書きなら1行の横幅、
+   * 縦書きなら1列の縦幅を表す。実効値はウィンドウを超えないよう CSS 側で
+   * クランプする。
+   */
+  editorMeasure: number;
   writingMode: WritingMode;
   typewriterScroll: boolean;
   typewriterOffset: number;
@@ -223,6 +232,10 @@ export type EditorSettings = {
   canvasDefaultFontSource: CanvasNodeFontSource;
   /** プロット表示に使うフォント種別。 */
   plotFontSource: PlotFontSource;
+  /** 見出し・太字に別フォントを使うか。 */
+  headingFontSource: HeadingFontSource;
+  /** headingFontSource === "custom" のときに見出し・太字へ適用するフォント。 */
+  headingFontFamily: string;
   /** キャンバスをメイン画面のモードではなく別ウィンドウで開くか。 */
   canvasOpensInWindow: boolean;
   /** エクスポートをメイン画面のモードではなく別ウィンドウで開くか。 */
@@ -242,6 +255,12 @@ export type CursorPosition = {
 /** ナビゲータのプレビュー行数として選べる値（0 = なし）。 */
 export const NAVIGATOR_PREVIEW_LINE_CHOICES: readonly number[] = [0, 1, 2, 3] as const;
 export const DEFAULT_NAVIGATOR_PREVIEW_LINES = 2;
+
+/** 本文の文字表示幅（px）の範囲と既定値。 */
+export const EDITOR_MEASURE_MIN = 360;
+export const EDITOR_MEASURE_MAX = 1280;
+export const EDITOR_MEASURE_STEP = 20;
+export const DEFAULT_EDITOR_MEASURE = 760;
 
 /** UI 表示倍率の選択肢。 */
 export const UI_FONT_SCALE_CHOICES: readonly number[] = [0.85, 1, 1.05, 1.1, 1.15, 1.3] as const;
