@@ -14,6 +14,7 @@ import type {
   ReferenceCardState,
   ReferenceKind,
   ReferenceLayout,
+  ReferenceScope,
 } from "../../types";
 
 type ReferenceLayerProps = {
@@ -21,7 +22,7 @@ type ReferenceLayerProps = {
   layout: ReferenceLayout;
   onLayoutChange: (updater: (layout: ReferenceLayout) => ReferenceLayout) => void;
   onReturnFocusToEditor: () => void;
-  onTextSaved: (sourcePath: string, text: string) => void;
+  onTextSaved: (sourcePath: string, scope: ReferenceScope, text: string) => void;
 };
 
 type ReferenceCardProps = {
@@ -31,7 +32,7 @@ type ReferenceCardProps = {
   onPatch: (patch: Partial<ReferenceCardState>) => void;
   onClose: () => void;
   onBringToFront: () => void;
-  onTextSaved: (sourcePath: string, text: string) => void;
+  onTextSaved: (sourcePath: string, scope: ReferenceScope, text: string) => void;
 };
 
 type DragMode =
@@ -261,7 +262,7 @@ function ReferenceCardBody({
   rootPath: string;
   card: ReferenceCardState;
   onPatch: (patch: Partial<ReferenceCardState>) => void;
-  onTextSaved: (sourcePath: string, text: string) => void;
+  onTextSaved: (sourcePath: string, scope: ReferenceScope, text: string) => void;
 }) {
   if (isTextualReference(card.kind)) {
     return (
@@ -285,22 +286,24 @@ function ReferenceCardBody({
 export function ReferenceReadOnlyPreview({
   rootPath,
   sourcePath,
+  scope,
   kind,
   title,
 }: {
-  rootPath: string;
+  rootPath: string | null;
   sourcePath: string;
+  scope: ReferenceScope;
   kind: ReferenceKind;
   title?: string;
 }) {
   if (isTextualReference(kind)) {
-    return <ReadOnlyTextReferencePreview rootPath={rootPath} sourcePath={sourcePath} kind={kind} />;
+    return <ReadOnlyTextReferencePreview rootPath={rootPath} sourcePath={sourcePath} scope={scope} kind={kind} />;
   }
   if (kind === "image") {
-    return <ReadOnlyImageReferencePreview rootPath={rootPath} sourcePath={sourcePath} title={title} />;
+    return <ReadOnlyImageReferencePreview rootPath={rootPath} sourcePath={sourcePath} scope={scope} title={title} />;
   }
   if (kind === "pdf") {
-    return <ReadOnlyPdfReferencePreview rootPath={rootPath} sourcePath={sourcePath} />;
+    return <ReadOnlyPdfReferencePreview rootPath={rootPath} sourcePath={sourcePath} scope={scope} />;
   }
   return <div className="referenceReadOnlyPreview referencePlaceholder">未対応の資料です</div>;
 }
@@ -308,10 +311,12 @@ export function ReferenceReadOnlyPreview({
 function ReadOnlyTextReferencePreview({
   rootPath,
   sourcePath,
+  scope,
   kind,
 }: {
-  rootPath: string;
+  rootPath: string | null;
   sourcePath: string;
+  scope: ReferenceScope;
   kind: ReferenceKind;
 }) {
   const [text, setText] = useState("");
@@ -325,6 +330,7 @@ function ReadOnlyTextReferencePreview({
     invoke<string>("read_reference_text", {
       rootPath,
       sourcePath,
+      scope,
     })
       .then((value) => {
         if (!cancelled) setText(value);
@@ -338,7 +344,7 @@ function ReadOnlyTextReferencePreview({
     return () => {
       cancelled = true;
     };
-  }, [rootPath, sourcePath]);
+  }, [rootPath, scope, sourcePath]);
 
   if (loading) {
     return <div className="referenceReadOnlyPreview referencePlaceholder">読み込み中...</div>;
@@ -350,7 +356,7 @@ function ReadOnlyTextReferencePreview({
   return (
     <div className="referenceReadOnlyPreview referenceTextPreview">
       {kind === "markdown" ? (
-        <MarkdownLite rootPath={rootPath} sourcePath={sourcePath} text={text} />
+        <MarkdownLite rootPath={rootPath ?? ""} sourcePath={sourcePath} scope={scope} text={text} />
       ) : (
         <pre>{text}</pre>
       )}
@@ -361,10 +367,12 @@ function ReadOnlyTextReferencePreview({
 function ReadOnlyImageReferencePreview({
   rootPath,
   sourcePath,
+  scope,
   title,
 }: {
-  rootPath: string;
+  rootPath: string | null;
   sourcePath: string;
+  scope: ReferenceScope;
   title?: string;
 }) {
   const [src, setSrc] = useState("");
@@ -377,6 +385,7 @@ function ReadOnlyImageReferencePreview({
     invoke<ReferenceBinary>("read_reference_binary", {
       rootPath,
       sourcePath,
+      scope,
     })
       .then((binary) => {
         if (!cancelled) setSrc(binaryDataUrl(binary));
@@ -387,7 +396,7 @@ function ReadOnlyImageReferencePreview({
     return () => {
       cancelled = true;
     };
-  }, [rootPath, sourcePath]);
+  }, [rootPath, scope, sourcePath]);
 
   if (error) {
     return <div className="referenceReadOnlyPreview referenceError">{error}</div>;
@@ -403,9 +412,11 @@ function ReadOnlyImageReferencePreview({
 function ReadOnlyPdfReferencePreview({
   rootPath,
   sourcePath,
+  scope,
 }: {
-  rootPath: string;
+  rootPath: string | null;
   sourcePath: string;
+  scope: ReferenceScope;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
@@ -422,6 +433,7 @@ function ReadOnlyPdfReferencePreview({
         invoke<ReferenceBinary>("read_reference_binary", {
           rootPath,
           sourcePath,
+          scope,
         }),
         import("pdfjs-dist"),
       ]);
@@ -439,7 +451,7 @@ function ReadOnlyPdfReferencePreview({
     return () => {
       cancelled = true;
     };
-  }, [rootPath, sourcePath]);
+  }, [rootPath, scope, sourcePath]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -512,7 +524,7 @@ function TextReferenceBody({
   rootPath: string;
   card: ReferenceCardState;
   onPatch: (patch: Partial<ReferenceCardState>) => void;
-  onTextSaved: (sourcePath: string, text: string) => void;
+  onTextSaved: (sourcePath: string, scope: ReferenceScope, text: string) => void;
 }) {
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const [text, setText] = useState("");
@@ -527,6 +539,7 @@ function TextReferenceBody({
     invoke<string>("read_reference_text", {
       rootPath,
       sourcePath: card.sourcePath,
+      scope: card.scope,
     })
       .then((value) => {
         if (cancelled) return;
@@ -542,7 +555,7 @@ function TextReferenceBody({
     return () => {
       cancelled = true;
     };
-  }, [rootPath, card.sourcePath]);
+  }, [rootPath, card.scope, card.sourcePath]);
 
   useEffect(() => {
     if (!bodyRef.current || typeof card.scrollTop !== "number") return;
@@ -555,10 +568,11 @@ function TextReferenceBody({
       await invoke("save_reference_text", {
         rootPath,
         sourcePath: card.sourcePath,
+        scope: card.scope,
         text: draft,
       });
       setText(draft);
-      onTextSaved(card.sourcePath, draft);
+      onTextSaved(card.sourcePath, card.scope, draft);
       onPatch({ editing: false });
     } catch (reason) {
       setError(String(reason));
@@ -611,7 +625,7 @@ function TextReferenceBody({
           onScroll={(event) => onPatch({ scrollTop: event.currentTarget.scrollTop })}
         >
           {card.kind === "markdown" ? (
-            <MarkdownLite rootPath={rootPath} sourcePath={card.sourcePath} text={text} />
+            <MarkdownLite rootPath={rootPath} sourcePath={card.sourcePath} scope={card.scope} text={text} />
           ) : (
             <pre>{text}</pre>
           )}
@@ -624,10 +638,12 @@ function TextReferenceBody({
 function MarkdownLite({
   rootPath,
   sourcePath,
+  scope,
   text,
 }: {
   rootPath: string;
   sourcePath: string;
+  scope: ReferenceScope;
   text: string;
 }) {
   const lines = text.split(/\r?\n/);
@@ -660,7 +676,7 @@ function MarkdownLite({
         rows.push(splitMarkdownTableRow(lines[index]));
         index += 1;
       }
-      blocks.push(renderMarkdownTable(rootPath, sourcePath, null, rows, key, columnCount));
+      blocks.push(renderMarkdownTable(rootPath, sourcePath, scope, null, rows, key, columnCount));
       continue;
     }
 
@@ -673,11 +689,11 @@ function MarkdownLite({
         rows.push(splitMarkdownTableRow(lines[index]));
         index += 1;
       }
-      blocks.push(renderMarkdownTable(rootPath, sourcePath, header, rows, key));
+      blocks.push(renderMarkdownTable(rootPath, sourcePath, scope, header, rows, key));
       continue;
     }
 
-    blocks.push(renderMarkdownLine(rootPath, sourcePath, line, index));
+    blocks.push(renderMarkdownLine(rootPath, sourcePath, scope, line, index));
     index += 1;
   }
 
@@ -687,12 +703,13 @@ function MarkdownLite({
 function renderMarkdownLine(
   rootPath: string,
   sourcePath: string,
+  scope: ReferenceScope,
   line: string,
   key: number,
 ) {
   const heading = line.match(/^(#{1,6})\s+(.+)$/);
   if (heading) {
-    return renderMarkdownHeading(rootPath, sourcePath, heading[1].length, heading[2], key);
+    return renderMarkdownHeading(rootPath, sourcePath, scope, heading[1].length, heading[2], key);
   }
 
   if (/^\s*[-*]\s+\[[ xX]\]\s+/.test(line)) {
@@ -704,6 +721,7 @@ function renderMarkdownLine(
           {renderInlineMarkdown(
             rootPath,
             sourcePath,
+            scope,
             line.replace(/^\s*[-*]\s+\[[ xX]\]\s+/, ""),
           )}
         </span>
@@ -714,19 +732,19 @@ function renderMarkdownLine(
   if (/^\s*[-*]\s+/.test(line)) {
     return (
       <p key={key}>
-        • {renderInlineMarkdown(rootPath, sourcePath, line.replace(/^\s*[-*]\s+/, ""))}
+        • {renderInlineMarkdown(rootPath, sourcePath, scope, line.replace(/^\s*[-*]\s+/, ""))}
       </p>
     );
   }
 
   if (/^\s*\d+\.\s+/.test(line)) {
-    return <p key={key}>{renderInlineMarkdown(rootPath, sourcePath, line)}</p>;
+    return <p key={key}>{renderInlineMarkdown(rootPath, sourcePath, scope, line)}</p>;
   }
 
   if (!line.trim()) return <div className="referenceMarkdownBlank" key={key} />;
 
   return (
-    <p key={key}>{renderInlineMarkdown(rootPath, sourcePath, line)}</p>
+    <p key={key}>{renderInlineMarkdown(rootPath, sourcePath, scope, line)}</p>
   );
 }
 
@@ -788,6 +806,7 @@ function isMarkdownTableSeparator(line: string): boolean {
 function renderMarkdownTable(
   rootPath: string,
   sourcePath: string,
+  scope: ReferenceScope,
   header: string[] | null,
   rows: string[][],
   key: number,
@@ -807,7 +826,7 @@ function renderMarkdownTable(
             <tr>
               {Array.from({ length: columnCount }, (_, cellIndex) => (
                 <th key={cellIndex}>
-                  {renderInlineMarkdown(rootPath, sourcePath, header[cellIndex] ?? "")}
+                  {renderInlineMarkdown(rootPath, sourcePath, scope, header[cellIndex] ?? "")}
                 </th>
               ))}
             </tr>
@@ -818,7 +837,7 @@ function renderMarkdownTable(
             <tr key={rowIndex}>
               {Array.from({ length: columnCount }, (_, cellIndex) => (
                 <td key={cellIndex}>
-                  {renderInlineMarkdown(rootPath, sourcePath, row[cellIndex] ?? "")}
+                  {renderInlineMarkdown(rootPath, sourcePath, scope, row[cellIndex] ?? "")}
                 </td>
               ))}
             </tr>
@@ -832,18 +851,19 @@ function renderMarkdownTable(
 function renderMarkdownHeading(
   rootPath: string,
   sourcePath: string,
+  scope: ReferenceScope,
   level: number,
   text: string,
   key: number,
 ) {
-  const children = renderInlineMarkdown(rootPath, sourcePath, text);
+  const children = renderInlineMarkdown(rootPath, sourcePath, scope, text);
   if (level === 1) return <h3 key={key}>{children}</h3>;
   if (level === 2) return <h4 key={key}>{children}</h4>;
   if (level === 3) return <h5 key={key}>{children}</h5>;
   return <h6 key={key}>{children}</h6>;
 }
 
-function renderInlineMarkdown(rootPath: string, sourcePath: string, text: string) {
+function renderInlineMarkdown(rootPath: string, sourcePath: string, scope: ReferenceScope, text: string) {
   const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\)|!\[[^\]]*\]\([^)]+\))/g);
   return parts.map((part, index) => {
     if (part.startsWith("**") && part.endsWith("**")) {
@@ -859,6 +879,7 @@ function renderInlineMarkdown(rootPath: string, sourcePath: string, text: string
           key={index}
           rootPath={rootPath}
           sourcePath={sourcePath}
+          scope={scope}
           alt={image[1]}
           target={image[2]}
         />
@@ -900,11 +921,13 @@ function resolveMarkdownAssetPath(sourcePath: string, target: string): string | 
 function ReferenceMarkdownImage({
   rootPath,
   sourcePath,
+  scope,
   alt,
   target,
 }: {
   rootPath: string;
   sourcePath: string;
+  scope: ReferenceScope;
   alt: string;
   target: string;
 }) {
@@ -931,6 +954,7 @@ function ReferenceMarkdownImage({
     invoke<ReferenceBinary>("read_reference_binary", {
       rootPath,
       sourcePath: resolved,
+      scope,
     })
       .then((binary) => {
         if (!cancelled) setSrc(binaryDataUrl(binary));
@@ -942,7 +966,7 @@ function ReferenceMarkdownImage({
     return () => {
       cancelled = true;
     };
-  }, [rootPath, sourcePath, target]);
+  }, [rootPath, scope, sourcePath, target]);
 
   if (failed) {
     return <span className="referenceMissingImage">[画像を表示できません: {alt || target}]</span>;
@@ -970,6 +994,7 @@ function ImageReferenceBody({
     invoke<ReferenceBinary>("read_reference_binary", {
       rootPath,
       sourcePath: card.sourcePath,
+      scope: card.scope,
     })
       .then((binary) => {
         if (!cancelled) setSrc(binaryDataUrl(binary));
@@ -980,7 +1005,7 @@ function ImageReferenceBody({
     return () => {
       cancelled = true;
     };
-  }, [rootPath, card.sourcePath]);
+  }, [rootPath, card.scope, card.sourcePath]);
 
   return (
     <div className="referenceCardBody referenceImageBody">
@@ -1030,6 +1055,7 @@ function PdfReferenceBody({
         invoke<ReferenceBinary>("read_reference_binary", {
           rootPath,
           sourcePath: card.sourcePath,
+          scope: card.scope,
         }),
         import("pdfjs-dist"),
       ]);
@@ -1047,7 +1073,7 @@ function PdfReferenceBody({
     return () => {
       cancelled = true;
     };
-  }, [rootPath, card.sourcePath]);
+  }, [rootPath, card.scope, card.sourcePath]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

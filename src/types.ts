@@ -15,6 +15,7 @@ export type Snippet = {
 
 /** スレッド内の1断片（メモの最小単位）。 */
 export type CanvasScope = "project" | "global";
+export type ReferenceScope = CanvasScope;
 
 export type IdeaOriginRef = {
   source: "canvas";
@@ -72,6 +73,7 @@ export type ReferenceKind = "text" | "markdown" | "image" | "pdf" | "unknown";
 
 export type ReferenceCardState = {
   id: string;
+  scope: ReferenceScope;
   sourcePath: string;
   kind: ReferenceKind;
   x: number;
@@ -95,6 +97,7 @@ export type ReferenceLayout = {
 };
 
 export type ReferenceFileInfo = {
+  scope: ReferenceScope;
   sourcePath: string;
   name: string;
   kind: ReferenceKind;

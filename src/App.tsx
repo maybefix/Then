@@ -102,6 +102,7 @@ import type {
   ReferenceFileInfo,
   ReferenceKind,
   ReferenceLayout,
+  ReferenceScope,
   SaveStatus,
   Snippet,
   TextDocument,
@@ -1013,6 +1014,22 @@ function referenceNameFromPath(sourcePath: string): string {
   return sourcePath.split(/[\\/]/).filter(Boolean).pop() ?? sourcePath;
 }
 
+function normalizeReferenceScope(scope: unknown): ReferenceScope {
+  return scope === "global" ? "global" : "project";
+}
+
+function referenceKey(sourcePath: string, scope: ReferenceScope = "project"): string {
+  return `${scope}:${sourcePath.replace(/[\\]+/g, "/").toLocaleLowerCase()}`;
+}
+
+function referenceFileKey(file: Pick<ReferenceFileInfo, "sourcePath" | "scope">): string {
+  return referenceKey(file.sourcePath, file.scope);
+}
+
+function referenceCardKey(card: Pick<ReferenceCardState, "sourcePath" | "scope">): string {
+  return referenceKey(card.sourcePath, card.scope);
+}
+
 function isReferenceFileInfo(value: unknown): value is ReferenceFileInfo {
   if (!value || typeof value !== "object") return false;
   const record = value as Partial<Record<keyof ReferenceFileInfo, unknown>>;
@@ -1031,8 +1048,10 @@ function isReferenceFileInfo(value: unknown): value is ReferenceFileInfo {
 function makeReferenceFileInfo(
   sourcePath: string,
   kind: ReferenceKind = referenceKindFromPath(sourcePath),
+  scope: ReferenceScope = "project",
 ): ReferenceFileInfo {
   return {
+    scope,
     sourcePath,
     name: referenceNameFromPath(sourcePath),
     kind,
@@ -1043,9 +1062,9 @@ function makeReferenceFileInfo(
 
 function mergeReferenceFiles(...groups: ReferenceFileInfo[][]): ReferenceFileInfo[] {
   const merged = new Map<string, ReferenceFileInfo>();
-  for (const group of groups) {
+    for (const group of groups) {
     for (const file of group) {
-      const key = file.sourcePath.toLocaleLowerCase();
+      const key = referenceFileKey(file);
       if (!merged.has(key)) merged.set(key, file);
     }
   }
@@ -1056,12 +1075,12 @@ function upsertRecentReference(
   layout: ReferenceLayout,
   file: ReferenceFileInfo,
 ): ReferenceLayout {
-  const key = file.sourcePath.toLocaleLowerCase();
+  const key = referenceFileKey(file);
   return {
     ...layout,
     recent: [
       file,
-      ...layout.recent.filter((item) => item.sourcePath.toLocaleLowerCase() !== key),
+      ...layout.recent.filter((item) => referenceFileKey(item) !== key),
     ].slice(0, MAX_RECENT_REFERENCES),
   };
 }
@@ -1087,6 +1106,7 @@ function retargetReferenceFileInfo(
   oldSourcePath: string,
   newSourcePath: string,
 ): ReferenceFileInfo {
+  if (file.scope !== "project") return file;
   const sourcePath = retargetReferenceSourcePath(file.sourcePath, oldSourcePath, newSourcePath);
   if (!sourcePath) return file;
   return {
@@ -1102,6 +1122,7 @@ function retargetReferenceCard(
   oldSourcePath: string,
   newSourcePath: string,
 ): ReferenceCardState {
+  if (card.scope !== "project") return card;
   const sourcePath = retargetReferenceSourcePath(card.sourcePath, oldSourcePath, newSourcePath);
   if (!sourcePath) return card;
   return {
@@ -1163,6 +1184,7 @@ function normalizeReferenceLayout(
       return clampReferenceCardToStage(
         {
           id: card.id,
+          scope: normalizeReferenceScope(card.scope),
           sourcePath: card.sourcePath,
           kind,
           x: typeof card.x === "number" ? card.x : 72 + index * 32,
@@ -1185,6 +1207,7 @@ function normalizeReferenceLayout(
     .filter(isReferenceFileInfo)
     .map((file) => ({
       ...file,
+      scope: normalizeReferenceScope(file.scope),
       imported: Boolean(file.imported),
     }));
   return {
@@ -1192,7 +1215,7 @@ function normalizeReferenceLayout(
     name: typeof raw?.name === "string" && raw.name.trim() ? raw.name : "default",
     recent: mergeReferenceFiles(
       normalizedRecent,
-      normalizedCards.map((card) => makeReferenceFileInfo(card.sourcePath, card.kind)),
+      normalizedCards.map((card) => makeReferenceFileInfo(card.sourcePath, card.kind, card.scope)),
     )
       .slice(0, MAX_RECENT_REFERENCES),
     cards: normalizedCards,
@@ -1860,7 +1883,10 @@ async function saveReferenceLayout(folderPath: string, layout: ReferenceLayout):
 
 async function listReferenceCandidates(folderPath: string): Promise<ReferenceFileInfo[]> {
   if (!isTauriRuntime()) return [];
-  return await invoke<ReferenceFileInfo[]>("list_reference_candidates", { rootPath: folderPath });
+  return await invoke<ReferenceFileInfo[]>("list_reference_candidates", {
+    rootPath: folderPath,
+    scope: "all",
+  });
 }
 
 async function listCanvasBoards(
@@ -2132,7 +2158,8 @@ export default function App() {
       setReferenceLayout((current) => {
         const file = fileInfo ?? makeReferenceFileInfo(sourcePath);
         const nextLayout = upsertRecentReference(current, file);
-        const existing = current.cards.find((card) => card.sourcePath === sourcePath);
+        const fileKey = referenceFileKey(file);
+        const existing = current.cards.find((card) => referenceCardKey(card) === fileKey);
         if (existing) {
           return {
             ...nextLayout,
@@ -2158,6 +2185,7 @@ export default function App() {
         const card = clampReferenceCardToStage(
           {
             id: `ref-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+            scope: file.scope,
             sourcePath,
             kind,
             x: originX + 72 + index * 32,
@@ -2180,8 +2208,8 @@ export default function App() {
     [projectFolder],
   );
 
-  const handleAddReference = useCallback(async () => {
-    if (!projectFolder) {
+  const handleAddReference = useCallback(async (scope: ReferenceScope = "project") => {
+    if (scope === "project" && !projectFolder) {
       showToast("先にフォルダを開いてください");
       return;
     }
@@ -2192,7 +2220,8 @@ export default function App() {
 
     try {
       const file = await invoke<ReferenceFileInfo | null>("pick_reference_file", {
-        rootPath: projectFolder.path,
+        rootPath: projectFolder?.path ?? null,
+        scope,
       });
       if (!file) return;
       setReferenceCandidates((current) =>
@@ -2207,8 +2236,8 @@ export default function App() {
     }
   }, [openReferenceCard, projectFolder]);
 
-  const handleCreateReference = useCallback(async () => {
-    if (!projectFolder) {
+  const handleCreateReference = useCallback(async (scope: ReferenceScope = "project") => {
+    if (scope === "project" && !projectFolder) {
       showToast("先にフォルダを開いてください");
       return;
     }
@@ -2233,7 +2262,8 @@ export default function App() {
 
     try {
       const file = await invoke<ReferenceFileInfo>("create_reference_text_file", {
-        rootPath: projectFolder.path,
+        rootPath: projectFolder?.path ?? null,
+        scope,
         name,
       });
       setReferenceCandidates((current) =>
@@ -2249,8 +2279,8 @@ export default function App() {
   }, [openReferenceCard, projectFolder]);
 
   const handleDeleteImportedReference = useCallback(
-    async (sourcePath: string) => {
-      if (!projectFolder) return;
+    async (sourcePath: string, scope: ReferenceScope = "project") => {
+      if (scope === "project" && !projectFolder) return;
       const fileName = sourcePath.split(/[\\/]/).filter(Boolean).pop() ?? sourcePath;
       const confirmed = await new Promise<boolean>((resolve) => {
         setAppDialog({
@@ -2268,21 +2298,22 @@ export default function App() {
 
       try {
         await invoke("delete_imported_reference", {
-          rootPath: projectFolder.path,
+          rootPath: projectFolder?.path ?? null,
           sourcePath,
+          scope,
         });
-        const deletedKey = sourcePath.toLocaleLowerCase();
+        const deletedKey = referenceKey(sourcePath, scope);
         setReferenceLayout((current) => ({
           ...current,
           cards: current.cards.filter(
-            (card) => card.sourcePath.toLocaleLowerCase() !== deletedKey,
+            (card) => referenceCardKey(card) !== deletedKey,
           ),
           recent: current.recent.filter(
-            (file) => file.sourcePath.toLocaleLowerCase() !== deletedKey,
+            (file) => referenceFileKey(file) !== deletedKey,
           ),
         }));
         setReferenceCandidates((current) =>
-          current.filter((file) => file.sourcePath.toLocaleLowerCase() !== deletedKey),
+          current.filter((file) => referenceFileKey(file) !== deletedKey),
         );
         showToast(`「${fileName}」を削除しました`);
       } catch (error) {
@@ -2293,13 +2324,118 @@ export default function App() {
     [projectFolder],
   );
 
+  const handleCopyReferenceToScope = useCallback(
+    async (file: ReferenceFileInfo, targetScope: ReferenceScope) => {
+      if (targetScope === "project" && !projectFolder) {
+        showToast("先にフォルダを開いてください");
+        return;
+      }
+      if (file.scope === targetScope) return;
+      if (!isTauriRuntime()) {
+        showToast("資料のコピーはTauri版で利用できます");
+        return;
+      }
+
+      try {
+        const copied = await invoke<ReferenceFileInfo>("copy_reference_to_scope", {
+          rootPath: projectFolder?.path ?? null,
+          sourcePath: file.sourcePath,
+          sourceScope: file.scope,
+          targetScope,
+        });
+        setReferenceCandidates((current) =>
+          mergeReferenceFiles([copied], current).sort((left, right) =>
+            left.sourcePath.localeCompare(right.sourcePath),
+          ),
+        );
+        setReferenceLayout((current) => upsertRecentReference(current, copied));
+        showToast(targetScope === "global" ? "共通資料へコピーしました" : "プロジェクト資料へコピーしました");
+      } catch (error) {
+        setLastError(String(error));
+        showToast("資料をコピーできませんでした");
+      }
+    },
+    [projectFolder],
+  );
+
+  const handleMoveReferenceToScope = useCallback(
+    async (file: ReferenceFileInfo, targetScope: ReferenceScope) => {
+      if (targetScope === "project" && !projectFolder) {
+        showToast("先にフォルダを開いてください");
+        return;
+      }
+      if (file.scope === targetScope) return;
+      if (!file.imported) {
+        showToast("取り込んだ資料だけ移転できます");
+        return;
+      }
+      if (!isTauriRuntime()) {
+        showToast("資料の移転はTauri版で利用できます");
+        return;
+      }
+
+      const confirmed = await new Promise<boolean>((resolve) => {
+        setAppDialog({
+          type: "confirm",
+          title: "資料を移転",
+          message: `「${file.name}」を${targetScope === "global" ? "共通" : "プロジェクト"}へ移転しますか？`,
+          detail: "移転元の取り込みコピーは削除され、開いている資料カードも移転先へ付け替えます。",
+          confirmLabel: "移転",
+          danger: false,
+          resolve,
+        });
+      });
+      if (!confirmed) return;
+
+      try {
+        const moved = await invoke<ReferenceFileInfo>("move_reference_to_scope", {
+          rootPath: projectFolder?.path ?? null,
+          sourcePath: file.sourcePath,
+          sourceScope: file.scope,
+          targetScope,
+        });
+        const oldKey = referenceFileKey(file);
+        setReferenceCandidates((current) =>
+          mergeReferenceFiles([moved], current.filter((item) => referenceFileKey(item) !== oldKey)).sort(
+            (left, right) => left.sourcePath.localeCompare(right.sourcePath),
+          ),
+        );
+        setReferenceLayout((current) => {
+          const withoutOld = {
+            ...current,
+            recent: current.recent.filter((item) => referenceFileKey(item) !== oldKey),
+          };
+          const nextLayout = upsertRecentReference(withoutOld, moved);
+          return {
+            ...nextLayout,
+            cards: nextLayout.cards.map((card) =>
+              referenceCardKey(card) === oldKey
+                ? {
+                    ...card,
+                    scope: moved.scope,
+                    sourcePath: moved.sourcePath,
+                    kind: moved.kind,
+                  }
+                : card,
+            ),
+          };
+        });
+        showToast("資料を移転しました");
+      } catch (error) {
+        setLastError(String(error));
+        showToast("資料を移転できませんでした");
+      }
+    },
+    [projectFolder],
+  );
+
   const returnFocusToEditor = useCallback(() => {
     editorInstanceRef.current?.focus();
   }, []);
 
   const handleReferenceTextSaved = useCallback(
-    (sourcePath: string, text: string) => {
-      if (!projectFolder) return;
+    (sourcePath: string, scope: ReferenceScope, text: string) => {
+      if (!projectFolder || scope !== "project") return;
       const file = collectProjectTextFiles(projectFolder).find(
         (item) =>
           toProjectRelativePath(projectFolder.path, item.path).toLocaleLowerCase() ===
@@ -2674,7 +2810,7 @@ export default function App() {
   const sortedReferenceCandidates = useMemo(() => {
     const candidates = mergeReferenceFiles(referenceLayout.recent, referenceCandidates);
     const recentIndex = new Map(
-      referenceLayout.recent.map((file, index) => [file.sourcePath.toLocaleLowerCase(), index]),
+      referenceLayout.recent.map((file, index) => [referenceFileKey(file), index]),
     );
     if (!projectFolder) return candidates;
     const manuscriptPaths = new Set(
@@ -2683,18 +2819,21 @@ export default function App() {
       ),
     );
     return candidates
-      .filter((file) => !manuscriptPaths.has(file.sourcePath.toLocaleLowerCase()))
+      .filter((file) => file.scope !== "project" || !manuscriptPaths.has(file.sourcePath.toLocaleLowerCase()))
       .sort((left, right) => {
-        const leftIsManuscript = manuscriptPaths.has(left.sourcePath.toLocaleLowerCase());
-        const rightIsManuscript = manuscriptPaths.has(right.sourcePath.toLocaleLowerCase());
+        const leftIsManuscript =
+          left.scope === "project" && manuscriptPaths.has(left.sourcePath.toLocaleLowerCase());
+        const rightIsManuscript =
+          right.scope === "project" && manuscriptPaths.has(right.sourcePath.toLocaleLowerCase());
         if (leftIsManuscript !== rightIsManuscript) return leftIsManuscript ? 1 : -1;
-        const leftRecentIndex = recentIndex.get(left.sourcePath.toLocaleLowerCase());
-        const rightRecentIndex = recentIndex.get(right.sourcePath.toLocaleLowerCase());
+        const leftRecentIndex = recentIndex.get(referenceFileKey(left));
+        const rightRecentIndex = recentIndex.get(referenceFileKey(right));
         if (leftRecentIndex !== undefined && rightRecentIndex !== undefined) {
           return leftRecentIndex - rightRecentIndex;
         }
         if (leftRecentIndex !== undefined) return -1;
         if (rightRecentIndex !== undefined) return 1;
+        if (left.scope !== right.scope) return left.scope === "global" ? -1 : 1;
         return left.sourcePath.localeCompare(right.sourcePath);
       });
   }, [projectFolder, referenceCandidates, referenceLayout.recent]);
@@ -2703,7 +2842,9 @@ export default function App() {
     (sourcePath: string, fileInfo: ReferenceFileInfo) => {
       const file =
         sortedReferenceCandidates.find(
-          (item) => item.sourcePath.toLocaleLowerCase() === sourcePath.toLocaleLowerCase(),
+          (item) =>
+            item.scope === fileInfo.scope &&
+            item.sourcePath.toLocaleLowerCase() === sourcePath.toLocaleLowerCase(),
         ) ?? fileInfo;
       openReferenceCard(file.sourcePath, file, { switchToReferenceTab: false });
     },
@@ -3403,7 +3544,7 @@ export default function App() {
           used: fragment.used,
         })),
       })),
-      referenceFiles: scope === "project" ? sortedReferenceCandidates : [],
+      referenceFiles: projectFolder ? sortedReferenceCandidates : [],
       rightSidebarVisible: !isRightSidebarCollapsed,
     };
 
@@ -7786,7 +7927,7 @@ export default function App() {
                     title: thread.title,
                   }))}
                   liveReferenceFiles={
-                    canvasEmbedPayload.scope === "project" ? sortedReferenceCandidates : []
+                    projectFolder ? sortedReferenceCandidates : []
                   }
                 />
               </div>
@@ -7914,23 +8055,31 @@ export default function App() {
                     />
                   ) : rightSidebarTab === "reference" ? (
                     <ReferencePane
+                      rootPath={projectFolder?.path ?? null}
                       cards={referenceLayout.cards}
                       candidates={sortedReferenceCandidates}
                       query={referenceQuery}
                       onQueryChange={setReferenceQuery}
-                      onAddReference={() => void handleAddReference()}
-                      onCreateReference={() => void handleCreateReference()}
-                      onOpenReference={(sourcePath) => {
-                        const file = sortedReferenceCandidates.find(
-                          (item) => item.sourcePath === sourcePath,
-                        );
-                        openReferenceCard(sourcePath, file);
+                      onAddReference={(scope) => void handleAddReference(scope)}
+                      onCreateReference={(scope) => void handleCreateReference(scope)}
+                      onOpenReference={(targetFile) => {
+                        const file =
+                          sortedReferenceCandidates.find(
+                            (item) => referenceFileKey(item) === referenceFileKey(targetFile),
+                          ) ?? targetFile;
+                        openReferenceCard(file.sourcePath, file);
                       }}
                       onFocusReference={focusReferenceCard}
                       onCloseReference={closeReferenceCard}
                       onPinReference={pinReferenceCard}
-                      onDeleteImportedReference={(sourcePath) =>
-                        void handleDeleteImportedReference(sourcePath)
+                      onCopyReference={(file, targetScope) =>
+                        void handleCopyReferenceToScope(file, targetScope)
+                      }
+                      onMoveReference={(file, targetScope) =>
+                        void handleMoveReferenceToScope(file, targetScope)
+                      }
+                      onDeleteImportedReference={(file) =>
+                        void handleDeleteImportedReference(file.sourcePath, file.scope)
                       }
                     />
                   ) : (

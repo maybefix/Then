@@ -1059,11 +1059,42 @@ export default function CanvasWindowApp({
     );
   };
 
-  const insertReferenceNodeAt = (file: ReferenceFileInfo, point: Point) => {
+  const materializeReferenceForBoard = async (file: ReferenceFileInfo): Promise<ReferenceFileInfo | null> => {
+    const normalized: ReferenceFileInfo = {
+      ...file,
+      scope: file.scope === "global" ? "global" : "project",
+    };
+    if (scope !== "global" || normalized.scope !== "project") return normalized;
+    if (!rootPath) {
+      setStatus("共通ボードには共通資料のみ追加できます");
+      return null;
+    }
+    if (!isTauriRuntime()) {
+      setStatus("共通ボードへ追加するには共通資料へコピーしてください");
+      return null;
+    }
+    try {
+      const copied = await invoke<ReferenceFileInfo>("copy_reference_to_scope", {
+        rootPath,
+        sourcePath: normalized.sourcePath,
+        sourceScope: normalized.scope,
+        targetScope: "global",
+      });
+      setStatus("共通資料へコピーして追加しました");
+      return copied;
+    } catch (error) {
+      setStatus(String(error));
+      return null;
+    }
+  };
+
+  const insertReferenceNodeAt = async (file: ReferenceFileInfo, point: Point) => {
     if (!board) return;
+    const materialized = await materializeReferenceForBoard(file);
+    if (!materialized) return;
     const width = 380;
     const height = 260;
-    const node = createCanvasReferenceNode(file, {
+    const node = createCanvasReferenceNode(materialized, {
       x: Math.max(0, point.x - width / 2),
       y: Math.max(0, point.y - height / 2),
       width,
@@ -1092,7 +1123,7 @@ export default function CanvasWindowApp({
   };
 
   const addReferenceNode = (file: (typeof referenceFiles)[number]) => {
-    insertReferenceNodeAt(file, viewportCenterWorld());
+    void insertReferenceNodeAt(file, viewportCenterWorld());
     setTool("select");
     setIsReferenceMenuOpen(false);
     setReferenceQuery("");
@@ -1122,7 +1153,7 @@ export default function CanvasWindowApp({
           event.dataTransfer.getData(REFERENCE_FILE_DRAG_MIME),
         ) as ReferenceFileInfo;
         if (file && typeof file.sourcePath === "string" && file.sourcePath) {
-          insertReferenceNodeAt(file, point);
+          void insertReferenceNodeAt(file, point);
         }
       } catch {
         // 壊れたドラッグデータは無視する
@@ -2252,16 +2283,17 @@ export default function CanvasWindowApp({
                   className="canvasReferencePreview"
                   onWheel={(event) => event.stopPropagation()}
                 >
-                  {rootPath ? (
+                  {rootPath || node.scope === "global" ? (
                     <ReferenceReadOnlyPreview
                       rootPath={rootPath}
                       sourcePath={node.sourcePath}
+                      scope={node.scope}
                       kind={node.kind}
                       title={node.name}
                     />
                   ) : (
                     <div className="referenceReadOnlyPreview referencePlaceholder">
-                      作品ボードで資料を表示できます
+                      プロジェクト資料は作品ボードで表示できます
                     </div>
                   )}
                 </div>
@@ -2544,7 +2576,7 @@ export default function CanvasWindowApp({
             threads={ideaThreadOptions}
             referenceFiles={referenceFiles}
             onInsertFragment={(body) => insertIdeaTextNodeAt(body, viewportCenterWorld())}
-            onInsertReference={(file) => insertReferenceNodeAt(file, viewportCenterWorld())}
+            onInsertReference={(file) => void insertReferenceNodeAt(file, viewportCenterWorld())}
             onClose={() => setIsSidePanelOpen(false)}
           />
         )}
