@@ -22,6 +22,7 @@ struct ReferenceFileInfo {
     kind: String,
     size: u64,
     imported: bool,
+    scope: String,
 }
 
 #[derive(Serialize)]
@@ -238,6 +239,8 @@ struct PlotCardConfig {
 #[serde(rename_all = "camelCase")]
 struct ReferenceCardConfig {
     id: String,
+    #[serde(default = "default_reference_scope")]
+    scope: String,
     source_path: String,
     kind: String,
     x: f64,
@@ -263,6 +266,10 @@ fn default_reference_layout_version() -> i64 {
 
 fn default_reference_layout_name() -> String {
     "default".to_string()
+}
+
+fn default_reference_scope() -> String {
+    "project".to_string()
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -404,6 +411,8 @@ pub fn run() {
             pick_reference_file,
             create_reference_text_file,
             list_reference_candidates,
+            copy_reference_to_scope,
+            move_reference_to_scope,
             delete_imported_reference,
             read_reference_text,
             save_reference_text,
@@ -2004,12 +2013,11 @@ fn save_canvas_board(
 #[tauri::command]
 fn pick_reference_file(
     app: tauri::AppHandle,
-    root_path: String,
+    root_path: Option<String>,
+    scope: Option<String>,
 ) -> Result<Option<ReferenceFileInfo>, String> {
-    let root = PathBuf::from(root_path);
-    if !root.is_dir() {
-        return Err("project root does not exist".to_string());
-    }
+    let scope = normalize_reference_scope(scope.as_deref())?;
+    let root = reference_scope_root(&app, &scope, root_path.as_deref())?;
 
     let Some(path) = app
         .dialog()
@@ -2028,66 +2036,117 @@ fn pick_reference_file(
         return Err("unsupported reference file type".to_string());
     }
 
-    let imported = import_reference_file(&root, &path)?;
-    reference_file_info(&root, &imported).map(Some)
+    let imported = import_reference_file(&app, &scope, &root, &path)?;
+    reference_file_info(&root, &imported, &scope).map(Some)
 }
 
 #[tauri::command]
 fn create_reference_text_file(
-    root_path: String,
+    app: tauri::AppHandle,
+    root_path: Option<String>,
+    scope: Option<String>,
     name: String,
 ) -> Result<ReferenceFileInfo, String> {
-    let root = PathBuf::from(root_path);
-    if !root.is_dir() {
-        return Err("project root does not exist".to_string());
-    }
-
+    let scope = normalize_reference_scope(scope.as_deref())?;
     let file_name = normalize_reference_text_file_name(&name)?;
-    let root = root
-        .canonicalize()
-        .map_err(|error| format!("failed to resolve project root: {error}"))?;
-    let imports_dir = reference_imports_dir(&root);
+    let root = reference_scope_root(&app, &scope, root_path.as_deref())?;
+    let imports_dir = reference_imports_dir_for_scope(&app, &scope, &root)?;
     std::fs::create_dir_all(&imports_dir)
         .map_err(|error| format!("failed to create reference import directory: {error}"))?;
 
     let path = unique_reference_import_path(&imports_dir, &file_name);
     std::fs::write(&path, "")
         .map_err(|error| format!("failed to create reference file: {error}"))?;
-    reference_file_info(&root, &path)
+    reference_file_info(&root, &path, &scope)
 }
 
 #[tauri::command]
-fn list_reference_candidates(root_path: String) -> Result<Vec<ReferenceFileInfo>, String> {
-    let root = PathBuf::from(root_path);
-    if !root.is_dir() {
-        return Err("project root does not exist".to_string());
+fn list_reference_candidates(
+    app: tauri::AppHandle,
+    root_path: Option<String>,
+    scope: Option<String>,
+) -> Result<Vec<ReferenceFileInfo>, String> {
+    let scope = normalize_reference_scope_filter(scope.as_deref())?;
+    let mut files = Vec::new();
+
+    if scope == "project" || scope == "all" {
+        if let Some(root_path) = root_path.as_deref() {
+            let root = reference_scope_root(&app, "project", Some(root_path))?;
+            collect_reference_candidates(&root, &root, "project", &mut files)?;
+            let imports_dir = reference_imports_dir(&root);
+            if imports_dir.is_dir() {
+                collect_reference_candidates(&root, &imports_dir, "project", &mut files)?;
+            }
+        } else if scope == "project" {
+            return Err("project reference list requires a project root".to_string());
+        }
     }
 
-    let mut files = Vec::new();
-    collect_reference_candidates(&root, &root, &mut files)?;
-    let imports_dir = reference_imports_dir(&root);
-    if imports_dir.is_dir() {
-        collect_reference_candidates(&root, &imports_dir, &mut files)?;
+    if scope == "global" || scope == "all" {
+        let root = reference_scope_root(&app, "global", None)?;
+        std::fs::create_dir_all(&root)
+            .map_err(|error| format!("failed to create global reference directory: {error}"))?;
+        collect_reference_candidates(&root, &root, "global", &mut files)?;
     }
+
     files.sort_by_key(|file| file.source_path.to_lowercase());
     Ok(files)
 }
 
 #[tauri::command]
-fn delete_imported_reference(root_path: String, source_path: String) -> Result<(), String> {
-    let root = PathBuf::from(root_path);
-    if !root.is_dir() {
-        return Err("project root does not exist".to_string());
+fn copy_reference_to_scope(
+    app: tauri::AppHandle,
+    root_path: Option<String>,
+    source_path: String,
+    source_scope: Option<String>,
+    target_scope: String,
+) -> Result<ReferenceFileInfo, String> {
+    let source_scope = normalize_reference_scope(source_scope.as_deref())?;
+    let target_scope = normalize_reference_scope(Some(&target_scope))?;
+    let source = resolve_reference_source_path(&app, root_path.as_deref(), &source_scope, &source_path)?;
+    let target_root = reference_scope_root(&app, &target_scope, root_path.as_deref())?;
+    if source_scope == target_scope && source.starts_with(&target_root) {
+        return reference_file_info(&target_root, &source, &target_scope);
     }
+    let copied = import_reference_file(&app, &target_scope, &target_root, &source)?;
+    reference_file_info(&target_root, &copied, &target_scope)
+}
 
-    let path = resolve_reference_source_path(&root, &source_path)?;
-    let imports_dir = reference_imports_dir(
-        &root
-            .canonicalize()
-            .map_err(|error| format!("failed to resolve project root: {error}"))?,
-    )
-    .canonicalize()
-    .map_err(|error| format!("failed to resolve reference import directory: {error}"))?;
+#[tauri::command]
+fn move_reference_to_scope(
+    app: tauri::AppHandle,
+    root_path: Option<String>,
+    source_path: String,
+    source_scope: Option<String>,
+    target_scope: String,
+) -> Result<ReferenceFileInfo, String> {
+    let source_scope = normalize_reference_scope(source_scope.as_deref())?;
+    let copied = copy_reference_to_scope(
+        app.clone(),
+        root_path.clone(),
+        source_path.clone(),
+        Some(source_scope.clone()),
+        target_scope,
+    )?;
+    if copied.scope != source_scope {
+        delete_imported_reference(app, root_path, source_path, Some(source_scope))?;
+    }
+    Ok(copied)
+}
+
+#[tauri::command]
+fn delete_imported_reference(
+    app: tauri::AppHandle,
+    root_path: Option<String>,
+    source_path: String,
+    scope: Option<String>,
+) -> Result<(), String> {
+    let scope = normalize_reference_scope(scope.as_deref())?;
+    let root = reference_scope_root(&app, &scope, root_path.as_deref())?;
+    let path = resolve_reference_source_path(&app, root_path.as_deref(), &scope, &source_path)?;
+    let imports_dir = reference_imports_dir_for_scope(&app, &scope, &root)?
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve reference import directory: {error}"))?;
     if !path.starts_with(&imports_dir) {
         return Err("only imported reference files can be deleted".to_string());
     }
@@ -2097,9 +2156,14 @@ fn delete_imported_reference(root_path: String, source_path: String) -> Result<(
 }
 
 #[tauri::command]
-fn read_reference_text(root_path: String, source_path: String) -> Result<String, String> {
-    let root = PathBuf::from(root_path);
-    let path = resolve_reference_source_path(&root, &source_path)?;
+fn read_reference_text(
+    app: tauri::AppHandle,
+    root_path: Option<String>,
+    source_path: String,
+    scope: Option<String>,
+) -> Result<String, String> {
+    let scope = normalize_reference_scope(scope.as_deref())?;
+    let path = resolve_reference_source_path(&app, root_path.as_deref(), &scope, &source_path)?;
     if !matches!(reference_kind_for_path(&path).as_str(), "text" | "markdown") {
         return Err("reference is not a text file".to_string());
     }
@@ -2109,9 +2173,15 @@ fn read_reference_text(root_path: String, source_path: String) -> Result<String,
 }
 
 #[tauri::command]
-fn save_reference_text(root_path: String, source_path: String, text: String) -> Result<(), String> {
-    let root = PathBuf::from(root_path);
-    let path = resolve_reference_source_path(&root, &source_path)?;
+fn save_reference_text(
+    app: tauri::AppHandle,
+    root_path: Option<String>,
+    source_path: String,
+    scope: Option<String>,
+    text: String,
+) -> Result<(), String> {
+    let scope = normalize_reference_scope(scope.as_deref())?;
+    let path = resolve_reference_source_path(&app, root_path.as_deref(), &scope, &source_path)?;
     if !matches!(reference_kind_for_path(&path).as_str(), "text" | "markdown") {
         return Err("reference is not a text file".to_string());
     }
@@ -2121,13 +2191,15 @@ fn save_reference_text(root_path: String, source_path: String, text: String) -> 
 
 #[tauri::command]
 fn read_reference_binary(
-    root_path: String,
+    app: tauri::AppHandle,
+    root_path: Option<String>,
     source_path: String,
+    scope: Option<String>,
 ) -> Result<ReferenceBinary, String> {
     use base64::Engine;
 
-    let root = PathBuf::from(root_path);
-    let path = resolve_reference_source_path(&root, &source_path)?;
+    let scope = normalize_reference_scope(scope.as_deref())?;
+    let path = resolve_reference_source_path(&app, root_path.as_deref(), &scope, &source_path)?;
     let kind = reference_kind_for_path(&path);
     if !matches!(kind.as_str(), "image" | "pdf") {
         return Err("reference is not a binary preview file".to_string());
@@ -2301,6 +2373,64 @@ fn project_canvas_boards_dir(root: &Path) -> PathBuf {
 
 fn reference_imports_dir(root: &Path) -> PathBuf {
     root.join(".then").join("references").join("imports")
+}
+
+fn global_reference_imports_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("failed to resolve app data directory: {error}"))?;
+    Ok(dir.join("references").join("imports"))
+}
+
+fn normalize_reference_scope(scope: Option<&str>) -> Result<String, String> {
+    match scope.unwrap_or("project") {
+        "project" => Ok("project".to_string()),
+        "global" => Ok("global".to_string()),
+        _ => Err("unknown reference scope".to_string()),
+    }
+}
+
+fn normalize_reference_scope_filter(scope: Option<&str>) -> Result<String, String> {
+    match scope.unwrap_or("project") {
+        "project" => Ok("project".to_string()),
+        "global" => Ok("global".to_string()),
+        "all" => Ok("all".to_string()),
+        _ => Err("unknown reference scope".to_string()),
+    }
+}
+
+fn reference_scope_root(
+    app: &tauri::AppHandle,
+    scope: &str,
+    root_path: Option<&str>,
+) -> Result<PathBuf, String> {
+    match scope {
+        "project" => {
+            let root_path =
+                root_path.ok_or_else(|| "project reference requires a project root".to_string())?;
+            let root = PathBuf::from(root_path);
+            if !root.is_dir() {
+                return Err("project root does not exist".to_string());
+            }
+            root.canonicalize()
+                .map_err(|error| format!("failed to resolve project root: {error}"))
+        }
+        "global" => Ok(global_reference_imports_dir(app)?),
+        _ => Err("unknown reference scope".to_string()),
+    }
+}
+
+fn reference_imports_dir_for_scope(
+    app: &tauri::AppHandle,
+    scope: &str,
+    root: &Path,
+) -> Result<PathBuf, String> {
+    match scope {
+        "project" => Ok(reference_imports_dir(root)),
+        "global" => global_reference_imports_dir(app),
+        _ => Err("unknown reference scope".to_string()),
+    }
 }
 
 fn legacy_project_config_path(root: &Path) -> PathBuf {
@@ -2563,6 +2693,7 @@ fn write_canvas_board_file(path: &Path, board: &serde_json::Value) -> Result<(),
 fn collect_reference_candidates(
     root: &Path,
     folder: &Path,
+    scope: &str,
     files: &mut Vec<ReferenceFileInfo>,
 ) -> Result<(), String> {
     for entry in std::fs::read_dir(folder)
@@ -2580,19 +2711,19 @@ fn collect_reference_candidates(
         }
 
         if path.is_dir() {
-            collect_reference_candidates(root, &path, files)?;
+            collect_reference_candidates(root, &path, scope, files)?;
             continue;
         }
 
         if path.is_file() && is_supported_reference_extension(&path) {
-            files.push(reference_file_info(root, &path)?);
+            files.push(reference_file_info(root, &path, scope)?);
         }
     }
 
     Ok(())
 }
 
-fn reference_file_info(root: &Path, path: &Path) -> Result<ReferenceFileInfo, String> {
+fn reference_file_info(root: &Path, path: &Path, scope: &str) -> Result<ReferenceFileInfo, String> {
     let resolved = resolve_reference_absolute_path(root, path)?;
     let metadata = std::fs::metadata(&resolved)
         .map_err(|error| format!("failed to read reference metadata: {error}"))?;
@@ -2605,23 +2736,32 @@ fn reference_file_info(root: &Path, path: &Path) -> Result<ReferenceFileInfo, St
             .to_string(),
         kind: reference_kind_for_path(&resolved),
         size: metadata.len(),
-        imported: is_imported_reference(root, &resolved)?,
+        imported: is_imported_reference(root, scope, &resolved)?,
+        scope: scope.to_string(),
     })
 }
 
-fn import_reference_file(root: &Path, source: &Path) -> Result<PathBuf, String> {
+fn import_reference_file(
+    app: &tauri::AppHandle,
+    scope: &str,
+    root: &Path,
+    source: &Path,
+) -> Result<PathBuf, String> {
     let source = source
         .canonicalize()
         .map_err(|error| format!("failed to resolve reference source: {error}"))?;
 
-    let root = root
-        .canonicalize()
-        .map_err(|error| format!("failed to resolve project root: {error}"))?;
+    let root = if root.exists() {
+        root.canonicalize()
+            .map_err(|error| format!("failed to resolve reference root: {error}"))?
+    } else {
+        root.to_path_buf()
+    };
     if source.starts_with(&root) {
         return Ok(source);
     }
 
-    let imports_dir = reference_imports_dir(&root);
+    let imports_dir = reference_imports_dir_for_scope(app, scope, &root)?;
     std::fs::create_dir_all(&imports_dir)
         .map_err(|error| format!("failed to create reference import directory: {error}"))?;
 
@@ -2665,29 +2805,37 @@ fn unique_reference_import_path(imports_dir: &Path, file_name: &str) -> PathBuf 
     }
 }
 
-fn is_imported_reference(root: &Path, path: &Path) -> Result<bool, String> {
+fn is_imported_reference(root: &Path, scope: &str, path: &Path) -> Result<bool, String> {
     let root = root
         .canonicalize()
-        .map_err(|error| format!("failed to resolve project root: {error}"))?;
+        .map_err(|error| format!("failed to resolve reference root: {error}"))?;
     let path = path
         .canonicalize()
         .map_err(|error| format!("failed to resolve reference path: {error}"))?;
+    if scope == "global" {
+        return Ok(path.starts_with(&root));
+    }
     let imports_dir = reference_imports_dir(&root);
-    Ok(imports_dir.exists()
-        && imports_dir
-            .canonicalize()
-            .map(|dir| path.starts_with(dir))
-            .unwrap_or(false))
+    Ok(imports_dir
+        .canonicalize()
+        .map(|dir| path.starts_with(dir))
+        .unwrap_or(false))
 }
 
-fn resolve_reference_source_path(root: &Path, source_path: &str) -> Result<PathBuf, String> {
+fn resolve_reference_source_path(
+    app: &tauri::AppHandle,
+    root_path: Option<&str>,
+    scope: &str,
+    source_path: &str,
+) -> Result<PathBuf, String> {
     if source_path.trim().is_empty() {
         return Err("reference path is required".to_string());
     }
     if Path::new(source_path).is_absolute() {
         return Err("reference path must be project-relative".to_string());
     }
-    resolve_reference_absolute_path(root, &root.join(source_path))
+    let root = reference_scope_root(app, scope, root_path)?;
+    resolve_reference_absolute_path(&root, &root.join(source_path))
 }
 
 fn resolve_reference_absolute_path(root: &Path, path: &Path) -> Result<PathBuf, String> {

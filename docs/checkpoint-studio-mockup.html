@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Then — チェックポイント</title>
+  <style>
+    :root {
+      --bg: #f3f5f8;
+      --surface: #ffffff;
+      --surface-quiet: #f8fafc;
+      --surface-selected: #eaf1f8;
+      --line: #dce1e8;
+      --line-strong: #bcc5d1;
+      --ink: #172033;
+      --muted: #65748a;
+      --faint: #97a3b2;
+      --accent: #193a5a;
+      --accent-hover: #0f2c46;
+      --accent-soft: #dce9f5;
+      --green: #237047;
+      --green-bg: #eaf7ef;
+      --red: #ae4141;
+      --red-bg: #fff0f0;
+      --amber: #966218;
+      --amber-bg: #fff7e6;
+      --shadow: 0 16px 38px rgba(31, 47, 66, .13);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 980px; min-height: 760px; overflow: hidden; color: var(--ink); background: var(--bg); font: 13px/1.45 "Yu Gothic UI", "Yu Gothic", Meiryo, system-ui, sans-serif; }
+    button, select { font: inherit; }
+    button { color: inherit; cursor: pointer; }
+    .app { height: 100vh; min-height: 760px; display: grid; grid-template-rows: 58px minmax(0, 1fr) 30px; }
+    .topbar { display: flex; align-items: center; gap: 14px; padding: 0 19px; background: var(--surface); border-bottom: 1px solid var(--line); }
+    .brand { display: flex; align-items: center; gap: 9px; font-weight: 730; font-size: 15px; letter-spacing: .02em; }
+    .brand-mark { display: grid; width: 24px; height: 24px; place-items: center; color: white; border-radius: 7px; background: var(--accent); font-family: Georgia, serif; font-size: 16px; }
+    .crumbs { display: flex; min-width: 0; align-items: center; gap: 9px; margin-left: 16px; color: var(--muted); }
+    .crumbs span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .crumbs .now { color: var(--ink); font-weight: 700; }
+    .slash { color: var(--faint); }
+    .topbar-spacer { flex: 1; }
+    .autosave { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+    .autosave i { width: 7px; height: 7px; border-radius: 50%; background: #42a066; }
+    .button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 32px; padding: 0 11px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); font-size: 12px; font-weight: 650; transition: .15s ease; }
+    .button:hover { background: var(--surface-quiet); border-color: #9daabc; }
+    .button.primary { color: #fff; border-color: var(--accent); background: var(--accent); }
+    .button.primary:hover { background: var(--accent-hover); }
+    .button.danger { color: #fff; border-color: var(--red); background: var(--red); }
+    .button svg, .icon { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .workspace { display: grid; min-height: 0; grid-template-columns: 292px minmax(450px, 1fr) 294px; }
+    aside { min-width: 0; background: var(--surface); }
+    .history { border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 16px 13px; }
+    h1, h2, h3, p { margin: 0; }
+    .panel-head h1 { font-size: 14px; letter-spacing: .02em; }
+    .small-icon { display: grid; width: 28px; height: 28px; place-items: center; border: 0; border-radius: 5px; color: var(--muted); background: transparent; }
+    .small-icon:hover { color: var(--ink); background: #edf1f5; }
+    .history-note { margin: 0 16px 12px; padding: 9px 10px; border-radius: 6px; color: var(--muted); background: var(--surface-quiet); font-size: 11px; line-height: 1.55; }
+    .history-list { overflow: auto; padding: 0 9px 14px; }
+    .history-label { padding: 11px 7px 7px; color: var(--faint); font-size: 10px; font-weight: 750; letter-spacing: .08em; }
+    .snapshot { position: relative; width: 100%; display: grid; grid-template-columns: 9px 1fr auto; gap: 9px; align-items: start; padding: 10px 9px; border: 1px solid transparent; border-radius: 7px; text-align: left; background: transparent; }
+    .snapshot:hover { background: var(--surface-quiet); }
+    .snapshot.active { border-color: #c3d3e3; background: var(--surface-selected); }
+    .timeline-dot { width: 7px; height: 7px; margin-top: 5px; border-radius: 50%; background: #90a0b2; box-shadow: 0 0 0 3px #f4f6f8; }
+    .snapshot.active .timeline-dot { background: var(--accent); box-shadow: 0 0 0 3px #d8e6f4; }
+    .snapshot.auto .timeline-dot { background: #d29a37; }
+    .snap-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; font-size: 12px; }
+    .snap-date { margin-top: 2px; color: var(--muted); font-size: 11px; }
+    .snap-meta { display: flex; gap: 4px; align-items: center; margin-top: 5px; color: var(--faint); font-size: 10px; }
+    .tag { display: inline-flex; align-items: center; min-height: 18px; padding: 0 5px; border: 1px solid #d4dee7; border-radius: 4px; color: var(--muted); background: #fff; font-size: 10px; font-weight: 650; }
+    .tag.current { color: var(--accent); border-color: #b9cde1; background: #f5faff; }
+    .dots { margin: -3px -3px 0 0; padding: 5px; border: 0; border-radius: 4px; color: var(--faint); background: transparent; font-weight: 800; letter-spacing: 1px; }
+    .dots:hover { color: var(--ink); background: rgba(25,58,90,.08); }
+    .shelter { margin: 11px 7px 0; padding: 10px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+    .shelter strong { color: var(--muted); }
+    .main { display: flex; min-width: 0; flex-direction: column; background: var(--bg); }
+    .comparebar { display: flex; align-items: center; min-height: 72px; gap: 11px; padding: 12px 19px; border-bottom: 1px solid var(--line); background: var(--surface); }
+    .compare-title { margin-right: 6px; }
+    .compare-title h2 { font-size: 14px; }
+    .compare-title span { color: var(--muted); font-size: 11px; }
+    .select-wrap { position: relative; }
+    select { min-width: 148px; height: 33px; appearance: none; padding: 0 28px 0 10px; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--ink); background: var(--surface); font-size: 12px; font-weight: 650; }
+    .select-wrap::after { content: "⌄"; position: absolute; top: 5px; right: 9px; pointer-events: none; color: var(--muted); font-size: 16px; }
+    .compare-arrow { color: var(--faint); font-size: 16px; }
+    .view-tabs { display: flex; margin-left: auto; padding: 3px; border-radius: 6px; background: #edf1f5; }
+    .view-tab { padding: 5px 9px; border: 0; border-radius: 4px; color: var(--muted); background: transparent; font-size: 11px; font-weight: 700; }
+    .view-tab.active { color: var(--ink); background: var(--surface); box-shadow: 0 1px 3px rgba(30,45,60,.14); }
+    .diff-toolbar { display: flex; align-items: center; gap: 9px; min-height: 43px; padding: 0 20px; color: var(--muted); background: #f8fafc; border-bottom: 1px solid var(--line); font-size: 11px; }
+    .diff-toolbar .file-name { display: flex; align-items: center; gap: 6px; color: var(--ink); font-weight: 700; }
+    .file-dot { width: 12px; height: 14px; border: 1.4px solid #6f8297; border-radius: 2px; }
+    .diff-toolbar .spacer { flex: 1; }
+    .legend { display: inline-flex; align-items: center; gap: 4px; }
+    .legend i { width: 8px; height: 8px; border-radius: 2px; }
+    .legend.add i { background: #bce6c9; }.legend.del i { background: #f2c7c7; }
+    .diff-stage { display: flex; min-height: 0; flex: 1; padding: 19px; overflow: auto; }
+    .diff-paper { width: 100%; min-width: 650px; display: grid; grid-template-columns: 1fr 1fr; align-self: stretch; overflow: hidden; border: 1px solid var(--line); border-radius: 7px; box-shadow: 0 2px 8px rgba(30,47,65,.04); background: #fff; }
+    .diff-column { min-width: 0; }
+    .diff-column + .diff-column { border-left: 1px solid var(--line); }
+    .diff-head { display: flex; align-items: center; justify-content: space-between; height: 42px; padding: 0 14px; border-bottom: 1px solid var(--line); background: #fbfcfd; }
+    .diff-head strong { font-size: 12px; }.diff-head span { color: var(--muted); font-size: 11px; }
+    .code { padding: 14px 0 30px; color: #253348; font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace; font-size: 12px; line-height: 1.85; }
+    .line { display: grid; grid-template-columns: 34px minmax(0,1fr); min-height: 25px; padding-right: 10px; }
+    .line-no { padding-right: 9px; color: #a4afbb; text-align: right; user-select: none; }
+    .line-text { min-width: 0; padding: 0 7px; white-space: pre-wrap; }
+    .removed .line-text { background: var(--red-bg); color: #843737; }.added .line-text { background: var(--green-bg); color: #1e633f; }
+    .removed .line-no { background: #fff8f8; }.added .line-no { background: #f5fbf7; }
+    mark { padding: 1px 0; color: inherit; background: #f5d1d1; }.added mark { background: #bee8c9; }
+    .empty-gap { height: 50px; }
+    .insight { border-left: 3px solid #e3b243; background: #fffaf0; color: #755421; font-family: inherit; font-size: 11px; }
+    .restore { border-left: 1px solid var(--line); display: flex; flex-direction: column; }
+    .restore .panel-head { padding-bottom: 10px; }.restore .panel-head h2 { font-size: 14px; }
+    .summary-card { margin: 0 16px 15px; padding: 13px; border: 1px solid #cbdbe9; border-radius: 7px; background: #f6faff; }
+    .summary-card h3 { color: var(--accent); font-size: 12px; }.summary-card p { margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.55; }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 12px; }.stat { padding: 7px 4px; border-radius: 5px; text-align: center; background: #fff; }.stat b { display: block; font-size: 15px; }.stat span { color: var(--muted); font-size: 10px; }.stat.add b { color: var(--green); }.stat.del b { color: var(--red); }
+    .section { padding: 0 16px 15px; }.section-title { display: flex; align-items: center; justify-content: space-between; padding: 0 0 8px; color: var(--muted); font-size: 11px; font-weight: 750; }.section-title button { padding: 0; border: 0; color: var(--accent); background: transparent; font-size: 11px; }
+    .restore-scope { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; border-radius: 6px; background: #edf1f5; }.scope-button { min-height: 29px; border: 0; border-radius: 4px; color: var(--muted); background: transparent; font-size: 11px; font-weight: 700; }.scope-button.active { color: var(--ink); background: #fff; box-shadow: 0 1px 3px rgba(30,45,60,.14); }
+    .tree { overflow: hidden; border: 1px solid var(--line); border-radius: 6px; background: #fff; }.tree-row { display: flex; min-height: 31px; align-items: center; gap: 7px; padding: 0 8px; border-bottom: 1px solid #edf0f3; font-size: 11px; }.tree-row:last-child { border-bottom: 0; }.tree-row .tree-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.tree-indent { width: 10px; }.tree-icon { color: #75879b; }.change { padding: 2px 5px; border-radius: 3px; font-size: 9px; font-weight: 750; }.change.mod { color: #876018; background: #fff3d5; }.change.add { color: #267447; background: #e7f6ec; }.change.del { color: #9a3939; background: #ffeaea; }
+    .tree-row input { width: 13px; height: 13px; margin: 0; accent-color: var(--accent); }.tree-row:has(input:disabled) { opacity: .58; }.tree-row:has(input:checked) { background: #f3f8fc; }.tree-row .order { color: #78889a; font-size: 10px; font-variant-numeric: tabular-nums; }.order-diff { display: inline-flex; align-items: center; gap: 3px; color: #876018; font-size: 9px; font-weight: 700; }.order-diff::before { content: "↕"; font-size: 12px; }
+    .order-card { padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-quiet); }.order-card p { color: var(--muted); font-size: 11px; line-height: 1.55; }.order-card label { display: flex; align-items: flex-start; gap: 7px; margin-top: 9px; color: var(--ink); font-size: 11px; font-weight: 650; }.order-card input { width: 13px; height: 13px; margin: 1px 0 0; accent-color: var(--accent); }.order-card small { display: block; margin-top: 2px; color: var(--muted); font-weight: 400; }
+    .restore-bottom { margin-top: auto; padding: 13px 16px 16px; border-top: 1px solid var(--line); background: #fbfcfd; }.restore-bottom .button { width: 100%; min-height: 36px; }.restore-bottom p { margin: 8px 2px 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+    .statusbar { display: flex; align-items: center; justify-content: space-between; padding: 0 15px; border-top: 1px solid var(--line); color: var(--muted); background: var(--surface); font-size: 11px; }.statusbar span { display: inline-flex; align-items: center; gap: 6px; }.statusbar i { width: 6px; height: 6px; border-radius: 50%; background: #54a270; }
+    .toast { position: fixed; right: 24px; bottom: 48px; z-index: 4; padding: 10px 13px; border-radius: 7px; color: #fff; background: #253c54; box-shadow: var(--shadow); opacity: 0; transform: translateY(8px); pointer-events: none; transition: .2s ease; font-size: 12px; }.toast.show { opacity: 1; transform: none; }
+    .dialog-backdrop { position: fixed; inset: 0; z-index: 3; display: none; place-items: center; background: rgba(21,32,46,.33); }.dialog-backdrop.open { display: grid; }.dialog { width: 396px; padding: 20px; border: 1px solid #c4cdd8; border-radius: 9px; background: #fff; box-shadow: var(--shadow); }.dialog h2 { font-size: 16px; }.dialog p { margin-top: 10px; color: var(--muted); font-size: 12px; line-height: 1.65; }.warning-box { margin-top: 13px; padding: 9px 10px; border-radius: 5px; color: #73541f; background: var(--amber-bg); font-size: 11px; }.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+    @media (max-width: 1120px) { .workspace { grid-template-columns: 257px minmax(440px, 1fr) 250px; }.compare-title { display: none; }.view-tabs { margin-left: 0; }.diff-stage { padding: 13px; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">t</span><span>Then</span></div>
+      <nav class="crumbs" aria-label="パンくず"><span>海辺のアトリエ</span><b class="slash">/</b><span>長編小説</span><b class="slash">/</b><span class="now">チェックポイント</span></nav>
+      <div class="topbar-spacer"></div>
+      <span class="autosave"><i></i>すべて保存済み</span>
+      <button class="button" id="back-button">← 編集に戻る</button>
+    </header>
+
+    <div class="workspace">
+      <aside class="history" aria-label="チェックポイント履歴">
+        <div class="panel-head"><h1>チェックポイント</h1><button class="small-icon" id="new-checkpoint" title="保存点を作成">＋</button></div>
+        <p class="history-note">原稿の節目を手動で保存します。整理したファイルを戻す機能は「ゴミ箱」を使います。</p>
+        <div class="history-list">
+          <div class="history-label">2026年 7月</div>
+          <button class="snapshot" data-name="第二稿・会話を整理" data-date="7月10日 16:42" data-count="4" data-added="2" data-deleted="1">
+            <i class="timeline-dot"></i><span><span class="snap-name">第二稿・会話を整理</span><span class="snap-date">7月10日 16:42</span><span class="snap-meta">8ファイル <span class="tag">18,420字</span></span></span><span class="dots">•••</span>
+          </button>
+          <button class="snapshot active" data-name="終盤改稿前" data-date="7月9日 22:18" data-count="3" data-added="1" data-deleted="1">
+            <i class="timeline-dot"></i><span><span class="snap-name">終盤改稿前</span><span class="snap-date">7月9日 22:18</span><span class="snap-meta">7ファイル <span class="tag current">比較中</span></span></span><span class="dots">•••</span>
+          </button>
+          <button class="snapshot" data-name="第3章を書き終えた時点" data-date="7月6日 19:05" data-count="6" data-added="3" data-deleted="0">
+            <i class="timeline-dot"></i><span><span class="snap-name">第3章を書き終えた時点</span><span class="snap-date">7月6日 19:05</span><span class="snap-meta">6ファイル <span class="tag">12,806字</span></span></span><span class="dots">•••</span>
+          </button>
+          <div class="history-label">2026年 6月</div>
+          <button class="snapshot" data-name="プロットを本文に展開" data-date="6月29日 13:30" data-count="9" data-added="4" data-deleted="2">
+            <i class="timeline-dot"></i><span><span class="snap-name">プロットを本文に展開</span><span class="snap-date">6月29日 13:30</span><span class="snap-meta">4ファイル <span class="tag">7,992字</span></span></span><span class="dots">•••</span>
+          </button>
+          <button class="snapshot" data-name="書き始め" data-date="6月21日 09:12" data-count="12" data-added="5" data-deleted="0">
+            <i class="timeline-dot"></i><span><span class="snap-name">書き始め</span><span class="snap-date">6月21日 09:12</span><span class="snap-meta">2ファイル <span class="tag">1,682字</span></span></span><span class="dots">•••</span>
+          </button>
+          <div class="shelter"><strong>⌄ 復元前の退避</strong><br><span>復元の直前に自動保存した状態</span></div>
+          <button class="snapshot auto" data-name="第二稿・会話を整理（復元前）" data-date="7月10日 16:44" data-count="4" data-added="2" data-deleted="1">
+            <i class="timeline-dot"></i><span><span class="snap-name">第二稿・会話を整理（復元前）</span><span class="snap-date">7月10日 16:44</span></span><span class="dots">•••</span>
+          </button>
+        </div>
+      </aside>
+
+      <main class="main">
+        <section class="comparebar">
+          <div class="compare-title"><h2>変更を確認</h2><span>復元前に現在の状態と比較</span></div>
+          <div class="select-wrap"><select aria-label="比較元"><option>終盤改稿前</option><option>第3章を書き終えた時点</option></select></div><span class="compare-arrow">→</span><div class="select-wrap"><select aria-label="比較先"><option>現在の原稿</option></select></div>
+          <div class="view-tabs" role="tablist"><button class="view-tab active" data-view="diff">差分</button><button class="view-tab" data-view="full">全文</button><button class="view-tab" data-view="tree">構造</button></div>
+        </section>
+        <section class="diff-toolbar"><span class="file-name"><i class="file-dot"></i>03_帰還.md</span><span>変更 12箇所</span><span class="spacer"></span><span class="legend add"><i></i>追加 8</span><span class="legend del"><i></i>削除 4</span><button class="small-icon" title="次の変更">⌄</button></section>
+        <section class="diff-stage" id="diff-stage">
+          <div class="diff-paper">
+            <article class="diff-column"><header class="diff-head"><strong>終盤改稿前</strong><span>7月9日 22:18</span></header><div class="code">
+              <div class="line"><span class="line-no">41</span><span class="line-text">　波の音が、窓の外でほどけていた。</span></div>
+              <div class="line"><span class="line-no">42</span><span class="line-text">　机の上には、書きかけの手紙と、</span></div>
+              <div class="line removed"><span class="line-no">43</span><span class="line-text">　<mark>まだ温かいコーヒー</mark>が置かれている。</span></div>
+              <div class="line removed"><span class="line-no">44</span><span class="line-text">　彼女はそれを見つめたまま、</span></div>
+              <div class="line"><span class="line-no">45</span><span class="line-text">　なにも言わなかった。</span></div>
+              <div class="empty-gap"></div>
+              <div class="line"><span class="line-no">46</span><span class="line-text">　「帰るの？」</span></div>
+              <div class="line removed"><span class="line-no">47</span><span class="line-text">　<mark>私はようやく、</mark>そう訊ねた。</span></div>
+              <div class="line"><span class="line-no">48</span><span class="line-text">　彼は少し笑って、窓を閉めた。</span></div>
+              <div class="line"><span class="line-no">49</span><span class="line-text">　海からの風が、部屋の匂いを</span></div>
+              <div class="line"><span class="line-no">50</span><span class="line-text">　連れ去っていく。</span></div>
+              <div class="line insight"><span class="line-no">✦</span><span class="line-text">この段落では、語り手の主語が省略されています</span></div>
+            </div></article>
+            <article class="diff-column"><header class="diff-head"><strong>現在の原稿</strong><span>7月10日 17:02</span></header><div class="code">
+              <div class="line"><span class="line-no">41</span><span class="line-text">　波の音が、窓の外でほどけていた。</span></div>
+              <div class="line"><span class="line-no">42</span><span class="line-text">　机の上には、書きかけの手紙と、</span></div>
+              <div class="line added"><span class="line-no">43</span><span class="line-text">　<mark>冷めかけた紅茶</mark>が置かれている。</span></div>
+              <div class="line added"><span class="line-no">44</span><span class="line-text">　彼女はカップの縁を指でなぞり、</span></div>
+              <div class="line"><span class="line-no">45</span><span class="line-text">　なにも言わなかった。</span></div>
+              <div class="empty-gap"></div>
+              <div class="line"><span class="line-no">46</span><span class="line-text">　「帰るの？」</span></div>
+              <div class="line added"><span class="line-no">47</span><span class="line-text">　声に出したのは、私だった。</span></div>
+              <div class="line"><span class="line-no">48</span><span class="line-text">　彼は少し笑って、窓を閉めた。</span></div>
+              <div class="line"><span class="line-no">49</span><span class="line-text">　海からの風が、部屋の匂いを</span></div>
+              <div class="line"><span class="line-no">50</span><span class="line-text">　連れ去っていく。</span></div>
+              <div class="line insight"><span class="line-no">✦</span><span class="line-text">会話の話者を明示して読みやすさを改善</span></div>
+            </div></article>
+          </div>
+        </section>
+      </main>
+
+      <aside class="restore" aria-label="復元内容">
+        <div class="panel-head"><h2>復元の内容</h2><button class="small-icon" title="ヘルプ">?</button></div>
+        <div class="summary-card"><h3 id="summary-name">「終盤改稿前」に戻す</h3><p id="summary-date">2026年7月9日 22:18 の原稿状態</p><div class="stats"><div class="stat"><b id="modified-count">3</b><span>変更</span></div><div class="stat add"><b id="added-count">1</b><span>追加</span></div><div class="stat del"><b id="deleted-count">1</b><span>削除</span></div></div></div>
+        <section class="section"><div class="section-title"><span>復元範囲</span></div><div class="restore-scope"><button class="scope-button active" data-scope="all">すべてを復元</button><button class="scope-button" data-scope="selected">選択して復元</button></div></section>
+        <section class="section"><div class="section-title"><span>影響するファイル</span><button id="show-all">すべて表示</button></div><div class="tree" id="restore-tree">
+          <label class="tree-row"><input type="checkbox" class="restore-item" checked disabled><span class="tree-icon">⌄</span><b class="tree-name">長編小説</b></label>
+          <label class="tree-row"><input type="checkbox" class="restore-item" checked disabled><span class="tree-indent"></span><span class="tree-icon">▱</span><span class="tree-name">03_帰還.md</span><span class="change mod">変更</span></label>
+          <label class="tree-row"><input type="checkbox" class="restore-item" checked disabled><span class="tree-indent"></span><span class="tree-icon">▱</span><span class="tree-name">04_灯台.md</span><span class="change mod">変更</span></label>
+          <label class="tree-row"><input type="checkbox" class="restore-item" checked disabled><span class="tree-indent"></span><span class="tree-icon">▱</span><span class="tree-name">メモ_結末案.md</span><span class="change del">削除</span></label>
+          <label class="tree-row"><input type="checkbox" class="restore-item" checked disabled><span class="tree-indent"></span><span class="tree-icon">▱</span><span class="tree-name">資料/年表.md</span><span class="change add">追加</span></label>
+        </div></section>
+        <section class="section"><div class="section-title"><span>フォルダツリーの順序</span></div><div class="order-card"><p>保存点では「03_帰還.md」が先頭です。現在の並び順と 3 件異なります。</p><label><input type="checkbox" id="restore-order" checked disabled><span>保存時の順に並び替える<small>フォルダ内のファイル順・フォルダ順を復元します。</small></span></label></div></section>
+        <div class="restore-bottom"><button class="button primary" id="restore-button">このチェックポイントに戻す</button><p id="restore-help">現在の原稿は「復元前の退避」として保存されます。構造と並び順も保存時点へ戻します。</p></div>
+      </aside>
+    </div>
+    <footer class="statusbar"><span><i></i>チェックポイント画面</span><span>7ファイル・16,908字　　現在との差分: 12箇所</span></footer>
+  </div>
+  <div class="dialog-backdrop" id="dialog"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><h2 id="dialog-title">「終盤改稿前」に戻しますか？</h2><p id="dialog-copy">現在の原稿は「復元前の退避」として保存されます。選択した保存点の本文とプロジェクト構造が復元されます。</p><div class="warning-box" id="dialog-warning">現在のテキストファイル 1 件は保存点に存在しないため、ゴミ箱へ移動します。</div><div class="dialog-actions"><button class="button" id="cancel-restore">キャンセル</button><button class="button danger" id="confirm-restore">チェックポイントに戻す</button></div></div></div>
+  <div class="toast" id="toast" role="status">保存点を選択しました。差分を確認できます。</div>
+  <script>
+    const toast = document.getElementById('toast');
+    let toastTimer;
+    function notify(message) { toast.textContent = message; toast.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('show'), 2600); }
+    document.querySelectorAll('.snapshot').forEach((item) => item.addEventListener('click', (event) => {
+      if (event.target.classList.contains('dots')) return;
+      document.querySelectorAll('.snapshot').forEach((s) => s.classList.remove('active'));
+      item.classList.add('active');
+      const name = item.dataset.name, date = item.dataset.date;
+      document.getElementById('summary-name').textContent = `「${name}」に戻す`;
+      document.getElementById('summary-date').textContent = `2026年${date} の原稿状態`;
+      document.getElementById('modified-count').textContent = item.dataset.count;
+      document.getElementById('added-count').textContent = item.dataset.added;
+      document.getElementById('deleted-count').textContent = item.dataset.deleted;
+      document.querySelector('.comparebar select').value = '終盤改稿前';
+      notify(`「${name}」を比較対象にしました`);
+    }));
+    document.querySelectorAll('.view-tab').forEach((tab) => tab.addEventListener('click', () => {
+      document.querySelectorAll('.view-tab').forEach((t) => t.classList.remove('active')); tab.classList.add('active');
+      const stage = document.getElementById('diff-stage');
+      if (tab.dataset.view === 'full') { stage.querySelector('.diff-paper').style.gridTemplateColumns = '1fr'; stage.querySelector('.diff-column + .diff-column').style.display = 'none'; notify('現在の原稿を全文表示しています'); }
+      else if (tab.dataset.view === 'tree') { stage.innerHTML = '<div style="width:100%;padding:27px;border:1px solid var(--line);border-radius:7px;background:#fff"><strong style="display:block;color:var(--ink);font-size:15px;margin-bottom:5px">プロジェクト構造と並び順の差分</strong><p style="margin:0 0 19px;color:var(--muted);font-size:12px">本文だけでなく、保存点のフォルダ階層と同階層内の並び順も確認できます。</p><div style="display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:6px;overflow:hidden;font-size:12px"><div style="padding:14px;border-right:1px solid var(--line)"><b>保存点の順序</b><ol style="margin:10px 0 0;padding-left:23px;line-height:2;color:var(--ink)"><li>03_帰還.md</li><li>04_灯台.md</li><li>資料</li></ol></div><div style="padding:14px"><b>現在の順序</b><ol style="margin:10px 0 0;padding-left:23px;line-height:2;color:var(--ink)"><li>資料 <small style="color:#966218">↑ 2件移動</small></li><li>04_灯台.md</li><li>03_帰還.md <small style="color:#966218">↓ 2件移動</small></li></ol></div></div></div>'; notify('フォルダツリーと並び順の差分を表示しています'); }
+      else { location.reload(); }
+    }));
+    let restoreScope = 'all';
+    const scopeButtons = document.querySelectorAll('.scope-button');
+    const restoreItems = document.querySelectorAll('.restore-item');
+    const restoreOrder = document.getElementById('restore-order');
+    const restoreButton = document.getElementById('restore-button');
+    const restoreHelp = document.getElementById('restore-help');
+    function updateRestoreScope(scope) {
+      restoreScope = scope;
+      scopeButtons.forEach((button) => button.classList.toggle('active', button.dataset.scope === scope));
+      const selectable = scope === 'selected';
+      restoreItems.forEach((item, index) => {
+        item.disabled = !selectable;
+        item.checked = selectable ? index === 1 : true;
+      });
+      restoreOrder.disabled = !selectable;
+      restoreOrder.checked = !selectable;
+      restoreButton.textContent = selectable ? '選択した項目を復元' : 'このチェックポイントに戻す';
+      restoreHelp.textContent = selectable
+        ? '選択したファイル／フォルダだけを復元します。並び順の復元は任意です。'
+        : '現在の原稿は「復元前の退避」として保存されます。構造と並び順も保存時点へ戻します。';
+    }
+    scopeButtons.forEach((button) => button.addEventListener('click', () => updateRestoreScope(button.dataset.scope)));
+    restoreItems.forEach((item) => item.addEventListener('change', () => {
+      const count = [...restoreItems].filter((checkbox) => checkbox.checked).length;
+      restoreButton.disabled = count === 0;
+      if (restoreScope === 'selected') restoreButton.textContent = count ? `選択した ${count} 項目を復元` : '復元する項目を選択';
+    }));
+    const dialog = document.getElementById('dialog');
+    document.getElementById('restore-button').onclick = () => {
+      const selected = [...restoreItems].filter((checkbox) => checkbox.checked).length;
+      const isSelected = restoreScope === 'selected';
+      document.getElementById('dialog-title').textContent = isSelected ? `選択した ${selected} 項目を復元しますか？` : '「終盤改稿前」に戻しますか？';
+      document.getElementById('dialog-copy').textContent = isSelected
+        ? `選択したファイル／フォルダの本文を保存点の状態に戻します。${restoreOrder.checked ? 'フォルダ内の並び順も保存時点へ戻します。' : '現在のフォルダツリーの並び順は維持します。'}`
+        : '現在の原稿は「復元前の退避」として保存されます。選択した保存点の本文、プロジェクト構造、フォルダツリーの並び順を復元します。';
+      document.getElementById('dialog-warning').textContent = isSelected
+        ? '個別復元では、選択していないファイルは変更しません。'
+        : '現在のテキストファイル 1 件は保存点に存在しないため、ゴミ箱へ移動します。';
+      dialog.classList.add('open');
+    };
+    document.getElementById('cancel-restore').onclick = () => dialog.classList.remove('open');
+    document.getElementById('confirm-restore').onclick = () => { dialog.classList.remove('open'); notify('モックアップ: 復元処理を開始します'); };
+    document.getElementById('new-checkpoint').onclick = () => notify('モックアップ: 現在の原稿を新しいチェックポイントとして保存します');
+    document.getElementById('back-button').onclick = () => notify('モックアップ: 編集画面へ戻ります');
+    document.getElementById('show-all').onclick = () => notify('モックアップ: 影響する全ファイルを表示します');
+  </script>
+</body>
+</html>

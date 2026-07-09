@@ -50,6 +50,7 @@ export type CanvasReferenceNode = {
   y: number;
   width: number;
   height: number;
+  scope: CanvasScope;
   sourcePath: string;
   name: string;
   kind: ReferenceKind;
@@ -237,7 +238,7 @@ export function createCanvasGroupNode(
 
 export function createCanvasReferenceNode(
   file: ReferenceFileInfo,
-  options: Partial<Omit<CanvasReferenceNode, "id" | "type" | "sourcePath" | "name" | "kind">> = {},
+  options: Partial<Omit<CanvasReferenceNode, "id" | "type" | "scope" | "sourcePath" | "name" | "kind">> = {},
 ): CanvasReferenceNode {
     return {
       id: nextCanvasId("reference"),
@@ -246,6 +247,7 @@ export function createCanvasReferenceNode(
       y: options.y ?? 140,
       width: options.width ?? 380,
       height: options.height ?? 260,
+      scope: file.scope,
       sourcePath: file.sourcePath,
       name: file.name,
       kind: file.kind,
@@ -339,6 +341,7 @@ function normalizeNode(value: unknown): CanvasNode | null {
         y,
         width: Math.max(260, width),
         height: Math.max(180, height),
+        scope: reference.scope === "global" ? "global" : "project",
         sourcePath: typeof reference.sourcePath === "string" ? reference.sourcePath : "",
       name:
         typeof reference.name === "string" && reference.name.trim()
