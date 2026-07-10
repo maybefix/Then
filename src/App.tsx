@@ -18,6 +18,13 @@ import { CommandPalette, type PaletteCommand } from "./components/dialogs/Comman
 import { SettingsModal } from "./components/dialogs/SettingsModal";
 import { ThemePickerModal } from "./components/dialogs/ThemePickerModal";
 import { MetadataPanel } from "./components/editor/MetadataPanel";
+import {
+  CheckpointStudio,
+  type CheckpointCurrentProjectFile,
+  type CheckpointCurrentProjectStatus,
+  type SnapshotRelocation,
+  type SnapshotConflictPolicy,
+} from "./components/checkpoints/CheckpointStudio";
 import { WorkspaceSidebar } from "./components/layout/WorkspaceSidebar";
 import {
   createDocumentAst,
@@ -293,6 +300,7 @@ type AppIconName =
   | "export"
   | "file"
   | "folder"
+  | "history"
   | "horizontal"
   | "menu"
   | "panelLeft"
@@ -345,6 +353,14 @@ function AppIcon({ name, className = "" }: { name: AppIconName; className?: stri
       return (
         <svg {...common}>
           <path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" />
+        </svg>
+      );
+    case "history":
+      return (
+        <svg {...common}>
+          <path d="M3.5 12a8.5 8.5 0 1 0 2.5-6" />
+          <path d="M3.5 4.5v4h4" />
+          <path d="M12 7v5l3.5 2" />
         </svg>
       );
     case "horizontal":
@@ -840,6 +856,55 @@ function countDisplayCharacters(text: string, includeWhitespace: boolean): numbe
 
 function documentAstToText(documentAst: DocumentAst): string {
   return documentAst.blocks.map((block) => block.source).join("\n");
+}
+
+function restoredCopyPath(path: string, index: number): string {
+  const separator = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  const dot = path.lastIndexOf(".");
+  const hasExtension = dot > separator;
+  const suffix = index === 1 ? "（復元）" : `（復元 ${index}）`;
+  return hasExtension
+    ? `${path.slice(0, dot)}${suffix}${path.slice(dot)}`
+    : `${path}${suffix}`;
+}
+
+function selectedSnapshotFolderTree(
+  root: ProjectFolder,
+  selectedFolderPaths: ReadonlySet<string>,
+): ProjectFolder {
+  const keepEntry = (entry: ProjectEntry): ProjectEntry | null => {
+    if (entry.kind !== "folder") return null;
+    if (selectedFolderPaths.has(normalizePathForCompare(entry.path))) return entry;
+    const children = entry.children.flatMap((child) => {
+      const kept = keepEntry(child);
+      return kept ? [kept] : [];
+    });
+    return children.length ? { ...entry, children } : null;
+  };
+  return { ...root, children: root.children.flatMap((entry) => {
+    const kept = keepEntry(entry);
+    return kept ? [kept] : [];
+  }) };
+}
+
+async function restoreSnapshotTreeOrder(
+  rootPath: string,
+  tree: ProjectFolder,
+  selectedFolderPaths?: ReadonlySet<string>,
+): Promise<void> {
+  const visit = async (folder: ProjectFolder | ProjectEntry): Promise<void> => {
+    if (!selectedFolderPaths || selectedFolderPaths.has(normalizePathForCompare(folder.path))) {
+      await invoke<ProjectFolder>("reorder_project_entries", {
+        rootPath,
+        folderPath: folder.path,
+        orderedPaths: folder.children.map((entry) => entry.path),
+      });
+    }
+    for (const child of folder.children) {
+      if (child.kind === "folder") await visit(child);
+    }
+  };
+  await visit(tree);
 }
 
 function snapshotId(prefix = "snapshot"): string {
@@ -2008,6 +2073,9 @@ export default function App() {
   activeTabIdRef.current = activeTabId;
   const [projectFolder, setProjectFolder] = useState<ProjectFolder | null>(null);
   const [projectAst, setProjectAst] = useState<ProjectAst | null>(null);
+  const [checkpointCurrentProjectFiles, setCheckpointCurrentProjectFiles] = useState<ReadonlyMap<string, CheckpointCurrentProjectFile>>(() => new Map());
+  const [checkpointCurrentProjectStatus, setCheckpointCurrentProjectStatus] = useState<CheckpointCurrentProjectStatus>("idle");
+  const [checkpointUnavailableProjectPaths, setCheckpointUnavailableProjectPaths] = useState<ReadonlySet<string>>(() => new Set());
   const [snippetWorkspacePath, setSnippetWorkspacePath] = useState<string | null>(null);
   const [plotWorkspacePath, setPlotWorkspacePath] = useState<string | null>(null);
   const [plotCards, setPlotCards] = useState<PlotCard[]>(() => defaultPlotCards);
@@ -2066,10 +2134,10 @@ export default function App() {
   const [isRightSidebarWide, setIsRightSidebarWide] = useState(false);
   /**
    * メイン画面のモード。write=本文（左右サイドバー）、canvas=キャンバス（右のみ）、
-   * export=エクスポート（サイドバーなし）。canvas/export は設定により別ウィンドウ
+   * export=エクスポート、checkpoint=チェックポイント（いずれもサイドバーなし）。canvas/export は設定により別ウィンドウ
    * 起動へ切り替わる。
    */
-  const [appMode, setAppMode] = useState<"write" | "canvas" | "export">("write");
+  const [appMode, setAppMode] = useState<"write" | "canvas" | "export" | "checkpoint">("write");
   const [canvasEmbedPayload, setCanvasEmbedPayload] = useState<CanvasWindowPayload | null>(null);
   const [exportEmbedPayload, setExportEmbedPayload] = useState<{
     requestId: string;
@@ -2723,6 +2791,24 @@ export default function App() {
       .filter((snapshot) => isSamePath(snapshot.workspacePath, projectFolder.path))
       .sort((left, right) => right.createdAt - left.createdAt);
   }, [appState.snapshots, projectFolder]);
+  const snapshotConflictPaths = useMemo(() => {
+    return new Map(currentWorkspaceSnapshots.map((snapshot) => {
+      const conflicts = new Set<string>();
+      for (const file of snapshot.files) {
+        const key = normalizePathForCompare(file.path);
+        const currentFile = checkpointCurrentProjectFiles.get(key);
+        const currentHash = currentFile
+          ? createDocumentAst({
+              path: currentFile.path,
+              name: currentFile.name,
+              text: currentFile.text,
+            }).textHash
+          : null;
+        if (currentHash && currentHash !== file.textHash) conflicts.add(key);
+      }
+      return [snapshot.id, conflicts] as const;
+    }));
+  }, [checkpointCurrentProjectFiles, currentWorkspaceSnapshots]);
   const frontMatter = useMemo(() => parseFrontMatter(markdown), [markdown]);
   const editorText = frontMatter.body;
   activeDocumentSnapshotRef.current = {
@@ -2730,6 +2816,69 @@ export default function App() {
     name: currentFileName,
     text: editorText,
   };
+
+  // チェックポイントは「編集中の一枚」ではなくプロジェクト全体を比較する。
+  // 画面へ入るたび、ディスク上の全本文を再取得し、未保存タブだけをその内容で上書きする。
+  // 読み込み不能なパスを欠落扱いにしないことで、破損・権限エラーを誤った復元判断へつなげない。
+  useEffect(() => {
+    if (appMode !== "checkpoint" || !projectFolder) {
+      setCheckpointCurrentProjectFiles(new Map());
+      setCheckpointUnavailableProjectPaths(new Set());
+      setCheckpointCurrentProjectStatus("idle");
+      return;
+    }
+
+    let cancelled = false;
+    const files = collectProjectTextFiles(projectFolder);
+    const openTabsByPath = new Map(
+      openTabs
+        .filter((tab): tab is DocumentTab & { path: string } => Boolean(tab.path))
+        .map((tab) => [normalizePathForCompare(tab.path), tab] as const),
+    );
+    const activeDocument = activeDocumentSnapshotRef.current;
+
+    setCheckpointCurrentProjectFiles(new Map());
+    setCheckpointUnavailableProjectPaths(new Set());
+    setCheckpointCurrentProjectStatus("loading");
+
+    const loadCurrentProjectFiles = async () => {
+      const loaded = new Map<string, CheckpointCurrentProjectFile>();
+      const unavailable = new Set<string>();
+
+      await Promise.all(files.map(async (file) => {
+        const key = normalizePathForCompare(file.path);
+        const openTab = openTabsByPath.get(key);
+
+        if (activeDocument?.path && normalizePathForCompare(activeDocument.path) === key) {
+          loaded.set(key, { path: file.path, name: activeDocument.name || file.name, text: activeDocument.text });
+          return;
+        }
+        if (openTab) {
+          loaded.set(key, { path: file.path, name: openTab.name || file.name, text: parseFrontMatter(openTab.markdown).body });
+          return;
+        }
+        if (!isTauriRuntime()) {
+          unavailable.add(key);
+          return;
+        }
+
+        try {
+          const document = await invoke<TextDocument>("read_text_file", { path: file.path });
+          loaded.set(key, { path: file.path, name: document.name || file.name, text: parseFrontMatter(document.content).body });
+        } catch {
+          unavailable.add(key);
+        }
+      }));
+
+      if (cancelled) return;
+      setCheckpointCurrentProjectFiles(loaded);
+      setCheckpointUnavailableProjectPaths(unavailable);
+      setCheckpointCurrentProjectStatus(unavailable.size ? "error" : "ready");
+    };
+
+    void loadCurrentProjectFiles();
+    return () => { cancelled = true; };
+  }, [appMode, editorText, openTabs, projectFolder]);
   // 前回終了時のカーソル位置。保存時点の本文長が現在と一致する場合のみ復元し、
   // 外部編集などで食い違う場合は先頭へフォールバックする。
   const initialSelectionOffset = useMemo(() => {
@@ -4483,6 +4632,10 @@ export default function App() {
 
   const handleDeleteManuscriptSnapshot = useCallback(
     async (snapshot: ManuscriptSnapshot) => {
+      if (snapshot.reason !== "manual") {
+        showToast("復元前の退避は自動管理のため削除できません");
+        return;
+      }
       const shouldDelete = await requestConfirm({
         title: "チェックポイントを削除",
         message: `「${snapshot.label}」を削除しますか？`,
@@ -4620,6 +4773,10 @@ export default function App() {
           "auto-before-restore",
           currentWorkspaceSnapshots[0] ? [currentWorkspaceSnapshots[0].id] : [],
         );
+        setAppState((current) => ({
+          ...current,
+          snapshots: trimAutoShelterSnapshots([shelter, ...current.snapshots]),
+        }));
         const restoredDocuments: TextDocument[] = [];
         const snapshotPathKeys = new Set(
           snapshot.files.map((file) => normalizePathForCompare(file.path)),
@@ -4668,6 +4825,8 @@ export default function App() {
           }
         }
 
+        await restoreSnapshotTreeOrder(projectFolder.path, snapshot.projectTree);
+
         const restoredByPath = new Map(
           restoredDocuments.map((document) => [document.path, document] as const),
         );
@@ -4701,7 +4860,6 @@ export default function App() {
 
         setAppState((current) => ({
           ...current,
-          snapshots: trimAutoShelterSnapshots([shelter, ...current.snapshots]),
           lastWorkspacePath: projectFolder.path,
           lastFilePath: activeRestored?.path ?? current.lastFilePath,
           markdown: activeRestored?.content ?? current.markdown,
@@ -4739,6 +4897,174 @@ export default function App() {
       projectFolder,
       refreshProjectFolder,
     ],
+  );
+
+  const handleRestoreManuscriptSnapshotFiles = useCallback(
+    async (
+      snapshot: ManuscriptSnapshot,
+      selectedPaths: string[],
+      selectedFolderPaths: string[],
+      conflictPolicy: SnapshotConflictPolicy,
+      restoreOrder: boolean,
+      relocations: SnapshotRelocation[],
+    ) => {
+      if (!projectFolder || !isSamePath(snapshot.workspacePath, projectFolder.path)) {
+        showToast("このチェックポイントのプロジェクトを開いてください");
+        return;
+      }
+      if (!isTauriRuntime()) {
+        showToast("チェックポイントへの復元はTauri版で利用できます");
+        return;
+      }
+      const selectedPathKeys = new Set(selectedPaths.map(normalizePathForCompare));
+      const files = snapshot.files.filter((file) => selectedPathKeys.has(normalizePathForCompare(file.path)));
+      const relocationBySnapshotPath = new Map(relocations.map((item) => [normalizePathForCompare(item.snapshotPath), item.currentPath] as const));
+      const selectedRelocationCount = files.filter((file) => relocationBySnapshotPath.has(normalizePathForCompare(file.path))).length;
+      const selectedFolderPathKeys = new Set(selectedFolderPaths.map(normalizePathForCompare));
+      if (!files.length && !selectedFolderPathKeys.size) {
+        showToast("復元するファイルまたはフォルダを選択してください");
+        return;
+      }
+
+      const shouldRestore = await requestConfirm({
+        title: "選択したファイルを復元",
+        message: `${files.length + selectedFolderPathKeys.size} 件を「${snapshot.label}」の状態へ戻しますか？`,
+        detail: `${selectedRelocationCount ? `名前変更・移動を認識した ${selectedRelocationCount} 件は保存点のパスへ戻します。` : ""}${conflictPolicy === "overwrite"
+          ? "競合したファイルは保存点の本文で上書きします。現在の状態は復元前の退避として保存されます。"
+          : conflictPolicy === "copy"
+            ? "競合した現在のファイルを残し、保存点の内容を別パスへ復元します。現在の状態は復元前の退避として保存されます。"
+            : "現在の本文と競合したファイルはスキップします。現在の状態は復元前の退避として保存されます。"}`,
+        confirmLabel: "復元",
+      });
+      if (!shouldRestore) return;
+
+      try {
+        const shelter = buildManuscriptSnapshot(
+          "復元前の退避",
+          "",
+          "auto-before-restore",
+          currentWorkspaceSnapshots[0] ? [currentWorkspaceSnapshots[0].id] : [],
+        );
+        // 先に退避を履歴へ確定する。以降のファイル操作が途中で失敗しても戻り先を失わない。
+        setAppState((current) => ({
+          ...current,
+          snapshots: trimAutoShelterSnapshots([shelter, ...current.snapshots]),
+        }));
+        const selectedTree = selectedFolderPathKeys.size
+          ? selectedSnapshotFolderTree(snapshot.projectTree, selectedFolderPathKeys)
+          : null;
+        if (selectedTree) {
+          await invoke("ensure_project_folder_tree", {
+            rootPath: projectFolder.path,
+            tree: selectedTree,
+          });
+        }
+        const restoredDocuments: TextDocument[] = [];
+        const revertedRelocations = new Map<string, string>();
+        let skipped = 0;
+
+        for (const file of files) {
+          const relocatedCurrentPath = relocationBySnapshotPath.get(normalizePathForCompare(file.path)) ?? null;
+          const currentSourcePath = relocatedCurrentPath ?? file.path;
+          const openTab = openTabs.find((tab) => tab.path && isSamePath(tab.path, currentSourcePath));
+          let currentDocument: TextDocument | null = null;
+          let currentContent = openTab?.markdown ?? null;
+          try {
+            if (currentContent === null) {
+              currentDocument = await invoke<TextDocument>("read_text_file", { path: currentSourcePath });
+              currentContent = currentDocument.content;
+            }
+          } catch {
+            // A missing file is a normal individual-restore case.
+          }
+          const currentBody = currentContent !== null ? parseFrontMatter(currentContent).body : null;
+          const conflicts = currentBody !== null && currentBody !== file.text;
+          if (conflicts && conflictPolicy === "skip") {
+            skipped += 1;
+            continue;
+          }
+
+          let targetPath = file.path;
+          if (conflicts && conflictPolicy === "copy" && !relocatedCurrentPath) {
+            for (let index = 1; index < 100; index += 1) {
+              const candidate = restoredCopyPath(file.path, index);
+              try {
+                await invoke<TextDocument>("read_text_file", { path: candidate });
+              } catch (error) {
+                if (/does not exist|not found|cannot find|os error 2/i.test(String(error))) {
+                  targetPath = candidate;
+                  break;
+                }
+                throw error;
+              }
+            }
+            if (targetPath === file.path) throw new Error("復元ファイルの保存先を決められませんでした");
+          }
+
+          const preserveRelocatedCurrent = Boolean(relocatedCurrentPath && conflicts && conflictPolicy === "copy");
+          if (relocatedCurrentPath && !preserveRelocatedCurrent) {
+            try {
+              await invoke("delete_project_entry_to_trash", {
+                rootPath: projectFolder.path,
+                path: relocatedCurrentPath,
+              });
+            } catch (error) {
+              if (!String(error).includes("entry does not exist")) throw error;
+            }
+            revertedRelocations.set(relocatedCurrentPath, file.path);
+          }
+
+          const content = currentContent !== null
+            ? composeMarkdown(parseFrontMatter(currentContent).metadata, file.text)
+            : file.text;
+          restoredDocuments.push(await invoke<TextDocument>("save_text_file", { path: targetPath, content }));
+        }
+
+        if (!restoredDocuments.length && !selectedTree) {
+          showToast("競合したファイルをスキップしたため、復元するファイルはありませんでした");
+          return;
+        }
+        if (restoreOrder && selectedTree) {
+          await restoreSnapshotTreeOrder(projectFolder.path, selectedTree, selectedFolderPathKeys);
+        }
+        const restoredByPath = new Map(restoredDocuments.map((document) => [normalizePathForCompare(document.path), document] as const));
+        const relocatedTargets = new Map([...revertedRelocations].map(([currentPath, snapshotPath]) => [normalizePathForCompare(currentPath), normalizePathForCompare(snapshotPath)] as const));
+        setOpenTabs((current) => current.flatMap((tab) => {
+          if (!tab.path) return [tab];
+          const tabPathKey = normalizePathForCompare(tab.path);
+          const targetPathKey = relocatedTargets.get(tabPathKey) ?? tabPathKey;
+          const document = restoredByPath.get(targetPathKey);
+          return document ? [{ ...tab, path: document.path, name: document.name, markdown: document.content, savedMarkdown: document.content, saveStatus: "saved", editorRevision: null }] : [tab];
+        }));
+        const activePathKey = currentFilePath ? normalizePathForCompare(currentFilePath) : null;
+        const activeTargetPathKey = activePathKey ? relocatedTargets.get(activePathKey) ?? activePathKey : null;
+        const activeRestored = activeTargetPathKey ? restoredByPath.get(activeTargetPathKey) ?? null : null;
+        if (activeRestored) loadDocumentIntoEditor(activeRestored, { replaceActive: true });
+        setAppState((current) => ({
+          ...current,
+          lastWorkspacePath: projectFolder.path,
+          lastFilePath: activeRestored?.path ?? current.lastFilePath,
+          markdown: activeRestored?.content ?? current.markdown,
+        }));
+        projectAstBuildIdRef.current += 1;
+        const refreshedFolder = await refreshProjectFolder(projectFolder.path);
+        setProjectAst((current) => {
+          const base = refreshedFolder ? createProjectAstSkeleton(refreshedFolder, current) : current;
+          if (!base) return base;
+          return restoredDocuments.reduce((next, document) => upsertProjectAstDocument(next, {
+            path: document.path,
+            name: document.name,
+            text: parseFrontMatter(document.content).body,
+          }), base);
+        });
+        const restoredCount = restoredDocuments.length + selectedFolderPathKeys.size;
+        showToast(skipped ? `${restoredCount} 件を復元しました（競合 ${skipped} 件をスキップ）` : `${restoredCount} 件を復元しました`);
+      } catch (error) {
+        setLastError(String(error));
+        showToast(error instanceof Error ? error.message : "選択したファイルを復元できませんでした");
+      }
+    },
+    [buildManuscriptSnapshot, currentFilePath, currentWorkspaceSnapshots, loadDocumentIntoEditor, openTabs, projectFolder, refreshProjectFolder],
   );
 
   const handleProjectFolderSelect = useCallback(
@@ -4967,9 +5293,13 @@ export default function App() {
   };
 
   /** 画面上部のモード切替。canvas/export は設定により別ウィンドウ起動になる。 */
-  const switchAppMode = (mode: "write" | "canvas" | "export") => {
+  const switchAppMode = (mode: "write" | "canvas" | "export" | "checkpoint") => {
     if (mode === "write") {
       setAppMode("write");
+      return;
+    }
+    if (mode === "checkpoint") {
+      setAppMode("checkpoint");
       return;
     }
     if (mode === "canvas") {
@@ -7479,8 +7809,19 @@ export default function App() {
                 >
                   エクスポート
                 </button>
+                <button
+                  className={appMode === "checkpoint" ? "isActiveMode" : ""}
+                  type="button"
+                  role="tab"
+                  aria-selected={appMode === "checkpoint"}
+                  title="チェックポイント"
+                  aria-label="チェックポイント"
+                  onClick={() => switchAppMode("checkpoint")}
+                >
+                  <AppIcon name="history" className="modeSwitcherIcon" />
+                </button>
               </div>
-              {isRightSidebarCollapsed && appMode !== "export" && (
+              {isRightSidebarCollapsed && (appMode === "write" || appMode === "canvas") && (
                 <button
                   className="iconButton"
                   type="button"
@@ -7533,7 +7874,7 @@ export default function App() {
           </header>
 
           <div
-            className={`workspace ${appMode === "export" ? "modeHiddenPane" : ""}`}
+            className={`workspace ${appMode === "export" || appMode === "checkpoint" ? "modeHiddenPane" : ""}`}
             ref={workspaceRef}
             data-app-mode={appMode}
           >
@@ -8143,6 +8484,32 @@ export default function App() {
                 onOpenResult={(path) => void invoke("open_export_location", { path })}
               />
             </div>
+          )}
+
+          {appMode === "checkpoint" && (
+            <CheckpointStudio
+              projectFolder={projectFolder}
+              snapshots={currentWorkspaceSnapshots}
+              currentFilePath={currentFilePath}
+              currentProjectFiles={checkpointCurrentProjectFiles}
+              currentProjectStatus={checkpointCurrentProjectStatus}
+              unavailableCurrentProjectPaths={checkpointUnavailableProjectPaths}
+              conflictsBySnapshot={snapshotConflictPaths}
+              onClose={() => setAppMode("write")}
+              onCreate={() => void handleCreateManuscriptSnapshot()}
+              onDelete={(snapshot) => void handleDeleteManuscriptSnapshot(snapshot)}
+              onRestore={(snapshot) => void handleRestoreManuscriptSnapshot(snapshot)}
+              onRestoreFiles={(snapshot, paths, folderPaths, policy, restoreOrder, relocations) =>
+                void handleRestoreManuscriptSnapshotFiles(
+                  snapshot,
+                  paths,
+                  folderPaths,
+                  policy,
+                  restoreOrder,
+                  relocations,
+                )
+              }
+            />
           )}
 
           <div className={`toast ${toast ? "showToast" : ""}`} role="status">

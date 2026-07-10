@@ -1592,20 +1592,22 @@ export function WorkspaceSidebar({
                 </div>
               </div>
               <div className="snapshotMenuDivider" role="presentation" />
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => closeSnapshotMenuAndRun(() => onRenameSnapshot(snapshot))}
-              >
-                タイトルを編集
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => closeSnapshotMenuAndRun(() => onEditSnapshotMemo(snapshot))}
-              >
-                メモを編集
-              </button>
+              {snapshot.reason === "manual" && <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => closeSnapshotMenuAndRun(() => onRenameSnapshot(snapshot))}
+                >
+                  タイトルを編集
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => closeSnapshotMenuAndRun(() => onEditSnapshotMemo(snapshot))}
+                >
+                  メモを編集
+                </button>
+              </>}
               <button
                 type="button"
                 role="menuitem"
@@ -1613,14 +1615,14 @@ export function WorkspaceSidebar({
               >
                 復元
               </button>
-              <button
+              {snapshot.reason === "manual" && <button
                 className="snapshotMenuDanger"
                 type="button"
                 role="menuitem"
                 onClick={() => closeSnapshotMenuAndRun(() => onDeleteSnapshot(snapshot))}
               >
                 削除
-              </button>
+              </button>}
             </div>
           )}
         </div>
@@ -1893,15 +1895,6 @@ export function WorkspaceSidebar({
           </button>
         </div>
       </div>
-      {!isProjectSearchMode && (
-        <div
-          className={`snapshotDock ${
-            isSnapshotSectionCollapsed ? "collapsedSnapshotDock" : ""
-          }`}
-        >
-          {renderSnapshotSection()}
-        </div>
-      )}
       {renderContextMenu()}
     </aside>
   );

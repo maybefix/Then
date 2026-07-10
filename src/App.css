@@ -86,6 +86,10 @@ textarea {
   zoom: var(--ui-font-scale, 1);
 }
 
+.checkpointStudio {
+  zoom: var(--ui-font-scale, 1);
+}
+
 /*
  * Export window chrome. The window is entirely chrome except the組版 preview,
  * which must stay at its true (出力と同じ) scale — so zoom the surrounding
@@ -11150,7 +11154,7 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   .exportModalFooter .exportBtn { flex: 1; min-width: 0; padding-inline: 6px; }
 }
 
-/* ===== 画面モード（本文 / キャンバス / エクスポート） ===== */
+/* ===== 画面モード（本文 / キャンバス / エクスポート / チェックポイント） ===== */
 
 .modeSwitcher {
   display: inline-flex;
@@ -11233,6 +11237,177 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   border: 0;
   border-radius: 0;
   box-shadow: none;
+}
+
+.modeSwitcherIcon {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: middle;
+}
+
+.checkpointStudio {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  background: var(--bg-root);
+  color: var(--text-primary);
+}
+
+.checkpointStudioHeader {
+  display: flex;
+  min-height: 86px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 24px;
+  border-bottom: 0.5px solid var(--border-subtle);
+  background: var(--bg-panel);
+}
+
+.checkpointStudioHeader h1 { margin: 2px 0 0; font-size: 19px; letter-spacing: .02em; }
+.checkpointStudioHeader p { margin: 4px 0 0; color: var(--text-muted); font-size: 13px; }
+.checkpointEyebrow { color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: .08em; }
+.checkpointStudioActions { display: flex; gap: 8px; }
+.checkpointButton { min-height: 36px; padding: 0 13px; border: 1px solid var(--border-strong); border-radius: var(--radius-button); background: var(--bg-panel); color: var(--text-secondary); font-size: 13px; font-weight: 700; }
+.checkpointButton:hover { background: var(--control-hover); color: var(--text-primary); }
+.checkpointCreateButton { border-color: var(--accent-border); background: var(--accent-soft); color: var(--text-primary); }
+.checkpointStudioLayout { display: grid; min-height: 0; flex: 1; grid-template-columns: 286px minmax(460px, 1fr) 336px; }
+.checkpointHistory { display: flex; min-height: 0; flex-direction: column; border-right: 1px solid var(--border-subtle); background: var(--sidebar-bg); }
+.checkpointPaneTitle { display: flex; align-items: flex-start; gap: 9px; }
+.checkpointPaneTitle > span { display: grid; width: 23px; height: 23px; flex: 0 0 23px; place-items: center; border-radius: 50%; background: var(--accent-soft); color: var(--accent-strong); font-size: 12px; font-weight: 800; }
+.checkpointPaneTitle > div { display: grid; gap: 2px; }
+.checkpointPaneTitle strong { color: var(--text-primary); font-size: 14px; line-height: 1.35; }
+.checkpointPaneTitle small { color: var(--text-muted); font-size: 11px; line-height: 1.4; }
+.checkpointHistory > .checkpointPaneTitle { padding: 16px 16px 7px; }
+.checkpointSearch { display: flex; align-items: center; gap: 8px; margin: 7px 14px 10px; padding: 0 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--bg-panel); color: var(--text-muted); }
+.checkpointSearch:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.checkpointSearch input { width: 100%; height: 36px; border: 0; outline: 0; background: transparent; color: var(--text-primary); font-size: 13px; }
+.checkpointSnapshotList { min-height: 0; flex: 1; overflow-y: auto; padding: 0 9px 12px; }
+.checkpointSnapshot { display: grid; width: 100%; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 8px; padding: 11px 9px; border: 1px solid transparent; border-radius: var(--radius-card); background: transparent; color: var(--text-secondary); text-align: left; }
+.checkpointSnapshot:hover { background: var(--control-hover); color: var(--text-primary); }
+.checkpointSnapshot.active { border-color: var(--accent-border); background: var(--accent-soft); color: var(--text-primary); }
+.checkpointSnapshot:focus-visible,.checkpointFileTabs button:focus-visible,.checkpointScope button:focus-visible,.checkpointButton:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+.checkpointSnapshot > i { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--text-faint); }
+.checkpointSnapshot.active > i { background: var(--accent); }.checkpointSnapshot.shelter > i { background: var(--warning); }
+.checkpointSnapshot strong,.checkpointSnapshot small,.checkpointSnapshot em { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.checkpointSnapshot strong { font-size: 13px; }.checkpointSnapshot small,.checkpointSnapshot em { margin-top: 3px; color: var(--text-muted); font-size: 11px; font-style: normal; }
+.checkpointSnapshot > b { align-self: start; padding: 2px 5px; border-radius: 4px; background: color-mix(in srgb, var(--warning) 15%, var(--bg-panel)); color: var(--text-secondary); font-size: 10px; }
+.checkpointNoResult,.checkpointNoSelection { padding: 16px; color: var(--text-muted); font-size: 13px; line-height: 1.55; }.checkpointStorage { padding: 12px 16px; border-top: 1px solid var(--border-subtle); color: var(--text-muted); font-size: 11px; }.checkpointStorage strong,.checkpointStorage span { display: block; }.checkpointStorage span { margin-top: 3px; }
+.checkpointCompare { display: flex; min-width: 0; min-height: 0; flex-direction: column; }.checkpointCompareHeader { display: flex; min-height: 70px; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 18px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-panel); }.checkpointCompareSelect { display: grid; gap: 3px; color: var(--text-muted); font-size: 11px; font-weight: 700; }.checkpointCompareSelect select { min-width: 190px; max-width: 240px; height: 34px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--bg-panel-strong); color: var(--text-primary); font-size: 13px; }
+.checkpointFileTabs { display: flex; gap: 4px; overflow-x: auto; padding: 9px 14px 0; border-bottom: 1px solid var(--border-subtle); background: var(--bg-panel); }.checkpointFileTabs button { max-width: 210px; overflow: hidden; padding: 8px 10px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--text-muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }.checkpointFileTabs button.active { border-bottom-color: var(--accent); color: var(--text-primary); font-weight: 700; }
+.checkpointDiffMeta { display: flex; justify-content: space-between; gap: 12px; padding: 11px 18px 7px; color: var(--text-muted); font-size: 12px; }.checkpointDiffMeta span:first-child { color: var(--text-secondary); font-weight: 700; }.checkpointDiffLegend { display: flex; justify-content: flex-end; gap: 8px; padding: 0 18px 9px; font-size: 11px; }.checkpointDiffLegend span { padding: 3px 7px; border-radius: 4px; color: var(--text-secondary); }.checkpointLegendSnapshot { background: var(--danger-soft); }.checkpointLegendCurrent { background: color-mix(in srgb, var(--success) 14%, transparent); }
+.checkpointDiff { display: grid; min-height: 0; flex: 1; grid-template-columns: 1fr 1fr; overflow: auto; margin: 0 18px 18px; border: 1px solid var(--border-subtle); border-radius: var(--radius-card); background: var(--bg-panel); }.checkpointDiff article + article { border-left: 1px solid var(--border-subtle); }.checkpointDiff article { min-width: 0; }.checkpointDiff article header { display: flex; justify-content: space-between; gap: 10px; padding: 11px 13px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-panel-strong); font-size: 13px; }.checkpointDiff article header span { overflow: hidden; color: var(--text-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }.checkpointDiff pre { margin: 0; padding: 11px 0 22px; overflow: auto; color: var(--text-primary); font: 13px/1.85 "Cascadia Code", Consolas, monospace; }.checkpointDiff code { display: grid; grid-template-columns: 39px 1fr; min-height: 24px; padding-right: 10px; white-space: pre-wrap; }.checkpointDiff code b { padding-right: 8px; color: var(--text-faint); font-weight: 400; text-align: right; user-select: none; }.checkpointDiff code.changed { background: var(--danger-soft); }.checkpointDiff code.current { background: color-mix(in srgb, var(--success) 14%, transparent); }.checkpointDiff pre p { padding: 12px 14px; color: var(--text-muted); font-family: var(--ui-font-family); font-size: 13px; line-height: 1.6; }.checkpointBlank { display: grid; flex: 1; place-items: center; padding: 20px; color: var(--text-muted); font-size: 14px; text-align: center; }
+.checkpointPlan { display: flex; min-height: 0; flex-direction: column; overflow-y: auto; border-left: 1px solid var(--border-subtle); background: var(--sidebar-bg); }.checkpointPlan > section { padding: 15px 17px 0; }.checkpointRestoreHeading { padding-top: 16px !important; }.checkpointPlan p { margin: 8px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.55; }.checkpointPlan p b { color: var(--text-primary); }.checkpointScope { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px !important; margin: 14px 17px 0; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--bg-panel-strong); }.checkpointScope button { min-height: 57px; padding: 6px; border: 1px solid transparent; border-radius: calc(var(--radius-control) - 1px); background: transparent; color: var(--text-muted); font-size: 12px; text-align: left; }.checkpointScope button b,.checkpointScope button small { display: block; }.checkpointScope button b { font-size: 12px; }.checkpointScope button small { margin-top: 3px; font-size: 10px; line-height: 1.3; }.checkpointScope button.active { border-color: var(--accent-border); background: var(--bg-panel); color: var(--text-primary); box-shadow: 0 1px 3px rgba(20, 25, 32, .12); }.checkpointPlanSection { border-top: 1px solid var(--border-subtle); margin-top: 16px; padding-top: 14px !important; }.checkpointPlanSection h3 { margin: 0; color: var(--text-primary); font-size: 13px; }.checkpointPlanSection h3 span { color: var(--danger); }.checkpointSectionHelp { margin-top: 4px !important; font-size: 11px !important; }.checkpointPlanSection ul { margin: 8px 0 0; padding-left: 18px; color: var(--text-muted); font-size: 12px; line-height: 1.65; }.checkpointCaution { margin-top: 10px !important; padding: 8px 9px; border-left: 3px solid var(--warning); background: color-mix(in srgb, var(--warning) 10%, transparent); color: var(--text-secondary) !important; }.checkpointRestoreList { overflow: hidden; margin-top: 8px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--bg-panel); }.checkpointRestoreList label { display: grid; min-height: 35px; grid-template-columns: 16px 14px minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 0 8px; border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary); font-size: 12px; }.checkpointRestoreList label:last-child { border-bottom: 0; }.checkpointRestoreList label:has(input:checked) { background: color-mix(in srgb, var(--accent-soft) 65%, var(--bg-panel)); color: var(--text-primary); }.checkpointRestoreList input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); }.checkpointRestoreList input:disabled { opacity: .65; }.checkpointRestoreList b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }.checkpointRestoreList em { color: var(--text-muted); font-size: 10px; font-style: normal; }.checkpointFolderTitle { margin-top: 14px !important; }.checkpointFolderList { max-height: 132px; overflow-y: auto; }.checkpointConflictMark { color: var(--danger) !important; font-weight: 700; }
+.checkpointConflictChoices { display: grid; gap: 6px; margin-top: 8px; }.checkpointConflictChoices label { display: flex; align-items: flex-start; gap: 8px; padding: 9px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--bg-panel); color: var(--text-secondary); font-size: 12px; }.checkpointConflictChoices label:has(input:checked) { border-color: var(--accent-border); background: var(--accent-soft); color: var(--text-primary); }.checkpointConflictChoices input { width: 15px; height: 15px; margin: 2px 0 0; accent-color: var(--accent); }.checkpointConflictChoices b,.checkpointConflictChoices small { display: block; }.checkpointConflictChoices small { margin-top: 3px; color: var(--text-muted); font-size: 11px; line-height: 1.4; }.checkpointOrder { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; padding: 9px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--bg-panel); color: var(--text-secondary); font-size: 12px; }.checkpointOrder input { width: 15px; height: 15px; margin: 2px 0 0; accent-color: var(--accent); }.checkpointOrder span,.checkpointOrder small { display: block; }.checkpointOrder small { margin-top: 3px; color: var(--text-muted); font-size: 11px; }.checkpointIncludes { padding-bottom: 15px !important; }.checkpointPlan footer { position: sticky; bottom: 0; margin-top: auto; padding: 14px 17px 16px; border-top: 1px solid var(--border-subtle); background: var(--bg-panel); }.checkpointRestoreButton { width: 100%; min-height: 40px; border: 0; border-radius: var(--radius-button); background: var(--accent); color: var(--on-accent); font-size: 14px; font-weight: 800; }.checkpointRestoreButton:hover { background: var(--accent-strong); }.checkpointRestoreButton:disabled { cursor: not-allowed; opacity: .45; }.checkpointPlan footer small { display: block; margin: 8px 1px 0; color: var(--text-muted); font-size: 11px; line-height: 1.45; }.checkpointEmpty { align-items: center; justify-content: center; gap: 10px; }.checkpointEmpty h1,.checkpointEmpty p { margin: 0; }.checkpointEmpty p { color: var(--text-muted); }.checkpointEmpty button { padding: 8px 12px; border: 0; border-radius: var(--radius-button); background: var(--accent); color: var(--on-accent); }
+
+@media (max-width: 1280px) {
+  .checkpointStudioLayout { grid-template-columns: 250px minmax(380px, 1fr) 306px; }
+  .checkpointStudioHeader { padding-inline: 16px; }
+}
+
+/* チェックポイント: 説明を常駐させず、選択・比較・復元の操作を優先する。 */
+.checkpointStudioHeader { min-height: 58px; padding: 10px 18px; }
+.checkpointStudioHeader h1 { margin: 0; font-size: 16px; letter-spacing: 0; }
+.checkpointStudioLayout { grid-template-columns: 250px minmax(420px, 1fr) 292px; }
+.checkpointButton { min-height: 32px; padding-inline: 11px; font-size: 12px; }
+.checkpointCompactHeader { display: flex; align-items: center; justify-content: space-between; padding: 13px 15px 5px; }
+.checkpointCompactHeader strong { font-size: 13px; }
+.checkpointCompactHeader span { color: var(--text-muted); font-size: 11px; }
+.checkpointSearch { margin: 6px 12px 9px; padding-inline: 9px; }
+.checkpointSearch input { height: 33px; font-size: 12px; }
+.checkpointSnapshot { padding: 9px 8px; }
+.checkpointSnapshot strong { font-size: 12px; }
+.checkpointSnapshot small,.checkpointSnapshot em { font-size: 10px; }
+.checkpointSnapshot { position: relative; display: block; padding: 0; }
+.checkpointSnapshotSelect { display: grid; width: 100%; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 8px; padding: 9px 34px 9px 8px; border: 1px solid transparent; border-radius: inherit; background: transparent; color: inherit; text-align: left; }
+.checkpointSnapshot:hover { background: transparent; }
+.checkpointSnapshot:hover .checkpointSnapshotSelect { background: var(--control-hover); }
+.checkpointSnapshot.active .checkpointSnapshotSelect { border-color: var(--accent-border); background: var(--accent-soft); }
+.checkpointSnapshotSelect > i { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--text-faint); }
+.checkpointSnapshot.active .checkpointSnapshotSelect > i { background: var(--accent); }
+.checkpointSnapshot.shelter .checkpointSnapshotSelect > i { background: var(--warning); }
+.checkpointSnapshotSelect > b { align-self: start; padding: 2px 5px; border-radius: 4px; background: color-mix(in srgb, var(--warning) 15%, var(--bg-panel)); color: var(--text-secondary); font-size: 10px; }
+.checkpointSnapshotActions { position: absolute; top: 7px; right: 6px; }
+.checkpointSnapshotMore { display: grid; width: 24px; height: 24px; place-items: center; border: 0; border-radius: 4px; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 17px; line-height: 1; opacity: 0; }
+.checkpointSnapshot:hover .checkpointSnapshotMore,.checkpointSnapshot:focus-within .checkpointSnapshotMore { opacity: 1; }
+.checkpointSnapshotMore:hover,.checkpointSnapshotMore[aria-expanded="true"] { background: var(--bg-panel-strong); color: var(--text-primary); }
+.checkpointSnapshotMenu { position: absolute; z-index: 2; top: 27px; right: 0; min-width: 76px; padding: 4px; border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--bg-panel); box-shadow: var(--shadow-popover, 0 6px 18px rgba(0, 0, 0, .16)); }
+.checkpointSnapshotMenu button { width: 100%; min-height: 28px; border: 0; border-radius: 3px; background: transparent; color: var(--danger); cursor: pointer; font-size: 11px; text-align: left; }
+.checkpointSnapshotMenu button:hover { background: var(--danger-soft); }
+.checkpointCompareHeader { min-height: 54px; padding: 9px 15px; }
+.checkpointCompareHeader > strong { min-width: 0; overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.checkpointCompareSelect select { min-width: 172px; height: 30px; font-size: 12px; }
+.checkpointFileTabs { padding: 7px 11px 0; }
+.checkpointFileTabs button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 8px; font-size: 12px; }
+.checkpointFileTabs button > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.checkpointFileStatus { flex: 0 0 auto; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-style: normal; font-weight: 700; }
+.checkpointFileStatus.added { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
+.checkpointFileStatus.removed { background: var(--danger-soft); color: var(--danger); }
+.checkpointFileStatus.unavailable { background: color-mix(in srgb, var(--warning) 12%, transparent); color: var(--warning); }
+.checkpointFileStatus.relocated { background: var(--accent-soft); color: var(--accent-strong); }
+.checkpointDiffMeta { justify-content: flex-end; min-height: 32px; padding: 8px 15px; font-size: 11px; }
+.checkpointDiff { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; margin: 0 15px 15px; border: 1px solid var(--border-subtle); }
+.checkpointDiffColumnHeaders { display: grid; grid-template-columns: 1fr 1fr; flex: 0 0 auto; border-bottom: 1px solid var(--border-subtle); background: var(--bg-panel-strong); }
+.checkpointDiffColumnHeaders > span { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 8px; padding: 9px 11px; font-size: 12px; }
+.checkpointDiffColumnHeaders > span + span { border-left: 1px solid var(--border-subtle); }
+.checkpointDiffColumnHeaders b,.checkpointDiffColumnHeaders small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.checkpointDiffColumnHeaders small { color: var(--text-muted); font-size: 10px; font-weight: 400; }
+.checkpointDiffRows { min-height: 0; flex: 1; overflow: auto; }
+.checkpointDiffRow { display: grid; min-width: min-content; grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr); border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 58%, transparent); }
+.checkpointDiffRow:last-child { border-bottom: 0; }
+.checkpointDiff .checkpointDiffLine { display: grid; min-width: 0; min-height: 25px; grid-template-columns: 42px minmax(0, 1fr); padding: 3px 9px 3px 0; background: transparent; color: var(--text-primary); font: 12px/1.65 "Cascadia Code", Consolas, monospace; white-space: pre-wrap; }
+.checkpointDiff .checkpointDiffLine + .checkpointDiffLine { border-left: 1px solid var(--border-subtle); }
+.checkpointDiff .checkpointDiffLine b { padding-right: 8px; color: var(--text-faint); font-weight: 400; text-align: right; user-select: none; }
+.checkpointDiff .checkpointDiffLine span { min-width: 0; overflow-wrap: anywhere; }
+.checkpointDiff .checkpointDiffLine.removed { background: var(--danger-soft); }
+.checkpointDiff .checkpointDiffLine.added { background: color-mix(in srgb, var(--success) 14%, transparent); }
+.checkpointDiff .checkpointDiffLine.empty { background: color-mix(in srgb, var(--bg-panel-strong) 45%, transparent); }
+.checkpointPlan > section { padding-inline: 15px; }
+.checkpointRestoreHeading { padding-top: 13px !important; }
+.checkpointRestoreHeading h2 { margin: 0; font-size: 14px; }
+.checkpointRestoreHeading p { margin-top: 4px; font-size: 11px; }
+.checkpointScope { margin: 11px 15px 0; }
+.checkpointScope button { min-height: 34px; padding: 5px; font-size: 12px; text-align: center; }
+.checkpointScope button small,.checkpointScope button b { display: inline; font-size: inherit; }
+.checkpointRestoreSummary { margin: 13px 15px 0 !important; color: var(--text-secondary) !important; font-size: 12px !important; line-height: 1.55; }
+.checkpointPlanSection { margin-top: 13px; padding-top: 12px !important; }
+.checkpointPlanSection h3 { font-size: 12px; }
+.checkpointRestoreList label { min-height: 32px; font-size: 11px; }
+.checkpointConflictChoices label { padding: 8px; font-size: 11px; }
+.checkpointConflictChoices small { font-size: 10px; }
+.checkpointOrder { padding: 7px; font-size: 11px; }
+.checkpointPlan footer { padding: 11px 15px 13px; }
+.checkpointRestoreButton { min-height: 36px; font-size: 13px; }
+
+@media (max-width: 1280px) {
+  .checkpointStudioLayout { grid-template-columns: 226px minmax(340px, 1fr) 278px; }
+  .checkpointDiffRow { grid-template-columns: minmax(240px, 1fr) minmax(240px, 1fr); }
+}
+
+/* Stable restore-list icons and vertically centered order checkbox. */
+.checkpointRestoreItemIcon {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.75;
+}
+
+.checkpointOrder {
+  align-items: center;
+}
+
+.checkpointOrder input {
+  flex: 0 0 auto;
+  margin: 0;
 }
 
 /* ===== 別ウィンドウキャンバスの Idea・資料サイドパネル ===== */
