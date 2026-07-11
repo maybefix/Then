@@ -13,16 +13,13 @@ export const themeCatalog: ThemeDefinition[] = [
   { id: "coral-light", label: "Coral", description: "クリームとコーラル", mode: "light" },
   { id: "minimal-light", label: "Minimal", description: "ミニマルな白とブルー", mode: "light" },
   { id: "worker-light", label: "Worker", description: "Stone系とプロダクトブルー", mode: "light" },
-  { id: "life-light", label: "Life", description: "淡い業務UIとメディカルブルー", mode: "light" },
   { id: "resonance-light", label: "Resonance", description: "白とロイヤルバイオレット", mode: "light" },
   { id: "blue-sky-light", label: "BlueSky", description: "清潔な白とブルー", mode: "light" },
   { id: "drive-light", label: "Drive", description: "構造的な白とレッド", mode: "light" },
   { id: "orchestrating-light", label: "Orchestrating", description: "青みのある白とブルー", mode: "light" },
   { id: "shaping-light", label: "Shaping", description: "明快な白とレッド", mode: "light" },
   { id: "paper-light", label: "Paper", description: "新聞紙面の白とネイビー", mode: "light" },
-  { id: "one-hundred-light", label: "OneHundred", description: "白とビビッドマゼンタ", mode: "light" },
   { id: "precious-light", label: "Precious", description: "爽快なブルーとゴールド", mode: "light" },
-  { id: "evergreen-light", label: "Evergreen", description: "技術文書の白とグリーン", mode: "light" },
   { id: "express-light", label: "Express", description: "自然な白と鉄道グリーン", mode: "light" },
   { id: "education-light", label: "Education", description: "空色と学びのオレンジ", mode: "light" },
   { id: "water-light", label: "Water", description: "白とサステナブルティール", mode: "light" },
@@ -32,7 +29,6 @@ export const themeCatalog: ThemeDefinition[] = [
   { id: "air-light", label: "Air", description: "空色と深いブルーのグラデーション", mode: "light" },
   { id: "passion-light", label: "Passion", description: "深紅とコーラルのグラデーション", mode: "light" },
   { id: "tech-light", label: "Tech", description: "濃紺とスチールブルー", mode: "light" },
-  { id: "energy-light", label: "Energy", description: "黄橙と朱色のグラデーション", mode: "light" },
   { id: "dark", label: "Default", description: "グレーブルー", mode: "dark" },
   { id: "minimal-dark", label: "Minimal", description: "ブラックとブライトブルー", mode: "dark" },
   { id: "resonance-dark", label: "Resonance", description: "深い紫とラベンダー", mode: "dark" },
@@ -52,7 +48,6 @@ export const themeCatalog: ThemeDefinition[] = [
   { id: "air-dark", label: "Air", description: "夜空とブライトシアンのグラデーション", mode: "dark" },
   { id: "passion-dark", label: "Passion", description: "ワインレッドとコーラルのグラデーション", mode: "dark" },
   { id: "tech-dark", label: "Tech", description: "ブルーブラックとスチールブルー", mode: "dark" },
-  { id: "energy-dark", label: "Energy", description: "焦茶と電光オレンジのグラデーション", mode: "dark" },
 ];
 
 export const getThemeDefinition = (theme: AppTheme) =>
@@ -77,6 +72,11 @@ const legacyThemeAliases: Record<string, AppTheme> = {
   "fujitsu-dark": "shaping-dark",
   "commerce-light": "standard",
   "commerce-dark": "dark",
+  "life-light": "standard",
+  "one-hundred-light": "standard",
+  "evergreen-light": "standard",
+  "energy-light": "standard",
+  "energy-dark": "dark",
 };
 
 export const normalizeAppTheme = (theme: unknown): AppTheme => {

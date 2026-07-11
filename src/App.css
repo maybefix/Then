@@ -2669,8 +2669,9 @@ body {
 .topbar {
   gap: 8px;
   padding: 0 10px 0 8px;
-  border-bottom: 0.5px solid var(--border-subtle);
+  border-bottom: 0;
   background: #121316;
+  box-shadow: inset 0 -0.5px var(--border-subtle);
   color: var(--text-muted);
   font-size: 12px;
 }
@@ -8893,6 +8894,7 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
 
 .modeSwitcher {
   display: inline-flex;
+  height: 30px;
   align-items: center;
   gap: 2px;
   padding: 2px;
@@ -8902,6 +8904,10 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
 }
 
 .modeSwitcher button {
+  display: inline-flex;
+  height: 25px;
+  align-items: center;
+  justify-content: center;
   border: 0;
   border-radius: 4px;
   background: transparent;
@@ -8909,7 +8915,7 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   cursor: pointer;
   font-size: 11.5px;
   line-height: 1;
-  padding: 5px 10px;
+  padding: 0 10px;
   white-space: nowrap;
 }
 

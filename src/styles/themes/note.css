@@ -1,0 +1,24 @@
+.appShell[data-theme="note-light"] {
+  --bg-root: #f7f6f3;
+  --bg-primary: #fff;
+  --bg-secondary: #f7f6f3;
+  --bg-tertiary: #f1f1ef;
+  --bg-panel: #fff;
+  --bg-panel-strong: #f7f6f3;
+  --border-subtle: #e5e3df;
+  --border-strong: #c8c4be;
+  --text-primary: #1f1f1d;
+  --text-secondary: #37352f;
+  --text-muted: #6f6e69;
+  --text-faint: #9b9992;
+  --accent: #0b6fc2;
+  --accent-strong: #085a9f;
+  --success: #2f8a55;
+  --warning: #a66b18;
+  --danger: #c23b3b;
+  --accent-soft: rgba(35, 131, 226, 0.11);
+  --accent-border: rgba(35, 131, 226, 0.42);
+  --card-hover: #f7f6f3;
+  --sidebar-bg: #f7f6f3;
+  --silkdown-code-bg: rgba(135, 131, 120, 0.15);
+}

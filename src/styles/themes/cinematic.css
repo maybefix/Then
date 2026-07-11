@@ -1,0 +1,41 @@
+.appShell[data-theme="cinematic-dark"] {
+  color-scheme: dark;
+  --bg-root: #111;
+  --bg-primary: #111;
+  --bg-secondary: #1a1a1a;
+  --bg-tertiary: #242424;
+  --bg-panel: #1a1a1a;
+  --bg-panel-strong: #242424;
+  --border-subtle: #393939;
+  --border-strong: #646464;
+  --text-primary: #fff;
+  --text-secondary: #d9d9d9;
+  --text-muted: #a8a8a8;
+  --text-faint: #737373;
+  --accent: #3865e0;
+  --accent-strong: #86a0ee;
+  --success: #67a676;
+  --warning: #d3aa4e;
+  --danger: #e55353;
+  --overlay: rgba(0, 0, 0, 0.72);
+  --control-hover: rgba(255, 255, 255, 0.08);
+  --accent-soft: rgba(91, 126, 229, 0.15);
+  --accent-border: rgba(91, 126, 229, 0.58);
+  --editor-bg: #111;
+  --card-bg: #1a1a1a;
+  --card-hover: #242424;
+  --topbar-bg: #111;
+  --sidebar-bg: #1a1a1a;
+  --radius-control: 2px;
+  --radius-card: 0;
+  --radius-button: 2px;
+  --silkdown-link-color: #6f8ff2;
+}
+
+.themePreview-cinematic-dark { border-color: #393939; background: #111; }
+
+.themePreview-cinematic-dark::before { background: #1a1a1a; }
+
+.themePreview-cinematic-dark i { background: #fff; }
+
+.themePreview-cinematic-dark b { background: #5b7ee5; }

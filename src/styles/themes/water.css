@@ -1,0 +1,79 @@
+.appShell[data-theme="water-light"] {
+  --on-accent: #fff;
+  --bg-root: #f1f5f5;
+  --bg-primary: #fff;
+  --bg-secondary: #f5f5f5;
+  --bg-tertiary: #e5f0f0;
+  --bg-panel: #fff;
+  --bg-panel-strong: #f1f6f6;
+  --border-subtle: #d3dddd;
+  --border-strong: #8eaaaa;
+  --text-primary: #333;
+  --text-secondary: #565f5f;
+  --text-muted: #6f7a7a;
+  --text-faint: #9aa6a6;
+  --accent: #008486;
+  --accent-strong: #006668;
+  --success: #287c58;
+  --warning: #956a00;
+  --danger: #c43c3c;
+  --accent-soft: rgba(0, 132, 134, 0.1);
+  --accent-border: rgba(0, 132, 134, 0.48);
+  --editor-bg: #fff;
+  --card-bg: #fff;
+  --card-hover: #e9f4f4;
+  --topbar-bg: #fff;
+  --sidebar-bg: #f1f1f1;
+  --radius-control: 2px;
+  --radius-card: 2px;
+  --radius-button: 2px;
+}
+
+.appShell[data-theme="water-dark"] {
+  color-scheme: dark;
+  --on-accent: #032426;
+  --bg-root: #07191a;
+  --bg-primary: #0d2425;
+  --bg-secondary: #122d2e;
+  --bg-tertiary: #193b3c;
+  --bg-panel: #122d2e;
+  --bg-panel-strong: #173637;
+  --border-subtle: #2a4d4e;
+  --border-strong: #4e7374;
+  --text-primary: #f3f8f8;
+  --text-secondary: #d4e2e2;
+  --text-muted: #a5bcbc;
+  --text-faint: #739393;
+  --accent: #43c4c6;
+  --accent-strong: #7de0e1;
+  --success: #72bd91;
+  --warning: #dcba64;
+  --danger: #e27c78;
+  --overlay: rgba(1, 8, 8, 0.75);
+  --control-hover: rgba(125, 224, 225, 0.08);
+  --accent-soft: rgba(67, 196, 198, 0.14);
+  --accent-border: rgba(67, 196, 198, 0.56);
+  --editor-bg: #07191a;
+  --card-bg: #122d2e;
+  --card-hover: #193b3c;
+  --topbar-bg: #0d2425;
+  --sidebar-bg: #0d2425;
+  --radius-control: 2px;
+  --radius-card: 2px;
+  --radius-button: 2px;
+  --silkdown-link-color: #7de0e1;
+}
+
+.themePreview-water-light::before { background: #f1f1f1; }
+
+.themePreview-water-light i { background: #333; }
+
+.themePreview-water-light b { background: #008486; }
+
+.themePreview-water-dark { border-color: #2a4d4e; background: #07191a; }
+
+.themePreview-water-dark::before { background: #122d2e; }
+
+.themePreview-water-dark i { background: #f3f8f8; }
+
+.themePreview-water-dark b { background: #43c4c6; }

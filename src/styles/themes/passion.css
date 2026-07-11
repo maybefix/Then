@@ -1,0 +1,87 @@
+/* Passion: adapted from Dainichi Consultant's crimson and coral recruitment palette. */
+.appShell[data-theme="passion-light"] {
+  --on-accent: #fff;
+  --brand-gradient: linear-gradient(145deg, #a91f31 0%, #c02537 52%, #c83c45 100%);
+  --bg-root: #fff1f1;
+  --bg-primary: #fff;
+  --bg-secondary: #fff8f4;
+  --bg-tertiary: #f7e3e4;
+  --bg-panel: #fff;
+  --bg-panel-strong: #fff7f7;
+  --border-subtle: #ead5d7;
+  --border-strong: #c99ca1;
+  --text-primary: #2d333d;
+  --text-secondary: #555b66;
+  --text-muted: #717688;
+  --text-faint: #9d9fab;
+  --accent: #c02537;
+  --accent-strong: #98182a;
+  --success: #287c50;
+  --warning: #9b6500;
+  --danger: #b52232;
+  --accent-soft: rgba(192, 37, 55, 0.11);
+  --accent-border: rgba(192, 37, 55, 0.5);
+  --editor-bg: #fff;
+  --card-bg: #fff;
+  --card-hover: #fff1f1;
+  --topbar-bg: var(--brand-gradient);
+  --sidebar-bg: #fff1f1;
+  --topbar-text-primary: #fff;
+  --topbar-text-secondary: #fff6f6;
+  --topbar-text-muted: #f6d9dc;
+  --topbar-text-faint: #dfa9af;
+  --radius-control: 4px;
+  --radius-card: 8px;
+  --radius-button: 4px;
+  --silkdown-link-color: #a91f31;
+}
+
+.appShell[data-theme="passion-dark"] {
+  color-scheme: dark;
+  --on-accent: #fff;
+  --brand-gradient: linear-gradient(145deg, #841929 0%, #a92436 52%, #c03943 100%);
+  --bg-root: #180b0e;
+  --bg-primary: #241014;
+  --bg-secondary: #31171c;
+  --bg-tertiary: #432028;
+  --bg-panel: #291318;
+  --bg-panel-strong: #371a20;
+  --border-subtle: #57303a;
+  --border-strong: #80505a;
+  --text-primary: #fff7f5;
+  --text-secondary: #ead8d7;
+  --text-muted: #c4a3a5;
+  --text-faint: #8f6e73;
+  --accent: #f06b6b;
+  --accent-strong: #ff9a8c;
+  --success: #72bd8b;
+  --warning: #e2b862;
+  --danger: #ff7f82;
+  --overlay: rgba(10, 3, 5, 0.78);
+  --control-hover: rgba(240, 107, 107, 0.1);
+  --accent-soft: rgba(240, 107, 107, 0.15);
+  --accent-border: rgba(240, 107, 107, 0.58);
+  --editor-bg: #180b0e;
+  --card-bg: #291318;
+  --card-hover: #371a20;
+  --topbar-bg: var(--brand-gradient);
+  --sidebar-bg: #241014;
+  --radius-control: 4px;
+  --radius-card: 8px;
+  --radius-button: 4px;
+  --silkdown-link-color: #ff9a8c;
+}
+
+.themePreview-passion-light::before { background: #fff1f1; }
+
+.themePreview-passion-light i { background: #2d333d; }
+
+.themePreview-passion-light b { background: linear-gradient(145deg, #c02537, #e95353); }
+
+.themePreview-passion-dark { border-color: #57303a; background: #180b0e; }
+
+.themePreview-passion-dark::before { background: #291318; }
+
+.themePreview-passion-dark i { background: #fff7f5; }
+
+.themePreview-passion-dark b { background: linear-gradient(145deg, #c02537, #e95353); }

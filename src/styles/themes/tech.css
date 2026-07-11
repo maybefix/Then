@@ -1,0 +1,85 @@
+/* Tech: adapted from Giken Service's near-black navy and steel-blue palette. */
+.appShell[data-theme="tech-light"] {
+  --on-accent: #fff;
+  --bg-root: #f2f2f2;
+  --bg-primary: #fff;
+  --bg-secondary: #f7f7f7;
+  --bg-tertiary: #e8edf3;
+  --bg-panel: #fff;
+  --bg-panel-strong: #f4f6f8;
+  --border-subtle: #d8dee6;
+  --border-strong: #9caec2;
+  --text-primary: #000220;
+  --text-secondary: #37384a;
+  --text-muted: #656b79;
+  --text-faint: #9499a4;
+  --accent: #466f9f;
+  --accent-strong: #274f7e;
+  --success: #207c51;
+  --warning: #926400;
+  --danger: #c43d45;
+  --accent-soft: rgba(116, 153, 199, 0.14);
+  --accent-border: rgba(70, 111, 159, 0.5);
+  --editor-bg: #fff;
+  --card-bg: #fff;
+  --card-hover: #edf2f7;
+  --topbar-bg: #000220;
+  --sidebar-bg: #f2f2f2;
+  --topbar-text-primary: #fff;
+  --topbar-text-secondary: #eef4fb;
+  --topbar-text-muted: #c6d4e4;
+  --topbar-text-faint: #8499b4;
+  --radius-control: 0;
+  --radius-card: 2px;
+  --radius-button: 0;
+  --silkdown-link-color: #274f7e;
+}
+
+.appShell[data-theme="tech-dark"] {
+  color-scheme: dark;
+  --on-accent: #07101e;
+  --bg-root: #00010a;
+  --bg-primary: #000220;
+  --bg-secondary: #0b102c;
+  --bg-tertiary: #171d3a;
+  --bg-panel: #080b24;
+  --bg-panel-strong: #121833;
+  --border-subtle: #29324d;
+  --border-strong: #4c5d78;
+  --text-primary: #f7f9fc;
+  --text-secondary: #d6deea;
+  --text-muted: #a0adbf;
+  --text-faint: #707e92;
+  --accent: #7499c7;
+  --accent-strong: #a3c1e2;
+  --success: #65bd8b;
+  --warning: #d9b762;
+  --danger: #e8797f;
+  --overlay: rgba(0, 1, 10, 0.8);
+  --control-hover: rgba(116, 153, 199, 0.1);
+  --accent-soft: rgba(116, 153, 199, 0.15);
+  --accent-border: rgba(116, 153, 199, 0.58);
+  --editor-bg: #00010a;
+  --card-bg: #080b24;
+  --card-hover: #121833;
+  --topbar-bg: #000220;
+  --sidebar-bg: #05081d;
+  --radius-control: 0;
+  --radius-card: 2px;
+  --radius-button: 0;
+  --silkdown-link-color: #a3c1e2;
+}
+
+.themePreview-tech-light::before { background: #f2f2f2; }
+
+.themePreview-tech-light i { background: #000220; }
+
+.themePreview-tech-light b { background: #7499c7; }
+
+.themePreview-tech-dark { border-color: #29324d; background: #00010a; }
+
+.themePreview-tech-dark::before { background: #080b24; }
+
+.themePreview-tech-dark i { background: #f7f9fc; }
+
+.themePreview-tech-dark b { background: #7499c7; }

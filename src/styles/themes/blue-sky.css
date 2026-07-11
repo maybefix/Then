@@ -1,0 +1,81 @@
+.appShell[data-theme="blue-sky-light"] {
+  --bg-root: #f1f1f1;
+  --bg-primary: #fff;
+  --bg-secondary: #f1f1f1;
+  --bg-tertiary: #e7eaf3;
+  --bg-panel: #fff;
+  --bg-panel-strong: #f4f5f9;
+  --border-subtle: #d4d6dd;
+  --border-strong: #c7c7c7;
+  --text-primary: #333;
+  --text-secondary: #4e4e4e;
+  --text-muted: #707070;
+  --text-faint: #999;
+  --accent: #073190;
+  --accent-strong: #00146e;
+  --success: #28784d;
+  --warning: #8d6b12;
+  --danger: #c63b45;
+  --accent-soft: rgba(7, 49, 144, 0.1);
+  --accent-border: rgba(7, 49, 144, 0.48);
+  --editor-bg: #fff;
+  --card-bg: #fff;
+  --card-hover: #e8ebf4;
+  --topbar-bg: #fff;
+  --sidebar-bg: #f1f1f1;
+  --canvas-bg: #e7eaf3;
+  --card-float-shadow: 0 4px 14px rgba(48, 54, 62, 0.08);
+  --radius-control: 6px;
+  --radius-card: 0;
+  --radius-button: 50px;
+}
+
+.appShell[data-theme="blue-sky-dark"] {
+  color-scheme: dark;
+  --bg-root: #06102a;
+  --bg-primary: #09183a;
+  --bg-secondary: #0d214c;
+  --bg-tertiary: #142d60;
+  --bg-panel: #0d214c;
+  --bg-panel-strong: #132a59;
+  --border-subtle: #263e70;
+  --border-strong: #496398;
+  --text-primary: #f7f9ff;
+  --text-secondary: #dce5f8;
+  --text-muted: #a9b9d8;
+  --text-faint: #7488b1;
+  --accent: #3158a6;
+  --accent-strong: #9bb8ff;
+  --success: #74b493;
+  --warning: #d4c493;
+  --danger: #e47a83;
+  --overlay: rgba(2, 8, 24, 0.72);
+  --control-hover: rgba(204, 212, 234, 0.09);
+  --accent-soft: rgba(91, 127, 210, 0.16);
+  --accent-border: rgba(126, 160, 235, 0.55);
+  --editor-bg: #06102a;
+  --card-bg: #0d214c;
+  --card-hover: #142d60;
+  --topbar-bg: #09183a;
+  --sidebar-bg: #09183a;
+  --canvas-bg: #040b1e;
+  --card-float-shadow: 0 6px 18px rgba(0, 0, 0, 0.38);
+  --radius-control: 6px;
+  --radius-card: 0;
+  --radius-button: 50px;
+  --silkdown-link-color: #9bb8ff;
+}
+
+.themePreview-blue-sky-light::before { background: #f1f1f1; }
+
+.themePreview-blue-sky-light i { background: #333; }
+
+.themePreview-blue-sky-light b { background: #073190; }
+
+.themePreview-blue-sky-dark { border-color: #263e70; background: #06102a; }
+
+.themePreview-blue-sky-dark::before { background: #0d214c; }
+
+.themePreview-blue-sky-dark i { background: #f7f9ff; }
+
+.themePreview-blue-sky-dark b { background: #5b7fd2; }

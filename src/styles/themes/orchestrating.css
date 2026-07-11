@@ -1,0 +1,84 @@
+.appShell[data-theme="orchestrating-light"] {
+  --bg-root: #eff2f6;
+  --bg-primary: #fff;
+  --bg-secondary: #f4f6f9;
+  --bg-tertiary: #e7ebf2;
+  --bg-panel: #fff;
+  --bg-panel-strong: #f0f2ff;
+  --border-subtle: #d9dfe9;
+  --border-strong: #a7b1c7;
+  --text-primary: #282d3c;
+  --text-secondary: #3c4155;
+  --text-muted: #6b7387;
+  --text-faint: #8f98ac;
+  --accent: #0f1ed2;
+  --accent-strong: #0b179f;
+  --success: #277a50;
+  --warning: #966500;
+  --danger: #c73845;
+  --accent-soft: rgba(15, 30, 210, 0.09);
+  --accent-border: rgba(15, 30, 210, 0.48);
+  --editor-bg: #fff;
+  --card-bg: #fff;
+  --card-hover: #f0f2ff;
+  --topbar-bg: #fff;
+  --sidebar-bg: #eff2f6;
+  --canvas-bg: #e7ebf2;
+  --card-float-shadow: 0 4px 14px rgba(48, 54, 62, 0.08);
+  --radius-control: 4px;
+  --radius-card: 20px;
+  --radius-button: 4px;
+  --silkdown-code-bg: rgba(15, 30, 210, 0.08);
+  --silkdown-link-color: #0f1ed2;
+}
+
+.appShell[data-theme="orchestrating-dark"] {
+  color-scheme: dark;
+  --bg-root: #101522;
+  --bg-primary: #151b2a;
+  --bg-secondary: #1c2333;
+  --bg-tertiary: #282d3c;
+  --bg-panel: #1c2333;
+  --bg-panel-strong: #252c3d;
+  --border-subtle: #343c50;
+  --border-strong: #515869;
+  --text-primary: #fbfcfd;
+  --text-secondary: #d9dfe9;
+  --text-muted: #a7b1c7;
+  --text-faint: #6b7387;
+  --accent: #2459e6;
+  --accent-strong: #8bacff;
+  --success: #72b892;
+  --warning: #d6b65d;
+  --danger: #e47d87;
+  --overlay: rgba(6, 9, 17, 0.72);
+  --control-hover: rgba(139, 172, 255, 0.09);
+  --accent-soft: rgba(44, 105, 255, 0.15);
+  --accent-border: rgba(107, 155, 255, 0.58);
+  --editor-bg: #101522;
+  --card-bg: #1c2333;
+  --card-hover: #282d3c;
+  --topbar-bg: #151b2a;
+  --sidebar-bg: #151b2a;
+  --canvas-bg: #0d111b;
+  --card-float-shadow: 0 6px 18px rgba(0, 0, 0, 0.38);
+  --radius-control: 4px;
+  --radius-card: 20px;
+  --radius-button: 4px;
+  --silkdown-code-bg: rgba(139, 172, 255, 0.1);
+  --silkdown-link-color: #8bacff;
+}
+
+.themePreview-orchestrating-light::before { background: #eff2f6; }
+
+.themePreview-orchestrating-light i { background: #282d3c; }
+
+.themePreview-orchestrating-light b { background: #0f1ed2; }
+
+.themePreview-orchestrating-dark { border-color: #343c50; background: #101522; }
+
+.themePreview-orchestrating-dark::before { background: #1c2333; }
+
+.themePreview-orchestrating-dark i { background: #fbfcfd; }
+
+.themePreview-orchestrating-dark b { background: #2459e6; }

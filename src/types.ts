@@ -118,7 +118,6 @@ export const appThemeValues = [
   "minimal-light",
   "minimal-dark",
   "worker-light",
-  "life-light",
   "resonance-light",
   "resonance-dark",
   "cinematic-dark",
@@ -132,9 +131,7 @@ export const appThemeValues = [
   "shaping-dark",
   "paper-light",
   "paper-dark",
-  "one-hundred-light",
   "precious-light",
-  "evergreen-light",
   "express-light",
   "express-dark",
   "education-light",
@@ -154,8 +151,6 @@ export const appThemeValues = [
   "passion-dark",
   "tech-light",
   "tech-dark",
-  "energy-light",
-  "energy-dark",
 ] as const;
 
 export type AppTheme = (typeof appThemeValues)[number];

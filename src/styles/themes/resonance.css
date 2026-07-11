@@ -1,0 +1,80 @@
+.appShell[data-theme="resonance-light"] {
+  --bg-root: #f6f6f6;
+  --bg-primary: #fff;
+  --bg-secondary: #f6f6f6;
+  --bg-tertiary: #eee8f2;
+  --bg-panel: #fff;
+  --bg-panel-strong: #f6f6f6;
+  --border-subtle: #d4d0d7;
+  --border-strong: #a3a3a3;
+  --text-primary: #333;
+  --text-secondary: #555;
+  --text-muted: #707070;
+  --text-faint: #999;
+  --accent: #4b1e78;
+  --accent-strong: #351255;
+  --success: #1f7a4d;
+  --warning: #9c6700;
+  --danger: #d83933;
+  --accent-soft: rgba(214, 164, 234, 0.24);
+  --accent-border: rgba(75, 30, 120, 0.48);
+  --editor-bg: #fff;
+  --card-bg: #fff;
+  --card-hover: #f0e2f7;
+  --topbar-bg: #fff;
+  --sidebar-bg: #f6f6f6;
+  --canvas-bg: #eee8f2;
+  --card-float-shadow: 0 4px 14px rgba(48, 54, 62, 0.08);
+  --radius-card: 20px;
+  --radius-button: 60px;
+}
+
+.appShell[data-theme="resonance-dark"] {
+  color-scheme: dark;
+  --on-accent: #1b1022;
+  --bg-root: #130d18;
+  --bg-primary: #1a1121;
+  --bg-secondary: #211629;
+  --bg-tertiary: #2d2036;
+  --bg-panel: #211629;
+  --bg-panel-strong: #2a1d33;
+  --border-subtle: #44344e;
+  --border-strong: #685477;
+  --text-primary: #fbf8fc;
+  --text-secondary: #ded4e4;
+  --text-muted: #b2a2bc;
+  --text-faint: #82718d;
+  --accent: #d6a4ea;
+  --accent-strong: #ebc9f7;
+  --success: #79b995;
+  --warning: #dbb86b;
+  --danger: #e0807a;
+  --overlay: rgba(12, 7, 15, 0.7);
+  --control-hover: rgba(214, 164, 234, 0.1);
+  --accent-soft: rgba(214, 164, 234, 0.13);
+  --accent-border: rgba(214, 164, 234, 0.5);
+  --editor-bg: #130d18;
+  --card-bg: #211629;
+  --card-hover: #2d2036;
+  --topbar-bg: #1a1121;
+  --sidebar-bg: #1a1121;
+  --canvas-bg: #100a14;
+  --card-float-shadow: 0 6px 18px rgba(0, 0, 0, 0.38);
+  --radius-card: 20px;
+  --radius-button: 60px;
+  --silkdown-link-color: #d6a4ea;
+}
+
+.themePreview-resonance-light::before { background: #f6f6f6; }
+
+.themePreview-resonance-light i { background: #333; }
+
+.themePreview-resonance-light b { background: #4b1e78; }
+
+.themePreview-resonance-dark { border-color: #44344e; background: #130d18; }
+
+.themePreview-resonance-dark::before { background: #211629; }
+
+.themePreview-resonance-dark i { background: #fbf8fc; }
+
+.themePreview-resonance-dark b { background: #d6a4ea; }

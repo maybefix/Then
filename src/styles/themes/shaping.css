@@ -1,0 +1,84 @@
+.appShell[data-theme="shaping-light"] {
+  --bg-root: #f3f3f3;
+  --bg-primary: #fff;
+  --bg-secondary: #f3f3f3;
+  --bg-tertiary: #efefef;
+  --bg-panel: #fff;
+  --bg-panel-strong: #f3f3f3;
+  --border-subtle: #dcdcdc;
+  --border-strong: #b9b9b9;
+  --text-primary: #000;
+  --text-secondary: #333;
+  --text-muted: #5f5f5f;
+  --text-faint: #777;
+  --accent: #d80000;
+  --accent-strong: #a90000;
+  --success: #287848;
+  --warning: #9a6200;
+  --danger: #d80000;
+  --accent-soft: rgba(234, 0, 0, 0.09);
+  --accent-border: rgba(216, 0, 0, 0.5);
+  --editor-bg: #fff;
+  --card-bg: #fff;
+  --card-hover: #efefef;
+  --topbar-bg: #fff;
+  --sidebar-bg: #f3f3f3;
+  --canvas-bg: #efefef;
+  --card-float-shadow: 0 4px 14px rgba(48, 54, 62, 0.08);
+  --radius-control: 0;
+  --radius-card: 0;
+  --radius-button: 0;
+  --silkdown-code-bg: rgba(36, 0, 176, 0.08);
+  --silkdown-link-color: #2400b0;
+}
+
+.appShell[data-theme="shaping-dark"] {
+  color-scheme: dark;
+  --bg-root: #10171d;
+  --bg-primary: #16212a;
+  --bg-secondary: #1b2934;
+  --bg-tertiary: #253541;
+  --bg-panel: #1b2934;
+  --bg-panel-strong: #233440;
+  --border-subtle: #354956;
+  --border-strong: #587080;
+  --text-primary: #fff;
+  --text-secondary: #e8edf0;
+  --text-muted: #b5c0c7;
+  --text-faint: #7f929f;
+  --accent: #d80000;
+  --accent-strong: #ff7373;
+  --success: #74b68c;
+  --warning: #dfb45d;
+  --danger: #ff7373;
+  --overlay: rgba(5, 9, 12, 0.74);
+  --control-hover: rgba(255, 255, 255, 0.08);
+  --accent-soft: rgba(234, 0, 0, 0.15);
+  --accent-border: rgba(255, 82, 82, 0.58);
+  --editor-bg: #10171d;
+  --card-bg: #1b2934;
+  --card-hover: #253541;
+  --topbar-bg: #16212a;
+  --sidebar-bg: #16212a;
+  --canvas-bg: #0d141a;
+  --card-float-shadow: 0 6px 18px rgba(0, 0, 0, 0.38);
+  --radius-control: 0;
+  --radius-card: 0;
+  --radius-button: 0;
+  --silkdown-code-bg: rgba(107, 126, 255, 0.1);
+  --silkdown-link-color: #9aa8ff;
+}
+
+.themePreview-shaping-light::before { background: #f3f3f3; }
+
+.themePreview-shaping-light i { background: #000; }
+
+.themePreview-shaping-light b { background: #d80000; }
+
+.themePreview-shaping-dark { border-color: #354956; background: #10171d; }
+
+.themePreview-shaping-dark::before { background: #1b2934; }
+
+.themePreview-shaping-dark i { background: #fff; }
+
+.themePreview-shaping-dark b { background: #d80000; }

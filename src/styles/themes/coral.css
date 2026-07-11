@@ -1,0 +1,94 @@
+/* Claude.ai 寄せのカラースキーム。
+   ベースは温かいアイボリー、面（カード/入力/エディタ）は白に近づけ、
+   境界はほぼ見えないヘアライン、コーラルは差し色に限定する。 */
+.appShell[data-theme="coral-light"] {
+  --radius-control: 12px;
+  --radius-card: 16px;
+  --radius-button: 10px;
+  --bg-root: #faf9f5;
+  --bg-primary: #faf9f5;
+  --bg-secondary: #f0eee6;
+  --bg-tertiary: #ffffff;
+  --bg-panel: #ffffff;
+  --bg-panel-strong: #f0eee6;
+  --border-subtle: #ebe8df;
+  --border-strong: #dcd7cb;
+  --text-primary: #1a1915;
+  --text-secondary: #3c3a34;
+  --text-muted: #73706a;
+  --text-faint: #a8a49b;
+  --accent: #c96a48;
+  --accent-strong: #b0512f;
+  --success: #3f8255;
+  --warning: #9f7015;
+  --danger: #b23f3f;
+  --accent-soft: rgba(201, 106, 72, 0.1);
+  --accent-border: rgba(201, 106, 72, 0.4);
+  --overlay: rgba(40, 34, 28, 0.3);
+  --shadow-popover: 0 8px 30px rgba(40, 34, 28, 0.1);
+  --shadow-modal: 0 18px 50px rgba(40, 34, 28, 0.16);
+  --control-hover: rgba(30, 25, 20, 0.05);
+  --editor-bg: #faf9f5;
+  --card-bg: #ffffff;
+  --card-hover: #f4f2ea;
+  --topbar-bg: #faf9f5;
+  --sidebar-bg: #f0eee6;
+  --silkdown-code-bg: rgba(201, 106, 72, 0.1);
+}
+
+/* Claude らしいボタン: ヘアライン＋ごく淡い影、面は白。 */
+.appShell[data-theme="coral-light"] .modalActions button,
+.appShell[data-theme="coral-light"] .themePickerButton,
+.appShell[data-theme="coral-light"] .sidebarAddButton,
+.appShell[data-theme="coral-light"] .addButton,
+.appShell[data-theme="coral-light"] .newTabActions button,
+.appShell[data-theme="coral-light"] .ideaAdd {
+  border-color: transparent;
+  background: var(--bg-panel);
+  box-shadow: 0 1px 2px rgba(40, 34, 28, 0.04), 0 0 0 0.5px rgba(40, 34, 28, 0.13);
+}
+
+.appShell[data-theme="coral-light"] .modalActions button:hover,
+.appShell[data-theme="coral-light"] .themePickerButton:hover,
+.appShell[data-theme="coral-light"] .sidebarAddButton:hover,
+.appShell[data-theme="coral-light"] .addButton:hover,
+.appShell[data-theme="coral-light"] .newTabActions button:hover,
+.appShell[data-theme="coral-light"] .ideaAdd:hover {
+  background: var(--bg-panel);
+  box-shadow: 0 2px 8px rgba(40, 34, 28, 0.07), 0 0 0 0.5px rgba(40, 34, 28, 0.28);
+}
+
+/* Claude のチャット入力枠に倣った入力フィールド（透明境界＋ソフトシャドウ）。 */
+.appShell[data-theme="coral-light"] .modalForm input,
+.appShell[data-theme="coral-light"] .modalForm select,
+.appShell[data-theme="coral-light"] .modalForm textarea,
+.appShell[data-theme="coral-light"] .ideaSearch input,
+.appShell[data-theme="coral-light"] .projectSearchInput {
+  border-color: transparent;
+  background: var(--bg-panel);
+  box-shadow: 0 4px 20px rgba(20, 20, 19, 0.035), 0 0 0 0.5px rgba(40, 34, 28, 0.15);
+}
+
+.appShell[data-theme="coral-light"] .modalForm input:hover,
+.appShell[data-theme="coral-light"] .modalForm select:hover,
+.appShell[data-theme="coral-light"] .modalForm textarea:hover {
+  box-shadow: 0 4px 20px rgba(20, 20, 19, 0.035), 0 0 0 0.5px rgba(40, 34, 28, 0.3);
+}
+
+.appShell[data-theme="coral-light"] .modalForm input:focus,
+.appShell[data-theme="coral-light"] .modalForm select:focus,
+.appShell[data-theme="coral-light"] .modalForm textarea:focus,
+.appShell[data-theme="coral-light"] .modalForm input:focus-visible,
+.appShell[data-theme="coral-light"] .modalForm select:focus-visible,
+.appShell[data-theme="coral-light"] .modalForm textarea:focus-visible {
+  border-color: transparent;
+  box-shadow: 0 4px 20px rgba(20, 20, 19, 0.075), 0 0 0 0.5px var(--accent-border);
+}
+
+.themePreview-coral-light { background: #faf9f5; }
+
+.themePreview-coral-light::before { background: #f5f0e8; }
+
+.themePreview-coral-light i { background: #141413; }
+
+.themePreview-coral-light b { background: #b85f45; }

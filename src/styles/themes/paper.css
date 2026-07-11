@@ -1,0 +1,80 @@
+/* Brand-inspired themes: semantic adaptations for then. */
+.appShell[data-theme="paper-light"] {
+  --bg-root: #f4f4f2;
+  --bg-primary: #fff;
+  --bg-secondary: #fafafa;
+  --bg-tertiary: #f0f1f2;
+  --bg-panel: #fff;
+  --bg-panel-strong: #f8f8f8;
+  --border-subtle: #d8d8d5;
+  --border-strong: #a9adb0;
+  --text-primary: #333;
+  --text-secondary: #5c5c5c;
+  --text-muted: #757575;
+  --text-faint: #999;
+  --accent: #003e70;
+  --accent-strong: #002d52;
+  --success: #28794b;
+  --warning: #b86200;
+  --danger: #c51a0b;
+  --accent-soft: rgba(0, 62, 112, 0.09);
+  --accent-border: rgba(0, 62, 112, 0.45);
+  --editor-bg: #fff;
+  --card-bg: #fff;
+  --card-hover: #fafafa;
+  --topbar-bg: #fff;
+  --sidebar-bg: #f4f4f2;
+  --radius-control: 2px;
+  --radius-card: 2px;
+  --radius-button: 2px;
+  --silkdown-link-color: #326691;
+}
+
+.appShell[data-theme="paper-dark"] {
+  color-scheme: dark;
+  --on-accent: #101619;
+  --bg-root: #15191c;
+  --bg-primary: #1b2024;
+  --bg-secondary: #20262b;
+  --bg-tertiary: #293137;
+  --bg-panel: #1b2024;
+  --bg-panel-strong: #242b30;
+  --border-subtle: #38434a;
+  --border-strong: #596770;
+  --text-primary: #f1f0ec;
+  --text-secondary: #c9c9c4;
+  --text-muted: #a3a6a8;
+  --text-faint: #747b80;
+  --accent: #5a9ccc;
+  --accent-strong: #8bc3e8;
+  --success: #72ad83;
+  --warning: #f1a33e;
+  --danger: #ff6d5d;
+  --overlay: rgba(5, 8, 10, 0.72);
+  --control-hover: rgba(255, 255, 255, 0.07);
+  --accent-soft: rgba(90, 156, 204, 0.15);
+  --accent-border: rgba(90, 156, 204, 0.56);
+  --editor-bg: #15191c;
+  --card-bg: #20262b;
+  --card-hover: #293137;
+  --topbar-bg: #1b2024;
+  --sidebar-bg: #1b2024;
+  --radius-control: 2px;
+  --radius-card: 2px;
+  --radius-button: 2px;
+  --silkdown-link-color: #8bc3e8;
+}
+
+.themePreview-paper-light::before { background: #f4f4f2; }
+
+.themePreview-paper-light i { background: #333; }
+
+.themePreview-paper-light b { background: #003e70; }
+
+.themePreview-paper-dark { border-color: #38434a; background: #15191c; }
+
+.themePreview-paper-dark::before { background: #20262b; }
+
+.themePreview-paper-dark i { background: #f1f0ec; }
+
+.themePreview-paper-dark b { background: #5a9ccc; }

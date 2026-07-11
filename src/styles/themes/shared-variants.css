@@ -1,0 +1,157 @@
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="air-"], [data-theme^="passion-"]) :is(
+  .themePickerButton,
+  .modalActions button,
+  .newTabActions button,
+  .addButton,
+  .ideaAdd
+) {
+  border-color: transparent;
+  background: var(--action-gradient, var(--brand-gradient));
+  color: var(--action-text, var(--on-accent));
+}
+
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="air-"], [data-theme^="passion-"]) :is(
+  .themePickerButton,
+  .modalActions button,
+  .newTabActions button,
+  .addButton,
+  .ideaAdd
+):hover {
+  filter: brightness(1.06);
+}
+
+.appShell:is([data-theme^="promise-"], [data-theme^="air-"], [data-theme^="passion-"]) .sidebarAddButton {
+  border-color: transparent;
+  background: var(--action-gradient, var(--brand-gradient));
+  color: var(--action-text, var(--on-accent));
+}
+
+.appShell:is([data-theme^="promise-"], [data-theme^="air-"], [data-theme^="passion-"]) .sidebarAddButton:hover {
+  filter: brightness(1.06);
+}
+
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) .appFrame {
+  border-color: transparent;
+  border-radius: 0;
+}
+
+/* Floating-card layout: the left sidebar, editor and right sidebar sit as
+   independent cards on one flat canvas. Each theme controls corner shape and
+   elevation through --radius-card and --card-float-shadow. */
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) .workspace {
+  gap: 8px;
+  padding: 8px;
+  background: var(--canvas-bg);
+}
+
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.workspaceSidebar, .editorColumn, .rightSidebar) {
+  border: none;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  box-shadow: var(--card-float-shadow);
+}
+
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) .editorColumn {
+  background: var(--editor-bg);
+}
+
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.workspaceSidebar, .rightSidebar) {
+  background: var(--sidebar-bg);
+}
+
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.editor, .editorContent, .verticalTypewriterShell) {
+  background: transparent;
+}
+
+/* Rounded cards clip their scrollers' ends. The editor (.verticalTypewriterScroller)
+   and the right-pane plot list (.plotPane) set standard `scrollbar-width: thin`
+   + `scrollbar-color`, which on Chromium draws increment/decrement arrows that
+   the corner cuts off — and standard scrollbars give no way to hide them.
+   Reverting those two props to `auto` re-enables the already-defined
+   `::-webkit-scrollbar` (a rounded thumb, no buttons), so each bar ends cleanly
+   inside the corner. */
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.verticalTypewriterScroller, .plotPane) {
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+}
+
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) .statusbar {
+  /* Bottom of the editor card. Transparent so the card's single gradient shows
+     through; a hairline (not a fill) divides it from the editor. */
+  border-top-color: color-mix(in srgb, var(--accent) 10%, transparent);
+  background: transparent;
+}
+
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) .sidebarFooter {
+  padding-bottom: 12px;
+}
+
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.menuPopover, .editorContextMenu) {
+  border-radius: var(--radius-card);
+}
+
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.editor, .editorContent, .verticalTypewriterShell) {
+  overflow: hidden;
+}
+
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"]) :is(.activeRightTab, .exportProgressBar i) {
+  border-color: transparent;
+  background: var(--action-gradient);
+  color: var(--action-text);
+}
+
+/* Keep editorial emphasis neutral while reserving accent colors for links,
+   selection and interactive state. */
+.appShell:is(
+  [data-theme="coral-light"],
+  [data-theme^="minimal-"],
+  [data-theme="resonance-dark"],
+  [data-theme="drive-dark"],
+  [data-theme^="air-"],
+  [data-theme^="passion-"],
+  [data-theme="paper-dark"]
+) .verticalTypewriterEditor .pm-root :is(p.heading, .bold) {
+  color: var(--text-primary);
+}
+
+/* Dark-theme focus depth. The editor is a slightly recessed work surface;
+   auxiliary panes sit one luminance step closer to the viewer. Transparent
+   overlays preserve each theme's hue and any existing gradients. */
+.appShell:is([data-theme="dark"], [data-theme$="-dark"]) {
+  --editor-depth-bg:
+    linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)),
+    var(--editor-bg);
+  --auxiliary-depth-bg:
+    linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)),
+    var(--sidebar-bg);
+  --depth-divider: color-mix(in srgb, var(--text-primary) 9%, transparent);
+}
+
+.appShell:is([data-theme="dark"], [data-theme$="-dark"]) :is(
+  .editorColumn,
+  .editor,
+  .editorContent,
+  .verticalTypewriterShell
+) {
+  background: var(--editor-depth-bg);
+}
+
+.appShell:is([data-theme="dark"], [data-theme$="-dark"]) :is(
+  .workspaceSidebar,
+  .rightSidebar
+) {
+  background: var(--auxiliary-depth-bg);
+}
+
+.appShell:is([data-theme="dark"], [data-theme$="-dark"]) .workspaceSidebar {
+  border-right-color: var(--depth-divider);
+}
+
+.appShell:is([data-theme="dark"], [data-theme$="-dark"]) .rightSidebar {
+  border-left-color: var(--depth-divider);
+}
+
+.appShell:is([data-theme="dark"], [data-theme$="-dark"]) .statusbar {
+  background: var(--editor-depth-bg);
+  border-top-color: var(--depth-divider);
+}

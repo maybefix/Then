@@ -1,0 +1,114 @@
+/* Promise: adapted from Iwate Bank's deep green, trust-first public banking palette. */
+.appShell[data-theme="promise-light"] {
+  --on-accent: #fff;
+  --brand-gradient: linear-gradient(135deg, #005f38 0%, #00834f 48%, #58bd7c 100%);
+  --action-gradient: linear-gradient(135deg, #006b3f 0%, #00834f 58%, #34a865 100%);
+  --action-text: #fff;
+  --bg-root: #eaf4ee;
+  --bg-primary: #fbfffc;
+  --bg-secondary: #f3faf5;
+  --bg-tertiary: #dceee4;
+  --bg-panel: #fbfffc;
+  --bg-panel-strong: #eff8f2;
+  --border-subtle: rgba(0, 88, 51, 0.09);
+  --border-strong: rgba(0, 88, 51, 0.18);
+  --text-primary: #10241b;
+  --text-secondary: #34483d;
+  --text-muted: #64766d;
+  --text-faint: #91a099;
+  --accent: #006b3f;
+  --accent-strong: #004f31;
+  --success: #207b4c;
+  --warning: #8b6500;
+  --danger: #bd3f45;
+  --control-hover: rgba(0, 107, 63, 0.08);
+  --accent-soft: rgba(0, 107, 63, 0.12);
+  --accent-border: rgba(0, 107, 63, 0.38);
+  --danger-soft: rgba(189, 63, 69, 0.09);
+  --editor-bg:
+    radial-gradient(circle at 82% 12%, rgba(88, 189, 124, 0.2), transparent 34%),
+    linear-gradient(135deg, #ffffff 0%, #f6fcf8 50%, #eaf4ee 100%);
+  --card-bg: #fbfffc;
+  --card-hover: #eef8f2;
+  --topbar-bg: var(--brand-gradient);
+  --sidebar-bg: linear-gradient(180deg, #f8fdf9 0%, #eaf4ee 100%);
+  --canvas-bg: #d6e8de;
+  --card-float-shadow: 0 4px 14px rgba(0, 74, 44, 0.08);
+  --topbar-text-primary: #fff;
+  --topbar-text-secondary: #f3fff8;
+  --topbar-text-muted: #d8f2e2;
+  --topbar-text-faint: #aee0c2;
+  --radius-control: 14px;
+  --radius-card: 20px;
+  --radius-button: 999px;
+  --shadow-popover: 0 14px 34px rgba(0, 74, 44, 0.12);
+  --shadow-modal: 0 24px 60px rgba(0, 74, 44, 0.16);
+  --silkdown-code-bg: rgba(0, 107, 63, 0.08);
+  --silkdown-link-color: #005f38;
+}
+
+.appShell[data-theme="promise-dark"] {
+  color-scheme: dark;
+  --on-accent: #062015;
+  --brand-gradient: linear-gradient(135deg, #052819 0%, #006b3f 56%, #72d995 100%);
+  --action-gradient: linear-gradient(135deg, #48c176 0%, #72d995 48%, #b4f0c3 100%);
+  --action-text: #062015;
+  --bg-root: #06120d;
+  --bg-primary: #0b1d14;
+  --bg-secondary: #10271b;
+  --bg-tertiary: #183523;
+  --bg-panel: #0d2117;
+  --bg-panel-strong: #143020;
+  --border-subtle: rgba(180, 240, 195, 0.09);
+  --border-strong: rgba(180, 240, 195, 0.18);
+  --text-primary: #f4fff7;
+  --text-secondary: #d5ebdd;
+  --text-muted: #9db5a7;
+  --text-faint: #718779;
+  --accent: #72d995;
+  --accent-strong: #b4f0c3;
+  --success: #79d996;
+  --warning: #e0c264;
+  --danger: #f07b7f;
+  --overlay: rgba(3, 10, 7, 0.78);
+  --control-hover: rgba(114, 217, 149, 0.1);
+  --accent-soft: rgba(114, 217, 149, 0.15);
+  --accent-border: rgba(114, 217, 149, 0.48);
+  --danger-soft: rgba(240, 123, 127, 0.14);
+  --editor-bg:
+    radial-gradient(circle at 80% 10%, rgba(114, 217, 149, 0.16), transparent 34%),
+    linear-gradient(135deg, #0d2117 0%, #0a1a12 54%, #06120d 100%);
+  --card-bg: #0f261a;
+  --card-hover: #173322;
+  --topbar-bg: var(--brand-gradient);
+  --topbar-text-primary: #f4fff7;
+  --topbar-text-secondary: #e4f8eb;
+  --topbar-text-muted: #bfeaca;
+  --topbar-text-faint: #87c99c;
+  --sidebar-bg: linear-gradient(180deg, #0b1d14 0%, #07150f 100%);
+  --canvas-bg: #05100b;
+  --card-float-shadow: 0 6px 18px rgba(0, 0, 0, 0.34);
+  --radius-control: 14px;
+  --radius-card: 20px;
+  --radius-button: 999px;
+  --shadow-popover: 0 16px 38px rgba(0, 0, 0, 0.32);
+  --shadow-modal: 0 26px 70px rgba(0, 0, 0, 0.42);
+  --silkdown-code-bg: rgba(114, 217, 149, 0.11);
+  --silkdown-link-color: #b4f0c3;
+}
+
+.themePreview-promise-light { background: #fbfffc; }
+
+.themePreview-promise-light::before { background: #eaf4ee; }
+
+.themePreview-promise-light i { background: #10241b; }
+
+.themePreview-promise-light b { background: linear-gradient(135deg, #006b3f, #58bd7c); }
+
+.themePreview-promise-dark { border-color: #21402c; background: #06120d; }
+
+.themePreview-promise-dark::before { background: #0f261a; }
+
+.themePreview-promise-dark i { background: #f4fff7; }
+
+.themePreview-promise-dark b { background: linear-gradient(135deg, #48c176, #b4f0c3); }

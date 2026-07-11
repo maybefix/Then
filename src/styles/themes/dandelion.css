@@ -1,0 +1,42 @@
+.appShell[data-theme="dandelion-dark"] {
+  color-scheme: dark;
+  --on-accent: #2e291c;
+  --bg-root: #1b1d1e;
+  --bg-primary: #232628;
+  --bg-secondary: #2a2e30;
+  --bg-tertiary: #33383c;
+  --bg-panel: #2a2e30;
+  --bg-panel-strong: #303538;
+  --border-subtle: #454a4d;
+  --border-strong: #6f6c60;
+  --text-primary: #f2eee5;
+  --text-secondary: #d8d0c0;
+  --text-muted: #aea797;
+  --text-faint: #7f7c74;
+  --accent: #e2c465;
+  --accent-strong: #f0d98e;
+  --success: #72b58a;
+  --warning: #d4a843;
+  --danger: #e07b6e;
+  --overlay: rgba(7, 8, 8, 0.76);
+  --control-hover: rgba(226, 196, 101, 0.09);
+  --accent-soft: rgba(226, 196, 101, 0.14);
+  --accent-border: rgba(226, 196, 101, 0.54);
+  --editor-bg: #1b1d1e;
+  --card-bg: #2a2e30;
+  --card-hover: #33383c;
+  --topbar-bg: #33383c;
+  --sidebar-bg: #232628;
+  --radius-control: 4px;
+  --radius-card: 0;
+  --radius-button: 41px;
+  --silkdown-link-color: #f0d98e;
+}
+
+.themePreview-dandelion-dark { border-color: #454a4d; background: #1b1d1e; }
+
+.themePreview-dandelion-dark::before { background: #33383c; }
+
+.themePreview-dandelion-dark i { background: #f2eee5; }
+
+.themePreview-dandelion-dark b { background: #e2c465; }

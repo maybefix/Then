@@ -1,0 +1,35 @@
+.appShell[data-theme="worker-light"] {
+  --bg-root: #f8f7f6;
+  --bg-primary: #fff;
+  --bg-secondary: #f2f1f0;
+  --bg-tertiary: #edebe8;
+  --bg-panel: #fff;
+  --bg-panel-strong: #f2f1f0;
+  --border-subtle: #d6d3d0;
+  --border-strong: #aaa69f;
+  --text-primary: #23221e;
+  --text-secondary: #4e4c49;
+  --text-muted: #706d65;
+  --text-faint: #aaa69f;
+  --accent: #0077c7;
+  --accent-strong: #005f9f;
+  --success: #2c7a55;
+  --warning: #9b6d00;
+  --danger: #e01e5a;
+  --accent-soft: rgba(0, 119, 199, 0.1);
+  --accent-border: rgba(0, 119, 199, 0.48);
+  --editor-bg: #fff;
+  --card-bg: #fff;
+  --card-hover: #f8f7f6;
+  --topbar-bg: #fff;
+  --sidebar-bg: #f8f7f6;
+  --radius-control: 6px;
+  --radius-card: 6px;
+  --radius-button: 6px;
+}
+
+.themePreview-worker-light::before { background: #f8f7f6; }
+
+.themePreview-worker-light i { background: #23221e; }
+
+.themePreview-worker-light b { background: #0077c7; }

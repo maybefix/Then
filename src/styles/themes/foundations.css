@@ -37,691 +37,31 @@
   --silkdown-hr-color: var(--border-subtle);
 }
 
-.appShell[data-theme="standard"] {
-  --bg-root: #f3f5f8;
-  --bg-primary: #fff;
-  --bg-secondary: #f5f7fa;
-  --bg-tertiary: #eef1f5;
-  --bg-panel: #fff;
-  --bg-panel-strong: #f4f6f9;
-  --border-subtle: #dce1e8;
-  --border-strong: #bcc5d1;
-  --text-primary: #172033;
-  --text-secondary: #3d4b61;
-  --text-muted: #6d798c;
-  --text-faint: #929dad;
-  --accent: #193a5a;
-  --accent-strong: #0f2c46;
-  --success: #2f7d4a;
-  --warning: #9b6519;
-  --danger: #b64141;
-}
-
-.appShell[data-theme="dark"] {
-  color-scheme: dark;
-  --on-accent: #1f2529;
-  --bg-root: #181d20;
-  --bg-primary: #1f2529;
-  --bg-secondary: #252c31;
-  --bg-tertiary: #2d353a;
-  --bg-panel: #1f2529;
-  --bg-panel-strong: #2a3136;
-  --border-subtle: #394248;
-  --border-strong: #566168;
-  --text-primary: #fcfcfc;
-  --text-secondary: #d9dee1;
-  --text-muted: #a9b1b6;
-  --text-faint: #7f898f;
-  --accent: #e6e9ed;
-  --accent-strong: #fcfcfc;
-  --success: #79a88b;
-  --warning: #c9aa70;
-  --danger: #d47d72;
-  --overlay: rgba(15, 19, 21, 0.68);
-  --shadow-popover: none;
-  --shadow-modal: none;
-  --control-hover: rgba(230, 233, 237, 0.08);
-  --accent-soft: rgba(230, 233, 237, 0.1);
-  --accent-border: rgba(230, 233, 237, 0.52);
-  --danger-soft: rgba(212, 125, 114, 0.12);
-  --editor-bg: #1f2529;
-  --card-bg: #252c31;
-  --card-hover: #2d353a;
-  --topbar-bg: #1f2529;
-  --sidebar-bg: #252c31;
-  --radius-control: 0;
-  --radius-card: 0;
-  --radius-button: 0;
-  --silkdown-code-bg: rgba(230, 233, 237, 0.09);
-  --silkdown-blockquote-color: var(--text-secondary);
-  --silkdown-link-color: #d5dce1;
-  --silkdown-hr-color: var(--border-subtle);
-}
-
-.appShell[data-theme="minimal-light"] {
-  --bg-root: #f5f5f7;
-  --bg-primary: #fff;
-  --bg-secondary: #f5f5f7;
-  --bg-tertiary: #ececf0;
-  --bg-panel: #fff;
-  --bg-panel-strong: #f5f5f7;
-  --border-subtle: #d9d9df;
-  --border-strong: #b8b8bd;
-  --text-primary: #1d1d1f;
-  --text-secondary: #424245;
-  --text-muted: #6e6e73;
-  --text-faint: #9a9a9f;
-  --accent: #0071e3;
-  --accent-strong: #0066cc;
-  --success: #248a3d;
-  --warning: #9a6700;
-  --danger: #c9342f;
-  --accent-soft: rgba(0, 113, 227, 0.1);
-  --accent-border: rgba(0, 113, 227, 0.48);
-  --editor-bg: #fff;
-  --card-bg: #fff;
-  --card-hover: #f5f5f7;
-  --topbar-bg: rgba(255, 255, 255, 0.86);
-  --sidebar-bg: #f5f5f7;
-  --radius-button: 999px;
-  --topbar-backdrop: saturate(180%) blur(20px);
-}
-
-.appShell[data-theme="minimal-dark"] {
-  color-scheme: dark;
-  --bg-root: #000;
-  --bg-primary: #111113;
-  --bg-secondary: #1d1d1f;
-  --bg-tertiary: #29292c;
-  --bg-panel: #1d1d1f;
-  --bg-panel-strong: #242426;
-  --border-subtle: #38383a;
-  --border-strong: #5a5a5e;
-  --text-primary: #f5f5f7;
-  --text-secondary: #d2d2d7;
-  --text-muted: #a1a1a6;
-  --text-faint: #6e6e73;
-  --accent: #0071e3;
-  --accent-strong: #2997ff;
-  --success: #32d74b;
-  --warning: #ffd60a;
-  --danger: #ff6961;
-  --overlay: rgba(0, 0, 0, 0.68);
-  --control-hover: rgba(255, 255, 255, 0.09);
-  --accent-soft: rgba(41, 151, 255, 0.14);
-  --accent-border: rgba(41, 151, 255, 0.58);
-  --editor-bg: #000;
-  --card-bg: #1d1d1f;
-  --card-hover: #29292c;
-  --topbar-bg: rgba(29, 29, 31, 0.88);
-  --sidebar-bg: #111113;
-  --radius-button: 999px;
-  --topbar-backdrop: saturate(180%) blur(20px);
-  --silkdown-link-color: #2997ff;
-}
-
-.appShell[data-theme="worker-light"] {
-  --bg-root: #f8f7f6;
-  --bg-primary: #fff;
-  --bg-secondary: #f2f1f0;
-  --bg-tertiary: #edebe8;
-  --bg-panel: #fff;
-  --bg-panel-strong: #f2f1f0;
-  --border-subtle: #d6d3d0;
-  --border-strong: #aaa69f;
-  --text-primary: #23221e;
-  --text-secondary: #4e4c49;
-  --text-muted: #706d65;
-  --text-faint: #aaa69f;
-  --accent: #0077c7;
-  --accent-strong: #005f9f;
-  --success: #2c7a55;
-  --warning: #9b6d00;
-  --danger: #e01e5a;
-  --accent-soft: rgba(0, 119, 199, 0.1);
-  --accent-border: rgba(0, 119, 199, 0.48);
-  --editor-bg: #fff;
-  --card-bg: #fff;
-  --card-hover: #f8f7f6;
-  --topbar-bg: #fff;
-  --sidebar-bg: #f8f7f6;
-  --radius-control: 6px;
-  --radius-card: 6px;
-  --radius-button: 6px;
-}
-
-.appShell[data-theme="life-light"] {
-  --bg-root: #eef4fb;
-  --bg-primary: #f8fbff;
-  --bg-secondary: #edf3fb;
-  --bg-tertiary: #dfeaf7;
-  --bg-panel: #fff;
-  --bg-panel-strong: #f3f8fe;
-  --border-subtle: #c8d6e6;
-  --border-strong: #8fa9c7;
-  --text-primary: #26364a;
-  --text-secondary: #4c5f76;
-  --text-muted: #6d7f92;
-  --text-faint: #9aaabc;
-  --accent: #432fd8;
-  --accent-strong: #2217b8;
-  --success: #23835c;
-  --warning: #a06f00;
-  --danger: #c33142;
-  --accent-soft: rgba(47, 115, 216, 0.12);
-  --accent-border: rgba(47, 115, 216, 0.52);
-  --editor-bg: #fff;
-  --card-bg: #fff;
-  --card-hover: #f2f7fd;
-  --topbar-bg: #e7ecfb;
-  --sidebar-bg: #edeffc;
-  --selection-bg: #2f4bd8;
-  --selection-text: #fff;
-  --radius-control: 3px;
-  --radius-card: 3px;
-  --radius-button: 3px;
-  --silkdown-link-color: #1754b8;
-}
-
-.appShell[data-theme="resonance-light"] {
-  --bg-root: #f6f6f6;
-  --bg-primary: #fff;
-  --bg-secondary: #f6f6f6;
-  --bg-tertiary: #eee8f2;
-  --bg-panel: #fff;
-  --bg-panel-strong: #f6f6f6;
-  --border-subtle: #d4d0d7;
-  --border-strong: #a3a3a3;
-  --text-primary: #333;
-  --text-secondary: #555;
-  --text-muted: #707070;
-  --text-faint: #999;
-  --accent: #4b1e78;
-  --accent-strong: #351255;
-  --success: #1f7a4d;
-  --warning: #9c6700;
-  --danger: #d83933;
-  --accent-soft: rgba(214, 164, 234, 0.24);
-  --accent-border: rgba(75, 30, 120, 0.48);
-  --editor-bg: #fff;
-  --card-bg: #fff;
-  --card-hover: #f0e2f7;
-  --topbar-bg: #fff;
-  --sidebar-bg: #f6f6f6;
-  --radius-button: 60px;
-}
-
-.appShell[data-theme="resonance-dark"] {
-  color-scheme: dark;
-  --on-accent: #1b1022;
-  --bg-root: #130d18;
-  --bg-primary: #1a1121;
-  --bg-secondary: #211629;
-  --bg-tertiary: #2d2036;
-  --bg-panel: #211629;
-  --bg-panel-strong: #2a1d33;
-  --border-subtle: #44344e;
-  --border-strong: #685477;
-  --text-primary: #fbf8fc;
-  --text-secondary: #ded4e4;
-  --text-muted: #b2a2bc;
-  --text-faint: #82718d;
-  --accent: #d6a4ea;
-  --accent-strong: #ebc9f7;
-  --success: #79b995;
-  --warning: #dbb86b;
-  --danger: #e0807a;
-  --overlay: rgba(12, 7, 15, 0.7);
-  --control-hover: rgba(214, 164, 234, 0.1);
-  --accent-soft: rgba(214, 164, 234, 0.13);
-  --accent-border: rgba(214, 164, 234, 0.5);
-  --editor-bg: #130d18;
-  --card-bg: #211629;
-  --card-hover: #2d2036;
-  --topbar-bg: #1a1121;
-  --sidebar-bg: #1a1121;
-  --radius-button: 60px;
-  --silkdown-link-color: #d6a4ea;
-}
-
-.appShell[data-theme="cinematic-dark"] {
-  color-scheme: dark;
-  --bg-root: #111;
-  --bg-primary: #111;
-  --bg-secondary: #1a1a1a;
-  --bg-tertiary: #242424;
-  --bg-panel: #1a1a1a;
-  --bg-panel-strong: #242424;
-  --border-subtle: #393939;
-  --border-strong: #646464;
-  --text-primary: #fff;
-  --text-secondary: #d9d9d9;
-  --text-muted: #a8a8a8;
-  --text-faint: #737373;
-  --accent: #3865e0;
-  --accent-strong: #86a0ee;
-  --success: #67a676;
-  --warning: #d3aa4e;
-  --danger: #e55353;
-  --overlay: rgba(0, 0, 0, 0.72);
-  --control-hover: rgba(255, 255, 255, 0.08);
-  --accent-soft: rgba(91, 126, 229, 0.15);
-  --accent-border: rgba(91, 126, 229, 0.58);
-  --editor-bg: #111;
-  --card-bg: #1a1a1a;
-  --card-hover: #242424;
-  --topbar-bg: #111;
-  --sidebar-bg: #1a1a1a;
-  --radius-control: 2px;
-  --radius-card: 0;
-  --radius-button: 2px;
-  --silkdown-link-color: #6f8ff2;
-}
-
-.appShell[data-theme="blue-sky-light"] {
-  --bg-root: #f1f1f1;
-  --bg-primary: #fff;
-  --bg-secondary: #f1f1f1;
-  --bg-tertiary: #e7eaf3;
-  --bg-panel: #fff;
-  --bg-panel-strong: #f4f5f9;
-  --border-subtle: #d4d6dd;
-  --border-strong: #c7c7c7;
-  --text-primary: #333;
-  --text-secondary: #4e4e4e;
-  --text-muted: #707070;
-  --text-faint: #999;
-  --accent: #073190;
-  --accent-strong: #00146e;
-  --success: #28784d;
-  --warning: #8d6b12;
-  --danger: #c63b45;
-  --accent-soft: rgba(7, 49, 144, 0.1);
-  --accent-border: rgba(7, 49, 144, 0.48);
-  --editor-bg: #fff;
-  --card-bg: #fff;
-  --card-hover: #e8ebf4;
-  --topbar-bg: #fff;
-  --sidebar-bg: #f1f1f1;
-  --radius-control: 6px;
-  --radius-card: 8px;
-  --radius-button: 50px;
-}
-
-.appShell[data-theme="blue-sky-dark"] {
-  color-scheme: dark;
-  --bg-root: #06102a;
-  --bg-primary: #09183a;
-  --bg-secondary: #0d214c;
-  --bg-tertiary: #142d60;
-  --bg-panel: #0d214c;
-  --bg-panel-strong: #132a59;
-  --border-subtle: #263e70;
-  --border-strong: #496398;
-  --text-primary: #f7f9ff;
-  --text-secondary: #dce5f8;
-  --text-muted: #a9b9d8;
-  --text-faint: #7488b1;
-  --accent: #3158a6;
-  --accent-strong: #9bb8ff;
-  --success: #74b493;
-  --warning: #d4c493;
-  --danger: #e47a83;
-  --overlay: rgba(2, 8, 24, 0.72);
-  --control-hover: rgba(204, 212, 234, 0.09);
-  --accent-soft: rgba(91, 127, 210, 0.16);
-  --accent-border: rgba(126, 160, 235, 0.55);
-  --editor-bg: #06102a;
-  --card-bg: #0d214c;
-  --card-hover: #142d60;
-  --topbar-bg: #09183a;
-  --sidebar-bg: #09183a;
-  --radius-control: 6px;
-  --radius-card: 8px;
-  --radius-button: 50px;
-  --silkdown-link-color: #9bb8ff;
-}
-
-.appShell[data-theme="drive-light"] {
-  --bg-root: #f6f6f6;
-  --bg-primary: #fff;
-  --bg-secondary: #f6f6f6;
-  --bg-tertiary: #eee;
-  --bg-panel: #fff;
-  --bg-panel-strong: #f2f2f2;
-  --border-subtle: #ddd;
-  --border-strong: #b8b8b8;
-  --text-primary: #343434;
-  --text-secondary: #666;
-  --text-muted: #777;
-  --text-faint: #8a8a8a;
-  --accent: #c3002f;
-  --accent-strong: #980024;
-  --success: #2e7d32;
-  --warning: #a85600;
-  --danger: #d32f2f;
-  --accent-soft: rgba(195, 0, 47, 0.09);
-  --accent-border: rgba(195, 0, 47, 0.48);
-  --editor-bg: #fff;
-  --card-bg: #fff;
-  --card-hover: #f2f2f2;
-  --topbar-bg: #1a1a1a;
-  --sidebar-bg: #f6f6f6;
-  --radius-control: 0;
-  --radius-card: 0;
-  --radius-button: 0;
-  --topbar-text-primary: #fff;
-  --topbar-text-secondary: #e4e4e4;
-  --topbar-text-muted: #bdbdbd;
-  --topbar-text-faint: #8a8a8a;
-}
-
-.appShell[data-theme="drive-dark"] {
-  color-scheme: dark;
-  --bg-root: #111;
-  --bg-primary: #1a1a1a;
-  --bg-secondary: #202020;
-  --bg-tertiary: #2a2a2a;
-  --bg-panel: #1a1a1a;
-  --bg-panel-strong: #242424;
-  --border-subtle: #383838;
-  --border-strong: #5a5a5a;
-  --text-primary: #f5f5f5;
-  --text-secondary: #d3d3d3;
-  --text-muted: #a7a7a7;
-  --text-faint: #777;
-  --accent: #c3002f;
-  --accent-strong: #ef456b;
-  --success: #69a66d;
-  --warning: #e49a45;
-  --danger: #ef5a5a;
-  --overlay: rgba(0, 0, 0, 0.74);
-  --control-hover: rgba(255, 255, 255, 0.08);
-  --accent-soft: rgba(195, 0, 47, 0.16);
-  --accent-border: rgba(225, 43, 83, 0.58);
-  --editor-bg: #111;
-  --card-bg: #1a1a1a;
-  --card-hover: #2a2a2a;
-  --topbar-bg: #070707;
-  --sidebar-bg: #1a1a1a;
-  --radius-control: 0;
-  --radius-card: 0;
-  --radius-button: 0;
-  --silkdown-link-color: #ef6a88;
-}
-
-.appShell[data-theme="orchestrating-light"] {
-  --bg-root: #eff2f6;
-  --bg-primary: #fff;
-  --bg-secondary: #f4f6f9;
-  --bg-tertiary: #e7ebf2;
-  --bg-panel: #fff;
-  --bg-panel-strong: #f0f2ff;
-  --border-subtle: #d9dfe9;
-  --border-strong: #a7b1c7;
-  --text-primary: #282d3c;
-  --text-secondary: #3c4155;
-  --text-muted: #6b7387;
-  --text-faint: #8f98ac;
-  --accent: #0f1ed2;
-  --accent-strong: #0b179f;
-  --success: #277a50;
-  --warning: #966500;
-  --danger: #c73845;
-  --accent-soft: rgba(15, 30, 210, 0.09);
-  --accent-border: rgba(15, 30, 210, 0.48);
-  --editor-bg: #fff;
-  --card-bg: #fff;
-  --card-hover: #f0f2ff;
-  --topbar-bg: #fff;
-  --sidebar-bg: #eff2f6;
-  --radius-control: 4px;
-  --radius-card: 8px;
-  --radius-button: 4px;
-  --silkdown-code-bg: rgba(15, 30, 210, 0.08);
-  --silkdown-link-color: #0f1ed2;
-}
-
-.appShell[data-theme="orchestrating-dark"] {
-  color-scheme: dark;
-  --bg-root: #101522;
-  --bg-primary: #151b2a;
-  --bg-secondary: #1c2333;
-  --bg-tertiary: #282d3c;
-  --bg-panel: #1c2333;
-  --bg-panel-strong: #252c3d;
-  --border-subtle: #343c50;
-  --border-strong: #515869;
-  --text-primary: #fbfcfd;
-  --text-secondary: #d9dfe9;
-  --text-muted: #a7b1c7;
-  --text-faint: #6b7387;
-  --accent: #2459e6;
-  --accent-strong: #8bacff;
-  --success: #72b892;
-  --warning: #d6b65d;
-  --danger: #e47d87;
-  --overlay: rgba(6, 9, 17, 0.72);
-  --control-hover: rgba(139, 172, 255, 0.09);
-  --accent-soft: rgba(44, 105, 255, 0.15);
-  --accent-border: rgba(107, 155, 255, 0.58);
-  --editor-bg: #101522;
-  --card-bg: #1c2333;
-  --card-hover: #282d3c;
-  --topbar-bg: #151b2a;
-  --sidebar-bg: #151b2a;
-  --radius-control: 4px;
-  --radius-card: 8px;
-  --radius-button: 4px;
-  --silkdown-code-bg: rgba(139, 172, 255, 0.1);
-  --silkdown-link-color: #8bacff;
-}
-
-.appShell[data-theme="shaping-light"] {
-  --bg-root: #f3f3f3;
-  --bg-primary: #fff;
-  --bg-secondary: #f3f3f3;
-  --bg-tertiary: #efefef;
-  --bg-panel: #fff;
-  --bg-panel-strong: #f3f3f3;
-  --border-subtle: #dcdcdc;
-  --border-strong: #b9b9b9;
-  --text-primary: #000;
-  --text-secondary: #333;
-  --text-muted: #5f5f5f;
-  --text-faint: #777;
-  --accent: #d80000;
-  --accent-strong: #a90000;
-  --success: #287848;
-  --warning: #9a6200;
-  --danger: #d80000;
-  --accent-soft: rgba(234, 0, 0, 0.09);
-  --accent-border: rgba(216, 0, 0, 0.5);
-  --editor-bg: #fff;
-  --card-bg: #fff;
-  --card-hover: #efefef;
-  --topbar-bg: #fff;
-  --sidebar-bg: #f3f3f3;
-  --radius-control: 0;
-  --radius-card: 0;
-  --radius-button: 0;
-  --silkdown-code-bg: rgba(36, 0, 176, 0.08);
-  --silkdown-link-color: #2400b0;
-}
-
-.appShell[data-theme="shaping-dark"] {
-  color-scheme: dark;
-  --bg-root: #10171d;
-  --bg-primary: #16212a;
-  --bg-secondary: #1b2934;
-  --bg-tertiary: #253541;
-  --bg-panel: #1b2934;
-  --bg-panel-strong: #233440;
-  --border-subtle: #354956;
-  --border-strong: #587080;
-  --text-primary: #fff;
-  --text-secondary: #e8edf0;
-  --text-muted: #b5c0c7;
-  --text-faint: #7f929f;
-  --accent: #d80000;
-  --accent-strong: #ff7373;
-  --success: #74b68c;
-  --warning: #dfb45d;
-  --danger: #ff7373;
-  --overlay: rgba(5, 9, 12, 0.74);
-  --control-hover: rgba(255, 255, 255, 0.08);
-  --accent-soft: rgba(234, 0, 0, 0.15);
-  --accent-border: rgba(255, 82, 82, 0.58);
-  --editor-bg: #10171d;
-  --card-bg: #1b2934;
-  --card-hover: #253541;
-  --topbar-bg: #16212a;
-  --sidebar-bg: #16212a;
-  --radius-control: 0;
-  --radius-card: 0;
-  --radius-button: 0;
-  --silkdown-code-bg: rgba(107, 126, 255, 0.1);
-  --silkdown-link-color: #9aa8ff;
-}
-
-.appShell[data-theme="note-light"] {
-  --bg-root: #f7f6f3;
-  --bg-primary: #fff;
-  --bg-secondary: #f7f6f3;
-  --bg-tertiary: #f1f1ef;
-  --bg-panel: #fff;
-  --bg-panel-strong: #f7f6f3;
-  --border-subtle: #e5e3df;
-  --border-strong: #c8c4be;
-  --text-primary: #1f1f1d;
-  --text-secondary: #37352f;
-  --text-muted: #6f6e69;
-  --text-faint: #9b9992;
-  --accent: #0b6fc2;
-  --accent-strong: #085a9f;
-  --success: #2f8a55;
-  --warning: #a66b18;
-  --danger: #c23b3b;
-  --accent-soft: rgba(35, 131, 226, 0.11);
-  --accent-border: rgba(35, 131, 226, 0.42);
-  --card-hover: #f7f6f3;
-  --sidebar-bg: #f7f6f3;
-  --silkdown-code-bg: rgba(135, 131, 120, 0.15);
-}
-
-/* Claude.ai 寄せのカラースキーム。
-   ベースは温かいアイボリー、面（カード/入力/エディタ）は白に近づけ、
-   境界はほぼ見えないヘアライン、コーラルは差し色に限定する。 */
-.appShell[data-theme="coral-light"] {
-  --radius-control: 12px;
-  --radius-card: 16px;
-  --radius-button: 10px;
-  --bg-root: #faf9f5;
-  --bg-primary: #faf9f5;
-  --bg-secondary: #f0eee6;
-  --bg-tertiary: #ffffff;
-  --bg-panel: #ffffff;
-  --bg-panel-strong: #f0eee6;
-  --border-subtle: #ebe8df;
-  --border-strong: #dcd7cb;
-  --text-primary: #1a1915;
-  --text-secondary: #3c3a34;
-  --text-muted: #73706a;
-  --text-faint: #a8a49b;
-  --accent: #c96a48;
-  --accent-strong: #b0512f;
-  --success: #3f8255;
-  --warning: #9f7015;
-  --danger: #b23f3f;
-  --accent-soft: rgba(201, 106, 72, 0.1);
-  --accent-border: rgba(201, 106, 72, 0.4);
-  --overlay: rgba(40, 34, 28, 0.3);
-  --shadow-popover: 0 8px 30px rgba(40, 34, 28, 0.1);
-  --shadow-modal: 0 18px 50px rgba(40, 34, 28, 0.16);
-  --control-hover: rgba(30, 25, 20, 0.05);
-  --editor-bg: #faf9f5;
-  --card-bg: #ffffff;
-  --card-hover: #f4f2ea;
-  --topbar-bg: #faf9f5;
-  --sidebar-bg: #f0eee6;
-  --silkdown-code-bg: rgba(201, 106, 72, 0.1);
-}
-
-/* Claude らしいボタン: ヘアライン＋ごく淡い影、面は白。 */
-.appShell[data-theme="coral-light"] .modalActions button,
-.appShell[data-theme="coral-light"] .themePickerButton,
-.appShell[data-theme="coral-light"] .sidebarAddButton,
-.appShell[data-theme="coral-light"] .addButton,
-.appShell[data-theme="coral-light"] .newTabActions button,
-.appShell[data-theme="coral-light"] .ideaAdd {
-  border-color: transparent;
-  background: var(--bg-panel);
-  box-shadow: 0 1px 2px rgba(40, 34, 28, 0.04), 0 0 0 0.5px rgba(40, 34, 28, 0.13);
-}
-
-.appShell[data-theme="coral-light"] .modalActions button:hover,
-.appShell[data-theme="coral-light"] .themePickerButton:hover,
-.appShell[data-theme="coral-light"] .sidebarAddButton:hover,
-.appShell[data-theme="coral-light"] .addButton:hover,
-.appShell[data-theme="coral-light"] .newTabActions button:hover,
-.appShell[data-theme="coral-light"] .ideaAdd:hover {
-  background: var(--bg-panel);
-  box-shadow: 0 2px 8px rgba(40, 34, 28, 0.07), 0 0 0 0.5px rgba(40, 34, 28, 0.28);
-}
-
-/* Claude のチャット入力枠に倣った入力フィールド（透明境界＋ソフトシャドウ）。 */
-.appShell[data-theme="coral-light"] .modalForm input,
-.appShell[data-theme="coral-light"] .modalForm select,
-.appShell[data-theme="coral-light"] .modalForm textarea,
-.appShell[data-theme="coral-light"] .ideaSearch input,
-.appShell[data-theme="coral-light"] .projectSearchInput {
-  border-color: transparent;
-  background: var(--bg-panel);
-  box-shadow: 0 4px 20px rgba(20, 20, 19, 0.035), 0 0 0 0.5px rgba(40, 34, 28, 0.15);
-}
-
-.appShell[data-theme="coral-light"] .modalForm input:hover,
-.appShell[data-theme="coral-light"] .modalForm select:hover,
-.appShell[data-theme="coral-light"] .modalForm textarea:hover {
-  box-shadow: 0 4px 20px rgba(20, 20, 19, 0.035), 0 0 0 0.5px rgba(40, 34, 28, 0.3);
-}
-
-.appShell[data-theme="coral-light"] .modalForm input:focus,
-.appShell[data-theme="coral-light"] .modalForm select:focus,
-.appShell[data-theme="coral-light"] .modalForm textarea:focus,
-.appShell[data-theme="coral-light"] .modalForm input:focus-visible,
-.appShell[data-theme="coral-light"] .modalForm select:focus-visible,
-.appShell[data-theme="coral-light"] .modalForm textarea:focus-visible {
-  border-color: transparent;
-  box-shadow: 0 4px 20px rgba(20, 20, 19, 0.075), 0 0 0 0.5px var(--accent-border);
-}
-
-/* Claude らしく、見出しはコーラルではなく本文と同じニュートラルにし、
-   コーラルはアクティブ状態やリンクなどの控えめなアクセントに限定する。 */
-.appShell[data-theme="coral-light"] .verticalTypewriterEditor .pm-root p.heading {
-  color: var(--text-primary);
-}
-
 .appShell[data-theme] .appFrame,
 .appShell[data-theme] .workspace,
 .appShell[data-theme] .editorColumn { background: var(--bg-root); }
+
 .appShell[data-theme] .topbar {
   background: var(--topbar-bg);
   color: var(--topbar-text-muted);
   backdrop-filter: var(--topbar-backdrop);
 }
+
 .appShell[data-theme] .topbar .menuButton,
 .appShell[data-theme] .topbar .iconButton,
 .appShell[data-theme] .topbar .breadcrumbFolderButton {
   color: var(--topbar-text-muted);
 }
+
 .appShell[data-theme] .topbar .activeCrumb {
   color: var(--topbar-text-secondary);
 }
+
 .appShell[data-theme] .topbar .crumbSeparator,
 .appShell[data-theme] .topbar .outlineSeparator {
   color: var(--topbar-text-faint);
 }
+
 .appShell[data-theme] .workspaceSidebar,
 .appShell[data-theme] .rightSidebar { background: var(--sidebar-bg); }
 
@@ -747,32 +87,41 @@
 .appShell[data-theme] .sidebarIconButton {
   color: var(--navigation-icon);
 }
+
 .appShell[data-theme] .editor,
 .appShell[data-theme] .editorContent,
 .appShell[data-theme] .verticalTypewriterShell {
   background: var(--editor-bg);
   color: var(--text-primary);
 }
+
 .appShell[data-theme] .verticalTypewriterEditor .pm-root { color: var(--text-primary); }
+
 .appShell[data-theme] .verticalTypewriterEditor .pm-root[data-empty="true"]::before {
   color: var(--text-faint);
 }
+
 .appShell[data-theme] .verticalTypewriterGuide { border-left-color: var(--accent-soft); }
+
 .appShell[data-theme][data-writing-mode="horizontal-tb"] .verticalTypewriterGuide {
   border-top-color: var(--accent-soft);
 }
+
 .appShell[data-theme] .menuPopover,
 .appShell[data-theme] .editorContextMenu {
   border-color: var(--border-strong);
   background: var(--bg-panel);
   box-shadow: var(--shadow-popover);
 }
+
 .appShell[data-theme] .modalBackdrop { background: var(--overlay); }
+
 .appShell[data-theme] .modal {
   border-radius: var(--radius-card);
   background: var(--bg-panel);
   box-shadow: var(--shadow-modal);
 }
+
 .appShell[data-theme] .modalForm input,
 .appShell[data-theme] .modalForm select,
 .appShell[data-theme] .modalForm textarea,
@@ -780,17 +129,21 @@
 .appShell[data-theme] .projectSearchInput {
   border-radius: var(--radius-control);
 }
+
 .appShell[data-theme] .rightTabs,
 .appShell[data-theme] .ideaCard,
 .appShell[data-theme] .rightSidebar .snippetCard,
 .appShell[data-theme] .notationModal .modalForm input[readonly] { background: var(--card-bg); }
+
 .appShell[data-theme] .rightTabs,
 .appShell[data-theme] .ideaCard,
 .appShell[data-theme] .rightSidebar .snippetCard,
 .appShell[data-theme] .notationChoiceButton {
   border-radius: var(--radius-card);
 }
+
 .appShell[data-theme] .rightTab { border-radius: var(--radius-control); }
+
 .appShell[data-theme] .modalActions button,
 .appShell[data-theme] .sidebarAddButton,
 .appShell[data-theme] .newTabActions button,
@@ -799,12 +152,15 @@
 .appShell[data-theme] .themePickerButton {
   border-radius: var(--radius-button);
 }
+
 .appShell[data-theme] .ideaCard:hover,
 .appShell[data-theme] .rightSidebar .snippetCard:hover { background: var(--card-hover); }
+
 .appShell[data-theme] .activeRightTab {
   background: var(--selection-bg);
   color: var(--selection-text);
 }
+
 .appShell[data-theme] .activeRightTab:hover { color: var(--selection-text); }
 
 .appShell[data-theme] .menuButton:hover,
@@ -826,6 +182,7 @@
   background: var(--control-hover);
   color: var(--text-primary);
 }
+
 .appShell[data-theme] .topbar .menuButton:hover,
 .appShell[data-theme] .topbar .menuButton[aria-expanded="true"],
 .appShell[data-theme] .topbar .iconButton:hover,
@@ -833,20 +190,24 @@
 .appShell[data-theme] .topbar .breadcrumbFolderButton[aria-expanded="true"] {
   color: var(--topbar-text-primary);
 }
+
 .appShell[data-theme] .iconButton:hover,
 .appShell[data-theme] .sidebarIconButton:hover,
 .appShell[data-theme] .activeSidebarIconButton {
   color: var(--navigation-icon-hover);
 }
+
 .appShell[data-theme] .activeTreeItem,
 .appShell[data-theme] .projectSearchResultButton:hover,
 .appShell[data-theme] .projectSearchResultButton:focus-visible,
 .appShell[data-theme] .plotToolButton:hover:not(:disabled),
 .appShell[data-theme] .plotCardToggle:hover { background: var(--accent-soft); }
+
 .appShell[data-theme] .activeTreeItem {
   color: var(--text-primary);
   box-shadow: inset 2px 0 0 var(--accent);
 }
+
 .appShell[data-theme] .ideaSearch input:focus,
 .appShell[data-theme] .projectSearchInput:focus,
 .appShell[data-theme] .modalForm input:focus,
@@ -854,31 +215,41 @@
 .appShell[data-theme] .modalForm textarea:focus,
 .appShell[data-theme] .ideaAdd:hover,
 .appShell[data-theme] .expandedPlotCard .plotCardNum { border-color: var(--accent-border); }
+
 .appShell[data-theme] .projectSearchInput:focus,
 .appShell[data-theme] .modalForm input:focus-visible,
 .appShell[data-theme] .modalForm select:focus-visible,
 .appShell[data-theme] .modalForm textarea:focus-visible { box-shadow: 0 0 0 3px var(--accent-soft); }
+
 .appShell[data-theme] .ideaText:focus,
 .appShell[data-theme] .plotCardTitle:focus,
 .appShell[data-theme] .plotCardBody:focus { background: var(--accent-soft); }
+
 .appShell[data-theme] .plotCardBody { color: var(--text-secondary); }
+
 .appShell[data-theme] .plotManagerModal .modalActions { background: var(--bg-secondary); }
+
 .appShell[data-theme] .plotManagerBoard { background: var(--sidebar-bg); }
+
 .appShell[data-theme] .toast {
   background: var(--bg-panel);
   box-shadow: var(--shadow-popover);
 }
+
 .appShell[data-theme] ::selection {
   background: var(--selection-bg);
   color: var(--selection-text);
 }
+
 .appShell[data-theme] input[type="checkbox"],
 .appShell[data-theme] input[type="radio"],
 .appShell[data-theme] input[type="range"] { accent-color: var(--accent); }
+
 .appShell[data-theme] *::-webkit-scrollbar-thumb {
   background: var(--border-strong);
   background-clip: content-box;
 }
+
 .appShell[data-theme] *::-webkit-scrollbar-thumb:hover {
   background: var(--text-faint);
   background-clip: content-box;

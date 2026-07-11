@@ -1,0 +1,82 @@
+.appShell[data-theme="express-light"] {
+  --bg-root: #f3f7f2;
+  --bg-primary: #fff;
+  --bg-secondary: #f9fbf9;
+  --bg-tertiary: #e9f1e8;
+  --bg-panel: #fff;
+  --bg-panel-strong: #f9fbf9;
+  --border-subtle: #d7dfd6;
+  --border-strong: #93a594;
+  --text-primary: #202020;
+  --text-secondary: #3d463d;
+  --text-muted: #657066;
+  --text-faint: #8d998e;
+  --accent: #008803;
+  --accent-strong: #006b02;
+  --success: #007903;
+  --warning: #956700;
+  --danger: #c93434;
+  --accent-soft: rgba(0, 136, 3, 0.1);
+  --accent-border: rgba(0, 121, 3, 0.48);
+  --editor-bg: #fff;
+  --card-bg: #fff;
+  --card-hover: #eefdf1;
+  --topbar-bg: #fff;
+  --sidebar-bg: #e9f1e8;
+  --canvas-bg: #e4eee3;
+  --card-float-shadow: 0 4px 14px rgba(48, 54, 62, 0.08);
+  --radius-control: 6px;
+  --radius-card: 20px;
+  --radius-button: 100px;
+}
+
+.appShell[data-theme="express-dark"] {
+  color-scheme: dark;
+  --on-accent: #08210a;
+  --bg-root: #0c160e;
+  --bg-primary: #122016;
+  --bg-secondary: #17291b;
+  --bg-tertiary: #203624;
+  --bg-panel: #17291b;
+  --bg-panel-strong: #1d3221;
+  --border-subtle: #304a34;
+  --border-strong: #527158;
+  --text-primary: #f2f7f2;
+  --text-secondary: #d3dfd4;
+  --text-muted: #a5b9a7;
+  --text-faint: #718b75;
+  --accent: #55c95a;
+  --accent-strong: #8ce390;
+  --success: #70cf78;
+  --warning: #dfbd62;
+  --danger: #ed7a73;
+  --overlay: rgba(3, 8, 4, 0.74);
+  --control-hover: rgba(140, 227, 144, 0.09);
+  --accent-soft: rgba(85, 201, 90, 0.14);
+  --accent-border: rgba(85, 201, 90, 0.56);
+  --editor-bg: #0c160e;
+  --card-bg: #17291b;
+  --card-hover: #203624;
+  --topbar-bg: #122016;
+  --sidebar-bg: #122016;
+  --canvas-bg: #09120b;
+  --card-float-shadow: 0 6px 18px rgba(0, 0, 0, 0.38);
+  --radius-control: 6px;
+  --radius-card: 20px;
+  --radius-button: 100px;
+  --silkdown-link-color: #8ce390;
+}
+
+.themePreview-express-light::before { background: #e9f1e8; }
+
+.themePreview-express-light i { background: #202020; }
+
+.themePreview-express-light b { background: #008803; }
+
+.themePreview-express-dark { border-color: #304a34; background: #0c160e; }
+
+.themePreview-express-dark::before { background: #17291b; }
+
+.themePreview-express-dark i { background: #f2f7f2; }
+
+.themePreview-express-dark b { background: #55c95a; }

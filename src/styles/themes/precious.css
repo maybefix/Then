@@ -1,0 +1,39 @@
+.appShell[data-theme="precious-light"] {
+  --bg-root: #edf4fc;
+  --bg-primary: #fff;
+  --bg-secondary: #f9f9f9;
+  --bg-tertiary: #e4edf8;
+  --bg-panel: #fff;
+  --bg-panel-strong: #f2f6fb;
+  --border-subtle: #d4dce7;
+  --border-strong: #9eacc0;
+  --text-primary: #333;
+  --text-secondary: #50555c;
+  --text-muted: #707984;
+  --text-faint: #9aa4af;
+  --accent: #074194;
+  --accent-strong: #052d68;
+  --success: #28784d;
+  --warning: #8b6500;
+  --danger: #cc111a;
+  --accent-soft: rgba(7, 65, 148, 0.1);
+  --accent-border: rgba(7, 65, 148, 0.46);
+  --editor-bg: #fff;
+  --card-bg: #f9f9f9;
+  --card-hover: #edf4fc;
+  --topbar-bg: #074194;
+  --sidebar-bg: #edf4fc;
+  --topbar-text-primary: #fff;
+  --topbar-text-secondary: #f3f6fc;
+  --topbar-text-muted: #d5e1f1;
+  --topbar-text-faint: #a9bfdd;
+  --radius-control: 4px;
+  --radius-card: 8px;
+  --radius-button: 4px;
+}
+
+.themePreview-precious-light::before { background: #edf4fc; }
+
+.themePreview-precious-light i { background: #333; }
+
+.themePreview-precious-light b { background: #074194; box-shadow: 5px 0 0 #ffd742; }

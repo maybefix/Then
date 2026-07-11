@@ -1,0 +1,83 @@
+.appShell[data-theme="hands-light"] {
+  --bg-root: #edf3ef;
+  --bg-primary: #fff;
+  --bg-secondary: #f5f5f5;
+  --bg-tertiary: #e4eee7;
+  --bg-panel: #fff;
+  --bg-panel-strong: #f5f5f5;
+  --border-subtle: #e0e0e0;
+  --border-strong: #aab9af;
+  --text-primary: #333;
+  --text-secondary: #4d4d4d;
+  --text-muted: #707070;
+  --text-faint: #999;
+  --accent: #006b30;
+  --accent-strong: #004022;
+  --success: #006b30;
+  --warning: #a73f05;
+  --danger: #cc0000;
+  --accent-soft: rgba(0, 107, 48, 0.1);
+  --accent-border: rgba(0, 107, 48, 0.48);
+  --editor-bg: #fff;
+  --card-bg: #fff;
+  --card-hover: #f1f7f2;
+  --topbar-bg: #004022;
+  --sidebar-bg: #edf3ef;
+  --topbar-text-primary: #fff;
+  --topbar-text-secondary: #eef8f0;
+  --topbar-text-muted: #c5dccb;
+  --topbar-text-faint: #91b19a;
+  --radius-control: 0;
+  --radius-card: 2px;
+  --radius-button: 2px;
+  --silkdown-link-color: #006b30;
+}
+
+.appShell[data-theme="hands-dark"] {
+  color-scheme: dark;
+  --on-accent: #071d0d;
+  --bg-root: #07150e;
+  --bg-primary: #0d2015;
+  --bg-secondary: #122a1b;
+  --bg-tertiary: #193824;
+  --bg-panel: #122a1b;
+  --bg-panel-strong: #173321;
+  --border-subtle: #294a34;
+  --border-strong: #4b7057;
+  --text-primary: #f2f7f3;
+  --text-secondary: #d5e2d8;
+  --text-muted: #a7bbaa;
+  --text-faint: #759079;
+  --accent: #51c05c;
+  --accent-strong: #82dd8a;
+  --success: #69ca73;
+  --warning: #e28b46;
+  --danger: #ed7272;
+  --overlay: rgba(2, 8, 4, 0.76);
+  --control-hover: rgba(255, 255, 255, 0.07);
+  --accent-soft: rgba(81, 192, 92, 0.14);
+  --accent-border: rgba(81, 192, 92, 0.56);
+  --editor-bg: #07150e;
+  --card-bg: #122a1b;
+  --card-hover: #193824;
+  --topbar-bg: #004022;
+  --sidebar-bg: #0d2015;
+  --radius-control: 0;
+  --radius-card: 2px;
+  --radius-button: 2px;
+  --silkdown-link-color: #82dd8a;
+}
+
+.themePreview-hands-light::before { background: #edf3ef; }
+
+.themePreview-hands-light i { background: #333; }
+
+.themePreview-hands-light b { background: #006b30; }
+
+.themePreview-hands-dark { border-color: #294a34; background: #07150e; }
+
+.themePreview-hands-dark::before { background: #122a1b; }
+
+.themePreview-hands-dark i { background: #f2f7f3; }
+
+.themePreview-hands-dark b { background: #51c05c; }

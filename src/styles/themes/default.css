@@ -1,0 +1,77 @@
+.appShell[data-theme="standard"] {
+  --bg-root: #f3f5f8;
+  --bg-primary: #fff;
+  --bg-secondary: #f5f7fa;
+  --bg-tertiary: #eef1f5;
+  --bg-panel: #fff;
+  --bg-panel-strong: #f4f6f9;
+  --border-subtle: #dce1e8;
+  --border-strong: #bcc5d1;
+  --text-primary: #172033;
+  --text-secondary: #3d4b61;
+  --text-muted: #6d798c;
+  --text-faint: #929dad;
+  --accent: #193a5a;
+  --accent-strong: #0f2c46;
+  --success: #2f7d4a;
+  --warning: #9b6519;
+  --danger: #b64141;
+}
+
+.appShell[data-theme="dark"] {
+  color-scheme: dark;
+  --on-accent: #1f2529;
+  --bg-root: #181d20;
+  --bg-primary: #1f2529;
+  --bg-secondary: #252c31;
+  --bg-tertiary: #2d353a;
+  --bg-panel: #1f2529;
+  --bg-panel-strong: #2a3136;
+  --border-subtle: #394248;
+  --border-strong: #566168;
+  --text-primary: #fcfcfc;
+  --text-secondary: #d9dee1;
+  --text-muted: #a9b1b6;
+  --text-faint: #7f898f;
+  --accent: #e6e9ed;
+  --accent-strong: #fcfcfc;
+  --success: #79a88b;
+  --warning: #c9aa70;
+  --danger: #d47d72;
+  --overlay: rgba(15, 19, 21, 0.68);
+  --shadow-popover: none;
+  --shadow-modal: none;
+  --control-hover: rgba(230, 233, 237, 0.08);
+  --accent-soft: rgba(230, 233, 237, 0.1);
+  --accent-border: rgba(230, 233, 237, 0.52);
+  --danger-soft: rgba(212, 125, 114, 0.12);
+  --editor-bg: #1f2529;
+  --card-bg: #252c31;
+  --card-hover: #2d353a;
+  --topbar-bg: #1f2529;
+  --sidebar-bg: #252c31;
+  --radius-control: 0;
+  --radius-card: 0;
+  --radius-button: 0;
+  --silkdown-code-bg: rgba(230, 233, 237, 0.09);
+  --silkdown-blockquote-color: var(--text-secondary);
+  --silkdown-link-color: #d5dce1;
+  --silkdown-hr-color: var(--border-subtle);
+}
+
+.themePreview-standard::before { background: #f3f5f8; }
+
+.themePreview-standard i { background: #172033; }
+
+.themePreview-standard b { background: #193a5a; }
+
+.themePreview-dark {
+  border-color: #566168;
+  background: #1f2529;
+}
+
+.themePreview-dark::before { background: #252c31; }
+
+.themePreview-dark i { background: #fcfcfc; }
+
+.themePreview-dark b { background: #e6e9ed; }
