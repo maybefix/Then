@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { normalizeAppTheme } from "./themes";
 import { listen } from "@tauri-apps/api/event";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -95,7 +96,7 @@ export default function ExportWindowApp() {
     void invoke<{ settings?: { theme?: string; uiFontFamily?: string; uiFontScale?: number } } | null>("load_app_state")
       .then((state) => {
         const settings = state?.settings;
-        if (settings?.theme) setTheme(settings.theme);
+        if (settings?.theme) setTheme(normalizeAppTheme(settings.theme));
         if (settings?.uiFontFamily) setUiFont(settings.uiFontFamily);
         if (typeof settings?.uiFontScale === "number" && Number.isFinite(settings.uiFontScale)) {
           setUiFontScale(settings.uiFontScale);

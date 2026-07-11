@@ -1,0 +1,67 @@
+.themePreview-standard::before { background: #f3f5f8; }
+.themePreview-standard i { background: #172033; }
+.themePreview-standard b { background: #193a5a; }
+.themePreview-coral-light { background: #faf9f5; }
+.themePreview-coral-light::before { background: #f5f0e8; }
+.themePreview-coral-light i { background: #141413; }
+.themePreview-coral-light b { background: #b85f45; }
+.themePreview-dark {
+  border-color: #566168;
+  background: #1f2529;
+}
+.themePreview-dark::before { background: #252c31; }
+.themePreview-dark i { background: #fcfcfc; }
+.themePreview-dark b { background: #e6e9ed; }
+.themePreview-minimal-light::before { background: #f5f5f7; }
+.themePreview-minimal-light i { background: #1d1d1f; }
+.themePreview-minimal-light b { background: #0071e3; }
+.themePreview-minimal-dark { border-color: #38383a; background: #000; }
+.themePreview-minimal-dark::before { background: #1d1d1f; }
+.themePreview-minimal-dark i { background: #f5f5f7; }
+.themePreview-minimal-dark b { background: #2997ff; }
+.themePreview-worker-light::before { background: #f8f7f6; }
+.themePreview-worker-light i { background: #23221e; }
+.themePreview-worker-light b { background: #0077c7; }
+.themePreview-life-light { background: #f7fbff; }
+.themePreview-life-light::before { background: #e7f0fb; }
+.themePreview-life-light i { background: #26364a; }
+.themePreview-life-light b { background: #2f73d8; box-shadow: 5px 0 0 #f5c842; }
+.themePreview-resonance-light::before { background: #f6f6f6; }
+.themePreview-resonance-light i { background: #333; }
+.themePreview-resonance-light b { background: #4b1e78; }
+.themePreview-resonance-dark { border-color: #44344e; background: #130d18; }
+.themePreview-resonance-dark::before { background: #211629; }
+.themePreview-resonance-dark i { background: #fbf8fc; }
+.themePreview-resonance-dark b { background: #d6a4ea; }
+.themePreview-cinematic-dark { border-color: #393939; background: #111; }
+.themePreview-cinematic-dark::before { background: #1a1a1a; }
+.themePreview-cinematic-dark i { background: #fff; }
+.themePreview-cinematic-dark b { background: #5b7ee5; }
+.themePreview-blue-sky-light::before { background: #f1f1f1; }
+.themePreview-blue-sky-light i { background: #333; }
+.themePreview-blue-sky-light b { background: #073190; }
+.themePreview-blue-sky-dark { border-color: #263e70; background: #06102a; }
+.themePreview-blue-sky-dark::before { background: #0d214c; }
+.themePreview-blue-sky-dark i { background: #f7f9ff; }
+.themePreview-blue-sky-dark b { background: #5b7fd2; }
+.themePreview-drive-light::before { background: #f6f6f6; }
+.themePreview-drive-light i { background: #343434; }
+.themePreview-drive-light b { background: #c3002f; }
+.themePreview-drive-dark { border-color: #383838; background: #111; }
+.themePreview-drive-dark::before { background: #1a1a1a; }
+.themePreview-drive-dark i { background: #f5f5f5; }
+.themePreview-drive-dark b { background: #c3002f; }
+.themePreview-orchestrating-light::before { background: #eff2f6; }
+.themePreview-orchestrating-light i { background: #282d3c; }
+.themePreview-orchestrating-light b { background: #0f1ed2; }
+.themePreview-orchestrating-dark { border-color: #343c50; background: #101522; }
+.themePreview-orchestrating-dark::before { background: #1c2333; }
+.themePreview-orchestrating-dark i { background: #fbfcfd; }
+.themePreview-orchestrating-dark b { background: #2459e6; }
+.themePreview-shaping-light::before { background: #f3f3f3; }
+.themePreview-shaping-light i { background: #000; }
+.themePreview-shaping-light b { background: #d80000; }
+.themePreview-shaping-dark { border-color: #354956; background: #10171d; }
+.themePreview-shaping-dark::before { background: #1b2934; }
+.themePreview-shaping-dark i { background: #fff; }
+.themePreview-shaping-dark b { background: #d80000; }

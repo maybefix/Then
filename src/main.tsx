@@ -5,6 +5,9 @@ import App from "./App";
 import CanvasWindowApp from "./CanvasWindowApp";
 import ExportWindowApp from "./ExportWindowApp";
 import "./App.css";
+import "./styles/themes/foundations.css";
+import "./styles/themes/catalog.css";
+import "./styles/themes/previews.css";
 
 function installWebviewNativeShortcutGuards(): void {
   window.addEventListener(

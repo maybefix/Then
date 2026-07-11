@@ -17,6 +17,7 @@ import { AppDialogModal } from "./components/dialogs/AppDialogModal";
 import { CommandPalette, type PaletteCommand } from "./components/dialogs/CommandPalette";
 import { SettingsModal } from "./components/dialogs/SettingsModal";
 import { ThemePickerModal } from "./components/dialogs/ThemePickerModal";
+import { normalizeAppTheme } from "./themes";
 import { MetadataPanel } from "./components/editor/MetadataPanel";
 import {
   CheckpointStudio,
@@ -117,7 +118,6 @@ import type {
   WorkspaceRecord,
 } from "./types";
 import {
-  appThemeValues,
   fileProgressStatuses,
   DEFAULT_EDITOR_MEASURE_PERCENT,
   DEFAULT_NAVIGATOR_PREVIEW_LINES,
@@ -1779,9 +1779,7 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
       )
         ? (settings.navigatorPreviewLines as number)
         : DEFAULT_NAVIGATOR_PREVIEW_LINES,
-      theme: appThemeValues.includes(settings.theme as EditorSettings["theme"])
-        ? (settings.theme as EditorSettings["theme"])
-        : "dark",
+      theme: normalizeAppTheme(settings.theme),
       countWhitespace:
         typeof settings.countWhitespace === "boolean"
           ? settings.countWhitespace
