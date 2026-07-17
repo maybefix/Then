@@ -213,6 +213,8 @@ export type EditorSettings = {
   sidebarMode: SidebarMode;
   /** プロジェクト切替メニューでフォルダパスを表示するか。 */
   showWorkspacePaths: boolean;
+  /** ステータスバーに現在のファイルパスを表示するか。 */
+  showStatusFilePath: boolean;
   /** 左右サイドバーを通常時に透かし、ホバー時だけ通常表示にする実験モード。 */
   zoneMode: boolean;
   /** Zoneモードでサイドバーに適用する通常時の不透明度。 */

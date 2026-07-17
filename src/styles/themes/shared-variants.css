@@ -59,6 +59,94 @@
   background: var(--sidebar-bg);
 }
 
+/* Rounded-island themes treat the activity rail and file tree as one shell. */
+.appShell:is(
+  [data-theme^="flat-"],
+  [data-theme^="resonance-"],
+  [data-theme^="minimal-"],
+  [data-theme^="orchestrating-"],
+  [data-theme^="promise-"]
+) .leftWorkspaceCluster {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background: var(--sidebar-bg);
+  box-shadow: var(--card-float-shadow);
+}
+
+.appShell:is(
+  [data-theme^="flat-"],
+  [data-theme^="resonance-"],
+  [data-theme^="minimal-"],
+  [data-theme^="orchestrating-"],
+  [data-theme^="promise-"]
+) .leftWorkspaceCluster .workspaceActivityBar {
+  height: 100%;
+  border-right-color: var(--border-subtle);
+  background: transparent;
+}
+
+.appShell:is(
+  [data-theme^="flat-"],
+  [data-theme^="resonance-"],
+  [data-theme^="minimal-"],
+  [data-theme^="orchestrating-"],
+  [data-theme^="promise-"]
+) .leftWorkspaceCluster .workspaceSidebar {
+  height: 100%;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.appShell:is(
+  [data-theme^="flat-"],
+  [data-theme^="resonance-"],
+  [data-theme^="minimal-"],
+  [data-theme^="orchestrating-"],
+  [data-theme^="promise-"]
+) .leftWorkspaceCluster[data-sidebar-collapsed="true"] .workspaceActivityBar {
+  border-right-color: transparent;
+}
+
+.appShell:is(
+  [data-theme^="flat-"],
+  [data-theme^="resonance-"],
+  [data-theme^="minimal-"],
+  [data-theme^="orchestrating-"],
+  [data-theme^="promise-"]
+) .workspaceActivityButton {
+  width: 36px;
+  border-radius: 12px;
+}
+
+.appShell:is(
+  [data-theme^="flat-"],
+  [data-theme^="resonance-"],
+  [data-theme^="minimal-"],
+  [data-theme^="orchestrating-"],
+  [data-theme^="promise-"]
+) .workspaceActivityButton::before {
+  top: 9px;
+  bottom: 9px;
+  left: 3px;
+  width: 2px;
+  border-radius: 999px;
+}
+
+.appShell:is(
+  [data-theme^="flat-"],
+  [data-theme^="resonance-"],
+  [data-theme^="minimal-"],
+  [data-theme^="orchestrating-"],
+  [data-theme^="promise-"]
+) .activeWorkspaceActivityButton {
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+}
+
 .appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.editor, .editorContent, .verticalTypewriterShell) {
   background: transparent;
 }

@@ -299,12 +299,16 @@ type AppIconName =
   | "canvas"
   | "export"
   | "file"
+  | "files"
   | "folder"
+  | "folderPlus"
   | "history"
   | "horizontal"
   | "menu"
   | "panelLeft"
   | "panelRight"
+  | "plus"
+  | "search"
   | "settings"
   | "theme"
   | "vertical";
@@ -349,10 +353,25 @@ function AppIcon({ name, className = "" }: { name: AppIconName; className?: stri
           <path d="M14 2v6h6" />
         </svg>
       );
+    case "files":
+      return (
+        <svg {...common}>
+          <path d="M14 2H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7z" />
+          <path d="M14 2v6h5" />
+          <path d="M9 22h9a3 3 0 0 0 3-3V9" />
+        </svg>
+      );
     case "folder":
       return (
         <svg {...common}>
           <path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" />
+        </svg>
+      );
+    case "folderPlus":
+      return (
+        <svg {...common}>
+          <path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" />
+          <path d="M12 10v6M9 13h6" />
         </svg>
       );
     case "history":
@@ -391,6 +410,19 @@ function AppIcon({ name, className = "" }: { name: AppIconName; className?: stri
         <svg {...common}>
           <rect x="3" y="3" width="18" height="18" rx="2" />
           <path d="M15 3v18" />
+        </svg>
+      );
+    case "plus":
+      return (
+        <svg {...common}>
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      );
+    case "search":
+      return (
+        <svg {...common}>
+          <circle cx="10.5" cy="10.5" r="7.25" />
+          <path d="m16 16 5 5" />
         </svg>
       );
     case "settings":
@@ -721,6 +753,7 @@ const defaultSettings: EditorSettings = {
   snippetStorageMode: "workspace",
   sidebarMode: "tree",
   showWorkspacePaths: true,
+  showStatusFilePath: false,
   zoneMode: false,
   zoneModeOpacity: 0.42,
   navigatorPreviewLines: DEFAULT_NAVIGATOR_PREVIEW_LINES,
@@ -1766,6 +1799,10 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         typeof settings.showWorkspacePaths === "boolean"
           ? settings.showWorkspacePaths
           : defaultSettings.showWorkspacePaths,
+      showStatusFilePath:
+        typeof settings.showStatusFilePath === "boolean"
+          ? settings.showStatusFilePath
+          : defaultSettings.showStatusFilePath,
       zoneMode:
         typeof settings.zoneMode === "boolean"
           ? settings.zoneMode
@@ -7876,8 +7913,69 @@ export default function App() {
             ref={workspaceRef}
             data-app-mode={appMode}
           >
-            {appMode === "write" && !isLeftSidebarCollapsed && (
-              <WorkspaceSidebar
+            <div
+              className={`leftWorkspaceCluster ${appMode !== "write" ? "modeHiddenPane" : ""}`}
+              data-sidebar-collapsed={isLeftSidebarCollapsed}
+            >
+                <nav className="workspaceActivityBar" aria-label="左サイドバー操作">
+                  <button
+                    className={`workspaceActivityButton ${
+                      !isProjectSearchMode && !isLeftSidebarCollapsed
+                        ? "activeWorkspaceActivityButton"
+                        : ""
+                    }`}
+                    type="button"
+                    aria-label="ファイルツリー"
+                    title="ファイルツリー"
+                    aria-pressed={!isProjectSearchMode && !isLeftSidebarCollapsed}
+                    onClick={() => {
+                      setIsLeftSidebarCollapsed(false);
+                      setIsProjectSearchMode(false);
+                    }}
+                  >
+                    <AppIcon name="files" className="workspaceActivityIcon" />
+                  </button>
+                  <button
+                    className={`workspaceActivityButton ${
+                      isProjectSearchMode && !isLeftSidebarCollapsed
+                        ? "activeWorkspaceActivityButton"
+                        : ""
+                    }`}
+                    type="button"
+                    aria-label="プロジェクト検索"
+                    title="プロジェクト検索"
+                    aria-pressed={isProjectSearchMode && !isLeftSidebarCollapsed}
+                    onClick={() => {
+                      setIsLeftSidebarCollapsed(false);
+                      setIsProjectSearchMode(true);
+                    }}
+                  >
+                    <AppIcon name="search" className="workspaceActivityIcon" />
+                  </button>
+                  <button
+                    className="workspaceActivityButton"
+                    type="button"
+                    aria-label="新規ファイル"
+                    title="新規ファイル"
+                    onClick={handleNewDocument}
+                  >
+                    <AppIcon name="plus" className="workspaceActivityIcon" />
+                  </button>
+                  <button
+                    className="workspaceActivityButton"
+                    type="button"
+                    aria-label="新規フォルダ"
+                    title="新規フォルダ"
+                    onClick={() =>
+                      projectFolder
+                        ? void handleCreateProjectFolder(focusedFolderPath ?? projectFolder.path)
+                        : handleOpenProjectFolder()
+                    }
+                  >
+                    <AppIcon name="folderPlus" className="workspaceActivityIcon" />
+                  </button>
+                </nav>
+                <WorkspaceSidebar
                 projectFolder={projectFolder}
                 currentFilePath={currentFilePath}
                 currentFileName={currentFileName}
@@ -7897,7 +7995,6 @@ export default function App() {
                 projectReplaceValue={projectReplaceValue}
                 isProjectReplacing={isProjectReplacing}
                 isProjectSearchMode={isProjectSearchMode}
-                onProjectSearchModeChange={setIsProjectSearchMode}
                 onJumpOutline={jumpToOutlineItem}
                 onJumpProjectOutline={(path, item) => void handleProjectOutlineJump(path, item)}
                 onMoveHeading={(
@@ -7926,7 +8023,6 @@ export default function App() {
                 onReplaceInCurrentFile={handleReplaceInCurrentFile}
                 onReplaceInProject={() => void handleReplaceInProject()}
                 onOpenProjectFolder={handleOpenProjectFolder}
-                onNewDocument={handleNewDocument}
                 onCreateFile={(folderPath) => void handleCreateProjectFile(folderPath)}
                 onCreateFolder={(folderPath) => void handleCreateProjectFolder(folderPath)}
                 onSelectFile={(path) => void handleProjectFileSelect(path)}
@@ -7950,9 +8046,9 @@ export default function App() {
                 onEditSnapshotMemo={(snapshot) => void handleEditManuscriptSnapshotMemo(snapshot)}
                 onRestoreSnapshot={(snapshot) => void handleRestoreManuscriptSnapshot(snapshot)}
                 onDeleteSnapshot={(snapshot) => void handleDeleteManuscriptSnapshot(snapshot)}
-                onCollapse={() => setIsLeftSidebarCollapsed(true)}
-              />
-            )}
+                    onCollapse={() => setIsLeftSidebarCollapsed(true)}
+                />
+            </div>
             <div className={`editorColumn ${appMode !== "write" ? "modeHiddenPane" : ""}`}>
               <div className="editorFrame">
                 <div
@@ -8250,6 +8346,7 @@ export default function App() {
               <StatusBar
                 saveStatus={saveStatus}
                 currentFilePath={currentFilePath}
+                showFilePath={settings.showStatusFilePath}
                 lastError={lastError}
                 charCount={charCount}
               />

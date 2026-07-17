@@ -62,15 +62,16 @@
   color: var(--topbar-text-faint);
 }
 
+.appShell[data-theme] .workspaceActivityBar,
 .appShell[data-theme] .workspaceSidebar,
 .appShell[data-theme] .rightSidebar { background: var(--sidebar-bg); }
 
-.appShell[data-zone-mode="true"] :is(.workspaceSidebar, .rightSidebar) {
+.appShell[data-zone-mode="true"] :is(.workspaceActivityBar, .workspaceSidebar, .rightSidebar) {
   opacity: var(--zone-sidebar-opacity, 0.42);
   transition: opacity 140ms ease;
 }
 
-.appShell[data-zone-mode="true"] :is(.workspaceSidebar, .rightSidebar):is(:hover, :focus-within) {
+.appShell[data-zone-mode="true"] :is(.workspaceActivityBar, .workspaceSidebar, .rightSidebar):is(:hover, :focus-within) {
   opacity: 1;
 }
 

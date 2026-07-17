@@ -76,6 +76,7 @@ textarea {
  * 文字サイズは --editor-font-size で独立して制御する。
  */
 .topbar,
+.workspaceActivityBar,
 .workspaceSidebar,
 .rightSidebar,
 .statusbar,
@@ -2760,6 +2761,74 @@ body {
   position: relative;
   min-height: 0;
   background: var(--bg-root);
+}
+
+.leftWorkspaceCluster {
+  display: contents;
+}
+
+.leftWorkspaceCluster[data-sidebar-collapsed="true"] .workspaceSidebar {
+  display: none;
+}
+
+.workspaceActivityBar {
+  display: flex;
+  width: 44px;
+  min-width: 44px;
+  height: 100%;
+  flex: 0 0 44px;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 0;
+  border-right: 0.5px solid var(--border-subtle);
+  background: var(--sidebar-bg, #17181d);
+  color: var(--text-faint);
+}
+
+.workspaceActivityButton {
+  position: relative;
+  display: grid;
+  width: 43px;
+  height: 34px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.workspaceActivityButton::before {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 0;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent-strong);
+  content: "";
+  opacity: 0;
+}
+
+.workspaceActivityButton:hover,
+.activeWorkspaceActivityButton {
+  background: var(--control-hover, rgba(255, 255, 255, 0.04));
+  color: var(--navigation-icon-hover, var(--text-primary));
+}
+
+.activeWorkspaceActivityButton::before {
+  opacity: 1;
+}
+
+.workspaceActivityIcon {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .workspaceSidebar {

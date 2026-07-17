@@ -3,6 +3,7 @@ import type { SaveStatus } from "../../types";
 type StatusBarProps = {
   saveStatus: SaveStatus;
   currentFilePath: string | null;
+  showFilePath: boolean;
   lastError: string;
   charCount: number;
 };
@@ -18,6 +19,7 @@ const statusLabels: Record<SaveStatus, string> = {
 export function StatusBar({
   saveStatus,
   currentFilePath,
+  showFilePath,
   lastError,
   charCount,
 }: StatusBarProps) {
@@ -25,9 +27,11 @@ export function StatusBar({
     <footer className={`statusbar status-${saveStatus}`}>
       <span className="statusDot" aria-hidden="true" />
       <span>{statusLabels[saveStatus]}</span>
-      <span className="statusPath" title={currentFilePath ?? "保存先未指定"}>
-        {currentFilePath ?? "保存先未指定"}
-      </span>
+      {showFilePath && (
+        <span className="statusPath" title={currentFilePath ?? "保存先未指定"}>
+          {currentFilePath ?? "保存先未指定"}
+        </span>
+      )}
       {lastError && <span className="statusError">{lastError}</span>}
       <span className="statusRight">{charCount}文字</span>
     </footer>

@@ -49,7 +49,6 @@ type WorkspaceSidebarProps = {
   projectReplaceValue: string;
   isProjectReplacing: boolean;
   isProjectSearchMode: boolean;
-  onProjectSearchModeChange: (value: boolean) => void;
   onProjectSearchQueryChange: (value: string) => void;
   onSearchScopeChange: (value: WorkspaceSearchScope) => void;
   onProjectReplaceValueChange: (value: string) => void;
@@ -68,7 +67,6 @@ type WorkspaceSidebarProps = {
     position: "before" | "after" | "append",
   ) => void;
   onOpenProjectFolder: () => void;
-  onNewDocument: () => void;
   onCreateFile: (folderPath?: string) => void;
   onCreateFolder: (folderPath?: string) => void;
   onSelectFile: (path: string) => void;
@@ -437,7 +435,6 @@ export function WorkspaceSidebar({
   projectReplaceValue,
   isProjectReplacing,
   isProjectSearchMode,
-  onProjectSearchModeChange,
   onProjectSearchQueryChange,
   onSearchScopeChange,
   onProjectReplaceValueChange,
@@ -448,7 +445,6 @@ export function WorkspaceSidebar({
   onJumpProjectOutline,
   onMoveHeading,
   onOpenProjectFolder,
-  onNewDocument,
   onCreateFile,
   onCreateFolder,
   onSelectFile,
@@ -1806,51 +1802,10 @@ export function WorkspaceSidebar({
   return (
     <aside className="workspaceSidebar" aria-label="アウトライン">
       <div className="sidebarHeader">
-        <span className="sidebarHeaderLabel">Outline</span>
+        <span className="sidebarHeaderLabel">
+          {isProjectSearchMode ? "Search" : "Outline"}
+        </span>
         <div className="sidebarHeaderActions">
-          <button
-            className="sidebarIconButton"
-            type="button"
-            aria-label="新規ファイル"
-            title="新規ファイル"
-            onClick={onNewDocument}
-          >
-            <SidebarIcon name="plus" className="sidebarButtonSvg" />
-          </button>
-          <button
-            className="sidebarIconButton"
-            type="button"
-            aria-label="新規フォルダ"
-            title="新規フォルダ"
-            onClick={() =>
-              projectFolder
-                ? onCreateFolder(focusedFolderPath ?? projectFolder.path)
-                : onOpenProjectFolder()
-            }
-          >
-            <SidebarIcon name="folderPlus" className="sidebarButtonSvg" />
-          </button>
-          <button
-            className="sidebarIconButton"
-            type="button"
-            aria-label="フォルダを開く"
-            title="フォルダを開く"
-            onClick={onOpenProjectFolder}
-          >
-            <SidebarIcon name="folder" className="sidebarButtonSvg" />
-          </button>
-          <button
-            className={`sidebarIconButton ${
-              isProjectSearchMode ? "activeSidebarIconButton" : ""
-            }`}
-            type="button"
-            aria-label="プロジェクト検索"
-            title="プロジェクト検索"
-            aria-pressed={isProjectSearchMode}
-            onClick={() => onProjectSearchModeChange(!isProjectSearchMode)}
-          >
-            <SidebarIcon name="search" className="sidebarButtonSvg" />
-          </button>
           <button
             className="sidebarIconButton"
             type="button"
@@ -1875,26 +1830,6 @@ export function WorkspaceSidebar({
         )}
       </div>
 
-      <div className="sidebarFooter">
-        <div className="sidebarFooterActions">
-          <button className="sidebarAddButton" type="button" onClick={onNewDocument}>
-            <SidebarIcon name="plus" className="sidebarButtonSvg" />
-            <span>シート</span>
-          </button>
-          <button
-            className="sidebarAddButton"
-            type="button"
-            onClick={() =>
-              projectFolder
-                ? onCreateFolder(focusedFolderPath ?? projectFolder.path)
-                : onOpenProjectFolder()
-            }
-          >
-            <SidebarIcon name="folderPlus" className="sidebarButtonSvg" />
-            <span>フォルダ</span>
-          </button>
-        </div>
-      </div>
       {renderContextMenu()}
     </aside>
   );

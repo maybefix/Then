@@ -362,6 +362,16 @@ export function SettingsModal({
                   />
                   <span>プロジェクト切替にパスを表示</span>
                 </label>
+                <label className="checkSetting">
+                  <input
+                    checked={settings.showStatusFilePath}
+                    type="checkbox"
+                    onChange={(event) =>
+                      onUpdateSettings("showStatusFilePath", event.target.checked)
+                    }
+                  />
+                  <span>画面下部にファイルパスを表示</span>
+                </label>
                 <label>
                   <span>スニペット保存先</span>
                   <select
