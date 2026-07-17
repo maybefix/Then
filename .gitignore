@@ -6,6 +6,7 @@ src-tauri/target/
 src-tauri/gen/
 test-artifacts/
 /tmp/
+/artifacts/demo/
 
 *.log
 *.tmp

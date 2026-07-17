@@ -1,0 +1,284 @@
+{
+  "name": "Then 機能紹介",
+  "actions": [
+    { "type": "wait", "ms": 1200 },
+    {
+      "type": "click",
+      "target": { "aria": "ファイルメニュー" },
+      "label": "ファイルメニュー",
+      "afterMs": 500
+    },
+    {
+      "type": "click",
+      "target": { "text": "フォルダを開く", "role": "menuitem" },
+      "label": "プロジェクトフォルダを開く",
+      "afterMs": 700
+    },
+    {
+      "type": "nativeFolderDialog",
+      "path": "${DEMO_WORKSPACE}",
+      "label": "Windows のフォルダ選択",
+      "afterMs": 2600
+    },
+
+    {
+      "type": "editorAppend",
+      "target": { "css": "[contenteditable=\"true\"]" },
+      "text": "## 第三景\n列車の窓に、朝の光が差し込んだ。",
+      "label": "本文に新しい場面を執筆",
+      "charDelay": 70,
+      "afterMs": 1400
+    },
+    {
+      "type": "shortcut",
+      "key": "f",
+      "ctrl": true,
+      "label": "本文検索を開く",
+      "afterMs": 500
+    },
+    {
+      "type": "type",
+      "target": { "aria": "検索語句" },
+      "text": "旅人",
+      "label": "本文から旅人を検索",
+      "animate": true,
+      "charDelay": 90,
+      "afterMs": 700
+    },
+    {
+      "type": "click",
+      "target": { "aria": "次の一致" },
+      "label": "次の検索結果",
+      "afterMs": 650
+    },
+    {
+      "type": "click",
+      "target": { "css": ".editorFindPopover button[aria-label=\"閉じる\"]" },
+      "label": "本文検索を閉じる",
+      "afterMs": 800
+    },
+
+    {
+      "type": "clickIfPresent",
+      "target": { "aria": "右サイドバーを表示" },
+      "label": "補助ペインを表示",
+      "afterMs": 700
+    },
+    {
+      "type": "click",
+      "target": { "aria": "Idea" },
+      "label": "Ideaを開く",
+      "afterMs": 600
+    },
+    {
+      "type": "type",
+      "target": { "placeholder": "メモを書いて Enter で追加…" },
+      "text": "駅員は手紙の差出人を知っている。",
+      "label": "アイデアを記録",
+      "animate": true,
+      "charDelay": 65,
+      "afterMs": 450
+    },
+    {
+      "type": "click",
+      "target": { "text": "追加", "role": "button" },
+      "label": "アイデアを追加",
+      "afterMs": 650
+    },
+    {
+      "type": "focus",
+      "target": { "css": "section.ideaPane" },
+      "label": "追加したIdeaを確認",
+      "zoom": 1.08,
+      "lead": 0.6,
+      "hold": 1.0,
+      "tail": 0.6,
+      "afterMs": 2400
+    },
+
+    {
+      "type": "click",
+      "target": { "aria": "Plot" },
+      "label": "Plotを開く",
+      "afterMs": 600
+    },
+    {
+      "type": "click",
+      "target": { "aria": "章を追加" },
+      "label": "章を追加",
+      "afterMs": 500
+    },
+    {
+      "type": "type",
+      "target": { "placeholder": "章のタイトル…", "last": true },
+      "text": "第一章　雨の駅",
+      "label": "章タイトルを入力",
+      "animate": true,
+      "charDelay": 65,
+      "afterMs": 500
+    },
+    {
+      "type": "click",
+      "target": { "aria": "セクションを追加" },
+      "label": "章にセクションを追加",
+      "afterMs": 500
+    },
+    {
+      "type": "click",
+      "target": { "aria": "展開する", "last": true },
+      "label": "セクションを展開",
+      "afterMs": 450
+    },
+    {
+      "type": "type",
+      "target": { "placeholder": "タイトル…", "last": true },
+      "text": "旅人の到着",
+      "label": "セクションタイトルを入力",
+      "animate": true,
+      "charDelay": 60,
+      "afterMs": 350
+    },
+    {
+      "type": "click",
+      "target": { "css": ".plotCardBodyPreview", "last": true },
+      "label": "セクション本文を編集",
+      "afterMs": 350
+    },
+    {
+      "type": "type",
+      "target": { "placeholder": "本文…", "last": true },
+      "text": "終電後のホームで、旅人が古い手紙を開く。",
+      "label": "セクション本文を入力",
+      "animate": true,
+      "charDelay": 48,
+      "afterMs": 650
+    },
+    {
+      "type": "focus",
+      "target": { "css": ".plotPane" },
+      "label": "章とセクションを確認",
+      "zoom": 1.08,
+      "lead": 0.6,
+      "hold": 1.0,
+      "tail": 0.6,
+      "afterMs": 2400
+    },
+
+    {
+      "type": "click",
+      "target": { "aria": "資料" },
+      "label": "資料を開く",
+      "afterMs": 700
+    },
+    {
+      "type": "click",
+      "target": { "css": ".referenceRowOpenButton" },
+      "label": "資料をポップアップ表示",
+      "afterMs": 1200
+    },
+    {
+      "type": "focus",
+      "target": { "css": ".referenceCard" },
+      "label": "資料ポップアップを確認",
+      "zoom": 1.08,
+      "lead": 0.6,
+      "hold": 1.0,
+      "tail": 0.6,
+      "afterMs": 2400
+    },
+    {
+      "type": "click",
+      "target": { "css": ".referenceCard button[aria-label=\"ピン留め\"]" },
+      "label": "資料をピン留め",
+      "afterMs": 800
+    },
+    {
+      "type": "click",
+      "target": { "css": ".referenceCard button[aria-label=\"閉じる\"]" },
+      "label": "資料ポップアップを閉じる",
+      "afterMs": 700
+    },
+
+    {
+      "type": "click",
+      "target": { "aria": "設定" },
+      "label": "設定を開く",
+      "afterMs": 1400
+    },
+    {
+      "type": "click",
+      "target": { "aria": "閉じる", "last": true },
+      "label": "設定を閉じる",
+      "afterMs": 700
+    },
+
+    {
+      "type": "click",
+      "target": { "aria": "チェックポイント" },
+      "label": "チェックポイントを開く",
+      "afterMs": 1300
+    },
+    {
+      "type": "click",
+      "target": { "text": "＋ 保存点を作成", "role": "button" },
+      "label": "保存点を作成",
+      "afterMs": 600
+    },
+    {
+      "type": "type",
+      "target": { "placeholder": "例: 終盤改稿前" },
+      "text": "第一章プロット作成後",
+      "label": "保存点タイトルを入力",
+      "animate": true,
+      "charDelay": 55,
+      "afterMs": 300
+    },
+    {
+      "type": "type",
+      "target": { "placeholder": "例: 終盤の分岐前。会話のテンポを試す" },
+      "text": "本文・Idea・Plotをまとめて保存",
+      "label": "保存点メモを入力",
+      "animate": true,
+      "charDelay": 45,
+      "afterMs": 350
+    },
+    {
+      "type": "click",
+      "target": { "text": "作成", "role": "button" },
+      "label": "チェックポイントを確定",
+      "afterMs": 1700
+    },
+    {
+      "type": "assert",
+      "target": { "css": ".checkpointSnapshotSelect" },
+      "label": "作成した保存点を確認",
+      "afterMs": 700
+    },
+    {
+      "type": "click",
+      "target": { "text": "本文へ戻る", "role": "button" },
+      "label": "本文へ戻る",
+      "afterMs": 800
+    },
+
+    {
+      "type": "click",
+      "target": { "text": "エクスポート", "role": "tab" },
+      "label": "エクスポート画面を開く",
+      "afterMs": 2600
+    },
+    {
+      "type": "clickIfPresent",
+      "target": { "text": "↻ プレビュー更新", "role": "button" },
+      "label": "組版プレビューを更新",
+      "afterMs": 3000
+    },
+    {
+      "type": "click",
+      "target": { "text": "本文", "role": "tab" },
+      "label": "本文画面へ戻る",
+      "afterMs": 1200
+    },
+    { "type": "wait", "ms": 1000 }
+  ]
+}

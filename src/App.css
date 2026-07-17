@@ -1475,7 +1475,7 @@ body.thenPdfExporting .printExportViewport {
   font-family: var(--editor-heading-font-family, var(--editor-font-family));
   font-weight: 600;
   color: #f1dfb8;
-  line-height: 1.95;
+  line-height: 1.45;
 }
 
 .verticalTypewriterEditor .pm-root p.h1 {
