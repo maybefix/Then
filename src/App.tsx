@@ -872,6 +872,8 @@ function createDefaultState(): AppState {
     lastFilePath: null,
     recentWorkspaces: [],
     collapsedFolderPathsByWorkspace: {},
+    collapsedOutlinePathsByWorkspace: {},
+    collapsedOutlineHeadingKeysByWorkspace: {},
     fileProgress: {},
     cursorPositions: {},
     snapshots: [],
@@ -1749,7 +1751,7 @@ function collectEditorFindMatches(
   return matches;
 }
 
-function normalizeCollapsedFolderPathsByWorkspace(
+function normalizeCollapsedPathListsByWorkspace(
   value: unknown,
 ): Record<string, string[]> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
@@ -1895,8 +1897,14 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
       typeof value?.lastWorkspacePath === "string" ? value.lastWorkspacePath : null,
     lastFilePath: typeof value?.lastFilePath === "string" ? value.lastFilePath : null,
     recentWorkspaces,
-    collapsedFolderPathsByWorkspace: normalizeCollapsedFolderPathsByWorkspace(
+    collapsedFolderPathsByWorkspace: normalizeCollapsedPathListsByWorkspace(
       value?.collapsedFolderPathsByWorkspace,
+    ),
+    collapsedOutlinePathsByWorkspace: normalizeCollapsedPathListsByWorkspace(
+      value?.collapsedOutlinePathsByWorkspace,
+    ),
+    collapsedOutlineHeadingKeysByWorkspace: normalizeCollapsedPathListsByWorkspace(
+      value?.collapsedOutlineHeadingKeysByWorkspace,
     ),
     fileProgress: normalizeFileProgress(value?.fileProgress),
     cursorPositions: normalizeCursorPositions(value?.cursorPositions),
@@ -2842,6 +2850,24 @@ export default function App() {
           : [],
       ),
     [appState.collapsedFolderPathsByWorkspace, projectFolder],
+  );
+  const collapsedTreeOutlinePaths = useMemo(
+    () =>
+      new Set(
+        projectFolder
+          ? (appState.collapsedOutlinePathsByWorkspace[projectFolder.path] ?? [])
+          : [],
+      ),
+    [appState.collapsedOutlinePathsByWorkspace, projectFolder],
+  );
+  const collapsedTreeOutlineHeadingKeys = useMemo(
+    () =>
+      new Set(
+        projectFolder
+          ? (appState.collapsedOutlineHeadingKeysByWorkspace[projectFolder.path] ?? [])
+          : [],
+      ),
+    [appState.collapsedOutlineHeadingKeysByWorkspace, projectFolder],
   );
   const markdown = activeTab?.markdown ?? appState.markdown;
   const saveStatus = activeTab?.saveStatus ?? "loading";
@@ -7276,6 +7302,50 @@ export default function App() {
     });
   };
 
+  const handleOutlineCollapsedChange = (path: string, collapsed: boolean) => {
+    if (!projectFolder) return;
+    const workspacePath = projectFolder.path;
+    setAppState((current) => {
+      const currentPaths = new Set(
+        current.collapsedOutlinePathsByWorkspace[workspacePath] ?? [],
+      );
+      if (collapsed) {
+        currentPaths.add(path);
+      } else {
+        currentPaths.delete(path);
+      }
+      return {
+        ...current,
+        collapsedOutlinePathsByWorkspace: {
+          ...current.collapsedOutlinePathsByWorkspace,
+          [workspacePath]: Array.from(currentPaths),
+        },
+      };
+    });
+  };
+
+  const handleOutlineHeadingCollapsedChange = (key: string, collapsed: boolean) => {
+    if (!projectFolder) return;
+    const workspacePath = projectFolder.path;
+    setAppState((current) => {
+      const currentKeys = new Set(
+        current.collapsedOutlineHeadingKeysByWorkspace[workspacePath] ?? [],
+      );
+      if (collapsed) {
+        currentKeys.add(key);
+      } else {
+        currentKeys.delete(key);
+      }
+      return {
+        ...current,
+        collapsedOutlineHeadingKeysByWorkspace: {
+          ...current.collapsedOutlineHeadingKeysByWorkspace,
+          [workspacePath]: Array.from(currentKeys),
+        },
+      };
+    });
+  };
+
   const handleSetFileProgress = (path: string, status: FileProgressStatus) => {
     setAppState((current) => {
       const nextProgress = { ...current.fileProgress };
@@ -8112,6 +8182,10 @@ export default function App() {
                 onSetFileProgress={handleSetFileProgress}
                 collapsedFolderPaths={collapsedTreeFolderPaths}
                 onFolderCollapsedChange={handleFolderCollapsedChange}
+                collapsedOutlinePaths={collapsedTreeOutlinePaths}
+                onOutlineCollapsedChange={handleOutlineCollapsedChange}
+                collapsedOutlineHeadingKeys={collapsedTreeOutlineHeadingKeys}
+                onOutlineHeadingCollapsedChange={handleOutlineHeadingCollapsedChange}
                 projectSearchQuery={projectSearchQuery}
                 projectSearchResults={workspaceSearchResults}
                 searchScope={searchScope}

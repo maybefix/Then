@@ -1,4 +1,4 @@
-.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="air-"], [data-theme^="passion-"]) :is(
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="signal-red-"], [data-theme^="mono-press-"], [data-theme^="air-"], [data-theme^="passion-"]) :is(
   .themePickerButton,
   .modalActions button,
   .newTabActions button,
@@ -10,7 +10,7 @@
   color: var(--action-text, var(--on-accent));
 }
 
-.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="air-"], [data-theme^="passion-"]) :is(
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="signal-red-"], [data-theme^="mono-press-"], [data-theme^="air-"], [data-theme^="passion-"]) :is(
   .themePickerButton,
   .modalActions button,
   .newTabActions button,
@@ -30,7 +30,7 @@
   filter: brightness(1.06);
 }
 
-.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) .appFrame {
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="signal-red-"], [data-theme^="mono-press-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) .appFrame {
   border-color: transparent;
   border-radius: 0;
 }
@@ -38,30 +38,33 @@
 /* Floating-card layout: the left sidebar, editor and right sidebar sit as
    independent cards on one flat canvas. Each theme controls corner shape and
    elevation through --radius-card and --card-float-shadow. */
-.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) .workspace {
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="signal-red-"], [data-theme^="mono-press-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) .workspace {
   gap: 8px;
   padding: 8px;
   background: var(--canvas-bg);
 }
 
-.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.workspaceSidebar, .editorColumn, .rightSidebar) {
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="signal-red-"], [data-theme^="mono-press-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.workspaceSidebar, .editorColumn, .rightSidebar) {
   border: none;
   border-radius: var(--radius-card);
   overflow: hidden;
   box-shadow: var(--card-float-shadow);
 }
 
-.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) .editorColumn {
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="signal-red-"], [data-theme^="mono-press-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) .editorColumn {
   background: var(--editor-bg);
 }
 
-.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.workspaceSidebar, .rightSidebar) {
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="signal-red-"], [data-theme^="mono-press-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.workspaceSidebar, .rightSidebar) {
   background: var(--sidebar-bg);
 }
 
-/* Rounded-island themes treat the activity rail and file tree as one shell. */
+/* Integrated-shell themes treat the activity rail and file tree as one unit. */
 .appShell:is(
   [data-theme^="flat-"],
+  [data-theme^="signal-red-"],
+  [data-theme^="mono-press-"],
+  [data-theme^="express-"],
   [data-theme^="resonance-"],
   [data-theme^="minimal-"],
   [data-theme^="orchestrating-"],
@@ -79,6 +82,9 @@
 
 .appShell:is(
   [data-theme^="flat-"],
+  [data-theme^="signal-red-"],
+  [data-theme^="mono-press-"],
+  [data-theme^="express-"],
   [data-theme^="resonance-"],
   [data-theme^="minimal-"],
   [data-theme^="orchestrating-"],
@@ -91,6 +97,9 @@
 
 .appShell:is(
   [data-theme^="flat-"],
+  [data-theme^="signal-red-"],
+  [data-theme^="mono-press-"],
+  [data-theme^="express-"],
   [data-theme^="resonance-"],
   [data-theme^="minimal-"],
   [data-theme^="orchestrating-"],
@@ -104,6 +113,9 @@
 
 .appShell:is(
   [data-theme^="flat-"],
+  [data-theme^="signal-red-"],
+  [data-theme^="mono-press-"],
+  [data-theme^="express-"],
   [data-theme^="resonance-"],
   [data-theme^="minimal-"],
   [data-theme^="orchestrating-"],
@@ -114,6 +126,9 @@
 
 .appShell:is(
   [data-theme^="flat-"],
+  [data-theme^="signal-red-"],
+  [data-theme^="mono-press-"],
+  [data-theme^="express-"],
   [data-theme^="resonance-"],
   [data-theme^="minimal-"],
   [data-theme^="orchestrating-"],
@@ -125,6 +140,9 @@
 
 .appShell:is(
   [data-theme^="flat-"],
+  [data-theme^="signal-red-"],
+  [data-theme^="mono-press-"],
+  [data-theme^="express-"],
   [data-theme^="resonance-"],
   [data-theme^="minimal-"],
   [data-theme^="orchestrating-"],
@@ -139,6 +157,9 @@
 
 .appShell:is(
   [data-theme^="flat-"],
+  [data-theme^="signal-red-"],
+  [data-theme^="mono-press-"],
+  [data-theme^="express-"],
   [data-theme^="resonance-"],
   [data-theme^="minimal-"],
   [data-theme^="orchestrating-"],
@@ -147,7 +168,39 @@
   background: color-mix(in srgb, var(--accent) 11%, transparent);
 }
 
-.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.editor, .editorContent, .verticalTypewriterShell) {
+/* Mono Press uses the same integrated navigation structure, but renders it as
+   a black compositor's rail and hard print-register rules. */
+.appShell[data-theme="mono-press-light"] .leftWorkspaceCluster {
+  border: 2px solid var(--border-strong);
+  box-shadow: none;
+}
+
+.appShell[data-theme="mono-press-light"] .leftWorkspaceCluster .workspaceActivityBar {
+  border-right: 2px solid var(--border-strong);
+  background: #000;
+}
+
+.appShell[data-theme="mono-press-light"] .workspaceActivityButton {
+  border-radius: 0;
+  color: #b8b8b8;
+}
+
+.appShell[data-theme="mono-press-light"] .workspaceActivityButton::before {
+  border-radius: 0;
+  background: #fff;
+}
+
+.appShell[data-theme="mono-press-light"] .activeWorkspaceActivityButton {
+  background: #292929;
+  color: #fff;
+}
+
+.appShell[data-theme="mono-press-light"] :is(.editorColumn, .rightSidebar) {
+  border: 2px solid var(--border-strong);
+  box-shadow: none;
+}
+
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="signal-red-"], [data-theme^="mono-press-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.editor, .editorContent, .verticalTypewriterShell) {
   background: transparent;
 }
 
@@ -158,31 +211,31 @@
    Reverting those two props to `auto` re-enables the already-defined
    `::-webkit-scrollbar` (a rounded thumb, no buttons), so each bar ends cleanly
    inside the corner. */
-.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.verticalTypewriterScroller, .plotPane) {
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="signal-red-"], [data-theme^="mono-press-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.verticalTypewriterScroller, .plotPane) {
   scrollbar-width: auto;
   scrollbar-color: auto;
 }
 
-.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) .statusbar {
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="signal-red-"], [data-theme^="mono-press-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) .statusbar {
   /* Bottom of the editor card. Transparent so the card's single gradient shows
      through; a hairline (not a fill) divides it from the editor. */
   border-top-color: color-mix(in srgb, var(--accent) 10%, transparent);
   background: transparent;
 }
 
-.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) .sidebarFooter {
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="signal-red-"], [data-theme^="mono-press-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) .sidebarFooter {
   padding-bottom: 12px;
 }
 
-.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.menuPopover, .editorContextMenu) {
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="signal-red-"], [data-theme^="mono-press-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.menuPopover, .editorContextMenu) {
   border-radius: var(--radius-card);
 }
 
-.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.editor, .editorContent, .verticalTypewriterShell) {
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="signal-red-"], [data-theme^="mono-press-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.editor, .editorContent, .verticalTypewriterShell) {
   overflow: hidden;
 }
 
-.appShell:is([data-theme^="promise-"], [data-theme^="flat-"]) :is(.activeRightTab, .exportProgressBar i) {
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="signal-red-"], [data-theme^="mono-press-"]) :is(.activeRightTab, .exportProgressBar i) {
   border-color: transparent;
   background: var(--action-gradient);
   color: var(--action-text);

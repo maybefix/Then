@@ -26,6 +26,8 @@ export const themeCatalog: ThemeDefinition[] = [
   { id: "hands-light", label: "Hands", description: "実用的な白と深緑", mode: "light" },
   { id: "promise-light", label: "Promise", description: "白緑と深緑のグラデーション", mode: "light" },
   { id: "flat-light", label: "Flat", description: "ブルーグレーのグレースケール", mode: "light" },
+  { id: "signal-red-light", label: "Signal Red", description: "軽快な白とシグナルレッド", mode: "light" },
+  { id: "mono-press-light", label: "Mono Press", description: "活字と罫線のモノクローム", mode: "light" },
   { id: "air-light", label: "Air", description: "空色と深いブルーのグラデーション", mode: "light" },
   { id: "passion-light", label: "Passion", description: "深紅とコーラルのグラデーション", mode: "light" },
   { id: "tech-light", label: "Tech", description: "濃紺とスチールブルー", mode: "light" },

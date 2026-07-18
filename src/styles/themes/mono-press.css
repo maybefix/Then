@@ -1,0 +1,58 @@
+.appShell[data-theme="mono-press-light"] {
+  --on-accent: #fff;
+  --action-gradient: #000;
+  --action-text: #fff;
+  --bg-root: #f0f0f0;
+  --bg-primary: #fff;
+  --bg-secondary: #f4f4f4;
+  --bg-tertiary: #e7e7e7;
+  --bg-panel: #fff;
+  --bg-panel-strong: #f4f4f4;
+  --border-subtle: #b8b8b8;
+  --border-strong: #000;
+  --text-primary: #000;
+  --text-secondary: #292929;
+  --text-muted: #555;
+  --text-faint: #767676;
+  --accent: #000;
+  --accent-strong: #000;
+  --success: #28623d;
+  --warning: #775900;
+  --danger: #a51f2d;
+  --control-hover: rgba(0, 0, 0, 0.07);
+  --accent-soft: rgba(0, 0, 0, 0.09);
+  --accent-border: rgba(0, 0, 0, 0.72);
+  --danger-soft: rgba(165, 31, 45, 0.1);
+  --editor-bg: #fff;
+  --card-bg: #fff;
+  --card-hover: #ededed;
+  --topbar-bg: #fff;
+  --sidebar-bg: #fff;
+  --canvas-bg: #f0f0f0;
+  --card-float-shadow: none;
+  --radius-control: 0;
+  --radius-card: 0;
+  --radius-button: 0;
+  --shadow-popover: 4px 4px 0 rgba(0, 0, 0, 0.2);
+  --shadow-modal: 8px 8px 0 rgba(0, 0, 0, 0.2);
+  --silkdown-code-bg: #ededed;
+  --silkdown-link-color: #000;
+}
+
+.appShell[data-theme="mono-press-light"] .topbar {
+  border-bottom-color: #000;
+}
+
+.themePreview-mono-press-light {
+  border-color: #000;
+  background: #fff;
+}
+
+.themePreview-mono-press-light::before { background: #000; }
+
+.themePreview-mono-press-light i { background: #000; }
+
+.themePreview-mono-press-light b {
+  border: 1px solid #000;
+  background: #fff;
+}

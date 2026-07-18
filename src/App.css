@@ -1895,6 +1895,9 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .verticalTypewriterEditor .pm-root p.active-line {
+  /* 空段落を追加した直後も実寸で配置する。仮想レイアウトの 2.6em から
+     1lh への遅延縮小で、タイプライター位置が後からずれるのを防ぐ。 */
+  content-visibility: visible;
   background: none;
 }
 

@@ -45,6 +45,10 @@ type WorkspaceSidebarProps = {
   onSetFileProgress: (path: string, status: FileProgressStatus) => void;
   collapsedFolderPaths: ReadonlySet<string>;
   onFolderCollapsedChange: (path: string, collapsed: boolean) => void;
+  collapsedOutlinePaths: ReadonlySet<string>;
+  onOutlineCollapsedChange: (path: string, collapsed: boolean) => void;
+  collapsedOutlineHeadingKeys: ReadonlySet<string>;
+  onOutlineHeadingCollapsedChange: (key: string, collapsed: boolean) => void;
   projectSearchQuery: string;
   projectSearchResults: ProjectSearchResult[];
   searchScope: WorkspaceSearchScope;
@@ -433,6 +437,10 @@ export function WorkspaceSidebar({
   onSetFileProgress,
   collapsedFolderPaths,
   onFolderCollapsedChange,
+  collapsedOutlinePaths,
+  onOutlineCollapsedChange,
+  collapsedOutlineHeadingKeys,
+  onOutlineHeadingCollapsedChange,
   projectSearchQuery,
   projectSearchResults,
   searchScope,
@@ -476,10 +484,7 @@ export function WorkspaceSidebar({
     line: number;
   } | null>(null);
   const [headingDropTarget, setHeadingDropTarget] = useState<HeadingDropTarget>(null);
-  const [collapsedOutlinePaths, setCollapsedOutlinePaths] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
-  const [collapsedOutlineHeadingKeys, setCollapsedOutlineHeadingKeys] = useState<
+  const [collapsedScratchOutlineHeadingKeys, setCollapsedScratchOutlineHeadingKeys] = useState<
     ReadonlySet<string>
   >(() => new Set());
   const [isReplaceExpanded, setIsReplaceExpanded] = useState(false);
@@ -687,15 +692,7 @@ export function WorkspaceSidebar({
       hasOutline &&
       (event.target as HTMLElement).closest("[data-tree-outline-disclosure]")
     ) {
-      setCollapsedOutlinePaths((current) => {
-        const next = new Set(current);
-        if (next.has(entry.path)) {
-          next.delete(entry.path);
-        } else {
-          next.add(entry.path);
-        }
-        return next;
-      });
+      onOutlineCollapsedChange(entry.path, !collapsedOutlinePaths.has(entry.path));
       return;
     }
     onSelectFile(entry.path);
@@ -704,8 +701,12 @@ export function WorkspaceSidebar({
   const outlineHeadingKey = (filePath: string | null, item: DocumentOutlineItem | OutlineItem) =>
     `${filePath ?? "scratch"}:${item.id}`;
 
-  const toggleOutlineHeadingCollapse = (key: string) => {
-    setCollapsedOutlineHeadingKeys((current) => {
+  const toggleOutlineHeadingCollapse = (filePath: string | null, key: string) => {
+    if (filePath) {
+      onOutlineHeadingCollapsedChange(key, !collapsedOutlineHeadingKeys.has(key));
+      return;
+    }
+    setCollapsedScratchOutlineHeadingKeys((current) => {
       const next = new Set(current);
       if (next.has(key)) {
         next.delete(key);
@@ -967,7 +968,11 @@ export function WorkspaceSidebar({
     return items.map((item) => {
       const itemKey = outlineHeadingKey(filePath, item);
       const hasChildren = item.children.length > 0;
-      const isCollapsed = hasChildren && collapsedOutlineHeadingKeys.has(itemKey);
+      const isCollapsed =
+        hasChildren &&
+        (filePath
+          ? collapsedOutlineHeadingKeys.has(itemKey)
+          : collapsedScratchOutlineHeadingKeys.has(itemKey));
       const isActive = filePath === currentFilePath && activeOutlineIds.has(item.id);
       const isDragging =
         filePath !== null &&
@@ -1012,7 +1017,7 @@ export function WorkspaceSidebar({
                 hasChildren &&
                 (event.target as HTMLElement).closest("[data-outline-heading-disclosure]")
               ) {
-                toggleOutlineHeadingCollapse(itemKey);
+                toggleOutlineHeadingCollapse(filePath, itemKey);
                 return;
               }
               filePath ? onJumpProjectOutline(filePath, item) : onJumpOutline(item);

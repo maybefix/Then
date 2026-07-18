@@ -99,6 +99,8 @@ function astFile(path, name, outline) {
 function Harness() {
   const [moved, setMoved] = React.useState(false);
   const [collapsedFolders, setCollapsedFolders] = React.useState(new Set());
+  const [collapsedOutlinePaths, setCollapsedOutlinePaths] = React.useState(new Set());
+  const [collapsedOutlineHeadingKeys, setCollapsedOutlineHeadingKeys] = React.useState(new Set());
   const outline = moved ? outlineByOrder.moved : outlineByOrder.original;
   const projectAst = {
     kind: "project",
@@ -134,6 +136,24 @@ function Harness() {
         const next = new Set(current);
         if (collapsed) next.add(path);
         else next.delete(path);
+        return next;
+      });
+    },
+    collapsedOutlinePaths,
+    onOutlineCollapsedChange(path, collapsed) {
+      setCollapsedOutlinePaths((current) => {
+        const next = new Set(current);
+        if (collapsed) next.add(path);
+        else next.delete(path);
+        return next;
+      });
+    },
+    collapsedOutlineHeadingKeys,
+    onOutlineHeadingCollapsedChange(key, collapsed) {
+      setCollapsedOutlineHeadingKeys((current) => {
+        const next = new Set(current);
+        if (collapsed) next.add(key);
+        else next.delete(key);
         return next;
       });
     },

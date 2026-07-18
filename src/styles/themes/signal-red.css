@@ -1,0 +1,48 @@
+.appShell[data-theme="signal-red-light"] {
+  --on-accent: #fff;
+  --action-gradient: #e60012;
+  --action-text: #fff;
+  --bg-root: #eeeeee;
+  --bg-primary: #fff;
+  --bg-secondary: #f8f7f6;
+  --bg-tertiary: #e6e6e6;
+  --bg-panel: #fff;
+  --bg-panel-strong: #f8f7f6;
+  --border-subtle: #dedede;
+  --border-strong: #b7b7b7;
+  --text-primary: #252525;
+  --text-secondary: #4a4a4a;
+  --text-muted: #696969;
+  --text-faint: #969696;
+  --accent: #e60012;
+  --accent-strong: #bd000f;
+  --success: #237a48;
+  --warning: #8a6200;
+  --danger: #c92d3a;
+  --control-hover: rgba(37, 37, 37, 0.06);
+  --accent-soft: rgba(230, 0, 18, 0.09);
+  --accent-border: rgba(230, 0, 18, 0.46);
+  --danger-soft: rgba(201, 45, 58, 0.1);
+  --editor-bg: #fff;
+  --card-bg: #fff;
+  --card-hover: #f8f7f6;
+  --topbar-bg: var(--canvas-bg);
+  --sidebar-bg: #fff;
+  --canvas-bg: #eeeeee;
+  --card-float-shadow: none;
+  --radius-control: 14px;
+  --radius-card: 20px;
+  --radius-button: 999px;
+  --shadow-popover: 0 14px 34px rgba(37, 37, 37, 0.14);
+  --shadow-modal: 0 22px 58px rgba(37, 37, 37, 0.18);
+  --silkdown-code-bg: rgba(230, 0, 18, 0.07);
+  --silkdown-link-color: #bd000f;
+}
+
+.themePreview-signal-red-light { background: #fff; }
+
+.themePreview-signal-red-light::before { background: #eeeeee; }
+
+.themePreview-signal-red-light i { background: #252525; }
+
+.themePreview-signal-red-light b { background: #e60012; }

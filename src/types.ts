@@ -145,6 +145,8 @@ export const appThemeValues = [
   "promise-dark",
   "flat-light",
   "flat-dark",
+  "signal-red-light",
+  "mono-press-light",
   "air-light",
   "air-dark",
   "passion-light",
@@ -305,6 +307,10 @@ export type AppState = {
   recentWorkspaces: WorkspaceRecord[];
   /** ワークスペースごとに記憶した、ファイルツリーで折りたたまれているフォルダ。 */
   collapsedFolderPathsByWorkspace: Record<string, string[]>;
+  /** ワークスペースごとに記憶した、見出しツリーを閉じているファイル。 */
+  collapsedOutlinePathsByWorkspace: Record<string, string[]>;
+  /** ワークスペースごとに記憶した、折りたたまれている見出し階層。 */
+  collapsedOutlineHeadingKeysByWorkspace: Record<string, string[]>;
   /** ファイルパスごとの進捗ラベル。未登録は "todo"（未着手）として扱う。 */
   fileProgress: Record<string, FileProgressStatus>;
   /** ファイルパスごとに記憶した最後のカーソル位置。 */
