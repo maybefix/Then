@@ -27,6 +27,7 @@ import {
   type SnapshotConflictPolicy,
 } from "./components/checkpoints/CheckpointStudio";
 import { WorkspaceSidebar } from "./components/layout/WorkspaceSidebar";
+import { StartupPortal } from "./components/startup/StartupPortal";
 import {
   createDocumentAst,
   findActiveOutlineChain,
@@ -754,6 +755,7 @@ const defaultSettings: EditorSettings = {
   sidebarMode: "tree",
   showWorkspacePaths: true,
   showStatusFilePath: false,
+  skipStartupPortal: false,
   zoneMode: false,
   zoneModeOpacity: 0.42,
   navigatorPreviewLines: DEFAULT_NAVIGATOR_PREVIEW_LINES,
@@ -869,6 +871,7 @@ function createDefaultState(): AppState {
     lastWorkspacePath: null,
     lastFilePath: null,
     recentWorkspaces: [],
+    collapsedFolderPathsByWorkspace: {},
     fileProgress: {},
     cursorPositions: {},
     snapshots: [],
@@ -1746,6 +1749,21 @@ function collectEditorFindMatches(
   return matches;
 }
 
+function normalizeCollapsedFolderPathsByWorkspace(
+  value: unknown,
+): Record<string, string[]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+
+  const normalized: Record<string, string[]> = {};
+  for (const [workspacePath, folderPaths] of Object.entries(value)) {
+    if (!workspacePath || !Array.isArray(folderPaths)) continue;
+    normalized[workspacePath] = Array.from(
+      new Set(folderPaths.filter((path): path is string => typeof path === "string" && path.length > 0)),
+    );
+  }
+  return normalized;
+}
+
 function normalizeState(value: Partial<AppState> | null | undefined): AppState {
   const settings = (value?.settings ?? {}) as Partial<EditorSettings>;
   const recentWorkspaces = Array.isArray(value?.recentWorkspaces)
@@ -1803,6 +1821,10 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         typeof settings.showStatusFilePath === "boolean"
           ? settings.showStatusFilePath
           : defaultSettings.showStatusFilePath,
+      skipStartupPortal:
+        typeof settings.skipStartupPortal === "boolean"
+          ? settings.skipStartupPortal
+          : defaultSettings.skipStartupPortal,
       zoneMode:
         typeof settings.zoneMode === "boolean"
           ? settings.zoneMode
@@ -1873,6 +1895,9 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
       typeof value?.lastWorkspacePath === "string" ? value.lastWorkspacePath : null,
     lastFilePath: typeof value?.lastFilePath === "string" ? value.lastFilePath : null,
     recentWorkspaces,
+    collapsedFolderPathsByWorkspace: normalizeCollapsedFolderPathsByWorkspace(
+      value?.collapsedFolderPathsByWorkspace,
+    ),
     fileProgress: normalizeFileProgress(value?.fileProgress),
     cursorPositions: normalizeCursorPositions(value?.cursorPositions),
     snapshots: normalizeSnapshots(value?.snapshots),
@@ -2095,6 +2120,9 @@ export default function App() {
 
   const [appState, setAppState] = useState<AppState>(() => createDefaultState());
   const [isHydrated, setIsHydrated] = useState(false);
+  const [startupView, setStartupView] = useState<"loading" | "portal" | "editor">(
+    "loading",
+  );
   const [lastError, setLastError] = useState("");
   const [openTabs, setOpenTabs] = useState<DocumentTab[]>(() => [
     createScratchDocumentTab(initialMarkdown, {
@@ -2806,6 +2834,15 @@ export default function App() {
   }, []);
 
   const { snippets, settings } = appState;
+  const collapsedTreeFolderPaths = useMemo(
+    () =>
+      new Set(
+        projectFolder
+          ? (appState.collapsedFolderPathsByWorkspace[projectFolder.path] ?? [])
+          : [],
+      ),
+    [appState.collapsedFolderPathsByWorkspace, projectFolder],
+  );
   const markdown = activeTab?.markdown ?? appState.markdown;
   const saveStatus = activeTab?.saveStatus ?? "loading";
   const currentFilePath = activeTab?.path ?? null;
@@ -3199,115 +3236,124 @@ export default function App() {
     };
   }, [isHydrated, projectFolder]);
 
-  useEffect(() => {
-    let isCancelled = false;
+  const openScratchFromStoredState = (
+    state: AppState,
+    alert: WorkspaceAlert = null,
+  ) => {
+    suppressNextEditorUpdateRef.current = true;
+    didMountEditorRef.current = false;
+    setProjectFolder(null);
+    setSnippetWorkspacePath(null);
+    setPlotWorkspacePath(null);
+    setPlotCards(defaultPlotCards);
+    referenceLayoutLoadedRootRef.current = null;
+    setReferenceLayout(defaultReferenceLayout);
+    setReferenceCandidates([]);
+    setReferenceQuery("");
+    setFocusedFolderPath(null);
+    replaceActiveTab(createScratchDocumentTab("", { documentKey: `scratch-${Date.now()}` }));
+    setWorkspaceAlert(alert);
+    setAppState({ ...state, markdown: "" });
+    setLastError("");
+  };
 
-    const openScratch = (state: AppState, alert: WorkspaceAlert = null) => {
+  const restoreWorkspaceFromState = async (state: AppState): Promise<boolean> => {
+    if (!isTauriRuntime() || !state.lastWorkspacePath) return false;
+
+    try {
+      const folder = await invoke<ProjectFolder>("list_project_text_files", {
+        folderPath: state.lastWorkspacePath,
+      });
+      setProjectFolder(folder);
+      setWorkspaceAlert(null);
+      const restoredSnippets =
+        state.settings.snippetStorageMode === "workspace"
+          ? await loadWorkspaceSnippets(folder.path)
+          : state.snippets;
+      const restoredPlotCards = await loadWorkspacePlotCards(folder.path);
+      setSnippetWorkspacePath(
+        state.settings.snippetStorageMode === "workspace" ? folder.path : null,
+      );
+      setPlotWorkspacePath(folder.path);
+      setPlotCards(restoredPlotCards);
+
+      const restoredState: AppState = {
+        ...state,
+        snippets: restoredSnippets,
+        recentWorkspaces: upsertRecentWorkspace(
+          removeNestedRecentWorkspaces(state.recentWorkspaces, folder.path),
+          folder.path,
+          folder.name,
+        ),
+      };
+      const filePath =
+        state.lastFilePath && findProjectEntry(folder.children, state.lastFilePath)
+          ? state.lastFilePath
+          : findFirstTextFile(folder.children)?.path ?? null;
+
       suppressNextEditorUpdateRef.current = true;
       didMountEditorRef.current = false;
-      setProjectFolder(null);
-      setSnippetWorkspacePath(null);
-      setPlotWorkspacePath(null);
-      setPlotCards(defaultPlotCards);
-      referenceLayoutLoadedRootRef.current = null;
-      setReferenceLayout(defaultReferenceLayout);
-      setReferenceCandidates([]);
-      setReferenceQuery("");
-      setFocusedFolderPath(null);
-      replaceActiveTab(createScratchDocumentTab("", { documentKey: `scratch-${Date.now()}` }));
-      setWorkspaceAlert(alert);
-      setAppState({ ...state, markdown: "" });
+      if (filePath) {
+        const document = await invoke<TextDocument>("read_text_file", { path: filePath });
+        setFocusedFolderPath(null);
+        replaceActiveTab(createFileDocumentTab(document));
+        setAppState({
+          ...restoredState,
+          markdown: document.content,
+          lastWorkspacePath: folder.path,
+          lastFilePath: document.path,
+        });
+      } else {
+        setFocusedFolderPath(folder.path);
+        replaceActiveTab(
+          createScratchDocumentTab("", {
+            documentKey: `workspace-new-${Date.now()}`,
+            saveStatus: "saved",
+          }),
+        );
+        setAppState({
+          ...restoredState,
+          markdown: "",
+          lastWorkspacePath: folder.path,
+          lastFilePath: null,
+        });
+      }
       setLastError("");
-    };
+      setSaveStatus("saved");
+      return true;
+    } catch {
+      openScratchFromStoredState(state, {
+        path: state.lastWorkspacePath,
+        message: "前回の作業フォルダを開けませんでした",
+      });
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    let isCancelled = false;
 
     loadStoredState()
       .then(async (state) => {
         if (isCancelled) return;
 
-        if (!isTauriRuntime() || !state.lastWorkspacePath) {
-          openScratch(state);
+        if (
+          isTauriRuntime() &&
+          state.settings.skipStartupPortal &&
+          state.lastWorkspacePath
+        ) {
+          const restored = await restoreWorkspaceFromState(state);
+          if (!isCancelled) setStartupView(restored ? "editor" : "portal");
           return;
         }
 
-        try {
-          const folder = await invoke<ProjectFolder>("list_project_text_files", {
-            folderPath: state.lastWorkspacePath,
-          });
-          if (isCancelled) return;
-
-          setProjectFolder(folder);
-          setWorkspaceAlert(null);
-          const restoredSnippets =
-            state.settings.snippetStorageMode === "workspace"
-              ? await loadWorkspaceSnippets(folder.path)
-              : state.snippets;
-          const restoredPlotCards = await loadWorkspacePlotCards(folder.path);
-          setSnippetWorkspacePath(
-            state.settings.snippetStorageMode === "workspace" ? folder.path : null,
-          );
-          setPlotWorkspacePath(folder.path);
-          setPlotCards(restoredPlotCards);
-
-          const restoredState: AppState = {
-            ...state,
-            snippets: restoredSnippets,
-            recentWorkspaces: upsertRecentWorkspace(
-              removeNestedRecentWorkspaces(state.recentWorkspaces, folder.path),
-              folder.path,
-              folder.name,
-            ),
-          };
-
-          const filePath =
-            state.lastFilePath && findProjectEntry(folder.children, state.lastFilePath)
-              ? state.lastFilePath
-              : findFirstTextFile(folder.children)?.path ?? null;
-
-          if (filePath) {
-            const document = await invoke<TextDocument>("read_text_file", {
-              path: filePath,
-            });
-            if (isCancelled) return;
-            suppressNextEditorUpdateRef.current = true;
-            didMountEditorRef.current = false;
-            setFocusedFolderPath(null);
-            replaceActiveTab(createFileDocumentTab(document));
-            setAppState({
-              ...restoredState,
-              markdown: document.content,
-              lastWorkspacePath: folder.path,
-              lastFilePath: document.path,
-            });
-          } else {
-            suppressNextEditorUpdateRef.current = true;
-            didMountEditorRef.current = false;
-            setFocusedFolderPath(folder.path);
-            replaceActiveTab(
-              createScratchDocumentTab("", {
-                documentKey: `workspace-new-${Date.now()}`,
-                saveStatus: "saved",
-              }),
-            );
-            setAppState({
-              ...restoredState,
-              markdown: "",
-              lastWorkspacePath: folder.path,
-              lastFilePath: null,
-            });
-          }
-          setLastError("");
-          setSaveStatus("saved");
-        } catch {
-          if (isCancelled) return;
-          openScratch(state, {
-            path: state.lastWorkspacePath,
-            message: "前回の作業フォルダを開けませんでした",
-          });
-        }
+        openScratchFromStoredState(state);
+        setStartupView("portal");
       })
       .catch(() => {
         if (isCancelled) return;
         setSaveStatus("error");
+        setStartupView("portal");
       })
       .finally(() => {
         if (!isCancelled) setIsHydrated(true);
@@ -5428,12 +5474,12 @@ export default function App() {
   async function openWorkspace(
     path?: string,
     options: { skipKnownParentPrompt?: boolean } = {},
-  ) {
+  ): Promise<boolean> {
     if (!isTauriRuntime()) {
       showToast("フォルダを開く機能はTauri版で利用できます");
-      return;
+      return false;
     }
-    if (!(await confirmDiscardDirtyWorkspace())) return;
+    if (!(await confirmDiscardDirtyWorkspace())) return false;
 
     const previousSaveStatus = saveStatus;
     setSaveStatus("loading");
@@ -5449,7 +5495,7 @@ export default function App() {
       });
       if (!folder) {
         setSaveStatus(previousSaveStatus);
-        return;
+        return false;
       }
 
       let folderToOpen = folder;
@@ -5467,7 +5513,7 @@ export default function App() {
           });
           if (!choice) {
             setSaveStatus(previousSaveStatus);
-            return;
+            return false;
           }
           if (choice === "primary") {
             folderToOpen = await invoke<ProjectFolder>("list_project_text_files", {
@@ -5489,9 +5535,11 @@ export default function App() {
           ? `「${folderToOpen.name}」内の「${folder.name}」へ移動しました`
           : `「${folderToOpen.name}」を開きました`,
       );
+      return true;
     } catch (error) {
       setLastError(String(error));
       setSaveStatus("error");
+      return false;
     }
   }
 
@@ -7178,6 +7226,56 @@ export default function App() {
     }));
   };
 
+  const handleContinueFromPortal = async () => {
+    if (!appState.lastWorkspacePath) return;
+    setStartupView("loading");
+    const restored = await restoreWorkspaceFromState(appState);
+    setStartupView(restored ? "editor" : "portal");
+  };
+
+  const handleOpenWorkspaceFromPortal = async (path?: string) => {
+    setWorkspaceAlert(null);
+    const opened = await openWorkspace(path);
+    if (opened) setStartupView("editor");
+  };
+
+  const handleNewDocumentFromPortal = () => {
+    setStartupView("editor");
+    void handleNewDocument();
+  };
+
+  const handleClearWorkspaceHistory = () => {
+    setAppState((current) => ({
+      ...current,
+      lastWorkspacePath: null,
+      lastFilePath: null,
+      recentWorkspaces: [],
+    }));
+    setWorkspaceAlert(null);
+  };
+
+  const handleFolderCollapsedChange = (path: string, collapsed: boolean) => {
+    if (!projectFolder) return;
+    const workspacePath = projectFolder.path;
+    setAppState((current) => {
+      const currentPaths = new Set(
+        current.collapsedFolderPathsByWorkspace[workspacePath] ?? [],
+      );
+      if (collapsed) {
+        currentPaths.add(path);
+      } else {
+        currentPaths.delete(path);
+      }
+      return {
+        ...current,
+        collapsedFolderPathsByWorkspace: {
+          ...current.collapsedFolderPathsByWorkspace,
+          [workspacePath]: Array.from(currentPaths),
+        },
+      };
+    });
+  };
+
   const handleSetFileProgress = (path: string, status: FileProgressStatus) => {
     setAppState((current) => {
       const nextProgress = { ...current.fileProgress };
@@ -7274,6 +7372,7 @@ export default function App() {
         data-theme={settings.theme}
         data-writing-mode={settings.writingMode}
         data-zone-mode={settings.zoneMode ? "true" : undefined}
+        data-startup-view={startupView}
         style={
           {
             "--editor-font-family": settings.editorFontFamily,
@@ -7297,7 +7396,29 @@ export default function App() {
           } as React.CSSProperties
         }
       >
-        <section className="appFrame" aria-label="Then">
+        {startupView === "loading" ? (
+          <div className="startupPortalLoading" role="status">
+            Then を読み込んでいます…
+          </div>
+        ) : startupView === "portal" ? (
+          <StartupPortal
+            recentWorkspaces={appState.recentWorkspaces}
+            lastWorkspacePath={appState.lastWorkspacePath}
+            skipStartupPortal={settings.skipStartupPortal}
+            workspaceAlert={workspaceAlert}
+            onContinue={() => void handleContinueFromPortal()}
+            onNewDocument={handleNewDocumentFromPortal}
+            onOpenFolder={() => void handleOpenWorkspaceFromPortal()}
+            onOpenWorkspace={(path) => void handleOpenWorkspaceFromPortal(path)}
+            onClearHistory={handleClearWorkspaceHistory}
+            onSkipStartupPortalChange={(value) => updateSettings("skipStartupPortal", value)}
+            onOpenSettings={() => {
+              setStartupView("editor");
+              setIsSettingsModalOpen(true);
+            }}
+          />
+        ) : (
+          <section className="appFrame" aria-label="Then">
           <header className="topbar">
             <div className="fileMenu" ref={fileMenuRef}>
               <button
@@ -7472,7 +7593,7 @@ export default function App() {
                                         role="menuitem"
                                         onClick={() =>
                                           closeBreadcrumbMenuAndRun(() =>
-                                            isActive ? undefined : openWorkspace(workspace.path),
+                                            isActive ? undefined : void openWorkspace(workspace.path),
                                           )
                                         }
                                       >
@@ -7504,7 +7625,7 @@ export default function App() {
                                 type="button"
                                 role="menuitem"
                                 onClick={() =>
-                                  closeBreadcrumbMenuAndRun(() => openWorkspace())
+                                  closeBreadcrumbMenuAndRun(() => void openWorkspace())
                                 }
                               >
                                 <AppIcon name="folder" className="menuSvgIcon" />
@@ -7716,7 +7837,7 @@ export default function App() {
                               type="button"
                               role="menuitem"
                               onClick={() =>
-                                closeBreadcrumbMenuAndRun(() => openWorkspace(workspace.path))
+                                closeBreadcrumbMenuAndRun(() => void openWorkspace(workspace.path))
                               }
                             >
                               <AppIcon name="folder" className="menuSvgIcon" />
@@ -7738,7 +7859,7 @@ export default function App() {
                       <button
                         type="button"
                         role="menuitem"
-                        onClick={() => closeBreadcrumbMenuAndRun(() => openWorkspace())}
+                        onClick={() => closeBreadcrumbMenuAndRun(() => void openWorkspace())}
                       >
                         <AppIcon name="folder" className="menuSvgIcon" />
                         <span>別のフォルダを開く...</span>
@@ -7989,6 +8110,8 @@ export default function App() {
                 countWhitespace={settings.countWhitespace}
                 fileProgress={appState.fileProgress}
                 onSetFileProgress={handleSetFileProgress}
+                collapsedFolderPaths={collapsedTreeFolderPaths}
+                onFolderCollapsedChange={handleFolderCollapsedChange}
                 projectSearchQuery={projectSearchQuery}
                 projectSearchResults={workspaceSearchResults}
                 searchScope={searchScope}
@@ -8747,7 +8870,8 @@ export default function App() {
               onSelect={(theme) => updateSettings("theme", theme)}
             />
           )}
-        </section>
+          </section>
+        )}
       </main>
   );
 }

@@ -372,6 +372,16 @@ export function SettingsModal({
                   />
                   <span>画面下部にファイルパスを表示</span>
                 </label>
+                <label className="checkSetting">
+                  <input
+                    checked={settings.skipStartupPortal}
+                    type="checkbox"
+                    onChange={(event) =>
+                      onUpdateSettings("skipStartupPortal", event.target.checked)
+                    }
+                  />
+                  <span>起動時に前回のワークスペースを直接開く</span>
+                </label>
                 <label>
                   <span>スニペット保存先</span>
                   <select

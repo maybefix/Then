@@ -43,6 +43,8 @@ type WorkspaceSidebarProps = {
   countWhitespace: boolean;
   fileProgress: Record<string, FileProgressStatus>;
   onSetFileProgress: (path: string, status: FileProgressStatus) => void;
+  collapsedFolderPaths: ReadonlySet<string>;
+  onFolderCollapsedChange: (path: string, collapsed: boolean) => void;
   projectSearchQuery: string;
   projectSearchResults: ProjectSearchResult[];
   searchScope: WorkspaceSearchScope;
@@ -429,6 +431,8 @@ export function WorkspaceSidebar({
   countWhitespace,
   fileProgress,
   onSetFileProgress,
+  collapsedFolderPaths,
+  onFolderCollapsedChange,
   projectSearchQuery,
   projectSearchResults,
   searchScope,
@@ -472,9 +476,6 @@ export function WorkspaceSidebar({
     line: number;
   } | null>(null);
   const [headingDropTarget, setHeadingDropTarget] = useState<HeadingDropTarget>(null);
-  const [collapsedFolderPaths, setCollapsedFolderPaths] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
   const [collapsedOutlinePaths, setCollapsedOutlinePaths] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -679,15 +680,7 @@ export function WorkspaceSidebar({
       return;
     }
     if (isFolder) {
-      setCollapsedFolderPaths((current) => {
-        const next = new Set(current);
-        if (next.has(entry.path)) {
-          next.delete(entry.path);
-        } else {
-          next.add(entry.path);
-        }
-        return next;
-      });
+      onFolderCollapsedChange(entry.path, !collapsedFolderPaths.has(entry.path));
       return;
     }
     if (

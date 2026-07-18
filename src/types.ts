@@ -215,6 +215,8 @@ export type EditorSettings = {
   showWorkspacePaths: boolean;
   /** ステータスバーに現在のファイルパスを表示するか。 */
   showStatusFilePath: boolean;
+  /** 起動ポータルを省略し、前回のワークスペースを直接開くか。 */
+  skipStartupPortal: boolean;
   /** 左右サイドバーを通常時に透かし、ホバー時だけ通常表示にする実験モード。 */
   zoneMode: boolean;
   /** Zoneモードでサイドバーに適用する通常時の不透明度。 */
@@ -301,6 +303,8 @@ export type AppState = {
   lastWorkspacePath: string | null;
   lastFilePath: string | null;
   recentWorkspaces: WorkspaceRecord[];
+  /** ワークスペースごとに記憶した、ファイルツリーで折りたたまれているフォルダ。 */
+  collapsedFolderPathsByWorkspace: Record<string, string[]>;
   /** ファイルパスごとの進捗ラベル。未登録は "todo"（未着手）として扱う。 */
   fileProgress: Record<string, FileProgressStatus>;
   /** ファイルパスごとに記憶した最後のカーソル位置。 */

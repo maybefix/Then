@@ -20,6 +20,14 @@ let sidebarSource = await readFile(
 sidebarSource = sidebarSource
   .replace('from "react"', `from "${reactUrl}"`)
   .replace(
+    'import { fileProgressLabels, fileProgressStatuses } from "../../types";',
+    'const fileProgressStatuses = ["todo", "writing", "revising", "done"];\nconst fileProgressLabels = { todo: "未着手", writing: "執筆中", revising: "推敲中", done: "完了" };',
+  )
+  .replace(
+    /import \{\s*buildFilePreview,\s*buildHeadingPreview,\s*\} from "\.\.\/\.\.\/utils\/previewText";/,
+    'const buildFilePreview = () => [];\nconst buildHeadingPreview = () => [];',
+  )
+  .replace(
     'import { logHeadingDnd } from "../../utils/headingDndDiagnostics";',
     "const logHeadingDnd = (...args) => globalThis.__headingLogs.push(args);",
   );
@@ -90,6 +98,7 @@ function astFile(path, name, outline) {
 
 function Harness() {
   const [moved, setMoved] = React.useState(false);
+  const [collapsedFolders, setCollapsedFolders] = React.useState(new Set());
   const outline = moved ? outlineByOrder.moved : outlineByOrder.original;
   const projectAst = {
     kind: "project",
@@ -114,6 +123,20 @@ function Harness() {
     activeDocumentOutline: outline,
     activeOutlineIds: new Set(),
     projectAst,
+    sidebarMode: "tree",
+    navigatorPreviewLines: 2,
+    countWhitespace: true,
+    fileProgress: {},
+    onSetFileProgress() {},
+    collapsedFolderPaths: collapsedFolders,
+    onFolderCollapsedChange(path, collapsed) {
+      setCollapsedFolders((current) => {
+        const next = new Set(current);
+        if (collapsed) next.add(path);
+        else next.delete(path);
+        return next;
+      });
+    },
     projectSearchQuery: "",
     projectSearchResults: [],
     searchScope: "project",
@@ -145,7 +168,16 @@ function Harness() {
     onOpenFileInNewTab() {},
     onRenameEntry() {},
     onDeleteEntry() {},
+    onMoveEntry() {},
     onReorderEntry() {},
+    snapshots: [],
+    isSnapshotSectionCollapsed: true,
+    onSnapshotSectionCollapsedChange() {},
+    onCreateSnapshot() {},
+    onRenameSnapshot() {},
+    onEditSnapshotMemo() {},
+    onRestoreSnapshot() {},
+    onDeleteSnapshot() {},
     onCollapse() {},
   });
 }

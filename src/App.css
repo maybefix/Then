@@ -70,6 +70,350 @@ textarea {
   font-family: var(--ui-font-family);
 }
 
+.appShell[data-startup-view="portal"],
+.appShell[data-startup-view="loading"] {
+  min-width: 0;
+}
+
+.startupPortal,
+.startupPortalLoading {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-root);
+  color: var(--text-primary);
+}
+
+.startupPortal {
+  display: grid;
+  grid-template-rows: 44px minmax(0, 1fr) 54px;
+  overflow: hidden;
+}
+
+.startupPortalLoading {
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.startupPortalHeader,
+.startupPortalFooter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  border-color: var(--border-subtle);
+  background: var(--topbar-bg, var(--bg-panel));
+}
+
+.startupPortalHeader {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.startupPortalFooter {
+  justify-content: space-between;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.startupPortalMenuIcon,
+.startupPortalSettingsButton,
+.startupPortalActions button,
+.startupPortalWorkspace {
+  color: inherit;
+}
+
+.startupPortalMenuIcon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.startupPortalWordmark {
+  font-family: Georgia, "Yu Mincho", serif;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.startupPortalMain {
+  display: grid;
+  width: min(100%, 1040px);
+  min-height: 0;
+  margin: 0 auto;
+  padding: 48px 52px 42px;
+  grid-template-columns: minmax(250px, 0.85fr) minmax(360px, 1.25fr);
+  gap: 48px;
+  overflow: auto;
+}
+
+.startupPortalIntro {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 20px;
+}
+
+.startupPortalMark {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border-radius: 16px;
+  background: var(--accent);
+  color: var(--on-accent, #fff);
+  font-family: Georgia, serif;
+  font-size: 30px;
+  font-weight: 600;
+}
+
+.startupPortalIntro h1,
+.startupPortalRecent h2,
+.startupPortalRecent p {
+  margin: 0;
+}
+
+.startupPortalIntro h1 {
+  max-width: 330px;
+  font-size: 23px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.startupPortalAlert {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--warning);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.startupPortalAlert span {
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.startupPortalActions {
+  display: grid;
+  gap: 8px;
+}
+
+.startupPortalActions button,
+.startupPortalSettingsButton,
+.startupPortalTextButton,
+.startupPortalWorkspace {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-button, 6px);
+  background: var(--bg-panel);
+  cursor: pointer;
+}
+
+.startupPortalActions button {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  text-align: left;
+}
+
+.startupPortalActions button:hover:not(:disabled),
+.startupPortalSettingsButton:hover,
+.startupPortalTextButton:hover,
+.startupPortalWorkspace:hover {
+  border-color: var(--border-strong);
+  background: var(--control-hover);
+}
+
+.startupPortalActions button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.startupPortalActions .startupPortalPrimaryButton {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent, #fff);
+}
+
+.startupPortalActions .startupPortalPrimaryButton:hover:not(:disabled) {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: var(--on-accent, #fff);
+}
+
+.startupPortalPrimaryButton span {
+  display: grid;
+  gap: 2px;
+}
+
+.startupPortalPrimaryButton small {
+  opacity: 0.78;
+}
+
+.startupPortal svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.startupPortalRecent {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.startupPortalRecentHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.startupPortalRecent h2 {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.startupPortalRecent p {
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.startupPortalTextButton {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.startupPortalWorkspaceList {
+  display: grid;
+  gap: 8px;
+}
+
+.startupPortalWorkspace {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 12px;
+  text-align: left;
+}
+
+.startupPortalWorkspaceBody,
+.startupPortalWorkspaceTitle,
+.startupPortalWorkspaceMeta {
+  display: flex;
+  min-width: 0;
+}
+
+.startupPortalWorkspaceBody {
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.startupPortalWorkspaceTitle,
+.startupPortalWorkspaceMeta {
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.startupPortalWorkspaceTitle em {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.startupPortalWorkspaceMeta {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.startupPortalWorkspaceMeta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.startupPortalWorkspaceMeta time {
+  flex: 0 0 auto;
+}
+
+.startupPortalEmpty {
+  padding: 18px 0;
+}
+
+.startupPortalSettingsButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+}
+
+.startupPortalSkipSetting {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.startupPortalSkipSetting input {
+  accent-color: var(--accent);
+}
+
+.startupPortalVersion {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+@media (max-width: 760px) {
+  .startupPortal {
+    grid-template-rows: 44px minmax(0, 1fr) auto;
+  }
+
+  .startupPortalMain {
+    grid-template-columns: 1fr;
+    gap: 34px;
+    padding: 30px 24px;
+  }
+
+  .startupPortalIntro {
+    justify-content: flex-start;
+  }
+
+  .startupPortalFooter {
+    flex-wrap: wrap;
+    padding-block: 10px;
+  }
+
+  .startupPortalSkipSetting {
+    order: 3;
+    width: 100%;
+  }
+}
+
 /*
  * UI（本文以外のクローム）の表示倍率。本文エディタはタイプライタースクロールや
  * 改行マーク描画が getBoundingClientRect の座標に依存するため zoom の対象外とし、
