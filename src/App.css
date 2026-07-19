@@ -4787,6 +4787,10 @@ body {
   overflow: hidden;
 }
 
+.plotRightSidebarBody {
+  padding: 8px 10px 10px 12px;
+}
+
 /* ===== 資料レイヤー ===== */
 .referenceLayer {
   position: absolute;
@@ -6376,6 +6380,12 @@ body {
   scrollbar-color: var(--border-strong) rgba(255, 255, 255, 0.04);
   scrollbar-width: thin;
   scrollbar-gutter: stable;
+}
+
+.plotRightSidebarBody > .plotPane {
+  border: 0.5px solid var(--border-subtle);
+  border-radius: var(--radius-card, 8px);
+  background: color-mix(in srgb, var(--bg-panel) 72%, var(--sidebar-bg, var(--bg-root)));
 }
 
 .plotPane::-webkit-scrollbar {

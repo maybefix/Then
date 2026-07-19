@@ -8675,7 +8675,11 @@ export default function App() {
                     </button>
                   </div>
                 </div>
-                <div className="rightSidebarBody">
+                <div
+                  className={`rightSidebarBody ${
+                    rightSidebarTab === "plot" ? "plotRightSidebarBody" : ""
+                  }`}
+                >
                   {rightSidebarTab === "plot" ? (
                     <PlotPane
                       cards={plotCards}
