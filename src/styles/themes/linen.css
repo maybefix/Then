@@ -1,0 +1,49 @@
+/* Linen: warm off-white paper with a quiet sage-greige accent. */
+.appShell[data-theme="linen-light"] {
+  --on-accent: #fff;
+  --action-gradient: #5d7360;
+  --action-text: #fff;
+  --bg-root: #f5f2eb;
+  --bg-primary: #fdfcf8;
+  --bg-secondary: #f8f5ef;
+  --bg-tertiary: #ece8dd;
+  --bg-panel: #fdfcf8;
+  --bg-panel-strong: #f8f5ef;
+  --border-subtle: #e4dfd2;
+  --border-strong: #c6bfae;
+  --text-primary: #2b2925;
+  --text-secondary: #524e45;
+  --text-muted: #726d62;
+  --text-faint: #9a948a;
+  --accent: #5d7360;
+  --accent-strong: #475c4a;
+  --success: #3c7d55;
+  --warning: #8a6200;
+  --danger: #b5453c;
+  --control-hover: rgba(43, 41, 37, 0.06);
+  --accent-soft: rgba(93, 115, 96, 0.12);
+  --accent-border: rgba(93, 115, 96, 0.45);
+  --danger-soft: rgba(181, 69, 60, 0.1);
+  --editor-bg: #fdfcf8;
+  --card-bg: #fdfcf8;
+  --card-hover: #f8f5ef;
+  --topbar-bg: var(--canvas-bg);
+  --sidebar-bg: #f8f5ef;
+  --canvas-bg: #f5f2eb;
+  --card-float-shadow: none;
+  --radius-control: 10px;
+  --radius-card: 14px;
+  --radius-button: 10px;
+  --shadow-popover: 0 12px 30px rgba(43, 41, 37, 0.12);
+  --shadow-modal: 0 20px 50px rgba(43, 41, 37, 0.16);
+  --silkdown-code-bg: rgba(93, 115, 96, 0.1);
+  --silkdown-link-color: #475c4a;
+}
+
+.themePreview-linen-light { background: #fdfcf8; }
+
+.themePreview-linen-light::before { background: #f5f2eb; }
+
+.themePreview-linen-light i { background: #2b2925; }
+
+.themePreview-linen-light b { background: #5d7360; }

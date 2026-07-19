@@ -153,6 +153,18 @@ export const appThemeValues = [
   "passion-dark",
   "tech-light",
   "tech-dark",
+  "slate-light",
+  "linen-light",
+  "graphite-dark",
+  "umber-dark",
+  "bronze-light",
+  "bronze-dark",
+  "moss-light",
+  "moss-dark",
+  "violet-light",
+  "violet-dark",
+  "rose-light",
+  "rose-dark",
 ] as const;
 
 export type AppTheme = (typeof appThemeValues)[number];

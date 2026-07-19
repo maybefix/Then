@@ -1,0 +1,51 @@
+/* Umber: warm brown-greys with a muted sand accent. */
+.appShell[data-theme="umber-dark"] {
+  color-scheme: dark;
+  --on-accent: #1e1c19;
+  --action-gradient: #c8ab7e;
+  --action-text: #1e1c19;
+  --bg-root: #1e1c19;
+  --bg-primary: #262421;
+  --bg-secondary: #2b2925;
+  --bg-tertiary: #34312c;
+  --bg-panel: #262421;
+  --bg-panel-strong: #2b2925;
+  --border-subtle: #3b3833;
+  --border-strong: #544f47;
+  --text-primary: #e9e6e0;
+  --text-secondary: #c2beb6;
+  --text-muted: #949087;
+  --text-faint: #6c6860;
+  --accent: #c8ab7e;
+  --accent-strong: #d7bd93;
+  --success: #8ab383;
+  --warning: #d3b166;
+  --danger: #d97f6d;
+  --overlay: rgba(10, 9, 7, 0.78);
+  --control-hover: rgba(233, 230, 224, 0.07);
+  --accent-soft: rgba(200, 171, 126, 0.14);
+  --accent-border: rgba(200, 171, 126, 0.45);
+  --danger-soft: rgba(217, 127, 109, 0.14);
+  --editor-bg: #262421;
+  --card-bg: #262421;
+  --card-hover: #2c2a26;
+  --topbar-bg: var(--canvas-bg);
+  --sidebar-bg: #232120;
+  --canvas-bg: #1e1c19;
+  --card-float-shadow: none;
+  --radius-control: 10px;
+  --radius-card: 14px;
+  --radius-button: 10px;
+  --shadow-popover: 0 12px 30px rgba(0, 0, 0, 0.5);
+  --shadow-modal: 0 20px 50px rgba(0, 0, 0, 0.6);
+  --silkdown-code-bg: rgba(200, 171, 126, 0.12);
+  --silkdown-link-color: #d7bd93;
+}
+
+.themePreview-umber-dark { border-color: #3b3833; background: #1e1c19; }
+
+.themePreview-umber-dark::before { background: #262421; }
+
+.themePreview-umber-dark i { background: #e9e6e0; }
+
+.themePreview-umber-dark b { background: #c8ab7e; }

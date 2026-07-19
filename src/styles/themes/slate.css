@@ -1,0 +1,49 @@
+/* Slate: plain white surfaces with a muted steel-blue accent. */
+.appShell[data-theme="slate-light"] {
+  --on-accent: #fff;
+  --action-gradient: #3d6485;
+  --action-text: #fff;
+  --bg-root: #f3f4f6;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f7f8fa;
+  --bg-tertiary: #e9ebee;
+  --bg-panel: #ffffff;
+  --bg-panel-strong: #f7f8fa;
+  --border-subtle: #e2e4e8;
+  --border-strong: #c3c7cd;
+  --text-primary: #23272d;
+  --text-secondary: #494f57;
+  --text-muted: #6b7280;
+  --text-faint: #9aa1a9;
+  --accent: #3d6485;
+  --accent-strong: #2f4f6b;
+  --success: #2f7d4f;
+  --warning: #8a6200;
+  --danger: #b5453c;
+  --control-hover: rgba(35, 39, 45, 0.06);
+  --accent-soft: rgba(61, 100, 133, 0.1);
+  --accent-border: rgba(61, 100, 133, 0.45);
+  --danger-soft: rgba(181, 69, 60, 0.1);
+  --editor-bg: #ffffff;
+  --card-bg: #ffffff;
+  --card-hover: #f7f8fa;
+  --topbar-bg: var(--canvas-bg);
+  --sidebar-bg: #f7f8fa;
+  --canvas-bg: #f3f4f6;
+  --card-float-shadow: none;
+  --radius-control: 10px;
+  --radius-card: 14px;
+  --radius-button: 10px;
+  --shadow-popover: 0 12px 30px rgba(35, 39, 45, 0.12);
+  --shadow-modal: 0 20px 50px rgba(35, 39, 45, 0.16);
+  --silkdown-code-bg: rgba(61, 100, 133, 0.08);
+  --silkdown-link-color: #2f4f6b;
+}
+
+.themePreview-slate-light { background: #ffffff; }
+
+.themePreview-slate-light::before { background: #f3f4f6; }
+
+.themePreview-slate-light i { background: #23272d; }
+
+.themePreview-slate-light b { background: #3d6485; }

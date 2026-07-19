@@ -1,0 +1,117 @@
+/* Moss: Flat's floating-card structure — white surfaces with a moss-green
+   accent in light; deep green night with the editor lifted above the canvas
+   in dark. */
+.appShell[data-theme="moss-light"] {
+  --on-accent: #fff;
+  --brand-gradient: linear-gradient(135deg, #385f43 0%, #4a7856 100%);
+  --action-gradient: linear-gradient(135deg, #4a7856 0%, #385f43 100%);
+  --action-text: #fff;
+  --bg-root: #fbfbfb;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f8f8;
+  --bg-tertiary: #ececec;
+  --bg-panel: #ffffff;
+  --bg-panel-strong: #f4f4f4;
+  --border-subtle: rgba(32, 38, 46, 0.1);
+  --border-strong: rgba(32, 38, 46, 0.2);
+  --text-primary: #212529;
+  --text-secondary: #454b52;
+  --text-muted: #6e747b;
+  --text-faint: #9ba1a8;
+  --accent: #4a7856;
+  --accent-strong: #385f43;
+  --success: #4f7c66;
+  --warning: #8a6f3c;
+  --danger: #b0565b;
+  --control-hover: rgba(74, 120, 86, 0.08);
+  --accent-soft: rgba(74, 120, 86, 0.14);
+  --accent-border: rgba(74, 120, 86, 0.42);
+  --danger-soft: rgba(176, 86, 91, 0.09);
+  --editor-bg:
+    radial-gradient(circle at 82% 12%, rgba(100, 150, 110, 0.08), transparent 36%),
+    linear-gradient(135deg, #ffffff 0%, #fdfdfd 55%, #f0f3ef 100%);
+  --card-bg: #ffffff;
+  --card-hover: #f4f4f4;
+  --topbar-bg: var(--canvas-bg);
+  --sidebar-bg: linear-gradient(180deg, #ffffff 0%, #eef2ee 100%);
+  --canvas-bg: #f4f6f4;
+  --card-float-shadow: 0 4px 14px rgba(32, 38, 46, 0.08);
+  --topbar-text-primary: #212529;
+  --topbar-text-secondary: #454b52;
+  --topbar-text-muted: #6e747b;
+  --topbar-text-faint: #9ba1a8;
+  --radius-control: 14px;
+  --radius-card: 20px;
+  --radius-button: 999px;
+  --shadow-popover: 0 14px 34px rgba(48, 54, 62, 0.13);
+  --shadow-modal: 0 24px 60px rgba(48, 54, 62, 0.17);
+  --silkdown-code-bg: rgba(74, 120, 86, 0.1);
+  --silkdown-link-color: #385f43;
+}
+
+.appShell[data-theme="moss-dark"] {
+  color-scheme: dark;
+  --on-accent: #171b18;
+  --brand-gradient: linear-gradient(135deg, #9cd2ae 0%, #82c096 100%);
+  --action-gradient: linear-gradient(135deg, #82c096 0%, #9cd2ae 100%);
+  --action-text: #171b18;
+  --bg-root: #171b18;
+  --bg-primary: #212823;
+  --bg-secondary: #273028;
+  --bg-tertiary: #313b32;
+  --bg-panel: #1f2620;
+  --bg-panel-strong: #2b342c;
+  --border-subtle: rgba(210, 220, 235, 0.1);
+  --border-strong: rgba(210, 220, 235, 0.2);
+  --text-primary: #eef0f2;
+  --text-secondary: #cdd0d4;
+  --text-muted: #9ba0a6;
+  --text-faint: #71767d;
+  --accent: #82c096;
+  --accent-strong: #9cd2ae;
+  --success: #84c0a0;
+  --warning: #d8bd7e;
+  --danger: #e89aa0;
+  --overlay: rgba(8, 9, 11, 0.78);
+  --control-hover: rgba(130, 192, 150, 0.1);
+  --accent-soft: rgba(130, 192, 150, 0.16);
+  --accent-border: rgba(130, 192, 150, 0.46);
+  --danger-soft: rgba(232, 154, 160, 0.14);
+  /* The editor sits one luminance step above the canvas to pull focus. */
+  --editor-bg:
+    radial-gradient(circle at 80% 10%, rgba(140, 205, 160, 0.1), transparent 34%),
+    linear-gradient(135deg, #2c342d 0%, #28302a 54%, #232a25 100%);
+  --card-bg: #252c26;
+  --card-hover: #2f382f;
+  --topbar-bg: var(--canvas-bg);
+  --topbar-text-primary: #eef0f2;
+  --topbar-text-secondary: #cdd0d4;
+  --topbar-text-muted: #9ba0a6;
+  --topbar-text-faint: #71767d;
+  --sidebar-bg: #1d221e;
+  --canvas-bg: #171b18;
+  --card-float-shadow: 0 6px 18px rgba(0, 0, 0, 0.34);
+  --radius-control: 14px;
+  --radius-card: 20px;
+  --radius-button: 999px;
+  --shadow-popover: 0 16px 38px rgba(0, 0, 0, 0.34);
+  --shadow-modal: 0 26px 70px rgba(0, 0, 0, 0.44);
+  --silkdown-code-bg: rgba(130, 192, 150, 0.12);
+  --silkdown-link-color: #9cd2ae;
+}
+
+.themePreview-moss-light { background: #ffffff; }
+
+.themePreview-moss-light::before { background: #f4f6f4; }
+
+.themePreview-moss-light i { background: #212529; }
+
+.themePreview-moss-light b { background: linear-gradient(135deg, #385f43, #4a7856); }
+
+.themePreview-moss-dark { border-color: #313b32; background: #171b18; }
+
+.themePreview-moss-dark::before { background: #252c26; }
+
+.themePreview-moss-dark i { background: #eef0f2; }
+
+.themePreview-moss-dark b { background: linear-gradient(135deg, #82c096, #9cd2ae); }

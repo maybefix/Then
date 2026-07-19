@@ -1,0 +1,117 @@
+/* Bronze: Flat's floating-card structure — white surfaces with a bronze
+   accent in light; warm brown night with the editor lifted above the canvas
+   in dark. */
+.appShell[data-theme="bronze-light"] {
+  --on-accent: #fff;
+  --brand-gradient: linear-gradient(135deg, #6e5230 0%, #8c6a3f 100%);
+  --action-gradient: linear-gradient(135deg, #8c6a3f 0%, #6e5230 100%);
+  --action-text: #fff;
+  --bg-root: #fbfbfb;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f8f8;
+  --bg-tertiary: #ececec;
+  --bg-panel: #ffffff;
+  --bg-panel-strong: #f4f4f4;
+  --border-subtle: rgba(32, 38, 46, 0.1);
+  --border-strong: rgba(32, 38, 46, 0.2);
+  --text-primary: #212529;
+  --text-secondary: #454b52;
+  --text-muted: #6e747b;
+  --text-faint: #9ba1a8;
+  --accent: #8c6a3f;
+  --accent-strong: #6e5230;
+  --success: #4f7c66;
+  --warning: #8a6f3c;
+  --danger: #b0565b;
+  --control-hover: rgba(140, 106, 63, 0.08);
+  --accent-soft: rgba(140, 106, 63, 0.14);
+  --accent-border: rgba(140, 106, 63, 0.42);
+  --danger-soft: rgba(176, 86, 91, 0.09);
+  --editor-bg:
+    radial-gradient(circle at 82% 12%, rgba(150, 120, 70, 0.08), transparent 36%),
+    linear-gradient(135deg, #ffffff 0%, #fdfdfd 55%, #f4f1ec 100%);
+  --card-bg: #ffffff;
+  --card-hover: #f4f4f4;
+  --topbar-bg: var(--canvas-bg);
+  --sidebar-bg: linear-gradient(180deg, #ffffff 0%, #f2efe9 100%);
+  --canvas-bg: #f7f5f2;
+  --card-float-shadow: 0 4px 14px rgba(32, 38, 46, 0.08);
+  --topbar-text-primary: #212529;
+  --topbar-text-secondary: #454b52;
+  --topbar-text-muted: #6e747b;
+  --topbar-text-faint: #9ba1a8;
+  --radius-control: 14px;
+  --radius-card: 20px;
+  --radius-button: 999px;
+  --shadow-popover: 0 14px 34px rgba(48, 54, 62, 0.13);
+  --shadow-modal: 0 24px 60px rgba(48, 54, 62, 0.17);
+  --silkdown-code-bg: rgba(140, 106, 63, 0.1);
+  --silkdown-link-color: #6e5230;
+}
+
+.appShell[data-theme="bronze-dark"] {
+  color-scheme: dark;
+  --on-accent: #1c1a17;
+  --brand-gradient: linear-gradient(135deg, #e8ba7a 0%, #d9a55e 100%);
+  --action-gradient: linear-gradient(135deg, #d9a55e 0%, #e8ba7a 100%);
+  --action-text: #1c1a17;
+  --bg-root: #1c1a17;
+  --bg-primary: #26231e;
+  --bg-secondary: #2c2823;
+  --bg-tertiary: #363129;
+  --bg-panel: #24211c;
+  --bg-panel-strong: #302c25;
+  --border-subtle: rgba(210, 220, 235, 0.1);
+  --border-strong: rgba(210, 220, 235, 0.2);
+  --text-primary: #eef0f2;
+  --text-secondary: #cdd0d4;
+  --text-muted: #9ba0a6;
+  --text-faint: #71767d;
+  --accent: #d9a55e;
+  --accent-strong: #e8ba7a;
+  --success: #84c0a0;
+  --warning: #d8bd7e;
+  --danger: #e89aa0;
+  --overlay: rgba(8, 9, 11, 0.78);
+  --control-hover: rgba(217, 165, 94, 0.1);
+  --accent-soft: rgba(217, 165, 94, 0.16);
+  --accent-border: rgba(217, 165, 94, 0.46);
+  --danger-soft: rgba(232, 154, 160, 0.14);
+  /* The editor sits one luminance step above the canvas to pull focus. */
+  --editor-bg:
+    radial-gradient(circle at 80% 10%, rgba(224, 184, 128, 0.1), transparent 34%),
+    linear-gradient(135deg, #312d26 0%, #2c2822 54%, #272420 100%);
+  --card-bg: #2a2721;
+  --card-hover: #343026;
+  --topbar-bg: var(--canvas-bg);
+  --topbar-text-primary: #eef0f2;
+  --topbar-text-secondary: #cdd0d4;
+  --topbar-text-muted: #9ba0a6;
+  --topbar-text-faint: #71767d;
+  --sidebar-bg: #232019;
+  --canvas-bg: #1c1a17;
+  --card-float-shadow: 0 6px 18px rgba(0, 0, 0, 0.34);
+  --radius-control: 14px;
+  --radius-card: 20px;
+  --radius-button: 999px;
+  --shadow-popover: 0 16px 38px rgba(0, 0, 0, 0.34);
+  --shadow-modal: 0 26px 70px rgba(0, 0, 0, 0.44);
+  --silkdown-code-bg: rgba(217, 165, 94, 0.12);
+  --silkdown-link-color: #e8ba7a;
+}
+
+.themePreview-bronze-light { background: #ffffff; }
+
+.themePreview-bronze-light::before { background: #f7f5f2; }
+
+.themePreview-bronze-light i { background: #212529; }
+
+.themePreview-bronze-light b { background: linear-gradient(135deg, #6e5230, #8c6a3f); }
+
+.themePreview-bronze-dark { border-color: #363129; background: #1c1a17; }
+
+.themePreview-bronze-dark::before { background: #2a2721; }
+
+.themePreview-bronze-dark i { background: #eef0f2; }
+
+.themePreview-bronze-dark b { background: linear-gradient(135deg, #d9a55e, #e8ba7a); }

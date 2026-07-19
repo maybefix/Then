@@ -100,7 +100,9 @@
   --silkdown-link-color: #c4d2e0;
 }
 
-.appShell[data-theme^="flat-"] .sidebarFooter .sidebarAddButton {
+/* Flat family (flat + bronze/moss/violet/rose colorways): keep the sidebar
+   add button quiet instead of the gradient treatment. */
+.appShell:is([data-theme^="flat-"], [data-theme^="bronze-"], [data-theme^="moss-"], [data-theme^="violet-"], [data-theme^="rose-"]) .sidebarFooter .sidebarAddButton {
   border-color: var(--border-strong);
   background: transparent;
   background-image: none;
@@ -109,10 +111,10 @@
   filter: none;
 }
 
-.appShell[data-theme^="flat-"] .sidebarFooter .sidebarAddButton:hover,
-.appShell[data-theme^="flat-"] .sidebarFooter .sidebarAddButton:focus,
-.appShell[data-theme^="flat-"] .sidebarFooter .sidebarAddButton:focus-visible,
-.appShell[data-theme^="flat-"] .sidebarFooter .sidebarAddButton:active {
+.appShell:is([data-theme^="flat-"], [data-theme^="bronze-"], [data-theme^="moss-"], [data-theme^="violet-"], [data-theme^="rose-"]) .sidebarFooter .sidebarAddButton:hover,
+.appShell:is([data-theme^="flat-"], [data-theme^="bronze-"], [data-theme^="moss-"], [data-theme^="violet-"], [data-theme^="rose-"]) .sidebarFooter .sidebarAddButton:focus,
+.appShell:is([data-theme^="flat-"], [data-theme^="bronze-"], [data-theme^="moss-"], [data-theme^="violet-"], [data-theme^="rose-"]) .sidebarFooter .sidebarAddButton:focus-visible,
+.appShell:is([data-theme^="flat-"], [data-theme^="bronze-"], [data-theme^="moss-"], [data-theme^="violet-"], [data-theme^="rose-"]) .sidebarFooter .sidebarAddButton:active {
   border-color: var(--accent-border);
   background: var(--control-hover);
   background-image: none;

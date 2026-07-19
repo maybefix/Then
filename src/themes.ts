@@ -31,6 +31,12 @@ export const themeCatalog: ThemeDefinition[] = [
   { id: "air-light", label: "Air", description: "空色と深いブルーのグラデーション", mode: "light" },
   { id: "passion-light", label: "Passion", description: "深紅とコーラルのグラデーション", mode: "light" },
   { id: "tech-light", label: "Tech", description: "濃紺とスチールブルー", mode: "light" },
+  { id: "slate-light", label: "Slate", description: "白とスチールブルー", mode: "light" },
+  { id: "linen-light", label: "Linen", description: "亜麻色とセージグリーン", mode: "light" },
+  { id: "bronze-light", label: "Bronze", description: "白とブロンズ", mode: "light" },
+  { id: "moss-light", label: "Moss", description: "白とモスグリーン", mode: "light" },
+  { id: "violet-light", label: "Violet", description: "白とバイオレット", mode: "light" },
+  { id: "rose-light", label: "Rose", description: "白とローズレッド", mode: "light" },
   { id: "dark", label: "Default", description: "グレーブルー", mode: "dark" },
   { id: "minimal-dark", label: "Minimal", description: "ブラックとブライトブルー", mode: "dark" },
   { id: "resonance-dark", label: "Resonance", description: "深い紫とラベンダー", mode: "dark" },
@@ -50,6 +56,12 @@ export const themeCatalog: ThemeDefinition[] = [
   { id: "air-dark", label: "Air", description: "夜空とブライトシアンのグラデーション", mode: "dark" },
   { id: "passion-dark", label: "Passion", description: "ワインレッドとコーラルのグラデーション", mode: "dark" },
   { id: "tech-dark", label: "Tech", description: "ブルーブラックとスチールブルー", mode: "dark" },
+  { id: "graphite-dark", label: "Graphite", description: "無彩色グレーとソフトブルー", mode: "dark" },
+  { id: "umber-dark", label: "Umber", description: "焦茶グレーとサンド", mode: "dark" },
+  { id: "bronze-dark", label: "Bronze", description: "夜の焦茶とブロンズ", mode: "dark" },
+  { id: "moss-dark", label: "Moss", description: "深緑とミストグリーン", mode: "dark" },
+  { id: "violet-dark", label: "Violet", description: "夜紫とライトバイオレット", mode: "dark" },
+  { id: "rose-dark", label: "Rose", description: "墨色とローズピンク", mode: "dark" },
 ];
 
 export const getThemeDefinition = (theme: AppTheme) =>
