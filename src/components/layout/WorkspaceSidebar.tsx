@@ -77,7 +77,6 @@ type WorkspaceSidebarProps = {
   onCreateFolder: (folderPath?: string) => void;
   onSelectFile: (path: string) => void;
   onSelectFolder: (path: string) => void;
-  onOpenFileInNewTab: (path: string) => void;
   onRenameEntry: (entry: ProjectFolder | ProjectEntry) => void;
   onDeleteEntry: (entry: ProjectEntry) => void;
   onMoveEntry: (sourcePath: string, targetFolderPath: string) => void;
@@ -461,7 +460,6 @@ export function WorkspaceSidebar({
   onCreateFolder,
   onSelectFile,
   onSelectFolder,
-  onOpenFileInNewTab,
   onRenameEntry,
   onDeleteEntry,
   onMoveEntry,
@@ -909,15 +907,6 @@ export function WorkspaceSidebar({
         >
           開く
         </button>
-        {kind === "file" && (
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => closeContextMenuAndRun(() => onOpenFileInNewTab(entry.path))}
-          >
-            新しいタブで開く
-          </button>
-        )}
         {kind === "folder" && (
           <>
             <button

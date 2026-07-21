@@ -797,6 +797,7 @@ function createScratchDocumentTab(
     saveStatus: options.saveStatus ?? "dirty",
     documentKey: options.documentKey ?? id,
     activeOutlineLine: null,
+    viewportState: null,
   };
 }
 
@@ -850,6 +851,7 @@ function createFileDocumentTab(document: TextDocument): DocumentTab {
     saveStatus: "saved",
     documentKey: document.path,
     activeOutlineLine: null,
+    viewportState: null,
   };
 }
 
@@ -2670,6 +2672,15 @@ export default function App() {
     [activeTabId],
   );
   const syncDocumentTabToEditor = useCallback((tab: DocumentTab) => {
+    const previousTabId = activeTabIdRef.current;
+    if (tab.id !== previousTabId) {
+      const viewportState = editorInstanceRef.current?.getViewportState() ?? null;
+      setOpenTabs((current) =>
+        current.map((item) =>
+          item.id === previousTabId ? { ...item, viewportState } : item,
+        ),
+      );
+    }
     suppressNextEditorUpdateRef.current = true;
     didMountEditorRef.current = false;
     lastSavedMarkdownRef.current = tab.savedMarkdown;
@@ -3594,6 +3605,12 @@ export default function App() {
 
   const handleEditorReady = useCallback((editor: TextEditorHandle | null) => {
     editorInstanceRef.current = editor;
+    if (editor) {
+      // マウント時の選択復元は onReady より先に完了するため、ここで親側にも
+      // 実位置を同期する。同期しないと以前の値（初期値0を含む）がカーソル保存へ
+      // 流れ、次回のタブ復帰時に先頭として復元されることがある。
+      setEditorSelectionHead(editor.getSelection().head);
+    }
   }, []);
 
   const handleEditorViewportSizeChange = useCallback(
@@ -5842,27 +5859,6 @@ export default function App() {
     setFocusedFolderPath(null);
   };
 
-  const handleProjectFileSelectInNewTab = async (path: string) => {
-    if (!path) return;
-    const existingTab = openTabs.find((tab) => tab.path === path);
-    if (existingTab) {
-      activateDocumentTab(existingTab.id);
-      showToast(`「${existingTab.name}」を開きました`);
-      return;
-    }
-
-    try {
-      const document = await invoke<TextDocument>("read_text_file", { path });
-      openDocumentInTab(document);
-      setFocusedFolderPath(null);
-      setLastError("");
-      showToast(`「${document.name}」を新しいタブで開きました`);
-    } catch (error) {
-      setLastError(String(error));
-      setSaveStatus("error");
-    }
-  };
-
   const closeFileMenuAndRun = (action: () => void | Promise<void>) => {
     setIsFileMenuOpen(false);
     void action();
@@ -7765,21 +7761,6 @@ export default function App() {
                                     <button
                                       className="menuActionButton"
                                       type="button"
-                                      aria-label={`${entry.name} を新しいタブで開く`}
-                                      disabled={entry.kind !== "file"}
-                                      onClick={() =>
-                                        entry.kind === "file"
-                                          ? closeBreadcrumbMenuAndRun(() =>
-                                              handleProjectFileSelectInNewTab(entry.path),
-                                            )
-                                          : undefined
-                                      }
-                                    >
-                                      +
-                                    </button>
-                                    <button
-                                      className="menuActionButton"
-                                      type="button"
                                       aria-label={`${entry.name} を上へ移動`}
                                       disabled={entryIndex === 0}
                                       onClick={() =>
@@ -8224,7 +8205,6 @@ export default function App() {
                 onCreateFolder={(folderPath) => void handleCreateProjectFolder(folderPath)}
                 onSelectFile={(path) => void handleProjectFileSelect(path)}
                 onSelectFolder={(path) => void handleProjectFolderSelect(path)}
-                onOpenFileInNewTab={(path) => void handleProjectFileSelectInNewTab(path)}
                 onRenameEntry={(entry) => void handleRenameProjectEntry(entry)}
                 onDeleteEntry={(entry) => void handleDeleteProjectEntry(entry)}
                 onMoveEntry={(sourcePath, targetFolderPath) =>
@@ -8318,6 +8298,7 @@ export default function App() {
                             typewriterOffset={settings.typewriterOffset}
                             showLineBreakMarks={settings.showLineBreakMarks}
                             initialSelectionOffset={initialSelectionOffset}
+                            initialViewportState={activeTab?.viewportState ?? null}
                             onViewportSizeChange={handleEditorViewportSizeChange}
                             onReady={handleEditorReady}
                             onTextChange={handleTextChange}

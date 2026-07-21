@@ -18,7 +18,7 @@ import {
   type EditorView,
 } from "@tiptap/pm/view";
 import { useEffect, useMemo, useRef } from "react";
-import type { WritingMode } from "./types";
+import type { TextEditorViewportState, WritingMode } from "./types";
 
 export type TextEditorHandle = {
   focus: () => void;
@@ -28,6 +28,7 @@ export type TextEditorHandle = {
   replaceRange: (from: number, to: number, insert: string, cursorPos?: number) => void;
   jumpToLine: (line: number) => void;
   positionFromPoint: (x: number, y: number) => number | null;
+  getViewportState: () => TextEditorViewportState | null;
   /** 本文オフセットの画面座標（ビューポート基準）。ドロップ位置表示などに使う。 */
   coordsAtPos: (
     offset: number,
@@ -45,6 +46,8 @@ type VerticalTextEditorProps = {
   showLineBreakMarks: boolean;
   /** マウント時に復元するカーソル位置（本文先頭からの文字オフセット）。 */
   initialSelectionOffset?: number;
+  /** 同じタブを再表示するときに復元する論理的な表示位置。 */
+  initialViewportState?: TextEditorViewportState | null;
   /**
    * エディタのスクロール領域の内寸（クライアントサイズ, px）と、本文ルート
    * (.pm-root) の上下パディング実測値を通知する。文字表示幅設定の上限算出に
@@ -182,6 +185,8 @@ const ACTIVE_BUILD_RADIUS = 72;
 const VISIBLE_BUILD_RADIUS = 72;
 const VISIBLE_UPDATE_STEP = 12;
 const SCROLL_EPS = 0.75;
+const INITIAL_CENTER_SETTLE_MS = 500;
+const INITIAL_CENTER_STABLE_FRAMES = 2;
 const PLACEHOLDER = "# 見出し\n- リスト項目\nここに入力……";
 
 const astKey = new PluginKey<AstPluginState>("then-layout-ast");
@@ -1555,7 +1560,7 @@ function scrollAxis(writingMode: WritingMode): {
   set: (element: HTMLElement, value: number) => void;
   viewportStart: (rect: DOMRect) => number;
   viewportSize: (rect: DOMRect) => number;
-  rectCenter: (rect: DOMRect) => number;
+  rectCenter: (rect: Pick<DOMRect, "top" | "bottom" | "left" | "right">) => number;
 } {
   if (isHorizontalWriting(writingMode)) {
     return {
@@ -1857,6 +1862,41 @@ function centerCaretForEditor(
   axis.set(scroller, target);
 }
 
+function measureViewportAnchorDelta(
+  editor: Editor,
+  scroller: HTMLElement,
+  viewportState: TextEditorViewportState,
+): number | null {
+  const pos = pmPosFromTextOffset(editor.state.doc, viewportState.anchorOffset);
+
+  try {
+    const coords = editor.view.coordsAtPos(pos);
+    const axis = scrollAxis(viewportState.writingMode);
+    const scrollerRect = scroller.getBoundingClientRect();
+    const viewportTarget =
+      axis.viewportStart(scrollerRect) +
+      axis.viewportSize(scrollerRect) * viewportState.anchorRatio;
+    return axis.rectCenter(coords) - viewportTarget;
+  } catch {
+    return null;
+  }
+}
+
+function restoreViewportAnchorForEditor(
+  editor: Editor,
+  scroller: HTMLElement,
+  viewportState: TextEditorViewportState,
+): void {
+  const delta = measureViewportAnchorDelta(editor, scroller, viewportState);
+  if (delta === null) return;
+
+  const axis = scrollAxis(viewportState.writingMode);
+  const current = axis.get(scroller);
+  const target = snapScrollValue(current + delta);
+  if (Math.abs(target - current) < SCROLL_EPS) return;
+  axis.set(scroller, target);
+}
+
 function domLineIndexFromElement(root: HTMLElement, element: Element | null): number {
   let current: Element | null = element;
 
@@ -1906,6 +1946,7 @@ export function VerticalTextEditor({
   typewriterOffset,
   showLineBreakMarks,
   initialSelectionOffset,
+  initialViewportState,
   onViewportSizeChange,
   onReady,
   onTextChange,
@@ -1920,6 +1961,8 @@ export function VerticalTextEditor({
   const initialSelectionRef = useRef(
     Number.isFinite(initialSelectionOffset) ? Math.max(0, initialSelectionOffset as number) : 0,
   );
+  // マウント時だけ参照し、表示中のタブ状態更新では再適用しない。
+  const initialViewportRef = useRef(initialViewportState ?? null);
   const onTextChangeRef = useRef(onTextChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
   const localRevisionRef = useRef(0);
@@ -1935,6 +1978,7 @@ export function VerticalTextEditor({
   const requestLineBreakMarksRef = useRef<(() => void) | null>(null);
   const startCenterAnimationRef = useRef<(() => void) | null>(null);
   const stopCenterAnimationRef = useRef<(() => void) | null>(null);
+  const cancelInitialAdjustmentRef = useRef<(() => void) | null>(null);
   typewriterScrollRef.current = typewriterScroll;
 
   useEffect(() => {
@@ -2024,6 +2068,7 @@ export function VerticalTextEditor({
         return editor ? getTextSelection(editor) : { from: 0, to: 0, head: 0 };
       },
       selectRange: (from, to) => {
+        cancelInitialAdjustmentRef.current?.();
         const editor = tiptapRef.current;
         const scroller = scrollerRef.current;
         if (!editor) return;
@@ -2044,6 +2089,7 @@ export function VerticalTextEditor({
         requestLineBreakMarksRef.current?.();
       },
       replaceRange: (from, to, insert, cursorPos) => {
+        cancelInitialAdjustmentRef.current?.();
         const editor = tiptapRef.current;
         const scroller = scrollerRef.current;
         if (!editor) return;
@@ -2068,6 +2114,7 @@ export function VerticalTextEditor({
         requestLineBreakMarksRef.current?.();
       },
       jumpToLine: (line) => {
+        cancelInitialAdjustmentRef.current?.();
         const editor = tiptapRef.current;
         const scroller = scrollerRef.current;
         if (!editor) return;
@@ -2090,6 +2137,58 @@ export function VerticalTextEditor({
         const result = editor.view.posAtCoords({ left: x, top: y });
         return result ? textOffsetFromPmPos(editor.state.doc, result.pos) : null;
       },
+      getViewportState: () => {
+        const editor = tiptapRef.current;
+        const scroller = scrollerRef.current;
+        if (!editor || !scroller) return null;
+
+        const scrollerRect = scroller.getBoundingClientRect();
+        const mode = writingModeRef.current;
+        const primaryRatios = [0.5, 0.35, 0.65];
+
+        for (const ratio of primaryRatios) {
+          const point = isHorizontalWriting(mode)
+            ? {
+                left: scrollerRect.left + scrollerRect.width / 2,
+                top: scrollerRect.top + scrollerRect.height * ratio,
+              }
+            : {
+                left: scrollerRect.left + scrollerRect.width * ratio,
+                top: scrollerRect.top + scrollerRect.height / 2,
+              };
+          const result = editor.view.posAtCoords(point);
+          if (!result) continue;
+
+          try {
+            const coords = editor.view.coordsAtPos(result.pos);
+            const viewportStart = isHorizontalWriting(mode)
+              ? scrollerRect.top
+              : scrollerRect.left;
+            const viewportSize = isHorizontalWriting(mode)
+              ? scrollerRect.height
+              : scrollerRect.width;
+            const anchorCenter = isHorizontalWriting(mode)
+              ? (coords.top + coords.bottom) / 2
+              : (coords.left + coords.right) / 2;
+            const anchorRatio = (anchorCenter - viewportStart) / viewportSize;
+            if (!Number.isFinite(anchorRatio) || anchorRatio < 0 || anchorRatio > 1) {
+              continue;
+            }
+
+            const currentText = docToText(editor.state.doc);
+            return {
+              textLength: currentText.length,
+              writingMode: mode,
+              anchorOffset: textOffsetFromPmPos(editor.state.doc, result.pos),
+              anchorRatio,
+            };
+          } catch {
+            // DOM が差し替わる瞬間は座標取得に失敗し得る。次の候補点を試す。
+          }
+        }
+
+        return null;
+      },
       coordsAtPos: (offset) => {
         const editor = tiptapRef.current;
         if (!editor) return null;
@@ -2101,6 +2200,7 @@ export function VerticalTextEditor({
         }
       },
       scrollCaretIntoView: (offsetPercent) => {
+        cancelInitialAdjustmentRef.current?.();
         const editor = tiptapRef.current;
         const scroller = scrollerRef.current;
         if (!typewriterScrollRef.current || !editor || !scroller || isEditorComposing(editor, composingRef)) return;
@@ -2157,7 +2257,24 @@ export function VerticalTextEditor({
     let lineBreakFrame: number | null = null;
     let compositionFrame: number | null = null;
     let centerAnimFrame: number | null = null;
+    let initialAdjustmentFrame: number | null = null;
+    let initialAdjustmentExpiryTimer: number | null = null;
+    let initialAdjustmentAllowed = true;
     let lineBreakQueued = false;
+    const candidateViewport = initialViewportRef.current;
+    const initialViewportToRestore =
+      candidateViewport &&
+      candidateViewport.textLength === textRef.current.length &&
+      candidateViewport.writingMode === writingModeRef.current &&
+      Number.isFinite(candidateViewport.anchorOffset) &&
+      candidateViewport.anchorOffset >= 0 &&
+      candidateViewport.anchorOffset <= candidateViewport.textLength &&
+      Number.isFinite(candidateViewport.anchorRatio) &&
+      candidateViewport.anchorRatio >= 0 &&
+      candidateViewport.anchorRatio <= 1
+        ? candidateViewport
+        : null;
+    let initialAdjustmentDeadline = Number.POSITIVE_INFINITY;
 
     const stopCenterAnimation = () => {
       if (centerAnimFrame !== null) cancelAnimationFrame(centerAnimFrame);
@@ -2233,8 +2350,192 @@ export function VerticalTextEditor({
       return true;
     };
 
+    const primeVisibleWindowAtOffset = (editor: Editor, offset: number): boolean => {
+      const pos = pmPosFromTextOffset(editor.state.doc, offset);
+      const index = Math.max(
+        0,
+        Math.min(editor.state.doc.childCount - 1, editor.state.doc.resolve(pos).index(0)),
+      );
+      lastVisibleCenter = index;
+      const state = astKey.getState(editor.state);
+      if (state?.visibleCenter === index) return false;
+
+      editor.view.dispatch(
+        editor.state.tr
+          .setMeta(astKey, { visibleCenter: index } satisfies AstMeta)
+          .setMeta("addToHistory", false),
+      );
+      requestLineBreakMarks();
+      return true;
+    };
+
+    const cancelInitialAdjustment = () => {
+      initialAdjustmentAllowed = false;
+      if (initialAdjustmentFrame !== null) cancelAnimationFrame(initialAdjustmentFrame);
+      initialAdjustmentFrame = null;
+      if (initialAdjustmentExpiryTimer !== null) window.clearTimeout(initialAdjustmentExpiryTimer);
+      initialAdjustmentExpiryTimer = null;
+      if (centerFrame !== null) cancelAnimationFrame(centerFrame);
+      centerFrame = null;
+      centerQueued = false;
+      centerInstant = false;
+      centerWaitFrames = 1;
+    };
+    cancelInitialAdjustmentRef.current = cancelInitialAdjustment;
+
+    // 初回選択を復元した直後は、可視範囲の装飾更新によって本文のスクロール幅が
+    // 数フレーム変化することがある。幅と装飾範囲が安定し、キャレットが基準線へ
+    // 収束するまで初回に限って追従する。固定待ち時間にはせず、ユーザー操作が
+    // 始まった時点で中止するため、手動スクロールを後から巻き戻さない。
+    const startInitialCaretSettle = () => {
+      if (
+        !initialAdjustmentAllowed ||
+        initialViewportToRestore ||
+        !typewriterScrollRef.current ||
+        performance.now() >= initialAdjustmentDeadline
+      ) {
+        return;
+      }
+      if (initialAdjustmentFrame !== null) cancelAnimationFrame(initialAdjustmentFrame);
+
+      let previousExtent: string | null = null;
+      let stableFrames = 0;
+
+      const step = () => {
+        initialAdjustmentFrame = null;
+        const currentEditor = tiptapRef.current;
+        const currentScroller = scrollerRef.current;
+        if (
+          !initialAdjustmentAllowed ||
+          !typewriterScrollRef.current ||
+          !currentEditor ||
+          !currentScroller ||
+          isEditorComposing(currentEditor, composingRef)
+        ) {
+          return;
+        }
+
+        const visibleWindowChanged = syncVisibleWindow(currentEditor, currentScroller);
+        const axis = scrollAxis(writingModeRef.current);
+        const beforeScroll = axis.get(currentScroller);
+        centerCaretForEditor(
+          currentEditor,
+          currentScroller,
+          typewriterOffsetRef.current,
+          writingModeRef.current,
+        );
+        const afterScroll = axis.get(currentScroller);
+        const remainingDelta = measureCenterDelta(
+          currentEditor,
+          currentScroller,
+          typewriterOffsetRef.current,
+          writingModeRef.current,
+        );
+        const extent = `${currentScroller.scrollWidth}:${currentScroller.scrollHeight}`;
+        const extentStable = extent === previousExtent;
+        const aligned = remainingDelta !== null && Math.abs(remainingDelta) < SCROLL_EPS;
+        const cannotMoveFurther =
+          remainingDelta !== null &&
+          Math.abs(afterScroll - beforeScroll) < SCROLL_EPS;
+
+        if (
+          !visibleWindowChanged &&
+          extentStable &&
+          (aligned || cannotMoveFurther)
+        ) {
+          stableFrames += 1;
+        } else {
+          stableFrames = 0;
+        }
+        previousExtent = extent;
+
+        if (
+          stableFrames >= INITIAL_CENTER_STABLE_FRAMES ||
+          performance.now() >= initialAdjustmentDeadline
+        ) {
+          return;
+        }
+        initialAdjustmentFrame = requestAnimationFrame(step);
+      };
+
+      initialAdjustmentFrame = requestAnimationFrame(step);
+    };
+
+    // タブ再訪時はキャレットではなく、離れる直前に画面内で見えていた本文位置を
+    // 復元する。生のスクロール量を使わないため、装飾範囲の再構築で本文サイズが
+    // 変わっても同じ本文位置へ戻せる。
+    const startInitialViewportRestore = () => {
+      if (
+        !initialAdjustmentAllowed ||
+        !initialViewportToRestore ||
+        performance.now() >= initialAdjustmentDeadline
+      ) {
+        return;
+      }
+      if (initialAdjustmentFrame !== null) cancelAnimationFrame(initialAdjustmentFrame);
+
+      const currentEditor = tiptapRef.current;
+      if (currentEditor) {
+        primeVisibleWindowAtOffset(currentEditor, initialViewportToRestore.anchorOffset);
+      }
+
+      let previousExtent: string | null = null;
+      let stableFrames = 0;
+
+      const step = () => {
+        initialAdjustmentFrame = null;
+        const editor = tiptapRef.current;
+        const currentScroller = scrollerRef.current;
+        if (
+          !initialAdjustmentAllowed ||
+          !editor ||
+          !currentScroller ||
+          isEditorComposing(editor, composingRef)
+        ) {
+          return;
+        }
+
+        const axis = scrollAxis(initialViewportToRestore.writingMode);
+        const beforeScroll = axis.get(currentScroller);
+        restoreViewportAnchorForEditor(editor, currentScroller, initialViewportToRestore);
+        const visibleWindowChanged = syncVisibleWindow(editor, currentScroller);
+        if (visibleWindowChanged) {
+          restoreViewportAnchorForEditor(editor, currentScroller, initialViewportToRestore);
+        }
+        const afterScroll = axis.get(currentScroller);
+        const remainingDelta = measureViewportAnchorDelta(
+          editor,
+          currentScroller,
+          initialViewportToRestore,
+        );
+        const extent = `${currentScroller.scrollWidth}:${currentScroller.scrollHeight}`;
+        const extentStable = extent === previousExtent;
+        const aligned = remainingDelta !== null && Math.abs(remainingDelta) < SCROLL_EPS;
+        const cannotMoveFurther =
+          remainingDelta !== null && Math.abs(afterScroll - beforeScroll) < SCROLL_EPS;
+
+        if (!visibleWindowChanged && extentStable && (aligned || cannotMoveFurther)) {
+          stableFrames += 1;
+        } else {
+          stableFrames = 0;
+        }
+        previousExtent = extent;
+
+        if (
+          stableFrames >= INITIAL_CENTER_STABLE_FRAMES ||
+          performance.now() >= initialAdjustmentDeadline
+        ) {
+          return;
+        }
+        initialAdjustmentFrame = requestAnimationFrame(step);
+      };
+
+      initialAdjustmentFrame = requestAnimationFrame(step);
+    };
+
     const requestCenterCaret = (instant: boolean, eventType: string) => {
       const editor = tiptapRef.current;
+      if (initialAdjustmentAllowed && initialViewportToRestore) return;
       if (!typewriterScrollRef.current || !editor || isEditorComposing(editor, composingRef)) return;
 
       centerInstant = centerInstant || instant;
@@ -2404,6 +2705,7 @@ export function VerticalTextEditor({
         },
       },
       onUpdate: ({ editor: currentEditor }) => {
+        cancelInitialAdjustment();
         const next = docToText(currentEditor.state.doc);
         updateEmptyAttribute(currentEditor);
         textRef.current = next;
@@ -2432,6 +2734,7 @@ export function VerticalTextEditor({
     updateEmptyAttribute(editor);
 
     const handleWheel = (event: WheelEvent) => {
+      cancelInitialAdjustment();
       stopCenterAnimation();
       event.preventDefault();
       const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
@@ -2445,6 +2748,7 @@ export function VerticalTextEditor({
     };
 
     const handleMouseDown = (event: MouseEvent) => {
+      cancelInitialAdjustment();
       if (event.target !== scroller) return;
 
       const scrollerRect = scroller.getBoundingClientRect();
@@ -2466,6 +2770,7 @@ export function VerticalTextEditor({
     };
 
     const handleCompositionStart = () => {
+      cancelInitialAdjustment();
       stopCenterAnimation();
       composingRef.current = true;
       renderLineBreakMarks();
@@ -2493,7 +2798,11 @@ export function VerticalTextEditor({
     };
 
     const handleResize = () => {
-      requestCenterCaret(true, "resize");
+      if (initialAdjustmentAllowed && initialViewportToRestore) {
+        startInitialViewportRestore();
+      } else {
+        requestCenterCaret(true, "resize");
+      }
       requestVisibleWindow();
       requestLineBreakMarks();
     };
@@ -2506,6 +2815,7 @@ export function VerticalTextEditor({
     // 本文上の左ボタンドラッグ開始を、PM が選択を確定する前に捕捉するため
     // キャプチャフェーズで拾う（pointerdown は mousedown より前に発火する）。
     const handlePointerDown = (event: PointerEvent) => {
+      cancelInitialAdjustment();
       if (event.button !== 0) return;
       pointerDraggingRef.current = true;
     };
@@ -2528,6 +2838,8 @@ export function VerticalTextEditor({
     scroller.addEventListener("wheel", handleWheel, { passive: false });
     scroller.addEventListener("mousedown", handleMouseDown);
     editor.view.dom.addEventListener("pointerdown", handlePointerDown, { capture: true });
+    window.addEventListener("pointerdown", cancelInitialAdjustment, { capture: true });
+    window.addEventListener("keydown", cancelInitialAdjustment, { capture: true });
     window.addEventListener("pointerup", handlePointerUp);
     window.addEventListener("pointercancel", handlePointerCancel);
     editor.view.dom.addEventListener("compositionstart", handleCompositionStart);
@@ -2543,11 +2855,29 @@ export function VerticalTextEditor({
     } else {
       editor.commands.focus("start");
     }
-    requestCenterCaret(true, "initial");
+    initialAdjustmentDeadline = performance.now() + INITIAL_CENTER_SETTLE_MS;
+    initialAdjustmentExpiryTimer = window.setTimeout(
+      cancelInitialAdjustment,
+      INITIAL_CENTER_SETTLE_MS,
+    );
+    if (initialViewportToRestore) {
+      startInitialViewportRestore();
+    } else {
+      requestCenterCaret(true, "initial");
+      startInitialCaretSettle();
+    }
     requestVisibleWindow();
     requestLineBreakMarks();
     document.fonts?.ready.then(() => {
-      requestCenterCaret(true, "font-ready");
+      if (tiptapRef.current !== editor) return;
+      if (initialAdjustmentAllowed && performance.now() < initialAdjustmentDeadline) {
+        if (initialViewportToRestore) {
+          startInitialViewportRestore();
+        } else {
+          requestCenterCaret(true, "font-ready");
+          startInitialCaretSettle();
+        }
+      }
       requestVisibleWindow();
       requestLineBreakMarks();
     });
@@ -2558,6 +2888,8 @@ export function VerticalTextEditor({
       scroller.removeEventListener("wheel", handleWheel);
       scroller.removeEventListener("mousedown", handleMouseDown);
       editor.view.dom.removeEventListener("pointerdown", handlePointerDown, { capture: true });
+      window.removeEventListener("pointerdown", cancelInitialAdjustment, { capture: true });
+      window.removeEventListener("keydown", cancelInitialAdjustment, { capture: true });
       window.removeEventListener("pointerup", handlePointerUp);
       window.removeEventListener("pointercancel", handlePointerCancel);
       editor.view.dom.removeEventListener("compositionstart", handleCompositionStart);
@@ -2569,11 +2901,15 @@ export function VerticalTextEditor({
       if (visibleFrame !== null) cancelAnimationFrame(visibleFrame);
       if (lineBreakFrame !== null) cancelAnimationFrame(lineBreakFrame);
       if (compositionFrame !== null) cancelAnimationFrame(compositionFrame);
+      cancelInitialAdjustment();
       stopCenterAnimation();
       if (startCenterAnimationRef.current === startCenterAnimation) startCenterAnimationRef.current = null;
       if (stopCenterAnimationRef.current === stopCenterAnimation) stopCenterAnimationRef.current = null;
       renderLineBreakMarksRef.current = null;
       requestLineBreakMarksRef.current = null;
+      if (cancelInitialAdjustmentRef.current === cancelInitialAdjustment) {
+        cancelInitialAdjustmentRef.current = null;
+      }
       if (lineBreakLayerRef.current) lineBreakLayerRef.current.textContent = "";
       editor.destroy();
       if (tiptapRef.current === editor) tiptapRef.current = null;

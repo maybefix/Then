@@ -283,6 +283,18 @@ export const UI_FONT_SCALE_MAX = 1.6;
 
 export type SaveStatus = "loading" | "saved" | "dirty" | "saving" | "error";
 
+/**
+ * タブを離れる直前に画面内で見えていた本文位置。
+ * スクロール量そのものは装飾の遅延生成で変わり得るため、本文オフセットと
+ * ビューポート内の相対位置を組み合わせて保持する。
+ */
+export type TextEditorViewportState = {
+  textLength: number;
+  writingMode: WritingMode;
+  anchorOffset: number;
+  anchorRatio: number;
+};
+
 export type DocumentTab = {
   id: string;
   kind: "file" | "scratch";
@@ -299,6 +311,8 @@ export type DocumentTab = {
   saveStatus: SaveStatus;
   documentKey: string;
   activeOutlineLine: number | null;
+  /** 同じタブへ戻ったときに復元する、セッション中だけの表示位置。 */
+  viewportState: TextEditorViewportState | null;
 };
 
 export type AppState = {

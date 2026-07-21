@@ -28,6 +28,7 @@
   --radius-control: 0;
   --radius-card: 0;
   --radius-button: 0;
+  --editor-heading-color: #260606;
   --silkdown-code-bg: rgba(36, 0, 176, 0.08);
   --silkdown-link-color: #2400b0;
 }
@@ -65,6 +66,7 @@
   --radius-control: 0;
   --radius-card: 0;
   --radius-button: 0;
+  --editor-heading-color: #f1e8e8;
   --silkdown-code-bg: rgba(107, 126, 255, 0.1);
   --silkdown-link-color: #9aa8ff;
 }
@@ -82,3 +84,7 @@
 .themePreview-shaping-dark i { background: #fff; }
 
 .themePreview-shaping-dark b { background: #d80000; }
+
+.appShell[data-theme^="shaping-"] .verticalTypewriterEditor .pm-root p.heading {
+  color: var(--editor-heading-color);
+}

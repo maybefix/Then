@@ -68,6 +68,8 @@
   [data-theme^="resonance-"],
   [data-theme^="minimal-"],
   [data-theme^="orchestrating-"],
+  [data-theme^="blue-sky-"],
+  [data-theme^="shaping-"],
   [data-theme^="promise-"]
 ) .leftWorkspaceCluster {
   display: flex;
@@ -88,6 +90,8 @@
   [data-theme^="resonance-"],
   [data-theme^="minimal-"],
   [data-theme^="orchestrating-"],
+  [data-theme^="blue-sky-"],
+  [data-theme^="shaping-"],
   [data-theme^="promise-"]
 ) .leftWorkspaceCluster .workspaceActivityBar {
   height: 100%;
@@ -103,6 +107,8 @@
   [data-theme^="resonance-"],
   [data-theme^="minimal-"],
   [data-theme^="orchestrating-"],
+  [data-theme^="blue-sky-"],
+  [data-theme^="shaping-"],
   [data-theme^="promise-"]
 ) .leftWorkspaceCluster .workspaceSidebar {
   height: 100%;
@@ -119,6 +125,8 @@
   [data-theme^="resonance-"],
   [data-theme^="minimal-"],
   [data-theme^="orchestrating-"],
+  [data-theme^="blue-sky-"],
+  [data-theme^="shaping-"],
   [data-theme^="promise-"]
 ) .leftWorkspaceCluster[data-sidebar-collapsed="true"] .workspaceActivityBar {
   border-right-color: transparent;
@@ -132,6 +140,8 @@
   [data-theme^="resonance-"],
   [data-theme^="minimal-"],
   [data-theme^="orchestrating-"],
+  [data-theme^="blue-sky-"],
+  [data-theme^="shaping-"],
   [data-theme^="promise-"]
 ) .workspaceActivityButton {
   width: 36px;
@@ -146,6 +156,8 @@
   [data-theme^="resonance-"],
   [data-theme^="minimal-"],
   [data-theme^="orchestrating-"],
+  [data-theme^="blue-sky-"],
+  [data-theme^="shaping-"],
   [data-theme^="promise-"]
 ) .workspaceActivityButton::before {
   top: 9px;
@@ -163,9 +175,16 @@
   [data-theme^="resonance-"],
   [data-theme^="minimal-"],
   [data-theme^="orchestrating-"],
+  [data-theme^="blue-sky-"],
+  [data-theme^="shaping-"],
   [data-theme^="promise-"]
 ) .activeWorkspaceActivityButton {
   background: color-mix(in srgb, var(--accent) 11%, transparent);
+}
+
+/* Shaping uses a square, edge-aligned navigation highlight. */
+.appShell[data-theme^="shaping-"] .workspaceActivityButton {
+  border-radius: 0;
 }
 
 /* Mono Press uses the same integrated navigation structure, but renders it as
