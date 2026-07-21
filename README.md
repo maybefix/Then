@@ -71,6 +71,17 @@ Markdown / テキストファイルをそのまま原稿として扱いながら
 - 実際の出力エンジンを使ったプレビュー
 - 生成進捗の表示
 
+### Vivliostyleの利用とライセンス
+
+Thenは、PDFのページ組版にオープンソースの**Vivliostyle Viewer 2.43.3**を利用しています。
+
+- **実装:** Vivliostyle Viewerの配布ファイルをアプリに同梱し、PDF出力時に独立した非表示WebViewでローカル実行します。ThenのReact / TypeScriptコードへVivliostyleのソースを直接取り込む構成ではなく、組版後のページをWindows WebView2のPDF出力機能で保存します。
+- **原稿データ:** この組版処理では、原稿から生成したHTMLをアプリ内部で同梱Viewerへ渡します。オンライン版Vivliostyle Viewerや外部のVivliostyleサーバーへ原稿をアップロードする処理はありません。
+- **原稿・出力物の権利:** Vivliostyle公式FAQでは、Vivliostyleを利用して作成した出版物にAGPLが及ぶことはなく、原稿のHTML / CSSを公開する義務もないと説明されています。作成した原稿やPDF / DOCXは、商用・非商用を問わず、Vivliostyleのライセンスを理由とする追加の公開義務なしに利用できます。
+- **オープンソースライセンス:** 同梱するVivliostyle ViewerはGNU Affero General Public License v3（AGPL-3.0）で提供されています。Thenでは配布版を独立したコンポーネントとして利用しており、AGPLの表示・ソース提供などの条件はこのVivliostyleコンポーネントについて扱います。将来Viewer自体を改変する場合は、その改変部分を含む対応ソースをAGPL-3.0に従って提供します。
+
+詳細は[第三者ライセンス告知](THIRD_PARTY_LICENSES/Vivliostyle-NOTICE.md)、[同梱しているAGPL-3.0全文](THIRD_PARTY_LICENSES/AGPL-3.0.txt)、[Vivliostyle公式ライセンスFAQ](https://vivliostyle.org/ja/faq/#vivliostyle-license-faq)、[同梱版2.43.3に対応するソースコード](https://github.com/vivliostyle/vivliostyle.js/tree/74048579bd3dde59a7a814bca6e9fd11760c6059)を参照してください。対応ソースは[ZIP形式](https://github.com/vivliostyle/vivliostyle.js/archive/74048579bd3dde59a7a814bca6e9fd11760c6059.zip)でも無償で取得できます。VivliostyleおよびVivliostyle Viewerの著作権・商標その他の権利は、それぞれの権利者に帰属します。
+
 ### 表示と設定
 
 - ライト／ダークを含む多数のカラーテーマ
