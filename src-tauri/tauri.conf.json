@@ -28,7 +28,9 @@
     "active": true,
     "targets": "all",
     "resources": {
-      "../THIRD_PARTY_LICENSES/NotoCJK-OFL.txt": "THIRD_PARTY_LICENSES/NotoCJK-OFL.txt"
+      "../THIRD_PARTY_LICENSES/NotoCJK-OFL.txt": "THIRD_PARTY_LICENSES/NotoCJK-OFL.txt",
+      "../THIRD_PARTY_LICENSES/AGPL-3.0.txt": "THIRD_PARTY_LICENSES/AGPL-3.0.txt",
+      "../THIRD_PARTY_LICENSES/Vivliostyle-NOTICE.md": "THIRD_PARTY_LICENSES/Vivliostyle-NOTICE.md"
     },
     "icon": [
       "icons/32x32.png",
