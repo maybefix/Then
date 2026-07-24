@@ -3459,6 +3459,21 @@ body {
   color: var(--text-primary);
 }
 
+.treeContextMenu button:disabled {
+  background: transparent;
+  color: var(--text-faint);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.contextMenuHint {
+  max-width: 220px;
+  padding: 3px 10px 5px;
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .scratchTreeItem {
   margin-top: 6px;
 }
@@ -4179,6 +4194,15 @@ body {
 }
 
 .activeOutlineTreeItem {
+  color: var(--accent-strong);
+}
+
+.selectedOutlineTreeItem {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text-primary);
+}
+
+.selectedOutlineTreeItem.activeOutlineTreeItem {
   color: var(--accent-strong);
 }
 

@@ -9,6 +9,29 @@ export type HeadingMoveResult = {
   targetMarkdown: string;
 };
 
+export type HeadingMoveSource = {
+  path: string;
+  line: number;
+};
+
+export type HeadingMoveDocument = {
+  path: string;
+  markdown: string;
+};
+
+export type HeadingMoveManyResult = {
+  changed: boolean;
+  movedTitles: string[];
+  documents: HeadingMoveDocument[];
+};
+
+export type HeadingExtractResult = {
+  changed: boolean;
+  extractedTitle: string;
+  sourceMarkdown: string;
+  extractedMarkdown: string;
+};
+
 type TextLines = {
   lines: string[];
   trailingNewline: boolean;
@@ -87,6 +110,137 @@ function getInsertionIndex(
   };
 }
 
+export function moveHeadingSections({
+  documents,
+  sources,
+  targetPath,
+  targetLine,
+  position,
+}: {
+  documents: HeadingMoveDocument[];
+  sources: HeadingMoveSource[];
+  targetPath: string;
+  targetLine: number | null;
+  position: HeadingDropPosition;
+}): HeadingMoveManyResult {
+  const originalByPath = new Map(documents.map((document) => [document.path, document.markdown]));
+  const bodyByPath = new Map(
+    documents.map((document) => [
+      document.path,
+      splitLines(parseFrontMatter(document.markdown).body),
+    ]),
+  );
+  const targetBody = bodyByPath.get(targetPath);
+  if (!targetBody) {
+    throw new Error("移動先のファイルを読み込めませんでした。");
+  }
+
+  const candidates = sources.map((source, order) => {
+    const body = bodyByPath.get(source.path);
+    if (!body) {
+      throw new Error("移動元のファイルを読み込めませんでした。");
+    }
+    return {
+      ...getHeadingSection(body.lines, source.line, "移動元"),
+      path: source.path,
+      order,
+      sourceTrailingNewline: body.trailingNewline,
+      sourceLineCount: body.lines.length,
+    };
+  });
+
+  const acceptedByPath = new Map<string, typeof candidates>();
+  for (const candidate of [...candidates].sort(
+    (left, right) =>
+      left.path.localeCompare(right.path) ||
+      left.start - right.start ||
+      right.end - left.end,
+  )) {
+    const accepted = acceptedByPath.get(candidate.path) ?? [];
+    if (
+      accepted.some(
+        (section) =>
+          candidate.start >= section.start && candidate.start < section.end,
+      )
+    ) {
+      continue;
+    }
+    accepted.push(candidate);
+    acceptedByPath.set(candidate.path, accepted);
+  }
+  const accepted = [...acceptedByPath.values()]
+    .flat()
+    .sort((left, right) => left.order - right.order);
+  if (accepted.length === 0) {
+    return { changed: false, movedTitles: [], documents };
+  }
+
+  const insertion = getInsertionIndex(targetBody.lines, targetLine, position);
+  const targetSections = acceptedByPath.get(targetPath) ?? [];
+  if (
+    insertion.targetStart !== null &&
+    targetSections.some(
+      (section) =>
+        insertion.targetStart! >= section.start &&
+        insertion.targetStart! < section.end,
+    )
+  ) {
+    return {
+      changed: false,
+      movedTitles: accepted.map((section) => section.title),
+      documents,
+    };
+  }
+
+  const nextBodies = new Map(
+    [...bodyByPath.entries()].map(([path, body]) => [
+      path,
+      { ...body, lines: [...body.lines] },
+    ]),
+  );
+  for (const [path, sections] of acceptedByPath) {
+    const nextBody = nextBodies.get(path)!;
+    for (const section of [...sections].sort((left, right) => right.start - left.start)) {
+      nextBody.lines.splice(section.start, section.end - section.start);
+    }
+  }
+
+  const removedBeforeInsertion = targetSections.reduce(
+    (total, section) =>
+      section.end <= insertion.index ? total + section.end - section.start : total,
+    0,
+  );
+  const adjustedInsertion = insertion.index - removedBeforeInsertion;
+  const movedLines = accepted.flatMap((section) => section.lines);
+  const nextTargetBody = nextBodies.get(targetPath)!;
+  nextTargetBody.lines.splice(adjustedInsertion, 0, ...movedLines);
+  const lastMovedSection = accepted[accepted.length - 1];
+  if (
+    insertion.index === targetBody.lines.length &&
+    lastMovedSection.sourceTrailingNewline &&
+    lastMovedSection.end === lastMovedSection.sourceLineCount
+  ) {
+    nextTargetBody.trailingNewline = true;
+  }
+
+  const nextDocuments = documents.map((document) => {
+    const body = nextBodies.get(document.path);
+    if (!body) return document;
+    return {
+      ...document,
+      markdown: updateMarkdownBody(document.markdown, joinLines(body)),
+    };
+  });
+
+  return {
+    changed: nextDocuments.some(
+      (document) => document.markdown !== originalByPath.get(document.path),
+    ),
+    movedTitles: accepted.map((section) => section.title),
+    documents: nextDocuments,
+  };
+}
+
 export function moveHeadingSection({
   sourceMarkdown,
   targetMarkdown,
@@ -102,71 +256,72 @@ export function moveHeadingSection({
   position: HeadingDropPosition;
   sameDocument: boolean;
 }): HeadingMoveResult {
+  const sourcePath = sameDocument ? "document" : "source";
+  const targetPath = sameDocument ? sourcePath : "target";
+  const result = moveHeadingSections({
+    documents: sameDocument
+      ? [{ path: sourcePath, markdown: sourceMarkdown }]
+      : [
+          { path: sourcePath, markdown: sourceMarkdown },
+          { path: targetPath, markdown: targetMarkdown },
+        ],
+    sources: [{ path: sourcePath, line: sourceLine }],
+    targetPath,
+    targetLine,
+    position,
+  });
+  const nextSource =
+    result.documents.find((document) => document.path === sourcePath)?.markdown ??
+    sourceMarkdown;
+  const nextTarget =
+    result.documents.find((document) => document.path === targetPath)?.markdown ??
+    targetMarkdown;
+  return {
+    changed: result.changed,
+    movedTitle: result.movedTitles[0] ?? "",
+    sourceMarkdown: nextSource,
+    targetMarkdown: sameDocument ? nextSource : nextTarget,
+  };
+}
+
+export function extractHeadingSection({
+  sourceMarkdown,
+  sourceLine,
+  includeChildren,
+}: {
+  sourceMarkdown: string;
+  sourceLine: number;
+  includeChildren: boolean;
+}): HeadingExtractResult {
   const sourceBody = splitLines(parseFrontMatter(sourceMarkdown).body);
-  const sourceSection = getHeadingSection(sourceBody.lines, sourceLine, "移動元");
-
-  if (sameDocument) {
-    const insertion = getInsertionIndex(sourceBody.lines, targetLine, position);
-    if (
-      insertion.targetStart !== null &&
-      insertion.targetStart >= sourceSection.start &&
-      insertion.targetStart < sourceSection.end
-    ) {
-      return {
-        changed: false,
-        movedTitle: sourceSection.title,
-        sourceMarkdown,
-        targetMarkdown: sourceMarkdown,
-      };
+  const fullSection = getHeadingSection(sourceBody.lines, sourceLine, "切り出し元");
+  let end = fullSection.end;
+  if (!includeChildren) {
+    for (let index = fullSection.start + 1; index < fullSection.end; index += 1) {
+      if (parseHeading(sourceBody.lines[index])) {
+        end = index;
+        break;
+      }
     }
-
-    const nextLines = [...sourceBody.lines];
-    nextLines.splice(sourceSection.start, sourceSection.end - sourceSection.start);
-    const removedLength = sourceSection.end - sourceSection.start;
-    const adjustedInsertion =
-      insertion.index >= sourceSection.end
-        ? insertion.index - removedLength
-        : insertion.index;
-    nextLines.splice(adjustedInsertion, 0, ...sourceSection.lines);
-    const nextMarkdown = updateMarkdownBody(
-      sourceMarkdown,
-      joinLines({ ...sourceBody, lines: nextLines }),
-    );
-
-    return {
-      changed: nextMarkdown !== sourceMarkdown,
-      movedTitle: sourceSection.title,
-      sourceMarkdown: nextMarkdown,
-      targetMarkdown: nextMarkdown,
-    };
   }
 
-  const targetBody = splitLines(parseFrontMatter(targetMarkdown).body);
-  const insertion = getInsertionIndex(targetBody.lines, targetLine, position);
+  const extractedLines = sourceBody.lines.slice(fullSection.start, end);
   const nextSourceLines = [...sourceBody.lines];
-  nextSourceLines.splice(sourceSection.start, sourceSection.end - sourceSection.start);
-  const nextTargetLines = [...targetBody.lines];
-  nextTargetLines.splice(insertion.index, 0, ...sourceSection.lines);
-  const targetTrailingNewline =
-    targetBody.trailingNewline ||
-    (insertion.index === targetBody.lines.length &&
-      sourceSection.end === sourceBody.lines.length &&
-      sourceBody.trailingNewline);
+  nextSourceLines.splice(fullSection.start, end - fullSection.start);
+  const extractedTrailingNewline =
+    end < sourceBody.lines.length || sourceBody.trailingNewline;
+  const nextSourceMarkdown = updateMarkdownBody(
+    sourceMarkdown,
+    joinLines({ ...sourceBody, lines: nextSourceLines }),
+  );
 
   return {
-    changed: true,
-    movedTitle: sourceSection.title,
-    sourceMarkdown: updateMarkdownBody(
-      sourceMarkdown,
-      joinLines({ ...sourceBody, lines: nextSourceLines }),
-    ),
-    targetMarkdown: updateMarkdownBody(
-      targetMarkdown,
-      joinLines({
-        ...targetBody,
-        lines: nextTargetLines,
-        trailingNewline: targetTrailingNewline,
-      }),
-    ),
+    changed: nextSourceMarkdown !== sourceMarkdown,
+    extractedTitle: fullSection.title,
+    sourceMarkdown: nextSourceMarkdown,
+    extractedMarkdown: joinLines({
+      lines: extractedLines,
+      trailingNewline: extractedTrailingNewline,
+    }),
   };
 }

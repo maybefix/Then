@@ -172,12 +172,15 @@ function Harness() {
     onReplaceInProject() {},
     onJumpOutline() {},
     onJumpProjectOutline() {},
-    onMoveHeading(sourcePath, sourceLine, sourceBlockId, targetPath, targetLine, targetBlockId, position) {
+    onMoveHeadings(sources, targetPath, targetLine, targetBlockId, position) {
       globalThis.__headingLogs.push([
         "reorder-handler-reached",
-        { sourcePath, sourceLine, sourceBlockId, targetPath, targetLine, targetBlockId, position },
+        { sources, targetPath, targetLine, targetBlockId, position },
       ]);
       setMoved(true);
+    },
+    onExtractHeading(source) {
+      globalThis.__headingLogs.push(["extract-heading", { source }]);
     },
     onOpenProjectFolder() {},
     onNewDocument() {},
@@ -288,6 +291,69 @@ for (const required of [
   assert.ok(stages.includes(required), `missing ${required}: ${stages.join(", ")}`);
 }
 assert.deepEqual(domOrder, ["block-beta", "block-alpha"]);
+
+const selectedBeta = document.querySelector('[data-outline-block-id="block-beta"]');
+const selectedAlpha = document.querySelector('[data-outline-block-id="block-alpha"]');
+assert.ok(selectedBeta && selectedAlpha, "moved outline rows must remain selectable");
+await act(async () => {
+  selectedBeta.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, ctrlKey: true }));
+  selectedAlpha.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, ctrlKey: true }));
+});
+assert.equal(
+  document.querySelectorAll(".selectedOutlineTreeItem").length,
+  2,
+  "Ctrl+click must select multiple headings",
+);
+await act(async () => {
+  selectedBeta.dispatchEvent(
+    new dom.window.MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 12,
+      clientY: 18,
+    }),
+  );
+});
+const extractButton = Array.from(document.querySelectorAll(".headingContextMenu button"))
+  .find((button) => button.textContent.includes("別ファイルへ切り出す"));
+assert.ok(extractButton?.disabled, "extract must be disabled while multiple headings are selected");
+
+const targetFileRow = Array.from(document.querySelectorAll(".fileTreeItem"))
+  .find((row) => row.getAttribute("data-outline-file-path") === pathB);
+assert.ok(targetFileRow, "cross-file drop target must render");
+const multiTransfer = new DataTransferStub();
+await act(async () => {
+  selectedBeta.dispatchEvent(new dom.window.MouseEvent("pointerdown", { bubbles: true }));
+  selectedBeta.dispatchEvent(dragEvent("dragstart", multiTransfer));
+  targetFileRow.dispatchEvent(dragEvent("dragover", multiTransfer));
+  targetFileRow.dispatchEvent(dragEvent("drop", multiTransfer));
+  selectedBeta.dispatchEvent(dragEvent("dragend", multiTransfer));
+});
+const moveLogs = globalThis.__headingLogs.filter(([stage]) => stage === "reorder-handler-reached");
+assert.equal(
+  moveLogs.at(-1)[1].sources.length,
+  2,
+  "dragging a selected heading must move the complete Ctrl+click selection",
+);
+const singleHeading = document.querySelector('[data-outline-block-id="block-beta"]');
+await act(async () => {
+  singleHeading.dispatchEvent(
+    new dom.window.MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 12,
+      clientY: 18,
+    }),
+  );
+});
+const singleExtractButton = Array.from(document.querySelectorAll(".headingContextMenu button"))
+  .find((button) => button.textContent.includes("別ファイルへ切り出す"));
+assert.ok(singleExtractButton && !singleExtractButton.disabled, "one heading can be extracted");
+await act(async () => singleExtractButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
+assert.ok(
+  globalThis.__headingLogs.some(([stage]) => stage === "extract-heading"),
+  "extract menu must invoke its heading callback",
+);
 console.log(JSON.stringify({ stages, domOrder, logs: globalThis.__headingLogs }, null, 2));
 await act(async () => root.unmount());
 dom.window.close();

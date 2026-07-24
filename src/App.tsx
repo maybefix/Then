@@ -26,7 +26,10 @@ import {
   type SnapshotRelocation,
   type SnapshotConflictPolicy,
 } from "./components/checkpoints/CheckpointStudio";
-import { WorkspaceSidebar } from "./components/layout/WorkspaceSidebar";
+import {
+  WorkspaceSidebar,
+  type SidebarHeadingSelection,
+} from "./components/layout/WorkspaceSidebar";
 import { StartupPortal } from "./components/startup/StartupPortal";
 import {
   createDocumentAst,
@@ -36,7 +39,8 @@ import {
   hash16,
 } from "./editor/ast/documentAst";
 import {
-  moveHeadingSection,
+  extractHeadingSection,
+  moveHeadingSections,
   type HeadingDropPosition,
 } from "./editor/ast/headingMove";
 import {
@@ -233,8 +237,12 @@ type DocumentSaveQueue = {
 };
 
 type HeadingMoveDocuments = {
+  documents: TextDocument[];
+};
+
+type HeadingExtractDocuments = {
   sourceDocument: TextDocument;
-  targetDocument: TextDocument | null;
+  extractedDocument: TextDocument;
 };
 
 type MoveProjectEntryResult = {
@@ -892,6 +900,18 @@ const WHITESPACE_PATTERN = /[\s　]/g;
 function countDisplayCharacters(text: string, includeWhitespace: boolean): number {
   const target = includeWhitespace ? text : text.replace(WHITESPACE_PATTERN, "");
   return Array.from(target).length;
+}
+
+function suggestedHeadingFileName(title: string, sourcePath: string): string {
+  const extensionMatch = sourcePath.match(/(\.(?:md|txt))$/i);
+  const extension = extensionMatch?.[1] ?? ".txt";
+  const sanitized =
+    title
+      .replace(/[\\/:*?"<>|]/g, " ")
+      .replace(/\s+/g, " ")
+      .replace(/[.\s]+$/g, "")
+      .trim() || "切り出した見出し";
+  return `${sanitized}${extension}`;
 }
 
 function documentAstToText(documentAst: DocumentAst): string {
@@ -2174,6 +2194,7 @@ export default function App() {
   const [breadcrumbDropTarget, setBreadcrumbDropTarget] =
     useState<BreadcrumbDropTarget>(null);
   const [charCount, setCharCount] = useState(0);
+  const [selectionCharCount, setSelectionCharCount] = useState<number | null>(null);
   const [editorSelectionHead, setEditorSelectionHead] = useState(0);
   const [editorContextMenu, setEditorContextMenu] =
     useState<EditorContextMenuState | null>(null);
@@ -3603,15 +3624,38 @@ export default function App() {
     };
   }, []);
 
-  const handleEditorReady = useCallback((editor: TextEditorHandle | null) => {
-    editorInstanceRef.current = editor;
-    if (editor) {
-      // マウント時の選択復元は onReady より先に完了するため、ここで親側にも
-      // 実位置を同期する。同期しないと以前の値（初期値0を含む）がカーソル保存へ
-      // 流れ、次回のタブ復帰時に先頭として復元されることがある。
-      setEditorSelectionHead(editor.getSelection().head);
-    }
-  }, []);
+  const updateSelectionCharCount = useCallback(
+    (editor: TextEditorHandle | null) => {
+      if (!editor) {
+        setSelectionCharCount(null);
+        return;
+      }
+      const selection = editor.getSelection();
+      if (selection.from === selection.to) {
+        setSelectionCharCount(null);
+        return;
+      }
+      const selectedText = editor.getValue().slice(selection.from, selection.to);
+      setSelectionCharCount(
+        countDisplayCharacters(selectedText, settings.countWhitespace),
+      );
+    },
+    [settings.countWhitespace],
+  );
+
+  const handleEditorReady = useCallback(
+    (editor: TextEditorHandle | null) => {
+      editorInstanceRef.current = editor;
+      if (editor) {
+        // マウント時の選択復元は onReady より先に完了するため、ここで親側にも
+        // 実位置を同期する。同期しないと以前の値（初期値0を含む）がカーソル保存へ
+        // 流れ、次回のタブ復帰時に先頭として復元されることがある。
+        setEditorSelectionHead(editor.getSelection().head);
+      }
+      updateSelectionCharCount(editor);
+    },
+    [updateSelectionCharCount],
+  );
 
   const handleEditorViewportSizeChange = useCallback(
     (size: { width: number; height: number; verticalPadding: number } | null) => {
@@ -3711,6 +3755,7 @@ export default function App() {
   const handleTextChange = useCallback((nextText: string, editorRevision: number) => {
     didMountEditorRef.current = true;
     setCharCount(countDisplayCharacters(nextText, settings.countWhitespace));
+    updateSelectionCharCount(editorInstanceRef.current);
     if (suppressNextEditorUpdateRef.current) {
       suppressNextEditorUpdateRef.current = false;
       return;
@@ -3722,11 +3767,26 @@ export default function App() {
     if (!currentFilePath) {
       setSaveStatus("dirty");
     }
-  }, [currentFilePath, markdown, setActiveMarkdown, setSaveStatus, settings.countWhitespace]);
+  }, [
+    currentFilePath,
+    markdown,
+    setActiveMarkdown,
+    setSaveStatus,
+    settings.countWhitespace,
+    updateSelectionCharCount,
+  ]);
 
   useEffect(() => {
     setCharCount(countDisplayCharacters(editorText, settings.countWhitespace));
   }, [editorText, settings.countWhitespace]);
+
+  useEffect(() => {
+    updateSelectionCharCount(editorInstanceRef.current);
+  }, [updateSelectionCharCount]);
+
+  useEffect(() => {
+    setSelectionCharCount(null);
+  }, [documentKey]);
 
   const updateFrontMatter = useCallback((metadata: string) => {
     const nextMarkdown = composeMarkdown(metadata, parseFrontMatter(markdown).body);
@@ -3767,9 +3827,10 @@ export default function App() {
     if (editor) {
       setEditorSelectionHead(editor.getSelection().head);
     }
+    updateSelectionCharCount(editor);
     // 選択変化に伴うタイプライター再センタリングはエディタ内部に一本化した。
     // App 側の scheduleTypewriterScroll は設定・オフセット変更時の再適用専用に残す。
-  }, []);
+  }, [updateSelectionCharCount]);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -6485,29 +6546,27 @@ export default function App() {
   };
 
   const handleHeadingMove = async (
-    sourcePath: string,
-    sourceLine: number,
-    sourceBlockId: string,
+    sources: SidebarHeadingSelection[],
     targetPath: string,
     targetLine: number | null,
     targetBlockId: string | null,
     position: HeadingDropPosition,
   ) => {
     logHeadingDnd("reorder-handler-reached", {
-      sourcePath,
-      sourceLine,
-      sourceBlockId,
+      sources,
       targetPath,
       targetLine,
       targetBlockId,
       position,
     });
+    if (!sources.length) return;
     if (headingMoveInProgressRef.current) {
       showToast("見出しを移動中です");
       return;
     }
+    const affectedPaths = new Set([...sources.map((source) => source.path), targetPath]);
     const affectedTabs = openTabs.filter(
-      (tab) => tab.path === sourcePath || tab.path === targetPath,
+      (tab) => tab.path && affectedPaths.has(tab.path),
     );
     if (affectedTabs.some((tab) => tab.saveStatus === "saving")) {
       showToast("保存完了後に見出しを移動してください");
@@ -6522,40 +6581,53 @@ export default function App() {
     };
 
     try {
-      const sourceMarkdown = await readMarkdown(sourcePath);
-      const targetMarkdown =
-        sourcePath === targetPath ? sourceMarkdown : await readMarkdown(targetPath);
-      const move = moveHeadingSection({
-        sourceMarkdown,
-        targetMarkdown,
-        sourceLine,
+      const originalDocuments = await Promise.all(
+        [...affectedPaths].map(async (path) => ({
+          path,
+          markdown: await readMarkdown(path),
+        })),
+      );
+      const originalByPath = new Map(
+        originalDocuments.map((document) => [document.path, document.markdown] as const),
+      );
+      const move = moveHeadingSections({
+        documents: originalDocuments,
+        sources: sources.map((source) => ({
+          path: source.path,
+          line: source.line,
+        })),
+        targetPath,
         targetLine,
         position,
-        sameDocument: sourcePath === targetPath,
       });
       logHeadingDnd("reorder-transform-complete", {
-        sourceBlockId,
+        sourceBlockIds: sources.map((source) => source.blockId),
         targetBlockId,
         changed: move.changed,
-        movedTitle: move.movedTitle,
+        movedTitles: move.movedTitles,
       });
       if (!move.changed) {
         showToast("見出しの移動先が同じため変更はありません");
         return;
       }
 
-      logHeadingDnd("reorder-save-start", { sourceBlockId, targetBlockId });
-      const saved = await invoke<HeadingMoveDocuments>("save_heading_move", {
-        sourcePath,
-        targetPath,
-        sourceContent: move.sourceMarkdown,
-        targetContent: move.targetMarkdown,
-      });
-      const savedDocuments = [saved.sourceDocument, saved.targetDocument].filter(
-        (document): document is TextDocument => document !== null,
+      const changedDocuments = move.documents.filter(
+        (document) => document.markdown !== originalByPath.get(document.path),
       );
+      logHeadingDnd("reorder-save-start", {
+        sourceBlockIds: sources.map((source) => source.blockId),
+        targetBlockId,
+        paths: changedDocuments.map((document) => document.path),
+      });
+      const saved = await invoke<HeadingMoveDocuments>("save_heading_move", {
+        documents: changedDocuments.map((document) => ({
+          path: document.path,
+          content: document.markdown,
+        })),
+      });
+      const savedDocuments = saved.documents;
       logHeadingDnd("reorder-save-complete", {
-        sourceBlockId,
+        sourceBlockIds: sources.map((source) => source.blockId),
         targetBlockId,
         savedPaths: savedDocuments.map((document) => document.path),
       });
@@ -6601,7 +6673,7 @@ export default function App() {
         }));
       }
       logHeadingDnd("state-update-scheduled", {
-        sourceBlockId,
+        sourceBlockIds: sources.map((source) => source.blockId),
         targetBlockId,
         updatedTabPaths: savedDocuments.map((document) => document.path),
       });
@@ -6611,13 +6683,17 @@ export default function App() {
             document.querySelectorAll<HTMLElement>("[data-outline-block-id]"),
           );
           const movedRows = outlineRows
-            .filter((row) => row.dataset.outlineBlockId === sourceBlockId)
+            .filter((row) =>
+              sources.some(
+                (source) => row.dataset.outlineBlockId === source.blockId,
+              ),
+            )
             .map((row) => ({
               path: row.dataset.outlineFilePath ?? null,
               line: Number(row.dataset.outlineHeadingLine ?? 0),
             }));
           logHeadingDnd("state-dom-updated", {
-            sourceBlockId,
+            sourceBlockIds: sources.map((source) => source.blockId),
             targetBlockId,
             outlineRowCount: outlineRows.length,
             movedRows,
@@ -6625,14 +6701,105 @@ export default function App() {
         });
       });
       setLastError("");
+      const sourcePaths = new Set(sources.map((source) => source.path));
       showToast(
-        sourcePath === targetPath
-          ? `見出し「${move.movedTitle}」を移動しました`
-          : `見出し「${move.movedTitle}」を「${saved.targetDocument?.name ?? targetPath}」へ移動しました`,
+        move.movedTitles.length === 1
+          ? sourcePaths.size === 1 && sourcePaths.has(targetPath)
+            ? `見出し「${move.movedTitles[0]}」を移動しました`
+            : `見出し「${move.movedTitles[0]}」を別ファイルへ移動しました`
+          : `${move.movedTitles.length}件の見出しを移動しました`,
       );
     } catch (error) {
       setLastError(String(error));
       showToast(error instanceof Error ? error.message : "見出しを移動できませんでした");
+    } finally {
+      headingMoveInProgressRef.current = false;
+    }
+  };
+
+  const handleHeadingExtract = async (source: SidebarHeadingSelection) => {
+    if (headingMoveInProgressRef.current) {
+      showToast("見出しを移動中です");
+      return;
+    }
+    const openSourceTab = openTabs.find((tab) => tab.path === source.path);
+    if (openSourceTab?.saveStatus === "saving") {
+      showToast("保存完了後に見出しを切り出してください");
+      return;
+    }
+
+    const childChoice = await requestChoice({
+      title: "見出しを別ファイルへ切り出す",
+      message: `「${source.title}」の子階層も一緒に切り出しますか？`,
+      detail: "「この見出しのみ」では、下位レベルの見出しを元ファイルに残します。",
+      primaryLabel: "子階層も含める",
+      secondaryLabel: "この見出しのみ",
+    });
+    if (!childChoice) return;
+
+    const fileName = await requestInput({
+      title: "切り出すファイル名",
+      label: "テキストファイル名",
+      initialValue: suggestedHeadingFileName(source.title, source.path),
+      confirmLabel: "切り出す",
+      placeholder: "例: 第一章.md",
+    });
+    if (!fileName) return;
+
+    headingMoveInProgressRef.current = true;
+    try {
+      const sourceMarkdown =
+        openSourceTab?.markdown ??
+        (await invoke<TextDocument>("read_text_file", { path: source.path })).content;
+      const extraction = extractHeadingSection({
+        sourceMarkdown,
+        sourceLine: source.line,
+        includeChildren: childChoice === "primary",
+      });
+      if (!extraction.changed || !extraction.extractedMarkdown) {
+        showToast("切り出せる内容がありません");
+        return;
+      }
+
+      const saved = await invoke<HeadingExtractDocuments>("extract_heading_to_file", {
+        sourcePath: source.path,
+        fileName,
+        sourceContent: extraction.sourceMarkdown,
+        extractedContent: extraction.extractedMarkdown,
+      });
+      setOpenTabs((current) =>
+        current.map((tab) =>
+          tab.path === saved.sourceDocument.path
+            ? {
+                ...tab,
+                markdown: saved.sourceDocument.content,
+                savedMarkdown: saved.sourceDocument.content,
+                editorRevision: null,
+                name: saved.sourceDocument.name,
+                saveStatus: "saved",
+              }
+            : tab,
+        ),
+      );
+      setProjectAst((current) => {
+        if (!current || current.rootPath !== projectFolder?.path) return current;
+        return [saved.sourceDocument, saved.extractedDocument].reduce(
+          (next, document) =>
+            upsertProjectAstDocument(next, {
+              path: document.path,
+              name: document.name,
+              text: parseFrontMatter(document.content).body,
+            }),
+          current,
+        );
+      });
+      await refreshProjectFolder(getParentPath(source.path) ?? projectFolder?.path ?? "");
+      loadDocumentIntoEditor(saved.extractedDocument);
+      setLastError("");
+      showToast(`見出し「${extraction.extractedTitle}」を切り出しました`);
+    } catch (error) {
+      setLastError(String(error));
+      showToast(error instanceof Error ? error.message : "見出しを切り出せませんでした");
     } finally {
       headingMoveInProgressRef.current = false;
     }
@@ -8175,25 +8342,22 @@ export default function App() {
                 isProjectSearchMode={isProjectSearchMode}
                 onJumpOutline={jumpToOutlineItem}
                 onJumpProjectOutline={(path, item) => void handleProjectOutlineJump(path, item)}
-                onMoveHeading={(
-                  sourcePath,
-                  sourceLine,
-                  sourceBlockId,
+                onMoveHeadings={(
+                  sources,
                   targetPath,
                   targetLine,
                   targetBlockId,
                   position,
                 ) =>
                   void handleHeadingMove(
-                    sourcePath,
-                    sourceLine,
-                    sourceBlockId,
+                    sources,
                     targetPath,
                     targetLine,
                     targetBlockId,
                     position,
                   )
                 }
+                onExtractHeading={(source) => void handleHeadingExtract(source)}
                 onProjectSearchQueryChange={setProjectSearchQuery}
                 onSearchScopeChange={setSearchScope}
                 onProjectReplaceValueChange={setProjectReplaceValue}
@@ -8527,6 +8691,7 @@ export default function App() {
                 showFilePath={settings.showStatusFilePath}
                 lastError={lastError}
                 charCount={charCount}
+                selectionCharCount={selectionCharCount}
               />
             </div>
 

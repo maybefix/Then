@@ -4,10 +4,10 @@
 
 Markdown / テキストファイルをそのまま原稿として扱いながら、本文執筆、構成管理、資料参照、保存点の比較・復元、PDF / DOCX出力までを一つのワークスペースで行えます。
 
-- 現在のバージョン: `v0.4.6`
+- 現在の開発バージョン: `v0.5.0`
 - 対応環境: Windows x64
 - 技術構成: Tauri v2 + React + TypeScript + Vite + Tiptap / ProseMirror
-- ダウンロード: [Then v0.4.6](https://github.com/maybefix/Then/releases/tag/v0.4.6)
+- 直近の公開版: [Then v0.5.0](https://github.com/maybefix/Then/releases/tag/v0.5.0)
 
 ## 主な機能
 

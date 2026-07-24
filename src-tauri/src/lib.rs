@@ -47,8 +47,30 @@ struct CanvasWindowState(Mutex<Option<serde_json::Value>>);
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HeadingMoveDocuments {
+    documents: Vec<TextDocument>,
+}
+
+#[derive(Deserialize)]
+struct HeadingDocumentWrite {
+    path: String,
+    content: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HeadingExtractDocuments {
     source_document: TextDocument,
-    target_document: Option<TextDocument>,
+    extracted_document: TextDocument,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MainWindowState {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+    maximized: bool,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -352,10 +374,13 @@ pub fn run() {
         .manage(ViewerExportState::default())
         .setup(|app| {
             if let Some(main_window) = app.get_webview_window("main") {
+                let _ = restore_main_window_state(app.handle(), &main_window);
                 disable_webview_native_ui(&main_window);
                 let app_handle = app.handle().clone();
+                let window_for_events = main_window.clone();
                 main_window.on_window_event(move |event| {
                     if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                        let _ = save_main_window_state(&app_handle, &window_for_events);
                         close_linked_child_windows(&app_handle);
                     }
                 });
@@ -384,6 +409,7 @@ pub fn run() {
             focus_source_in_main,
             close_export_window,
             save_heading_move,
+            extract_heading_to_file,
             log_heading_dnd,
             open_markdown_file_dialog,
             read_markdown_file,
@@ -1076,44 +1102,106 @@ async fn export_pdf(
 
 #[tauri::command]
 fn save_heading_move(
-    source_path: String,
-    target_path: String,
-    source_content: String,
-    target_content: String,
+    documents: Vec<HeadingDocumentWrite>,
 ) -> Result<HeadingMoveDocuments, String> {
+    if documents.is_empty() {
+        return Err("heading move has no documents to save".to_string());
+    }
+
+    let mut originals = BTreeMap::<PathBuf, String>::new();
+    for document in &documents {
+        let path = PathBuf::from(&document.path);
+        if !path.is_file() {
+            return Err("heading move source or target does not exist".to_string());
+        }
+        if !is_supported_text_extension(&path) {
+            return Err("heading move supports only text and markdown files".to_string());
+        }
+        if originals.contains_key(&path) {
+            return Err("heading move contains a duplicate document path".to_string());
+        }
+        let original = std::fs::read_to_string(&path)
+            .map_err(|error| format!("failed to back up heading move document: {error}"))?;
+        originals.insert(path, original);
+    }
+
+    for document in &documents {
+        let path = PathBuf::from(&document.path);
+        if let Err(save_error) = write_text_file(&path, &document.content) {
+            let rollback_errors = originals
+                .iter()
+                .filter_map(|(original_path, original_content)| {
+                    write_text_file(original_path, original_content)
+                        .err()
+                        .map(|error| format!("{}: {error}", original_path.display()))
+                })
+                .collect::<Vec<_>>();
+            return Err(if rollback_errors.is_empty() {
+                format!("failed to save heading move; all documents were restored: {save_error}")
+            } else {
+                format!(
+                    "failed to save heading move and restore every document: {save_error}; {}",
+                    rollback_errors.join("; ")
+                )
+            });
+        }
+    }
+
+    let saved_documents = documents
+        .iter()
+        .map(|document| read_text_document(Path::new(&document.path)))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(HeadingMoveDocuments {
+        documents: saved_documents,
+    })
+}
+
+#[tauri::command]
+fn extract_heading_to_file(
+    source_path: String,
+    file_name: String,
+    source_content: String,
+    extracted_content: String,
+) -> Result<HeadingExtractDocuments, String> {
     let source = PathBuf::from(source_path);
-    let target = PathBuf::from(target_path);
-    if !source.is_file() || !target.is_file() {
-        return Err("heading move source or target does not exist".to_string());
+    if !source.is_file() || !is_supported_text_extension(&source) {
+        return Err("heading extraction source does not exist or is not a text file".to_string());
     }
-    if !is_supported_text_extension(&source) || !is_supported_text_extension(&target) {
-        return Err("heading move supports only text and markdown files".to_string());
+    let folder = source
+        .parent()
+        .ok_or_else(|| "heading extraction source folder does not exist".to_string())?;
+    let normalized_name = normalize_text_file_name(&file_name)?;
+    let stem = file_stem_for_unique_name(&normalized_name);
+    let extension = file_extension_for_unique_name(&normalized_name);
+    let mut target = folder.join(&normalized_name);
+    let mut index = 2;
+    while target.exists() {
+        target = folder.join(format!("{stem}-{index}.{extension}"));
+        index += 1;
     }
 
-    if source == target {
-        write_text_file(&source, &source_content)?;
-        return Ok(HeadingMoveDocuments {
-            source_document: read_text_document(&source)?,
-            target_document: None,
-        });
+    let original_source = std::fs::read_to_string(&source)
+        .map_err(|error| format!("failed to back up heading extraction source: {error}"))?;
+    if let Err(error) = write_text_file(&target, &extracted_content) {
+        let _ = std::fs::remove_file(&target);
+        return Err(format!("failed to create extracted heading file: {error}"));
     }
-
-    let original_target = std::fs::read_to_string(&target)
-        .map_err(|error| format!("failed to back up heading move target: {error}"))?;
-    write_text_file(&target, &target_content)?;
-    if let Err(source_error) = write_text_file(&source, &source_content) {
-        let rollback_result = write_text_file(&target, &original_target);
-        return Err(match rollback_result {
-            Ok(()) => format!("failed to save heading move source; target was restored: {source_error}"),
-            Err(rollback_error) => format!(
-                "failed to save heading move source and restore target: {source_error}; {rollback_error}"
+    if let Err(save_error) = write_text_file(&source, &source_content) {
+        let source_rollback = write_text_file(&source, &original_source);
+        let target_rollback = std::fs::remove_file(&target);
+        return Err(match (source_rollback, target_rollback) {
+            (Ok(()), Ok(())) => {
+                format!("failed to save heading extraction source; changes were restored: {save_error}")
+            }
+            (source_result, target_result) => format!(
+                "failed to save and fully restore heading extraction: {save_error}; source rollback={source_result:?}; target rollback={target_result:?}"
             ),
         });
     }
 
-    Ok(HeadingMoveDocuments {
+    Ok(HeadingExtractDocuments {
         source_document: read_text_document(&source)?,
-        target_document: Some(read_text_document(&target)?),
+        extracted_document: read_text_document(&target)?,
     })
 }
 
@@ -3142,6 +3230,71 @@ fn app_state_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> 
         .map_err(|error| format!("failed to create app data directory: {error}"))?;
 
     Ok(dir.join("app-state.json"))
+}
+
+fn main_window_state_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("failed to resolve app data directory: {error}"))?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|error| format!("failed to create app data directory: {error}"))?;
+    Ok(dir.join("main-window-state.json"))
+}
+
+fn restore_main_window_state(
+    app: &tauri::AppHandle,
+    window: &tauri::WebviewWindow,
+) -> Result<(), String> {
+    let path = main_window_state_path(app)?;
+    if !path.is_file() {
+        return Ok(());
+    }
+    let content = std::fs::read_to_string(&path)
+        .map_err(|error| format!("failed to read main window state: {error}"))?;
+    let state: MainWindowState = serde_json::from_str(&content)
+        .map_err(|error| format!("failed to parse main window state: {error}"))?;
+    if state.maximized {
+        window
+            .maximize()
+            .map_err(|error| format!("failed to restore maximized main window: {error}"))?;
+        return Ok(());
+    }
+    window
+        .set_size(tauri::PhysicalSize::new(
+            state.width.max(720),
+            state.height.max(520),
+        ))
+        .map_err(|error| format!("failed to restore main window size: {error}"))?;
+    window
+        .set_position(tauri::PhysicalPosition::new(state.x, state.y))
+        .map_err(|error| format!("failed to restore main window position: {error}"))?;
+    Ok(())
+}
+
+fn save_main_window_state(
+    app: &tauri::AppHandle,
+    window: &tauri::WebviewWindow,
+) -> Result<(), String> {
+    let position = window
+        .outer_position()
+        .map_err(|error| format!("failed to read main window position: {error}"))?;
+    let size = window
+        .outer_size()
+        .map_err(|error| format!("failed to read main window size: {error}"))?;
+    let state = MainWindowState {
+        x: position.x,
+        y: position.y,
+        width: size.width,
+        height: size.height,
+        maximized: window
+            .is_maximized()
+            .map_err(|error| format!("failed to read main window maximized state: {error}"))?,
+    };
+    let content = serde_json::to_string_pretty(&state)
+        .map_err(|error| format!("failed to serialize main window state: {error}"))?;
+    std::fs::write(main_window_state_path(app)?, content)
+        .map_err(|error| format!("failed to write main window state: {error}"))
 }
 
 #[tauri::command]

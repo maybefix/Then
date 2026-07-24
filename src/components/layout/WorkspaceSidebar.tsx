@@ -63,15 +63,14 @@ type WorkspaceSidebarProps = {
   onReplaceInProject: () => void;
   onJumpOutline: (item: OutlineItem) => void;
   onJumpProjectOutline: (path: string, item: DocumentOutlineItem) => void;
-  onMoveHeading: (
-    sourcePath: string,
-    sourceLine: number,
-    sourceBlockId: string,
+  onMoveHeadings: (
+    sources: SidebarHeadingSelection[],
     targetPath: string,
     targetLine: number | null,
     targetBlockId: string | null,
     position: "before" | "after" | "append",
   ) => void;
+  onExtractHeading: (source: SidebarHeadingSelection) => void;
   onOpenProjectFolder: () => void;
   onCreateFile: (folderPath?: string) => void;
   onCreateFolder: (folderPath?: string) => void;
@@ -128,10 +127,20 @@ type TreeDropTarget =
   | null;
 
 type HeadingDragState = {
-  sourcePath: string;
-  sourceLine: number;
-  sourceBlockId: string;
+  sources: SidebarHeadingSelection[];
 };
+
+export type SidebarHeadingSelection = {
+  path: string;
+  line: number;
+  blockId: string;
+  title: string;
+};
+
+type HeadingContextMenu = {
+  x: number;
+  y: number;
+} | null;
 
 type HeadingDropTarget =
   | {
@@ -454,7 +463,8 @@ export function WorkspaceSidebar({
   onReplaceInProject,
   onJumpOutline,
   onJumpProjectOutline,
-  onMoveHeading,
+  onMoveHeadings,
+  onExtractHeading,
   onOpenProjectFolder,
   onCreateFile,
   onCreateFolder,
@@ -475,12 +485,15 @@ export function WorkspaceSidebar({
   onCollapse,
 }: WorkspaceSidebarProps) {
   const [contextMenu, setContextMenu] = useState<TreeContextMenu>(null);
+  const [headingContextMenu, setHeadingContextMenu] = useState<HeadingContextMenu>(null);
   const [draggingEntryPath, setDraggingEntryPath] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<TreeDropTarget>(null);
-  const [draggingHeading, setDraggingHeading] = useState<{
-    path: string;
-    line: number;
-  } | null>(null);
+  const [draggingHeadingKeys, setDraggingHeadingKeys] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [selectedHeadings, setSelectedHeadings] = useState<
+    ReadonlyMap<string, SidebarHeadingSelection>
+  >(() => new Map());
   const [headingDropTarget, setHeadingDropTarget] = useState<HeadingDropTarget>(null);
   const [collapsedScratchOutlineHeadingKeys, setCollapsedScratchOutlineHeadingKeys] = useState<
     ReadonlySet<string>
@@ -506,9 +519,12 @@ export function WorkspaceSidebar({
   );
 
   useEffect(() => {
-    if (!contextMenu) return undefined;
+    if (!contextMenu && !headingContextMenu) return undefined;
 
-    const close = () => setContextMenu(null);
+    const close = () => {
+      setContextMenu(null);
+      setHeadingContextMenu(null);
+    };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") close();
     };
@@ -519,7 +535,7 @@ export function WorkspaceSidebar({
       window.removeEventListener("pointerdown", close);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [contextMenu]);
+  }, [contextMenu, headingContextMenu]);
 
   useEffect(() => {
     if (!snapshotMenu) return undefined;
@@ -540,6 +556,8 @@ export function WorkspaceSidebar({
   // プロジェクトフォルダが切り替わったらナビゲータをルートに戻す。
   useEffect(() => {
     setNavigatorLocation(null);
+    setSelectedHeadings(new Map());
+    setHeadingContextMenu(null);
   }, [projectFolder?.path]);
 
   const resetPointerDrag = () => {
@@ -699,6 +717,9 @@ export function WorkspaceSidebar({
   const outlineHeadingKey = (filePath: string | null, item: DocumentOutlineItem | OutlineItem) =>
     `${filePath ?? "scratch"}:${item.id}`;
 
+  const headingSelectionKey = (heading: SidebarHeadingSelection) =>
+    `${heading.path}:${heading.blockId}`;
+
   const toggleOutlineHeadingCollapse = (filePath: string | null, key: string) => {
     if (filePath) {
       onOutlineHeadingCollapsedChange(key, !collapsedOutlineHeadingKeys.has(key));
@@ -718,29 +739,42 @@ export function WorkspaceSidebar({
   const resetHeadingDrag = () => {
     headingDragRef.current = null;
     lastHeadingDragOverRef.current = "";
-    setDraggingHeading(null);
+    setDraggingHeadingKeys(new Set());
     setHeadingDropTarget(null);
   };
 
   const handleHeadingDragStart = (
     event: ReactDragEvent<HTMLButtonElement>,
-    sourcePath: string,
-    sourceLine: number,
-    sourceBlockId: string,
+    source: SidebarHeadingSelection,
   ) => {
-    headingDragRef.current = { sourcePath, sourceLine, sourceBlockId };
-    setDraggingHeading({ path: sourcePath, line: sourceLine });
+    const sourceKey = headingSelectionKey(source);
+    const selectedSources = selectedHeadings.has(sourceKey)
+      ? [...selectedHeadings.values()]
+      : [source];
+    const fileOrder = new Map(
+      projectAst?.files.map((file, index) => [file.path, index] as const) ?? [],
+    );
+    const sources = selectedSources.sort(
+      (left, right) =>
+        (fileOrder.get(left.path) ?? Number.MAX_SAFE_INTEGER) -
+          (fileOrder.get(right.path) ?? Number.MAX_SAFE_INTEGER) ||
+        left.path.localeCompare(right.path) ||
+        left.line - right.line,
+    );
+    if (!selectedHeadings.has(sourceKey)) {
+      setSelectedHeadings(new Map([[sourceKey, source]]));
+    }
+    headingDragRef.current = { sources };
+    setDraggingHeadingKeys(new Set(sources.map(headingSelectionKey)));
     setHeadingDropTarget(null);
     suppressNextClickRef.current = true;
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData(
       HEADING_DRAG_MIME,
-      JSON.stringify({ sourcePath, sourceLine, sourceBlockId }),
+      JSON.stringify({ sources }),
     );
     logHeadingDnd("dragstart", {
-      sourcePath,
-      sourceLine,
-      sourceBlockId,
+      sources,
       dataTransferTypes: Array.from(event.dataTransfer.types),
     });
   };
@@ -768,7 +802,7 @@ export function WorkspaceSidebar({
     if (lastHeadingDragOverRef.current !== targetKey) {
       lastHeadingDragOverRef.current = targetKey;
       logHeadingDnd("dragover", {
-        sourceBlockId: headingDragRef.current.sourceBlockId,
+        sourceBlockIds: headingDragRef.current.sources.map((source) => source.blockId),
         targetPath: path,
         targetLine: line,
         targetBlockId: blockId,
@@ -790,21 +824,20 @@ export function WorkspaceSidebar({
     const rect = event.currentTarget.getBoundingClientRect();
     const position = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
     logHeadingDnd("drop", {
-      sourceBlockId: source.sourceBlockId,
+      sourceBlockIds: source.sources.map((item) => item.blockId),
       targetPath,
       targetLine,
       targetBlockId,
       position,
     });
-    onMoveHeading(
-      source.sourcePath,
-      source.sourceLine,
-      source.sourceBlockId,
+    onMoveHeadings(
+      source.sources,
       targetPath,
       targetLine,
       targetBlockId,
       position,
     );
+    setSelectedHeadings(new Map());
     resetHeadingDrag();
   };
 
@@ -821,7 +854,7 @@ export function WorkspaceSidebar({
     if (lastHeadingDragOverRef.current !== targetKey) {
       lastHeadingDragOverRef.current = targetKey;
       logHeadingDnd("dragover", {
-        sourceBlockId: headingDragRef.current.sourceBlockId,
+        sourceBlockIds: headingDragRef.current.sources.map((source) => source.blockId),
         targetPath: path,
         targetLine: null,
         targetBlockId: null,
@@ -839,21 +872,20 @@ export function WorkspaceSidebar({
     event.preventDefault();
     event.stopPropagation();
     logHeadingDnd("drop", {
-      sourceBlockId: source.sourceBlockId,
+      sourceBlockIds: source.sources.map((item) => item.blockId),
       targetPath,
       targetLine: null,
       targetBlockId: null,
       position: "append",
     });
-    onMoveHeading(
-      source.sourcePath,
-      source.sourceLine,
-      source.sourceBlockId,
+    onMoveHeadings(
+      source.sources,
       targetPath,
       null,
       null,
       "append",
     );
+    setSelectedHeadings(new Map());
     resetHeadingDrag();
   };
 
@@ -870,11 +902,29 @@ export function WorkspaceSidebar({
     isRoot: boolean,
   ) => {
     event.preventDefault();
+    setHeadingContextMenu(null);
     setContextMenu({
       x: event.clientX,
       y: event.clientY,
       entry,
       isRoot,
+    });
+  };
+
+  const openHeadingContextMenu = (
+    event: ReactMouseEvent<HTMLElement>,
+    heading: SidebarHeadingSelection,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const key = headingSelectionKey(heading);
+    if (!selectedHeadings.has(key) && selectedHeadings.size <= 1) {
+      setSelectedHeadings(new Map([[key, heading]]));
+    }
+    setContextMenu(null);
+    setHeadingContextMenu({
+      x: event.clientX,
+      y: event.clientY,
     });
   };
 
@@ -949,6 +999,43 @@ export function WorkspaceSidebar({
     );
   };
 
+  const renderHeadingContextMenu = (): JSX.Element | null => {
+    if (!headingContextMenu) return null;
+    const selected = [...selectedHeadings.values()];
+    const canExtract = selected.length === 1;
+
+    return (
+      <div
+        className="treeContextMenu headingContextMenu"
+        style={{ left: headingContextMenu.x, top: headingContextMenu.y }}
+        role="menu"
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          role="menuitem"
+          disabled={!canExtract}
+          title={
+            canExtract
+              ? "見出しを同じフォルダの別ファイルへ切り出します"
+              : "複数の見出しを選択しているため切り出せません"
+          }
+          onClick={() => {
+            const source = selected[0];
+            if (!source || !canExtract) return;
+            setHeadingContextMenu(null);
+            onExtractHeading(source);
+          }}
+        >
+          別ファイルへ切り出す…
+        </button>
+        {!canExtract && (
+          <span className="contextMenuHint">複数選択時は切り出せません</span>
+        )}
+      </div>
+    );
+  };
+
   const renderOutlineItems = (
     filePath: string | null,
     items: DocumentOutlineItem[] | OutlineItem[],
@@ -963,10 +1050,17 @@ export function WorkspaceSidebar({
           ? collapsedOutlineHeadingKeys.has(itemKey)
           : collapsedScratchOutlineHeadingKeys.has(itemKey));
       const isActive = filePath === currentFilePath && activeOutlineIds.has(item.id);
-      const isDragging =
-        filePath !== null &&
-        draggingHeading?.path === filePath &&
-        draggingHeading.line === item.line;
+      const headingSelection = filePath
+        ? {
+            path: filePath,
+            line: item.line,
+            blockId: item.blockId,
+            title: item.title,
+          }
+        : null;
+      const selectionKey = headingSelection ? headingSelectionKey(headingSelection) : null;
+      const isSelected = Boolean(selectionKey && selectedHeadings.has(selectionKey));
+      const isDragging = Boolean(selectionKey && draggingHeadingKeys.has(selectionKey));
       const targetPosition =
         filePath !== null &&
         headingDropTarget?.kind === "heading" &&
@@ -982,6 +1076,7 @@ export function WorkspaceSidebar({
               hasChildren ? "collapsibleOutlineTreeItem" : "",
               isCollapsed ? "collapsedOutlineTreeItem" : "",
               isActive ? "activeOutlineTreeItem" : "",
+              isSelected ? "selectedOutlineTreeItem" : "",
               isDragging ? "draggingHeadingItem" : "",
               targetPosition ? `headingDrop-${targetPosition}` : "",
             ].filter(Boolean).join(" ")}
@@ -989,6 +1084,7 @@ export function WorkspaceSidebar({
             data-outline-heading-line={filePath ? item.line : undefined}
             data-outline-block-id={filePath ? item.blockId : undefined}
             draggable={Boolean(filePath)}
+            aria-pressed={filePath ? isSelected : undefined}
             style={
               {
                 "--outline-item-indent": `${12 + depth * 14}px`,
@@ -1009,6 +1105,24 @@ export function WorkspaceSidebar({
                 toggleOutlineHeadingCollapse(filePath, itemKey);
                 return;
               }
+              if (headingSelection && (event.ctrlKey || event.metaKey)) {
+                setSelectedHeadings((current) => {
+                  const next = new Map(current);
+                  const key = headingSelectionKey(headingSelection);
+                  if (next.has(key)) {
+                    next.delete(key);
+                  } else {
+                    next.set(key, headingSelection);
+                  }
+                  return next;
+                });
+                return;
+              }
+              if (headingSelection) {
+                setSelectedHeadings(
+                  new Map([[headingSelectionKey(headingSelection), headingSelection]]),
+                );
+              }
               filePath ? onJumpProjectOutline(filePath, item) : onJumpOutline(item);
             }}
             onPointerDown={() => {
@@ -1024,9 +1138,8 @@ export function WorkspaceSidebar({
               });
             }}
             onDragStart={
-              filePath
-                ? (event) =>
-                    handleHeadingDragStart(event, filePath, item.line, item.blockId)
+              headingSelection
+                ? (event) => handleHeadingDragStart(event, headingSelection)
                 : undefined
             }
             onDragOver={
@@ -1042,6 +1155,11 @@ export function WorkspaceSidebar({
                 : undefined
             }
             onDragEnd={filePath ? handleHeadingDragEnd : undefined}
+            onContextMenu={
+              headingSelection
+                ? (event) => openHeadingContextMenu(event, headingSelection)
+                : undefined
+            }
           >
             <span
               className="outlineHeadingDisclosure"
@@ -1818,6 +1936,7 @@ export function WorkspaceSidebar({
       </div>
 
       {renderContextMenu()}
+      {renderHeadingContextMenu()}
     </aside>
   );
 }

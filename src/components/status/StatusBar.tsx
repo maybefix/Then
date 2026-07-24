@@ -6,6 +6,7 @@ type StatusBarProps = {
   showFilePath: boolean;
   lastError: string;
   charCount: number;
+  selectionCharCount: number | null;
 };
 
 const statusLabels: Record<SaveStatus, string> = {
@@ -22,6 +23,7 @@ export function StatusBar({
   showFilePath,
   lastError,
   charCount,
+  selectionCharCount,
 }: StatusBarProps) {
   return (
     <footer className={`statusbar status-${saveStatus}`}>
@@ -33,7 +35,10 @@ export function StatusBar({
         </span>
       )}
       {lastError && <span className="statusError">{lastError}</span>}
-      <span className="statusRight">{charCount}文字</span>
+      <span className="statusRight">
+        {selectionCharCount !== null ? `${selectionCharCount} / ` : ""}
+        {charCount}文字
+      </span>
     </footer>
   );
 }

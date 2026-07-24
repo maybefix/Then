@@ -14,7 +14,11 @@ const headingMoveSource = (
   await readFile("src/editor/ast/headingMove.ts", "utf8")
 ).replace('"../../utils/frontmatter"', `"${frontmatterUrl}"`);
 const moduleUrl = asModuleUrl(transpile(headingMoveSource));
-const { moveHeadingSection } = await import(moduleUrl);
+const {
+  extractHeadingSection,
+  moveHeadingSection,
+  moveHeadingSections,
+} = await import(moduleUrl);
 
 const sameFile = `---
 title: test
@@ -134,5 +138,85 @@ const appended = moveHeadingSection({
 });
 assert.equal(appended.sourceMarkdown, "");
 assert.equal(appended.targetMarkdown, "# Move\nbody\n");
+
+const movedMany = moveHeadingSections({
+  documents: [
+    {
+      path: "many.md",
+      markdown: "# A\nbody A\n# B\nbody B\n# C\nbody C\n",
+    },
+  ],
+  sources: [
+    { path: "many.md", line: 1 },
+    { path: "many.md", line: 5 },
+  ],
+  targetPath: "many.md",
+  targetLine: 3,
+  position: "after",
+});
+assert.equal(movedMany.changed, true);
+assert.deepEqual(movedMany.movedTitles, ["A", "C"]);
+assert.equal(
+  movedMany.documents[0].markdown,
+  "# B\nbody B\n# A\nbody A\n# C\nbody C\n",
+);
+
+const movedAcrossFiles = moveHeadingSections({
+  documents: [
+    { path: "one.md", markdown: "# A\nbody A\n# B\nbody B\n" },
+    { path: "two.md", markdown: "# X\nbody X\n" },
+  ],
+  sources: [
+    { path: "one.md", line: 1 },
+    { path: "one.md", line: 3 },
+  ],
+  targetPath: "two.md",
+  targetLine: null,
+  position: "append",
+});
+assert.equal(movedAcrossFiles.documents[0].markdown, "");
+assert.equal(
+  movedAcrossFiles.documents[1].markdown,
+  "# X\nbody X\n# A\nbody A\n# B\nbody B\n",
+);
+
+const nestedSelection = moveHeadingSections({
+  documents: [
+    { path: "nested.md", markdown: "# Parent\nlead\n## Child\nchild\n" },
+    { path: "target.md", markdown: "" },
+  ],
+  sources: [
+    { path: "nested.md", line: 1 },
+    { path: "nested.md", line: 3 },
+  ],
+  targetPath: "target.md",
+  targetLine: null,
+  position: "append",
+});
+assert.deepEqual(nestedSelection.movedTitles, ["Parent"]);
+assert.equal(nestedSelection.documents[0].markdown, "");
+assert.equal(
+  nestedSelection.documents[1].markdown,
+  "# Parent\nlead\n## Child\nchild\n",
+);
+
+const extractedOnly = extractHeadingSection({
+  sourceMarkdown: "# Parent\nlead\n## Child\nchild\n# Stay\nstay\n",
+  sourceLine: 1,
+  includeChildren: false,
+});
+assert.equal(extractedOnly.extractedMarkdown, "# Parent\nlead\n");
+assert.equal(extractedOnly.sourceMarkdown, "## Child\nchild\n# Stay\nstay\n");
+
+const extractedWithChildren = extractHeadingSection({
+  sourceMarkdown: "# Parent\nlead\n## Child\nchild\n# Stay\nstay\n",
+  sourceLine: 1,
+  includeChildren: true,
+});
+assert.equal(
+  extractedWithChildren.extractedMarkdown,
+  "# Parent\nlead\n## Child\nchild\n",
+);
+assert.equal(extractedWithChildren.sourceMarkdown, "# Stay\nstay\n");
 
 console.log("heading move tests passed");
