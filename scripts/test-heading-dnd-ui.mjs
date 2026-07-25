@@ -53,12 +53,14 @@ Object.defineProperty(globalThis, "navigator", {
   value: dom.window.navigator,
 });
 globalThis.HTMLElement = dom.window.HTMLElement;
+globalThis.Element = dom.window.Element;
 globalThis.MouseEvent = dom.window.MouseEvent;
 globalThis.Event = dom.window.Event;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.__headingLogs = [];
 globalThis.__folderSelectCalls = 0;
 globalThis.__fileSelectCalls = 0;
+globalThis.__fileMoveLogs = [];
 
 const React = (await import("react")).default;
 const { act } = await import("react");
@@ -67,6 +69,8 @@ const { WorkspaceSidebar } = await import(sidebarUrl);
 
 const pathA = "C:\\fixture\\a.md";
 const pathB = "C:\\fixture\\b.md";
+const pathC = "C:\\fixture\\c.md";
+const destinationFolderPath = "C:\\fixture\\destination";
 const outlineByOrder = {
   original: [
     { id: "a:1", blockId: "block-alpha", title: "Alpha", level: 1, line: 1, children: [] },
@@ -83,6 +87,13 @@ const projectFolder = {
   children: [
     { path: pathA, name: "a.md", kind: "file", children: [] },
     { path: pathB, name: "b.md", kind: "file", children: [] },
+    { path: pathC, name: "c.md", kind: "file", children: [] },
+    {
+      path: destinationFolderPath,
+      name: "destination",
+      kind: "folder",
+      children: [],
+    },
   ],
 };
 
@@ -107,8 +118,12 @@ function Harness() {
     rootPath: projectFolder.path,
     name: projectFolder.name,
     status: "ready",
-    files: [astFile(pathA, "a.md", outline), astFile(pathB, "b.md", [])],
-    indexedCount: 2,
+    files: [
+      astFile(pathA, "a.md", outline),
+      astFile(pathB, "b.md", []),
+      astFile(pathC, "c.md", []),
+    ],
+    indexedCount: 3,
     pendingCount: 0,
     errorCount: 0,
     totalTextLength: 40,
@@ -191,8 +206,18 @@ function Harness() {
     onOpenFileInNewTab() {},
     onRenameEntry() {},
     onDeleteEntry() {},
-    onMoveEntry() {},
-    onReorderEntry() {},
+    onMoveEntry(sourcePaths, targetFolderPath) {
+      globalThis.__fileMoveLogs.push([
+        "move-files",
+        { sourcePaths, targetFolderPath },
+      ]);
+    },
+    onReorderEntry(folderPath, sourcePaths, targetPath, position) {
+      globalThis.__fileMoveLogs.push([
+        "reorder-files",
+        { folderPath, sourcePaths, targetPath, position },
+      ]);
+    },
     snapshots: [],
     isSnapshotSectionCollapsed: true,
     onSnapshotSectionCollapsedChange() {},
@@ -228,6 +253,62 @@ function dragEvent(type, dataTransfer, clientY = 0) {
   });
   Object.defineProperty(event, "dataTransfer", { value: dataTransfer });
   return event;
+}
+
+let treePointerTarget = null;
+document.elementFromPoint = () => treePointerTarget;
+dom.window.HTMLElement.prototype.setPointerCapture = function setPointerCapture(pointerId) {
+  this.__capturedPointerId = pointerId;
+};
+dom.window.HTMLElement.prototype.hasPointerCapture = function hasPointerCapture(pointerId) {
+  return this.__capturedPointerId === pointerId;
+};
+dom.window.HTMLElement.prototype.releasePointerCapture = function releasePointerCapture(pointerId) {
+  if (this.__capturedPointerId === pointerId) this.__capturedPointerId = null;
+};
+
+function pointerEvent(type, pointerId, clientX, clientY, init = {}) {
+  const event = new dom.window.MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    button: 0,
+    clientX,
+    clientY,
+    ...init,
+  });
+  Object.defineProperty(event, "pointerId", { value: pointerId });
+  return event;
+}
+
+async function ctrlClickFile(element, pointerId) {
+  await act(async () => {
+    element.dispatchEvent(pointerEvent("pointerdown", pointerId, 0, 0));
+  });
+  await act(async () => {
+    element.dispatchEvent(pointerEvent("pointerup", pointerId, 0, 0));
+  });
+  await act(async () => {
+    element.dispatchEvent(
+      new dom.window.MouseEvent("click", { bubbles: true, ctrlKey: true }),
+    );
+  });
+}
+
+async function clickFile(element, pointerId) {
+  await act(async () => {
+    element.dispatchEvent(pointerEvent("pointerdown", pointerId, 0, 0));
+  });
+  assert.equal(
+    element.hasPointerCapture(pointerId),
+    true,
+    "the actual file button must own pointer capture so click remains targeted",
+  );
+  await act(async () => {
+    element.dispatchEvent(pointerEvent("pointerup", pointerId, 0, 0));
+  });
+  await act(async () => {
+    element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+  });
 }
 
 const root = createRoot(document.getElementById("root"));
@@ -353,6 +434,152 @@ await act(async () => singleExtractButton.dispatchEvent(new dom.window.MouseEven
 assert.ok(
   globalThis.__headingLogs.some(([stage]) => stage === "extract-heading"),
   "extract menu must invoke its heading callback",
+);
+
+await act(async () =>
+  root.render(React.createElement(Harness, { key: "restored-file-selection" })),
+);
+const fileButtonA = Array.from(document.querySelectorAll(".fileTreeItem .treeItemPrimary"))
+  .find((button) => button.getAttribute("title") === pathA);
+const fileButtonB = Array.from(document.querySelectorAll(".fileTreeItem .treeItemPrimary"))
+  .find((button) => button.getAttribute("title") === pathB);
+const fileRowA = fileButtonA?.closest(".fileTreeItem");
+const fileRowC = Array.from(document.querySelectorAll(".fileTreeItem"))
+  .find((row) => row.getAttribute("data-tree-entry-path") === pathC);
+const destinationFolderRow = Array.from(document.querySelectorAll(".folderTreeItem"))
+  .find((row) => row.getAttribute("data-tree-entry-path") === destinationFolderPath);
+assert.ok(
+  fileButtonA && fileButtonB && fileRowA && fileRowC && destinationFolderRow,
+  "multiple file drag fixtures must render",
+);
+
+assert.equal(
+  document.querySelectorAll(".selectedTreeEntry").length,
+  1,
+  "the restored active file must initialize the real file selection",
+);
+assert.equal(
+  fileButtonA.getAttribute("aria-pressed"),
+  "true",
+  "the restored active file must be part of drag source selection",
+);
+assert.equal(globalThis.__fileSelectCalls, 0);
+await ctrlClickFile(fileButtonB, 11);
+assert.equal(
+  document.querySelectorAll(".selectedTreeEntry").length,
+  2,
+  "Ctrl+click must add to the restored active-file selection without opening it",
+);
+assert.equal(globalThis.__fileSelectCalls, 0);
+
+fileRowC.getBoundingClientRect = () => ({
+  top: 0,
+  height: 20,
+  bottom: 20,
+  left: 0,
+  right: 200,
+  width: 200,
+  x: 0,
+  y: 0,
+  toJSON() {},
+});
+treePointerTarget = fileRowC;
+await act(async () => {
+  fileButtonA.dispatchEvent(pointerEvent("pointerdown", 1, 0, 0));
+  assert.equal(
+    fileButtonA.hasPointerCapture(1),
+    true,
+    "a modifier-free drag must keep pointer capture on the file button",
+  );
+  fileButtonA.dispatchEvent(pointerEvent("pointermove", 1, 0, 18));
+  fileButtonA.dispatchEvent(pointerEvent("pointerup", 1, 0, 18));
+});
+assert.deepEqual(
+  globalThis.__fileMoveLogs.at(-1),
+  [
+    "reorder-files",
+    {
+      folderPath: projectFolder.path,
+      sourcePaths: [pathA, pathB],
+      targetPath: pathC,
+      position: "after",
+    },
+  ],
+  "dragging a selected file block must reorder every selected file",
+);
+
+await clickFile(fileButtonA, 12);
+assert.equal(
+  document.querySelectorAll(".selectedTreeEntry").length,
+  1,
+  "an ordinary click must replace the file selection",
+);
+assert.equal(globalThis.__fileSelectCalls, 1, "an ordinary click must open the file");
+await ctrlClickFile(fileButtonB, 13);
+assert.equal(
+  document.querySelectorAll(".selectedTreeEntry").length,
+  2,
+  "ordinary click followed by Ctrl+click must rebuild a two-file selection",
+);
+destinationFolderRow.getBoundingClientRect = () => ({
+  top: 0,
+  height: 20,
+  bottom: 20,
+  left: 0,
+  right: 200,
+  width: 200,
+  x: 0,
+  y: 0,
+  toJSON() {},
+});
+treePointerTarget = destinationFolderRow;
+await act(async () => {
+  fileButtonA.dispatchEvent(pointerEvent("pointerdown", 2, 0, 0));
+  assert.equal(
+    fileButtonA.hasPointerCapture(2),
+    true,
+    "folder moves must not require Shift or another modifier",
+  );
+  fileButtonA.dispatchEvent(pointerEvent("pointermove", 2, 0, 10));
+  fileButtonA.dispatchEvent(pointerEvent("pointerup", 2, 0, 10));
+});
+assert.deepEqual(
+  globalThis.__fileMoveLogs.at(-1),
+  [
+    "move-files",
+    {
+      sourcePaths: [pathA, pathB],
+      targetFolderPath: destinationFolderPath,
+    },
+  ],
+  "dropping a selected file block into a folder must move every selected file",
+);
+
+await clickFile(fileButtonA, 14);
+treePointerTarget = fileRowC;
+await act(async () => {
+  fileButtonB.dispatchEvent(
+    pointerEvent("pointerdown", 3, 0, 0, { ctrlKey: true }),
+  );
+  fileButtonB.dispatchEvent(
+    pointerEvent("pointermove", 3, 0, 18, { ctrlKey: true }),
+  );
+  fileButtonB.dispatchEvent(
+    pointerEvent("pointerup", 3, 0, 18, { ctrlKey: true }),
+  );
+});
+assert.deepEqual(
+  globalThis.__fileMoveLogs.at(-1),
+  [
+    "reorder-files",
+    {
+      folderPath: projectFolder.path,
+      sourcePaths: [pathA, pathB],
+      targetPath: pathC,
+      position: "after",
+    },
+  ],
+  "Ctrl+pointerdown followed immediately by drag must use the additive selection",
 );
 console.log(JSON.stringify({ stages, domOrder, logs: globalThis.__headingLogs }, null, 2));
 await act(async () => root.unmount());

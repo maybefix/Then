@@ -1,14 +1,16 @@
 {
   "name": "then",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.5.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "dev:local": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "build": "tsc && vite build",
+    "test:heading-extract-state": "node scripts/test-heading-extract-state.mjs",
     "test:heading-move": "node scripts/test-heading-move.mjs",
     "test:heading-dnd-ui": "node scripts/test-heading-dnd-ui.mjs",
+    "test:file-move": "node scripts/test-file-move.mjs",
     "test:export": "node scripts/verify-export.mjs",
     "demo:record": "powershell -ExecutionPolicy Bypass -File scripts/demo/record-desktop.ps1",
     "demo:edit": "node scripts/demo/edit-video.mjs",

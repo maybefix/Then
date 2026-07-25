@@ -78,10 +78,10 @@ type WorkspaceSidebarProps = {
   onSelectFolder: (path: string) => void;
   onRenameEntry: (entry: ProjectFolder | ProjectEntry) => void;
   onDeleteEntry: (entry: ProjectEntry) => void;
-  onMoveEntry: (sourcePath: string, targetFolderPath: string) => void;
+  onMoveEntry: (sourcePaths: string[], targetFolderPath: string) => void;
   onReorderEntry: (
     folderPath: string,
-    draggedPath: string,
+    draggedPaths: string[],
     targetPath: string,
     position: "before" | "after",
   ) => void;
@@ -105,8 +105,12 @@ type TreeContextMenu = {
 
 type PointerDragState = {
   pointerId: number;
-  folderPath: string;
   entryPath: string;
+  entryPaths: string[];
+  sourceParentPaths: string[];
+  reorderFolderPath: string | null;
+  replaceSelectionOnDrag: boolean;
+  captureTarget: HTMLElement;
   startX: number;
   startY: number;
   isDragging: boolean;
@@ -257,6 +261,21 @@ function findParentPath(root: ProjectFolder, targetPath: string): string | null 
     return null;
   };
   return visit(root.path, root.children);
+}
+
+function collectFilePathsInDisplayOrder(root: ProjectFolder): string[] {
+  const paths: string[] = [];
+  const visit = (entries: ProjectEntry[]) => {
+    for (const entry of entries) {
+      if (entry.kind === "file") {
+        paths.push(entry.path);
+      } else {
+        visit(entry.children);
+      }
+    }
+  };
+  visit(root.children);
+  return paths;
 }
 
 const PROGRESS_DOT_CLASS: Record<FileProgressStatus, string> = {
@@ -486,7 +505,12 @@ export function WorkspaceSidebar({
 }: WorkspaceSidebarProps) {
   const [contextMenu, setContextMenu] = useState<TreeContextMenu>(null);
   const [headingContextMenu, setHeadingContextMenu] = useState<HeadingContextMenu>(null);
-  const [draggingEntryPath, setDraggingEntryPath] = useState<string | null>(null);
+  const [draggingEntryPaths, setDraggingEntryPaths] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [selectedFilePaths, setSelectedFilePaths] = useState<ReadonlySet<string>>(
+    () => new Set(currentFilePath ? [currentFilePath] : []),
+  );
   const [dropTarget, setDropTarget] = useState<TreeDropTarget>(null);
   const [draggingHeadingKeys, setDraggingHeadingKeys] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -514,6 +538,12 @@ export function WorkspaceSidebar({
   const lastHeadingDragOverRef = useRef("");
   const dropTargetRef = useRef<TreeDropTarget>(null);
   const suppressNextClickRef = useRef(false);
+  const selectedFilePathsRef = useRef(selectedFilePaths);
+  const replaceSelectedFilePaths = (paths: Iterable<string>) => {
+    const next = new Set(paths);
+    selectedFilePathsRef.current = next;
+    setSelectedFilePaths(next);
+  };
   const projectAstFiles = new Map(
     projectAst?.files.map((file) => [file.path, file] as const) ?? [],
   );
@@ -556,13 +586,28 @@ export function WorkspaceSidebar({
   // プロジェクトフォルダが切り替わったらナビゲータをルートに戻す。
   useEffect(() => {
     setNavigatorLocation(null);
+    replaceSelectedFilePaths(currentFilePath ? [currentFilePath] : []);
     setSelectedHeadings(new Map());
     setHeadingContextMenu(null);
   }, [projectFolder?.path]);
 
+  // 復元や検索結果からファイルが開かれた場合も、表示上のアクティブ行と
+  // ドラッグに使う選択集合を一致させる。
+  useEffect(() => {
+    if (currentFilePath && selectedFilePathsRef.current.has(currentFilePath)) return;
+    replaceSelectedFilePaths(currentFilePath ? [currentFilePath] : []);
+  }, [currentFilePath]);
+
   const resetPointerDrag = () => {
+    const dragState = pointerDragRef.current;
+    if (
+      dragState &&
+      dragState.captureTarget.hasPointerCapture(dragState.pointerId)
+    ) {
+      dragState.captureTarget.releasePointerCapture(dragState.pointerId);
+    }
     pointerDragRef.current = null;
-    setDraggingEntryPath(null);
+    setDraggingEntryPaths(new Set());
     dropTargetRef.current = null;
     setDropTarget(null);
   };
@@ -589,9 +634,11 @@ export function WorkspaceSidebar({
     const targetEntryKind = row.dataset.treeEntryKind;
     if (
       !targetEntryPath ||
-      targetEntryPath === dragState.entryPath ||
+      dragState.entryPaths.includes(targetEntryPath) ||
       (targetEntryKind === "folder" &&
-        isSidebarPathInside(targetEntryPath, dragState.entryPath))
+        dragState.entryPaths.some((sourcePath) =>
+          isSidebarPathInside(targetEntryPath, sourcePath),
+        ))
     ) {
       updateDropTarget(null);
       return;
@@ -601,7 +648,9 @@ export function WorkspaceSidebar({
     const offset = clientY - rect.top;
     const isMiddleFolderDrop =
       targetEntryKind === "folder" &&
-      targetEntryPath !== dragState.folderPath &&
+      !dragState.sourceParentPaths.every(
+        (parentPath) => parentPath === targetEntryPath,
+      ) &&
       offset > rect.height * 0.28 &&
       offset < rect.height * 0.72;
     if (isMiddleFolderDrop) {
@@ -613,7 +662,10 @@ export function WorkspaceSidebar({
       return;
     }
 
-    if (!targetParentFolderPath || targetParentFolderPath !== dragState.folderPath) {
+    if (
+      !targetParentFolderPath ||
+      targetParentFolderPath !== dragState.reorderFolderPath
+    ) {
       updateDropTarget(null);
       return;
     }
@@ -630,17 +682,50 @@ export function WorkspaceSidebar({
     event: ReactPointerEvent<HTMLElement>,
     folderPath: string | null,
     entryPath: string,
+    isFolder: boolean,
   ) => {
     if (!folderPath || event.button !== 0) return;
 
+    const selectionAtPointerDown = selectedFilePathsRef.current;
+    const isAdditiveSelection = !isFolder && (event.ctrlKey || event.metaKey);
+    const dragSelection = new Set(selectionAtPointerDown);
+    if (isAdditiveSelection) dragSelection.add(entryPath);
+    const shouldDragSelection =
+      !isFolder && (selectionAtPointerDown.has(entryPath) || isAdditiveSelection);
+    const entryPaths =
+      shouldDragSelection && projectFolder
+        ? collectFilePathsInDisplayOrder(projectFolder).filter((path) =>
+            dragSelection.has(path),
+          )
+        : [entryPath];
+    const sourceParentPaths = projectFolder
+      ? entryPaths
+          .map((path) => findParentPath(projectFolder, path))
+          .filter((path): path is string => Boolean(path))
+      : [folderPath];
+    const uniqueParentPaths = new Set(sourceParentPaths);
+    const eventTarget =
+      event.target instanceof Element ? event.target : event.currentTarget;
+    const captureTarget =
+      eventTarget.closest<HTMLElement>("button") ?? event.currentTarget;
     pointerDragRef.current = {
       pointerId: event.pointerId,
-      folderPath,
       entryPath,
+      entryPaths,
+      sourceParentPaths,
+      reorderFolderPath:
+        uniqueParentPaths.size === 1 ? sourceParentPaths[0] ?? folderPath : null,
+      replaceSelectionOnDrag:
+        !isFolder && !selectionAtPointerDown.has(entryPath),
+      captureTarget,
       startX: event.clientX,
       startY: event.clientY,
       isDragging: false,
     };
+    // Capture immediately so an ordinary drag keeps delivering pointer events
+    // after the cursor leaves the narrow source row. Waiting for the first
+    // pointermove made fast drags depend on incidental modifier/browser behavior.
+    captureTarget.setPointerCapture(event.pointerId);
   };
 
   const handleTreePointerMove = (event: ReactPointerEvent<HTMLElement>) => {
@@ -655,9 +740,11 @@ export function WorkspaceSidebar({
 
     if (!dragState.isDragging) {
       dragState.isDragging = true;
-      event.currentTarget.setPointerCapture(event.pointerId);
+      if (dragState.replaceSelectionOnDrag) {
+        replaceSelectedFilePaths(dragState.entryPaths);
+      }
     }
-    setDraggingEntryPath(dragState.entryPath);
+    setDraggingEntryPaths(new Set(dragState.entryPaths));
     updateDropTargetFromPoint(event.clientX, event.clientY, dragState);
     event.preventDefault();
   };
@@ -675,17 +762,18 @@ export function WorkspaceSidebar({
       if (activeDropTarget?.kind === "reorder") {
         onReorderEntry(
           activeDropTarget.folderPath,
-          dragState.entryPath,
+          dragState.entryPaths,
           activeDropTarget.entryPath,
           activeDropTarget.position,
         );
       } else if (activeDropTarget?.kind === "moveInto") {
-        onMoveEntry(dragState.entryPath, activeDropTarget.folderPath);
+        onMoveEntry(dragState.entryPaths, activeDropTarget.folderPath);
       }
+      if (activeDropTarget) replaceSelectedFilePaths([]);
     }
 
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+    if (dragState.captureTarget.hasPointerCapture(event.pointerId)) {
+      dragState.captureTarget.releasePointerCapture(event.pointerId);
     }
     resetPointerDrag();
   };
@@ -701,6 +789,7 @@ export function WorkspaceSidebar({
       return;
     }
     if (isFolder) {
+      replaceSelectedFilePaths([]);
       onFolderCollapsedChange(entry.path, !collapsedFolderPaths.has(entry.path));
       return;
     }
@@ -711,6 +800,17 @@ export function WorkspaceSidebar({
       onOutlineCollapsedChange(entry.path, !collapsedOutlinePaths.has(entry.path));
       return;
     }
+    if (event.ctrlKey || event.metaKey) {
+      const next = new Set(selectedFilePathsRef.current);
+      if (next.has(entry.path)) {
+        next.delete(entry.path);
+      } else {
+        next.add(entry.path);
+      }
+      replaceSelectedFilePaths(next);
+      return;
+    }
+    replaceSelectedFilePaths([entry.path]);
     onSelectFile(entry.path);
   };
 
@@ -1198,6 +1298,7 @@ export function WorkspaceSidebar({
     const isFolderExpanded = isFolder && !collapsedFolderPaths.has(entry.path);
     const isActive = entry.path === currentFilePath;
     const isFocused = entry.path === focusedFolderPath;
+    const isSelectedFile = !isFolder && selectedFilePaths.has(entry.path);
     const isDraggable = Boolean(parentFolderPath && isProjectEntry(entry));
     const dropClass =
       dropTarget?.entryPath === entry.path
@@ -1216,7 +1317,8 @@ export function WorkspaceSidebar({
       isDraggable ? "draggableTreeItem" : "",
       dropClass,
       headingFileDropClass,
-      draggingEntryPath === entry.path ? "draggingTreeEntry" : "",
+      draggingEntryPaths.has(entry.path) ? "draggingTreeEntry" : "",
+      isSelectedFile ? "selectedTreeEntry" : "",
       isActive ? "activeTreeItem" : "",
       isFocused && !isActive ? "focusedTreeItem" : "",
       isFolder ? "folderTreeItem" : "fileTreeItem",
@@ -1253,7 +1355,13 @@ export function WorkspaceSidebar({
           }
           onPointerDown={
             isDraggable
-              ? (event) => handleTreePointerDown(event, parentFolderPath, entry.path)
+              ? (event) =>
+                  handleTreePointerDown(
+                    event,
+                    parentFolderPath,
+                    entry.path,
+                    isFolder,
+                  )
               : undefined
           }
           onPointerMove={isDraggable ? handleTreePointerMove : undefined}
@@ -1264,6 +1372,7 @@ export function WorkspaceSidebar({
           <button
             className="treeItemPrimary"
             type="button"
+            aria-pressed={!isFolder ? isSelectedFile : undefined}
             aria-expanded={
               isFolder && hasChildren
                 ? isFolderExpanded

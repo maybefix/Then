@@ -137,6 +137,27 @@ export function movePathToDropPosition(
   return next;
 }
 
+export function movePathsToDropPosition(
+  paths: string[],
+  draggedPaths: string[],
+  targetPath: string,
+  position: "before" | "after",
+): string[] | null {
+  const dragged = new Set(draggedPaths);
+  if (dragged.has(targetPath)) return null;
+
+  const orderedDragged = paths.filter((path) => dragged.has(path));
+  if (orderedDragged.length === 0) return null;
+  const withoutDragged = paths.filter((path) => !dragged.has(path));
+  const targetIndex = withoutDragged.indexOf(targetPath);
+  if (targetIndex < 0) return null;
+
+  const insertIndex = position === "before" ? targetIndex : targetIndex + 1;
+  const next = [...withoutDragged];
+  next.splice(insertIndex, 0, ...orderedDragged);
+  return next.every((path, index) => path === paths[index]) ? null : next;
+}
+
 export function getWorkspaceName(path: string): string {
   const normalized = path.replace(/[\\/]+$/, "");
   return normalized.split(/[\\/]/).pop() || path;

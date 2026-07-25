@@ -43,6 +43,7 @@ import {
   moveHeadingSections,
   type HeadingDropPosition,
 } from "./editor/ast/headingMove";
+import { reconcileSavedDocumentTabs } from "./editor/documentTabState";
 import {
   collectProjectTextFiles,
   createProjectAstSkeleton,
@@ -149,6 +150,7 @@ import {
   isPathSameOrInside,
   movePathInOrder,
   movePathToDropPosition,
+  movePathsToDropPosition,
   removeNestedRecentWorkspaces,
   replaceFolderChildren,
   upsertRecentWorkspace,
@@ -252,6 +254,13 @@ type MoveProjectEntryResult = {
   newPath: string;
   oldParentPath: string;
   newParentPath: string;
+};
+
+type MovedProjectEntry = Omit<MoveProjectEntryResult, "projectFolder">;
+
+type MoveProjectEntriesResult = {
+  projectFolder: ProjectFolder;
+  moves: MovedProjectEntry[];
 };
 
 type NotationModalState =
@@ -6436,6 +6445,192 @@ export default function App() {
     }
   };
 
+  const handleMoveProjectEntriesToFolder = async (
+    sourcePaths: string[],
+    targetFolderPath: string,
+  ) => {
+    if (!projectFolder) return;
+    const uniqueSourcePaths = [...new Set(sourcePaths)];
+    if (uniqueSourcePaths.length === 0) return;
+    if (uniqueSourcePaths.length === 1) {
+      await handleMoveProjectEntryToFolder(uniqueSourcePaths[0], targetFolderPath);
+      return;
+    }
+
+    const sourceEntries = uniqueSourcePaths.map((path) =>
+      findProjectEntry(projectFolder.children, path),
+    );
+    if (sourceEntries.some((entry) => !entry || entry.kind !== "file")) {
+      showToast("複数移動ではファイルだけを選択してください");
+      return;
+    }
+    const movingPaths = uniqueSourcePaths.filter((path) => {
+      const parentPath =
+        findContainingFolderPath(projectFolder, path) ?? projectFolder.path;
+      return !isSamePath(parentPath, targetFolderPath);
+    });
+    if (movingPaths.length === 0) return;
+
+    projectEntryPathChangeInProgressRef.current = true;
+    setSaveStatus("loading");
+    try {
+      const movingPathSet = new Set(movingPaths);
+      await Promise.all(
+        openTabs
+          .filter(
+            (tab): tab is DocumentTab & { path: string } =>
+              Boolean(tab.path && movingPathSet.has(tab.path)),
+          )
+          .filter(isDirtyDocumentTab)
+          .map((tab) =>
+            enqueueDocumentSave({
+              tabId: tab.id,
+              path: tab.path,
+              content: tab.markdown,
+            }),
+          ),
+      );
+
+      const result = await invoke<MoveProjectEntriesResult>("move_project_entries", {
+        rootPath: projectFolder.path,
+        sourcePaths: movingPaths,
+        targetFolderPath,
+      });
+      const retargetMovedPath = (path: string): string | null => {
+        let nextPath = path;
+        let changed = false;
+        for (const moved of result.moves) {
+          const candidate = retargetFilesystemPath(
+            nextPath,
+            moved.oldPath,
+            moved.newPath,
+          );
+          if (!candidate) continue;
+          nextPath = candidate;
+          changed = true;
+        }
+        return changed ? nextPath : null;
+      };
+
+      for (const moved of result.moves) {
+        const oldReferencePath = toProjectRelativePath(
+          projectFolder.path,
+          moved.oldPath,
+        );
+        const newReferencePath = toProjectRelativePath(
+          projectFolder.path,
+          moved.newPath,
+        );
+        if (!oldReferencePath || !newReferencePath) continue;
+        setPlotCards((current) =>
+          current.map((card) => ({
+            ...card,
+            body: replacePlotReferencePath(
+              card.body,
+              oldReferencePath,
+              newReferencePath,
+            ),
+          })),
+        );
+        setReferenceLayout((current) => ({
+          ...current,
+          cards: current.cards.map((card) =>
+            retargetReferenceCard(card, oldReferencePath, newReferencePath),
+          ),
+          recent: current.recent.map((file) =>
+            retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
+          ),
+        }));
+        setReferenceCandidates((current) =>
+          current.map((file) =>
+            retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
+          ),
+        );
+      }
+
+      const movedDocumentByPath = new Map(
+        result.moves.flatMap((moved) =>
+          moved.movedDocument
+            ? [[moved.movedDocument.path, moved.movedDocument] as const]
+            : [],
+        ),
+      );
+      const activeNewPath = currentFilePath
+        ? retargetMovedPath(currentFilePath)
+        : null;
+      setOpenTabs((current) =>
+        current.map((tab) => {
+          if (!tab.path) return tab;
+          const nextPath = retargetMovedPath(tab.path);
+          if (!nextPath) return tab;
+          const movedDocument = movedDocumentByPath.get(nextPath);
+          return {
+            ...tab,
+            id: `file:${nextPath}`,
+            kind: "file",
+            path: nextPath,
+            name:
+              movedDocument?.name ??
+              nextPath.split(/[\\/]/).pop() ??
+              tab.name,
+            markdown: movedDocument?.content ?? tab.markdown,
+            savedMarkdown: movedDocument?.content ?? tab.savedMarkdown,
+            saveStatus: "saved",
+            documentKey: nextPath,
+          };
+        }),
+      );
+      if (activeNewPath) {
+        const activeMovedDocument = movedDocumentByPath.get(activeNewPath);
+        setActiveTabId(`file:${activeNewPath}`);
+        lastSavedMarkdownRef.current =
+          activeMovedDocument?.content ??
+          activeTab?.savedMarkdown ??
+          lastSavedMarkdownRef.current;
+      }
+
+      setAppState((current) => {
+        const retargetRecord = <T,>(record: Record<string, T>): Record<string, T> => {
+          const next: Record<string, T> = {};
+          for (const [path, value] of Object.entries(record)) {
+            next[retargetMovedPath(path) ?? path] = value;
+          }
+          return next;
+        };
+        const activeMovedDocument = activeNewPath
+          ? movedDocumentByPath.get(activeNewPath)
+          : null;
+        return {
+          ...current,
+          ...(activeNewPath
+            ? {
+                markdown: activeMovedDocument?.content ?? current.markdown,
+                lastFilePath: activeNewPath,
+              }
+            : {}),
+          fileProgress: retargetRecord(current.fileProgress),
+          cursorPositions: retargetRecord(current.cursorPositions),
+          lastFilePath: current.lastFilePath
+            ? retargetMovedPath(current.lastFilePath) ?? current.lastFilePath
+            : current.lastFilePath,
+        };
+      });
+      setFocusedFolderPath(targetFolderPath);
+      projectAstBuildIdRef.current += 1;
+      setProjectAst(null);
+      setProjectFolder(result.projectFolder);
+      setLastError("");
+      setSaveStatus(activeNewPath || currentFilePath ? "saved" : "dirty");
+      showToast(`${result.moves.length}件のファイルを移動しました`);
+    } catch (error) {
+      setLastError(String(error));
+      setSaveStatus("error");
+      showToast("選択したファイルを移動できませんでした");
+    } finally {
+      projectEntryPathChangeInProgressRef.current = false;
+    }
+  };
+
   const saveProjectEntryOrder = async (folderPath: string, orderedPaths: string[]) => {
     if (!projectFolder) return;
 
@@ -6529,16 +6724,16 @@ export default function App() {
 
   const handleSidebarEntryReorder = async (
     folderPath: string,
-    draggedPath: string,
+    draggedPaths: string[],
     targetPath: string,
     position: "before" | "after",
   ) => {
     if (!projectFolder) return;
 
     const children = getFolderChildren(projectFolder, folderPath);
-    const nextOrder = movePathToDropPosition(
+    const nextOrder = movePathsToDropPosition(
       children.map((entry) => entry.path),
-      draggedPath,
+      draggedPaths,
       targetPath,
       position,
     );
@@ -6746,6 +6941,10 @@ export default function App() {
     });
     if (!fileName) return;
 
+    const sourceViewportBeforeExtract =
+      openSourceTab?.id === activeTabIdRef.current
+        ? editorInstanceRef.current?.getViewportState() ?? openSourceTab.viewportState
+        : openSourceTab?.viewportState ?? null;
     headingMoveInProgressRef.current = true;
     try {
       const sourceMarkdown =
@@ -6767,19 +6966,54 @@ export default function App() {
         sourceContent: extraction.sourceMarkdown,
         extractedContent: extraction.extractedMarkdown,
       });
+      const reconciledSource = reconcileSavedDocumentTabs(
+        openTabs,
+        activeTabIdRef.current,
+        saved.sourceDocument,
+      );
+      const savedSourceBody = parseFrontMatter(saved.sourceDocument.content).body;
+      const sourceCursorOffset = Math.min(
+        extraction.sourceCursorOffset,
+        savedSourceBody.length,
+      );
+      const sourceViewportState = {
+        textLength: savedSourceBody.length,
+        writingMode: settings.writingMode,
+        anchorOffset: sourceCursorOffset,
+        anchorRatio:
+          sourceViewportBeforeExtract?.anchorRatio ??
+          Math.max(0, Math.min(1, settings.typewriterOffset / 100)),
+      };
+      if (reconciledSource.activeSavedMarkdown !== null) {
+        lastSavedMarkdownRef.current = reconciledSource.activeSavedMarkdown;
+      }
+      setAppState((current) => ({
+        ...current,
+        ...(reconciledSource.activeSavedMarkdown !== null
+          ? {
+              markdown: saved.sourceDocument.content,
+              lastFilePath: saved.sourceDocument.path,
+            }
+          : {}),
+        cursorPositions: {
+          ...current.cursorPositions,
+          [saved.sourceDocument.path]: {
+            offset: sourceCursorOffset,
+            length: savedSourceBody.length,
+          },
+        },
+      }));
+      // Switch tabs before yielding so the source update cannot briefly trigger
+      // autosave as an unsaved editor change. Reconcile it afterwards to retain
+      // a viewport anchored at the extraction point.
+      loadDocumentIntoEditor(saved.extractedDocument);
       setOpenTabs((current) =>
-        current.map((tab) =>
-          tab.path === saved.sourceDocument.path
-            ? {
-                ...tab,
-                markdown: saved.sourceDocument.content,
-                savedMarkdown: saved.sourceDocument.content,
-                editorRevision: null,
-                name: saved.sourceDocument.name,
-                saveStatus: "saved",
-              }
-            : tab,
-        ),
+        reconcileSavedDocumentTabs(
+          current,
+          activeTabIdRef.current,
+          saved.sourceDocument,
+          { viewportState: sourceViewportState },
+        ).tabs,
       );
       setProjectAst((current) => {
         if (!current || current.rootPath !== projectFolder?.path) return current;
@@ -6794,7 +7028,6 @@ export default function App() {
         );
       });
       await refreshProjectFolder(getParentPath(source.path) ?? projectFolder?.path ?? "");
-      loadDocumentIntoEditor(saved.extractedDocument);
       setLastError("");
       showToast(`見出し「${extraction.extractedTitle}」を切り出しました`);
     } catch (error) {
@@ -8371,11 +8604,11 @@ export default function App() {
                 onSelectFolder={(path) => void handleProjectFolderSelect(path)}
                 onRenameEntry={(entry) => void handleRenameProjectEntry(entry)}
                 onDeleteEntry={(entry) => void handleDeleteProjectEntry(entry)}
-                onMoveEntry={(sourcePath, targetFolderPath) =>
-                  void handleMoveProjectEntryToFolder(sourcePath, targetFolderPath)
+                onMoveEntry={(sourcePaths, targetFolderPath) =>
+                  void handleMoveProjectEntriesToFolder(sourcePaths, targetFolderPath)
                 }
-                onReorderEntry={(folderPath, draggedPath, targetPath, position) =>
-                  void handleSidebarEntryReorder(folderPath, draggedPath, targetPath, position)
+                onReorderEntry={(folderPath, draggedPaths, targetPath, position) =>
+                  void handleSidebarEntryReorder(folderPath, draggedPaths, targetPath, position)
                 }
                 snapshots={currentWorkspaceSnapshots}
                 isSnapshotSectionCollapsed={settings.checkpointSectionCollapsed}

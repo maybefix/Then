@@ -219,4 +219,20 @@ assert.equal(
 );
 assert.equal(extractedWithChildren.sourceMarkdown, "# Stay\nstay\n");
 
+const extractedMiddle = extractHeadingSection({
+  sourceMarkdown: "# Before\nbefore\n# Cut\ncut\n# After\nafter\n",
+  sourceLine: 3,
+  includeChildren: true,
+});
+assert.equal(
+  extractedMiddle.sourceCursorOffset,
+  "# Before\nbefore\n".length,
+  "the source cursor must remain at the extraction boundary",
+);
+assert.ok(
+  extractedMiddle.sourceCursorOffset <=
+    extractedMiddle.sourceMarkdown.length,
+  "the source cursor must remain within the shortened document",
+);
+
 console.log("heading move tests passed");

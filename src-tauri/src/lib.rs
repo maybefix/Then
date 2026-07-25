@@ -99,6 +99,23 @@ struct MoveProjectEntryResult {
     new_parent_path: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MovedProjectEntry {
+    moved_document: Option<TextDocument>,
+    old_path: String,
+    new_path: String,
+    old_parent_path: String,
+    new_parent_path: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MoveProjectEntriesResult {
+    project_folder: ProjectFolder,
+    moves: Vec<MovedProjectEntry>,
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DeleteProjectEntryPlan {
@@ -427,6 +444,7 @@ pub fn run() {
             delete_project_entry,
             ensure_project_folder_tree,
             move_project_entry,
+            move_project_entries,
             reorder_project_entries,
             load_project_snippets,
             save_project_snippets,
@@ -1864,6 +1882,127 @@ fn move_project_entry(
         new_path: next_path.to_string_lossy().to_string(),
         old_parent_path: old_parent.to_string_lossy().to_string(),
         new_parent_path: target_folder.to_string_lossy().to_string(),
+    })
+}
+
+#[tauri::command]
+fn move_project_entries(
+    root_path: String,
+    source_paths: Vec<String>,
+    target_folder_path: String,
+) -> Result<MoveProjectEntriesResult, String> {
+    let root = PathBuf::from(&root_path);
+    let target_folder = PathBuf::from(&target_folder_path);
+    if !root.is_dir() {
+        return Err("project root does not exist".to_string());
+    }
+    if !target_folder.is_dir() {
+        return Err("target folder does not exist".to_string());
+    }
+
+    let root_canonical = root
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve project root: {error}"))?;
+    let target_canonical = target_folder
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve target folder: {error}"))?;
+    if !target_canonical.starts_with(&root_canonical) {
+        return Err("entry move must stay inside the project root".to_string());
+    }
+
+    let mut candidates = Vec::<String>::new();
+    let mut destinations = Vec::<String>::new();
+    for source_path in source_paths {
+        let source = PathBuf::from(&source_path);
+        if !source.is_file() || !is_supported_text_extension(&source) {
+            return Err("multiple entry move supports only text files".to_string());
+        }
+        let source_canonical = source
+            .canonicalize()
+            .map_err(|error| format!("failed to resolve entry path: {error}"))?;
+        if !source_canonical.starts_with(&root_canonical) {
+            return Err("entry move must stay inside the project root".to_string());
+        }
+        let parent_canonical = source
+            .parent()
+            .ok_or_else(|| "entry parent does not exist".to_string())?
+            .canonicalize()
+            .map_err(|error| format!("failed to resolve entry parent: {error}"))?;
+        if parent_canonical == target_canonical {
+            continue;
+        }
+        if candidates.iter().any(|path| path == &source_path) {
+            continue;
+        }
+
+        let file_name = source
+            .file_name()
+            .ok_or_else(|| "entry name does not exist".to_string())?;
+        let destination = target_folder.join(file_name);
+        let destination_key = destination.to_string_lossy().to_lowercase();
+        if destination.exists() || destinations.contains(&destination_key) {
+            return Err("entry with that name already exists in target folder".to_string());
+        }
+        candidates.push(source_path);
+        destinations.push(destination_key);
+    }
+
+    let original_config = load_project_config(&root)?;
+    let mut completed = Vec::<MovedProjectEntry>::new();
+    for source_path in candidates {
+        match move_project_entry(
+            root_path.clone(),
+            source_path,
+            target_folder_path.clone(),
+        ) {
+            Ok(result) => completed.push(MovedProjectEntry {
+                moved_document: result.moved_document,
+                old_path: result.old_path,
+                new_path: result.new_path,
+                old_parent_path: result.old_parent_path,
+                new_parent_path: result.new_parent_path,
+            }),
+            Err(move_error) => {
+                let rollback_errors = completed
+                    .iter()
+                    .rev()
+                    .filter_map(|moved| {
+                        move_project_entry(
+                            root_path.clone(),
+                            moved.new_path.clone(),
+                            moved.old_parent_path.clone(),
+                        )
+                        .err()
+                        .map(|error| format!("{}: {error}", moved.new_path))
+                    })
+                    .collect::<Vec<_>>();
+                let config_rollback_error = if rollback_errors.is_empty() {
+                    save_project_config(&root, &original_config).err()
+                } else {
+                    None
+                };
+                return Err(if rollback_errors.is_empty() {
+                    match config_rollback_error {
+                        Some(error) => format!(
+                            "failed to move selected files; files were restored but project order restoration failed: {move_error}; {error}"
+                        ),
+                        None => format!(
+                            "failed to move selected files; completed moves were restored: {move_error}"
+                        ),
+                    }
+                } else {
+                    format!(
+                        "failed to move selected files and restore every file: {move_error}; {}",
+                        rollback_errors.join("; ")
+                    )
+                });
+            }
+        }
+    }
+
+    Ok(MoveProjectEntriesResult {
+        project_folder: list_project_folder(&root)?,
+        moves: completed,
     })
 }
 

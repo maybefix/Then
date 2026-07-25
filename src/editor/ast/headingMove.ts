@@ -30,6 +30,7 @@ export type HeadingExtractResult = {
   extractedTitle: string;
   sourceMarkdown: string;
   extractedMarkdown: string;
+  sourceCursorOffset: number;
 };
 
 type TextLines = {
@@ -310,9 +311,16 @@ export function extractHeadingSection({
   nextSourceLines.splice(fullSection.start, end - fullSection.start);
   const extractedTrailingNewline =
     end < sourceBody.lines.length || sourceBody.trailingNewline;
+  const nextSourceBody = joinLines({ ...sourceBody, lines: nextSourceLines });
+  const sourceCursorOffset = Math.min(
+    nextSourceBody.length,
+    sourceBody.lines
+      .slice(0, fullSection.start)
+      .reduce((offset, line) => offset + line.length + 1, 0),
+  );
   const nextSourceMarkdown = updateMarkdownBody(
     sourceMarkdown,
-    joinLines({ ...sourceBody, lines: nextSourceLines }),
+    nextSourceBody,
   );
 
   return {
@@ -323,5 +331,6 @@ export function extractHeadingSection({
       lines: extractedLines,
       trailingNewline: extractedTrailingNewline,
     }),
+    sourceCursorOffset,
   };
 }
