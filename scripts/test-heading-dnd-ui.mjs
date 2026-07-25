@@ -143,6 +143,7 @@ function Harness() {
     sidebarMode: "tree",
     navigatorPreviewLines: 2,
     countWhitespace: true,
+    showOutlineGuides: true,
     fileProgress: {},
     onSetFileProgress() {},
     collapsedFolderPaths: collapsedFolders,
@@ -330,25 +331,24 @@ async function clickFileDisclosure(element, fileButton, pointerId) {
 
 const root = createRoot(document.getElementById("root"));
 await act(async () => root.render(React.createElement(Harness)));
-const rootFolderButton = document.querySelector('.folderTreeItem .treeItemPrimary[aria-expanded="true"]');
-assert.ok(rootFolderButton, "expanded project folder must render");
-await act(async () => rootFolderButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
-assert.equal(rootFolderButton.getAttribute("aria-expanded"), "false");
-assert.equal(document.querySelector('[data-outline-block-id="block-alpha"]'), null);
-assert.equal(globalThis.__folderSelectCalls, 0, "folder click must not change the selected breadcrumb folder");
-await act(async () => rootFolderButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
-assert.equal(rootFolderButton.getAttribute("aria-expanded"), "true");
+assert.equal(
+  document.querySelector(`[data-tree-entry-path="${projectFolder.path.replace(/\\/g, "\\\\")}"]`),
+  null,
+  "the project root folder must stay hidden in the refreshed file view",
+);
 
 const fileButton = Array.from(document.querySelectorAll(".fileTreeItem .treeItemPrimary"))
   .find((button) => button.getAttribute("title") === pathA);
-const fileDisclosure = fileButton?.querySelector("[data-tree-outline-disclosure]");
+const fileDisclosure = fileButton
+  ?.closest(".fileTreeItem")
+  ?.querySelector(".treeFileDisclosure");
 assert.ok(fileButton && fileDisclosure, "file with headings must render an outline disclosure");
 await clickFileDisclosure(fileDisclosure, fileButton, 20);
-assert.equal(fileButton.getAttribute("aria-expanded"), "false");
+assert.equal(fileDisclosure.getAttribute("aria-expanded"), "false");
 assert.equal(document.querySelector('[data-outline-block-id="block-alpha"]'), null);
 assert.equal(globalThis.__fileSelectCalls, 0, "outline disclosure must not open the file");
 await clickFileDisclosure(fileDisclosure, fileButton, 21);
-assert.equal(fileButton.getAttribute("aria-expanded"), "true");
+assert.equal(fileDisclosure.getAttribute("aria-expanded"), "true");
 
 const source = document.querySelector('[data-outline-block-id="block-alpha"]');
 const target = document.querySelector('[data-outline-block-id="block-beta"]');

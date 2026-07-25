@@ -521,6 +521,12 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .topbar {
+  /*
+   * Blur-backed themes make the topbar a stacking context. Keep that context
+   * above the workspace so its popovers are not painted behind the editor.
+   */
+  position: relative;
+  z-index: 1;
   display: flex;
   height: var(--documentbar-height);
   flex: 0 0 var(--documentbar-height);
@@ -655,6 +661,37 @@ body.thenPdfExporting .printExportViewport {
   overscroll-behavior: contain;
 }
 
+.breadcrumbBrowseHeader {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.breadcrumbBrowseBack {
+  display: inline-grid !important;
+  width: 28px;
+  min-height: 28px !important;
+  padding: 0 !important;
+  place-items: center;
+  font-size: 19px !important;
+  text-align: center !important;
+}
+
+.breadcrumbBrowseFolderName {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .workspaceSwitcherButton {
   font-weight: 650;
 }
@@ -779,6 +816,12 @@ body.thenPdfExporting .printExportViewport {
 .workspaceFolderDisclosure:disabled {
   cursor: default;
   opacity: 0.4;
+}
+
+.workspaceFolderTreeIndent {
+  display: block;
+  width: 20px;
+  height: 1px;
 }
 
 .workspaceFolderTreeButton {
@@ -1097,6 +1140,8 @@ body.thenPdfExporting .printExportViewport {
 
 .workspace {
   position: relative;
+  /* Confine workspace overlays below the topbar; modal backdrops remain above both. */
+  z-index: 0;
   display: flex;
   min-height: 0;
   flex: 1;
@@ -4110,6 +4155,7 @@ body {
 }
 
 .outlineTreeNode {
+  position: relative;
   min-width: 0;
 }
 
@@ -4134,22 +4180,29 @@ body {
 .outlineHeadingDisclosure {
   position: absolute;
   top: 0;
-  bottom: 0;
-  left: calc(var(--outline-item-indent, 12px) - 14px);
-  display: inline-grid;
-  width: 12px;
-  height: 24px;
+  left: calc(var(--outline-item-indent, 31px) - 30px);
+  z-index: 4;
+  display: grid;
+  width: 34px;
+  height: 25px;
+  padding: 0;
   place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
   color: var(--text-faint);
+  cursor: pointer;
 }
 
-.collapsibleOutlineTreeItem .outlineHeadingDisclosure {
-  color: var(--text-muted);
-}
-
-.collapsibleOutlineTreeItem:hover .outlineHeadingDisclosure,
-.activeOutlineTreeItem .outlineHeadingDisclosure {
+.outlineHeadingDisclosure:hover,
+.outlineHeadingDisclosure:focus-visible {
+  background: var(--control-hover, rgba(127, 137, 143, 0.12));
   color: var(--text-primary);
+  outline: none;
+}
+
+.activeOutlineHeadingDisclosure {
+  color: var(--accent-strong);
 }
 
 .outlineTreeItem::before,
@@ -9749,4 +9802,330 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   margin: 0;
   color: var(--text-muted);
   font-size: 10.5px;
+}
+
+/* ===== ファイルビュー刷新 ===== */
+:root {
+  --left-sidebar-width: 320px;
+}
+
+.outlineExplorerSection {
+  padding-top: 2px;
+}
+
+.outlineExplorerSection .outlineTree {
+  padding: 0 0 8px;
+}
+
+.folderTreeItem {
+  margin-top: 4px;
+  color: var(--text-secondary);
+}
+
+.folderTreeItem:hover,
+.folderTreeItem.focusedTreeItem {
+  color: var(--text-primary);
+}
+
+.folderTreeItemPrimary {
+  width: 100%;
+  min-height: 31px;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  gap: 6px;
+  padding: 0 12px 0 var(--tree-item-indent, 10px);
+  font-size: 12px;
+  font-weight: 690;
+  letter-spacing: 0.02em;
+}
+
+.fileTreeItem {
+  min-height: 28px;
+  grid-template-columns: 16px 50px minmax(0, 1fr) 20px;
+  gap: 5px;
+  padding: 0 5px 0 var(--tree-item-indent, 10px);
+}
+
+.fileTreeItem:hover {
+  background: rgba(255, 255, 255, 0.032);
+}
+
+.fileTreeItem.activeTreeItem {
+  background:
+    linear-gradient(90deg, rgba(91, 113, 214, 0.2), rgba(91, 113, 214, 0.075));
+  color: #f0f1f5;
+  box-shadow: inset 2px 0 #7689ff;
+}
+
+.fileTreeItem.selectedTreeEntry:not(.activeTreeItem) {
+  background: rgba(91, 113, 214, 0.11);
+  box-shadow: inset 0 0 0 1px rgba(118, 137, 255, 0.3);
+}
+
+.treeFileDisclosure,
+.treeFileDisclosurePlaceholder {
+  display: grid;
+  width: 16px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-faint, var(--text-muted));
+}
+
+.treeFileDisclosure {
+  cursor: pointer;
+}
+
+.treeFileDisclosure:hover {
+  color: var(--text-secondary);
+}
+
+.fileTreeItem .fileProgressControl {
+  width: 50px;
+  min-width: 50px;
+  justify-content: stretch;
+}
+
+.fileTreeItem .fileProgressBadge {
+  width: 50px;
+  min-height: 18px;
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+  border-radius: 3px;
+  font-size: 8.5px;
+  font-weight: 650;
+  letter-spacing: 0.035em;
+}
+
+.fileTreeItem .fileProgressBadge .progressDot {
+  display: none;
+}
+
+.fileTreeItem .fileProgressBadge-todo {
+  border-color: rgba(146, 149, 158, 0.3);
+  background: rgba(146, 149, 158, 0.1);
+  color: #a4a7af;
+}
+
+.fileTreeItem .fileProgressBadge-writing {
+  border-color: rgba(105, 168, 255, 0.35);
+  background: rgba(77, 143, 240, 0.16);
+  color: #75b0ff;
+}
+
+.fileTreeItem .fileProgressBadge-revising {
+  border-color: rgba(228, 174, 85, 0.36);
+  background: rgba(220, 158, 61, 0.15);
+  color: #e4ae55;
+}
+
+.fileTreeItem .fileProgressBadge-done {
+  border-color: rgba(99, 196, 142, 0.36);
+  background: rgba(74, 177, 119, 0.15);
+  color: #69c792;
+}
+
+.fileTreeItem .fileProgressBadge-todo:hover,
+.fileTreeItem .fileProgressBadge-writing:hover,
+.fileTreeItem .fileProgressBadge-revising:hover,
+.fileTreeItem .fileProgressBadge-done:hover {
+  filter: brightness(1.12);
+}
+
+.fileTreeItem .fileProgressMenu {
+  right: auto;
+  left: 0;
+}
+
+.fileTreeItemPrimary {
+  width: 100%;
+  min-height: 28px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  padding: 0;
+  font-size: 11.3px;
+  letter-spacing: 0.005em;
+}
+
+.fileTreeItem.activeTreeItem .fileTreeItemPrimary {
+  font-weight: 580;
+}
+
+.treeEntryMoreButton {
+  display: grid;
+  width: 20px;
+  height: 24px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint, var(--text-muted));
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: -0.08em;
+  opacity: 0;
+}
+
+.fileTreeItem:hover .treeEntryMoreButton,
+.fileTreeItem.activeTreeItem .treeEntryMoreButton,
+.treeEntryMoreButton:focus-visible {
+  opacity: 1;
+}
+
+.treeEntryMoreButton:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.treeItemCharCount {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.fileTreeOutlineChildren {
+  position: relative;
+  padding: 1px 0 4px;
+}
+
+.showOutlineGuides .fileTreeOutlineChildren::before {
+  position: absolute;
+  top: 0;
+  bottom: 5px;
+  left: var(--file-outline-guide-indent, 56px);
+  width: 1px;
+  background: var(--border-subtle);
+  content: "";
+  pointer-events: none;
+}
+
+.fileTreeOutlineChildren .nestedOutlineTreeChildren {
+  position: relative;
+}
+
+.showOutlineGuides .fileTreeOutlineChildren .nestedOutlineTreeChildren::before {
+  position: absolute;
+  top: 0;
+  bottom: 4px;
+  left: var(--nested-outline-guide-indent);
+  width: 1px;
+  background: var(--border-subtle);
+  content: "";
+  pointer-events: none;
+}
+
+.fileTreeOutlineChildren .outlineTreeItem {
+  min-height: 25px;
+  grid-template-columns: 25px minmax(0, 1fr) auto;
+  gap: 5px;
+  padding-right: 12px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.fileTreeOutlineChildren .outlineTreeItem:hover {
+  background: rgba(255, 255, 255, 0.026);
+  color: var(--text-primary);
+}
+
+.fileTreeOutlineChildren .activeOutlineTreeItem {
+  background: transparent;
+  color: var(--accent-strong);
+}
+
+.fileTreeOutlineChildren .outlineLevelMark {
+  display: inline-flex;
+  width: 24px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  border: 1px solid #cfd5da;
+  border-radius: 3px;
+  background: #eef1f3;
+  color: #5f6972;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 9.25px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.fileTreeOutlineChildren .activeOutlineTreeItem .outlineLevelMark {
+  border-color: #b3bdc5;
+  background: #e3e8ec;
+  color: #444e56;
+}
+
+.appShell:is([data-theme="dark"], [data-theme$="-dark"])
+  .fileTreeOutlineChildren
+  .outlineLevelMark {
+  border-color: #50575e;
+  background: #33383d;
+  color: #c4cbd1;
+}
+
+.appShell:is([data-theme="dark"], [data-theme$="-dark"])
+  .fileTreeOutlineChildren
+  .activeOutlineTreeItem
+  .outlineLevelMark {
+  border-color: #68717a;
+  background: #3c4248;
+  color: #e0e5e9;
+}
+
+.outlineItemTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileTreeOutlineChildren .outlineTreeItem .treeItemCharCount {
+  overflow: visible;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  text-overflow: clip;
+}
+
+.fileViewSummary {
+  display: flex;
+  height: 34px;
+  flex: 0 0 34px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 12px;
+  border-top: 0.5px solid var(--border-subtle);
+}
+
+.fileViewSummary strong {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+/* 資料ライブラリは左アクティビティバーから切り替える。 */
+.leftReferenceSidebarBody {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.referenceWorkspaceSidebar .referencePane {
+  background: var(--bg-panel);
+}
+
+.referenceWorkspaceSidebar .referencePaneTop {
+  padding: 9px 10px 8px;
+}
+
+.referenceWorkspaceSidebar .referencePaneSection {
+  padding-right: 10px;
+  padding-left: 10px;
 }

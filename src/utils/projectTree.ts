@@ -55,6 +55,98 @@ export function getFolderChildren(
   return entry?.kind === "folder" ? entry.children : [];
 }
 
+export type BreadcrumbFolderNavigation = {
+  path: string;
+  name: string;
+  children: ProjectEntry[];
+  parentPath: string | null;
+  parentName: string | null;
+};
+
+export type WorkspaceFolderTreeRow = {
+  entry: ProjectFolder | ProjectEntry;
+  depth: number;
+};
+
+/**
+ * Flatten the project tree for the workspace switcher while retaining depth.
+ * Files are included so expanding a folder exposes something actionable
+ * instead of only changing the focused destination folder.
+ */
+export function getVisibleWorkspaceFolderTreeRows(
+  folder: ProjectFolder | null,
+  collapsedPaths: ReadonlySet<string>,
+): WorkspaceFolderTreeRow[] {
+  if (!folder) return [];
+
+  const rows: WorkspaceFolderTreeRow[] = [];
+  const walk = (entry: ProjectFolder | ProjectEntry, depth: number) => {
+    rows.push({ entry, depth });
+    if (
+      ("kind" in entry && entry.kind === "file") ||
+      collapsedPaths.has(entry.path)
+    ) {
+      return;
+    }
+    for (const child of entry.children) {
+      walk(child, depth + 1);
+    }
+  };
+
+  walk(folder, 0);
+  return rows;
+}
+
+/**
+ * Resolve the folder shown inside a breadcrumb popover.
+ *
+ * The popover remains anchored to a folder in the current file's breadcrumb
+ * trail while its contents can drill down into descendants. A stale or
+ * out-of-branch browse path falls back to the anchor instead of producing an
+ * unreachable menu.
+ */
+export function getBreadcrumbFolderNavigation(
+  folder: ProjectFolder | null,
+  anchorPath: string,
+  browsePath: string | null,
+): BreadcrumbFolderNavigation | null {
+  if (!folder) return null;
+
+  const anchorTrail = findPathToEntry(folder, anchorPath);
+  const anchor = anchorTrail[anchorTrail.length - 1];
+  const anchorIsFolder =
+    anchor &&
+    ("children" in anchor) &&
+    (!("kind" in anchor) || anchor.kind === "folder");
+  if (!anchorIsFolder) return null;
+
+  const requestedTrail = browsePath ? findPathToEntry(folder, browsePath) : [];
+  const anchorIndex = requestedTrail.findIndex((entry) => entry.path === anchorPath);
+  const requested = requestedTrail[requestedTrail.length - 1];
+  const requestedIsFolder =
+    anchorIndex >= 0 &&
+    requested &&
+    ("children" in requested) &&
+    (!("kind" in requested) || requested.kind === "folder");
+  const trail = requestedIsFolder ? requestedTrail : anchorTrail;
+  const current = trail[trail.length - 1];
+  if (!current || !("children" in current)) return null;
+
+  const currentAnchorIndex = trail.findIndex((entry) => entry.path === anchorPath);
+  const parent =
+    trail.length - 1 > currentAnchorIndex
+      ? trail[trail.length - 2] ?? null
+      : null;
+
+  return {
+    path: current.path,
+    name: current.name,
+    children: current.children,
+    parentPath: parent?.path ?? null,
+    parentName: parent?.name ?? null,
+  };
+}
+
 export function replaceFolderChildren(
   folder: ProjectFolder,
   folderPath: string,

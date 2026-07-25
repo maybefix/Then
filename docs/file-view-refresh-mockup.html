@@ -1,0 +1,1387 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Then — ファイルビュー刷新モックアップ</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ui-font:
+        Inter, "Noto Sans JP", "Yu Gothic UI", Meiryo, system-ui, -apple-system,
+        BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --serif-font: "Noto Serif JP", "Yu Mincho", YuMincho, serif;
+      --bg-root: #111216;
+      --bg-editor: #191a1e;
+      --bg-sidebar: #15161a;
+      --bg-rail: #121317;
+      --bg-elevated: #22242a;
+      --bg-menu: #282a31;
+      --line: #2a2c33;
+      --line-strong: #3b3e47;
+      --text: #e7e8ec;
+      --text-soft: #b6b8c0;
+      --text-muted: #81848e;
+      --text-faint: #5f626c;
+      --accent: #7689ff;
+      --accent-soft: rgba(118, 137, 255, 0.13);
+      --active-line: #8493ff;
+      --todo: #92959e;
+      --todo-bg: rgba(146, 149, 158, 0.1);
+      --writing: #69a8ff;
+      --writing-bg: rgba(77, 143, 240, 0.16);
+      --revising: #e4ae55;
+      --revising-bg: rgba(220, 158, 61, 0.15);
+      --done: #63c48e;
+      --done-bg: rgba(74, 177, 119, 0.15);
+      font-family: var(--ui-font);
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+    }
+
+    body {
+      min-width: 960px;
+      min-height: 620px;
+      overflow: hidden;
+      background: #0d0e11;
+      color: var(--text);
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    svg {
+      display: block;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .app {
+      display: flex;
+      width: 100vw;
+      height: 100vh;
+      min-width: 960px;
+      min-height: 620px;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg-root);
+    }
+
+    .topbar {
+      display: grid;
+      height: 45px;
+      flex: 0 0 45px;
+      grid-template-columns: 340px minmax(0, 1fr) auto;
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+      background: #17181c;
+      color: var(--text-muted);
+    }
+
+    .brand {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 12px;
+      padding: 0 15px;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 23px;
+      height: 23px;
+      place-items: center;
+      color: #d9dbe1;
+    }
+
+    .brand-mark svg {
+      width: 18px;
+      height: 18px;
+      stroke-width: 1.7;
+    }
+
+    .brand-name {
+      color: #f1f1f3;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .breadcrumb {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 8px;
+      overflow: hidden;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .breadcrumb span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .breadcrumb .current {
+      color: var(--text-soft);
+    }
+
+    .window-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding-right: 15px;
+    }
+
+    .window-actions span {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #454851;
+    }
+
+    .workspace {
+      display: flex;
+      min-height: 0;
+      flex: 1;
+    }
+
+    .activity-rail {
+      display: flex;
+      width: 45px;
+      flex: 0 0 45px;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      padding: 6px 0;
+      border-right: 1px solid var(--line);
+      background: var(--bg-rail);
+      color: #666974;
+    }
+
+    .activity-button,
+    .icon-button,
+    .more-button,
+    .disclosure {
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .activity-button {
+      position: relative;
+      display: grid;
+      width: 44px;
+      height: 36px;
+      place-items: center;
+      color: inherit;
+    }
+
+    .activity-button::before {
+      position: absolute;
+      top: 6px;
+      bottom: 6px;
+      left: 0;
+      width: 2px;
+      border-radius: 0 2px 2px 0;
+      background: var(--accent);
+      content: "";
+      opacity: 0;
+    }
+
+    .activity-button:hover,
+    .activity-button.active {
+      color: #cfd1d7;
+      background: rgba(255, 255, 255, 0.035);
+    }
+
+    .activity-button.active::before {
+      opacity: 1;
+    }
+
+    .activity-button svg {
+      width: 18px;
+      height: 18px;
+      stroke-width: 1.55;
+    }
+
+    .rail-spacer {
+      flex: 1;
+    }
+
+    .sidebar {
+      display: flex;
+      width: 344px;
+      min-width: 344px;
+      flex: 0 0 344px;
+      flex-direction: column;
+      border-right: 1px solid var(--line);
+      background: var(--bg-sidebar);
+      color: var(--text-soft);
+    }
+
+    .sidebar-header {
+      display: flex;
+      height: 43px;
+      flex: 0 0 43px;
+      align-items: center;
+      gap: 7px;
+      padding: 0 9px 0 12px;
+      border-bottom: 1px solid rgba(42, 44, 51, 0.68);
+    }
+
+    .sidebar-title {
+      min-width: 0;
+      flex: 1;
+      color: #c7c9d0;
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: 0.07em;
+    }
+
+    .project-total {
+      color: var(--text-faint);
+      font-size: 9.5px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 1px;
+    }
+
+    .icon-button,
+    .more-button {
+      display: grid;
+      place-items: center;
+      border-radius: 4px;
+      color: #777a84;
+    }
+
+    .icon-button {
+      width: 25px;
+      height: 25px;
+    }
+
+    .icon-button:hover,
+    .more-button:hover,
+    .icon-button.active {
+      background: rgba(255, 255, 255, 0.055);
+      color: #d4d6db;
+    }
+
+    .icon-button svg {
+      width: 14px;
+      height: 14px;
+      stroke-width: 1.65;
+    }
+
+    .search-panel {
+      display: grid;
+      grid-template-rows: 0fr;
+      overflow: hidden;
+      border-bottom: 0 solid var(--line);
+      transition: grid-template-rows 130ms ease;
+    }
+
+    .search-panel.open {
+      grid-template-rows: 1fr;
+      border-bottom-width: 1px;
+    }
+
+    .search-panel-inner {
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .search-field {
+      display: grid;
+      height: 34px;
+      grid-template-columns: 16px minmax(0, 1fr);
+      align-items: center;
+      gap: 5px;
+      margin: 8px 9px;
+      padding: 0 9px;
+      border: 1px solid var(--line-strong);
+      border-radius: 5px;
+      background: #1d1f24;
+      color: var(--text-muted);
+    }
+
+    .search-field svg {
+      width: 13px;
+      height: 13px;
+      stroke-width: 1.7;
+    }
+
+    .search-field input {
+      min-width: 0;
+      border: 0;
+      outline: none;
+      background: transparent;
+      color: var(--text);
+      font-size: 11px;
+    }
+
+    .search-field input::placeholder {
+      color: #60636d;
+    }
+
+    .file-scroll {
+      min-height: 0;
+      flex: 1;
+      overflow: auto;
+      padding: 4px 0 10px;
+      scrollbar-color: #383b43 transparent;
+      scrollbar-width: thin;
+    }
+
+    .folder-group {
+      min-width: 0;
+    }
+
+    .folder-group[hidden],
+    .file-row[hidden] {
+      display: none;
+    }
+
+    .folder-header {
+      display: grid;
+      width: 100%;
+      min-width: 0;
+      height: 31px;
+      grid-template-columns: 14px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 5px;
+      padding: 0 12px 0 10px;
+      border: 0;
+      background: transparent;
+      color: #d8d9dd;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .folder-header:hover {
+      background: rgba(255, 255, 255, 0.035);
+    }
+
+    .folder-header svg {
+      width: 11px;
+      height: 11px;
+      color: #747781;
+      stroke-width: 2;
+      transition: transform 110ms ease;
+    }
+
+    .folder-group.collapsed .folder-header svg {
+      transform: rotate(-90deg);
+    }
+
+    .folder-name {
+      min-width: 0;
+      overflow: hidden;
+      font-size: 11.5px;
+      font-weight: 690;
+      letter-spacing: 0.025em;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .count {
+      color: #747781;
+      font-size: 9.5px;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.015em;
+      white-space: nowrap;
+    }
+
+    .file-list {
+      min-width: 0;
+    }
+
+    .folder-group.collapsed .file-list {
+      display: none;
+    }
+
+    .file-node {
+      min-width: 0;
+    }
+
+    .file-row {
+      position: relative;
+      display: grid;
+      min-width: 0;
+      min-height: 28px;
+      grid-template-columns: 22px 43px minmax(0, 1fr) auto 21px;
+      align-items: center;
+      gap: 5px;
+      padding: 0 6px 0 10px;
+      color: #9fa2aa;
+      cursor: default;
+      user-select: none;
+    }
+
+    .file-row::before {
+      position: absolute;
+      top: 3px;
+      bottom: 3px;
+      left: 0;
+      width: 2px;
+      border-radius: 0 2px 2px 0;
+      background: var(--active-line);
+      content: "";
+      opacity: 0;
+    }
+
+    .file-row:hover {
+      background: rgba(255, 255, 255, 0.033);
+      color: #d9dae0;
+    }
+
+    .file-row.active {
+      background:
+        linear-gradient(90deg, rgba(118, 137, 255, 0.16), rgba(118, 137, 255, 0.075));
+      color: #eff0f4;
+    }
+
+    .file-row.active::before {
+      opacity: 1;
+    }
+
+    .file-row.dragging {
+      opacity: 0.42;
+    }
+
+    .file-row.drop-before::after,
+    .file-row.drop-after::after {
+      position: absolute;
+      right: 9px;
+      left: 9px;
+      height: 2px;
+      border-radius: 2px;
+      background: var(--accent);
+      box-shadow: 0 0 0 3px rgba(118, 137, 255, 0.1);
+      content: "";
+    }
+
+    .file-row.drop-before::after {
+      top: -1px;
+    }
+
+    .file-row.drop-after::after {
+      bottom: -1px;
+    }
+
+    .disclosure {
+      display: grid;
+      width: 22px;
+      height: 27px;
+      place-items: center;
+      color: #737680;
+    }
+
+    .disclosure:hover {
+      color: #d3d5da;
+    }
+
+    .disclosure svg {
+      width: 10px;
+      height: 10px;
+      stroke-width: 2;
+      transition: transform 110ms ease;
+    }
+
+    .file-node.outline-collapsed .disclosure svg {
+      transform: rotate(-90deg);
+    }
+
+    .disclosure.empty {
+      cursor: grab;
+      opacity: 0.28;
+    }
+
+    .progress-label {
+      display: inline-grid;
+      width: 43px;
+      height: 16px;
+      padding: 0;
+      place-items: center;
+      border: 1px solid currentColor;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 8.5px;
+      font-weight: 650;
+      line-height: 1;
+      letter-spacing: 0.035em;
+      white-space: nowrap;
+    }
+
+    .progress-label[data-status="todo"] {
+      border-color: rgba(146, 149, 158, 0.3);
+      background: var(--todo-bg);
+      color: var(--todo);
+    }
+
+    .progress-label[data-status="writing"] {
+      border-color: rgba(105, 168, 255, 0.34);
+      background: var(--writing-bg);
+      color: var(--writing);
+    }
+
+    .progress-label[data-status="revising"] {
+      border-color: rgba(228, 174, 85, 0.34);
+      background: var(--revising-bg);
+      color: var(--revising);
+    }
+
+    .progress-label[data-status="done"] {
+      border-color: rgba(99, 196, 142, 0.34);
+      background: var(--done-bg);
+      color: var(--done);
+    }
+
+    .file-name {
+      min-width: 0;
+      overflow: hidden;
+      color: inherit;
+      font-size: 10.7px;
+      letter-spacing: 0.005em;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .file-row.active .file-name {
+      font-weight: 580;
+    }
+
+    .more-button {
+      width: 21px;
+      height: 23px;
+      color: #60636d;
+      font-size: 13px;
+      opacity: 0;
+    }
+
+    .file-row:hover .more-button,
+    .file-row.active .more-button {
+      opacity: 1;
+    }
+
+    .outline-list {
+      position: relative;
+      padding: 1px 0 4px;
+    }
+
+    .outline-list::before {
+      position: absolute;
+      top: 0;
+      bottom: 5px;
+      left: 56px;
+      width: 1px;
+      background: #292b32;
+      content: "";
+    }
+
+    .file-node.outline-collapsed .outline-list {
+      display: none;
+    }
+
+    .heading-row {
+      display: grid;
+      min-width: 0;
+      min-height: 24px;
+      grid-template-columns: 25px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 5px;
+      padding: 0 12px 0 64px;
+      color: #777a84;
+      cursor: pointer;
+    }
+
+    .heading-row.level-2 {
+      padding-left: 76px;
+    }
+
+    .heading-row:hover {
+      background: rgba(255, 255, 255, 0.027);
+      color: #bfc1c8;
+    }
+
+    .heading-row.active {
+      color: #bfc5ff;
+    }
+
+    .heading-level {
+      color: #5d606a;
+      font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+      font-size: 8.5px;
+      letter-spacing: 0.02em;
+    }
+
+    .heading-row.active .heading-level {
+      color: #828fff;
+    }
+
+    .heading-title {
+      min-width: 0;
+      overflow: hidden;
+      font-size: 10px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .folder-separator {
+      height: 4px;
+    }
+
+    .sidebar-footer {
+      display: flex;
+      height: 31px;
+      flex: 0 0 31px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 11px;
+      border-top: 1px solid var(--line);
+      color: #656872;
+      font-size: 9px;
+    }
+
+    .sidebar-footer strong {
+      color: #898c95;
+      font-weight: 550;
+    }
+
+    .editor {
+      position: relative;
+      display: flex;
+      min-width: 0;
+      flex: 1;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 0, rgba(255, 255, 255, 0.018), transparent 42%),
+        var(--bg-editor);
+    }
+
+    .editor-toolbar {
+      position: absolute;
+      top: 0;
+      right: 0;
+      left: 0;
+      display: flex;
+      height: 42px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      border-bottom: 1px solid rgba(42, 44, 51, 0.68);
+      color: #6b6e78;
+      font-size: 10px;
+    }
+
+    .editor-toolbar .mode {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .editor-toolbar .mode::before {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #5cb680;
+      content: "";
+    }
+
+    .paper {
+      position: absolute;
+      inset: 42px 0 25px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 74px 6vw 40px;
+      overflow: hidden;
+    }
+
+    .vertical-manuscript {
+      width: min(690px, 78%);
+      height: 100%;
+      overflow: hidden;
+      color: #d8d2c9;
+      font-family: var(--serif-font);
+      font-size: 17px;
+      letter-spacing: 0.055em;
+      line-height: 2.05;
+      opacity: 0.78;
+      writing-mode: vertical-rl;
+    }
+
+    .vertical-manuscript h1 {
+      margin: 0 0 0 3em;
+      font-size: 20px;
+      font-weight: 500;
+    }
+
+    .vertical-manuscript p {
+      margin: 0 0 0 1.65em;
+    }
+
+    .editor-status {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      display: flex;
+      height: 25px;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 13px;
+      padding: 0 13px;
+      border-top: 1px solid var(--line);
+      color: #646771;
+      font-size: 9px;
+    }
+
+    .editor-status strong {
+      color: #9396a0;
+      font-weight: 500;
+    }
+
+    .popover {
+      position: fixed;
+      z-index: 100;
+      min-width: 126px;
+      padding: 5px;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      background: var(--bg-menu);
+      box-shadow: 0 16px 38px rgba(0, 0, 0, 0.5);
+    }
+
+    .popover[hidden] {
+      display: none;
+    }
+
+    .popover-title {
+      padding: 5px 8px 7px;
+      color: #6f727c;
+      font-size: 9px;
+      letter-spacing: 0.05em;
+    }
+
+    .popover button {
+      display: flex;
+      width: 100%;
+      height: 28px;
+      align-items: center;
+      gap: 8px;
+      padding: 0 8px;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      color: #c2c4ca;
+      cursor: pointer;
+      font-size: 10px;
+      text-align: left;
+    }
+
+    .popover button:hover {
+      background: rgba(255, 255, 255, 0.065);
+      color: #f0f0f2;
+    }
+
+    .status-swatch {
+      width: 7px;
+      height: 7px;
+      border-radius: 2px;
+      background: currentColor;
+    }
+
+    .status-option[data-status="todo"] {
+      color: var(--todo);
+    }
+
+    .status-option[data-status="writing"] {
+      color: var(--writing);
+    }
+
+    .status-option[data-status="revising"] {
+      color: var(--revising);
+    }
+
+    .status-option[data-status="done"] {
+      color: var(--done);
+    }
+
+    .context-menu {
+      min-width: 152px;
+    }
+
+    .context-menu .danger {
+      color: #e18a8a;
+    }
+
+    .toast {
+      position: fixed;
+      z-index: 120;
+      bottom: 40px;
+      left: 50%;
+      padding: 8px 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      background: #2b2d33;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+      color: #d7d8dc;
+      font-size: 10px;
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, 8px);
+      transition: opacity 140ms ease, transform 140ms ease;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
+    @media (max-width: 1120px) {
+      .topbar {
+        grid-template-columns: 300px minmax(0, 1fr) auto;
+      }
+
+      .sidebar {
+        width: 320px;
+        min-width: 320px;
+        flex-basis: 320px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+        </span>
+        <span class="brand-name">Then</span>
+      </div>
+      <nav class="breadcrumb" aria-label="現在位置">
+        <span>01_雨の境界</span><span>›</span>
+        <span class="current">01-02 雨の駅.md</span><span>›</span>
+        <span class="current">第一章　雨の匂い</span>
+      </nav>
+      <div class="window-actions" aria-hidden="true"><span></span><span></span><span></span></div>
+    </header>
+
+    <main class="workspace">
+      <nav class="activity-rail" aria-label="アクティビティ">
+        <button class="activity-button active" type="button" title="ファイル" data-toast="ファイルビュー">
+          <svg viewBox="0 0 24 24"><path d="M3 7.5h7l2 2h9v9.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M3 7.5V5a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v2.5" /></svg>
+        </button>
+        <button class="activity-button" type="button" title="検索" data-toast="プロジェクト検索">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg>
+        </button>
+        <button class="activity-button" type="button" title="アイデア" data-toast="アイデア">
+          <svg viewBox="0 0 24 24"><path d="M8 18h8M9 22h6" /><path d="M8.2 14.5A7 7 0 1 1 16 14.4c-1.1.8-1.8 1.8-2 3.1h-4c-.2-1.3-.8-2.3-1.8-3z" /></svg>
+        </button>
+        <button class="activity-button" type="button" title="保存点" data-toast="保存点">
+          <svg viewBox="0 0 24 24"><path d="M4 5h16v16H4z" /><path d="M8 3v5h8V3M8 14h8M8 18h5" /></svg>
+        </button>
+        <span class="rail-spacer"></span>
+        <button class="activity-button" type="button" title="設定" data-toast="設定">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1z" /></svg>
+        </button>
+      </nav>
+
+      <aside class="sidebar" aria-label="ファイルビュー">
+        <header class="sidebar-header">
+          <span class="sidebar-title">ファイル</span>
+          <span class="project-total">11ファイル · 146,217字</span>
+          <div class="header-actions">
+            <button class="icon-button" id="searchButton" type="button" title="ファイルを検索" aria-expanded="false">
+              <svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 5 5" /></svg>
+            </button>
+            <button class="icon-button" type="button" title="新しいファイル" data-toast="新しいファイルを作成">
+              <svg viewBox="0 0 24 24"><path d="M13 3H5v18h14V9z" /><path d="M13 3v6h6M8 14h8M12 10v8" /></svg>
+            </button>
+            <button class="icon-button" type="button" title="新しいフォルダ" data-toast="新しいフォルダを作成">
+              <svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v11H3z" /><path d="M12 12v6M9 15h6" /></svg>
+            </button>
+            <button class="icon-button" id="collapseAllButton" type="button" title="すべて折りたたむ">
+              <svg viewBox="0 0 24 24"><path d="m7 9 5 5 5-5" /><path d="m7 4 5 5 5-5" /></svg>
+            </button>
+          </div>
+        </header>
+
+        <div class="search-panel" id="searchPanel">
+          <div class="search-panel-inner">
+            <label class="search-field">
+              <svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 5 5" /></svg>
+              <input id="fileSearch" type="search" placeholder="ファイル名を検索" autocomplete="off" />
+            </label>
+          </div>
+        </div>
+
+        <div class="file-scroll" id="fileScroll">
+          <section class="folder-group" data-folder="第0話 プロローグ">
+            <button class="folder-header" type="button" aria-expanded="true">
+              <svg viewBox="0 0 24 24"><path d="m5 9 7 7 7-7" /></svg>
+              <span class="folder-name">第0話　プロローグ</span>
+              <span class="count">8,395字</span>
+            </button>
+            <div class="file-list">
+              <div class="file-node outline-collapsed">
+                <div class="file-row" draggable="true" data-file="00-00 prologue.md">
+                  <button class="disclosure" type="button" title="見出しを展開">
+                    <svg viewBox="0 0 24 24"><path d="m5 9 7 7 7-7" /></svg>
+                  </button>
+                  <button class="progress-label" type="button" data-status="done">完了</button>
+                  <span class="file-name">00-00 はじまりの灯.md</span>
+                  <span class="count">8,395字</span>
+                  <button class="more-button" type="button" aria-label="その他の操作">•••</button>
+                </div>
+                <div class="outline-list">
+                  <div class="heading-row"><span class="heading-level">H1</span><span class="heading-title">プロローグ</span><span class="count">8,395字</span></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div class="folder-separator"></div>
+
+          <section class="folder-group" data-folder="第1話 雨の境界">
+            <button class="folder-header" type="button" aria-expanded="true">
+              <svg viewBox="0 0 24 24"><path d="m5 9 7 7 7-7" /></svg>
+              <span class="folder-name">第1話　雨の境界</span>
+              <span class="count">38,792字</span>
+            </button>
+            <div class="file-list">
+              <div class="file-node outline-collapsed">
+                <div class="file-row" draggable="true" data-file="01-01 曇天.md">
+                  <button class="disclosure" type="button" title="見出しを展開">
+                    <svg viewBox="0 0 24 24"><path d="m5 9 7 7 7-7" /></svg>
+                  </button>
+                  <button class="progress-label" type="button" data-status="done">完了</button>
+                  <span class="file-name">01-01 曇天.md</span>
+                  <span class="count">11,422字</span>
+                  <button class="more-button" type="button" aria-label="その他の操作">•••</button>
+                </div>
+                <div class="outline-list">
+                  <div class="heading-row"><span class="heading-level">H1</span><span class="heading-title">雲の切れ間</span><span class="count">6,984字</span></div>
+                  <div class="heading-row level-2"><span class="heading-level">H2</span><span class="heading-title">始発前</span><span class="count">4,438字</span></div>
+                </div>
+              </div>
+
+              <div class="file-node">
+                <div class="file-row active" draggable="true" data-file="01-02 雨の駅.md">
+                  <button class="disclosure" type="button" title="見出しを折りたたむ">
+                    <svg viewBox="0 0 24 24"><path d="m5 9 7 7 7-7" /></svg>
+                  </button>
+                  <button class="progress-label" type="button" data-status="writing">執筆中</button>
+                  <span class="file-name">01-02 雨の駅.md</span>
+                  <span class="count">12,604字</span>
+                  <button class="more-button" type="button" aria-label="その他の操作">•••</button>
+                </div>
+                <div class="outline-list">
+                  <div class="heading-row active"><span class="heading-level">H1</span><span class="heading-title">第一章　雨の匂い</span><span class="count">8,972字</span></div>
+                  <div class="heading-row level-2"><span class="heading-level">H2</span><span class="heading-title">ホームに立つ男</span><span class="count">2,446字</span></div>
+                  <div class="heading-row level-2"><span class="heading-level">H2</span><span class="heading-title">濡れた切符</span><span class="count">1,186字</span></div>
+                </div>
+              </div>
+
+              <div class="file-node outline-collapsed">
+                <div class="file-row" draggable="true" data-file="01-03 夜明け前.md">
+                  <button class="disclosure" type="button" title="見出しを展開">
+                    <svg viewBox="0 0 24 24"><path d="m5 9 7 7 7-7" /></svg>
+                  </button>
+                  <button class="progress-label" type="button" data-status="revising">推敲中</button>
+                  <span class="file-name">01-03 夜明け前.md</span>
+                  <span class="count">14,766字</span>
+                  <button class="more-button" type="button" aria-label="その他の操作">•••</button>
+                </div>
+                <div class="outline-list">
+                  <div class="heading-row"><span class="heading-level">H1</span><span class="heading-title">夜が明けるまで</span><span class="count">9,082字</span></div>
+                  <div class="heading-row level-2"><span class="heading-level">H2</span><span class="heading-title">返事のない手紙</span><span class="count">5,684字</span></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div class="folder-separator"></div>
+
+          <section class="folder-group" data-folder="第2話 水底の手紙">
+            <button class="folder-header" type="button" aria-expanded="true">
+              <svg viewBox="0 0 24 24"><path d="m5 9 7 7 7-7" /></svg>
+              <span class="folder-name">第2話　水底の手紙</span>
+              <span class="count">45,117字</span>
+            </button>
+            <div class="file-list">
+              <div class="file-node outline-collapsed">
+                <div class="file-row" draggable="true" data-file="02-01 沈む町.md">
+                  <button class="disclosure" type="button" title="見出しを展開">
+                    <svg viewBox="0 0 24 24"><path d="m5 9 7 7 7-7" /></svg>
+                  </button>
+                  <button class="progress-label" type="button" data-status="done">完了</button>
+                  <span class="file-name">02-01 沈む町.md</span>
+                  <span class="count">7,645字</span>
+                  <button class="more-button" type="button" aria-label="その他の操作">•••</button>
+                </div>
+                <div class="outline-list">
+                  <div class="heading-row"><span class="heading-level">H1</span><span class="heading-title">水位標</span><span class="count">7,645字</span></div>
+                </div>
+              </div>
+
+              <div class="file-node outline-collapsed">
+                <div class="file-row" draggable="true" data-file="02-02 青い封筒.md">
+                  <button class="disclosure" type="button" title="見出しを展開">
+                    <svg viewBox="0 0 24 24"><path d="m5 9 7 7 7-7" /></svg>
+                  </button>
+                  <button class="progress-label" type="button" data-status="revising">推敲中</button>
+                  <span class="file-name">02-02 青い封筒.md</span>
+                  <span class="count">8,131字</span>
+                  <button class="more-button" type="button" aria-label="その他の操作">•••</button>
+                </div>
+                <div class="outline-list">
+                  <div class="heading-row"><span class="heading-level">H1</span><span class="heading-title">宛名のない手紙</span><span class="count">8,131字</span></div>
+                </div>
+              </div>
+
+              <div class="file-node outline-collapsed">
+                <div class="file-row" draggable="true" data-file="02-03 追憶.md">
+                  <button class="disclosure" type="button" title="見出しを展開">
+                    <svg viewBox="0 0 24 24"><path d="m5 9 7 7 7-7" /></svg>
+                  </button>
+                  <button class="progress-label" type="button" data-status="todo">未着手</button>
+                  <span class="file-name">02-03 追憶.md</span>
+                  <span class="count">6,214字</span>
+                  <button class="more-button" type="button" aria-label="その他の操作">•••</button>
+                </div>
+                <div class="outline-list">
+                  <div class="heading-row"><span class="heading-level">H1</span><span class="heading-title">古い写真</span><span class="count">6,214字</span></div>
+                </div>
+              </div>
+
+              <div class="file-node outline-collapsed">
+                <div class="file-row" draggable="true" data-file="02-04 返書.md">
+                  <button class="disclosure" type="button" title="見出しを展開">
+                    <svg viewBox="0 0 24 24"><path d="m5 9 7 7 7-7" /></svg>
+                  </button>
+                  <button class="progress-label" type="button" data-status="writing">執筆中</button>
+                  <span class="file-name">02-04 返書.md</span>
+                  <span class="count">11,122字</span>
+                  <button class="more-button" type="button" aria-label="その他の操作">•••</button>
+                </div>
+                <div class="outline-list">
+                  <div class="heading-row"><span class="heading-level">H1</span><span class="heading-title">水面へ</span><span class="count">11,122字</span></div>
+                </div>
+              </div>
+
+              <div class="file-node outline-collapsed">
+                <div class="file-row" draggable="true" data-file="02-05 帰路.md">
+                  <button class="disclosure" type="button" title="見出しを展開">
+                    <svg viewBox="0 0 24 24"><path d="m5 9 7 7 7-7" /></svg>
+                  </button>
+                  <button class="progress-label" type="button" data-status="todo">未着手</button>
+                  <span class="file-name">02-05 帰路.md</span>
+                  <span class="count">12,005字</span>
+                  <button class="more-button" type="button" aria-label="その他の操作">•••</button>
+                </div>
+                <div class="outline-list">
+                  <div class="heading-row"><span class="heading-level">H1</span><span class="heading-title">帰る場所</span><span class="count">12,005字</span></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div class="folder-separator"></div>
+
+          <section class="folder-group collapsed" data-folder="第3話 光の岸辺">
+            <button class="folder-header" type="button" aria-expanded="false">
+              <svg viewBox="0 0 24 24"><path d="m5 9 7 7 7-7" /></svg>
+              <span class="folder-name">第3話　光の岸辺</span>
+              <span class="count">53,913字</span>
+            </button>
+            <div class="file-list">
+              <div class="file-node"><div class="file-row" draggable="true" data-file="03-01 岸辺.md"><span></span><button class="progress-label" type="button" data-status="todo">未着手</button><span class="file-name">03-01 岸辺.md</span><span class="count">12,228字</span><button class="more-button" type="button">•••</button></div></div>
+            </div>
+          </section>
+        </div>
+
+        <footer class="sidebar-footer">
+          <span>空白を除いて集計</span>
+          <strong>プロジェクト合計 146,217字</strong>
+        </footer>
+      </aside>
+
+      <section class="editor" aria-label="本文エディター">
+        <div class="editor-toolbar">
+          <span>01-02 雨の駅.md</span>
+          <span class="mode">保存済み</span>
+        </div>
+        <div class="paper">
+          <article class="vertical-manuscript">
+            <h1>第一章　雨の匂い</h1>
+            <p>静寂のなかで、目はゆっくりと開いた。</p>
+            <p>駅舎の屋根を打つ雨の音だけが、遠い記憶のように続いている。</p>
+            <p>彼は濡れた切符を指でなぞり、ホームの向こうに人影を探した。</p>
+            <p>朝はまだ来ない。けれど雲の端には、淡い光が滲み始めていた。</p>
+            <p>「ここで待てばいい」手紙には、ただそれだけが書かれていた。</p>
+          </article>
+        </div>
+        <footer class="editor-status"><span>Markdown</span><span>UTF-8</span><strong>12,604字</strong></footer>
+      </section>
+    </main>
+  </div>
+
+  <div class="popover" id="progressPopover" hidden>
+    <div class="popover-title">進捗を変更</div>
+    <button class="status-option" type="button" data-status="todo"><span class="status-swatch"></span><span>未着手</span></button>
+    <button class="status-option" type="button" data-status="writing"><span class="status-swatch"></span><span>執筆中</span></button>
+    <button class="status-option" type="button" data-status="revising"><span class="status-swatch"></span><span>推敲中</span></button>
+    <button class="status-option" type="button" data-status="done"><span class="status-swatch"></span><span>完了</span></button>
+  </div>
+
+  <div class="popover context-menu" id="contextMenu" hidden>
+    <button type="button" data-action="開く">開く</button>
+    <button type="button" data-action="新しいファイルを追加">ファイルを追加</button>
+    <button type="button" data-action="新しいフォルダを追加">フォルダを追加</button>
+    <button type="button" data-action="名前を変更">名前を変更</button>
+    <button class="danger" type="button" data-action="削除">削除</button>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script>
+    (() => {
+      const searchButton = document.getElementById("searchButton");
+      const searchPanel = document.getElementById("searchPanel");
+      const fileSearch = document.getElementById("fileSearch");
+      const progressPopover = document.getElementById("progressPopover");
+      const contextMenu = document.getElementById("contextMenu");
+      const toast = document.getElementById("toast");
+      let activeProgressLabel = null;
+      let toastTimer = null;
+      let draggedRow = null;
+
+      const statusLabels = {
+        todo: "未着手",
+        writing: "執筆中",
+        revising: "推敲中",
+        done: "完了",
+      };
+
+      const showToast = (message) => {
+        window.clearTimeout(toastTimer);
+        toast.textContent = message;
+        toast.classList.add("show");
+        toastTimer = window.setTimeout(() => toast.classList.remove("show"), 1500);
+      };
+
+      const hidePopovers = () => {
+        progressPopover.hidden = true;
+        contextMenu.hidden = true;
+        activeProgressLabel = null;
+      };
+
+      const placePopover = (popover, rect, width = 152) => {
+        const left = Math.min(window.innerWidth - width - 8, Math.max(8, rect.left));
+        const top = Math.min(window.innerHeight - 160, rect.bottom + 5);
+        popover.style.left = `${left}px`;
+        popover.style.top = `${Math.max(8, top)}px`;
+      };
+
+      searchButton.addEventListener("click", () => {
+        const isOpen = searchPanel.classList.toggle("open");
+        searchButton.classList.toggle("active", isOpen);
+        searchButton.setAttribute("aria-expanded", String(isOpen));
+        if (isOpen) window.setTimeout(() => fileSearch.focus(), 140);
+      });
+
+      fileSearch.addEventListener("input", () => {
+        const query = fileSearch.value.trim().toLocaleLowerCase("ja");
+        document.querySelectorAll(".folder-group").forEach((group) => {
+          let visibleFiles = 0;
+          group.querySelectorAll(".file-row").forEach((row) => {
+            const visible = !query || row.dataset.file.toLocaleLowerCase("ja").includes(query);
+            row.hidden = !visible;
+            const node = row.closest(".file-node");
+            if (node) node.hidden = !visible;
+            if (visible) visibleFiles += 1;
+          });
+          group.hidden = visibleFiles === 0;
+          if (query && visibleFiles) {
+            group.classList.remove("collapsed");
+            group.querySelector(".folder-header").setAttribute("aria-expanded", "true");
+          }
+        });
+      });
+
+      document.querySelectorAll(".folder-header").forEach((button) => {
+        button.addEventListener("click", () => {
+          const group = button.closest(".folder-group");
+          const collapsed = group.classList.toggle("collapsed");
+          button.setAttribute("aria-expanded", String(!collapsed));
+        });
+      });
+
+      document.querySelectorAll(".disclosure").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const node = button.closest(".file-node");
+          if (!node.querySelector(".outline-list")) return;
+          const collapsed = node.classList.toggle("outline-collapsed");
+          button.title = collapsed ? "見出しを展開" : "見出しを折りたたむ";
+        });
+      });
+
+      document.querySelectorAll(".file-row").forEach((row) => {
+        row.addEventListener("click", (event) => {
+          if (event.target.closest("button")) return;
+          document.querySelectorAll(".file-row.active").forEach((item) => item.classList.remove("active"));
+          row.classList.add("active");
+          showToast(`${row.dataset.file} を選択`);
+        });
+
+        row.addEventListener("contextmenu", (event) => {
+          event.preventDefault();
+          hidePopovers();
+          const rect = { left: event.clientX, bottom: event.clientY };
+          placePopover(contextMenu, rect);
+          contextMenu.hidden = false;
+          contextMenu.dataset.file = row.dataset.file;
+        });
+
+        row.addEventListener("dragstart", (event) => {
+          draggedRow = row;
+          row.classList.add("dragging");
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", row.dataset.file);
+        });
+
+        row.addEventListener("dragover", (event) => {
+          if (!draggedRow || draggedRow === row) return;
+          if (draggedRow.closest(".file-list") !== row.closest(".file-list")) return;
+          event.preventDefault();
+          document.querySelectorAll(".drop-before, .drop-after").forEach((item) => item.classList.remove("drop-before", "drop-after"));
+          const rect = row.getBoundingClientRect();
+          row.classList.add(event.clientY < rect.top + rect.height / 2 ? "drop-before" : "drop-after");
+        });
+
+        row.addEventListener("drop", (event) => {
+          event.preventDefault();
+          if (!draggedRow || draggedRow === row) return;
+          const list = row.closest(".file-list");
+          const draggedNode = draggedRow.closest(".file-node");
+          const targetNode = row.closest(".file-node");
+          if (list !== draggedNode.parentElement) return;
+          const insertAfter = row.classList.contains("drop-after");
+          list.insertBefore(draggedNode, insertAfter ? targetNode.nextSibling : targetNode);
+          showToast("ファイルの並び順を変更");
+        });
+
+        row.addEventListener("dragend", () => {
+          document.querySelectorAll(".dragging, .drop-before, .drop-after").forEach((item) => item.classList.remove("dragging", "drop-before", "drop-after"));
+          draggedRow = null;
+        });
+      });
+
+      document.querySelectorAll(".progress-label").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const wasOpen = activeProgressLabel === button && !progressPopover.hidden;
+          hidePopovers();
+          if (wasOpen) return;
+          activeProgressLabel = button;
+          placePopover(progressPopover, button.getBoundingClientRect(), 126);
+          progressPopover.hidden = false;
+        });
+      });
+
+      progressPopover.querySelectorAll(".status-option").forEach((option) => {
+        option.addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (!activeProgressLabel) return;
+          const status = option.dataset.status;
+          activeProgressLabel.dataset.status = status;
+          activeProgressLabel.textContent = statusLabels[status];
+          showToast(`進捗を「${statusLabels[status]}」に変更`);
+          hidePopovers();
+        });
+      });
+
+      document.querySelectorAll(".more-button").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          hidePopovers();
+          const row = button.closest(".file-row");
+          placePopover(contextMenu, button.getBoundingClientRect());
+          contextMenu.hidden = false;
+          contextMenu.dataset.file = row.dataset.file;
+        });
+      });
+
+      contextMenu.querySelectorAll("button").forEach((button) => {
+        button.addEventListener("click", () => {
+          showToast(`${contextMenu.dataset.file}: ${button.dataset.action}`);
+          hidePopovers();
+        });
+      });
+
+      document.querySelectorAll("[data-toast]").forEach((button) => {
+        button.addEventListener("click", () => showToast(button.dataset.toast));
+      });
+
+      document.querySelectorAll(".heading-row").forEach((row) => {
+        row.addEventListener("click", () => {
+          document.querySelectorAll(".heading-row.active").forEach((item) => item.classList.remove("active"));
+          row.classList.add("active");
+          showToast(`「${row.querySelector(".heading-title").textContent}」へ移動`);
+        });
+      });
+
+      document.getElementById("collapseAllButton").addEventListener("click", () => {
+        const groups = [...document.querySelectorAll(".folder-group")];
+        const shouldExpand = groups.every((group) => group.classList.contains("collapsed"));
+        groups.forEach((group) => {
+          group.classList.toggle("collapsed", !shouldExpand);
+          group.querySelector(".folder-header").setAttribute("aria-expanded", String(shouldExpand));
+        });
+        showToast(shouldExpand ? "すべて展開" : "すべて折りたたみ");
+      });
+
+      document.addEventListener("pointerdown", (event) => {
+        if (!event.target.closest(".popover") && !event.target.closest(".progress-label") && !event.target.closest(".more-button")) {
+          hidePopovers();
+        }
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") hidePopovers();
+      });
+    })();
+  </script>
+</body>
+</html>

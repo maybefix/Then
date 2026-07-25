@@ -144,8 +144,10 @@ import {
   findFirstTextFile,
   findPathToEntry,
   findProjectEntry,
+  getBreadcrumbFolderNavigation,
   getFolderChildren,
   getParentPath,
+  getVisibleWorkspaceFolderTreeRows,
   getWorkspaceName,
   isPathSameOrInside,
   movePathInOrder,
@@ -326,6 +328,7 @@ type AppIconName =
   | "panelLeft"
   | "panelRight"
   | "plus"
+  | "reference"
   | "search"
   | "settings"
   | "theme"
@@ -434,6 +437,16 @@ function AppIcon({ name, className = "" }: { name: AppIconName; className?: stri
       return (
         <svg {...common}>
           <path d="M12 5v14M5 12h14" />
+        </svg>
+      );
+    case "reference":
+      return (
+        <svg {...common}>
+          <path d="M7 3.5h7l3 3V20a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 6 20V5A1.5 1.5 0 0 1 7.5 3.5Z" />
+          <path d="M14 3.5V7h3.5" />
+          <path d="M9 11h6" />
+          <path d="M9 14h6" />
+          <path d="M9 17h4" />
         </svg>
       );
     case "search":
@@ -777,6 +790,7 @@ const defaultSettings: EditorSettings = {
   zoneModeOpacity: 0.42,
   navigatorPreviewLines: DEFAULT_NAVIGATOR_PREVIEW_LINES,
   countWhitespace: true,
+  showOutlineGuides: true,
   checkpointSectionCollapsed: false,
   canvasOpensInWindow: false,
   exportOpensInWindow: false,
@@ -1876,6 +1890,10 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         typeof settings.countWhitespace === "boolean"
           ? settings.countWhitespace
           : defaultSettings.countWhitespace,
+      showOutlineGuides:
+        typeof settings.showOutlineGuides === "boolean"
+          ? settings.showOutlineGuides
+          : defaultSettings.showOutlineGuides,
       checkpointSectionCollapsed:
         typeof settings.checkpointSectionCollapsed === "boolean"
           ? settings.checkpointSectionCollapsed
@@ -2126,6 +2144,7 @@ export default function App() {
   const saveTimerRef = useRef<number | null>(null);
   const referenceSaveTimerRef = useRef<number | null>(null);
   const referenceLayoutLoadedRootRef = useRef<string | null>(null);
+  const workspaceFolderTreeRootRef = useRef<string | null>(null);
   const activeTabIdRef = useRef("initial-document-tab");
   const documentSaveQueuesRef = useRef<Map<string, DocumentSaveQueue>>(new Map());
   const headingMoveInProgressRef = useRef(false);
@@ -2188,7 +2207,9 @@ export default function App() {
   const [searchScope, setSearchScope] = useState<WorkspaceSearchScope>("project");
   const [projectReplaceValue, setProjectReplaceValue] = useState("");
   const [isProjectReplacing, setIsProjectReplacing] = useState(false);
-  const [isProjectSearchMode, setIsProjectSearchMode] = useState(false);
+  const [leftSidebarView, setLeftSidebarView] =
+    useState<"files" | "search" | "reference">("files");
+  const isProjectSearchMode = leftSidebarView === "search";
   const [editorFind, setEditorFind] = useState<EditorFindState>({
     open: false,
     query: "",
@@ -2224,6 +2245,7 @@ export default function App() {
     useState(false);
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const [activeBreadcrumbPath, setActiveBreadcrumbPath] = useState<string | null>(null);
+  const [breadcrumbBrowsePath, setBreadcrumbBrowsePath] = useState<string | null>(null);
   const [isWorkspaceSwitcherOpen, setIsWorkspaceSwitcherOpen] = useState(false);
   const [workspaceSwitcherQuery, setWorkspaceSwitcherQuery] = useState("");
   const [collapsedWorkspaceFolderPaths, setCollapsedWorkspaceFolderPaths] =
@@ -2248,7 +2270,7 @@ export default function App() {
     sources: LoadedExportSource[];
     sourceError?: string;
   } | null>(null);
-  const [rightSidebarTab, setRightSidebarTab] = useState<"idea" | "plot" | "reference">("plot");
+  const [rightSidebarTab, setRightSidebarTab] = useState<"idea" | "plot">("plot");
   const [isPlotManagerOpen, setIsPlotManagerOpen] = useState(false);
   const [ideaFocusRequest, setIdeaFocusRequest] = useState<{
     threadId: string;
@@ -2374,7 +2396,10 @@ export default function App() {
         );
         return { ...nextLayout, cards: [...nextLayout.cards, card] };
       });
-      if (switchToReferenceTab) setRightSidebarTab("reference");
+      if (switchToReferenceTab) {
+        setLeftSidebarView("reference");
+        setIsLeftSidebarCollapsed(false);
+      }
     },
     [projectFolder],
   );
@@ -3219,6 +3244,28 @@ export default function App() {
   }, [isHydrated, projectFolder?.path, referenceLayout]);
 
   useEffect(() => {
+    const rootPath = projectFolder?.path ?? null;
+    if (workspaceFolderTreeRootRef.current === rootPath) return;
+    workspaceFolderTreeRootRef.current = rootPath;
+
+    if (!projectFolder) {
+      setCollapsedWorkspaceFolderPaths(new Set());
+      return;
+    }
+
+    const collapsed = new Set<string>();
+    const collectNestedFolders = (entries: ProjectEntry[]) => {
+      for (const entry of entries) {
+        if (entry.kind !== "folder") continue;
+        collapsed.add(entry.path);
+        collectNestedFolders(entry.children);
+      }
+    };
+    collectNestedFolders(projectFolder.children);
+    setCollapsedWorkspaceFolderPaths(collapsed);
+  }, [projectFolder]);
+
+  useEffect(() => {
     if (!projectFolder || !currentFilePath) return;
     if (!findProjectEntry(projectFolder.children, currentFilePath)) return;
 
@@ -3608,6 +3655,7 @@ export default function App() {
       }
       if (!breadcrumbMenuRef.current?.contains(target)) {
         setActiveBreadcrumbPath(null);
+        setBreadcrumbBrowsePath(null);
         setIsWorkspaceSwitcherOpen(false);
       }
       if (!editorContextMenuRef.current?.contains(target)) {
@@ -3619,6 +3667,7 @@ export default function App() {
       if (event.key !== "Escape") return;
       setIsFileMenuOpen(false);
       setActiveBreadcrumbPath(null);
+      setBreadcrumbBrowsePath(null);
       setIsWorkspaceSwitcherOpen(false);
       setEditorContextMenu(null);
       setNotationModal(null);
@@ -3693,6 +3742,7 @@ export default function App() {
 
     if (event.key === "Escape") {
       setActiveBreadcrumbPath(null);
+      setBreadcrumbBrowsePath(null);
       setIsWorkspaceSwitcherOpen(false);
       setIsOutlineMenuOpen(false);
       event.preventDefault();
@@ -3939,6 +3989,7 @@ export default function App() {
     event.preventDefault();
     setIsFileMenuOpen(false);
     setActiveBreadcrumbPath(null);
+    setBreadcrumbBrowsePath(null);
     setIsWorkspaceSwitcherOpen(false);
     setIsOutlineMenuOpen(false);
 
@@ -5268,7 +5319,6 @@ export default function App() {
       try {
         const folder = await refreshProjectFolder(path);
         setFocusedFolderPath(path);
-        setActiveBreadcrumbPath(path);
         const selectedFolder =
           folder?.path === path
             ? folder
@@ -5281,7 +5331,30 @@ export default function App() {
         setSaveStatus("error");
       }
     },
-    [currentFilePath, projectFolder, refreshProjectFolder],
+    [projectFolder, refreshProjectFolder],
+  );
+
+  const handleBreadcrumbFolderSelect = useCallback(
+    async (path: string) => {
+      if (!projectFolder || !isTauriRuntime()) return;
+
+      try {
+        const folder = await refreshProjectFolder(path);
+        const selectedFolder =
+          folder?.path === path
+            ? folder
+            : folder
+              ? findProjectEntry(folder.children, path)
+              : null;
+        setFocusedFolderPath(path);
+        setBreadcrumbBrowsePath(path);
+        showToast(`「${selectedFolder?.name ?? getWorkspaceName(path)}」へ移動しました`);
+      } catch (error) {
+        setLastError(String(error));
+        setSaveStatus("error");
+      }
+    },
+    [projectFolder, refreshProjectFolder],
   );
 
   const toggleWorkspaceFolderCollapse = useCallback((path: string) => {
@@ -5296,29 +5369,15 @@ export default function App() {
     });
   }, []);
 
-  const handleWorkspaceFolderTreeSelect = useCallback(
-    async (path: string) => {
-      if (!projectFolder || !isTauriRuntime()) return;
-
-      try {
-        const folder = await refreshProjectFolder(path);
-        const selectedFolder =
-          folder?.path === path
-            ? folder
-            : folder
-              ? findProjectEntry(folder.children, path)
-              : null;
-        setFocusedFolderPath(path);
-        setActiveBreadcrumbPath(null);
-        setIsWorkspaceSwitcherOpen(false);
-        showToast(`「${selectedFolder?.name ?? getWorkspaceName(path)}」へ移動しました`);
-      } catch (error) {
-        setLastError(String(error));
-        setSaveStatus("error");
-      }
-    },
-    [projectFolder, refreshProjectFolder],
-  );
+  const handleWorkspaceFolderTreeSelect = useCallback((path: string) => {
+    setFocusedFolderPath(path);
+    setCollapsedWorkspaceFolderPaths((current) => {
+      if (!current.has(path)) return current;
+      const next = new Set(current);
+      next.delete(path);
+      return next;
+    });
+  }, []);
 
   const handleNewTab = () => {
     addScratchTab(`new-tab-${Date.now()}`, newTabName);
@@ -5936,6 +5995,7 @@ export default function App() {
 
   const closeBreadcrumbMenuAndRun = (action: () => void | Promise<void>) => {
     setActiveBreadcrumbPath(null);
+    setBreadcrumbBrowsePath(null);
     setIsWorkspaceSwitcherOpen(false);
     void action();
   };
@@ -6229,6 +6289,11 @@ export default function App() {
           : focusedFolderPath;
       setFocusedFolderPath(nextFocusedFolder);
       setActiveBreadcrumbPath((path) =>
+        path && isPathSameOrInside(path, entry.path)
+          ? getParentPath(entry.path) ?? projectFolder.path
+          : path,
+      );
+      setBreadcrumbBrowsePath((path) =>
         path && isPathSameOrInside(path, entry.path)
           ? getParentPath(entry.path) ?? projectFolder.path
           : path,
@@ -7783,54 +7848,61 @@ export default function App() {
     setAppState((current) => ({ ...current, snippets: profileState.profileSnippets }));
   };
 
-  const renderWorkspaceFolderTree = (
-    entry: ProjectFolder | ProjectEntry,
-    depth = 0,
-  ) => {
-    const folders = entry.children.filter((child) => child.kind === "folder");
-    const isRoot = !("kind" in entry);
-    const isCollapsed = collapsedWorkspaceFolderPaths.has(entry.path);
-    const isActive = focusedFolderPath
-      ? isSamePath(focusedFolderPath, entry.path)
-      : isRoot;
+  const renderWorkspaceFolderTree = (folder: ProjectFolder) =>
+    getVisibleWorkspaceFolderTreeRows(
+      folder,
+      collapsedWorkspaceFolderPaths,
+    ).map(({ entry, depth }) => {
+      const isRoot = !("kind" in entry);
+      const isFile = "kind" in entry && entry.kind === "file";
+      const isCollapsed = collapsedWorkspaceFolderPaths.has(entry.path);
+      const isActive = isFile
+        ? Boolean(currentFilePath && isSamePath(currentFilePath, entry.path))
+        : focusedFolderPath
+          ? isSamePath(focusedFolderPath, entry.path)
+          : isRoot;
 
-    return (
-      <div className="workspaceFolderTreeNode" key={entry.path}>
-        <div className="workspaceFolderTreeRow" style={{ paddingLeft: `${depth * 14}px` }}>
-          <button
-            className="workspaceFolderDisclosure"
-            type="button"
-            aria-label={isCollapsed ? `${entry.name} を展開` : `${entry.name} を折りたたむ`}
-            disabled={folders.length === 0}
-            onClick={() => toggleWorkspaceFolderCollapse(entry.path)}
-          >
-            {folders.length > 0 ? (isCollapsed ? "›" : "⌄") : ""}
-          </button>
-          <button
-            className={`workspaceFolderTreeButton ${
-              isActive ? "activeWorkspaceFolderTreeButton" : ""
-            }`}
-            type="button"
-            role="menuitem"
-            title={entry.path}
-            onClick={() => void handleWorkspaceFolderTreeSelect(entry.path)}
-          >
-            {isRoot ? (
-              <AppIcon name="book" className="workspaceFolderTreeIcon" />
+      return (
+        <div className="workspaceFolderTreeNode" key={entry.path}>
+          <div className="workspaceFolderTreeRow" style={{ paddingLeft: `${depth * 14}px` }}>
+            {isFile ? (
+              <span className="workspaceFolderTreeIndent" aria-hidden="true" />
             ) : (
-              <AppIcon name="folder" className="workspaceFolderTreeIcon" />
+              <button
+                className="workspaceFolderDisclosure"
+                type="button"
+                aria-label={isCollapsed ? `${entry.name} を展開` : `${entry.name} を折りたたむ`}
+                disabled={entry.children.length === 0}
+                onClick={() => toggleWorkspaceFolderCollapse(entry.path)}
+              >
+                {entry.children.length > 0 ? (isCollapsed ? "›" : "⌄") : ""}
+              </button>
             )}
-            <span>{entry.name}</span>
-          </button>
-        </div>
-        {folders.length > 0 && !isCollapsed && (
-          <div className="workspaceFolderTreeChildren">
-            {folders.map((folder) => renderWorkspaceFolderTree(folder, depth + 1))}
+            <button
+              className={`workspaceFolderTreeButton ${
+                isActive ? "activeWorkspaceFolderTreeButton" : ""
+              }`}
+              type="button"
+              role="menuitem"
+              title={entry.path}
+              onClick={() =>
+                isFile
+                  ? closeBreadcrumbMenuAndRun(() =>
+                      handleProjectFileSelect(entry.path),
+                    )
+                  : handleWorkspaceFolderTreeSelect(entry.path)
+              }
+            >
+              <AppIcon
+                name={isRoot ? "book" : isFile ? "file" : "folder"}
+                className="workspaceFolderTreeIcon"
+              />
+              <span>{entry.name}</span>
+            </button>
           </div>
-        )}
-      </div>
-    );
-  };
+        </div>
+      );
+    });
 
   return (
       <main
@@ -7967,9 +8039,18 @@ export default function App() {
                     "children" in crumb &&
                     (!("kind" in crumb) || crumb.kind === "folder");
                   const isLast = index === breadcrumbTrail.length - 1;
-                  const children = isFolder
-                    ? getFolderChildren(projectFolder, crumb.path)
-                    : [];
+                  const breadcrumbNavigation = isFolder
+                    ? getBreadcrumbFolderNavigation(
+                        projectFolder,
+                        crumb.path,
+                        activeBreadcrumbPath === crumb.path
+                          ? breadcrumbBrowsePath
+                          : crumb.path,
+                      )
+                    : null;
+                  const breadcrumbMenuFolderPath =
+                    breadcrumbNavigation?.path ?? crumb.path;
+                  const children = breadcrumbNavigation?.children ?? [];
 
                   return (
                     <div className="breadcrumbSegment" key={crumb.path}>
@@ -7992,18 +8073,24 @@ export default function App() {
                             onClick={() => {
                               if (index === 0) {
                                 setActiveBreadcrumbPath(null);
+                                setBreadcrumbBrowsePath(null);
                                 setIsWorkspaceSwitcherOpen((isOpen) => !isOpen);
                                 return;
                               }
                               setIsWorkspaceSwitcherOpen(false);
-                              setActiveBreadcrumbPath((path) =>
-                                path === crumb.path ? null : crumb.path,
-                              );
+                              if (activeBreadcrumbPath === crumb.path) {
+                                setActiveBreadcrumbPath(null);
+                                setBreadcrumbBrowsePath(null);
+                              } else {
+                                setActiveBreadcrumbPath(crumb.path);
+                                setBreadcrumbBrowsePath(crumb.path);
+                              }
                             }}
                             onContextMenu={(event) => {
                               if (index === 0) return;
                               event.preventDefault();
                               setActiveBreadcrumbPath(crumb.path);
+                              setBreadcrumbBrowsePath(crumb.path);
                             }}
                           >
                             {index === 0 && (
@@ -8101,6 +8188,29 @@ export default function App() {
                           )}
                           {index !== 0 && activeBreadcrumbPath === crumb.path && (
                             <div className="menuPopover breadcrumbPopover" role="menu">
+                              {breadcrumbNavigation?.parentPath && (
+                                <div className="breadcrumbBrowseHeader">
+                                  <button
+                                    className="breadcrumbBrowseBack"
+                                    type="button"
+                                    role="menuitem"
+                                    aria-label={`${breadcrumbNavigation.parentName ?? crumb.name} に戻る`}
+                                    onClick={() =>
+                                      setBreadcrumbBrowsePath(
+                                        breadcrumbNavigation.parentPath,
+                                      )
+                                    }
+                                  >
+                                    <span aria-hidden="true">‹</span>
+                                  </button>
+                                  <span
+                                    className="breadcrumbBrowseFolderName"
+                                    title={breadcrumbNavigation.name}
+                                  >
+                                    {breadcrumbNavigation.name}
+                                  </span>
+                                </div>
+                              )}
                               {children.length ? (
                                 children.map((entry, entryIndex) => {
                                   const dropClass =
@@ -8119,19 +8229,23 @@ export default function App() {
                                     onDragStart={(event) =>
                                       handleBreadcrumbEntryDragStart(
                                         event,
-                                        crumb.path,
+                                        breadcrumbMenuFolderPath,
                                         entry.path,
                                       )
                                     }
                                     onDragOver={(event) =>
                                       handleBreadcrumbEntryDragOver(
                                         event,
-                                        crumb.path,
+                                        breadcrumbMenuFolderPath,
                                         entry.path,
                                       )
                                     }
                                     onDrop={(event) =>
-                                      handleBreadcrumbEntryDrop(event, crumb.path, entry.path)
+                                      handleBreadcrumbEntryDrop(
+                                        event,
+                                        breadcrumbMenuFolderPath,
+                                        entry.path,
+                                      )
                                     }
                                     onDragEnd={handleBreadcrumbEntryDragEnd}
                                   >
@@ -8148,7 +8262,7 @@ export default function App() {
                                           ? closeBreadcrumbMenuAndRun(() =>
                                               handleProjectFileSelect(entry.path),
                                             )
-                                          : void handleProjectFolderSelect(entry.path)
+                                          : void handleBreadcrumbFolderSelect(entry.path)
                                       }
                                     >
                                       <AppIcon
@@ -8164,7 +8278,11 @@ export default function App() {
                                       aria-label={`${entry.name} を上へ移動`}
                                       disabled={entryIndex === 0}
                                       onClick={() =>
-                                        handleMoveProjectEntry(crumb.path, entry.path, -1)
+                                        handleMoveProjectEntry(
+                                          breadcrumbMenuFolderPath,
+                                          entry.path,
+                                          -1,
+                                        )
                                       }
                                     >
                                       ↑
@@ -8175,7 +8293,11 @@ export default function App() {
                                       aria-label={`${entry.name} を下へ移動`}
                                       disabled={entryIndex === children.length - 1}
                                       onClick={() =>
-                                        handleMoveProjectEntry(crumb.path, entry.path, 1)
+                                        handleMoveProjectEntry(
+                                          breadcrumbMenuFolderPath,
+                                          entry.path,
+                                          1,
+                                        )
                                       }
                                     >
                                       ↓
@@ -8219,7 +8341,7 @@ export default function App() {
                                 role="menuitem"
                                 onClick={() =>
                                   closeBreadcrumbMenuAndRun(() =>
-                                    handleCreateProjectFile(crumb.path),
+                                    handleCreateProjectFile(breadcrumbMenuFolderPath),
                                   )
                                 }
                               >
@@ -8230,7 +8352,7 @@ export default function App() {
                                 role="menuitem"
                                 onClick={() =>
                                   closeBreadcrumbMenuAndRun(() =>
-                                    handleCreateProjectFolder(crumb.path),
+                                    handleCreateProjectFolder(breadcrumbMenuFolderPath),
                                   )
                                 }
                               >
@@ -8256,6 +8378,7 @@ export default function App() {
                     aria-expanded={isWorkspaceSwitcherOpen}
                     onClick={() => {
                       setActiveBreadcrumbPath(null);
+                      setBreadcrumbBrowsePath(null);
                       setIsWorkspaceSwitcherOpen((isOpen) => !isOpen);
                     }}
                   >
@@ -8492,37 +8615,54 @@ export default function App() {
                 <nav className="workspaceActivityBar" aria-label="左サイドバー操作">
                   <button
                     className={`workspaceActivityButton ${
-                      !isProjectSearchMode && !isLeftSidebarCollapsed
+                      leftSidebarView === "files" && !isLeftSidebarCollapsed
                         ? "activeWorkspaceActivityButton"
                         : ""
                     }`}
                     type="button"
                     aria-label="ファイルツリー"
                     title="ファイルツリー"
-                    aria-pressed={!isProjectSearchMode && !isLeftSidebarCollapsed}
+                    aria-pressed={leftSidebarView === "files" && !isLeftSidebarCollapsed}
                     onClick={() => {
                       setIsLeftSidebarCollapsed(false);
-                      setIsProjectSearchMode(false);
+                      setLeftSidebarView("files");
                     }}
                   >
                     <AppIcon name="files" className="workspaceActivityIcon" />
                   </button>
                   <button
                     className={`workspaceActivityButton ${
-                      isProjectSearchMode && !isLeftSidebarCollapsed
+                      leftSidebarView === "search" && !isLeftSidebarCollapsed
                         ? "activeWorkspaceActivityButton"
                         : ""
                     }`}
                     type="button"
                     aria-label="プロジェクト検索"
                     title="プロジェクト検索"
-                    aria-pressed={isProjectSearchMode && !isLeftSidebarCollapsed}
+                    aria-pressed={leftSidebarView === "search" && !isLeftSidebarCollapsed}
                     onClick={() => {
                       setIsLeftSidebarCollapsed(false);
-                      setIsProjectSearchMode(true);
+                      setLeftSidebarView("search");
                     }}
                   >
                     <AppIcon name="search" className="workspaceActivityIcon" />
+                  </button>
+                  <button
+                    className={`workspaceActivityButton ${
+                      leftSidebarView === "reference" && !isLeftSidebarCollapsed
+                        ? "activeWorkspaceActivityButton"
+                        : ""
+                    }`}
+                    type="button"
+                    aria-label="資料"
+                    title="資料"
+                    aria-pressed={leftSidebarView === "reference" && !isLeftSidebarCollapsed}
+                    onClick={() => {
+                      setIsLeftSidebarCollapsed(false);
+                      setLeftSidebarView("reference");
+                    }}
+                  >
+                    <AppIcon name="reference" className="workspaceActivityIcon" />
                   </button>
                   <button
                     className="workspaceActivityButton"
@@ -8547,6 +8687,58 @@ export default function App() {
                     <AppIcon name="folderPlus" className="workspaceActivityIcon" />
                   </button>
                 </nav>
+                {leftSidebarView === "reference" ? (
+                  <aside
+                    className="workspaceSidebar referenceWorkspaceSidebar"
+                    aria-label="資料"
+                  >
+                    <div className="sidebarHeader">
+                      <span className="sidebarHeaderLabel">資料</span>
+                      <div className="sidebarHeaderActions">
+                        <button
+                          className="sidebarIconButton"
+                          type="button"
+                          aria-label="左サイドバーを畳む"
+                          title="左サイドバーを畳む"
+                          onClick={() => setIsLeftSidebarCollapsed(true)}
+                        >
+                          <AppIcon name="panelLeft" className="sidebarButtonSvg" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="leftReferenceSidebarBody">
+                      <ReferencePane
+                        rootPath={projectFolder?.path ?? null}
+                        cards={referenceLayout.cards}
+                        candidates={sortedReferenceCandidates}
+                        query={referenceQuery}
+                        onQueryChange={setReferenceQuery}
+                        onAddReference={(scope) => void handleAddReference(scope)}
+                        onCreateReference={(scope) => void handleCreateReference(scope)}
+                        onOpenReference={(targetFile) => {
+                          const file =
+                            sortedReferenceCandidates.find(
+                              (item) =>
+                                referenceFileKey(item) === referenceFileKey(targetFile),
+                            ) ?? targetFile;
+                          openReferenceCard(file.sourcePath, file);
+                        }}
+                        onFocusReference={focusReferenceCard}
+                        onCloseReference={closeReferenceCard}
+                        onPinReference={pinReferenceCard}
+                        onCopyReference={(file, targetScope) =>
+                          void handleCopyReferenceToScope(file, targetScope)
+                        }
+                        onMoveReference={(file, targetScope) =>
+                          void handleMoveReferenceToScope(file, targetScope)
+                        }
+                        onDeleteImportedReference={(file) =>
+                          void handleDeleteImportedReference(file.sourcePath, file.scope)
+                        }
+                      />
+                    </div>
+                  </aside>
+                ) : (
                 <WorkspaceSidebar
                 projectFolder={projectFolder}
                 currentFilePath={currentFilePath}
@@ -8559,6 +8751,7 @@ export default function App() {
                 sidebarMode={settings.sidebarMode}
                 navigatorPreviewLines={settings.navigatorPreviewLines}
                 countWhitespace={settings.countWhitespace}
+                showOutlineGuides={settings.showOutlineGuides}
                 fileProgress={appState.fileProgress}
                 onSetFileProgress={handleSetFileProgress}
                 collapsedFolderPaths={collapsedTreeFolderPaths}
@@ -8622,6 +8815,7 @@ export default function App() {
                 onDeleteSnapshot={(snapshot) => void handleDeleteManuscriptSnapshot(snapshot)}
                     onCollapse={() => setIsLeftSidebarCollapsed(true)}
                 />
+                )}
             </div>
             <div className={`editorColumn ${appMode !== "write" ? "modeHiddenPane" : ""}`}>
               <div className="editorFrame">
@@ -8984,23 +9178,6 @@ export default function App() {
                         <path d="M17.5 8.8c-1.1-.1-2.2.1-3.4.7" />
                       </svg>
                     </button>
-                    <button
-                      className={`rightTab ${rightSidebarTab === "reference" ? "activeRightTab" : ""}`}
-                      type="button"
-                      role="tab"
-                      aria-label="資料"
-                      aria-selected={rightSidebarTab === "reference"}
-                      title="資料"
-                      onClick={() => setRightSidebarTab("reference")}
-                    >
-                      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-                        <path d="M7 3.5h7l3 3V20a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 6 20V5A1.5 1.5 0 0 1 7.5 3.5Z" />
-                        <path d="M14 3.5V7h3.5" />
-                        <path d="M9 11h6" />
-                        <path d="M9 14h6" />
-                        <path d="M9 17h4" />
-                      </svg>
-                    </button>
                   </div>
                   {rightSidebarTab === "plot" && (
                     <PlotPaneHeaderActions
@@ -9022,13 +9199,7 @@ export default function App() {
                       </button>
                     </div>
                   )}
-                  <div
-                    className={`rightSidebarChromeActions ${
-                      rightSidebarTab === "plot" || rightSidebarTab === "idea"
-                        ? ""
-                        : "pushRightSidebarChromeActions"
-                    }`}
-                  >
+                  <div className="rightSidebarChromeActions">
                     <button
                       className="sidebarIconButton"
                       type="button"
@@ -9068,35 +9239,6 @@ export default function App() {
                       onMissingReference={() => showToast("存在しないファイルです")}
                       isManagerOpen={isPlotManagerOpen}
                       onManagerOpenChange={setIsPlotManagerOpen}
-                    />
-                  ) : rightSidebarTab === "reference" ? (
-                    <ReferencePane
-                      rootPath={projectFolder?.path ?? null}
-                      cards={referenceLayout.cards}
-                      candidates={sortedReferenceCandidates}
-                      query={referenceQuery}
-                      onQueryChange={setReferenceQuery}
-                      onAddReference={(scope) => void handleAddReference(scope)}
-                      onCreateReference={(scope) => void handleCreateReference(scope)}
-                      onOpenReference={(targetFile) => {
-                        const file =
-                          sortedReferenceCandidates.find(
-                            (item) => referenceFileKey(item) === referenceFileKey(targetFile),
-                          ) ?? targetFile;
-                        openReferenceCard(file.sourcePath, file);
-                      }}
-                      onFocusReference={focusReferenceCard}
-                      onCloseReference={closeReferenceCard}
-                      onPinReference={pinReferenceCard}
-                      onCopyReference={(file, targetScope) =>
-                        void handleCopyReferenceToScope(file, targetScope)
-                      }
-                      onMoveReference={(file, targetScope) =>
-                        void handleMoveReferenceToScope(file, targetScope)
-                      }
-                      onDeleteImportedReference={(file) =>
-                        void handleDeleteImportedReference(file.sourcePath, file.scope)
-                      }
                     />
                   ) : (
                     <IdeaPane

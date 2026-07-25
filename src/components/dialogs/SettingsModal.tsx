@@ -354,6 +354,16 @@ export function SettingsModal({
                 </label>
                 <label className="checkSetting">
                   <input
+                    checked={settings.showOutlineGuides}
+                    type="checkbox"
+                    onChange={(event) =>
+                      onUpdateSettings("showOutlineGuides", event.target.checked)
+                    }
+                  />
+                  <span>見出しのガイド線を表示</span>
+                </label>
+                <label className="checkSetting">
+                  <input
                     checked={settings.showWorkspacePaths}
                     type="checkbox"
                     onChange={(event) =>

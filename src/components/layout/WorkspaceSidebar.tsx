@@ -41,6 +41,7 @@ type WorkspaceSidebarProps = {
   navigatorPreviewLines: number;
   /** 文字数カウントに空白文字を含めるか。false なら空白を除いた文字数を表示する。 */
   countWhitespace: boolean;
+  showOutlineGuides: boolean;
   fileProgress: Record<string, FileProgressStatus>;
   onSetFileProgress: (path: string, status: FileProgressStatus) => void;
   collapsedFolderPaths: ReadonlySet<string>;
@@ -184,6 +185,76 @@ function getProjectAstStatusLabel(projectAst: ProjectAst | null): string {
 
 function formatCharCount(value: number): string {
   return `${new Intl.NumberFormat("ja-JP").format(value)}字`;
+}
+
+function countSourceCharacters(value: string, includeWhitespace: boolean): number {
+  const target = includeWhitespace ? value : value.replace(/[\s　]/g, "");
+  return Array.from(target).length;
+}
+
+function flattenOutlineItems(
+  items: DocumentOutlineItem[],
+): DocumentOutlineItem[] {
+  return items.flatMap((item) => [item, ...flattenOutlineItems(item.children)]);
+}
+
+/**
+ * 見出し行から次の見出し直前までを、その見出し固有の区間として数える。
+ * 親見出しに子見出しの本文を重複加算しないため、行ごとの合計が把握しやすい。
+ */
+function getHeadingCharCount(
+  astFile: ProjectAstFile | null | undefined,
+  item: DocumentOutlineItem | OutlineItem,
+  includeWhitespace: boolean,
+): number | null {
+  const documentAst = astFile?.documentAst;
+  if (!documentAst) return null;
+  const blocks = documentAst.blocks;
+  if (!Array.isArray(blocks)) return null;
+  const headings = flattenOutlineItems(documentAst.outline).sort(
+    (left, right) => left.line - right.line,
+  );
+  const currentIndex = headings.findIndex(
+    (heading) => heading.blockId === item.blockId || heading.id === item.id,
+  );
+  if (currentIndex < 0) return null;
+  const startIndex = Math.max(0, item.line - 1);
+  const nextHeading = headings[currentIndex + 1];
+  const endIndex = nextHeading
+    ? Math.max(startIndex, nextHeading.line - 1)
+    : blocks.length;
+  const source = blocks
+    .slice(startIndex, endIndex)
+    .map((block) => block.source)
+    .join("\n");
+  const sectionSource = endIndex < blocks.length ? `${source}\n` : source;
+  return countSourceCharacters(sectionSource, includeWhitespace);
+}
+
+function getFolderCharCount(
+  folder: ProjectFolder | ProjectEntry,
+  astFiles: ReadonlyMap<string, ProjectAstFile>,
+  includeWhitespace: boolean,
+): number | null {
+  let descendantFileCount = 0;
+  let indexedFileCount = 0;
+  let total = 0;
+  const visit = (entries: ProjectEntry[]) => {
+    for (const entry of entries) {
+      if (entry.kind === "folder") {
+        visit(entry.children);
+        continue;
+      }
+      descendantFileCount += 1;
+      const astFile = astFiles.get(entry.path);
+      if (astFile?.status !== "indexed") continue;
+      indexedFileCount += 1;
+      total += includeWhitespace ? astFile.textLength : astFile.visibleTextLength;
+    }
+  };
+  visit(folder.children);
+  if (descendantFileCount > 0 && indexedFileCount === 0) return null;
+  return total;
 }
 
 function formatSnapshotDate(value: number): string {
@@ -460,6 +531,7 @@ export function WorkspaceSidebar({
   sidebarMode,
   navigatorPreviewLines,
   countWhitespace,
+  showOutlineGuides,
   fileProgress,
   onSetFileProgress,
   collapsedFolderPaths,
@@ -1145,7 +1217,8 @@ export function WorkspaceSidebar({
   const renderOutlineItems = (
     filePath: string | null,
     items: DocumentOutlineItem[] | OutlineItem[],
-    depth: number,
+    treeDepth: number,
+    headingDepth = 0,
   ): JSX.Element[] => {
     return items.map((item) => {
       const itemKey = outlineHeadingKey(filePath, item);
@@ -1174,8 +1247,45 @@ export function WorkspaceSidebar({
         headingDropTarget.line === item.line
           ? headingDropTarget.position
           : null;
+      const headingCharCount = filePath
+        ? getHeadingCharCount(projectAstFiles.get(filePath), item, countWhitespace)
+        : null;
+      const outlineIndent = 47 + treeDepth * 14 + headingDepth * 16;
+      const childGuideIndent =
+        35 + treeDepth * 14 + (headingDepth + 1) * 16;
       return (
-        <div className="outlineTreeNode" key={itemKey}>
+        <div
+          className="outlineTreeNode"
+          key={itemKey}
+          style={
+            {
+              "--outline-item-indent": `${outlineIndent}px`,
+            } as CSSProperties
+          }
+        >
+          {hasChildren && (
+            <button
+              className={[
+                "outlineHeadingDisclosure",
+                isActive ? "activeOutlineHeadingDisclosure" : "",
+              ].filter(Boolean).join(" ")}
+              type="button"
+              aria-label={`${item.title}を${isCollapsed ? "展開" : "折りたたむ"}`}
+              aria-expanded={!isCollapsed}
+              title={isCollapsed ? "子見出しを展開" : "子見出しを折りたたむ"}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                toggleOutlineHeadingCollapse(filePath, itemKey);
+              }}
+            >
+              <SidebarIcon
+                name={isCollapsed ? "chevronRight" : "chevronDown"}
+                className="treeChevronIcon"
+              />
+            </button>
+          )}
           <button
             className={[
               "outlineTreeItem",
@@ -1193,8 +1303,8 @@ export function WorkspaceSidebar({
             aria-pressed={filePath ? isSelected : undefined}
             style={
               {
-                "--outline-item-indent": `${12 + depth * 14}px`,
-                paddingLeft: `${12 + depth * 14}px`,
+                "--outline-item-indent": `${outlineIndent}px`,
+                paddingLeft: `${outlineIndent}px`,
               } as CSSProperties
             }
             type="button"
@@ -1202,13 +1312,6 @@ export function WorkspaceSidebar({
             onClick={(event) => {
               if (suppressNextClickRef.current) {
                 event.preventDefault();
-                return;
-              }
-              if (
-                hasChildren &&
-                (event.target as HTMLElement).closest("[data-outline-heading-disclosure]")
-              ) {
-                toggleOutlineHeadingCollapse(filePath, itemKey);
                 return;
               }
               if (headingSelection && (event.ctrlKey || event.metaKey)) {
@@ -1267,24 +1370,24 @@ export function WorkspaceSidebar({
                 : undefined
             }
           >
-            <span
-              className="outlineHeadingDisclosure"
-              data-outline-heading-disclosure={hasChildren ? "true" : undefined}
-              aria-hidden="true"
-            >
-              {hasChildren && (
-                <SidebarIcon
-                  name={isCollapsed ? "chevronRight" : "chevronDown"}
-                  className="treeChevronIcon"
-                />
-              )}
-            </span>
             <span className="outlineLevelMark">H{item.level}</span>
-            <span>{item.title}</span>
+            <span className="outlineItemTitle">{item.title}</span>
+            {headingCharCount !== null && (
+              <span className="treeItemCharCount">
+                {formatCharCount(headingCharCount)}
+              </span>
+            )}
           </button>
           {hasChildren && !isCollapsed && (
-            <div className="outlineTreeChildren">
-              {renderOutlineItems(filePath, item.children, depth + 1)}
+            <div
+              className="outlineTreeChildren nestedOutlineTreeChildren"
+              style={
+                {
+                  "--nested-outline-guide-indent": `${childGuideIndent}px`,
+                } as CSSProperties
+              }
+            >
+              {renderOutlineItems(filePath, item.children, treeDepth, headingDepth + 1)}
             </div>
           )}
         </div>
@@ -1335,10 +1438,17 @@ export function WorkspaceSidebar({
     const outline = astFile?.documentAst?.outline ?? [];
     const hasOutline = outline.length > 0;
     const isOutlineExpanded = hasOutline && !collapsedOutlinePaths.has(entry.path);
-    const charCountLabel =
-      !isFolder && astFile?.status === "indexed"
+    const folderCharCount = isFolder
+      ? getFolderCharCount(entry, projectAstFiles, countWhitespace)
+      : null;
+    const charCountLabel = isFolder
+      ? folderCharCount === null
+        ? null
+        : formatCharCount(folderCharCount)
+      : astFile?.status === "indexed"
         ? formatCharCount(countWhitespace ? astFile.textLength : astFile.visibleTextLength)
         : null;
+    const treeItemIndent = 10 + depth * 14;
 
     return (
       <div className="treeNode" key={entry.path}>
@@ -1349,6 +1459,11 @@ export function WorkspaceSidebar({
           data-tree-folder-path={parentFolderPath ?? undefined}
           data-outline-file-row={!isFolder ? "true" : undefined}
           data-outline-file-path={!isFolder ? entry.path : undefined}
+          style={
+            {
+              "--tree-item-indent": `${treeItemIndent}px`,
+            } as CSSProperties
+          }
           onDragOver={
             !isFolder
               ? (event) => handleHeadingFileDragOver(event, entry.path)
@@ -1375,60 +1490,91 @@ export function WorkspaceSidebar({
           onPointerCancel={isDraggable ? resetPointerDrag : undefined}
           onContextMenu={(event) => openContextMenu(event, entry, isRoot)}
         >
-          <button
-            className="treeItemPrimary"
-            type="button"
-            aria-pressed={!isFolder ? isSelectedFile : undefined}
-            aria-expanded={
-              isFolder && hasChildren
-                ? isFolderExpanded
-                : hasOutline
-                  ? isOutlineExpanded
-                  : undefined
-            }
-            style={{ paddingLeft: `${12 + depth * 14}px` }}
-            title={entry.path}
-            onClick={(event) => handleTreeItemClick(event, entry, isFolder, hasOutline)}
-          >
-            <span
-              className="treeChevron"
-              data-tree-outline-disclosure={!isFolder && hasOutline ? "true" : undefined}
-              title={!isFolder && hasOutline ? "見出しを展開・折りたたみ" : undefined}
+          {isFolder ? (
+            <button
+              className="treeItemPrimary folderTreeItemPrimary"
+              type="button"
+              aria-expanded={hasChildren ? isFolderExpanded : undefined}
+              title={entry.path}
+              onClick={(event) => handleTreeItemClick(event, entry, true, false)}
             >
-              {(hasChildren || hasOutline) && (
-                <SidebarIcon
-                  name={
-                    isFolder
-                      ? isFolderExpanded && hasChildren
-                        ? "chevronDown"
-                        : "chevronRight"
-                      : isOutlineExpanded
-                        ? "chevronDown"
-                        : "chevronRight"
-                  }
-                  className="treeChevronIcon"
-                />
+              <span className="treeChevron">
+                {hasChildren && (
+                  <SidebarIcon
+                    name={isFolderExpanded ? "chevronDown" : "chevronRight"}
+                    className="treeChevronIcon"
+                  />
+                )}
+              </span>
+              <span className="treeItemName">{entry.name}</span>
+              {charCountLabel && (
+                <span className="treeItemCharCount">{charCountLabel}</span>
               )}
-            </span>
-            <span
-              className="treeDragHandle"
-              title={isDraggable ? "ドラッグして並び替え" : undefined}
-            >
-              <SidebarIcon
-                name={isFolder ? (isRoot ? "book" : "folder") : "file"}
-                className="treeSvgIcon"
+            </button>
+          ) : (
+            <>
+              {hasOutline ? (
+                <button
+                  className="treeFileDisclosure"
+                  type="button"
+                  aria-label={`${entry.name}の見出しを${
+                    isOutlineExpanded ? "折りたたむ" : "展開"
+                  }`}
+                  aria-expanded={isOutlineExpanded}
+                  title="見出しを展開・折りたたみ"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onOutlineCollapsedChange(entry.path, isOutlineExpanded);
+                  }}
+                >
+                  <SidebarIcon
+                    name={isOutlineExpanded ? "chevronDown" : "chevronRight"}
+                    className="treeChevronIcon"
+                  />
+                </button>
+              ) : (
+                <span className="treeFileDisclosurePlaceholder" aria-hidden="true" />
+              )}
+              <FileProgressControl
+                status={getFileProgress(fileProgress, entry.path)}
+                onChange={(status) => onSetFileProgress(entry.path, status)}
               />
-            </span>
-            <span className="treeItemName">{entry.name}</span>
-            {charCountLabel && <span className="treeItemCharCount">{charCountLabel}</span>}
-            {isActive && <span className="treeActiveDot" aria-hidden="true" />}
-          </button>
-          {!isFolder && (
-            <FileProgressControl
-              status={getFileProgress(fileProgress, entry.path)}
-              onChange={(status) => onSetFileProgress(entry.path, status)}
-              compact
-            />
+              <button
+                className="treeItemPrimary fileTreeItemPrimary"
+                type="button"
+                aria-pressed={isSelectedFile}
+                title={entry.path}
+                onClick={(event) => handleTreeItemClick(event, entry, false, hasOutline)}
+              >
+                <span className="treeItemName">{entry.name}</span>
+                {charCountLabel && (
+                  <span className="treeItemCharCount">{charCountLabel}</span>
+                )}
+              </button>
+              <button
+                className="treeEntryMoreButton"
+                type="button"
+                aria-label={`${entry.name}のメニュー`}
+                title="その他の操作"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  setHeadingContextMenu(null);
+                  setContextMenu({
+                    x: Math.min(rect.left, window.innerWidth - 180),
+                    y: rect.bottom + 4,
+                    entry,
+                    isRoot: false,
+                  });
+                }}
+              >
+                •••
+              </button>
+            </>
           )}
         </div>
         {isFolder && hasChildren && isFolderExpanded && (
@@ -1437,8 +1583,15 @@ export function WorkspaceSidebar({
           </div>
         )}
         {!isFolder && hasOutline && isOutlineExpanded && (
-          <div className="outlineTreeChildren">
-            {renderOutlineItems(entry.path, outline, depth + 2)}
+          <div
+            className="outlineTreeChildren fileTreeOutlineChildren"
+            style={
+              {
+                "--file-outline-guide-indent": `${35 + depth * 14}px`,
+              } as CSSProperties
+            }
+          >
+            {renderOutlineItems(entry.path, outline, depth)}
           </div>
         )}
         {!isFolder && astFile?.status === "pending" && (
@@ -1455,11 +1608,25 @@ export function WorkspaceSidebar({
     );
   };
 
+  const projectTotalCharCount = projectAst
+    ? projectAst.files.reduce(
+        (sum, file) =>
+          sum + (countWhitespace ? file.textLength : file.visibleTextLength),
+        0,
+      )
+    : null;
+
   const renderOutlineMode = () => (
     <section className="sidebarSection outlineExplorerSection" aria-label="アウトライン">
       <div className="tree outlineTree">
         {projectFolder ? (
-          renderEntry(projectFolder, 0, null)
+          projectFolder.children.length > 0 ? (
+            projectFolder.children.map((entry) =>
+              renderEntry(entry, 0, projectFolder.path),
+            )
+          ) : (
+            <div className="outlineEmptyState">空のフォルダ</div>
+          )
         ) : (
           <>
             <div className="sidebarEmptyState">
@@ -1479,7 +1646,7 @@ export function WorkspaceSidebar({
             </div>
             {activeDocumentOutline.length > 0 ? (
               <div className="outlineTreeChildren">
-                {renderOutlineItems(null, activeDocumentOutline, 1)}
+                {renderOutlineItems(null, activeDocumentOutline, 0)}
               </div>
             ) : (
               <div className="outlineEmptyState">見出しがありません</div>
@@ -2020,10 +2187,13 @@ export function WorkspaceSidebar({
   );
 
   return (
-    <aside className="workspaceSidebar" aria-label="アウトライン">
+    <aside
+      className={`workspaceSidebar ${showOutlineGuides ? "showOutlineGuides" : ""}`}
+      aria-label="ファイルと検索"
+    >
       <div className="sidebarHeader">
         <span className="sidebarHeaderLabel">
-          {isProjectSearchMode ? "Search" : "Outline"}
+          {isProjectSearchMode ? "検索" : "ファイル"}
         </span>
         <div className="sidebarHeaderActions">
           <button
@@ -2049,6 +2219,17 @@ export function WorkspaceSidebar({
           sidebarMode === "navigator" ? renderNavigatorMode() : renderOutlineMode()
         )}
       </div>
+
+      {!isProjectSearchMode && sidebarMode === "tree" && projectFolder && (
+        <footer className="fileViewSummary">
+          <strong>
+            プロジェクト合計{" "}
+            {projectTotalCharCount === null
+              ? "—"
+              : formatCharCount(projectTotalCharCount)}
+          </strong>
+        </footer>
+      )}
 
       {renderContextMenu()}
       {renderHeadingContextMenu()}

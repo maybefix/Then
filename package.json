@@ -1,7 +1,7 @@
 {
   "name": "then",
   "private": true,
-  "version": "0.5.1",
+  "version": "0.5.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,6 +11,7 @@
     "test:heading-move": "node scripts/test-heading-move.mjs",
     "test:heading-dnd-ui": "node scripts/test-heading-dnd-ui.mjs",
     "test:file-move": "node scripts/test-file-move.mjs",
+    "test:breadcrumb": "node scripts/test-breadcrumb-navigation.mjs",
     "test:export": "node scripts/verify-export.mjs",
     "demo:record": "powershell -ExecutionPolicy Bypass -File scripts/demo/record-desktop.ps1",
     "demo:edit": "node scripts/demo/edit-video.mjs",
