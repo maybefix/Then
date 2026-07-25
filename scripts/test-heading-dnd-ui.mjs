@@ -311,6 +311,23 @@ async function clickFile(element, pointerId) {
   });
 }
 
+async function clickFileDisclosure(element, fileButton, pointerId) {
+  await act(async () => {
+    element.dispatchEvent(pointerEvent("pointerdown", pointerId, 0, 0));
+  });
+  assert.equal(
+    fileButton.hasPointerCapture(pointerId),
+    false,
+    "the outline disclosure must not start or capture a file drag",
+  );
+  await act(async () => {
+    element.dispatchEvent(pointerEvent("pointerup", pointerId, 0, 0));
+  });
+  await act(async () => {
+    element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+  });
+}
+
 const root = createRoot(document.getElementById("root"));
 await act(async () => root.render(React.createElement(Harness)));
 const rootFolderButton = document.querySelector('.folderTreeItem .treeItemPrimary[aria-expanded="true"]');
@@ -326,11 +343,11 @@ const fileButton = Array.from(document.querySelectorAll(".fileTreeItem .treeItem
   .find((button) => button.getAttribute("title") === pathA);
 const fileDisclosure = fileButton?.querySelector("[data-tree-outline-disclosure]");
 assert.ok(fileButton && fileDisclosure, "file with headings must render an outline disclosure");
-await act(async () => fileDisclosure.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
+await clickFileDisclosure(fileDisclosure, fileButton, 20);
 assert.equal(fileButton.getAttribute("aria-expanded"), "false");
 assert.equal(document.querySelector('[data-outline-block-id="block-alpha"]'), null);
 assert.equal(globalThis.__fileSelectCalls, 0, "outline disclosure must not open the file");
-await act(async () => fileDisclosure.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
+await clickFileDisclosure(fileDisclosure, fileButton, 21);
 assert.equal(fileButton.getAttribute("aria-expanded"), "true");
 
 const source = document.querySelector('[data-outline-block-id="block-alpha"]');

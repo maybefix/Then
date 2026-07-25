@@ -686,6 +686,14 @@ export function WorkspaceSidebar({
   ) => {
     if (!folderPath || event.button !== 0) return;
 
+    const eventTarget =
+      event.target instanceof Element ? event.target : event.currentTarget;
+    if (
+      !isFolder &&
+      eventTarget.closest("[data-tree-outline-disclosure]")
+    ) {
+      return;
+    }
     const selectionAtPointerDown = selectedFilePathsRef.current;
     const isAdditiveSelection = !isFolder && (event.ctrlKey || event.metaKey);
     const dragSelection = new Set(selectionAtPointerDown);
@@ -704,8 +712,6 @@ export function WorkspaceSidebar({
           .filter((path): path is string => Boolean(path))
       : [folderPath];
     const uniqueParentPaths = new Set(sourceParentPaths);
-    const eventTarget =
-      event.target instanceof Element ? event.target : event.currentTarget;
     const captureTarget =
       eventTarget.closest<HTMLElement>("button") ?? event.currentTarget;
     pointerDragRef.current = {
