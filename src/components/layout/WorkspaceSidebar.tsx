@@ -2223,7 +2223,7 @@ export function WorkspaceSidebar({
       {!isProjectSearchMode && sidebarMode === "tree" && projectFolder && (
         <footer className="fileViewSummary">
           <strong>
-            プロジェクト合計{" "}
+            合計{" "}
             {projectTotalCharCount === null
               ? "—"
               : formatCharCount(projectTotalCharCount)}
