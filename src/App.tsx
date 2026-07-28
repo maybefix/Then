@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ChangeEvent,
   DragEvent,
@@ -322,6 +323,8 @@ type AppIconName =
   | "files"
   | "folder"
   | "folderPlus"
+  | "fullscreen"
+  | "fullscreenExit"
   | "history"
   | "horizontal"
   | "menu"
@@ -393,6 +396,24 @@ function AppIcon({ name, className = "" }: { name: AppIconName; className?: stri
         <svg {...common}>
           <path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" />
           <path d="M12 10v6M9 13h6" />
+        </svg>
+      );
+    case "fullscreen":
+      return (
+        <svg {...common}>
+          <path d="M8 3H3v5" />
+          <path d="M16 3h5v5" />
+          <path d="M21 16v5h-5" />
+          <path d="M8 21H3v-5" />
+        </svg>
+      );
+    case "fullscreenExit":
+      return (
+        <svg {...common}>
+          <path d="M3 9h6V3" />
+          <path d="M21 9h-6V3" />
+          <path d="M15 21v-6h6" />
+          <path d="M9 21v-6H3" />
         </svg>
       );
     case "history":
@@ -786,6 +807,7 @@ const defaultSettings: EditorSettings = {
   showWorkspacePaths: true,
   showStatusFilePath: false,
   skipStartupPortal: false,
+  focusModeUsesNativeFullscreen: false,
   zoneMode: false,
   zoneModeOpacity: 0.42,
   navigatorPreviewLines: DEFAULT_NAVIGATOR_PREVIEW_LINES,
@@ -1872,6 +1894,10 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         typeof settings.skipStartupPortal === "boolean"
           ? settings.skipStartupPortal
           : defaultSettings.skipStartupPortal,
+      focusModeUsesNativeFullscreen:
+        typeof settings.focusModeUsesNativeFullscreen === "boolean"
+          ? settings.focusModeUsesNativeFullscreen
+          : defaultSettings.focusModeUsesNativeFullscreen,
       zoneMode:
         typeof settings.zoneMode === "boolean"
           ? settings.zoneMode
@@ -2153,6 +2179,8 @@ export default function App() {
   const workspaceSwitchGenerationRef = useRef(0);
   const toastTimerRef = useRef<number | null>(null);
   const typewriterScrollFrameRef = useRef<number | null>(null);
+  const nativeFullscreenRequestedRef = useRef(false);
+  const nativeFullscreenRequestIdRef = useRef(0);
   const draggingSnippetRef = useRef<{
     threadId: string;
     fragmentId: string;
@@ -2257,12 +2285,16 @@ export default function App() {
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
   const [isRightSidebarWide, setIsRightSidebarWide] = useState(false);
+  const [isEditorFocusMode, setIsEditorFocusMode] = useState(false);
   /**
    * メイン画面のモード。write=本文（左右サイドバー）、canvas=キャンバス（右のみ）、
    * export=エクスポート、checkpoint=チェックポイント（いずれもサイドバーなし）。canvas/export は設定により別ウィンドウ
    * 起動へ切り替わる。
    */
   const [appMode, setAppMode] = useState<"write" | "canvas" | "export" | "checkpoint">("write");
+  useEffect(() => {
+    if (appMode !== "write") setIsEditorFocusMode(false);
+  }, [appMode]);
   const [canvasEmbedPayload, setCanvasEmbedPayload] = useState<CanvasWindowPayload | null>(null);
   const [exportEmbedPayload, setExportEmbedPayload] = useState<{
     requestId: string;
@@ -2908,6 +2940,30 @@ export default function App() {
   }, []);
 
   const { snippets, settings } = appState;
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+
+    const shouldUseNativeFullscreen =
+      isEditorFocusMode && settings.focusModeUsesNativeFullscreen;
+    if (nativeFullscreenRequestedRef.current === shouldUseNativeFullscreen) return;
+
+    nativeFullscreenRequestedRef.current = shouldUseNativeFullscreen;
+    const requestId = nativeFullscreenRequestIdRef.current + 1;
+    nativeFullscreenRequestIdRef.current = requestId;
+
+    void getCurrentWindow()
+      .setFullscreen(shouldUseNativeFullscreen)
+      .catch((error) => {
+        if (nativeFullscreenRequestIdRef.current !== requestId) return;
+        const message = shouldUseNativeFullscreen
+          ? "完全フルスクリーンへの切り替えに失敗しました"
+          : "通常ウィンドウへの復帰に失敗しました";
+        setLastError(`${message}: ${String(error)}`);
+        setToast(message);
+        if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = window.setTimeout(() => setToast(""), 2400);
+      });
+  }, [isEditorFocusMode, settings.focusModeUsesNativeFullscreen]);
   const collapsedTreeFolderPaths = useMemo(
     () =>
       new Set(
@@ -3665,6 +3721,7 @@ export default function App() {
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      setIsEditorFocusMode(false);
       setIsFileMenuOpen(false);
       setActiveBreadcrumbPath(null);
       setBreadcrumbBrowsePath(null);
@@ -5565,6 +5622,21 @@ export default function App() {
       return;
     }
     void handleOpenLinkedExport();
+  };
+
+  const toggleEditorFocusMode = () => {
+    setIsEditorFocusMode((current) => !current);
+    setIsFileMenuOpen(false);
+    setActiveBreadcrumbPath(null);
+    setBreadcrumbBrowsePath(null);
+    setIsWorkspaceSwitcherOpen(false);
+    setEditorContextMenu(null);
+    window.requestAnimationFrame(() => editorInstanceRef.current?.focus());
+  };
+
+  const leaveEditorFocusMode = () => {
+    setIsEditorFocusMode(false);
+    window.requestAnimationFrame(() => editorInstanceRef.current?.focus());
   };
 
   const openWorkspaceFolder = async (
@@ -7956,9 +8028,18 @@ export default function App() {
             }}
           />
         ) : (
-          <section className="appFrame" aria-label="Then">
+          <section
+            className="appFrame"
+            aria-label="Then"
+            data-editor-focus={isEditorFocusMode ? "true" : undefined}
+          >
           <header className="topbar">
-            <div className="fileMenu" ref={fileMenuRef}>
+            <div
+              className="fileMenu"
+              ref={fileMenuRef}
+              aria-hidden={isEditorFocusMode}
+              {...(isEditorFocusMode ? { inert: "" } : {})}
+            >
               <button
                 className="menuButton"
                 type="button"
@@ -8021,6 +8102,8 @@ export default function App() {
                 className="iconButton"
                 type="button"
                 aria-label="左サイドバーを表示"
+                aria-hidden={isEditorFocusMode}
+                tabIndex={isEditorFocusMode ? -1 : 0}
                 title="左サイドバーを表示"
                 onClick={() => setIsLeftSidebarCollapsed(false)}
               >
@@ -8499,7 +8582,11 @@ export default function App() {
                 </>
               )}
             </nav>
-            <div className="topbarActions">
+            <div
+              className="topbarActions"
+              aria-hidden={isEditorFocusMode}
+              {...(isEditorFocusMode ? { inert: "" } : {})}
+            >
               <div className="modeSwitcher" role="tablist" aria-label="画面モード">
                 <button
                   className={appMode === "write" ? "isActiveMode" : ""}
@@ -8551,6 +8638,28 @@ export default function App() {
                   <AppIcon name="history" className="modeSwitcherIcon" />
                 </button>
               </div>
+              {appMode === "write" && (
+                <button
+                  className={`iconButton editorFocusModeButton ${
+                    isEditorFocusMode ? "activeIconButton" : ""
+                  }`}
+                  type="button"
+                  aria-label={
+                    settings.focusModeUsesNativeFullscreen
+                      ? "エディタを完全フルスクリーン表示"
+                      : "エディタをフルスクリーン表示"
+                  }
+                  aria-pressed={isEditorFocusMode}
+                  title={
+                    settings.focusModeUsesNativeFullscreen
+                      ? "エディタを完全フルスクリーン表示"
+                      : "エディタをフルスクリーン表示"
+                  }
+                  onClick={toggleEditorFocusMode}
+                >
+                  <AppIcon name="fullscreen" className="topbarSvgIcon" />
+                </button>
+              )}
               {isRightSidebarCollapsed && (appMode === "write" || appMode === "canvas") && (
                 <button
                   className="iconButton"
@@ -8611,6 +8720,8 @@ export default function App() {
             <div
               className={`leftWorkspaceCluster ${appMode !== "write" ? "modeHiddenPane" : ""}`}
               data-sidebar-collapsed={isLeftSidebarCollapsed}
+              aria-hidden={isEditorFocusMode}
+              {...(isEditorFocusMode ? { inert: "" } : {})}
             >
                 <nav className="workspaceActivityBar" aria-label="左サイドバー操作">
                   <button
@@ -8819,6 +8930,17 @@ export default function App() {
             </div>
             <div className={`editorColumn ${appMode !== "write" ? "modeHiddenPane" : ""}`}>
               <div className="editorFrame">
+                <button
+                  className={`editorFocusExitButton ${isEditorFocusMode ? "isVisible" : ""}`}
+                  type="button"
+                  aria-label="通常表示に戻す"
+                  title="通常表示に戻す (Esc)"
+                  aria-hidden={!isEditorFocusMode}
+                  tabIndex={isEditorFocusMode ? 0 : -1}
+                  onClick={leaveEditorFocusMode}
+                >
+                  <AppIcon name="fullscreenExit" />
+                </button>
                 <div
                   ref={editorShellRef}
                   className="editor"
@@ -9143,6 +9265,8 @@ export default function App() {
               <aside
                 className={`rightSidebar ${isRightSidebarWide ? "wideRightSidebar" : ""}`}
                 aria-label="補助ペイン"
+                aria-hidden={isEditorFocusMode}
+                {...(isEditorFocusMode ? { inert: "" } : {})}
               >
                 <div className="rightSidebarHeader">
                   <div className="rightTabs" role="tablist" aria-label="補助ペイン">

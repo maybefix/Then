@@ -134,6 +134,19 @@ export function SettingsModal({
                     ))}
                   </select>
                 </label>
+                <label className="checkSetting descriptiveCheckSetting">
+                  <input
+                    checked={settings.focusModeUsesNativeFullscreen}
+                    type="checkbox"
+                    onChange={(event) =>
+                      onUpdateSettings("focusModeUsesNativeFullscreen", event.target.checked)
+                    }
+                  />
+                  <span className="checkSettingCopy">
+                    <span>集中表示で完全フルスクリーンを使用</span>
+                    <small>タイトルバーとWindowsのタスクバーも隠します</small>
+                  </span>
+                </label>
                 <label className="checkSetting">
                   <input
                     checked={settings.zoneMode}

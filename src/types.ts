@@ -231,6 +231,8 @@ export type EditorSettings = {
   showStatusFilePath: boolean;
   /** 起動ポータルを省略し、前回のワークスペースを直接開くか。 */
   skipStartupPortal: boolean;
+  /** 集中表示と同時にTauriウィンドウを完全フルスクリーンへ切り替えるか。 */
+  focusModeUsesNativeFullscreen: boolean;
   /** 左右サイドバーを通常時に透かし、ホバー時だけ通常表示にする実験モード。 */
   zoneMode: boolean;
   /** Zoneモードでサイドバーに適用する通常時の不透明度。 */
