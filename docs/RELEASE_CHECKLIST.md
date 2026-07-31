@@ -7,7 +7,8 @@ Thenのインストーラーを公開する前に、次を確認する。
 - `THIRD_PARTY_LICENSES/AGPL-3.0.txt` がGNU公式のAGPL-3.0全文である。
 - `THIRD_PARTY_LICENSES/Vivliostyle-NOTICE.md` のViewerバージョン、`gitHead`、対応ソースURLが、実際に同梱するViewerと一致する。
 - `src-tauri/tauri.conf.json` の `bundle.resources` にAGPL全文とVivliostyle告知が登録されている。
-- 生成したMSI / NSISインストーラーに `THIRD_PARTY_LICENSES/AGPL-3.0.txt` と `THIRD_PARTY_LICENSES/Vivliostyle-NOTICE.md` が含まれている。
+- `src-tauri/tauri.conf.json` の `bundle.targets` が `["nsis"]` であり、NSIS以外を新規生成しない。
+- 生成したNSISインストーラーに `THIRD_PARTY_LICENSES/AGPL-3.0.txt` と `THIRD_PARTY_LICENSES/Vivliostyle-NOTICE.md` が含まれている。
 - GitHub Releaseのインストーラーダウンロード案内の近くに、同梱版と対応するソースアーカイブへのリンクを掲載する。
 
 Vivliostyle Viewer 2.43.3の対応ソース:

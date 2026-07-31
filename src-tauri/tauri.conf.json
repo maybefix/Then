@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Then",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "identifier": "local.then",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -26,7 +26,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
     "resources": {
       "../THIRD_PARTY_LICENSES/NotoCJK-OFL.txt": "THIRD_PARTY_LICENSES/NotoCJK-OFL.txt",
       "../THIRD_PARTY_LICENSES/AGPL-3.0.txt": "THIRD_PARTY_LICENSES/AGPL-3.0.txt",

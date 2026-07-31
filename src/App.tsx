@@ -8858,6 +8858,9 @@ export default function App() {
                 focusedFolderPath={focusedFolderPath}
                 activeDocumentOutline={outlineItems}
                 activeOutlineIds={activeOutlineIds}
+                activeOutlineBlockId={
+                  activeOutlineChain[activeOutlineChain.length - 1]?.blockId ?? null
+                }
                 projectAst={projectAst}
                 sidebarMode={settings.sidebarMode}
                 navigatorPreviewLines={settings.navigatorPreviewLines}

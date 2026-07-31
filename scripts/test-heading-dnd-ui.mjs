@@ -107,7 +107,7 @@ function astFile(path, name, outline) {
   };
 }
 
-function Harness() {
+function Harness({ activeOutlineIds = new Set() } = {}) {
   const [moved, setMoved] = React.useState(false);
   const [collapsedFolders, setCollapsedFolders] = React.useState(new Set());
   const [collapsedOutlinePaths, setCollapsedOutlinePaths] = React.useState(new Set());
@@ -138,7 +138,9 @@ function Harness() {
     currentFileCharCount: 40,
     focusedFolderPath: null,
     activeDocumentOutline: outline,
-    activeOutlineIds: new Set(),
+    activeOutlineIds,
+    activeOutlineBlockId:
+      outline.find((item) => activeOutlineIds.has(item.id))?.blockId ?? null,
     projectAst,
     sidebarMode: "tree",
     navigatorPreviewLines: 2,
@@ -353,6 +355,30 @@ assert.equal(fileDisclosure.getAttribute("aria-expanded"), "true");
 const source = document.querySelector('[data-outline-block-id="block-alpha"]');
 const target = document.querySelector('[data-outline-block-id="block-beta"]');
 assert.ok(source && target, "fixture outline rows must render");
+
+await act(async () => {
+  source.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+});
+assert.ok(
+  source.classList.contains("selectedOutlineTreeItem"),
+  "an ordinary heading click must retain its single-selection behavior",
+);
+await act(async () =>
+  root.render(React.createElement(Harness, { activeOutlineIds: new Set(["a:1"]) })),
+);
+assert.ok(
+  source.classList.contains("selectedOutlineTreeItem"),
+  "the clicked heading must stay selected when navigation reaches it",
+);
+await act(async () =>
+  root.render(React.createElement(Harness, { activeOutlineIds: new Set(["a:3"]) })),
+);
+assert.equal(
+  document.querySelectorAll(".selectedOutlineTreeItem").length,
+  0,
+  "a navigation-only selection must clear after the active heading moves elsewhere",
+);
+
 target.getBoundingClientRect = () => ({ top: 0, height: 20, bottom: 20, left: 0, right: 200, width: 200, x: 0, y: 0, toJSON() {} });
 const transfer = new DataTransferStub();
 
@@ -401,6 +427,14 @@ assert.equal(
   document.querySelectorAll(".selectedOutlineTreeItem").length,
   2,
   "Ctrl+click must select multiple headings",
+);
+await act(async () =>
+  root.render(React.createElement(Harness, { activeOutlineIds: new Set(["a:3"]) })),
+);
+assert.equal(
+  document.querySelectorAll(".selectedOutlineTreeItem").length,
+  2,
+  "explicit Ctrl+click heading selections must survive active-heading changes",
 );
 await act(async () => {
   selectedBeta.dispatchEvent(

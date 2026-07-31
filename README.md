@@ -4,10 +4,16 @@
 
 Markdown / テキストファイルをそのまま原稿として扱いながら、本文執筆、構成管理、資料参照、保存点の比較・復元、PDF / DOCX出力までを一つのワークスペースで行えます。
 
-- 現在の開発バージョン: `v0.5.4`
+- 現在の開発バージョン: `v0.5.5`
 - 対応環境: Windows x64
 - 技術構成: Tauri v2 + React + TypeScript + Vite + Tiptap / ProseMirror
-- 直近の公開版: [Then v0.5.1](https://github.com/maybefix/Then/releases/tag/v0.5.1)
+- 直近の公開版: [Then v0.5.5](https://github.com/maybefix/Then/releases/tag/v0.5.5)
+
+## v0.5.5の変更点
+
+- 左サイドバーで見出しをクリックして移動した後、本文側で別の見出しへ移ると、移動元に残っていた選択ハイライトを解除するようにしました。
+- `Ctrl` / `Cmd`+クリックによる複数見出し選択、見出しのドラッグ移動、別ファイルへの切り出しは従来どおり利用できます。
+- Windows向け配布インストーラーをNSIS形式（`Then_*_x64-setup.exe`）に統一しました。
 
 ## 主な機能
 
@@ -103,8 +109,9 @@ Thenは、PDFのページ組版にオープンソースの**Vivliostyle Viewer 2
 
 [GitHub Releases](https://github.com/maybefix/Then/releases) から最新版をダウンロードできます。
 
-- 通常のインストール: `Then_*_x64-setup.exe`
-- MSI形式: `Then_*_x64_en-US.msi`
+- NSISインストーラー: `Then_*_x64-setup.exe`
+
+v0.5.5以降はNSIS形式のみを配布します。
 
 現在のWindowsインストーラーはコード署名されていないため、Windows SmartScreenが警告を表示する場合があります。
 
@@ -142,7 +149,6 @@ npm run tauri:build
 Windowsインストーラーは次の場所に生成されます。
 
 ```text
-src-tauri/target/release/bundle/msi/
 src-tauri/target/release/bundle/nsis/
 ```
 

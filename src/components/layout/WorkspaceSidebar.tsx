@@ -36,6 +36,7 @@ type WorkspaceSidebarProps = {
   focusedFolderPath: string | null;
   activeDocumentOutline: OutlineItem[];
   activeOutlineIds: ReadonlySet<string>;
+  activeOutlineBlockId: string | null;
   projectAst: ProjectAst | null;
   sidebarMode: SidebarMode;
   navigatorPreviewLines: number;
@@ -133,6 +134,11 @@ type TreeDropTarget =
 
 type HeadingDragState = {
   sources: SidebarHeadingSelection[];
+};
+
+type NavigationHeadingSelection = {
+  key: string;
+  hasBeenActive: boolean;
 };
 
 export type SidebarHeadingSelection = {
@@ -527,6 +533,7 @@ export function WorkspaceSidebar({
   focusedFolderPath,
   activeDocumentOutline,
   activeOutlineIds,
+  activeOutlineBlockId,
   projectAst,
   sidebarMode,
   navigatorPreviewLines,
@@ -607,6 +614,7 @@ export function WorkspaceSidebar({
   >(null);
   const pointerDragRef = useRef<PointerDragState | null>(null);
   const headingDragRef = useRef<HeadingDragState | null>(null);
+  const navigationHeadingSelectionRef = useRef<NavigationHeadingSelection | null>(null);
   const lastHeadingDragOverRef = useRef("");
   const dropTargetRef = useRef<TreeDropTarget>(null);
   const suppressNextClickRef = useRef(false);
@@ -660,6 +668,7 @@ export function WorkspaceSidebar({
     setNavigatorLocation(null);
     replaceSelectedFilePaths(currentFilePath ? [currentFilePath] : []);
     setSelectedHeadings(new Map());
+    navigationHeadingSelectionRef.current = null;
     setHeadingContextMenu(null);
   }, [projectFolder?.path]);
 
@@ -898,6 +907,32 @@ export function WorkspaceSidebar({
   const headingSelectionKey = (heading: SidebarHeadingSelection) =>
     `${heading.path}:${heading.blockId}`;
 
+  const activeHeadingSelectionKey =
+    currentFilePath && activeOutlineBlockId
+      ? `${currentFilePath}:${activeOutlineBlockId}`
+      : null;
+
+  // 通常クリックの選択は、移動先へ到達するまではドラッグ選択として保持する。
+  // その見出しが一度アクティブになった後に本文側で別の見出しへ移った場合だけ
+  // 解除し、現在位置とは異なる行が選択色のまま残るのを防ぐ。
+  useEffect(() => {
+    const navigationSelection = navigationHeadingSelectionRef.current;
+    if (!navigationSelection) return;
+    if (navigationSelection.key === activeHeadingSelectionKey) {
+      navigationSelection.hasBeenActive = true;
+      return;
+    }
+    if (!navigationSelection.hasBeenActive) return;
+
+    setSelectedHeadings((current) => {
+      if (!current.has(navigationSelection.key)) return current;
+      const next = new Map(current);
+      next.delete(navigationSelection.key);
+      return next;
+    });
+    navigationHeadingSelectionRef.current = null;
+  }, [activeHeadingSelectionKey]);
+
   const toggleOutlineHeadingCollapse = (filePath: string | null, key: string) => {
     if (filePath) {
       onOutlineHeadingCollapsedChange(key, !collapsedOutlineHeadingKeys.has(key));
@@ -925,6 +960,7 @@ export function WorkspaceSidebar({
     event: ReactDragEvent<HTMLButtonElement>,
     source: SidebarHeadingSelection,
   ) => {
+    navigationHeadingSelectionRef.current = null;
     const sourceKey = headingSelectionKey(source);
     const selectedSources = selectedHeadings.has(sourceKey)
       ? [...selectedHeadings.values()]
@@ -1095,6 +1131,7 @@ export function WorkspaceSidebar({
   ) => {
     event.preventDefault();
     event.stopPropagation();
+    navigationHeadingSelectionRef.current = null;
     const key = headingSelectionKey(heading);
     if (!selectedHeadings.has(key) && selectedHeadings.size <= 1) {
       setSelectedHeadings(new Map([[key, heading]]));
@@ -1315,6 +1352,7 @@ export function WorkspaceSidebar({
                 return;
               }
               if (headingSelection && (event.ctrlKey || event.metaKey)) {
+                navigationHeadingSelectionRef.current = null;
                 setSelectedHeadings((current) => {
                   const next = new Map(current);
                   const key = headingSelectionKey(headingSelection);
@@ -1328,8 +1366,13 @@ export function WorkspaceSidebar({
                 return;
               }
               if (headingSelection) {
+                const key = headingSelectionKey(headingSelection);
+                navigationHeadingSelectionRef.current = {
+                  key,
+                  hasBeenActive: key === activeHeadingSelectionKey,
+                };
                 setSelectedHeadings(
-                  new Map([[headingSelectionKey(headingSelection), headingSelection]]),
+                  new Map([[key, headingSelection]]),
                 );
               }
               filePath ? onJumpProjectOutline(filePath, item) : onJumpOutline(item);
