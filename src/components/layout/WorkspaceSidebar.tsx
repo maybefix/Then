@@ -7,6 +7,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import type {
   DocumentOutlineItem,
   ProjectAst,
@@ -23,6 +24,7 @@ import type {
 } from "../../types";
 import { fileProgressLabels, fileProgressStatuses } from "../../types";
 import { logHeadingDnd } from "../../utils/headingDndDiagnostics";
+import { getScaledFixedMenuPosition } from "../../utils/contextMenuPosition";
 import {
   buildFilePreview,
   buildHeadingPreview,
@@ -171,6 +173,8 @@ type HeadingDropTarget =
 type WorkspaceSearchScope = "file" | "project";
 
 const HEADING_DRAG_MIME = "application/x-then-heading";
+const TREE_CONTEXT_MENU_WIDTH = 180;
+const TREE_CONTEXT_MENU_HEIGHT = 164;
 
 function isProjectEntry(entry: ProjectFolder | ProjectEntry): entry is ProjectEntry {
   return "kind" in entry;
@@ -1117,9 +1121,13 @@ export function WorkspaceSidebar({
   ) => {
     event.preventDefault();
     setHeadingContextMenu(null);
+    const position = getScaledFixedMenuPosition(event.clientX, event.clientY, {
+      width: TREE_CONTEXT_MENU_WIDTH,
+      height: TREE_CONTEXT_MENU_HEIGHT,
+    });
     setContextMenu({
-      x: event.clientX,
-      y: event.clientY,
+      x: position.left,
+      y: position.top,
       entry,
       isRoot,
     });
@@ -1137,9 +1145,13 @@ export function WorkspaceSidebar({
       setSelectedHeadings(new Map([[key, heading]]));
     }
     setContextMenu(null);
+    const position = getScaledFixedMenuPosition(event.clientX, event.clientY, {
+      width: TREE_CONTEXT_MENU_WIDTH,
+      height: 72,
+    });
     setHeadingContextMenu({
-      x: event.clientX,
-      y: event.clientY,
+      x: position.left,
+      y: position.top,
     });
   };
 
@@ -1154,7 +1166,7 @@ export function WorkspaceSidebar({
     const { entry, isRoot, x, y } = contextMenu;
     const kind = getEntryKind(entry);
 
-    return (
+    return createPortal(
       <div
         className="treeContextMenu"
         style={{ left: x, top: y }}
@@ -1210,7 +1222,8 @@ export function WorkspaceSidebar({
             )}
           </>
         )}
-      </div>
+      </div>,
+      document.querySelector<HTMLElement>(".appShell") ?? document.body,
     );
   };
 
@@ -1219,7 +1232,7 @@ export function WorkspaceSidebar({
     const selected = [...selectedHeadings.values()];
     const canExtract = selected.length === 1;
 
-    return (
+    return createPortal(
       <div
         className="treeContextMenu headingContextMenu"
         style={{ left: headingContextMenu.x, top: headingContextMenu.y }}
@@ -1247,7 +1260,8 @@ export function WorkspaceSidebar({
         {!canExtract && (
           <span className="contextMenuHint">複数選択時は切り出せません</span>
         )}
-      </div>
+      </div>,
+      document.querySelector<HTMLElement>(".appShell") ?? document.body,
     );
   };
 
@@ -1606,10 +1620,14 @@ export function WorkspaceSidebar({
                   event.preventDefault();
                   event.stopPropagation();
                   const rect = event.currentTarget.getBoundingClientRect();
+                  const position = getScaledFixedMenuPosition(rect.left, rect.bottom + 4, {
+                    width: TREE_CONTEXT_MENU_WIDTH,
+                    height: 104,
+                  });
                   setHeadingContextMenu(null);
                   setContextMenu({
-                    x: Math.min(rect.left, window.innerWidth - 180),
-                    y: rect.bottom + 4,
+                    x: position.left,
+                    y: position.top,
                     entry,
                     isRoot: false,
                   });

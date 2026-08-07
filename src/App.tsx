@@ -3421,7 +3421,12 @@ export default function App() {
     setReferenceCandidates([]);
     setReferenceQuery("");
     setFocusedFolderPath(null);
-    replaceActiveTab(createScratchDocumentTab("", { documentKey: `scratch-${Date.now()}` }));
+    replaceActiveTab(
+      createScratchDocumentTab("", {
+        documentKey: `scratch-${Date.now()}`,
+        saveStatus: "saved",
+      }),
+    );
     setWorkspaceAlert(alert);
     setAppState({ ...state, markdown: "" });
     setLastError("");

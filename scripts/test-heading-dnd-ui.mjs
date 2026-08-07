@@ -13,12 +13,14 @@ assert.equal(
   "Windows HTML5 drag and drop requires Tauri native file drop to be disabled",
 );
 const reactUrl = pathToFileURL(require.resolve("react")).href;
+const reactDomUrl = pathToFileURL(require.resolve("react-dom")).href;
 let sidebarSource = await readFile(
   "src/components/layout/WorkspaceSidebar.tsx",
   "utf8",
 );
 sidebarSource = sidebarSource
   .replace('from "react"', `from "${reactUrl}"`)
+  .replace('from "react-dom"', `from "${reactDomUrl}"`)
   .replace(
     'import { fileProgressLabels, fileProgressStatuses } from "../../types";',
     'const fileProgressStatuses = ["todo", "writing", "revising", "done"];\nconst fileProgressLabels = { todo: "未着手", writing: "執筆中", revising: "推敲中", done: "完了" };',
@@ -30,6 +32,10 @@ sidebarSource = sidebarSource
   .replace(
     'import { logHeadingDnd } from "../../utils/headingDndDiagnostics";',
     "const logHeadingDnd = (...args) => globalThis.__headingLogs.push(args);",
+  )
+  .replace(
+    'import { getScaledFixedMenuPosition } from "../../utils/contextMenuPosition";',
+    "const getScaledFixedMenuPosition = (x, y) => ({ left: x, top: y });",
   );
 const sidebarCode = ts.transpileModule(
   `import React from "${reactUrl}";\n${sidebarSource}`,
@@ -43,9 +49,12 @@ const sidebarCode = ts.transpileModule(
 ).outputText;
 const sidebarUrl = `data:text/javascript;base64,${Buffer.from(sidebarCode).toString("base64")}`;
 
-const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", {
+const dom = new JSDOM(
+  "<!doctype html><html><body><div class='appShell'><div id='root'></div></div></body></html>",
+  {
   url: "http://127.0.0.1/",
-});
+  },
+);
 globalThis.window = dom.window;
 globalThis.document = dom.window.document;
 Object.defineProperty(globalThis, "navigator", {
@@ -503,6 +512,33 @@ assert.ok(
   fileButtonA && fileButtonB && fileRowA && fileRowC && destinationFolderRow,
   "multiple file drag fixtures must render",
 );
+
+const fileMoreButtonA = fileRowA.querySelector(".treeEntryMoreButton");
+fileMoreButtonA.getBoundingClientRect = () => ({
+  top: 20,
+  height: 24,
+  bottom: 44,
+  left: 280,
+  right: 304,
+  width: 24,
+  x: 280,
+  y: 20,
+  toJSON() {},
+});
+await act(async () => fileMoreButtonA.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+const portaledFileMenu = document.querySelector(".treeContextMenu");
+assert.ok(portaledFileMenu, "the file overflow button must open its menu");
+assert.equal(
+  portaledFileMenu.parentElement,
+  document.querySelector(".appShell"),
+  "the file menu must be portaled outside the clipping workspace sidebar",
+);
+assert.equal(
+  portaledFileMenu.closest(".workspaceSidebar"),
+  null,
+  "the file menu must not remain inside the sidebar overflow boundary",
+);
+await act(async () => window.dispatchEvent(new Event("pointerdown")));
 
 assert.equal(
   document.querySelectorAll(".selectedTreeEntry").length,
