@@ -12,6 +12,7 @@
     "test:heading-dnd-ui": "node scripts/test-heading-dnd-ui.mjs",
     "test:file-move": "node scripts/test-file-move.mjs",
     "test:breadcrumb": "node scripts/test-breadcrumb-navigation.mjs",
+    "test:ui-scale-layout": "node scripts/test-ui-scale-layout.mjs",
     "test:export": "node scripts/verify-export.mjs",
     "demo:record": "powershell -ExecutionPolicy Bypass -File scripts/demo/record-desktop.ps1",
     "demo:edit": "node scripts/demo/edit-video.mjs",

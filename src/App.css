@@ -420,8 +420,7 @@ textarea {
  * 文字サイズは --editor-font-size で独立して制御する。
  */
 .topbar,
-.workspaceActivityBar,
-.workspaceSidebar,
+.leftWorkspaceCluster,
 .rightSidebar,
 .statusbar,
 .treeContextMenu,
