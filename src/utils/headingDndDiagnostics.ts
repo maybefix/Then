@@ -7,6 +7,7 @@ export function logHeadingDnd(
   stage: string,
   details: Record<string, unknown> = {},
 ): void {
+  if (!import.meta.env.DEV) return;
   const entry = { stage, ...details, loggedAt: new Date().toISOString() };
   console.info("[heading-dnd]", entry);
   if (!("__TAURI_INTERNALS__" in window)) return;

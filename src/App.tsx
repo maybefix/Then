@@ -38,6 +38,8 @@ import {
   flattenOutline,
   getLineNumberAtOffset,
   hash16,
+  normalizeText,
+  updateDocumentAst,
 } from "./editor/ast/documentAst";
 import {
   extractHeadingSection,
@@ -52,7 +54,10 @@ import {
   removeProjectAstPaths,
   searchProjectAst,
   upsertProjectAstDocument,
+  upsertProjectAstDocumentAst,
+  upsertProjectAstDocumentAsts,
 } from "./editor/ast/projectAst";
+import { collectSnapshotConflictPaths } from "./editor/ast/snapshotConflicts";
 import {
   PlotPane,
   PlotPaneHeaderActions,
@@ -191,6 +196,7 @@ const PINNED_REFERENCE_Z_BASE = 10000;
 const NORMAL_REFERENCE_Z_LIMIT = PINNED_REFERENCE_Z_BASE - 1;
 const MAX_RECENT_REFERENCES = 30;
 const CANVAS_NEW_THREAD_TARGET = "__new__";
+const PROJECT_AST_INDEX_BATCH_SIZE = 12;
 
 type LayoutDirection = "start" | "center" | "end";
 
@@ -507,6 +513,7 @@ function AppIcon({ name, className = "" }: { name: AppIconName; className?: stri
 }
 
 function debugLog(message: string, data?: unknown): void {
+  if (!import.meta.env.DEV) return;
   const timestamp = new Date().toISOString();
   if (data === undefined) {
     console.log(`[folder-debug] ${timestamp} ${message}`);
@@ -2203,6 +2210,7 @@ export default function App() {
     name: string;
     text: string;
   } | null>(null);
+  const activeDocumentAstCacheRef = useRef<DocumentAst | null>(null);
 
   const [appState, setAppState] = useState<AppState>(() => createDefaultState());
   const [isHydrated, setIsHydrated] = useState(false);
@@ -3011,24 +3019,25 @@ export default function App() {
       .filter((snapshot) => isSamePath(snapshot.workspacePath, projectFolder.path))
       .sort((left, right) => right.createdAt - left.createdAt);
   }, [appState.snapshots, projectFolder]);
-  const snapshotConflictPaths = useMemo(() => {
-    return new Map(currentWorkspaceSnapshots.map((snapshot) => {
-      const conflicts = new Set<string>();
-      for (const file of snapshot.files) {
-        const key = normalizePathForCompare(file.path);
-        const currentFile = checkpointCurrentProjectFiles.get(key);
-        const currentHash = currentFile
-          ? createDocumentAst({
-              path: currentFile.path,
-              name: currentFile.name,
-              text: currentFile.text,
-            }).textHash
-          : null;
-        if (currentHash && currentHash !== file.textHash) conflicts.add(key);
-      }
-      return [snapshot.id, conflicts] as const;
-    }));
-  }, [checkpointCurrentProjectFiles, currentWorkspaceSnapshots]);
+  const checkpointCurrentTextHashes = useMemo(
+    () =>
+      new Map(
+        Array.from(checkpointCurrentProjectFiles.entries(), ([key, file]) => [
+          key,
+          hash16(normalizeText(file.text)),
+        ] as const),
+      ),
+    [checkpointCurrentProjectFiles],
+  );
+  const snapshotConflictPaths = useMemo(
+    () =>
+      collectSnapshotConflictPaths(
+        currentWorkspaceSnapshots,
+        checkpointCurrentTextHashes,
+        normalizePathForCompare,
+      ),
+    [checkpointCurrentTextHashes, currentWorkspaceSnapshots],
+  );
   const frontMatter = useMemo(() => parseFrontMatter(markdown), [markdown]);
   const editorText = frontMatter.body;
   activeDocumentSnapshotRef.current = {
@@ -3107,15 +3116,15 @@ export default function App() {
     if (!saved || saved.length !== editorText.length) return 0;
     return Math.min(saved.offset, editorText.length);
   }, [appState.cursorPositions, currentFilePath, editorText]);
-  const activeDocumentAst = useMemo(
-    () =>
-      createDocumentAst({
-        path: currentFilePath,
-        name: currentFileName,
-        text: editorText,
-      }),
-    [currentFileName, currentFilePath, editorText],
-  );
+  const activeDocumentAst = useMemo(() => {
+    const next = updateDocumentAst(activeDocumentAstCacheRef.current, {
+      path: currentFilePath,
+      name: currentFileName,
+      text: editorText,
+    });
+    activeDocumentAstCacheRef.current = next;
+    return next;
+  }, [currentFileName, currentFilePath, editorText]);
   const outlineItems = activeDocumentAst.outline;
   const outlineFlatItems = useMemo<FlatOutlineItem[]>(
     () => flattenOutline(outlineItems),
@@ -3327,14 +3336,10 @@ export default function App() {
 
     setProjectAst((current) =>
       current && current.rootPath === projectFolder.path
-        ? upsertProjectAstDocument(current, {
-            path: currentFilePath,
-            name: currentFileName,
-            text: editorText,
-          })
+        ? upsertProjectAstDocumentAst(current, activeDocumentAst)
         : current,
     );
-  }, [currentFileName, currentFilePath, editorText, projectFolder]);
+  }, [activeDocumentAst, currentFilePath, projectFolder]);
 
   useEffect(() => {
     if (!isHydrated || !isTauriRuntime() || !projectFolder) return;
@@ -3348,20 +3353,30 @@ export default function App() {
     setProjectAst((current) => createProjectAstSkeleton(projectFolder, current));
 
     const indexFiles = async () => {
+      const completedAsts: DocumentAst[] = [];
+      const flushCompletedAsts = () => {
+        if (completedAsts.length === 0) return;
+        const completedBatch = completedAsts.splice(0, completedAsts.length);
+        setProjectAst((current) =>
+          current && current.rootPath === projectFolder.path
+            ? upsertProjectAstDocumentAsts(current, completedBatch)
+            : current,
+        );
+      };
+
       for (const file of files) {
         if (isCancelled || projectAstBuildIdRef.current !== buildId) return;
 
         const activeSnapshot = activeDocumentSnapshotRef.current;
         if (activeSnapshot?.path === file.path) {
-          setProjectAst((current) =>
-            current && current.rootPath === projectFolder.path
-              ? upsertProjectAstDocument(current, {
-                  path: file.path,
-                  name: activeSnapshot.name || file.name,
-                  text: activeSnapshot.text,
-                })
-              : current,
+          completedAsts.push(
+            createDocumentAst({
+              path: file.path,
+              name: activeSnapshot.name || file.name,
+              text: activeSnapshot.text,
+            }),
           );
+          if (completedAsts.length >= PROJECT_AST_INDEX_BATCH_SIZE) flushCompletedAsts();
           continue;
         }
 
@@ -3379,17 +3394,17 @@ export default function App() {
               ? latestActiveSnapshot.name
               : document.name;
 
-          setProjectAst((current) =>
-            current && current.rootPath === projectFolder.path
-              ? upsertProjectAstDocument(current, {
-                  path: document.path,
-                  name,
-                  text,
-                })
-              : current,
+          completedAsts.push(
+            createDocumentAst({
+              path: document.path,
+              name,
+              text,
+            }),
           );
+          if (completedAsts.length >= PROJECT_AST_INDEX_BATCH_SIZE) flushCompletedAsts();
         } catch (error) {
           if (isCancelled || projectAstBuildIdRef.current !== buildId) return;
+          flushCompletedAsts();
           setProjectAst((current) =>
             current && current.rootPath === projectFolder.path
               ? markProjectAstFileError(current, file.path, error)
@@ -3397,6 +3412,7 @@ export default function App() {
           );
         }
       }
+      flushCompletedAsts();
     };
 
     void indexFiles();
@@ -3745,12 +3761,15 @@ export default function App() {
   }, []);
 
   const updateSelectionCharCount = useCallback(
-    (editor: TextEditorHandle | null) => {
+    (
+      editor: TextEditorHandle | null,
+      knownSelection?: { from: number; to: number; head: number },
+    ) => {
       if (!editor) {
         setSelectionCharCount(null);
         return;
       }
-      const selection = editor.getSelection();
+      const selection = knownSelection ?? editor.getSelection();
       if (selection.from === selection.to) {
         setSelectionCharCount(null);
         return;
@@ -3770,9 +3789,12 @@ export default function App() {
         // マウント時の選択復元は onReady より先に完了するため、ここで親側にも
         // 実位置を同期する。同期しないと以前の値（初期値0を含む）がカーソル保存へ
         // 流れ、次回のタブ復帰時に先頭として復元されることがある。
-        setEditorSelectionHead(editor.getSelection().head);
+        const selection = editor.getSelection();
+        setEditorSelectionHead(selection.head);
+        updateSelectionCharCount(editor, selection);
+        return;
       }
-      updateSelectionCharCount(editor);
+      updateSelectionCharCount(null);
     },
     [updateSelectionCharCount],
   );
@@ -3875,8 +3897,6 @@ export default function App() {
 
   const handleTextChange = useCallback((nextText: string, editorRevision: number) => {
     didMountEditorRef.current = true;
-    setCharCount(countDisplayCharacters(nextText, settings.countWhitespace));
-    updateSelectionCharCount(editorInstanceRef.current);
     if (suppressNextEditorUpdateRef.current) {
       suppressNextEditorUpdateRef.current = false;
       return;
@@ -3893,8 +3913,6 @@ export default function App() {
     markdown,
     setActiveMarkdown,
     setSaveStatus,
-    settings.countWhitespace,
-    updateSelectionCharCount,
   ]);
 
   useEffect(() => {
@@ -3946,9 +3964,12 @@ export default function App() {
   const handleSelectionChange = useCallback(() => {
     const editor = editorInstanceRef.current;
     if (editor) {
-      setEditorSelectionHead(editor.getSelection().head);
+      const selection = editor.getSelection();
+      setEditorSelectionHead(selection.head);
+      updateSelectionCharCount(editor, selection);
+      return;
     }
-    updateSelectionCharCount(editor);
+    updateSelectionCharCount(null);
     // 選択変化に伴うタイプライター再センタリングはエディタ内部に一本化した。
     // App 側の scheduleTypewriterScroll は設定・オフセット変更時の再適用専用に残す。
   }, [updateSelectionCharCount]);

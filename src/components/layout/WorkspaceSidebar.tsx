@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useState,
   useRef,
   type CSSProperties,
@@ -29,6 +30,11 @@ import {
   buildFilePreview,
   buildHeadingPreview,
 } from "../../utils/previewText";
+import {
+  buildSidebarMetrics,
+  getSidebarFolderCharCount,
+  getSidebarHeadingCharCount,
+} from "./sidebarMetrics";
 
 type WorkspaceSidebarProps = {
   projectFolder: ProjectFolder | null;
@@ -195,76 +201,6 @@ function getProjectAstStatusLabel(projectAst: ProjectAst | null): string {
 
 function formatCharCount(value: number): string {
   return `${new Intl.NumberFormat("ja-JP").format(value)}字`;
-}
-
-function countSourceCharacters(value: string, includeWhitespace: boolean): number {
-  const target = includeWhitespace ? value : value.replace(/[\s　]/g, "");
-  return Array.from(target).length;
-}
-
-function flattenOutlineItems(
-  items: DocumentOutlineItem[],
-): DocumentOutlineItem[] {
-  return items.flatMap((item) => [item, ...flattenOutlineItems(item.children)]);
-}
-
-/**
- * 見出し行から次の見出し直前までを、その見出し固有の区間として数える。
- * 親見出しに子見出しの本文を重複加算しないため、行ごとの合計が把握しやすい。
- */
-function getHeadingCharCount(
-  astFile: ProjectAstFile | null | undefined,
-  item: DocumentOutlineItem | OutlineItem,
-  includeWhitespace: boolean,
-): number | null {
-  const documentAst = astFile?.documentAst;
-  if (!documentAst) return null;
-  const blocks = documentAst.blocks;
-  if (!Array.isArray(blocks)) return null;
-  const headings = flattenOutlineItems(documentAst.outline).sort(
-    (left, right) => left.line - right.line,
-  );
-  const currentIndex = headings.findIndex(
-    (heading) => heading.blockId === item.blockId || heading.id === item.id,
-  );
-  if (currentIndex < 0) return null;
-  const startIndex = Math.max(0, item.line - 1);
-  const nextHeading = headings[currentIndex + 1];
-  const endIndex = nextHeading
-    ? Math.max(startIndex, nextHeading.line - 1)
-    : blocks.length;
-  const source = blocks
-    .slice(startIndex, endIndex)
-    .map((block) => block.source)
-    .join("\n");
-  const sectionSource = endIndex < blocks.length ? `${source}\n` : source;
-  return countSourceCharacters(sectionSource, includeWhitespace);
-}
-
-function getFolderCharCount(
-  folder: ProjectFolder | ProjectEntry,
-  astFiles: ReadonlyMap<string, ProjectAstFile>,
-  includeWhitespace: boolean,
-): number | null {
-  let descendantFileCount = 0;
-  let indexedFileCount = 0;
-  let total = 0;
-  const visit = (entries: ProjectEntry[]) => {
-    for (const entry of entries) {
-      if (entry.kind === "folder") {
-        visit(entry.children);
-        continue;
-      }
-      descendantFileCount += 1;
-      const astFile = astFiles.get(entry.path);
-      if (astFile?.status !== "indexed") continue;
-      indexedFileCount += 1;
-      total += includeWhitespace ? astFile.textLength : astFile.visibleTextLength;
-    }
-  };
-  visit(folder.children);
-  if (descendantFileCount > 0 && indexedFileCount === 0) return null;
-  return total;
 }
 
 function formatSnapshotDate(value: number): string {
@@ -628,9 +564,11 @@ export function WorkspaceSidebar({
     selectedFilePathsRef.current = next;
     setSelectedFilePaths(next);
   };
-  const projectAstFiles = new Map(
-    projectAst?.files.map((file) => [file.path, file] as const) ?? [],
+  const sidebarMetrics = useMemo(
+    () => buildSidebarMetrics(projectFolder, projectAst, countWhitespace),
+    [countWhitespace, projectAst, projectFolder],
   );
+  const projectAstFiles = sidebarMetrics.projectAstFiles;
 
   useEffect(() => {
     if (!contextMenu && !headingContextMenu) return undefined;
@@ -1299,7 +1237,7 @@ export function WorkspaceSidebar({
           ? headingDropTarget.position
           : null;
       const headingCharCount = filePath
-        ? getHeadingCharCount(projectAstFiles.get(filePath), item, countWhitespace)
+        ? getSidebarHeadingCharCount(sidebarMetrics, filePath, item)
         : null;
       const outlineIndent = 47 + treeDepth * 14 + headingDepth * 16;
       const childGuideIndent =
@@ -1496,7 +1434,7 @@ export function WorkspaceSidebar({
     const hasOutline = outline.length > 0;
     const isOutlineExpanded = hasOutline && !collapsedOutlinePaths.has(entry.path);
     const folderCharCount = isFolder
-      ? getFolderCharCount(entry, projectAstFiles, countWhitespace)
+      ? getSidebarFolderCharCount(sidebarMetrics, entry.path)
       : null;
     const charCountLabel = isFolder
       ? folderCharCount === null
@@ -1669,13 +1607,7 @@ export function WorkspaceSidebar({
     );
   };
 
-  const projectTotalCharCount = projectAst
-    ? projectAst.files.reduce(
-        (sum, file) =>
-          sum + (countWhitespace ? file.textLength : file.visibleTextLength),
-        0,
-      )
-    : null;
+  const projectTotalCharCount = sidebarMetrics.projectTotalCharCount;
 
   const renderOutlineMode = () => (
     <section className="sidebarSection outlineExplorerSection" aria-label="アウトライン">

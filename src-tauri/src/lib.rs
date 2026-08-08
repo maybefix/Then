@@ -336,7 +336,9 @@ struct CanvasBoardSummary {
 }
 
 fn debug_log(message: &str) {
-    eprintln!("[folder-debug] {message}");
+    if cfg!(debug_assertions) {
+        eprintln!("[folder-debug] {message}");
+    }
 }
 
 const LINKED_CHILD_WINDOW_LABELS: &[&str] = &["linked-export", "linked-export-viewer", "idea-canvas"];

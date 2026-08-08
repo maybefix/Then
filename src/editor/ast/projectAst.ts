@@ -10,11 +10,16 @@ import {
   hash16,
   normalizeText,
 } from "./documentAst";
+import {
+  createIndexedProjectAstFile,
+  rebuildProjectAstMetrics,
+  replaceProjectAstFile,
+  replaceProjectAstFiles,
+} from "./projectAstMetrics";
 import type {
   DocumentAst,
   ProjectAst,
   ProjectAstFile,
-  ProjectAstStatus,
   ProjectSearchMode,
   ProjectSearchResult,
 } from "./types";
@@ -74,21 +79,7 @@ function createProjectAstFileFromDocument(input: ProjectAstDocumentInput): Proje
     text: input.text,
     indexedAt: input.indexedAt,
   });
-
-  return {
-    path: input.path,
-    name: input.name,
-    status: "indexed",
-    documentAst,
-    textHash: documentAst.textHash,
-    semanticHash: documentAst.semanticHash,
-    lineCount: documentAst.lineCount,
-    textLength: documentAst.textLength,
-    visibleTextLength: documentAst.visibleTextLength,
-    outlineCount: flattenDocumentOutline(documentAst).length,
-    indexedAt: documentAst.indexedAt,
-    error: null,
-  };
+  return createIndexedProjectAstFile(documentAst);
 }
 
 function flattenDocumentOutline(documentAst: DocumentAst): DocumentAst["outline"] {
@@ -103,28 +94,6 @@ function flattenDocumentOutline(documentAst: DocumentAst): DocumentAst["outline"
 
   visit(documentAst.outline);
   return out;
-}
-
-function getProjectAstStatus(files: ProjectAstFile[]): ProjectAstStatus {
-  if (files.length === 0) return "empty";
-  if (files.some((file) => file.status === "pending")) return "indexing";
-  if (files.some((file) => file.status === "error")) return "partial";
-  return "ready";
-}
-
-function recomputeProjectAst(projectAst: ProjectAst): ProjectAst {
-  const files = projectAst.files;
-  return {
-    ...projectAst,
-    status: getProjectAstStatus(files),
-    indexedCount: files.filter((file) => file.status === "indexed").length,
-    pendingCount: files.filter((file) => file.status === "pending").length,
-    errorCount: files.filter((file) => file.status === "error").length,
-    totalTextLength: files.reduce((sum, file) => sum + file.textLength, 0),
-    totalLineCount: files.reduce((sum, file) => sum + file.lineCount, 0),
-    totalOutlineCount: files.reduce((sum, file) => sum + file.outlineCount, 0),
-    updatedAt: Date.now(),
-  };
 }
 
 export function createProjectAstSkeleton(
@@ -145,7 +114,7 @@ export function createProjectAstSkeleton(
     };
   });
 
-  return recomputeProjectAst({
+  return rebuildProjectAstMetrics({
     kind: "project",
     rootPath: folder.path,
     name: folder.name,
@@ -166,16 +135,27 @@ export function upsertProjectAstDocument(
   input: ProjectAstDocumentInput,
 ): ProjectAst {
   const nextFile = createProjectAstFileFromDocument(input);
-  const index = projectAst.files.findIndex((file) => file.path === input.path);
-  const files =
-    index >= 0
-      ? projectAst.files.map((file, fileIndex) => (fileIndex === index ? nextFile : file))
-      : [...projectAst.files, nextFile];
+  return replaceProjectAstFile(projectAst, nextFile);
+}
 
-  return recomputeProjectAst({
-    ...projectAst,
-    files,
-  });
+/** Reuses an AST already built for the active editor instead of parsing its text again. */
+export function upsertProjectAstDocumentAst(
+  projectAst: ProjectAst,
+  documentAst: DocumentAst,
+): ProjectAst {
+  if (!documentAst.path) return projectAst;
+  return replaceProjectAstFile(projectAst, createIndexedProjectAstFile(documentAst));
+}
+
+/** Applies an indexing batch with one project-array copy and one React state update. */
+export function upsertProjectAstDocumentAsts(
+  projectAst: ProjectAst,
+  documentAsts: readonly DocumentAst[],
+): ProjectAst {
+  const files = documentAsts
+    .filter((documentAst): documentAst is DocumentAst & { path: string } => Boolean(documentAst.path))
+    .map(createIndexedProjectAstFile);
+  return replaceProjectAstFiles(projectAst, files);
 }
 
 export function markProjectAstFileError(
@@ -184,20 +164,13 @@ export function markProjectAstFileError(
   error: unknown,
 ): ProjectAst {
   const errorMessage = error instanceof Error ? error.message : String(error);
-  const files = projectAst.files.map((file) =>
-    file.path === path
-      ? {
-          ...file,
-          status: "error" as const,
-          error: errorMessage,
-          indexedAt: Date.now(),
-        }
-      : file,
-  );
-
-  return recomputeProjectAst({
-    ...projectAst,
-    files,
+  const current = projectAst.files.find((file) => file.path === path);
+  if (!current) return projectAst;
+  return replaceProjectAstFile(projectAst, {
+    ...current,
+    status: "error",
+    error: errorMessage,
+    indexedAt: Date.now(),
   });
 }
 
@@ -210,7 +183,7 @@ export function removeProjectAstPaths(
     (file) => !deletedPaths.some((deletedPath) => isPathSameOrInside(file.path, deletedPath)),
   );
 
-  return recomputeProjectAst({
+  return rebuildProjectAstMetrics({
     ...projectAst,
     files,
   });

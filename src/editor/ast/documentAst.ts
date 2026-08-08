@@ -576,6 +576,14 @@ export function buildOutlineFromBlocks(blocks: LineNode[], sourceId = "document"
 export function createDocumentAst(input: DocumentAstInput): DocumentAst {
   const normalized = normalizeText(input.text);
   const blocks = parseDocumentBlocks(normalized);
+  return assembleDocumentAst(input, normalized, blocks);
+}
+
+function assembleDocumentAst(
+  input: DocumentAstInput,
+  normalized: string,
+  blocks: LineNode[],
+): DocumentAst {
   const outline = buildOutlineFromBlocks(blocks, input.path ?? input.name ?? "document");
   const semanticHash = hash16(blocks.map((block) => block.semanticHash).join("|"));
 
@@ -593,6 +601,76 @@ export function createDocumentAst(input: DocumentAstInput): DocumentAst {
     outline,
     indexedAt: input.indexedAt ?? Date.now(),
   };
+}
+
+/**
+ * Rebuilds document-level hashes and outline while parsing only changed lines.
+ * Unchanged blocks retain identity when their line index and source offsets do
+ * not move, which also lets downstream metric caches reuse their work.
+ */
+export function updateDocumentAst(
+  previous: DocumentAst | null,
+  input: DocumentAstInput,
+): DocumentAst {
+  if (!previous) return createDocumentAst(input);
+
+  const normalized = normalizeText(input.text);
+  const lines = normalized.split("\n");
+  const oldBlocks = previous.blocks;
+  const oldCount = oldBlocks.length;
+  const newCount = lines.length;
+  let prefixCount = 0;
+  const maxPrefix = Math.min(oldCount, newCount);
+  while (
+    prefixCount < maxPrefix &&
+    oldBlocks[prefixCount].source === lines[prefixCount]
+  ) {
+    prefixCount += 1;
+  }
+
+  let suffixCount = 0;
+  const maxSuffix = Math.min(oldCount - prefixCount, newCount - prefixCount);
+  while (
+    suffixCount < maxSuffix &&
+    oldBlocks[oldCount - 1 - suffixCount].source === lines[newCount - 1 - suffixCount]
+  ) {
+    suffixCount += 1;
+  }
+
+  const blocks: LineNode[] = [];
+  let offset = 0;
+  const changedEnd = newCount - suffixCount;
+  for (let index = 0; index < newCount; index += 1) {
+    const source = lines[index];
+    const oldIndex =
+      index < prefixCount
+        ? index
+        : index >= changedEnd
+          ? oldCount - (newCount - index)
+          : -1;
+    const oldBlock = oldIndex >= 0 ? oldBlocks[oldIndex] : null;
+    const to = offset + source.length;
+    if (
+      oldBlock &&
+      oldBlock.lineIndex === index &&
+      oldBlock.from === offset &&
+      oldBlock.to === to
+    ) {
+      blocks.push(oldBlock);
+    } else if (oldBlock) {
+      blocks.push({
+        ...oldBlock,
+        lineIndex: index,
+        from: offset,
+        to,
+      });
+    } else {
+      blocks.push(parseLineNode(source, index, offset));
+    }
+    offset = to + 1;
+  }
+
+  return assembleDocumentAst(input, normalized, blocks);
 }
 
 export function flattenOutline(

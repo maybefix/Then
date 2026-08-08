@@ -4,10 +4,20 @@
 
 Markdown / テキストファイルをそのまま原稿として扱いながら、本文執筆、構成管理、資料参照、保存点の比較・復元、PDF / DOCX出力までを一つのワークスペースで行えます。
 
-- 現在の開発バージョン: `v0.5.6`
+- 現在の開発バージョン: `v0.5.7`（試験的パフォーマンス改善版）
 - 対応環境: Windows x64
 - 技術構成: Tauri v2 + React + TypeScript + Vite + Tiptap / ProseMirror
 - 直近の公開版: [Then v0.5.6](https://github.com/maybefix/Then/releases/tag/v0.5.6)
+
+## v0.5.7の変更点（試験版）
+
+- 本文ASTを行単位で増分更新し、入力のたびに全行のMarkdown構文を再解析しないようにしました。見出し階層、文字数、ハッシュなどの文書全体の結果は従来どおり更新します。
+- 編集中の本文ASTをプロジェクト索引でも再利用し、同じ本文を一度の入力で二重解析しないようにしました。
+- 初回のプロジェクト索引をまとめて反映し、ファイルごとのReact再描画と全体集計を削減しました。
+- サイドバーのファイル、フォルダ、見出し文字数を事前集計し、表示更新時の繰り返し全文走査を除きました。
+- Idea Boardのポインター移動を画面フレーム単位にまとめ、ドラッグ中の過剰な状態更新を抑えました。
+- チェックポイント競合判定の本文ハッシュを一度だけ計算し、診断ログを開発ビルドだけに限定しました。
+- `npm run test:performance` を追加し、増分ASTの完全再構築との同値性、集計値、キャッシュ再利用、フレーム制御、リリース設定を検証します。
 
 ## v0.5.6の変更点
 
@@ -146,6 +156,7 @@ npm run dev:local
 
 ```powershell
 npm run build
+npm run test:performance
 npm run test:heading-move
 npm run test:heading-dnd-ui
 npm run test:export

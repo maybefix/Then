@@ -13,6 +13,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type WheelEvent,
 } from "react";
+import { createLatestFrameScheduler } from "./utils/latestFrameScheduler";
 import {
   CANVAS_LIVE_DATA_EVENT,
   createCanvasDocument,
@@ -1304,25 +1305,24 @@ export default function CanvasWindowApp({
   }, []);
 
   useEffect(() => {
-    const handlePointerMove = (event: PointerEvent) => {
+    const applyPointerMove = (point: { clientX: number; clientY: number }) => {
       const drag = dragStateRef.current;
       if (!drag) return;
-      event.preventDefault();
       if (drag.kind === "pan") {
         setPan({
-          x: drag.pan.x + event.clientX - drag.start.x,
-          y: drag.pan.y + event.clientY - drag.start.y,
+          x: drag.pan.x + point.clientX - drag.start.x,
+          y: drag.pan.y + point.clientY - drag.start.y,
         });
         return;
       }
       if (drag.kind === "marquee") {
-        const point = screenToWorld(event.clientX, event.clientY);
-        marqueePointRef.current = point;
+        const worldPoint = screenToWorld(point.clientX, point.clientY);
+        marqueePointRef.current = worldPoint;
         setMarqueeRect({
-          x: Math.min(drag.start.x, point.x),
-          y: Math.min(drag.start.y, point.y),
-          width: Math.abs(point.x - drag.start.x),
-          height: Math.abs(point.y - drag.start.y),
+          x: Math.min(drag.start.x, worldPoint.x),
+          y: Math.min(drag.start.y, worldPoint.y),
+          width: Math.abs(worldPoint.x - drag.start.x),
+          height: Math.abs(worldPoint.y - drag.start.y),
         });
         return;
       }
@@ -1331,8 +1331,8 @@ export default function CanvasWindowApp({
         drag.pushed = true;
       }
       if (drag.kind === "node") {
-        const dx = (event.clientX - drag.start.x) / zoom;
-        const dy = (event.clientY - drag.start.y) / zoom;
+        const dx = (point.clientX - drag.start.x) / zoom;
+        const dy = (point.clientY - drag.start.y) / zoom;
         patchBoard((current) => ({
           ...current,
           nodes: current.nodes.map((node) => {
@@ -1342,8 +1342,8 @@ export default function CanvasWindowApp({
         }));
         return;
       }
-      const dx = (event.clientX - drag.start.x) / zoom;
-      const dy = (event.clientY - drag.start.y) / zoom;
+      const dx = (point.clientX - drag.start.x) / zoom;
+      const dy = (point.clientY - drag.start.y) / zoom;
       patchBoard((current) => ({
         ...current,
         nodes: current.nodes.map((node) =>
@@ -1357,7 +1357,18 @@ export default function CanvasWindowApp({
         ),
       }));
     };
+    const pointerMoveScheduler = createLatestFrameScheduler(
+      (callback) => window.requestAnimationFrame(callback),
+      (id) => window.cancelAnimationFrame(id),
+      applyPointerMove,
+    );
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!dragStateRef.current) return;
+      event.preventDefault();
+      pointerMoveScheduler.schedule({ clientX: event.clientX, clientY: event.clientY });
+    };
     const clearDrag = () => {
+      pointerMoveScheduler.flush();
       const drag = dragStateRef.current;
       dragStateRef.current = null;
       if (drag?.kind !== "marquee") return;
@@ -1392,6 +1403,7 @@ export default function CanvasWindowApp({
     window.addEventListener("pointerup", clearDrag);
     window.addEventListener("pointercancel", clearDrag);
     return () => {
+      pointerMoveScheduler.cancel();
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", clearDrag);
       window.removeEventListener("pointercancel", clearDrag);

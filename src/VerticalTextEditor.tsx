@@ -218,8 +218,9 @@ function docToText(doc: PMNode): string {
   return topTexts(doc).join("\n");
 }
 
-function updateEmptyAttribute(editor: Editor): void {
-  editor.view.dom.dataset.empty = docToText(editor.state.doc).length === 0 ? "true" : "false";
+function updateEmptyAttribute(editor: Editor, knownText?: string): void {
+  const text = knownText ?? docToText(editor.state.doc);
+  editor.view.dom.dataset.empty = text.length === 0 ? "true" : "false";
   editor.view.dom.dataset.placeholder = PLACEHOLDER;
 }
 
@@ -2707,7 +2708,7 @@ export function VerticalTextEditor({
       onUpdate: ({ editor: currentEditor }) => {
         cancelInitialAdjustment();
         const next = docToText(currentEditor.state.doc);
-        updateEmptyAttribute(currentEditor);
+        updateEmptyAttribute(currentEditor, next);
         textRef.current = next;
         const nextRevision = ++localRevisionRef.current;
         onTextChangeRef.current(next, nextRevision);

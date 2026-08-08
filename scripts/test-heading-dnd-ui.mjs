@@ -36,6 +36,17 @@ sidebarSource = sidebarSource
   .replace(
     'import { getScaledFixedMenuPosition } from "../../utils/contextMenuPosition";',
     "const getScaledFixedMenuPosition = (x, y) => ({ left: x, top: y });",
+  )
+  .replace(
+    /import \{\s*buildSidebarMetrics,\s*getSidebarFolderCharCount,\s*getSidebarHeadingCharCount,\s*\} from "\.\/sidebarMetrics";/,
+    `const buildSidebarMetrics = (_folder, projectAst) => ({
+      projectAstFiles: new Map((projectAst?.files ?? []).map((file) => [file.path, file])),
+      folderCharCounts: new Map(),
+      headingCharCounts: new Map(),
+      projectTotalCharCount: projectAst?.totalTextLength ?? null,
+    });
+    const getSidebarFolderCharCount = () => null;
+    const getSidebarHeadingCharCount = () => null;`,
   );
 const sidebarCode = ts.transpileModule(
   `import React from "${reactUrl}";\n${sidebarSource}`,
