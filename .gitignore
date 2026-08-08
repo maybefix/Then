@@ -7,6 +7,7 @@ src-tauri/gen/
 test-artifacts/
 /tmp/
 /artifacts/demo/
+/target/qa/
 
 *.log
 *.tmp
