@@ -411,8 +411,8 @@ for (const targetCharacters of [10_000, 100_000, 500_000]) {
   });
 }
 
-// Characterize the initial-index batching race: a stale active AST collected
-// before typing can overwrite the fresh active AST when its batch commits later.
+// The initial-index batch must not overwrite a fresher active AST that was
+// committed while file reads were still in flight.
 const racePath = "C:\\fixture\\active.md";
 const staleActive = createDocumentAst({
   path: racePath,
@@ -441,10 +441,46 @@ raceProject = replaceProjectAstFile(raceProject, createIndexedProjectAstFile(fre
 raceProject = replaceProjectAstFiles(raceProject, [
   createIndexedProjectAstFile(staleActive),
   createIndexedProjectAstFile(raceOther),
-]);
+], { preserveNewerIndexed: true });
 const activeAfterLateBatch = raceProject.files.find((file) => file.path === racePath).documentAst;
-const staleBatchOverwriteDetected = activeAfterLateBatch.textHash === staleActive.textHash;
-assert.equal(staleBatchOverwriteDetected, true, "race characterization must remain reproducible");
+const staleBatchOverwritePrevented = activeAfterLateBatch.textHash === freshActive.textHash;
+assert.equal(
+  staleBatchOverwritePrevented,
+  true,
+  "a stale initial-index batch must preserve the fresher active document AST",
+);
+const sameTimestampStaleActive = createDocumentAst({
+  path: racePath,
+  name: "active.md",
+  text: "# old at same timestamp\nold body",
+  indexedAt: freshActive.indexedAt,
+});
+raceProject = replaceProjectAstFiles(
+  raceProject,
+  [createIndexedProjectAstFile(sameTimestampStaleActive)],
+  { preserveNewerIndexed: true },
+);
+assert.equal(
+  raceProject.files.find((file) => file.path === racePath).textHash,
+  freshActive.textHash,
+  "equal timestamps must conservatively preserve the AST already committed by the editor",
+);
+const newerIndexedActive = createDocumentAst({
+  path: racePath,
+  name: "active.md",
+  text: "# disk is newer\nnew disk body",
+  indexedAt: freshActive.indexedAt + 1,
+});
+raceProject = replaceProjectAstFiles(
+  raceProject,
+  [createIndexedProjectAstFile(newerIndexedActive)],
+  { preserveNewerIndexed: true },
+);
+assert.equal(
+  raceProject.files.find((file) => file.path === racePath).textHash,
+  newerIndexedActive.textHash,
+  "the freshness guard must still accept a genuinely newer indexed AST",
+);
 
 console.log(
   JSON.stringify(
@@ -459,8 +495,8 @@ console.log(
       snapshotCount: snapshots.length,
       scheduledPointerEvents: 1_000,
       performance: performanceResults,
-      characterizedSideEffects: {
-        staleInitialIndexBatchCanOverwriteFreshActiveAst: staleBatchOverwriteDetected,
+      concurrencyGuards: {
+        staleInitialIndexBatchPreservesFreshActiveAst: staleBatchOverwritePrevented,
       },
     },
     null,

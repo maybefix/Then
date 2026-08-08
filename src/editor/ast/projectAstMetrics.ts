@@ -63,11 +63,13 @@ export function createIndexedProjectAstFile(documentAst: DocumentAst): ProjectAs
 /**
  * Replaces several files while updating project totals by delta. Unlike a full
  * recomputation, this walks the project file array once regardless of the
- * number of aggregate fields.
+ * number of aggregate fields. Initial-index callers can preserve an indexed
+ * file that is at least as fresh as a delayed batch replacement.
  */
 export function replaceProjectAstFiles(
   projectAst: ProjectAst,
   replacements: readonly ProjectAstFile[],
+  options: { preserveNewerIndexed?: boolean } = {},
 ): ProjectAst {
   if (replacements.length === 0) return projectAst;
 
@@ -84,6 +86,16 @@ export function replaceProjectAstFiles(
     const index = indexByPath.get(replacement.path);
     const previous = index === undefined ? null : files[index];
     if (previous === replacement) continue;
+    if (
+      options.preserveNewerIndexed &&
+      previous?.status === "indexed" &&
+      replacement.status === "indexed" &&
+      previous.indexedAt !== null &&
+      replacement.indexedAt !== null &&
+      previous.indexedAt >= replacement.indexedAt
+    ) {
+      continue;
+    }
 
     if (previous) {
       const contribution = statusContribution(previous.status);

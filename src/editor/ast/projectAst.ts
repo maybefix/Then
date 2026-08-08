@@ -155,7 +155,10 @@ export function upsertProjectAstDocumentAsts(
   const files = documentAsts
     .filter((documentAst): documentAst is DocumentAst & { path: string } => Boolean(documentAst.path))
     .map(createIndexedProjectAstFile);
-  return replaceProjectAstFiles(projectAst, files);
+  // File reads finish asynchronously. Do not let an AST captured earlier in
+  // the initial-index batch overwrite a document updated by the editor while
+  // those reads were in flight.
+  return replaceProjectAstFiles(projectAst, files, { preserveNewerIndexed: true });
 }
 
 export function markProjectAstFileError(
