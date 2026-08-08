@@ -29,6 +29,7 @@ import {
   lineNumberFromTopLevelIndex,
   type TextEditorSelection,
 } from "./editor/selectionMetrics";
+import { updateTextFromLineDiff } from "./editor/lineTextUpdate";
 import type { TextEditorViewportState, WritingMode } from "./types";
 
 export type TextEditorHandle = {
@@ -133,6 +134,7 @@ type LineNode = {
 type AstPluginState = {
   lines: LineNode[];
   documentIndex: DocumentIndex | null;
+  text: string;
   decoSet: DecorationSet;
   activeIndex: number;
   visibleCenter: number;
@@ -700,23 +702,25 @@ function cloneLineNode(line: LineNode, lineIndex: number): LineNode {
   };
 }
 
-function diffLines(
-  oldLines: LineNode[],
-  newTexts: string[],
-): DocumentLineDiff {
-  const oldCount = oldLines.length;
-  const newCount = newTexts.length;
+function diffTopLevelNodes(oldDoc: PMNode, newDoc: PMNode): DocumentLineDiff {
+  const oldCount = oldDoc.childCount;
+  const newCount = newDoc.childCount;
   let head = 0;
   const maxHead = Math.min(oldCount, newCount);
 
-  while (head < maxHead && oldLines[head].source === newTexts[head]) head += 1;
+  while (head < maxHead) {
+    const oldNode = oldDoc.child(head);
+    const newNode = newDoc.child(head);
+    if (oldNode !== newNode && !oldNode.eq(newNode)) break;
+    head += 1;
+  }
 
   let tail = 0;
   const maxTail = Math.min(oldCount - head, newCount - head);
-  while (
-    tail < maxTail &&
-    oldLines[oldCount - 1 - tail].source === newTexts[newCount - 1 - tail]
-  ) {
+  while (tail < maxTail) {
+    const oldNode = oldDoc.child(oldCount - 1 - tail);
+    const newNode = newDoc.child(newCount - 1 - tail);
+    if (oldNode !== newNode && !oldNode.eq(newNode)) break;
     tail += 1;
   }
 
@@ -729,21 +733,22 @@ function diffLines(
 
 function incrementalLines(
   oldLines: LineNode[],
-  newTexts: string[],
+  newDoc: PMNode,
   diff: DocumentLineDiff,
 ): LineNode[] {
   const next: LineNode[] = [];
 
   for (let i = 0; i < diff.from; i += 1) {
-    next.push(cloneLineNode(oldLines[i], i));
+    next.push(oldLines[i]);
   }
 
   for (let i = diff.from; i < diff.toNew; i += 1) {
-    next.push(parseLineNode(newTexts[i], i));
+    next.push(parseLineNode(newDoc.child(i).textContent, i));
   }
 
   for (let oldIndex = diff.toOld; oldIndex < oldLines.length; oldIndex += 1) {
-    next.push(cloneLineNode(oldLines[oldIndex], next.length));
+    const oldLine = oldLines[oldIndex];
+    next.push(oldLine.lineIndex === next.length ? oldLine : cloneLineNode(oldLine, next.length));
   }
 
   return next;
@@ -1399,6 +1404,7 @@ function makeAstState(state: EditorState): AstPluginState {
   return {
     lines,
     documentIndex: import.meta.env.DEV ? createDocumentIndexFromLines(texts) : null,
+    text: texts.join("\n"),
     activeIndex,
     visibleCenter: activeIndex,
     decoSet: buildWindowDecos(state.doc, lines, activeIndex, activeIndex),
@@ -1407,11 +1413,12 @@ function makeAstState(state: EditorState): AstPluginState {
 
 function updateDocumentIndexWithShadow(
   previous: DocumentIndex | null,
-  newTexts: readonly string[],
+  newLines: readonly LineNode[],
   diff: DocumentLineDiff,
 ): DocumentIndex | null {
   if (!import.meta.env.DEV || !previous) return null;
 
+  const newTexts = newLines.map((line) => line.source);
   const incremental = updateDocumentIndex(previous, newTexts, diff);
   const rebuilt = createDocumentIndexFromLines(newTexts);
   if (areDocumentIndexesEquivalent(incremental, rebuilt)) return incremental;
@@ -1419,6 +1426,26 @@ function updateDocumentIndexWithShadow(
   console.error("[document-index-shadow] incremental metrics diverged; using full rebuild", {
     diff,
     incremental,
+    rebuilt,
+  });
+  return rebuilt;
+}
+
+function updateEditorTextWithShadow(
+  previousText: string,
+  oldLines: readonly LineNode[],
+  newLines: readonly LineNode[],
+  diff: DocumentLineDiff,
+): string {
+  const text = updateTextFromLineDiff(previousText, oldLines, newLines, diff);
+  if (!import.meta.env.DEV) return text;
+
+  const rebuilt = newLines.map((line) => line.source).join("\n");
+  if (text === rebuilt) return text;
+
+  console.error("[editor-text-shadow] incremental text diverged; using full materialization", {
+    diff,
+    text,
     rebuilt,
   });
   return rebuilt;
@@ -1455,16 +1482,17 @@ function applyAst(
     };
   }
 
-  const newTexts = topTexts(newState.doc);
-  const diff = diffLines(value.lines, newTexts);
-  const lines = incrementalLines(value.lines, newTexts, diff);
-  const documentIndex = updateDocumentIndexWithShadow(value.documentIndex, newTexts, diff);
+  const diff = diffTopLevelNodes(_oldState.doc, newState.doc);
+  const lines = incrementalLines(value.lines, newState.doc, diff);
+  const documentIndex = updateDocumentIndexWithShadow(value.documentIndex, lines, diff);
+  const text = updateEditorTextWithShadow(value.text, value.lines, lines, diff);
   const activeIndex = activeLineIndex(newState);
 
   if (tr.getMeta("composition") !== undefined) {
     return {
       lines,
       documentIndex,
+      text,
       activeIndex,
       visibleCenter,
       decoSet: value.decoSet.map(tr.mapping, newState.doc),
@@ -1474,6 +1502,7 @@ function applyAst(
   return {
     lines,
     documentIndex,
+    text,
     activeIndex,
     visibleCenter,
     decoSet: buildWindowDecos(newState.doc, lines, activeIndex, visibleCenter),
@@ -2738,7 +2767,7 @@ export function VerticalTextEditor({
       },
       onUpdate: ({ editor: currentEditor }) => {
         cancelInitialAdjustment();
-        const next = docToText(currentEditor.state.doc);
+        const next = astKey.getState(currentEditor.state)?.text ?? docToText(currentEditor.state.doc);
         updateEmptyAttribute(currentEditor, next);
         textRef.current = next;
         const nextRevision = ++localRevisionRef.current;

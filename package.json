@@ -16,6 +16,7 @@
     "test:performance": "node scripts/test-performance-regressions.mjs",
     "test:v057-deep": "node scripts/test-v057-deep-regression.mjs",
     "test:v058-counts": "node scripts/test-v058-character-counts.mjs",
+    "test:v058-editor-text": "node scripts/test-v058-editor-text.mjs",
     "test:v058-index": "node scripts/test-v058-document-index.mjs",
     "test:v058-selection": "node scripts/test-v058-selection-metrics.mjs",
     "test:export": "node scripts/verify-export.mjs",
