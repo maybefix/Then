@@ -19,6 +19,13 @@ import {
 } from "@tiptap/pm/view";
 import { useEffect, useMemo, useRef } from "react";
 import {
+  areDocumentIndexesEquivalent,
+  createDocumentIndexFromLines,
+  updateDocumentIndex,
+  type DocumentIndex,
+  type DocumentLineDiff,
+} from "./editor/documentIndex";
+import {
   lineNumberFromTopLevelIndex,
   type TextEditorSelection,
 } from "./editor/selectionMetrics";
@@ -125,6 +132,7 @@ type LineNode = {
 
 type AstPluginState = {
   lines: LineNode[];
+  documentIndex: DocumentIndex | null;
   decoSet: DecorationSet;
   activeIndex: number;
   visibleCenter: number;
@@ -685,12 +693,6 @@ function parseLineNode(text: string, index: number): LineNode {
   };
 }
 
-function parseDoc(text: string): LineNode[] {
-  return normalizeText(text)
-    .split("\n")
-    .map((line, index) => parseLineNode(line, index));
-}
-
 function cloneLineNode(line: LineNode, lineIndex: number): LineNode {
   return {
     ...line,
@@ -701,7 +703,7 @@ function cloneLineNode(line: LineNode, lineIndex: number): LineNode {
 function diffLines(
   oldLines: LineNode[],
   newTexts: string[],
-): { from: number; toOld: number; toNew: number } {
+): DocumentLineDiff {
   const oldCount = oldLines.length;
   const newCount = newTexts.length;
   let head = 0;
@@ -728,7 +730,7 @@ function diffLines(
 function incrementalLines(
   oldLines: LineNode[],
   newTexts: string[],
-  diff: { from: number; toOld: number; toNew: number },
+  diff: DocumentLineDiff,
 ): LineNode[] {
   const next: LineNode[] = [];
 
@@ -1391,14 +1393,35 @@ function buildWindowDecos(
 }
 
 function makeAstState(state: EditorState): AstPluginState {
-  const lines = parseDoc(docToText(state.doc));
+  const texts = topTexts(state.doc);
+  const lines = texts.map((line, index) => parseLineNode(line, index));
   const activeIndex = activeLineIndex(state);
   return {
     lines,
+    documentIndex: import.meta.env.DEV ? createDocumentIndexFromLines(texts) : null,
     activeIndex,
     visibleCenter: activeIndex,
     decoSet: buildWindowDecos(state.doc, lines, activeIndex, activeIndex),
   };
+}
+
+function updateDocumentIndexWithShadow(
+  previous: DocumentIndex | null,
+  newTexts: readonly string[],
+  diff: DocumentLineDiff,
+): DocumentIndex | null {
+  if (!import.meta.env.DEV || !previous) return null;
+
+  const incremental = updateDocumentIndex(previous, newTexts, diff);
+  const rebuilt = createDocumentIndexFromLines(newTexts);
+  if (areDocumentIndexesEquivalent(incremental, rebuilt)) return incremental;
+
+  console.error("[document-index-shadow] incremental metrics diverged; using full rebuild", {
+    diff,
+    incremental,
+    rebuilt,
+  });
+  return rebuilt;
 }
 
 function applyAst(
@@ -1435,11 +1458,13 @@ function applyAst(
   const newTexts = topTexts(newState.doc);
   const diff = diffLines(value.lines, newTexts);
   const lines = incrementalLines(value.lines, newTexts, diff);
+  const documentIndex = updateDocumentIndexWithShadow(value.documentIndex, newTexts, diff);
   const activeIndex = activeLineIndex(newState);
 
   if (tr.getMeta("composition") !== undefined) {
     return {
       lines,
+      documentIndex,
       activeIndex,
       visibleCenter,
       decoSet: value.decoSet.map(tr.mapping, newState.doc),
@@ -1448,6 +1473,7 @@ function applyAst(
 
   return {
     lines,
+    documentIndex,
     activeIndex,
     visibleCenter,
     decoSet: buildWindowDecos(newState.doc, lines, activeIndex, visibleCenter),

@@ -15,6 +15,7 @@
     "test:ui-scale-layout": "node scripts/test-ui-scale-layout.mjs",
     "test:performance": "node scripts/test-performance-regressions.mjs",
     "test:v057-deep": "node scripts/test-v057-deep-regression.mjs",
+    "test:v058-index": "node scripts/test-v058-document-index.mjs",
     "test:v058-selection": "node scripts/test-v058-selection-metrics.mjs",
     "test:export": "node scripts/verify-export.mjs",
     "demo:record": "powershell -ExecutionPolicy Bypass -File scripts/demo/record-desktop.ps1",
