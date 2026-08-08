@@ -36,7 +36,6 @@ import {
   createDocumentAst,
   findActiveOutlineChain,
   flattenOutline,
-  getLineNumberAtOffset,
   hash16,
   normalizeText,
   updateDocumentAst,
@@ -2262,6 +2261,7 @@ export default function App() {
   const [charCount, setCharCount] = useState(0);
   const [selectionCharCount, setSelectionCharCount] = useState<number | null>(null);
   const [editorSelectionHead, setEditorSelectionHead] = useState(0);
+  const [editorSelectionLine, setEditorSelectionLine] = useState(1);
   const [editorContextMenu, setEditorContextMenu] =
     useState<EditorContextMenuState | null>(null);
   const [notationModal, setNotationModal] = useState<NotationModalState | null>(null);
@@ -3130,10 +3130,7 @@ export default function App() {
     () => flattenOutline(outlineItems),
     [outlineItems],
   );
-  const activeEditorLine = useMemo(
-    () => getLineNumberAtOffset(editorText, editorSelectionHead),
-    [editorSelectionHead, editorText],
-  );
+  const activeEditorLine = editorSelectionLine;
   const activeOutlineChain = useMemo(
     () => findActiveOutlineChain(outlineItems, activeEditorLine),
     [activeEditorLine, outlineItems],
@@ -3791,6 +3788,7 @@ export default function App() {
         // 流れ、次回のタブ復帰時に先頭として復元されることがある。
         const selection = editor.getSelection();
         setEditorSelectionHead(selection.head);
+        setEditorSelectionLine(selection.line);
         updateSelectionCharCount(editor, selection);
         return;
       }
@@ -3966,6 +3964,7 @@ export default function App() {
     if (editor) {
       const selection = editor.getSelection();
       setEditorSelectionHead(selection.head);
+      setEditorSelectionLine(selection.line);
       updateSelectionCharCount(editor, selection);
       return;
     }

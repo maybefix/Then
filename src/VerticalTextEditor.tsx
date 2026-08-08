@@ -18,12 +18,16 @@ import {
   type EditorView,
 } from "@tiptap/pm/view";
 import { useEffect, useMemo, useRef } from "react";
+import {
+  lineNumberFromTopLevelIndex,
+  type TextEditorSelection,
+} from "./editor/selectionMetrics";
 import type { TextEditorViewportState, WritingMode } from "./types";
 
 export type TextEditorHandle = {
   focus: () => void;
   getValue: () => string;
-  getSelection: () => { from: number; to: number; head: number };
+  getSelection: () => TextEditorSelection;
   selectRange: (from: number, to: number) => void;
   replaceRange: (from: number, to: number, insert: string, cursorPos?: number) => void;
   jumpToLine: (line: number) => void;
@@ -1526,12 +1530,13 @@ function pmPosFromTextOffset(doc: PMNode, offset: number): number {
   return lastStart + 1 + doc.child(lastIndex).content.size;
 }
 
-function getTextSelection(editor: Editor): { from: number; to: number; head: number } {
+function getTextSelection(editor: Editor): TextEditorSelection {
   const selection = editor.state.selection;
   return {
     from: textOffsetFromPmPos(editor.state.doc, selection.from),
     to: textOffsetFromPmPos(editor.state.doc, selection.to),
     head: textOffsetFromPmPos(editor.state.doc, selection.head),
+    line: lineNumberFromTopLevelIndex(selection.$head.index(0)),
   };
 }
 
@@ -2066,7 +2071,7 @@ export function VerticalTextEditor({
       },
       getSelection: () => {
         const editor = tiptapRef.current;
-        return editor ? getTextSelection(editor) : { from: 0, to: 0, head: 0 };
+        return editor ? getTextSelection(editor) : { from: 0, to: 0, head: 0, line: 1 };
       },
       selectRange: (from, to) => {
         cancelInitialAdjustmentRef.current?.();

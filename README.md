@@ -4,10 +4,15 @@
 
 Markdown / テキストファイルをそのまま原稿として扱いながら、本文執筆、構成管理、資料参照、保存点の比較・復元、PDF / DOCX出力までを一つのワークスペースで行えます。
 
-- 現在の開発バージョン: `v0.5.7`（試験的パフォーマンス改善版）
+- 現在の開発バージョン: `v0.5.8`（増分DocumentIndex開発版）
 - 対応環境: Windows x64
 - 技術構成: Tauri v2 + React + TypeScript + Vite + Tiptap / ProseMirror
 - 直近の公開版: [Then v0.5.6](https://github.com/maybefix/Then/releases/tag/v0.5.6)
+
+## v0.5.8の変更点（開発中）
+
+- キャレットの現在行をProseMirrorの段落indexから直接取得し、選択更新ごとの本文先頭走査を除きました。
+- 今後の増分DocumentIndex移行に向けて、新旧結果を比較できるテストを段階的に追加します。
 
 ## v0.5.7の変更点（試験版）
 
