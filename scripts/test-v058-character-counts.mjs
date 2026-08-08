@@ -40,6 +40,26 @@ assert.equal(
   "updated visible total remains exact",
 );
 
+const sectionAst = createDocumentAst({
+  text: "# A\nab\n## B\nc d\n# C\n終",
+  name: "sections.md",
+  indexedAt: 3,
+});
+const sectionHeadings = [
+  sectionAst.outline[0],
+  sectionAst.outline[0].children[0],
+  sectionAst.outline[1],
+];
+assert.deepEqual(
+  sectionHeadings.map((item) => [item.title, item.sectionTextLength, item.sectionVisibleTextLength]),
+  [
+    ["A", 7, 4],
+    ["B", 9, 5],
+    ["C", 5, 3],
+  ],
+  "each heading stores the exact range count through the line before the next heading",
+);
+
 const documentAstSource = await readFile("src/editor/ast/documentAst.ts", "utf8");
 assert.doesNotMatch(
   documentAstSource,
@@ -67,13 +87,13 @@ assert.doesNotMatch(
 const sidebarSource = await readFile("src/components/layout/sidebarMetrics.ts", "utf8");
 assert.match(
   sidebarSource,
-  /includeWhitespace \? blocks\[index\]\.textLength : blocks\[index\]\.visibleTextLength/,
-  "heading prefixes must reuse per-line character metrics",
+  /includeWhitespace \? item\.sectionTextLength : item\.sectionVisibleTextLength/,
+  "heading counts must read the range aggregate stored on each outline item",
 );
 assert.doesNotMatch(
   sidebarSource,
-  /countCharacters\(blocks\[index\]\.source/,
-  "heading prefix construction must not rescan each source line",
+  /const prefix = new Array<number>/,
+  "sidebar updates must not rebuild a document-wide line prefix",
 );
 
 const editorSource = await readFile("src/VerticalTextEditor.tsx", "utf8");

@@ -35,29 +35,13 @@ function buildHeadingCounts(
   documentAst: NonNullable<ProjectAstFile["documentAst"]>,
   includeWhitespace: boolean,
 ): ReadonlyMap<string, number> {
-  const blocks = documentAst.blocks;
   const headings = flattenOutline(documentAst.outline);
-  const prefix = new Array<number>(blocks.length + 1).fill(0);
-
-  for (let index = 0; index < blocks.length; index += 1) {
-    const newlineCount = includeWhitespace && index < blocks.length - 1 ? 1 : 0;
-    prefix[index + 1] =
-      prefix[index] +
-      (includeWhitespace ? blocks[index].textLength : blocks[index].visibleTextLength) +
-      newlineCount;
-  }
 
   const counts = new Map<string, number>();
-  for (let index = 0; index < headings.length; index += 1) {
-    const heading = headings[index];
-    const start = Math.max(0, Math.min(blocks.length, heading.line - 1));
-    const nextHeading = headings[index + 1];
-    const end = nextHeading
-      ? Math.max(start, Math.min(blocks.length, nextHeading.line - 1))
-      : blocks.length;
-    const count = prefix[end] - prefix[start];
-    counts.set(heading.blockId, count);
-    counts.set(heading.id, count);
+  for (const item of headings) {
+    const count = includeWhitespace ? item.sectionTextLength : item.sectionVisibleTextLength;
+    counts.set(item.blockId, count);
+    counts.set(item.id, count);
   }
   return counts;
 }

@@ -63,6 +63,10 @@ export type DocumentOutlineItem = {
   title: string;
   level: number;
   line: number;
+  /** Character count from this heading through the line before the next heading. */
+  sectionTextLength: number;
+  /** The same heading range count excluding half/full-width whitespace. */
+  sectionVisibleTextLength: number;
   children: DocumentOutlineItem[];
 };
 

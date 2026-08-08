@@ -554,33 +554,44 @@ function normalizeHeadingTitle(text: string): string {
 export function buildOutlineFromBlocks(blocks: LineNode[], sourceId = "document"): DocumentOutlineItem[] {
   const roots: DocumentOutlineItem[] = [];
   const stack: DocumentOutlineItem[] = [];
+  let currentSection: DocumentOutlineItem | null = null;
 
-  for (const block of blocks) {
-    if (block.kind !== "heading") continue;
+  for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
+    const block = blocks[blockIndex];
+    if (block.kind === "heading") {
+      const title = normalizeHeadingTitle(block.text);
+      if (title) {
+        const item: DocumentOutlineItem = {
+          id: `${sourceId}:${block.lineIndex + 1}:${block.level}:${hash16(title)}`,
+          blockId: block.id,
+          title,
+          level: block.level,
+          line: block.lineIndex + 1,
+          sectionTextLength: 0,
+          sectionVisibleTextLength: 0,
+          children: [],
+        };
 
-    const title = normalizeHeadingTitle(block.text);
-    if (!title) continue;
+        while (stack.length && stack[stack.length - 1].level >= item.level) {
+          stack.pop();
+        }
 
-    const item: DocumentOutlineItem = {
-      id: `${sourceId}:${block.lineIndex + 1}:${block.level}:${hash16(title)}`,
-      blockId: block.id,
-      title,
-      level: block.level,
-      line: block.lineIndex + 1,
-      children: [],
-    };
-
-    while (stack.length && stack[stack.length - 1].level >= item.level) {
-      stack.pop();
+        const parent = stack[stack.length - 1];
+        if (parent) {
+          parent.children.push(item);
+        } else {
+          roots.push(item);
+        }
+        stack.push(item);
+        currentSection = item;
+      }
     }
 
-    const parent = stack[stack.length - 1];
-    if (parent) {
-      parent.children.push(item);
-    } else {
-      roots.push(item);
+    if (currentSection) {
+      currentSection.sectionTextLength +=
+        block.textLength + (blockIndex < blocks.length - 1 ? 1 : 0);
+      currentSection.sectionVisibleTextLength += block.visibleTextLength;
     }
-    stack.push(item);
   }
 
   return roots;

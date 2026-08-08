@@ -1327,7 +1327,9 @@ export function WorkspaceSidebar({
                   new Map([[key, headingSelection]]),
                 );
               }
-              filePath ? onJumpProjectOutline(filePath, item) : onJumpOutline(item);
+              filePath
+                ? onJumpProjectOutline(filePath, item as DocumentOutlineItem)
+                : onJumpOutline(item);
             }}
             onPointerDown={() => {
               if (!filePath) return;
