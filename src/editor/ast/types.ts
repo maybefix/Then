@@ -49,6 +49,10 @@ export type LineNode = {
   lineIndex: number;
   from: number;
   to: number;
+  /** Unicode code-point count including whitespace. */
+  textLength: number;
+  /** Unicode code-point count excluding half/full-width whitespace. */
+  visibleTextLength: number;
   length: number;
   inlineMarkups: InlineMarkup[];
 };

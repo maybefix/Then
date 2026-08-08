@@ -449,6 +449,16 @@ function cleanLineTextForAst(text: string): string {
     .replace(/^>>\s*/, "");
 }
 
+function measureLineCharacters(text: string): {
+  textLength: number;
+  visibleTextLength: number;
+} {
+  return {
+    textLength: Array.from(text).length,
+    visibleTextLength: Array.from(text.replace(/[\s　]/g, "")).length,
+  };
+}
+
 export function parseLineNode(text: string, index: number, from = 0): LineNode {
   let kind: LineKind = "paragraph";
   let level = 0;
@@ -505,6 +515,7 @@ export function parseLineNode(text: string, index: number, from = 0): LineNode {
     if (align === "end") jitsuki = true;
   }
 
+  const characterMetrics = measureLineCharacters(text);
   return {
     id: hash16(`L|${kind}|${level}|${align || ""}|${text}`),
     semanticHash: hash16(`S|${kind}|${level}|${align || ""}|${cleanText}`),
@@ -518,6 +529,8 @@ export function parseLineNode(text: string, index: number, from = 0): LineNode {
     lineIndex: index,
     from,
     to: from + text.length,
+    textLength: characterMetrics.textLength,
+    visibleTextLength: characterMetrics.visibleTextLength,
     length: text.length,
     inlineMarkups,
   };
@@ -585,7 +598,15 @@ function assembleDocumentAst(
   blocks: LineNode[],
 ): DocumentAst {
   const outline = buildOutlineFromBlocks(blocks, input.path ?? input.name ?? "document");
-  const semanticHash = hash16(blocks.map((block) => block.semanticHash).join("|"));
+  const semanticParts: string[] = [];
+  let textLength = Math.max(0, blocks.length - 1);
+  let visibleTextLength = 0;
+  for (const block of blocks) {
+    semanticParts.push(block.semanticHash);
+    textLength += block.textLength;
+    visibleTextLength += block.visibleTextLength;
+  }
+  const semanticHash = hash16(semanticParts.join("|"));
 
   return {
     kind: "document",
@@ -594,8 +615,8 @@ function assembleDocumentAst(
     name: input.name ?? input.path?.split(/[\\/]/).pop() ?? "untitled.txt",
     textHash: hash16(normalized),
     semanticHash,
-    textLength: Array.from(normalized).length,
-    visibleTextLength: Array.from(normalized.replace(/[\s　]/g, "")).length,
+    textLength,
+    visibleTextLength,
     lineCount: blocks.length,
     blocks,
     outline,

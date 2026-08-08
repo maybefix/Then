@@ -19,11 +19,6 @@ type HeadingCountCacheEntry = {
 
 const headingCountCache = new WeakMap<object, HeadingCountCacheEntry>();
 
-function countCharacters(value: string, includeWhitespace: boolean): number {
-  const target = includeWhitespace ? value : value.replace(/[\s　]/g, "");
-  return Array.from(target).length;
-}
-
 function flattenOutline(items: DocumentOutlineItem[]): DocumentOutlineItem[] {
   const result: DocumentOutlineItem[] = [];
   const visit = (current: DocumentOutlineItem[]) => {
@@ -47,7 +42,9 @@ function buildHeadingCounts(
   for (let index = 0; index < blocks.length; index += 1) {
     const newlineCount = includeWhitespace && index < blocks.length - 1 ? 1 : 0;
     prefix[index + 1] =
-      prefix[index] + countCharacters(blocks[index].source, includeWhitespace) + newlineCount;
+      prefix[index] +
+      (includeWhitespace ? blocks[index].textLength : blocks[index].visibleTextLength) +
+      newlineCount;
   }
 
   const counts = new Map<string, number>();

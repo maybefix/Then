@@ -471,9 +471,14 @@ assert.doesNotMatch(
   "the editor callback must not duplicate character and selection counts performed by its effects/events",
 );
 assert.match(
-  textChangeHandlerSource,
-  /setCharCount\(countDisplayCharacters\(editorText, settings\.countWhitespace\)\)/,
-  "character counts must still update after every editor text change",
+  appSource,
+  /const charCount = settings\.countWhitespace\s*\? activeDocumentAst\.textLength\s*:\s*activeDocumentAst\.visibleTextLength;/,
+  "character counts must update from the active incremental Document AST",
+);
+assert.doesNotMatch(
+  appSource,
+  /setCharCount\(countDisplayCharacters\(editorText/,
+  "character count updates must not restore a complete editor-text scan",
 );
 
 const editorSource = await readFile("src/VerticalTextEditor.tsx", "utf8");

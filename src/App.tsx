@@ -2258,7 +2258,6 @@ export default function App() {
     useState<string | null>(null);
   const [breadcrumbDropTarget, setBreadcrumbDropTarget] =
     useState<BreadcrumbDropTarget>(null);
-  const [charCount, setCharCount] = useState(0);
   const [selectionCharCount, setSelectionCharCount] = useState<number | null>(null);
   const [editorSelectionHead, setEditorSelectionHead] = useState(0);
   const [editorSelectionLine, setEditorSelectionLine] = useState(1);
@@ -3125,6 +3124,9 @@ export default function App() {
     activeDocumentAstCacheRef.current = next;
     return next;
   }, [currentFileName, currentFilePath, editorText]);
+  const charCount = settings.countWhitespace
+    ? activeDocumentAst.textLength
+    : activeDocumentAst.visibleTextLength;
   const outlineItems = activeDocumentAst.outline;
   const outlineFlatItems = useMemo<FlatOutlineItem[]>(
     () => flattenOutline(outlineItems),
@@ -3912,10 +3914,6 @@ export default function App() {
     setActiveMarkdown,
     setSaveStatus,
   ]);
-
-  useEffect(() => {
-    setCharCount(countDisplayCharacters(editorText, settings.countWhitespace));
-  }, [editorText, settings.countWhitespace]);
 
   useEffect(() => {
     updateSelectionCharCount(editorInstanceRef.current);
@@ -8879,7 +8877,7 @@ export default function App() {
                 projectFolder={projectFolder}
                 currentFilePath={currentFilePath}
                 currentFileName={currentFileName}
-                currentFileCharCount={countDisplayCharacters(editorText, settings.countWhitespace)}
+                currentFileCharCount={charCount}
                 focusedFolderPath={focusedFolderPath}
                 activeDocumentOutline={outlineItems}
                 activeOutlineIds={activeOutlineIds}
