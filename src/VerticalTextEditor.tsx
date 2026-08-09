@@ -30,6 +30,7 @@ import {
   type TextEditorSelection,
 } from "./editor/selectionMetrics";
 import { updateTextFromLineDiff } from "./editor/lineTextUpdate";
+import { lineDiffFromSelectionTransaction } from "./editor/transactionLineDiff";
 import type { TextEditorViewportState, WritingMode } from "./types";
 
 export type TextEditorHandle = {
@@ -54,6 +55,7 @@ type VerticalTextEditorProps = {
   editorRevision: number | null;
   writingMode: WritingMode;
   typewriterScroll: boolean;
+  showTypewriterGuide: boolean;
   typewriterOffset: number;
   showLineBreakMarks: boolean;
   /** マウント時に復元するカーソル位置（本文先頭からの文字オフセット）。 */
@@ -1482,7 +1484,8 @@ function applyAst(
     };
   }
 
-  const diff = diffTopLevelNodes(_oldState.doc, newState.doc);
+  const diff = lineDiffFromSelectionTransaction(tr, _oldState, newState)
+    ?? diffTopLevelNodes(_oldState.doc, newState.doc);
   const lines = incrementalLines(value.lines, newState.doc, diff);
   const documentIndex = updateDocumentIndexWithShadow(value.documentIndex, lines, diff);
   const text = updateEditorTextWithShadow(value.text, value.lines, lines, diff);
@@ -2004,6 +2007,7 @@ export function VerticalTextEditor({
   editorRevision,
   writingMode,
   typewriterScroll,
+  showTypewriterGuide,
   typewriterOffset,
   showLineBreakMarks,
   initialSelectionOffset,
@@ -2984,7 +2988,7 @@ export function VerticalTextEditor({
         <div ref={editorHostRef} className="verticalTypewriterEditor" />
         <div ref={lineBreakLayerRef} className="visibleLineBreakLayer" aria-hidden="true" />
       </div>
-      {typewriterScroll && <div className="verticalTypewriterGuide" />}
+      {typewriterScroll && showTypewriterGuide && <div className="verticalTypewriterGuide" />}
     </div>
   );
 }

@@ -13,6 +13,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { manageAsyncRegistration } from "./utils/asyncRegistration";
 import { VerticalTextEditor, type TextEditorHandle } from "./VerticalTextEditor";
 import { AppDialogModal } from "./components/dialogs/AppDialogModal";
 import { CommandPalette, type PaletteCommand } from "./components/dialogs/CommandPalette";
@@ -806,6 +807,7 @@ const defaultSettings: EditorSettings = {
   headingFontSource: "body",
   headingFontFamily: toCssFontFamilyValue("Noto Sans JP"),
   typewriterScroll: true,
+  showTypewriterGuide: true,
   typewriterOffset: 46,
   showLineBreakMarks: false,
   snippetStorageMode: "workspace",
@@ -1934,6 +1936,10 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         typeof settings.typewriterScroll === "boolean"
           ? settings.typewriterScroll
           : defaultSettings.typewriterScroll,
+      showTypewriterGuide:
+        typeof settings.showTypewriterGuide === "boolean"
+          ? settings.showTypewriterGuide
+          : defaultSettings.showTypewriterGuide,
       typewriterOffset:
         typeof settings.typewriterOffset === "number" && Number.isFinite(settings.typewriterOffset)
           ? Math.min(65, Math.max(30, settings.typewriterOffset))
@@ -2200,7 +2206,9 @@ export default function App() {
   const breadcrumbMenuRef = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const didMountEditorRef = useRef(false);
-  const suppressNextEditorUpdateRef = useRef(false);
+  const handleProjectFileSelectRef = useRef<(path: string) => Promise<void>>(
+    async () => undefined,
+  );
   const lastSavedMarkdownRef = useRef(initialMarkdown);
   const breadcrumbDragEntryRef = useRef<{ folderPath: string; entryPath: string } | null>(null);
   const projectAstBuildIdRef = useRef(0);
@@ -2775,7 +2783,6 @@ export default function App() {
         ),
       );
     }
-    suppressNextEditorUpdateRef.current = true;
     didMountEditorRef.current = false;
     lastSavedMarkdownRef.current = tab.savedMarkdown;
     setActiveTabId(tab.id);
@@ -3425,7 +3432,6 @@ export default function App() {
     state: AppState,
     alert: WorkspaceAlert = null,
   ) => {
-    suppressNextEditorUpdateRef.current = true;
     didMountEditorRef.current = false;
     setProjectFolder(null);
     setSnippetWorkspacePath(null);
@@ -3481,7 +3487,6 @@ export default function App() {
           ? state.lastFilePath
           : findFirstTextFile(folder.children)?.path ?? null;
 
-      suppressNextEditorUpdateRef.current = true;
       didMountEditorRef.current = false;
       if (filePath) {
         const document = await invoke<TextDocument>("read_text_file", { path: filePath });
@@ -3897,10 +3902,6 @@ export default function App() {
 
   const handleTextChange = useCallback((nextText: string, editorRevision: number) => {
     didMountEditorRef.current = true;
-    if (suppressNextEditorUpdateRef.current) {
-      suppressNextEditorUpdateRef.current = false;
-      return;
-    }
     const nextFullText = updateMarkdownBody(markdown, nextText);
     if (markdown !== nextFullText) {
       setActiveMarkdown(nextFullText, editorRevision);
@@ -4802,7 +4803,6 @@ export default function App() {
   };
 
   const loadDocumentIntoEditor = useCallback((document: TextDocument, options: { replaceActive?: boolean } = {}) => {
-    suppressNextEditorUpdateRef.current = true;
     didMountEditorRef.current = false;
     if (options.replaceActive) {
       replaceActiveTabWithDocument(document);
@@ -5894,14 +5894,17 @@ export default function App() {
     }
   };
 
+  handleProjectFileSelectRef.current = handleProjectFileSelect;
+
   useEffect(() => {
     if (!isTauriRuntime()) return;
-    let dispose: (() => void) | undefined;
-    void listen<string>("then-open-export-source", (event) => {
-      void handleProjectFileSelect(event.payload);
-    }).then((unlisten) => { dispose = unlisten; });
-    return () => dispose?.();
-  }, [currentFilePath, openTabs]);
+    return manageAsyncRegistration(
+      listen<string>("then-open-export-source", (event) => {
+        void handleProjectFileSelectRef.current(event.payload);
+      }),
+      (error) => setLastError(String(error)),
+    );
+  }, []);
 
   // プロジェクトを切り替えたら埋め込みモードの内容は古くなるため本文モードへ戻す。
   const projectPathForModeReset = projectFolder?.path ?? null;
@@ -6422,7 +6425,6 @@ export default function App() {
           });
           loadDocumentIntoEditor(document, { replaceActive: true });
         } else {
-          suppressNextEditorUpdateRef.current = true;
           didMountEditorRef.current = false;
           setFocusedFolderPath(projectFolder.path);
           replaceActiveTab(
@@ -9034,6 +9036,7 @@ export default function App() {
                             editorRevision={activeTab?.editorRevision ?? null}
                             writingMode={settings.writingMode}
                             typewriterScroll={settings.typewriterScroll}
+                            showTypewriterGuide={settings.showTypewriterGuide}
                             typewriterOffset={settings.typewriterOffset}
                             showLineBreakMarks={settings.showLineBreakMarks}
                             initialSelectionOffset={initialSelectionOffset}

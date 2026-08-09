@@ -314,6 +314,17 @@ export function SettingsModal({
                 </label>
                 <label className="checkSetting">
                   <input
+                    checked={settings.showTypewriterGuide}
+                    disabled={!settings.typewriterScroll}
+                    type="checkbox"
+                    onChange={(event) =>
+                      onUpdateSettings("showTypewriterGuide", event.target.checked)
+                    }
+                  />
+                  <span>タイプライター中央線を表示</span>
+                </label>
+                <label className="checkSetting">
+                  <input
                     checked={settings.showLineBreakMarks}
                     type="checkbox"
                     onChange={(event) =>

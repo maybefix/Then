@@ -18,6 +18,7 @@
     "test:v058-counts": "node scripts/test-v058-character-counts.mjs",
     "test:v058-bundle": "node scripts/test-v058-bundle-splitting.mjs",
     "test:v058-editor-text": "node scripts/test-v058-editor-text.mjs",
+    "test:v058-high-risk": "node scripts/test-v058-high-risk-regressions.mjs",
     "test:v058-index": "node scripts/test-v058-document-index.mjs",
     "test:v058-selection": "node scripts/test-v058-selection-metrics.mjs",
     "test:export": "node scripts/verify-export.mjs",

@@ -221,6 +221,7 @@ export type EditorSettings = {
   editorMeasureVertical: number;
   writingMode: WritingMode;
   typewriterScroll: boolean;
+  showTypewriterGuide: boolean;
   typewriterOffset: number;
   showLineBreakMarks: boolean;
   snippetStorageMode: "workspace" | "profile";
