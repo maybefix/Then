@@ -1,7 +1,7 @@
 {
   "name": "then",
   "private": true,
-  "version": "0.5.8",
+  "version": "0.5.9",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -21,6 +21,7 @@
     "test:v058-high-risk": "node scripts/test-v058-high-risk-regressions.mjs",
     "test:v058-index": "node scripts/test-v058-document-index.mjs",
     "test:v058-selection": "node scripts/test-v058-selection-metrics.mjs",
+    "test:v059-visibility": "node scripts/test-v059-editor-visibility.mjs",
     "test:export": "node scripts/verify-export.mjs",
     "demo:record": "powershell -ExecutionPolicy Bypass -File scripts/demo/record-desktop.ps1",
     "demo:edit": "node scripts/demo/edit-video.mjs",

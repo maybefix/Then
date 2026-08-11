@@ -147,27 +147,16 @@ export function SettingsModal({
                     <small>タイトルバーとWindowsのタスクバーも隠します</small>
                   </span>
                 </label>
-                <label className="checkSetting">
+                <label className="checkSetting descriptiveCheckSetting">
                   <input
                     checked={settings.zoneMode}
                     type="checkbox"
                     onChange={(event) => onUpdateSettings("zoneMode", event.target.checked)}
                   />
-                  <span>Zoneモード</span>
-                </label>
-                <label className="rangeSetting">
-                  <span>Zone透明度 {Math.round(settings.zoneModeOpacity * 100)}%</span>
-                  <input
-                    disabled={!settings.zoneMode}
-                    min="0"
-                    max="0.85"
-                    step="0.05"
-                    type="range"
-                    value={settings.zoneModeOpacity}
-                    onChange={(event) =>
-                      onUpdateSettings("zoneModeOpacity", Number(event.target.value))
-                    }
-                  />
+                  <span className="checkSettingCopy">
+                    <span>左右ペインをホバーで表示</span>
+                    <small>通常時は本文を全幅にし、画面端へマウスを移すとペインを重ねて表示します</small>
+                  </span>
                 </label>
               </>
             )}
@@ -332,6 +321,39 @@ export function SettingsModal({
                     }
                   />
                   <span>改行記号を表示</span>
+                </label>
+                <label className="checkSetting">
+                  <input
+                    checked={settings.showLineNumbers}
+                    type="checkbox"
+                    onChange={(event) =>
+                      onUpdateSettings("showLineNumbers", event.target.checked)
+                    }
+                  />
+                  <span>行番号を表示</span>
+                </label>
+                <label className="checkSetting">
+                  <input
+                    checked={settings.highlightCurrentLine}
+                    type="checkbox"
+                    onChange={(event) =>
+                      onUpdateSettings("highlightCurrentLine", event.target.checked)
+                    }
+                  />
+                  <span>現在行をハイライト</span>
+                </label>
+                <label className="checkSetting descriptiveCheckSetting">
+                  <input
+                    checked={settings.colorizeJapaneseQuotes}
+                    type="checkbox"
+                    onChange={(event) =>
+                      onUpdateSettings("colorizeJapaneseQuotes", event.target.checked)
+                    }
+                  />
+                  <span className="checkSettingCopy">
+                    <span>「」内を色分け</span>
+                    <small>鉤括弧を含む会話文を落ち着いた色で表示します</small>
+                  </span>
                 </label>
                 <label className="checkSetting">
                   <input

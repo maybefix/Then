@@ -810,6 +810,9 @@ const defaultSettings: EditorSettings = {
   showTypewriterGuide: true,
   typewriterOffset: 46,
   showLineBreakMarks: false,
+  showLineNumbers: false,
+  highlightCurrentLine: false,
+  colorizeJapaneseQuotes: false,
   snippetStorageMode: "workspace",
   sidebarMode: "tree",
   showWorkspacePaths: true,
@@ -1940,6 +1943,18 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         typeof settings.showTypewriterGuide === "boolean"
           ? settings.showTypewriterGuide
           : defaultSettings.showTypewriterGuide,
+      showLineNumbers:
+        typeof settings.showLineNumbers === "boolean"
+          ? settings.showLineNumbers
+          : defaultSettings.showLineNumbers,
+      highlightCurrentLine:
+        typeof settings.highlightCurrentLine === "boolean"
+          ? settings.highlightCurrentLine
+          : defaultSettings.highlightCurrentLine,
+      colorizeJapaneseQuotes:
+        typeof settings.colorizeJapaneseQuotes === "boolean"
+          ? settings.colorizeJapaneseQuotes
+          : defaultSettings.colorizeJapaneseQuotes,
       typewriterOffset:
         typeof settings.typewriterOffset === "number" && Number.isFinite(settings.typewriterOffset)
           ? Math.min(65, Math.max(30, settings.typewriterOffset))
@@ -9039,6 +9054,9 @@ export default function App() {
                             showTypewriterGuide={settings.showTypewriterGuide}
                             typewriterOffset={settings.typewriterOffset}
                             showLineBreakMarks={settings.showLineBreakMarks}
+                            showLineNumbers={settings.showLineNumbers}
+                            highlightCurrentLine={settings.highlightCurrentLine}
+                            colorizeJapaneseQuotes={settings.colorizeJapaneseQuotes}
                             initialSelectionOffset={initialSelectionOffset}
                             initialViewportState={activeTab?.viewportState ?? null}
                             onViewportSizeChange={handleEditorViewportSizeChange}

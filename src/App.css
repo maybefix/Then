@@ -1946,6 +1946,65 @@ body.thenPdfExporting .printExportViewport {
   background: none;
 }
 
+.verticalTypewriterShell[data-colorize-japanese-quotes="true"] .japanese-quote {
+  color: color-mix(in srgb, var(--text-secondary) 76%, var(--accent) 24%);
+}
+
+.verticalTypewriterShell[data-show-line-numbers="true"]
+  .verticalTypewriterEditor
+  .pm-root
+  p {
+  max-inline-size: min(
+    calc(100% * var(--editor-measure-v-ratio, 0.75)),
+    calc(100% - 28px)
+  );
+  /* 全ブロックの折り返し数を正確に測るため、行番号表示中は仮想寸法を使わない。 */
+  content-visibility: visible;
+}
+
+.visibleLineNumberLayer {
+  position: fixed;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  contain: layout style paint;
+  direction: ltr;
+  overflow: hidden;
+  pointer-events: none;
+  text-orientation: mixed;
+  user-select: none;
+  writing-mode: horizontal-tb;
+}
+
+.visibleLineNumber {
+  position: absolute;
+  color: var(--text-faint);
+  font-family: var(--ui-font-family);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1;
+  opacity: 0.72;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
+.visibleLineNumber.active {
+  color: color-mix(in srgb, var(--text-muted) 72%, var(--accent) 28%);
+  opacity: 0.96;
+}
+
+.activeVisualLineHighlight {
+  position: absolute;
+  border: 1px solid color-mix(in srgb, var(--accent) 7%, transparent);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  box-sizing: border-box;
+}
+
 .verticalTypewriterEditor .pm-root p.ks-justify {
   text-align: justify;
   text-align-last: auto;
@@ -2196,6 +2255,21 @@ body.thenPdfExporting .printExportViewport {
   contain-intrinsic-inline-size: auto 100%;
   contain-intrinsic-block-size: auto 2.2em;
   text-justify: auto;
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-show-line-numbers="true"]
+  .verticalTypewriterEditor
+  .pm-root
+  p {
+  max-inline-size: none;
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .visibleLineNumber {
+  min-width: 24px;
+  text-align: right;
+  transform: translate(-100%, -50%);
 }
 
 .appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.jitsuki,

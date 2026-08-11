@@ -30,6 +30,12 @@ import {
   type TextEditorSelection,
 } from "./editor/selectionMetrics";
 import { updateTextFromLineDiff } from "./editor/lineTextUpdate";
+import { findJapaneseQuoteRanges } from "./editor/japaneseQuoteRanges";
+import {
+  createVisualLineBands,
+  findClosestVisualLineBand,
+  type VisualBlockRect,
+} from "./editor/visualLineLayout";
 import { lineDiffFromSelectionTransaction } from "./editor/transactionLineDiff";
 import type { TextEditorViewportState, WritingMode } from "./types";
 
@@ -58,6 +64,9 @@ type VerticalTextEditorProps = {
   showTypewriterGuide: boolean;
   typewriterOffset: number;
   showLineBreakMarks: boolean;
+  showLineNumbers: boolean;
+  highlightCurrentLine: boolean;
+  colorizeJapaneseQuotes: boolean;
   /** マウント時に復元するカーソル位置（本文先頭からの文字オフセット）。 */
   initialSelectionOffset?: number;
   /** 同じタブを再表示するときに復元する論理的な表示位置。 */
@@ -140,6 +149,7 @@ type AstPluginState = {
   decoSet: DecorationSet;
   activeIndex: number;
   visibleCenter: number;
+  fullDecorations: boolean;
 };
 
 type RawMarkup =
@@ -189,6 +199,7 @@ type RawMarkup =
 type AstMeta = {
   visibleCenter?: number;
   rebuild?: boolean;
+  fullDecorations?: boolean;
 };
 
 type EditorViewWithInput = EditorView & {
@@ -1172,6 +1183,20 @@ function pushKinsokuDecos(out: Decoration[], line: LineNode, contentStart: numbe
   }
 }
 
+function pushJapaneseQuoteDecos(
+  out: Decoration[],
+  line: LineNode,
+  contentStart: number,
+): void {
+  for (const range of findJapaneseQuoteRanges(line.source)) {
+    out.push(
+      Decoration.inline(contentStart + range.from, contentStart + range.to, {
+        class: "japanese-quote",
+      }),
+    );
+  }
+}
+
 function shouldJustifyLine(line: LineNode): boolean {
   if (line.kind !== "paragraph" || line.jitsuki || line.align) return false;
   return Array.from(line.text || line.source).length >= 8;
@@ -1360,6 +1385,7 @@ function pushLineDecos(
 
   const contentStart = nodeStart + 1;
   pushKinsokuDecos(out, line, contentStart);
+  pushJapaneseQuoteDecos(out, line, contentStart);
 
   if (active) return;
 
@@ -1381,11 +1407,15 @@ function buildWindowDecos(
   lines: LineNode[],
   activeIndex: number,
   visibleCenter: number,
+  fullDecorations: boolean,
 ): DecorationSet {
   const out: Decoration[] = [];
   const count = Math.min(doc.childCount, lines.length);
+  const ranges = fullDecorations
+    ? [{ from: 0, to: count }]
+    : decorationRange(activeIndex, count, visibleCenter);
 
-  for (const range of decorationRange(activeIndex, count, visibleCenter)) {
+  for (const range of ranges) {
     let nodeStart = pmStartAtIndex(doc, range.from);
     if (nodeStart === null) continue;
 
@@ -1409,7 +1439,8 @@ function makeAstState(state: EditorState): AstPluginState {
     text: texts.join("\n"),
     activeIndex,
     visibleCenter: activeIndex,
-    decoSet: buildWindowDecos(state.doc, lines, activeIndex, activeIndex),
+    fullDecorations: false,
+    decoSet: buildWindowDecos(state.doc, lines, activeIndex, activeIndex, false),
   };
 }
 
@@ -1461,6 +1492,10 @@ function applyAst(
 ): AstPluginState {
   const meta = tr.getMeta(astKey) as AstMeta | undefined;
   let visibleCenter = value.visibleCenter;
+  const fullDecorations =
+    typeof meta?.fullDecorations === "boolean"
+      ? meta.fullDecorations
+      : value.fullDecorations;
 
   if (typeof meta?.visibleCenter === "number") {
     visibleCenter = Math.max(0, Math.min(newState.doc.childCount - 1, meta.visibleCenter));
@@ -1471,7 +1506,8 @@ function applyAst(
     if (
       meta?.rebuild !== true &&
       activeIndex === value.activeIndex &&
-      visibleCenter === value.visibleCenter
+      visibleCenter === value.visibleCenter &&
+      fullDecorations === value.fullDecorations
     ) {
       return value;
     }
@@ -1480,7 +1516,14 @@ function applyAst(
       ...value,
       activeIndex,
       visibleCenter,
-      decoSet: buildWindowDecos(newState.doc, value.lines, activeIndex, visibleCenter),
+      fullDecorations,
+      decoSet: buildWindowDecos(
+        newState.doc,
+        value.lines,
+        activeIndex,
+        visibleCenter,
+        fullDecorations,
+      ),
     };
   }
 
@@ -1498,6 +1541,7 @@ function applyAst(
       text,
       activeIndex,
       visibleCenter,
+      fullDecorations,
       decoSet: value.decoSet.map(tr.mapping, newState.doc),
     };
   }
@@ -1508,7 +1552,14 @@ function applyAst(
     text,
     activeIndex,
     visibleCenter,
-    decoSet: buildWindowDecos(newState.doc, lines, activeIndex, visibleCenter),
+    fullDecorations,
+    decoSet: buildWindowDecos(
+      newState.doc,
+      lines,
+      activeIndex,
+      visibleCenter,
+      fullDecorations,
+    ),
   };
 }
 
@@ -2010,6 +2061,9 @@ export function VerticalTextEditor({
   showTypewriterGuide,
   typewriterOffset,
   showLineBreakMarks,
+  showLineNumbers,
+  highlightCurrentLine,
+  colorizeJapaneseQuotes,
   initialSelectionOffset,
   initialViewportState,
   onViewportSizeChange,
@@ -2020,6 +2074,7 @@ export function VerticalTextEditor({
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const editorHostRef = useRef<HTMLDivElement | null>(null);
   const lineBreakLayerRef = useRef<HTMLDivElement | null>(null);
+  const visualLineLayerRef = useRef<HTMLDivElement | null>(null);
   const tiptapRef = useRef<Editor | null>(null);
   const textRef = useRef(text);
   // マウント時に一度だけ参照する復元位置。以後プロップが変化しても再適用しない。
@@ -2039,8 +2094,12 @@ export function VerticalTextEditor({
   const typewriterScrollRef = useRef(typewriterScroll);
   const typewriterOffsetRef = useRef(typewriterOffset);
   const showLineBreakMarksRef = useRef(showLineBreakMarks);
+  const showLineNumbersRef = useRef(showLineNumbers);
+  const highlightCurrentLineRef = useRef(highlightCurrentLine);
   const renderLineBreakMarksRef = useRef<(() => void) | null>(null);
   const requestLineBreakMarksRef = useRef<(() => void) | null>(null);
+  const renderVisualLinesRef = useRef<(() => void) | null>(null);
+  const requestVisualLinesRef = useRef<(() => void) | null>(null);
   const startCenterAnimationRef = useRef<(() => void) | null>(null);
   const stopCenterAnimationRef = useRef<(() => void) | null>(null);
   const cancelInitialAdjustmentRef = useRef<(() => void) | null>(null);
@@ -2104,9 +2163,11 @@ export function VerticalTextEditor({
         stopCenterAnimationRef.current?.();
         centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, writingModeRef.current);
         requestLineBreakMarksRef.current?.();
+        requestVisualLinesRef.current?.();
       });
     } else {
       requestLineBreakMarksRef.current?.();
+      requestVisualLinesRef.current?.();
     }
   }, [writingMode]);
 
@@ -2118,6 +2179,38 @@ export function VerticalTextEditor({
       renderLineBreakMarksRef.current?.();
     }
   }, [showLineBreakMarks]);
+
+  useEffect(() => {
+    showLineNumbersRef.current = showLineNumbers;
+    const editor = tiptapRef.current;
+    if (editor) {
+      const state = astKey.getState(editor.state);
+      if (state?.fullDecorations !== showLineNumbers) {
+        editor.view.dispatch(
+          editor.state.tr
+            .setMeta(astKey, {
+              rebuild: true,
+              fullDecorations: showLineNumbers,
+            } satisfies AstMeta)
+            .setMeta("addToHistory", false),
+        );
+      }
+    }
+    if (showLineNumbers) {
+      requestVisualLinesRef.current?.();
+    } else {
+      renderVisualLinesRef.current?.();
+    }
+  }, [showLineNumbers]);
+
+  useEffect(() => {
+    highlightCurrentLineRef.current = highlightCurrentLine;
+    if (highlightCurrentLine) {
+      requestVisualLinesRef.current?.();
+    } else {
+      renderVisualLinesRef.current?.();
+    }
+  }, [highlightCurrentLine]);
 
   const handle = useMemo<TextEditorHandle>(
     () => ({
@@ -2320,12 +2413,14 @@ export function VerticalTextEditor({
     let centerFrame: number | null = null;
     let visibleFrame: number | null = null;
     let lineBreakFrame: number | null = null;
+    let visualLineFrame: number | null = null;
     let compositionFrame: number | null = null;
     let centerAnimFrame: number | null = null;
     let initialAdjustmentFrame: number | null = null;
     let initialAdjustmentExpiryTimer: number | null = null;
     let initialAdjustmentAllowed = true;
     let lineBreakQueued = false;
+    let visualLineQueued = false;
     const candidateViewport = initialViewportRef.current;
     const initialViewportToRestore =
       candidateViewport &&
@@ -2665,6 +2760,160 @@ export function VerticalTextEditor({
       });
     };
 
+    const renderVisualLines = () => {
+      visualLineQueued = false;
+      visualLineFrame = null;
+      const layer = visualLineLayerRef.current;
+      const currentEditor = tiptapRef.current;
+      if (!layer) return;
+
+      layer.textContent = "";
+      const scrollerRect = scroller.getBoundingClientRect();
+      layer.style.left = `${snapScrollValue(scrollerRect.left)}px`;
+      layer.style.top = `${snapScrollValue(scrollerRect.top)}px`;
+      layer.style.width = `${snapScrollValue(scrollerRect.width)}px`;
+      layer.style.height = `${snapScrollValue(scrollerRect.height)}px`;
+
+      if (
+        (!showLineNumbersRef.current && !highlightCurrentLineRef.current) ||
+        !currentEditor ||
+        isEditorComposing(currentEditor, composingRef)
+      ) {
+        return;
+      }
+
+      const blockElements = Array.from(currentEditor.view.dom.children).filter(
+        (element): element is HTMLElement => element instanceof HTMLElement,
+      );
+      const blockRects: VisualBlockRect[] = blockElements.map((element) => {
+        const rect = element.getBoundingClientRect();
+        const contentRange = document.createRange();
+        contentRange.selectNodeContents(element);
+        const fragments = Array.from(contentRange.getClientRects(), (fragment) => ({
+          left: fragment.left,
+          right: fragment.right,
+          top: fragment.top,
+          bottom: fragment.bottom,
+        }));
+        contentRange.detach();
+        return {
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          bottom: rect.bottom,
+          fragments,
+        };
+      });
+      const mode = writingModeRef.current;
+      const bands = createVisualLineBands(blockRects, mode);
+      const activeBlockIndex = activeLineIndex(currentEditor.state);
+      let caretX = 0;
+      let caretY = 0;
+      let affinityPoint: { x: number; y: number } | null = null;
+      try {
+        const { selection } = currentEditor.state;
+        const caretRect = currentEditor.view.coordsAtPos(selection.head);
+        caretX = (caretRect.left + caretRect.right) / 2;
+        caretY = (caretRect.top + caretRect.bottom) / 2;
+
+        // 文末などではゼロ幅キャレットが隣接する2行の共有境界に置かれる。
+        // 選択位置に隣接する実文字の両端を測り、その文字の内側を所属判定に使う。
+        const { $head } = selection;
+        if ($head.parent.isTextblock && $head.parent.content.size > 0) {
+          const parentStart = $head.start();
+          const parentEnd = $head.end();
+          const parentOffset = $head.parentOffset;
+          const parentText = $head.parent.textContent;
+          const atTextblockEnd = selection.head >= parentEnd;
+          const charactersBeforeCaret = Array.from(parentText.slice(0, parentOffset));
+          const adjacentCharacter = atTextblockEnd
+            ? charactersBeforeCaret[charactersBeforeCaret.length - 1]
+            : Array.from(parentText.slice(parentOffset))[0];
+          const characterLength = adjacentCharacter?.length ?? 1;
+          const characterFrom = atTextblockEnd
+            ? Math.max(parentStart, selection.head - characterLength)
+            : selection.head;
+          const characterTo = atTextblockEnd
+            ? selection.head
+            : Math.min(parentEnd, selection.head + characterLength);
+
+          if (characterTo > characterFrom) {
+            const fromRect = currentEditor.view.coordsAtPos(characterFrom, 1);
+            const toRect = currentEditor.view.coordsAtPos(characterTo, -1);
+            affinityPoint = {
+              x:
+                (fromRect.left + fromRect.right + toRect.left + toRect.right) /
+                4,
+              y:
+                (fromRect.top + fromRect.bottom + toRect.top + toRect.bottom) /
+                4,
+            };
+          }
+        }
+      } catch {
+        const activeRect = blockRects[activeBlockIndex];
+        caretX = activeRect ? (activeRect.left + activeRect.right) / 2 : 0;
+        caretY = activeRect ? (activeRect.top + activeRect.bottom) / 2 : 0;
+      }
+      const activeBand = findClosestVisualLineBand(
+        bands,
+        activeBlockIndex,
+        caretX,
+        caretY,
+        affinityPoint,
+      );
+      const fragment = document.createDocumentFragment();
+
+      if (highlightCurrentLineRef.current && activeBand) {
+        const highlight = document.createElement("div");
+        highlight.className = "activeVisualLineHighlight";
+        highlight.dataset.visualLineNumber = String(activeBand.number);
+        highlight.style.left = `${snapScrollValue(activeBand.left - scrollerRect.left)}px`;
+        highlight.style.top = `${snapScrollValue(activeBand.top - scrollerRect.top)}px`;
+        highlight.style.width = `${snapScrollValue(activeBand.right - activeBand.left)}px`;
+        highlight.style.height = `${snapScrollValue(activeBand.bottom - activeBand.top)}px`;
+        fragment.appendChild(highlight);
+      }
+
+      if (showLineNumbersRef.current) {
+        for (const band of bands) {
+          if (
+            band.right < scrollerRect.left ||
+            band.left > scrollerRect.right ||
+            band.bottom < scrollerRect.top ||
+            band.top > scrollerRect.bottom
+          ) {
+            continue;
+          }
+
+          const blockRect = blockRects[band.blockIndex];
+          if (!blockRect) continue;
+          const number = document.createElement("span");
+          number.className = `visibleLineNumber${
+            activeBand?.number === band.number ? " active" : ""
+          }`;
+          number.dataset.visualLineNumber = String(band.number);
+          number.textContent = String(band.number);
+          if (isHorizontalWriting(mode)) {
+            number.style.left = `${snapScrollValue(blockRect.left - scrollerRect.left - 10)}px`;
+            number.style.top = `${snapScrollValue(band.centerY - scrollerRect.top)}px`;
+          } else {
+            number.style.left = `${snapScrollValue(band.centerX - scrollerRect.left)}px`;
+            number.style.top = `${snapScrollValue(blockRect.top - scrollerRect.top - 13)}px`;
+          }
+          fragment.appendChild(number);
+        }
+      }
+
+      layer.appendChild(fragment);
+    };
+
+    const requestVisualLines = () => {
+      if (visualLineQueued) return;
+      visualLineQueued = true;
+      visualLineFrame = requestAnimationFrame(renderVisualLines);
+    };
+
     const renderLineBreakMarks = () => {
       lineBreakQueued = false;
       lineBreakFrame = null;
@@ -2732,6 +2981,7 @@ export function VerticalTextEditor({
     };
 
     const requestLineBreakMarks = () => {
+      requestVisualLines();
       if (!showLineBreakMarksRef.current || lineBreakQueued) return;
 
       lineBreakQueued = true;
@@ -2740,6 +2990,8 @@ export function VerticalTextEditor({
 
     renderLineBreakMarksRef.current = renderLineBreakMarks;
     requestLineBreakMarksRef.current = requestLineBreakMarks;
+    renderVisualLinesRef.current = renderVisualLines;
+    requestVisualLinesRef.current = requestVisualLines;
 
     const editor = new Editor({
       element: host,
@@ -2796,7 +3048,21 @@ export function VerticalTextEditor({
     });
 
     tiptapRef.current = editor;
+    if (showLineNumbersRef.current) {
+      editor.view.dispatch(
+        editor.state.tr
+          .setMeta(astKey, {
+            rebuild: true,
+            fullDecorations: true,
+          } satisfies AstMeta)
+          .setMeta("addToHistory", false),
+      );
+    }
     updateEmptyAttribute(editor);
+
+    const visualLayoutObserver = new ResizeObserver(() => requestVisualLines());
+    visualLayoutObserver.observe(editor.view.dom);
+    visualLayoutObserver.observe(scroller);
 
     const handleWheel = (event: WheelEvent) => {
       cancelInitialAdjustment();
@@ -2872,6 +3138,11 @@ export function VerticalTextEditor({
       requestLineBreakMarks();
     };
 
+    const handleFontLoadingDone = () => {
+      requestVisibleWindow();
+      requestLineBreakMarks();
+    };
+
     const handleScroll = () => {
       requestVisibleWindow();
       requestLineBreakMarks();
@@ -2912,6 +3183,7 @@ export function VerticalTextEditor({
     editor.view.dom.addEventListener("compositionend", handleCompositionEnd);
     scroller.addEventListener("scroll", handleScroll, { passive: true });
     window.addEventListener("resize", handleResize);
+    document.fonts?.addEventListener("loadingdone", handleFontLoadingDone);
 
     const initialOffset = Math.min(initialSelectionRef.current, docToText(editor.state.doc).length);
     if (initialOffset > 0) {
@@ -2962,20 +3234,26 @@ export function VerticalTextEditor({
       editor.view.dom.removeEventListener("compositionend", handleCompositionEnd);
       scroller.removeEventListener("scroll", handleScroll);
       window.removeEventListener("resize", handleResize);
+      document.fonts?.removeEventListener("loadingdone", handleFontLoadingDone);
       if (centerFrame !== null) cancelAnimationFrame(centerFrame);
       if (visibleFrame !== null) cancelAnimationFrame(visibleFrame);
       if (lineBreakFrame !== null) cancelAnimationFrame(lineBreakFrame);
+      if (visualLineFrame !== null) cancelAnimationFrame(visualLineFrame);
       if (compositionFrame !== null) cancelAnimationFrame(compositionFrame);
+      visualLayoutObserver.disconnect();
       cancelInitialAdjustment();
       stopCenterAnimation();
       if (startCenterAnimationRef.current === startCenterAnimation) startCenterAnimationRef.current = null;
       if (stopCenterAnimationRef.current === stopCenterAnimation) stopCenterAnimationRef.current = null;
       renderLineBreakMarksRef.current = null;
       requestLineBreakMarksRef.current = null;
+      renderVisualLinesRef.current = null;
+      requestVisualLinesRef.current = null;
       if (cancelInitialAdjustmentRef.current === cancelInitialAdjustment) {
         cancelInitialAdjustmentRef.current = null;
       }
       if (lineBreakLayerRef.current) lineBreakLayerRef.current.textContent = "";
+      if (visualLineLayerRef.current) visualLineLayerRef.current.textContent = "";
       editor.destroy();
       if (tiptapRef.current === editor) tiptapRef.current = null;
       onReady(null);
@@ -2983,9 +3261,19 @@ export function VerticalTextEditor({
   }, [handle, onReady]);
 
   return (
-    <div className="verticalTypewriterShell">
+    <div
+      className="verticalTypewriterShell"
+      data-show-line-numbers={showLineNumbers ? "true" : undefined}
+      data-highlight-current-line={highlightCurrentLine ? "true" : undefined}
+      data-colorize-japanese-quotes={colorizeJapaneseQuotes ? "true" : undefined}
+    >
       <div ref={scrollerRef} className="verticalTypewriterScroller">
         <div ref={editorHostRef} className="verticalTypewriterEditor" />
+        <div
+          ref={visualLineLayerRef}
+          className="visibleLineNumberLayer"
+          aria-hidden="true"
+        />
         <div ref={lineBreakLayerRef} className="visibleLineBreakLayer" aria-hidden="true" />
       </div>
       {typewriterScroll && showTypewriterGuide && <div className="verticalTypewriterGuide" />}

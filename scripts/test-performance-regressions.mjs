@@ -6,9 +6,9 @@ import ts from "typescript";
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
 const tauriConfig = JSON.parse(await readFile("src-tauri/tauri.conf.json", "utf8"));
 const cargoManifest = await readFile("src-tauri/Cargo.toml", "utf8");
-assert.equal(packageJson.version, "0.5.8", "the experimental branch must identify itself as v0.5.8");
+assert.equal(packageJson.version, "0.5.9", "the feature branch must identify itself as v0.5.9");
 assert.equal(tauriConfig.version, packageJson.version, "frontend and Tauri versions must match");
-assert.match(cargoManifest, /^version = "0\.5\.8"$/m, "Rust package version must match v0.5.8");
+assert.match(cargoManifest, /^version = "0\.5\.9"$/m, "Rust package version must match v0.5.9");
 
 async function importStandaloneTypeScript(path) {
   const source = await readFile(path, "utf8");

@@ -224,6 +224,12 @@ export type EditorSettings = {
   showTypewriterGuide: boolean;
   typewriterOffset: number;
   showLineBreakMarks: boolean;
+  /** 縦書きでは各列の上、横書きでは各行の左に行番号を表示するか。 */
+  showLineNumbers: boolean;
+  /** キャレットがある現在行を控えめな背景色で強調するか。 */
+  highlightCurrentLine: boolean;
+  /** 日本語の鉤括弧「」で囲まれた本文を色分けするか。 */
+  colorizeJapaneseQuotes: boolean;
   snippetStorageMode: "workspace" | "profile";
   sidebarMode: SidebarMode;
   /** プロジェクト切替メニューでフォルダパスを表示するか。 */
@@ -234,7 +240,7 @@ export type EditorSettings = {
   skipStartupPortal: boolean;
   /** 集中表示と同時にTauriウィンドウを完全フルスクリーンへ切り替えるか。 */
   focusModeUsesNativeFullscreen: boolean;
-  /** 左右サイドバーを通常時に透かし、ホバー時だけ通常表示にする実験モード。 */
+  /** 左右サイドバーを領域外へ隠し、画面端のホバー時だけ重ねて表示するモード。 */
   zoneMode: boolean;
   /** Zoneモードでサイドバーに適用する通常時の不透明度。 */
   zoneModeOpacity: number;
