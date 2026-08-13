@@ -29,6 +29,22 @@ export type VisualPoint = {
   y: number;
 };
 
+export type VisualLineLayerUpdate = "clear" | "preserve" | "render";
+
+/**
+ * IME composition 中は ProseMirror の selection とブラウザが編集中の DOM が
+ * 一時的に一致しないため、直前に確定した表示行レイヤーをそのまま保持する。
+ */
+export function resolveVisualLineLayerUpdate(
+  showLineNumbers: boolean,
+  highlightCurrentLine: boolean,
+  hasEditor: boolean,
+  composing: boolean,
+): VisualLineLayerUpdate {
+  if ((!showLineNumbers && !highlightCurrentLine) || !hasEditor) return "clear";
+  return composing ? "preserve" : "render";
+}
+
 type MutableLineRect = VisualRect & {
   primaryCenter: number;
 };

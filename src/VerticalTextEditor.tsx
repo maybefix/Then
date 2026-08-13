@@ -34,6 +34,7 @@ import { findJapaneseQuoteRanges } from "./editor/japaneseQuoteRanges";
 import {
   createVisualLineBands,
   findClosestVisualLineBand,
+  resolveVisualLineLayerUpdate,
   type VisualBlockRect,
 } from "./editor/visualLineLayout";
 import { lineDiffFromSelectionTransaction } from "./editor/transactionLineDiff";
@@ -2767,20 +2768,23 @@ export function VerticalTextEditor({
       const currentEditor = tiptapRef.current;
       if (!layer) return;
 
+      const layerUpdate = resolveVisualLineLayerUpdate(
+        showLineNumbersRef.current,
+        highlightCurrentLineRef.current,
+        Boolean(currentEditor),
+        Boolean(currentEditor && isEditorComposing(currentEditor, composingRef)),
+      );
+      // IME変換中は一時DOMを再計測せず、確定済みの行番号とハイライトを残す。
+      if (layerUpdate === "preserve") return;
+
       layer.textContent = "";
+      if (layerUpdate === "clear" || !currentEditor) return;
+
       const scrollerRect = scroller.getBoundingClientRect();
       layer.style.left = `${snapScrollValue(scrollerRect.left)}px`;
       layer.style.top = `${snapScrollValue(scrollerRect.top)}px`;
       layer.style.width = `${snapScrollValue(scrollerRect.width)}px`;
       layer.style.height = `${snapScrollValue(scrollerRect.height)}px`;
-
-      if (
-        (!showLineNumbersRef.current && !highlightCurrentLineRef.current) ||
-        !currentEditor ||
-        isEditorComposing(currentEditor, composingRef)
-      ) {
-        return;
-      }
 
       const blockElements = Array.from(currentEditor.view.dom.children).filter(
         (element): element is HTMLElement => element instanceof HTMLElement,
