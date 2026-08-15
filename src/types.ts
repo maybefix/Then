@@ -113,6 +113,7 @@ export type ReferenceBinary = {
 export const appThemeValues = [
   "dark",
   "note-light",
+  "default",
   "standard",
   "coral-light",
   "minimal-light",

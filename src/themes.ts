@@ -8,7 +8,8 @@ export type ThemeDefinition = {
 };
 
 export const themeCatalog: ThemeDefinition[] = [
-  { id: "standard", label: "Default", description: "白とネイビー", mode: "light" },
+  { id: "default", label: "Default", description: "白とネイビー", mode: "light" },
+  { id: "standard", label: "Standard", description: "白とブラック", mode: "light" },
   { id: "note-light", label: "Note", description: "温白色とチャコール", mode: "light" },
   { id: "coral-light", label: "Coral", description: "クリームとコーラル", mode: "light" },
   { id: "minimal-light", label: "Minimal", description: "ミニマルな白とブルー", mode: "light" },
@@ -26,7 +27,7 @@ export const themeCatalog: ThemeDefinition[] = [
   { id: "hands-light", label: "Hands", description: "実用的な白と深緑", mode: "light" },
   { id: "promise-light", label: "Promise", description: "白緑と深緑のグラデーション", mode: "light" },
   { id: "flat-light", label: "Flat", description: "ブルーグレーのグレースケール", mode: "light" },
-  { id: "signal-red-light", label: "Signal Red", description: "軽快な白とシグナルレッド", mode: "light" },
+  { id: "signal-red-light", label: "Red", description: "軽快な白とシグナルレッド", mode: "light" },
   { id: "mono-press-light", label: "Mono Press", description: "活字と罫線のモノクローム", mode: "light" },
   { id: "air-light", label: "Air", description: "空色と深いブルーのグラデーション", mode: "light" },
   { id: "passion-light", label: "Passion", description: "深紅とコーラルのグラデーション", mode: "light" },
@@ -84,12 +85,12 @@ const legacyThemeAliases: Record<string, AppTheme> = {
   "nec-dark": "orchestrating-dark",
   "fujitsu-light": "shaping-light",
   "fujitsu-dark": "shaping-dark",
-  "commerce-light": "standard",
+  "commerce-light": "default",
   "commerce-dark": "dark",
-  "life-light": "standard",
-  "one-hundred-light": "standard",
-  "evergreen-light": "standard",
-  "energy-light": "standard",
+  "life-light": "default",
+  "one-hundred-light": "default",
+  "evergreen-light": "default",
+  "energy-light": "default",
   "energy-dark": "dark",
 };
 

@@ -1,4 +1,4 @@
-.appShell[data-theme="standard"] {
+.appShell[data-theme="default"] {
   --bg-root: #f3f5f8;
   --bg-primary: #fff;
   --bg-secondary: #f5f7fa;
@@ -59,11 +59,11 @@
   --silkdown-hr-color: var(--border-subtle);
 }
 
-.themePreview-standard::before { background: #f3f5f8; }
+.themePreview-default::before { background: #f3f5f8; }
 
-.themePreview-standard i { background: #172033; }
+.themePreview-default i { background: #172033; }
 
-.themePreview-standard b { background: #193a5a; }
+.themePreview-default b { background: #193a5a; }
 
 .themePreview-dark {
   border-color: #566168;

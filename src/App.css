@@ -10350,31 +10350,13 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   z-index: 22;
   padding-right: 54px;
   background: color-mix(in srgb, var(--bg-panel-strong) 92%, transparent);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+  box-shadow: none;
   transform: translateY(calc(-100% + 7px));
-}
-
-.appFrame[data-editor-focus="true"] .topbar::after {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 7px;
-  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--accent) 24%, transparent));
-  content: "";
-  opacity: 0.55;
-  pointer-events: none;
-  transition: opacity 160ms ease;
 }
 
 .appFrame[data-editor-focus="true"] .topbar:hover,
 .appFrame[data-editor-focus="true"] .topbar:focus-within {
   transform: translateY(0);
-}
-
-.appFrame[data-editor-focus="true"] .topbar:hover::after,
-.appFrame[data-editor-focus="true"] .topbar:focus-within::after {
-  opacity: 0;
 }
 
 .appFrame[data-editor-focus="true"] .topbar > :not(.breadcrumbs) {
@@ -10411,7 +10393,7 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
 
 .appFrame[data-editor-focus="true"] .statusbar {
   background: color-mix(in srgb, var(--bg-panel-strong) 92%, transparent);
-  box-shadow: 0 -12px 28px rgba(0, 0, 0, 0.2);
+  box-shadow: none;
   clip-path: inset(calc(100% - 7px) 0 0);
   opacity: 0.28;
   transform: translateY(0);

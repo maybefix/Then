@@ -1,7 +1,7 @@
 {
   "name": "then",
   "private": true,
-  "version": "0.5.10",
+  "version": "0.5.11",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -23,6 +23,8 @@
     "test:v058-selection": "node scripts/test-v058-selection-metrics.mjs",
     "test:v059-visibility": "node scripts/test-v059-editor-visibility.mjs",
     "test:v0510-ime-visual-lines": "node scripts/test-v0510-ime-visual-lines.mjs",
+    "test:v0511-focus-mode": "node scripts/test-v0511-focus-mode.mjs",
+    "test:v0511-themes": "node scripts/test-v0511-themes.mjs",
     "test:export": "node scripts/verify-export.mjs",
     "demo:record": "powershell -ExecutionPolicy Bypass -File scripts/demo/record-desktop.ps1",
     "demo:edit": "node scripts/demo/edit-video.mjs",
