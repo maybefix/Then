@@ -10,6 +10,7 @@ import {
   MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -2317,7 +2318,7 @@ export default function App() {
   const [activeBreadcrumbPath, setActiveBreadcrumbPath] = useState<string | null>(null);
   const [breadcrumbBrowsePath, setBreadcrumbBrowsePath] = useState<string | null>(null);
   const [breadcrumbLayout, setBreadcrumbLayout] =
-    useState<BreadcrumbLayout>("compact");
+    useState<BreadcrumbLayout>("full");
   const [isBreadcrumbOverflowOpen, setIsBreadcrumbOverflowOpen] = useState(false);
   const [isWorkspaceSwitcherOpen, setIsWorkspaceSwitcherOpen] = useState(false);
   const [workspaceSwitcherQuery, setWorkspaceSwitcherQuery] = useState("");
@@ -3262,7 +3263,7 @@ export default function App() {
     projectFolder,
   ]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const breadcrumbs = breadcrumbMenuRef.current;
     if (!breadcrumbs) return;
 
@@ -3287,7 +3288,7 @@ export default function App() {
       observer.disconnect();
       window.removeEventListener("resize", handleWindowResize);
     };
-  }, []);
+  }, [startupView]);
 
   useEffect(() => {
     if (breadcrumbOverflowItems.length === 0) {

@@ -203,4 +203,20 @@ assert.deepEqual(
   "compact outline breadcrumbs keep only the active heading",
 );
 
+const appSource = await readFile("src/App.tsx", "utf8");
+assert.match(
+  appSource,
+  /useState<BreadcrumbLayout>\("full"\)/,
+  "breadcrumbs must start expanded until their available width is measured",
+);
+const observerStart = appSource.indexOf("const updateLayout = (width: number)");
+const observerEnd = appSource.indexOf("const sortedReferenceCandidates", observerStart);
+assert.notEqual(observerStart, -1, "the breadcrumb width observer must exist");
+assert.notEqual(observerEnd, -1, "the breadcrumb width observer must have a stable boundary");
+assert.match(
+  appSource.slice(observerStart, observerEnd),
+  /\}, \[startupView\]\);/,
+  "the width observer must attach again when the editor replaces the startup portal",
+);
+
 console.log("breadcrumb navigation tests passed");
