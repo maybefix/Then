@@ -190,6 +190,11 @@ assert.match(editorSource, /createVisualLineBands/);
 assert.match(editorSource, /findClosestVisualLineBand/);
 assert.match(
   editorSource,
+  /VERTICAL_LINE_NUMBER_TOP_OFFSET_PX = 18/,
+  "vertical line numbers need readable separation above the body text",
+);
+assert.match(
+  editorSource,
   /contentRange\.getClientRects\(\)/,
   "visual lines must come from browser-rendered Range rectangles",
 );

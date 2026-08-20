@@ -215,6 +215,8 @@ const VISIBLE_UPDATE_STEP = 12;
 const SCROLL_EPS = 0.75;
 const INITIAL_CENTER_SETTLE_MS = 500;
 const INITIAL_CENTER_STABLE_FRAMES = 2;
+// 縦書きの行番号を本文上端から離し、数字と先頭文字を視覚的に分離する。
+const VERTICAL_LINE_NUMBER_TOP_OFFSET_PX = 18;
 const PLACEHOLDER = "# 見出し\n- リスト項目\nここに入力……";
 
 const astKey = new PluginKey<AstPluginState>("then-layout-ast");
@@ -2903,7 +2905,9 @@ export function VerticalTextEditor({
             number.style.top = `${snapScrollValue(band.centerY - scrollerRect.top)}px`;
           } else {
             number.style.left = `${snapScrollValue(band.centerX - scrollerRect.left)}px`;
-            number.style.top = `${snapScrollValue(blockRect.top - scrollerRect.top - 13)}px`;
+            number.style.top = `${snapScrollValue(
+              blockRect.top - scrollerRect.top - VERTICAL_LINE_NUMBER_TOP_OFFSET_PX,
+            )}px`;
           }
           fragment.appendChild(number);
         }
