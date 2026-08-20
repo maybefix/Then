@@ -1804,9 +1804,9 @@ body.thenPdfExporting .printExportViewport {
   position: relative;
   min-width: max-content;
   height: 100%;
-  /* 上下余白は持たない。文字表示幅（縦幅）は設定値が全高まで使えるように
-     し、余白は段落の margin-inline: auto（中央寄せ）で生まれるものだけ。 */
-  padding: 0 50vw;
+  /* 上下余白は持たない。横方向は先頭・末尾の列をタイプライター設定の
+     全範囲（30〜65%）へ運べるよう、左右に各1画面分のスクロール余白を持つ。 */
+  padding: 0 100vw;
   outline: none;
   writing-mode: vertical-rl;
   text-orientation: mixed;
@@ -4822,7 +4822,7 @@ body {
 }
 
 .verticalTypewriterEditor .pm-root {
-  padding: 0 50vw;
+  padding: 0 100vw;
   color: #e9e4d6;
   font-family: var(--editor-font-family);
   font-size: var(--editor-font-size);

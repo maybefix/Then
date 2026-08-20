@@ -225,6 +225,16 @@ assert.doesNotMatch(
 );
 assert.match(appCss, /\.visibleLineNumber/);
 assert.match(appCss, /\.activeVisualLineHighlight/);
+assert.doesNotMatch(
+  appCss,
+  /\.verticalTypewriterEditor \.pm-root\s*\{[^}]*padding:\s*0 50vw;/,
+  "half-viewport gutters cannot move the first vertical line to targets below 50%",
+);
+assert.match(
+  appCss,
+  /\.verticalTypewriterEditor \.pm-root\s*\{[^}]*padding:\s*0 100vw;/,
+  "vertical typewriter scrolling needs a full viewport gutter at both document edges",
+);
 assert.match(
   appCss,
   /data-show-line-numbers="true"[\s\S]*?content-visibility: visible/,
