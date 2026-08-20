@@ -546,7 +546,14 @@ body.thenPdfExporting .printExportViewport {
   position: relative;
   display: inline-flex;
   min-width: 0;
+}
+
+.fileMenu {
   flex: 0 0 auto;
+}
+
+.breadcrumbMenu {
+  flex: 0 1 auto;
 }
 
 .menuButton {
@@ -575,15 +582,17 @@ body.thenPdfExporting .printExportViewport {
   min-width: 0;
   align-items: center;
   gap: 10px;
-  flex: 1;
+  flex: 1 1 0;
   white-space: nowrap;
 }
 
 .breadcrumbSegment {
   display: inline-flex;
   min-width: 0;
+  max-width: 100%;
   align-items: center;
   gap: 7px;
+  flex: 0 1 auto;
 }
 
 .breadcrumbItem {
@@ -591,13 +600,21 @@ body.thenPdfExporting .printExportViewport {
   min-width: 0;
   align-items: center;
   gap: 6px;
+  flex: 0 1 auto;
+  overflow: hidden;
 }
 
 .activeCrumb {
+  min-width: 0;
   overflow: hidden;
   color: var(--text-primary);
   font-weight: 720;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.breadcrumbCollapsedSegment {
+  display: none !important;
 }
 
 .crumbSeparator {
@@ -610,6 +627,7 @@ body.thenPdfExporting .printExportViewport {
 
 .breadcrumbFolderButton {
   display: inline-flex;
+  min-width: 0;
   max-width: 310px;
   height: 30px;
   align-items: center;
@@ -627,6 +645,54 @@ body.thenPdfExporting .printExportViewport {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.breadcrumbOverflowMenu {
+  flex: 0 0 auto;
+}
+
+.breadcrumbOverflowButton {
+  display: inline-grid;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.breadcrumbOverflowButton:hover,
+.breadcrumbOverflowButton[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.breadcrumbOverflowPopover {
+  left: 0;
+  width: clamp(230px, 30vw, 340px);
+  max-height: min(420px, calc(100vh - 96px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.breadcrumbOverflowItemIcon {
+  display: inline-grid;
+  width: 16px;
+  flex: 0 0 16px;
+  place-items: center;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.breadcrumbs[data-layout="minimal"] .breadcrumbSegment,
+.breadcrumbs[data-layout="minimal"] .breadcrumbItem {
+  max-width: min(240px, 100%);
 }
 
 .breadcrumbFolderButton:hover,
@@ -1083,6 +1149,7 @@ body.thenPdfExporting .printExportViewport {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
   margin-left: auto;
 }
 

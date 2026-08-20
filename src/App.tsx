@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ChangeEvent,
   DragEvent,
+  Fragment,
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
@@ -14,6 +15,12 @@ import {
   useState,
 } from "react";
 import { manageAsyncRegistration } from "./utils/asyncRegistration";
+import {
+  getBreadcrumbLayout,
+  isBreadcrumbTrailItemVisible,
+  isOutlineBreadcrumbItemVisible,
+  type BreadcrumbLayout,
+} from "./utils/breadcrumbLayout";
 import { VerticalTextEditor, type TextEditorHandle } from "./VerticalTextEditor";
 import { AppDialogModal } from "./components/dialogs/AppDialogModal";
 import { CommandPalette, type PaletteCommand } from "./components/dialogs/CommandPalette";
@@ -201,6 +208,11 @@ const PROJECT_AST_INDEX_BATCH_SIZE = 12;
 type LayoutDirection = "start" | "center" | "end";
 
 type WorkspaceSearchScope = "file" | "project";
+
+type BreadcrumbOverflowItem =
+  | { kind: "folder" | "file"; name: string; path: string }
+  | { kind: "outline"; item: DocumentOutlineItem }
+  | { kind: "scratch"; name: string };
 
 type EditorSelectionSnapshot = {
   from: number;
@@ -2304,6 +2316,9 @@ export default function App() {
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const [activeBreadcrumbPath, setActiveBreadcrumbPath] = useState<string | null>(null);
   const [breadcrumbBrowsePath, setBreadcrumbBrowsePath] = useState<string | null>(null);
+  const [breadcrumbLayout, setBreadcrumbLayout] =
+    useState<BreadcrumbLayout>("compact");
+  const [isBreadcrumbOverflowOpen, setIsBreadcrumbOverflowOpen] = useState(false);
   const [isWorkspaceSwitcherOpen, setIsWorkspaceSwitcherOpen] = useState(false);
   const [workspaceSwitcherQuery, setWorkspaceSwitcherQuery] = useState("");
   const [collapsedWorkspaceFolderPaths, setCollapsedWorkspaceFolderPaths] =
@@ -3206,6 +3221,79 @@ export default function App() {
     () => findPathToEntry(projectFolder, currentFilePath),
     [currentFilePath, projectFolder],
   );
+  const hasActiveOutlineBreadcrumb =
+    Boolean(currentFilePath) && activeOutlineChain.length > 0;
+  const breadcrumbOverflowItems = useMemo<BreadcrumbOverflowItem[]>(() => {
+    if (breadcrumbLayout === "full") return [];
+
+    const items: BreadcrumbOverflowItem[] = [];
+    breadcrumbTrail.forEach((crumb, index) => {
+      const isVisible = isBreadcrumbTrailItemVisible(
+        breadcrumbLayout,
+        index,
+        breadcrumbTrail.length,
+        hasActiveOutlineBreadcrumb,
+      );
+      if (isVisible) return;
+
+      const isFolder =
+        "children" in crumb && (!("kind" in crumb) || crumb.kind === "folder");
+      items.push({
+        kind: isFolder ? "folder" : "file",
+        name: crumb.name,
+        path: crumb.path,
+      });
+    });
+
+    if (!projectFolder && breadcrumbLayout === "minimal") {
+      items.push({ kind: "scratch", name: scratchWorkspaceName });
+    }
+
+    activeOutlineChain.forEach((item, index) => {
+      if (index === activeOutlineChain.length - 1) return;
+      items.push({ kind: "outline", item });
+    });
+    return items;
+  }, [
+    activeOutlineChain,
+    breadcrumbLayout,
+    breadcrumbTrail,
+    hasActiveOutlineBreadcrumb,
+    projectFolder,
+  ]);
+
+  useEffect(() => {
+    const breadcrumbs = breadcrumbMenuRef.current;
+    if (!breadcrumbs) return;
+
+    const updateLayout = (width: number) => {
+      const nextLayout = getBreadcrumbLayout(width);
+      setBreadcrumbLayout((current) =>
+        current === nextLayout ? current : nextLayout,
+      );
+    };
+
+    updateLayout(breadcrumbs.getBoundingClientRect().width);
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) updateLayout(entry.contentRect.width);
+    });
+    observer.observe(breadcrumbs);
+    const handleWindowResize = () => {
+      updateLayout(breadcrumbs.getBoundingClientRect().width);
+    };
+    window.addEventListener("resize", handleWindowResize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", handleWindowResize);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (breadcrumbOverflowItems.length === 0) {
+      setIsBreadcrumbOverflowOpen(false);
+    }
+  }, [breadcrumbOverflowItems.length]);
   const sortedReferenceCandidates = useMemo(() => {
     const candidates = mergeReferenceFiles(referenceLayout.recent, referenceCandidates);
     const recentIndex = new Map(
@@ -3752,6 +3840,7 @@ export default function App() {
       if (!breadcrumbMenuRef.current?.contains(target)) {
         setActiveBreadcrumbPath(null);
         setBreadcrumbBrowsePath(null);
+        setIsBreadcrumbOverflowOpen(false);
         setIsWorkspaceSwitcherOpen(false);
       }
       if (!editorContextMenuRef.current?.contains(target)) {
@@ -3765,6 +3854,7 @@ export default function App() {
       setIsFileMenuOpen(false);
       setActiveBreadcrumbPath(null);
       setBreadcrumbBrowsePath(null);
+      setIsBreadcrumbOverflowOpen(false);
       setIsWorkspaceSwitcherOpen(false);
       setEditorContextMenu(null);
       setNotationModal(null);
@@ -3847,6 +3937,7 @@ export default function App() {
     if (event.key === "Escape") {
       setActiveBreadcrumbPath(null);
       setBreadcrumbBrowsePath(null);
+      setIsBreadcrumbOverflowOpen(false);
       setIsWorkspaceSwitcherOpen(false);
       setIsOutlineMenuOpen(false);
       event.preventDefault();
@@ -6109,6 +6200,7 @@ export default function App() {
   const closeBreadcrumbMenuAndRun = (action: () => void | Promise<void>) => {
     setActiveBreadcrumbPath(null);
     setBreadcrumbBrowsePath(null);
+    setIsBreadcrumbOverflowOpen(false);
     setIsWorkspaceSwitcherOpen(false);
     void action();
   };
@@ -8016,6 +8108,71 @@ export default function App() {
       );
     });
 
+  const renderBreadcrumbOverflow = (key: string) => (
+    <div className="breadcrumbMenu breadcrumbOverflowMenu" key={key}>
+      <button
+        className="breadcrumbOverflowButton"
+        type="button"
+        aria-label="省略されたパンくずを表示"
+        aria-expanded={isBreadcrumbOverflowOpen}
+        title="省略されたパンくずを表示"
+        onClick={() => {
+          setActiveBreadcrumbPath(null);
+          setBreadcrumbBrowsePath(null);
+          setIsWorkspaceSwitcherOpen(false);
+          setIsOutlineMenuOpen(false);
+          setIsBreadcrumbOverflowOpen((isOpen) => !isOpen);
+        }}
+      >
+        <span aria-hidden="true">…</span>
+      </button>
+      {isBreadcrumbOverflowOpen && (
+        <div className="menuPopover breadcrumbOverflowPopover" role="menu">
+          {breadcrumbOverflowItems.map((item) => {
+            const itemKey =
+              item.kind === "outline"
+                ? `outline:${item.item.id}`
+                : item.kind === "scratch"
+                  ? "scratch"
+                  : `${item.kind}:${item.path}`;
+            const itemName = item.kind === "outline" ? item.item.title : item.name;
+            return (
+              <button
+                key={itemKey}
+                type="button"
+                role="menuitem"
+                title={itemName}
+                onClick={() => {
+                  setIsBreadcrumbOverflowOpen(false);
+                  if (item.kind === "outline") {
+                    jumpToOutlineItem(item.item);
+                  } else if (item.kind === "folder") {
+                    void handleBreadcrumbFolderSelect(item.path);
+                  } else if (item.kind === "file") {
+                    void handleProjectFileSelect(item.path);
+                  } else {
+                    void openWorkspace();
+                  }
+                }}
+              >
+                <span className="breadcrumbOverflowItemIcon" aria-hidden="true">
+                  {item.kind === "outline"
+                    ? "#"
+                    : item.kind === "folder"
+                      ? "▸"
+                      : item.kind === "file"
+                        ? "▤"
+                        : "⌂"}
+                </span>
+                <span>{itemName}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
   return (
       <main
         className="appShell"
@@ -8153,9 +8310,13 @@ export default function App() {
             <nav
               className="breadcrumbs"
               aria-label="パンくず"
+              data-layout={breadcrumbLayout}
               ref={breadcrumbMenuRef}
               onKeyDown={handleBreadcrumbKeyDown}
             >
+              {breadcrumbLayout === "minimal" &&
+                breadcrumbOverflowItems.length > 0 &&
+                renderBreadcrumbOverflow("breadcrumb-overflow-minimal")}
               {projectFolder ? (
                 breadcrumbTrail.map((crumb, index) => {
                   const isFolder =
@@ -8174,9 +8335,20 @@ export default function App() {
                   const breadcrumbMenuFolderPath =
                     breadcrumbNavigation?.path ?? crumb.path;
                   const children = breadcrumbNavigation?.children ?? [];
+                  const isVisible = isBreadcrumbTrailItemVisible(
+                    breadcrumbLayout,
+                    index,
+                    breadcrumbTrail.length,
+                    hasActiveOutlineBreadcrumb,
+                  );
 
                   return (
-                    <div className="breadcrumbSegment" key={crumb.path}>
+                    <Fragment key={crumb.path}>
+                    <div
+                      className={`breadcrumbSegment breadcrumbTrailSegment ${
+                        isVisible ? "" : "breadcrumbCollapsedSegment"
+                      }`}
+                    >
                       {index > 0 && <span className="crumbSeparator">›</span>}
                       {isFolder ? (
                         <div className="breadcrumbMenu">
@@ -8490,10 +8662,21 @@ export default function App() {
                         </span>
                       )}
                     </div>
+                    {breadcrumbLayout === "compact" &&
+                      index === 0 &&
+                      breadcrumbOverflowItems.length > 0 &&
+                      renderBreadcrumbOverflow("breadcrumb-overflow-compact")}
+                    </Fragment>
                   );
                 })
               ) : (
-                <div className="breadcrumbMenu">
+                <div
+                  className={`breadcrumbMenu ${
+                    breadcrumbLayout === "minimal"
+                      ? "breadcrumbCollapsedSegment"
+                      : ""
+                  }`}
+                >
                   <button
                     className="breadcrumbFolderButton workspaceSwitcherButton"
                     type="button"
@@ -8577,8 +8760,21 @@ export default function App() {
                 <>
                   <span className="outlineSeparator">/</span>
                   {activeOutlineChain.map((item, index) => (
-                    <div className="breadcrumbSegment" key={item.id}>
-                      {index > 0 && <span className="crumbSeparator">›</span>}
+                    <div
+                      className={`breadcrumbSegment outlineBreadcrumbSegment ${
+                        !isOutlineBreadcrumbItemVisible(
+                          breadcrumbLayout,
+                          index,
+                          activeOutlineChain.length,
+                        )
+                          ? "breadcrumbCollapsedSegment"
+                          : ""
+                      }`}
+                      key={item.id}
+                    >
+                      {index > 0 && breadcrumbLayout === "full" && (
+                        <span className="crumbSeparator">›</span>
+                      )}
                       <div className="breadcrumbMenu">
                         <button
                           className="breadcrumbFolderButton outlineCrumbButton"

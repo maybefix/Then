@@ -148,4 +148,59 @@ assert.equal(
   "expanding a nested folder must expose its files",
 );
 
+const layoutSource = await readFile("src/utils/breadcrumbLayout.ts", "utf8");
+const layoutCode = ts.transpileModule(layoutSource, {
+  compilerOptions: {
+    module: ts.ModuleKind.ESNext,
+    target: ts.ScriptTarget.ES2022,
+  },
+}).outputText;
+const layoutModuleUrl = `data:text/javascript;base64,${Buffer.from(layoutCode).toString("base64")}`;
+const {
+  getBreadcrumbLayout,
+  isBreadcrumbTrailItemVisible,
+  isOutlineBreadcrumbItemVisible,
+} = await import(layoutModuleUrl);
+
+assert.equal(getBreadcrumbLayout(239), "minimal");
+assert.equal(getBreadcrumbLayout(240), "compact");
+assert.equal(getBreadcrumbLayout(479), "compact");
+assert.equal(getBreadcrumbLayout(480), "full");
+
+assert.deepEqual(
+  [0, 1, 2, 3].filter((index) =>
+    isBreadcrumbTrailItemVisible("compact", index, 4, false),
+  ),
+  [0, 3],
+  "compact breadcrumbs keep the workspace and current file",
+);
+assert.deepEqual(
+  [0, 1, 2, 3].filter((index) =>
+    isBreadcrumbTrailItemVisible("compact", index, 4, true),
+  ),
+  [0],
+  "an active outline becomes the compact current location",
+);
+assert.deepEqual(
+  [0, 1, 2, 3].filter((index) =>
+    isBreadcrumbTrailItemVisible("minimal", index, 4, false),
+  ),
+  [3],
+  "minimal breadcrumbs keep only the current file",
+);
+assert.deepEqual(
+  [0, 1, 2, 3].filter((index) =>
+    isBreadcrumbTrailItemVisible("minimal", index, 4, true),
+  ),
+  [],
+  "minimal breadcrumbs move all file ancestors into the overflow menu",
+);
+assert.deepEqual(
+  [0, 1, 2].filter((index) =>
+    isOutlineBreadcrumbItemVisible("compact", index, 3),
+  ),
+  [2],
+  "compact outline breadcrumbs keep only the active heading",
+);
+
 console.log("breadcrumb navigation tests passed");
