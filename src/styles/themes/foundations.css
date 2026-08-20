@@ -110,6 +110,29 @@
     transform 190ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* Keep the edge hit target in the real workspace coordinate system. The
+   sidebar itself is UI-scaled, so using its translated 7px remainder as the
+   only target can move the hoverable area outside a narrow window. */
+.zoneRightSidebarHoverTarget {
+  display: none;
+}
+
+.appShell[data-zone-mode="true"]
+  .workspace[data-app-mode="write"]
+  > .zoneRightSidebarHoverTarget {
+  position: absolute;
+  z-index: 71;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: block;
+  width: 10px;
+}
+
+.appShell[data-zone-mode="true"]
+  .workspace[data-app-mode="write"]
+  > .zoneRightSidebarHoverTarget:hover
+  + .rightSidebar,
 .appShell[data-zone-mode="true"]
   .workspace[data-app-mode="write"]
   > .rightSidebar:is(:hover, :focus-within) {

@@ -9308,6 +9308,9 @@ export default function App() {
               </div>
             )}
 
+            {!isRightSidebarCollapsed && !isEditorFocusMode && (
+              <div className="zoneRightSidebarHoverTarget" aria-hidden="true" />
+            )}
             {!isRightSidebarCollapsed && (
               <aside
                 className={`rightSidebar ${isRightSidebarWide ? "wideRightSidebar" : ""}`}

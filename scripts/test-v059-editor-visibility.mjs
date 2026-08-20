@@ -238,5 +238,25 @@ assert.match(
 );
 assert.match(foundationsCss, /translateX\(calc\(-100% \+ 7px\)\)/);
 assert.match(foundationsCss, /translateX\(calc\(100% - 7px\)\)/);
+assert.match(
+  appCss,
+  /\.appShell\s*\{[\s\S]*?min-width:\s*0;/,
+  "the editor shell must fit the native 720px minimum window instead of overflowing at 920px",
+);
+assert.doesNotMatch(
+  appCss,
+  /\.appShell\s*\{[^}]*min-width:\s*(?:920|980)px;/,
+  "no later shell rule may restore the obsolete desktop-only minimum width",
+);
+assert.match(
+  appSource,
+  /className="zoneRightSidebarHoverTarget"/,
+  "zone mode needs a viewport-edge hover target independent of the scaled sidebar",
+);
+assert.match(
+  foundationsCss,
+  /> \.zoneRightSidebarHoverTarget:hover\s*\+ \.rightSidebar/,
+  "hovering the fixed right-edge target must reveal the right sidebar",
+);
 
 console.log("v0.5.9 editor visibility tests passed");
