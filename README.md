@@ -7,7 +7,7 @@ Markdown / テキストファイルをそのまま原稿として扱いながら
 - 現在のバージョン: `v0.5.12`
 - 対応環境: Windows x64
 - 技術構成: Tauri v2 + React + TypeScript + Vite + Tiptap / ProseMirror
-- 最新の公開版: [Then v0.5.11](https://github.com/maybefix/Then/releases/tag/v0.5.11)
+- 最新の公開版: [Then v0.5.12](https://github.com/maybefix/Then/releases/tag/v0.5.12)
 
 変更履歴は[GitHub Releases](https://github.com/maybefix/Then/releases)を参照してください。
 
