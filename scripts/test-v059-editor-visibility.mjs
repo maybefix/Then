@@ -161,6 +161,74 @@ assert.equal(
   "a layout-width change must recalculate the number of wrapped visual columns",
 );
 
+const pagedVerticalBands = createVisualLineBands(
+  [
+    {
+      left: 200,
+      right: 248,
+      top: 100,
+      bottom: 940,
+      fragments: [
+        { left: 224, right: 248, top: 100, bottom: 480 },
+        { left: 200, right: 224, top: 100, bottom: 260 },
+        // 次ページでは同じ列位置が再利用される。これを1ページ目と
+        // 統合すると、後続番号が先頭番号へ重なってしまう。
+        { left: 224, right: 248, top: 600, bottom: 940 },
+        { left: 200, right: 224, top: 600, bottom: 780 },
+      ],
+    },
+  ],
+  "vertical-rl",
+  { fragmented: true, fragmentOrigin: 100, fragmentStep: 500 },
+);
+assert.deepEqual(
+  pagedVerticalBands.map(({ number, top, bottom }) => ({ number, top, bottom })),
+  [
+    { number: 1, top: 100, bottom: 480 },
+    { number: 2, top: 100, bottom: 260 },
+    { number: 3, top: 600, bottom: 940 },
+    { number: 4, top: 600, bottom: 780 },
+  ],
+  "paged vertical lines must stay separated and ordered by fragmentainer",
+);
+assert.deepEqual(
+  pagedVerticalBands
+    .filter((band) => band.bottom >= 100 && band.top <= 480)
+    .map((band) => band.number),
+  [1, 2],
+  "the first page must not render line numbers from a later page at the same column position",
+);
+
+const reversePagedBands = createVisualLineBands(
+  [
+    {
+      left: 224,
+      right: 248,
+      top: -400,
+      bottom: 480,
+      fragments: [
+        { left: 224, right: 248, top: 100, bottom: 480 },
+        { left: 224, right: 248, top: -400, bottom: -20 },
+      ],
+    },
+  ],
+  "vertical-rl",
+  {
+    fragmented: true,
+    fragmentOrigin: 100,
+    fragmentStep: 500,
+    fragmentDirection: -1,
+  },
+);
+assert.deepEqual(
+  reversePagedBands.map(({ number, top }) => ({ number, top })),
+  [
+    { number: 1, top: 100 },
+    { number: 2, top: -400 },
+  ],
+  "reverse physical fragmentation must retain document-order line numbers",
+);
+
 const [appSource, editorSource, settingsSource, appCss, foundationsCss] = await Promise.all([
   readFile("src/App.tsx", "utf8"),
   readFile("src/VerticalTextEditor.tsx", "utf8"),

@@ -31,6 +31,17 @@ export type VisualPoint = {
 
 export type VisualLineLayerUpdate = "clear" | "preserve" | "render";
 
+export type VisualLineLayoutOptions = {
+  /** CSS fragmentation時の先頭fragmentainerの画面座標。 */
+  fragmentOrigin?: number;
+  /** 隣接fragmentainerの開始位置間の距離。 */
+  fragmentStep?: number;
+  /** fragmentainerが画面座標の正方向・負方向のどちらへ増えるか。 */
+  fragmentDirection?: 1 | -1;
+  /** 行帯を段落全体ではなく各ページ内の文字断片へ限定する。 */
+  fragmented?: boolean;
+};
+
 /**
  * IME composition 中は ProseMirror の selection とブラウザが編集中の DOM が
  * 一時的に一致しないため、直前に確定した表示行レイヤーをそのまま保持する。
@@ -47,6 +58,7 @@ export function resolveVisualLineLayerUpdate(
 
 type MutableLineRect = VisualRect & {
   primaryCenter: number;
+  fragmentIndex: number;
 };
 
 const finiteRect = (rect: VisualRect): boolean =>
@@ -68,7 +80,9 @@ function belongsToSameRenderedLine(
   line: MutableLineRect,
   fragment: VisualRect,
   vertical: boolean,
+  fragmentIndex: number,
 ): boolean {
+  if (line.fragmentIndex !== fragmentIndex) return false;
   const lineStart = primaryStart(line, vertical);
   const lineEnd = primaryEnd(line, vertical);
   const fragmentStart = primaryStart(fragment, vertical);
@@ -90,29 +104,65 @@ function mergeRect(line: MutableLineRect, fragment: VisualRect, vertical: boolea
   line.primaryCenter = primaryCenter(line, vertical);
 }
 
-function collectRenderedLines(block: VisualBlockRect, vertical: boolean): MutableLineRect[] {
+function resolveFragmentIndex(
+  rect: VisualRect,
+  vertical: boolean,
+  options?: VisualLineLayoutOptions,
+): number {
+  const origin = options?.fragmentOrigin;
+  const step = options?.fragmentStep;
+  if (!options?.fragmented || origin === undefined || !step || step <= 0) return 0;
+  const center = vertical
+    ? (rect.top + rect.bottom) / 2
+    : (rect.left + rect.right) / 2;
+  const direction = options.fragmentDirection ?? 1;
+  const relative = (center - origin) / step;
+  return Math.max(0, direction > 0 ? Math.floor(relative) : Math.ceil(-relative));
+}
+
+function collectRenderedLines(
+  block: VisualBlockRect,
+  vertical: boolean,
+  options?: VisualLineLayoutOptions,
+): MutableLineRect[] {
   const fragments = (block.fragments ?? []).filter(finiteRect);
   if (fragments.length === 0) {
     return finiteRect(block)
-      ? [{ ...block, primaryCenter: primaryCenter(block, vertical) }]
+      ? [{
+          ...block,
+          primaryCenter: primaryCenter(block, vertical),
+          fragmentIndex: resolveFragmentIndex(block, vertical, options),
+        }]
       : [];
   }
 
   const lines: MutableLineRect[] = [];
   for (const fragment of fragments) {
-    const existing = lines.find((line) =>
-      belongsToSameRenderedLine(line, fragment, vertical),
-    );
-    if (existing) {
+    const fragmentIndex = resolveFragmentIndex(fragment, vertical, options);
+    // Range#getClientRects() は文書順で返る。ページ断片化中は同じ列位置が
+    // 次ページでも再利用されるため、過去の全行を検索せず直前の断片とのみ
+    // 統合して文書順を保つ。
+    const existing = options?.fragmented
+      ? lines[lines.length - 1]
+      : lines.find((line) =>
+          belongsToSameRenderedLine(line, fragment, vertical, fragmentIndex),
+        );
+    if (existing && belongsToSameRenderedLine(existing, fragment, vertical, fragmentIndex)) {
       mergeRect(existing, fragment, vertical);
     } else {
-      lines.push({ ...fragment, primaryCenter: primaryCenter(fragment, vertical) });
+      lines.push({
+        ...fragment,
+        primaryCenter: primaryCenter(fragment, vertical),
+        fragmentIndex,
+      });
     }
   }
 
-  lines.sort((a, b) =>
-    vertical ? b.primaryCenter - a.primaryCenter : a.primaryCenter - b.primaryCenter,
-  );
+  if (!options?.fragmented) {
+    lines.sort((a, b) =>
+      vertical ? b.primaryCenter - a.primaryCenter : a.primaryCenter - b.primaryCenter,
+    );
+  }
   return lines;
 }
 
@@ -123,19 +173,22 @@ function collectRenderedLines(block: VisualBlockRect, vertical: boolean): Mutabl
 export function createVisualLineBands(
   blocks: readonly VisualBlockRect[],
   writingMode: VisualWritingMode,
+  options?: VisualLineLayoutOptions,
 ): VisualLineBand[] {
   const bands: VisualLineBand[] = [];
   const vertical = writingMode === "vertical-rl";
   let number = 1;
 
   blocks.forEach((block, blockIndex) => {
-    const renderedLines = collectRenderedLines(block, vertical);
+    const renderedLines = collectRenderedLines(block, vertical, options);
     renderedLines.forEach((line, lineIndex) => {
       // ハイライトは文字断片だけでなく、その段落のインライン方向全体へ伸ばす。
-      const left = vertical ? line.left : block.left;
-      const right = vertical ? line.right : block.right;
-      const top = vertical ? block.top : line.top;
-      const bottom = vertical ? block.bottom : line.bottom;
+      // ページ断片化時に段落全体へ伸ばすと別ページまで可視扱いになるため、
+      // その場合だけfragmentainer内の実断片へ限定する。
+      const left = vertical || options?.fragmented ? line.left : block.left;
+      const right = vertical || options?.fragmented ? line.right : block.right;
+      const top = vertical && !options?.fragmented ? block.top : line.top;
+      const bottom = vertical && !options?.fragmented ? block.bottom : line.bottom;
       bands.push({
         number,
         blockIndex,

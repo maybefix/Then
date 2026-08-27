@@ -2227,7 +2227,15 @@ export function VerticalTextEditor({
 
     // 固定寸法のmulticol要素は、収まらない本文を同寸の匿名column boxへ
     // 逐次断片化する。横書きはX軸、縦書きはY軸に生成された断片から数える。
-    const fragmentedExtent = verticalWriting ? root.scrollHeight : root.scrollWidth;
+    let fragmentedExtent = verticalWriting ? root.scrollHeight : root.scrollWidth;
+    if (verticalWriting) {
+      // vertical-rl + direction:rtl では後続fragmentainerが負のY方向へ生成され、
+      // scrollHeightには負側のoverflowが含まれない。Rangeのunion寸法で全ページを数える。
+      const contentRange = document.createRange();
+      contentRange.selectNodeContents(root);
+      fragmentedExtent = Math.max(contentHeight, contentRange.getBoundingClientRect().height);
+      contentRange.detach();
+    }
     const total = Math.max(1, Math.ceil((fragmentedExtent + columnGap - 1) / columnStep));
     const pageSpan =
       pageFlowDirectionRef.current === "vertical" ? height + gap : width + gap;
@@ -2249,7 +2257,7 @@ export function VerticalTextEditor({
       `${pageFlowDirectionRef.current === "vertical" ? hostOffset : 0}px`,
     );
     root.style.setProperty("--paged-fragment-x", `${verticalWriting ? 0 : -fragmentOffset}px`);
-    root.style.setProperty("--paged-fragment-y", `${verticalWriting ? -fragmentOffset : 0}px`);
+    root.style.setProperty("--paged-fragment-y", `${verticalWriting ? fragmentOffset : 0}px`);
     publishPageMetrics({ current, total });
   };
   syncPageMetricsRef.current = syncPageMetrics;
@@ -2279,18 +2287,20 @@ export function VerticalTextEditor({
     requestAnimationFrame(() => {
       if (editorDisplayModeRef.current !== "paged" || tiptapRef.current !== editor) return;
       const scroller = scrollerRef.current;
-      if (!scroller) return;
+      const host = editorHostRef.current;
+      if (!scroller || !host) return;
       const layout = pageLayoutRef.current;
-      const scrollerRect = scroller.getBoundingClientRect();
+      const hostRect = host.getBoundingClientRect();
       const caret = editor.view.coordsAtPos(editor.state.selection.head);
       const verticalWriting = writingModeRef.current === "vertical-rl";
       const caretCenter = verticalWriting
         ? (caret.top + caret.bottom) / 2
         : (caret.left + caret.right) / 2;
       const contentStart = verticalWriting
-        ? scrollerRect.top + layout.paddingY
-        : scrollerRect.left + layout.paddingX;
-      const relativePage = Math.floor((caretCenter - contentStart) / layout.columnStep);
+        ? hostRect.top + layout.paddingY
+        : hostRect.left + layout.paddingX;
+      const physicalPageDelta = Math.floor((caretCenter - contentStart) / layout.columnStep);
+      const relativePage = verticalWriting ? -physicalPageDelta : physicalPageDelta;
       if (relativePage === 0) return;
       scrollToPage(pageMetricsRef.current.current + relativePage, "auto");
     });
@@ -2439,7 +2449,14 @@ export function VerticalTextEditor({
   const handle = useMemo<TextEditorHandle>(
     () => ({
       focus: () => {
-        tiptapRef.current?.commands.focus();
+        const editor = tiptapRef.current;
+        if (!editor) return;
+        if (editorDisplayModeRef.current === "paged") {
+          editor.view.dom.focus({ preventScroll: true });
+          revealSelectionPageRef.current?.(editor);
+        } else {
+          editor.commands.focus();
+        }
       },
       getValue: () => {
         const editor = tiptapRef.current;
@@ -2503,10 +2520,16 @@ export function VerticalTextEditor({
 
         const index = Math.max(0, Math.min(editor.state.doc.childCount - 1, line - 1));
         const pos = (pmStartAtIndex(editor.state.doc, index) ?? 0) + 1;
-        editor.commands.focus();
+        if (editorDisplayModeRef.current === "paged") {
+          editor.view.dom.focus({ preventScroll: true });
+        } else {
+          editor.commands.focus();
+        }
         editor.commands.setTextSelection(pos);
         onSelectionChangeRef.current();
-        if (scroller && typewriterScrollRef.current) {
+        if (editorDisplayModeRef.current === "paged") {
+          revealSelectionPageRef.current?.(editor);
+        } else if (scroller && typewriterScrollRef.current) {
           stopCenterAnimationRef.current?.();
           centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, writingModeRef.current);
         }
@@ -3038,7 +3061,20 @@ export function VerticalTextEditor({
         };
       });
       const mode = writingModeRef.current;
-      const bands = createVisualLineBands(blockRects, mode);
+      const pagedLayout = editorDisplayModeRef.current === "paged";
+      const rootRect = currentEditor.view.dom.getBoundingClientRect();
+      const bands = createVisualLineBands(
+        blockRects,
+        mode,
+        pagedLayout
+          ? {
+              fragmented: true,
+              fragmentOrigin: isHorizontalWriting(mode) ? rootRect.left : rootRect.top,
+              fragmentStep: pageLayoutRef.current.columnStep,
+              fragmentDirection: isHorizontalWriting(mode) ? 1 : -1,
+            }
+          : undefined,
+      );
       const activeBlockIndex = activeLineIndex(currentEditor.state);
       let caretX = 0;
       let caretY = 0;
@@ -3128,12 +3164,16 @@ export function VerticalTextEditor({
           number.dataset.visualLineNumber = String(band.number);
           number.textContent = String(band.number);
           if (isHorizontalWriting(mode)) {
-            number.style.left = `${snapScrollValue(blockRect.left - scrollerRect.left - 10)}px`;
+            number.style.left = `${snapScrollValue(
+              (pagedLayout ? band.left : blockRect.left) - scrollerRect.left - 10,
+            )}px`;
             number.style.top = `${snapScrollValue(band.centerY - scrollerRect.top)}px`;
           } else {
             number.style.left = `${snapScrollValue(band.centerX - scrollerRect.left)}px`;
             number.style.top = `${snapScrollValue(
-              blockRect.top - scrollerRect.top - VERTICAL_LINE_NUMBER_TOP_OFFSET_PX,
+              (pagedLayout ? band.top : blockRect.top) -
+                scrollerRect.top -
+                VERTICAL_LINE_NUMBER_TOP_OFFSET_PX,
             )}px`;
           }
           fragment.appendChild(number);

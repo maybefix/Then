@@ -1879,7 +1879,6 @@ body.thenPdfExporting .printExportViewport {
   inset: 30px 36px 42px;
   border: 0;
   background: transparent;
-  scroll-behavior: smooth;
   scroll-snap-type: x mandatory;
   scroll-snap-stop: always;
 }
@@ -1968,7 +1967,7 @@ body.thenPdfExporting .printExportViewport {
   column-gap: var(--paged-column-gap);
   column-fill: auto;
   column-rule: 0;
-  direction: ltr;
+  direction: rtl;
   overflow: visible;
   pointer-events: auto;
   transform: translate(
@@ -1987,6 +1986,13 @@ body.thenPdfExporting .printExportViewport {
   overflow-clip-margin: 0;
   orphans: 2;
   widows: 2;
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-editor-display="paged"]
+  .verticalTypewriterEditor
+  .pm-root {
+  direction: ltr;
 }
 
 .appShell[data-writing-mode="horizontal-tb"]
