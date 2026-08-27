@@ -1861,8 +1861,15 @@ body.thenPdfExporting .printExportViewport {
   background: transparent;
 }
 
-/* v0.6.0 page editing: the editor remains one ProseMirror document, while the
-   viewport behaves as a page. This preserves IME/undo/selection semantics. */
+/* v0.6.0 page editing: a fixed-height multicol container fragments the live
+   ProseMirror document into page-sized column boxes. The sheet elements below
+   are real page surfaces aligned one-for-one with those fragments. */
+.verticalTypewriterPageSurface {
+  position: relative;
+  min-width: 100%;
+  height: 100%;
+}
+
 .verticalTypewriterShell[data-editor-display="paged"] {
   background: var(--bg-primary, #1b1c1f);
 }
@@ -1870,14 +1877,26 @@ body.thenPdfExporting .printExportViewport {
 .verticalTypewriterShell[data-editor-display="paged"] .verticalTypewriterScroller {
   z-index: 1;
   inset: 30px 36px 42px;
-  border: 1px solid color-mix(in srgb, var(--text-muted) 48%, transparent);
-  background: var(--bg-primary, #1b1c1f);
+  border: 0;
+  background: transparent;
   scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
   scroll-snap-stop: always;
+}
+
+.verticalTypewriterShell[data-editor-display="paged"][data-page-flow="horizontal-rtl"]
+  .verticalTypewriterScroller {
+  direction: rtl;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .verticalTypewriterShell[data-editor-display="paged"][data-page-flow="vertical"]
   .verticalTypewriterScroller {
+  direction: ltr;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
   scrollbar-width: none;
 }
 
@@ -1886,15 +1905,96 @@ body.thenPdfExporting .printExportViewport {
   display: none;
 }
 
-.pagedEditorFrame {
+.verticalTypewriterShell[data-editor-display="paged"] .verticalTypewriterPageSurface {
+  min-width: 0;
+  min-height: 0;
+}
+
+.pagedEditorSheet {
   position: absolute;
   z-index: 0;
-  inset: 30px 36px 42px;
+  box-sizing: border-box;
+  width: var(--paged-page-width);
+  height: var(--paged-page-height);
+  border: 1px solid color-mix(in srgb, var(--text-muted) 48%, transparent);
   background: var(--bg-primary, #1b1c1f);
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.12),
     0 12px 32px rgba(0, 0, 0, 0.08);
+  scroll-snap-align: start;
   pointer-events: none;
+}
+
+.pagedEditorSheet > span {
+  position: absolute;
+  right: 12px;
+  bottom: 9px;
+  color: var(--text-faint);
+  font-family: var(--ui-font-family);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.verticalTypewriterShell[data-editor-display="paged"] .verticalTypewriterEditor {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  width: var(--paged-page-width);
+  min-width: 0;
+  height: var(--paged-page-height);
+  overflow: hidden;
+  pointer-events: none;
+  transform: translate(
+    var(--paged-host-x, 0px),
+    var(--paged-host-y, 0px)
+  );
+}
+
+.verticalTypewriterShell[data-editor-display="paged"] .verticalTypewriterEditor .pm-root {
+  position: absolute;
+  top: var(--paged-padding-y);
+  right: var(--paged-padding-x);
+  box-sizing: border-box;
+  width: var(--paged-content-width);
+  min-width: var(--paged-content-width);
+  max-width: var(--paged-content-width);
+  height: var(--paged-content-height);
+  min-height: var(--paged-content-height);
+  max-height: var(--paged-content-height);
+  margin: 0;
+  padding: 0;
+  column-width: var(--paged-content-width);
+  column-gap: var(--paged-column-gap);
+  column-fill: auto;
+  column-rule: 0;
+  direction: ltr;
+  overflow: visible;
+  pointer-events: auto;
+  transform: translate(
+    var(--paged-fragment-x, 0px),
+    var(--paged-fragment-y, 0px)
+  );
+  transform-origin: right top;
+}
+
+.verticalTypewriterShell[data-editor-display="paged"] .verticalTypewriterEditor .pm-root p {
+  max-inline-size: 100%;
+  margin-inline: 0;
+  break-inside: auto;
+  contain: none;
+  content-visibility: visible;
+  overflow-clip-margin: 0;
+  orphans: 2;
+  widows: 2;
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-editor-display="paged"]
+  .verticalTypewriterEditor
+  .pm-root
+  p {
+  direction: ltr;
 }
 
 .pagedEditorNav {
@@ -1991,14 +2091,6 @@ body.thenPdfExporting .printExportViewport {
   letter-spacing: 0.01em;
   line-height: 20px;
   pointer-events: none;
-}
-
-.appShell[data-writing-mode="horizontal-tb"]
-  .verticalTypewriterShell[data-editor-display="paged"]
-  .verticalTypewriterEditor
-  .pm-root {
-  padding-top: 64px;
-  padding-bottom: 72px;
 }
 
 .verticalTypewriterEditor {
@@ -2523,6 +2615,45 @@ body.thenPdfExporting .printExportViewport {
   height: 0;
   border-left: 0;
   border-top: 1px solid rgba(232, 176, 75, 0.14);
+}
+
+/* These rules intentionally follow both writing-mode branches. Pagination
+   owns the fragmentainer dimensions; writing mode only controls glyph flow. */
+.appShell .verticalTypewriterShell[data-editor-display="paged"]
+  .verticalTypewriterEditor {
+  width: var(--paged-page-width);
+  min-width: 0;
+  height: var(--paged-page-height);
+  min-height: 0;
+}
+
+.appShell .verticalTypewriterShell[data-editor-display="paged"]
+  .verticalTypewriterEditor
+  .pm-root {
+  box-sizing: border-box;
+  width: var(--paged-content-width);
+  min-width: var(--paged-content-width);
+  max-width: var(--paged-content-width);
+  height: var(--paged-content-height);
+  min-height: var(--paged-content-height);
+  max-height: var(--paged-content-height);
+  margin: 0;
+  padding: 0;
+  column-width: var(--paged-content-width);
+  column-gap: var(--paged-column-gap);
+  column-fill: auto;
+  overflow: visible;
+}
+
+.appShell .verticalTypewriterShell[data-editor-display="paged"]
+  .verticalTypewriterEditor
+  .pm-root
+  p {
+  max-inline-size: 100%;
+  margin-inline: 0;
+  contain: none;
+  content-visibility: visible;
+  overflow-clip-margin: 0;
 }
 
 .asideLine {

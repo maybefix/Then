@@ -229,7 +229,30 @@ const PLACEHOLDER = "# 見出し\n- リスト項目\nここに入力……";
 
 type PageMetrics = { current: number; total: number };
 
+type PageLayout = {
+  width: number;
+  height: number;
+  gap: number;
+  paddingX: number;
+  paddingY: number;
+  contentWidth: number;
+  contentHeight: number;
+  columnGap: number;
+  columnStep: number;
+};
+
 const DEFAULT_PAGE_METRICS: PageMetrics = { current: 1, total: 1 };
+const DEFAULT_PAGE_LAYOUT: PageLayout = {
+  width: 1,
+  height: 1,
+  gap: 28,
+  paddingX: 1,
+  paddingY: 1,
+  contentWidth: 1,
+  contentHeight: 1,
+  columnGap: 30,
+  columnStep: 31,
+};
 
 const astKey = new PluginKey<AstPluginState>("then-layout-ast");
 
@@ -2090,6 +2113,7 @@ export function VerticalTextEditor({
   onPageMetricsChange,
 }: VerticalTextEditorProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const pageSurfaceRef = useRef<HTMLDivElement | null>(null);
   const editorHostRef = useRef<HTMLDivElement | null>(null);
   const lineBreakLayerRef = useRef<HTMLDivElement | null>(null);
   const visualLineLayerRef = useRef<HTMLDivElement | null>(null);
@@ -2125,8 +2149,11 @@ export function VerticalTextEditor({
   const stopCenterAnimationRef = useRef<(() => void) | null>(null);
   const cancelInitialAdjustmentRef = useRef<(() => void) | null>(null);
   const syncPageMetricsRef = useRef<(() => void) | null>(null);
+  const revealSelectionPageRef = useRef<((editor: Editor) => void) | null>(null);
   const pageMetricsRef = useRef<PageMetrics>(DEFAULT_PAGE_METRICS);
+  const pageLayoutRef = useRef<PageLayout>(DEFAULT_PAGE_LAYOUT);
   const [pageMetrics, setPageMetrics] = useState<PageMetrics>(DEFAULT_PAGE_METRICS);
+  const [pageLayout, setPageLayout] = useState<PageLayout>(DEFAULT_PAGE_LAYOUT);
   editorDisplayModeRef.current = editorDisplayMode;
   pageFlowDirectionRef.current = pageFlowDirection;
   typewriterScrollRef.current = typewriterScroll && editorDisplayMode === "continuous";
@@ -2145,47 +2172,137 @@ export function VerticalTextEditor({
       return;
     }
     const scroller = scrollerRef.current;
+    const surface = pageSurfaceRef.current;
+    const host = editorHostRef.current;
     const root = editorHostRef.current?.querySelector<HTMLElement>(".pm-root");
-    const firstBlock = root?.firstElementChild;
-    if (!scroller || !root || !(firstBlock instanceof HTMLElement)) {
+    if (!scroller || !surface || !host || !root) {
       publishPageMetrics(DEFAULT_PAGE_METRICS);
       return;
     }
 
+    const width = Math.max(1, scroller.clientWidth);
+    const height = Math.max(1, scroller.clientHeight);
     const verticalWriting = writingModeRef.current === "vertical-rl";
-    const span = Math.max(1, verticalWriting ? scroller.clientWidth : scroller.clientHeight);
-    const rootStyle = getComputedStyle(root);
-    const leadingPadding = verticalWriting
-      ? (Number.parseFloat(rootStyle.paddingLeft) || 0) +
-        (Number.parseFloat(rootStyle.paddingRight) || 0)
-      : (Number.parseFloat(rootStyle.paddingTop) || 0) +
-        (Number.parseFloat(rootStyle.paddingBottom) || 0);
-    const fullExtent = verticalWriting ? root.scrollWidth : root.scrollHeight;
-    const contentExtent = Math.max(1, fullExtent - leadingPadding);
-    const total = Math.max(1, Math.ceil(contentExtent / span));
-    const scrollerRect = scroller.getBoundingClientRect();
-    const firstRect = firstBlock.getBoundingClientRect();
-    const displaced = verticalWriting
-      ? Math.max(0, firstRect.right - scrollerRect.right)
-      : Math.max(0, scrollerRect.top - firstRect.top);
-    const current = Math.max(1, Math.min(total, Math.round(displaced / span) + 1));
+    const gap = 28;
+    const paddingX = Math.max(28, Math.min(72, Math.round(width * 0.08)));
+    const paddingY = Math.max(28, Math.min(64, Math.round(height * 0.08)));
+    const contentWidth = Math.max(1, width - paddingX * 2);
+    const contentHeight = Math.max(1, height - paddingY * 2);
+    const columnGap = verticalWriting ? gap + paddingY * 2 : gap + paddingX * 2;
+    const columnStep = verticalWriting
+      ? contentHeight + columnGap
+      : contentWidth + columnGap;
+    const nextLayout: PageLayout = {
+      width,
+      height,
+      gap,
+      paddingX,
+      paddingY,
+      contentWidth,
+      contentHeight,
+      columnGap,
+      columnStep,
+    };
+    surface.style.setProperty("--paged-page-width", `${width}px`);
+    surface.style.setProperty("--paged-page-height", `${height}px`);
+    surface.style.setProperty("--paged-page-gap", `${gap}px`);
+    surface.style.setProperty("--paged-padding-x", `${paddingX}px`);
+    surface.style.setProperty("--paged-padding-y", `${paddingY}px`);
+    surface.style.setProperty("--paged-content-width", `${contentWidth}px`);
+    surface.style.setProperty("--paged-content-height", `${contentHeight}px`);
+    surface.style.setProperty("--paged-column-gap", `${columnGap}px`);
+
+    const previousLayout = pageLayoutRef.current;
+    if (
+      previousLayout.width !== width ||
+      previousLayout.height !== height ||
+      previousLayout.paddingX !== paddingX ||
+      previousLayout.paddingY !== paddingY ||
+      previousLayout.columnGap !== columnGap ||
+      previousLayout.columnStep !== columnStep
+    ) {
+      pageLayoutRef.current = nextLayout;
+      setPageLayout(nextLayout);
+    }
+
+    // 固定寸法のmulticol要素は、収まらない本文を同寸の匿名column boxへ
+    // 逐次断片化する。横書きはX軸、縦書きはY軸に生成された断片から数える。
+    const fragmentedExtent = verticalWriting ? root.scrollHeight : root.scrollWidth;
+    const total = Math.max(1, Math.ceil((fragmentedExtent + columnGap - 1) / columnStep));
+    const pageSpan =
+      pageFlowDirectionRef.current === "vertical" ? height + gap : width + gap;
+    const rawPage =
+      pageFlowDirectionRef.current === "vertical"
+        ? scroller.scrollTop / pageSpan
+        : Math.abs(scroller.scrollLeft) / pageSpan;
+    const current = Math.max(1, Math.min(total, Math.round(rawPage) + 1));
+    const fragmentOffset = (current - 1) * columnStep;
+    const hostOffset =
+      (current - 1) *
+      (pageFlowDirectionRef.current === "vertical" ? height + gap : width + gap);
+    host.style.setProperty(
+      "--paged-host-x",
+      `${pageFlowDirectionRef.current === "horizontal-rtl" ? -hostOffset : 0}px`,
+    );
+    host.style.setProperty(
+      "--paged-host-y",
+      `${pageFlowDirectionRef.current === "vertical" ? hostOffset : 0}px`,
+    );
+    root.style.setProperty("--paged-fragment-x", `${verticalWriting ? 0 : -fragmentOffset}px`);
+    root.style.setProperty("--paged-fragment-y", `${verticalWriting ? -fragmentOffset : 0}px`);
     publishPageMetrics({ current, total });
   };
   syncPageMetricsRef.current = syncPageMetrics;
+
+  const scrollToPage = (targetPage: number, behavior: ScrollBehavior) => {
+    const scroller = scrollerRef.current;
+    if (!scroller || editorDisplayModeRef.current !== "paged") return;
+    const target = Math.max(1, Math.min(pageMetricsRef.current.total, targetPage));
+    const layout = pageLayoutRef.current;
+    if (pageFlowDirectionRef.current === "horizontal-rtl") {
+      scroller.scrollTo({
+        left: -(target - 1) * (layout.width + layout.gap),
+        behavior,
+      });
+    } else {
+      scroller.scrollTo({
+        top: (target - 1) * (layout.height + layout.gap),
+        behavior,
+      });
+    }
+    window.setTimeout(() => syncPageMetricsRef.current?.(), behavior === "smooth" ? 220 : 0);
+  };
+
+  const revealSelectionPage = (editor: Editor) => {
+    if (editorDisplayModeRef.current !== "paged") return;
+    syncPageMetricsRef.current?.();
+    requestAnimationFrame(() => {
+      if (editorDisplayModeRef.current !== "paged" || tiptapRef.current !== editor) return;
+      const scroller = scrollerRef.current;
+      if (!scroller) return;
+      const layout = pageLayoutRef.current;
+      const scrollerRect = scroller.getBoundingClientRect();
+      const caret = editor.view.coordsAtPos(editor.state.selection.head);
+      const verticalWriting = writingModeRef.current === "vertical-rl";
+      const caretCenter = verticalWriting
+        ? (caret.top + caret.bottom) / 2
+        : (caret.left + caret.right) / 2;
+      const contentStart = verticalWriting
+        ? scrollerRect.top + layout.paddingY
+        : scrollerRect.left + layout.paddingX;
+      const relativePage = Math.floor((caretCenter - contentStart) / layout.columnStep);
+      if (relativePage === 0) return;
+      scrollToPage(pageMetricsRef.current.current + relativePage, "auto");
+    });
+  };
+  revealSelectionPageRef.current = revealSelectionPage;
 
   const movePage = (delta: -1 | 1) => {
     const scroller = scrollerRef.current;
     if (!scroller || editorDisplayModeRef.current !== "paged") return;
     cancelInitialAdjustmentRef.current?.();
     stopCenterAnimationRef.current?.();
-    const verticalWriting = writingModeRef.current === "vertical-rl";
-    const span = Math.max(1, verticalWriting ? scroller.clientWidth : scroller.clientHeight);
-    if (verticalWriting) {
-      scroller.scrollBy({ left: -delta * span, behavior: "smooth" });
-    } else {
-      scroller.scrollBy({ top: delta * span, behavior: "smooth" });
-    }
-    window.setTimeout(() => syncPageMetricsRef.current?.(), 220);
+    scrollToPage(pageMetricsRef.current.current + delta, "smooth");
   };
 
   useEffect(() => {
@@ -3154,6 +3271,7 @@ export function VerticalTextEditor({
         onSelectionChangeRef.current();
         if (!isEditorComposing(currentEditor, composingRef)) {
           requestCenterCaret(true, "update");
+          revealSelectionPageRef.current?.(currentEditor);
         }
         requestVisibleWindow();
         requestLineBreakMarks();
@@ -3164,6 +3282,7 @@ export function VerticalTextEditor({
         // キーボードでの選択（Shift+矢印など）はドラッグ外なので従来どおり追従する。
         if (!pointerDraggingRef.current) {
           requestCenterCaret(false, "selection");
+          revealSelectionPageRef.current?.(editor);
         }
         requestVisibleWindow();
         requestLineBreakMarks();
@@ -3206,7 +3325,9 @@ export function VerticalTextEditor({
         }
         return;
       }
-      if (isHorizontalWriting(writingModeRef.current)) {
+      if (editorDisplayModeRef.current === "paged") {
+        scroller.scrollLeft -= delta;
+      } else if (isHorizontalWriting(writingModeRef.current)) {
         scroller.scrollTop += delta;
       } else {
         scroller.scrollLeft -= delta;
@@ -3221,7 +3342,13 @@ export function VerticalTextEditor({
       if (event.target !== scroller) return;
 
       const scrollerRect = scroller.getBoundingClientRect();
-      if (isHorizontalWriting(writingModeRef.current)) {
+      if (
+        editorDisplayModeRef.current === "paged" &&
+        pageFlowDirectionRef.current === "horizontal-rtl"
+      ) {
+        const scrollbarHeight = scroller.offsetHeight - scroller.clientHeight;
+        if (scrollbarHeight > 0 && event.clientY >= scrollerRect.bottom - scrollbarHeight) return;
+      } else if (isHorizontalWriting(writingModeRef.current)) {
         const scrollbarWidth = scroller.offsetWidth - scroller.clientWidth;
         if (scrollbarWidth > 0 && event.clientX >= scrollerRect.right - scrollbarWidth) return;
       } else {
@@ -3262,6 +3389,7 @@ export function VerticalTextEditor({
         );
       });
       requestCenterCaret(true, "compositionend");
+      revealSelectionPageRef.current?.(editor);
       requestVisibleWindow();
       requestLineBreakMarks();
     };
@@ -3411,9 +3539,42 @@ export function VerticalTextEditor({
       data-editor-display={editorDisplayMode}
       data-page-flow={editorDisplayMode === "paged" ? pageFlowDirection : undefined}
     >
-      {editorDisplayMode === "paged" && <div className="pagedEditorFrame" aria-hidden="true" />}
       <div ref={scrollerRef} className="verticalTypewriterScroller">
-        <div ref={editorHostRef} className="verticalTypewriterEditor" />
+        <div
+          ref={pageSurfaceRef}
+          className="verticalTypewriterPageSurface"
+          style={
+            editorDisplayMode === "paged"
+              ? {
+                  width:
+                    pageFlowDirection === "horizontal-rtl"
+                      ? `${pageMetrics.total * pageLayout.width + Math.max(0, pageMetrics.total - 1) * pageLayout.gap}px`
+                      : `${pageLayout.width}px`,
+                  height:
+                    pageFlowDirection === "vertical"
+                      ? `${pageMetrics.total * pageLayout.height + Math.max(0, pageMetrics.total - 1) * pageLayout.gap}px`
+                      : `${pageLayout.height}px`,
+                }
+              : undefined
+          }
+        >
+          {editorDisplayMode === "paged" &&
+            Array.from({ length: pageMetrics.total }, (_, index) => (
+              <div
+                className="pagedEditorSheet"
+                key={index}
+                style={
+                  pageFlowDirection === "horizontal-rtl"
+                    ? { right: `${index * (pageLayout.width + pageLayout.gap)}px`, top: 0 }
+                    : { left: 0, top: `${index * (pageLayout.height + pageLayout.gap)}px` }
+                }
+                aria-hidden="true"
+              >
+                <span>{index + 1}</span>
+              </div>
+            ))}
+          <div ref={editorHostRef} className="verticalTypewriterEditor" />
+        </div>
       </div>
       <div
         ref={visualLineLayerRef}
