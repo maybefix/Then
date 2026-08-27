@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [types, catalog, defaultCss, standardCss, redCss, themeIndex, sharedVariants] =
+const [types, catalog, defaultCss, standardCss, redCss, acrylicCss, flatCss, newsroomCss, themeIndex, sharedVariants] =
   await Promise.all([
     readFile("src/types.ts", "utf8"),
     readFile("src/themes.ts", "utf8"),
     readFile("src/styles/themes/default.css", "utf8"),
     readFile("src/styles/themes/standard.css", "utf8"),
     readFile("src/styles/themes/signal-red.css", "utf8"),
+    readFile("src/styles/themes/acrylic.css", "utf8"),
+    readFile("src/styles/themes/flat.css", "utf8"),
+    readFile("src/styles/themes/newsroom.css", "utf8"),
     readFile("src/styles/themes/index.css", "utf8"),
     readFile("src/styles/themes/shared-variants.css", "utf8"),
   ]);
@@ -16,12 +19,66 @@ assert.match(types, /"default",\s+"standard",/s, "Default and Standard must have
 assert.match(catalog, /id: "default", label: "Default"/);
 assert.match(catalog, /id: "standard", label: "Standard"/);
 assert.match(catalog, /id: "signal-red-light", label: "Red"/);
+assert.match(catalog, /id: "acrylic-light", label: "Aero Glass"/);
+assert.match(catalog, /id: "acrylic-dark", label: "Aero Glass"/);
+assert.match(catalog, /id: "flat-light", label: "Flat"/);
+assert.match(catalog, /id: "flat-dark", label: "Flat"/);
+assert.match(catalog, /id: "newsroom-light", label: "Newsroom"/);
+assert.match(catalog, /id: "newsroom-dark", label: "Newsroom"/);
+assert.doesNotMatch(catalog, /label: "Modern Skeuo"/);
 
 assert.match(defaultCss, /data-theme="default"/);
 assert.doesNotMatch(defaultCss, /data-theme="standard"/);
 assert.match(standardCss, /data-theme="standard"/);
 assert.match(themeIndex, /@import "\.\/standard\.css";/);
+assert.match(themeIndex, /@import "\.\/acrylic\.css";/);
+assert.match(themeIndex, /@import "\.\/newsroom\.css";/);
+assert.doesNotMatch(themeIndex, /modern-skeuo/);
 assert.match(sharedVariants, /data-theme="standard"/);
+
+for (const themeId of ["acrylic-light", "acrylic-dark"]) {
+  assert.match(types, new RegExp(`"${themeId}"`));
+  assert.match(acrylicCss, new RegExp(`data-theme="${themeId}"`));
+}
+
+for (const themeId of ["flat-light", "flat-dark"]) {
+  assert.match(flatCss, new RegExp(`data-theme="${themeId}"`));
+}
+
+assert.match(types, /"newsroom-light"/);
+assert.match(types, /"newsroom-dark"/);
+assert.doesNotMatch(types, /"skeuo-(?:light|dark)"/);
+assert.match(newsroomCss, /data-theme="newsroom-light"/);
+assert.match(newsroomCss, /data-theme="newsroom-dark"/);
+
+for (const token of [
+  "--focus-ring:",
+  "--success:",
+  "--warning:",
+  "--danger:",
+]) {
+  assert.ok(acrylicCss.includes(token), `Acrylic must define ${token}`);
+  assert.ok(flatCss.includes(token), `Flat must define ${token}`);
+}
+
+assert.match(acrylicCss, /--radius-control: 9px/);
+assert.match(flatCss, /--radius-control: 10px/);
+assert.match(acrylicCss, /--panel-backdrop: blur\(/);
+assert.match(acrylicCss, /@supports not \(backdrop-filter: blur\(1px\)\)/);
+assert.match(acrylicCss, /linear-gradient[\s\S]*?backdrop-filter: var\(--panel-backdrop\)/);
+assert.match(flatCss, /--card-float-shadow: none/);
+assert.match(newsroomCss, /--bg-primary: #fff/);
+assert.match(newsroomCss, /--text-primary: #0a0a03/);
+assert.match(newsroomCss, /--accent: #b21f24/);
+assert.match(newsroomCss, /data-theme="newsroom-dark"[\s\S]*?--bg-primary: #141413/);
+assert.match(newsroomCss, /data-theme="newsroom-dark"[\s\S]*?--text-primary: #f2f1eb/);
+assert.match(newsroomCss, /data-theme="newsroom-dark"[\s\S]*?--accent: #c73f45/);
+assert.match(newsroomCss, /themePreview-newsroom-dark/);
+assert.match(newsroomCss, /--radius-card: 2px/);
+assert.match(newsroomCss, /--card-float-shadow: none/);
+assert.doesNotMatch(newsroomCss, /(?:linear-gradient|backdrop-filter)/);
+assert.match(catalog, /"skeuo-light": "newsroom-light"/);
+assert.match(catalog, /"skeuo-dark": "newsroom-dark"/);
 
 for (const token of [
   "--bg-root: #eeeeee",

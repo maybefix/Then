@@ -4,10 +4,10 @@
 
 Markdown / テキストファイルをそのまま原稿として扱いながら、本文執筆、構成管理、資料参照、保存点の比較・復元、PDF / DOCX出力までを一つのワークスペースで行えます。
 
-- 現在のバージョン: `v0.5.12`
+- 現在のバージョン: `v0.5.13`
 - 対応環境: Windows x64
 - 技術構成: Tauri v2 + React + TypeScript + Vite + Tiptap / ProseMirror
-- 最新の公開版: [Then v0.5.12](https://github.com/maybefix/Then/releases/tag/v0.5.12)
+- 最新の公開版: [Then v0.5.13](https://github.com/maybefix/Then/releases/tag/v0.5.13)
 
 変更履歴は[GitHub Releases](https://github.com/maybefix/Then/releases)を参照してください。
 
@@ -89,6 +89,7 @@ Thenは、PDFのページ組版にオープンソースの**Vivliostyle Viewer 2
 ### 表示と設定
 
 - ライト／ダークを含む多数のカラーテーマ
+- フロストガラス調の「Aero Glass」、マットな「Flat」、紙面調の「Newsroom」を含むライト／ダークテーマ
 - 白をベースに黒をアクセントとした「Standard」テーマと、旧「Signal Red」から改名した「Red」テーマ
 - Windowsにインストールされたフォントの利用
 - 本文フォント、文字サイズ、行間、本文表示幅の調整

@@ -2783,8 +2783,13 @@ export function VerticalTextEditor({
       if (layerUpdate === "clear" || !currentEditor) return;
 
       const scrollerRect = scroller.getBoundingClientRect();
-      layer.style.left = `${snapScrollValue(scrollerRect.left)}px`;
-      layer.style.top = `${snapScrollValue(scrollerRect.top)}px`;
+      const layerParentRect = layer.parentElement?.getBoundingClientRect();
+      layer.style.left = `${snapScrollValue(
+        scrollerRect.left - (layerParentRect?.left ?? 0),
+      )}px`;
+      layer.style.top = `${snapScrollValue(
+        scrollerRect.top - (layerParentRect?.top ?? 0),
+      )}px`;
       layer.style.width = `${snapScrollValue(scrollerRect.width)}px`;
       layer.style.height = `${snapScrollValue(scrollerRect.height)}px`;
 
@@ -2932,8 +2937,13 @@ export function VerticalTextEditor({
       layer.textContent = "";
 
       const scrollerRect = scroller.getBoundingClientRect();
-      layer.style.left = `${snapScrollValue(scrollerRect.left)}px`;
-      layer.style.top = `${snapScrollValue(scrollerRect.top)}px`;
+      const layerParentRect = layer.parentElement?.getBoundingClientRect();
+      layer.style.left = `${snapScrollValue(
+        scrollerRect.left - (layerParentRect?.left ?? 0),
+      )}px`;
+      layer.style.top = `${snapScrollValue(
+        scrollerRect.top - (layerParentRect?.top ?? 0),
+      )}px`;
       layer.style.width = `${snapScrollValue(scrollerRect.width)}px`;
       layer.style.height = `${snapScrollValue(scrollerRect.height)}px`;
 
@@ -3277,13 +3287,13 @@ export function VerticalTextEditor({
     >
       <div ref={scrollerRef} className="verticalTypewriterScroller">
         <div ref={editorHostRef} className="verticalTypewriterEditor" />
-        <div
-          ref={visualLineLayerRef}
-          className="visibleLineNumberLayer"
-          aria-hidden="true"
-        />
-        <div ref={lineBreakLayerRef} className="visibleLineBreakLayer" aria-hidden="true" />
       </div>
+      <div
+        ref={visualLineLayerRef}
+        className="visibleLineNumberLayer"
+        aria-hidden="true"
+      />
+      <div ref={lineBreakLayerRef} className="visibleLineBreakLayer" aria-hidden="true" />
       {typewriterScroll && showTypewriterGuide && <div className="verticalTypewriterGuide" />}
     </div>
   );

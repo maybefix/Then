@@ -2032,7 +2032,7 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .visibleLineNumberLayer {
-  position: fixed;
+  position: absolute;
   z-index: 1;
   top: 0;
   left: 0;
@@ -2227,7 +2227,7 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .visibleLineBreakLayer {
-  position: fixed;
+  position: absolute;
   left: 0;
   top: 0;
   width: 0;

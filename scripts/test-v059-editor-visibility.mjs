@@ -186,6 +186,11 @@ assert.doesNotMatch(
 );
 assert.match(editorSource, /class: "japanese-quote"/);
 assert.match(editorSource, /className="visibleLineNumberLayer"/);
+assert.match(
+  editorSource,
+  /className="verticalTypewriterScroller">[\s\S]*?<div ref=\{editorHostRef\}[\s\S]*?<\/div>\s*<div\s+ref=\{visualLineLayerRef\}/,
+  "visual overlays must be siblings of the scroller so filtered themes cannot shift their coordinate space",
+);
 assert.match(editorSource, /createVisualLineBands/);
 assert.match(editorSource, /findClosestVisualLineBand/);
 assert.match(
@@ -230,6 +235,11 @@ assert.doesNotMatch(
 );
 assert.match(appCss, /\.visibleLineNumber/);
 assert.match(appCss, /\.activeVisualLineHighlight/);
+assert.match(
+  appCss,
+  /\.visibleLineNumberLayer\s*\{[^}]*position:\s*absolute/s,
+  "visual line overlays must use the editor shell as their containing block",
+);
 assert.doesNotMatch(
   appCss,
   /\.verticalTypewriterEditor \.pm-root\s*\{[^}]*padding:\s*0 50vw;/,

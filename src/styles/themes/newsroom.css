@@ -1,0 +1,474 @@
+/* Editorial theme derived from the referenced Japanese newspaper layout:
+   white paper, near-black ink, fine rules, and restrained red accents. */
+.appShell[data-theme="newsroom-light"] {
+  --on-accent: #fff;
+  --brand-gradient: #b21f24;
+  --action-gradient: #b21f24;
+  --action-text: #fff;
+  --bg-root: #f4f4f4;
+  --bg-primary: #fff;
+  --bg-secondary: #fafafa;
+  --bg-tertiary: #f0f0f0;
+  --bg-panel: #fff;
+  --bg-panel-strong: #fff;
+  --border-subtle: #dedede;
+  --border-strong: #8c8c8c;
+  --text-primary: #0a0a03;
+  --text-secondary: #444440;
+  --text-muted: #74746f;
+  --text-faint: #9b9b96;
+  --accent: #b21f24;
+  --accent-strong: #8f1015;
+  --focus-ring: #b21f24;
+  --success: #2e7651;
+  --warning: #8c6119;
+  --danger: #b21f24;
+  --control-hover: #f2f2f2;
+  --accent-soft: #fff0f0;
+  --accent-border: #cf777a;
+  --danger-soft: #fbecec;
+  --editor-bg: #fff;
+  --card-bg: #fff;
+  --card-hover: #f8f8f8;
+  --topbar-bg: #fff;
+  --sidebar-bg: #fff;
+  --canvas-bg: #f4f4f4;
+  --selection-bg: #b21f24;
+  --selection-text: #fff;
+  --card-float-shadow: none;
+  --radius-control: 2px;
+  --radius-card: 2px;
+  --radius-button: 2px;
+  --shadow-popover: 0 3px 12px rgba(10, 10, 3, 0.15);
+  --shadow-modal: 0 8px 28px rgba(10, 10, 3, 0.2);
+  --silkdown-code-bg: #f4f4f4;
+  --silkdown-link-color: #8f1015;
+}
+
+.appShell[data-theme="newsroom-dark"] {
+  color-scheme: dark;
+  --on-accent: #fff;
+  --brand-gradient: #c73f45;
+  --action-gradient: #c73f45;
+  --action-text: #fff;
+  --bg-root: #0d0d0c;
+  --bg-primary: #141413;
+  --bg-secondary: #191918;
+  --bg-tertiary: #222220;
+  --bg-panel: #171716;
+  --bg-panel-strong: #1d1d1b;
+  --border-subtle: #343431;
+  --border-strong: #686861;
+  --text-primary: #f2f1eb;
+  --text-secondary: #d0cfc8;
+  --text-muted: #a09f97;
+  --text-faint: #73726c;
+  --accent: #c73f45;
+  --accent-strong: #ee777b;
+  --focus-ring: #ee777b;
+  --success: #71b58c;
+  --warning: #dda95a;
+  --danger: #ff7c80;
+  --overlay: rgba(0, 0, 0, 0.76);
+  --control-hover: #242421;
+  --accent-soft: #321a1b;
+  --accent-border: #914146;
+  --danger-soft: #351a1b;
+  --editor-bg: #111110;
+  --card-bg: #171716;
+  --card-hover: #20201e;
+  --topbar-bg: #131312;
+  --sidebar-bg: #151514;
+  --canvas-bg: #0d0d0c;
+  --selection-bg: #a92e34;
+  --selection-text: #fff;
+  --card-float-shadow: none;
+  --radius-control: 2px;
+  --radius-card: 2px;
+  --radius-button: 2px;
+  --shadow-popover: 0 4px 16px rgba(0, 0, 0, 0.42);
+  --shadow-modal: 0 10px 34px rgba(0, 0, 0, 0.56);
+  --silkdown-code-bg: #20201e;
+  --silkdown-link-color: #ee777b;
+}
+
+.themePreview-newsroom-light {
+  border-color: #8c8c8c;
+  border-radius: 2px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.themePreview-newsroom-light::before {
+  background: #fafafa;
+  box-shadow: inset -1px 0 0 #dedede;
+}
+
+.themePreview-newsroom-light i { background: #0a0a03; }
+.themePreview-newsroom-light b { background: #b21f24; }
+
+.themePreview-newsroom-dark {
+  border-color: #686861;
+  border-radius: 2px;
+  background: #111110;
+  box-shadow: none;
+}
+
+.themePreview-newsroom-dark::before {
+  background: #1d1d1b;
+  box-shadow: inset -1px 0 0 #343431;
+}
+
+.themePreview-newsroom-dark i { background: #f2f1eb; }
+.themePreview-newsroom-dark b { background: #c73f45; }
+
+.appShell[data-theme="newsroom-light"] .appFrame {
+  border-color: #c9c9c9;
+  background: var(--bg-root);
+}
+
+.appShell[data-theme="newsroom-light"] .workspace {
+  gap: 0;
+  padding: 0;
+  background: var(--bg-primary);
+}
+
+.appShell[data-theme="newsroom-light"] .topbar {
+  border-bottom-color: var(--border-strong);
+  background: #fff;
+  box-shadow: inset 0 -1px 0 rgba(10, 10, 3, 0.04);
+}
+
+.appShell[data-theme="newsroom-light"] .leftWorkspaceCluster {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  flex: 0 0 auto;
+  border-right: 1px solid var(--border-strong);
+  background: #fff;
+}
+
+.appShell[data-theme="newsroom-light"] .leftWorkspaceCluster .workspaceActivityBar {
+  height: 100%;
+  border-right-color: var(--border-subtle);
+  background: #fff;
+}
+
+.appShell[data-theme="newsroom-light"] .leftWorkspaceCluster .workspaceSidebar {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
+}
+
+.appShell[data-theme="newsroom-light"] .workspaceSidebar .sidebarHeaderLabel {
+  color: var(--text-muted);
+}
+
+.appShell[data-theme="newsroom-light"] .workspaceSidebar :is(
+  .fileTreeItem,
+  .fileTreeOutlineChildren .outlineTreeItem
+) {
+  color: var(--text-secondary);
+}
+
+.appShell[data-theme="newsroom-light"] .workspaceSidebar :is(
+  .fileTreeItem.activeTreeItem,
+  .fileTreeOutlineChildren .activeOutlineTreeItem
+) {
+  color: var(--text-primary);
+}
+
+.appShell[data-theme="newsroom-light"] .workspaceSidebar .fileTreeItem:hover:not(.activeTreeItem):not(.selectedTreeEntry) {
+  background: #f5f5f5;
+}
+
+.appShell[data-theme="newsroom-light"] .editorColumn {
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
+}
+
+.appShell[data-theme="newsroom-light"] .verticalTypewriterEditor .pm-root p.heading {
+  color: var(--text-primary);
+}
+
+.appShell[data-theme="newsroom-light"] .verticalTypewriterScroller {
+  z-index: 1;
+}
+
+.appShell[data-theme="newsroom-light"] .verticalTypewriterGuide {
+  z-index: 0;
+}
+
+.appShell[data-theme="newsroom-light"] .activeVisualLineHighlight {
+  border-color: rgba(10, 10, 3, 0.1);
+  background: rgba(10, 10, 3, 0.06);
+}
+
+.appShell[data-theme="newsroom-light"] .visibleLineNumber.active {
+  color: var(--text-secondary);
+}
+
+.appShell[data-theme="newsroom-light"] .rightSidebar {
+  border-left: 1px solid var(--border-strong);
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
+}
+
+.appShell[data-theme="newsroom-light"] :is(.rightTabs, .ideaCard, .rightSidebar .snippetCard, .plotCard, .themeOption) {
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
+}
+
+.appShell[data-theme="newsroom-light"] .rightTabs {
+  border-top: 1px solid var(--text-primary);
+}
+
+.appShell[data-theme="newsroom-light"] :is(.ideaCard, .rightSidebar .snippetCard, .themeOption):hover {
+  background: var(--card-hover);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.appShell[data-theme="newsroom-light"] :is(.activeWorkspaceActivityButton, .activeRightTab) {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.appShell[data-theme="newsroom-light"] .activeRightTab:hover { color: var(--accent-strong); }
+
+.appShell[data-theme="newsroom-light"] :is(.rightSidebarHeader, .panelHeader) {
+  border-bottom-color: var(--text-primary);
+}
+
+.appShell[data-theme="newsroom-light"] :is(
+  .modalForm input,
+  .modalForm select,
+  .modalForm textarea,
+  .ideaSearch input,
+  .projectSearchInput,
+  .plotCardTitle,
+  .plotCardBody
+) {
+  border-color: var(--border-subtle);
+  background: #fff;
+  box-shadow: none;
+}
+
+.appShell[data-theme="newsroom-light"] :is(
+  .themePickerButton,
+  .modalActions button,
+  .newTabActions button,
+  .addButton,
+  .ideaAdd
+) {
+  border: 1px solid var(--accent);
+  background: #fff;
+  box-shadow: none;
+  color: var(--accent-strong);
+}
+
+.appShell[data-theme="newsroom-light"] :is(
+  .themePickerButton,
+  .modalActions button,
+  .newTabActions button,
+  .addButton,
+  .ideaAdd
+):hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+
+.appShell[data-theme="newsroom-light"] :is(.menuPopover, .editorContextMenu, .modal, .toast) {
+  border: 1px solid var(--border-strong);
+  background: #fff;
+}
+
+.appShell[data-theme="newsroom-light"] .statusbar {
+  border-top-color: var(--border-subtle);
+  background: #fafafa;
+  box-shadow: none;
+}
+
+.appShell[data-theme="newsroom-dark"] .appFrame {
+  border-color: var(--border-strong);
+  background: var(--bg-root);
+}
+
+.appShell[data-theme="newsroom-dark"] .workspace {
+  gap: 0;
+  padding: 0;
+  background: var(--bg-primary);
+}
+
+.appShell[data-theme="newsroom-dark"] .topbar {
+  border-bottom-color: var(--border-strong);
+  background: var(--topbar-bg);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.025);
+}
+
+.appShell[data-theme="newsroom-dark"] .leftWorkspaceCluster {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  flex: 0 0 auto;
+  border-right: 1px solid var(--border-strong);
+  background: var(--sidebar-bg);
+}
+
+.appShell[data-theme="newsroom-dark"] .leftWorkspaceCluster .workspaceActivityBar {
+  height: 100%;
+  border-right-color: var(--border-subtle);
+  background: var(--bg-primary);
+}
+
+.appShell[data-theme="newsroom-dark"] .leftWorkspaceCluster .workspaceSidebar {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: var(--sidebar-bg);
+  box-shadow: none;
+}
+
+.appShell[data-theme="newsroom-dark"] .workspaceSidebar .sidebarHeaderLabel {
+  color: var(--text-muted);
+}
+
+.appShell[data-theme="newsroom-dark"] .workspaceSidebar :is(
+  .fileTreeItem,
+  .fileTreeOutlineChildren .outlineTreeItem
+) {
+  color: var(--text-secondary);
+}
+
+.appShell[data-theme="newsroom-dark"] .workspaceSidebar :is(
+  .fileTreeItem.activeTreeItem,
+  .fileTreeOutlineChildren .activeOutlineTreeItem
+) {
+  color: var(--text-primary);
+}
+
+.appShell[data-theme="newsroom-dark"] .workspaceSidebar .fileTreeItem:hover:not(.activeTreeItem):not(.selectedTreeEntry) {
+  background: var(--control-hover);
+}
+
+.appShell[data-theme="newsroom-dark"] .editorColumn {
+  border: 0;
+  border-radius: 0;
+  background: var(--editor-bg);
+  box-shadow: none;
+}
+
+.appShell[data-theme="newsroom-dark"] .verticalTypewriterEditor .pm-root p.heading {
+  color: var(--text-primary);
+}
+
+.appShell[data-theme="newsroom-dark"] .verticalTypewriterScroller {
+  z-index: 1;
+}
+
+.appShell[data-theme="newsroom-dark"] .verticalTypewriterGuide {
+  z-index: 0;
+  border-left-color: rgba(238, 119, 123, 0.2);
+}
+
+.appShell[data-theme="newsroom-dark"] .activeVisualLineHighlight {
+  border-color: rgba(242, 241, 235, 0.1);
+  background: rgba(242, 241, 235, 0.06);
+}
+
+.appShell[data-theme="newsroom-dark"] .visibleLineNumber.active {
+  color: var(--text-secondary);
+}
+
+.appShell[data-theme="newsroom-dark"] .rightSidebar {
+  border-left: 1px solid var(--border-strong);
+  border-radius: 0;
+  background: var(--bg-panel);
+  box-shadow: none;
+}
+
+.appShell[data-theme="newsroom-dark"] :is(.rightTabs, .ideaCard, .rightSidebar .snippetCard, .plotCard, .themeOption) {
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: var(--card-bg);
+  box-shadow: none;
+}
+
+.appShell[data-theme="newsroom-dark"] .rightTabs {
+  border-top: 1px solid var(--text-primary);
+}
+
+.appShell[data-theme="newsroom-dark"] :is(.ideaCard, .rightSidebar .snippetCard, .themeOption):hover {
+  background: var(--card-hover);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.appShell[data-theme="newsroom-dark"] :is(.activeWorkspaceActivityButton, .activeRightTab) {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.appShell[data-theme="newsroom-dark"] .activeRightTab:hover { color: var(--accent-strong); }
+
+.appShell[data-theme="newsroom-dark"] :is(.rightSidebarHeader, .panelHeader) {
+  border-bottom-color: var(--text-primary);
+}
+
+.appShell[data-theme="newsroom-dark"] :is(
+  .modalForm input,
+  .modalForm select,
+  .modalForm textarea,
+  .ideaSearch input,
+  .projectSearchInput,
+  .plotCardTitle,
+  .plotCardBody
+) {
+  border-color: var(--border-subtle);
+  background: var(--bg-panel-strong);
+  box-shadow: none;
+}
+
+.appShell[data-theme="newsroom-dark"] :is(
+  .themePickerButton,
+  .modalActions button,
+  .newTabActions button,
+  .addButton,
+  .ideaAdd
+) {
+  border: 1px solid var(--accent);
+  background: var(--bg-panel-strong);
+  box-shadow: none;
+  color: var(--accent-strong);
+}
+
+.appShell[data-theme="newsroom-dark"] :is(
+  .themePickerButton,
+  .modalActions button,
+  .newTabActions button,
+  .addButton,
+  .ideaAdd
+):hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.appShell[data-theme="newsroom-dark"] :is(.menuPopover, .editorContextMenu, .modal, .toast) {
+  border: 1px solid var(--border-strong);
+  background: var(--bg-panel);
+}
+
+.appShell[data-theme="newsroom-dark"] .statusbar {
+  border-top-color: var(--border-subtle);
+  background: var(--bg-secondary);
+  box-shadow: none;
+}
