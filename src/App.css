@@ -1861,6 +1861,146 @@ body.thenPdfExporting .printExportViewport {
   background: transparent;
 }
 
+/* v0.6.0 page editing: the editor remains one ProseMirror document, while the
+   viewport behaves as a page. This preserves IME/undo/selection semantics. */
+.verticalTypewriterShell[data-editor-display="paged"] {
+  background: var(--bg-primary, #1b1c1f);
+}
+
+.verticalTypewriterShell[data-editor-display="paged"] .verticalTypewriterScroller {
+  z-index: 1;
+  inset: 30px 36px 42px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 48%, transparent);
+  background: var(--bg-primary, #1b1c1f);
+  scroll-behavior: smooth;
+  scroll-snap-stop: always;
+}
+
+.verticalTypewriterShell[data-editor-display="paged"][data-page-flow="vertical"]
+  .verticalTypewriterScroller {
+  scrollbar-width: none;
+}
+
+.verticalTypewriterShell[data-editor-display="paged"][data-page-flow="vertical"]
+  .verticalTypewriterScroller::-webkit-scrollbar {
+  display: none;
+}
+
+.pagedEditorFrame {
+  position: absolute;
+  z-index: 0;
+  inset: 30px 36px 42px;
+  background: var(--bg-primary, #1b1c1f);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.12),
+    0 12px 32px rgba(0, 0, 0, 0.08);
+  pointer-events: none;
+}
+
+.pagedEditorNav {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 86%, transparent);
+  border-radius: 999px;
+  outline: none;
+  background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+  color: var(--text-secondary);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  backdrop-filter: none;
+  transition:
+    color 120ms ease,
+    background 120ms ease,
+    border-color 120ms ease,
+    transform 120ms ease,
+    opacity 120ms ease;
+}
+
+.pagedEditorNav svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.pagedEditorNav:hover:not(:disabled),
+.pagedEditorNav:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 68%, var(--border-strong));
+  background: color-mix(in srgb, var(--bg-secondary) 82%, var(--accent) 18%);
+  color: var(--text-primary);
+  transform: scale(1.06);
+}
+
+.pagedEditorNav:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+
+.verticalTypewriterShell[data-page-flow="horizontal-rtl"] .pagedEditorPrevious {
+  top: 50%;
+  right: 1px;
+  transform: translateY(-50%);
+}
+
+.verticalTypewriterShell[data-page-flow="horizontal-rtl"] .pagedEditorNext {
+  top: 50%;
+  left: 1px;
+  transform: translateY(-50%);
+}
+
+.verticalTypewriterShell[data-page-flow="horizontal-rtl"]
+  .pagedEditorNav:hover:not(:disabled),
+.verticalTypewriterShell[data-page-flow="horizontal-rtl"] .pagedEditorNav:focus-visible {
+  transform: translateY(-50%) scale(1.06);
+}
+
+.verticalTypewriterShell[data-page-flow="vertical"] .pagedEditorPrevious {
+  top: 1px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.verticalTypewriterShell[data-page-flow="vertical"] .pagedEditorNext {
+  bottom: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.verticalTypewriterShell[data-page-flow="vertical"]
+  .pagedEditorNav:hover:not(:disabled),
+.verticalTypewriterShell[data-page-flow="vertical"] .pagedEditorNav:focus-visible {
+  transform: translateX(-50%) scale(1.06);
+}
+
+.pagedEditorCounter {
+  position: absolute;
+  z-index: 5;
+  bottom: 9px;
+  left: 44px;
+  color: var(--text-faint);
+  font-family: var(--ui-font-family);
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  line-height: 20px;
+  pointer-events: none;
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-editor-display="paged"]
+  .verticalTypewriterEditor
+  .pm-root {
+  padding-top: 64px;
+  padding-bottom: 72px;
+}
+
 .verticalTypewriterEditor {
   position: relative;
   min-width: 100%;
@@ -2971,6 +3111,12 @@ body.thenPdfExporting .printExportViewport {
   gap: 5px;
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.dialogFieldHint {
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .modalForm input,
@@ -9575,6 +9721,7 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
 
 .modeSwitcher button {
   display: inline-flex;
+  width: 31px;
   height: 25px;
   align-items: center;
   justify-content: center;
@@ -9585,7 +9732,7 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   cursor: pointer;
   font-size: 11.5px;
   line-height: 1;
-  padding: 0 10px;
+  padding: 0;
   white-space: nowrap;
 }
 

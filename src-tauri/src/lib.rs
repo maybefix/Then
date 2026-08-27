@@ -14,6 +14,15 @@ struct TextDocument {
     content: String,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TextTemplateSummary {
+    id: String,
+    name: String,
+    scope: String,
+    extension: String,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ReferenceFileInfo {
@@ -438,6 +447,10 @@ pub fn run() {
             list_project_text_files,
             list_project_markdown_files,
             create_text_file,
+            create_text_file_from_template,
+            list_text_templates,
+            register_text_template,
+            delete_text_template,
             create_markdown_file,
             create_project_folder,
             rename_project_entry,
@@ -1311,6 +1324,180 @@ fn create_text_file(folder_path: String, name: String) -> Result<TextDocument, S
         .and_then(|value| value.to_str())
         .unwrap_or("新規ノート");
     write_text_file(&path, &format!("# {title}\n"))?;
+    read_text_document(&path)
+}
+
+fn text_template_dir(
+    app: &tauri::AppHandle,
+    scope: &str,
+    root_path: Option<&str>,
+) -> Result<PathBuf, String> {
+    match scope {
+        "workspace" => {
+            let root = root_path
+                .map(PathBuf::from)
+                .ok_or_else(|| "workspace template requires a project root".to_string())?;
+            if !root.is_dir() {
+                return Err("project root does not exist".to_string());
+            }
+            Ok(root.join(".then").join("templates"))
+        }
+        "profile" => app
+            .path()
+            .app_data_dir()
+            .map(|path| path.join("templates"))
+            .map_err(|error| format!("failed to resolve app data directory: {error}")),
+        _ => Err("template scope must be workspace or profile".to_string()),
+    }
+}
+
+fn text_template_summary(scope: &str, path: &Path) -> Option<TextTemplateSummary> {
+    if !path.is_file() || !is_supported_text_extension(path) {
+        return None;
+    }
+    let file_name = path.file_name()?.to_str()?.to_string();
+    let name = path.file_stem()?.to_str()?.to_string();
+    let extension = path.extension()?.to_str()?.to_lowercase();
+    Some(TextTemplateSummary {
+        id: format!("{scope}:{file_name}"),
+        name,
+        scope: scope.to_string(),
+        extension,
+    })
+}
+
+fn collect_text_templates(
+    dir: &Path,
+    scope: &str,
+    templates: &mut Vec<TextTemplateSummary>,
+) -> Result<(), String> {
+    if !dir.exists() {
+        return Ok(());
+    }
+    for entry in std::fs::read_dir(dir)
+        .map_err(|error| format!("failed to read template directory: {error}"))?
+    {
+        let entry = entry.map_err(|error| format!("failed to read template entry: {error}"))?;
+        if let Some(summary) = text_template_summary(scope, &entry.path()) {
+            templates.push(summary);
+        }
+    }
+    Ok(())
+}
+
+fn resolve_text_template_path(
+    app: &tauri::AppHandle,
+    root_path: Option<&str>,
+    template_id: &str,
+) -> Result<PathBuf, String> {
+    let (scope, file_name) = template_id
+        .split_once(':')
+        .ok_or_else(|| "invalid template identifier".to_string())?;
+    let normalized = normalize_text_file_name(file_name)?;
+    if normalized != file_name || Path::new(file_name).file_name().and_then(|value| value.to_str()) != Some(file_name) {
+        return Err("invalid template identifier".to_string());
+    }
+    let path = text_template_dir(app, scope, root_path)?.join(file_name);
+    if !path.is_file() {
+        return Err("template does not exist".to_string());
+    }
+    Ok(path)
+}
+
+#[tauri::command]
+fn list_text_templates(
+    app: tauri::AppHandle,
+    root_path: Option<String>,
+) -> Result<Vec<TextTemplateSummary>, String> {
+    let mut templates = Vec::new();
+    if root_path.is_some() {
+        let workspace_dir = text_template_dir(&app, "workspace", root_path.as_deref())?;
+        collect_text_templates(&workspace_dir, "workspace", &mut templates)?;
+    }
+    let profile_dir = text_template_dir(&app, "profile", None)?;
+    collect_text_templates(&profile_dir, "profile", &mut templates)?;
+    templates.sort_by(|left, right| {
+        let left_scope = if left.scope == "workspace" { 0 } else { 1 };
+        let right_scope = if right.scope == "workspace" { 0 } else { 1 };
+        left_scope
+            .cmp(&right_scope)
+            .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+    });
+    Ok(templates)
+}
+
+#[tauri::command]
+fn register_text_template(
+    app: tauri::AppHandle,
+    root_path: Option<String>,
+    scope: String,
+    name: String,
+    extension: String,
+    content: String,
+    overwrite: bool,
+) -> Result<TextTemplateSummary, String> {
+    let extension = match extension.to_lowercase().as_str() {
+        "md" => "md",
+        "txt" => "txt",
+        _ => return Err("template extension must be txt or md".to_string()),
+    };
+    let raw_label = normalize_project_entry_name(&name)?;
+    let suffix = format!(".{extension}");
+    let label = if raw_label.to_lowercase().ends_with(&suffix) {
+        raw_label[..raw_label.len() - suffix.len()].trim().to_string()
+    } else {
+        raw_label
+    };
+    if label.is_empty() {
+        return Err("template name is required".to_string());
+    }
+    let dir = text_template_dir(&app, &scope, root_path.as_deref())?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|error| format!("failed to create template directory: {error}"))?;
+    let path = dir.join(format!("{label}.{extension}"));
+    if path.exists() && !overwrite {
+        return Err("template already exists".to_string());
+    }
+    write_text_file(&path, &content)?;
+    text_template_summary(&scope, &path)
+        .ok_or_else(|| "failed to read registered template".to_string())
+}
+
+#[tauri::command]
+fn delete_text_template(
+    app: tauri::AppHandle,
+    root_path: Option<String>,
+    template_id: String,
+) -> Result<(), String> {
+    let path = resolve_text_template_path(&app, root_path.as_deref(), &template_id)?;
+    std::fs::remove_file(path).map_err(|error| format!("failed to delete template: {error}"))
+}
+
+#[tauri::command]
+fn create_text_file_from_template(
+    app: tauri::AppHandle,
+    folder_path: String,
+    name: String,
+    root_path: Option<String>,
+    template_id: String,
+) -> Result<TextDocument, String> {
+    let folder = PathBuf::from(folder_path);
+    if !folder.is_dir() {
+        return Err("folder does not exist".to_string());
+    }
+    let template_path = resolve_text_template_path(&app, root_path.as_deref(), &template_id)?;
+    let content = std::fs::read_to_string(&template_path)
+        .map_err(|error| format!("failed to read template: {error}"))?;
+    let file_name = normalize_text_file_name(&name)?;
+    let stem = file_stem_for_unique_name(&file_name);
+    let extension = file_extension_for_unique_name(&file_name);
+    let mut path = folder.join(&file_name);
+    let mut index = 2;
+    while path.exists() {
+        path = folder.join(format!("{stem}-{index}.{extension}"));
+        index += 1;
+    }
+    write_text_file(&path, &content)?;
     read_text_document(&path)
 }
 

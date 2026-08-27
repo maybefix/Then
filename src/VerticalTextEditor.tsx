@@ -17,7 +17,7 @@ import {
   DecorationSet,
   type EditorView,
 } from "@tiptap/pm/view";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   areDocumentIndexesEquivalent,
   createDocumentIndexFromLines,
@@ -38,7 +38,12 @@ import {
   type VisualBlockRect,
 } from "./editor/visualLineLayout";
 import { lineDiffFromSelectionTransaction } from "./editor/transactionLineDiff";
-import type { TextEditorViewportState, WritingMode } from "./types";
+import type {
+  EditorDisplayMode,
+  PageFlowDirection,
+  TextEditorViewportState,
+  WritingMode,
+} from "./types";
 
 export type TextEditorHandle = {
   focus: () => void;
@@ -61,6 +66,8 @@ type VerticalTextEditorProps = {
   text: string;
   editorRevision: number | null;
   writingMode: WritingMode;
+  editorDisplayMode: EditorDisplayMode;
+  pageFlowDirection: PageFlowDirection;
   typewriterScroll: boolean;
   showTypewriterGuide: boolean;
   typewriterOffset: number;
@@ -83,6 +90,7 @@ type VerticalTextEditorProps = {
   onReady: (editor: TextEditorHandle | null) => void;
   onTextChange: (text: string, editorRevision: number) => void;
   onSelectionChange: () => void;
+  onPageMetricsChange?: (metrics: { current: number; total: number } | null) => void;
 };
 
 type LayoutAlign = "start" | "center" | "end";
@@ -218,6 +226,10 @@ const INITIAL_CENTER_STABLE_FRAMES = 2;
 // 縦書きの行番号を本文上端から離し、数字と先頭文字を視覚的に分離する。
 const VERTICAL_LINE_NUMBER_TOP_OFFSET_PX = 18;
 const PLACEHOLDER = "# 見出し\n- リスト項目\nここに入力……";
+
+type PageMetrics = { current: number; total: number };
+
+const DEFAULT_PAGE_METRICS: PageMetrics = { current: 1, total: 1 };
 
 const astKey = new PluginKey<AstPluginState>("then-layout-ast");
 
@@ -2060,6 +2072,8 @@ export function VerticalTextEditor({
   text,
   editorRevision,
   writingMode,
+  editorDisplayMode,
+  pageFlowDirection,
   typewriterScroll,
   showTypewriterGuide,
   typewriterOffset,
@@ -2073,6 +2087,7 @@ export function VerticalTextEditor({
   onReady,
   onTextChange,
   onSelectionChange,
+  onPageMetricsChange,
 }: VerticalTextEditorProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const editorHostRef = useRef<HTMLDivElement | null>(null);
@@ -2088,13 +2103,16 @@ export function VerticalTextEditor({
   const initialViewportRef = useRef(initialViewportState ?? null);
   const onTextChangeRef = useRef(onTextChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
+  const onPageMetricsChangeRef = useRef(onPageMetricsChange);
   const localRevisionRef = useRef(0);
   const composingRef = useRef(false);
   // マウスでのドラッグ範囲選択中は true。ジェスチャ中は再センタリングを抑制し、
   // pointerup 時にキャレットが collapsed なら一度だけ寄せ、範囲が残るなら据え置く。
   const pointerDraggingRef = useRef(false);
   const writingModeRef = useRef<WritingMode>(writingMode);
-  const typewriterScrollRef = useRef(typewriterScroll);
+  const editorDisplayModeRef = useRef<EditorDisplayMode>(editorDisplayMode);
+  const pageFlowDirectionRef = useRef<PageFlowDirection>(pageFlowDirection);
+  const typewriterScrollRef = useRef(typewriterScroll && editorDisplayMode === "continuous");
   const typewriterOffsetRef = useRef(typewriterOffset);
   const showLineBreakMarksRef = useRef(showLineBreakMarks);
   const showLineNumbersRef = useRef(showLineNumbers);
@@ -2106,7 +2124,69 @@ export function VerticalTextEditor({
   const startCenterAnimationRef = useRef<(() => void) | null>(null);
   const stopCenterAnimationRef = useRef<(() => void) | null>(null);
   const cancelInitialAdjustmentRef = useRef<(() => void) | null>(null);
-  typewriterScrollRef.current = typewriterScroll;
+  const syncPageMetricsRef = useRef<(() => void) | null>(null);
+  const pageMetricsRef = useRef<PageMetrics>(DEFAULT_PAGE_METRICS);
+  const [pageMetrics, setPageMetrics] = useState<PageMetrics>(DEFAULT_PAGE_METRICS);
+  editorDisplayModeRef.current = editorDisplayMode;
+  pageFlowDirectionRef.current = pageFlowDirection;
+  typewriterScrollRef.current = typewriterScroll && editorDisplayMode === "continuous";
+
+  const publishPageMetrics = (next: PageMetrics) => {
+    const previous = pageMetricsRef.current;
+    if (previous.current === next.current && previous.total === next.total) return;
+    pageMetricsRef.current = next;
+    setPageMetrics(next);
+    onPageMetricsChangeRef.current?.(next);
+  };
+
+  const syncPageMetrics = () => {
+    if (editorDisplayModeRef.current !== "paged") {
+      onPageMetricsChangeRef.current?.(null);
+      return;
+    }
+    const scroller = scrollerRef.current;
+    const root = editorHostRef.current?.querySelector<HTMLElement>(".pm-root");
+    const firstBlock = root?.firstElementChild;
+    if (!scroller || !root || !(firstBlock instanceof HTMLElement)) {
+      publishPageMetrics(DEFAULT_PAGE_METRICS);
+      return;
+    }
+
+    const verticalWriting = writingModeRef.current === "vertical-rl";
+    const span = Math.max(1, verticalWriting ? scroller.clientWidth : scroller.clientHeight);
+    const rootStyle = getComputedStyle(root);
+    const leadingPadding = verticalWriting
+      ? (Number.parseFloat(rootStyle.paddingLeft) || 0) +
+        (Number.parseFloat(rootStyle.paddingRight) || 0)
+      : (Number.parseFloat(rootStyle.paddingTop) || 0) +
+        (Number.parseFloat(rootStyle.paddingBottom) || 0);
+    const fullExtent = verticalWriting ? root.scrollWidth : root.scrollHeight;
+    const contentExtent = Math.max(1, fullExtent - leadingPadding);
+    const total = Math.max(1, Math.ceil(contentExtent / span));
+    const scrollerRect = scroller.getBoundingClientRect();
+    const firstRect = firstBlock.getBoundingClientRect();
+    const displaced = verticalWriting
+      ? Math.max(0, firstRect.right - scrollerRect.right)
+      : Math.max(0, scrollerRect.top - firstRect.top);
+    const current = Math.max(1, Math.min(total, Math.round(displaced / span) + 1));
+    publishPageMetrics({ current, total });
+  };
+  syncPageMetricsRef.current = syncPageMetrics;
+
+  const movePage = (delta: -1 | 1) => {
+    const scroller = scrollerRef.current;
+    if (!scroller || editorDisplayModeRef.current !== "paged") return;
+    cancelInitialAdjustmentRef.current?.();
+    stopCenterAnimationRef.current?.();
+    const verticalWriting = writingModeRef.current === "vertical-rl";
+    const span = Math.max(1, verticalWriting ? scroller.clientWidth : scroller.clientHeight);
+    if (verticalWriting) {
+      scroller.scrollBy({ left: -delta * span, behavior: "smooth" });
+    } else {
+      scroller.scrollBy({ top: delta * span, behavior: "smooth" });
+    }
+    window.setTimeout(() => syncPageMetricsRef.current?.(), 220);
+  };
 
   useEffect(() => {
     onTextChangeRef.current = onTextChange;
@@ -2115,6 +2195,15 @@ export function VerticalTextEditor({
   useEffect(() => {
     onSelectionChangeRef.current = onSelectionChange;
   }, [onSelectionChange]);
+
+  useEffect(() => {
+    onPageMetricsChangeRef.current = onPageMetricsChange;
+    onPageMetricsChange?.(editorDisplayMode === "paged" ? pageMetricsRef.current : null);
+  }, [editorDisplayMode, onPageMetricsChange]);
+
+  useEffect(() => {
+    requestAnimationFrame(() => syncPageMetricsRef.current?.());
+  }, [editorDisplayMode, pageFlowDirection, writingMode, text]);
 
   // スクロール領域の内寸（スクロールバー除く）と .pm-root の上下パディング
   // 実測値を親へ通知する。文字表示幅設定のスライダー上限が常に実際の描画
@@ -2137,6 +2226,7 @@ export function VerticalTextEditor({
         height: scroller.clientHeight,
         verticalPadding,
       });
+      syncPageMetricsRef.current?.();
     };
     report();
     const resizeObserver = new ResizeObserver(report);
@@ -2155,6 +2245,20 @@ export function VerticalTextEditor({
   useEffect(() => {
     typewriterOffsetRef.current = Number.isFinite(typewriterOffset) ? typewriterOffset : 50;
   }, [typewriterOffset]);
+
+  useEffect(() => {
+    const editor = tiptapRef.current;
+    const scroller = scrollerRef.current;
+    if (editorDisplayMode !== "continuous" || !typewriterScroll || !editor || !scroller) {
+      stopCenterAnimationRef.current?.();
+      return;
+    }
+    requestAnimationFrame(() => {
+      if (!typewriterScrollRef.current || isEditorComposing(editor, composingRef)) return;
+      centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, writingModeRef.current);
+      requestLineBreakMarksRef.current?.();
+    });
+  }, [editorDisplayMode, typewriterScroll]);
 
   useEffect(() => {
     writingModeRef.current = writingMode;
@@ -2424,6 +2528,7 @@ export function VerticalTextEditor({
     let initialAdjustmentAllowed = true;
     let lineBreakQueued = false;
     let visualLineQueued = false;
+    let lastPagedWheelAt = 0;
     const candidateViewport = initialViewportRef.current;
     const initialViewportToRestore =
       candidateViewport &&
@@ -3081,12 +3186,26 @@ export function VerticalTextEditor({
     const visualLayoutObserver = new ResizeObserver(() => requestVisualLines());
     visualLayoutObserver.observe(editor.view.dom);
     visualLayoutObserver.observe(scroller);
+    const pageLayoutObserver = new ResizeObserver(() => syncPageMetricsRef.current?.());
+    pageLayoutObserver.observe(editor.view.dom);
+    pageLayoutObserver.observe(scroller);
 
     const handleWheel = (event: WheelEvent) => {
       cancelInitialAdjustment();
       stopCenterAnimation();
       event.preventDefault();
       const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+      if (
+        editorDisplayModeRef.current === "paged" &&
+        pageFlowDirectionRef.current === "vertical"
+      ) {
+        const now = performance.now();
+        if (Math.abs(delta) >= 3 && now - lastPagedWheelAt >= 280) {
+          lastPagedWheelAt = now;
+          movePage(delta > 0 ? 1 : -1);
+        }
+        return;
+      }
       if (isHorizontalWriting(writingModeRef.current)) {
         scroller.scrollTop += delta;
       } else {
@@ -3094,6 +3213,7 @@ export function VerticalTextEditor({
       }
       requestVisibleWindow();
       requestLineBreakMarks();
+      syncPageMetricsRef.current?.();
     };
 
     const handleMouseDown = (event: MouseEvent) => {
@@ -3154,6 +3274,7 @@ export function VerticalTextEditor({
       }
       requestVisibleWindow();
       requestLineBreakMarks();
+      syncPageMetricsRef.current?.();
     };
 
     const handleFontLoadingDone = () => {
@@ -3164,6 +3285,7 @@ export function VerticalTextEditor({
     const handleScroll = () => {
       requestVisibleWindow();
       requestLineBreakMarks();
+      syncPageMetricsRef.current?.();
     };
 
     // 本文上の左ボタンドラッグ開始を、PM が選択を確定する前に捕捉するため
@@ -3223,6 +3345,7 @@ export function VerticalTextEditor({
     }
     requestVisibleWindow();
     requestLineBreakMarks();
+    syncPageMetricsRef.current?.();
     document.fonts?.ready.then(() => {
       if (tiptapRef.current !== editor) return;
       if (initialAdjustmentAllowed && performance.now() < initialAdjustmentDeadline) {
@@ -3259,6 +3382,7 @@ export function VerticalTextEditor({
       if (visualLineFrame !== null) cancelAnimationFrame(visualLineFrame);
       if (compositionFrame !== null) cancelAnimationFrame(compositionFrame);
       visualLayoutObserver.disconnect();
+      pageLayoutObserver.disconnect();
       cancelInitialAdjustment();
       stopCenterAnimation();
       if (startCenterAnimationRef.current === startCenterAnimation) startCenterAnimationRef.current = null;
@@ -3284,7 +3408,10 @@ export function VerticalTextEditor({
       data-show-line-numbers={showLineNumbers ? "true" : undefined}
       data-highlight-current-line={highlightCurrentLine ? "true" : undefined}
       data-colorize-japanese-quotes={colorizeJapaneseQuotes ? "true" : undefined}
+      data-editor-display={editorDisplayMode}
+      data-page-flow={editorDisplayMode === "paged" ? pageFlowDirection : undefined}
     >
+      {editorDisplayMode === "paged" && <div className="pagedEditorFrame" aria-hidden="true" />}
       <div ref={scrollerRef} className="verticalTypewriterScroller">
         <div ref={editorHostRef} className="verticalTypewriterEditor" />
       </div>
@@ -3294,7 +3421,40 @@ export function VerticalTextEditor({
         aria-hidden="true"
       />
       <div ref={lineBreakLayerRef} className="visibleLineBreakLayer" aria-hidden="true" />
-      {typewriterScroll && showTypewriterGuide && <div className="verticalTypewriterGuide" />}
+      {editorDisplayMode === "continuous" && typewriterScroll && showTypewriterGuide && (
+        <div className="verticalTypewriterGuide" />
+      )}
+      {editorDisplayMode === "paged" && (
+        <>
+          <span className="pagedEditorCounter" aria-live="polite">
+            {pageMetrics.current} / {pageMetrics.total}ページ
+          </span>
+          <button
+            className="pagedEditorNav pagedEditorPrevious"
+            type="button"
+            aria-label="前のページ"
+            title="前のページ"
+            disabled={pageMetrics.current <= 1}
+            onClick={() => movePage(-1)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d={pageFlowDirection === "vertical" ? "m7 14 5-5 5 5" : "m9 7 5 5-5 5"} />
+            </svg>
+          </button>
+          <button
+            className="pagedEditorNav pagedEditorNext"
+            type="button"
+            aria-label="次のページ"
+            title="次のページ"
+            disabled={pageMetrics.current >= pageMetrics.total}
+            onClick={() => movePage(1)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d={pageFlowDirection === "vertical" ? "m7 10 5 5 5-5" : "m15 7-5 5 5 5"} />
+            </svg>
+          </button>
+        </>
+      )}
     </div>
   );
 }

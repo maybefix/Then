@@ -134,6 +134,7 @@ import type {
   SaveStatus,
   Snippet,
   TextDocument,
+  TextTemplateSummary,
   WorkspaceAlert,
   WorkspaceRecord,
 } from "./types";
@@ -354,7 +355,8 @@ type AppIconName =
   | "search"
   | "settings"
   | "theme"
-  | "vertical";
+  | "vertical"
+  | "write";
 
 function AppIcon({ name, className = "" }: { name: AppIconName; className?: string }) {
   const common = {
@@ -518,6 +520,14 @@ function AppIcon({ name, className = "" }: { name: AppIconName; className?: stri
           <path d="M7 4v16" />
           <path d="M12 4v16" />
           <path d="M17 4v10" />
+        </svg>
+      );
+    case "write":
+      return (
+        <svg {...common}>
+          <path d="M6 3h9l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+          <path d="M15 3v5h4" />
+          <path d="M8 12h8M8 16h6" />
         </svg>
       );
     default:
@@ -814,6 +824,8 @@ const defaultSettings: EditorSettings = {
   editorMeasureHorizontal: DEFAULT_EDITOR_MEASURE_PERCENT,
   editorMeasureVertical: DEFAULT_EDITOR_MEASURE_PERCENT,
   writingMode: "vertical-rl",
+  editorDisplayMode: "continuous",
+  pageFlowDirection: "horizontal-rtl",
   canvasDefaultWritingMode: "horizontal-tb",
   canvasDefaultFontSource: "ui",
   plotFontSource: "editor",
@@ -1976,6 +1988,10 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         settings.writingMode === "horizontal-tb" || settings.writingMode === "vertical-rl"
           ? settings.writingMode
           : defaultSettings.writingMode,
+      editorDisplayMode:
+        settings.editorDisplayMode === "paged" ? "paged" : "continuous",
+      pageFlowDirection:
+        settings.pageFlowDirection === "vertical" ? "vertical" : "horizontal-rtl",
       canvasDefaultWritingMode:
         settings.canvasDefaultWritingMode === "horizontal-tb" ||
         settings.canvasDefaultWritingMode === "vertical-rl"
@@ -2297,6 +2313,10 @@ export default function App() {
   const [selectionCharCount, setSelectionCharCount] = useState<number | null>(null);
   const [editorSelectionHead, setEditorSelectionHead] = useState(0);
   const [editorSelectionLine, setEditorSelectionLine] = useState(1);
+  const [editorPageMetrics, setEditorPageMetrics] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
   const [editorContextMenu, setEditorContextMenu] =
     useState<EditorContextMenuState | null>(null);
   const [notationModal, setNotationModal] = useState<NotationModalState | null>(null);
@@ -4500,6 +4520,13 @@ export default function App() {
 
     if (!mod || event.altKey) return;
 
+    if (key === "n" || key === "N") {
+      event.preventDefault();
+      setIsCommandPaletteOpen(false);
+      void handleNewDocument();
+      return;
+    }
+
     if (key === "f" || key === "F") {
       event.preventDefault();
       setIsCommandPaletteOpen(false);
@@ -4705,6 +4732,7 @@ export default function App() {
       placeholder?: string;
       optional?: boolean;
       multiline?: boolean;
+      options?: { value: string; label: string }[];
     }[];
     confirmLabel: string;
   }) =>
@@ -4719,8 +4747,23 @@ export default function App() {
           placeholder: field.placeholder,
           optional: field.optional,
           multiline: field.multiline,
+          options: field.options,
         })),
         confirmLabel,
+        error: "",
+        resolve,
+      });
+    });
+
+  const requestCreateFile = (templates: TextTemplateSummary[]) =>
+    new Promise<{ fileName: string; templateId: string | null } | null>((resolve) => {
+      setAppDialog({
+        type: "createFile",
+        title: "新規ファイルを作成",
+        fileName: "新規ノート.txt",
+        templateId: "",
+        templates,
+        confirmLabel: "作成",
         error: "",
         resolve,
       });
@@ -4783,6 +4826,8 @@ export default function App() {
         current.resolve(null);
       } else if (current.type === "multiInput") {
         current.resolve(null);
+      } else if (current.type === "createFile") {
+        current.resolve(null);
       } else if (current.type === "confirm") {
         current.resolve(false);
       } else {
@@ -4816,6 +4861,17 @@ export default function App() {
         current.resolve(values);
         return null;
       }
+      if (current.type === "createFile") {
+        const fileName = current.fileName.trim();
+        if (!fileName) {
+          return { ...current, error: "テキストファイル名を入力してください" };
+        }
+        current.resolve({
+          fileName,
+          templateId: current.templateId || null,
+        });
+        return null;
+      }
 
       const value = current.value.trim();
       if (!value && !current.optional) {
@@ -4833,8 +4889,13 @@ export default function App() {
   };
 
   const updateAppDialogFieldValue = (fieldId: string, value: string) => {
-    setAppDialog((current) =>
-      current?.type === "multiInput"
+    setAppDialog((current) => {
+      if (current?.type === "createFile") {
+        if (fieldId === "fileName") return { ...current, fileName: value, error: "" };
+        if (fieldId === "templateId") return { ...current, templateId: value, error: "" };
+        return current;
+      }
+      return current?.type === "multiInput"
         ? {
             ...current,
             fields: current.fields.map((field) =>
@@ -4842,8 +4903,8 @@ export default function App() {
             ),
             error: "",
           }
-        : current,
-    );
+        : current;
+    });
   };
 
   const chooseAppDialog = (value: "primary" | "secondary") => {
@@ -6206,6 +6267,13 @@ export default function App() {
     void action();
   };
 
+  const loadTextTemplates = async (): Promise<TextTemplateSummary[]> => {
+    if (!isTauriRuntime()) return [];
+    return invoke<TextTemplateSummary[]>("list_text_templates", {
+      rootPath: projectFolder?.path ?? null,
+    });
+  };
+
   const handleCreateProjectFile = async (folderPath = activeBreadcrumbPath) => {
     if (!projectFolder) {
       showToast("先にフォルダを開いてください");
@@ -6213,26 +6281,94 @@ export default function App() {
     }
     const targetFolderPath = folderPath ?? projectFolder.path;
 
-    const name = await requestInput({
-      title: "新規ファイルを作成",
-      label: "テキストファイル名",
-      initialValue: "新規ノート.txt",
-      confirmLabel: "作成",
-      placeholder: "例: chapter-01.txt",
-    });
-    if (!name) return;
-
     try {
-      const document = await invoke<TextDocument>("create_text_file", {
-        folderPath: targetFolderPath,
-        name,
-      });
+      const templates = await loadTextTemplates();
+      const draft = await requestCreateFile(templates);
+      if (!draft) return;
+      const document = draft.templateId
+        ? await invoke<TextDocument>("create_text_file_from_template", {
+            folderPath: targetFolderPath,
+            name: draft.fileName,
+            rootPath: projectFolder.path,
+            templateId: draft.templateId,
+          })
+        : await invoke<TextDocument>("create_text_file", {
+            folderPath: targetFolderPath,
+            name: draft.fileName,
+          });
       await refreshProjectFolder(targetFolderPath);
       loadDocumentIntoEditor(document);
       showToast(`「${document.name}」を作成しました`);
     } catch (error) {
       setLastError(String(error));
       setSaveStatus("error");
+    }
+  };
+
+  const handleRegisterCurrentFileAsTemplate = async () => {
+    if (!isTauriRuntime()) {
+      showToast("テンプレート登録はTauri版で利用できます");
+      return;
+    }
+    const sourceExtension = currentFileName.toLowerCase().endsWith(".md") ? "md" : "txt";
+    const initialName = currentFileName.replace(/\.(?:txt|md)$/i, "") || "新規テンプレート";
+    const scopeOptions = projectFolder
+      ? [
+          { value: "workspace", label: "このワークスペース" },
+          { value: "profile", label: "すべてのワークスペースで共通" },
+        ]
+      : [{ value: "profile", label: "すべてのワークスペースで共通" }];
+    const draft = await requestMultiInput({
+      title: "このファイルをテンプレートとして登録",
+      fields: [
+        {
+          id: "name",
+          label: "テンプレート名",
+          initialValue: initialName,
+          placeholder: "例: 章のひな型",
+        },
+        {
+          id: "scope",
+          label: "保存先",
+          initialValue: projectFolder ? "workspace" : "profile",
+          options: scopeOptions,
+        },
+      ],
+      confirmLabel: "登録",
+    });
+    if (!draft) return;
+
+    try {
+      const templates = await loadTextTemplates();
+      const normalizedName = draft.name.replace(/\.(?:txt|md)$/i, "");
+      const existing = templates.find(
+        (template) =>
+          template.scope === draft.scope &&
+          template.extension === sourceExtension &&
+          template.name.localeCompare(normalizedName, undefined, { sensitivity: "accent" }) === 0,
+      );
+      let overwrite = false;
+      if (existing) {
+        overwrite = await requestConfirm({
+          title: "テンプレートを上書き",
+          message: `「${existing.name}」はすでに登録されています。`,
+          detail: "登録済みの内容を、現在のファイル内容で置き換えます。",
+          confirmLabel: "上書き",
+        });
+        if (!overwrite) return;
+      }
+      const registered = await invoke<TextTemplateSummary>("register_text_template", {
+        rootPath: projectFolder?.path ?? null,
+        scope: draft.scope,
+        name: normalizedName,
+        extension: sourceExtension,
+        content: markdown,
+        overwrite,
+      });
+      showToast(`テンプレート「${registered.name}」を登録しました`);
+    } catch (error) {
+      setLastError(String(error));
+      showToast("テンプレートを登録できませんでした");
     }
   };
 
@@ -8277,6 +8413,13 @@ export default function App() {
                   >
                     別名で保存
                   </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => closeFileMenuAndRun(handleRegisterCurrentFileAsTemplate)}
+                  >
+                    このファイルをテンプレートとして登録…
+                  </button>
                   <div className="menuDivider" role="separator" />
                   <button
                     type="button"
@@ -8830,16 +8973,18 @@ export default function App() {
                   type="button"
                   role="tab"
                   aria-selected={appMode === "write"}
+                  aria-label="本文"
                   title="本文モード"
                   onClick={() => switchAppMode("write")}
                 >
-                  本文
+                  <AppIcon name="write" className="modeSwitcherIcon" />
                 </button>
                 <button
                   className={appMode === "canvas" ? "isActiveMode" : ""}
                   type="button"
                   role="tab"
                   aria-selected={appMode === "canvas"}
+                  aria-label="キャンバス"
                   title={
                     settings.canvasOpensInWindow
                       ? "キャンバスを別ウィンドウで開く"
@@ -8847,13 +8992,14 @@ export default function App() {
                   }
                   onClick={() => switchAppMode("canvas")}
                 >
-                  キャンバス
+                  <AppIcon name="canvas" className="modeSwitcherIcon" />
                 </button>
                 <button
                   className={appMode === "export" ? "isActiveMode" : ""}
                   type="button"
                   role="tab"
                   aria-selected={appMode === "export"}
+                  aria-label="エクスポート"
                   title={
                     settings.exportOpensInWindow
                       ? "エクスポートを別ウィンドウで開く"
@@ -8861,7 +9007,7 @@ export default function App() {
                   }
                   onClick={() => switchAppMode("export")}
                 >
-                  エクスポート
+                  <AppIcon name="export" className="modeSwitcherIcon" />
                 </button>
                 <button
                   className={appMode === "checkpoint" ? "isActiveMode" : ""}
@@ -9247,6 +9393,8 @@ export default function App() {
                             text={editorText}
                             editorRevision={activeTab?.editorRevision ?? null}
                             writingMode={settings.writingMode}
+                            editorDisplayMode={settings.editorDisplayMode}
+                            pageFlowDirection={settings.pageFlowDirection}
                             typewriterScroll={settings.typewriterScroll}
                             showTypewriterGuide={settings.showTypewriterGuide}
                             typewriterOffset={settings.typewriterOffset}
@@ -9260,6 +9408,7 @@ export default function App() {
                             onReady={handleEditorReady}
                             onTextChange={handleTextChange}
                             onSelectionChange={handleSelectionChange}
+                            onPageMetricsChange={setEditorPageMetrics}
                           />
                         )}
                         {editorFind.open && (
@@ -9485,6 +9634,7 @@ export default function App() {
                 lastError={lastError}
                 charCount={charCount}
                 selectionCharCount={selectionCharCount}
+                pageMetrics={editorPageMetrics}
               />
             </div>
 

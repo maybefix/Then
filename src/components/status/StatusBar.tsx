@@ -7,6 +7,7 @@ type StatusBarProps = {
   lastError: string;
   charCount: number;
   selectionCharCount: number | null;
+  pageMetrics: { current: number; total: number } | null;
 };
 
 const statusLabels: Record<SaveStatus, string> = {
@@ -24,6 +25,7 @@ export function StatusBar({
   lastError,
   charCount,
   selectionCharCount,
+  pageMetrics,
 }: StatusBarProps) {
   return (
     <footer className={`statusbar status-${saveStatus}`}>
@@ -35,6 +37,11 @@ export function StatusBar({
         </span>
       )}
       {lastError && <span className="statusError">{lastError}</span>}
+      {pageMetrics && (
+        <span className="statusPages">
+          {pageMetrics.current} / {pageMetrics.total}ページ
+        </span>
+      )}
       <span className="statusRight">
         {selectionCharCount !== null ? `${selectionCharCount} / ` : ""}
         {charCount}文字

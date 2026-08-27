@@ -60,7 +60,19 @@ export function AppDialogModal({
             {dialog.fields.map((field, index) => (
               <label key={field.id}>
                 <span>{field.label}</span>
-                {field.multiline ? (
+                {field.options ? (
+                  <select
+                    autoFocus={index === 0}
+                    value={field.value}
+                    onChange={(event) => onFieldValueChange(field.id, event.target.value)}
+                  >
+                    {field.options.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : field.multiline ? (
                   <textarea
                     autoFocus={index === 0}
                     value={field.value}
@@ -77,6 +89,46 @@ export function AppDialogModal({
                 )}
               </label>
             ))}
+            {dialog.error && (
+              <p className="dialogError" role="alert">
+                {dialog.error}
+              </p>
+            )}
+            <footer className="modalActions">
+              <button type="button" onClick={onClose}>
+                キャンセル
+              </button>
+              <button type="submit">{dialog.confirmLabel}</button>
+            </footer>
+          </form>
+        ) : dialog.type === "createFile" ? (
+          <form className="modalForm" onSubmit={onSubmit}>
+            <label>
+              <span>テキストファイル名</span>
+              <input
+                autoFocus
+                value={dialog.fileName}
+                placeholder="例: chapter-01.txt"
+                onChange={(event) => onFieldValueChange("fileName", event.target.value)}
+              />
+            </label>
+            <label>
+              <span>テンプレート</span>
+              <select
+                value={dialog.templateId}
+                onChange={(event) => onFieldValueChange("templateId", event.target.value)}
+              >
+                <option value="">なし</option>
+                {dialog.templates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}（{template.scope === "workspace" ? "ワークスペース" : "共通"}）
+                  </option>
+                ))}
+              </select>
+              <small className="dialogFieldHint">
+                選択したテキストを、そのまま新規ファイルの本文へコピーします
+              </small>
+            </label>
             {dialog.error && (
               <p className="dialogError" role="alert">
                 {dialog.error}

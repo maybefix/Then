@@ -238,6 +238,38 @@ export function SettingsModal({
                     <option value="horizontal-tb">横書き</option>
                   </select>
                 </label>
+                <label>
+                  <span>編集表示</span>
+                  <select
+                    value={settings.editorDisplayMode}
+                    onChange={(event) =>
+                      onUpdateSettings(
+                        "editorDisplayMode",
+                        event.target.value as EditorSettings["editorDisplayMode"],
+                      )
+                    }
+                  >
+                    <option value="continuous">連続表示</option>
+                    <option value="paged">ページ表示</option>
+                  </select>
+                </label>
+                {settings.editorDisplayMode === "paged" && (
+                  <label>
+                    <span>ページ送り</span>
+                    <select
+                      value={settings.pageFlowDirection}
+                      onChange={(event) =>
+                        onUpdateSettings(
+                          "pageFlowDirection",
+                          event.target.value as EditorSettings["pageFlowDirection"],
+                        )
+                      }
+                    >
+                      <option value="horizontal-rtl">横（右から左）</option>
+                      <option value="vertical">縦（上から下）</option>
+                    </select>
+                  </label>
+                )}
                 <div className="modalFormGrid">
                   <label>
                     <span>文字サイズ</span>

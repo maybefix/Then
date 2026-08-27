@@ -180,6 +180,12 @@ export type SidebarMode = "tree" | "navigator";
 /** 本文エディタの書字方向。 */
 export type WritingMode = "vertical-rl" | "horizontal-tb";
 
+/** 本文を従来の連続領域で表示するか、ページ枠付きで表示するか。 */
+export type EditorDisplayMode = "continuous" | "paged";
+
+/** ページ表示時の送り方向。横送りは日本語の本に合わせて右から左へ進む。 */
+export type PageFlowDirection = "horizontal-rtl" | "vertical";
+
 /** Canvas の text node に適用するフォント種別。 */
 export type CanvasNodeFontSource = "ui" | "editor";
 
@@ -225,6 +231,8 @@ export type EditorSettings = {
   /** 縦書き時の1列の縦幅。編集領域に対する百分率（30〜100）。 */
   editorMeasureVertical: number;
   writingMode: WritingMode;
+  editorDisplayMode: EditorDisplayMode;
+  pageFlowDirection: PageFlowDirection;
   typewriterScroll: boolean;
   showTypewriterGuide: boolean;
   typewriterOffset: number;
@@ -474,6 +482,13 @@ export type BreadcrumbDropTarget = {
   position: "before" | "after";
 } | null;
 
+export type TextTemplateSummary = {
+  id: string;
+  name: string;
+  scope: "workspace" | "profile";
+  extension: "txt" | "md";
+};
+
 export type AppDialog =
   | {
       type: "input";
@@ -496,10 +511,21 @@ export type AppDialog =
         placeholder?: string;
         optional?: boolean;
         multiline?: boolean;
+        options?: { value: string; label: string }[];
       }[];
       confirmLabel: string;
       error: string;
       resolve: (value: Record<string, string> | null) => void;
+    }
+  | {
+      type: "createFile";
+      title: string;
+      fileName: string;
+      templateId: string;
+      templates: TextTemplateSummary[];
+      confirmLabel: string;
+      error: string;
+      resolve: (value: { fileName: string; templateId: string | null } | null) => void;
     }
   | {
       type: "confirm";
