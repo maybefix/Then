@@ -1,6 +1,6 @@
 [package]
 name = "Then"
-version = "0.5.13"
+version = "0.6.0"
 description = "Then vertical writing editor"
 authors = ["local"]
 edition = "2021"
