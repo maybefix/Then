@@ -1967,7 +1967,7 @@ body.thenPdfExporting .printExportViewport {
   column-gap: var(--paged-column-gap);
   column-fill: auto;
   column-rule: 0;
-  direction: rtl;
+  direction: ltr;
   overflow: visible;
   pointer-events: auto;
   transform: translate(
@@ -1978,6 +1978,7 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .verticalTypewriterShell[data-editor-display="paged"] .verticalTypewriterEditor .pm-root p {
+  direction: ltr;
   max-inline-size: 100%;
   margin-inline: 0;
   break-inside: auto;

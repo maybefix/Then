@@ -2229,8 +2229,8 @@ export function VerticalTextEditor({
     // 逐次断片化する。横書きはX軸、縦書きはY軸に生成された断片から数える。
     let fragmentedExtent = verticalWriting ? root.scrollHeight : root.scrollWidth;
     if (verticalWriting) {
-      // vertical-rl + direction:rtl では後続fragmentainerが負のY方向へ生成され、
-      // scrollHeightには負側のoverflowが含まれない。Rangeのunion寸法で全ページを数える。
+      // vertical-rl のfragmentainerは選択状態や内容によってborder boxの基準位置が
+      // 移動し得るため、scrollHeightではなくRangeのunion寸法で全ページを数える。
       const contentRange = document.createRange();
       contentRange.selectNodeContents(root);
       fragmentedExtent = Math.max(contentHeight, contentRange.getBoundingClientRect().height);
@@ -2256,8 +2256,19 @@ export function VerticalTextEditor({
       "--paged-host-y",
       `${pageFlowDirectionRef.current === "vertical" ? hostOffset : 0}px`,
     );
+    let verticalBaseOffset = 0;
+    if (verticalWriting && root.firstElementChild instanceof HTMLElement) {
+      const transform = getComputedStyle(root).transform;
+      const currentTransformY = transform === "none" ? 0 : new DOMMatrixReadOnly(transform).m42;
+      const firstBlockTop = root.firstElementChild.getBoundingClientRect().top - currentTransformY;
+      const desiredFirstBlockTop = host.getBoundingClientRect().top + paddingY;
+      verticalBaseOffset = desiredFirstBlockTop - firstBlockTop;
+    }
     root.style.setProperty("--paged-fragment-x", `${verticalWriting ? 0 : -fragmentOffset}px`);
-    root.style.setProperty("--paged-fragment-y", `${verticalWriting ? fragmentOffset : 0}px`);
+    root.style.setProperty(
+      "--paged-fragment-y",
+      `${verticalWriting ? verticalBaseOffset - fragmentOffset : 0}px`,
+    );
     publishPageMetrics({ current, total });
   };
   syncPageMetricsRef.current = syncPageMetrics;
@@ -2300,7 +2311,7 @@ export function VerticalTextEditor({
         ? hostRect.top + layout.paddingY
         : hostRect.left + layout.paddingX;
       const physicalPageDelta = Math.floor((caretCenter - contentStart) / layout.columnStep);
-      const relativePage = verticalWriting ? -physicalPageDelta : physicalPageDelta;
+      const relativePage = physicalPageDelta;
       if (relativePage === 0) return;
       scrollToPage(pageMetricsRef.current.current + relativePage, "auto");
     });
@@ -3069,9 +3080,11 @@ export function VerticalTextEditor({
         pagedLayout
           ? {
               fragmented: true,
-              fragmentOrigin: isHorizontalWriting(mode) ? rootRect.left : rootRect.top,
+              fragmentOrigin: isHorizontalWriting(mode)
+                ? rootRect.left
+                : (blockRects[0]?.top ?? rootRect.top),
               fragmentStep: pageLayoutRef.current.columnStep,
-              fragmentDirection: isHorizontalWriting(mode) ? 1 : -1,
+              fragmentDirection: 1,
             }
           : undefined,
       );

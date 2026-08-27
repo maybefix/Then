@@ -247,6 +247,17 @@ for (const setting of [
   assert.match(editorSource, new RegExp(setting), `${setting} must reach the editor`);
 }
 
+assert.match(
+  appCss,
+  /data-page-flow="horizontal-rtl"[\s\S]*?\.verticalTypewriterScroller\s*\{[\s\S]*?direction:\s*rtl/,
+  "horizontal paging must retain the traditional right-to-left scroll direction",
+);
+assert.match(
+  editorSource,
+  /verticalBaseOffset[\s\S]*?desiredFirstBlockTop[\s\S]*?verticalBaseOffset - fragmentOffset/,
+  "vertical pagination must normalize the first document block before applying page offsets",
+);
+
 assert.doesNotMatch(
   editorSource,
   /"data-line-number": String\(index \+ 1\)/,
