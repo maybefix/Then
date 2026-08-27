@@ -1876,7 +1876,7 @@ body.thenPdfExporting .printExportViewport {
 
 .verticalTypewriterShell[data-editor-display="paged"] .verticalTypewriterScroller {
   z-index: 1;
-  inset: 30px 36px 42px;
+  inset: 30px 36px;
   border: 0;
   background: transparent;
   scroll-snap-type: x mandatory;
@@ -2085,19 +2085,6 @@ body.thenPdfExporting .printExportViewport {
   .pagedEditorNav:hover:not(:disabled),
 .verticalTypewriterShell[data-page-flow="vertical"] .pagedEditorNav:focus-visible {
   transform: translateX(-50%) scale(1.06);
-}
-
-.pagedEditorCounter {
-  position: absolute;
-  z-index: 5;
-  bottom: 9px;
-  left: 44px;
-  color: var(--text-faint);
-  font-family: var(--ui-font-family);
-  font-size: 11px;
-  letter-spacing: 0.01em;
-  line-height: 20px;
-  pointer-events: none;
 }
 
 .verticalTypewriterEditor {

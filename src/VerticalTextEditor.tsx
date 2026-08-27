@@ -2292,29 +2292,31 @@ export function VerticalTextEditor({
     window.setTimeout(() => syncPageMetricsRef.current?.(), behavior === "smooth" ? 220 : 0);
   };
 
+  const revealSelectionPageNow = (editor: Editor) => {
+    if (editorDisplayModeRef.current !== "paged") return;
+    if (tiptapRef.current !== editor) return;
+    const scroller = scrollerRef.current;
+    const host = editorHostRef.current;
+    if (!scroller || !host) return;
+    const layout = pageLayoutRef.current;
+    const hostRect = host.getBoundingClientRect();
+    const caret = editor.view.coordsAtPos(editor.state.selection.head);
+    const verticalWriting = writingModeRef.current === "vertical-rl";
+    const caretCenter = verticalWriting
+      ? (caret.top + caret.bottom) / 2
+      : (caret.left + caret.right) / 2;
+    const contentStart = verticalWriting
+      ? hostRect.top + layout.paddingY
+      : hostRect.left + layout.paddingX;
+    const relativePage = Math.floor((caretCenter - contentStart) / layout.columnStep);
+    if (relativePage === 0) return;
+    scrollToPage(pageMetricsRef.current.current + relativePage, "auto");
+  };
+
   const revealSelectionPage = (editor: Editor) => {
     if (editorDisplayModeRef.current !== "paged") return;
     syncPageMetricsRef.current?.();
-    requestAnimationFrame(() => {
-      if (editorDisplayModeRef.current !== "paged" || tiptapRef.current !== editor) return;
-      const scroller = scrollerRef.current;
-      const host = editorHostRef.current;
-      if (!scroller || !host) return;
-      const layout = pageLayoutRef.current;
-      const hostRect = host.getBoundingClientRect();
-      const caret = editor.view.coordsAtPos(editor.state.selection.head);
-      const verticalWriting = writingModeRef.current === "vertical-rl";
-      const caretCenter = verticalWriting
-        ? (caret.top + caret.bottom) / 2
-        : (caret.left + caret.right) / 2;
-      const contentStart = verticalWriting
-        ? hostRect.top + layout.paddingY
-        : hostRect.left + layout.paddingX;
-      const physicalPageDelta = Math.floor((caretCenter - contentStart) / layout.columnStep);
-      const relativePage = physicalPageDelta;
-      if (relativePage === 0) return;
-      scrollToPage(pageMetricsRef.current.current + relativePage, "auto");
-    });
+    requestAnimationFrame(() => revealSelectionPageNow(editor));
   };
   revealSelectionPageRef.current = revealSelectionPage;
 
@@ -2673,6 +2675,8 @@ export function VerticalTextEditor({
     let lineBreakFrame: number | null = null;
     let visualLineFrame: number | null = null;
     let compositionFrame: number | null = null;
+    let pagedReflowFrame: number | null = null;
+    let pagedReflowGeneration = 0;
     let centerAnimFrame: number | null = null;
     let initialAdjustmentFrame: number | null = null;
     let initialAdjustmentExpiryTimer: number | null = null;
@@ -2680,6 +2684,7 @@ export function VerticalTextEditor({
     let lineBreakQueued = false;
     let visualLineQueued = false;
     let lastPagedWheelAt = 0;
+    let lastHorizontalPagedWheelAt = 0;
     const candidateViewport = initialViewportRef.current;
     const initialViewportToRestore =
       candidateViewport &&
@@ -3286,6 +3291,52 @@ export function VerticalTextEditor({
     renderVisualLinesRef.current = renderVisualLines;
     requestVisualLinesRef.current = requestVisualLines;
 
+    // 改行・削除・IME確定では、ProseMirrorの更新通知より後にCSS multicolの
+    // 再分割とReactのページ面サイズ更新が続く。古い総ページ数で一度だけ
+    // キャレットを表示すると末尾で前ページへ丸められるため、寸法が連続して
+    // 安定するまで「ページ数→所属ページ→行表示」の順に同期し直す。
+    const requestPagedSelectionAfterReflow = (currentEditor: Editor) => {
+      if (editorDisplayModeRef.current !== "paged") return;
+      pagedReflowGeneration += 1;
+      const generation = pagedReflowGeneration;
+      if (pagedReflowFrame !== null) cancelAnimationFrame(pagedReflowFrame);
+
+      let previousSignature: string | null = null;
+      let stableFrames = 0;
+      let remainingFrames = 8;
+      const step = () => {
+        pagedReflowFrame = null;
+        if (
+          generation !== pagedReflowGeneration ||
+          editorDisplayModeRef.current !== "paged" ||
+          tiptapRef.current !== currentEditor
+        ) {
+          return;
+        }
+
+        syncPageMetricsRef.current?.();
+        revealSelectionPageNow(currentEditor);
+        syncPageMetricsRef.current?.();
+        requestVisibleWindow();
+        requestLineBreakMarks();
+
+        const currentScroller = scrollerRef.current;
+        const metrics = pageMetricsRef.current;
+        const signature = currentScroller
+          ? `${currentEditor.state.selection.head}:${metrics.current}:${metrics.total}:` +
+            `${currentScroller.scrollLeft}:${currentScroller.scrollTop}:` +
+            `${currentScroller.scrollWidth}:${currentScroller.scrollHeight}`
+          : "missing";
+        stableFrames = signature === previousSignature ? stableFrames + 1 : 0;
+        previousSignature = signature;
+        remainingFrames -= 1;
+        if (stableFrames >= 2 || remainingFrames <= 0) return;
+        pagedReflowFrame = requestAnimationFrame(step);
+      };
+
+      pagedReflowFrame = requestAnimationFrame(step);
+    };
+
     const editor = new Editor({
       element: host,
       extensions: [Document, Paragraph, Text, History, LayoutAstExtension],
@@ -3324,10 +3375,10 @@ export function VerticalTextEditor({
         onSelectionChangeRef.current();
         if (!isEditorComposing(currentEditor, composingRef)) {
           requestCenterCaret(true, "update");
-          revealSelectionPageRef.current?.(currentEditor);
+          requestPagedSelectionAfterReflow(currentEditor);
         }
         requestVisibleWindow();
-        requestLineBreakMarks();
+        if (editorDisplayModeRef.current !== "paged") requestLineBreakMarks();
       },
       onSelectionUpdate: () => {
         onSelectionChangeRef.current();
@@ -3378,9 +3429,18 @@ export function VerticalTextEditor({
         }
         return;
       }
-      if (editorDisplayModeRef.current === "paged") {
-        scroller.scrollLeft -= delta;
-      } else if (isHorizontalWriting(writingModeRef.current)) {
+      if (
+        editorDisplayModeRef.current === "paged" &&
+        pageFlowDirectionRef.current === "horizontal-rtl"
+      ) {
+        const now = performance.now();
+        if (Math.abs(delta) >= 3 && now - lastHorizontalPagedWheelAt >= 280) {
+          lastHorizontalPagedWheelAt = now;
+          movePage(delta > 0 ? 1 : -1);
+        }
+        return;
+      }
+      if (isHorizontalWriting(writingModeRef.current)) {
         scroller.scrollTop += delta;
       } else {
         scroller.scrollLeft -= delta;
@@ -3442,9 +3502,9 @@ export function VerticalTextEditor({
         );
       });
       requestCenterCaret(true, "compositionend");
-      revealSelectionPageRef.current?.(editor);
+      requestPagedSelectionAfterReflow(editor);
       requestVisibleWindow();
-      requestLineBreakMarks();
+      if (editorDisplayModeRef.current !== "paged") requestLineBreakMarks();
     };
 
     const handleResize = () => {
@@ -3562,6 +3622,8 @@ export function VerticalTextEditor({
       if (lineBreakFrame !== null) cancelAnimationFrame(lineBreakFrame);
       if (visualLineFrame !== null) cancelAnimationFrame(visualLineFrame);
       if (compositionFrame !== null) cancelAnimationFrame(compositionFrame);
+      pagedReflowGeneration += 1;
+      if (pagedReflowFrame !== null) cancelAnimationFrame(pagedReflowFrame);
       visualLayoutObserver.disconnect();
       pageLayoutObserver.disconnect();
       cancelInitialAdjustment();
@@ -3640,9 +3702,6 @@ export function VerticalTextEditor({
       )}
       {editorDisplayMode === "paged" && (
         <>
-          <span className="pagedEditorCounter" aria-live="polite">
-            {pageMetrics.current} / {pageMetrics.total}ページ
-          </span>
           <button
             className="pagedEditorNav pagedEditorPrevious"
             type="button"

@@ -257,6 +257,36 @@ assert.match(
   /verticalBaseOffset[\s\S]*?desiredFirstBlockTop[\s\S]*?verticalBaseOffset - fragmentOffset/,
   "vertical pagination must normalize the first document block before applying page offsets",
 );
+assert.match(
+  editorSource,
+  /pageFlowDirectionRef\.current === "horizontal-rtl"[\s\S]*?lastHorizontalPagedWheelAt[\s\S]*?movePage\(delta > 0 \? 1 : -1\)/,
+  "horizontal paged mode must map mouse-wheel gestures to page navigation",
+);
+assert.match(
+  editorSource,
+  /pageFlowDirectionRef\.current === "vertical"[\s\S]*?lastPagedWheelAt[\s\S]*?movePage\(delta > 0 \? 1 : -1\)/,
+  "vertical paged mode must retain its independent wheel navigation path",
+);
+assert.match(
+  editorSource,
+  /if \(isHorizontalWriting\(writingModeRef\.current\)\) \{\s*scroller\.scrollTop \+= delta;\s*\} else \{\s*scroller\.scrollLeft -= delta;/,
+  "continuous-mode wheel behavior must remain unchanged",
+);
+assert.match(
+  editorSource,
+  /requestPagedSelectionAfterReflow[\s\S]*?syncPageMetricsRef\.current\?\.\(\);[\s\S]*?revealSelectionPageNow\(currentEditor\);[\s\S]*?requestLineBreakMarks\(\)/,
+  "paged edits must re-sync pagination, caret ownership, and line overlays after reflow",
+);
+assert.doesNotMatch(
+  editorSource,
+  /pagedEditorCounter/,
+  "the editor must not duplicate the page counter already shown in the app status bar",
+);
+assert.match(
+  appCss,
+  /data-editor-display="paged"\] \.verticalTypewriterScroller \{[\s\S]*?inset:\s*30px 36px;/,
+  "removing the duplicate page counter must return its bottom space to the page viewport",
+);
 
 assert.doesNotMatch(
   editorSource,
