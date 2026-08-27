@@ -75,6 +75,12 @@ type VerticalTextEditorProps = {
   showLineNumbers: boolean;
   highlightCurrentLine: boolean;
   colorizeJapaneseQuotes: boolean;
+  /**
+   * 文字寸法に影響する設定（フォント・文字サイズ・行間・文字表示幅）の合成値。
+   * ページ表示中の .pm-root はCSSで寸法固定されておりResizeObserverが発火しない
+   * ため、この値の変化でページ再分割の同期と表示位置の復元を行う。
+   */
+  textLayoutSignature: string;
   /** マウント時に復元するカーソル位置（本文先頭からの文字オフセット）。 */
   initialSelectionOffset?: number;
   /** 同じタブを再表示するときに復元する論理的な表示位置。 */
@@ -2104,6 +2110,7 @@ export function VerticalTextEditor({
   showLineNumbers,
   highlightCurrentLine,
   colorizeJapaneseQuotes,
+  textLayoutSignature,
   initialSelectionOffset,
   initialViewportState,
   onViewportSizeChange,
@@ -2152,6 +2159,13 @@ export function VerticalTextEditor({
   const revealSelectionPageRef = useRef<((editor: Editor) => void) | null>(null);
   const pagedScrollSettleFrameRef = useRef<number | null>(null);
   const pagedScrollSettleGenerationRef = useRef(0);
+  // ページ寸法・文字寸法の変更をまたいで表示位置を保つための内容アンカー。
+  // スクロール停止のたびに「現在ページ先頭の文書位置」を記録し、レイアウト
+  // 変更後はこの位置が属するページへスクロールを復元する。
+  const pagedAnchorPosRef = useRef<number | null>(null);
+  const pagedAnchorRestoreFrameRef = useRef<number | null>(null);
+  const pagedAnchorRestoreGenerationRef = useRef(0);
+  const requestPagedAnchorRestoreRef = useRef<(() => void) | null>(null);
   const pageMetricsRef = useRef<PageMetrics>(DEFAULT_PAGE_METRICS);
   const pageLayoutRef = useRef<PageLayout>(DEFAULT_PAGE_LAYOUT);
   const [pageMetrics, setPageMetrics] = useState<PageMetrics>(DEFAULT_PAGE_METRICS);
@@ -2225,6 +2239,12 @@ export function VerticalTextEditor({
     ) {
       pageLayoutRef.current = nextLayout;
       setPageLayout(nextLayout);
+      // ページスパンが変わるとスクロール量（px）から導く現在ページが実質
+      // ランダムなページへ落ち、ホスト位置とビューポートも食い違う。初回
+      // 計測（既定値からの遷移）を除き、記録済みアンカーのページへ復元する。
+      if (previousLayout !== DEFAULT_PAGE_LAYOUT) {
+        requestPagedAnchorRestoreRef.current?.();
+      }
     }
 
     // 固定寸法のmulticol要素は、収まらない本文を同寸の匿名column boxへ
@@ -2275,6 +2295,55 @@ export function VerticalTextEditor({
   };
   syncPageMetricsRef.current = syncPageMetrics;
 
+  // 断片化軸上の座標が属するページ番号（1始まり）を、現在表示中のページを
+  // 基準に算出する。レイアウト適用後に呼ぶこと。
+  const pageContainingPoint = (center: number): number | null => {
+    const host = editorHostRef.current;
+    if (!host) return null;
+    const layout = pageLayoutRef.current;
+    const verticalWriting = writingModeRef.current === "vertical-rl";
+    const hostRect = host.getBoundingClientRect();
+    const contentStart = verticalWriting
+      ? hostRect.top + layout.paddingY
+      : hostRect.left + layout.paddingX;
+    const relativePage = Math.floor((center - contentStart) / layout.columnStep);
+    return pageMetricsRef.current.current + relativePage;
+  };
+
+  const pageContainingPosition = (editor: Editor, pos: number): number | null => {
+    const clamped = Math.max(0, Math.min(pos, editor.state.doc.content.size));
+    let caret: { left: number; right: number; top: number; bottom: number };
+    try {
+      caret = editor.view.coordsAtPos(clamped);
+    } catch {
+      return null;
+    }
+    return pageContainingPoint(
+      writingModeRef.current === "vertical-rl"
+        ? (caret.top + caret.bottom) / 2
+        : (caret.left + caret.right) / 2,
+    );
+  };
+
+  // 現在ページの本文開始点にある文書位置を復元アンカーとして記録する。
+  // 縦書きはページ右上（第1列の先頭）、横書きはページ左上が開始点になる。
+  const capturePagedAnchor = () => {
+    if (editorDisplayModeRef.current !== "paged") return;
+    // 復元スクロールの途中経過を新しいアンカーとして記録しない。
+    if (pagedAnchorRestoreFrameRef.current !== null) return;
+    const editor = tiptapRef.current;
+    const host = editorHostRef.current;
+    if (!editor || !host) return;
+    const layout = pageLayoutRef.current;
+    const hostRect = host.getBoundingClientRect();
+    const point =
+      writingModeRef.current === "vertical-rl"
+        ? { left: hostRect.right - layout.paddingX - 2, top: hostRect.top + layout.paddingY + 2 }
+        : { left: hostRect.left + layout.paddingX + 2, top: hostRect.top + layout.paddingY + 2 };
+    const found = editor.view.posAtCoords(point);
+    pagedAnchorPosRef.current = found ? found.pos : editor.state.selection.head;
+  };
+
   const requestPagedScrollSettle = () => {
     if (editorDisplayModeRef.current !== "paged") return;
     pagedScrollSettleGenerationRef.current += 1;
@@ -2317,6 +2386,8 @@ export function VerticalTextEditor({
         syncPageMetricsRef.current?.();
         requestVisualLinesRef.current?.();
         requestLineBreakMarksRef.current?.();
+        // 静止した表示を次のレイアウト変更に備えたアンカーとして記録する。
+        capturePagedAnchor();
         return;
       }
       pagedScrollSettleFrameRef.current = requestAnimationFrame(step);
@@ -2347,23 +2418,70 @@ export function VerticalTextEditor({
   const revealSelectionPageNow = (editor: Editor) => {
     if (editorDisplayModeRef.current !== "paged") return;
     if (tiptapRef.current !== editor) return;
-    const scroller = scrollerRef.current;
-    const host = editorHostRef.current;
-    if (!scroller || !host) return;
-    const layout = pageLayoutRef.current;
-    const hostRect = host.getBoundingClientRect();
-    const caret = editor.view.coordsAtPos(editor.state.selection.head);
-    const verticalWriting = writingModeRef.current === "vertical-rl";
-    const caretCenter = verticalWriting
-      ? (caret.top + caret.bottom) / 2
-      : (caret.left + caret.right) / 2;
-    const contentStart = verticalWriting
-      ? hostRect.top + layout.paddingY
-      : hostRect.left + layout.paddingX;
-    const relativePage = Math.floor((caretCenter - contentStart) / layout.columnStep);
-    if (relativePage === 0) return;
-    scrollToPage(pageMetricsRef.current.current + relativePage, "auto");
+    if (!scrollerRef.current) return;
+    const target = pageContainingPosition(editor, editor.state.selection.head);
+    if (target === null || target === pageMetricsRef.current.current) return;
+    scrollToPage(target, "auto");
   };
+
+  // レイアウト（ページ寸法・文字寸法・ページ送り方向）変更後に、アンカー
+  // 位置の属するページへスクロールを復元する。React側のページ面サイズ更新が
+  // 遅れて総ページ数が変わるため、目標ページと表示が一致するまで数フレーム
+  // 追跡する。アンカー未記録時はキャレット位置へフォールバックする。
+  const requestPagedAnchorRestore = () => {
+    if (editorDisplayModeRef.current !== "paged") return;
+    pagedAnchorRestoreGenerationRef.current += 1;
+    const generation = pagedAnchorRestoreGenerationRef.current;
+    if (pagedAnchorRestoreFrameRef.current !== null) {
+      cancelAnimationFrame(pagedAnchorRestoreFrameRef.current);
+    }
+
+    let remainingFrames = 12;
+    const step = () => {
+      pagedAnchorRestoreFrameRef.current = null;
+      if (
+        generation !== pagedAnchorRestoreGenerationRef.current ||
+        editorDisplayModeRef.current !== "paged"
+      ) {
+        return;
+      }
+      const editor = tiptapRef.current;
+      const scroller = scrollerRef.current;
+      if (!editor || !scroller) return;
+
+      syncPageMetricsRef.current?.();
+      const anchor = pagedAnchorPosRef.current ?? editor.state.selection.head;
+      const target = pageContainingPosition(editor, anchor);
+      if (target === null) return;
+      const layout = pageLayoutRef.current;
+      const clampedTarget = Math.max(1, Math.min(pageMetricsRef.current.total, target));
+      const expectedOffset =
+        (clampedTarget - 1) *
+        (pageFlowDirectionRef.current === "vertical"
+          ? layout.height + layout.gap
+          : layout.width + layout.gap);
+      const currentOffset =
+        pageFlowDirectionRef.current === "vertical"
+          ? scroller.scrollTop
+          : Math.abs(scroller.scrollLeft);
+
+      if (
+        clampedTarget === pageMetricsRef.current.current &&
+        Math.abs(currentOffset - expectedOffset) <= 1
+      ) {
+        // 目標ページの境界に載った。行表示を確定させて終了する。
+        requestPagedScrollSettle();
+        return;
+      }
+      scrollToPage(clampedTarget, "auto");
+      remainingFrames -= 1;
+      if (remainingFrames <= 0) return;
+      pagedAnchorRestoreFrameRef.current = requestAnimationFrame(step);
+    };
+
+    pagedAnchorRestoreFrameRef.current = requestAnimationFrame(step);
+  };
+  requestPagedAnchorRestoreRef.current = requestPagedAnchorRestore;
 
   const revealSelectionPage = (editor: Editor) => {
     if (editorDisplayModeRef.current !== "paged") return;
@@ -2395,7 +2513,27 @@ export function VerticalTextEditor({
 
   useEffect(() => {
     requestAnimationFrame(() => syncPageMetricsRef.current?.());
-  }, [editorDisplayMode, pageFlowDirection, writingMode, text]);
+  }, [text]);
+
+  // 編集表示・ページ送り方向・本文方向・文字寸法設定の変更では、断片構成や
+  // ページスパンの軸が変わるため、同期に加えて表示位置の復元まで行う。
+  // 初回マウント時は初期ビューポート復元と競合させない（同期のみ）。
+  const pagedLayoutEffectMountedRef = useRef(false);
+  useEffect(() => {
+    if (!pagedLayoutEffectMountedRef.current) {
+      pagedLayoutEffectMountedRef.current = true;
+      requestAnimationFrame(() => syncPageMetricsRef.current?.());
+      return;
+    }
+    if (editorDisplayMode !== "paged") {
+      // ページ表示を離れたらアンカーは無効。次回ページ表示への切替では
+      // キャレット位置へのフォールバックで表示ページを決める。
+      pagedAnchorPosRef.current = null;
+      requestAnimationFrame(() => syncPageMetricsRef.current?.());
+      return;
+    }
+    requestAnimationFrame(() => requestPagedAnchorRestoreRef.current?.());
+  }, [editorDisplayMode, pageFlowDirection, writingMode, textLayoutSignature]);
 
   // スクロール領域の内寸（スクロールバー除く）と .pm-root の上下パディング
   // 実測値を親へ通知する。文字表示幅設定のスライダー上限が常に実際の描画
@@ -2727,6 +2865,7 @@ export function VerticalTextEditor({
     let lineBreakFrame: number | null = null;
     let visualLineFrame: number | null = null;
     let compositionFrame: number | null = null;
+    let compositionRevealFrame: number | null = null;
     let pagedReflowFrame: number | null = null;
     let pagedReflowGeneration = 0;
     let centerAnimFrame: number | null = null;
@@ -3306,6 +3445,18 @@ export function VerticalTextEditor({
           const rect = paragraphEndRect(currentEditor, index, mode);
           if (!rect) continue;
 
+          // ページ表示では他ページ断片の記号が表示域外に大量生成されるため、
+          // スクロール領域（マーク描画余白24px込み）内のものだけを描画する。
+          if (
+            editorDisplayModeRef.current === "paged" &&
+            (rect.right < scrollerRect.left - 24 ||
+              rect.left > scrollerRect.right + 24 ||
+              rect.bottom < scrollerRect.top - 24 ||
+              rect.top > scrollerRect.bottom + 24)
+          ) {
+            continue;
+          }
+
           const mark = document.createElement("span");
           const blank = line.source.length === 0;
           mark.className = `visibleLineBreakMark${blank ? " blank" : ""}${
@@ -3470,14 +3621,17 @@ export function VerticalTextEditor({
       stopCenterAnimation();
       event.preventDefault();
       const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+      // ページ送りはdeltaYのみを使う。RTLスクロールでのdeltaXはネイティブの
+      // スクロール方向と符号解釈が逆になり得るうえ、チルトホイールの誤操作で
+      // ページが飛ぶのを避ける。
       if (
         editorDisplayModeRef.current === "paged" &&
         pageFlowDirectionRef.current === "vertical"
       ) {
         const now = performance.now();
-        if (Math.abs(delta) >= 3 && now - lastPagedWheelAt >= 280) {
+        if (Math.abs(event.deltaY) >= 3 && now - lastPagedWheelAt >= 280) {
           lastPagedWheelAt = now;
-          movePage(delta > 0 ? 1 : -1);
+          movePage(event.deltaY > 0 ? 1 : -1);
         }
         return;
       }
@@ -3486,9 +3640,9 @@ export function VerticalTextEditor({
         pageFlowDirectionRef.current === "horizontal-rtl"
       ) {
         const now = performance.now();
-        if (Math.abs(delta) >= 3 && now - lastHorizontalPagedWheelAt >= 280) {
+        if (Math.abs(event.deltaY) >= 3 && now - lastHorizontalPagedWheelAt >= 280) {
           lastHorizontalPagedWheelAt = now;
-          movePage(delta > 0 ? 1 : -1);
+          movePage(event.deltaY > 0 ? 1 : -1);
         }
         return;
       }
@@ -3539,6 +3693,51 @@ export function VerticalTextEditor({
 
     const handleCompositionUpdate = () => {
       requestVisibleWindow();
+      // 変換中テキストがページ境界を越えて次断片へ流れると、確定まで画面外の
+      // まま入力が見えなくなる。キャレットが表示域外へ出た場合のみ、断片表示
+      // （CSS変数）の切替だけでキャレットのページへ追従する。DOMツリーには
+      // 触れないためIMEのcomposition状態は壊れない。
+      if (editorDisplayModeRef.current !== "paged") return;
+      if (compositionRevealFrame !== null) return;
+      // 断片位置の再正規化は1フレームにつき1ページ分しか進まないため、
+      // キャレットが表示域へ入るまで数フレーム追従する。
+      let remainingFrames = 8;
+      const step = () => {
+        compositionRevealFrame = null;
+        if (editorDisplayModeRef.current !== "paged") return;
+        if (tiptapRef.current !== editor) return;
+        const host = editorHostRef.current;
+        if (!host) return;
+        // 変換中に断片が増えていることがあるため、先に総ページ数と断片位置を
+        // 揃えてから座標を読む。
+        syncPageMetricsRef.current?.();
+        // composition中はProseMirrorのselectionがDOMの実キャレットより遅れる
+        // ため、変換中テキストの実座標をDOM選択から直接読む。
+        const domSelection = window.getSelection();
+        if (!domSelection || domSelection.rangeCount === 0) return;
+        const domRange = domSelection.getRangeAt(0);
+        if (!editor.view.dom.contains(domRange.endContainer)) return;
+        const caret = domRange.getBoundingClientRect();
+        if (caret.width === 0 && caret.height === 0) return;
+        const hostRect = host.getBoundingClientRect();
+        const outside =
+          caret.bottom < hostRect.top ||
+          caret.top > hostRect.bottom ||
+          caret.right < hostRect.left ||
+          caret.left > hostRect.right;
+        if (!outside) return;
+        const target = pageContainingPoint(
+          writingModeRef.current === "vertical-rl"
+            ? (caret.top + caret.bottom) / 2
+            : (caret.left + caret.right) / 2,
+        );
+        if (target === null || target === pageMetricsRef.current.current) return;
+        scrollToPage(target, "auto");
+        remainingFrames -= 1;
+        if (remainingFrames <= 0) return;
+        compositionRevealFrame = requestAnimationFrame(step);
+      };
+      compositionRevealFrame = requestAnimationFrame(step);
     };
 
     const handleCompositionEnd = () => {
@@ -3573,6 +3772,11 @@ export function VerticalTextEditor({
     const handleFontLoadingDone = () => {
       requestVisibleWindow();
       requestLineBreakMarks();
+      // Webフォント適用で文字寸法が変わると断片構成も変わる。ページ表示では
+      // 総ページ数を再同期し、表示位置をアンカーのページへ復元する。
+      if (editorDisplayModeRef.current === "paged") {
+        requestPagedAnchorRestoreRef.current?.();
+      }
     };
 
     const handleScroll = () => {
@@ -3675,12 +3879,18 @@ export function VerticalTextEditor({
       if (lineBreakFrame !== null) cancelAnimationFrame(lineBreakFrame);
       if (visualLineFrame !== null) cancelAnimationFrame(visualLineFrame);
       if (compositionFrame !== null) cancelAnimationFrame(compositionFrame);
+      if (compositionRevealFrame !== null) cancelAnimationFrame(compositionRevealFrame);
       pagedReflowGeneration += 1;
       if (pagedReflowFrame !== null) cancelAnimationFrame(pagedReflowFrame);
       pagedScrollSettleGenerationRef.current += 1;
       if (pagedScrollSettleFrameRef.current !== null) {
         cancelAnimationFrame(pagedScrollSettleFrameRef.current);
         pagedScrollSettleFrameRef.current = null;
+      }
+      pagedAnchorRestoreGenerationRef.current += 1;
+      if (pagedAnchorRestoreFrameRef.current !== null) {
+        cancelAnimationFrame(pagedAnchorRestoreFrameRef.current);
+        pagedAnchorRestoreFrameRef.current = null;
       }
       visualLayoutObserver.disconnect();
       pageLayoutObserver.disconnect();

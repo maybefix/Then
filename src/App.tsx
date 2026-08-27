@@ -9402,6 +9402,15 @@ export default function App() {
                             showLineNumbers={settings.showLineNumbers}
                             highlightCurrentLine={settings.highlightCurrentLine}
                             colorizeJapaneseQuotes={settings.colorizeJapaneseQuotes}
+                            textLayoutSignature={[
+                              settings.editorFontFamily,
+                              settings.headingFontSource,
+                              settings.headingFontFamily,
+                              settings.fontSize,
+                              settings.lineHeight,
+                              settings.editorMeasureHorizontal,
+                              settings.editorMeasureVertical,
+                            ].join("|")}
                             initialSelectionOffset={initialSelectionOffset}
                             initialViewportState={activeTab?.viewportState ?? null}
                             onViewportSizeChange={handleEditorViewportSizeChange}
