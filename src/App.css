@@ -1879,6 +1879,7 @@ body.thenPdfExporting .printExportViewport {
   inset: 30px 36px;
   border: 0;
   background: transparent;
+  scrollbar-gutter: auto;
   scroll-snap-type: x mandatory;
   scroll-snap-stop: always;
 }

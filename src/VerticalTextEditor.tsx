@@ -2150,6 +2150,8 @@ export function VerticalTextEditor({
   const cancelInitialAdjustmentRef = useRef<(() => void) | null>(null);
   const syncPageMetricsRef = useRef<(() => void) | null>(null);
   const revealSelectionPageRef = useRef<((editor: Editor) => void) | null>(null);
+  const pagedScrollSettleFrameRef = useRef<number | null>(null);
+  const pagedScrollSettleGenerationRef = useRef(0);
   const pageMetricsRef = useRef<PageMetrics>(DEFAULT_PAGE_METRICS);
   const pageLayoutRef = useRef<PageLayout>(DEFAULT_PAGE_LAYOUT);
   const [pageMetrics, setPageMetrics] = useState<PageMetrics>(DEFAULT_PAGE_METRICS);
@@ -2273,6 +2275,56 @@ export function VerticalTextEditor({
   };
   syncPageMetricsRef.current = syncPageMetrics;
 
+  const requestPagedScrollSettle = () => {
+    if (editorDisplayModeRef.current !== "paged") return;
+    pagedScrollSettleGenerationRef.current += 1;
+    const generation = pagedScrollSettleGenerationRef.current;
+    if (pagedScrollSettleFrameRef.current !== null) {
+      cancelAnimationFrame(pagedScrollSettleFrameRef.current);
+    }
+
+    let previousSignature: string | null = null;
+    let stableFrames = 0;
+    let remainingFrames = 90;
+    const step = () => {
+      pagedScrollSettleFrameRef.current = null;
+      if (
+        generation !== pagedScrollSettleGenerationRef.current ||
+        editorDisplayModeRef.current !== "paged"
+      ) {
+        return;
+      }
+
+      // Smooth scrollの途中で計算された断片基準を、停止時の実座標でもう一度
+      // 正規化する。最終ページの短い断片だけ下へ残る現象をここで解消する。
+      syncPageMetricsRef.current?.();
+      const scroller = scrollerRef.current;
+      if (!scroller) return;
+      const offset =
+        pageFlowDirectionRef.current === "vertical"
+          ? scroller.scrollTop
+          : Math.abs(scroller.scrollLeft);
+      const root = editorHostRef.current?.querySelector<HTMLElement>(".pm-root");
+      const metrics = pageMetricsRef.current;
+      const signature = `${Math.round(offset * 2) / 2}:${metrics.current}:${metrics.total}:` +
+        `${root?.style.getPropertyValue("--paged-fragment-x") ?? ""}:` +
+        `${root?.style.getPropertyValue("--paged-fragment-y") ?? ""}`;
+      stableFrames = signature === previousSignature ? stableFrames + 1 : 0;
+      previousSignature = signature;
+      remainingFrames -= 1;
+
+      if (stableFrames >= 2 || remainingFrames <= 0) {
+        syncPageMetricsRef.current?.();
+        requestVisualLinesRef.current?.();
+        requestLineBreakMarksRef.current?.();
+        return;
+      }
+      pagedScrollSettleFrameRef.current = requestAnimationFrame(step);
+    };
+
+    pagedScrollSettleFrameRef.current = requestAnimationFrame(step);
+  };
+
   const scrollToPage = (targetPage: number, behavior: ScrollBehavior) => {
     const scroller = scrollerRef.current;
     if (!scroller || editorDisplayModeRef.current !== "paged") return;
@@ -2289,7 +2341,7 @@ export function VerticalTextEditor({
         behavior,
       });
     }
-    window.setTimeout(() => syncPageMetricsRef.current?.(), behavior === "smooth" ? 220 : 0);
+    requestPagedScrollSettle();
   };
 
   const revealSelectionPageNow = (editor: Editor) => {
@@ -3527,6 +3579,7 @@ export function VerticalTextEditor({
       requestVisibleWindow();
       requestLineBreakMarks();
       syncPageMetricsRef.current?.();
+      requestPagedScrollSettle();
     };
 
     // 本文上の左ボタンドラッグ開始を、PM が選択を確定する前に捕捉するため
@@ -3624,6 +3677,11 @@ export function VerticalTextEditor({
       if (compositionFrame !== null) cancelAnimationFrame(compositionFrame);
       pagedReflowGeneration += 1;
       if (pagedReflowFrame !== null) cancelAnimationFrame(pagedReflowFrame);
+      pagedScrollSettleGenerationRef.current += 1;
+      if (pagedScrollSettleFrameRef.current !== null) {
+        cancelAnimationFrame(pagedScrollSettleFrameRef.current);
+        pagedScrollSettleFrameRef.current = null;
+      }
       visualLayoutObserver.disconnect();
       pageLayoutObserver.disconnect();
       cancelInitialAdjustment();

@@ -277,6 +277,16 @@ assert.match(
   /requestPagedSelectionAfterReflow[\s\S]*?syncPageMetricsRef\.current\?\.\(\);[\s\S]*?revealSelectionPageNow\(currentEditor\);[\s\S]*?requestLineBreakMarks\(\)/,
   "paged edits must re-sync pagination, caret ownership, and line overlays after reflow",
 );
+assert.match(
+  editorSource,
+  /requestPagedScrollSettle[\s\S]*?--paged-fragment-y[\s\S]*?signature === previousSignature[\s\S]*?syncPageMetricsRef\.current\?\.\(\);[\s\S]*?requestVisualLinesRef\.current\?\.\(\)/,
+  "paged scrolling must re-normalize the final fragment after the scroll position settles",
+);
+assert.match(
+  editorSource,
+  /const handleScroll = \(\) => \{[\s\S]*?syncPageMetricsRef\.current\?\.\(\);[\s\S]*?requestPagedScrollSettle\(\)/,
+  "button, wheel, and scrollbar navigation must share the same paged settle path",
+);
 assert.doesNotMatch(
   editorSource,
   /pagedEditorCounter/,
@@ -286,6 +296,11 @@ assert.match(
   appCss,
   /data-editor-display="paged"\] \.verticalTypewriterScroller \{[\s\S]*?inset:\s*30px 36px;/,
   "removing the duplicate page counter must return its bottom space to the page viewport",
+);
+assert.match(
+  appCss,
+  /data-editor-display="paged"\] \.verticalTypewriterScroller \{[\s\S]*?scrollbar-gutter:\s*auto/,
+  "paged RTL scrolling must not reserve an unused vertical scrollbar gutter",
 );
 
 assert.doesNotMatch(
