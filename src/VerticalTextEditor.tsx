@@ -2287,20 +2287,8 @@ export function VerticalTextEditor({
         ? scroller.scrollTop / pageSpan
         : Math.abs(scroller.scrollLeft) / pageSpan;
     const current = Math.max(1, Math.min(total, Math.round(rawPage) + 1));
-    // 変換中はページ単位に量子化しない。IMEの前編集は段へ再分割されないため
-    // ページ枠を突き抜けて伸び、ブラウザはキャレットを見せようと外側の
-    // スクロールを動かす。そこでページへ吸着し直すと、本文とスクロールが
-    // 食い違って入力位置が飛ぶ。段の間隔（columnStep）とページの間隔
-    // （pageSpan）は等しいので、スクロール量をそのまま断片位置へ写せば
-    // どの位置でも本文とページ枠は一致する。確定時にページへ戻す。
-    const composingNow = composingRef.current;
-    const scrollOffset = pageFlowDirectionRef.current === "vertical"
-      ? scroller.scrollTop
-      : Math.abs(scroller.scrollLeft);
-    const fragmentOffset = composingNow
-      ? (scrollOffset / pageSpan) * columnStep
-      : (current - 1) * columnStep;
-    const hostOffset = composingNow ? scrollOffset : (current - 1) * pageSpan;
+    const fragmentOffset = (current - 1) * columnStep;
+    const hostOffset = (current - 1) * pageSpan;
     host.style.setProperty(
       "--paged-host-x",
       `${pageFlowDirectionRef.current === "horizontal-rtl" ? -hostOffset : 0}px`,
@@ -3746,19 +3734,45 @@ export function VerticalTextEditor({
 
     const handleCompositionUpdate = () => {
       requestVisibleWindow();
-      // 変換中はブラウザ自身がキャレットを見せるために外側のスクロールを動かす。
-      // その量をそのまま断片位置へ写して本文を追随させる（syncPageMetricsが
-      // 変換中は連続写像に切り替わる）。スクロールイベントより先に写しておくと
-      // 前編集が1フレームも画面外に出ない。
+      // 変換中テキストが折り返して次のページへ流れたら、そのページへ丸ごと移る。
+      // ページの途中で止まらないよう、移動は必ずページ境界単位で行う。
       if (editorDisplayModeRef.current !== "paged") return;
       if (compositionRevealFrame !== null) return;
-      compositionRevealFrame = requestAnimationFrame(() => {
+      let remainingFrames = 6;
+      const step = () => {
         compositionRevealFrame = null;
-        if (tiptapRef.current !== editor) return;
         if (editorDisplayModeRef.current !== "paged") return;
+        if (tiptapRef.current !== editor) return;
+        const host = editorHostRef.current;
+        if (!host) return;
+        // 変換中に段が増えていることがあるため、先に総ページ数と断片位置を
+        // 揃えてから座標を読む。
         syncPageMetricsRef.current?.();
-        requestVisualLinesRef.current?.();
-      });
+        // composition中はProseMirrorのselectionがDOMの実キャレットより遅れる
+        // ため、変換中テキストの実座標をDOM選択から直接読む。
+        const domSelection = window.getSelection();
+        if (!domSelection || domSelection.rangeCount === 0) return;
+        const domRange = domSelection.getRangeAt(0);
+        if (!editor.view.dom.contains(domRange.endContainer)) return;
+        const caret = domRange.getBoundingClientRect();
+        if (caret.width === 0 && caret.height === 0) return;
+        const hostRect = host.getBoundingClientRect();
+        const layout = pageLayoutRef.current;
+        const vertical = writingModeRef.current === "vertical-rl";
+        const areaStart = vertical ? hostRect.top + layout.paddingY : hostRect.left + layout.paddingX;
+        const areaEnd = vertical ? hostRect.bottom - layout.paddingY : hostRect.right - layout.paddingX;
+        const caretStart = vertical ? caret.top : caret.left;
+        const caretEnd = vertical ? caret.bottom : caret.right;
+        // 表示中のページに収まっているなら動かさない。
+        if (caretStart >= areaStart && caretEnd <= areaEnd) return;
+        const target = pageContainingPoint(vertical ? caret.top : caret.left);
+        if (target === null || target === pageMetricsRef.current.current) return;
+        scrollToPage(target, "auto");
+        remainingFrames -= 1;
+        if (remainingFrames <= 0) return;
+        compositionRevealFrame = requestAnimationFrame(step);
+      };
+      compositionRevealFrame = requestAnimationFrame(step);
     };
 
     const handleCompositionEnd = () => {

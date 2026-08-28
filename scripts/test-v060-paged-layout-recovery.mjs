@@ -92,26 +92,26 @@ assert.match(
 
 assert.match(
   editorSource,
-  /const composingNow = composingRef\.current;[\s\S]*?const fragmentOffset = composingNow[\s\S]*?const hostOffset = composingNow \? scrollOffset/,
-  "while composing, page position must follow the scroll continuously instead of snapping per page",
-);
-
-assert.match(
-  editorSource,
-  /const handleCompositionUpdate = \(\) => \{[\s\S]*?syncPageMetricsRef\.current\?\.\(\)/,
-  "composition updates must re-map the fragment so the preedit stays on screen",
+  /const handleCompositionUpdate = \(\) => \{[\s\S]*?if \(caretStart >= areaStart && caretEnd <= areaEnd\) return;[\s\S]*?scrollToPage\(target, "auto"\)/,
+  "composition must move a whole page at a time, never park between pages",
 );
 
 assert.match(
   editorSource,
   /const handleCompositionStart = \(\) => \{[\s\S]*?setAttribute\("data-composing", "true"\)/,
-  "composition must mark the shell so scroll snapping can be suspended",
+  "composition must mark the shell so the kinsoku spans can release nowrap",
 );
 
 assert.match(
-  appCss,
-  /\[data-composing="true"\][\s\S]*?scroll-snap-type:\s*none/,
-  "scroll snapping must be off while composing so the caret reveal is not pulled back",
+  editorSource,
+  /const handleCompositionEnd = \(\) => \{[\s\S]*?compositionSettleFrame = requestAnimationFrame\([\s\S]*?if \(composingRef\.current\) return;[\s\S]*?scrollToPage\(/,
+  "the page must be re-snapped one frame after composition really ends (IME sends end/start between segments)",
+);
+
+assert.match(
+  editorSource,
+  /if \(compositionRevealFrame !== null\) cancelAnimationFrame\(compositionRevealFrame\);/,
+  "the composition tracking frame must be cancelled on unmount",
 );
 
 assert.match(

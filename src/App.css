@@ -1905,13 +1905,6 @@ body.thenPdfExporting .printExportViewport {
   display: none;
 }
 
-/* IME変換中はスナップを止める。前編集は段へ再分割されないのでページ枠の外まで
-   伸び、ブラウザはキャレットを見せようとスクロールを動かす。そこへスナップが
-   効くとページ境界へ引き戻され、入力位置が飛ぶ。 */
-.verticalTypewriterShell[data-editor-display="paged"][data-composing="true"]
-  .verticalTypewriterScroller {
-  scroll-snap-type: none;
-}
 
 .verticalTypewriterShell[data-editor-display="paged"] .verticalTypewriterPageSurface {
   min-width: 0;
