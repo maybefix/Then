@@ -2895,6 +2895,8 @@ export function VerticalTextEditor({
     let lineBreakFrame: number | null = null;
     let visualLineFrame: number | null = null;
     let compositionFrame: number | null = null;
+    // 変換を開始したページ。変換中の追従はここを基準に1ページ分までに抑える。
+    let compositionStartPage: number | null = null;
     let compositionRevealFrame: number | null = null;
     let pagedReflowFrame: number | null = null;
     let pagedReflowGeneration = 0;
@@ -3717,6 +3719,8 @@ export function VerticalTextEditor({
       cancelInitialAdjustment();
       stopCenterAnimation();
       composingRef.current = true;
+      compositionStartPage =
+        editorDisplayModeRef.current === "paged" ? pageMetricsRef.current.current : null;
       renderLineBreakMarks();
     };
 
@@ -3760,8 +3764,15 @@ export function VerticalTextEditor({
             ? (caret.top + caret.bottom) / 2
             : (caret.left + caret.right) / 2,
         );
-        if (target === null || target === pageMetricsRef.current.current) return;
-        scrollToPage(target, "auto");
+        if (target === null) return;
+        // 変換中の本文は段へ再分割されないため、DOMキャレットは確定後の位置より
+        // 何ページも先を指すことがある。そこまで追いかけると、変換中テキストが
+        // 数文字しか見えないページへ飛んで、確定と同時に戻ってくる往復になる。
+        // 追従は変換を始めたページとその次ページの間に限る。
+        const base = compositionStartPage ?? pageMetricsRef.current.current;
+        const limited = Math.max(base, Math.min(base + 1, target));
+        if (limited === pageMetricsRef.current.current) return;
+        scrollToPage(limited, "auto");
         remainingFrames -= 1;
         if (remainingFrames <= 0) return;
         compositionRevealFrame = requestAnimationFrame(step);
@@ -3771,6 +3782,7 @@ export function VerticalTextEditor({
 
     const handleCompositionEnd = () => {
       composingRef.current = false;
+      compositionStartPage = null;
       if (compositionFrame !== null) cancelAnimationFrame(compositionFrame);
       compositionFrame = requestAnimationFrame(() => {
         compositionFrame = null;

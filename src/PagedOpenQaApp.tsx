@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { VerticalTextEditor } from "./VerticalTextEditor";
 
 const SOURCE = String.raw`C:\Users\uest\Documents\テスト_snapshot検証用\02_ログ\Then開発ログ.txt`;
+const SCENARIO = new URLSearchParams(window.location.search).get("scenario") ?? "paging";
 const TRACE = String.raw`C:\Users\uest\Documents\then\.tmp\paged-video-regression-trace.json`;
 
 type Frame = {
@@ -57,6 +58,54 @@ export default function PagedOpenQaApp() {
     let reachedFirstPage = false;
     const frames: Frame[] = [];
 
+    let composingNode: Text | null = null;
+    let imeStartedAt: number | null = null;
+
+    const beginFakeComposition = () => {
+      // 現在ページの最後の段落の末尾へキャレットを置く。
+      const paragraphs = [...document.querySelectorAll<HTMLElement>(".pm-root p")];
+      const host = document.querySelector<HTMLElement>(".verticalTypewriterEditor");
+      if (!host) return;
+      const hostRect = host.getBoundingClientRect();
+      const onPage = paragraphs.filter((p) => {
+        const r = p.getBoundingClientRect();
+        return r.bottom >= hostRect.top && r.top <= hostRect.bottom && r.right >= hostRect.left && r.left <= hostRect.right;
+      });
+      const target = onPage[onPage.length - 1] ?? paragraphs[0];
+      if (!target) return;
+      const text = [...target.childNodes].reverse().find((n): n is Text => n.nodeType === Node.TEXT_NODE);
+      if (!text) return;
+      composingNode = text;
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.setStart(text, text.length);
+      range.collapse(true);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      const dom = document.querySelector<HTMLElement>(".pm-root");
+      dom?.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true, data: "" }));
+    };
+
+    const growFakeComposition = () => {
+      const node = composingNode;
+      const dom = document.querySelector<HTMLElement>(".pm-root");
+      if (!node || !dom) return;
+      node.appendData("ああああああああああ");
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.setStart(node, node.length);
+      range.collapse(true);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      dom.dispatchEvent(new CompositionEvent("compositionupdate", { bubbles: true, data: node.data }));
+    };
+
+    const endFakeComposition = () => {
+      const dom = document.querySelector<HTMLElement>(".pm-root");
+      dom?.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "" }));
+      composingNode = null;
+    };
+
     const capture = async () => {
       if (cancelled) return;
       const shell = document.querySelector<HTMLElement>(".verticalTypewriterShell");
@@ -70,10 +119,31 @@ export default function PagedOpenQaApp() {
       }
 
       const metrics = metricsRef.current;
-      // ファイルを開いた直後（キャレットは文末＝最終ページ）から先頭まで戻し、
-      // もう一度最終ページまで送る。動画で報告された「開いてから最終ページまで
-      // スクロールすると本文だけが下へずれる」経路をそのままなぞる。
-      if (frame >= 60 && frame % 24 === 12) {
+      if (SCENARIO === "ime") {
+        // 変換中のページ追従を見る。まず中ほどのページまで戻り、そのページの
+        // 最後の段落の末尾へキャレットを置いてから、DOMへ直接「あ」を足しつつ
+        // compositionupdate を投げる（実IMEの前編集と同じく doc は触らない）。
+        if (imeStartedAt === null) {
+          if (frame >= 60 && frame % 24 === 12) {
+            if (metrics.current > 3) {
+              scroller.dispatchEvent(
+                new WheelEvent("wheel", { deltaY: -120, deltaMode: WheelEvent.DOM_DELTA_PIXEL, bubbles: true, cancelable: true }),
+              );
+              wheelDispatches += 1;
+            } else {
+              imeStartedAt = frame;
+              beginFakeComposition();
+            }
+          }
+        } else {
+          const since = frame - imeStartedAt;
+          if (since > 0 && since <= 240 && since % 10 === 0) growFakeComposition();
+          else if (since === 270) endFakeComposition();
+        }
+      } else if (frame >= 60 && frame % 24 === 12) {
+        // ファイルを開いた直後（キャレットは文末＝最終ページ）から先頭まで戻し、
+        // もう一度最終ページまで送る。動画で報告された「開いてから最終ページまで
+        // スクロールすると本文だけが下へずれる」経路をそのままなぞる。
         const goingUp = !reachedFirstPage;
         if (goingUp && metrics.current <= 1) reachedFirstPage = true;
         const delta = reachedFirstPage ? 120 : -120;
@@ -167,9 +237,9 @@ export default function PagedOpenQaApp() {
       if (reachedFirstPage && metrics.current === metrics.total && finalReachedAt === null) finalReachedAt = frame;
       frame += 1;
 
-      if ((finalReachedAt !== null && frame >= finalReachedAt + 180) || frame >= 1500) {
+      if (SCENARIO === "ime" ? imeStartedAt !== null && frame >= imeStartedAt + 330 : (finalReachedAt !== null && frame >= finalReachedAt + 180) || frame >= 1500) {
         await invoke("save_text_file", {
-          path: TRACE,
+          path: SCENARIO === "ime" ? TRACE.replace(".json", "-ime.json") : TRACE,
           content: JSON.stringify({ source: SOURCE, textLength: text.length, finalReachedAt, wheelDispatches, frames }, null, 2),
         });
         await getCurrentWindow().close();

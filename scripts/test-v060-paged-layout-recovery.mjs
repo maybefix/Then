@@ -113,6 +113,18 @@ assert.match(
   "the composition tracking frame must be cancelled on unmount",
 );
 
+assert.match(
+  editorSource,
+  /const handleCompositionUpdate = \(\) => \{[\s\S]*?const base = compositionStartPage \?\? [\s\S]*?Math\.min\(base \+ 1, target\)/,
+  "composition tracking must stay within one page of where the composition started",
+);
+
+assert.match(
+  editorSource,
+  /const handleCompositionStart = \(\) => \{[\s\S]*?compositionStartPage =/,
+  "the page where the composition started must be recorded",
+);
+
 // --- 軽微: 改行記号を現在ページに絞る ---
 
 assert.match(
