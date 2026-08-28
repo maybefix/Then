@@ -115,6 +115,12 @@ assert.match(
 );
 
 assert.match(
+  appCss,
+  /\[data-composing="true"\][\s\S]*?\.ks-line-head-ban[\s\S]*?white-space:\s*pre-wrap/,
+  "kinsoku spans must drop nowrap while composing, or the IME preedit lands inside one and never wraps",
+);
+
+assert.match(
   editorSource,
   /const handleCompositionEnd = \(\) => \{[\s\S]*?compositionSettleFrame = requestAnimationFrame\([\s\S]*?if \(composingRef\.current\) return;[\s\S]*?scrollToPage\(/,
   "the page must be re-snapped one frame after composition really ends (IME sends end/start between segments)",

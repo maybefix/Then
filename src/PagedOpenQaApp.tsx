@@ -33,6 +33,7 @@ type Frame = {
   compositionLength: number;
   shellComposing: string | null;
   caretParagraph: Record<string, unknown> | null;
+  composingHost: Record<string, unknown> | null;
   rootBox: Record<string, unknown>;
   snapType: string;
   overflowBelow: number;
@@ -251,6 +252,33 @@ export default function PagedOpenQaApp() {
           textLength: el.textContent?.length ?? 0,
         };
       };
+      // 変換中テキストが実際に入っている要素（段落ではなくその内側）を調べる。
+      const composingHost = (() => {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return null;
+        const node = sel.getRangeAt(0).startContainer;
+        const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as HTMLElement);
+        if (!el) return null;
+        const cs = getComputedStyle(el);
+        return {
+          tag: el.tagName,
+          cls: el.className,
+          display: cs.display,
+          whiteSpace: cs.whiteSpace,
+          overflowWrap: cs.overflowWrap,
+          wordBreak: cs.wordBreak,
+          maxInlineSize: cs.maxInlineSize,
+          inlineSize: cs.inlineSize,
+          contain: cs.contain,
+          contentVisibility: cs.contentVisibility,
+          textLength: el.textContent?.length ?? 0,
+          parentTag: el.parentElement?.tagName ?? null,
+          parentCls: el.parentElement?.className ?? null,
+          parentDisplay: el.parentElement ? getComputedStyle(el.parentElement).display : null,
+          parentWhiteSpace: el.parentElement ? getComputedStyle(el.parentElement).whiteSpace : null,
+          html: (el.outerHTML || "").slice(0, 300),
+        };
+      })();
       const composingParagraphEl = (() => {
         const sel = window.getSelection();
         if (!sel || sel.rangeCount === 0) return null;
@@ -291,6 +319,7 @@ export default function PagedOpenQaApp() {
         compositionLength,
         shellComposing: shell.getAttribute("data-composing"),
         caretParagraph: paragraphBox(composingParagraphEl),
+        composingHost,
         rootBox: {
           columnWidth: rootStyleForBox.columnWidth,
           columnGap: rootStyleForBox.columnGap,

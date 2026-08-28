@@ -2340,6 +2340,20 @@ body.thenPdfExporting .printExportViewport {
   word-break: normal;
 }
 
+/* 禁則の span は本来2〜3文字を繋ぎ止めるためのもので、nowrap もその前提。
+   ところがキャレットがこの span の中にあると、IMEは変換中テキストをまるごと
+   この中へ挿し込む。すると前編集全体が nowrap になり、何文字打っても折り返さず
+   1行のまま伸びてページ枠を突き抜ける（実測: 256文字でキャレットが画面外
+   4500px。ページ表示・連続表示・縦横いずれでも再現）。変換中だけ禁則の
+   nowrap を解除して、前編集を通常どおり折り返させる。確定すれば装飾は
+   貼り直されるので、禁則は元に戻る。 */
+.verticalTypewriterShell[data-composing="true"] .verticalTypewriterEditor .ks-line-head-ban,
+.verticalTypewriterShell[data-composing="true"] .verticalTypewriterEditor .ks-line-end-ban,
+.verticalTypewriterShell[data-composing="true"] .verticalTypewriterEditor .ks-keep-short {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .verticalTypewriterEditor .ks-breakable-token {
   overflow-wrap: anywhere;
   white-space: normal;
