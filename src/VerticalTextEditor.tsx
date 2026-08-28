@@ -2122,6 +2122,7 @@ export function VerticalTextEditor({
   onPageMetricsChange,
 }: VerticalTextEditorProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const shellRef = useRef<HTMLDivElement | null>(null);
   const pageSurfaceRef = useRef<HTMLDivElement | null>(null);
   const editorHostRef = useRef<HTMLDivElement | null>(null);
   const lineBreakLayerRef = useRef<HTMLDivElement | null>(null);
@@ -2277,10 +2278,20 @@ export function VerticalTextEditor({
         ? scroller.scrollTop / pageSpan
         : Math.abs(scroller.scrollLeft) / pageSpan;
     const current = Math.max(1, Math.min(total, Math.round(rawPage) + 1));
-    const fragmentOffset = (current - 1) * columnStep;
-    const hostOffset =
-      (current - 1) *
-      (pageFlowDirectionRef.current === "vertical" ? height + gap : width + gap);
+    // 変換中はページ単位に量子化しない。IMEの前編集は段へ再分割されないため
+    // ページ枠を突き抜けて伸び、ブラウザはキャレットを見せようと外側の
+    // スクロールを動かす。そこでページへ吸着し直すと、本文とスクロールが
+    // 食い違って入力位置が飛ぶ。段の間隔（columnStep）とページの間隔
+    // （pageSpan）は等しいので、スクロール量をそのまま断片位置へ写せば
+    // どの位置でも本文とページ枠は一致する。確定時にページへ戻す。
+    const composingNow = composingRef.current;
+    const scrollOffset = pageFlowDirectionRef.current === "vertical"
+      ? scroller.scrollTop
+      : Math.abs(scroller.scrollLeft);
+    const fragmentOffset = composingNow
+      ? (scrollOffset / pageSpan) * columnStep
+      : (current - 1) * columnStep;
+    const hostOffset = composingNow ? scrollOffset : (current - 1) * pageSpan;
     host.style.setProperty(
       "--paged-host-x",
       `${pageFlowDirectionRef.current === "horizontal-rtl" ? -hostOffset : 0}px`,
@@ -2895,8 +2906,7 @@ export function VerticalTextEditor({
     let lineBreakFrame: number | null = null;
     let visualLineFrame: number | null = null;
     let compositionFrame: number | null = null;
-    // 変換を開始したページ。変換中の追従はここを基準に1ページ分までに抑える。
-    let compositionStartPage: number | null = null;
+    let compositionSettleFrame: number | null = null;
     let compositionRevealFrame: number | null = null;
     let pagedReflowFrame: number | null = null;
     let pagedReflowGeneration = 0;
@@ -3719,70 +3729,46 @@ export function VerticalTextEditor({
       cancelInitialAdjustment();
       stopCenterAnimation();
       composingRef.current = true;
-      compositionStartPage =
-        editorDisplayModeRef.current === "paged" ? pageMetricsRef.current.current : null;
+      // 変換中はスクロールスナップを止める。ブラウザがキャレットを見せるために
+      // 動かしたスクロールを、スナップがページ境界へ引き戻してしまうため。
+      shellRef.current?.setAttribute("data-composing", "true");
       renderLineBreakMarks();
     };
 
     const handleCompositionUpdate = () => {
       requestVisibleWindow();
-      // 変換中テキストがページ境界を越えて次断片へ流れると、確定まで画面外の
-      // まま入力が見えなくなる。キャレットが表示域外へ出た場合のみ、断片表示
-      // （CSS変数）の切替だけでキャレットのページへ追従する。DOMツリーには
-      // 触れないためIMEのcomposition状態は壊れない。
+      // 変換中はブラウザ自身がキャレットを見せるために外側のスクロールを動かす。
+      // その量をそのまま断片位置へ写して本文を追随させる（syncPageMetricsが
+      // 変換中は連続写像に切り替わる）。スクロールイベントより先に写しておくと
+      // 前編集が1フレームも画面外に出ない。
       if (editorDisplayModeRef.current !== "paged") return;
       if (compositionRevealFrame !== null) return;
-      // 断片位置の再正規化は1フレームにつき1ページ分しか進まないため、
-      // キャレットが表示域へ入るまで数フレーム追従する。
-      let remainingFrames = 8;
-      const step = () => {
+      compositionRevealFrame = requestAnimationFrame(() => {
         compositionRevealFrame = null;
-        if (editorDisplayModeRef.current !== "paged") return;
         if (tiptapRef.current !== editor) return;
-        const host = editorHostRef.current;
-        if (!host) return;
-        // 変換中に断片が増えていることがあるため、先に総ページ数と断片位置を
-        // 揃えてから座標を読む。
+        if (editorDisplayModeRef.current !== "paged") return;
         syncPageMetricsRef.current?.();
-        // composition中はProseMirrorのselectionがDOMの実キャレットより遅れる
-        // ため、変換中テキストの実座標をDOM選択から直接読む。
-        const domSelection = window.getSelection();
-        if (!domSelection || domSelection.rangeCount === 0) return;
-        const domRange = domSelection.getRangeAt(0);
-        if (!editor.view.dom.contains(domRange.endContainer)) return;
-        const caret = domRange.getBoundingClientRect();
-        if (caret.width === 0 && caret.height === 0) return;
-        const hostRect = host.getBoundingClientRect();
-        const outside =
-          caret.bottom < hostRect.top ||
-          caret.top > hostRect.bottom ||
-          caret.right < hostRect.left ||
-          caret.left > hostRect.right;
-        if (!outside) return;
-        const target = pageContainingPoint(
-          writingModeRef.current === "vertical-rl"
-            ? (caret.top + caret.bottom) / 2
-            : (caret.left + caret.right) / 2,
-        );
-        if (target === null) return;
-        // 変換中の本文は段へ再分割されないため、DOMキャレットは確定後の位置より
-        // 何ページも先を指すことがある。そこまで追いかけると、変換中テキストが
-        // 数文字しか見えないページへ飛んで、確定と同時に戻ってくる往復になる。
-        // 追従は変換を始めたページとその次ページの間に限る。
-        const base = compositionStartPage ?? pageMetricsRef.current.current;
-        const limited = Math.max(base, Math.min(base + 1, target));
-        if (limited === pageMetricsRef.current.current) return;
-        scrollToPage(limited, "auto");
-        remainingFrames -= 1;
-        if (remainingFrames <= 0) return;
-        compositionRevealFrame = requestAnimationFrame(step);
-      };
-      compositionRevealFrame = requestAnimationFrame(step);
+        requestVisualLinesRef.current?.();
+      });
     };
 
     const handleCompositionEnd = () => {
       composingRef.current = false;
-      compositionStartPage = null;
+      shellRef.current?.removeAttribute("data-composing");
+      // 確定すれば本文は段へ収まる。連続写像をやめてキャレットのページへ吸着
+      // し直す。ただしIMEは変換の区切りごとに compositionend → compositionstart
+      // を続けて投げてくるので、1フレーム待って本当に変換が終わったかを見る。
+      // 途中の区切りで吸着すると、入力中にページ境界へ引き戻されてしまう。
+      if (editorDisplayModeRef.current === "paged") {
+        if (compositionSettleFrame !== null) cancelAnimationFrame(compositionSettleFrame);
+        compositionSettleFrame = requestAnimationFrame(() => {
+          compositionSettleFrame = null;
+          if (tiptapRef.current !== editor) return;
+          if (composingRef.current) return;
+          syncPageMetricsRef.current?.();
+          scrollToPage(pageMetricsRef.current.current, "auto");
+        });
+      }
       if (compositionFrame !== null) cancelAnimationFrame(compositionFrame);
       compositionFrame = requestAnimationFrame(() => {
         compositionFrame = null;
@@ -3929,6 +3915,7 @@ export function VerticalTextEditor({
       if (lineBreakFrame !== null) cancelAnimationFrame(lineBreakFrame);
       if (visualLineFrame !== null) cancelAnimationFrame(visualLineFrame);
       if (compositionFrame !== null) cancelAnimationFrame(compositionFrame);
+      if (compositionSettleFrame !== null) cancelAnimationFrame(compositionSettleFrame);
       if (compositionRevealFrame !== null) cancelAnimationFrame(compositionRevealFrame);
       pagedReflowGeneration += 1;
       if (pagedReflowFrame !== null) cancelAnimationFrame(pagedReflowFrame);
@@ -3965,6 +3952,7 @@ export function VerticalTextEditor({
 
   return (
     <div
+      ref={shellRef}
       className="verticalTypewriterShell"
       data-show-line-numbers={showLineNumbers ? "true" : undefined}
       data-highlight-current-line={highlightCurrentLine ? "true" : undefined}

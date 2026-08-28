@@ -29,6 +29,17 @@ type Frame = {
   lastRectTop: number | null;
   paintAnomaly: number | null;
   firstLineLabel: string | null;
+  composing: boolean;
+  compositionLength: number;
+  shellComposing: string | null;
+  snapType: string;
+  nudgeKind: number;
+  overflowBelow: number;
+  overflowAbove: number;
+  caretTop: number | null;
+  caretBottom: number | null;
+  caretLeft: number | null;
+  caretRight: number | null;
   visibleTextTop: number | null;
   visibleTextBottom: number | null;
   // 実描画で見た本文上端のズレ（hostTop + paddingY からの差）。0が正しい。
@@ -59,6 +70,24 @@ export default function PagedOpenQaApp() {
     const frames: Frame[] = [];
 
     let composingNode: Text | null = null;
+    let composing = false;
+    let nudgeKind = 0;
+    let compositionLength = 0;
+    const onCompositionStart = () => {
+      composing = true;
+      compositionLength = 0;
+    };
+    const onCompositionUpdate = (event: Event) => {
+      composing = true;
+      compositionLength = (event as CompositionEvent).data?.length ?? 0;
+    };
+    const onCompositionEnd = () => {
+      composing = false;
+      compositionLength = 0;
+    };
+    document.addEventListener("compositionstart", onCompositionStart, true);
+    document.addEventListener("compositionupdate", onCompositionUpdate, true);
+    document.addEventListener("compositionend", onCompositionEnd, true);
     let imeStartedAt: number | null = null;
 
     const beginFakeComposition = () => {
@@ -119,7 +148,50 @@ export default function PagedOpenQaApp() {
       }
 
       const metrics = metricsRef.current;
-      if (SCENARIO === "ime") {
+      if (SCENARIO === "imelive") {
+        // 実IMEで打ち込むモード。変換中に「本文を折り返させる」ための小突きを
+        // 3種類、20フレームずつ順番に試して overflowBelow の変化を見る。
+        if (composing) {
+          nudgeKind = Math.floor(frame / 20) % 4;
+          const composingParagraph = (() => {
+            const sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0) return null;
+            let node: Node | null = sel.getRangeAt(0).startContainer;
+            while (node && !(node instanceof HTMLElement && node.tagName === "P")) node = node.parentNode;
+            return node instanceof HTMLElement ? node : null;
+          })();
+          const contentHeightPx = Number.parseFloat(getComputedStyle(surface).getPropertyValue("--paged-content-height")) || 0;
+          if (nudgeKind === 1) {
+            // 段の内寸をわずかに揺らして再分割を促す
+            root.style.height = `${contentHeightPx - 0.01}px`;
+          } else if (nudgeKind === 2) {
+            root.style.height = "";
+            // 変換中の段落へ折り返し幅をpxで明示する
+            if (composingParagraph) composingParagraph.style.maxInlineSize = `${contentHeightPx}px`;
+          } else if (nudgeKind === 3) {
+            if (composingParagraph) {
+              composingParagraph.style.maxInlineSize = "";
+              // 段落だけをいったんフロー外へ出して戻す（再ライン分割を強制）
+              composingParagraph.style.display = "inline-block";
+              void composingParagraph.offsetWidth;
+              composingParagraph.style.display = "";
+            }
+          } else {
+            root.style.height = "";
+            if (composingParagraph) composingParagraph.style.maxInlineSize = "";
+          }
+        } else {
+          nudgeKind = 0;
+          root.style.height = "";
+        }
+        // 計測結果を定期的に書き出す。
+        if (frame > 0 && frame % 45 === 0) {
+          void invoke("save_text_file", {
+            path: TRACE.replace(".json", "-imelive.json"),
+            content: JSON.stringify({ source: SOURCE, frames: frames.slice(-900) }, null, 2),
+          });
+        }
+      } else if (SCENARIO === "ime") {
         // 変換中のページ追従を見る。まず中ほどのページまで戻り、そのページの
         // 最後の段落の末尾へキャレットを置いてから、DOMへ直接「あ」を足しつつ
         // compositionupdate を投げる（実IMEの前編集と同じく doc は触らない）。
@@ -183,6 +255,17 @@ export default function PagedOpenQaApp() {
       }
       const visibleTextTop = visibleRects.length ? Math.min(...visibleRects.map((rect) => rect.top)) : null;
       const visibleTextBottom = visibleRects.length ? Math.max(...visibleRects.map((rect) => rect.bottom)) : null;
+      // 本文（可視の行矩形）がページ枠の本文領域からどれだけはみ出しているか。
+      const contentTop = hostRect.top + paddingY;
+      const contentBottom = hostRect.bottom - paddingY;
+      const overflowBelow = visibleTextBottom === null ? 0 : Math.max(0, visibleTextBottom - contentBottom);
+      const overflowAbove = visibleTextTop === null ? 0 : Math.max(0, contentTop - visibleTextTop);
+      const domSelection = window.getSelection();
+      let caretRect: { top: number; bottom: number; left: number; right: number } | null = null;
+      if (domSelection && domSelection.rangeCount > 0) {
+        const r = domSelection.getRangeAt(0).getBoundingClientRect();
+        caretRect = { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+      }
       const lineLayer = document.querySelector<HTMLElement>(".visibleLineNumberLayer");
       const firstLineLabel = lineLayer?.firstElementChild?.textContent ?? null;
       const r = (v: number | null) => (v === null ? null : Math.round(v * 100) / 100);
@@ -211,6 +294,17 @@ export default function PagedOpenQaApp() {
             ? null
             : Math.round((firstRectTop - hostRect.top - computedTransformY - root.offsetTop) * 100) / 100,
         firstLineLabel,
+        composing,
+        compositionLength,
+        shellComposing: shell.getAttribute("data-composing"),
+        snapType: getComputedStyle(scroller).scrollSnapType,
+        nudgeKind,
+        overflowBelow: Math.round(overflowBelow * 100) / 100,
+        overflowAbove: Math.round(overflowAbove * 100) / 100,
+        caretTop: caretRect ? r(caretRect.top) : null,
+        caretBottom: caretRect ? r(caretRect.bottom) : null,
+        caretLeft: caretRect ? r(caretRect.left) : null,
+        caretRight: caretRect ? r(caretRect.right) : null,
         visibleTextTop,
         visibleTextBottom,
         paintedError:
@@ -237,7 +331,7 @@ export default function PagedOpenQaApp() {
       if (reachedFirstPage && metrics.current === metrics.total && finalReachedAt === null) finalReachedAt = frame;
       frame += 1;
 
-      if (SCENARIO === "ime" ? imeStartedAt !== null && frame >= imeStartedAt + 330 : (finalReachedAt !== null && frame >= finalReachedAt + 180) || frame >= 1500) {
+      if (SCENARIO === "imelive" ? frame >= 40000 : SCENARIO === "ime" ? imeStartedAt !== null && frame >= imeStartedAt + 330 : (finalReachedAt !== null && frame >= finalReachedAt + 180) || frame >= 1500) {
         await invoke("save_text_file", {
           path: SCENARIO === "ime" ? TRACE.replace(".json", "-ime.json") : TRACE,
           content: JSON.stringify({ source: SOURCE, textLength: text.length, finalReachedAt, wheelDispatches, frames }, null, 2),
@@ -252,6 +346,9 @@ export default function PagedOpenQaApp() {
     return () => {
       cancelled = true;
       cancelAnimationFrame(frameId);
+      document.removeEventListener("compositionstart", onCompositionStart, true);
+      document.removeEventListener("compositionupdate", onCompositionUpdate, true);
+      document.removeEventListener("compositionend", onCompositionEnd, true);
     };
   }, [ready, text]);
 

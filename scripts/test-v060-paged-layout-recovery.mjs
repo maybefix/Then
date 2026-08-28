@@ -7,6 +7,7 @@ import { readFile } from "node:fs/promises";
 
 const editorSource = await readFile("src/VerticalTextEditor.tsx", "utf8");
 const appSource = await readFile("src/App.tsx", "utf8");
+const appCss = await readFile("src/App.css", "utf8");
 
 // --- バグ1: ページ寸法変更で読書位置が失われ、白紙ページが見える ---
 
@@ -91,38 +92,38 @@ assert.match(
 
 assert.match(
   editorSource,
-  /const handleCompositionUpdate = \(\) => \{[\s\S]*?window\.getSelection\(\)/,
-  "composition tracking must read DOM selection because the PM selection lags during IME",
+  /const composingNow = composingRef\.current;[\s\S]*?const fragmentOffset = composingNow[\s\S]*?const hostOffset = composingNow \? scrollOffset/,
+  "while composing, page position must follow the scroll continuously instead of snapping per page",
 );
 
 assert.match(
   editorSource,
-  /const handleCompositionUpdate = \(\) => \{[\s\S]*?const outside =[\s\S]*?if \(!outside\) return;/,
-  "the caret must only be chased when it actually leaves the visible page",
+  /const handleCompositionUpdate = \(\) => \{[\s\S]*?syncPageMetricsRef\.current\?\.\(\)/,
+  "composition updates must re-map the fragment so the preedit stays on screen",
 );
 
 assert.match(
   editorSource,
-  /const handleCompositionUpdate = \(\) => \{[\s\S]*?remainingFrames -= 1;[\s\S]*?requestAnimationFrame\(step\)/,
-  "fragment normalization advances one page per frame, so composition tracking must retry",
+  /const handleCompositionStart = \(\) => \{[\s\S]*?setAttribute\("data-composing", "true"\)/,
+  "composition must mark the shell so scroll snapping can be suspended",
+);
+
+assert.match(
+  appCss,
+  /\[data-composing="true"\][\s\S]*?scroll-snap-type:\s*none/,
+  "scroll snapping must be off while composing so the caret reveal is not pulled back",
+);
+
+assert.match(
+  editorSource,
+  /const handleCompositionEnd = \(\) => \{[\s\S]*?compositionSettleFrame = requestAnimationFrame\([\s\S]*?if \(composingRef\.current\) return;[\s\S]*?scrollToPage\(/,
+  "the page must be re-snapped one frame after composition really ends (IME sends end/start between segments)",
 );
 
 assert.match(
   editorSource,
   /if \(compositionRevealFrame !== null\) cancelAnimationFrame\(compositionRevealFrame\);/,
   "the composition tracking frame must be cancelled on unmount",
-);
-
-assert.match(
-  editorSource,
-  /const handleCompositionUpdate = \(\) => \{[\s\S]*?const base = compositionStartPage \?\? [\s\S]*?Math\.min\(base \+ 1, target\)/,
-  "composition tracking must stay within one page of where the composition started",
-);
-
-assert.match(
-  editorSource,
-  /const handleCompositionStart = \(\) => \{[\s\S]*?compositionStartPage =/,
-  "the page where the composition started must be recorded",
 );
 
 // --- 軽微: 改行記号を現在ページに絞る ---
