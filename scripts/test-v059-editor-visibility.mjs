@@ -259,13 +259,20 @@ assert.match(
 );
 assert.match(
   editorSource,
-  /pageFlowDirectionRef\.current === "horizontal-rtl"[\s\S]*?lastHorizontalPagedWheelAt[\s\S]*?movePage\(delta > 0 \? 1 : -1\)/,
+  /pageFlowDirectionRef\.current === "horizontal-rtl"[\s\S]*?lastHorizontalPagedWheelAt[\s\S]*?movePage\(event\.deltaY > 0 \? 1 : -1\)/,
   "horizontal paged mode must map mouse-wheel gestures to page navigation",
 );
 assert.match(
   editorSource,
-  /pageFlowDirectionRef\.current === "vertical"[\s\S]*?lastPagedWheelAt[\s\S]*?movePage\(delta > 0 \? 1 : -1\)/,
+  /pageFlowDirectionRef\.current === "vertical"[\s\S]*?lastPagedWheelAt[\s\S]*?movePage\(event\.deltaY > 0 \? 1 : -1\)/,
   "vertical paged mode must retain its independent wheel navigation path",
+);
+// ページ送りはdeltaYだけを見る。RTLではdeltaXの符号解釈がネイティブと逆に
+// なり得るうえ、チルトホイールの横成分でページが飛ぶのを避ける。
+assert.doesNotMatch(
+  editorSource,
+  /lastHorizontalPagedWheelAt = now;\s*movePage\(delta /,
+  "paged wheel navigation must not fall back to the mixed deltaX/deltaY value",
 );
 assert.match(
   editorSource,
