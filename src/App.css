@@ -1914,6 +1914,9 @@ body.thenPdfExporting .printExportViewport {
   position: absolute;
   z-index: 0;
   box-sizing: border-box;
+  /* 外余白のぶんスナップ位置を手前へ戻す。ページ境界のスクロール量は
+     余白を含まない (index * (ページ高 + gap)) のままにする。 */
+  scroll-margin: var(--paged-outer-margin, 0px);
   width: var(--paged-page-width);
   height: var(--paged-page-height);
   border: 1px solid color-mix(in srgb, var(--text-muted) 48%, transparent);
@@ -1937,8 +1940,8 @@ body.thenPdfExporting .printExportViewport {
 
 .verticalTypewriterShell[data-editor-display="paged"] .verticalTypewriterEditor {
   position: absolute;
-  top: 0;
-  right: 0;
+  top: var(--paged-outer-margin, 0px);
+  right: var(--paged-outer-margin, 0px);
   z-index: 2;
   width: var(--paged-page-width);
   min-width: 0;

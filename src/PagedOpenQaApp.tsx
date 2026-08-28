@@ -33,6 +33,7 @@ type Frame = {
   // 実描画で見た本文上端のズレ（hostTop + paddingY からの差）。0が正しい。
   paintedError: number | null;
   wheelDispatches: number;
+  frame_geometry: Record<string, unknown>;
 };
 
 type PageMetrics = { current: number; total: number };
@@ -145,6 +146,23 @@ export default function PagedOpenQaApp() {
         paintedError:
           visibleTextTop === null ? null : Math.round((visibleTextTop - hostRect.top - paddingY) * 100) / 100,
         wheelDispatches,
+        frame_geometry: (() => {
+          const sc = scroller.getBoundingClientRect();
+          const sheets = shell.querySelectorAll<HTMLElement>(".pagedEditorSheet");
+          const sheet = sheets[Math.max(0, metrics.current - 1)];
+          const sr = sheet ? sheet.getBoundingClientRect() : null;
+          const frameEl = document.querySelector<HTMLElement>(".editorFrame");
+          const fr = frameEl ? frameEl.getBoundingClientRect() : null;
+          return {
+            scrollerTop: r(sc.top), scrollerBottom: r(sc.bottom), clientH: scroller.clientHeight,
+            clientW: scroller.clientWidth, scrollerLeft: r(sc.left), scrollerRight: r(sc.right),
+            sheetTop: sr ? r(sr.top) : null, sheetBottom: sr ? r(sr.bottom) : null,
+            sheetLeft: sr ? r(sr.left) : null, sheetRight: sr ? r(sr.right) : null,
+            frameTop: fr ? r(fr.top) : null, frameBottom: fr ? r(fr.bottom) : null,
+            frameLeft: fr ? r(fr.left) : null, frameRight: fr ? r(fr.right) : null,
+            dpr: window.devicePixelRatio,
+          };
+        })(),
       });
       if (reachedFirstPage && metrics.current === metrics.total && finalReachedAt === null) finalReachedAt = frame;
       frame += 1;

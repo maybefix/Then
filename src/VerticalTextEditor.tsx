@@ -239,6 +239,7 @@ type PageLayout = {
   width: number;
   height: number;
   gap: number;
+  outerMargin: number;
   paddingX: number;
   paddingY: number;
   contentWidth: number;
@@ -252,6 +253,7 @@ const DEFAULT_PAGE_LAYOUT: PageLayout = {
   width: 1,
   height: 1,
   gap: 28,
+  outerMargin: 0,
   paddingX: 1,
   paddingY: 1,
   contentWidth: 1,
@@ -2196,8 +2198,14 @@ export function VerticalTextEditor({
       return;
     }
 
-    const width = Math.max(1, scroller.clientWidth);
-    const height = Math.max(1, scroller.clientHeight);
+    // ページ枠をスクロール領域いっぱいに置くと、clientHeight の丸め（実寸714.9→
+    // 715px）で下辺の枠線がクリップされて消える。外側に余白を取り、枠が四辺とも
+    // 内側へ収まるようにする。狭い窓では余白を諦めて本文の面積を優先する。
+    const viewportWidth = Math.max(1, scroller.clientWidth);
+    const viewportHeight = Math.max(1, scroller.clientHeight);
+    const outerMargin = viewportWidth >= 480 && viewportHeight >= 360 ? 20 : 0;
+    const width = Math.max(1, viewportWidth - outerMargin * 2);
+    const height = Math.max(1, viewportHeight - outerMargin * 2);
     const verticalWriting = writingModeRef.current === "vertical-rl";
     const gap = 28;
     const paddingX = Math.max(28, Math.min(72, Math.round(width * 0.08)));
@@ -2212,6 +2220,7 @@ export function VerticalTextEditor({
       width,
       height,
       gap,
+      outerMargin,
       paddingX,
       paddingY,
       contentWidth,
@@ -2222,6 +2231,7 @@ export function VerticalTextEditor({
     surface.style.setProperty("--paged-page-width", `${width}px`);
     surface.style.setProperty("--paged-page-height", `${height}px`);
     surface.style.setProperty("--paged-page-gap", `${gap}px`);
+    surface.style.setProperty("--paged-outer-margin", `${outerMargin}px`);
     surface.style.setProperty("--paged-padding-x", `${paddingX}px`);
     surface.style.setProperty("--paged-padding-y", `${paddingY}px`);
     surface.style.setProperty("--paged-content-width", `${contentWidth}px`);
@@ -2232,6 +2242,7 @@ export function VerticalTextEditor({
     if (
       previousLayout.width !== width ||
       previousLayout.height !== height ||
+      previousLayout.outerMargin !== outerMargin ||
       previousLayout.paddingX !== paddingX ||
       previousLayout.paddingY !== paddingY ||
       previousLayout.columnGap !== columnGap ||
@@ -3956,14 +3967,16 @@ export function VerticalTextEditor({
           style={
             editorDisplayMode === "paged"
               ? {
+                  // 面はページ列そのものの大きさ＋外余白。余白のぶんだけ
+                  // ページ枠がスクロール領域の内側へ入り、四辺とも見える。
                   width:
                     pageFlowDirection === "horizontal-rtl"
-                      ? `${pageMetrics.total * pageLayout.width + Math.max(0, pageMetrics.total - 1) * pageLayout.gap}px`
-                      : `${pageLayout.width}px`,
+                      ? `${pageMetrics.total * pageLayout.width + Math.max(0, pageMetrics.total - 1) * pageLayout.gap + pageLayout.outerMargin * 2}px`
+                      : `${pageLayout.width + pageLayout.outerMargin * 2}px`,
                   height:
                     pageFlowDirection === "vertical"
-                      ? `${pageMetrics.total * pageLayout.height + Math.max(0, pageMetrics.total - 1) * pageLayout.gap}px`
-                      : `${pageLayout.height}px`,
+                      ? `${pageMetrics.total * pageLayout.height + Math.max(0, pageMetrics.total - 1) * pageLayout.gap + pageLayout.outerMargin * 2}px`
+                      : `${pageLayout.height + pageLayout.outerMargin * 2}px`,
                 }
               : undefined
           }
@@ -3975,8 +3988,14 @@ export function VerticalTextEditor({
                 key={index}
                 style={
                   pageFlowDirection === "horizontal-rtl"
-                    ? { right: `${index * (pageLayout.width + pageLayout.gap)}px`, top: 0 }
-                    : { left: 0, top: `${index * (pageLayout.height + pageLayout.gap)}px` }
+                    ? {
+                        right: `${pageLayout.outerMargin + index * (pageLayout.width + pageLayout.gap)}px`,
+                        top: `${pageLayout.outerMargin}px`,
+                      }
+                    : {
+                        left: `${pageLayout.outerMargin}px`,
+                        top: `${pageLayout.outerMargin + index * (pageLayout.height + pageLayout.gap)}px`,
+                      }
                 }
                 aria-hidden="true"
               >
