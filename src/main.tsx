@@ -4,6 +4,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import CanvasWindowApp from "./CanvasWindowApp";
 import ExportWindowApp from "./ExportWindowApp";
+import PagedOpenQaApp from "./PagedOpenQaApp";
 import "./App.css";
 import "./styles/themes/index.css";
 
@@ -57,11 +58,20 @@ function detectCanvasWindow(): boolean {
 
 const isExportWindow = detectExportWindow();
 const isCanvasWindow = detectCanvasWindow();
+const isPagedOpenQa = new URLSearchParams(window.location.search).get("view") === "paged-open-qa";
 
 installWebviewNativeShortcutGuards();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    {isCanvasWindow ? <CanvasWindowApp /> : isExportWindow ? <ExportWindowApp /> : <App />}
+    {isPagedOpenQa ? (
+      <PagedOpenQaApp />
+    ) : isCanvasWindow ? (
+      <CanvasWindowApp />
+    ) : isExportWindow ? (
+      <ExportWindowApp />
+    ) : (
+      <App />
+    )}
   </React.StrictMode>,
 );

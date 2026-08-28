@@ -2495,7 +2495,11 @@ export function VerticalTextEditor({
     if (!scroller || editorDisplayModeRef.current !== "paged") return;
     cancelInitialAdjustmentRef.current?.();
     stopCenterAnimationRef.current?.();
-    scrollToPage(pageMetricsRef.current.current + delta, "smooth");
+    // 本文は現在ページのfragmentだけを単一のclip hostへ載せている。
+    // smooth scroll中にページ境界をまたぐとhostが途中フレームで次ページへ
+    // 切り替わり、短い最終ページでは本文が一瞬だけ上下へ跳ねて見える。
+    // ページ単位の操作は境界へ直接移動し、中間の不整合フレームを作らない。
+    scrollToPage(pageMetricsRef.current.current + delta, "auto");
   };
 
   useEffect(() => {
@@ -2862,6 +2866,7 @@ export function VerticalTextEditor({
     let lastVisibleCenter = -1;
     let centerFrame: number | null = null;
     let visibleFrame: number | null = null;
+    let scrollFrame: number | null = null;
     let lineBreakFrame: number | null = null;
     let visualLineFrame: number | null = null;
     let compositionFrame: number | null = null;
@@ -3651,9 +3656,8 @@ export function VerticalTextEditor({
       } else {
         scroller.scrollLeft -= delta;
       }
-      requestVisibleWindow();
-      requestLineBreakMarks();
-      syncPageMetricsRef.current?.();
+      // scroll位置の代入で発火するscrollイベントへ描画更新を一本化する。
+      // ホイールイベント側でも同期すると、同じ入力でDOM計測が二重に走る。
     };
 
     const handleMouseDown = (event: MouseEvent) => {
@@ -3780,10 +3784,18 @@ export function VerticalTextEditor({
     };
 
     const handleScroll = () => {
+      // 高解像度ホイールやsmooth scrollは1フレーム中に複数のscrollイベントを
+      // 発生させる。可視範囲・行表示は各request関数自身が集約し、Range計測を
+      // 含むページ同期もページ表示中だけ表示フレームごとに一度行う。
       requestVisibleWindow();
       requestLineBreakMarks();
-      syncPageMetricsRef.current?.();
-      requestPagedScrollSettle();
+      if (editorDisplayModeRef.current !== "paged" || scrollFrame !== null) return;
+      scrollFrame = requestAnimationFrame(() => {
+        scrollFrame = null;
+        if (editorDisplayModeRef.current !== "paged") return;
+        syncPageMetricsRef.current?.();
+        requestPagedScrollSettle();
+      });
     };
 
     // 本文上の左ボタンドラッグ開始を、PM が選択を確定する前に捕捉するため
@@ -3876,6 +3888,7 @@ export function VerticalTextEditor({
       document.fonts?.removeEventListener("loadingdone", handleFontLoadingDone);
       if (centerFrame !== null) cancelAnimationFrame(centerFrame);
       if (visibleFrame !== null) cancelAnimationFrame(visibleFrame);
+      if (scrollFrame !== null) cancelAnimationFrame(scrollFrame);
       if (lineBreakFrame !== null) cancelAnimationFrame(lineBreakFrame);
       if (visualLineFrame !== null) cancelAnimationFrame(visualLineFrame);
       if (compositionFrame !== null) cancelAnimationFrame(compositionFrame);

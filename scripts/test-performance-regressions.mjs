@@ -492,6 +492,25 @@ assert.match(
   /updateEmptyAttribute\(currentEditor, next\)/,
   "the editor update path must reuse its already-materialized text for empty-state updates",
 );
+assert.match(
+  editorSource,
+  /const handleScroll = \(\) => \{[\s\S]*?editorDisplayModeRef\.current !== "paged" \|\| scrollFrame !== null[\s\S]*?scrollFrame = requestAnimationFrame/,
+  "high-frequency scroll events must coalesce DOM measurement to one display frame",
+);
+assert.match(
+  editorSource,
+  /if \(editorDisplayModeRef\.current !== "paged" \|\| scrollFrame !== null\) return;[\s\S]*?syncPageMetricsRef\.current\?\.\(\);\s*requestPagedScrollSettle\(\);/,
+  "expensive page metrics must only run from the scroll path in paged mode",
+);
+const wheelSource = editorSource.slice(
+  editorSource.indexOf("const handleWheel"),
+  editorSource.indexOf("const handleMouseDown"),
+);
+assert.doesNotMatch(
+  wheelSource,
+  /requestVisibleWindow\(\)|requestLineBreakMarks\(\)|syncPageMetricsRef\.current/,
+  "continuous wheel input must rely on its scroll event instead of duplicating render work",
+);
 
 const canvasSource = await readFile("src/CanvasWindowApp.tsx", "utf8");
 assert.match(

@@ -267,6 +267,11 @@ assert.match(
   /pageFlowDirectionRef\.current === "vertical"[\s\S]*?lastPagedWheelAt[\s\S]*?movePage\(event\.deltaY > 0 \? 1 : -1\)/,
   "vertical paged mode must retain its independent wheel navigation path",
 );
+assert.match(
+  editorSource,
+  /const movePage = \(delta: -1 \| 1\) => \{[\s\S]*?scrollToPage\(pageMetricsRef\.current\.current \+ delta, "auto"\)/,
+  "paged navigation must not expose the single-fragment editor during an intermediate smooth-scroll frame",
+);
 // ページ送りはdeltaYだけを見る。RTLではdeltaXの符号解釈がネイティブと逆に
 // なり得るうえ、チルトホイールの横成分でページが飛ぶのを避ける。
 assert.doesNotMatch(
@@ -291,8 +296,8 @@ assert.match(
 );
 assert.match(
   editorSource,
-  /const handleScroll = \(\) => \{[\s\S]*?syncPageMetricsRef\.current\?\.\(\);[\s\S]*?requestPagedScrollSettle\(\)/,
-  "button, wheel, and scrollbar navigation must share the same paged settle path",
+  /const handleScroll = \(\) => \{[\s\S]*?editorDisplayModeRef\.current !== "paged" \|\| scrollFrame !== null[\s\S]*?requestAnimationFrame[\s\S]*?syncPageMetricsRef\.current\?\.\(\);[\s\S]*?requestPagedScrollSettle\(\)/,
+  "scroll work must be frame-coalesced while retaining the paged settle path",
 );
 assert.doesNotMatch(
   editorSource,
