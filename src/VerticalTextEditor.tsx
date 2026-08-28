@@ -2238,6 +2238,15 @@ export function VerticalTextEditor({
     surface.style.setProperty("--paged-content-width", `${contentWidth}px`);
     surface.style.setProperty("--paged-content-height", `${contentHeight}px`);
     surface.style.setProperty("--paged-column-gap", `${columnGap}px`);
+    // column-width はインライン方向の寸法。縦書きでは縦の長さ（＝本文の高さ）に
+    // なるので、横幅を渡すと段の内寸が本文より広く見積もられる。実測では
+    // column-width:1159px に対して本文の折り返しは599px（max-inline-size:100%）
+    // という食い違いになり、IME変換中の前編集だけが段の内寸いっぱい（＝ページ
+    // 枠の外）まで伸びていた。
+    surface.style.setProperty(
+      "--paged-column-size",
+      `${verticalWriting ? contentHeight : contentWidth}px`,
+    );
 
     const previousLayout = pageLayoutRef.current;
     if (

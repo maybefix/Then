@@ -1981,7 +1981,7 @@ body.thenPdfExporting .printExportViewport {
   max-height: var(--paged-content-height);
   margin: 0;
   padding: 0;
-  column-width: var(--paged-content-width);
+  column-width: var(--paged-column-size, var(--paged-content-width));
   column-gap: var(--paged-column-gap);
   column-fill: auto;
   column-rule: 0;
@@ -2651,7 +2651,7 @@ body.thenPdfExporting .printExportViewport {
   max-height: var(--paged-content-height);
   margin: 0;
   padding: 0;
-  column-width: var(--paged-content-width);
+  column-width: var(--paged-column-size, var(--paged-content-width));
   column-gap: var(--paged-column-gap);
   column-fill: auto;
   overflow: visible;

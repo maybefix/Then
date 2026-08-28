@@ -32,8 +32,9 @@ type Frame = {
   composing: boolean;
   compositionLength: number;
   shellComposing: string | null;
+  caretParagraph: Record<string, unknown> | null;
+  rootBox: Record<string, unknown>;
   snapType: string;
-  nudgeKind: number;
   overflowBelow: number;
   overflowAbove: number;
   caretTop: number | null;
@@ -71,7 +72,6 @@ export default function PagedOpenQaApp() {
 
     let composingNode: Text | null = null;
     let composing = false;
-    let nudgeKind = 0;
     let compositionLength = 0;
     const onCompositionStart = () => {
       composing = true;
@@ -148,42 +148,9 @@ export default function PagedOpenQaApp() {
       }
 
       const metrics = metricsRef.current;
-      if (SCENARIO === "imelive") {
+      if (SCENARIO === "imelive" || SCENARIO === "imecontinuous" || SCENARIO === "imehorizontal") {
         // 実IMEで打ち込むモード。変換中に「本文を折り返させる」ための小突きを
         // 3種類、20フレームずつ順番に試して overflowBelow の変化を見る。
-        if (composing) {
-          nudgeKind = Math.floor(frame / 20) % 4;
-          const composingParagraph = (() => {
-            const sel = window.getSelection();
-            if (!sel || sel.rangeCount === 0) return null;
-            let node: Node | null = sel.getRangeAt(0).startContainer;
-            while (node && !(node instanceof HTMLElement && node.tagName === "P")) node = node.parentNode;
-            return node instanceof HTMLElement ? node : null;
-          })();
-          const contentHeightPx = Number.parseFloat(getComputedStyle(surface).getPropertyValue("--paged-content-height")) || 0;
-          if (nudgeKind === 1) {
-            // 段の内寸をわずかに揺らして再分割を促す
-            root.style.height = `${contentHeightPx - 0.01}px`;
-          } else if (nudgeKind === 2) {
-            root.style.height = "";
-            // 変換中の段落へ折り返し幅をpxで明示する
-            if (composingParagraph) composingParagraph.style.maxInlineSize = `${contentHeightPx}px`;
-          } else if (nudgeKind === 3) {
-            if (composingParagraph) {
-              composingParagraph.style.maxInlineSize = "";
-              // 段落だけをいったんフロー外へ出して戻す（再ライン分割を強制）
-              composingParagraph.style.display = "inline-block";
-              void composingParagraph.offsetWidth;
-              composingParagraph.style.display = "";
-            }
-          } else {
-            root.style.height = "";
-            if (composingParagraph) composingParagraph.style.maxInlineSize = "";
-          }
-        } else {
-          nudgeKind = 0;
-          root.style.height = "";
-        }
         // 計測結果を定期的に書き出す。
         if (frame > 0 && frame % 45 === 0) {
           void invoke("save_text_file", {
@@ -266,6 +233,32 @@ export default function PagedOpenQaApp() {
         const r = domSelection.getRangeAt(0).getBoundingClientRect();
         caretRect = { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
       }
+      // 変換中の段落と、同じページの普通の段落の「折り返し条件」を並べて記録する。
+      const paragraphBox = (el: HTMLElement | null) => {
+        if (!el) return null;
+        const cs = getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        return {
+          maxInlineSize: cs.maxInlineSize,
+          inlineSize: cs.inlineSize,
+          whiteSpace: cs.whiteSpace,
+          overflowWrap: cs.overflowWrap,
+          wordBreak: cs.wordBreak,
+          lineBreak: cs.lineBreak,
+          rectHeight: Math.round(rect.height * 100) / 100,
+          rectWidth: Math.round(rect.width * 100) / 100,
+          lineRects: el.getClientRects().length,
+          textLength: el.textContent?.length ?? 0,
+        };
+      };
+      const composingParagraphEl = (() => {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return null;
+        let node: Node | null = sel.getRangeAt(0).startContainer;
+        while (node && !(node instanceof HTMLElement && node.tagName === "P")) node = node.parentNode;
+        return node instanceof HTMLElement ? node : null;
+      })();
+      const rootStyleForBox = getComputedStyle(root);
       const lineLayer = document.querySelector<HTMLElement>(".visibleLineNumberLayer");
       const firstLineLabel = lineLayer?.firstElementChild?.textContent ?? null;
       const r = (v: number | null) => (v === null ? null : Math.round(v * 100) / 100);
@@ -297,8 +290,16 @@ export default function PagedOpenQaApp() {
         composing,
         compositionLength,
         shellComposing: shell.getAttribute("data-composing"),
+        caretParagraph: paragraphBox(composingParagraphEl),
+        rootBox: {
+          columnWidth: rootStyleForBox.columnWidth,
+          columnGap: rootStyleForBox.columnGap,
+          columnCount: rootStyleForBox.columnCount,
+          inlineSize: rootStyleForBox.inlineSize,
+          blockSize: rootStyleForBox.blockSize,
+          writingMode: rootStyleForBox.writingMode,
+        },
         snapType: getComputedStyle(scroller).scrollSnapType,
-        nudgeKind,
         overflowBelow: Math.round(overflowBelow * 100) / 100,
         overflowAbove: Math.round(overflowAbove * 100) / 100,
         caretTop: caretRect ? r(caretRect.top) : null,
@@ -331,7 +332,7 @@ export default function PagedOpenQaApp() {
       if (reachedFirstPage && metrics.current === metrics.total && finalReachedAt === null) finalReachedAt = frame;
       frame += 1;
 
-      if (SCENARIO === "imelive" ? frame >= 40000 : SCENARIO === "ime" ? imeStartedAt !== null && frame >= imeStartedAt + 330 : (finalReachedAt !== null && frame >= finalReachedAt + 180) || frame >= 1500) {
+      if ((SCENARIO === "imelive" || SCENARIO === "imecontinuous" || SCENARIO === "imehorizontal") ? frame >= 40000 : SCENARIO === "ime" ? imeStartedAt !== null && frame >= imeStartedAt + 330 : (finalReachedAt !== null && frame >= finalReachedAt + 180) || frame >= 1500) {
         await invoke("save_text_file", {
           path: SCENARIO === "ime" ? TRACE.replace(".json", "-ime.json") : TRACE,
           content: JSON.stringify({ source: SOURCE, textLength: text.length, finalReachedAt, wheelDispatches, frames }, null, 2),
@@ -364,7 +365,7 @@ export default function PagedOpenQaApp() {
   } as CSSProperties;
 
   return (
-    <main className="appShell" data-theme="newsroom-light" data-writing-mode="vertical-rl" style={shellStyle}>
+    <main className="appShell" data-theme="newsroom-light" data-writing-mode={SCENARIO === "imehorizontal" ? "horizontal-tb" : "vertical-rl"} style={shellStyle}>
       <section className="appFrame" aria-label="Then paging regression QA">
         <section className="workspace">
           <div className="editorColumn">
@@ -374,8 +375,8 @@ export default function PagedOpenQaApp() {
                   <VerticalTextEditor
                     text={text}
                     editorRevision={null}
-                    writingMode="vertical-rl"
-                    editorDisplayMode="paged"
+                    writingMode={SCENARIO === "imehorizontal" ? "horizontal-tb" : "vertical-rl"}
+                    editorDisplayMode={SCENARIO === "imecontinuous" || SCENARIO === "imehorizontal" ? "continuous" : "paged"}
                     pageFlowDirection="vertical"
                     typewriterScroll
                     showTypewriterGuide={false}
