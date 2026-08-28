@@ -254,8 +254,23 @@ assert.match(
 );
 assert.match(
   editorSource,
-  /verticalBaseOffset[\s\S]*?desiredFirstBlockTop[\s\S]*?verticalBaseOffset - fragmentOffset/,
-  "vertical pagination must normalize the first document block before applying page offsets",
+  /verticalBaseOffset[\s\S]*?firstElementChild\.offsetTop[\s\S]*?verticalBaseOffset - fragmentOffset/,
+  "vertical pagination must derive the fragment base from layout coordinates",
+);
+assert.doesNotMatch(
+  editorSource,
+  /getComputedStyle\(root\)\.transform/,
+  "the fragment base must not be recomputed from the transform it is about to overwrite",
+);
+assert.match(
+  editorSource,
+  /host\.scrollTop !== 0\) host\.scrollTop = 0/,
+  "the paged clip host must never keep an internal scroll offset",
+);
+assert.match(
+  appCss,
+  /data-editor-display="paged"\]\s*\.verticalTypewriterEditor\s*\{[\s\S]*?overflow:\s*clip/,
+  "the paged clip host must use overflow: clip so the browser cannot scroll it",
 );
 assert.match(
   editorSource,

@@ -11,11 +11,27 @@ type Frame = {
   current: number;
   total: number;
   scrollTop: number;
-  fragmentY: string;
+  hostY: number;
+  fragmentY: number;
+  columnStep: number;
+  paddingY: number;
+  rootOffsetTop: number;
+  lastOffsetTop: number;
+  // レイアウト座標で見た「ページ枠の本文上端」と断片位置のズレ。0が正しい。
+  layoutError: number;
+  hostTop: number | null;
+  hostScrollTop: number;
+  hostScrollLeft: number;
   computedTransformY: number;
-  recomputedBase: number | null;
+  rootRectTop: number | null;
+  firstRectTop: number | null;
+  lastRectTop: number | null;
+  paintAnomaly: number | null;
+  firstLineLabel: string | null;
   visibleTextTop: number | null;
   visibleTextBottom: number | null;
+  // 実描画で見た本文上端のズレ（hostTop + paddingY からの差）。0が正しい。
+  paintedError: number | null;
   wheelDispatches: number;
 };
 
@@ -27,7 +43,7 @@ export default function PagedOpenQaApp() {
   const metricsRef = useRef<PageMetrics>({ current: 1, total: 1 });
 
   useEffect(() => {
-    void invoke<string>("read_text_file", { path: SOURCE }).then(setText);
+    void invoke<{ content: string }>("read_text_file", { path: SOURCE }).then((doc) => setText(doc.content));
   }, []);
 
   useEffect(() => {
@@ -37,34 +53,54 @@ export default function PagedOpenQaApp() {
     let frame = 0;
     let wheelDispatches = 0;
     let finalReachedAt: number | null = null;
+    let reachedFirstPage = false;
     const frames: Frame[] = [];
 
     const capture = async () => {
       if (cancelled) return;
       const shell = document.querySelector<HTMLElement>(".verticalTypewriterShell");
       const scroller = shell?.querySelector<HTMLElement>(".verticalTypewriterScroller");
+      const surface = shell?.querySelector<HTMLElement>(".verticalTypewriterPageSurface");
       const host = shell?.querySelector<HTMLElement>(".verticalTypewriterEditor");
       const root = host?.querySelector<HTMLElement>(".pm-root");
-      if (!shell || !scroller || !host || !root) {
+      if (!shell || !scroller || !surface || !host || !root) {
         frameId = requestAnimationFrame(() => void capture());
         return;
       }
 
-      if (frame >= 60 && frame % 24 === 12 && metricsRef.current.current < metricsRef.current.total) {
-        scroller.dispatchEvent(
-          new WheelEvent("wheel", { deltaY: 120, deltaMode: WheelEvent.DOM_DELTA_PIXEL, bubbles: true, cancelable: true }),
-        );
-        wheelDispatches += 1;
+      const metrics = metricsRef.current;
+      // ファイルを開いた直後（キャレットは文末＝最終ページ）から先頭まで戻し、
+      // もう一度最終ページまで送る。動画で報告された「開いてから最終ページまで
+      // スクロールすると本文だけが下へずれる」経路をそのままなぞる。
+      if (frame >= 60 && frame % 24 === 12) {
+        const goingUp = !reachedFirstPage;
+        if (goingUp && metrics.current <= 1) reachedFirstPage = true;
+        const delta = reachedFirstPage ? 120 : -120;
+        if (!(reachedFirstPage && metrics.current >= metrics.total)) {
+          scroller.dispatchEvent(
+            new WheelEvent("wheel", { deltaY: delta, deltaMode: WheelEvent.DOM_DELTA_PIXEL, bubbles: true, cancelable: true }),
+          );
+          wheelDispatches += 1;
+        }
       }
 
-      const transform = getComputedStyle(root).transform;
-      const computedTransformY = transform === "none" ? 0 : new DOMMatrixReadOnly(transform).m42;
+      const surfaceStyle = getComputedStyle(surface);
+      const num = (name: string) => Number.parseFloat(surfaceStyle.getPropertyValue(name)) || 0;
+      const paddingY = num("--paged-padding-y");
+      const columnStep = num("--paged-content-height") + num("--paged-column-gap");
+      const fragmentY = Number.parseFloat(root.style.getPropertyValue("--paged-fragment-y")) || 0;
+      const hostY = Number.parseFloat(host.style.getPropertyValue("--paged-host-y")) || 0;
+      const last = root.lastElementChild instanceof HTMLElement ? root.lastElementChild : null;
+      const layoutError =
+        root.offsetTop + (metrics.current - 1) * columnStep + fragmentY - paddingY;
+
       const hostRect = host.getBoundingClientRect();
+      const rootStyle = getComputedStyle(root);
+      const matrix = rootStyle.transform === "none" ? null : new DOMMatrixReadOnly(rootStyle.transform);
+      const computedTransformY = matrix ? matrix.m42 : 0;
       const first = root.firstElementChild instanceof HTMLElement ? root.firstElementChild : null;
-      const paddingY = Number.parseFloat(getComputedStyle(shell).getPropertyValue("--paged-padding-y")) || 0;
-      const recomputedBase = first
-        ? hostRect.top + paddingY - (first.getBoundingClientRect().top - computedTransformY)
-        : null;
+      const firstRectTop = first ? first.getBoundingClientRect().top : null;
+      const lastRectTop = last ? last.getBoundingClientRect().top : null;
       const visibleRects: DOMRect[] = [];
       for (const paragraph of root.querySelectorAll("p")) {
         const range = document.createRange();
@@ -74,26 +110,49 @@ export default function PagedOpenQaApp() {
         }
         range.detach();
       }
-      const metrics = metricsRef.current;
+      const visibleTextTop = visibleRects.length ? Math.min(...visibleRects.map((rect) => rect.top)) : null;
+      const visibleTextBottom = visibleRects.length ? Math.max(...visibleRects.map((rect) => rect.bottom)) : null;
+      const lineLayer = document.querySelector<HTMLElement>(".visibleLineNumberLayer");
+      const firstLineLabel = lineLayer?.firstElementChild?.textContent ?? null;
+      const r = (v: number | null) => (v === null ? null : Math.round(v * 100) / 100);
       frames.push({
         frame,
         current: metrics.current,
         total: metrics.total,
         scrollTop: scroller.scrollTop,
-        fragmentY: root.style.getPropertyValue("--paged-fragment-y"),
+        hostY,
+        fragmentY,
+        columnStep,
+        paddingY,
+        rootOffsetTop: root.offsetTop,
+        lastOffsetTop: last ? last.offsetTop : -1,
+        layoutError: Math.round(layoutError * 100) / 100,
+        hostTop: r(hostRect.top),
+        hostScrollTop: host.scrollTop,
+        hostScrollLeft: host.scrollLeft,
         computedTransformY,
-        recomputedBase,
-        visibleTextTop: visibleRects.length ? Math.min(...visibleRects.map((rect) => rect.top)) : null,
-        visibleTextBottom: visibleRects.length ? Math.max(...visibleRects.map((rect) => rect.bottom)) : null,
+        rootRectTop: r(root.getBoundingClientRect().top),
+        firstRectTop: r(firstRectTop),
+        lastRectTop: r(lastRectTop),
+        // 描画座標とレイアウト座標のズレ（0なら transform どおりに描かれている）
+        paintAnomaly:
+          firstRectTop === null
+            ? null
+            : Math.round((firstRectTop - hostRect.top - computedTransformY - root.offsetTop) * 100) / 100,
+        firstLineLabel,
+        visibleTextTop,
+        visibleTextBottom,
+        paintedError:
+          visibleTextTop === null ? null : Math.round((visibleTextTop - hostRect.top - paddingY) * 100) / 100,
         wheelDispatches,
       });
-      if (metrics.current === metrics.total && finalReachedAt === null) finalReachedAt = frame;
+      if (reachedFirstPage && metrics.current === metrics.total && finalReachedAt === null) finalReachedAt = frame;
       frame += 1;
 
-      if ((finalReachedAt !== null && frame >= finalReachedAt + 180) || frame >= 900) {
+      if ((finalReachedAt !== null && frame >= finalReachedAt + 180) || frame >= 1500) {
         await invoke("save_text_file", {
           path: TRACE,
-          contents: JSON.stringify({ source: SOURCE, textLength: text.length, finalReachedAt, wheelDispatches, frames }, null, 2),
+          content: JSON.stringify({ source: SOURCE, textLength: text.length, finalReachedAt, wheelDispatches, frames }, null, 2),
         });
         await getCurrentWindow().close();
         return;

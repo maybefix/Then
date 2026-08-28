@@ -1943,7 +1943,13 @@ body.thenPdfExporting .printExportViewport {
   width: var(--paged-page-width);
   min-width: 0;
   height: var(--paged-page-height);
-  overflow: hidden;
+  /* hidden ではなく clip。hidden はスクロールコンテナなので、キャレット表示
+     （focus/scrollIntoView）やスクロールアンカリングでブラウザがこの枠自身を
+     内部スクロールしてしまい、そのぶん本文が段送りとは無関係にずれる。
+     ページ送りの transform と食い違ったまま固定され、最終ページで本文だけが
+     数十px下へ残る症状の原因になっていた。clip は非スクロールなので起きない。 */
+  overflow: clip;
+  overflow-anchor: none;
   pointer-events: none;
   transform: translate(
     var(--paged-host-x, 0px),

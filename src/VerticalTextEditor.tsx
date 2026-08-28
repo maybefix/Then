@@ -2278,13 +2278,27 @@ export function VerticalTextEditor({
       "--paged-host-y",
       `${pageFlowDirectionRef.current === "vertical" ? hostOffset : 0}px`,
     );
+    // ページ枠が内部スクロールしていたら戻す。CSSは overflow: clip にしてある
+    // ので通常は0のままだが、clipを解さない環境ではキャレット表示でここが
+    // 動き、その量だけ本文がページ枠からずれる。
+    if (host.scrollTop !== 0) host.scrollTop = 0;
+    if (host.scrollLeft !== 0) host.scrollLeft = 0;
     let verticalBaseOffset = 0;
     if (verticalWriting && root.firstElementChild instanceof HTMLElement) {
-      const transform = getComputedStyle(root).transform;
-      const currentTransformY = transform === "none" ? 0 : new DOMMatrixReadOnly(transform).m42;
-      const firstBlockTop = root.firstElementChild.getBoundingClientRect().top - currentTransformY;
-      const desiredFirstBlockTop = host.getBoundingClientRect().top + paddingY;
-      verticalBaseOffset = desiredFirstBlockTop - firstBlockTop;
+      // 断片の基準位置は transform を含まないレイアウト座標で読む。
+      // getBoundingClientRect と getComputedStyle().transform の組で基準を
+      // 逆算すると、直前に書き込んだ transform が矩形へまだ反映されていない
+      // フレームで「補正が自分自身を打ち消す」ループに入る。以後どれだけ
+      // 同期しても本文だけがページ枠から数十px下へずれたまま固定され、
+      // settleが諦めるまで直らない（最終ページで顕著だった症状）。
+      // .pm-root は position:absolute なので、先頭ブロックの offsetTop は
+      // 最初の段（column）の .pm-root 内オフセットそのものになる。
+      const firstColumnOffset = root.firstElementChild.offsetTop;
+      // 段送り1つ分以上ずれた値は計測が壊れている証拠なので補正しない。
+      verticalBaseOffset =
+        Number.isFinite(firstColumnOffset) && Math.abs(firstColumnOffset) < columnStep
+          ? -firstColumnOffset
+          : 0;
     }
     root.style.setProperty("--paged-fragment-x", `${verticalWriting ? 0 : -fragmentOffset}px`);
     root.style.setProperty(
