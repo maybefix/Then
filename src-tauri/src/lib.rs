@@ -1976,6 +1976,8 @@ fn move_project_entry(
     root_path: String,
     source_path: String,
     target_folder_path: String,
+    target_path: Option<String>,
+    position: Option<String>,
 ) -> Result<MoveProjectEntryResult, String> {
     let root = PathBuf::from(root_path);
     let source = PathBuf::from(source_path);
@@ -2024,6 +2026,28 @@ fn move_project_entry(
         return Err("entry is already in that folder".to_string());
     }
 
+    let ordered_target = match (target_path.as_deref(), position.as_deref()) {
+        (None, None) => None,
+        (Some(path), Some(position @ ("before" | "after"))) => {
+            let path = PathBuf::from(path);
+            if !path.exists() {
+                return Err("order target does not exist".to_string());
+            }
+            let parent = path
+                .parent()
+                .ok_or_else(|| "order target parent does not exist".to_string())?;
+            let parent_canonical = parent
+                .canonicalize()
+                .map_err(|error| format!("failed to resolve order target parent: {error}"))?;
+            if parent_canonical != target_canonical {
+                return Err("order target is outside target folder".to_string());
+            }
+            Some((path, position))
+        }
+        (Some(_), Some(_)) => return Err("invalid drop position".to_string()),
+        _ => return Err("order target and position must be specified together".to_string()),
+    };
+
     let file_name = source
         .file_name()
         .ok_or_else(|| "entry name does not exist".to_string())?;
@@ -2044,6 +2068,8 @@ fn move_project_entry(
         &old_parent,
         &target_folder,
         source_is_dir,
+        ordered_target.as_ref().map(|(path, _)| path.as_path()),
+        ordered_target.as_ref().map(|(_, position)| *position),
     )?;
 
     std::fs::rename(&source, &next_path)
@@ -2143,6 +2169,8 @@ fn move_project_entries(
             root_path.clone(),
             source_path,
             target_folder_path.clone(),
+            None,
+            None,
         ) {
             Ok(result) => completed.push(MovedProjectEntry {
                 moved_document: result.moved_document,
@@ -2160,6 +2188,8 @@ fn move_project_entries(
                             root_path.clone(),
                             moved.new_path.clone(),
                             moved.old_parent_path.clone(),
+                            None,
+                            None,
                         )
                         .err()
                         .map(|error| format!("{}: {error}", moved.new_path))
@@ -3397,6 +3427,8 @@ fn prepare_project_config_after_move(
     old_parent: &Path,
     new_parent: &Path,
     source_is_dir: bool,
+    target_path: Option<&Path>,
+    position: Option<&str>,
 ) -> Result<ProjectConfig, String> {
     let old_name = old_path
         .file_name()
@@ -3416,7 +3448,24 @@ fn prepare_project_config_after_move(
         .into_iter()
         .filter(|name| name != new_name)
         .collect::<Vec<_>>();
-    new_parent_order.push(new_name.to_string());
+    if let (Some(target_path), Some(position)) = (target_path, position) {
+        let target_name = target_path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| "order target name is not valid unicode".to_string())?;
+        let target_index = new_parent_order
+            .iter()
+            .position(|name| name == target_name)
+            .ok_or_else(|| "order target is not a visible project entry".to_string())?;
+        let insert_index = if position == "after" {
+            target_index + 1
+        } else {
+            target_index
+        };
+        new_parent_order.insert(insert_index, new_name.to_string());
+    } else {
+        new_parent_order.push(new_name.to_string());
+    }
 
     if source_is_dir {
         let old_key = project_order_key(root, old_path)?;

@@ -2787,8 +2787,26 @@ export function VerticalTextEditor({
         const scroller = scrollerRef.current;
         if (!editor || !scroller) return null;
 
-        const scrollerRect = scroller.getBoundingClientRect();
         const mode = writingModeRef.current;
+        const currentText = docToText(editor.state.doc);
+
+        if (editorDisplayModeRef.current === "paged") {
+          // ページ中央が余白や短い最終ページに当たっても null にしない。
+          // ページ先頭の本文アンカーを専用経路で取得し、復元側でその所属ページへ戻す。
+          syncPageMetricsRef.current?.();
+          capturePagedAnchor();
+          const anchorPos = pagedAnchorPosRef.current ?? editor.state.selection.head;
+          return {
+            textLength: currentText.length,
+            writingMode: mode,
+            anchorOffset: textOffsetFromPmPos(editor.state.doc, anchorPos),
+            // ページ表示ではページ番号で復元するため比率は使わないが、保存形式の
+            // 共通バリデーションを通せる有限値を維持する。
+            anchorRatio: 0.5,
+          };
+        }
+
+        const scrollerRect = scroller.getBoundingClientRect();
         const primaryRatios = [0.5, 0.35, 0.65];
 
         for (const ratio of primaryRatios) {
@@ -2820,7 +2838,6 @@ export function VerticalTextEditor({
               continue;
             }
 
-            const currentText = docToText(editor.state.doc);
             return {
               textLength: currentText.length,
               writingMode: mode,
@@ -3146,6 +3163,59 @@ export function VerticalTextEditor({
           !currentScroller ||
           isEditorComposing(editor, composingRef)
         ) {
+          return;
+        }
+
+        // ページ表示ではスクロール軸が writingMode ではなく pageFlowDirection で
+        // 決まり、位置もページ境界へスナップする。連続表示用のピクセル差分で
+        // 戻すと別ページへ丸められるため、アンカーを含むページを直接復元する。
+        if (editorDisplayModeRef.current === "paged") {
+          syncPageMetricsRef.current?.();
+          const anchorPos = pmPosFromTextOffset(
+            editor.state.doc,
+            initialViewportToRestore.anchorOffset,
+          );
+          const targetPage = pageContainingPosition(editor, anchorPos);
+          if (targetPage !== null) {
+            const clampedTarget = Math.max(
+              1,
+              Math.min(pageMetricsRef.current.total, targetPage),
+            );
+            const layout = pageLayoutRef.current;
+            const expectedOffset =
+              (clampedTarget - 1) *
+              (pageFlowDirectionRef.current === "vertical"
+                ? layout.height + layout.gap
+                : layout.width + layout.gap);
+            const currentOffset =
+              pageFlowDirectionRef.current === "vertical"
+                ? currentScroller.scrollTop
+                : Math.abs(currentScroller.scrollLeft);
+
+            if (
+              pageMetricsRef.current.current !== clampedTarget ||
+              Math.abs(currentOffset - expectedOffset) > 1
+            ) {
+              scrollToPage(clampedTarget, "auto");
+            }
+          }
+
+          const metrics = pageMetricsRef.current;
+          const offset =
+            pageFlowDirectionRef.current === "vertical"
+              ? currentScroller.scrollTop
+              : Math.abs(currentScroller.scrollLeft);
+          const signature = `${metrics.current}:${metrics.total}:${Math.round(offset * 2) / 2}`;
+          stableFrames = signature === previousExtent ? stableFrames + 1 : 0;
+          previousExtent = signature;
+          if (
+            stableFrames >= INITIAL_CENTER_STABLE_FRAMES ||
+            performance.now() >= initialAdjustmentDeadline
+          ) {
+            requestPagedScrollSettle();
+            return;
+          }
+          initialAdjustmentFrame = requestAnimationFrame(step);
           return;
         }
 

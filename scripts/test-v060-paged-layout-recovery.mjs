@@ -47,6 +47,18 @@ assert.match(
   "the restore must scroll to the page that owns the anchor position",
 );
 
+assert.match(
+  editorSource,
+  /const startInitialViewportRestore = \(\) => \{[\s\S]*?editorDisplayModeRef\.current === "paged"[\s\S]*?pageContainingPosition\(editor, anchorPos\)[\s\S]*?scrollToPage\(clampedTarget, "auto"\)/,
+  "tab revisit in paged mode must restore the anchor by page instead of a continuous pixel delta",
+);
+
+assert.match(
+  editorSource,
+  /getViewportState: \(\) => \{[\s\S]*?editorDisplayModeRef\.current === "paged"[\s\S]*?capturePagedAnchor\(\)[\s\S]*?pagedAnchorPosRef\.current/,
+  "paged tabs must save a page-content anchor even when viewport center points land in blank space",
+);
+
 // 復元は総ページ数の更新が遅れて届くため、目標ページに載るまで追従する。
 assert.match(
   editorSource,

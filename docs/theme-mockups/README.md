@@ -1,7 +1,7 @@
-# Aero Glass / Soft Flat theme mockups
+# Aero Glass / Flat theme notes
 
 Then の現行レイアウトを固定し、テーマの素材感を比較するために作成したモックアップ。
-現在は Aero Glass を新規テーマとして追加し、既存の Flat を Soft Flat の仕様へ更新済み。
+Aero Glass は新規テーマとして追加済み。Flat は 0.5.13 で一度 Soft Flat に更新したが、現在は従来の低彩度ブルーグレー、グラデーション、強い角丸の仕様へ復元済み。
 内部テーマIDは既存設定との互換性を保つため `acrylic-*` のまま維持する。
 
 ## Aero Glass (Glassmorphism)
@@ -39,7 +39,9 @@ Then の現行レイアウトを固定し、テーマの素材感を比較する
 | `--radius-card` | `14px` | `14px` |
 | `--panel-blur` | `blur(24px) saturate(165%)` | `blur(26px) saturate(155%)` |
 
-## Soft Flat
+## Soft Flat（0.5.13時点のアーカイブ）
+
+以下の画像とトークンは現在の Flat ではなく、0.5.13 で一時採用した Soft Flat の記録。
 
 | Light | Dark |
 | --- | --- |
@@ -84,17 +86,17 @@ Then の現行レイアウトを固定し、テーマの素材感を比較する
 ## Implementation status
 
 - `acrylic-light` / `acrylic-dark`: 表示名 Aero Glass としてテーマ選択へ追加済み。
-- `flat-light` / `flat-dark`: Soft Flat の不透明面・角丸・単色アクセントへ更新済み。
+- `flat-light` / `flat-dark`: 従来の低彩度ブルーグレー、グラデーション、20pxカード角丸の Flat へ復元済み。
 - テーマ選択プレビュー、永続化対象の型、CSS 読み込み、テーマ回帰テストを更新済み。
 - Vite の実画面で Aero Glass のライト／ダークを切り替え、複数行の行番号・現在行ハイライトの原点と領域一致を確認済み。
 
-## Image generation prompts
+## Archived image generation prompts
 
 Built-in ImageGen を使用。共通して現行の `docs/then-ui-mockup-v2.png` を編集対象とし、レイアウト、情報構造、文面、縦書きエディタを固定した。
 
 - Aero Glass Light: vivid sky wallpaper, frosted cyan-white panels, bright glass rim, deep soft shadow, 9px/14px radii.
 - Aero Glass Dark: deep teal-night wallpaper, smoky cyan glass, cool rim highlight, deep soft shadow, 9px/14px radii.
-- Soft Flat Light: opaque warm off-white surfaces, stone-gray hierarchy, cornflower accent, no blur or gradients, 10px/14px/16px radii.
-- Soft Flat Dark: opaque blue-charcoal surface ladder, off-white text, periwinkle accent, no blur or gradients, 10px/14px/16px radii.
+- Soft Flat Light（アーカイブ）: opaque warm off-white surfaces, stone-gray hierarchy, cornflower accent, no blur or gradients, 10px/14px/16px radii.
+- Soft Flat Dark（アーカイブ）: opaque blue-charcoal surface ladder, off-white text, periwinkle accent, no blur or gradients, 10px/14px/16px radii.
 
 すべてに `change only the theme styling; keep geometry, information architecture, content density, and all panels unchanged` を制約として指定した。

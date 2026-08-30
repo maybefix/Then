@@ -10579,6 +10579,16 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   background: var(--bg-panel);
 }
 
+/* Light themes use the same high-luminance content surface for files/search
+   as the reference pane. Keep the rail and pane header on --sidebar-bg so the
+   sidebar hierarchy remains visible. Dark themes intentionally keep their
+   existing depth treatment. */
+.appShell[data-theme]:not(:is([data-theme="dark"], [data-theme$="-dark"]))
+  .workspaceSidebar:not(.referenceWorkspaceSidebar)
+  :is(.sidebarScroll, .sidebarFooter) {
+  background: var(--bg-panel);
+}
+
 .referenceWorkspaceSidebar .referencePaneTop {
   padding: 9px 10px 8px;
 }

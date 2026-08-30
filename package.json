@@ -26,6 +26,7 @@
     "test:v0511-focus-mode": "node scripts/test-v0511-focus-mode.mjs",
     "test:v0511-themes": "node scripts/test-v0511-themes.mjs",
     "test:v060-paged-recovery": "node scripts/test-v060-paged-layout-recovery.mjs",
+    "test:v060-editor-position": "node scripts/test-v060-editor-position-memory.mjs",
     "test:export": "node scripts/verify-export.mjs",
     "demo:record": "powershell -ExecutionPolicy Bypass -File scripts/demo/record-desktop.ps1",
     "demo:edit": "node scripts/demo/edit-video.mjs",

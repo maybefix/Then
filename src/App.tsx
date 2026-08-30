@@ -2246,6 +2246,9 @@ export default function App() {
   const editorShellRef = useRef<HTMLDivElement | null>(null);
   const editorContextMenuRef = useRef<HTMLDivElement | null>(null);
   const editorFindInputRef = useRef<HTMLInputElement | null>(null);
+  // コマンドパレットへフォーカスを移す前の選択。パレットの入力欄を操作しても
+  // 記法コマンドの対象が変わらないよう、開いた時点の範囲を保持する。
+  const commandPaletteSelectionRef = useRef<EditorSelectionSnapshot | null>(null);
   const fileMenuRef = useRef<HTMLDivElement | null>(null);
   const breadcrumbMenuRef = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
@@ -2826,6 +2829,8 @@ export default function App() {
   );
   const syncDocumentTabToEditor = useCallback((tab: DocumentTab) => {
     const previousTabId = activeTabIdRef.current;
+    const previousDocument = activeDocumentSnapshotRef.current;
+    const previousSelection = editorInstanceRef.current?.getSelection() ?? null;
     if (tab.id !== previousTabId) {
       const viewportState = editorInstanceRef.current?.getViewportState() ?? null;
       setOpenTabs((current) =>
@@ -2841,6 +2846,16 @@ export default function App() {
       ...current,
       markdown: tab.markdown,
       lastFilePath: tab.path ?? current.lastFilePath,
+      cursorPositions:
+        previousDocument?.path && previousSelection
+          ? {
+              ...current.cursorPositions,
+              [previousDocument.path]: {
+                offset: previousSelection.head,
+                length: previousDocument.text.length,
+              },
+            }
+          : current.cursorPositions,
     }));
     setFocusedFolderPath(null);
     setLastError("");
@@ -4368,11 +4383,11 @@ export default function App() {
     return normalizeSelectionRange(editor.getSelection(), editor.getValue());
   };
 
-  const applyBoldShortcut = () => {
+  const applyBoldShortcut = (selectionOverride?: EditorSelectionSnapshot) => {
     const editor = editorInstanceRef.current;
     if (!editor) return;
     const text = editor.getValue();
-    const selection = normalizeSelectionRange(editor.getSelection(), text);
+    const selection = normalizeSelectionRange(selectionOverride ?? editor.getSelection(), text);
     const edit = toggleBoldSelection(text, selection);
     if (!edit) {
       showToast("太字にする単一行の範囲を選択してください");
@@ -4382,11 +4397,11 @@ export default function App() {
     editor.focus();
   };
 
-  const applyEmphasisShortcut = () => {
+  const applyEmphasisShortcut = (selectionOverride?: EditorSelectionSnapshot) => {
     const editor = editorInstanceRef.current;
     if (!editor) return;
     const text = editor.getValue();
-    const selection = normalizeSelectionRange(editor.getSelection(), text);
+    const selection = normalizeSelectionRange(selectionOverride ?? editor.getSelection(), text);
     const edit = toggleEmphasisSelection(text, selection);
     if (!edit) {
       showToast("圏点を付ける単一行の範囲を選択してください");
@@ -4396,11 +4411,11 @@ export default function App() {
     editor.focus();
   };
 
-  const applyHeadingShortcut = (level: number) => {
+  const applyHeadingShortcut = (level: number, selectionOverride?: EditorSelectionSnapshot) => {
     const editor = editorInstanceRef.current;
     if (!editor) return;
     const text = editor.getValue();
-    const selection = normalizeSelectionRange(editor.getSelection(), text);
+    const selection = normalizeSelectionRange(selectionOverride ?? editor.getSelection(), text);
     const edit = applyHeadingToSelection(text, selection, level);
     editor.replaceRange(edit.from, edit.to, edit.insert, edit.cursorPos);
     editor.focus();
@@ -4537,7 +4552,14 @@ export default function App() {
     // Ctrl+P：コマンドパレット。印刷ダイアログの既定動作を抑止する。
     if (key === "p" || key === "P") {
       event.preventDefault();
-      setIsCommandPaletteOpen((open) => !open);
+      setIsCommandPaletteOpen((open) => {
+        if (open) {
+          commandPaletteSelectionRef.current = null;
+          return false;
+        }
+        commandPaletteSelectionRef.current = getCurrentEditorSelection();
+        return true;
+      });
       return;
     }
 
@@ -4597,7 +4619,7 @@ export default function App() {
   };
 
   const buildPaletteCommands = (): PaletteCommand[] => {
-    const selection = getCurrentEditorSelection();
+    const selection = commandPaletteSelectionRef.current ?? getCurrentEditorSelection();
     const canWrap = selection ? canWrapInlineSelection(selection) : false;
     const wrapDisabled = canWrap ? undefined : "単一行の範囲を選択してください";
 
@@ -4605,7 +4627,7 @@ export default function App() {
       id: `heading-${level}`,
       label: `見出し${level}`,
       hint: `Ctrl+${level}`,
-      run: () => applyHeadingShortcut(level),
+      run: () => applyHeadingShortcut(level, selection ?? undefined),
     }));
     const workspaceCommands: PaletteCommand[] = [
       {
@@ -4623,13 +4645,18 @@ export default function App() {
     ];
 
     return [
-      { id: "bold", label: "太字", hint: "Ctrl+B", run: applyBoldShortcut },
+      {
+        id: "bold",
+        label: "太字",
+        hint: "Ctrl+B",
+        run: () => applyBoldShortcut(selection ?? undefined),
+      },
       {
         id: "emphasis",
         label: "圏点（傍点）",
         hint: "Ctrl+I",
         disabledReason: wrapDisabled,
-        run: applyEmphasisShortcut,
+        run: () => applyEmphasisShortcut(selection ?? undefined),
       },
       {
         id: "idea-quick-capture",
@@ -4661,7 +4688,7 @@ export default function App() {
         label: "ルビ…",
         hint: customNotationSpecs[0].syntax,
         disabledReason: wrapDisabled,
-        run: () => openRubyNotationModal(getCurrentEditorSelection()),
+        run: () => openRubyNotationModal(selection),
       },
       {
         id: "tcy",
@@ -4669,22 +4696,26 @@ export default function App() {
         hint: customNotationSpecs[1].syntax,
         disabledReason: wrapDisabled,
         run: () => {
-          const target = getCurrentEditorSelection();
-          if (target) applyInlineNotation(target, "tcy");
+          if (selection) applyInlineNotation(selection, "tcy");
         },
       },
       ...headingCommands,
-      { id: "heading-clear", label: "見出しを解除", hint: "Ctrl+0", run: () => applyHeadingShortcut(0) },
+      {
+        id: "heading-clear",
+        label: "見出しを解除",
+        hint: "Ctrl+0",
+        run: () => applyHeadingShortcut(0, selection ?? undefined),
+      },
       {
         id: "direction",
         label: "文章方向…",
         hint: customNotationSpecs[3].syntax,
-        run: () => openDirectionNotationModal(getCurrentEditorSelection()),
+        run: () => openDirectionNotationModal(selection),
       },
       {
         id: "clear-notation",
         label: "記法をクリア",
-        run: () => clearSelectionNotation(getCurrentEditorSelection()),
+        run: () => clearSelectionNotation(selection),
       },
       ...workspaceCommands,
     ];
@@ -6702,6 +6733,8 @@ export default function App() {
   const handleMoveProjectEntryToFolder = async (
     sourcePath: string,
     targetFolderPath: string,
+    targetPath?: string,
+    position?: "before" | "after",
   ) => {
     if (!projectFolder) return;
     const sourceEntry = findProjectEntry(projectFolder.children, sourcePath);
@@ -6744,6 +6777,8 @@ export default function App() {
         rootPath: projectFolder.path,
         sourcePath,
         targetFolderPath,
+        targetPath: targetPath ?? null,
+        position: position ?? null,
       });
       const oldReferencePath = toProjectRelativePath(projectFolder.path, result.oldPath);
       const newReferencePath = toProjectRelativePath(projectFolder.path, result.newPath);
@@ -6854,12 +6889,19 @@ export default function App() {
   const handleMoveProjectEntriesToFolder = async (
     sourcePaths: string[],
     targetFolderPath: string,
+    targetPath?: string,
+    position?: "before" | "after",
   ) => {
     if (!projectFolder) return;
     const uniqueSourcePaths = [...new Set(sourcePaths)];
     if (uniqueSourcePaths.length === 0) return;
     if (uniqueSourcePaths.length === 1) {
-      await handleMoveProjectEntryToFolder(uniqueSourcePaths[0], targetFolderPath);
+      await handleMoveProjectEntryToFolder(
+        uniqueSourcePaths[0],
+        targetFolderPath,
+        targetPath,
+        position,
+      );
       return;
     }
 
@@ -9294,8 +9336,13 @@ export default function App() {
                 onSelectFolder={(path) => void handleProjectFolderSelect(path)}
                 onRenameEntry={(entry) => void handleRenameProjectEntry(entry)}
                 onDeleteEntry={(entry) => void handleDeleteProjectEntry(entry)}
-                onMoveEntry={(sourcePaths, targetFolderPath) =>
-                  void handleMoveProjectEntriesToFolder(sourcePaths, targetFolderPath)
+                onMoveEntry={(sourcePaths, targetFolderPath, targetPath, position) =>
+                  void handleMoveProjectEntriesToFolder(
+                    sourcePaths,
+                    targetFolderPath,
+                    targetPath,
+                    position,
+                  )
                 }
                 onReorderEntry={(folderPath, draggedPaths, targetPath, position) =>
                   void handleSidebarEntryReorder(folderPath, draggedPaths, targetPath, position)
@@ -9959,7 +10006,10 @@ export default function App() {
           {isCommandPaletteOpen && (
             <CommandPalette
               commands={buildPaletteCommands()}
-              onClose={() => setIsCommandPaletteOpen(false)}
+              onClose={() => {
+                setIsCommandPaletteOpen(false);
+                commandPaletteSelectionRef.current = null;
+              }}
             />
           )}
           {isQuickIdeaModalOpen && (

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [types, catalog, defaultCss, standardCss, redCss, acrylicCss, flatCss, newsroomCss, themeIndex, sharedVariants] =
+const [appCss, types, catalog, defaultCss, standardCss, redCss, acrylicCss, flatCss, newsroomCss, themeIndex, sharedVariants] =
   await Promise.all([
+    readFile("src/App.css", "utf8"),
     readFile("src/types.ts", "utf8"),
     readFile("src/themes.ts", "utf8"),
     readFile("src/styles/themes/default.css", "utf8"),
@@ -35,6 +36,11 @@ assert.match(themeIndex, /@import "\.\/acrylic\.css";/);
 assert.match(themeIndex, /@import "\.\/newsroom\.css";/);
 assert.doesNotMatch(themeIndex, /modern-skeuo/);
 assert.match(sharedVariants, /data-theme="standard"/);
+assert.match(
+  appCss,
+  /\.appShell\[data-theme\]:not\(:is\(\[data-theme="dark"\], \[data-theme\$="-dark"\]\)\)[\s\S]*?\.workspaceSidebar:not\(\.referenceWorkspaceSidebar\)[\s\S]*?:is\(\.sidebarScroll, \.sidebarFooter\)[\s\S]*?background: var\(--bg-panel\);/,
+  "Light file/search sidebars must use the same content surface as references",
+);
 
 for (const themeId of ["acrylic-light", "acrylic-dark"]) {
   assert.match(types, new RegExp(`"${themeId}"`));
@@ -58,15 +64,25 @@ for (const token of [
   "--danger:",
 ]) {
   assert.ok(acrylicCss.includes(token), `Acrylic must define ${token}`);
+}
+
+for (const token of [
+  "--success:",
+  "--warning:",
+  "--danger:",
+]) {
   assert.ok(flatCss.includes(token), `Flat must define ${token}`);
 }
 
 assert.match(acrylicCss, /--radius-control: 9px/);
-assert.match(flatCss, /--radius-control: 10px/);
+assert.match(flatCss, /--radius-control: 14px/);
+assert.match(flatCss, /--radius-card: 20px/);
+assert.match(flatCss, /--radius-button: 999px/);
+assert.match(flatCss, /--brand-gradient: linear-gradient\(/);
 assert.match(acrylicCss, /--panel-backdrop: blur\(/);
 assert.match(acrylicCss, /@supports not \(backdrop-filter: blur\(1px\)\)/);
 assert.match(acrylicCss, /linear-gradient[\s\S]*?backdrop-filter: var\(--panel-backdrop\)/);
-assert.match(flatCss, /--card-float-shadow: none/);
+assert.doesNotMatch(flatCss, /--card-float-shadow: none/);
 assert.match(newsroomCss, /--bg-primary: #fff/);
 assert.match(newsroomCss, /--text-primary: #0a0a03/);
 assert.match(newsroomCss, /--accent: #b21f24/);

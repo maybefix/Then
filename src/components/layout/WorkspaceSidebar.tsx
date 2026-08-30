@@ -88,7 +88,12 @@ type WorkspaceSidebarProps = {
   onSelectFolder: (path: string) => void;
   onRenameEntry: (entry: ProjectFolder | ProjectEntry) => void;
   onDeleteEntry: (entry: ProjectEntry) => void;
-  onMoveEntry: (sourcePaths: string[], targetFolderPath: string) => void;
+  onMoveEntry: (
+    sourcePaths: string[],
+    targetFolderPath: string,
+    targetPath?: string,
+    position?: "before" | "after",
+  ) => void;
   onReorderEntry: (
     folderPath: string,
     draggedPaths: string[],
@@ -685,10 +690,20 @@ export function WorkspaceSidebar({
       return;
     }
 
-    if (
-      !targetParentFolderPath ||
-      targetParentFolderPath !== dragState.reorderFolderPath
-    ) {
+    if (!targetParentFolderPath) {
+      updateDropTarget(null);
+      return;
+    }
+
+    const isSameParent =
+      dragState.reorderFolderPath !== null &&
+      normalizeSidebarPath(targetParentFolderPath) ===
+        normalizeSidebarPath(dragState.reorderFolderPath);
+    // A single entry can be placed before/after an entry in another folder.
+    // This is what allows a nested folder to be promoted back to the root.
+    // Multi-selection remains limited to one parent because its relative order
+    // across multiple source folders is otherwise ambiguous.
+    if (!isSameParent && dragState.entryPaths.length !== 1) {
       updateDropTarget(null);
       return;
     }
@@ -789,12 +804,25 @@ export function WorkspaceSidebar({
       }, 0);
       const activeDropTarget = dropTargetRef.current;
       if (activeDropTarget?.kind === "reorder") {
-        onReorderEntry(
-          activeDropTarget.folderPath,
-          dragState.entryPaths,
-          activeDropTarget.entryPath,
-          activeDropTarget.position,
-        );
+        const isSameParent =
+          dragState.reorderFolderPath !== null &&
+          normalizeSidebarPath(activeDropTarget.folderPath) ===
+            normalizeSidebarPath(dragState.reorderFolderPath);
+        if (isSameParent) {
+          onReorderEntry(
+            activeDropTarget.folderPath,
+            dragState.entryPaths,
+            activeDropTarget.entryPath,
+            activeDropTarget.position,
+          );
+        } else {
+          onMoveEntry(
+            dragState.entryPaths,
+            activeDropTarget.folderPath,
+            activeDropTarget.entryPath,
+            activeDropTarget.position,
+          );
+        }
       } else if (activeDropTarget?.kind === "moveInto") {
         onMoveEntry(dragState.entryPaths, activeDropTarget.folderPath);
       }
