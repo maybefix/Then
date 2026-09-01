@@ -1861,9 +1861,12 @@ body.thenPdfExporting .printExportViewport {
   background: transparent;
 }
 
-/* v0.6.0 page editing: a fixed-height multicol container fragments the live
-   ProseMirror document into page-sized column boxes. The sheet elements below
-   are real page surfaces aligned one-for-one with those fragments. */
+/* ページ編集の本文は、断片化させずに1つの流れのまま置く。表示するページは
+   ブロック方向の位置をずらして枠内へ出し、枠の外は clip で隠す。
+   multicol で断片へ切ると、ページの境目にかかる段落のレイアウトが分かれ、
+   ブラウザが OS へ渡すキャレット座標が前の断片（＝前のページ）のものになる。
+   IMEの変換候補ウィンドウが前のページへ出ていたのはそれが原因だった。
+   下のシート要素はページの見た目を描くだけで、本文の断片とは対応しない。 */
 .verticalTypewriterPageSurface {
   position: relative;
   min-width: 100%;
@@ -1961,31 +1964,28 @@ body.thenPdfExporting .printExportViewport {
   );
 }
 
+/* 位置と寸法はページ割りの計算結果から与える。インライン方向（縦書きなら
+   縦、横書きなら横）だけを版面に合わせ、ブロック方向は本文が流れるままに
+   伸ばす。表示するページはブロック方向の始端をずらして出す。transform では
+   なくレイアウト上の位置で動かすのは、ブラウザのキャレット座標計算に後段の
+   変換を挟ませないため。 */
 .verticalTypewriterShell[data-editor-display="paged"] .verticalTypewriterEditor .pm-root {
   position: absolute;
-  top: var(--paged-padding-y);
-  right: var(--paged-padding-x);
+  top: var(--paged-root-top, 0px);
+  right: var(--paged-root-right, auto);
+  left: var(--paged-root-left, auto);
   box-sizing: border-box;
-  width: var(--paged-content-width);
-  min-width: var(--paged-content-width);
-  max-width: var(--paged-content-width);
-  height: var(--paged-content-height);
-  min-height: var(--paged-content-height);
-  max-height: var(--paged-content-height);
+  width: var(--paged-root-width, auto);
+  min-width: 0;
+  max-width: none;
+  height: var(--paged-root-height, auto);
+  min-height: 0;
+  max-height: none;
   margin: 0;
   padding: 0;
-  column-width: var(--paged-column-size, var(--paged-content-width));
-  column-gap: var(--paged-column-gap);
-  column-fill: auto;
-  column-rule: 0;
   direction: ltr;
   overflow: visible;
   pointer-events: auto;
-  transform: translate(
-    var(--paged-fragment-x, 0px),
-    var(--paged-fragment-y, 0px)
-  );
-  transform-origin: right top;
 }
 
 .verticalTypewriterShell[data-editor-display="paged"] .verticalTypewriterEditor .pm-root p {
@@ -2635,8 +2635,8 @@ body.thenPdfExporting .printExportViewport {
   border-top: 1px solid rgba(232, 176, 75, 0.14);
 }
 
-/* These rules intentionally follow both writing-mode branches. Pagination
-   owns the fragmentainer dimensions; writing mode only controls glyph flow. */
+/* 書字方向のどちらの分岐にも効かせる。ページ枠の寸法はページ割りが持ち、
+   書字方向は文字の流れだけを決める。 */
 .appShell .verticalTypewriterShell[data-editor-display="paged"]
   .verticalTypewriterEditor {
   width: var(--paged-page-width);
@@ -2649,17 +2649,14 @@ body.thenPdfExporting .printExportViewport {
   .verticalTypewriterEditor
   .pm-root {
   box-sizing: border-box;
-  width: var(--paged-content-width);
-  min-width: var(--paged-content-width);
-  max-width: var(--paged-content-width);
-  height: var(--paged-content-height);
-  min-height: var(--paged-content-height);
-  max-height: var(--paged-content-height);
+  width: var(--paged-root-width, auto);
+  min-width: 0;
+  max-width: none;
+  height: var(--paged-root-height, auto);
+  min-height: 0;
+  max-height: none;
   margin: 0;
   padding: 0;
-  column-width: var(--paged-column-size, var(--paged-content-width));
-  column-gap: var(--paged-column-gap);
-  column-fill: auto;
   overflow: visible;
 }
 

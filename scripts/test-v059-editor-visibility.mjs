@@ -295,15 +295,30 @@ assert.match(
   /data-page-flow="horizontal-rtl"[\s\S]*?\.verticalTypewriterScroller\s*\{[\s\S]*?direction:\s*rtl/,
   "horizontal paging must retain the traditional right-to-left scroll direction",
 );
+// 本文は断片化させず1つの流れのまま置き、表示するページはブロック方向の始端を
+// ずらして出す。縦書きは右から左へ流れるので、始端はページの右端になる。
+// transform ではなくレイアウト上の位置で動かすのは、ブラウザのキャレット座標
+// 計算に後段の変換を挟ませないため。断片化した要素では、その座標が前の断片
+// （＝前のページ）のものになり、IMEの変換候補ウィンドウが前のページへ出る。
 assert.match(
   editorSource,
-  /verticalBaseOffset[\s\S]*?firstElementChild\.offsetTop[\s\S]*?verticalBaseOffset - fragmentOffset/,
-  "vertical pagination must derive the fragment base from layout coordinates",
+  /root\.style\.setProperty\("--paged-root-right", `\$\{paddingX - pageOffset\}px`\)/,
+  "vertical pagination must reveal the page by moving the block-start edge in layout coordinates",
+);
+assert.match(
+  editorSource,
+  /root\.style\.setProperty\("--paged-root-top", `\$\{paddingY - pageOffset\}px`\)/,
+  "horizontal pagination must move the block-start edge the same way",
 );
 assert.doesNotMatch(
   editorSource,
   /getComputedStyle\(root\)\.transform/,
-  "the fragment base must not be recomputed from the transform it is about to overwrite",
+  "the page position must not be recomputed from a transform it is about to overwrite",
+);
+assert.doesNotMatch(
+  appCss,
+  /data-editor-display="paged"[\s\S]*?\.pm-root\s*\{[\s\S]*?column-width/,
+  "the paged body must not be fragmented by multicol; fragments break the browser's caret coordinates",
 );
 assert.match(
   editorSource,
@@ -349,8 +364,8 @@ assert.match(
 );
 assert.match(
   editorSource,
-  /requestPagedScrollSettle[\s\S]*?--paged-fragment-y[\s\S]*?signature === previousSignature[\s\S]*?syncPageMetricsRef\.current\?\.\(\);[\s\S]*?requestVisualLinesRef\.current\?\.\(\)/,
-  "paged scrolling must re-normalize the final fragment after the scroll position settles",
+  /requestPagedScrollSettle[\s\S]*?--paged-root-right[\s\S]*?signature === previousSignature[\s\S]*?syncPageMetricsRef\.current\?\.\(\);[\s\S]*?requestVisualLinesRef\.current\?\.\(\)/,
+  "paged scrolling must re-normalize the page position after the scroll position settles",
 );
 assert.match(
   editorSource,

@@ -29,9 +29,11 @@ assert.match(
   "an in-flight restore must not overwrite the anchor with an intermediate position",
 );
 
+// 版面の寸法が変わるとページの割りも変わる。以前は multicol の段送り
+// (columnStep) の変化で見ていたが、断片化をやめたので版面の内寸で見る。
 assert.match(
   editorSource,
-  /previousLayout\.columnStep !== columnStep[\s\S]*?requestPagedAnchorRestoreRef\.current\?\.\(\)/,
+  /previousLayout\.contentHeight !== contentHeight[\s\S]*?requestPagedAnchorRestoreRef\.current\?\.\(\)/,
   "a page-dimension change must trigger the anchor restore, not just a metrics resync",
 );
 

@@ -38,6 +38,11 @@ import {
   type VisualBlockRect,
 } from "./editor/visualLineLayout";
 import { lineDiffFromSelectionTransaction } from "./editor/transactionLineDiff";
+import {
+  computePageBreaks,
+  measureParagraphs,
+  type PageBreaks,
+} from "./editor/pageBreaks";
 import type {
   EditorDisplayMode,
   PageFlowDirection,
@@ -244,8 +249,6 @@ type PageLayout = {
   paddingY: number;
   contentWidth: number;
   contentHeight: number;
-  columnGap: number;
-  columnStep: number;
 };
 
 const DEFAULT_PAGE_METRICS: PageMetrics = { current: 1, total: 1 };
@@ -258,8 +261,6 @@ const DEFAULT_PAGE_LAYOUT: PageLayout = {
   paddingY: 1,
   contentWidth: 1,
   contentHeight: 1,
-  columnGap: 30,
-  columnStep: 31,
 };
 
 const astKey = new PluginKey<AstPluginState>("then-layout-ast");
@@ -2170,6 +2171,9 @@ export function VerticalTextEditor({
   const onPageMetricsChangeRef = useRef(onPageMetricsChange);
   const localRevisionRef = useRef(0);
   const composingRef = useRef(false);
+  // ページの割りと、測り直しが要るかを見分けるための署名。
+  const pageBreaksRef = useRef<PageBreaks>({ pages: [], offsets: [] });
+  const pageBreaksSignatureRef = useRef("");
   // マウスでのドラッグ範囲選択中は true。ジェスチャ中は再センタリングを抑制し、
   // pointerup 時にキャレットが collapsed なら一度だけ寄せ、範囲が残るなら据え置く。
   const pointerDraggingRef = useRef(false);
@@ -2243,10 +2247,6 @@ export function VerticalTextEditor({
     const paddingY = Math.max(28, Math.min(64, Math.round(height * 0.08)));
     const contentWidth = Math.max(1, width - paddingX * 2);
     const contentHeight = Math.max(1, height - paddingY * 2);
-    const columnGap = verticalWriting ? gap + paddingY * 2 : gap + paddingX * 2;
-    const columnStep = verticalWriting
-      ? contentHeight + columnGap
-      : contentWidth + columnGap;
     const nextLayout: PageLayout = {
       width,
       height,
@@ -2256,8 +2256,6 @@ export function VerticalTextEditor({
       paddingY,
       contentWidth,
       contentHeight,
-      columnGap,
-      columnStep,
     };
     surface.style.setProperty("--paged-page-width", `${width}px`);
     surface.style.setProperty("--paged-page-height", `${height}px`);
@@ -2267,17 +2265,6 @@ export function VerticalTextEditor({
     surface.style.setProperty("--paged-padding-y", `${paddingY}px`);
     surface.style.setProperty("--paged-content-width", `${contentWidth}px`);
     surface.style.setProperty("--paged-content-height", `${contentHeight}px`);
-    surface.style.setProperty("--paged-column-gap", `${columnGap}px`);
-    // column-width はインライン方向の寸法。縦書きでは縦の長さ（＝本文の高さ）に
-    // なるので、横幅を渡すと段の内寸が本文より広く見積もられる。実測では
-    // column-width:1159px に対して本文の折り返しは599px（max-inline-size:100%）
-    // という食い違いになり、IME変換中の前編集だけが段の内寸いっぱい（＝ページ
-    // 枠の外）まで伸びていた。
-    surface.style.setProperty(
-      "--paged-column-size",
-      `${verticalWriting ? contentHeight : contentWidth}px`,
-    );
-
     const previousLayout = pageLayoutRef.current;
     if (
       previousLayout.width !== width ||
@@ -2285,8 +2272,8 @@ export function VerticalTextEditor({
       previousLayout.outerMargin !== outerMargin ||
       previousLayout.paddingX !== paddingX ||
       previousLayout.paddingY !== paddingY ||
-      previousLayout.columnGap !== columnGap ||
-      previousLayout.columnStep !== columnStep
+      previousLayout.contentWidth !== contentWidth ||
+      previousLayout.contentHeight !== contentHeight
     ) {
       pageLayoutRef.current = nextLayout;
       setPageLayout(nextLayout);
@@ -2298,18 +2285,34 @@ export function VerticalTextEditor({
       }
     }
 
-    // 固定寸法のmulticol要素は、収まらない本文を同寸の匿名column boxへ
-    // 逐次断片化する。横書きはX軸、縦書きはY軸に生成された断片から数える。
-    let fragmentedExtent = verticalWriting ? root.scrollHeight : root.scrollWidth;
-    if (verticalWriting) {
-      // vertical-rl のfragmentainerは選択状態や内容によってborder boxの基準位置が
-      // 移動し得るため、scrollHeightではなくRangeのunion寸法で全ページを数える。
-      const contentRange = document.createRange();
-      contentRange.selectNodeContents(root);
-      fragmentedExtent = Math.max(contentHeight, contentRange.getBoundingClientRect().height);
-      contentRange.detach();
+    // ページの割りは自前で持つ。CSS multicol に切ってもらうと、ページの境目に
+    // かかる段落のレイアウトが断片に分かれ、ブラウザが OS へ渡すキャレット座標が
+    // 最初の断片（＝前のページ）のものになる。IMEの変換候補ウィンドウが前の
+    // ページへ出ていたのはこれが原因だった。
+    //
+    // 行分割はブラウザに任せたまま（禁則・ルビ・縦中横は既存のCSS組版が担当）、
+    // 描かれた行数を測って割り付けだけを計算する。段落は断片に分かれないので、
+    // ブラウザの座標計算はそのまま正しく働く。
+    const pageBlockSize = verticalWriting ? contentWidth : contentHeight;
+    const flowExtent = verticalWriting ? root.offsetWidth : root.offsetHeight;
+    // 段落ごとの実測は重いので、行数が変わり得たときだけ測り直す。スクロール
+    // だけでは割りは変わらない。
+    const breaksSignature = [
+      root.childElementCount,
+      Math.round(flowExtent),
+      Math.round(pageBlockSize),
+      verticalWriting ? "v" : "h",
+    ].join(":");
+    if (breaksSignature !== pageBreaksSignatureRef.current) {
+      pageBreaksSignatureRef.current = breaksSignature;
+      pageBreaksRef.current = computePageBreaks(
+        pageBlockSize,
+        measureParagraphs(root, writingModeRef.current),
+      );
     }
-    const total = Math.max(1, Math.ceil((fragmentedExtent + columnGap - 1) / columnStep));
+    const breaks = pageBreaksRef.current;
+
+    const total = Math.max(1, breaks.pages.length);
     const pageSpan =
       pageFlowDirectionRef.current === "vertical" ? height + gap : width + gap;
     const rawPage =
@@ -2317,7 +2320,7 @@ export function VerticalTextEditor({
         ? scroller.scrollTop / pageSpan
         : Math.abs(scroller.scrollLeft) / pageSpan;
     const current = Math.max(1, Math.min(total, Math.round(rawPage) + 1));
-    const fragmentOffset = (current - 1) * columnStep;
+    const pageOffset = breaks.offsets[current - 1] ?? 0;
     const hostOffset = (current - 1) * pageSpan;
     host.style.setProperty(
       "--paged-host-x",
@@ -2332,45 +2335,52 @@ export function VerticalTextEditor({
     // 動き、その量だけ本文がページ枠からずれる。
     if (host.scrollTop !== 0) host.scrollTop = 0;
     if (host.scrollLeft !== 0) host.scrollLeft = 0;
-    let verticalBaseOffset = 0;
-    if (verticalWriting && root.firstElementChild instanceof HTMLElement) {
-      // 断片の基準位置は transform を含まないレイアウト座標で読む。
-      // getBoundingClientRect と getComputedStyle().transform の組で基準を
-      // 逆算すると、直前に書き込んだ transform が矩形へまだ反映されていない
-      // フレームで「補正が自分自身を打ち消す」ループに入る。以後どれだけ
-      // 同期しても本文だけがページ枠から数十px下へずれたまま固定され、
-      // settleが諦めるまで直らない（最終ページで顕著だった症状）。
-      // .pm-root は position:absolute なので、先頭ブロックの offsetTop は
-      // 最初の段（column）の .pm-root 内オフセットそのものになる。
-      const firstColumnOffset = root.firstElementChild.offsetTop;
-      // 段送り1つ分以上ずれた値は計測が壊れている証拠なので補正しない。
-      verticalBaseOffset =
-        Number.isFinite(firstColumnOffset) && Math.abs(firstColumnOffset) < columnStep
-          ? -firstColumnOffset
-          : 0;
+
+    // 表示するページを出す。transform ではなくレイアウト上の位置で動かす。
+    // ブラウザがキャレット座標を計算する経路をそのまま使わせたいので、座標に
+    // 後段の変換を挟まない。本文はブロック方向の始端から流れるので、始端を
+    // ページのオフセットぶん戻せば、そのページの行が版面へ現れる。
+    if (verticalWriting) {
+      // 縦書きは右から左へ流れる。始端はページ右端。
+      root.style.setProperty("--paged-root-top", `${paddingY}px`);
+      root.style.setProperty("--paged-root-right", `${paddingX - pageOffset}px`);
+      root.style.setProperty("--paged-root-left", "auto");
+      root.style.setProperty("--paged-root-width", "auto");
+      root.style.setProperty("--paged-root-height", `${contentHeight}px`);
+    } else {
+      root.style.setProperty("--paged-root-top", `${paddingY - pageOffset}px`);
+      root.style.setProperty("--paged-root-right", "auto");
+      root.style.setProperty("--paged-root-left", `${paddingX}px`);
+      root.style.setProperty("--paged-root-width", `${contentWidth}px`);
+      root.style.setProperty("--paged-root-height", "auto");
     }
-    root.style.setProperty("--paged-fragment-x", `${verticalWriting ? 0 : -fragmentOffset}px`);
-    root.style.setProperty(
-      "--paged-fragment-y",
-      `${verticalWriting ? verticalBaseOffset - fragmentOffset : 0}px`,
-    );
     publishPageMetrics({ current, total });
   };
+
   syncPageMetricsRef.current = syncPageMetrics;
 
-  // 断片化軸上の座標が属するページ番号（1始まり）を、現在表示中のページを
-  // 基準に算出する。レイアウト適用後に呼ぶこと。
-  const pageContainingPoint = (center: number): number | null => {
+  // ブロック方向の画面座標が属するページ番号（1始まり）。ページの割りは
+  // 実測から計算した区間で持っているので、その区間を引く。レイアウト適用後に
+  // 呼ぶこと。
+  const pageContainingPoint = (blockCoordinate: number): number | null => {
     const host = editorHostRef.current;
     if (!host) return null;
     const layout = pageLayoutRef.current;
     const verticalWriting = writingModeRef.current === "vertical-rl";
     const hostRect = host.getBoundingClientRect();
-    const contentStart = verticalWriting
-      ? hostRect.top + layout.paddingY
-      : hostRect.left + layout.paddingX;
-    const relativePage = Math.floor((center - contentStart) / layout.columnStep);
-    return pageMetricsRef.current.current + relativePage;
+    // 縦書きは右から左へ流れるので、版面の右端からの距離がブロック方向の位置。
+    const distance = verticalWriting
+      ? hostRect.right - layout.paddingX - blockCoordinate
+      : blockCoordinate - (hostRect.top + layout.paddingY);
+    const breaks = pageBreaksRef.current;
+    if (breaks.offsets.length === 0) return pageMetricsRef.current.current;
+    const flowOffset =
+      (breaks.offsets[pageMetricsRef.current.current - 1] ?? 0) + distance;
+    // オフセットは単調増加なので、収まる区間の先頭を後ろから探す。
+    for (let index = breaks.offsets.length - 1; index >= 0; index -= 1) {
+      if (flowOffset >= breaks.offsets[index]) return index + 1;
+    }
+    return 1;
   };
 
   const pageContainingPosition = (editor: Editor, pos: number): number | null => {
@@ -2381,10 +2391,11 @@ export function VerticalTextEditor({
     } catch {
       return null;
     }
+    // ブロック方向は縦書きなら横、横書きなら縦。
     return pageContainingPoint(
       writingModeRef.current === "vertical-rl"
-        ? (caret.top + caret.bottom) / 2
-        : (caret.left + caret.right) / 2,
+        ? (caret.left + caret.right) / 2
+        : (caret.top + caret.bottom) / 2,
     );
   };
 
@@ -2439,8 +2450,8 @@ export function VerticalTextEditor({
       const root = editorHostRef.current?.querySelector<HTMLElement>(".pm-root");
       const metrics = pageMetricsRef.current;
       const signature = `${Math.round(offset * 2) / 2}:${metrics.current}:${metrics.total}:` +
-        `${root?.style.getPropertyValue("--paged-fragment-x") ?? ""}:` +
-        `${root?.style.getPropertyValue("--paged-fragment-y") ?? ""}`;
+        `${root?.style.getPropertyValue("--paged-root-top") ?? ""}:` +
+        `${root?.style.getPropertyValue("--paged-root-right") ?? ""}`;
       stableFrames = signature === previousSignature ? stableFrames + 1 : 0;
       previousSignature = signature;
       remainingFrames -= 1;
@@ -3413,16 +3424,9 @@ export function VerticalTextEditor({
       const bands = createVisualLineBands(
         blockRects,
         mode,
-        pagedLayout
-          ? {
-              fragmented: true,
-              fragmentOrigin: isHorizontalWriting(mode)
-                ? rootRect.left
-                : (blockRects[0]?.top ?? rootRect.top),
-              fragmentStep: pageLayoutRef.current.columnStep,
-              fragmentDirection: 1,
-            }
-          : undefined,
+        // ページ表示でも本文は1つの流れのまま（断片化させない）ので、
+        // 連続表示と同じ測り方でよい。
+        undefined,
       );
       const activeBlockIndex = activeLineIndex(currentEditor.state);
       let caretX = 0;
@@ -3896,13 +3900,14 @@ export function VerticalTextEditor({
         const hostRect = host.getBoundingClientRect();
         const layout = pageLayoutRef.current;
         const vertical = writingModeRef.current === "vertical-rl";
-        const areaStart = vertical ? hostRect.top + layout.paddingY : hostRect.left + layout.paddingX;
-        const areaEnd = vertical ? hostRect.bottom - layout.paddingY : hostRect.right - layout.paddingX;
-        const caretStart = vertical ? caret.top : caret.left;
-        const caretEnd = vertical ? caret.bottom : caret.right;
+        // ブロック方向で版面に収まっているかを見る。縦書きは横、横書きは縦。
+        const areaStart = vertical ? hostRect.left + layout.paddingX : hostRect.top + layout.paddingY;
+        const areaEnd = vertical ? hostRect.right - layout.paddingX : hostRect.bottom - layout.paddingY;
+        const caretStart = vertical ? caret.left : caret.top;
+        const caretEnd = vertical ? caret.right : caret.bottom;
         // 表示中のページに収まっているなら動かさない。
         if (caretStart >= areaStart && caretEnd <= areaEnd) return;
-        const target = pageContainingPoint(vertical ? caret.top : caret.left);
+        const target = pageContainingPoint(vertical ? caret.left : caret.top);
         if (target === null || target === pageMetricsRef.current.current) return;
         scrollToPage(target, "auto");
         remainingFrames -= 1;
