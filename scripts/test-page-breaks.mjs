@@ -7,10 +7,11 @@ import { computePageBreaks } from "../src/editor/pageBreaks.ts";
 
 // --- 一様な行送り ---
 
-const uniform = Array.from({ length: 5 }, () => ({
+const uniform = Array.from({ length: 5 }, (_unused, index) => ({
   lineCount: 4,
   linePitch: 30,
   gapBefore: 0,
+  blockStart: index * 120,
 }));
 
 {
@@ -47,8 +48,8 @@ const uniform = Array.from({ length: 5 }, () => ({
 
 {
   const mixed = [
-    { lineCount: 1, linePitch: 60, gapBefore: 0 }, // 見出し
-    { lineCount: 9, linePitch: 30, gapBefore: 0 }, // 本文
+    { lineCount: 1, linePitch: 60, gapBefore: 0, blockStart: 0 }, // 見出し
+    { lineCount: 9, linePitch: 30, gapBefore: 0, blockStart: 60 }, // 本文
   ];
   const { pages } = computePageBreaks(300, mixed);
   assert.equal(pages.length, 2, "a 60px heading leaves room for only 8 body lines");
@@ -69,16 +70,17 @@ const uniform = Array.from({ length: 5 }, () => ({
 
 {
   const spaced = [
-    { lineCount: 5, linePitch: 30, gapBefore: 0 },
-    { lineCount: 5, linePitch: 30, gapBefore: 20 },
+    { lineCount: 5, linePitch: 30, gapBefore: 0, blockStart: 0 },
+    { lineCount: 5, linePitch: 30, gapBefore: 20, blockStart: 170 },
   ];
   const { pages, offsets } = computePageBreaks(300, spaced);
   assert.equal(pages.length, 2, "the gap pushes the last line onto a second page");
   assert.equal(offsets[0], 0);
+  // 2ページ目の先頭は2段落目の5行目。オフセットは段落の実位置から出す。
   assert.equal(
     offsets[1],
-    5 * 30 + 20 + 4 * 30,
-    "the offset must account for the gap exactly as the page assignment did",
+    170 + 4 * 30,
+    "the offset must come from the paragraph's measured position, not accumulated pitch",
   );
 }
 

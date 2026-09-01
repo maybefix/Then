@@ -10,7 +10,7 @@ import type { WritingMode } from "../types";
  * キャレット座標が最初の断片（＝前のページ）のものになるため、IMEの変換候補
  * ウィンドウが前のページへ出てしまう。
  *
- * そこでページの割りを自前で持ち、表示するページの行だけを描くようにする。
+ * そこでページの割りを自前で持ち、表示するページの行だけを見せるようにする。
  * 段落は断片に分かれないので、ブラウザの座標計算はそのまま正しく働く。
  *
  * 行分割そのものはブラウザに任せたまま（禁則・ルビ・縦中横は既存のCSS組版が
@@ -18,12 +18,18 @@ import type { WritingMode } from "../types";
  * paginate は行数を入力として受け取る純粋な計算なので、この分担ができる。
  */
 
+/** 段落の実測値。mejiro へ渡す値に、流し込みの中での実位置を足したもの。 */
+export type ParagraphGeometry = ParagraphMeasure & {
+  /** 本文の流れの先頭から、この段落の先頭までのブロック方向の距離（px）。 */
+  blockStart: number;
+};
+
 export type PageBreaks = {
   /** ページごとの、段落の行範囲。 */
   pages: PageSlice[][];
   /**
-   * 各ページ先頭のブロック方向オフセット（px）。段落を連続して流し込んだときの
-   * 位置で、表示するページを出すための移動量になる。
+   * 各ページ先頭のブロック方向オフセット（px）。表示するページを出すための
+   * 移動量になる。
    */
   offsets: number[];
 };
@@ -33,36 +39,32 @@ const EMPTY: PageBreaks = { pages: [], offsets: [] };
 /**
  * 1ページに収まるブロック方向の寸法と段落の実測値から、ページの割りを決める。
  *
+ * オフセットは行送りの積み上げではなく、段落の実位置から出す。積み上げると
+ * 端数が溜まってページ境界が実際の行の境目から少しずれ、前のページの行が
+ * 版面へ覗いてしまう（そこへカーソルも置けてしまう）。
+ *
  * @param pageBlockSize 版面のブロック方向の寸法（縦書きなら横幅）。
- * @param paragraphs 段落ごとの行数・行送り・前隙間。
+ * @param paragraphs 段落ごとの行数・行送り・前隙間・実位置。
  */
 export function computePageBreaks(
   pageBlockSize: number,
-  paragraphs: ParagraphMeasure[],
+  paragraphs: ParagraphGeometry[],
 ): PageBreaks {
   if (!(pageBlockSize > 0) || paragraphs.length === 0) return EMPTY;
 
   const pages = paginate(pageBlockSize, paragraphs);
-  const offsets: number[] = [];
-  let consumed = 0;
-
-  for (const page of pages) {
-    offsets.push(consumed);
-    let atPageStart = true;
-    for (const slice of page) {
-      const measure = paragraphs[slice.paragraphIndex];
-      if (!measure) continue;
-      // 段落の前隙間はページ先頭では詰める。paginate の割り付けと合わせる。
-      if (!atPageStart && slice.lineStart === 0) consumed += measure.gapBefore;
-      consumed += (slice.lineEnd - slice.lineStart) * measure.linePitch;
-      atPageStart = false;
-    }
-  }
+  const offsets = pages.map((page) => {
+    const first = page[0];
+    if (!first) return 0;
+    const measure = paragraphs[first.paragraphIndex];
+    if (!measure) return 0;
+    return measure.blockStart + first.lineStart * measure.linePitch;
+  });
 
   return { pages, offsets };
 }
 
-/** 本文オフセットではなく段落番号で、その段落を含むページを引く。 */
+/** 段落番号から、その段落を含むページ（0始まり）を引く。 */
 export function pageIndexOfParagraph(breaks: PageBreaks, paragraphIndex: number): number {
   for (let index = 0; index < breaks.pages.length; index += 1) {
     for (const slice of breaks.pages[index]) {
@@ -78,35 +80,31 @@ export function pageIndexOfParagraph(breaks: PageBreaks, paragraphIndex: number)
  * 行送りは computed style の line-height、行数はブロック方向の寸法から割り出す。
  * ブロック方向は書字方向で入れ替わる。縦書き（vertical-rl）は右から左へ流れる
  * ので横幅と margin-right、横書き（horizontal-tb）は上から下なので高さと
- * margin-top を見る。断片化している要素（移行期の multicol）では矩形が複数
- * 返るので合算する。
+ * margin-top を見る。
  */
 export function measureParagraphs(
   root: HTMLElement,
   writingMode: WritingMode,
-): ParagraphMeasure[] {
+): ParagraphGeometry[] {
   const vertical = writingMode === "vertical-rl";
-  const measures: ParagraphMeasure[] = [];
+  const rootRect = root.getBoundingClientRect();
+  const measures: ParagraphGeometry[] = [];
 
   for (const child of Array.from(root.children)) {
     if (!(child instanceof HTMLElement)) continue;
 
     const style = getComputedStyle(child);
+    const rect = child.getBoundingClientRect();
+    // 縦書きは右から左へ流れるので、流れの先頭は本文の右端。
+    const blockStart = vertical ? rootRect.right - rect.right : rect.top - rootRect.top;
     const linePitch = Number.parseFloat(style.lineHeight);
+
     if (!Number.isFinite(linePitch) || linePitch <= 0) {
-      measures.push({ lineCount: 0, linePitch: 0, gapBefore: 0 });
+      measures.push({ lineCount: 0, linePitch: 0, gapBefore: 0, blockStart });
       continue;
     }
 
-    let blockSize = 0;
-    for (const rect of Array.from(child.getClientRects())) {
-      blockSize += vertical ? rect.width : rect.height;
-    }
-    if (blockSize <= 0) {
-      const rect = child.getBoundingClientRect();
-      blockSize = vertical ? rect.width : rect.height;
-    }
-
+    const blockSize = vertical ? rect.width : rect.height;
     const gapBefore = vertical
       ? Number.parseFloat(style.marginRight) || 0
       : Number.parseFloat(style.marginTop) || 0;
@@ -116,6 +114,7 @@ export function measureParagraphs(
       lineCount: Math.max(1, Math.round(blockSize / linePitch)),
       linePitch,
       gapBefore,
+      blockStart,
     });
   }
 

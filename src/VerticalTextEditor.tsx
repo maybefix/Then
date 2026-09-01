@@ -3395,6 +3395,7 @@ export function VerticalTextEditor({
       )}px`;
       layer.style.width = `${snapScrollValue(scrollerRect.width)}px`;
       layer.style.height = `${snapScrollValue(scrollerRect.height)}px`;
+      clipLayerToTextBlock(layer, scrollerRect);
 
       const blockElements = Array.from(currentEditor.view.dom.children).filter(
         (element): element is HTMLElement => element instanceof HTMLElement,
@@ -3542,6 +3543,31 @@ export function VerticalTextEditor({
       visualLineFrame = requestAnimationFrame(renderVisualLines);
     };
 
+    // ページ表示では本文を1つの流れのまま置いて表示ページの位置へずらすので、
+    // 版面の外にも前後のページの行が存在する。行番号や折返し記号の層はスクロール
+    // 領域いっぱいに置いてあるため、切らないと前後のページの行に対する印まで出る。
+    //
+    // 切るのはブロック方向（行が並ぶ向き）だけにする。行番号は版面の外側の余白へ
+    // 出す作りなので、四辺で切ると番号そのものが消える。
+    const clipLayerToTextBlock = (layer: HTMLElement, scrollerRect: DOMRect) => {
+      const pageHost = editorHostRef.current;
+      if (editorDisplayModeRef.current !== "paged" || !pageHost) {
+        layer.style.clipPath = "";
+        return;
+      }
+      const layout = pageLayoutRef.current;
+      const hostRect = pageHost.getBoundingClientRect();
+      if (writingModeRef.current === "vertical-rl") {
+        const left = hostRect.left + layout.paddingX - scrollerRect.left;
+        const right = scrollerRect.width - left - layout.contentWidth;
+        layer.style.clipPath = `inset(0px ${right}px 0px ${left}px)`;
+        return;
+      }
+      const top = hostRect.top + layout.paddingY - scrollerRect.top;
+      const bottom = scrollerRect.height - top - layout.contentHeight;
+      layer.style.clipPath = `inset(${top}px 0px ${bottom}px 0px)`;
+    };
+
     const renderLineBreakMarks = () => {
       lineBreakQueued = false;
       lineBreakFrame = null;
@@ -3561,6 +3587,7 @@ export function VerticalTextEditor({
       )}px`;
       layer.style.width = `${snapScrollValue(scrollerRect.width)}px`;
       layer.style.height = `${snapScrollValue(scrollerRect.height)}px`;
+      clipLayerToTextBlock(layer, scrollerRect);
 
       if (
         !showLineBreakMarksRef.current ||

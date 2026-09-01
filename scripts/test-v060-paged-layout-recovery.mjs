@@ -8,6 +8,7 @@ import { readFile } from "node:fs/promises";
 const editorSource = await readFile("src/VerticalTextEditor.tsx", "utf8");
 const appSource = await readFile("src/App.tsx", "utf8");
 const appCss = await readFile("src/App.css", "utf8");
+const pageBreaksSource = await readFile("src/editor/pageBreaks.ts", "utf8");
 
 // --- バグ1: ページ寸法変更で読書位置が失われ、白紙ページが見える ---
 
@@ -27,6 +28,24 @@ assert.match(
   editorSource,
   /if \(pagedAnchorRestoreFrameRef\.current !== null\) return;/,
   "an in-flight restore must not overwrite the anchor with an intermediate position",
+);
+
+// ページの先頭位置は段落の実位置から出す。行送りの積み上げで出すと端数が溜まり、
+// ページ境界が実際の行の境目からずれて、前のページの行が版面へ覗く（そこへ
+// カーソルも置けてしまう）。
+assert.match(
+  pageBreaksSource,
+  /return measure\.blockStart \+ first\.lineStart \* measure\.linePitch;/,
+  "page offsets must come from the measured paragraph position, not accumulated line pitch",
+);
+
+// 行番号や折返し記号の層はスクロール領域いっぱいに置いてあるので、前後のページの
+// 行に対する印まで出る。ただし行番号は版面の外側の余白へ出す作りなので、切るのは
+// 行が並ぶ向き（ブロック方向）だけにする。四辺で切ると番号そのものが消える。
+assert.match(
+  editorSource,
+  /const clipLayerToTextBlock = [\s\S]*?writingModeRef\.current === "vertical-rl"[\s\S]*?inset\(0px \$\{right\}px 0px \$\{left\}px\)/,
+  "overlay layers must be clipped along the block axis only",
 );
 
 // 版面の寸法が変わるとページの割りも変わる。以前は multicol の段送り
