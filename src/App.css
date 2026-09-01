@@ -2352,6 +2352,15 @@ body.thenPdfExporting .printExportViewport {
   overflow-wrap: anywhere;
 }
 
+/* EditContext を使うページ表示では、変換中テキストの下線をブラウザが描かない
+   （入力の描画がアプリ側の責任になるため）。OSが渡してくる書式は装飾の inline
+   style へ載せているので、ここでは書式が来なかったときの最低限の下線だけを
+   決めておく。確定済み本文と前編集を見分けられれば足りる。 */
+.verticalTypewriterEditor .ime-composition {
+  text-decoration-line: underline;
+  text-underline-offset: 0.25em;
+}
+
 .verticalTypewriterEditor .ks-breakable-token {
   overflow-wrap: anywhere;
   white-space: normal;
