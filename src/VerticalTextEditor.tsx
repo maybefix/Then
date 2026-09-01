@@ -9,6 +9,7 @@ import { keymap } from "@tiptap/pm/keymap";
 import {
   Plugin,
   PluginKey,
+  TextSelection as PMTextSelection,
   type EditorState,
   type Transaction,
 } from "@tiptap/pm/state";
@@ -17,7 +18,14 @@ import {
   DecorationSet,
   type EditorView,
 } from "@tiptap/pm/view";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 import {
   areDocumentIndexesEquivalent,
   createDocumentIndexFromLines,
@@ -75,6 +83,11 @@ export type VerticalTextEditorProps = {
   showLineNumbers: boolean;
   highlightCurrentLine: boolean;
   colorizeJapaneseQuotes: boolean;
+  /**
+   * ページ表示だけで、断片化されたProseMirrorを読み取り専用レンダラーにし、
+   * ネイティブ入力をキャレット位置のtextareaへ分離する。
+   */
+  separateNativeInput?: boolean;
   /**
    * 文字寸法に影響する設定（フォント・文字サイズ・行間・文字表示幅）の合成値。
    * ページ表示中の .pm-root はCSSで寸法固定されておりResizeObserverが発火しない
@@ -2142,6 +2155,7 @@ export function VerticalTextEditor({
   showLineNumbers,
   highlightCurrentLine,
   colorizeJapaneseQuotes,
+  separateNativeInput = false,
   textLayoutSignature,
   initialSelectionOffset,
   initialViewportState,
@@ -2155,6 +2169,8 @@ export function VerticalTextEditor({
   const shellRef = useRef<HTMLDivElement | null>(null);
   const pageSurfaceRef = useRef<HTMLDivElement | null>(null);
   const editorHostRef = useRef<HTMLDivElement | null>(null);
+  const inputBridgeRef = useRef<HTMLTextAreaElement | null>(null);
+  const inputBridgeCaretRef = useRef<HTMLDivElement | null>(null);
   const lineBreakLayerRef = useRef<HTMLDivElement | null>(null);
   const visualLineLayerRef = useRef<HTMLDivElement | null>(null);
   const tiptapRef = useRef<Editor | null>(null);
@@ -2170,6 +2186,10 @@ export function VerticalTextEditor({
   const onPageMetricsChangeRef = useRef(onPageMetricsChange);
   const localRevisionRef = useRef(0);
   const composingRef = useRef(false);
+  const separateNativeInputRef = useRef(separateNativeInput);
+  const applyingInputBridgeRef = useRef(false);
+  const bridgePointerAnchorRef = useRef<number | null>(null);
+  const bridgeGeometryFrameRef = useRef<number | null>(null);
   // マウスでのドラッグ範囲選択中は true。ジェスチャ中は再センタリングを抑制し、
   // pointerup 時にキャレットが collapsed なら一度だけ寄せ、範囲が残るなら据え置く。
   const pointerDraggingRef = useRef(false);
@@ -2206,6 +2226,129 @@ export function VerticalTextEditor({
   editorDisplayModeRef.current = editorDisplayMode;
   pageFlowDirectionRef.current = pageFlowDirection;
   typewriterScrollRef.current = typewriterScroll && editorDisplayMode === "continuous";
+  separateNativeInputRef.current = separateNativeInput;
+
+  const requestInputBridgeGeometry = (editor: Editor | null = tiptapRef.current) => {
+    if (bridgeGeometryFrameRef.current !== null) {
+      cancelAnimationFrame(bridgeGeometryFrameRef.current);
+    }
+    bridgeGeometryFrameRef.current = requestAnimationFrame(() => {
+      bridgeGeometryFrameRef.current = null;
+      const input = inputBridgeRef.current;
+      const caret = inputBridgeCaretRef.current;
+      const surface = pageSurfaceRef.current;
+      if (!separateNativeInputRef.current || !editor || !input || !caret || !surface) return;
+
+      let rect: { left: number; right: number; top: number; bottom: number };
+      try {
+        rect = editor.view.coordsAtPos(editor.state.selection.head);
+      } catch {
+        caret.style.display = "none";
+        return;
+      }
+
+      const surfaceRect = surface.getBoundingClientRect();
+      const left = rect.left - surfaceRect.left;
+      const top = rect.top - surfaceRect.top;
+      input.style.left = `${left}px`;
+      input.style.top = `${top}px`;
+      caret.style.left = `${left}px`;
+      caret.style.top = `${top}px`;
+      caret.style.display = editor.state.selection.empty ? "block" : "none";
+      if (writingModeRef.current === "vertical-rl") {
+        caret.style.width = `${Math.max(8, Math.min(32, rect.right - rect.left))}px`;
+        caret.style.height = "1px";
+      } else {
+        caret.style.width = "1px";
+        caret.style.height = `${Math.max(12, Math.min(40, rect.bottom - rect.top))}px`;
+      }
+    });
+  };
+
+  const syncInputBridgeFromEditor = (editor: Editor, focus = false) => {
+    const input = inputBridgeRef.current;
+    if (!input || !separateNativeInputRef.current) return;
+    const currentText = docToText(editor.state.doc);
+    if (!composingRef.current && input.value !== currentText) input.value = currentText;
+    const selection = getTextSelection(editor);
+    input.setSelectionRange(
+      selection.from,
+      selection.to,
+      selection.head === selection.from && selection.from !== selection.to ? "backward" : "forward",
+    );
+    if (focus) input.focus({ preventScroll: true });
+    requestInputBridgeGeometry(editor);
+  };
+
+  const syncEditorSelectionFromInputBridge = (editor: Editor) => {
+    const input = inputBridgeRef.current;
+    if (!input) return;
+    const currentText = docToText(editor.state.doc);
+    const start = Math.max(0, Math.min(currentText.length, input.selectionStart ?? 0));
+    const end = Math.max(start, Math.min(currentText.length, input.selectionEnd ?? start));
+    const anchorOffset = input.selectionDirection === "backward" ? end : start;
+    const headOffset = input.selectionDirection === "backward" ? start : end;
+    const currentSelection = getTextSelection(editor);
+    if (
+      currentSelection.from === start &&
+      currentSelection.to === end &&
+      currentSelection.head === headOffset
+    ) {
+      requestInputBridgeGeometry(editor);
+      return;
+    }
+    const anchor = pmPosFromTextOffset(editor.state.doc, anchorOffset);
+    const head = pmPosFromTextOffset(editor.state.doc, headOffset);
+    editor.view.dispatch(
+      editor.state.tr
+        .setSelection(PMTextSelection.create(editor.state.doc, anchor, head))
+        .setMeta("addToHistory", false),
+    );
+    onSelectionChangeRef.current();
+    revealSelectionPageRef.current?.(editor);
+    requestInputBridgeGeometry(editor);
+  };
+
+  const applyInputBridgeValue = (input: HTMLTextAreaElement) => {
+    const editor = tiptapRef.current;
+    if (!editor) return;
+    const next = normalizeText(input.value);
+    const changed = next !== docToText(editor.state.doc);
+    applyingInputBridgeRef.current = true;
+    try {
+      if (changed) {
+        editor.commands.setContent(textToDoc(next), false);
+        textRef.current = next;
+        updateEmptyAttribute(editor, next);
+      }
+      syncEditorSelectionFromInputBridge(editor);
+    } finally {
+      applyingInputBridgeRef.current = false;
+    }
+    if (changed) {
+      const nextRevision = ++localRevisionRef.current;
+      onTextChangeRef.current(next, nextRevision);
+    }
+    requestAnimationFrame(() => {
+      syncPageMetricsRef.current?.();
+      revealSelectionPageRef.current?.(editor);
+      requestInputBridgeGeometry(editor);
+      requestVisualLinesRef.current?.();
+      requestLineBreakMarksRef.current?.();
+    });
+  };
+
+  const handleInputBridgeInput = (event: FormEvent<HTMLTextAreaElement>) => {
+    applyInputBridgeValue(event.currentTarget);
+  };
+
+  const handleInputBridgeKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "Tab" || event.ctrlKey || event.metaKey || event.altKey) return;
+    event.preventDefault();
+    const input = event.currentTarget;
+    input.setRangeText("\t", input.selectionStart, input.selectionEnd, "end");
+    applyInputBridgeValue(input);
+  };
 
   const publishPageMetrics = (next: PageMetrics) => {
     const previous = pageMetricsRef.current;
@@ -2355,6 +2498,7 @@ export function VerticalTextEditor({
       `${verticalWriting ? verticalBaseOffset - fragmentOffset : 0}px`,
     );
     publishPageMetrics({ current, total });
+    requestInputBridgeGeometry(tiptapRef.current);
   };
   syncPageMetricsRef.current = syncPageMetrics;
 
@@ -2721,7 +2865,10 @@ export function VerticalTextEditor({
       focus: () => {
         const editor = tiptapRef.current;
         if (!editor) return;
-        if (editorDisplayModeRef.current === "paged") {
+        if (separateNativeInputRef.current) {
+          syncInputBridgeFromEditor(editor, true);
+          revealSelectionPageRef.current?.(editor);
+        } else if (editorDisplayModeRef.current === "paged") {
           editor.view.dom.focus({ preventScroll: true });
           revealSelectionPageRef.current?.(editor);
         } else {
@@ -2745,11 +2892,12 @@ export function VerticalTextEditor({
         const current = docToText(editor.state.doc);
         const start = Math.max(0, Math.min(current.length, from));
         const end = Math.max(start, Math.min(current.length, to));
-        editor.commands.focus();
+        if (!separateNativeInputRef.current) editor.commands.focus();
         editor.commands.setTextSelection({
           from: pmPosFromTextOffset(editor.state.doc, start),
           to: pmPosFromTextOffset(editor.state.doc, end),
         });
+        if (separateNativeInputRef.current) syncInputBridgeFromEditor(editor, true);
         onSelectionChangeRef.current();
         if (scroller && typewriterScrollRef.current) {
           stopCenterAnimationRef.current?.();
@@ -2773,6 +2921,7 @@ export function VerticalTextEditor({
         setSelectionByTextOffset(editor, nextCursor);
         updateEmptyAttribute(editor);
         textRef.current = next;
+        if (separateNativeInputRef.current) syncInputBridgeFromEditor(editor, true);
         const nextRevision = ++localRevisionRef.current;
         onTextChangeRef.current(next, nextRevision);
         onSelectionChangeRef.current();
@@ -2790,12 +2939,13 @@ export function VerticalTextEditor({
 
         const index = Math.max(0, Math.min(editor.state.doc.childCount - 1, line - 1));
         const pos = (pmStartAtIndex(editor.state.doc, index) ?? 0) + 1;
-        if (editorDisplayModeRef.current === "paged") {
+        if (!separateNativeInputRef.current && editorDisplayModeRef.current === "paged") {
           editor.view.dom.focus({ preventScroll: true });
-        } else {
+        } else if (!separateNativeInputRef.current) {
           editor.commands.focus();
         }
         editor.commands.setTextSelection(pos);
+        if (separateNativeInputRef.current) syncInputBridgeFromEditor(editor, true);
         onSelectionChangeRef.current();
         if (editorDisplayModeRef.current === "paged") {
           revealSelectionPageRef.current?.(editor);
@@ -2913,6 +3063,7 @@ export function VerticalTextEditor({
     const editorText = docToText(editor.state.doc);
     if (editorText === text) {
       textRef.current = text;
+      if (separateNativeInputRef.current) syncInputBridgeFromEditor(editor);
       return;
     }
 
@@ -2924,6 +3075,7 @@ export function VerticalTextEditor({
     setSelectionByTextOffset(editor, 0);
     textRef.current = text;
     updateEmptyAttribute(editor);
+    if (separateNativeInputRef.current) syncInputBridgeFromEditor(editor);
     requestAnimationFrame(() => {
       const scroller = scrollerRef.current;
       if (scroller && typewriterScrollRef.current) {
@@ -2933,6 +3085,32 @@ export function VerticalTextEditor({
       requestLineBreakMarksRef.current?.();
     });
   }, [editorRevision, text]);
+
+  useEffect(() => {
+    const editor = tiptapRef.current;
+    if (!editor) return;
+    editor.setEditable(!separateNativeInput);
+    if (separateNativeInput) {
+      requestAnimationFrame(() => {
+        syncInputBridgeFromEditor(editor, true);
+        syncPageMetricsRef.current?.();
+      });
+    } else {
+      inputBridgeRef.current?.blur();
+      if (inputBridgeCaretRef.current) inputBridgeCaretRef.current.style.display = "none";
+      requestAnimationFrame(() => editor.commands.focus());
+    }
+  }, [separateNativeInput]);
+
+  useEffect(
+    () => () => {
+      if (bridgeGeometryFrameRef.current !== null) {
+        cancelAnimationFrame(bridgeGeometryFrameRef.current);
+        bridgeGeometryFrameRef.current = null;
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     const host = editorHostRef.current;
@@ -3719,6 +3897,7 @@ export function VerticalTextEditor({
       extensions: [Document, Paragraph, Text, History, LayoutAstExtension],
       content: textToDoc(textRef.current),
       autofocus: false,
+      editable: !separateNativeInputRef.current,
       editorProps: {
         attributes: {
           class: "pm-root",
@@ -3759,6 +3938,9 @@ export function VerticalTextEditor({
       },
       onSelectionUpdate: () => {
         prepareImeLayoutTarget();
+        if (separateNativeInputRef.current && !applyingInputBridgeRef.current) {
+          syncInputBridgeFromEditor(editor);
+        }
         onSelectionChangeRef.current();
         // ドラッグ範囲選択中は寄せない（pointerup でまとめて判定する）。
         // キーボードでの選択（Shift+矢印など）はドラッグ外なので従来どおり追従する。
@@ -3850,10 +4032,14 @@ export function VerticalTextEditor({
       }
 
       event.preventDefault();
-      editor.commands.focus();
       const lastIndex = Math.max(0, editor.state.doc.childCount - 1);
       const lastNode = editor.state.doc.child(lastIndex);
       editor.commands.setTextSelection((pmStartAtIndex(editor.state.doc, lastIndex) ?? 0) + 1 + lastNode.content.size);
+      if (separateNativeInputRef.current) {
+        syncInputBridgeFromEditor(editor, true);
+      } else {
+        editor.commands.focus();
+      }
       requestCenterCaret(true, "scroller-mousedown");
       requestLineBreakMarks();
     };
@@ -3955,6 +4141,7 @@ export function VerticalTextEditor({
       requestVisibleWindow();
       requestLineBreakMarks();
       syncPageMetricsRef.current?.();
+      requestInputBridgeGeometry(editor);
     };
 
     const handleFontLoadingDone = () => {
@@ -3973,6 +4160,7 @@ export function VerticalTextEditor({
       // 含むページ同期もページ表示中だけ表示フレームごとに一度行う。
       requestVisibleWindow();
       requestLineBreakMarks();
+      requestInputBridgeGeometry(editor);
       if (editorDisplayModeRef.current !== "paged" || scrollFrame !== null) return;
       scrollFrame = requestAnimationFrame(() => {
         scrollFrame = null;
@@ -3988,26 +4176,65 @@ export function VerticalTextEditor({
       cancelInitialAdjustment();
       if (event.button !== 0) return;
       pointerDraggingRef.current = true;
+      if (!separateNativeInputRef.current) return;
+      const found = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
+      if (!found) return;
+      const offset = textOffsetFromPmPos(editor.state.doc, found.pos);
+      bridgePointerAnchorRef.current = offset;
+      editor.view.dispatch(
+        editor.state.tr
+          .setSelection(PMTextSelection.create(editor.state.doc, found.pos))
+          .setMeta("addToHistory", false),
+      );
+      syncInputBridgeFromEditor(editor, true);
+      editor.view.dom.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
     };
 
-    const handlePointerUp = () => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const anchorOffset = bridgePointerAnchorRef.current;
+      if (!separateNativeInputRef.current || anchorOffset === null || (event.buttons & 1) === 0) {
+        return;
+      }
+      const found = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
+      if (!found) return;
+      const anchor = pmPosFromTextOffset(editor.state.doc, anchorOffset);
+      editor.view.dispatch(
+        editor.state.tr
+          .setSelection(PMTextSelection.create(editor.state.doc, anchor, found.pos))
+          .setMeta("addToHistory", false),
+      );
+      syncInputBridgeFromEditor(editor);
+      event.preventDefault();
+    };
+
+    const handlePointerUp = (event: PointerEvent) => {
       if (!pointerDraggingRef.current) return;
       pointerDraggingRef.current = false;
+      bridgePointerAnchorRef.current = null;
+      if (editor.view.dom.hasPointerCapture?.(event.pointerId)) {
+        editor.view.dom.releasePointerCapture?.(event.pointerId);
+      }
       const currentEditor = tiptapRef.current;
       // クリック（collapsed）で終わったら一度だけ寄せる。範囲が残るならビューは動かさない。
       if (currentEditor && currentEditor.state.selection.empty) {
         requestCenterCaret(false, "pointer-click");
+      }
+      if (currentEditor && separateNativeInputRef.current) {
+        syncInputBridgeFromEditor(currentEditor, true);
       }
       requestLineBreakMarks();
     };
 
     const handlePointerCancel = () => {
       pointerDraggingRef.current = false;
+      bridgePointerAnchorRef.current = null;
     };
 
     scroller.addEventListener("wheel", handleWheel, { passive: false });
     scroller.addEventListener("mousedown", handleMouseDown);
     editor.view.dom.addEventListener("pointerdown", handlePointerDown, { capture: true });
+    editor.view.dom.addEventListener("pointermove", handlePointerMove, { capture: true });
     window.addEventListener("pointerdown", cancelInitialAdjustment, { capture: true });
     window.addEventListener("keydown", cancelInitialAdjustment, { capture: true });
     window.addEventListener("pointerup", handlePointerUp);
@@ -4022,9 +4249,16 @@ export function VerticalTextEditor({
     const initialOffset = Math.min(initialSelectionRef.current, docToText(editor.state.doc).length);
     if (initialOffset > 0) {
       setSelectionByTextOffset(editor, initialOffset);
-      editor.commands.focus();
+      if (!separateNativeInputRef.current) editor.commands.focus();
     } else {
-      editor.commands.focus("start");
+      if (separateNativeInputRef.current) {
+        setSelectionByTextOffset(editor, 0);
+      } else {
+        editor.commands.focus("start");
+      }
+    }
+    if (separateNativeInputRef.current) {
+      requestAnimationFrame(() => syncInputBridgeFromEditor(editor, true));
     }
     initialAdjustmentDeadline = performance.now() + INITIAL_CENTER_SETTLE_MS;
     initialAdjustmentExpiryTimer = window.setTimeout(
@@ -4060,6 +4294,7 @@ export function VerticalTextEditor({
       scroller.removeEventListener("wheel", handleWheel);
       scroller.removeEventListener("mousedown", handleMouseDown);
       editor.view.dom.removeEventListener("pointerdown", handlePointerDown, { capture: true });
+      editor.view.dom.removeEventListener("pointermove", handlePointerMove, { capture: true });
       window.removeEventListener("pointerdown", cancelInitialAdjustment, { capture: true });
       window.removeEventListener("keydown", cancelInitialAdjustment, { capture: true });
       window.removeEventListener("pointerup", handlePointerUp);
@@ -4165,6 +4400,41 @@ export function VerticalTextEditor({
               </div>
             ))}
           <div ref={editorHostRef} className="verticalTypewriterEditor" />
+          {separateNativeInput && (
+            <>
+              <div
+                ref={inputBridgeCaretRef}
+                className="pagedNativeInputCaret"
+                aria-hidden="true"
+              />
+              <textarea
+                ref={inputBridgeRef}
+                className="pagedNativeInputBridge"
+                aria-label="本文"
+                defaultValue={textRef.current}
+                spellCheck={false}
+                onInput={handleInputBridgeInput}
+                onSelect={() => {
+                  const editor = tiptapRef.current;
+                  if (editor) syncEditorSelectionFromInputBridge(editor);
+                }}
+                onKeyDown={handleInputBridgeKeyDown}
+                onKeyUp={() => {
+                  const editor = tiptapRef.current;
+                  if (editor) syncEditorSelectionFromInputBridge(editor);
+                }}
+                onCompositionStart={() => {
+                  composingRef.current = true;
+                  shellRef.current?.setAttribute("data-composing", "true");
+                }}
+                onCompositionEnd={(event) => {
+                  composingRef.current = false;
+                  shellRef.current?.removeAttribute("data-composing");
+                  applyInputBridgeValue(event.currentTarget);
+                }}
+              />
+            </>
+          )}
         </div>
       </div>
       <div

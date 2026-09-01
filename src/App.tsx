@@ -23,7 +23,6 @@ import {
   type BreadcrumbLayout,
 } from "./utils/breadcrumbLayout";
 import { VerticalTextEditor, type TextEditorHandle } from "./VerticalTextEditor";
-import { SeparatedPagedTextEditor } from "./SeparatedPagedTextEditor";
 import { AppDialogModal } from "./components/dialogs/AppDialogModal";
 import { CommandPalette, type PaletteCommand } from "./components/dialogs/CommandPalette";
 import { PluginManagerModal } from "./components/dialogs/PluginManagerModal";
@@ -10261,72 +10260,40 @@ export default function App() {
                           onClear={handleClearFrontMatter}
                           onChange={handleFrontMatterChange}
                         />
-                        {isHydrated &&
-                          (settings.editorDisplayMode === "paged" ? (
-                            <SeparatedPagedTextEditor
-                              key={documentKey}
-                              text={editorText}
-                              editorRevision={activeTab?.editorRevision ?? null}
-                              writingMode={settings.writingMode}
-                              editorDisplayMode="paged"
-                              pageFlowDirection={settings.pageFlowDirection}
-                              typewriterScroll={false}
-                              showTypewriterGuide={false}
-                              typewriterOffset={settings.typewriterOffset}
-                              showLineBreakMarks={settings.showLineBreakMarks}
-                              showLineNumbers={settings.showLineNumbers}
-                              highlightCurrentLine={settings.highlightCurrentLine}
-                              colorizeJapaneseQuotes={settings.colorizeJapaneseQuotes}
-                              textLayoutSignature={[
-                                settings.editorFontFamily,
-                                settings.headingFontSource,
-                                settings.headingFontFamily,
-                                settings.fontSize,
-                                settings.lineHeight,
-                                settings.editorMeasureHorizontal,
-                                settings.editorMeasureVertical,
-                              ].join("|")}
-                              initialSelectionOffset={initialSelectionOffset}
-                              initialViewportState={activeTab?.viewportState ?? null}
-                              onViewportSizeChange={handleEditorViewportSizeChange}
-                              onReady={handleEditorReady}
-                              onTextChange={handleTextChange}
-                              onSelectionChange={handleSelectionChange}
-                              onPageMetricsChange={setEditorPageMetrics}
-                            />
-                          ) : (
-                            <VerticalTextEditor
-                              key={documentKey}
-                              text={editorText}
-                              editorRevision={activeTab?.editorRevision ?? null}
-                              writingMode={settings.writingMode}
-                              editorDisplayMode="continuous"
-                              pageFlowDirection={settings.pageFlowDirection}
-                              typewriterScroll={settings.typewriterScroll}
-                              showTypewriterGuide={settings.showTypewriterGuide}
-                              typewriterOffset={settings.typewriterOffset}
-                              showLineBreakMarks={settings.showLineBreakMarks}
-                              showLineNumbers={settings.showLineNumbers}
-                              highlightCurrentLine={settings.highlightCurrentLine}
-                              colorizeJapaneseQuotes={settings.colorizeJapaneseQuotes}
-                              textLayoutSignature={[
-                                settings.editorFontFamily,
-                                settings.headingFontSource,
-                                settings.headingFontFamily,
-                                settings.fontSize,
-                                settings.lineHeight,
-                                settings.editorMeasureHorizontal,
-                                settings.editorMeasureVertical,
-                              ].join("|")}
-                              initialSelectionOffset={initialSelectionOffset}
-                              initialViewportState={activeTab?.viewportState ?? null}
-                              onViewportSizeChange={handleEditorViewportSizeChange}
-                              onReady={handleEditorReady}
-                              onTextChange={handleTextChange}
-                              onSelectionChange={handleSelectionChange}
-                              onPageMetricsChange={setEditorPageMetrics}
-                            />
-                          ))}
+                        {isHydrated && (
+                          <VerticalTextEditor
+                            key={documentKey}
+                            text={editorText}
+                            editorRevision={activeTab?.editorRevision ?? null}
+                            writingMode={settings.writingMode}
+                            editorDisplayMode={settings.editorDisplayMode}
+                            pageFlowDirection={settings.pageFlowDirection}
+                            typewriterScroll={settings.typewriterScroll}
+                            showTypewriterGuide={settings.showTypewriterGuide}
+                            typewriterOffset={settings.typewriterOffset}
+                            showLineBreakMarks={settings.showLineBreakMarks}
+                            showLineNumbers={settings.showLineNumbers}
+                            highlightCurrentLine={settings.highlightCurrentLine}
+                            colorizeJapaneseQuotes={settings.colorizeJapaneseQuotes}
+                            separateNativeInput={settings.editorDisplayMode === "paged"}
+                            textLayoutSignature={[
+                              settings.editorFontFamily,
+                              settings.headingFontSource,
+                              settings.headingFontFamily,
+                              settings.fontSize,
+                              settings.lineHeight,
+                              settings.editorMeasureHorizontal,
+                              settings.editorMeasureVertical,
+                            ].join("|")}
+                            initialSelectionOffset={initialSelectionOffset}
+                            initialViewportState={activeTab?.viewportState ?? null}
+                            onViewportSizeChange={handleEditorViewportSizeChange}
+                            onReady={handleEditorReady}
+                            onTextChange={handleTextChange}
+                            onSelectionChange={handleSelectionChange}
+                            onPageMetricsChange={setEditorPageMetrics}
+                          />
+                        )}
                         {editorFind.open && (
                           <section
                             className="editorFindPopover"
