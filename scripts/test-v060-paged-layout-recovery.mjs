@@ -39,6 +39,16 @@ assert.match(
   "page offsets must come from the measured paragraph position, not accumulated line pitch",
 );
 
+// ページの最後の行の次の行は、版面の中から始まって外へはみ出す。paginate は
+// まるごと収まる行までを1ページにするため、収まらない次の行の頭が版面の残り幅へ
+// 食い込む。切る位置を版面の幅ではなく次のページが始まる位置にしないと、その頭が
+// 見切れとして出る。
+assert.match(
+  editorSource,
+  /const nextOffset = breaks\.offsets\[current\] \?\? pageOffset \+ pageBlockSize;[\s\S]*?const visibleExtent = Math\.max\(0, Math\.min\(pageBlockSize, nextOffset - pageOffset\)\)/,
+  "the visible extent must end where the next page begins, not at the text block width",
+);
+
 // 行番号や折返し記号の層はスクロール領域いっぱいに置いてあるので、前後のページの
 // 行に対する印まで出る。ただし行番号は版面の外側の余白へ出す作りなので、切るのは
 // 行が並ぶ向き（ブロック方向）だけにする。四辺で切ると番号そのものが消える。

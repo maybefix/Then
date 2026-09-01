@@ -336,8 +336,15 @@ assert.match(
 // はみ出して見える。
 assert.match(
   appCss,
-  /data-editor-display="paged"\]\s*\.verticalTypewriterEditor\s*\{[\s\S]*?clip-path:\s*inset\(var\(--paged-padding-y[\s\S]*?var\(--paged-padding-x/,
+  /data-editor-display="paged"\]\s*\.verticalTypewriterEditor\s*\{[\s\S]*?clip-path:\s*var\(--paged-clip,\s*inset\(var\(--paged-padding-y[\s\S]*?var\(--paged-padding-x/,
   "the paged body must be clipped to the text block, not merely to the page frame",
+);
+// 切る範囲はページごとに変わる（次のページが始まる位置で終える）ので、
+// 実寸は同期処理から与える。
+assert.match(
+  editorSource,
+  /host\.style\.setProperty\(\s*"--paged-clip",[\s\S]*?width - paddingX - visibleExtent[\s\S]*?height - paddingY - visibleExtent/,
+  "the clip must be handed the page's real extent for both writing modes",
 );
 assert.match(
   editorSource,

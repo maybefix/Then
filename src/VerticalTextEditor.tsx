@@ -2174,6 +2174,8 @@ export function VerticalTextEditor({
   // ページの割りと、測り直しが要るかを見分けるための署名。
   const pageBreaksRef = useRef<PageBreaks>({ pages: [], offsets: [] });
   const pageBreaksSignatureRef = useRef("");
+  // 表示中のページが実際に占めるブロック方向の寸法。版面の幅とは限らない。
+  const pageVisibleExtentRef = useRef(0);
   // マウスでのドラッグ範囲選択中は true。ジェスチャ中は再センタリングを抑制し、
   // pointerup 時にキャレットが collapsed なら一度だけ寄せ、範囲が残るなら据え置く。
   const pointerDraggingRef = useRef(false);
@@ -2321,6 +2323,13 @@ export function VerticalTextEditor({
         : Math.abs(scroller.scrollLeft) / pageSpan;
     const current = Math.max(1, Math.min(total, Math.round(rawPage) + 1));
     const pageOffset = breaks.offsets[current - 1] ?? 0;
+    // ページの最後の行の次の行は、版面の中から始まって外へはみ出す。
+    // paginate はまるごと収まる行までを1ページにするので、収まらない次の行の
+    // 頭が版面の残り幅へ食い込む。切る位置は版面の幅ではなく、次のページが
+    // 始まる位置にしないと、その頭が見切れとして出る。
+    const nextOffset = breaks.offsets[current] ?? pageOffset + pageBlockSize;
+    const visibleExtent = Math.max(0, Math.min(pageBlockSize, nextOffset - pageOffset));
+    pageVisibleExtentRef.current = visibleExtent;
     const hostOffset = (current - 1) * pageSpan;
     host.style.setProperty(
       "--paged-host-x",
@@ -2335,6 +2344,15 @@ export function VerticalTextEditor({
     // 動き、その量だけ本文がページ枠からずれる。
     if (host.scrollTop !== 0) host.scrollTop = 0;
     if (host.scrollLeft !== 0) host.scrollLeft = 0;
+
+    // 本文は版面の外へも伸びているので、描画は版面で切る。ブロック方向の
+    // 終端は、このページが実際に占める分だけにする。
+    host.style.setProperty(
+      "--paged-clip",
+      verticalWriting
+        ? `inset(${paddingY}px ${paddingX}px ${paddingY}px ${width - paddingX - visibleExtent}px)`
+        : `inset(${paddingY}px ${paddingX}px ${height - paddingY - visibleExtent}px ${paddingX}px)`,
+    );
 
     // 表示するページを出す。transform ではなくレイアウト上の位置で動かす。
     // ブラウザがキャレット座標を計算する経路をそのまま使わせたいので、座標に
@@ -3557,14 +3575,15 @@ export function VerticalTextEditor({
       }
       const layout = pageLayoutRef.current;
       const hostRect = pageHost.getBoundingClientRect();
+      const extent = pageVisibleExtentRef.current || layout.contentWidth;
       if (writingModeRef.current === "vertical-rl") {
-        const left = hostRect.left + layout.paddingX - scrollerRect.left;
-        const right = scrollerRect.width - left - layout.contentWidth;
+        const right = scrollerRect.right - (hostRect.right - layout.paddingX);
+        const left = scrollerRect.width - right - extent;
         layer.style.clipPath = `inset(0px ${right}px 0px ${left}px)`;
         return;
       }
       const top = hostRect.top + layout.paddingY - scrollerRect.top;
-      const bottom = scrollerRect.height - top - layout.contentHeight;
+      const bottom = scrollerRect.height - top - (pageVisibleExtentRef.current || layout.contentHeight);
       layer.style.clipPath = `inset(${top}px 0px ${bottom}px 0px)`;
     };
 
