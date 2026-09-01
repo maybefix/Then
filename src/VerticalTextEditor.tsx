@@ -1888,6 +1888,25 @@ function rectFromEdges(edges: {
   );
 }
 
+// 変換候補ウィンドウをどこへ開かせるか。
+//
+// "right"  … 書いている列の右隣。高さは前編集のまま動かさないので目線が
+//             上下に飛ばず、書いている列も塞がない。隠れるのは右側＝すでに
+//             読み終えた列だけになる。
+// "bottom" … 版面の下辺の外。書いている列の真下に出て、列を移れば横へ追従する。
+const IME_CANDIDATE_PLACEMENT: "right" | "bottom" = "right";
+
+// 書いている列と候補ウィンドウのあいだに置く余白。列送りに対する割合で持つ。
+// px で持つと文字寸法を変えたときにここだけ追従しなくなる。
+const IME_CANDIDATE_COLUMN_GAP = 0.3;
+
+/** 列送り1つ分（縦書きでは行の横方向の送り幅）。矩形が実測できないときの保険。 */
+function lineAdvancePx(view: EditorView): number {
+  const element = activeBlockElement(view) ?? view.dom;
+  const advance = lineHeightPx(element);
+  return Number.isFinite(advance) && advance > 0 ? advance : 0;
+}
+
 /** OS へ渡すキャレット（または選択範囲）の画面矩形。 */
 function imeSelectionBounds(view: EditorView, writingMode: WritingMode): DOMRect | null {
   // 実際に描かれているキャレットの矩形が一番正確で、縦書きなら横長、横書き
@@ -4284,6 +4303,44 @@ export function VerticalTextEditor({
 
     const editorIsLive = () => tiptapRef.current === editor && !editor.isDestroyed;
 
+    // 候補ウィンドウを開かせたい位置へ座標を移す。
+    //
+    // IME は渡された矩形の下へ窓を開く。横書きならそれは次の行にあたるので
+    // 自然だが、縦書きでは書いている列の続きにあたり、本文を塞ぐ。窓は
+    // 約 140x80px あるので、版面の中にいる限り位置をどう調整しても必ず何かを
+    // 隠す。文字のない場所は版面の外しかない。
+    //
+    // EditContext は座標をアプリから明示できるので、文字の実座標ではなく
+    // 開いてほしい場所を渡す。片方の軸だけを版面の外へ出し、もう片方は
+    // 前編集の位置を保つので、窓は書いている場所に追従する。
+    const imeBoundsForOs = (rect: DOMRect): DOMRect => {
+      if (isHorizontalWriting(writingModeRef.current)) return rect;
+      const pageHost = editorHostRef.current;
+      if (!pageHost) return rect;
+
+      const layout = pageLayoutRef.current;
+      const hostRect = pageHost.getBoundingClientRect();
+
+      if (IME_CANDIDATE_PLACEMENT === "bottom") {
+        // 高さだけ版面の下辺へ落とし、列の位置は保つ。
+        const bottom = hostRect.top + layout.paddingY + layout.contentHeight;
+        return new DOMRect(rect.x, bottom, rect.width, 1);
+      }
+
+      // 横位置だけ書いている列の右隣へ寄せ、高さは前編集のまま動かさない。
+      // IME は渡した x にほぼそのまま窓を開くので、書いている列の右端を渡すと
+      // ちょうど隣の列に重なる。矩形は DOM の実測値で、その幅は縦書きの行送り
+      // （列幅）そのものなので、文字寸法を変えてもこの関係は保たれる。
+      // 版面の右端を越えるときは余白側で止める。
+      const columnAdvance = rect.width > 0 ? rect.width : lineAdvancePx(editor.view);
+      const pageRight = hostRect.right - layout.paddingX;
+      const right = Math.min(
+        rect.right + columnAdvance * IME_CANDIDATE_COLUMN_GAP,
+        pageRight,
+      );
+      return new DOMRect(right, rect.y, 1, rect.height);
+    };
+
     const clearImeDecorations = () => {
       if (!editorIsLive()) return;
       const current = imeCompositionKey.getState(editor.state) ?? DecorationSet.empty;
@@ -4305,22 +4362,21 @@ export function VerticalTextEditor({
       const hostRect = pageHost.getBoundingClientRect();
       try {
         // 編集領域はページ枠の版面。候補ウィンドウが本文を覆わないための情報。
-        context.updateControlBounds(
-          new DOMRect(
-            hostRect.left + layout.paddingX,
-            hostRect.top + layout.paddingY,
-            Math.max(1, layout.contentWidth),
-            Math.max(1, layout.contentHeight),
-          ),
+        const controlBounds = new DOMRect(
+          hostRect.left + layout.paddingX,
+          hostRect.top + layout.paddingY,
+          Math.max(1, layout.contentWidth),
+          Math.max(1, layout.contentHeight),
         );
+        context.updateControlBounds(controlBounds);
         const caret = imeSelectionBounds(editor.view, writingModeRef.current);
-        if (caret) context.updateSelectionBounds(caret);
+        if (caret) context.updateSelectionBounds(imeBoundsForOs(caret));
         // ページ送りや再組版で前編集が動いたら、OS が覚えている文字矩形も測り
         // 直して上書きする。ここを怠ると候補ウィンドウだけが取り残される。
         if (imeRange) {
           context.updateCharacterBounds(
             imeRange.start,
-            imeCharacterBounds(editor.view, imeRange.start, imeRange.end),
+            imeCharacterBounds(editor.view, imeRange.start, imeRange.end).map(imeBoundsForOs),
           );
         }
       } catch (error) {
@@ -4415,7 +4471,7 @@ export function VerticalTextEditor({
       try {
         context.updateCharacterBounds(
           event.rangeStart,
-          imeCharacterBounds(editor.view, event.rangeStart, event.rangeEnd),
+          imeCharacterBounds(editor.view, event.rangeStart, event.rangeEnd).map(imeBoundsForOs),
         );
       } catch (error) {
         console.warn("[then] EditContext character bounds update failed", error);

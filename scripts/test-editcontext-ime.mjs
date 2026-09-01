@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 // ページ表示のIME入力を EditContext 経由へ切り替えた変更の監査。
-// multicol の断片化と transform を通した後の実座標を OS へ渡す経路が
-// 残っていることを、実装側のパターンで固定する。
+// multicol の断片化と transform を通した後の実座標を OS へ渡す経路と、
+// 変換候補ウィンドウを書いている列の外へ開かせる経路が残っていることを、
+// 実装側のパターンで固定する。
 // 実DOMを伴う確認（変換候補ウィンドウの位置）は Windows 実機で行う。
 
 const editorSource = await readFile("src/VerticalTextEditor.tsx", "utf8");
@@ -35,7 +36,7 @@ assert.match(
   "tearing down the editor must detach the EditContext before the view goes away",
 );
 
-// --- 候補ウィンドウの位置は実測した矩形で渡す ---
+// --- 位置は実測した矩形で渡す ---
 
 assert.match(
   editorSource,
@@ -65,6 +66,42 @@ assert.match(
   editorSource,
   /function imeSelectionBounds\([\s\S]*?getSelection\(\)[\s\S]*?getBoundingClientRect\(\)/,
   "the caret bounds must come from the rendered DOM selection first",
+);
+
+// --- 候補ウィンドウは書いている列の外へ開かせる ---
+//
+// IME は渡された矩形の下へ窓を開く。縦書きではそれが書いている列の続きに
+// あたるため、実座標をそのまま渡すと本文が隠れる。片方の軸だけ列の外へ移す。
+
+assert.match(
+  editorSource,
+  /const imeBoundsForOs = \(rect: DOMRect\): DOMRect => \{[\s\S]{0,200}?if \(isHorizontalWriting\(writingModeRef\.current\)\) return rect;/,
+  "only vertical writing relocates the window; horizontal keeps the real coordinates",
+);
+
+assert.match(
+  editorSource,
+  /const columnAdvance = rect\.width > 0 \? rect\.width : lineAdvancePx\(editor\.view\);/,
+  "the column advance must be measured, so the placement follows font-size changes",
+);
+
+// 逃げ幅を px で持つと、文字寸法を変えたときにここだけ追従しなくなる。
+assert.match(
+  editorSource,
+  /rect\.right \+ columnAdvance \* IME_CANDIDATE_COLUMN_GAP/,
+  "the window must sit one column over, offset by a share of the measured column advance",
+);
+
+assert.match(
+  editorSource,
+  /updateSelectionBounds\(imeBoundsForOs\(caret\)\)/,
+  "the caret bounds handed to the OS must go through the placement transform",
+);
+
+assert.match(
+  editorSource,
+  /imeCharacterBounds\(editor\.view, event\.rangeStart, event\.rangeEnd\)\.map\(imeBoundsForOs\)/,
+  "character bounds must use the same transform, or the window and the caret disagree",
 );
 
 // --- 本文と EditContext のバッファを双方向に保つ ---
