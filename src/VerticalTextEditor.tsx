@@ -62,7 +62,7 @@ export type TextEditorHandle = {
   isComposing: () => boolean;
 };
 
-type VerticalTextEditorProps = {
+export type VerticalTextEditorProps = {
   text: string;
   editorRevision: number | null;
   writingMode: WritingMode;
