@@ -330,6 +330,15 @@ assert.match(
   /data-editor-display="paged"\]\s*\.verticalTypewriterEditor\s*\{[\s\S]*?overflow:\s*clip/,
   "the paged clip host must use overflow: clip so the browser cannot scroll it",
 );
+// 本文は1つの流れのままページの位置へずらすので、版面の外へも伸びている。
+// multicol のときは段の箱が本文を版面の内側へ閉じ込めていたが、その役目が
+// なくなった。ページ枠ではなく版面で切らないと、前後のページの行が余白へ
+// はみ出して見える。
+assert.match(
+  appCss,
+  /data-editor-display="paged"\]\s*\.verticalTypewriterEditor\s*\{[\s\S]*?clip-path:\s*inset\(var\(--paged-padding-y[\s\S]*?var\(--paged-padding-x/,
+  "the paged body must be clipped to the text block, not merely to the page frame",
+);
 assert.match(
   editorSource,
   /pageFlowDirectionRef\.current === "horizontal-rtl"[\s\S]*?lastHorizontalPagedWheelAt[\s\S]*?movePage\(event\.deltaY > 0 \? 1 : -1\)/,

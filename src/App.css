@@ -1957,6 +1957,11 @@ body.thenPdfExporting .printExportViewport {
      数十px下へ残る症状の原因になっていた。clip は非スクロールなので起きない。 */
   overflow: clip;
   overflow-anchor: none;
+  /* 本文は1つの流れのまま置いてページの位置へずらすので、版面の外へも伸びて
+     いる。multicol のときは段の箱が本文を版面の内側へ閉じ込めていたが、その
+     役目がなくなったぶんをここで切る。ページ枠ではなく版面で切らないと、
+     前後のページの行が余白へはみ出して見える。 */
+  clip-path: inset(var(--paged-padding-y, 0px) var(--paged-padding-x, 0px));
   pointer-events: none;
   transform: translate(
     var(--paged-host-x, 0px),
