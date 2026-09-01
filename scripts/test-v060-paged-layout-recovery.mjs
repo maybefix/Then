@@ -134,7 +134,7 @@ assert.match(
 
 assert.doesNotMatch(
   appCss,
-  /\.verticalTypewriterShell\[data-composing="true"\]\s+\.verticalTypewriterEditor\s+\.ks-line-head-ban/,
+  /\[data-composing="true"\][\s\S]*?\.ks-line-head-ban[\s\S]*?white-space:\s*pre-wrap/,
   "composition must not release every kinsoku span and reflow all pages",
 );
 
