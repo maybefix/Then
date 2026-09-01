@@ -3,13 +3,12 @@ import Document from "@tiptap/extension-document";
 import History from "@tiptap/extension-history";
 import Paragraph from "@tiptap/extension-paragraph";
 import Text from "@tiptap/extension-text";
-import { Fragment, Slice, type Node as PMNode, type Schema } from "@tiptap/pm/model";
+import { Fragment, Slice, type Node as PMNode } from "@tiptap/pm/model";
 import { baseKeymap } from "@tiptap/pm/commands";
 import { keymap } from "@tiptap/pm/keymap";
 import {
   Plugin,
   PluginKey,
-  TextSelection,
   type EditorState,
   type Transaction,
 } from "@tiptap/pm/state";
@@ -1662,326 +1661,6 @@ const LayoutAstExtension = Extension.create({
   },
 });
 
-// ---------------------------------------------------------------------------
-// EditContext（IME候補ウィンドウの位置合わせ）
-//
-// ページ表示の本文は固定寸法の multicol で断片化し、表示中のページだけを
-// transform で送っている。素の contenteditable では、ブラウザが OS へ渡す
-// 変換中テキストの位置が断片化・transform を反映しない座標のままになり、
-// 候補ウィンドウが本文から大きく離れた場所へ出る。EditContext を使うと
-// 入力位置をアプリ側から明示できるので、実際に描画されている文字の矩形を
-// 測って渡す。
-// ---------------------------------------------------------------------------
-
-type EditContextTextUpdateEvent = Event & {
-  updateRangeStart: number;
-  updateRangeEnd: number;
-  text: string;
-  selectionStart: number;
-  selectionEnd: number;
-};
-
-type EditContextCharacterBoundsUpdateEvent = Event & {
-  rangeStart: number;
-  rangeEnd: number;
-};
-
-type EditContextTextFormat = {
-  rangeStart: number;
-  rangeEnd: number;
-  underlineStyle: string;
-  underlineThickness: string;
-};
-
-type EditContextTextFormatUpdateEvent = Event & {
-  getTextFormats: () => EditContextTextFormat[];
-};
-
-type NativeEditContext = EventTarget & {
-  readonly text: string;
-  readonly selectionStart: number;
-  readonly selectionEnd: number;
-  updateText: (rangeStart: number, rangeEnd: number, text: string) => void;
-  updateSelection: (start: number, end: number) => void;
-  updateControlBounds: (bounds: DOMRect) => void;
-  updateSelectionBounds: (bounds: DOMRect) => void;
-  updateCharacterBounds: (rangeStart: number, bounds: DOMRect[]) => void;
-};
-
-type NativeEditContextConstructor = new (init?: {
-  text?: string;
-  selectionStart?: number;
-  selectionEnd?: number;
-}) => NativeEditContext;
-
-type HTMLElementWithEditContext = HTMLElement & {
-  editContext?: NativeEditContext | null;
-};
-
-type ImeCompositionRange = { from: number; to: number; style: string };
-
-type ImeCompositionMeta = { ranges: ImeCompositionRange[] };
-
-type TextSegmenter = {
-  segment: (input: string) => Iterable<{ index: number; segment: string }>;
-};
-
-type IntlWithSegmenter = {
-  Segmenter?: new (
-    locales?: string | string[],
-    options?: { granularity?: "grapheme" | "word" },
-  ) => TextSegmenter;
-};
-
-function createSegmenter(granularity: "grapheme" | "word"): TextSegmenter | null {
-  const SegmenterConstructor = (Intl as unknown as IntlWithSegmenter).Segmenter;
-  if (typeof SegmenterConstructor !== "function") return null;
-  try {
-    return new SegmenterConstructor(undefined, { granularity });
-  } catch {
-    return null;
-  }
-}
-
-const graphemeSegmenter = createSegmenter("grapheme");
-const wordSegmenter = createSegmenter("word");
-
-/** offset の直前にある1区切りの開始位置。異体字セレクタや濁点を割らない。 */
-function segmentStartBefore(text: string, offset: number, segmenter: TextSegmenter | null): number {
-  if (offset <= 0) return 0;
-  if (segmenter) {
-    let start = 0;
-    for (const segment of segmenter.segment(text.slice(0, offset))) start = segment.index;
-    return start;
-  }
-  const code = text.codePointAt(offset - 2);
-  return code !== undefined && code > 0xffff ? offset - 2 : offset - 1;
-}
-
-/** offset の直後にある1区切りの終了位置。 */
-function segmentEndAfter(text: string, offset: number, segmenter: TextSegmenter | null): number {
-  if (offset >= text.length) return text.length;
-  if (segmenter) {
-    for (const segment of segmenter.segment(text.slice(offset))) {
-      return offset + segment.segment.length;
-    }
-  }
-  const code = text.codePointAt(offset);
-  return code !== undefined && code > 0xffff ? offset + 2 : offset + 1;
-}
-
-/**
- * EditContext を付けた要素では、ブラウザが DOM の編集をやめるので既定の
- * 1文字削除も働かない。基本キーマップ（baseKeymap）が受け持つのは選択の削除と
- * 段落の結合だけなので、行の途中の削除をここで補う。処理したキーは
- * preventDefault されるため、ブラウザ側の削除と二重に効くことはない。
- * EditContext を使っていないあいだは false を返し、既定動作へ譲る。
- */
-function deleteSegmentCommand(direction: -1 | 1, granularity: "grapheme" | "word") {
-  const segmenter = granularity === "word" ? wordSegmenter : graphemeSegmenter;
-
-  return (
-    state: EditorState,
-    dispatch?: (tr: Transaction) => void,
-    view?: EditorView,
-  ): boolean => {
-    if (!view || (view.dom as HTMLElement).dataset.editContext !== "active") return false;
-
-    const selection = state.selection;
-    if (!(selection instanceof TextSelection)) return false;
-    const cursor = selection.$cursor;
-    if (!cursor) return false;
-
-    const text = cursor.parent.textContent;
-    const offset = cursor.parentOffset;
-    // 行頭・行末では段落の結合になる。baseKeymap の joinBackward / joinForward へ譲る。
-    const step =
-      direction < 0
-        ? offset - segmentStartBefore(text, offset, segmenter)
-        : segmentEndAfter(text, offset, segmenter) - offset;
-    if (step <= 0) return false;
-
-    if (dispatch) {
-      const from = direction < 0 ? cursor.pos - step : cursor.pos;
-      dispatch(state.tr.delete(from, from + step).scrollIntoView());
-    }
-    return true;
-  };
-}
-
-const imeCompositionKey = new PluginKey<DecorationSet>("then-ime-composition");
-
-// EditContext を付けた要素では変換中の下線をブラウザが描かない。OS が渡して
-// くる書式範囲を装飾に写し、前編集と確定済み本文を見分けられるようにする。
-const ImeCompositionExtension = Extension.create({
-  name: "thenImeComposition",
-
-  addProseMirrorPlugins() {
-    return [
-      new Plugin<DecorationSet>({
-        key: imeCompositionKey,
-        state: {
-          init: () => DecorationSet.empty,
-          apply(tr, previous) {
-            const meta = tr.getMeta(imeCompositionKey) as ImeCompositionMeta | undefined;
-            if (meta) {
-              return DecorationSet.create(
-                tr.doc,
-                meta.ranges
-                  .filter((range) => range.to > range.from)
-                  .map((range) =>
-                    Decoration.inline(range.from, range.to, {
-                      class: "ime-composition",
-                      style: range.style,
-                    }),
-                  ),
-              );
-            }
-            return tr.docChanged ? previous.map(tr.mapping, tr.doc) : previous;
-          },
-        },
-        props: {
-          decorations: (state) => imeCompositionKey.getState(state) ?? DecorationSet.empty,
-        },
-      }),
-      keymap({
-        Backspace: deleteSegmentCommand(-1, "grapheme"),
-        "Shift-Backspace": deleteSegmentCommand(-1, "grapheme"),
-        Delete: deleteSegmentCommand(1, "grapheme"),
-        "Mod-Backspace": deleteSegmentCommand(-1, "word"),
-        "Mod-Delete": deleteSegmentCommand(1, "word"),
-      }),
-    ];
-  },
-});
-
-function nativeEditContextConstructor(): NativeEditContextConstructor | null {
-  const ctor = (window as unknown as { EditContext?: NativeEditContextConstructor }).EditContext;
-  return typeof ctor === "function" ? ctor : null;
-}
-
-/** 1行1段落の平文を、そのまま貼り込めるスライスにする。 */
-function plainTextSlice(schema: Schema, text: string): Slice {
-  if (!text) return Slice.empty;
-  const nodes = normalizeText(text)
-    .split("\n")
-    .map((line) =>
-      line.length > 0
-        ? schema.nodes.paragraph.create(null, schema.text(line))
-        : schema.nodes.paragraph.create(),
-    );
-  return new Slice(Fragment.fromArray(nodes), 1, 1);
-}
-
-/** coordsAtPos が返す辺の組を、面積のある DOMRect へ均す。 */
-function rectFromEdges(edges: {
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
-}): DOMRect {
-  return new DOMRect(
-    edges.left,
-    edges.top,
-    Math.max(1, edges.right - edges.left),
-    Math.max(1, edges.bottom - edges.top),
-  );
-}
-
-/**
- * キャレットのいる段落がページの境目にかかっているか。
- *
- * ページ表示の本文は固定寸法の multicol で、段落がページをまたぐとレイアウトが
- * 断片に分かれる。この状態のブラウザは、キャレットの座標を最初の断片（＝前の
- * ページ）のものとして OS へ渡すため、変換候補ウィンドウが前のページへ出る。
- * ブロック要素の getClientRects() は断片ごとに1つ返るので、数で判定できる。
- */
-function caretBlockIsFragmented(view: EditorView): boolean {
-  const element = activeBlockElement(view);
-  return element ? element.getClientRects().length > 1 : false;
-}
-
-/** OS へ渡すキャレット（または選択範囲）の画面矩形。 */
-function imeSelectionBounds(view: EditorView, writingMode: WritingMode): DOMRect | null {
-  // 実際に描かれているキャレットの矩形が一番正確で、縦書きなら横長、横書き
-  // なら縦長という向きまで合う。変換中は ProseMirror の選択より DOM 側が先に
-  // 動くので、その意味でも DOM 選択を優先する。
-  const domSelection = view.dom.ownerDocument.getSelection();
-  if (domSelection && domSelection.rangeCount > 0) {
-    const range = domSelection.getRangeAt(0);
-    if (view.dom.contains(range.startContainer) && view.dom.contains(range.endContainer)) {
-      const rect = range.getBoundingClientRect();
-      if (rect.width > 0 || rect.height > 0) return rectFromEdges(rect);
-    }
-  }
-
-  const selection = view.state.selection;
-  if (selection.from !== selection.to) {
-    const rect = domRangeRect(view, selection.from, selection.to, false);
-    if (rect) return rectFromEdges(rect);
-  }
-
-  try {
-    const coords = view.coordsAtPos(selectionSafeHead(view));
-    if (coords) return rectFromEdges(coords);
-  } catch {
-    // 断片化直後は座標が取れないことがある。下のフォールバックへ回す。
-  }
-
-  const fallback =
-    coordsAtSelectionStable(view) ?? activeBlockColumnRect(view, writingMode);
-  return fallback ? rectFromEdges(fallback) : null;
-}
-/**
- * 変換中テキストを1文字ずつ実測した画面矩形。multicol の断片化と
- * transform を通した後の座標なので、候補ウィンドウが本文へ吸い付く。
- */
-function imeCharacterBounds(view: EditorView, rangeStart: number, rangeEnd: number): DOMRect[] {
-  const doc = view.state.doc;
-  const length = docToText(doc).length;
-  const start = Math.max(0, Math.min(length, rangeStart));
-  const end = Math.max(start, Math.min(length, rangeEnd));
-  const bounds: DOMRect[] = [];
-  // 改行位置など矩形が取れない文字は、直前の文字の矩形で埋める。空の矩形を
-  // 返すと Windows が候補ウィンドウを画面左上へ寄せてしまう。
-  let previous: DOMRect | null = null;
-
-  for (let offset = start; offset < end; offset += 1) {
-    const from = pmPosFromTextOffset(doc, offset);
-    const to = pmPosFromTextOffset(doc, offset + 1);
-    const measured =
-      to > from ? domRangeRect(view, from, to, false) : null;
-    const rect: DOMRect | null =
-      measured && rectHasArea(measured) ? DOMRect.fromRect(measured) : previous;
-    bounds.push(rect ?? new DOMRect());
-    previous = rect;
-  }
-
-  return bounds;
-}
-
-/** OS が指定した変換中書式を、そのまま描ける CSS 宣言へ写す。 */
-function imeUnderlineStyle(format: EditContextTextFormat): string {
-  const style = String(format.underlineStyle ?? "").toLowerCase();
-  const thickness = String(format.underlineThickness ?? "").toLowerCase();
-  if (style === "none" || thickness === "none") return "";
-
-  const line =
-    style === "dotted"
-      ? "dotted"
-      : style === "dashed"
-        ? "dashed"
-        : style === "squiggle" || style === "wavy"
-          ? "wavy"
-          : "solid";
-  return (
-    "text-decoration-line: underline;" +
-    ` text-decoration-style: ${line};` +
-    ` text-decoration-thickness: ${thickness === "thick" ? 2 : 1}px;` +
-    " text-underline-offset: 0.25em;"
-  );
-}
-
 function textOffsetFromPmPos(doc: PMNode, pos: number): number {
   const max = doc.content.size;
   const clamped = Math.max(0, Math.min(max, pos));
@@ -2491,10 +2170,6 @@ export function VerticalTextEditor({
   const onPageMetricsChangeRef = useRef(onPageMetricsChange);
   const localRevisionRef = useRef(0);
   const composingRef = useRef(false);
-  // EditContext のブリッジ。実体はエディタ生成エフェクトの中で入れる。
-  const configureEditContextRef = useRef<(() => void) | null>(null);
-  const syncEditContextStateRef = useRef<(() => void) | null>(null);
-  const requestEditContextBoundsRef = useRef<(() => void) | null>(null);
   // マウスでのドラッグ範囲選択中は true。ジェスチャ中は再センタリングを抑制し、
   // pointerup 時にキャレットが collapsed なら一度だけ寄せ、範囲が残るなら据え置く。
   const pointerDraggingRef = useRef(false);
@@ -2680,11 +2355,6 @@ export function VerticalTextEditor({
       `${verticalWriting ? verticalBaseOffset - fragmentOffset : 0}px`,
     );
     publishPageMetrics({ current, total });
-    // 断片位置が動いた後の実座標を OS へ渡し直す。これを怠ると、ページ送りの
-    // あいだ IME の候補ウィンドウだけが元の場所へ取り残される。ページの割りが
-    // 変われば、段落が境目にかかるかどうかも変わる。
-    configureEditContextRef.current?.();
-    requestEditContextBoundsRef.current?.();
   };
   syncPageMetricsRef.current = syncPageMetrics;
 
@@ -2931,11 +2601,6 @@ export function VerticalTextEditor({
     }
     requestAnimationFrame(() => requestPagedAnchorRestoreRef.current?.());
   }, [editorDisplayMode, pageFlowDirection, writingMode, textLayoutSignature]);
-
-  // 表示を切り替えたら、EditContext が要る状態かどうかを判定し直す。
-  useEffect(() => {
-    configureEditContextRef.current?.();
-  }, [editorDisplayMode]);
 
   // スクロール領域の内寸（スクロールバー除く）と .pm-root の上下パディング
   // 実測値を親へ通知する。文字表示幅設定のスライダー上限が常に実際の描画
@@ -4051,14 +3716,7 @@ export function VerticalTextEditor({
 
     const editor = new Editor({
       element: host,
-      extensions: [
-        Document,
-        Paragraph,
-        Text,
-        History,
-        LayoutAstExtension,
-        ImeCompositionExtension,
-      ],
+      extensions: [Document, Paragraph, Text, History, LayoutAstExtension],
       content: textToDoc(textRef.current),
       autofocus: false,
       editorProps: {
@@ -4072,15 +3730,23 @@ export function VerticalTextEditor({
         // between blocks, which is why copying spaced the lines out.
         clipboardTextSerializer: (slice) =>
           slice.content.textBetween(0, slice.content.size, "\n"),
-        clipboardTextParser: (text, _context, _plain, view) =>
-          plainTextSlice(view.state.schema, text),
+        clipboardTextParser: (text, _context, _plain, view) => {
+          const { schema } = view.state;
+          const nodes = normalizeText(text)
+            .split("\n")
+            .map((line) =>
+              line.length > 0
+                ? schema.nodes.paragraph.create(null, schema.text(line))
+                : schema.nodes.paragraph.create(),
+            );
+          return new Slice(Fragment.fromArray(nodes), 1, 1);
+        },
       },
       onUpdate: ({ editor: currentEditor }) => {
         cancelInitialAdjustment();
         const next = astKey.getState(currentEditor.state)?.text ?? docToText(currentEditor.state.doc);
         updateEmptyAttribute(currentEditor, next);
         textRef.current = next;
-        syncEditContextStateRef.current?.();
         const nextRevision = ++localRevisionRef.current;
         onTextChangeRef.current(next, nextRevision);
         onSelectionChangeRef.current();
@@ -4093,8 +3759,6 @@ export function VerticalTextEditor({
       },
       onSelectionUpdate: () => {
         prepareImeLayoutTarget();
-        configureEditContextRef.current?.();
-        syncEditContextStateRef.current?.();
         onSelectionChangeRef.current();
         // ドラッグ範囲選択中は寄せない（pointerup でまとめて判定する）。
         // キーボードでの選択（Shift+矢印など）はドラッグ外なので従来どおり追従する。
@@ -4282,278 +3946,6 @@ export function VerticalTextEditor({
       if (editorDisplayModeRef.current !== "paged") requestLineBreakMarks();
     };
 
-    // --- EditContext（IME候補ウィンドウの位置合わせ） ---
-    // ページ表示のあいだ、テキスト入力の窓口をブラウザ既定の contenteditable
-    // から EditContext へ移す。変換中テキストの位置は実測した文字矩形で OS へ
-    // 渡すので、multicol の断片化と transform を通した後の、実際に見えている
-    // 場所へ候補ウィンドウが出る。
-    const editContextHost = editor.view.dom as HTMLElementWithEditContext;
-    let editContext: NativeEditContext | null = null;
-    let editContextListeners: Array<[string, EventListener]> = [];
-    let editContextBoundsFrame: number | null = null;
-    // EditContext 由来の変更を本文へ書き戻しているあいだは、逆向きの同期を止める。
-    let applyingEditContext = false;
-    // OS が矩形を要求している変換中テキストの範囲（本文オフセット）。
-    let imeRange: { start: number; end: number } | null = null;
-    let compositionSerial = 0;
-
-    const editorIsLive = () => tiptapRef.current === editor && !editor.isDestroyed;
-
-    const clearImeDecorations = () => {
-      if (!editorIsLive()) return;
-      const current = imeCompositionKey.getState(editor.state) ?? DecorationSet.empty;
-      if (current === DecorationSet.empty) return;
-      editor.view.dispatch(
-        editor.state.tr
-          .setMeta(imeCompositionKey, { ranges: [] } satisfies ImeCompositionMeta)
-          .setMeta("addToHistory", false),
-      );
-    };
-
-    const syncEditContextBounds = () => {
-      editContextBoundsFrame = null;
-      const context = editContext;
-      const pageHost = editorHostRef.current;
-      if (!context || !pageHost || !editorIsLive()) return;
-
-      const layout = pageLayoutRef.current;
-      const hostRect = pageHost.getBoundingClientRect();
-      try {
-        // 編集領域はページ枠の版面。候補ウィンドウが本文を覆わないための情報。
-        const controlBounds = new DOMRect(
-          hostRect.left + layout.paddingX,
-          hostRect.top + layout.paddingY,
-          Math.max(1, layout.contentWidth),
-          Math.max(1, layout.contentHeight),
-        );
-        context.updateControlBounds(controlBounds);
-        const caret = imeSelectionBounds(editor.view, writingModeRef.current);
-        if (caret) context.updateSelectionBounds(caret);
-        // ページ送りや再組版で前編集が動いたら、OS が覚えている文字矩形も測り
-        // 直して上書きする。ここを怠ると候補ウィンドウだけが取り残される。
-        if (imeRange) {
-          context.updateCharacterBounds(
-            imeRange.start,
-            imeCharacterBounds(editor.view, imeRange.start, imeRange.end),
-          );
-        }
-      } catch (error) {
-        console.warn("[then] EditContext bounds update failed", error);
-      }
-    };
-
-    const requestEditContextBounds = () => {
-      if (!editContext || editContextBoundsFrame !== null) return;
-      editContextBoundsFrame = requestAnimationFrame(syncEditContextBounds);
-    };
-
-    const syncEditContextState = () => {
-      const context = editContext;
-      if (!context || applyingEditContext || !editorIsLive()) return;
-
-      try {
-        const next = docToText(editor.state.doc);
-        // 変換中の updateText は前編集を壊すので、位置合わせだけに留める。
-        if (!composingRef.current && context.text !== next) {
-          context.updateText(0, context.text.length, next);
-        }
-        const from = textOffsetFromPmPos(editor.state.doc, editor.state.selection.from);
-        const to = textOffsetFromPmPos(editor.state.doc, editor.state.selection.to);
-        if (context.selectionStart !== from || context.selectionEnd !== to) {
-          context.updateSelection(from, to);
-        }
-      } catch (error) {
-        console.warn("[then] EditContext state sync failed", error);
-      }
-      requestEditContextBounds();
-    };
-
-    // EditContext が付いた要素へは beforeinput が来ない。文字入力・変換・
-    // ブラウザ既定の削除は、すべてこの textupdate として届く。キーマップが
-    // 処理して preventDefault したキー（改行や行頭の Backspace など）は既定
-    // 動作にならないため、ここへは来ず、二重適用も起きない。
-    const handleEditContextTextUpdate = ((rawEvent: Event) => {
-      const event = rawEvent as EditContextTextUpdateEvent;
-      if (!editorIsLive()) return;
-
-      const current = docToText(editor.state.doc);
-      const from = Math.max(0, Math.min(current.length, event.updateRangeStart));
-      const to = Math.max(from, Math.min(current.length, event.updateRangeEnd));
-      const inserted = normalizeText(event.text ?? "");
-      const nextLength = current.length - (to - from) + inserted.length;
-
-      applyingEditContext = true;
-      try {
-        let tr = editor.state.tr.replace(
-          pmPosFromTextOffset(editor.state.doc, from),
-          pmPosFromTextOffset(editor.state.doc, to),
-          plainTextSlice(editor.state.schema, inserted),
-        );
-        const selectionFrom = Math.max(
-          0,
-          Math.min(nextLength, Math.min(event.selectionStart, event.selectionEnd)),
-        );
-        const selectionTo = Math.max(
-          selectionFrom,
-          Math.min(nextLength, Math.max(event.selectionStart, event.selectionEnd)),
-        );
-        tr = tr.setSelection(
-          TextSelection.create(
-            tr.doc,
-            pmPosFromTextOffset(tr.doc, selectionFrom),
-            pmPosFromTextOffset(tr.doc, selectionTo),
-          ),
-        );
-        // 変換中は装飾の全再構築を避ける（既存の composition メタと同じ扱い）。
-        if (composingRef.current) tr = tr.setMeta("composition", compositionSerial);
-        editor.view.dispatch(tr);
-      } catch (error) {
-        console.warn("[then] EditContext text update failed", error);
-      } finally {
-        applyingEditContext = false;
-      }
-
-      syncEditContextState();
-      // EditContext では compositionupdate が DOM へ来ない。変換中の折り返しで
-      // ページをまたいだときの追従は、ここから既存の処理へ渡す。
-      if (composingRef.current) handleCompositionUpdate();
-      requestEditContextBounds();
-    }) as EventListener;
-
-    const handleEditContextCharacterBoundsUpdate = ((rawEvent: Event) => {
-      const event = rawEvent as EditContextCharacterBoundsUpdateEvent;
-      const context = editContext;
-      if (!context || !editorIsLive()) return;
-
-      imeRange = { start: event.rangeStart, end: event.rangeEnd };
-      try {
-        context.updateCharacterBounds(
-          event.rangeStart,
-          imeCharacterBounds(editor.view, event.rangeStart, event.rangeEnd),
-        );
-      } catch (error) {
-        console.warn("[then] EditContext character bounds update failed", error);
-      }
-    }) as EventListener;
-
-    const handleEditContextTextFormatUpdate = ((rawEvent: Event) => {
-      const event = rawEvent as EditContextTextFormatUpdateEvent;
-      if (!editorIsLive()) return;
-
-      const doc = editor.state.doc;
-      const ranges = event
-        .getTextFormats()
-        .map((format) => {
-          const style = imeUnderlineStyle(format);
-          if (!style) return null;
-          const from = pmPosFromTextOffset(doc, format.rangeStart);
-          const to = pmPosFromTextOffset(doc, format.rangeEnd);
-          return to > from ? { from, to, style } : null;
-        })
-        .filter((range): range is ImeCompositionRange => range !== null);
-      editor.view.dispatch(
-        editor.state.tr
-          .setMeta(imeCompositionKey, { ranges } satisfies ImeCompositionMeta)
-          .setMeta("composition", compositionSerial)
-          .setMeta("addToHistory", false),
-      );
-    }) as EventListener;
-
-    // 変換の開始と終了は DOM ではなく EditContext へ届くので、ページ表示の
-    // 既存処理（スナップ停止・確定後の吸着）へ橋渡しする。
-    const handleEditContextCompositionStart = (() => {
-      compositionSerial += 1;
-      handleCompositionStart();
-    }) as EventListener;
-
-    const handleEditContextCompositionEnd = (() => {
-      imeRange = null;
-      clearImeDecorations();
-      handleCompositionEnd();
-      syncEditContextState();
-    }) as EventListener;
-
-    const attachEditContext = () => {
-      if (editContext || !editorIsLive()) return;
-
-      const EditContextConstructor = nativeEditContextConstructor();
-      if (!EditContextConstructor) {
-        // 未対応環境では素の contenteditable のまま動かす（編集機能は落ちない）。
-        editContextHost.dataset.editContext = "unsupported";
-        return;
-      }
-
-      const context = new EditContextConstructor({
-        text: docToText(editor.state.doc),
-        selectionStart: textOffsetFromPmPos(editor.state.doc, editor.state.selection.from),
-        selectionEnd: textOffsetFromPmPos(editor.state.doc, editor.state.selection.to),
-      });
-      editContextListeners = [
-        ["textupdate", handleEditContextTextUpdate],
-        ["textformatupdate", handleEditContextTextFormatUpdate],
-        ["characterboundsupdate", handleEditContextCharacterBoundsUpdate],
-        ["compositionstart", handleEditContextCompositionStart],
-        ["compositionend", handleEditContextCompositionEnd],
-      ];
-      for (const [eventName, handler] of editContextListeners) {
-        context.addEventListener(eventName, handler);
-      }
-      editContextHost.editContext = context;
-      editContextHost.dataset.editContext = "active";
-      editContext = context;
-      requestEditContextBounds();
-    };
-
-    const detachEditContext = () => {
-      const context = editContext;
-      for (const [eventName, handler] of editContextListeners) {
-        context?.removeEventListener(eventName, handler);
-      }
-      editContextListeners = [];
-      editContext = null;
-      imeRange = null;
-      if (editContextBoundsFrame !== null) {
-        cancelAnimationFrame(editContextBoundsFrame);
-        editContextBoundsFrame = null;
-      }
-      if (context) {
-        try {
-          editContextHost.editContext = null;
-        } catch (error) {
-          console.warn("[then] failed to detach EditContext", error);
-        }
-        // 変換中に表示を切り替えたら IME は中断される。状態を戻しておく。
-        if (composingRef.current) handleCompositionEnd();
-        clearImeDecorations();
-      }
-      delete editContextHost.dataset.editContext;
-    };
-
-    const configureEditContext = (enabled: boolean) => {
-      if (enabled) attachEditContext();
-      else detachEditContext();
-    };
-
-    // 素の contenteditable のままなら、ブラウザが縦書きであることを OS へ
-    // 伝えるので、変換候補ウィンドウは列の横へ正しく開く。EditContext を
-    // 付けるとアプリが座標だけを渡す形になり、その向きの情報が落ちて候補が
-    // 真下＝書いている列の続きへ出る。仕様に書字方向を渡す口がない。
-    //
-    // だから既定は素の経路にして、ブラウザの座標が壊れる場合＝段落がページの
-    // 境目にかかって断片化し、前のページの座標を拾ってしまう場合にだけ
-    // EditContext へ切り替える。切り替えは変換中に行わない（IME が中断する）。
-    const updateEditContextNeed = () => {
-      if (composingRef.current || !editorIsLive()) return;
-      configureEditContext(
-        editorDisplayModeRef.current === "paged" && caretBlockIsFragmented(editor.view),
-      );
-    };
-
-    configureEditContextRef.current = updateEditContextNeed;
-    syncEditContextStateRef.current = syncEditContextState;
-    requestEditContextBoundsRef.current = requestEditContextBounds;
-    updateEditContextNeed();
-
     const handleResize = () => {
       if (initialAdjustmentAllowed && initialViewportToRestore) {
         startInitialViewportRestore();
@@ -4665,10 +4057,6 @@ export function VerticalTextEditor({
     onReady(handle);
 
     return () => {
-      detachEditContext();
-      configureEditContextRef.current = null;
-      syncEditContextStateRef.current = null;
-      requestEditContextBoundsRef.current = null;
       scroller.removeEventListener("wheel", handleWheel);
       scroller.removeEventListener("mousedown", handleMouseDown);
       editor.view.dom.removeEventListener("pointerdown", handlePointerDown, { capture: true });
