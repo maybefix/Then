@@ -1888,23 +1888,17 @@ function rectFromEdges(edges: {
   );
 }
 
-// 変換候補ウィンドウをどこへ開かせるか。
-//
-// "right"  … 書いている列の右隣。高さは前編集のまま動かさないので目線が
-//             上下に飛ばず、書いている列も塞がない。隠れるのは右側＝すでに
-//             読み終えた列だけになる。
-// "bottom" … 版面の下辺の外。書いている列の真下に出て、列を移れば横へ追従する。
-const IME_CANDIDATE_PLACEMENT: "right" | "bottom" = "right";
-
-// 書いている列と候補ウィンドウのあいだに置く余白。列送りに対する割合で持つ。
-// px で持つと文字寸法を変えたときにここだけ追従しなくなる。
-const IME_CANDIDATE_COLUMN_GAP = 0.3;
-
-/** 列送り1つ分（縦書きでは行の横方向の送り幅）。矩形が実測できないときの保険。 */
-function lineAdvancePx(view: EditorView): number {
-  const element = activeBlockElement(view) ?? view.dom;
-  const advance = lineHeightPx(element);
-  return Number.isFinite(advance) && advance > 0 ? advance : 0;
+/**
+ * キャレットのいる段落がページの境目にかかっているか。
+ *
+ * ページ表示の本文は固定寸法の multicol で、段落がページをまたぐとレイアウトが
+ * 断片に分かれる。この状態のブラウザは、キャレットの座標を最初の断片（＝前の
+ * ページ）のものとして OS へ渡すため、変換候補ウィンドウが前のページへ出る。
+ * ブロック要素の getClientRects() は断片ごとに1つ返るので、数で判定できる。
+ */
+function caretBlockIsFragmented(view: EditorView): boolean {
+  const element = activeBlockElement(view);
+  return element ? element.getClientRects().length > 1 : false;
 }
 
 /** OS へ渡すキャレット（または選択範囲）の画面矩形。 */
@@ -2498,7 +2492,7 @@ export function VerticalTextEditor({
   const localRevisionRef = useRef(0);
   const composingRef = useRef(false);
   // EditContext のブリッジ。実体はエディタ生成エフェクトの中で入れる。
-  const configureEditContextRef = useRef<((enabled: boolean) => void) | null>(null);
+  const configureEditContextRef = useRef<(() => void) | null>(null);
   const syncEditContextStateRef = useRef<(() => void) | null>(null);
   const requestEditContextBoundsRef = useRef<(() => void) | null>(null);
   // マウスでのドラッグ範囲選択中は true。ジェスチャ中は再センタリングを抑制し、
@@ -2687,7 +2681,9 @@ export function VerticalTextEditor({
     );
     publishPageMetrics({ current, total });
     // 断片位置が動いた後の実座標を OS へ渡し直す。これを怠ると、ページ送りの
-    // あいだ IME の候補ウィンドウだけが元の場所へ取り残される。
+    // あいだ IME の候補ウィンドウだけが元の場所へ取り残される。ページの割りが
+    // 変われば、段落が境目にかかるかどうかも変わる。
+    configureEditContextRef.current?.();
     requestEditContextBoundsRef.current?.();
   };
   syncPageMetricsRef.current = syncPageMetrics;
@@ -2936,10 +2932,9 @@ export function VerticalTextEditor({
     requestAnimationFrame(() => requestPagedAnchorRestoreRef.current?.());
   }, [editorDisplayMode, pageFlowDirection, writingMode, textLayoutSignature]);
 
-  // 入力の窓口をページ表示のあいだだけ EditContext へ移す。連続表示は断片化も
-  // transform もなく候補ウィンドウがずれないので、既定の経路のまま触らない。
+  // 表示を切り替えたら、EditContext が要る状態かどうかを判定し直す。
   useEffect(() => {
-    configureEditContextRef.current?.(editorDisplayMode === "paged");
+    configureEditContextRef.current?.();
   }, [editorDisplayMode]);
 
   // スクロール領域の内寸（スクロールバー除く）と .pm-root の上下パディング
@@ -4098,6 +4093,7 @@ export function VerticalTextEditor({
       },
       onSelectionUpdate: () => {
         prepareImeLayoutTarget();
+        configureEditContextRef.current?.();
         syncEditContextStateRef.current?.();
         onSelectionChangeRef.current();
         // ドラッグ範囲選択中は寄せない（pointerup でまとめて判定する）。
@@ -4303,44 +4299,6 @@ export function VerticalTextEditor({
 
     const editorIsLive = () => tiptapRef.current === editor && !editor.isDestroyed;
 
-    // 候補ウィンドウを開かせたい位置へ座標を移す。
-    //
-    // IME は渡された矩形の下へ窓を開く。横書きならそれは次の行にあたるので
-    // 自然だが、縦書きでは書いている列の続きにあたり、本文を塞ぐ。窓は
-    // 約 140x80px あるので、版面の中にいる限り位置をどう調整しても必ず何かを
-    // 隠す。文字のない場所は版面の外しかない。
-    //
-    // EditContext は座標をアプリから明示できるので、文字の実座標ではなく
-    // 開いてほしい場所を渡す。片方の軸だけを版面の外へ出し、もう片方は
-    // 前編集の位置を保つので、窓は書いている場所に追従する。
-    const imeBoundsForOs = (rect: DOMRect): DOMRect => {
-      if (isHorizontalWriting(writingModeRef.current)) return rect;
-      const pageHost = editorHostRef.current;
-      if (!pageHost) return rect;
-
-      const layout = pageLayoutRef.current;
-      const hostRect = pageHost.getBoundingClientRect();
-
-      if (IME_CANDIDATE_PLACEMENT === "bottom") {
-        // 高さだけ版面の下辺へ落とし、列の位置は保つ。
-        const bottom = hostRect.top + layout.paddingY + layout.contentHeight;
-        return new DOMRect(rect.x, bottom, rect.width, 1);
-      }
-
-      // 横位置だけ書いている列の右隣へ寄せ、高さは前編集のまま動かさない。
-      // IME は渡した x にほぼそのまま窓を開くので、書いている列の右端を渡すと
-      // ちょうど隣の列に重なる。矩形は DOM の実測値で、その幅は縦書きの行送り
-      // （列幅）そのものなので、文字寸法を変えてもこの関係は保たれる。
-      // 版面の右端を越えるときは余白側で止める。
-      const columnAdvance = rect.width > 0 ? rect.width : lineAdvancePx(editor.view);
-      const pageRight = hostRect.right - layout.paddingX;
-      const right = Math.min(
-        rect.right + columnAdvance * IME_CANDIDATE_COLUMN_GAP,
-        pageRight,
-      );
-      return new DOMRect(right, rect.y, 1, rect.height);
-    };
-
     const clearImeDecorations = () => {
       if (!editorIsLive()) return;
       const current = imeCompositionKey.getState(editor.state) ?? DecorationSet.empty;
@@ -4370,13 +4328,13 @@ export function VerticalTextEditor({
         );
         context.updateControlBounds(controlBounds);
         const caret = imeSelectionBounds(editor.view, writingModeRef.current);
-        if (caret) context.updateSelectionBounds(imeBoundsForOs(caret));
+        if (caret) context.updateSelectionBounds(caret);
         // ページ送りや再組版で前編集が動いたら、OS が覚えている文字矩形も測り
         // 直して上書きする。ここを怠ると候補ウィンドウだけが取り残される。
         if (imeRange) {
           context.updateCharacterBounds(
             imeRange.start,
-            imeCharacterBounds(editor.view, imeRange.start, imeRange.end).map(imeBoundsForOs),
+            imeCharacterBounds(editor.view, imeRange.start, imeRange.end),
           );
         }
       } catch (error) {
@@ -4471,7 +4429,7 @@ export function VerticalTextEditor({
       try {
         context.updateCharacterBounds(
           event.rangeStart,
-          imeCharacterBounds(editor.view, event.rangeStart, event.rangeEnd).map(imeBoundsForOs),
+          imeCharacterBounds(editor.view, event.rangeStart, event.rangeEnd),
         );
       } catch (error) {
         console.warn("[then] EditContext character bounds update failed", error);
@@ -4576,10 +4534,25 @@ export function VerticalTextEditor({
       else detachEditContext();
     };
 
-    configureEditContextRef.current = configureEditContext;
+    // 素の contenteditable のままなら、ブラウザが縦書きであることを OS へ
+    // 伝えるので、変換候補ウィンドウは列の横へ正しく開く。EditContext を
+    // 付けるとアプリが座標だけを渡す形になり、その向きの情報が落ちて候補が
+    // 真下＝書いている列の続きへ出る。仕様に書字方向を渡す口がない。
+    //
+    // だから既定は素の経路にして、ブラウザの座標が壊れる場合＝段落がページの
+    // 境目にかかって断片化し、前のページの座標を拾ってしまう場合にだけ
+    // EditContext へ切り替える。切り替えは変換中に行わない（IME が中断する）。
+    const updateEditContextNeed = () => {
+      if (composingRef.current || !editorIsLive()) return;
+      configureEditContext(
+        editorDisplayModeRef.current === "paged" && caretBlockIsFragmented(editor.view),
+      );
+    };
+
+    configureEditContextRef.current = updateEditContextNeed;
     syncEditContextStateRef.current = syncEditContextState;
     requestEditContextBoundsRef.current = requestEditContextBounds;
-    configureEditContext(editorDisplayModeRef.current === "paged");
+    updateEditContextNeed();
 
     const handleResize = () => {
       if (initialAdjustmentAllowed && initialViewportToRestore) {
