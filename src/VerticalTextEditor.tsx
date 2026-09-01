@@ -1243,6 +1243,35 @@ function pushJapaneseQuoteDecos(
   }
 }
 
+function pushLatinOpticalCenterDecos(
+  out: Decoration[],
+  line: LineNode,
+  contentStart: number,
+): void {
+  const tcyRanges = line.inlineMarkups
+    .filter((markup) => markup.type === "tcy")
+    .map((markup) => ({
+      from: markup.contentRange.offset,
+      to: markup.contentRange.offset + markup.contentRange.length,
+    }));
+  const rotatedLatinRun =
+    /(?:(?![Ａ-Ｚａ-ｚ])(?:\p{Script=Latin}|\p{Mark}|\p{Number}|['’._-]))+/gu;
+
+  for (const match of line.source.matchAll(rotatedLatinRun)) {
+    if (!/\p{Script=Latin}/u.test(match[0])) continue;
+    const from = match.index;
+    const to = from + match[0].length;
+    const insideTcy = tcyRanges.some((range) => from < range.to && to > range.from);
+    if (!insideTcy) {
+      out.push(
+        Decoration.inline(contentStart + from, contentStart + to, {
+          class: "latin-optical-center",
+        }),
+      );
+    }
+  }
+}
+
 function shouldJustifyLine(line: LineNode): boolean {
   if (line.kind !== "paragraph" || line.jitsuki || line.align) return false;
   return Array.from(line.text || line.source).length >= 8;
@@ -1432,6 +1461,7 @@ function pushLineDecos(
   const contentStart = nodeStart + 1;
   pushKinsokuDecos(out, line, contentStart);
   pushJapaneseQuoteDecos(out, line, contentStart);
+  pushLatinOpticalCenterDecos(out, line, contentStart);
 
   if (active) return;
 
@@ -2922,6 +2952,7 @@ export function VerticalTextEditor({
     let compositionFrame: number | null = null;
     let compositionSettleFrame: number | null = null;
     let compositionRevealFrame: number | null = null;
+    let imeLayoutTarget: HTMLElement | null = null;
     let pagedReflowFrame: number | null = null;
     let pagedReflowGeneration = 0;
     let centerAnimFrame: number | null = null;
@@ -3603,6 +3634,40 @@ export function VerticalTextEditor({
     renderVisualLinesRef.current = renderVisualLines;
     requestVisualLinesRef.current = requestVisualLines;
 
+    const clearImeLayoutTarget = () => {
+      imeLayoutTarget?.removeAttribute("data-ime-layout-target");
+      imeLayoutTarget = null;
+    };
+
+    const prepareImeLayoutTarget = () => {
+      if (composingRef.current) return;
+      const selection = window.getSelection();
+      const anchor = selection?.isCollapsed ? selection.anchorNode : null;
+      const anchorElement =
+        anchor instanceof Element ? anchor : anchor?.parentElement ?? null;
+      const candidate = anchorElement?.closest<HTMLElement>(
+        ".ks-line-head-ban, .ks-line-end-ban, .ks-keep-short",
+      );
+      const next = candidate && host.contains(candidate) ? candidate : null;
+      if (next === imeLayoutTarget) return;
+
+      clearImeLayoutTarget();
+      imeLayoutTarget = next;
+      if (!imeLayoutTarget) return;
+
+      // IME開始後にnowrapを外すと、CSS multicolの再分割より先にWindows側が
+      // 古いキャレット位置を候補ウィンドウへ記憶することがある。選択位置が
+      // 決まった段階で対象spanだけを先に折り返し可能にし、本文全体の再組版や
+      // DOM選択の操作をせずに候補位置とページ割りを一致させる。
+      imeLayoutTarget.setAttribute("data-ime-layout-target", "true");
+      // style/layoutを変換開始前に確定させる。読み取りだけなので選択・Undo・本文は
+      // 変更しない。
+      imeLayoutTarget.getBoundingClientRect();
+      if (editorDisplayModeRef.current === "paged") {
+        syncPageMetricsRef.current?.();
+      }
+    };
+
     // 改行・削除・IME確定では、ProseMirrorの更新通知より後にCSS multicolの
     // 再分割とReactのページ面サイズ更新が続く。古い総ページ数で一度だけ
     // キャレットを表示すると末尾で前ページへ丸められるため、寸法が連続して
@@ -3693,6 +3758,7 @@ export function VerticalTextEditor({
         if (editorDisplayModeRef.current !== "paged") requestLineBreakMarks();
       },
       onSelectionUpdate: () => {
+        prepareImeLayoutTarget();
         onSelectionChangeRef.current();
         // ドラッグ範囲選択中は寄せない（pointerup でまとめて判定する）。
         // キーボードでの選択（Shift+矢印など）はドラッグ外なので従来どおり追従する。
@@ -3795,6 +3861,7 @@ export function VerticalTextEditor({
     const handleCompositionStart = () => {
       cancelInitialAdjustment();
       stopCenterAnimation();
+      prepareImeLayoutTarget();
       composingRef.current = true;
       // 変換中はスクロールスナップを止める。ブラウザがキャレットを見せるために
       // 動かしたスクロールを、スナップがページ境界へ引き戻してしまうため。
@@ -3848,6 +3915,7 @@ export function VerticalTextEditor({
     const handleCompositionEnd = () => {
       composingRef.current = false;
       shellRef.current?.removeAttribute("data-composing");
+      clearImeLayoutTarget();
       // 確定すれば本文は段へ収まる。連続写像をやめてキャレットのページへ吸着
       // し直す。ただしIMEは変換の区切りごとに compositionend → compositionstart
       // を続けて投げてくるので、1フレーム待って本当に変換が終わったかを見る。
@@ -4010,6 +4078,7 @@ export function VerticalTextEditor({
       if (compositionFrame !== null) cancelAnimationFrame(compositionFrame);
       if (compositionSettleFrame !== null) cancelAnimationFrame(compositionSettleFrame);
       if (compositionRevealFrame !== null) cancelAnimationFrame(compositionRevealFrame);
+      clearImeLayoutTarget();
       pagedReflowGeneration += 1;
       if (pagedReflowFrame !== null) cancelAnimationFrame(pagedReflowFrame);
       pagedScrollSettleGenerationRef.current += 1;

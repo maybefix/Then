@@ -199,6 +199,49 @@ assert.deepEqual(
   "the first page must not render line numbers from a later page at the same column position",
 );
 
+// 非展開の太字・ルビ等では、同じ列の通常テキストと装飾spanが離れた順序で
+// Range#getClientRects() に現れる。ページ内では再統合し、同じ座標を再利用する
+// 次ページの列とは分離して、通し番号を欠番なく付ける。
+const decoratedPagedVerticalBands = createVisualLineBands(
+  [
+    {
+      left: 176,
+      right: 224,
+      top: 100,
+      bottom: 940,
+      fragments: [
+        { left: 200, right: 224, top: 100, bottom: 260 },
+        { left: 176, right: 200, top: 100, bottom: 300 },
+        // inline spanから返る、1ページ目の同じ2列の追加矩形。
+        { left: 200, right: 224, top: 220, bottom: 460 },
+        { left: 176, right: 200, top: 260, bottom: 480 },
+        // 2ページ目は同じX座標を使うが、別fragmentainerなので別の行。
+        { left: 200, right: 224, top: 600, bottom: 760 },
+        { left: 176, right: 200, top: 600, bottom: 800 },
+        // 2ページ目でも装飾矩形をそれぞれ元の列へ統合する。
+        { left: 200, right: 224, top: 720, bottom: 900 },
+        { left: 176, right: 200, top: 760, bottom: 940 },
+      ],
+    },
+  ],
+  "vertical-rl",
+  { fragmented: true, fragmentOrigin: 100, fragmentStep: 500 },
+);
+assert.deepEqual(
+  decoratedPagedVerticalBands.map(({ number, centerX, top }) => ({
+    number,
+    centerX,
+    page: top < 600 ? 1 : 2,
+  })),
+  [
+    { number: 1, centerX: 212, page: 1 },
+    { number: 2, centerX: 188, page: 1 },
+    { number: 3, centerX: 212, page: 2 },
+    { number: 4, centerX: 188, page: 2 },
+  ],
+  "decorated columns must merge within each page and keep consecutive numbers across pages",
+);
+
 const reversePagedBands = createVisualLineBands(
   [
     {
@@ -409,8 +452,13 @@ assert.match(
 assert.match(appCss, /data-colorize-japanese-quotes="true"[\s\S]*?\.japanese-quote/);
 assert.match(
   foundationsCss,
-  /data-zone-mode="true"[\s\S]*?> \.leftWorkspaceCluster[\s\S]*?position: absolute/,
-  "hover sidebars must leave normal layout flow so the editor becomes full width",
+  /data-zone-mode="true"\]\[data-zone-left="true"\][\s\S]*?> \.leftWorkspaceCluster[\s\S]*?position: absolute/,
+  "the left sidebar must leave normal layout flow only when left hover display is selected",
+);
+assert.match(
+  foundationsCss,
+  /data-zone-mode="true"\]\[data-zone-right="true"\][\s\S]*?> \.rightSidebar[\s\S]*?position: absolute/,
+  "the right sidebar must leave normal layout flow only when right hover display is selected",
 );
 assert.match(foundationsCss, /translateX\(calc\(-100% \+ 7px\)\)/);
 assert.match(foundationsCss, /translateX\(calc\(100% - 7px\)\)/);
@@ -429,10 +477,55 @@ assert.match(
   /className="zoneRightSidebarHoverTarget"/,
   "zone mode needs a viewport-edge hover target independent of the scaled sidebar",
 );
+assert.match(appSource, /data-zone-left=/);
+assert.match(appSource, /data-zone-right=/);
+assert.match(appSource, /legacyZoneMode === true[\s\S]*?\? "both"/);
+assert.match(appSource, /sidebarHoverMode !== "none"/);
+assert.match(appSource, /settings\.sidebarHoverMode === "both" \|\| settings\.sidebarHoverMode === "left"/);
+assert.match(appSource, /settings\.sidebarHoverMode === "both" \|\| settings\.sidebarHoverMode === "right"/);
+assert.match(settingsSource, /<option value="none">左右とも常に表示<\/option>/);
+assert.match(settingsSource, /<option value="both">左右ともホバー表示<\/option>/);
+assert.match(settingsSource, /<option value="left">左側のみホバー表示<\/option>/);
+assert.match(settingsSource, /<option value="right">右側のみホバー表示<\/option>/);
 assert.match(
   foundationsCss,
   /> \.zoneRightSidebarHoverTarget:hover\s*\+ \.rightSidebar/,
   "hovering the fixed right-edge target must reveal the right sidebar",
+);
+assert.match(
+  foundationsCss,
+  /workspace:is\(\[data-app-mode="write"\], \[data-app-mode="plugin"\]\)[\s\S]*?> \.rightSidebar[\s\S]*?transform:\s*translateX\(calc\(100% - 7px\)\)/,
+  "a Zone sidebar must keep its final editor position while covered by a plugin screen",
+);
+assert.match(
+  foundationsCss,
+  /data-zone-right="true"[\s\S]*?\.pluginRuntimeDetachedHost:not\(\.pluginModalRuntimeHost\)[\s\S]*?pointer-events:\s*none/,
+  "a parked detached plugin frame must not cover the right-edge hover target",
+);
+assert.match(
+  foundationsCss,
+  /data-zone-right="true"\]:has\(\.workspace\[data-app-mode="write"\]\)[\s\S]*?\.pluginRuntimeDetachedHost:not\(\.pluginModalRuntimeHost\)[\s\S]*?opacity:\s*0/,
+  "Zone hiding must apply only to a plugin docked beside the editor, never to a full plugin screen",
+);
+assert.doesNotMatch(
+  foundationsCss,
+  /data-zone-right="true"\]\s+\.pluginRuntimeDetachedHost:not\(\.pluginModalRuntimeHost\)[\s\S]*?opacity:\s*0/,
+  "a full plugin screen must stay visible when the pointer enters the breadcrumb bar",
+);
+assert.match(
+  foundationsCss,
+  /:has\(\.zoneRightSidebarHoverTarget:hover\)[\s\S]*?\.activePluginRuntimeFrame[\s\S]*?pointer-events:\s*auto/,
+  "revealing the Zone sidebar must restore interaction with its active plugin frame",
+);
+assert.match(
+  foundationsCss,
+  /:has\(\.pluginRuntimeDetachedHost:not\(\.pluginModalRuntimeHost\):hover\)[\s\S]*?> \.rightSidebar[\s\S]*?transform:\s*translateX\(0\)/,
+  "moving from the sidebar into its detached plugin frame must keep the sidebar revealed",
+);
+assert.doesNotMatch(
+  foundationsCss,
+  /:has\(\.pluginRuntimeDetachedHost:hover\)\s*\r?\n\s*\.workspace\[data-app-mode="write"\]\s*\r?\n\s*> \.rightSidebar\s*\{/,
+  "a full-window plugin modal must not reveal the right sidebar merely because the modal is hovered",
 );
 
 console.log("v0.5.9 editor visibility tests passed");

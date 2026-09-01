@@ -137,24 +137,31 @@ function collectRenderedLines(
   }
 
   const lines: MutableLineRect[] = [];
+  const linesByFragment = new Map<number, MutableLineRect[]>();
   for (const fragment of fragments) {
     const fragmentIndex = resolveFragmentIndex(fragment, vertical, options);
-    // Range#getClientRects() は文書順で返る。ページ断片化中は同じ列位置が
-    // 次ページでも再利用されるため、過去の全行を検索せず直前の断片とのみ
-    // 統合して文書順を保つ。
-    const existing = options?.fragmented
-      ? lines[lines.length - 1]
-      : lines.find((line) =>
-          belongsToSameRenderedLine(line, fragment, vertical, fragmentIndex),
-        );
+    // インライン装飾（太字・ルビなど）があると、Range#getClientRects() は
+    // 1つの表示行を「装飾の外側→装飾内→外側」の非連続な矩形列として返す。
+    // 直前の矩形だけを見ると装飾部分を別行として数えてしまうため、同じ
+    // fragmentainer（ページ）内に限って既存の行帯全体から統合先を探す。
+    // fragmentIndex を照合することで、別ページの同じ列位置は統合しない。
+    const fragmentLines = linesByFragment.get(fragmentIndex) ?? [];
+    const existing = fragmentLines.find((line) =>
+      belongsToSameRenderedLine(line, fragment, vertical, fragmentIndex),
+    );
     if (existing && belongsToSameRenderedLine(existing, fragment, vertical, fragmentIndex)) {
       mergeRect(existing, fragment, vertical);
     } else {
-      lines.push({
+      const nextLine = {
         ...fragment,
         primaryCenter: primaryCenter(fragment, vertical),
         fragmentIndex,
-      });
+      };
+      lines.push(nextLine);
+      fragmentLines.push(nextLine);
+      if (!linesByFragment.has(fragmentIndex)) {
+        linesByFragment.set(fragmentIndex, fragmentLines);
+      }
     }
   }
 

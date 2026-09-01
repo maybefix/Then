@@ -1,7 +1,7 @@
 {
   "name": "then",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.6.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -27,6 +27,7 @@
     "test:v0511-themes": "node scripts/test-v0511-themes.mjs",
     "test:v060-paged-recovery": "node scripts/test-v060-paged-layout-recovery.mjs",
     "test:v060-editor-position": "node scripts/test-v060-editor-position-memory.mjs",
+    "test:v061-plugins": "node scripts/test-v061-plugin-platform.mjs",
     "test:export": "node scripts/verify-export.mjs",
     "demo:record": "powershell -ExecutionPolicy Bypass -File scripts/demo/record-desktop.ps1",
     "demo:edit": "node scripts/demo/edit-video.mjs",

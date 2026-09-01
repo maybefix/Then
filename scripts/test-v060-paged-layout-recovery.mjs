@@ -110,8 +110,8 @@ assert.match(
 
 assert.match(
   editorSource,
-  /const handleCompositionStart = \(\) => \{[\s\S]*?setAttribute\("data-composing", "true"\)/,
-  "composition must mark the shell so the kinsoku spans can release nowrap",
+  /onSelectionUpdate: \(\) => \{[\s\S]*?prepareImeLayoutTarget\(\)/,
+  "the selected kinsoku span must release nowrap before composition starts",
 );
 
 assert.match(
@@ -128,8 +128,14 @@ assert.match(
 
 assert.match(
   appCss,
+  /\.ks-line-head-ban\[data-ime-layout-target="true"\][\s\S]*?white-space:\s*pre-wrap/,
+  "only the selected kinsoku span must drop nowrap, or global reflow can stale the native IME position",
+);
+
+assert.doesNotMatch(
+  appCss,
   /\[data-composing="true"\][\s\S]*?\.ks-line-head-ban[\s\S]*?white-space:\s*pre-wrap/,
-  "kinsoku spans must drop nowrap while composing, or the IME preedit lands inside one and never wraps",
+  "composition must not release every kinsoku span and reflow all pages",
 );
 
 assert.match(

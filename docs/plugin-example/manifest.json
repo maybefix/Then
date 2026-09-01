@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "example.selection-notes",
+  "name": "Selection Notes",
+  "version": "1.1.0",
+  "main": "main.js",
+  "description": "選択範囲へ永続アンカー付きノートを保存するThen Plugin API v1サンプル",
+  "icon": {
+    "paths": [
+      "M5 4h14v16H5z",
+      "M8 8h8M8 12h8M8 16h5"
+    ]
+  },
+  "permissions": [
+    "document:read",
+    "document:selection",
+    "document:navigate",
+    "document:anchors",
+    "views",
+    "storage",
+    "commands"
+  ]
+}

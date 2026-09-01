@@ -14,6 +14,46 @@ struct TextDocument {
     content: String,
 }
 
+#[derive(Clone, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ThenPluginManifest {
+    schema_version: u32,
+    id: String,
+    name: String,
+    version: String,
+    main: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    icon: Option<ThenPluginIcon>,
+    #[serde(default)]
+    permissions: Vec<String>,
+}
+
+#[derive(Clone, Deserialize, PartialEq, Serialize)]
+struct ThenPluginIcon {
+    paths: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct LoadedThenPlugin {
+    manifest: ThenPluginManifest,
+    source: String,
+}
+
+#[derive(Serialize)]
+struct LoadedThenPlugins {
+    plugins: Vec<LoadedThenPlugin>,
+    errors: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ThenPluginInstallCandidate {
+    source_path: String,
+    manifest: ThenPluginManifest,
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct TextTemplateSummary {
@@ -479,10 +519,353 @@ pub fn run() {
             list_canvas_boards,
             create_canvas_board,
             load_canvas_board,
-            save_canvas_board
+            save_canvas_board,
+            list_installed_plugins,
+            inspect_plugin_dialog,
+            install_plugin,
+            uninstall_plugin,
+            load_plugin_project_data,
+            save_plugin_project_data,
+            load_plugin_anchors,
+            save_plugin_anchors
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+const THEN_PLUGIN_PERMISSIONS: &[&str] = &[
+    "document:read",
+    "document:selection",
+    "document:navigate",
+    "document:anchors",
+    "views",
+    "statusbar",
+    "storage",
+    "commands",
+];
+
+fn validate_plugin_id(value: &str) -> Result<(), String> {
+    let valid = !value.is_empty()
+        && value.len() <= 80
+        && value.chars().all(|character| {
+            character.is_ascii_lowercase()
+                || character.is_ascii_digit()
+                || character == '-'
+                || character == '.'
+        });
+    if valid {
+        Ok(())
+    } else {
+        Err(
+            "plugin id must contain only lowercase ASCII letters, digits, dots, and hyphens"
+                .to_string(),
+        )
+    }
+}
+
+fn validate_plugin_manifest(manifest: &ThenPluginManifest) -> Result<(), String> {
+    if manifest.schema_version != 1 {
+        return Err("unsupported plugin manifest schemaVersion".to_string());
+    }
+    validate_plugin_id(&manifest.id)?;
+    if manifest.name.trim().is_empty() || manifest.version.trim().is_empty() {
+        return Err("plugin name and version are required".to_string());
+    }
+    if manifest.main.is_empty()
+        || Path::new(&manifest.main).is_absolute()
+        || Path::new(&manifest.main).components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
+        })
+    {
+        return Err("plugin main must be a relative path inside the plugin directory".to_string());
+    }
+    for permission in &manifest.permissions {
+        if !THEN_PLUGIN_PERMISSIONS.contains(&permission.as_str()) {
+            return Err(format!("unknown plugin permission: {permission}"));
+        }
+    }
+    if let Some(icon) = &manifest.icon {
+        if icon.paths.is_empty() || icon.paths.len() > 8 {
+            return Err("plugin icon must contain between 1 and 8 SVG paths".to_string());
+        }
+        for path in &icon.paths {
+            if path.trim().is_empty()
+                || path.len() > 1024
+                || !path.is_ascii()
+                || !path.chars().all(|character| {
+                    character.is_ascii_alphanumeric()
+                        || character.is_ascii_whitespace()
+                        || matches!(character, '.' | ',' | '+' | '-')
+                })
+            {
+                return Err(
+                    "plugin icon paths must be plain ASCII SVG path data up to 1024 bytes"
+                        .to_string(),
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+fn require_plugin_icon(manifest: &ThenPluginManifest) -> Result<(), String> {
+    if manifest.icon.is_none() {
+        Err("plugin manifest icon is required".to_string())
+    } else {
+        Ok(())
+    }
+}
+
+fn installed_plugins_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("failed to resolve app data directory: {error}"))?
+        .join("plugins");
+    std::fs::create_dir_all(&dir)
+        .map_err(|error| format!("failed to create plugin directory: {error}"))?;
+    Ok(dir)
+}
+
+fn load_plugin_from_dir(directory: &Path) -> Result<LoadedThenPlugin, String> {
+    let manifest_path = directory.join("manifest.json");
+    let manifest_content = std::fs::read_to_string(&manifest_path)
+        .map_err(|error| format!("failed to read {}: {error}", manifest_path.display()))?;
+    let manifest: ThenPluginManifest = serde_json::from_str(&manifest_content)
+        .map_err(|error| format!("failed to parse {}: {error}", manifest_path.display()))?;
+    validate_plugin_manifest(&manifest)?;
+
+    let directory_canonical = directory
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve plugin directory: {error}"))?;
+    let main_path = directory.join(&manifest.main);
+    let main_canonical = main_path
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve plugin main: {error}"))?;
+    if !main_canonical.starts_with(&directory_canonical) || !main_canonical.is_file() {
+        return Err("plugin main must be a file inside the plugin directory".to_string());
+    }
+    let metadata = std::fs::metadata(&main_canonical)
+        .map_err(|error| format!("failed to inspect plugin main: {error}"))?;
+    if metadata.len() > 2 * 1024 * 1024 {
+        return Err("plugin main exceeds the 2 MiB v1 limit".to_string());
+    }
+    let source = std::fs::read_to_string(&main_canonical)
+        .map_err(|error| format!("failed to read plugin main: {error}"))?;
+    Ok(LoadedThenPlugin { manifest, source })
+}
+
+#[tauri::command]
+fn list_installed_plugins(app: tauri::AppHandle) -> Result<LoadedThenPlugins, String> {
+    let root = installed_plugins_dir(&app)?;
+    let mut plugins = Vec::new();
+    let mut errors = Vec::new();
+    for entry in std::fs::read_dir(&root)
+        .map_err(|error| format!("failed to list installed plugins: {error}"))?
+    {
+        let entry =
+            entry.map_err(|error| format!("failed to inspect installed plugin: {error}"))?;
+        if !entry
+            .file_type()
+            .map_err(|error| error.to_string())?
+            .is_dir()
+        {
+            continue;
+        }
+        match load_plugin_from_dir(&entry.path()) {
+            Ok(plugin) if entry.file_name().to_string_lossy() == plugin.manifest.id => {
+                plugins.push(plugin)
+            }
+            Ok(plugin) => errors.push(format!(
+                "{}: directory name must match plugin id {}",
+                entry.path().display(),
+                plugin.manifest.id
+            )),
+            Err(error) => errors.push(format!("{}: {error}", entry.path().display())),
+        }
+    }
+    plugins.sort_by(|left, right| {
+        left.manifest
+            .name
+            .to_lowercase()
+            .cmp(&right.manifest.name.to_lowercase())
+    });
+    Ok(LoadedThenPlugins { plugins, errors })
+}
+
+#[tauri::command]
+fn inspect_plugin_dialog(
+    app: tauri::AppHandle,
+) -> Result<Option<ThenPluginInstallCandidate>, String> {
+    let Some(source_dir) = app.dialog().file().blocking_pick_folder() else {
+        return Ok(None);
+    };
+    let source_dir = source_dir
+        .into_path()
+        .map_err(|error| format!("selected plugin directory is unavailable: {error}"))?;
+    let plugin = load_plugin_from_dir(&source_dir)?;
+    require_plugin_icon(&plugin.manifest)?;
+    Ok(Some(ThenPluginInstallCandidate {
+        source_path: source_dir.to_string_lossy().to_string(),
+        manifest: plugin.manifest,
+    }))
+}
+
+#[tauri::command]
+fn install_plugin(
+    app: tauri::AppHandle,
+    source_path: String,
+    expected_manifest: ThenPluginManifest,
+) -> Result<LoadedThenPlugin, String> {
+    let source_dir = PathBuf::from(source_path);
+    let plugin = load_plugin_from_dir(&source_dir)?;
+    require_plugin_icon(&plugin.manifest)?;
+    if plugin.manifest != expected_manifest {
+        return Err("plugin manifest changed after approval; select it again".to_string());
+    }
+    let root = installed_plugins_dir(&app)?;
+    let destination = root.join(&plugin.manifest.id);
+    if destination.exists() {
+        return Err(format!(
+            "plugin {} is already installed",
+            plugin.manifest.id
+        ));
+    }
+    std::fs::create_dir(&destination)
+        .map_err(|error| format!("failed to create installed plugin directory: {error}"))?;
+    let install_result = (|| {
+        std::fs::copy(
+            source_dir.join("manifest.json"),
+            destination.join("manifest.json"),
+        )
+        .map_err(|error| format!("failed to install plugin manifest: {error}"))?;
+        let main_destination = destination.join(&plugin.manifest.main);
+        if let Some(parent) = main_destination.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|error| format!("failed to create plugin main directory: {error}"))?;
+        }
+        std::fs::copy(source_dir.join(&plugin.manifest.main), &main_destination)
+            .map_err(|error| format!("failed to install plugin main: {error}"))?;
+        Ok::<(), String>(())
+    })();
+    if let Err(error) = install_result {
+        let _ = std::fs::remove_dir_all(&destination);
+        return Err(error);
+    }
+    load_plugin_from_dir(&destination)
+}
+
+#[tauri::command]
+fn uninstall_plugin(app: tauri::AppHandle, plugin_id: String) -> Result<(), String> {
+    validate_plugin_id(&plugin_id)?;
+    let root = installed_plugins_dir(&app)?;
+    let destination = root.join(&plugin_id);
+    if !destination.is_dir() {
+        return Err(format!("plugin {plugin_id} is not installed"));
+    }
+
+    let root_canonical = root
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve installed plugin root: {error}"))?;
+    let destination_canonical = destination
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve installed plugin: {error}"))?;
+    if destination_canonical.parent() != Some(root_canonical.as_path()) {
+        return Err("installed plugin removal must stay directly inside the plugin root".to_string());
+    }
+
+    let installed = load_plugin_from_dir(&destination_canonical)?;
+    if installed.manifest.id != plugin_id {
+        return Err("installed plugin directory does not match its manifest id".to_string());
+    }
+    std::fs::remove_dir_all(&destination_canonical)
+        .map_err(|error| format!("failed to remove installed plugin: {error}"))
+}
+
+fn validate_project_root(root_path: &str) -> Result<PathBuf, String> {
+    let root = PathBuf::from(root_path);
+    if !root.is_dir() {
+        return Err("project root does not exist".to_string());
+    }
+    root.canonicalize()
+        .map_err(|error| format!("failed to resolve project root: {error}"))
+}
+
+fn plugin_project_data_path(root_path: &str, plugin_id: &str) -> Result<PathBuf, String> {
+    validate_plugin_id(plugin_id)?;
+    Ok(validate_project_root(root_path)?
+        .join(".then")
+        .join("plugin-data")
+        .join(plugin_id)
+        .join("storage.json"))
+}
+
+#[tauri::command]
+fn load_plugin_project_data(
+    root_path: String,
+    plugin_id: String,
+) -> Result<BTreeMap<String, serde_json::Value>, String> {
+    let path = plugin_project_data_path(&root_path, &plugin_id)?;
+    if !path.is_file() {
+        return Ok(BTreeMap::new());
+    }
+    let content = std::fs::read_to_string(&path)
+        .map_err(|error| format!("failed to read plugin project data: {error}"))?;
+    serde_json::from_str(&content)
+        .map_err(|error| format!("failed to parse plugin project data: {error}"))
+}
+
+#[tauri::command]
+fn save_plugin_project_data(
+    root_path: String,
+    plugin_id: String,
+    data: BTreeMap<String, serde_json::Value>,
+) -> Result<(), String> {
+    let path = plugin_project_data_path(&root_path, &plugin_id)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("failed to create plugin project data directory: {error}"))?;
+    }
+    let content = serde_json::to_string_pretty(&data)
+        .map_err(|error| format!("failed to serialize plugin project data: {error}"))?;
+    std::fs::write(path, content)
+        .map_err(|error| format!("failed to save plugin project data: {error}"))
+}
+
+fn plugin_anchors_path(root_path: &str) -> Result<PathBuf, String> {
+    Ok(validate_project_root(root_path)?
+        .join(".then")
+        .join("anchors.json"))
+}
+
+#[tauri::command]
+fn load_plugin_anchors(root_path: String) -> Result<Option<serde_json::Value>, String> {
+    let path = plugin_anchors_path(&root_path)?;
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let content = std::fs::read_to_string(&path)
+        .map_err(|error| format!("failed to read plugin anchors: {error}"))?;
+    let value = serde_json::from_str(&content)
+        .map_err(|error| format!("failed to parse plugin anchors: {error}"))?;
+    Ok(Some(value))
+}
+
+#[tauri::command]
+fn save_plugin_anchors(root_path: String, store: serde_json::Value) -> Result<(), String> {
+    let path = plugin_anchors_path(&root_path)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("failed to create anchor directory: {error}"))?;
+    }
+    let content = serde_json::to_string_pretty(&store)
+        .map_err(|error| format!("failed to serialize plugin anchors: {error}"))?;
+    std::fs::write(path, content).map_err(|error| format!("failed to save plugin anchors: {error}"))
 }
 
 #[tauri::command]

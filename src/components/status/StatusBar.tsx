@@ -8,6 +8,14 @@ type StatusBarProps = {
   charCount: number;
   selectionCharCount: number | null;
   pageMetrics: { current: number; total: number } | null;
+  pluginItems: Array<{
+    pluginId: string;
+    id: string;
+    text: string;
+    tooltip?: string;
+    commandId?: string;
+  }>;
+  onPluginItemClick: (pluginId: string, commandId: string) => void;
 };
 
 const statusLabels: Record<SaveStatus, string> = {
@@ -26,6 +34,8 @@ export function StatusBar({
   charCount,
   selectionCharCount,
   pageMetrics,
+  pluginItems,
+  onPluginItemClick,
 }: StatusBarProps) {
   return (
     <footer className={`statusbar status-${saveStatus}`}>
@@ -40,6 +50,24 @@ export function StatusBar({
       {pageMetrics && (
         <span className="statusPages">
           {pageMetrics.current} / {pageMetrics.total}ページ
+        </span>
+      )}
+      {pluginItems.length > 0 && (
+        <span className="pluginStatusBarItems" aria-label="プラグインの状態">
+          {pluginItems.map((item) => item.commandId ? (
+            <button
+              type="button"
+              key={`${item.pluginId}:${item.id}`}
+              title={item.tooltip}
+              onClick={() => onPluginItemClick(item.pluginId, item.commandId!)}
+            >
+              {item.text}
+            </button>
+          ) : (
+            <span key={`${item.pluginId}:${item.id}`} title={item.tooltip}>
+              {item.text}
+            </span>
+          ))}
         </span>
       )}
       <span className="statusRight">

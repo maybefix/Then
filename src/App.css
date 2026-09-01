@@ -528,7 +528,7 @@ body.thenPdfExporting .printExportViewport {
    * above the workspace so its popovers are not painted behind the editor.
    */
   position: relative;
-  z-index: 1;
+  z-index: 6;
   display: flex;
   height: var(--documentbar-height);
   flex: 0 0 var(--documentbar-height);
@@ -2318,6 +2318,14 @@ body.thenPdfExporting .printExportViewport {
   word-spacing: normal;
 }
 
+.appShell[data-writing-mode="vertical-rl"]
+  .verticalTypewriterEditor
+  .latin-optical-center {
+  /* Rotated Latin in CJK serif fonts sits slightly left of the central baseline.
+     Shift only its inline run across the column; inline advance and justification stay intact. */
+  vertical-align: var(--editor-latin-optical-shift, 0.04em);
+}
+
 .verticalTypewriterEditor .pm-root p.heading:not(.align-start):not(.align-center):not(.align-end),
 .verticalTypewriterEditor .pm-root p.list-line:not(.align-start):not(.align-center):not(.align-end) {
   text-align: start;
@@ -2333,16 +2341,13 @@ body.thenPdfExporting .printExportViewport {
   word-break: normal;
 }
 
-/* 禁則の span は本来2〜3文字を繋ぎ止めるためのもので、nowrap もその前提。
-   ところがキャレットがこの span の中にあると、IMEは変換中テキストをまるごと
-   この中へ挿し込む。すると前編集全体が nowrap になり、何文字打っても折り返さず
-   1行のまま伸びてページ枠を突き抜ける（実測: 256文字でキャレットが画面外
-   4500px。ページ表示・連続表示・縦横いずれでも再現）。変換中だけ禁則の
-   nowrap を解除して、前編集を通常どおり折り返させる。確定すれば装飾は
-   貼り直されるので、禁則は元に戻る。 */
-.verticalTypewriterShell[data-composing="true"] .verticalTypewriterEditor .ks-line-head-ban,
-.verticalTypewriterShell[data-composing="true"] .verticalTypewriterEditor .ks-line-end-ban,
-.verticalTypewriterShell[data-composing="true"] .verticalTypewriterEditor .ks-keep-short {
+/* 禁則の span にキャレットがあると、IMEの前編集全体がnowrapの中へ入る。
+   選択確定時に入力対象のspanだけを折り返し可能にしておく。compositionstart後に
+   本文中の全spanを一斉変更すると、CSS multicolが全ページを再分割し、Windowsが
+   記憶した変換候補位置だけ旧ページに残るため、対象を局所化・事前化する。 */
+.verticalTypewriterEditor .ks-line-head-ban[data-ime-layout-target="true"],
+.verticalTypewriterEditor .ks-line-end-ban[data-ime-layout-target="true"],
+.verticalTypewriterEditor .ks-keep-short[data-ime-layout-target="true"] {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -2370,25 +2375,23 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .verticalTypewriterEditor .ruby-base {
-  position: relative;
+  display: ruby;
   color: var(--ruby-base-color, var(--text-primary));
+  ruby-align: space-around;
+  ruby-position: over;
 }
 
 .verticalTypewriterEditor .ruby-base::after {
   content: attr(data-rt);
-  position: absolute;
-  top: 50%;
-  left: 100%;
+  display: ruby-text;
   color: var(--ruby-reading-color, var(--accent));
   font-size: 0.5em;
   letter-spacing: 0.02em;
   line-height: 1;
   pointer-events: none;
   text-orientation: upright;
-  transform: translateY(-50%);
   user-select: none;
   white-space: nowrap;
-  writing-mode: vertical-rl;
 }
 
 .verticalTypewriterEditor .em-goma,
@@ -2600,11 +2603,7 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .ruby-base::after {
-  top: auto;
-  right: auto;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
+  transform: none;
   writing-mode: horizontal-tb;
   text-orientation: mixed;
 }
@@ -2717,6 +2716,7 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .statusbar {
+  position: relative;
   display: flex;
   height: var(--statusbar-height);
   flex: 0 0 var(--statusbar-height);
@@ -2979,6 +2979,7 @@ body.thenPdfExporting .printExportViewport {
 
 .toast {
   position: absolute;
+  z-index: 7;
   bottom: 38px;
   left: 50%;
   max-width: calc(100% - 48px);
@@ -3030,6 +3031,267 @@ body.thenPdfExporting .printExportViewport {
   display: flex;
   width: min(560px, 100%);
   flex-direction: column;
+}
+
+.pluginStatusBarItems {
+  position: absolute;
+  left: 50%;
+  display: inline-flex;
+  max-width: min(46%, 620px);
+  align-items: center;
+  gap: 6px;
+  transform: translateX(-50%);
+}
+
+.pluginStatusBarItems > span,
+.pluginStatusBarItems > button {
+  overflow: hidden;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pluginStatusBarItems > button {
+  cursor: pointer;
+}
+
+.pluginStatusBarItems > button:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.pluginManagerModal {
+  display: flex;
+  width: min(680px, 100%);
+  max-height: min(720px, calc(100% / var(--ui-font-scale, 1)));
+  flex-direction: column;
+}
+
+.pluginManagerHeading {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pluginManagerHeading h2 {
+  flex: 0 1 auto;
+}
+
+.pluginManagerHeading span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.pluginManagerToolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pluginManagerToolbar p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.pluginManagerToolbar > div {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.pluginManagerToolbar button,
+.pluginManagerDeleteButton {
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.pluginManagerToolbar button:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.pluginManagerToolbar .pluginManagerPrimaryButton {
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent-strong);
+}
+
+.pluginManagerToolbar button:disabled,
+.pluginManagerDeleteButton:disabled,
+.pluginManagerModal .modalClose:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.pluginManagerBody {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 12px 14px;
+}
+
+.pluginManagerList {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pluginManagerItem {
+  display: grid;
+  gap: 7px;
+  padding: 13px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: var(--bg-secondary);
+}
+
+.pluginManagerItemHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pluginManagerItemHeader > div {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pluginManagerIdentity {
+  align-items: center !important;
+}
+
+.pluginManagerIdentity > div {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pluginManagerIcon {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  fill: none;
+  stroke: var(--text-secondary);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.pluginManagerItemHeader strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pluginManagerItemHeader span,
+.pluginManagerItem code {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.pluginManagerItem p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pluginManagerItem code {
+  overflow-wrap: anywhere;
+}
+
+.pluginManagerDeleteButton {
+  flex: 0 0 auto;
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--border-strong));
+  color: #f0b2b2;
+}
+
+.pluginManagerDeleteButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: #ffd1d1;
+}
+
+.pluginPermissionList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.pluginPermissionList span {
+  padding: 3px 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.pluginManagerEmpty {
+  display: grid;
+  min-height: 180px;
+  place-content: center;
+  gap: 7px;
+  padding: 24px;
+  text-align: center;
+}
+
+.pluginManagerEmpty strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.pluginManagerEmpty span {
+  max-width: 420px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pluginManagerFooter {
+  flex: 0 0 auto;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+@media (max-width: 640px) {
+  .pluginManagerToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pluginManagerToolbar > div {
+    justify-content: flex-end;
+  }
 }
 
 .settingsTabList {
@@ -5228,15 +5490,24 @@ body {
   background: #17181d;
   color: var(--text-secondary);
   transition:
-    width 180ms ease,
-    min-width 180ms ease,
-    flex-basis 180ms ease;
+    opacity 180ms ease,
+    transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .wideRightSidebar {
   width: 480px;
   min-width: 480px;
   flex-basis: 480px;
+}
+
+.collapsedRightSidebar,
+.rightSidebar.collapsedRightSidebar {
+  width: 0;
+  min-width: 0;
+  flex-basis: 0;
+  border-left-color: transparent;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .rightSidebarHeader {
@@ -5327,6 +5598,120 @@ body {
   overflow: hidden;
 }
 
+.pluginRightTab span {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.pluginRightTabIcon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.pluginViewBody {
+  display: none;
+}
+
+.pluginRuntimeAnchor {
+  display: none;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.visiblePluginRuntimeAnchor {
+  display: block;
+}
+
+.pluginRuntimeHost {
+  display: none;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  flex: 1 1 auto;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.visiblePluginRuntimeHost {
+  display: block;
+}
+
+.pluginRuntimeDetachedHost {
+  position: fixed;
+  /* Keep normal plugin views above the workspace, but below Then's topbar and
+     native modal layer. The host follows the workspace in DOM order, so z=0
+     is sufficient without escaping above application dialogs. */
+  z-index: 0;
+  flex: none;
+  contain: layout paint;
+}
+
+.pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost) {
+  transition: opacity 140ms ease;
+}
+
+.pluginModalRuntimeHost {
+  position: fixed;
+  z-index: 20000;
+  inset: 0;
+  display: block;
+  width: auto;
+  height: auto;
+  overflow: hidden;
+  background: transparent;
+  pointer-events: auto;
+}
+
+.pluginRuntimeFrame {
+  display: none;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--bg-panel, #17181d);
+}
+
+.pluginModalRuntimeHost .pluginRuntimeFrame {
+  background: transparent;
+}
+
+.pluginScreenPane {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-root);
+  overflow: hidden;
+}
+
+.workspace[data-app-mode="plugin"] > :is(
+  .leftWorkspaceCluster,
+  .editorColumn,
+  .rightSidebar
+) {
+  visibility: hidden;
+}
+
+.pluginScreenPane .pluginRuntimeAnchor {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.visiblePluginRuntimeHost[data-active-view-ready="true"] .activePluginRuntimeFrame {
+  display: block;
+  pointer-events: auto;
+}
+
 .plotRightSidebarBody {
   padding: 8px 10px 10px 12px;
 }
@@ -5334,10 +5719,17 @@ body {
 /* ===== 資料レイヤー ===== */
 .referenceLayer {
   position: absolute;
-  inset: 0;
-  z-index: 75;
+  top: calc(var(--documentbar-height) * var(--ui-font-scale, 1));
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 5;
   overflow: hidden;
   pointer-events: none;
+}
+
+.appFrame[data-editor-focus="true"] > .referenceLayer {
+  top: 0;
 }
 
 .referenceCard {
@@ -9867,6 +10259,13 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   border: 0.5px solid var(--border-subtle);
   border-radius: 6px;
   background: color-mix(in srgb, var(--bg-panel) 72%, transparent);
+  max-width: min(55vw, 520px);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.modeSwitcher::-webkit-scrollbar {
+  display: none;
 }
 
 .modeSwitcher button {
@@ -9900,7 +10299,7 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   display: none !important;
 }
 
-.workspace[data-app-mode="canvas"] .referenceLayer {
+.appFrame:not([data-app-mode="write"]) > .referenceLayer {
   display: none;
 }
 
@@ -9956,6 +10355,10 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   stroke-linecap: round;
   stroke-linejoin: round;
   vertical-align: middle;
+}
+
+.pluginModeSwitcherIcon path {
+  vector-effect: non-scaling-stroke;
 }
 
 .checkpointStudio {
@@ -10656,9 +11059,6 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   opacity: 1;
   transform: translateX(0);
   transition:
-    width 280ms cubic-bezier(0.22, 1, 0.36, 1),
-    min-width 280ms cubic-bezier(0.22, 1, 0.36, 1),
-    flex-basis 280ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 180ms ease,
     transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }

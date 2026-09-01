@@ -4,10 +4,14 @@
 
 Markdown / テキストファイルをそのまま原稿として扱いながら、本文執筆、構成管理、資料参照、保存点の比較・復元、PDF / DOCX出力までを一つのワークスペースで行えます。
 
-- 現在のバージョン: `v0.6.0`
+- 開発中のバージョン: `v0.6.1`
 - 対応環境: Windows x64
 - 技術構成: Tauri v2 + React + TypeScript + Vite + Tiptap / ProseMirror
 - 最新の公開版: [Then v0.6.0](https://github.com/maybefix/Then/releases/tag/v0.6.0)
+
+- プラグイン開発: [Then Plugin API v1](docs/PLUGIN_API_V1.md)
+- Plugin API v1は複数の右ツールビュー、固有アイコン付き作業画面、画面遷移しない全面モーダル、選択時の右クリックコマンド、ステータスバー項目を追加できます。
+- サンプル: [Selection Notes](docs/plugin-example/) / [Ticket](docs/ticket/)
 
 変更履歴は[GitHub Releases](https://github.com/maybefix/Then/releases)を参照してください。
 
@@ -93,7 +97,7 @@ Thenは、PDFのページ組版にオープンソースの**Vivliostyle Viewer 2
 - 白をベースに黒をアクセントとした「Standard」テーマと、旧「Signal Red」から改名した「Red」テーマ
 - Windowsにインストールされたフォントの利用
 - 本文フォント、文字サイズ、行間、本文表示幅の調整
-- 左右ペインを画面端のホバー時だけ重ねて表示し、本文を全幅で使う表示モード
+- 左右それぞれを、常時表示または画面端のホバー時だけ重ねる表示モード
 - 左右サイドバーや各作業画面の状態を保存
 
 ## データの保存

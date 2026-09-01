@@ -66,9 +66,11 @@
 .appShell[data-theme] .workspaceSidebar,
 .appShell[data-theme] .rightSidebar { background: var(--sidebar-bg); }
 
-/* Zoneモードでは左右ペインをフローから外すため、本文領域は常に全幅になる。
+/* ホバー表示にしたペインだけをフローから外し、空いた分を本文領域へ渡す。
    画面端に残した7pxのホバー領域、またはキーボードフォーカスで一時表示する。 */
-.appShell[data-zone-mode="true"] .workspace[data-app-mode="write"] > .leftWorkspaceCluster {
+.appShell[data-zone-mode="true"][data-zone-left="true"]
+  .workspace:is([data-app-mode="write"], [data-app-mode="plugin"])
+  > .leftWorkspaceCluster {
   position: absolute;
   z-index: 70;
   top: 0;
@@ -83,13 +85,13 @@
     transform 190ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.appShell[data-zone-mode="true"]
-  .workspace[data-app-mode="write"]
+.appShell[data-zone-mode="true"][data-zone-left="true"]
+  .workspace:is([data-app-mode="write"], [data-app-mode="plugin"])
   > .leftWorkspaceCluster[data-sidebar-collapsed="true"] {
   width: 44px;
 }
 
-.appShell[data-zone-mode="true"]
+.appShell[data-zone-mode="true"][data-zone-left="true"]
   .workspace[data-app-mode="write"]
   > .leftWorkspaceCluster:is(:hover, :focus-within) {
   box-shadow: 18px 0 36px rgba(0, 0, 0, 0.32);
@@ -97,7 +99,9 @@
   transform: translateX(0);
 }
 
-.appShell[data-zone-mode="true"] .workspace[data-app-mode="write"] > .rightSidebar {
+.appShell[data-zone-mode="true"][data-zone-right="true"]
+  .workspace:is([data-app-mode="write"], [data-app-mode="plugin"])
+  > .rightSidebar {
   position: absolute;
   z-index: 70;
   top: 0;
@@ -117,7 +121,7 @@
   display: none;
 }
 
-.appShell[data-zone-mode="true"]
+.appShell[data-zone-mode="true"][data-zone-right="true"]
   .workspace[data-app-mode="write"]
   > .zoneRightSidebarHoverTarget {
   position: absolute;
@@ -129,13 +133,58 @@
   width: 10px;
 }
 
-.appShell[data-zone-mode="true"]
+.appShell[data-zone-mode="true"][data-zone-right="true"]
   .workspace[data-app-mode="write"]
   > .zoneRightSidebarHoverTarget:hover
   + .rightSidebar,
-.appShell[data-zone-mode="true"]
+.appShell[data-zone-mode="true"][data-zone-right="true"]
   .workspace[data-app-mode="write"]
   > .rightSidebar:is(:hover, :focus-within) {
+  box-shadow: -18px 0 36px rgba(0, 0, 0, 0.32);
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* The plugin iframe is intentionally detached from the sidebar so it can also
+   become a full-window modal. While the Zone sidebar is parked off-screen,
+   keep that detached iframe non-interactive; otherwise its transparent frame
+   covers the real edge hover target. */
+.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"])
+  .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"])
+  .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost)
+  .pluginRuntimeFrame {
+  pointer-events: none;
+}
+
+.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"]):has(.zoneRightSidebarHoverTarget:hover)
+  .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost),
+.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"]):has(.rightSidebar:is(:hover, :focus-within))
+  .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost),
+.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"]):has(.pluginRuntimeDetachedHost:hover)
+  .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost) {
+  opacity: 1;
+}
+
+.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"]):has(.zoneRightSidebarHoverTarget:hover)
+  .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost)
+  .activePluginRuntimeFrame,
+.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"]):has(.rightSidebar:is(:hover, :focus-within))
+  .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost)
+  .activePluginRuntimeFrame,
+.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"]):has(.pluginRuntimeDetachedHost:hover)
+  .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost)
+  .activePluginRuntimeFrame {
+  pointer-events: auto;
+}
+
+.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost):hover)
+  .workspace[data-app-mode="write"]
+  > .rightSidebar {
   box-shadow: -18px 0 36px rgba(0, 0, 0, 0.32);
   opacity: 1;
   transform: translateX(0);

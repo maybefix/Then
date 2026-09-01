@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "example.todo-board",
+  "name": "Ticket",
+  "version": "2.2.2",
+  "main": "main.js",
+  "description": "プロジェクト単位でチケットを整理する、カンバン・全面モーダル・ゴミ箱を備えたサンプル",
+  "icon": {
+    "paths": [
+      "M4 5h16v14H4z",
+      "M9.5 5v14M14.5 5v14",
+      "M6.5 8h1M11.5 8h1M16.5 8h1"
+    ]
+  },
+  "permissions": [
+    "document:selection",
+    "views",
+    "statusbar",
+    "storage",
+    "commands"
+  ]
+}

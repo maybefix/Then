@@ -214,6 +214,8 @@ export const fileProgressLabels: Record<FileProgressStatus, string> = {
 
 export const DEFAULT_FILE_PROGRESS: FileProgressStatus = "todo";
 
+export type SidebarHoverMode = "none" | "both" | "left" | "right";
+
 export type EditorSettings = {
   theme: AppTheme;
   editorFontFamily: string;
@@ -253,8 +255,8 @@ export type EditorSettings = {
   skipStartupPortal: boolean;
   /** 集中表示と同時にTauriウィンドウを完全フルスクリーンへ切り替えるか。 */
   focusModeUsesNativeFullscreen: boolean;
-  /** 左右サイドバーを領域外へ隠し、画面端のホバー時だけ重ねて表示するモード。 */
-  zoneMode: boolean;
+  /** 画面端のホバー時だけ重ねて表示するサイドバー。 */
+  sidebarHoverMode: SidebarHoverMode;
   /** Zoneモードでサイドバーに適用する通常時の不透明度。 */
   zoneModeOpacity: number;
   /** ナビゲータ方式のプレビュー表示行数。0 は「なし」（プレビュー非表示）。 */
