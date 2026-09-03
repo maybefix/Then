@@ -469,6 +469,19 @@ export function SettingsModal({
                   />
                   <span>画面下部にファイルパスを表示</span>
                 </label>
+                <label className="checkSetting descriptiveCheckSetting">
+                  <input
+                    checked={settings.showDocumentTabs}
+                    type="checkbox"
+                    onChange={(event) =>
+                      onUpdateSettings("showDocumentTabs", event.target.checked)
+                    }
+                  />
+                  <span className="checkSettingCopy">
+                    <span>タブを表示</span>
+                    <small>開いている文書をパンくずの下に表示します</small>
+                  </span>
+                </label>
                 <label className="checkSetting">
                   <input
                     checked={settings.skipStartupPortal}

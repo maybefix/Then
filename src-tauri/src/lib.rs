@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -8,10 +9,13 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct TextDocument {
     path: String,
     name: String,
     content: String,
+    file_id: Option<String>,
+    content_hash: Option<String>,
 }
 
 #[derive(Clone, Deserialize, PartialEq, Serialize)]
@@ -130,11 +134,16 @@ struct ProjectFolder {
 }
 
 #[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct ProjectEntry {
     path: String,
     name: String,
     kind: String,
     children: Vec<ProjectEntry>,
+    #[serde(default)]
+    file_id: Option<String>,
+    #[serde(default)]
+    content_hash: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -1953,6 +1962,8 @@ fn rename_project_entry(path: String, name: String) -> Result<TextDocument, Stri
                 .unwrap_or("folder")
                 .to_string(),
             content: String::new(),
+            file_id: None,
+            content_hash: None,
         })
     }
 }
@@ -3237,8 +3248,43 @@ fn read_text_document(path: &Path) -> Result<TextDocument, String> {
     Ok(TextDocument {
         path: path.to_string_lossy().to_string(),
         name,
+        content_hash: Some(content_hash(content.as_bytes())),
+        file_id: stable_file_id(path),
         content,
     })
+}
+
+fn content_hash(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+#[cfg(windows)]
+fn stable_file_id(path: &Path) -> Option<String> {
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::Storage::FileSystem::{
+        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+    };
+
+    let file = std::fs::File::open(path).ok()?;
+    let mut information = BY_HANDLE_FILE_INFORMATION::default();
+    unsafe {
+        GetFileInformationByHandle(HANDLE(file.as_raw_handle()), &mut information).ok()?;
+    }
+    let file_index =
+        (u64::from(information.nFileIndexHigh) << 32) | u64::from(information.nFileIndexLow);
+    if file_index == 0 {
+        return None;
+    }
+    Some(format!(
+        "{:08x}:{:016x}",
+        information.dwVolumeSerialNumber, file_index
+    ))
+}
+
+#[cfg(not(windows))]
+fn stable_file_id(_path: &Path) -> Option<String> {
+    None
 }
 
 fn write_text_file(path: &Path, content: &str) -> Result<(), String> {
@@ -3300,6 +3346,8 @@ fn list_project_entries(
                 name,
                 kind: "folder".to_string(),
                 children,
+                file_id: None,
+                content_hash: None,
             });
             continue;
         }
@@ -3317,6 +3365,10 @@ fn list_project_entries(
             name,
             kind: "file".to_string(),
             children: Vec::new(),
+            file_id: stable_file_id(&entry_path),
+            content_hash: std::fs::read(&entry_path)
+                .ok()
+                .map(|content| content_hash(&content)),
         });
     }
     debug_log(&format!(
@@ -4425,4 +4477,48 @@ fn wide_null_terminated_to_string(value: &[u16]) -> String {
         .unwrap_or(value.len());
 
     String::from_utf16_lossy(&value[..end]).trim().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{content_hash, read_text_document, stable_file_id};
+
+    #[test]
+    fn sha256_content_hash_is_stable() {
+        assert_eq!(
+            content_hash(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn file_id_survives_rename_on_the_same_volume() {
+        let unique = format!(
+            "then-file-id-test-{}-{}",
+            std::process::id(),
+            super::now_millis()
+        );
+        let test_dir = std::env::temp_dir().join(unique);
+        std::fs::create_dir_all(&test_dir).expect("create test directory");
+        let original = test_dir.join("before.md");
+        let renamed = test_dir.join("after.md");
+        std::fs::write(&original, "same document").expect("write test file");
+
+        let before = stable_file_id(&original).expect("Windows file id before rename");
+        std::fs::rename(&original, &renamed).expect("rename test file");
+        std::fs::write(&renamed, "updated document").expect("update renamed test file");
+        let after = stable_file_id(&renamed).expect("Windows file id after rename");
+        let document = read_text_document(&renamed).expect("read renamed document");
+
+        assert_eq!(before, after);
+        assert_eq!(document.file_id.as_deref(), Some(after.as_str()));
+        assert_eq!(
+            document.content_hash.as_deref(),
+            Some(content_hash(b"updated document").as_str())
+        );
+
+        std::fs::remove_file(&renamed).expect("remove test file");
+        std::fs::remove_dir(&test_dir).expect("remove test directory");
+    }
 }

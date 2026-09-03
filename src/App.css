@@ -33,7 +33,7 @@
   --danger: #d97373;
   --documentbar-height: 56px;
   --statusbar-height: 32px;
-  --tabrail-width: 210px;
+  --document-tabs-height: 35px;
   --snippet-width: 320px;
 }
 
@@ -422,6 +422,7 @@ textarea {
  * 文字サイズは --editor-font-size で独立して制御する。
  */
 .topbar,
+.documentTabs,
 .leftWorkspaceCluster,
 .rightSidebar,
 .statusbar,
@@ -1217,39 +1218,18 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .documentTabs {
+  position: relative;
+  z-index: 5;
   display: flex;
-  width: var(--tabrail-width);
-  flex: 0 0 var(--tabrail-width);
+  width: 100%;
+  height: var(--document-tabs-height);
+  flex: 0 0 var(--document-tabs-height);
+  min-width: 0;
   min-height: 0;
-  flex-direction: column;
-  border-right: 1px solid var(--border-subtle);
-  background: #1d201c;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--sidebar-bg, var(--bg-secondary));
   color: var(--text-secondary);
-}
-
-.documentTabsHeader {
-  display: flex;
-  height: 42px;
-  flex: 0 0 42px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 14px;
-  border-bottom: 1px solid rgba(63, 66, 61, 0.66);
-  color: #c7cdc1;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.documentTabsCount {
-  display: inline-grid;
-  min-width: 20px;
-  height: 20px;
-  place-items: center;
-  border-radius: 10px;
-  background: #2b2f2a;
-  color: var(--text-muted);
-  font-size: 11px;
 }
 
 .documentTabCloseButton {
@@ -1262,49 +1242,51 @@ body.thenPdfExporting .printExportViewport {
   cursor: pointer;
 }
 
-.documentTabCloseButton:hover,
-.documentTabsNewButton:hover {
-  background: #353834;
+.documentTabCloseButton:hover {
+  background: var(--control-hover);
   color: var(--text-primary);
 }
 
 .documentTabsList {
   display: flex;
+  min-width: 0;
   min-height: 0;
   flex: 1;
-  flex-direction: column;
-  overflow-y: auto;
-  padding: 6px 6px 8px;
-  gap: 3px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 4px;
+  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-width: thin;
 }
 
 .documentTabItem {
   position: relative;
   display: grid;
-  min-width: 0;
-  min-height: 48px;
-  flex: 0 0 48px;
+  min-width: 116px;
+  max-width: 240px;
+  height: 100%;
+  min-height: 0;
+  flex: 0 1 210px;
   grid-template-columns: minmax(0, 1fr) 26px;
   align-items: center;
-  border: 1px solid transparent;
-  border-left: 3px solid transparent;
-  border-radius: 5px;
+  border-right: 1px solid var(--border-subtle);
+  border-bottom: 2px solid transparent;
+  background: color-mix(in srgb, var(--bg-panel) 44%, transparent);
   color: var(--text-secondary);
 }
 
 .documentTabItem:hover {
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--control-hover);
 }
 
 .activeDocumentTabItem {
-  border-color: #3b4039;
-  border-left-color: var(--accent);
-  background: #272b26;
+  border-bottom-color: var(--accent);
+  background: var(--bg-primary);
   color: var(--text-primary);
 }
 
 .activeDocumentTabItem:hover {
-  background: #2f342e;
+  background: var(--bg-primary);
 }
 
 .documentTabButton {
@@ -1314,7 +1296,7 @@ body.thenPdfExporting .printExportViewport {
   grid-template-columns: 14px minmax(0, 1fr) 8px;
   align-items: center;
   gap: 9px;
-  padding: 0 4px 0 10px;
+  padding: 0 3px 0 10px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -1339,7 +1321,8 @@ body.thenPdfExporting .printExportViewport {
   height: 4px;
   border-bottom: 1px solid #9ba597;
   border-left: 1px solid #9ba597;
-  background: #272b26;
+  background: currentColor;
+  opacity: 0.3;
   content: "";
 }
 
@@ -1348,9 +1331,8 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .documentTabText {
-  display: grid;
+  display: block;
   min-width: 0;
-  gap: 2px;
 }
 
 .documentTabName,
@@ -1367,8 +1349,7 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .documentTabPath {
-  color: var(--text-muted);
-  font-size: 11px;
+  display: none;
 }
 
 .documentTabStatus {
@@ -1390,8 +1371,8 @@ body.thenPdfExporting .printExportViewport {
 .documentTabCloseButton {
   width: 22px;
   height: 22px;
-  margin-right: 3px;
-  font-size: 18px;
+  margin-right: 2px;
+  font-size: 16px;
   line-height: 1;
   opacity: 0.7;
 }
@@ -1400,35 +1381,28 @@ body.thenPdfExporting .printExportViewport {
   opacity: 0;
 }
 
-.documentTabsFooter {
-  display: flex;
-  height: 52px;
-  flex: 0 0 52px;
-  align-items: center;
-  padding: 0 10px;
-  border-top: 1px solid var(--border-subtle);
-}
-
 .documentTabsNewButton {
-  display: inline-flex;
-  min-width: 0;
-  width: 100%;
-  height: 32px;
-  align-items: center;
-  gap: 8px;
-  padding: 0 9px;
+  display: inline-grid;
+  width: 36px;
+  min-width: 36px;
+  height: 100%;
+  flex: 0 0 36px;
+  place-items: center;
+  padding: 0;
   border: 0;
-  border-radius: 5px;
-  background: transparent;
+  border-left: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: var(--sidebar-bg, var(--bg-secondary));
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 18px;
 }
 
-.documentTabsNewButton span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.documentTabsNewButton:hover,
+.documentTabsNewButton:focus-visible {
+  background: var(--control-hover);
+  color: var(--text-primary);
+  outline: none;
 }
 
 .editorColumn {

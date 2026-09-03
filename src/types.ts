@@ -251,6 +251,8 @@ export type EditorSettings = {
   showWorkspacePaths: boolean;
   /** ステータスバーに現在のファイルパスを表示するか。 */
   showStatusFilePath: boolean;
+  /** パンくずの下に開いている文書のタブバーを表示するか。 */
+  showDocumentTabs: boolean;
   /** 起動ポータルを省略し、前回のワークスペースを直接開くか。 */
   skipStartupPortal: boolean;
   /** 集中表示と同時にTauriウィンドウを完全フルスクリーンへ切り替えるか。 */
@@ -325,6 +327,10 @@ export type DocumentTab = {
   id: string;
   kind: "file" | "scratch";
   path: string | null;
+  /** OSが提供するファイル識別子。同一ボリューム内の移動・改名を追跡する。 */
+  fileId: string | null;
+  /** パスとファイルIDで追跡できない場合に使う内容ハッシュ。 */
+  contentHash: string | null;
   name: string;
   /**
    * TODO(Then): migrate these fields to text/savedText after the editor and
@@ -339,6 +345,21 @@ export type DocumentTab = {
   activeOutlineLine: number | null;
   /** 同じタブへ戻ったときに復元する、セッション中だけの表示位置。 */
   viewportState: TextEditorViewportState | null;
+};
+
+export type PersistedDocumentTab = {
+  path: string;
+  name: string;
+  fileId: string | null;
+  contentHash: string | null;
+  activeOutlineLine: number | null;
+  viewportState: TextEditorViewportState | null;
+};
+
+export type WorkspaceDocumentTabs = {
+  tabs: PersistedDocumentTab[];
+  activeIndex: number;
+  updatedAt: number;
 };
 
 export type AppState = {
@@ -367,6 +388,8 @@ export type AppState = {
   fileProgress: Record<string, FileProgressStatus>;
   /** ファイルパスごとに記憶した最後のカーソル位置。 */
   cursorPositions: Record<string, CursorPosition>;
+  /** プロジェクトごとに記憶した、開いている文書タブと選択状態。 */
+  documentTabsByWorkspace: Record<string, WorkspaceDocumentTabs>;
   /** 手動保存点。正本である原稿ASTから復元できる本文だけを保持する。 */
   snapshots: ManuscriptSnapshot[];
 };
@@ -375,6 +398,8 @@ export type TextDocument = {
   path: string;
   name: string;
   content: string;
+  fileId?: string | null;
+  contentHash?: string | null;
 };
 
 export type MarkdownDocument = TextDocument;
@@ -390,6 +415,8 @@ export type ProjectEntry = {
   name: string;
   kind: "folder" | "file";
   children: ProjectEntry[];
+  fileId?: string | null;
+  contentHash?: string | null;
 };
 
 export type DeleteProjectEntryPlan = {

@@ -32,14 +32,8 @@ export function DocumentTabs({
   onNewTab,
 }: DocumentTabsProps) {
   return (
-    <aside className="documentTabs" aria-label="開いている文書">
-      <div className="documentTabsHeader">
-        <span>開いている文書</span>
-        <span className="documentTabsCount" aria-label={`${openTabs.length}件`}>
-          {openTabs.length}
-        </span>
-      </div>
-      <div className="documentTabsList" role="tablist" aria-orientation="vertical">
+    <nav className="documentTabs" aria-label="開いている文書">
+      <div className="documentTabsList" role="tablist" aria-orientation="horizontal">
         {openTabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const tabStatus = getTabStatusLabel(tab);
@@ -56,8 +50,21 @@ export function DocumentTabs({
                 type="button"
                 role="tab"
                 aria-selected={isActive}
+                tabIndex={isActive ? 0 : -1}
                 title={tab.path ?? tab.name}
                 onClick={() => onActivateTab(tab.id)}
+                onKeyDown={(event) => {
+                  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                  event.preventDefault();
+                  const currentIndex = openTabs.findIndex((item) => item.id === tab.id);
+                  const delta = event.key === "ArrowLeft" ? -1 : 1;
+                  const nextIndex = (currentIndex + delta + openTabs.length) % openTabs.length;
+                  onActivateTab(openTabs[nextIndex].id);
+                  const tabButtons = event.currentTarget
+                    .closest('[role="tablist"]')
+                    ?.querySelectorAll<HTMLButtonElement>(".documentTabButton");
+                  tabButtons?.[nextIndex]?.focus();
+                }}
               >
                 <span
                   className={`documentTabKind ${
@@ -69,7 +76,7 @@ export function DocumentTabs({
                   <span className="documentTabName">{tab.name}</span>
                   <span className="documentTabPath">{tab.path ?? "保存先未指定"}</span>
                 </span>
-                <span className="documentTabStatus" aria-label={tabStatus} />
+                <span className="documentTabStatus" aria-label={tabStatus} title={tabStatus} />
               </button>
               <button
                 className="documentTabCloseButton"
@@ -86,12 +93,15 @@ export function DocumentTabs({
           );
         })}
       </div>
-      <div className="documentTabsFooter">
-        <button className="documentTabsNewButton" type="button" onClick={onNewTab}>
-          <span aria-hidden="true">＋</span>
-          <span>新しいタブ</span>
-        </button>
-      </div>
-    </aside>
+      <button
+        className="documentTabsNewButton"
+        type="button"
+        aria-label="新しいタブ"
+        title="新しいタブ"
+        onClick={onNewTab}
+      >
+        <span aria-hidden="true">＋</span>
+      </button>
+    </nav>
   );
 }
