@@ -2993,7 +2993,7 @@ export function VerticalTextEditor({
     let lastPagedWheelAt = 0;
     let lastHorizontalPagedWheelAt = 0;
     const candidateViewport = initialViewportRef.current;
-    const initialViewportToRestore =
+    const validatedInitialViewport =
       candidateViewport &&
       candidateViewport.textLength === textRef.current.length &&
       candidateViewport.writingMode === writingModeRef.current &&
@@ -3005,6 +3005,20 @@ export function VerticalTextEditor({
       candidateViewport.anchorRatio <= 1
         ? candidateViewport
         : null;
+    // 起動直後はタブ内だけで保持する viewportState がない。ページ表示では
+    // typewriter scroll も無効なので、保存済みカーソルを論理アンカーとして
+    // 扱わないと第1ページに残ったままになる。セッション中の表示位置があれば
+    // そちらを優先し、なければカーソルを含むページへ復元する。
+    const initialViewportToRestore =
+      validatedInitialViewport ??
+      (editorDisplayModeRef.current === "paged" && initialSelectionRef.current > 0
+        ? {
+            textLength: textRef.current.length,
+            writingMode: writingModeRef.current,
+            anchorOffset: Math.min(initialSelectionRef.current, textRef.current.length),
+            anchorRatio: 0.5,
+          }
+        : null);
     let initialAdjustmentDeadline = Number.POSITIVE_INFINITY;
 
     const stopCenterAnimation = () => {

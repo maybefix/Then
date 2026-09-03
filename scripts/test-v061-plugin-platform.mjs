@@ -88,7 +88,7 @@ assert.match(
 assert.match(runtimeSource, /addEventListener\("transitioncancel"/, "interrupted Zone transitions must stop host position tracking");
 assert.match(runtimeSource, /"--then-background": "--sidebar-bg"/, "plugin frames must receive Then theme tokens");
 assert.match(runtimeSource, /sendEvent\(runtime\.plugin\.manifest\.id, "theme\.change", theme\)/, "theme changes must be sent into every plugin frame");
-const rightSidebarStart = appSource.indexOf("<aside\n              className={`rightSidebar");
+const rightSidebarStart = appSource.search(/<aside\r?\n\s+className=\{`rightSidebar/);
 const rightSidebarEnd = appSource.indexOf("</aside>", rightSidebarStart);
 const sidebarRuntimeAnchorPosition = appSource.indexOf("ref={setSidebarPluginRuntimeAnchor}", rightSidebarStart);
 const screenPanePosition = appSource.indexOf('className="pluginScreenPane"');

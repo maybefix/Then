@@ -34,6 +34,7 @@
 
 .appShell[data-theme="orchestrating-dark"] {
   color-scheme: dark;
+  --editor-heading-color: #fff;
   --bg-root: #101522;
   --bg-primary: #151b2a;
   --bg-secondary: #1c2333;

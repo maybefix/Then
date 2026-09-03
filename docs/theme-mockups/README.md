@@ -1,10 +1,10 @@
-# Aero Glass / Flat theme notes
+# Theme mockup archive
 
 Then の現行レイアウトを固定し、テーマの素材感を比較するために作成したモックアップ。
-Aero Glass は新規テーマとして追加済み。Flat は 0.5.13 で一度 Soft Flat に更新したが、現在は従来の低彩度ブルーグレー、グラデーション、強い角丸の仕様へ復元済み。
-内部テーマIDは既存設定との互換性を保つため `acrylic-*` のまま維持する。
+Aero Glass は廃止済みで、以下の画像と値は設計記録としてのみ残している。Flat は 0.5.13 で一度 Soft Flat に更新したが、現在は従来の低彩度ブルーグレー、グラデーション、強い角丸の仕様へ復元済み。
+旧 `acrylic-light` 設定は Workbench、旧 `acrylic-dark` 設定は Default Dark へ自動移行する。
 
-## Aero Glass (Glassmorphism)
+## Aero Glass (Glassmorphism・廃止済み)
 
 | Light | Dark |
 | --- | --- |
@@ -79,16 +79,16 @@ Aero Glass は新規テーマとして追加済み。Flat は 0.5.13 で一度 S
 
 - 日本語本文は既存の明朝体を維持し、UI は Noto Sans JP 系のフォールバックを使う。
 - 本文には字間調整をかけず、UI 見出しだけ必要に応じて `font-feature-settings: "palt"` を使う。
-- Aero Glass は Windows WebView の `backdrop-filter` 対応を確認し、無効時は `--bg-panel-strong` にフォールバックする。
+- Aero Glass では Windows WebView の `backdrop-filter` 対応を確認し、無効時は `--bg-panel-strong` にフォールバックしていた。
 - 行番号・改行記号・現在行ハイライトはスクローラー外の絶対配置レイヤーとし、フィルターによる包含ブロック変更の影響を受けない。
 - 主要フォーカスは 2px リングと形状変化を併用する。成功・警告・危険はアイコンまたは文言を必ず添える。
 
 ## Implementation status
 
-- `acrylic-light` / `acrylic-dark`: 表示名 Aero Glass としてテーマ選択へ追加済み。
+- `acrylic-light` / `acrylic-dark`: テーマ選択と型定義から削除済み。旧保存値のみ移行対象として受け付ける。
 - `flat-light` / `flat-dark`: 従来の低彩度ブルーグレー、グラデーション、20pxカード角丸の Flat へ復元済み。
-- テーマ選択プレビュー、永続化対象の型、CSS 読み込み、テーマ回帰テストを更新済み。
-- Vite の実画面で Aero Glass のライト／ダークを切り替え、複数行の行番号・現在行ハイライトの原点と領域一致を確認済み。
+- テーマ選択プレビュー、永続化対象の型、CSS 読み込み、テーマ回帰テストからAero Glassを削除済み。
+- 掲載画像は廃止前にViteの実画面で確認した際の記録。
 
 ## Archived image generation prompts
 

@@ -1,0 +1,136 @@
+/* Night Library: a quiet dark study wrapped around a warm paper manuscript. */
+.appShell[data-theme="night-library-dark"] {
+  color-scheme: dark;
+  --on-accent: #fff;
+  --bg-root: #11141c;
+  --bg-primary: #171b24;
+  --bg-secondary: #1b202b;
+  --bg-tertiary: #252b37;
+  --bg-panel: #1b202b;
+  --bg-panel-strong: #252b37;
+  --border-subtle: #343b48;
+  --border-strong: #5f5960;
+  --text-primary: #f5efe3;
+  --text-secondary: #cbc1b3;
+  --text-muted: #988d80;
+  --text-faint: #6f675f;
+  --accent: #9c4a5a;
+  --accent-strong: #e3a1ad;
+  --primary-hover: #b35b6b;
+  --primary-pressed: #74333f;
+  --focus-ring: #e3a1ad;
+  --success: #76ad83;
+  --warning: #d2a757;
+  --danger: #df777b;
+  --overlay: rgba(7, 8, 12, 0.78);
+  --control-hover: rgba(227, 161, 173, 0.09);
+  --accent-soft: rgba(156, 74, 90, 0.2);
+  --accent-border: rgba(227, 161, 173, 0.5);
+  --danger-soft: rgba(223, 119, 123, 0.14);
+  --editor-bg: #fff9ed;
+  --card-bg: #222733;
+  --card-hover: #2b313e;
+  --canvas-bg: #0d1017;
+  --topbar-bg: #151923;
+  --sidebar-bg: #1b202b;
+  --radius-control: 4px;
+  --radius-card: 6px;
+  --radius-button: 4px;
+  --card-float-shadow: 0 10px 28px rgba(0, 0, 0, 0.38);
+  --shadow-popover: 0 18px 42px rgba(0, 0, 0, 0.52);
+  --shadow-modal: 0 28px 68px rgba(0, 0, 0, 0.62);
+  --silkdown-code-bg: rgba(227, 161, 173, 0.1);
+  --silkdown-link-color: #e3a1ad;
+}
+
+.themePreview-night-library-dark {
+  border-color: #5f5960;
+  background: #171b24;
+}
+
+.themePreview-night-library-dark::before { background: #fff9ed; }
+
+.themePreview-night-library-dark i { background: #2b2823; }
+
+.themePreview-night-library-dark b { background: #9c4a5a; }
+
+.appShell[data-theme="night-library-dark"] .workspace {
+  gap: 8px;
+  padding: 8px;
+  background: var(--canvas-bg);
+}
+
+.appShell[data-theme="night-library-dark"] .leftWorkspaceCluster {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--sidebar-bg);
+  box-shadow: var(--card-float-shadow);
+}
+
+.appShell[data-theme="night-library-dark"] .leftWorkspaceCluster .workspaceActivityBar {
+  height: 100%;
+  border-right-color: var(--border-subtle);
+  background: transparent;
+}
+
+.appShell[data-theme="night-library-dark"] .leftWorkspaceCluster .workspaceSidebar {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.appShell[data-theme="night-library-dark"] :is(.editorColumn, .rightSidebar) {
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  box-shadow: var(--card-float-shadow);
+}
+
+.appShell[data-theme="night-library-dark"] .editorColumn {
+  color-scheme: light;
+  --bg-root: #fff9ed;
+  --bg-primary: #fff9ed;
+  --bg-secondary: #f7efdf;
+  --bg-tertiary: #eee3cf;
+  --bg-panel: #fff9ed;
+  --bg-panel-strong: #f4ead8;
+  --border-subtle: #ded2be;
+  --border-strong: #c9bdaa;
+  --text-primary: #2b2823;
+  --text-secondary: #6b6257;
+  --text-muted: #817667;
+  --text-faint: #a39888;
+  --accent: #8a2e3b;
+  --accent-strong: #6f2230;
+  --control-hover: rgba(138, 46, 59, 0.07);
+  --accent-soft: rgba(138, 46, 59, 0.1);
+  --accent-border: rgba(138, 46, 59, 0.42);
+  --editor-heading-color: #6f2230;
+  --editor-bg: #fff9ed;
+  --card-bg: #fff9ed;
+  --card-hover: #f7efdf;
+  --silkdown-code-bg: #efe6d5;
+  --silkdown-link-color: #6f2230;
+  background: var(--editor-bg);
+  color: var(--text-primary);
+}
+
+.appShell[data-theme="night-library-dark"] .rightSidebar {
+  background: var(--sidebar-bg);
+}
+
+.appShell[data-theme="night-library-dark"] .activeWorkspaceActivityButton::before {
+  background: #e3a1ad;
+}
+
+.appShell[data-theme="night-library-dark"] :is(.activeTreeItem, .navigatorFileItemActive, .activeOutlineTreeItem) {
+  background: rgba(156, 74, 90, 0.26);
+  box-shadow: inset 3px 0 #e3a1ad;
+}

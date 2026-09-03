@@ -1,0 +1,148 @@
+/* Workbench: a dark operational rail around a calm, high-contrast writing surface. */
+.appShell[data-theme="workbench-light"] {
+  --on-accent: #fff;
+  --bg-root: #eef1f3;
+  --bg-primary: #fff;
+  --bg-secondary: #f4f6f7;
+  --bg-tertiary: #e6eaed;
+  --bg-panel: #fff;
+  --bg-panel-strong: #f7f8f8;
+  --border-subtle: #d6dbde;
+  --border-strong: #b7c0c5;
+  --text-primary: #20262a;
+  --text-secondary: #4b565d;
+  --text-muted: #59646b;
+  --text-faint: #929ca2;
+  --accent: #087ea4;
+  --accent-strong: #066887;
+  --primary-hover: #066887;
+  --primary-pressed: #044a63;
+  --focus-ring: #087ea4;
+  --success: #248a57;
+  --warning: #a86e00;
+  --danger: #c83d45;
+  --control-hover: rgba(8, 126, 164, 0.08);
+  --accent-soft: rgba(8, 126, 164, 0.11);
+  --accent-border: rgba(8, 126, 164, 0.5);
+  --danger-soft: rgba(200, 61, 69, 0.1);
+  --editor-bg: #fff;
+  --card-bg: #fff;
+  --card-hover: #edf4f6;
+  --canvas-bg: #eef1f3;
+  --topbar-bg: #1d252a;
+  --sidebar-bg: #f7f8f8;
+  --topbar-text-primary: #fff;
+  --topbar-text-secondary: #dce2e5;
+  --topbar-text-muted: #b9c2c7;
+  --topbar-text-faint: #829097;
+  --radius-control: 3px;
+  --radius-card: 2px;
+  --radius-button: 3px;
+  --card-float-shadow: none;
+  --shadow-popover: 0 12px 28px rgba(24, 34, 40, 0.2);
+  --shadow-modal: 0 20px 52px rgba(24, 34, 40, 0.24);
+  --silkdown-code-bg: #eef2f4;
+  --silkdown-link-color: #066887;
+}
+
+.themePreview-workbench-light {
+  border-color: #b7c0c5;
+  background: #232a2f;
+}
+
+.themePreview-workbench-light::before { background: #fff; }
+
+.themePreview-workbench-light i { background: #20262a; }
+
+.themePreview-workbench-light b { background: #087ea4; }
+
+.appShell[data-theme="workbench-light"] .workspace {
+  background: var(--canvas-bg);
+}
+
+/* Scope a dark semantic palette to the complete left navigation cluster. */
+.appShell[data-theme="workbench-light"] .leftWorkspaceCluster {
+  --bg-panel: #232a2f;
+  --bg-panel-strong: #2d363c;
+  --border-subtle: #39434a;
+  --border-strong: #58636a;
+  --text-primary: #fff;
+  --text-secondary: #dce2e5;
+  --text-muted: #b9c2c7;
+  --text-faint: #89969d;
+  --sidebar-bg: #232a2f;
+  --control-hover: #2d363c;
+  --accent: #0b8db7;
+  --accent-strong: #67c7df;
+  --accent-soft: rgba(11, 141, 183, 0.24);
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  flex: 0 0 auto;
+  overflow: hidden;
+  background: var(--sidebar-bg);
+}
+
+.appShell[data-theme="workbench-light"] .leftWorkspaceCluster .workspaceActivityBar {
+  height: 100%;
+  border-right-color: var(--border-subtle);
+  background: var(--sidebar-bg);
+}
+
+.appShell[data-theme="workbench-light"] .leftWorkspaceCluster .workspaceSidebar {
+  height: 100%;
+  border-right-color: var(--border-subtle);
+  background: var(--sidebar-bg);
+  box-shadow: none;
+}
+
+.appShell[data-theme="workbench-light"] .leftWorkspaceCluster[data-sidebar-collapsed="true"] .workspaceActivityBar {
+  border-right-color: var(--border-subtle);
+}
+
+.appShell[data-theme="workbench-light"] .leftWorkspaceCluster :is(
+  .activeTreeItem,
+  .navigatorFileItemActive,
+  .navigatorCurrentFileActive,
+  .navigatorHeadingItemActive,
+  .activeOutlineSidebarItem,
+  .activeOutlineTreeItem,
+  .selectedOutlineTreeItem
+) {
+  background: #087ea4;
+  color: #fff;
+  box-shadow: inset 3px 0 #67c7df;
+}
+
+.appShell[data-theme="workbench-light"] .leftWorkspaceCluster .selectedTreeEntry {
+  background: #066887;
+  color: #fff;
+  box-shadow: inset 3px 0 #9bddeb;
+}
+
+.appShell[data-theme="workbench-light"] .leftWorkspaceCluster :is(
+  .activeTreeItem,
+  .selectedTreeEntry,
+  .navigatorFileItemActive,
+  .navigatorCurrentFileActive,
+  .navigatorHeadingItemActive,
+  .activeOutlineSidebarItem,
+  .activeOutlineTreeItem,
+  .selectedOutlineTreeItem
+) :is(.treeChevron, .treeItemCharCount, .navigatorItemPreview, .navigatorHeadingPreview, .outlineLevelMark) {
+  color: #dff5fa;
+}
+
+.appShell[data-theme="workbench-light"] .activeWorkspaceActivityButton {
+  background: #087ea4;
+  color: #fff;
+}
+
+.appShell[data-theme="workbench-light"] .activeWorkspaceActivityButton::before {
+  background: #9bddeb;
+}
+
+.appShell[data-theme="workbench-light"] .rightSidebar {
+  border-left-color: var(--border-subtle);
+  background: var(--sidebar-bg);
+}

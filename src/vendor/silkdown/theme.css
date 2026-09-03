@@ -34,6 +34,7 @@
 .sd-h4,
 .sd-h5,
 .sd-h6 {
+  color: var(--editor-heading-color, inherit);
   font-weight: var(--silkdown-heading-weight);
   line-height: var(--silkdown-heading-line-height);
 }
@@ -126,6 +127,7 @@
 }
 
 .cm-line.cm-atomic-h1 {
+  color: var(--editor-heading-color, inherit);
   font-size: var(--silkdown-h1-size);
   font-weight: var(--silkdown-heading-weight);
   line-height: var(--silkdown-heading-line-height);
@@ -135,6 +137,7 @@
 }
 
 .cm-line.cm-atomic-h2 {
+  color: var(--editor-heading-color, inherit);
   font-size: var(--silkdown-h2-size);
   font-weight: var(--silkdown-heading-weight);
   line-height: 1.35;
@@ -143,6 +146,7 @@
 }
 
 .cm-line.cm-atomic-h3 {
+  color: var(--editor-heading-color, inherit);
   font-size: var(--silkdown-h3-size);
   font-weight: 650;
   line-height: 1.4;
@@ -152,6 +156,7 @@
 .cm-line.cm-atomic-h4,
 .cm-line.cm-atomic-h5,
 .cm-line.cm-atomic-h6 {
+  color: var(--editor-heading-color, inherit);
   font-weight: 650;
   padding-top: 0.08em;
 }

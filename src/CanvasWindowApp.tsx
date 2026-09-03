@@ -53,6 +53,22 @@ const HISTORY_LIMIT = 60;
 const MIN_ZOOM = 0.35;
 const MAX_ZOOM = 1.8;
 
+type TrashedCanvasBoardSummary = {
+  trashId: string;
+  boardId: string;
+  name: string;
+  scope: CanvasScope;
+  deletedAt: number;
+  nodeCount: number;
+  edgeCount: number;
+};
+
+type LocalTrashedCanvasBoard = {
+  boardId: string;
+  board: JsonCanvasDocument;
+  deletedAt: number;
+};
+
 type CanvasTool = "select" | "text" | "group" | "edge";
 type CanvasEdgeSide = NonNullable<CanvasEdge["fromSide"]>;
 
@@ -130,6 +146,14 @@ function localStorageKey(scope: CanvasScope, rootPath: string | null) {
   return `${LOCAL_STORAGE_PREFIX}.${scope}.${rootPath ?? "global"}`;
 }
 
+function localStorageOrderKey(scope: CanvasScope, rootPath: string | null) {
+  return `${localStorageKey(scope, rootPath)}.order`;
+}
+
+function localStorageTrashKey(scope: CanvasScope, rootPath: string | null) {
+  return `${localStorageKey(scope, rootPath)}.trash`;
+}
+
 function readLocalBoards(scope: CanvasScope, rootPath: string | null): Record<string, JsonCanvasDocument> {
   const raw = window.localStorage.getItem(localStorageKey(scope, rootPath));
   if (!raw) return {};
@@ -154,6 +178,45 @@ function writeLocalBoards(
   window.localStorage.setItem(localStorageKey(scope, rootPath), JSON.stringify(boards));
 }
 
+function readLocalBoardOrder(scope: CanvasScope, rootPath: string | null): string[] {
+  const raw = window.localStorage.getItem(localStorageOrderKey(scope, rootPath));
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((id): id is string => typeof id === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalBoardOrder(scope: CanvasScope, rootPath: string | null, boardIds: string[]) {
+  window.localStorage.setItem(localStorageOrderKey(scope, rootPath), JSON.stringify(boardIds));
+}
+
+function readLocalBoardTrash(
+  scope: CanvasScope,
+  rootPath: string | null,
+): Record<string, LocalTrashedCanvasBoard> {
+  const raw = window.localStorage.getItem(localStorageTrashKey(scope, rootPath));
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as Record<string, LocalTrashedCanvasBoard>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeLocalBoardTrash(
+  scope: CanvasScope,
+  rootPath: string | null,
+  trash: Record<string, LocalTrashedCanvasBoard>,
+) {
+  window.localStorage.setItem(localStorageTrashKey(scope, rootPath), JSON.stringify(trash));
+}
+
 function summarizeLocalBoard(
   id: string,
   board: JsonCanvasDocument,
@@ -175,9 +238,21 @@ async function listBoards(scope: CanvasScope, rootPath: string | null) {
     return invoke<CanvasBoardSummary[]>("list_canvas_boards", { scope, rootPath });
   }
   const boards = readLocalBoards(scope, rootPath);
-  return Object.entries(boards)
-    .map(([id, board]) => summarizeLocalBoard(id, board, scope))
-    .sort((left, right) => right.updatedAt - left.updatedAt);
+  const summaries = Object.entries(boards).map(([id, board]) =>
+    summarizeLocalBoard(id, board, scope),
+  );
+  const order = readLocalBoardOrder(scope, rootPath);
+  const positions = new Map(order.map((id, index) => [id, index]));
+  return summaries.sort((left, right) => {
+    const leftPosition = positions.get(left.id);
+    const rightPosition = positions.get(right.id);
+    if (leftPosition !== undefined && rightPosition !== undefined) {
+      return leftPosition - rightPosition;
+    }
+    if (leftPosition !== undefined) return -1;
+    if (rightPosition !== undefined) return 1;
+    return right.updatedAt - left.updatedAt;
+  });
 }
 
 async function createBoard(scope: CanvasScope, rootPath: string | null, name: string) {
@@ -212,6 +287,94 @@ async function saveBoard(
   const boards = readLocalBoards(scope, rootPath);
   boards[boardId] = board;
   writeLocalBoards(scope, rootPath, boards);
+}
+
+async function reorderBoards(
+  scope: CanvasScope,
+  rootPath: string | null,
+  boardIds: string[],
+) {
+  if (isTauriRuntime()) {
+    await invoke("reorder_canvas_boards", { scope, rootPath, boardIds });
+    return;
+  }
+  writeLocalBoardOrder(scope, rootPath, boardIds);
+}
+
+async function trashBoard(scope: CanvasScope, rootPath: string | null, boardId: string) {
+  if (isTauriRuntime()) {
+    await invoke("trash_canvas_board", { scope, rootPath, boardId });
+    return;
+  }
+  const boards = readLocalBoards(scope, rootPath);
+  const board = boards[boardId];
+  if (!board) throw new Error("canvas board does not exist");
+  const deletedAt = Date.now();
+  const trashId = `${deletedAt}--${boardId}`;
+  const trash = readLocalBoardTrash(scope, rootPath);
+  trash[trashId] = { boardId, board, deletedAt };
+  writeLocalBoardTrash(scope, rootPath, trash);
+  delete boards[boardId];
+  writeLocalBoards(scope, rootPath, boards);
+  writeLocalBoardOrder(
+    scope,
+    rootPath,
+    readLocalBoardOrder(scope, rootPath).filter((id) => id !== boardId),
+  );
+}
+
+
+async function listTrashedBoards(
+  scope: CanvasScope,
+  rootPath: string | null,
+): Promise<TrashedCanvasBoardSummary[]> {
+  if (isTauriRuntime()) {
+    return invoke<TrashedCanvasBoardSummary[]>("list_trashed_canvas_boards", {
+      scope,
+      rootPath,
+    });
+  }
+  return Object.entries(readLocalBoardTrash(scope, rootPath))
+    .map(([trashId, item]) => ({
+      trashId,
+      boardId: item.boardId,
+      name: boardName(item.board),
+      scope,
+      deletedAt: item.deletedAt,
+      nodeCount: item.board.nodes.length,
+      edgeCount: item.board.edges.length,
+    }))
+    .sort((left, right) => right.deletedAt - left.deletedAt);
+}
+
+async function restoreTrashedBoard(
+  scope: CanvasScope,
+  rootPath: string | null,
+  trashId: string,
+): Promise<CanvasBoardSummary> {
+  if (isTauriRuntime()) {
+    return invoke<CanvasBoardSummary>("restore_canvas_board", { scope, rootPath, trashId });
+  }
+  const trash = readLocalBoardTrash(scope, rootPath);
+  const item = trash[trashId];
+  if (!item) throw new Error("trashed canvas board does not exist");
+  const currentOrder = (await listBoards(scope, rootPath)).map((board) => board.id);
+  const boards = readLocalBoards(scope, rootPath);
+  let boardId = item.boardId;
+  let suffix = 2;
+  while (boards[boardId]) {
+    boardId = `${item.boardId}-${suffix}`;
+    suffix += 1;
+  }
+  boards[boardId] = item.board;
+  delete trash[trashId];
+  writeLocalBoards(scope, rootPath, boards);
+  writeLocalBoardTrash(scope, rootPath, trash);
+  writeLocalBoardOrder(scope, rootPath, [
+    ...currentOrder.filter((id) => id !== boardId),
+    boardId,
+  ]);
+  return summarizeLocalBoard(boardId, item.board, scope);
 }
 
 function isTextNode(node: CanvasNode): node is CanvasTextNode {
@@ -391,6 +554,15 @@ function formatSaveTime(timestamp: number) {
   }).format(new Date(timestamp));
 }
 
+function formatDeletedTime(timestamp: number) {
+  return new Intl.DateTimeFormat("ja-JP", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
+}
+
 function toolLabel(tool: CanvasTool) {
   switch (tool) {
     case "text":
@@ -435,7 +607,10 @@ function CanvasGlyph({
     | "undo"
     | "redo"
     | "plot"
-    | "panel";
+    | "panel"
+    | "grip"
+    | "chevronUp"
+    | "chevronDown";
 }) {
   const common = { viewBox: "0 0 24 24", "aria-hidden": true, focusable: false };
   switch (name) {
@@ -476,6 +651,29 @@ function CanvasGlyph({
         <svg {...common}>
           <path d="M12 5v14" />
           <path d="M5 12h14" />
+        </svg>
+      );
+    case "grip":
+      return (
+        <svg {...common}>
+          <circle cx="9" cy="7" r="1" />
+          <circle cx="15" cy="7" r="1" />
+          <circle cx="9" cy="12" r="1" />
+          <circle cx="15" cy="12" r="1" />
+          <circle cx="9" cy="17" r="1" />
+          <circle cx="15" cy="17" r="1" />
+        </svg>
+      );
+    case "chevronUp":
+      return (
+        <svg {...common}>
+          <path d="m7 14 5-5 5 5" />
+        </svg>
+      );
+    case "chevronDown":
+      return (
+        <svg {...common}>
+          <path d="m7 10 5 5 5-5" />
         </svg>
       );
     case "target":
@@ -762,6 +960,8 @@ export default function CanvasWindowApp({
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const saveTimerRef = useRef<number | null>(null);
+  const activeSaveRef = useRef<Promise<void> | null>(null);
+  const boardOrderSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const suppressNextSaveRef = useRef(false);
   const boardRef = useRef<JsonCanvasDocument | null>(null);
   const historyRef = useRef<{ undo: JsonCanvasDocument[]; redo: JsonCanvasDocument[] }>({
@@ -806,6 +1006,11 @@ export default function CanvasWindowApp({
   const [renameDraft, setRenameDraft] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createDraft, setCreateDraft] = useState("");
+  const [draggedBoardId, setDraggedBoardId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CanvasBoardSummary | null>(null);
+  const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
+  const [trashedBoards, setTrashedBoards] = useState<TrashedCanvasBoardSummary[]>([]);
+  const [isTrashLoading, setIsTrashLoading] = useState(false);
   // 別ウィンドウ表示のときだけ使う Idea・資料サイドパネル。
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(true);
   /**
@@ -1029,6 +1234,20 @@ export default function CanvasWindowApp({
     setIsCreateModalOpen(true);
   };
 
+  const openTrashModal = async () => {
+    if (!payload) return;
+    setIsBoardMenuOpen(false);
+    setIsTrashModalOpen(true);
+    setIsTrashLoading(true);
+    try {
+      setTrashedBoards(await listTrashedBoards(scope, payload.rootPath));
+    } catch (error) {
+      setStatus(String(error));
+    } finally {
+      setIsTrashLoading(false);
+    }
+  };
+
   const submitCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!payload) return;
@@ -1174,16 +1393,17 @@ export default function CanvasWindowApp({
       setEdgeCursor(null);
       setSelectedEdgeId(null);
       try {
-        let summaries = await listBoards(nextScope, payload.rootPath);
-        if (summaries.length === 0) {
-          const created = await createBoard(
-            nextScope,
-            payload.rootPath,
-            nextScope === "project" ? `${payload.workspaceName} ボード` : "共通ボード",
-          );
-          summaries = [created];
-        }
+        const summaries = await listBoards(nextScope, payload.rootPath);
         setBoards(summaries);
+        if (summaries.length === 0) {
+          setActiveBoardId(null);
+          suppressNextSaveRef.current = true;
+          setBoard(null);
+          setSelectedIds(new Set());
+          clearHistory();
+          setStatus("ボードがありません");
+          return;
+        }
         const nextBoard =
           summaries.find((item) => item.id === preferredBoardId) ?? summaries[0];
         setActiveBoardId(nextBoard.id);
@@ -1272,7 +1492,7 @@ export default function CanvasWindowApp({
     setStatus("保存中");
     pendingSaveRef.current = { scope, rootPath: payload.rootPath, boardId: activeBoardId };
     saveTimerRef.current = window.setTimeout(() => {
-      saveBoard(scope, payload.rootPath, activeBoardId, board)
+      const saveRequest = saveBoard(scope, payload.rootPath, activeBoardId, board)
         .then(async () => {
           pendingSaveRef.current = null;
           const summaries = await listBoards(scope, payload.rootPath);
@@ -1281,8 +1501,10 @@ export default function CanvasWindowApp({
         })
         .catch((error) => setStatus(String(error)))
         .finally(() => {
+          if (activeSaveRef.current === saveRequest) activeSaveRef.current = null;
           saveTimerRef.current = null;
         });
+      activeSaveRef.current = saveRequest;
     }, 500);
 
     return () => {
@@ -1422,6 +1644,120 @@ export default function CanvasWindowApp({
   const switchBoard = (boardId: string) => {
     setIsBoardMenuOpen(false);
     void loadBoardList(scope, boardId);
+  };
+
+  const persistBoardOrder = async (nextBoards: CanvasBoardSummary[]) => {
+    if (!payload) return;
+    setBoards(nextBoards);
+    setStatus("並び順を保存中");
+    const saveRequest = boardOrderSaveQueueRef.current
+      .catch(() => {})
+      .then(() =>
+        reorderBoards(
+          scope,
+          payload.rootPath,
+          nextBoards.map((item) => item.id),
+        ),
+      );
+    boardOrderSaveQueueRef.current = saveRequest;
+    try {
+      await saveRequest;
+      setStatus("並び順を保存しました");
+    } catch (error) {
+      setStatus(String(error));
+      const summaries = await listBoards(scope, payload.rootPath).catch(() => null);
+      if (summaries) setBoards(summaries);
+    }
+  };
+
+  const moveBoard = (boardId: string, offset: -1 | 1) => {
+    const index = boards.findIndex((item) => item.id === boardId);
+    const targetIndex = index + offset;
+    if (index < 0 || targetIndex < 0 || targetIndex >= boards.length) return;
+    const next = [...boards];
+    [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+    void persistBoardOrder(next);
+  };
+
+  const dropBoard = (
+    event: ReactDragEvent<HTMLDivElement>,
+    targetBoardId: string,
+  ) => {
+    event.preventDefault();
+    const sourceBoardId = draggedBoardId ?? event.dataTransfer.getData("text/plain");
+    setDraggedBoardId(null);
+    if (!sourceBoardId || sourceBoardId === targetBoardId) return;
+    const source = boards.find((item) => item.id === sourceBoardId);
+    if (!source) return;
+    const withoutSource = boards.filter((item) => item.id !== sourceBoardId);
+    const targetIndex = withoutSource.findIndex((item) => item.id === targetBoardId);
+    if (targetIndex < 0) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const insertAfter = event.clientY >= rect.top + rect.height / 2;
+    withoutSource.splice(targetIndex + (insertAfter ? 1 : 0), 0, source);
+    void persistBoardOrder(withoutSource);
+  };
+
+  const confirmDeleteBoard = async () => {
+    if (!deleteTarget || !payload) return;
+    const target = deleteTarget;
+    const deletedIndex = boards.findIndex((item) => item.id === target.id);
+    setDeleteTarget(null);
+    setIsBoardMenuOpen(false);
+    setStatus("ボードをゴミ箱へ移動中");
+
+    if (target.id === activeBoardId) {
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      pendingSaveRef.current = null;
+    }
+
+    try {
+      await boardOrderSaveQueueRef.current.catch(() => {});
+      if (target.id === activeBoardId && activeSaveRef.current) {
+        await activeSaveRef.current;
+      }
+      setStatus("ボードをゴミ箱へ移動中");
+      await trashBoard(scope, payload.rootPath, target.id);
+      const summaries = await listBoards(scope, payload.rootPath);
+      setBoards(summaries);
+      if (target.id === activeBoardId) {
+        const nextBoard = summaries[Math.min(Math.max(deletedIndex, 0), summaries.length - 1)];
+        if (nextBoard) {
+          await loadBoardList(scope, nextBoard.id);
+        } else {
+          setActiveBoardId(null);
+          suppressNextSaveRef.current = true;
+          setBoard(null);
+          setSelectedIds(new Set());
+          setSelectedEdgeId(null);
+          clearHistory();
+          setStatus("ボードをゴミ箱へ移動しました");
+        }
+      } else {
+        setStatus("ボードをゴミ箱へ移動しました");
+      }
+    } catch (error) {
+      setStatus(String(error));
+    }
+  };
+
+  const restoreBoard = async (trashId: string) => {
+    if (!payload) return;
+    setIsTrashLoading(true);
+    setStatus("ボードを復元中");
+    try {
+      const restored = await restoreTrashedBoard(scope, payload.rootPath, trashId);
+      setTrashedBoards(await listTrashedBoards(scope, payload.rootPath));
+      await loadBoardList(scope, activeBoardId ?? restored.id);
+      setStatus("ボードを復元しました");
+    } catch (error) {
+      setStatus(String(error));
+    } finally {
+      setIsTrashLoading(false);
+    }
   };
 
   const selectNode = (nodeId: string, event: ReactPointerEvent) => {
@@ -2051,21 +2387,74 @@ export default function CanvasWindowApp({
               onClick={() => setIsBoardMenuOpen((value) => !value)}
               title={boardName(board)}
             >
-              <span>{boardName(board)}</span>
+              <span>{board ? boardName(board) : "ボードがありません"}</span>
             </button>
             {isBoardMenuOpen && (
               <div className="canvasBoardMenu" role="menu" aria-label="ボード一覧">
-                {boards.map((item) => (
-                  <button
+                {boards.map((item, index) => (
+                  <div
                     key={item.id}
-                    className={item.id === activeBoardId ? "isActive" : ""}
-                    type="button"
-                    role="menuitem"
-                    title={item.name}
-                    onClick={() => switchBoard(item.id)}
+                    className={`canvasBoardMenuItem ${
+                      item.id === activeBoardId ? "isActive" : ""
+                    } ${item.id === draggedBoardId ? "isDragging" : ""}`}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "move";
+                    }}
+                    onDrop={(event) => dropBoard(event, item.id)}
                   >
-                    <span>{item.name}</span>
-                  </button>
+                    <span
+                      className="canvasBoardDragHandle"
+                      title="ドラッグして並び替え"
+                      draggable
+                      onDragStart={(event) => {
+                        setDraggedBoardId(item.id);
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData("text/plain", item.id);
+                      }}
+                      onDragEnd={() => setDraggedBoardId(null)}
+                    >
+                      <CanvasGlyph name="grip" />
+                    </span>
+                    <button
+                      className="canvasBoardSelectButton"
+                      type="button"
+                      role="menuitem"
+                      title={item.name}
+                      onClick={() => switchBoard(item.id)}
+                    >
+                      <span>{item.name}</span>
+                    </button>
+                    <span className="canvasBoardMenuActions">
+                      <button
+                        type="button"
+                        aria-label={`「${item.name}」を上へ移動`}
+                        title="上へ移動"
+                        disabled={index === 0}
+                        onClick={() => moveBoard(item.id, -1)}
+                      >
+                        <CanvasGlyph name="chevronUp" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`「${item.name}」を下へ移動`}
+                        title="下へ移動"
+                        disabled={index === boards.length - 1}
+                        onClick={() => moveBoard(item.id, 1)}
+                      >
+                        <CanvasGlyph name="chevronDown" />
+                      </button>
+                      <button
+                        className="dangerCanvasButton"
+                        type="button"
+                        aria-label={`「${item.name}」をゴミ箱へ移動`}
+                        title="ゴミ箱へ移動"
+                        onClick={() => setDeleteTarget(item)}
+                      >
+                        <CanvasGlyph name="trash" />
+                      </button>
+                    </span>
+                  </div>
                 ))}
               </div>
             )}
@@ -2074,6 +2463,7 @@ export default function CanvasWindowApp({
             className="canvasIconButton"
             type="button"
             title="ボード名を変更"
+            disabled={!board}
             onClick={openRenameModal}
           >
             <CanvasGlyph name="edit" />
@@ -2085,6 +2475,15 @@ export default function CanvasWindowApp({
             onClick={openCreateModal}
           >
             <CanvasGlyph name="plus" />
+          </button>
+          <button
+            className="canvasIconButton"
+            type="button"
+            title="ゴミ箱"
+            aria-label="キャンバスボードのゴミ箱を開く"
+            onClick={() => void openTrashModal()}
+          >
+            <CanvasGlyph name="trash" />
           </button>
         </div>
         <div className="canvasToolbarCluster canvasToolGroup" aria-label="ツール">
@@ -2651,6 +3050,93 @@ export default function CanvasWindowApp({
               <button type="submit">作成</button>
             </footer>
           </form>
+        </div>
+      )}
+      {deleteTarget && (
+        <div className="canvasModalBackdrop" role="presentation">
+          <section
+            className="canvasRenameModal canvasDeleteModal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="canvas-delete-title"
+            aria-describedby="canvas-delete-description"
+          >
+            <header>
+              <h2 id="canvas-delete-title">ボードをゴミ箱へ移動</h2>
+              <button type="button" aria-label="閉じる" onClick={() => setDeleteTarget(null)}>
+                ×
+              </button>
+            </header>
+            <p id="canvas-delete-description">
+              「{deleteTarget.name}」をゴミ箱へ移動します。あとでゴミ箱から復元できます。
+            </p>
+            <footer>
+              <button type="button" onClick={() => setDeleteTarget(null)}>
+                キャンセル
+              </button>
+              <button
+                className="dangerCanvasButton"
+                type="button"
+                onClick={() => void confirmDeleteBoard()}
+              >
+                ゴミ箱へ移動
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
+      {isTrashModalOpen && (
+        <div className="canvasModalBackdrop" role="presentation">
+          <section
+            className="canvasRenameModal canvasTrashModal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="canvas-trash-title"
+          >
+            <header>
+              <div>
+                <h2 id="canvas-trash-title">ゴミ箱</h2>
+                <span>{scope === "project" ? "作品ボード" : "共通ボード"}</span>
+              </div>
+              <button
+                type="button"
+                aria-label="閉じる"
+                onClick={() => setIsTrashModalOpen(false)}
+              >
+                ×
+              </button>
+            </header>
+            <div className="canvasTrashList">
+              {isTrashLoading && trashedBoards.length === 0 ? (
+                <p>読み込み中…</p>
+              ) : trashedBoards.length === 0 ? (
+                <p>ゴミ箱は空です。</p>
+              ) : (
+                trashedBoards.map((item) => (
+                  <article key={item.trashId}>
+                    <div>
+                      <strong title={item.name}>{item.name}</strong>
+                      <span>
+                        {formatDeletedTime(item.deletedAt)} ・ カード {item.nodeCount}件
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isTrashLoading}
+                      onClick={() => void restoreBoard(item.trashId)}
+                    >
+                      復元
+                    </button>
+                  </article>
+                ))
+              )}
+            </div>
+            <footer>
+              <button type="button" onClick={() => setIsTrashModalOpen(false)}>
+                閉じる
+              </button>
+            </footer>
+          </section>
         </div>
       )}
     </main>

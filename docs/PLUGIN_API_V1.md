@@ -4,6 +4,8 @@ Then v0.6.1 では、プラグイン本体をアプリ全体へ一度だけ導�
 
 SDKの型定義は [`plugin-sdk/then.d.ts`](../plugin-sdk/then.d.ts)、manifest用JSON Schemaは [`plugin-sdk/manifest.schema.json`](../plugin-sdk/manifest.schema.json) にある。
 
+SDKのnpm配布、開発CLI、`.thenplugin`パッケージ、公式プラグインリポジトリ、配布カタログの目標設計は [`PLUGIN_DEVELOPMENT_AND_DISTRIBUTION.md`](PLUGIN_DEVELOPMENT_AND_DISTRIBUTION.md) を参照する。
+
 ## 配置と分離
 
 - プラグイン本体: Then のユーザーデータ領域にある `plugins/<plugin-id>/`

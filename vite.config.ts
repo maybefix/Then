@@ -21,6 +21,12 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           const normalized = id.replaceAll("\\", "/");
+          if (
+            normalized.endsWith("/src/CanvasWindowApp.tsx") ||
+            normalized.endsWith("/src/canvasTypes.ts")
+          ) {
+            return "canvas";
+          }
           if (!normalized.includes("/node_modules/")) return undefined;
           if (
             normalized.includes("/node_modules/react/") ||

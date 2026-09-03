@@ -31,4 +31,12 @@ assert.match(
   "switching files must synchronously save the departing cursor instead of losing a debounced update",
 );
 
+const editorSource = await readFile("src/VerticalTextEditor.tsx", "utf8");
+
+assert.match(
+  editorSource,
+  /const initialViewportToRestore =[\s\S]*?validatedInitialViewport \?\?[\s\S]*?editorDisplayModeRef\.current === "paged" && initialSelectionRef\.current > 0[\s\S]*?anchorOffset: Math\.min\(initialSelectionRef\.current, textRef\.current\.length\)/,
+  "launching in paged mode must use the restored cursor as a viewport anchor when no tab viewport exists",
+);
+
 console.log("v0.6.0 editor position memory tests passed");

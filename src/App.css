@@ -5459,7 +5459,7 @@ body {
 }
 
 .verticalTypewriterEditor .pm-root p.heading {
-  color: var(--accent-strong);
+  color: var(--editor-heading-color, var(--accent-strong));
   font-weight: 700;
 }
 
@@ -8994,11 +8994,56 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   box-shadow: 0 18px 42px var(--canvas-shadow);
 }
 
-.canvasBoardMenu button {
+.canvasBoardMenuItem {
   display: flex;
   width: 100%;
   min-width: 0;
   height: 32px;
+  align-items: center;
+  gap: 2px;
+  border-radius: 4px;
+}
+
+.canvasBoardMenuItem:hover,
+.canvasBoardMenuItem.isActive {
+  background: var(--canvas-toolbar-control-hover);
+  color: var(--text-primary);
+}
+
+.canvasBoardMenuItem.isDragging {
+  opacity: 0.45;
+}
+
+.canvasBoardDragHandle {
+  display: grid;
+  width: 22px;
+  flex: 0 0 22px;
+  color: var(--text-muted);
+  cursor: grab;
+  place-items: center;
+}
+
+.canvasBoardDragHandle svg,
+.canvasBoardMenuActions svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.canvasBoardDragHandle svg circle {
+  fill: currentColor;
+  stroke: none;
+}
+
+.canvasBoardMenu .canvasBoardSelectButton {
+  display: flex;
+  min-width: 0;
+  height: 32px;
+  flex: 1 1 auto;
   align-items: center;
   border: 0;
   border-radius: 4px;
@@ -9010,17 +9055,51 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   text-align: left;
 }
 
-.canvasBoardMenu button:hover,
-.canvasBoardMenu button.isActive {
-  background: var(--canvas-toolbar-control-hover);
+.canvasBoardMenuItem:hover .canvasBoardSelectButton,
+.canvasBoardMenuItem.isActive .canvasBoardSelectButton {
   color: var(--text-primary);
 }
 
-.canvasBoardMenu button span {
+.canvasBoardSelectButton span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.canvasBoardMenuActions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding-right: 3px;
+}
+
+.canvasBoardMenuActions button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  place-items: center;
+}
+
+.canvasBoardMenuActions button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 9%, transparent);
+  color: var(--text-primary);
+}
+
+.canvasBoardMenuActions button.dangerCanvasButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+
+.canvasBoardMenuActions button:disabled {
+  opacity: 0.25;
+  cursor: default;
 }
 
 .canvasZoomControls span {
@@ -9846,6 +9925,86 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--selection-text);
+}
+
+.canvasDeleteModal p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.canvasDeleteModal button.dangerCanvasButton {
+  border-color: color-mix(in srgb, var(--danger) 60%, var(--canvas-toolbar-border));
+  background: color-mix(in srgb, var(--danger) 14%, var(--canvas-toolbar-control));
+  color: var(--danger);
+}
+
+.canvasTrashModal {
+  width: min(520px, calc(100vw - 40px));
+}
+
+.canvasTrashModal header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.canvasTrashModal header span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.canvasTrashList {
+  display: grid;
+  max-height: min(420px, 60vh);
+  overflow: auto;
+  gap: 6px;
+}
+
+.canvasTrashList > p {
+  margin: 12px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.canvasTrashList article {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: var(--canvas-radius-control);
+  background: color-mix(in srgb, var(--bg-primary) 76%, transparent);
+}
+
+.canvasTrashList article > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.canvasTrashList article strong,
+.canvasTrashList article span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvasTrashList article strong {
+  font-size: 12px;
+}
+
+.canvasTrashList article span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.canvasTrashList article > button {
+  min-width: 58px;
+  flex: 0 0 auto;
 }
 
 .ideaFragment.isFocusedOrigin {

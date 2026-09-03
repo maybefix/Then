@@ -10,10 +10,11 @@ export type ThemeDefinition = {
 export const themeCatalog: ThemeDefinition[] = [
   { id: "default", label: "Default", description: "白とネイビー", mode: "light" },
   { id: "standard", label: "Standard", description: "白とブラック", mode: "light" },
-  { id: "note-light", label: "Note", description: "温白色とチャコール", mode: "light" },
   { id: "coral-light", label: "Coral", description: "クリームとコーラル", mode: "light" },
   { id: "minimal-light", label: "Minimal", description: "ミニマルな白とブルー", mode: "light" },
   { id: "worker-light", label: "Worker", description: "Stone系とプロダクトブルー", mode: "light" },
+  { id: "workbench-light", label: "Workbench", description: "濃色の操作盤と白い原稿面", mode: "light" },
+  { id: "index-light", label: "Index", description: "生成り紙とインクブルー", mode: "light" },
   { id: "resonance-light", label: "Resonance", description: "白とロイヤルバイオレット", mode: "light" },
   { id: "blue-sky-light", label: "BlueSky", description: "清潔な白とブルー", mode: "light" },
   { id: "drive-light", label: "Drive", description: "構造的な白とレッド", mode: "light" },
@@ -27,7 +28,6 @@ export const themeCatalog: ThemeDefinition[] = [
   { id: "water-light", label: "Water", description: "白とサステナブルティール", mode: "light" },
   { id: "hands-light", label: "Hands", description: "実用的な白と深緑", mode: "light" },
   { id: "promise-light", label: "Promise", description: "白緑と深緑のグラデーション", mode: "light" },
-  { id: "acrylic-light", label: "Aero Glass", description: "空色のフロストガラス", mode: "light" },
   { id: "flat-light", label: "Flat", description: "ブルーグレーのグレースケール", mode: "light" },
   { id: "signal-red-light", label: "Red", description: "軽快な白とシグナルレッド", mode: "light" },
   { id: "mono-press-light", label: "Mono Press", description: "活字と罫線のモノクローム", mode: "light" },
@@ -44,6 +44,7 @@ export const themeCatalog: ThemeDefinition[] = [
   { id: "minimal-dark", label: "Minimal", description: "ブラックとブライトブルー", mode: "dark" },
   { id: "resonance-dark", label: "Resonance", description: "深い紫とラベンダー", mode: "dark" },
   { id: "cinematic-dark", label: "Cinematic", description: "シネマティックブラック", mode: "dark" },
+  { id: "night-library-dark", label: "Night Library", description: "夜の書斎とクリーム色の原稿面", mode: "dark" },
   { id: "blue-sky-dark", label: "BlueSky", description: "ダークネイビーとブルー", mode: "dark" },
   { id: "drive-dark", label: "Drive", description: "ニアブラックとレッド", mode: "dark" },
   { id: "orchestrating-dark", label: "Orchestrating", description: "ブルーブラックとブルー", mode: "dark" },
@@ -56,7 +57,6 @@ export const themeCatalog: ThemeDefinition[] = [
   { id: "hands-dark", label: "Hands", description: "森林のダークグリーン", mode: "dark" },
   { id: "dandelion-dark", label: "Dandelion", description: "チャコールとクラフトゴールド", mode: "dark" },
   { id: "promise-dark", label: "Promise", description: "深緑とミントのグラデーション", mode: "dark" },
-  { id: "acrylic-dark", label: "Aero Glass", description: "夜色のフロストガラス", mode: "dark" },
   { id: "flat-dark", label: "Flat", description: "ブルーグレーのグレースケール", mode: "dark" },
   { id: "air-dark", label: "Air", description: "夜空とブライトシアンのグラデーション", mode: "dark" },
   { id: "passion-dark", label: "Passion", description: "ワインレッドとコーラルのグラデーション", mode: "dark" },
@@ -73,7 +73,10 @@ export const getThemeDefinition = (theme: AppTheme) =>
   themeCatalog.find((item) => item.id === theme) ?? themeCatalog[0];
 
 const legacyThemeAliases: Record<string, AppTheme> = {
-  notion: "note-light",
+  notion: "worker-light",
+  "note-light": "worker-light",
+  "acrylic-light": "workbench-light",
+  "acrylic-dark": "dark",
   claude: "coral-light",
   "apple-light": "minimal-light",
   "apple-dark": "minimal-dark",

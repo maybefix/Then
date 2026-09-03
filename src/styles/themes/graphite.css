@@ -1,6 +1,7 @@
 /* Graphite: neutral charcoal greys with a soft blue accent. */
 .appShell[data-theme="graphite-dark"] {
   color-scheme: dark;
+  --editor-heading-color: #fff;
   --on-accent: #1b1c1e;
   --action-gradient: #8fb6e3;
   --action-text: #1b1c1e;

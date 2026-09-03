@@ -384,6 +384,18 @@ struct CanvasBoardSummary {
     edge_count: usize,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TrashedCanvasBoardSummary {
+    trash_id: String,
+    board_id: String,
+    name: String,
+    scope: String,
+    deleted_at: i64,
+    node_count: usize,
+    edge_count: usize,
+}
+
 fn debug_log(message: &str) {
     if cfg!(debug_assertions) {
         eprintln!("[folder-debug] {message}");
@@ -520,6 +532,10 @@ pub fn run() {
             create_canvas_board,
             load_canvas_board,
             save_canvas_board,
+            reorder_canvas_boards,
+            trash_canvas_board,
+            list_trashed_canvas_boards,
+            restore_canvas_board,
             list_installed_plugins,
             inspect_plugin_dialog,
             install_plugin,
@@ -2768,7 +2784,8 @@ fn list_canvas_boards(
         boards.push(canvas_board_summary(&path, &scope)?);
     }
 
-    boards.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+    let order = read_canvas_board_order(&dir);
+    sort_canvas_board_summaries(&mut boards, &order);
     Ok(boards)
 }
 
@@ -2837,6 +2854,155 @@ fn save_canvas_board(
     let path = canvas_board_path(&dir, &board_id)?;
     stamp_canvas_board(&mut board, &scope)?;
     write_canvas_board_file(&path, &board)
+}
+
+#[tauri::command]
+fn reorder_canvas_boards(
+    app: tauri::AppHandle,
+    scope: String,
+    root_path: Option<String>,
+    board_ids: Vec<String>,
+) -> Result<(), String> {
+    let dir = canvas_boards_dir(&app, &scope, root_path)?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|error| format!("failed to create canvas board directory: {error}"))?;
+    let existing_ids = canvas_board_ids(&dir)?;
+    if board_ids.len() != existing_ids.len() {
+        return Err("canvas board list changed while reordering".to_string());
+    }
+    for (index, board_id) in board_ids.iter().enumerate() {
+        canvas_board_path(&dir, board_id)?;
+        if !existing_ids
+            .iter()
+            .any(|existing_id| existing_id == board_id)
+        {
+            return Err("canvas board does not exist".to_string());
+        }
+        if board_ids[..index]
+            .iter()
+            .any(|previous_id| previous_id == board_id)
+        {
+            return Err("canvas board order contains a duplicate id".to_string());
+        }
+    }
+    write_canvas_board_order(&dir, &board_ids)
+}
+
+#[tauri::command]
+fn trash_canvas_board(
+    app: tauri::AppHandle,
+    scope: String,
+    root_path: Option<String>,
+    board_id: String,
+) -> Result<(), String> {
+    let dir = canvas_boards_dir(&app, &scope, root_path)?;
+    let path = canvas_board_path(&dir, &board_id)?;
+    if !path.is_file() {
+        return Err("canvas board does not exist".to_string());
+    }
+    let trash_dir = canvas_board_trash_dir(&dir);
+    std::fs::create_dir_all(&trash_dir)
+        .map_err(|error| format!("failed to create canvas board trash: {error}"))?;
+    let trash_path = unique_trashed_canvas_board_path(&trash_dir, &board_id);
+    std::fs::rename(&path, &trash_path)
+        .map_err(|error| format!("failed to move canvas board to trash: {error}"))?;
+    let order: Vec<String> = read_canvas_board_order(&dir)
+        .into_iter()
+        .filter(|id| id != &board_id)
+        .collect();
+    let _ = write_canvas_board_order(&dir, &order);
+    Ok(())
+}
+
+#[tauri::command]
+fn list_trashed_canvas_boards(
+    app: tauri::AppHandle,
+    scope: String,
+    root_path: Option<String>,
+) -> Result<Vec<TrashedCanvasBoardSummary>, String> {
+    let dir = canvas_boards_dir(&app, &scope, root_path)?;
+    let trash_dir = canvas_board_trash_dir(&dir);
+    if !trash_dir.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut boards = Vec::new();
+    for entry in std::fs::read_dir(&trash_dir)
+        .map_err(|error| format!("failed to read canvas board trash: {error}"))?
+    {
+        let entry =
+            entry.map_err(|error| format!("failed to read trashed canvas board: {error}"))?;
+        let path = entry.path();
+        if !path.is_file()
+            || path
+                .extension()
+                .and_then(|value| value.to_str())
+                .map(|extension| extension.eq_ignore_ascii_case("canvas"))
+                != Some(true)
+        {
+            continue;
+        }
+        let trash_id = path
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| "trashed canvas board id is invalid".to_string())?;
+        let (deleted_at, board_id) = parse_trashed_canvas_board_id(trash_id)?;
+        let summary = canvas_board_summary(&path, &scope)?;
+        boards.push(TrashedCanvasBoardSummary {
+            trash_id: trash_id.to_string(),
+            board_id,
+            name: summary.name,
+            scope: summary.scope,
+            deleted_at,
+            node_count: summary.node_count,
+            edge_count: summary.edge_count,
+        });
+    }
+    boards.sort_by(|left, right| right.deleted_at.cmp(&left.deleted_at));
+    Ok(boards)
+}
+
+#[tauri::command]
+fn restore_canvas_board(
+    app: tauri::AppHandle,
+    scope: String,
+    root_path: Option<String>,
+    trash_id: String,
+) -> Result<CanvasBoardSummary, String> {
+    let dir = canvas_boards_dir(&app, &scope, root_path)?;
+    let trash_path = trashed_canvas_board_path(&canvas_board_trash_dir(&dir), &trash_id)?;
+    if !trash_path.is_file() {
+        return Err("trashed canvas board does not exist".to_string());
+    }
+    let configured_order = read_canvas_board_order(&dir);
+    let mut current_boards = canvas_board_ids(&dir)?
+        .into_iter()
+        .map(|id| canvas_board_summary(&canvas_board_path(&dir, &id)?, &scope))
+        .collect::<Result<Vec<_>, _>>()?;
+    sort_canvas_board_summaries(&mut current_boards, &configured_order);
+    let (_, original_board_id) = parse_trashed_canvas_board_id(&trash_id)?;
+    let original_path = canvas_board_path(&dir, &original_board_id)?;
+    let restored_path = if original_path.exists() {
+        let content = std::fs::read_to_string(&trash_path).unwrap_or_default();
+        let value: serde_json::Value = serde_json::from_str(&content).unwrap_or_default();
+        let name = value
+            .pointer("/then/name")
+            .and_then(|value| value.as_str())
+            .unwrap_or(&original_board_id);
+        unique_canvas_board_path(&dir, name)
+    } else {
+        original_path
+    };
+    std::fs::rename(&trash_path, &restored_path)
+        .map_err(|error| format!("failed to restore canvas board: {error}"))?;
+    let restored_id = restored_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "restored canvas board id is invalid".to_string())?
+        .to_string();
+    let mut order: Vec<String> = current_boards.into_iter().map(|board| board.id).collect();
+    order.push(restored_id);
+    let _ = write_canvas_board_order(&dir, &order);
+    canvas_board_summary(&restored_path, &scope)
 }
 
 #[tauri::command]
@@ -3422,6 +3588,96 @@ fn unique_canvas_board_path(dir: &Path, name: &str) -> PathBuf {
         }
         index += 1;
     }
+}
+
+fn canvas_board_order_path(dir: &Path) -> PathBuf {
+    dir.join(".board-order.json")
+}
+
+fn canvas_board_trash_dir(dir: &Path) -> PathBuf {
+    dir.join(".trash")
+}
+
+fn parse_trashed_canvas_board_id(trash_id: &str) -> Result<(i64, String), String> {
+    let (deleted_at, board_id) = trash_id
+        .split_once("--")
+        .ok_or_else(|| "trashed canvas board id is invalid".to_string())?;
+    let deleted_at = deleted_at
+        .parse::<i64>()
+        .map_err(|_| "trashed canvas board id is invalid".to_string())?;
+    if sanitize_canvas_board_id(board_id) != board_id {
+        return Err("trashed canvas board id is invalid".to_string());
+    }
+    Ok((deleted_at, board_id.to_string()))
+}
+
+fn trashed_canvas_board_path(dir: &Path, trash_id: &str) -> Result<PathBuf, String> {
+    parse_trashed_canvas_board_id(trash_id)?;
+    Ok(dir.join(format!("{trash_id}.canvas")))
+}
+
+fn unique_trashed_canvas_board_path(dir: &Path, board_id: &str) -> PathBuf {
+    let mut deleted_at = now_millis();
+    loop {
+        let path = dir.join(format!("{deleted_at}--{board_id}.canvas"));
+        if !path.exists() {
+            return path;
+        }
+        deleted_at += 1;
+    }
+}
+
+fn read_canvas_board_order(dir: &Path) -> Vec<String> {
+    let path = canvas_board_order_path(dir);
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    serde_json::from_str::<Vec<String>>(&content).unwrap_or_default()
+}
+
+fn write_canvas_board_order(dir: &Path, board_ids: &[String]) -> Result<(), String> {
+    std::fs::create_dir_all(dir)
+        .map_err(|error| format!("failed to create canvas board directory: {error}"))?;
+    let content = serde_json::to_string_pretty(board_ids)
+        .map_err(|error| format!("failed to serialize canvas board order: {error}"))?;
+    std::fs::write(canvas_board_order_path(dir), content)
+        .map_err(|error| format!("failed to save canvas board order: {error}"))
+}
+
+fn canvas_board_ids(dir: &Path) -> Result<Vec<String>, String> {
+    let mut ids = Vec::new();
+    for entry in std::fs::read_dir(dir)
+        .map_err(|error| format!("failed to read canvas board directory: {error}"))?
+    {
+        let entry = entry.map_err(|error| format!("failed to read canvas board entry: {error}"))?;
+        let path = entry.path();
+        if !path.is_file()
+            || path
+                .extension()
+                .and_then(|value| value.to_str())
+                .map(|extension| extension.eq_ignore_ascii_case("canvas"))
+                != Some(true)
+        {
+            continue;
+        }
+        if let Some(id) = path.file_stem().and_then(|value| value.to_str()) {
+            ids.push(id.to_string());
+        }
+    }
+    Ok(ids)
+}
+
+fn sort_canvas_board_summaries(boards: &mut [CanvasBoardSummary], order: &[String]) {
+    boards.sort_by(|left, right| {
+        let left_position = order.iter().position(|id| id == &left.id);
+        let right_position = order.iter().position(|id| id == &right.id);
+        match (left_position, right_position) {
+            (Some(left_position), Some(right_position)) => left_position.cmp(&right_position),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => right.updated_at.cmp(&left.updated_at),
+        }
+    });
 }
 
 fn canvas_board_summary(path: &Path, scope: &str) -> Result<CanvasBoardSummary, String> {

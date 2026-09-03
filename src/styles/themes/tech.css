@@ -37,6 +37,7 @@
 
 .appShell[data-theme="tech-dark"] {
   color-scheme: dark;
+  --editor-heading-color: #fff;
   --on-accent: #07101e;
   --bg-root: #00010a;
   --bg-primary: #000220;

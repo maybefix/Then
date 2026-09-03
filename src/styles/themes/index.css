@@ -1,9 +1,11 @@
 @import "./foundations.css";
 @import "./default.css";
 @import "./minimal.css";
-@import "./note.css";
 @import "./coral.css";
 @import "./worker.css";
+@import "./workbench.css";
+@import "./index-card.css";
+@import "./night-library.css";
 @import "./resonance.css";
 @import "./cinematic.css";
 @import "./blue-sky.css";
@@ -19,7 +21,6 @@
 @import "./hands.css";
 @import "./dandelion.css";
 @import "./promise.css";
-@import "./acrylic.css";
 @import "./flat.css";
 @import "./standard.css";
 @import "./signal-red.css";

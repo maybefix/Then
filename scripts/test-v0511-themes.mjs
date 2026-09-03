@@ -1,17 +1,43 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [appCss, types, catalog, defaultCss, standardCss, redCss, acrylicCss, flatCss, newsroomCss, themeIndex, sharedVariants] =
+const [
+  appCss,
+  silkdownCss,
+  types,
+  catalog,
+  defaultCss,
+  standardCss,
+  redCss,
+  workbenchCss,
+  indexCardCss,
+  nightLibraryCss,
+  flatCss,
+  newsroomCss,
+  blueSkyCss,
+  orchestratingCss,
+  techCss,
+  graphiteCss,
+  themeIndex,
+  sharedVariants,
+] =
   await Promise.all([
     readFile("src/App.css", "utf8"),
+    readFile("src/vendor/silkdown/theme.css", "utf8"),
     readFile("src/types.ts", "utf8"),
     readFile("src/themes.ts", "utf8"),
     readFile("src/styles/themes/default.css", "utf8"),
     readFile("src/styles/themes/standard.css", "utf8"),
     readFile("src/styles/themes/signal-red.css", "utf8"),
-    readFile("src/styles/themes/acrylic.css", "utf8"),
+    readFile("src/styles/themes/workbench.css", "utf8"),
+    readFile("src/styles/themes/index-card.css", "utf8"),
+    readFile("src/styles/themes/night-library.css", "utf8"),
     readFile("src/styles/themes/flat.css", "utf8"),
     readFile("src/styles/themes/newsroom.css", "utf8"),
+    readFile("src/styles/themes/blue-sky.css", "utf8"),
+    readFile("src/styles/themes/orchestrating.css", "utf8"),
+    readFile("src/styles/themes/tech.css", "utf8"),
+    readFile("src/styles/themes/graphite.css", "utf8"),
     readFile("src/styles/themes/index.css", "utf8"),
     readFile("src/styles/themes/shared-variants.css", "utf8"),
   ]);
@@ -20,8 +46,10 @@ assert.match(types, /"default",\s+"standard",/s, "Default and Standard must have
 assert.match(catalog, /id: "default", label: "Default"/);
 assert.match(catalog, /id: "standard", label: "Standard"/);
 assert.match(catalog, /id: "signal-red-light", label: "Red"/);
-assert.match(catalog, /id: "acrylic-light", label: "Aero Glass"/);
-assert.match(catalog, /id: "acrylic-dark", label: "Aero Glass"/);
+assert.match(catalog, /id: "workbench-light", label: "Workbench"/);
+assert.match(catalog, /id: "index-light", label: "Index"/);
+assert.match(catalog, /id: "night-library-dark", label: "Night Library"[\s\S]*?mode: "dark"/);
+assert.doesNotMatch(catalog, /label: "(?:Aero Glass|Note)"/);
 assert.match(catalog, /id: "flat-light", label: "Flat"/);
 assert.match(catalog, /id: "flat-dark", label: "Flat"/);
 assert.match(catalog, /id: "newsroom-light", label: "Newsroom"/);
@@ -32,7 +60,10 @@ assert.match(defaultCss, /data-theme="default"/);
 assert.doesNotMatch(defaultCss, /data-theme="standard"/);
 assert.match(standardCss, /data-theme="standard"/);
 assert.match(themeIndex, /@import "\.\/standard\.css";/);
-assert.match(themeIndex, /@import "\.\/acrylic\.css";/);
+assert.match(themeIndex, /@import "\.\/workbench\.css";/);
+assert.match(themeIndex, /@import "\.\/index-card\.css";/);
+assert.match(themeIndex, /@import "\.\/night-library\.css";/);
+assert.doesNotMatch(themeIndex, /@import "\.\/(?:acrylic|note)\.css";/);
 assert.match(themeIndex, /@import "\.\/newsroom\.css";/);
 assert.doesNotMatch(themeIndex, /modern-skeuo/);
 assert.match(sharedVariants, /data-theme="standard"/);
@@ -42,10 +73,17 @@ assert.match(
   "Light file/search sidebars must use the same content surface as references",
 );
 
-for (const themeId of ["acrylic-light", "acrylic-dark"]) {
+assert.match(types, /"workbench-light"/);
+for (const themeId of ["index-light", "night-library-dark"]) {
   assert.match(types, new RegExp(`"${themeId}"`));
-  assert.match(acrylicCss, new RegExp(`data-theme="${themeId}"`));
 }
+assert.doesNotMatch(types, /"(?:acrylic-(?:light|dark)|note-light)"/);
+assert.match(workbenchCss, /data-theme="workbench-light"/);
+assert.match(indexCardCss, /data-theme="index-light"/);
+assert.match(nightLibraryCss, /data-theme="night-library-dark"/);
+assert.match(catalog, /"note-light": "worker-light"/);
+assert.match(catalog, /"acrylic-light": "workbench-light"/);
+assert.match(catalog, /"acrylic-dark": "dark"/);
 
 for (const themeId of ["flat-light", "flat-dark"]) {
   assert.match(flatCss, new RegExp(`data-theme="${themeId}"`));
@@ -63,7 +101,9 @@ for (const token of [
   "--warning:",
   "--danger:",
 ]) {
-  assert.ok(acrylicCss.includes(token), `Acrylic must define ${token}`);
+  assert.ok(workbenchCss.includes(token), `Workbench must define ${token}`);
+  assert.ok(indexCardCss.includes(token), `Index must define ${token}`);
+  assert.ok(nightLibraryCss.includes(token), `Night Library must define ${token}`);
 }
 
 for (const token of [
@@ -74,15 +114,31 @@ for (const token of [
   assert.ok(flatCss.includes(token), `Flat must define ${token}`);
 }
 
-assert.match(acrylicCss, /--radius-control: 9px/);
+assert.match(workbenchCss, /--topbar-bg: #1d252a/);
+assert.match(workbenchCss, /--sidebar-bg: #232a2f/);
+assert.match(workbenchCss, /\.activeTreeItem,[\s\S]*?background: #087ea4/);
+assert.match(workbenchCss, /--primary-hover: #066887/);
+assert.match(workbenchCss, /--primary-pressed: #044a63/);
+assert.match(indexCardCss, /background-size: 24px 24px/);
+assert.match(indexCardCss, /box-shadow: inset 3px 0 #1e5a7a/);
+assert.match(nightLibraryCss, /\.editorColumn \{[\s\S]*?color-scheme: light;[\s\S]*?--editor-bg: #fff9ed/);
+assert.match(nightLibraryCss, /--editor-heading-color: #6f2230/);
 assert.match(flatCss, /--radius-control: 14px/);
 assert.match(flatCss, /--radius-card: 20px/);
 assert.match(flatCss, /--radius-button: 999px/);
 assert.match(flatCss, /--brand-gradient: linear-gradient\(/);
-assert.match(acrylicCss, /--panel-backdrop: blur\(/);
-assert.match(acrylicCss, /@supports not \(backdrop-filter: blur\(1px\)\)/);
-assert.match(acrylicCss, /linear-gradient[\s\S]*?backdrop-filter: var\(--panel-backdrop\)/);
 assert.doesNotMatch(flatCss, /--card-float-shadow: none/);
+
+assert.match(appCss, /color: var\(--editor-heading-color, var\(--accent-strong\)\)/);
+assert.match(silkdownCss, /color: var\(--editor-heading-color, inherit\)/);
+for (const [name, css] of [
+  ["BlueSky", blueSkyCss],
+  ["Orchestrating", orchestratingCss],
+  ["Tech", techCss],
+  ["Graphite", graphiteCss],
+]) {
+  assert.match(css, /data-theme="[^"]+-dark"[\s\S]*?--editor-heading-color: #fff;/, `${name} dark headings must be white`);
+}
 assert.match(newsroomCss, /--bg-primary: #fff/);
 assert.match(newsroomCss, /--text-primary: #0a0a03/);
 assert.match(newsroomCss, /--accent: #b21f24/);
