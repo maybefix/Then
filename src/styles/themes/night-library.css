@@ -118,6 +118,14 @@
   --card-hover: #f7efdf;
   --silkdown-code-bg: #efe6d5;
   --silkdown-link-color: #6f2230;
+  /*
+   * 本文で使う色は、chrome ではなくこの原稿面の配色で解決させる。
+   * foundations 側の宣言をそのまま受けると、暗い操作盤向けの明るい文字色が
+   * 明るい紙に乗ってしまう。
+   */
+  --silkdown-code-color: var(--text-primary);
+  --silkdown-blockquote-color: var(--text-secondary);
+  --silkdown-hr-color: var(--border-subtle);
   background: var(--editor-bg);
   color: var(--text-primary);
 }

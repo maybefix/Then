@@ -6,6 +6,8 @@
  * ようにしておき、指摘を受け入れるかどうかを書き手が自分で決められるようにする。
  */
 
+import type { ProofreadTerm } from "./terms";
+
 /** 指摘の強さ。表記基準に反するものほど強い。 */
 export type ProofreadSeverity = "must" | "should" | "hint";
 
@@ -36,12 +38,15 @@ export type ProofreadOptions = {
   maxCommasPerSentence: number;
   /** 「」で囲まれた会話文を検査から外すか。 */
   skipDialogue: boolean;
+  /** 止めている検出項目のID。 */
+  disabledChecks: string[];
 };
 
 export const DEFAULT_PROOFREAD_OPTIONS: ProofreadOptions = {
   maxSentenceLength: 80,
   maxCommasPerSentence: 4,
   skipDialogue: true,
+  disabledChecks: [],
 };
 
 /** 本文を文単位に区切ったもの。オフセットは本文先頭からのUTF-16位置。 */
@@ -55,6 +60,8 @@ export type ProofreadSentence = {
 
 /** ルールに渡す解析済みの本文。 */
 export type ProofreadContext = {
+  /** 校正辞書。「揃える」に指定された語はルールから参照する。 */
+  terms: ProofreadTerm[];
   /** 元の本文。オフセットの基準。 */
   text: string;
   /**
@@ -74,8 +81,22 @@ export type ProofreadContext = {
   lineStart: (line: number) => number;
 };
 
+/**
+ * ルールの中の検出項目。1つのルールが複数の観点を持つとき、書き手が
+ * 観点ごとに止められるようにする。表記の好みが分かれる項目（数字の全角半角、
+ * 全角と半角の間の空きなど）はルールごと止めるには惜しいため。
+ */
+export type ProofreadCheck = {
+  /** ルールIDを含む一意なID。例: notation-variants/width-digits */
+  id: string;
+  name: string;
+  summary: string;
+};
+
 /** ルールが返す生の検出結果。 */
 export type ProofreadHit = {
+  /** どの検出項目から出たか。項目を持つルールだけが付ける。 */
+  checkId?: string;
   from: number;
   to: number;
   /** 何が問題かを一文で。 */
@@ -96,6 +117,13 @@ export type ProofreadRule = {
   target: ProofreadTarget;
   /** 会話文を除外する設定の影響を受けるか。 */
   respectsDialogue: boolean;
+  /** 観点ごとに止められる項目。持たないルールはルール単位の切り替えだけ。 */
+  checks?: ProofreadCheck[];
+  /**
+   * 指摘が語を指しているか。false のときは文全体を指しているので、
+   * その範囲を辞書に登録させてはいけない（文まるごとが校正対象から外れてしまう）。
+   */
+  wordScoped: boolean;
   sources: ProofreadSource[];
   scan: (context: ProofreadContext) => ProofreadHit[];
 };
@@ -105,6 +133,7 @@ export type ProofreadIssue = ProofreadHit & {
   /** 本文が変わらない限り安定するキー。無視リストにも使う。 */
   key: string;
   ruleId: string;
+  checkId?: string;
   ruleName: string;
   severity: ProofreadSeverity;
   line: number;

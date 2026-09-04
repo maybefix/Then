@@ -1,5 +1,6 @@
 import { createProofreadContext, isRangeMasked } from "./context";
 import { PROOFREAD_RULES } from "./rules";
+import type { ProofreadTerm } from "./terms";
 import type { ProofreadIssue, ProofreadOptions, ProofreadRule } from "./types";
 
 /** 抜粋に添える前後の文字数。 */
@@ -21,13 +22,21 @@ export function runProofread(
   text: string,
   options: ProofreadOptions,
   rules: ProofreadRule[] = PROOFREAD_RULES,
+  /** 校正辞書。「守る」の語はどのルールも触れず、「揃える」の語は照合に使う。 */
+  terms: ProofreadTerm[] = [],
 ): ProofreadResult {
-  const context = createProofreadContext(text, options);
+  const context = createProofreadContext(text, options, terms);
   const issues: ProofreadIssue[] = [];
+  /** 同じルールが同じ範囲に複数の指摘を出すことがあるので、鍵の重複を数えて避ける。 */
+  const keyCounts = new Map<string, number>();
   let truncated = false;
+
+  const disabledChecks = new Set(options.disabledChecks);
 
   for (const rule of rules) {
     for (const hit of rule.scan(context)) {
+      // 観点ごとに止めている項目は、ここで落とす。
+      if (hit.checkId && disabledChecks.has(hit.checkId)) continue;
       const from = Math.max(0, Math.min(text.length, hit.from));
       const to = Math.max(from, Math.min(text.length, hit.to));
       if (to === from) continue;
@@ -48,11 +57,14 @@ export function runProofread(
 
       const line = context.lineAt(from);
       const match = text.slice(from, to);
+      const keySeed = `${rule.id}:${from}:${match}`;
+      const seenCount = (keyCounts.get(keySeed) ?? 0) + 1;
+      keyCounts.set(keySeed, seenCount);
       issues.push({
         ...hit,
         from,
         to,
-        key: `${rule.id}:${from}:${match}`,
+        key: seenCount === 1 ? keySeed : `${keySeed}#${seenCount}`,
         ruleId: rule.id,
         ruleName: rule.name,
         severity: rule.severity,

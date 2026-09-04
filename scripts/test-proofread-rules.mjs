@@ -17,15 +17,30 @@ await build({
   outfile: bundle,
 });
 
-const { runProofread, DEFAULT_PROOFREAD_OPTIONS, PROOFREAD_RULES } = await import(
-  `${pathToFileURL(bundle).href}?${Date.now()}`
-);
+const {
+  runProofread,
+  DEFAULT_PROOFREAD_OPTIONS,
+  PROOFREAD_RULES,
+  parseProofreadTermInput,
+  mergeProofreadTerms,
+  normalizeProofreadTerms,
+  collectProtectedSurfaces,
+  sortProofreadTerms,
+  validateTermSurface,
+  updateProofreadTerm,
+  retargetProofreadTerm,
+  formatProofreadTermsForExport,
+  collectTermCandidates,
+} = await import(`${pathToFileURL(bundle).href}?${Date.now()}`);
 
 /** 生成時に実改行が紛れ込まないよう、改行は定数で組み立てる。 */
 const NL = String.fromCharCode(10);
 
-const scan = (text, overrides = {}) =>
-  runProofread(text, { ...DEFAULT_PROOFREAD_OPTIONS, ...overrides });
+const scan = (text, overrides = {}, terms = []) =>
+  runProofread(text, { ...DEFAULT_PROOFREAD_OPTIONS, ...overrides }, PROOFREAD_RULES, terms);
+
+/** 一括入力と同じ書式から辞書を組み立てる小さな入口。 */
+const dictionary = (...lines) => parseProofreadTermInput(lines.join(NL), "project").terms;
 
 const byRule = (text, ruleId, overrides) =>
   scan(text, overrides).issues.filter((issue) => issue.ruleId === ruleId);
@@ -43,13 +58,20 @@ const expectNone = (text, ruleId, overrides) => {
 };
 
 // --- ルールの棚卸し -----------------------------------------------------------
-assert.equal(PROOFREAD_RULES.length, 9, "9種類のルールを保つ");
+assert.equal(PROOFREAD_RULES.length, 10, "10種類のルールを保つ");
 for (const rule of PROOFREAD_RULES) {
   assert.ok(rule.sources.length > 0, `${rule.id} must carry a citation`);
+  assert.equal(typeof rule.wordScoped, "boolean", `${rule.id} must say what it points at`);
   for (const source of rule.sources) {
     assert.ok(source.title && source.publisher && source.locator && source.basis);
   }
 }
+
+// 文全体を指すルールは、その範囲を辞書に登録させない。
+assert.deepEqual(
+  PROOFREAD_RULES.filter((rule) => !rule.wordScoped).map((rule) => rule.id).sort(),
+  ["sentence-flow", "style-consistency"],
+);
 
 // --- 1. 話し言葉 --------------------------------------------------------------
 {
@@ -242,10 +264,8 @@ expectNone(
 );
 
 // --- 括弧の閉じ忘れ -----------------------------------------------------------
-{
-  const issue = expectOne("「そこまでだ" + NL + "次の行。", "punctuation", "「");
-  assert.match(issue.message, /閉じられていない/);
-}
+// 閉じ括弧のない行は、段落をまたぐ台詞の書き方とみなして咎めない。
+expectNone("「そこまでだ" + NL + "次の行。", "punctuation");
 expectNone("「そこまでだ」" + NL + "次の行。", "punctuation");
 
 // --- 検査対象から外す範囲 -----------------------------------------------------
@@ -260,6 +280,445 @@ expectNone("詳細は https://example.com/a...b を参照。", "punctuation");
     assert.equal(text.slice(issue.from, issue.to).replace(/\s+/g, " "), issue.excerpt.match);
     assert.ok(issue.line >= 1 && issue.column >= 1);
   }
+}
+
+// --- 校正辞書 ----------------------------------------------------------------
+{
+  const input = [
+    "# 覚書の行は飛ばす",
+    "橘沙耶	たちばなさや	人物",
+    "エルディア,,地名",
+    "サーバ管理課",
+    "見積システム		組織	守る",
+    "魔導		用語	揃える",
+    "",
+    "「かぎ括弧入り」",
+    "橘沙耶",
+  ].join(NL);
+  const parsed = parseProofreadTermInput(input, "project");
+
+  assert.deepEqual(
+    parsed.terms.map((term) => [term.surface, term.reading, term.kind, term.policy]),
+    [
+      ["橘沙耶", "たちばなさや", "person", "protect"],
+      ["エルディア", "", "place", "protect"],
+      ["サーバ管理課", "", "other", "protect"],
+      ["見積システム", "", "org", "protect"],
+      ["魔導", "", "term", "unify"],
+    ],
+  );
+  assert.equal(parsed.rejected.length, 2, "括弧入りと重複行は理由つきで弾く");
+  assert.ok(parsed.terms.every((term) => term.scope === "project"));
+}
+
+// 既存の語は、入力側で埋まっている欄だけ上書きする。
+{
+  const base = parseProofreadTermInput("橘沙耶	たちばなさや	人物", "project").terms;
+  const incoming = parseProofreadTermInput("橘沙耶			揃える", "project").terms;
+  const merged = mergeProofreadTerms(base, incoming);
+  assert.equal(merged.terms.length, 1);
+  assert.equal(merged.added, 0);
+  assert.equal(merged.updated, 1);
+  assert.equal(merged.terms[0].reading, "たちばなさや", "空欄で読みを消さない");
+  assert.equal(merged.terms[0].kind, "person", "種別「その他」で既存を上書きしない");
+  assert.equal(merged.terms[0].policy, "unify");
+}
+
+// 壊れた保存データは落とす。
+{
+  const restored = normalizeProofreadTerms(
+    [
+      { id: "a", surface: "橘沙耶", kind: "person", policy: "both" },
+      { surface: "" },
+      { surface: "「だめ」" },
+      null,
+      { id: "b", surface: "橘沙耶" },
+    ],
+    "global",
+  );
+  assert.equal(restored.length, 1);
+  assert.equal(restored[0].scope, "global");
+  assert.equal(restored[0].policy, "both");
+}
+
+// 「守る」の語だけを、長い順に集める。
+{
+  const terms = parseProofreadTermInput(
+    ["見積			守る", "見積システム			守る", "魔導			揃える"].join(NL),
+    "project",
+  ).terms;
+  assert.deepEqual(collectProtectedSurfaces(terms), ["見積システム", "見積"]);
+}
+
+// --- 辞書で守った語は、どのルールも触らない -----------------------------------
+{
+  const text = "サーバ管理課に連絡した。サーバーの設定を見直す。";
+  assert.ok(
+    byRule(text, "notation-variants").length > 0,
+    "辞書なしでは組織名がカタカナ長音のゆれとして拾われる",
+  );
+  assert.equal(
+    scan(text, {}, dictionary("サーバ管理課")).issues.filter(
+      (issue) => issue.ruleId === "notation-variants",
+    ).length,
+    0,
+    "守った語は表記ゆれの数にも入らない",
+  );
+}
+{
+  const text = "破天荒な暮らしを続けた。";
+  assert.equal(byRule(text, "word-misuse").length, 1);
+  assert.equal(
+    scan(text, {}, dictionary("破天荒")).issues.filter((issue) => issue.ruleId === "word-misuse")
+      .length,
+    0,
+  );
+}
+// 会話文の中でも守りは効く。
+{
+  const text = "「破天荒な人だ」と彼は言った。";
+  assert.equal(
+    scan(text, {}, dictionary("破天荒")).issues.filter((issue) => issue.ruleId === "word-misuse")
+      .length,
+    0,
+  );
+}
+// 長い語を先に伏せるので、短い語が部分一致で残らない。
+{
+  const text = "見積システムを入れた。見積もりを出す。見積を確認する。";
+  const issues = scan(text, {}, dictionary("見積システム")).issues.filter(
+    (issue) => issue.ruleId === "notation-variants",
+  );
+  assert.ok(
+    issues.every((issue) => issue.from >= text.indexOf("見積もり")),
+    "組織名の中の「見積」は表記ゆれとして数えない",
+  );
+}
+// 守った語は一文の長さや読点の数には影響しない。
+{
+  const name = "橘沙耶";
+  const text = `${name}${"あ".repeat(90)}。`;
+  const withDict = scan(text, {}, dictionary(name)).issues.filter(
+    (issue) => issue.ruleId === "sentence-flow",
+  );
+  assert.equal(withDict.length, 1);
+  assert.match(withDict[0].message, /一文が94字/, "伏せた語も文の長さには数える");
+}
+
+// --- 辞書の編集 --------------------------------------------------------------
+{
+  const terms = parseProofreadTermInput(
+    ["橘沙耶	たちばなさや	人物", "エルディア		地名"].join(NL),
+    "project",
+  ).terms;
+
+  assert.equal(validateTermSurface("新しい語", terms), null);
+  assert.match(validateTermSurface("  ", terms) ?? "", /表記を入力/);
+  assert.match(validateTermSurface("「だめ」", terms) ?? "", /鉤括弧/);
+  assert.match(validateTermSurface("エルディア", terms) ?? "", /すでに/);
+  assert.equal(
+    validateTermSurface("エルディア", terms, terms[1].id),
+    null,
+    "自分自身は重複として弾かない",
+  );
+
+  const edited = updateProofreadTerm(terms, terms[0].id, {
+    surface: " 橘紗耶 ",
+    note: "第2稿で改名",
+  });
+  assert.equal(edited[0].surface, "橘紗耶", "前後の空白は落とす");
+  assert.equal(edited[0].reading, "たちばなさや", "触れていない欄は残す");
+  assert.equal(edited[0].note, "第2稿で改名");
+  assert.ok(edited[0].updatedAt >= terms[0].updatedAt);
+
+  const moved = retargetProofreadTerm(terms[0], "global");
+  assert.equal(moved.scope, "global");
+  assert.equal(moved.id, terms[0].id, "移動しても同じ語として扱う");
+}
+
+// 並び順。
+{
+  const terms = parseProofreadTermInput(["さくら", "あかり", "なつめ"].join(NL), "global").terms;
+  assert.deepEqual(
+    sortProofreadTerms(terms, "surface").map((term) => term.surface),
+    ["あかり", "さくら", "なつめ"],
+  );
+  const stamped = terms.map((term, index) => ({ ...term, updatedAt: index }));
+  assert.deepEqual(
+    sortProofreadTerms(stamped, "recent").map((term) => term.surface),
+    ["なつめ", "あかり", "さくら"],
+  );
+}
+
+// 書き出しと読み込みで内容が保たれる（覚書は行末の注記なので取り込み時は無視する）。
+{
+  const source = parseProofreadTermInput(
+    ["橘沙耶	たちばなさや	人物	両方", "魔導		用語	揃える"].join(NL),
+    "project",
+  ).terms;
+  const withNote = updateProofreadTerm(source, source[0].id, { note: "主人公" });
+  const exported = formatProofreadTermsForExport(withNote);
+  assert.match(exported, /# 主人公/);
+
+  const restored = parseProofreadTermInput(exported, "project").terms;
+  assert.deepEqual(
+    restored.map((term) => [term.surface, term.reading, term.kind, term.policy]),
+    [
+      ["橘沙耶", "たちばなさや", "person", "both"],
+      ["魔導", "", "term", "unify"],
+    ],
+  );
+}
+
+// --- 指摘から辞書へ ----------------------------------------------------------
+// 指摘の抜粋をそのまま辞書に入れると守れることを、実際の指摘で確かめる。
+{
+  const text = "破天荒な暮らしを続けた。";
+  const [issue] = byRule(text, "word-misuse");
+  assert.equal(issue.excerpt.match, "破天荒");
+
+  const added = parseProofreadTermInput(issue.excerpt.match, "project").terms;
+  assert.equal(added.length, 1);
+  assert.equal(added[0].policy, "protect", "指摘を黙らせるために足すので既定は守る");
+
+  assert.equal(
+    scan(text, {}, added).issues.filter((item) => item.ruleId === "word-misuse").length,
+    0,
+  );
+}
+// 抜粋より広い範囲を登録しても、そのまま守りに効く。
+{
+  const text = "サーバ管理課に連絡した。サーバーの設定を見直す。";
+  const [issue] = byRule(text, "notation-variants");
+  assert.equal(issue.excerpt.match, "サーバ", "指摘そのものは短い語を指している");
+
+  const widened = parseProofreadTermInput("サーバ管理課", "project").terms;
+  assert.equal(
+    scan(text, {}, widened).issues.filter((item) => item.ruleId === "notation-variants").length,
+    0,
+    "書き足した範囲で守れる",
+  );
+}
+
+// --- 10. 辞書の表記ゆれ -------------------------------------------------------
+const unify = (ruleId, text, terms) =>
+  scan(text, {}, terms).issues.filter((issue) => issue.ruleId === ruleId);
+
+// 「守る」だけの語では揃えのルールは動かない。
+assert.equal(unify("dictionary-unify", "橘紗耶が来た。", dictionary("橘沙耶")).length, 0);
+
+{
+  const terms = dictionary("橘沙耶	たちばなさや	人物	揃える	橘紗耶/立花沙耶");
+  assert.deepEqual(terms[0].variants, ["橘紗耶", "立花沙耶"]);
+
+  const issues = unify("dictionary-unify", "橘紗耶と立花沙耶と橘沙耶。", terms);
+  assert.equal(issues.length, 2);
+  assert.deepEqual(
+    issues.map((issue) => [issue.excerpt.match, issue.replacement]),
+    [
+      ["橘紗耶", "橘沙耶"],
+      ["立花沙耶", "橘沙耶"],
+    ],
+  );
+}
+
+// 決めた表記の一部に別表記が含まれても、正しい方には当たらない。
+{
+  const terms = dictionary("モーター		用語	揃える	モータ");
+  const issues = unify("dictionary-unify", "モーターを点検する。モータも点検する。", terms);
+  assert.equal(issues.length, 1);
+  assert.equal(issues[0].from, "モーターを点検する。".length);
+}
+
+// 別表記が「守る」の語に含まれるときは、そちらが優先される。
+{
+  const terms = [
+    ...dictionary("モーター		用語	揃える	モータ"),
+    ...dictionary("モータ制御部		組織	守る"),
+  ];
+  assert.equal(unify("dictionary-unify", "モータ制御部に配属された。", terms).length, 0);
+}
+
+// ルビの読みが辞書と食い違う。
+{
+  const terms = dictionary("黒衣	くろご	用語	揃える");
+  const issues = unify("dictionary-unify", "｜黒衣《こくい》の男が立つ。", terms);
+  assert.equal(issues.length, 1);
+  assert.match(issues[0].message, /読みは辞書では「くろご」/);
+  assert.equal(issues[0].replacement, undefined);
+}
+expectNone("｜黒衣《くろご》の男が立つ。", "dictionary-unify");
+
+// 同じ読みに違う字が当たっている（変換ミス）。
+{
+  const terms = dictionary("橘沙耶	たちばなさや	人物	揃える");
+  const issues = unify("dictionary-unify", "｜橘紗耶《たちばなさや》が振り返る。", terms);
+  assert.equal(issues.length, 1);
+  assert.equal(issues[0].excerpt.match, "橘紗耶");
+  assert.equal(issues[0].replacement, "橘沙耶");
+}
+
+// Then記法のルビでも同じように働く。
+{
+  const terms = dictionary("橘沙耶	たちばなさや	人物	揃える");
+  const issues = unify("dictionary-unify", "[橘紗耶(rb,たちばなさや)]が笑う。", terms);
+  assert.equal(issues.length, 1);
+  assert.equal(issues[0].excerpt.match, "橘紗耶");
+}
+
+// 会話文の中も見る。
+{
+  const terms = dictionary("魔導		用語	揃える	魔道");
+  assert.equal(unify("dictionary-unify", "「魔道を学ぶ」と言った。", terms).length, 1);
+}
+
+// 別表記の列は書き出しにも残り、読み戻せる。
+{
+  const terms = dictionary("橘沙耶	たちばなさや	人物	両方	橘紗耶/立花沙耶");
+  const restored = parseProofreadTermInput(
+    formatProofreadTermsForExport(terms),
+    "project",
+  ).terms;
+  assert.deepEqual(restored[0].variants, ["橘紗耶", "立花沙耶"]);
+  assert.equal(restored[0].policy, "both");
+}
+
+// --- 原稿からの候補抽出 -------------------------------------------------------
+{
+  const text = [
+    "｜橘沙耶《たちばなさや》は席を立った。",
+    "橘沙耶は窓を見た。",
+    "田中さんが呼んでいる。",
+    "エルディアの城は遠い。エルディアへ向かう。",
+    "ドアを開けた。",
+  ].join(NL);
+
+  const found = collectTermCandidates(text, []);
+  assert.deepEqual(
+    found.map((candidate) => [candidate.surface, candidate.source, candidate.reading]),
+    [
+      ["橘沙耶", "ruby", "たちばなさや"],
+      ["田中", "honorific", ""],
+      ["エルディア", "katakana", ""],
+    ],
+  );
+  assert.equal(found[0].count, 2, "ルビの読みは数に入れず、本文の出現だけ数える");
+  assert.equal(found[1].kind, "person", "敬称つきは人物として拾う");
+}
+
+// 1度しか出てこない片仮名語は候補にしない。
+{
+  const found = collectTermCandidates("ドアを開けた。", []);
+  assert.equal(found.length, 0);
+}
+
+// すでに辞書にある語と、その別表記は出さない。
+{
+  const text = "｜橘沙耶《たちばなさや》と橘紗耶。エルディアとエルディア。";
+  const existing = parseProofreadTermInput(
+    ["橘沙耶		人物	揃える	橘紗耶"].join(NL),
+    "project",
+  ).terms;
+  assert.deepEqual(
+    collectTermCandidates(text, existing).map((candidate) => candidate.surface),
+    ["エルディア"],
+  );
+}
+
+// コードブロックの中は拾わない。
+{
+  const found = collectTermCandidates(
+    ["```", "エルディア", "エルディア", "```"].join(NL),
+    [],
+  );
+  assert.equal(found.length, 0);
+}
+
+// --- 誤検出の洗い出し ---------------------------------------------------------
+// 「の」は名詞をつなぐものだけを数える。接続助詞・指示語・準体助詞は数えない。
+expectNone("ルールとは原理的に両立できないので、このモードのときは無効になる。", "sentence-flow");
+expectNone("その流れであんまり有益ではなかったので、この件はここまで。", "sentence-flow");
+expectNone("彼が来るのが分かるのは、それを見るのが好きだからだ。", "sentence-flow");
+expectNone("もののあはれというものの見方があるものの、それはそれだ。", "sentence-flow");
+// 名詞の連なりは従来どおり拾う（建議が例に挙げている形）。
+{
+  const issue = expectOne("本年の当課の取組の中心は広報である。", "sentence-flow", "の当課の取組の");
+  assert.match(issue.message, /「の」が3回/);
+}
+expectOne("私の友人の兄の車が止まっている。", "sentence-flow", "の友人の兄の");
+
+// 「やってみたい」の「みたい」は補助動詞。
+expectNone("一度やってみたいと思っていた。", "colloquial");
+expectOne("子どもみたいな言い方だ。", "colloquial", "みたいな");
+
+// 「初めて見る」は本動詞の「見る」。
+expectNone("初めて見る景色だった。", "kanji-opening");
+expectOne("一度やって見る価値はある。", "kanji-opening", "て見る");
+
+// 段落をまたぐ台詞は、行頭の「を閉じないのが通例。閉じ括弧のない行は咎めない。
+expectNone(["「ここから長い台詞が始まる。", "「そして次の段落へ続く。", "　最後はここで閉じる」"].join(NL), "punctuation");
+// 同じ行の中で対応が取れていないものは拾う。
+{
+  const issue = expectOne("「ここは閉じた」そして「ここが開いたまま。", "punctuation", "「");
+  assert.match(issue.message, /対応が取れていません/);
+}
+// 閉じ括弧だけの行も、段落をまたぐ台詞の結びなので咎めない。
+expectNone("　最後はここで閉じる」", "punctuation");
+expectOne("「開いた」あと、対応のない」がある。", "punctuation", "」");
+
+// 送り仮名を省いた形が熟語の一部になっているものは、ゆれとして数えない。
+expectNone("見積書を作る。見積もりを添える。", "notation-variants");
+expectNone("手続法に沿う。手続きを進める。", "notation-variants");
+// 熟語でなければ従来どおり拾う。
+{
+  const issue = expectOne("見積もりを出す。見積を確認する。", "notation-variants", "見積");
+  assert.equal(issue.replacement, "見積もり");
+}
+
+// --- 検出項目ごとのオン・オフ ---------------------------------------------------
+{
+  const notation = PROOFREAD_RULES.find((rule) => rule.id === "notation-variants");
+  assert.deepEqual(
+    notation.checks.map((check) => check.id),
+    [
+      "notation-variants/okurigana",
+      "notation-variants/width-digits",
+      "notation-variants/width-alphabet",
+      "notation-variants/width-space",
+    ],
+  );
+  for (const check of notation.checks) assert.ok(check.name && check.summary);
+}
+
+// 数字の全角半角だけを止めても、送り仮名のゆれは残る。
+{
+  const text = "第1章と第３章を読み、打ち合わせと打合せを終えた。";
+  const all = byRule(text, "notation-variants").map((issue) => issue.checkId);
+  assert.ok(all.includes("notation-variants/width-digits"));
+  assert.ok(all.includes("notation-variants/okurigana"));
+
+  const withoutDigits = scan(text, {
+    disabledChecks: ["notation-variants/width-digits"],
+  }).issues.filter((issue) => issue.ruleId === "notation-variants");
+  assert.ok(withoutDigits.every((issue) => issue.checkId !== "notation-variants/width-digits"));
+  assert.ok(withoutDigits.some((issue) => issue.checkId === "notation-variants/okurigana"));
+}
+
+// 全角と半角の間の空きも、項目として止められる。
+{
+  const text = "Then は縦書きのエディタです。";
+  assert.equal(
+    byRule(text, "notation-variants").filter(
+      (issue) => issue.checkId === "notation-variants/width-space",
+    ).length,
+    1,
+  );
+  assert.equal(
+    scan(text, { disabledChecks: ["notation-variants/width-space"] }).issues.filter(
+      (issue) => issue.ruleId === "notation-variants",
+    ).length,
+    0,
+  );
 }
 
 console.log("proofread rules OK");

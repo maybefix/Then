@@ -108,6 +108,11 @@ import { IdeaPane } from "./components/snippets/IdeaPane";
 import ProofreadPane from "./components/proofread/ProofreadPane";
 import { PROOFREAD_RULES } from "./proofread/rules";
 import { DEFAULT_PROOFREAD_OPTIONS } from "./proofread/types";
+import {
+  collectProtectedSurfaces,
+  normalizeProofreadTerms,
+  type ProofreadTerm,
+} from "./proofread/terms";
 import { QuickIdeaModal } from "./components/snippets/QuickIdeaModal";
 import { StatusBar } from "./components/status/StatusBar";
 import type {
@@ -1112,6 +1117,7 @@ function createDefaultState(): AppState {
     collapsedOutlineHeadingKeysByWorkspace: {},
     fileProgress: {},
     cursorPositions: {},
+    proofreadTerms: [],
     documentTabsByWorkspace: {},
     snapshots: [],
   };
@@ -2016,6 +2022,9 @@ function normalizeCollapsedPathListsByWorkspace(
 }
 
 const knownProofreadRuleIds = new Set(PROOFREAD_RULES.map((rule) => rule.id));
+const knownProofreadCheckIds = new Set(
+  PROOFREAD_RULES.flatMap((rule) => rule.checks?.map((check) => check.id) ?? []),
+);
 
 /**
  * 校正設定の復元。しきい値は入力欄と同じ範囲へ丸め、無くなったルールIDは捨てる。
@@ -2036,6 +2045,16 @@ function normalizeProofreadSettings(value: unknown): ProofreadSettings {
     maxCommasPerSentence: clamp(stored.maxCommasPerSentence, 1, 12, fallback.maxCommasPerSentence),
     skipDialogue:
       typeof stored.skipDialogue === "boolean" ? stored.skipDialogue : fallback.skipDialogue,
+    disabledChecks: Array.isArray(stored.disabledChecks)
+      ? Array.from(
+          new Set(
+            stored.disabledChecks.filter(
+              (checkId): checkId is string =>
+                typeof checkId === "string" && knownProofreadCheckIds.has(checkId),
+            ),
+          ),
+        )
+      : [],
     disabledRules: Array.isArray(stored.disabledRules)
       ? Array.from(
           new Set(
@@ -2238,6 +2257,7 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
     ),
     fileProgress: normalizeFileProgress(value?.fileProgress),
     cursorPositions: normalizeCursorPositions(value?.cursorPositions),
+    proofreadTerms: normalizeProofreadTerms(value?.proofreadTerms, "global"),
     documentTabsByWorkspace: normalizeWorkspaceDocumentTabs(
       value?.documentTabsByWorkspace,
     ),
@@ -2334,6 +2354,54 @@ async function loadWorkspacePlotCards(folderPath: string): Promise<PlotCard[]> {
 async function saveWorkspacePlotCards(folderPath: string, plotCards: PlotCard[]): Promise<void> {
   if (!isTauriRuntime()) return;
   await invoke("save_project_plot_cards", { rootPath: folderPath, plotCards });
+}
+
+async function loadWorkspaceProofreadTerms(folderPath: string): Promise<ProofreadTerm[]> {
+  if (!isTauriRuntime()) return [];
+  const terms = await invoke<unknown>("load_project_proofread_terms", { rootPath: folderPath });
+  return normalizeProofreadTerms(terms, "project");
+}
+
+async function saveWorkspaceProofreadTerms(
+  folderPath: string,
+  proofreadTerms: ProofreadTerm[],
+): Promise<void> {
+  if (!isTauriRuntime()) return;
+  await invoke("save_project_proofread_terms", { rootPath: folderPath, proofreadTerms });
+}
+
+/** 無視した指摘。ワークスペース内の相対パスごとに保つ。 */
+type ProofreadIgnoredByPath = Record<string, string[]>;
+
+function normalizeProofreadIgnored(value: unknown): ProofreadIgnoredByPath {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const normalized: ProofreadIgnoredByPath = {};
+  for (const [path, keys] of Object.entries(value as Record<string, unknown>)) {
+    if (!path || !Array.isArray(keys)) continue;
+    const kept = Array.from(
+      new Set(keys.filter((key): key is string => typeof key === "string" && key.length > 0)),
+    );
+    if (kept.length) normalized[path] = kept;
+  }
+  return normalized;
+}
+
+async function loadWorkspaceProofreadIgnored(
+  folderPath: string,
+): Promise<ProofreadIgnoredByPath> {
+  if (!isTauriRuntime()) return {};
+  const stored = await invoke<unknown>("load_project_proofread_ignored", {
+    rootPath: folderPath,
+  });
+  return normalizeProofreadIgnored(stored);
+}
+
+async function saveWorkspaceProofreadIgnored(
+  folderPath: string,
+  proofreadIgnored: ProofreadIgnoredByPath,
+): Promise<void> {
+  if (!isTauriRuntime()) return;
+  await invoke("save_project_proofread_ignored", { rootPath: folderPath, proofreadIgnored });
 }
 
 async function loadReferenceLayout(folderPath: string): Promise<ReferenceLayout> {
@@ -2513,6 +2581,13 @@ export default function App() {
   const [checkpointUnavailableProjectPaths, setCheckpointUnavailableProjectPaths] = useState<ReadonlySet<string>>(() => new Set());
   const [snippetWorkspacePath, setSnippetWorkspacePath] = useState<string | null>(null);
   const [plotWorkspacePath, setPlotWorkspacePath] = useState<string | null>(null);
+  const [projectProofreadTerms, setProjectProofreadTerms] = useState<ProofreadTerm[]>([]);
+  const [projectProofreadIgnored, setProjectProofreadIgnored] = useState<ProofreadIgnoredByPath>(
+    {},
+  );
+  const [proofreadTermsWorkspacePath, setProofreadTermsWorkspacePath] = useState<string | null>(
+    null,
+  );
   const [plotCards, setPlotCards] = useState<PlotCard[]>(() => defaultPlotCards);
   const [focusedFolderPath, setFocusedFolderPath] = useState<string | null>(null);
   const [workspaceAlert, setWorkspaceAlert] = useState<WorkspaceAlert>(null);
@@ -2577,6 +2652,7 @@ export default function App() {
   const [systemFonts, setSystemFonts] = useState<FontOption[]>(fallbackFontOptions);
   const [isMetadataOpen, setIsMetadataOpen] = useState(false);
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
+  const rightTabsRef = useRef<HTMLDivElement | null>(null);
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
   const [isRightSidebarWide, setIsRightSidebarWide] = useState(false);
   const [isEditorFocusMode, setIsEditorFocusMode] = useState(false);
@@ -2633,6 +2709,23 @@ export default function App() {
       setRightSidebarTab("plot");
     }
   }, [activePluginView, rightSidebarTab]);
+  // タブが溢れているときに、選択中のタブが見えない位置に残らないようにする。
+  useEffect(() => {
+    const strip = rightTabsRef.current;
+    const active = strip?.querySelector<HTMLElement>(".activeRightTab");
+    if (!strip || !active) return;
+
+    // scrollIntoView は祖先までさかのぼってスクロールするため、サイドバーを
+    // 畳んでいるときにアプリ全体が横へずれて右端に余白が出てしまう。
+    // ここはタブ帯の中だけを動かす。
+    const left = active.offsetLeft;
+    const right = left + active.offsetWidth;
+    if (left < strip.scrollLeft) {
+      strip.scrollLeft = left;
+    } else if (right > strip.scrollLeft + strip.clientWidth) {
+      strip.scrollLeft = right - strip.clientWidth;
+    }
+  }, [pluginViews.length, rightSidebarTab]);
   useEffect(() => {
     if (activePluginModalKey && !activePluginModal) setActivePluginModalKey(null);
   }, [activePluginModal, activePluginModalKey]);
@@ -4036,6 +4129,9 @@ export default function App() {
     setSnippetWorkspacePath(null);
     setPlotWorkspacePath(null);
     setPlotCards(defaultPlotCards);
+    setProofreadTermsWorkspacePath(null);
+    setProjectProofreadTerms([]);
+    setProjectProofreadIgnored({});
     referenceLayoutLoadedRootRef.current = null;
     setReferenceLayout(defaultReferenceLayout);
     setReferenceCandidates([]);
@@ -4066,11 +4162,16 @@ export default function App() {
           ? await loadWorkspaceSnippets(folder.path)
           : state.snippets;
       const restoredPlotCards = await loadWorkspacePlotCards(folder.path);
+      const restoredProofreadTerms = await loadWorkspaceProofreadTerms(folder.path);
+      const restoredProofreadIgnored = await loadWorkspaceProofreadIgnored(folder.path);
       setSnippetWorkspacePath(
         state.settings.snippetStorageMode === "workspace" ? folder.path : null,
       );
       setPlotWorkspacePath(folder.path);
       setPlotCards(restoredPlotCards);
+      setProofreadTermsWorkspacePath(folder.path);
+      setProjectProofreadTerms(restoredProofreadTerms);
+      setProjectProofreadIgnored(restoredProofreadIgnored);
 
       const restoredState: AppState = {
         ...state,
@@ -4277,6 +4378,32 @@ export default function App() {
   }, [isHydrated, plotCards, plotWorkspacePath, projectFolder]);
 
   useEffect(() => {
+    if (!isHydrated || !projectFolder) return;
+    if (proofreadTermsWorkspacePath !== projectFolder.path) return;
+
+    const timer = window.setTimeout(() => {
+      saveWorkspaceProofreadTerms(projectFolder.path, projectProofreadTerms).catch(() => {
+        setLastError("ワークスペースの校正辞書の保存に失敗しました");
+      });
+    }, 700);
+
+    return () => window.clearTimeout(timer);
+  }, [isHydrated, projectFolder, projectProofreadTerms, proofreadTermsWorkspacePath]);
+
+  useEffect(() => {
+    if (!isHydrated || !projectFolder) return;
+    if (proofreadTermsWorkspacePath !== projectFolder.path) return;
+
+    const timer = window.setTimeout(() => {
+      saveWorkspaceProofreadIgnored(projectFolder.path, projectProofreadIgnored).catch(() => {
+        setLastError("無視した指摘の保存に失敗しました");
+      });
+    }, 700);
+
+    return () => window.clearTimeout(timer);
+  }, [isHydrated, projectFolder, projectProofreadIgnored, proofreadTermsWorkspacePath]);
+
+  useEffect(() => {
     if (!isHydrated || !isTauriRuntime()) return;
     if (settings.snippetStorageMode !== "workspace") return;
     if (workspaceSwitchInProgressRef.current) return;
@@ -4296,8 +4423,16 @@ export default function App() {
           }),
       loadWorkspaceSnippets(activeWorkspaceRootPath),
       loadWorkspacePlotCards(activeWorkspaceRootPath),
+      loadWorkspaceProofreadTerms(activeWorkspaceRootPath),
+      loadWorkspaceProofreadIgnored(activeWorkspaceRootPath),
     ])
-      .then(([folder, workspaceSnippets, workspacePlotCards]) => {
+      .then(([
+        folder,
+        workspaceSnippets,
+        workspacePlotCards,
+        workspaceProofreadTerms,
+        workspaceProofreadIgnored,
+      ]) => {
         if (isCancelled) return;
         if (workspaceSwitchGeneration !== workspaceSwitchGenerationRef.current) return;
         setProjectFolder(folder);
@@ -4306,6 +4441,9 @@ export default function App() {
         setSnippetWorkspacePath(folder.path);
         setPlotWorkspacePath(folder.path);
         setPlotCards(workspacePlotCards);
+        setProofreadTermsWorkspacePath(folder.path);
+        setProjectProofreadTerms(workspaceProofreadTerms);
+        setProjectProofreadIgnored(workspaceProofreadIgnored);
         setAppState((current) => ({
           ...current,
           snippets: workspaceSnippets,
@@ -5842,11 +5980,16 @@ export default function App() {
           ? await loadWorkspaceSnippets(folder.path)
           : null;
       const nextPlotCards = await loadWorkspacePlotCards(folder.path);
+      const nextProofreadTerms = await loadWorkspaceProofreadTerms(folder.path);
+      const nextProofreadIgnored = await loadWorkspaceProofreadIgnored(folder.path);
       if (nextSnippets) {
         setSnippetWorkspacePath(folder.path);
       }
       setPlotWorkspacePath(folder.path);
       setPlotCards(nextPlotCards);
+      setProofreadTermsWorkspacePath(folder.path);
+      setProjectProofreadTerms(nextProofreadTerms);
+      setProjectProofreadIgnored(nextProofreadIgnored);
       setAppState((current) => {
         const cursorPositions = { ...current.cursorPositions };
         const fileProgress = { ...current.fileProgress };
@@ -6523,6 +6666,8 @@ export default function App() {
           ? await loadWorkspaceSnippets(folder.path)
           : snippets;
       const restoredPlotCards = await loadWorkspacePlotCards(folder.path);
+      const restoredProofreadTerms = await loadWorkspaceProofreadTerms(folder.path);
+      const restoredProofreadIgnored = await loadWorkspaceProofreadIgnored(folder.path);
       const firstFile = findFirstTextFile(preferredFiles) ?? findFirstTextFile(folder.children);
       const workspaceKey = workspaceDocumentTabsKey(folder.path);
       const savedTabs = appState.documentTabsByWorkspace[workspaceKey];
@@ -6552,6 +6697,9 @@ export default function App() {
       setSnippetWorkspacePath(settings.snippetStorageMode === "workspace" ? folder.path : null);
       setPlotWorkspacePath(folder.path);
       setPlotCards(restoredPlotCards);
+      setProofreadTermsWorkspacePath(folder.path);
+      setProjectProofreadTerms(restoredProofreadTerms);
+      setProjectProofreadIgnored(restoredProofreadIgnored);
 
       const nextTabs = restoredTabs?.tabs.length
         ? restoredTabs.tabs
@@ -7212,6 +7360,46 @@ export default function App() {
         editorInstanceRef.current?.focus();
       });
     });
+  };
+
+  /**
+   * 無視した指摘を覚えておくときの見出し。ワークスペース内の相対パスにして、
+   * フォルダごと移動しても対応が切れないようにする。無題の原稿は保存先が
+   * ないので、タブの識別子で代用する。
+   */
+  const proofreadIgnoreKey = useMemo(() => {
+    if (!currentFilePath) return `scratch:${documentKey}`;
+    const root = projectFolder?.path;
+    if (!root) return currentFilePath;
+    const normalizedRoot = root.replace(/\\/g, "/");
+    const normalizedPath = currentFilePath.replace(/\\/g, "/");
+    return normalizedPath.startsWith(`${normalizedRoot}/`)
+      ? normalizedPath.slice(normalizedRoot.length + 1)
+      : normalizedPath;
+  }, [currentFilePath, documentKey, projectFolder]);
+
+  /** 校正辞書をタブ区切りのテキストとして保存する。 */
+  const exportProofreadDictionary = async (content: string) => {
+    if (!isTauriRuntime()) return null;
+    try {
+      return await invoke<string | null>("export_proofread_dictionary_dialog", { content });
+    } catch (error) {
+      setLastError(String(error));
+      showToast("校正辞書の書き出しに失敗しました");
+      return null;
+    }
+  };
+
+  /** 校正辞書のテキストを読み込む。解析はペイン側で一括入力と同じ形式で行う。 */
+  const importProofreadDictionary = async () => {
+    if (!isTauriRuntime()) return null;
+    try {
+      return await invoke<string | null>("import_proofread_dictionary_dialog");
+    } catch (error) {
+      setLastError(String(error));
+      showToast("校正辞書の読み込みに失敗しました");
+      return null;
+    }
   };
 
   /** 校正の指摘位置を本文で選択して見せる。 */
@@ -10935,7 +11123,18 @@ export default function App() {
               )}
             >
                 <div className="rightSidebarHeader">
-                  <div className="rightTabs" role="tablist" aria-label="補助ペイン">
+                  <div
+                    ref={rightTabsRef}
+                    className="rightTabs"
+                    role="tablist"
+                    aria-label="補助ペイン"
+                    onWheel={(event) => {
+                      // タブが溢れているときだけ、縦の回転を横送りに振り替える。
+                      const strip = event.currentTarget;
+                      if (strip.scrollWidth <= strip.clientWidth) return;
+                      strip.scrollLeft += event.deltaY || event.deltaX;
+                    }}
+                  >
                     <button
                       className={`rightTab ${rightSidebarTab === "idea" ? "activeRightTab" : ""}`}
                       type="button"
@@ -11087,6 +11286,32 @@ export default function App() {
                       }
                       onJump={revealEditorRange}
                       onReplace={replaceEditorRange}
+                      projectTerms={projectProofreadTerms}
+                      globalTerms={appState.proofreadTerms}
+                      hasProject={Boolean(projectFolder)}
+                      onProjectTermsChange={setProjectProofreadTerms}
+                      onGlobalTermsChange={(terms) =>
+                        setAppState((current) => ({ ...current, proofreadTerms: terms }))
+                      }
+                      onExportTermFile={exportProofreadDictionary}
+                      onImportTermFile={importProofreadDictionary}
+                      canUseTermFiles={isTauriRuntime()}
+                      ignoredKeys={projectProofreadIgnored[proofreadIgnoreKey] ?? []}
+                      onIgnoredKeysChange={(keys) =>
+                        setProjectProofreadIgnored((current) => {
+                          const next = { ...current };
+                          if (keys.length) next[proofreadIgnoreKey] = keys;
+                          else delete next[proofreadIgnoreKey];
+                          return next;
+                        })
+                      }
+                      disabledCheckIds={settings.proofread.disabledChecks}
+                      onDisabledCheckIdsChange={(checkIds) =>
+                        updateSettings("proofread", {
+                          ...settings.proofread,
+                          disabledChecks: checkIds,
+                        })
+                      }
                     />
                   ) : rightSidebarTab === "plot" ? (
                     <PlotPane

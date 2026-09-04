@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { runProofread, type ProofreadResult } from "../../proofread/engine";
-import { PROOFREAD_RULES } from "../../proofread/rules";
+import { PROOFREAD_RULES, proofreadRuleById } from "../../proofread/rules";
+import {
+  mergeProofreadTerms,
+  parseProofreadTermInput,
+  validateTermSurface,
+  type ProofreadTerm,
+  type ProofreadTermScope,
+} from "../../proofread/terms";
+import ProofreadDictionary from "./ProofreadDictionary";
 import {
   proofreadSeverityLabels,
   proofreadTargetLabels,
@@ -29,6 +37,25 @@ type ProofreadPaneProps = {
   onJump: (from: number, to: number) => void;
   /** 該当箇所を置き換える。 */
   onReplace: (from: number, to: number, insert: string) => void;
+  /** このワークスペースの校正辞書。 */
+  projectTerms: ProofreadTerm[];
+  /** 全ワークスペース共通の校正辞書。 */
+  globalTerms: ProofreadTerm[];
+  hasProject: boolean;
+  onProjectTermsChange: (terms: ProofreadTerm[]) => void;
+  onGlobalTermsChange: (terms: ProofreadTerm[]) => void;
+  /** 辞書をファイルへ書き出す。保存したパスを返す。 */
+  onExportTermFile: (content: string) => Promise<string | null>;
+  /** ファイルから辞書のテキストを読む。 */
+  onImportTermFile: () => Promise<string | null>;
+  /** ファイルのやり取りができるか（Tauri版のみ）。 */
+  canUseTermFiles: boolean;
+  /** このファイルで無視している指摘のキー。 */
+  ignoredKeys: string[];
+  onIgnoredKeysChange: (keys: string[]) => void;
+  /** 止めている検出項目のID。 */
+  disabledCheckIds: string[];
+  onDisabledCheckIdsChange: (checkIds: string[]) => void;
 };
 
 const sourceLabel = (rule: ProofreadRule) =>
@@ -37,16 +64,45 @@ const sourceLabel = (rule: ProofreadRule) =>
 function IssueCard({
   issue,
   isSelected,
+  canAddTerm,
+  hasProject,
   onJump,
   onReplace,
   onIgnore,
+  onAddTerm,
 }: {
   issue: ProofreadIssue;
   isSelected: boolean;
+  /** この指摘が語を指していて、辞書に登録できるか。 */
+  canAddTerm: boolean;
+  hasProject: boolean;
   onJump: () => void;
   onReplace: () => void;
   onIgnore: () => void;
+  /** 登録できなければ理由を返す。 */
+  onAddTerm: (surface: string, scope: ProofreadTermScope) => string | null;
 }) {
+  const [isAdding, setIsAdding] = useState(false);
+  const [surface, setSurface] = useState(issue.excerpt.match);
+  const [scope, setScope] = useState<ProofreadTermScope>(hasProject ? "project" : "global");
+  const [error, setError] = useState<string | null>(null);
+
+  const openAdd = () => {
+    setSurface(issue.excerpt.match);
+    setScope(hasProject ? "project" : "global");
+    setError(null);
+    setIsAdding(true);
+  };
+
+  const submit = () => {
+    const failure = onAddTerm(surface, hasProject ? scope : "global");
+    if (failure) {
+      setError(failure);
+      return;
+    }
+    setIsAdding(false);
+  };
+
   return (
     <li className={`proofIssue ${isSelected ? "isSelected" : ""}`}>
       <button className="proofIssueMain" type="button" onClick={onJump}>
@@ -55,7 +111,6 @@ function IssueCard({
             {proofreadSeverityLabels[issue.severity]}
           </span>
           <span className="proofIssueRule">{issue.ruleName}</span>
-          <span className="proofIssueLine">{issue.line}行</span>
         </span>
         <span className="proofExcerpt">
           <span className="proofExcerptSide">{issue.excerpt.before}</span>
@@ -80,10 +135,75 @@ function IssueCard({
             {issue.replacement === "" ? "削除" : `→ ${issue.replacement}`}
           </button>
         )}
+        {canAddTerm && (
+          <button
+            className="proofActionButton"
+            type="button"
+            title="この語を辞書に登録して、以後どのルールも触れないようにする"
+            onClick={() => (isAdding ? setIsAdding(false) : openAdd())}
+          >
+            辞書
+          </button>
+        )}
         <button className="proofActionButton" type="button" onClick={onIgnore}>
           無視
         </button>
       </div>
+      {isAdding && (
+        <div className="proofIssueAdd">
+          <label className="proofTermField">
+            <span>表記</span>
+            <input
+              value={surface}
+              spellCheck={false}
+              aria-label="辞書に登録する表記"
+              onChange={(event) => {
+                setSurface(event.target.value);
+                setError(null);
+              }}
+            />
+          </label>
+          {hasProject && (
+            <div className="proofScopeSwitch" role="group" aria-label="辞書の保存範囲">
+              <button
+                className={`proofScopeTab ${scope === "project" ? "isActive" : ""}`}
+                type="button"
+                onClick={() => setScope("project")}
+              >
+                プロジェクト
+              </button>
+              <button
+                className={`proofScopeTab ${scope === "global" ? "isActive" : ""}`}
+                type="button"
+                onClick={() => setScope("global")}
+              >
+                共通
+              </button>
+            </div>
+          )}
+          <p className="proofNote">
+            指摘された語より広い範囲が名前のこともあります。必要なら書き足してください。
+          </p>
+          {error && <p className="proofTermError">{error}</p>}
+          <div className="proofTermEditorActions">
+            <button
+              className="proofActionButton"
+              type="button"
+              onClick={() => setIsAdding(false)}
+            >
+              やめる
+            </button>
+            <button
+              className="proofActionButton isPrimary"
+              type="button"
+              disabled={!surface.trim()}
+              onClick={submit}
+            >
+              辞書に追加
+            </button>
+          </div>
+        </div>
+      )}
     </li>
   );
 }
@@ -93,13 +213,17 @@ function RuleCard({
   count,
   enabled,
   skipDialogue,
+  disabledCheckIds,
   onToggle,
+  onToggleCheck,
 }: {
   rule: ProofreadRule;
   count: number;
   enabled: boolean;
   skipDialogue: boolean;
+  disabledCheckIds: string[];
   onToggle: () => void;
+  onToggleCheck: (checkId: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -124,6 +248,26 @@ function RuleCard({
           ? "会話文（「」）は対象外"
           : "会話文（「」）も対象"}
       </p>
+      {rule.checks && rule.checks.length > 0 && (
+        <ul className="proofCheckList">
+          {rule.checks.map((check) => (
+            <li key={check.id}>
+              <label className="proofCheckRow">
+                <input
+                  type="checkbox"
+                  checked={!disabledCheckIds.includes(check.id)}
+                  disabled={!enabled}
+                  onChange={() => onToggleCheck(check.id)}
+                />
+                <span>
+                  <span className="proofCheckName">{check.name}</span>
+                  <span className="proofCheckSummary">{check.summary}</span>
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
       <button
         className="proofSourceToggle"
         type="button"
@@ -162,34 +306,55 @@ export default function ProofreadPane({
   onDisabledRuleIdsChange,
   onJump,
   onReplace,
+  projectTerms,
+  globalTerms,
+  hasProject,
+  onProjectTermsChange,
+  onGlobalTermsChange,
+  onExportTermFile,
+  onImportTermFile,
+  canUseTermFiles,
+  ignoredKeys,
+  onIgnoredKeysChange,
+  disabledCheckIds,
+  onDisabledCheckIdsChange,
 }: ProofreadPaneProps) {
-  const [view, setView] = useState<"issues" | "rules">("issues");
+  const [view, setView] = useState<"issues" | "rules" | "dictionary">("issues");
   const [result, setResult] = useState<ProofreadResult>(EMPTY_RESULT);
   const [isScanning, setIsScanning] = useState(false);
-  const [ignoredKeys, setIgnoredKeys] = useState<string[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [showIgnored, setShowIgnored] = useState(false);
   const [ruleFilter, setRuleFilter] = useState<string | null>(null);
+  const [termNotice, setTermNotice] = useState<string | null>(null);
 
   const enabledRules = useMemo(
     () => PROOFREAD_RULES.filter((rule) => !disabledRuleIds.includes(rule.id)),
     [disabledRuleIds],
   );
 
-  // ファイルを切り替えたら、前のファイルに対する「無視」は持ち越さない。
+  // プロジェクトの辞書を先に置き、同じ表記が共通側にもあればプロジェクト側を採る。
+  const activeTerms = useMemo(() => {
+    const bySurface = new Map<string, ProofreadTerm>();
+    for (const term of [...projectTerms, ...globalTerms]) {
+      if (!bySurface.has(term.surface)) bySurface.set(term.surface, term);
+    }
+    return [...bySurface.values()];
+  }, [globalTerms, projectTerms]);
+
   useEffect(() => {
-    setIgnoredKeys([]);
     setSelectedKey(null);
+    setShowIgnored(false);
   }, [documentKey]);
 
   useEffect(() => {
     if (!active) return;
     setIsScanning(true);
     const timer = window.setTimeout(() => {
-      setResult(runProofread(text, options, enabledRules));
+      setResult(runProofread(text, options, enabledRules, activeTerms));
       setIsScanning(false);
     }, SCAN_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [active, text, options, enabledRules]);
+  }, [active, text, options, enabledRules, activeTerms]);
 
   const visibleIssues = useMemo(
     () =>
@@ -211,6 +376,19 @@ export default function ProofreadPane({
 
   const activeCount = result.issues.filter((issue) => !ignoredKeys.includes(issue.key)).length;
 
+  /**
+   * 無視した指摘の一覧。本文が変わって同じ指摘が出なくなっていることもあるため、
+   * 見つからないものはキーから読める範囲を出す。
+   */
+  const ignoredIssues = useMemo(() => {
+    const byKey = new Map(result.issues.map((issue) => [issue.key, issue]));
+    return ignoredKeys.map((key) => ({
+      key,
+      issue: byKey.get(key),
+      label: key.split(":").slice(2).join(":") || key,
+    }));
+  }, [ignoredKeys, result.issues]);
+
   const toggleRule = (ruleId: string) => {
     onDisabledRuleIdsChange(
       disabledRuleIds.includes(ruleId)
@@ -221,6 +399,31 @@ export default function ProofreadPane({
 
   const patchOptions = (patch: Partial<ProofreadOptions>) =>
     onOptionsChange({ ...options, ...patch });
+
+  /**
+   * 指摘から辞書へ語を足す。登録できないときは理由を返し、カードの中に出す。
+   * 扱いは「守る」で入れる。指摘を黙らせたくて押す操作なので。
+   */
+  const addTermFromIssue = (surface: string, scope: ProofreadTermScope): string | null => {
+    const target = scope === "project" ? projectTerms : globalTerms;
+    const trimmed = surface.trim();
+    const failure = validateTermSurface(trimmed, target);
+    if (failure) return failure;
+
+    const parsed = parseProofreadTermInput(trimmed, scope);
+    if (!parsed.terms.length) {
+      return parsed.rejected[0]?.reason ?? "この表記は辞書に登録できません";
+    }
+
+    const merged = mergeProofreadTerms(target, parsed.terms);
+    if (scope === "project") onProjectTermsChange(merged.terms);
+    else onGlobalTermsChange(merged.terms);
+
+    setTermNotice(
+      `「${trimmed}」を${scope === "project" ? "このプロジェクト" : "共通"}の辞書に追加しました。`,
+    );
+    return null;
+  };
 
   return (
     <div className="proofPane">
@@ -245,6 +448,16 @@ export default function ProofreadPane({
           >
             ルール
             <span className="proofViewCount">{enabledRules.length}</span>
+          </button>
+          <button
+            className={`proofViewTab ${view === "dictionary" ? "isActive" : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={view === "dictionary"}
+            onClick={() => setView("dictionary")}
+          >
+            辞書
+            <span className="proofViewCount">{projectTerms.length + globalTerms.length}</span>
           </button>
         </div>
         <span className="proofStatus">
@@ -280,6 +493,17 @@ export default function ProofreadPane({
             </div>
           )}
 
+          {termNotice && (
+            <button
+              className="proofNote proofTermNotice"
+              type="button"
+              title="閉じる"
+              onClick={() => setTermNotice(null)}
+            >
+              {termNotice}
+            </button>
+          )}
+
           {visibleIssues.length === 0 ? (
             <p className="proofEmpty">
               {enabledRules.length === 0
@@ -295,6 +519,9 @@ export default function ProofreadPane({
                   key={issue.key}
                   issue={issue}
                   isSelected={selectedKey === issue.key}
+                  canAddTerm={proofreadRuleById.get(issue.ruleId)?.wordScoped ?? false}
+                  hasProject={hasProject}
+                  onAddTerm={addTermFromIssue}
                   onJump={() => {
                     setSelectedKey(issue.key);
                     onJump(issue.from, issue.to);
@@ -303,7 +530,7 @@ export default function ProofreadPane({
                     setSelectedKey(issue.key);
                     onReplace(issue.from, issue.to, issue.replacement ?? "");
                   }}
-                  onIgnore={() => setIgnoredKeys((keys) => [...keys, issue.key])}
+                  onIgnore={() => onIgnoredKeysChange([...ignoredKeys, issue.key])}
                 />
               ))}
             </ul>
@@ -313,16 +540,57 @@ export default function ProofreadPane({
             <p className="proofNote">指摘が多いため途中で打ち切りました。直してから再度確認します。</p>
           )}
           {ignoredKeys.length > 0 && (
-            <button
-              className="proofActionButton proofRestoreIgnored"
-              type="button"
-              onClick={() => setIgnoredKeys([])}
-            >
-              無視した{ignoredKeys.length}件を戻す
-            </button>
+            <div className="proofIgnoredArea">
+              <button
+                className="proofSourceToggle"
+                type="button"
+                aria-expanded={showIgnored}
+                onClick={() => setShowIgnored((open) => !open)}
+              >
+                {showIgnored ? "無視した指摘を閉じる" : `無視した指摘 ${ignoredKeys.length}件`}
+              </button>
+              {showIgnored && (
+                <>
+                  <ul className="proofIgnoredList">
+                    {ignoredIssues.map((entry) => (
+                      <li className="proofIgnoredItem" key={entry.key}>
+                        <span className="proofIgnoredText">
+                          {entry.issue ? (
+                            <>
+                              <span className="proofIssueRule">{entry.issue.ruleName}</span>
+                              <span className="proofIgnoredExcerpt">
+                                {entry.issue.excerpt.match}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="proofIgnoredExcerpt">{entry.label}</span>
+                          )}
+                        </span>
+                        <button
+                          className="proofActionButton"
+                          type="button"
+                          onClick={() =>
+                            onIgnoredKeysChange(ignoredKeys.filter((key) => key !== entry.key))
+                          }
+                        >
+                          戻す
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    className="proofActionButton proofRestoreIgnored"
+                    type="button"
+                    onClick={() => onIgnoredKeysChange([])}
+                  >
+                    すべて戻す
+                  </button>
+                </>
+              )}
+            </div>
           )}
         </div>
-      ) : (
+      ) : view === "rules" ? (
         <div className="proofBody">
           <div className="proofOptions">
             <label className="proofOptionRow">
@@ -383,7 +651,15 @@ export default function ProofreadPane({
                 count={countByRule.get(rule.id) ?? 0}
                 enabled={!disabledRuleIds.includes(rule.id)}
                 skipDialogue={options.skipDialogue}
+                disabledCheckIds={disabledCheckIds}
                 onToggle={() => toggleRule(rule.id)}
+                onToggleCheck={(checkId) =>
+                  onDisabledCheckIdsChange(
+                    disabledCheckIds.includes(checkId)
+                      ? disabledCheckIds.filter((id) => id !== checkId)
+                      : [...disabledCheckIds, checkId],
+                  )
+                }
               />
             ))}
           </ul>
@@ -392,6 +668,20 @@ export default function ProofreadPane({
             出典は各ルールが拠りどころにした資料です。どの語をどう拾うかはThenの実装で、
             資料そのものが定めた検査手順ではありません。指摘を採るかどうかは原稿ごとに判断してください。
           </p>
+        </div>
+      ) : (
+        <div className="proofBody">
+          <ProofreadDictionary
+            text={text}
+            projectTerms={projectTerms}
+            globalTerms={globalTerms}
+            hasProject={hasProject}
+            onProjectTermsChange={onProjectTermsChange}
+            onGlobalTermsChange={onGlobalTermsChange}
+            onExportFile={onExportTermFile}
+            onImportFile={onImportTermFile}
+            canUseFiles={canUseTermFiles}
+          />
         </div>
       )}
     </div>

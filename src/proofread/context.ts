@@ -1,4 +1,5 @@
 import { findJapaneseQuoteRanges } from "../editor/japaneseQuoteRanges";
+import { collectProtectedSurfaces, type ProofreadTerm } from "./terms";
 import type { ProofreadContext, ProofreadOptions, ProofreadSentence } from "./types";
 
 /** 検査対象から外した位置を埋める文字。本文と長さを揃えるため1文字で置き換える。 */
@@ -97,6 +98,39 @@ function computeLineStarts(text: string): number[] {
   return starts;
 }
 
+/**
+ * 辞書に登録された語の範囲。長い語から先に当てて、重なる部分は二重に取らない。
+ * 「見積システム」を伏せてから「見積」を探すことで、組織名の一部が表記ゆれとして
+ * 数えられるのを防ぐ。
+ */
+function collectTermRanges(text: string, surfaces: string[]): Range[] {
+  const ranges: Range[] = [];
+  const taken = new Uint8Array(text.length);
+
+  for (const surface of surfaces) {
+    if (!surface) continue;
+    let index = text.indexOf(surface);
+    while (index >= 0) {
+      let overlaps = false;
+      for (let cursor = index; cursor < index + surface.length; cursor += 1) {
+        if (taken[cursor]) {
+          overlaps = true;
+          break;
+        }
+      }
+      if (!overlaps) {
+        for (let cursor = index; cursor < index + surface.length; cursor += 1) {
+          taken[cursor] = 1;
+        }
+        pushRange(ranges, index, index + surface.length);
+      }
+      index = text.indexOf(surface, index + surface.length);
+    }
+  }
+
+  return ranges;
+}
+
 /** 会話文（「」の内側）の範囲。閉じていない鉤括弧は会話文として扱わない。 */
 function collectDialogueRanges(text: string, lineStarts: number[]): Range[] {
   const ranges: Range[] = [];
@@ -165,9 +199,27 @@ function collectSentences(
   return sentences;
 }
 
-export function createProofreadContext(text: string, options: ProofreadOptions): ProofreadContext {
+/** 指定した表記を潰した本文を返す。ルール側で語の重なりを避けるのに使う。 */
+export function maskSurfaces(text: string, surfaces: string[]): string {
+  if (!surfaces.length) return text;
+  return applyMask(text, collectTermRanges(text, [...surfaces].sort(
+    (left, right) => right.length - left.length,
+  )));
+}
+
+export function createProofreadContext(
+  text: string,
+  options: ProofreadOptions,
+  terms: ProofreadTerm[] = [],
+): ProofreadContext {
+  const protectedSurfaces = collectProtectedSurfaces(terms);
   const lineStarts = computeLineStarts(text);
-  const scanText = applyMask(text, collectMaskRanges(text, lineStarts));
+  // コードブロックやルビを外した本文。文の切り出しはこの段階の本文で行い、
+  // 辞書で伏せた語が一文の長さや読点の数に影響しないようにする。
+  const structuralText = applyMask(text, collectMaskRanges(text, lineStarts));
+  const scanText = protectedSurfaces.length
+    ? applyMask(structuralText, collectTermRanges(structuralText, protectedSurfaces))
+    : structuralText;
   const narrationText = options.skipDialogue
     ? applyMask(scanText, collectDialogueRanges(text, lineStarts))
     : scanText;
@@ -186,9 +238,10 @@ export function createProofreadContext(text: string, options: ProofreadOptions):
 
   return {
     text,
+    terms,
     scanText,
     narrationText,
-    sentences: collectSentences(text, scanText, lineStarts),
+    sentences: collectSentences(text, structuralText, lineStarts),
     options,
     lineAt,
     lineStart: (line) => lineStarts[Math.max(0, Math.min(lineStarts.length - 1, line - 1))] ?? 0,

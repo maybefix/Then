@@ -18,24 +18,35 @@
   --selection-text: var(--on-accent);
   --navigation-icon: var(--text-muted);
   --navigation-icon-hover: var(--text-primary);
-  --editor-symbol: var(--text-faint);
-  --editor-symbol-active: var(--text-muted);
   --topbar-text-primary: var(--text-primary);
   --topbar-text-secondary: var(--text-secondary);
   --topbar-text-muted: var(--text-muted);
   --topbar-text-faint: var(--text-faint);
-  --ruby-base-color: var(--text-primary);
-  --ruby-reading-color: var(--accent);
   --radius-control: 6px;
   --radius-card: 8px;
   --radius-button: 6px;
   --topbar-backdrop: none;
   --silkdown-code-bg: rgba(25, 58, 90, 0.08);
+  /*
+   * silkdown は :root 側にも既定値を持っている。ここで宣言しないと
+   * ライブラリの既定色（黒い引用文字・青いリンク）が出てしまうため、
+   * これらはアプリ側で必ず宣言する。原稿面だけ配色が違うテーマは、
+   * 面のスコープで宣言し直すこと（night-library.css を参照）。
+   */
   --silkdown-code-color: var(--text-primary);
   --silkdown-blockquote-color: var(--text-secondary);
   --silkdown-link-color: var(--accent);
   --silkdown-hr-color: var(--border-subtle);
 }
+
+/*
+ * ルビと記法の記号の色は、ここで既定値を宣言しない。カスタムプロパティは
+ * 「宣言した場所」で値が決まるため、ここで --text-primary などを参照して
+ * 既定値を作ると、chrome の色で解決済みの値が本文へ流れ込む。Night Library の
+ * ように操作盤が暗く原稿面だけ明るいテーマでは、明るい紙に chrome の明るい
+ * 文字色が乗って読めなくなる。既定値は使う側（App.css）の fallback に置き、
+ * 本文の色で解決させる。テーマが独自の色を決めたいときだけ宣言する。
+ */
 
 .appShell[data-theme] .appFrame,
 .appShell[data-theme] .workspace,

@@ -2748,6 +2748,37 @@ export function VerticalTextEditor({
     }
   }, [highlightCurrentLine]);
 
+  /**
+   * 外から本文へ飛ぶときのフォーカス。Tiptap の focus コマンドは実際の
+   * フォーカスを次フレームに回すため、選択を当ててから本当にフォーカスが
+   * 移るまでの間、ブラウザ側には移動前の選択が残る。その隙間に
+   * タイプライタースクロールやページ送りが走ると、古い選択が状態へ
+   * 読み戻されて移動が無かったことになる。ここでは DOM へ直接
+   * フォーカスして隙間をなくす。スクロールは呼び出し側が受け持つので
+   * preventScroll を付け、タイプライターの動きには触れない。
+   */
+  const focusEditorForJump = (editor: Editor) => {
+    if (editor.view.hasFocus()) return;
+    editor.view.dom.focus({ preventScroll: true });
+  };
+
+  /**
+   * 飛び先を画面に入れる。ページ表示はページ送り、タイプライター中は
+   * 基準線へ寄せる。どちらでもないときは ProseMirror に任せる。
+   */
+  const revealJumpTarget = (editor: Editor, scroller: HTMLElement | null) => {
+    if (editorDisplayModeRef.current === "paged") {
+      revealSelectionPageRef.current?.(editor);
+      return;
+    }
+    if (scroller && typewriterScrollRef.current) {
+      stopCenterAnimationRef.current?.();
+      centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, writingModeRef.current);
+      return;
+    }
+    editor.commands.scrollIntoView();
+  };
+
   const handle = useMemo<TextEditorHandle>(
     () => ({
       focus: () => {
@@ -2777,16 +2808,14 @@ export function VerticalTextEditor({
         const current = docToText(editor.state.doc);
         const start = Math.max(0, Math.min(current.length, from));
         const end = Math.max(start, Math.min(current.length, to));
-        editor.commands.focus();
+
+        focusEditorForJump(editor);
         editor.commands.setTextSelection({
           from: pmPosFromTextOffset(editor.state.doc, start),
           to: pmPosFromTextOffset(editor.state.doc, end),
         });
         onSelectionChangeRef.current();
-        if (scroller && typewriterScrollRef.current) {
-          stopCenterAnimationRef.current?.();
-          centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, writingModeRef.current);
-        }
+        revealJumpTarget(editor, scroller);
         requestLineBreakMarksRef.current?.();
       },
       replaceRange: (from, to, insert, cursorPos) => {
@@ -2822,19 +2851,11 @@ export function VerticalTextEditor({
 
         const index = Math.max(0, Math.min(editor.state.doc.childCount - 1, line - 1));
         const pos = (pmStartAtIndex(editor.state.doc, index) ?? 0) + 1;
-        if (editorDisplayModeRef.current === "paged") {
-          editor.view.dom.focus({ preventScroll: true });
-        } else {
-          editor.commands.focus();
-        }
+
+        focusEditorForJump(editor);
         editor.commands.setTextSelection(pos);
         onSelectionChangeRef.current();
-        if (editorDisplayModeRef.current === "paged") {
-          revealSelectionPageRef.current?.(editor);
-        } else if (scroller && typewriterScrollRef.current) {
-          stopCenterAnimationRef.current?.();
-          centerCaretForEditor(editor, scroller, typewriterOffsetRef.current, writingModeRef.current);
-        }
+        revealJumpTarget(editor, scroller);
         requestLineBreakMarksRef.current?.();
       },
       positionFromPoint: (x, y) => {

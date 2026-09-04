@@ -1,5 +1,13 @@
 import type { ExportFontFamily } from "./export/types";
 import type { ProofreadOptions } from "./proofread/types";
+import type { ProofreadTerm } from "./proofread/terms";
+
+export type {
+  ProofreadTerm,
+  ProofreadTermKind,
+  ProofreadTermPolicy,
+  ProofreadTermScope,
+} from "./proofread/terms";
 
 /**
  * 旧 Idea（フラットな付箋）モデル。スレッド型へ移行済みだが、
@@ -405,6 +413,8 @@ export type AppState = {
   documentTabsByWorkspace: Record<string, WorkspaceDocumentTabs>;
   /** 手動保存点。正本である原稿ASTから復元できる本文だけを保持する。 */
   snapshots: ManuscriptSnapshot[];
+  /** 全ワークスペース共通の校正辞書。プロジェクト固有の語は project.json 側。 */
+  proofreadTerms: ProofreadTerm[];
 };
 
 export type TextDocument = {

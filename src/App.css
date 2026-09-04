@@ -5578,12 +5578,25 @@ body {
 
 .rightTabs {
   display: inline-flex;
-  flex: 0 0 auto;
+  /*
+   * プラグインがビューを足すとタブが増える。縮まない指定にしていると、
+   * 右端の畳むボタンをヘッダーの外へ押し出してしまうので、ここで縮めて
+   * 内側で横スクロールさせる。
+   */
+  min-width: 0;
+  flex: 0 1 auto;
   gap: 2px;
   padding: 2px;
   border: 0.5px solid var(--border-subtle);
   border-radius: 7px;
   background: #1d1e24;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.rightTabs::-webkit-scrollbar {
+  display: none;
 }
 
 .plotPaneHeaderActions,
@@ -11613,12 +11626,6 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   white-space: nowrap;
 }
 
-.proofIssueLine {
-  flex: 0 0 auto;
-  color: var(--text-faint);
-  font-size: 11px;
-}
-
 .proofExcerpt {
   display: block;
   overflow: hidden;
@@ -11793,6 +11800,8 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
 }
 
 .proofTarget {
+  flex: 0 0 auto;
+  white-space: nowrap;
   padding: 0 5px;
   border: 0.5px solid var(--border-subtle);
   border-radius: 4px;
@@ -11813,6 +11822,461 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   color: var(--text-muted);
   font-size: 11px;
   line-height: 1.7;
+}
+
+.proofIssueAdd {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 9px;
+  border-top: 0.5px solid var(--border-subtle);
+  background: var(--bg-panel-strong);
+}
+
+.proofIssueAdd .proofNote {
+  margin: 0;
+}
+
+.proofIssueAdd .proofScopeSwitch {
+  align-self: flex-start;
+}
+
+.proofTermNotice {
+  display: block;
+  width: 100%;
+  margin: 0 0 10px;
+  padding: 7px 9px;
+  border: 0.5px solid var(--accent-border, var(--accent));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: start;
+}
+
+.proofCheckList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 0 0 0 20px;
+  list-style: none;
+}
+
+.proofCheckRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.proofCheckRow input {
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+
+.proofCheckRow > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.proofCheckName {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.proofCheckSummary {
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.proofIgnoredArea {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--border-subtle);
+}
+
+.proofIgnoredList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.proofIgnoredItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 7px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 7px;
+  background: var(--bg-secondary);
+}
+
+.proofIgnoredText {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.proofIgnoredExcerpt {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proofDictionary {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.proofDictHead {
+  display: flex;
+  /* ペインは狭い。1行に収まらなければ切り替えと表示モードを2段にする。 */
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 8px;
+}
+
+.proofScopeSwitch {
+  display: inline-flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 7px;
+  background: var(--bg-panel-strong);
+}
+
+.proofScopeTab {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  overflow: hidden;
+  padding: 0 8px;
+  text-overflow: ellipsis;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.proofScopeTab:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.proofScopeTab.isActive {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.proofScopeCount {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.proofDictModes {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.proofBulkArea {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.proofBulkInput {
+  min-height: 190px;
+  padding: 9px 10px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  resize: vertical;
+  tab-size: 8;
+  white-space: pre;
+}
+
+.proofBulkInput:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.proofBulkActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.proofCandidates {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 10px 10px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.proofCandidateHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.proofCandidateList {
+  display: flex;
+  max-height: 260px;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.proofCandidate {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 4px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.proofCandidate:hover {
+  background: var(--bg-panel-strong);
+}
+
+.proofCandidate .proofTermSurface {
+  flex: 1 1 auto;
+}
+
+.proofCandidateCount {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.proofDictList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.proofDictSearch {
+  height: 28px;
+  padding: 0 9px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-panel-strong);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.proofTermList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.proofDictFilters {
+  display: flex;
+  gap: 6px;
+}
+
+.proofDictFilters select {
+  min-width: 0;
+  flex: 1 1 0;
+  height: 26px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 5px;
+  background: var(--bg-panel-strong);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.proofTerm {
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.proofTerm.isEditing {
+  border-color: var(--accent-border, var(--accent));
+}
+
+.proofTermRow {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: start;
+}
+
+.proofTermRow:hover {
+  background: var(--bg-panel-strong);
+}
+
+.proofTermBadges {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.proofTermPolicyBadge {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--control-hover);
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 15px;
+  white-space: nowrap;
+}
+
+.proofTermEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 9px 9px;
+  border-top: 0.5px solid var(--border-subtle);
+}
+
+.proofTermField {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.proofTermField > span {
+  flex: 0 0 34px;
+}
+
+.proofTermField input,
+.proofTermField select {
+  min-width: 0;
+  flex: 1 1 auto;
+  height: 26px;
+  padding: 0 7px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 5px;
+  background: var(--bg-panel-strong);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.proofTermField input:focus,
+.proofTermField select:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.proofTermError {
+  margin: 0;
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.proofTermEditorActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+  padding-top: 2px;
+}
+
+.proofTermMain {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.proofTermSurface {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proofTermReading {
+  color: var(--text-faint);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.proofDictNotice {
+  color: var(--text-secondary);
+}
+
+.proofRejectedList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 0 16px;
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.proofRejectedList code {
+  color: var(--text-secondary);
+  font-size: 11px;
 }
 
 .proofRuleScope {

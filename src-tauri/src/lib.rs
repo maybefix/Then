@@ -221,6 +221,41 @@ struct ProjectConfig {
     idea_threads: Vec<IdeaThreadConfig>,
     #[serde(default, rename = "plotCards")]
     plot_cards: Vec<PlotCardConfig>,
+    /// 校正辞書。固有名詞やキャラクター名など、原稿ごとの語彙。
+    #[serde(default, rename = "proofreadTerms")]
+    proofread_terms: Vec<ProofreadTermConfig>,
+    /// 無視した校正の指摘。ワークスペース内の相対パスごとに持つ。
+    #[serde(default, rename = "proofreadIgnored")]
+    proofread_ignored: BTreeMap<String, Vec<String>>,
+}
+
+fn default_proofread_term_kind() -> String {
+    "other".to_string()
+}
+
+fn default_proofread_term_policy() -> String {
+    "protect".to_string()
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProofreadTermConfig {
+    id: String,
+    surface: String,
+    #[serde(default)]
+    reading: String,
+    #[serde(default = "default_proofread_term_kind")]
+    kind: String,
+    #[serde(default)]
+    variants: Vec<String>,
+    #[serde(default)]
+    note: String,
+    #[serde(default = "default_proofread_term_policy")]
+    policy: String,
+    #[serde(default)]
+    created_at: i64,
+    #[serde(default)]
+    updated_at: i64,
 }
 
 /// 旧 Idea スキーマ。移行（`migrate_snippets_to_threads`）でのみ参照する。
@@ -526,6 +561,12 @@ pub fn run() {
             save_project_snippets,
             load_project_plot_cards,
             save_project_plot_cards,
+            load_project_proofread_terms,
+            save_project_proofread_terms,
+            load_project_proofread_ignored,
+            save_project_proofread_ignored,
+            export_proofread_dictionary_dialog,
+            import_proofread_dictionary_dialog,
             load_reference_layout,
             save_reference_layout,
             pick_reference_file,
@@ -2735,6 +2776,97 @@ fn save_project_plot_cards(
 
     let mut config = load_project_config(&root)?;
     config.plot_cards = plot_cards;
+    save_project_config(&root, &config)
+}
+
+#[tauri::command]
+fn load_project_proofread_terms(root_path: String) -> Result<Vec<ProofreadTermConfig>, String> {
+    let root = PathBuf::from(root_path);
+    if !root.is_dir() {
+        return Err("project root does not exist".to_string());
+    }
+
+    Ok(load_project_config(&root)?.proofread_terms)
+}
+
+#[tauri::command]
+fn save_project_proofread_terms(
+    root_path: String,
+    proofread_terms: Vec<ProofreadTermConfig>,
+) -> Result<(), String> {
+    let root = PathBuf::from(root_path);
+    if !root.is_dir() {
+        return Err("project root does not exist".to_string());
+    }
+
+    let mut config = load_project_config(&root)?;
+    config.proofread_terms = proofread_terms;
+    save_project_config(&root, &config)
+}
+
+/// 校正辞書をタブ区切りのテキストとして書き出す。保存先のパスを返す。
+#[tauri::command]
+fn export_proofread_dictionary_dialog(
+    app: tauri::AppHandle,
+    content: String,
+) -> Result<Option<String>, String> {
+    let Some(path) = app
+        .dialog()
+        .file()
+        .add_filter("Text", &["txt", "tsv"])
+        .set_file_name("proofread-dictionary.txt")
+        .blocking_save_file()
+    else {
+        return Ok(None);
+    };
+
+    let path = dialog_path_to_path_buf(path)?;
+    write_text_file(&path, &content)?;
+    Ok(Some(path.to_string_lossy().to_string()))
+}
+
+/// 校正辞書のテキストを読み込む。解析は呼び出し側（一括入力と同じ形式）で行う。
+#[tauri::command]
+fn import_proofread_dictionary_dialog(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let Some(path) = app
+        .dialog()
+        .file()
+        .add_filter("Text", &["txt", "tsv", "csv"])
+        .blocking_pick_file()
+    else {
+        return Ok(None);
+    };
+
+    let path = dialog_path_to_path_buf(path)?;
+    std::fs::read_to_string(&path)
+        .map(Some)
+        .map_err(|error| format!("failed to read dictionary file: {error}"))
+}
+
+#[tauri::command]
+fn load_project_proofread_ignored(
+    root_path: String,
+) -> Result<BTreeMap<String, Vec<String>>, String> {
+    let root = PathBuf::from(root_path);
+    if !root.is_dir() {
+        return Err("project root does not exist".to_string());
+    }
+
+    Ok(load_project_config(&root)?.proofread_ignored)
+}
+
+#[tauri::command]
+fn save_project_proofread_ignored(
+    root_path: String,
+    proofread_ignored: BTreeMap<String, Vec<String>>,
+) -> Result<(), String> {
+    let root = PathBuf::from(root_path);
+    if !root.is_dir() {
+        return Err("project root does not exist".to_string());
+    }
+
+    let mut config = load_project_config(&root)?;
+    config.proofread_ignored = proofread_ignored;
     save_project_config(&root, &config)
 }
 

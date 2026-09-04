@@ -1,4 +1,5 @@
-import { isRangeMasked, sentenceLength } from "./context";
+import { isRangeMasked, maskSurfaces, sentenceLength } from "./context";
+import { collectRubyAnnotations } from "./ruby";
 import {
   ESTABLISHED_DOUBLE_HONORIFICS,
   IDIOM_FORMS,
@@ -30,6 +31,8 @@ const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&
 type Substitution = {
   pattern: RegExp;
   message: string;
+  /** 観点ごとに止められる項目のID。 */
+  checkId?: string;
   /** 当たった中から指摘に残すものを選ぶ。省くと全部残す。 */
   accept?: (match: RegExpExecArray) => boolean;
   /** 置き換え候補。曖昧なものは undefined を返して指摘だけにする。 */
@@ -59,6 +62,7 @@ function collectMatches(text: string, entries: Substitution[]): ProofreadHit[] {
       }
       const replacement = entry.replace?.(match);
       hits.push({
+        ...(entry.checkId ? { checkId: entry.checkId } : {}),
         from: match.index,
         to: match.index + match[0].length,
         message: entry.message,
@@ -151,6 +155,7 @@ const colloquialRule: ProofreadRule = {
   severity: "should",
   target: "common",
   respectsDialogue: true,
+  wordScoped: true,
   sources: [KOKUGO_YORON],
   scan: (context) =>
     collectMatches(context.narrationText, [
@@ -186,7 +191,8 @@ const colloquialRule: ProofreadRule = {
         replace: (match) => `${match[1]}${match[2]}そのため`,
       },
       {
-        pattern: /みたい(な|に|だ|で)/g,
+        // 「やってみたい」の「みたい」は補助動詞なので、直前が「て」「で」なら数えない。
+        pattern: /(?<![てで])みたい(な|に|だ|で)/g,
         message: "「みたいな」は話し言葉です。「のような」「のように」を検討します。",
       },
       {
@@ -220,6 +226,7 @@ const kanjiOpeningRule: ProofreadRule = {
   severity: "should",
   target: "article",
   respectsDialogue: true,
+  wordScoped: true,
   sources: [KANJI_SHIYO, JOYO_KANJI],
   scan: (context) =>
     collectMatches(context.narrationText, [
@@ -254,7 +261,8 @@ const kanjiOpeningRule: ProofreadRule = {
         replace: (match) => `て${KURU_FORMS[match[1]] ?? ""}`,
       },
       {
-        pattern: /て見(る|た|て|よう|ます|ない)/g,
+        // 「初めて見る」は本動詞の「見る」。補助動詞ではないので外す。
+        pattern: /(?<!初め)て見(る|た|て|よう|ます|ない)/g,
         message: "補助動詞の「みる」は仮名で書きます。",
         replace: (match) => `てみ${match[1]}`,
       },
@@ -341,11 +349,22 @@ const kanjiOpeningRule: ProofreadRule = {
 // 3. 一文の長さと読点
 // ---------------------------------------------------------------------------
 
-/** 助詞「の」が近い間隔で3回続く箇所を返す。 */
-function findParticleChains(sentence: string, particle: string, span: number): [number, number][] {
+/**
+ * 名詞をつなぐ「の」だけを拾うための前後の条件。漢字・片仮名に挟まれた
+ * ものに限ることで、「〜ので」「〜のに」「この」「その」「もの」や、
+ * 「書くのが」のような準体助詞を数えない。建議が例に挙げているのは
+ * 「本年の当課の取組の中心は」のような名詞の連なりなので、そこへ寄せる。
+ */
+const GENITIVE_NEIGHBOR = /[一-龥ァ-ヴー々]/;
+
+/** 名詞をつなぐ「の」が近い間隔で3回続く箇所を返す。 */
+function findGenitiveChains(sentence: string, span: number): [number, number][] {
   const positions: number[] = [];
-  for (let index = 0; index < sentence.length; index += 1) {
-    if (sentence[index] === particle) positions.push(index);
+  for (let index = 1; index + 1 < sentence.length; index += 1) {
+    if (sentence[index] !== "の") continue;
+    if (!GENITIVE_NEIGHBOR.test(sentence[index - 1])) continue;
+    if (!GENITIVE_NEIGHBOR.test(sentence[index + 1])) continue;
+    positions.push(index);
   }
 
   const chains: [number, number][] = [];
@@ -370,6 +389,7 @@ const sentenceRule: ProofreadRule = {
   severity: "hint",
   target: "common",
   respectsDialogue: true,
+  wordScoped: false,
   sources: [KOYOBUN],
   scan: (context) => {
     const hits: ProofreadHit[] = [];
@@ -399,7 +419,7 @@ const sentenceRule: ProofreadRule = {
         });
       }
 
-      for (const [from, to] of findParticleChains(sentence.text, "の", 8)) {
+      for (const [from, to] of findGenitiveChains(sentence.text, 8)) {
         hits.push({
           from: sentence.from + from,
           to: sentence.from + to,
@@ -452,6 +472,7 @@ const redundancyRule: ProofreadRule = {
   severity: "should",
   target: "common",
   respectsDialogue: true,
+  wordScoped: true,
   sources: [KISHA_HANDBOOK, KOYOBUN],
   scan: (context) =>
     collectMatches(context.narrationText, [
@@ -510,31 +531,41 @@ function findUnbalancedQuotes(context: ProofreadContext): ProofreadHit[] {
 
   for (const line of lines) {
     const openings: number[] = [];
+    const strays: number[] = [];
+    let hasOpening = false;
+    let hasClosing = false;
+
     for (let index = 0; index < line.length; index += 1) {
       const character = line[index];
       if (character === "「" || character === "『") {
+        hasOpening = true;
         openings.push(index);
         continue;
       }
       if (character !== "」" && character !== "』") continue;
+      hasClosing = true;
       if (openings.length) {
         openings.pop();
         continue;
       }
-      hits.push({
-        from: offset + index,
-        to: offset + index + 1,
-        message: "対応する開き括弧のない閉じ括弧です。",
-      });
+      strays.push(index);
     }
-    for (const index of openings) {
-      hits.push({
-        from: offset + index,
-        to: offset + index + 1,
-        message: "この行で閉じられていない括弧です。",
-        detail: "会話文は行の中で閉じるのが通例です。",
-      });
+
+    /*
+     * 長い台詞は段落をまたぎ、続く段落の行頭に「を置いて閉じず、最後の段落で
+     * 」だけを置く書き方が通例。片方しか無い行はその書き方とみなして咎めない。
+     * 開き括弧と閉じ括弧の両方がある行だけを、対応の崩れとして拾う。
+     */
+    if (hasOpening && hasClosing) {
+      for (const index of [...openings, ...strays]) {
+        hits.push({
+          from: offset + index,
+          to: offset + index + 1,
+          message: "同じ行の中で括弧の対応が取れていません。",
+        });
+      }
     }
+
     offset += line.length + 1;
   }
 
@@ -549,6 +580,7 @@ const punctuationRule: ProofreadRule = {
   severity: "should",
   target: "novel",
   respectsDialogue: false,
+  wordScoped: true,
   sources: [HYOKI_RULEBOOK, JIS_X_4051, JTF_STYLE],
   scan: (context) => [
     ...findUnbalancedQuotes(context),
@@ -612,6 +644,21 @@ const punctuationRule: ProofreadRule = {
 // 6. 表記のゆれ
 // ---------------------------------------------------------------------------
 
+const KANJI_CHARACTER = /[一-龥]/;
+
+/**
+ * 表記のゆれの検出項目。全角と半角の扱いは書き方の流儀が分かれるため、
+ * ルールごと止めなくても観点だけ外せるようにする。縦組の本文で数字を
+ * 全角に揃える、半角語の前後を空けて読みやすくする、といった書き方は
+ * それ自体が誤りではない。
+ */
+const NOTATION_CHECKS = {
+  okurigana: "notation-variants/okurigana",
+  digits: "notation-variants/width-digits",
+  alphabet: "notation-variants/width-alphabet",
+  space: "notation-variants/width-space",
+} as const;
+
 /** 同じ語の書き分け。先頭を推奨表記として、数が並んだときの寄せ先にする。 */
 const VARIANT_GROUPS: string[][] = [
   ["引っ越し", "引越し", "引越"],
@@ -643,9 +690,9 @@ const VARIANT_GROUPS: string[][] = [
 ];
 
 /** 全角と半角が混ざっているときだけ、少数派を多数派に寄せる。 */
-const WIDTH_GROUPS: { name: string; half: RegExp; full: RegExp }[] = [
-  { name: "数字", half: /[0-9]+/g, full: /[０-９]+/g },
-  { name: "英字", half: /[A-Za-z]+/g, full: /[Ａ-Ｚａ-ｚ]+/g },
+const WIDTH_GROUPS: { name: string; checkId: string; half: RegExp; full: RegExp }[] = [
+  { name: "数字", checkId: NOTATION_CHECKS.digits, half: /[0-9]+/g, full: /[０-９]+/g },
+  { name: "英字", checkId: NOTATION_CHECKS.alphabet, half: /[A-Za-z]+/g, full: /[Ａ-Ｚａ-ｚ]+/g },
 ];
 
 const toFullWidth = (text: string) =>
@@ -668,7 +715,15 @@ function scanVariantGroups(text: string): ProofreadHit[] {
 
     let match = pattern.exec(text);
     while (match) {
-      found.push({ variant: match[0], index: match.index });
+      // 「見積書」「手続法」のように、送り仮名を省いた形が別の熟語の一部に
+      // なっていることがある。漢字で終わる表記の直後が漢字なら複合語とみなす。
+      const variant = match[0];
+      const next = text[match.index + variant.length];
+      const isCompound =
+        KANJI_CHARACTER.test(variant[variant.length - 1]) &&
+        next !== undefined &&
+        KANJI_CHARACTER.test(next);
+      if (!isCompound) found.push({ variant, index: match.index });
       match = pattern.exec(text);
     }
     if (!found.length) continue;
@@ -693,6 +748,7 @@ function scanVariantGroups(text: string): ProofreadHit[] {
       if (item.variant === dominant) continue;
       if (hits.length >= MAX_HITS_PER_RULE) break;
       hits.push({
+        checkId: NOTATION_CHECKS.okurigana,
         from: item.index,
         to: item.index + item.variant.length,
         message: `表記がゆれています（「${dominant}」と「${mixed}」）。`,
@@ -715,6 +771,7 @@ function scanVariantGroups(text: string): ProofreadHit[] {
       if (hits.length >= MAX_HITS_PER_RULE) break;
       if (item.index === undefined) continue;
       hits.push({
+        checkId: group.checkId,
         from: item.index,
         to: item.index + item[0].length,
         message: `${group.name}の全角と半角が混ざっています。原稿では${majorityLabel}が多数です。`,
@@ -734,12 +791,36 @@ const notationRule: ProofreadRule = {
   severity: "should",
   target: "common",
   respectsDialogue: false,
+  wordScoped: true,
+  checks: [
+    {
+      id: NOTATION_CHECKS.okurigana,
+      name: "送り仮名・外来語のゆれ",
+      summary: "同じ語の送り方や長音が原稿の中で食い違っていないか。",
+    },
+    {
+      id: NOTATION_CHECKS.digits,
+      name: "数字の全角・半角",
+      summary: "縦組で数字を全角に揃えるなど、意図して使い分けるなら外します。",
+    },
+    {
+      id: NOTATION_CHECKS.alphabet,
+      name: "英字の全角・半角",
+      summary: "縦組で英字を全角に揃えるなど、意図して使い分けるなら外します。",
+    },
+    {
+      id: NOTATION_CHECKS.space,
+      name: "全角と半角の間の空き",
+      summary: "半角語の前後を空けて読みやすくする書き方もあります。外せます。",
+    },
+  ],
   sources: [OKURIGANA, GAIRAIGO, JTF_STYLE, KISHA_HANDBOOK],
   scan: (context: ProofreadContext) => [
     ...scanVariantGroups(context.scanText),
     ...collectMatches(context.scanText, [
       {
         // JTFスタイルガイド2.3.1.1。全角文字と半角文字の間にスペースを入れない。
+        checkId: NOTATION_CHECKS.space,
         pattern: /(?<=[ぁ-んァ-ヴ一-龥ー、。])[ ]+(?=[0-9A-Za-z])|(?<=[0-9A-Za-z])[ ]+(?=[ぁ-んァ-ヴ一-龥ー、。])/g,
         message: "全角文字と半角文字の間にはスペースを入れません。",
         replace: () => "",
@@ -760,6 +841,7 @@ const wordMisuseRule: ProofreadRule = {
   severity: "should",
   target: "common",
   respectsDialogue: false,
+  wordScoped: true,
   sources: [KOKUGO_YORON, KOTOBA_SHOKUDO],
   scan: (context) =>
     collectMatches(context.scanText, [
@@ -871,6 +953,7 @@ const keigoRule: ProofreadRule = {
   severity: "should",
   target: "common",
   respectsDialogue: false,
+  wordScoped: true,
   sources: [KEIGO_SHISHIN],
   scan: scanKeigo,
 };
@@ -904,6 +987,7 @@ const styleConsistencyRule: ProofreadRule = {
   severity: "should",
   target: "article",
   respectsDialogue: true,
+  wordScoped: false,
   sources: [JTF_STYLE],
   scan: (context) => {
     const scored: { from: number; to: number; style: "polite" | "plain" }[] = [];
@@ -933,6 +1017,98 @@ const styleConsistencyRule: ProofreadRule = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// 10. 辞書の表記ゆれ
+// ---------------------------------------------------------------------------
+
+/**
+ * 辞書で「揃える」に指定した語を本文と突き合わせる。
+ *
+ * ・別表記として登録した形が出てきたら、決めた表記へ寄せる。
+ * ・ルビの読みが辞書と食い違っていたら知らせる。同じ読みに違う字が
+ *   当たっている場合は、変換ミスの可能性が高いので表記を示す。
+ *
+ * 固定の辞書では拾えない、作品ごとの揺れを見るためのルール。登録した語しか
+ * 見ないので、原稿から勝手に似た語を探しに行くことはしない。
+ */
+function scanDictionaryUnify(context: ProofreadContext): ProofreadHit[] {
+  const unifyTerms = context.terms.filter(
+    (term) => term.policy === "unify" || term.policy === "both",
+  );
+  if (!unifyTerms.length) return [];
+
+  const hits: ProofreadHit[] = [];
+
+  // 決めた表記そのものを先に潰しておく。「モーター」を伏せずに別表記の
+  // 「モータ」を探すと、正しい方の一部にも当たってしまう。
+  const variantText = maskSurfaces(
+    context.scanText,
+    unifyTerms.map((term) => term.surface),
+  );
+
+  for (const term of unifyTerms) {
+    for (const variant of term.variants) {
+      if (!variant || variant === term.surface) continue;
+      let index = variantText.indexOf(variant);
+      while (index >= 0 && hits.length < MAX_HITS_PER_RULE) {
+        hits.push({
+          from: index,
+          to: index + variant.length,
+          message: `辞書では「${term.surface}」に決めています。`,
+          detail: `「${variant}」を別表記として登録しています。`,
+          replacement: term.surface,
+        });
+        index = variantText.indexOf(variant, index + variant.length);
+      }
+    }
+  }
+
+  const withReading = unifyTerms.filter((term) => term.reading);
+  const bySurface = new Map(withReading.map((term) => [term.surface, term]));
+  const byReading = new Map(withReading.map((term) => [term.reading, term]));
+
+  for (const ruby of collectRubyAnnotations(context.text)) {
+    if (hits.length >= MAX_HITS_PER_RULE) break;
+
+    const sameSurface = bySurface.get(ruby.base);
+    if (sameSurface && sameSurface.reading !== ruby.reading) {
+      hits.push({
+        from: ruby.from,
+        to: ruby.to,
+        message: `「${ruby.base}」の読みは辞書では「${sameSurface.reading}」です。`,
+        detail: `本文のルビは「${ruby.reading}」になっています。`,
+      });
+      continue;
+    }
+
+    const sameReading = byReading.get(ruby.reading);
+    if (sameReading && sameReading.surface !== ruby.base) {
+      hits.push({
+        from: ruby.baseFrom,
+        to: ruby.baseTo,
+        message: `読み「${ruby.reading}」の表記は辞書では「${sameReading.surface}」です。`,
+        detail: "同じ読みに違う字が当たっています。変換ミスの可能性があります。",
+        replacement: sameReading.surface,
+      });
+    }
+  }
+
+  return hits;
+}
+
+const dictionaryUnifyRule: ProofreadRule = {
+  id: "dictionary-unify",
+  name: "辞書の表記ゆれ",
+  summary:
+    "辞書で「揃える」に指定した語について、別表記の混入とルビの読みの食い違いを見る。登録した語だけが対象。",
+  severity: "should",
+  target: "common",
+  respectsDialogue: false,
+  wordScoped: true,
+  sources: [KOYOBUN, KISHA_HANDBOOK],
+  scan: scanDictionaryUnify,
+};
+
 export const PROOFREAD_RULES: ProofreadRule[] = [
   colloquialRule,
   kanjiOpeningRule,
@@ -943,6 +1119,7 @@ export const PROOFREAD_RULES: ProofreadRule[] = [
   wordMisuseRule,
   keigoRule,
   styleConsistencyRule,
+  dictionaryUnifyRule,
 ];
 
 export const proofreadRuleById = new Map(PROOFREAD_RULES.map((rule) => [rule.id, rule]));
