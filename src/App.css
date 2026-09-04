@@ -34,6 +34,7 @@
   --documentbar-height: 56px;
   --statusbar-height: 32px;
   --document-tabs-height: 35px;
+  --document-tabs-hover-strip: 6px;
   --snippet-width: 320px;
 }
 
@@ -1306,38 +1307,37 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .documentTabKind {
-  position: relative;
-  width: 12px;
+  display: block;
+  width: 14px;
   height: 14px;
-  border: 1px solid #9ba597;
-  border-radius: 2px;
+  fill: none;
+  opacity: 0.6;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
 }
 
-.documentTabKind::after {
-  position: absolute;
-  top: -1px;
-  right: -1px;
-  width: 4px;
-  height: 4px;
-  border-bottom: 1px solid #9ba597;
-  border-left: 1px solid #9ba597;
-  background: currentColor;
-  opacity: 0.3;
-  content: "";
+.activeDocumentTabItem .documentTabKind {
+  opacity: 0.85;
 }
 
+/* 未保存の下書きは、輪郭を破線にして通常のファイルと区別する。 */
 .scratchDocumentTabKind {
-  border-style: dashed;
+  stroke-dasharray: 3 2.2;
 }
 
 .documentTabText {
   display: block;
   min-width: 0;
+  overflow: hidden;
 }
 
 .documentTabName,
 .documentTabPath {
+  display: block;
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1403,6 +1403,45 @@ body.thenPdfExporting .printExportViewport {
   background: var(--control-hover);
   color: var(--text-primary);
   outline: none;
+}
+
+/*
+ * ホバー表示モード。タブバーは通常の流れに残したまま負の下マージンで
+ * 高さを打ち消し、下の編集面に重ねる。zoom は高さもマージンも同じ倍率で
+ * 拡大するため、UI表示サイズを変えても打ち消しがずれない。
+ */
+.documentTabsHoverZone {
+  position: relative;
+  /* モーダルの背景 (.modalBackdrop, z-index 10) より下に置き、
+     設定画面を開いている間はタブバーが手前に出ないようにする。 */
+  z-index: 6;
+  min-height: 0;
+  flex: 0 0 auto;
+}
+
+.hoverDocumentTabs {
+  margin-bottom: calc(var(--document-tabs-hover-strip) - var(--document-tabs-height));
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.documentTabsHoverZone:hover .hoverDocumentTabs,
+.documentTabsHoverZone:focus-within .hoverDocumentTabs {
+  box-shadow: 0 8px 18px rgb(0 0 0 / 18%);
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hoverDocumentTabs {
+    transform: none;
+    transition: none;
+  }
 }
 
 .editorColumn {
@@ -1994,20 +2033,29 @@ body.thenPdfExporting .printExportViewport {
   direction: ltr;
 }
 
+/*
+ * ページ送りボタンは用紙の辺の上へ横長の板として置く。円だと本文の脇で
+ * 存在感が強すぎるため、辺に沿った細い帯にして主張を抑える。
+ * --paged-nav-thickness は辺に対して垂直方向の厚み。用紙の辺へ中心を
+ * 合わせる計算に使うので、寸法を変えるときはこの変数を変える。
+ */
 .pagedEditorNav {
+  --paged-nav-thickness: 20px;
+  --paged-nav-length: 46px;
+
   position: absolute;
   z-index: 5;
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: var(--paged-nav-length);
+  height: var(--paged-nav-thickness);
   place-items: center;
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--border-strong) 86%, transparent);
-  border-radius: 999px;
+  border-radius: 7px;
   outline: none;
   background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
   color: var(--text-secondary);
-  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   cursor: pointer;
   backdrop-filter: none;
   transition:
@@ -2018,9 +2066,15 @@ body.thenPdfExporting .printExportViewport {
     opacity 120ms ease;
 }
 
+/* 左右送りでは辺が縦なので、板も縦長にして辺に沿わせる。 */
+.verticalTypewriterShell[data-page-flow="horizontal-rtl"] .pagedEditorNav {
+  width: var(--paged-nav-thickness);
+  height: var(--paged-nav-length);
+}
+
 .pagedEditorNav svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
@@ -2043,13 +2097,17 @@ body.thenPdfExporting .printExportViewport {
 
 .verticalTypewriterShell[data-page-flow="horizontal-rtl"] .pagedEditorPrevious {
   top: 50%;
-  right: 1px;
+  right: calc(
+    36px + var(--paged-outer-margin, 20px) - var(--paged-nav-thickness) / 2
+  );
   transform: translateY(-50%);
 }
 
 .verticalTypewriterShell[data-page-flow="horizontal-rtl"] .pagedEditorNext {
   top: 50%;
-  left: 1px;
+  left: calc(
+    36px + var(--paged-outer-margin, 20px) - var(--paged-nav-thickness) / 2
+  );
   transform: translateY(-50%);
 }
 
@@ -2059,16 +2117,44 @@ body.thenPdfExporting .printExportViewport {
   transform: translateY(-50%) scale(1.06);
 }
 
-.verticalTypewriterShell[data-page-flow="vertical"] .pagedEditorPrevious {
-  top: 1px;
+/*
+ * 上下送りのボタンは用紙の上辺・下辺へ中心を合わせる。用紙はスクロール領域
+ * (シェルから 30px の inset) の内側にさらに外余白のぶん入るので、辺までの
+ * 距離は上下とも 30px + 外余白。以前は上が枠の上端 1px、下がシェル下端から
+ * 5px と別々の基準だったため、下だけ用紙から離れて中途半端に見えていた。
+ */
+.verticalTypewriterShell[data-page-flow="vertical"] .pagedEditorNav {
   left: 50%;
   transform: translateX(-50%);
 }
 
+.verticalTypewriterShell[data-page-flow="vertical"] .pagedEditorPrevious {
+  top: calc(
+    30px + var(--paged-outer-margin, 20px) - var(--paged-nav-thickness) / 2
+  );
+}
+
 .verticalTypewriterShell[data-page-flow="vertical"] .pagedEditorNext {
-  bottom: 5px;
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: calc(
+    30px + var(--paged-outer-margin, 20px) - var(--paged-nav-thickness) / 2
+  );
+}
+
+/*
+ * 窓が狭いと用紙の外余白が 0 になり、上辺がシェル上端から 30px まで上がる。
+ * ホバー表示のタブバーは上端に (タブバー高 - ストリップ) 分だけ重なるので、
+ * そのときだけ帯の下へ逃がす。余白がある通常の窓では用紙の辺の位置が勝つ。
+ */
+[data-document-tabs="hover"]
+  .verticalTypewriterShell[data-page-flow="vertical"]
+  .pagedEditorPrevious {
+  top: max(
+    calc(30px + var(--paged-outer-margin, 20px) - var(--paged-nav-thickness) / 2),
+    calc(
+      (var(--document-tabs-height) - var(--document-tabs-hover-strip)) *
+        var(--ui-font-scale, 1) + 4px
+    )
+  );
 }
 
 .verticalTypewriterShell[data-page-flow="vertical"]

@@ -2263,6 +2263,9 @@ export function VerticalTextEditor({
     surface.style.setProperty("--paged-page-height", `${height}px`);
     surface.style.setProperty("--paged-page-gap", `${gap}px`);
     surface.style.setProperty("--paged-outer-margin", `${outerMargin}px`);
+    // ページ送りボタンはシェル直下でスクロール領域の外にあるため、用紙の辺へ
+    // 揃えるにはシェル側にも外余白を渡す必要がある。
+    shellRef.current?.style.setProperty("--paged-outer-margin", `${outerMargin}px`);
     surface.style.setProperty("--paged-padding-x", `${paddingX}px`);
     surface.style.setProperty("--paged-padding-y", `${paddingY}px`);
     surface.style.setProperty("--paged-content-width", `${contentWidth}px`);

@@ -216,6 +216,8 @@ export const DEFAULT_FILE_PROGRESS: FileProgressStatus = "todo";
 
 export type SidebarHoverMode = "none" | "both" | "left" | "right";
 
+export type DocumentTabsDisplayMode = "always" | "hover";
+
 export type EditorSettings = {
   theme: AppTheme;
   editorFontFamily: string;
@@ -253,6 +255,8 @@ export type EditorSettings = {
   showStatusFilePath: boolean;
   /** パンくずの下に開いている文書のタブバーを表示するか。 */
   showDocumentTabs: boolean;
+  /** タブバーを常時表示するか、上端ホバー時だけ重ねて表示するか。 */
+  documentTabsDisplayMode: DocumentTabsDisplayMode;
   /** 起動ポータルを省略し、前回のワークスペースを直接開くか。 */
   skipStartupPortal: boolean;
   /** 集中表示と同時にTauriウィンドウを完全フルスクリーンへ切り替えるか。 */

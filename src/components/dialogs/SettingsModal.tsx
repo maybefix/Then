@@ -482,6 +482,22 @@ export function SettingsModal({
                     <small>開いている文書をパンくずの下に表示します</small>
                   </span>
                 </label>
+                <label>
+                  <span>タブバーの表示方法</span>
+                  <select
+                    value={settings.documentTabsDisplayMode}
+                    disabled={!settings.showDocumentTabs}
+                    onChange={(event) =>
+                      onUpdateSettings(
+                        "documentTabsDisplayMode",
+                        event.target.value as EditorSettings["documentTabsDisplayMode"],
+                      )
+                    }
+                  >
+                    <option value="always">常に表示</option>
+                    <option value="hover">上端にカーソルを寄せたときだけ表示</option>
+                  </select>
+                </label>
                 <label className="checkSetting">
                   <input
                     checked={settings.skipStartupPortal}

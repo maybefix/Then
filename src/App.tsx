@@ -881,6 +881,7 @@ const defaultSettings: EditorSettings = {
   showWorkspacePaths: true,
   showStatusFilePath: false,
   showDocumentTabs: true,
+  documentTabsDisplayMode: "always",
   skipStartupPortal: false,
   focusModeUsesNativeFullscreen: false,
   sidebarHoverMode: "none",
@@ -2074,6 +2075,11 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         typeof settings.showDocumentTabs === "boolean"
           ? settings.showDocumentTabs
           : defaultSettings.showDocumentTabs,
+      documentTabsDisplayMode:
+        settings.documentTabsDisplayMode === "hover" ||
+        settings.documentTabsDisplayMode === "always"
+          ? settings.documentTabsDisplayMode
+          : defaultSettings.documentTabsDisplayMode,
       skipStartupPortal:
         typeof settings.skipStartupPortal === "boolean"
           ? settings.skipStartupPortal
@@ -9456,6 +9462,11 @@ export default function App() {
             aria-label="Then"
             data-app-mode={appMode}
             data-editor-focus={isEditorFocusMode ? "true" : undefined}
+            data-document-tabs={
+              settings.showDocumentTabs && appMode === "write" && !isEditorFocusMode
+                ? settings.documentTabsDisplayMode
+                : undefined
+            }
           >
           <header className="topbar">
             <div
@@ -10222,6 +10233,7 @@ export default function App() {
           {settings.showDocumentTabs && appMode === "write" && !isEditorFocusMode && (
             <DocumentTabs
               openTabs={openTabs}
+              displayMode={settings.documentTabsDisplayMode}
               activeTabId={activeTabId}
               onActivateTab={activateDocumentTab}
               onCloseTab={(tabId) => void closeDocumentTab(tabId)}

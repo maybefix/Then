@@ -2,6 +2,8 @@ import type { DocumentTab } from "../../types";
 
 type DocumentTabsProps = {
   openTabs: DocumentTab[];
+  /** "hover" は編集面の縦幅を空けるため、上端に触れたときだけ重ねて表示する。 */
+  displayMode: "always" | "hover";
   activeTabId: string;
   onActivateTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
@@ -26,13 +28,18 @@ function getTabStatusLabel(tab: DocumentTab): string {
 
 export function DocumentTabs({
   openTabs,
+  displayMode,
   activeTabId,
   onActivateTab,
   onCloseTab,
   onNewTab,
 }: DocumentTabsProps) {
-  return (
-    <nav className="documentTabs" aria-label="開いている文書">
+  const isHoverMode = displayMode === "hover";
+  const tabBar = (
+    <nav
+      className={`documentTabs ${isHoverMode ? "hoverDocumentTabs" : ""}`}
+      aria-label="開いている文書"
+    >
       <div className="documentTabsList" role="tablist" aria-orientation="horizontal">
         {openTabs.map((tab) => {
           const isActive = tab.id === activeTabId;
@@ -66,12 +73,17 @@ export function DocumentTabs({
                   tabButtons?.[nextIndex]?.focus();
                 }}
               >
-                <span
+                <svg
                   className={`documentTabKind ${
                     tab.kind === "scratch" ? "scratchDocumentTabKind" : ""
                   }`}
+                  viewBox="0 0 24 24"
                   aria-hidden="true"
-                />
+                  focusable="false"
+                >
+                  <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+                  <path d="M14 3v5h5" />
+                </svg>
                 <span className="documentTabText">
                   <span className="documentTabName">{tab.name}</span>
                   <span className="documentTabPath">{tab.path ?? "保存先未指定"}</span>
@@ -104,4 +116,7 @@ export function DocumentTabs({
       </button>
     </nav>
   );
+
+  if (!isHoverMode) return tabBar;
+  return <div className="documentTabsHoverZone">{tabBar}</div>;
 }
