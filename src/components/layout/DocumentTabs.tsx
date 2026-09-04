@@ -2,6 +2,8 @@ import type { DocumentTab } from "../../types";
 
 type DocumentTabsProps = {
   openTabs: DocumentTab[];
+  /** "hover" は編集面の縦幅を空けるため、上端に触れたときだけ重ねて表示する。 */
+  displayMode: "always" | "hover";
   activeTabId: string;
   onActivateTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
@@ -26,20 +28,19 @@ function getTabStatusLabel(tab: DocumentTab): string {
 
 export function DocumentTabs({
   openTabs,
+  displayMode,
   activeTabId,
   onActivateTab,
   onCloseTab,
   onNewTab,
 }: DocumentTabsProps) {
-  return (
-    <aside className="documentTabs" aria-label="開いている文書">
-      <div className="documentTabsHeader">
-        <span>開いている文書</span>
-        <span className="documentTabsCount" aria-label={`${openTabs.length}件`}>
-          {openTabs.length}
-        </span>
-      </div>
-      <div className="documentTabsList" role="tablist" aria-orientation="vertical">
+  const isHoverMode = displayMode === "hover";
+  const tabBar = (
+    <nav
+      className={`documentTabs ${isHoverMode ? "hoverDocumentTabs" : ""}`}
+      aria-label="開いている文書"
+    >
+      <div className="documentTabsList" role="tablist" aria-orientation="horizontal">
         {openTabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const tabStatus = getTabStatusLabel(tab);
@@ -56,20 +57,38 @@ export function DocumentTabs({
                 type="button"
                 role="tab"
                 aria-selected={isActive}
+                tabIndex={isActive ? 0 : -1}
                 title={tab.path ?? tab.name}
                 onClick={() => onActivateTab(tab.id)}
+                onKeyDown={(event) => {
+                  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                  event.preventDefault();
+                  const currentIndex = openTabs.findIndex((item) => item.id === tab.id);
+                  const delta = event.key === "ArrowLeft" ? -1 : 1;
+                  const nextIndex = (currentIndex + delta + openTabs.length) % openTabs.length;
+                  onActivateTab(openTabs[nextIndex].id);
+                  const tabButtons = event.currentTarget
+                    .closest('[role="tablist"]')
+                    ?.querySelectorAll<HTMLButtonElement>(".documentTabButton");
+                  tabButtons?.[nextIndex]?.focus();
+                }}
               >
-                <span
+                <svg
                   className={`documentTabKind ${
                     tab.kind === "scratch" ? "scratchDocumentTabKind" : ""
                   }`}
+                  viewBox="0 0 24 24"
                   aria-hidden="true"
-                />
+                  focusable="false"
+                >
+                  <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+                  <path d="M14 3v5h5" />
+                </svg>
                 <span className="documentTabText">
                   <span className="documentTabName">{tab.name}</span>
                   <span className="documentTabPath">{tab.path ?? "保存先未指定"}</span>
                 </span>
-                <span className="documentTabStatus" aria-label={tabStatus} />
+                <span className="documentTabStatus" aria-label={tabStatus} title={tabStatus} />
               </button>
               <button
                 className="documentTabCloseButton"
@@ -86,12 +105,18 @@ export function DocumentTabs({
           );
         })}
       </div>
-      <div className="documentTabsFooter">
-        <button className="documentTabsNewButton" type="button" onClick={onNewTab}>
-          <span aria-hidden="true">＋</span>
-          <span>新しいタブ</span>
-        </button>
-      </div>
-    </aside>
+      <button
+        className="documentTabsNewButton"
+        type="button"
+        aria-label="新しいタブ"
+        title="新しいタブ"
+        onClick={onNewTab}
+      >
+        <span aria-hidden="true">＋</span>
+      </button>
+    </nav>
   );
+
+  if (!isHoverMode) return tabBar;
+  return <div className="documentTabsHoverZone">{tabBar}</div>;
 }

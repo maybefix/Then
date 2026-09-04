@@ -41,6 +41,7 @@ import {
   WorkspaceSidebar,
   type SidebarHeadingSelection,
 } from "./components/layout/WorkspaceSidebar";
+import { DocumentTabs } from "./components/layout/DocumentTabs";
 import { StartupPortal } from "./components/startup/StartupPortal";
 import {
   createDocumentAst,
@@ -56,6 +57,12 @@ import {
   type HeadingDropPosition,
 } from "./editor/ast/headingMove";
 import { reconcileSavedDocumentTabs } from "./editor/documentTabState";
+import {
+  createWorkspaceDocumentTabs,
+  normalizeWorkspaceDocumentTabs,
+  reconcileWorkspaceDocumentTabs,
+  workspaceDocumentTabsKey,
+} from "./editor/workspaceDocumentTabs";
 import {
   collectProjectTextFiles,
   createProjectAstSkeleton,
@@ -137,6 +144,7 @@ import type {
   TextDocument,
   TextTemplateSummary,
   WorkspaceAlert,
+  WorkspaceDocumentTabs,
   WorkspaceRecord,
 } from "./types";
 import {
@@ -872,6 +880,8 @@ const defaultSettings: EditorSettings = {
   sidebarMode: "tree",
   showWorkspacePaths: true,
   showStatusFilePath: false,
+  showDocumentTabs: true,
+  documentTabsDisplayMode: "always",
   skipStartupPortal: false,
   focusModeUsesNativeFullscreen: false,
   sidebarHoverMode: "none",
@@ -909,6 +919,8 @@ function createScratchDocumentTab(
     id,
     kind: "scratch",
     path: null,
+    fileId: null,
+    contentHash: null,
     name: options.name ?? scratchFileName,
     markdown,
     savedMarkdown: options.savedMarkdown ?? "",
@@ -1008,6 +1020,8 @@ function createFileDocumentTab(document: TextDocument): DocumentTab {
     id: `file:${document.path}`,
     kind: "file",
     path: document.path,
+    fileId: document.fileId ?? null,
+    contentHash: document.contentHash ?? null,
     name: document.name,
     markdown: document.content,
     savedMarkdown: document.content,
@@ -1016,6 +1030,57 @@ function createFileDocumentTab(document: TextDocument): DocumentTab {
     documentKey: document.path,
     activeOutlineLine: null,
     viewportState: null,
+  };
+}
+
+type LoadedWorkspaceDocumentTabs = {
+  tabs: DocumentTab[];
+  activeIndex: number;
+  moved: Array<{ name: string; oldPath: string; newPath: string }>;
+  missingNames: string[];
+};
+
+async function loadWorkspaceDocumentTabs(
+  folder: ProjectFolder,
+  session: WorkspaceDocumentTabs,
+): Promise<LoadedWorkspaceDocumentTabs> {
+  const reconciliation = reconcileWorkspaceDocumentTabs(session, folder);
+  const loaded: Array<{ tab: DocumentTab; sourceIndex: number }> = [];
+  const missingNames = reconciliation.missing.map((tab) => tab.name);
+  const movedPaths = new Set(
+    reconciliation.moved.map((move) => normalizePathForCompare(move.newPath)),
+  );
+
+  for (const match of reconciliation.restored) {
+    try {
+      const document = await invoke<TextDocument>("read_text_file", {
+        path: match.entry.path,
+      });
+      loaded.push({
+        sourceIndex: match.sourceIndex,
+        tab: {
+          ...createFileDocumentTab(document),
+          activeOutlineLine: match.savedTab.activeOutlineLine,
+          viewportState: match.savedTab.viewportState,
+        },
+      });
+    } catch {
+      missingNames.push(match.savedTab.name);
+      movedPaths.delete(normalizePathForCompare(match.entry.path));
+    }
+  }
+
+  let activeIndex = loaded.findIndex((item) => item.sourceIndex === session.activeIndex);
+  if (activeIndex < 0) activeIndex = loaded.findIndex((item) => item.sourceIndex > session.activeIndex);
+  if (activeIndex < 0 && loaded.length) activeIndex = loaded.length - 1;
+
+  return {
+    tabs: loaded.map((item) => item.tab),
+    activeIndex: Math.max(0, activeIndex),
+    moved: reconciliation.moved.filter((move) =>
+      movedPaths.has(normalizePathForCompare(move.newPath)),
+    ),
+    missingNames,
   };
 }
 
@@ -1042,6 +1107,7 @@ function createDefaultState(): AppState {
     collapsedOutlineHeadingKeysByWorkspace: {},
     fileProgress: {},
     cursorPositions: {},
+    documentTabsByWorkspace: {},
     snapshots: [],
   };
 }
@@ -2005,6 +2071,15 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         typeof settings.showStatusFilePath === "boolean"
           ? settings.showStatusFilePath
           : defaultSettings.showStatusFilePath,
+      showDocumentTabs:
+        typeof settings.showDocumentTabs === "boolean"
+          ? settings.showDocumentTabs
+          : defaultSettings.showDocumentTabs,
+      documentTabsDisplayMode:
+        settings.documentTabsDisplayMode === "hover" ||
+        settings.documentTabsDisplayMode === "always"
+          ? settings.documentTabsDisplayMode
+          : defaultSettings.documentTabsDisplayMode,
       skipStartupPortal:
         typeof settings.skipStartupPortal === "boolean"
           ? settings.skipStartupPortal
@@ -2123,6 +2198,9 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
     ),
     fileProgress: normalizeFileProgress(value?.fileProgress),
     cursorPositions: normalizeCursorPositions(value?.cursorPositions),
+    documentTabsByWorkspace: normalizeWorkspaceDocumentTabs(
+      value?.documentTabsByWorkspace,
+    ),
     snapshots: normalizeSnapshots(value?.snapshots),
   };
 }
@@ -3041,6 +3119,51 @@ export default function App() {
     () => openTabs.find((tab) => tab.id === activeTabId) ?? openTabs[0] ?? null,
     [activeTabId, openTabs],
   );
+  const workspaceTabSessionSignature = useMemo(
+    () => JSON.stringify({
+      activeTabId,
+      tabs: openTabs
+        .filter((tab) => tab.kind === "file" && tab.path)
+        .map((tab) => ({
+          id: tab.id,
+          path: tab.path,
+          fileId: tab.fileId,
+          contentHash: tab.contentHash,
+          activeOutlineLine: tab.activeOutlineLine,
+          viewportState: tab.viewportState,
+        })),
+    }),
+    [activeTabId, openTabs],
+  );
+  useEffect(() => {
+    if (!isHydrated || !projectFolder || workspaceSwitchInProgressRef.current) return;
+    const key = workspaceDocumentTabsKey(projectFolder.path);
+    const session = createWorkspaceDocumentTabs(openTabs, activeTabId);
+    setAppState((current) => ({
+      ...current,
+      documentTabsByWorkspace: {
+        ...current.documentTabsByWorkspace,
+        [key]: session,
+      },
+    }));
+  }, [isHydrated, projectFolder?.path, workspaceTabSessionSignature]);
+  const rememberCurrentWorkspaceTabs = useCallback(() => {
+    if (!projectFolder) return;
+    const key = workspaceDocumentTabsKey(projectFolder.path);
+    const activeViewportState = editorInstanceRef.current?.getViewportState() ?? null;
+    const session = createWorkspaceDocumentTabs(
+      openTabs,
+      activeTabId,
+      activeViewportState,
+    );
+    setAppState((current) => ({
+      ...current,
+      documentTabsByWorkspace: {
+        ...current.documentTabsByWorkspace,
+        [key]: session,
+      },
+    }));
+  }, [activeTabId, openTabs, projectFolder]);
   const visibleRecentWorkspaces = useMemo(() => {
     const normalizedQuery = workspaceSwitcherQuery.trim().toLocaleLowerCase();
     if (!normalizedQuery) return appState.recentWorkspaces;
@@ -3258,6 +3381,8 @@ export default function App() {
                   ...tab,
                   savedMarkdown: document.content,
                   name: document.name,
+                  fileId: document.fileId ?? tab.fileId,
+                  contentHash: document.contentHash ?? tab.contentHash,
                   saveStatus: savedLatestRevision ? "saved" : "dirty",
                 };
               }),
@@ -3916,39 +4041,77 @@ export default function App() {
           folder.name,
         ),
       };
-      const filePath =
-        state.lastFilePath && findProjectEntry(folder.children, state.lastFilePath)
+      const workspaceKey = workspaceDocumentTabsKey(folder.path);
+      const savedTabs = state.documentTabsByWorkspace[workspaceKey];
+      const restoredTabs = savedTabs?.tabs.length
+        ? await loadWorkspaceDocumentTabs(folder, savedTabs)
+        : null;
+      const filePath = !restoredTabs?.tabs.length
+        ? state.lastFilePath && findProjectEntry(folder.children, state.lastFilePath)
           ? state.lastFilePath
-          : findFirstTextFile(folder.children)?.path ?? null;
+          : findFirstTextFile(folder.children)?.path ?? null
+        : null;
+      const fallbackDocument = filePath
+        ? await invoke<TextDocument>("read_text_file", { path: filePath })
+        : null;
+      const nextTabs = restoredTabs?.tabs.length
+        ? restoredTabs.tabs
+        : [
+            fallbackDocument
+              ? createFileDocumentTab(fallbackDocument)
+              : createScratchDocumentTab("", {
+                  documentKey: `workspace-new-${Date.now()}`,
+                  saveStatus: "saved",
+                }),
+          ];
+      const nextTab = nextTabs[restoredTabs?.activeIndex ?? 0] ?? nextTabs[0];
 
       didMountEditorRef.current = false;
-      if (filePath) {
-        const document = await invoke<TextDocument>("read_text_file", { path: filePath });
-        setFocusedFolderPath(null);
-        replaceActiveTab(createFileDocumentTab(document));
-        setAppState({
-          ...restoredState,
-          markdown: document.content,
-          lastWorkspacePath: folder.path,
-          lastFilePath: document.path,
-        });
-      } else {
-        setFocusedFolderPath(folder.path);
-        replaceActiveTab(
-          createScratchDocumentTab("", {
-            documentKey: `workspace-new-${Date.now()}`,
-            saveStatus: "saved",
-          }),
+      setFocusedFolderPath(nextTab.path ? null : folder.path);
+      setOpenTabs(nextTabs);
+      syncDocumentTabToEditor(nextTab);
+
+      let cursorPositions = { ...restoredState.cursorPositions };
+      let fileProgress = { ...restoredState.fileProgress };
+      for (const move of restoredTabs?.moved ?? []) {
+        const oldCursorKey = Object.keys(cursorPositions).find((path) =>
+          isSamePath(path, move.oldPath),
         );
-        setAppState({
-          ...restoredState,
-          markdown: "",
-          lastWorkspacePath: folder.path,
-          lastFilePath: null,
-        });
+        if (oldCursorKey) {
+          cursorPositions[move.newPath] = cursorPositions[oldCursorKey];
+          delete cursorPositions[oldCursorKey];
+        }
+        const oldProgressKey = Object.keys(fileProgress).find((path) =>
+          isSamePath(path, move.oldPath),
+        );
+        if (oldProgressKey) {
+          fileProgress[move.newPath] = fileProgress[oldProgressKey];
+          delete fileProgress[oldProgressKey];
+        }
       }
+      setAppState({
+        ...restoredState,
+        markdown: nextTab.markdown,
+        lastWorkspacePath: folder.path,
+        lastFilePath: nextTab.path,
+        cursorPositions,
+        fileProgress,
+        documentTabsByWorkspace: {
+          ...restoredState.documentTabsByWorkspace,
+          [workspaceKey]: createWorkspaceDocumentTabs(nextTabs, nextTab.id),
+        },
+      });
       setLastError("");
       setSaveStatus("saved");
+      const restoreSummary = [
+        restoredTabs?.moved.length
+          ? `移動したタブ ${restoredTabs.moved.length}件を追跡しました`
+          : "",
+        restoredTabs?.missingNames.length
+          ? `見つからないタブ ${restoredTabs.missingNames.length}件を除外しました`
+          : "",
+      ].filter(Boolean).join(" / ");
+      if (restoreSummary) showToast(restoreSummary);
       return true;
     } catch {
       openScratchFromStoredState(state, {
@@ -5354,6 +5517,7 @@ export default function App() {
     if (!(await confirmCloseDocumentTab(targetTab))) return;
 
     const remainingTabs = openTabs.filter((tab) => tab.id !== tabId);
+    const isClosingActiveTab = tabId === activeTabId;
     const fallbackTab =
       remainingTabs[targetIndex] ??
       remainingTabs[targetIndex - 1] ??
@@ -5363,7 +5527,7 @@ export default function App() {
       });
 
     setOpenTabs(remainingTabs.length ? remainingTabs : [fallbackTab]);
-    syncDocumentTabToEditor(fallbackTab);
+    if (isClosingActiveTab) syncDocumentTabToEditor(fallbackTab);
     showToast(`「${targetTab.name}」を閉じました`);
   };
 
@@ -5604,6 +5768,32 @@ export default function App() {
       const folder = await invoke<ProjectFolder>("list_project_text_files", {
         folderPath,
       });
+      const switched = !projectFolder || !isSamePath(projectFolder.path, folder.path);
+      let restoredTabs: LoadedWorkspaceDocumentTabs | null = null;
+      let nextTabs: DocumentTab[] | null = null;
+      let nextTab: DocumentTab | null = null;
+      if (switched) {
+        rememberCurrentWorkspaceTabs();
+        const workspaceKey = workspaceDocumentTabsKey(folder.path);
+        const savedTabs = appState.documentTabsByWorkspace[workspaceKey];
+        restoredTabs = savedTabs?.tabs.length
+          ? await loadWorkspaceDocumentTabs(folder, savedTabs)
+          : null;
+        nextTabs = restoredTabs?.tabs ?? [];
+        const existingIndex = nextTabs.findIndex((tab) =>
+          tab.path ? isSamePath(tab.path, document.path) : false,
+        );
+        const restoredRequestedTab = existingIndex >= 0 ? nextTabs[existingIndex] : null;
+        nextTab = {
+          ...createFileDocumentTab(document),
+          activeOutlineLine: restoredRequestedTab?.activeOutlineLine ?? null,
+          viewportState: restoredRequestedTab?.viewportState ?? null,
+        };
+        if (existingIndex >= 0) nextTabs[existingIndex] = nextTab;
+        else nextTabs.push(nextTab);
+        setOpenTabs(nextTabs);
+        syncDocumentTabToEditor(nextTab);
+      }
       setProjectFolder(folder);
       setFocusedFolderPath(null);
       setWorkspaceAlert(null);
@@ -5617,15 +5807,54 @@ export default function App() {
       }
       setPlotWorkspacePath(folder.path);
       setPlotCards(nextPlotCards);
-      setAppState((current) => ({
-        ...current,
-        snippets: nextSnippets ?? current.snippets,
-        lastWorkspacePath: folder.path,
-        lastFilePath: document.path,
-      }));
-      return folder;
+      setAppState((current) => {
+        const cursorPositions = { ...current.cursorPositions };
+        const fileProgress = { ...current.fileProgress };
+        for (const move of restoredTabs?.moved ?? []) {
+          const oldCursorKey = Object.keys(cursorPositions).find((path) =>
+            isSamePath(path, move.oldPath),
+          );
+          if (oldCursorKey) {
+            cursorPositions[move.newPath] = cursorPositions[oldCursorKey];
+            delete cursorPositions[oldCursorKey];
+          }
+          const oldProgressKey = Object.keys(fileProgress).find((path) =>
+            isSamePath(path, move.oldPath),
+          );
+          if (oldProgressKey) {
+            fileProgress[move.newPath] = fileProgress[oldProgressKey];
+            delete fileProgress[oldProgressKey];
+          }
+        }
+        return {
+          ...current,
+          snippets: nextSnippets ?? current.snippets,
+          markdown: nextTab?.markdown ?? current.markdown,
+          lastWorkspacePath: folder.path,
+          lastFilePath: document.path,
+          cursorPositions,
+          fileProgress,
+          documentTabsByWorkspace:
+            nextTabs && nextTab
+              ? {
+                  ...current.documentTabsByWorkspace,
+                  [workspaceDocumentTabsKey(folder.path)]: createWorkspaceDocumentTabs(
+                    nextTabs,
+                    nextTab.id,
+                  ),
+                }
+              : current.documentTabsByWorkspace,
+        };
+      });
+      return { folder, switched };
     },
-    [projectFolder, settings.snippetStorageMode],
+    [
+      appState.documentTabsByWorkspace,
+      projectFolder,
+      rememberCurrentWorkspaceTabs,
+      settings.snippetStorageMode,
+      syncDocumentTabToEditor,
+    ],
   );
 
   const refreshProjectFolder = useCallback(async (_folderPath: string) => {
@@ -6050,8 +6279,10 @@ export default function App() {
       if (!document) {
         return;
       }
-      await setWorkspaceFromDocumentPath(document, { loadWorkspaceSnippets: true });
-      loadDocumentIntoEditor(document);
+      const workspace = await setWorkspaceFromDocumentPath(document, {
+        loadWorkspaceSnippets: true,
+      });
+      if (!workspace?.switched) loadDocumentIntoEditor(document);
       showToast(`「${document.name}」を開きました`);
     } catch (error) {
       setLastError(String(error));
@@ -6085,10 +6316,10 @@ export default function App() {
       }
 
       const wasScratch = !currentFilePath;
-      loadDocumentIntoEditor(document, { replaceActive: true });
-      if (wasScratch) {
-        await setWorkspaceFromDocumentPath(document, { loadWorkspaceSnippets: true });
-      }
+      const workspace = wasScratch
+        ? await setWorkspaceFromDocumentPath(document, { loadWorkspaceSnippets: true })
+        : null;
+      if (!workspace?.switched) loadDocumentIntoEditor(document, { replaceActive: true });
       const refreshPath = currentFilePath
         ? findContainingFolderPath(projectFolder, currentFilePath)
         : projectFolder?.path;
@@ -6116,9 +6347,11 @@ export default function App() {
         setSaveStatus(previousSaveStatus);
         return;
       }
-      loadDocumentIntoEditor(document, { replaceActive: true });
-      const folder = await setWorkspaceFromDocumentPath(document, { loadWorkspaceSnippets: true });
-      if (!folder && projectFolder) {
+      const workspace = await setWorkspaceFromDocumentPath(document, {
+        loadWorkspaceSnippets: true,
+      });
+      if (!workspace?.switched) loadDocumentIntoEditor(document, { replaceActive: true });
+      if (!workspace && projectFolder) {
         await refreshProjectFolder(projectFolder.path);
       }
       showToast(`「${document.name}」を保存しました`);
@@ -6230,10 +6463,11 @@ export default function App() {
   const openWorkspaceFolder = async (
     folder: ProjectFolder,
     options: { focusFolderPath?: string | null } = {},
-  ) => {
+  ): Promise<{ movedCount: number; missingNames: string[] }> => {
     const switchGeneration = workspaceSwitchGenerationRef.current + 1;
     workspaceSwitchGenerationRef.current = switchGeneration;
     workspaceSwitchInProgressRef.current = true;
+    rememberCurrentWorkspaceTabs();
 
     const focusedPath = options.focusFolderPath ?? folder.path;
     const focusedEntry =
@@ -6250,7 +6484,12 @@ export default function App() {
           : snippets;
       const restoredPlotCards = await loadWorkspacePlotCards(folder.path);
       const firstFile = findFirstTextFile(preferredFiles) ?? findFirstTextFile(folder.children);
-      const firstDocument = firstFile
+      const workspaceKey = workspaceDocumentTabsKey(folder.path);
+      const savedTabs = appState.documentTabsByWorkspace[workspaceKey];
+      const restoredTabs = savedTabs?.tabs.length
+        ? await loadWorkspaceDocumentTabs(folder, savedTabs)
+        : null;
+      const firstDocument = !restoredTabs?.tabs.length && firstFile
         ? await (async () => {
             debugLog("before invoke read_text_file firstFile", {
               path: firstFile.path,
@@ -6274,28 +6513,63 @@ export default function App() {
       setPlotWorkspacePath(folder.path);
       setPlotCards(restoredPlotCards);
 
-      const nextTab = firstDocument
-        ? createFileDocumentTab(firstDocument)
-        : createScratchDocumentTab("", {
-            documentKey: `workspace-empty-${Date.now()}`,
-            saveStatus: "saved",
-            savedMarkdown: "",
-          });
-      setOpenTabs([nextTab]);
+      const nextTabs = restoredTabs?.tabs.length
+        ? restoredTabs.tabs
+        : [
+            firstDocument
+              ? createFileDocumentTab(firstDocument)
+              : createScratchDocumentTab("", {
+                  documentKey: `workspace-empty-${Date.now()}`,
+                  saveStatus: "saved",
+                  savedMarkdown: "",
+                }),
+          ];
+      const nextTab = nextTabs[restoredTabs?.activeIndex ?? 0] ?? nextTabs[0];
+      setOpenTabs(nextTabs);
       syncDocumentTabToEditor(nextTab);
       setFocusedFolderPath(focusedPath);
-      setAppState((current) => ({
-        ...current,
-        snippets: restoredSnippets,
-        markdown: firstDocument?.content ?? "",
-        lastWorkspacePath: folder.path,
-        lastFilePath: firstDocument?.path ?? null,
-        recentWorkspaces: upsertRecentWorkspace(
-          removeNestedRecentWorkspaces(current.recentWorkspaces, folder.path),
-          folder.path,
-          folder.name,
-        ),
-      }));
+      setAppState((current) => {
+        const cursorPositions = { ...current.cursorPositions };
+        const fileProgress = { ...current.fileProgress };
+        for (const move of restoredTabs?.moved ?? []) {
+          const oldCursorKey = Object.keys(cursorPositions).find((path) =>
+            isSamePath(path, move.oldPath),
+          );
+          if (oldCursorKey) {
+            cursorPositions[move.newPath] = cursorPositions[oldCursorKey];
+            delete cursorPositions[oldCursorKey];
+          }
+          const oldProgressKey = Object.keys(fileProgress).find((path) =>
+            isSamePath(path, move.oldPath),
+          );
+          if (oldProgressKey) {
+            fileProgress[move.newPath] = fileProgress[oldProgressKey];
+            delete fileProgress[oldProgressKey];
+          }
+        }
+        return {
+          ...current,
+          snippets: restoredSnippets,
+          markdown: nextTab.markdown,
+          lastWorkspacePath: folder.path,
+          lastFilePath: nextTab.path,
+          cursorPositions,
+          fileProgress,
+          documentTabsByWorkspace: {
+            ...current.documentTabsByWorkspace,
+            [workspaceKey]: createWorkspaceDocumentTabs(nextTabs, nextTab.id),
+          },
+          recentWorkspaces: upsertRecentWorkspace(
+            removeNestedRecentWorkspaces(current.recentWorkspaces, folder.path),
+            folder.path,
+            folder.name,
+          ),
+        };
+      });
+      return {
+        movedCount: restoredTabs?.moved.length ?? 0,
+        missingNames: restoredTabs?.missingNames ?? [],
+      };
     } finally {
       if (workspaceSwitchGenerationRef.current === switchGeneration) {
         workspaceSwitchInProgressRef.current = false;
@@ -6360,13 +6634,21 @@ export default function App() {
         path: folderToOpen.path,
         children: folderToOpen.children.length,
       });
-      await openWorkspaceFolder(folderToOpen, { focusFolderPath });
+      const tabRestore = await openWorkspaceFolder(folderToOpen, { focusFolderPath });
       setIsWorkspaceSwitcherOpen(false);
-      showToast(
-        focusFolderPath
-          ? `「${folderToOpen.name}」内の「${folder.name}」へ移動しました`
-          : `「${folderToOpen.name}」を開きました`,
-      );
+      const baseMessage = focusFolderPath
+        ? `「${folderToOpen.name}」内の「${folder.name}」へ移動しました`
+        : `「${folderToOpen.name}」を開きました`;
+      const restoreSummary = [
+        projectFolder && !isSamePath(projectFolder.path, folderToOpen.path)
+          ? `「${projectFolder.name}」のタブを記憶`
+          : "",
+        tabRestore.movedCount ? `移動したタブ ${tabRestore.movedCount}件を追跡` : "",
+        tabRestore.missingNames.length
+          ? `見つからないタブ ${tabRestore.missingNames.length}件を除外`
+          : "",
+      ].filter(Boolean).join(" / ");
+      showToast(restoreSummary ? `${baseMessage}（${restoreSummary}）` : baseMessage);
       return true;
     } catch (error) {
       setLastError(String(error));
@@ -6387,37 +6669,16 @@ export default function App() {
       const folder = await invoke<ProjectFolder>("list_project_text_files", {
         folderPath: workspaceAlert.path,
       });
-      setProjectFolder(folder);
-      setFocusedFolderPath(folder.path);
+      const tabRestore = await openWorkspaceFolder(folder);
       setWorkspaceAlert(null);
-      const restoredSnippets =
-        settings.snippetStorageMode === "workspace"
-          ? await loadWorkspaceSnippets(folder.path)
-          : snippets;
-      const restoredPlotCards = await loadWorkspacePlotCards(folder.path);
-      setSnippetWorkspacePath(settings.snippetStorageMode === "workspace" ? folder.path : null);
-      setPlotWorkspacePath(folder.path);
-      setPlotCards(restoredPlotCards);
-      const firstFile = findFirstTextFile(folder.children);
-      setAppState((current) => ({
-        ...current,
-        snippets: restoredSnippets,
-        lastWorkspacePath: folder.path,
-        lastFilePath: firstFile?.path ?? null,
-        recentWorkspaces: upsertRecentWorkspace(
-          removeNestedRecentWorkspaces(current.recentWorkspaces, folder.path),
-          folder.path,
-          folder.name,
-        ),
-      }));
-      if (firstFile) {
-        const document = await invoke<TextDocument>("read_text_file", {
-          path: firstFile.path,
-        });
-        loadDocumentIntoEditor(document, { replaceActive: true });
-      } else {
-        setSaveStatus("saved");
-      }
+      setSaveStatus("saved");
+      const detail = [
+        tabRestore.movedCount ? `移動したタブ ${tabRestore.movedCount}件を追跡` : "",
+        tabRestore.missingNames.length
+          ? `見つからないタブ ${tabRestore.missingNames.length}件を除外`
+          : "",
+      ].filter(Boolean).join(" / ");
+      showToast(detail ? `プロジェクトを復元しました（${detail}）` : "プロジェクトを復元しました");
     } catch (error) {
       setLastError(String(error));
       setWorkspaceAlert((current) => current);
@@ -7284,6 +7545,10 @@ export default function App() {
             name: isRenamedFile
               ? document.name
               : nextPath.split(/[\\/]/).pop() ?? tab.name,
+            fileId: isRenamedFile ? document.fileId ?? tab.fileId : tab.fileId,
+            contentHash: isRenamedFile
+              ? document.contentHash ?? tab.contentHash
+              : tab.contentHash,
             markdown: isRenamedFile ? document.content : tab.markdown,
             savedMarkdown: isRenamedFile ? document.content : tab.savedMarkdown,
             saveStatus: "saved",
@@ -7597,6 +7862,8 @@ export default function App() {
             kind: "file",
             path: nextPath,
             name: movedDocument?.name ?? nextPath.split(/[\\/]/).pop() ?? tab.name,
+            fileId: movedDocument?.fileId ?? tab.fileId,
+            contentHash: movedDocument?.contentHash ?? tab.contentHash,
             markdown: movedDocument?.content ?? tab.markdown,
             savedMarkdown: movedDocument?.content ?? tab.savedMarkdown,
             saveStatus: "saved",
@@ -7795,6 +8062,8 @@ export default function App() {
               movedDocument?.name ??
               nextPath.split(/[\\/]/).pop() ??
               tab.name,
+            fileId: movedDocument?.fileId ?? tab.fileId,
+            contentHash: movedDocument?.contentHash ?? tab.contentHash,
             markdown: movedDocument?.content ?? tab.markdown,
             savedMarkdown: movedDocument?.content ?? tab.savedMarkdown,
             saveStatus: "saved",
@@ -9193,6 +9462,11 @@ export default function App() {
             aria-label="Then"
             data-app-mode={appMode}
             data-editor-focus={isEditorFocusMode ? "true" : undefined}
+            data-document-tabs={
+              settings.showDocumentTabs && appMode === "write" && !isEditorFocusMode
+                ? settings.documentTabsDisplayMode
+                : undefined
+            }
           >
           <header className="topbar">
             <div
@@ -9955,6 +10229,17 @@ export default function App() {
               </button>
             </div>
           </header>
+
+          {settings.showDocumentTabs && appMode === "write" && !isEditorFocusMode && (
+            <DocumentTabs
+              openTabs={openTabs}
+              displayMode={settings.documentTabsDisplayMode}
+              activeTabId={activeTabId}
+              onActivateTab={activateDocumentTab}
+              onCloseTab={(tabId) => void closeDocumentTab(tabId)}
+              onNewTab={handleNewTab}
+            />
+          )}
 
           <div
             className={`workspace ${appMode === "export" || appMode === "checkpoint" ? "modeHiddenPane" : ""}`}

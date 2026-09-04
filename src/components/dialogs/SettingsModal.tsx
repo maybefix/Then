@@ -469,6 +469,35 @@ export function SettingsModal({
                   />
                   <span>画面下部にファイルパスを表示</span>
                 </label>
+                <label className="checkSetting descriptiveCheckSetting">
+                  <input
+                    checked={settings.showDocumentTabs}
+                    type="checkbox"
+                    onChange={(event) =>
+                      onUpdateSettings("showDocumentTabs", event.target.checked)
+                    }
+                  />
+                  <span className="checkSettingCopy">
+                    <span>タブを表示</span>
+                    <small>開いている文書をパンくずの下に表示します</small>
+                  </span>
+                </label>
+                <label>
+                  <span>タブバーの表示方法</span>
+                  <select
+                    value={settings.documentTabsDisplayMode}
+                    disabled={!settings.showDocumentTabs}
+                    onChange={(event) =>
+                      onUpdateSettings(
+                        "documentTabsDisplayMode",
+                        event.target.value as EditorSettings["documentTabsDisplayMode"],
+                      )
+                    }
+                  >
+                    <option value="always">常に表示</option>
+                    <option value="hover">上端にカーソルを寄せたときだけ表示</option>
+                  </select>
+                </label>
                 <label className="checkSetting">
                   <input
                     checked={settings.skipStartupPortal}
