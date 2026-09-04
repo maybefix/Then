@@ -1,4 +1,5 @@
 import type { ExportFontFamily } from "./export/types";
+import type { ProofreadOptions } from "./proofread/types";
 
 /**
  * 旧 Idea（フラットな付箋）モデル。スレッド型へ移行済みだが、
@@ -218,6 +219,12 @@ export type SidebarHoverMode = "none" | "both" | "left" | "right";
 
 export type DocumentTabsDisplayMode = "always" | "hover";
 
+/** 校正ペインの設定。しきい値と、外しているルール。 */
+export type ProofreadSettings = ProofreadOptions & {
+  /** 使わないルールのID。既定は空（全ルール有効）。 */
+  disabledRules: string[];
+};
+
 export type EditorSettings = {
   theme: AppTheme;
   editorFontFamily: string;
@@ -287,6 +294,8 @@ export type EditorSettings = {
   canvasOpensInWindow: boolean;
   /** エクスポートをメイン画面のモードではなく別ウィンドウで開くか。 */
   exportOpensInWindow: boolean;
+  /** 校正ペインのしきい値と、外しているルール。 */
+  proofread: ProofreadSettings;
 };
 
 /**

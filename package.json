@@ -31,6 +31,7 @@
     "test:document-tabs": "node scripts/test-document-tabs.mjs",
     "test:workspace-tabs": "node --experimental-strip-types scripts/test-workspace-document-tabs.mjs",
     "test:page-breaks": "node scripts/test-page-breaks.mjs",
+    "test:proofread": "node scripts/test-proofread-rules.mjs",
     "test:export": "node scripts/verify-export.mjs",
     "demo:record": "powershell -ExecutionPolicy Bypass -File scripts/demo/record-desktop.ps1",
     "demo:edit": "node scripts/demo/edit-video.mjs",

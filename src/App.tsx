@@ -105,6 +105,9 @@ import {
 import { ReferenceLayer } from "./components/references/ReferenceLayer";
 import { ReferencePane } from "./components/references/ReferencePane";
 import { IdeaPane } from "./components/snippets/IdeaPane";
+import ProofreadPane from "./components/proofread/ProofreadPane";
+import { PROOFREAD_RULES } from "./proofread/rules";
+import { DEFAULT_PROOFREAD_OPTIONS } from "./proofread/types";
 import { QuickIdeaModal } from "./components/snippets/QuickIdeaModal";
 import { StatusBar } from "./components/status/StatusBar";
 import type {
@@ -134,6 +137,7 @@ import type {
   PlotCard,
   ProjectEntry,
   ProjectFolder,
+  ProofreadSettings,
   ReferenceCardState,
   ReferenceFileInfo,
   ReferenceKind,
@@ -892,6 +896,7 @@ const defaultSettings: EditorSettings = {
   checkpointSectionCollapsed: false,
   canvasOpensInWindow: false,
   exportOpensInWindow: false,
+  proofread: { ...DEFAULT_PROOFREAD_OPTIONS, disabledRules: [] },
 };
 
 const fallbackFontFamilies = [
@@ -2010,6 +2015,40 @@ function normalizeCollapsedPathListsByWorkspace(
   return normalized;
 }
 
+const knownProofreadRuleIds = new Set(PROOFREAD_RULES.map((rule) => rule.id));
+
+/**
+ * 校正設定の復元。しきい値は入力欄と同じ範囲へ丸め、無くなったルールIDは捨てる。
+ * ルールを削除・改名しても、保存済みの設定が指摘を丸ごと止めてしまわないようにする。
+ */
+function normalizeProofreadSettings(value: unknown): ProofreadSettings {
+  const fallback: ProofreadSettings = { ...DEFAULT_PROOFREAD_OPTIONS, disabledRules: [] };
+  if (!value || typeof value !== "object") return fallback;
+
+  const stored = value as Partial<ProofreadSettings>;
+  const clamp = (input: unknown, min: number, max: number, fallbackValue: number) =>
+    typeof input === "number" && Number.isFinite(input)
+      ? Math.min(max, Math.max(min, Math.round(input)))
+      : fallbackValue;
+
+  return {
+    maxSentenceLength: clamp(stored.maxSentenceLength, 20, 200, fallback.maxSentenceLength),
+    maxCommasPerSentence: clamp(stored.maxCommasPerSentence, 1, 12, fallback.maxCommasPerSentence),
+    skipDialogue:
+      typeof stored.skipDialogue === "boolean" ? stored.skipDialogue : fallback.skipDialogue,
+    disabledRules: Array.isArray(stored.disabledRules)
+      ? Array.from(
+          new Set(
+            stored.disabledRules.filter(
+              (ruleId): ruleId is string =>
+                typeof ruleId === "string" && knownProofreadRuleIds.has(ruleId),
+            ),
+          ),
+        )
+      : [],
+  };
+}
+
 function normalizeState(value: Partial<AppState> | null | undefined): AppState {
   const rawSettings = (value?.settings ?? {}) as Partial<EditorSettings> & {
     /** v0.6.1以前の保存形式。trueは左右ともホバー表示。 */
@@ -2182,6 +2221,7 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         typeof settings.exportOpensInWindow === "boolean"
           ? settings.exportOpensInWindow
           : defaultSettings.exportOpensInWindow,
+      proofread: normalizeProofreadSettings(settings.proofread),
     },
     lastWorkspacePath:
       typeof value?.lastWorkspacePath === "string" ? value.lastWorkspacePath : null,
@@ -7174,6 +7214,21 @@ export default function App() {
     });
   };
 
+  /** 校正の指摘位置を本文で選択して見せる。 */
+  const revealEditorRange = (from: number, to: number) => {
+    window.requestAnimationFrame(() => {
+      editorInstanceRef.current?.selectRange(from, to);
+    });
+  };
+
+  /** 校正の置換候補を本文へ適用する。キャレットは置換後の末尾に置く。 */
+  const replaceEditorRange = (from: number, to: number, insert: string) => {
+    const editor = editorInstanceRef.current;
+    if (!editor) return;
+    editor.replaceRange(from, to, insert, from + insert.length);
+    showToast(insert ? `「${insert}」に置き換えました` : "該当箇所を削除しました");
+  };
+
   const handleProjectSearchResultOpen = async (result: ProjectSearchResult) => {
     if (result.path && result.path !== currentFilePath) {
       await handleProjectFileSelect(result.path);
@@ -10913,6 +10968,21 @@ export default function App() {
                         <path d="M17.5 8.8c-1.1-.1-2.2.1-3.4.7" />
                       </svg>
                     </button>
+                    <button
+                      className={`rightTab ${rightSidebarTab === "proof" ? "activeRightTab" : ""}`}
+                      type="button"
+                      role="tab"
+                      aria-label="校正"
+                      aria-selected={rightSidebarTab === "proof"}
+                      title="校正"
+                      onClick={() => setRightSidebarTab("proof")}
+                    >
+                      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+                        <path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7Z" />
+                        <polyline points="14 3 14 7 18 7" />
+                        <polyline points="9 13.5 11 15.5 15 11" />
+                      </svg>
+                    </button>
                     {pluginViews.map((view) => {
                       const tabId = `plugin:${view.pluginId}:${view.id}`;
                       const icon = view.icon ?? loadedPlugins.find(
@@ -10996,6 +11066,28 @@ export default function App() {
                   />
                   {activePluginView ? (
                     <div className="pluginViewBody" aria-label={activePluginView.title} />
+                  ) : rightSidebarTab === "proof" ? (
+                    <ProofreadPane
+                      text={editorText}
+                      documentKey={documentKey}
+                      active={!isRightSidebarCollapsed && !isEditorFocusMode && appMode !== "plugin"}
+                      options={settings.proofread}
+                      onOptionsChange={(next) =>
+                        updateSettings("proofread", {
+                          ...next,
+                          disabledRules: settings.proofread.disabledRules,
+                        })
+                      }
+                      disabledRuleIds={settings.proofread.disabledRules}
+                      onDisabledRuleIdsChange={(ruleIds) =>
+                        updateSettings("proofread", {
+                          ...settings.proofread,
+                          disabledRules: ruleIds,
+                        })
+                      }
+                      onJump={revealEditorRange}
+                      onReplace={replaceEditorRange}
+                    />
                   ) : rightSidebarTab === "plot" ? (
                     <PlotPane
                       cards={plotCards}
