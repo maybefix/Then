@@ -58,7 +58,7 @@ const expectNone = (text, ruleId, overrides) => {
 };
 
 // --- ルールの棚卸し -----------------------------------------------------------
-assert.equal(PROOFREAD_RULES.length, 10, "10種類のルールを保つ");
+assert.equal(PROOFREAD_RULES.length, 13, "13種類のルールを保つ");
 for (const rule of PROOFREAD_RULES) {
   assert.ok(rule.sources.length > 0, `${rule.id} must carry a citation`);
   assert.equal(typeof rule.wordScoped, "boolean", `${rule.id} must say what it points at`);
@@ -70,7 +70,7 @@ for (const rule of PROOFREAD_RULES) {
 // 文全体を指すルールは、その範囲を辞書に登録させない。
 assert.deepEqual(
   PROOFREAD_RULES.filter((rule) => !rule.wordScoped).map((rule) => rule.id).sort(),
-  ["sentence-flow", "style-consistency"],
+  ["nlp-dependency", "sentence-flow", "style-consistency"],
 );
 
 // --- 1. 話し言葉 --------------------------------------------------------------
@@ -720,5 +720,43 @@ expectNone("手続法に沿う。手続きを進める。", "notation-variants")
     0,
   );
 }
+
+// 異字同訓：活用、誤検出、保護範囲、設定を実際のエンジンで確認。
+for (const [text, matched, candidate] of [
+  ["期待に答えたい。", "期待に答え", "応える"],
+  ["設問に応えた。", "設問に応え", "答える"],
+  ["暑いお茶を飲む。", "暑いお茶", "熱い"],
+  ["お茶が暑かった。", "お茶が暑かった", "熱い"],
+  ["喉が乾いた。", "喉が乾いた", "渇く"],
+  ["洗濯物が渇く。", "洗濯物が渇く", "乾く"],
+  ["風邪を直したい。", "風邪を直し", "治す"],
+  ["怪我が直った。", "怪我が直っ", "治る"],
+  ["機械を治そう。", "機械を治そ", "直す"],
+  ["前例に習って進める。", "前例に習っ", "倣う"],
+  ["ピアノを倣う。", "ピアノを倣う", "習う"],
+]) {
+  const issue = expectOne(text, "ijidokun", matched);
+  assert.equal(issue.severity, "hint");
+  assert.equal(issue.replacement, undefined);
+  assert.ok(issue.message.includes(candidate));
+  assert.match(issue.detail, /出典/);
+}
+for (const text of [
+  "期待に応える。質問に答えた。", "熱いお茶。暑い部屋。厚い本。",
+  "喉が渇いた。空気が乾く。", "風邪を治す。誤りを直す。",
+  "前例に倣う。英語を習った。", "彼の答えを待つ。心が熱い。",
+  "期待に、彼は答えた。", "期待に。答えた。", "期待に\n答える。",
+  "暑いお茶会だった。", "無期待に答える。", "「期待に答える」と言った。",
+  "`期待に答える`", "https://example.com/期待に答える",
+  "｜言葉《期待に答える》", "[言葉(rb,期待に答える)]",
+  ["```", "期待に答える", "```"].join(NL),
+]) expectNone(text, "ijidokun");
+expectOne("「期待に答える」", "ijidokun", "期待に答え", { skipDialogue: false });
+expectNone("期待に答える。", "ijidokun", { disabledChecks: ["ijidokun/kotaeru"] });
+expectOne("喉が乾く。", "ijidokun", "喉が乾く", { disabledChecks: ["ijidokun/kotaeru"] });
+assert.equal(scan("期待に答える。", {}, dictionary("期待に答える")).issues.filter(i => i.ruleId === "ijidokun").length, 0);
+assert.equal(runProofread("期待に答える。", DEFAULT_PROOFREAD_OPTIONS, PROOFREAD_RULES.filter(r => r.id !== "ijidokun")).issues.filter(i => i.ruleId === "ijidokun").length, 0);
+expectOne("😀\n期待に答える。", "ijidokun", "期待に答え");
+assert.equal(byRule("期待に答える。".repeat(250), "ijidokun").length, 200);
 
 console.log("proofread rules OK");

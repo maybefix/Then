@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+mod proofread_nlp;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::io::Write;
@@ -512,6 +513,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            proofread_nlp::analyze_proofread_nlp,
             load_app_state,
             save_app_state,
             get_system_fonts,

@@ -1,4 +1,6 @@
 node_modules/
+.venv-nlp/
+__pycache__/
 dist/
 /.edge-ui-check*/
 ui-check*.png

@@ -1,5 +1,14 @@
 import type { ProofreadSource } from "./types";
 
+export const IJIDOKUN: ProofreadSource = {
+  title: "「異字同訓」の漢字の使い分け例（報告）",
+  publisher: "文化審議会国語分科会",
+  year: 2014,
+  edition: "平成26年2月21日",
+  locator: "文化庁 https://www.bunka.go.jp/seisaku/bunkashingikai/kokugo/hokoku/pdf/93927001_12.pdf （本文5・12・14・20・21ページ）",
+  basis: "同じ訓を持つ漢字の使い分けの目安を語義と用例で示す。前書きは、分野の習慣や個人差があり、異なる使い分けを否定する趣旨ではないと明記している。Thenの検出は一部の連語に限定し、誤りの断定や自動置換はしない。",
+};
+
 /**
  * 校正ルールの根拠にした資料。
  *

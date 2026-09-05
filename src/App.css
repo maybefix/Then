@@ -11513,6 +11513,27 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   margin-bottom: 10px;
 }
 
+.proofContextControls {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+.proofContextControls label { display: grid; gap: 6px; }
+.proofContextControls select, .proofContextControls button {
+  max-width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  font: inherit;
+}
+.proofContextControls button:disabled { opacity: .55; }
+
 .proofFilterChip {
   display: inline-flex;
   align-items: center;

@@ -1,5 +1,7 @@
 import { isRangeMasked, maskSurfaces, sentenceLength } from "./context";
 import { collectRubyAnnotations } from "./ruby";
+import { ijidokunRule } from "./ijidokun";
+import { nlpCollocationRule, nlpDependencyRule } from "./nlpRules";
 import {
   ESTABLISHED_DOUBLE_HONORIFICS,
   IDIOM_FORMS,
@@ -1120,6 +1122,9 @@ export const PROOFREAD_RULES: ProofreadRule[] = [
   keigoRule,
   styleConsistencyRule,
   dictionaryUnifyRule,
+  ijidokunRule,
+  nlpCollocationRule,
+  nlpDependencyRule,
 ];
 
 export const proofreadRuleById = new Map(PROOFREAD_RULES.map((rule) => [rule.id, rule]));

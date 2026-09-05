@@ -1,0 +1,62 @@
+import assert from "node:assert/strict";
+import { build } from "esbuild";
+import { mkdir } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
+import path from "node:path";
+import React, { act } from "react";
+import { JSDOM } from "jsdom";
+import { createRoot } from "react-dom/client";
+
+const dir = path.resolve("test-artifacts/nlp");
+await mkdir(dir, { recursive: true });
+await build({ entryPoints: ["src/components/proofread/ProofreadPane.tsx"], outfile: path.join(dir, "pane.mjs"), bundle: true, platform: "node", format: "esm", external: ["react", "react/jsx-runtime"], plugins: [{ name: "test-ipc", setup(builder) {
+  builder.onResolve({ filter: /^@tauri-apps\/api\/core$/ }, () => ({ path: "mock", namespace: "test" }));
+  builder.onLoad({ filter: /.*/, namespace: "test" }, () => ({ contents: "export const isTauri = () => true; export const invoke = (...args) => globalThis.nlpInvoke(...args);" }));
+} }] });
+const { default: Pane } = await import(pathToFileURL(path.join(dir, "pane.mjs")));
+const dom = new JSDOM("<div id='root'></div>", { url: "http://localhost" });
+globalThis.window = dom.window;
+globalThis.document = dom.window.document;
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+const root = createRoot(document.getElementById("root"));
+const options = { maxSentenceLength: 80, maxCommasPerSentence: 4, skipDialogue: true, disabledChecks: [] };
+const noop = () => {};
+const props = { text: "期待に十分答える。", documentKey: "a", active: true, options, onOptionsChange: noop,
+  disabledRuleIds: [], onDisabledRuleIdsChange: noop, onJump: noop, onReplace: noop, projectTerms: [], globalTerms: [], hasProject: true,
+  onProjectTermsChange: noop, onGlobalTermsChange: noop, onExportTermFile: async () => null, onImportTermFile: async () => null,
+  canUseTermFiles: true, ignoredKeys: [], onIgnoredKeysChange: noop, disabledCheckIds: [], onDisabledCheckIdsChange: noop };
+const render = async (patch = {}) => { await act(async () => { root.render(React.createElement(Pane, { ...props, ...patch })); }); };
+const button = () => [...document.querySelectorAll("button")].find(b => /この原稿を解析|文脈を解析中/.test(b.textContent));
+let resolve;
+let requested;
+globalThis.nlpInvoke = (command, args) => { assert.equal(command, "analyze_proofread_nlp"); requested = args; return new Promise(r => { resolve = r; }); };
+await render();
+await act(async () => { button().click(); });
+assert.equal(requested.mode, "dependency");
+assert.equal(requested.text, props.text);
+assert.equal(button().disabled, true);
+await render({ documentKey: "b", text: "別の原稿。" });
+await act(async () => { resolve({ mode: "dependency", tokens: [] }); });
+assert.ok(!document.body.textContent.includes("文脈解析が完了"), "late result must not appear on another document");
+await render();
+globalThis.nlpInvoke = async () => { throw new Error("モデルが未導入です。"); };
+await act(async () => { button().click(); });
+assert.ok(document.body.textContent.includes("モデルが未導入"));
+assert.equal(button().disabled, false);
+globalThis.nlpInvoke = async () => ({ mode: "dependency", tokens: [] });
+await act(async () => { button().click(); });
+assert.ok(document.body.textContent.includes("文脈解析が完了しました（0件）"));
+await render({ options: { ...options, skipDialogue: false } });
+assert.ok(!document.body.textContent.includes("文脈解析が完了"), "settings invalidate prior results");
+await render({ disabledRuleIds: ["nlp-collocation", "nlp-dependency"] });
+assert.equal(button().disabled, true);
+await render({ text: "…" });
+globalThis.nlpInvoke = async () => ({ mode: "dependency", tokens: [], morphology: [{ start: 1, end: 1, surface: "", lemma: ".", pos: "補助記号", head: -1, dep: "", sentence: 0 }] });
+await act(async () => { button().click(); });
+assert.ok(document.body.textContent.includes("文脈解析が完了しました（0件）"), "older embedded backend's empty Sudachi items must not break the UI");
+await render({ text: "あ".repeat(12001) });
+assert.equal(button().disabled, true);
+assert.ok(document.body.textContent.includes("12,000文字"));
+await act(async () => { root.unmount(); });
+dom.window.close();
+console.log("NLP UI OK: manual invocation, busy state, stale results, failure and input limit");
