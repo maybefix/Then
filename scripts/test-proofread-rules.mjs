@@ -34,6 +34,7 @@ const {
   IJIDOKUN_GROUPS,
   IJIDOKUN_ITEMS,
   IJIDOKUN_EXTRA_CUES,
+  HOMOPHONE_GROUPS,
 } = await import(`${pathToFileURL(bundle).href}?${Date.now()}`);
 
 /** 生成時に実改行が紛れ込まないよう、改行は定数で組み立てる。 */
@@ -61,7 +62,7 @@ const expectNone = (text, ruleId, overrides) => {
 };
 
 // --- ルールの棚卸し -----------------------------------------------------------
-assert.equal(PROOFREAD_RULES.length, 13, "13種類のルールを保つ");
+assert.equal(PROOFREAD_RULES.length, 14, "14種類のルールを保つ");
 for (const rule of PROOFREAD_RULES) {
   assert.ok(rule.sources.length > 0, `${rule.id} must carry a citation`);
   assert.equal(typeof rule.wordScoped, "boolean", `${rule.id} must say what it points at`);
@@ -826,5 +827,72 @@ assert.equal(scan("期待に答える。", {}, dictionary("期待に答える"))
 assert.equal(runProofread("期待に答える。", DEFAULT_PROOFREAD_OPTIONS, PROOFREAD_RULES.filter(r => r.id !== "ijidokun")).issues.filter(i => i.ruleId === "ijidokun").length, 0);
 expectOne("😀\n期待に答える。", "ijidokun", "答える");
 assert.equal(byRule("期待に答える。".repeat(250), "ijidokun").length, 200);
+
+// --- 14. 同音異義語 -----------------------------------------------------------
+for (const group of HOMOPHONE_GROUPS) {
+  assert.ok(group.variants.length >= 2, `${group.id} must offer a choice`);
+  assert.ok(group.cues.length > 0, `${group.id} must carry cues`);
+  const owner = new Map();
+  for (const { role, word, variant } of group.cues) {
+    assert.ok(group.variants[variant], `${group.id} cue ${word} points at a real spelling`);
+    // どちらの表記でも使う語は決め手にならないので、載せてはいけない。
+    const seen = owner.get(word);
+    assert.ok(seen === undefined || seen === variant, `${group.id} cue ${word} must point at one spelling`);
+    owner.set(word, variant);
+    assert.ok(["前", "後", "述"].includes(role));
+  }
+}
+for (const [text, matched, candidate] of [
+  ["品質保障に力を入れる。", "保障", "保証"],
+  ["社会保証制度を見直す。", "保証", "保障"],
+  ["損害を保証する。", "保証", "補償"],
+  ["調査対照を広げる。", "対照", "対象"],
+  ["対象的な二人だ。", "対象", "対照"],
+  ["左右対象の図形。", "対象", "対称"],
+  ["責任を追求する。", "追求", "追及"],
+  ["彼の努力に関心した。", "関心", "感心"],
+  ["上司の決済を仰ぐ。", "決済", "決裁"],
+  ["事態の収集がつかない。", "収集", "収拾"],
+  ["残高を紹介する。", "紹介", "照会"],
+  ["交通費を清算する。", "清算", "精算"],
+  ["適性価格で売る。", "適性", "適正"],
+  ["身体的特長を書く。", "特長", "特徴"],
+  ["博士過程に進む。", "過程", "課程"],
+  ["生命保健に入る。", "保健", "保険"],
+  ["漢字返還がおかしい。", "返還", "変換"],
+  ["内政鑑賞を避ける。", "鑑賞", "干渉"],
+  ["経済生長が続く。", "生長", "成長"],
+  ["人事移動の内示。", "移動", "異動"],
+  ["福利更生費を計上する。", "更生", "厚生"],
+  ["意志表示をする。", "意志", "意思"],
+  ["壮絶な最後を遂げる。", "最後", "最期"],
+]) {
+  const issue = expectOne(text, "homophone", matched);
+  assert.equal(issue.severity, "hint");
+  assert.equal(issue.replacement, undefined, "変換の取り違えは意味を読まないと決められない");
+  assert.ok(issue.message.includes(candidate), `${text}: ${issue.message}`);
+  assert.match(issue.detail, /記者ハンドブック/);
+}
+for (const text of [
+  "品質保証に力を入れる。社会保障制度。損害を補償する。",
+  "調査対象を広げる。対照的な二人。左右対称の図形。",
+  "責任を追及する。真理を追究する。利益を追求する。",
+  "彼の努力に感心した。無関心な態度。関心を持つ。",
+  "上司の決裁を仰ぐ。代金の決済を行う。事態の収拾がつかない。",
+  "自己紹介をする。残高を照会する。交通費を精算する。借金を清算する。",
+  "適正価格で売る。適性検査を受ける。身体的特徴を書く。特長を生かす。",
+  "博士課程に進む。成長過程を追う。生命保険に入る。保健室で休む。",
+  "漢字変換がおかしい。領土返還を求める。内政干渉を避ける。音楽鑑賞が趣味。",
+  "経済成長が続く。人事異動の内示。福利厚生費。意思表示をする。",
+  "壮絶な最期を遂げる。最後の一人まで残った。",
+  // 手掛かりが近くに無ければ黙る。
+  "保証について話した。対象を決める。競争が激しい。",
+  // マスクの中は見ない。
+  "`品質保障`", "｜言葉《品質保障》",
+]) expectNone(text, "homophone");
+expectNone("「品質保障」と書いてある。", "homophone");
+expectOne("「品質保障」と書いてある。", "homophone", "保障", { skipDialogue: false });
+expectNone("品質保障。", "homophone", { disabledChecks: ["homophone/hoshou"] });
+assert.equal(scan("品質保障。", {}, dictionary("品質保障")).issues.filter(i => i.ruleId === "homophone").length, 0);
 
 console.log("proofread rules OK");

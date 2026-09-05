@@ -1,5 +1,6 @@
 import { isRangeMasked, maskSurfaces, sentenceLength } from "./context";
 import { collectRubyAnnotations } from "./ruby";
+import { homophoneRule } from "./homophones";
 import { ijidokunRule } from "./ijidokun";
 import { nlpCollocationRule, nlpDependencyRule } from "./nlpRules";
 import {
@@ -1123,6 +1124,7 @@ export const PROOFREAD_RULES: ProofreadRule[] = [
   styleConsistencyRule,
   dictionaryUnifyRule,
   ijidokunRule,
+  homophoneRule,
   nlpCollocationRule,
   nlpDependencyRule,
 ];

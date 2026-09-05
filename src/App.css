@@ -11513,26 +11513,32 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   margin-bottom: 10px;
 }
 
+/* 文字の大きさと枠は、同じペインの設定欄（.proofOptionRow）に合わせる。 */
 .proofContextControls {
   display: grid;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  gap: 7px;
+  padding: 10px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 9px;
   margin-bottom: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
-.proofContextControls label { display: grid; gap: 6px; }
+.proofContextControls label { display: grid; gap: 5px; }
 .proofContextControls select, .proofContextControls button {
   max-width: 100%;
   min-width: 0;
-  padding: 6px 8px;
-  color: inherit;
-  background: transparent;
-  border: 1px solid var(--border-subtle);
-  border-radius: 4px;
-  font: inherit;
+  height: 24px;
+  padding: 0 6px;
+  color: var(--text-primary);
+  background: var(--bg-panel-strong);
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 12px;
 }
-.proofContextControls button:disabled { opacity: .55; }
+.proofContextControls button { cursor: pointer; }
+.proofContextControls button:disabled { opacity: .55; cursor: default; }
 
 .proofFilterChip {
   display: inline-flex;

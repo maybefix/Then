@@ -3,6 +3,7 @@ export { MAX_PROOFREAD_ISSUES, runProofread, type ProofreadResult } from "./engi
 export { PROOFREAD_RULES, proofreadRuleById } from "./rules";
 export { IJIDOKUN_GROUPS, type IjidokunGroup, type IjidokunCue } from "./ijidokunData";
 export { IJIDOKUN_ITEMS, IJIDOKUN_EXTRA_CUES } from "./ijidokunExtra";
+export { HOMOPHONE_GROUPS, type HomophoneGroup } from "./homophoneData";
 export * from "./candidates";
 export * from "./sources";
 export * from "./terms";
