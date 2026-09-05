@@ -31,6 +31,9 @@ const {
   retargetProofreadTerm,
   formatProofreadTermsForExport,
   collectTermCandidates,
+  IJIDOKUN_GROUPS,
+  IJIDOKUN_ITEMS,
+  IJIDOKUN_EXTRA_CUES,
 } = await import(`${pathToFileURL(bundle).href}?${Date.now()}`);
 
 /** 生成時に実改行が紛れ込まないよう、改行は定数で組み立てる。 */
@@ -722,23 +725,78 @@ expectNone("手続法に沿う。手続きを進める。", "notation-variants")
 }
 
 // 異字同訓：活用、誤検出、保護範囲、設定を実際のエンジンで確認。
+// 報告の全項目から手掛かり語を起こしているので、5組だけでなく各行の項目が動く。
+assert.ok(IJIDOKUN_GROUPS.length >= 120, `報告の項目をほぼ網羅する: ${IJIDOKUN_GROUPS.length}`);
+assert.ok(IJIDOKUN_GROUPS.reduce((total, group) => total + group.cues.length, 0) >= 900);
+for (const group of IJIDOKUN_ITEMS) {
+  assert.ok(group.variants.length >= 2, `${group.no} must offer a choice`);
+  assert.ok(group.cues.length > 0, `${group.no} must carry cues`);
+  const owner = new Map();
+  for (const [role, word, variant, head] of group.cues) {
+    assert.ok(word.length > 0 && role.length > 0);
+    assert.ok(group.variants[variant]?.heads[head], `${group.no} cue ${word} points at a real head`);
+    // 同じ語が同じ項目の複数の表記を指していたら、決め手にならない。
+    const seen = owner.get(word);
+    assert.ok(seen === undefined || seen === variant, `${group.no} cue ${word} must point at one spelling`);
+    owner.set(word, variant);
+  }
+}
+// 手で足した手掛かり語は、すべて実在する見出しに解決して表に載る。
+{
+  const byNo = new Map(IJIDOKUN_ITEMS.map((group) => [group.no, group]));
+  for (const { no, role, word, head } of IJIDOKUN_EXTRA_CUES) {
+    const group = byNo.get(no);
+    assert.ok(group, `補いの項目 ${no} が見つからない`);
+    const variant = group.variants.findIndex((entry) => entry.heads.includes(head));
+    assert.ok(variant >= 0, `補いの見出し ${head}（${no}）が項目に無い`);
+    assert.ok(
+      group.cues.some((cue) => cue[0] === role && cue[1] === word && cue[2] === variant),
+      `補い ${word}[${role}]→${head} が取り込まれていない（${no}）`,
+    );
+  }
+}
 for (const [text, matched, candidate] of [
-  ["期待に答えたい。", "期待に答え", "応える"],
-  ["設問に応えた。", "設問に応え", "答える"],
-  ["暑いお茶を飲む。", "暑いお茶", "熱い"],
-  ["お茶が暑かった。", "お茶が暑かった", "熱い"],
-  ["喉が乾いた。", "喉が乾いた", "渇く"],
-  ["洗濯物が渇く。", "洗濯物が渇く", "乾く"],
-  ["風邪を直したい。", "風邪を直し", "治す"],
-  ["怪我が直った。", "怪我が直っ", "治る"],
-  ["機械を治そう。", "機械を治そ", "直す"],
-  ["前例に習って進める。", "前例に習っ", "倣う"],
-  ["ピアノを倣う。", "ピアノを倣う", "習う"],
+  ["期待に答えたい。", "答え", "応える"],
+  ["設問に応えた。", "応え", "答える"],
+  ["暑いお茶を飲む。", "暑い", "熱い"],
+  ["お茶が暑かった。", "暑かっ", "熱い"],
+  ["喉が乾いた。", "乾い", "渇く"],
+  // 用例が仮名書きでも漢字書きでも引ける。
+  ["のどが乾いた。", "乾い", "渇く"],
+  ["干し物が渇く。", "渇く", "乾く"],
+  ["風邪を直したい。", "直し", "治す"],
+  ["けがが直った。", "直っ", "治る"],
+  ["怪我が直った。", "直っ", "治る"],
+  ["機械を治そう。", "治そ", "直す"],
+  ["前例に習って進める。", "習っ", "倣う"],
+  ["ピアノを倣う。", "倣う", "習う"],
+  // 先行実装の5組より外の項目。
+  ["権利を犯す。", "犯す", "侵す"],
+  ["感謝状を送る。", "送る", "贈る"],
+  ["審議会に図る。", "図る", "諮る"],
+  ["税を収める。", "収める", "納める"],
+  ["アイデアが沸く。", "沸く", "湧く"],
+  ["議長を勤める。", "勤める", "務める"],
+  ["時代を写した言葉。", "写し", "映す"],
+  ["犯人を上げる。", "上げる", "挙げる"],
+  ["支度を整える。", "整える", "調える"],
+  // 報告の用例に無い日常語は、語義に沿って足した手掛かり語で拾う。
+  ["質問に応える。", "応える", "答える"],
+  ["洗濯物が渇く。", "渇く", "乾く"],
+  ["病気を直す。", "直す", "治す"],
+  ["会社に務める。", "務める", "勤める"],
+  ["司会を勤める。", "勤める", "務める"],
+  ["絵を書く。", "書く", "描く"],
+  ["ギターを引く。", "引く", "弾く"],
+  ["コーヒーが暑い。", "暑い", "熱い"],
+  // 名詞の項目は、複合や述語との組合せで見る。
+  ["脚の裏を見る。", "脚", "足"],
+  ["立つ鳥後を濁さず。", "後", "跡"],
 ]) {
   const issue = expectOne(text, "ijidokun", matched);
   assert.equal(issue.severity, "hint");
   assert.equal(issue.replacement, undefined);
-  assert.ok(issue.message.includes(candidate));
+  assert.ok(issue.message.includes(candidate), `${text}: ${issue.message}`);
   assert.match(issue.detail, /出典/);
 }
 for (const text of [
@@ -750,13 +808,23 @@ for (const text of [
   "`期待に答える`", "https://example.com/期待に答える",
   "｜言葉《期待に答える》", "[言葉(rb,期待に答える)]",
   ["```", "期待に答える", "```"].join(NL),
+  // 広げた項目でも、正しい用法と複合語は静かにする。
+  "権利を侵す。感謝状を贈る。審議会に諮る。税を納める。",
+  "アイデアが湧く。議長を務める。犯人を挙げる。支度を調える。",
+  "正直に話す。直接会う。素直な人。最後に行く。今後の予定。",
+  "明らかに違う。上げ底の箱。荷物を引き上げる。",
+  "都合が悪い。場合による。具合を見る。満足している。世の中の話。",
+  "質問に答える。洗濯物が乾く。病気を治す。会社に勤める。司会を務める。",
+  "絵を描く。ギターを弾く。コーヒーが熱い。夏は暑い。",
+  // 用例で自動詞・他動詞が対になる項目は、形が対応しないと出さない。
+  "国を立つ。",
 ]) expectNone(text, "ijidokun");
-expectOne("「期待に答える」", "ijidokun", "期待に答え", { skipDialogue: false });
-expectNone("期待に答える。", "ijidokun", { disabledChecks: ["ijidokun/kotaeru"] });
-expectOne("喉が乾く。", "ijidokun", "喉が乾く", { disabledChecks: ["ijidokun/kotaeru"] });
+expectOne("「期待に答える」", "ijidokun", "答える", { skipDialogue: false });
+expectNone("期待に答える。", "ijidokun", { disabledChecks: ["ijidokun/057"] });
+expectOne("喉が乾く。", "ijidokun", "乾く", { disabledChecks: ["ijidokun/057"] });
 assert.equal(scan("期待に答える。", {}, dictionary("期待に答える")).issues.filter(i => i.ruleId === "ijidokun").length, 0);
 assert.equal(runProofread("期待に答える。", DEFAULT_PROOFREAD_OPTIONS, PROOFREAD_RULES.filter(r => r.id !== "ijidokun")).issues.filter(i => i.ruleId === "ijidokun").length, 0);
-expectOne("😀\n期待に答える。", "ijidokun", "期待に答え");
+expectOne("😀\n期待に答える。", "ijidokun", "答える");
 assert.equal(byRule("期待に答える。".repeat(250), "ijidokun").length, 200);
 
 console.log("proofread rules OK");

@@ -11884,6 +11884,24 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   list-style: none;
 }
 
+/* 検出項目が多いルールは畳んでおく。開くと中の一覧だけがスクロールする。 */
+.proofCheckGroup {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.proofCheckGroup > summary {
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.proofCheckGroup .proofCheckList {
+  max-height: 320px;
+  overflow-y: auto;
+  padding-left: 0;
+}
+
 .proofCheckRow {
   display: flex;
   align-items: flex-start;

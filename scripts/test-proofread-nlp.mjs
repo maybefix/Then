@@ -51,7 +51,8 @@ for (const mode of ["morphology", "dependency"]) {
   for (const line of [3, 5, 6, 11, 12, 13, 14, 15, 16, 17, 18]) assert.ok(!checked.issues.some(i => i.line === line), `${mode} false positive on line ${line}`);
   assert.ok(checked.issues.every(i => !i.replacement && i.severity === "hint"));
   assert.equal(runNlpChecks(text, analysis, options, [], ["nlp-collocation", "nlp-dependency"]).issues.length, 0);
-  assert.ok(!runNlpChecks(text, analysis, { ...options, disabledChecks: ["nlp-collocation/kotaeru"] }, []).issues.some(i => i.checkId === "nlp-collocation/kotaeru"));
+  assert.ok(checked.issues.some(i => i.checkId === "nlp-collocation/057"), "checks are keyed by the report item number");
+  assert.ok(!runNlpChecks(text, analysis, { ...options, disabledChecks: ["nlp-collocation/057"] }, []).issues.some(i => i.checkId === "nlp-collocation/057"), "one item can be switched off");
   assert.throws(() => validateAnalysis({ ...analysis, tokens: [{ ...analysis.tokens[0], start: -1 }] }, input));
   console.log(`${mode}: ${checked.issues.length} hints, ${Math.round(performance.now() - start)} ms`);
 }

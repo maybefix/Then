@@ -1,5 +1,8 @@
 import { createProofreadContext, MASK_CHAR } from "./context";
 import { MAX_PROOFREAD_ISSUES, runProofread } from "./engine";
+import { comparableHead, cueHead } from "./ijidokun";
+import { IJIDOKUN_ITEMS } from "./ijidokunExtra";
+import { type IjidokunGroup } from "./ijidokunData";
 import { nlpCollocationRule, nlpDependencyRule } from "./nlpRules";
 import type { ProofreadTerm } from "./terms";
 import type { ProofreadHit, ProofreadOptions } from "./types";
@@ -8,19 +11,22 @@ export type AnalysisMode = "morphology" | "dependency";
 export type NlpToken = { start: number; end: number; surface: string; lemma: string; pos: string; head: number; dep: string; sentence: number };
 export type NlpAnalysis = { mode: AnalysisMode; tokens: NlpToken[]; morphology?: NlpToken[] };
 
-// Context words and meanings come from IJIDOKUN; attachment tests are Then heuristics.
-const collocations = [
-  { id: "kotaeru", noun: ["期待", "声援", "要請", "恩顧"], particle: "に", wrong: ["答える"], candidate: "応える", section: "057 こたえる", reason: "応じる・報いる意味か確認します。" },
-  { id: "kotaeru", noun: ["質問", "設問"], particle: "に", wrong: ["応える"], candidate: "答える", section: "057 こたえる", reason: "解答する意味か確認します。" },
-  { id: "atsui", noun: ["お茶", "茶", "湯", "スープ", "コーヒー"], particle: "が", wrong: ["暑い"], candidate: "熱い", section: "008 あつい", reason: "飲み物の温度を表しているか確認します。", attributive: true },
-  { id: "kawaku", noun: ["喉", "のど"], particle: "が", wrong: ["乾く"], candidate: "渇く", section: "050 かわく", reason: "喉の潤いがなくなる意味か確認します。" },
-  { id: "kawaku", noun: ["空気", "洗濯物", "干し物"], particle: "が", wrong: ["渇く"], candidate: "乾く", section: "050 かわく", reason: "水分がなくなる意味か確認します。" },
-  { id: "naosu", noun: ["風邪", "病気", "けが", "怪我"], particle: "を", wrong: ["直す"], candidate: "治す", section: "094 なおす・なおる", reason: "病気やけがを治療する意味か確認します。" },
-  { id: "naosu", noun: ["風邪", "病気", "けが", "怪我"], particle: "が", wrong: ["直る"], candidate: "治る", section: "094 なおす・なおる", reason: "病気やけがから回復する意味か確認します。" },
-  { id: "naosu", noun: ["誤り", "機械", "服装", "故障", "誤字"], particle: "を", wrong: ["治す"], candidate: "直す", section: "094 なおす・なおる", reason: "正しい状態に戻す意味か確認します。" },
-  { id: "narau", noun: ["前例", "慣例"], particle: "に", wrong: ["習う"], candidate: "倣う", section: "097 ならう", reason: "手本としてまねる意味か確認します。" },
-  { id: "narau", noun: ["英語", "ピアノ"], particle: "を", wrong: ["倣う"], candidate: "習う", section: "097 ならう", reason: "教わって身に付ける意味か確認します。" },
-];
+/**
+ * 手掛かり語は {@link IJIDOKUN_GROUPS}（報告の全項目から起こしたもの）を使う。
+ * どの語をどの関係で結ぶかの判定はThenの実装で、解析結果は意味の正誤を保証しない。
+ */
+const LEMMA_INDEX = new Map<string, { group: IjidokunGroup; variant: number; head: string }[]>();
+for (const group of IJIDOKUN_ITEMS) {
+  if (group.kind !== "predicate") continue;
+  for (const [variant, entry] of group.variants.entries()) {
+    for (const head of entry.heads) {
+      const bucket = LEMMA_INDEX.get(head) ?? [];
+      bucket.push({ group, variant, head });
+      LEMMA_INDEX.set(head, bucket);
+    }
+  }
+}
+const CASE_PARTICLES = ["が", "を", "に", "と", "へ", "から", "で"];
 
 /** Masks use spaces to preserve UTF-16 positions while avoiding NUL in NLP input. */
 export function prepareNlpText(text: string, options: ProofreadOptions, terms: ProofreadTerm[]) {
@@ -59,24 +65,38 @@ export function runNlpChecks(text: string, analysis: NlpAnalysis, options: Proof
   for (let i = 0; i < tokens.length; i++) {
     const noun = tokens[i];
     if (!nounPos(noun)) continue;
-    for (const entry of collocations) {
-      if (!entry.noun.includes(noun.lemma) && !entry.noun.includes(noun.surface)) continue;
-      for (let j = Math.max(0, i - 6); j <= Math.min(tokens.length - 1, i + 8); j++) {
-        const predicate = tokens[j];
-        if (noun.sentence !== predicate.sentence || !predicatePos(predicate) || !entry.wrong.includes(predicate.lemma)) continue;
-        // Protected/masked text, newlines and quotes must never be crossed.
-        const between = input.slice(Math.min(noun.start, predicate.start), Math.max(noun.end, predicate.end));
-        if (/[\r\n「」『』]/.test(between) || between !== text.slice(Math.min(noun.start, predicate.start), Math.max(noun.end, predicate.end))) continue;
-        const middle = tokens.slice(Math.min(i, j) + 1, Math.max(i, j)).filter(t => !isSpace(t));
-        const attributive = entry.attributive && j < i && (analysis.mode === "dependency" ? predicate.head === i && ["amod", "acl"].includes(predicate.dep) : middle.length === 0 || (middle.length === 1 && ["お", "ご"].includes(middle[0].surface)));
-        const caseToken = middle[0];
-        const argument = j > i && caseToken?.surface === entry.particle && (
-          analysis.mode === "dependency" ? noun.head === j && caseToken.head === i && caseToken.dep === "case" : middle.length === 1
-        );
-        if (!attributive && !argument) continue;
-        lexical.push({ from: predicate.start, to: predicate.end, checkId: `nlp-collocation/${entry.id}`,
-          message: `「${entry.candidate}」の意味か確認してください。`,
-          detail: `「${noun.surface}」との${analysis.mode === "dependency" ? "係り受け" : "連語"}を検出。${entry.reason} 出典：${entry.section}。解析結果は意味の正誤を保証しません。` });
+    for (let j = Math.max(0, i - 6); j <= Math.min(tokens.length - 1, i + 8); j++) {
+      const predicate = tokens[j];
+      if (i === j || noun.sentence !== predicate.sentence || !predicatePos(predicate)) continue;
+      const entries = LEMMA_INDEX.get(predicate.lemma);
+      if (!entries) continue;
+      // Protected/masked text, newlines and quotes must never be crossed.
+      const between = input.slice(Math.min(noun.start, predicate.start), Math.max(noun.end, predicate.end));
+      if (/[\r\n「」『』]/.test(between) || between !== text.slice(Math.min(noun.start, predicate.start), Math.max(noun.end, predicate.end))) continue;
+      const middle = tokens.slice(Math.min(i, j) + 1, Math.max(i, j)).filter(t => !isSpace(t));
+      const attributive = j < i && (analysis.mode === "dependency" ? predicate.head === i && ["amod", "acl"].includes(predicate.dep) : middle.length === 0 || (middle.length === 1 && ["お", "ご"].includes(middle[0].surface)));
+      const caseToken = middle[0];
+      const argument = j > i && caseToken && CASE_PARTICLES.includes(caseToken.surface) && (
+        analysis.mode === "dependency" ? noun.head === j && caseToken.head === i && caseToken.dep === "case" : middle.length === 1
+      );
+      if (!attributive && !argument) continue;
+      // 連体修飾の被修飾名詞はガ格の項と同じ語であることが多いので、両方を引く。
+      const roles = attributive ? ["連体", "が"] : caseToken.surface === "が" ? ["が", "連体"] : [caseToken.surface];
+      // 「お茶」のように分かち書きが割れることがあるので、直前の名詞・接頭辞をつなげた形も見る。
+      let compound = noun.surface;
+      for (let k = i - 1; k >= 0 && ["名詞", "接頭辞", "NOUN", "PROPN"].includes(tokens[k].pos) && tokens[k].end === tokens[k + 1].start; k--) compound = tokens[k].surface + compound;
+      const words = new Set([noun.lemma, noun.surface, compound]);
+      for (const entry of entries) {
+        const cue = entry.group.cues.find(candidate =>
+          roles.includes(candidate[0]) && candidate[2] !== entry.variant && words.has(candidate[1]) &&
+          comparableHead(entry.group, candidate, entry.variant, entry.head));
+        if (!cue) continue;
+        const suggestion = cueHead(entry.group, cue);
+        lexical.push({ from: predicate.start, to: predicate.end, checkId: `nlp-collocation/${entry.group.no}`,
+          message: `「${suggestion}」の意味か確認してください。`,
+          detail: `「${noun.surface}」との${analysis.mode === "dependency" ? "係り受け" : "連語"}を検出。` +
+            `${entry.group.variants[cue[2]].sense}意味では「${suggestion}」、${entry.group.variants[entry.variant].sense}意味では「${entry.head}」が目安です。` +
+            `出典：報告${entry.group.no}「${entry.group.reading}」（本文${entry.group.page}ページ）。解析結果は意味の正誤を保証しません。` });
       }
     }
     if (analysis.mode !== "dependency" || !["趣味", "楽しみ", "目標", "目的"].includes(noun.lemma)) continue;

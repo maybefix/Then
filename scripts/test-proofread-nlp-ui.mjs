@@ -57,6 +57,18 @@ assert.ok(document.body.textContent.includes("文脈解析が完了しました�
 await render({ text: "あ".repeat(12001) });
 assert.equal(button().disabled, true);
 assert.ok(document.body.textContent.includes("12,000文字"));
+
+// 異字同訓は検出項目が多いので、ルール一覧では畳んで出し、停止中の件数を添える。
+const rulesTab = () => [...document.querySelectorAll("button[role='tab']")].find(b => b.textContent.startsWith("ルール"));
+await render({ text: "期待に答える。" });
+await act(async () => { rulesTab().click(); });
+const folded = [...document.querySelectorAll("details.proofCheckGroup > summary")].map(s => s.textContent);
+assert.ok(folded.some(label => /検出項目 1\d\d件/.test(label)), `many checks must fold: ${JSON.stringify(folded)}`);
+assert.ok(!folded.some(label => /停止中/.test(label)));
+await render({ text: "期待に答える。", disabledCheckIds: ["ijidokun/057", "ijidokun/094"] });
+assert.ok([...document.querySelectorAll("details.proofCheckGroup > summary")].some(s => s.textContent.includes("（2件を停止中）")));
+assert.ok([...document.querySelectorAll(".proofCheckName")].some(s => s.textContent.includes("こたえる")), "checks are named by the report item");
+
 await act(async () => { root.unmount(); });
 dom.window.close();
-console.log("NLP UI OK: manual invocation, busy state, stale results, failure and input limit");
+console.log("NLP UI OK: manual invocation, busy state, stale results, failure, input limit and folded check list");

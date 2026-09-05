@@ -22,6 +22,9 @@ import {
 /** 入力が続いている間は走らせない。止まってから校正する。 */
 const SCAN_DEBOUNCE_MS = 320;
 
+/** これより多い検出項目は、一覧を畳んで出す。 */
+const MANY_CHECKS = 12;
+
 const EMPTY_RESULT: ProofreadResult = { issues: [], truncated: false, sentenceCount: 0 };
 
 type ProofreadPaneProps = {
@@ -250,26 +253,41 @@ function RuleCard({
           ? "会話文（「」）は対象外"
           : "会話文（「」）も対象"}
       </p>
-      {rule.checks && rule.checks.length > 0 && (
-        <ul className="proofCheckList">
-          {rule.checks.map((check) => (
-            <li key={check.id}>
-              <label className="proofCheckRow">
-                <input
-                  type="checkbox"
-                  checked={!disabledCheckIds.includes(check.id)}
-                  disabled={!enabled}
-                  onChange={() => onToggleCheck(check.id)}
-                />
-                <span>
-                  <span className="proofCheckName">{check.name}</span>
-                  <span className="proofCheckSummary">{check.summary}</span>
-                </span>
-              </label>
-            </li>
-          ))}
-        </ul>
-      )}
+      {rule.checks && rule.checks.length > 0 && (() => {
+        const checks = rule.checks;
+        const stopped = checks.filter((check) => disabledCheckIds.includes(check.id)).length;
+        const list = (
+          <ul className="proofCheckList">
+            {checks.map((check) => (
+              <li key={check.id}>
+                <label className="proofCheckRow">
+                  <input
+                    type="checkbox"
+                    checked={!disabledCheckIds.includes(check.id)}
+                    disabled={!enabled}
+                    onChange={() => onToggleCheck(check.id)}
+                  />
+                  <span>
+                    <span className="proofCheckName">{check.name}</span>
+                    <span className="proofCheckSummary">{check.summary}</span>
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        );
+        // 異字同訓のように項目が多いルールは、既定では畳んでおく。
+        if (checks.length <= MANY_CHECKS) return list;
+        return (
+          <details className="proofCheckGroup">
+            <summary>
+              {`検出項目 ${checks.length}件`}
+              {stopped > 0 ? `（${stopped}件を停止中）` : ""}
+            </summary>
+            {list}
+          </details>
+        );
+      })()}
       <button
         className="proofSourceToggle"
         type="button"

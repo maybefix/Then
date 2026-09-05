@@ -1,10 +1,19 @@
+import { IJIDOKUN_ITEMS } from './ijidokunExtra';
 import { IJIDOKUN, KOYOBUN } from './sources';
 import type { ProofreadRule } from './types';
 
+/** 活用する語の項目だけを扱う。名詞の項目は常時動作する異字同訓ルールが見る。 */
+const groups = IJIDOKUN_ITEMS.filter(group => group.kind === "predicate");
+
 export const nlpCollocationRule: ProofreadRule = {
   id: "nlp-collocation", name: "文脈解析：異字同訓", severity: "hint", target: "common", respectsDialogue: true, wordScoped: true,
-  summary: "手動解析で単語の原形と連語辞書を照合。係り受けモードでは修飾先も確認します。", sources: [IJIDOKUN],
-  checks: ["kotaeru", "atsui", "kawaku", "naosu", "narau"].map((id, i) => ({ id: `nlp-collocation/${id}`, name: ["答・応", "熱・暑", "乾・渇", "直・治", "習・倣"][i], summary: "文脈解析の連語照合を切り替えます。" })),
+  summary: `手動解析で単語の原形を取り、報告の全${groups.length}項目の手掛かり語と照合します。係り受けモードでは離れた項や修飾先も確認します。`,
+  sources: [IJIDOKUN],
+  checks: groups.map(group => ({
+    id: `nlp-collocation/${group.no}`,
+    name: `${group.reading}（${group.variants.map(variant => variant.heads[0]).join("・")}）`,
+    summary: `報告の${group.no}（本文${group.page}ページ）。文脈解析での照合を切り替えます。`,
+  })),
   scan: () => [],
 };
 export const nlpDependencyRule: ProofreadRule = {
