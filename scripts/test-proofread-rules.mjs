@@ -21,6 +21,7 @@ const {
   runProofread,
   DEFAULT_PROOFREAD_OPTIONS,
   PROOFREAD_RULES,
+  proofreadRuleById,
   parseProofreadTermInput,
   mergeProofreadTerms,
   normalizeProofreadTerms,
@@ -62,7 +63,7 @@ const expectNone = (text, ruleId, overrides) => {
 };
 
 // --- ルールの棚卸し -----------------------------------------------------------
-assert.equal(PROOFREAD_RULES.length, 14, "14種類のルールを保つ");
+assert.equal(PROOFREAD_RULES.length, 15, "15種類のルールを保つ");
 for (const rule of PROOFREAD_RULES) {
   assert.ok(rule.sources.length > 0, `${rule.id} must carry a citation`);
   assert.equal(typeof rule.wordScoped, "boolean", `${rule.id} must say what it points at`);
@@ -74,7 +75,7 @@ for (const rule of PROOFREAD_RULES) {
 // 文全体を指すルールは、その範囲を辞書に登録させない。
 assert.deepEqual(
   PROOFREAD_RULES.filter((rule) => !rule.wordScoped).map((rule) => rule.id).sort(),
-  ["nlp-dependency", "sentence-flow", "style-consistency"],
+  ["nlp-dependency", "sentence-flow", "style-consistency", "topic-predicate"],
 );
 
 // --- 1. 話し言葉 --------------------------------------------------------------
@@ -894,5 +895,30 @@ expectNone("「品質保障」と書いてある。", "homophone");
 expectOne("「品質保障」と書いてある。", "homophone", "保障", { skipDialogue: false });
 expectNone("品質保障。", "homophone", { disabledChecks: ["homophone/hoshou"] });
 assert.equal(scan("品質保障。", {}, dictionary("品質保障")).issues.filter(i => i.ruleId === "homophone").length, 0);
+
+// --- 15. 主述の対応 -----------------------------------------------------------
+for (const [text, topic] of [
+  ["私の趣味は本を読む。", "趣味"],
+  ["彼の目標は世界一になる。", "目標"],
+  ["目的はここへ来る。", "目的"],
+  ["私の趣味は本を読みます。", "趣味"],
+]) {
+  const issues = byRule(text, "topic-predicate");
+  assert.equal(issues.length, 1, `${text}: ${JSON.stringify(issues)}`);
+  assert.ok(issues[0].message.includes(topic));
+  assert.equal(issues[0].replacement, undefined);
+  assert.equal(text.slice(issues[0].from, issues[0].to), text.slice(text.indexOf(`${topic}は`)));
+}
+for (const text of [
+  "私の趣味は本を読むことだ。", "彼の目標は世界一になることだ。",
+  "目的は資料を集めることにある。", "私の趣味は読書だ。", "趣味は登山です。",
+  "趣味は多い。", "目標は高い。", "楽しみは増えました。",
+  "目標は達成できたが、次の課題が残る。", "本を読む。",
+  ["```", "私の趣味は本を読む。", "```"].join(NL),
+]) expectNone(text, "topic-predicate");
+// 会話文は既定で対象外。
+expectNone("「私の趣味は本を読む」と彼は言った。", "topic-predicate");
+// 文全体を指すので、辞書には登録させない。
+assert.equal(proofreadRuleById.get("topic-predicate").wordScoped, false);
 
 console.log("proofread rules OK");

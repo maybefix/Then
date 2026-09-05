@@ -3,6 +3,7 @@ import { collectRubyAnnotations } from "./ruby";
 import { homophoneRule } from "./homophones";
 import { ijidokunRule } from "./ijidokun";
 import { nlpCollocationRule, nlpDependencyRule } from "./nlpRules";
+import { topicPredicateRule } from "./topicPredicate";
 import {
   ESTABLISHED_DOUBLE_HONORIFICS,
   IDIOM_FORMS,
@@ -1125,6 +1126,7 @@ export const PROOFREAD_RULES: ProofreadRule[] = [
   dictionaryUnifyRule,
   ijidokunRule,
   homophoneRule,
+  topicPredicateRule,
   nlpCollocationRule,
   nlpDependencyRule,
 ];

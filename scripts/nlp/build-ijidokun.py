@@ -181,6 +181,11 @@ def collect(entry):
     cues = [{"r": role, "w": word, "v": next(iter(found))[0], "h": next(iter(found))[1]}
             for (role, word), found in raw.items()
             if len(found) == 1 and len(spellings[word]) == 1]
+    # 別の表記を示す長い語の一部になっている語も落とす。「国民の声を聴く」の「声」は
+    # 「話し声を聞く」の一部でもあり、どちらの表記を指すのか決められない。
+    cues = [cue for cue in cues
+            if not any(cue["w"] != other and cue["w"] in other and spellings[other] != {cue["v"]}
+                       for other in spellings)]
     known = {cue["w"] for cue in cues}
     for cue in list(cues):
         for alias in aliases(cue["w"]):

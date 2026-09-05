@@ -98,15 +98,20 @@ const runAfter = (text: string, index: number) => {
   return text.slice(index, end);
 };
 
+/** 語の一部になりやすい接頭辞。「お金」の「金」を切り出さないための除外。 */
+const PREFIX_KANA = /[おごみ]/u;
+
 /**
  * 拾った語列が手掛かり語を指しているか。語列そのものか、仮名（「の」「な」など）
- * で区切られた末尾のときだけ認める。「大根」の「根」のように、漢字が続いた末尾は
+ * で区切られた末尾のときだけ認める。「蝉の声」の「声」は採るが、「大根」の「根」
+ * のように漢字が続いた末尾と、「お金」の「金」のように接頭辞が付いた末尾は、
  * 別語の一部とみなして採らない。
  */
 export function runMatchesCue(run: string, cue: string): boolean {
   if (run === cue) return true;
-  if (cue.length < 2 || !run.endsWith(cue)) return false;
-  return KANA.test(run[run.length - cue.length - 1]);
+  if (!run.endsWith(cue)) return false;
+  const boundary = run[run.length - cue.length - 1];
+  return KANA.test(boundary) && !PREFIX_KANA.test(boundary);
 }
 
 /**
@@ -148,17 +153,25 @@ export function comparableHead(group: IjidokunGroup, cue: IjidokunCue, variant: 
   return written.heads.indexOf(head) === cue[3] || okurigana(cueHead(group, cue)) === okurigana(head);
 }
 
-/** 述語の直前にある「〜が」「〜を」などの項。間に入るのは修飾語だけとみなす。 */
-function findArgument(text: string, from: number) {
+/**
+ * 述語の前にある「〜が」「〜を」などの項の候補を、近い順に返す。
+ *
+ * いちばん近い助詞が項とは限らない。「声を微かに聞いた」の「微かに」のように、
+ * 副詞の一部が助詞に見えることがあるので、窓の中の助詞をすべて候補にする。
+ * 実際に指摘するのは登録した手掛かり語に当たったときだけなので、候補を広げても
+ * 知らない語には反応しない。
+ */
+function findArguments(text: string, from: number) {
   const limit = Math.max(0, from - ARGUMENT_WINDOW);
+  const found: { particle: string; run: string }[] = [];
   for (let index = from; index > limit; index -= 1) {
     const particle = CASE_PARTICLES.find((candidate) => text.startsWith(candidate, index - candidate.length));
     if (!particle) continue;
     // 文や引用をまたいだ語は結び付けない。
-    if (BREAK.test(text.slice(index, from))) return null;
-    return { particle, run: runBefore(text, index - particle.length) };
+    if (BREAK.test(text.slice(index, from))) break;
+    found.push({ particle, run: runBefore(text, index - particle.length) });
   }
-  return null;
+  return found;
 }
 
 /** 連体修飾を受ける名詞。「乾いた土」のように助動詞が挟まる形も見る。 */
@@ -177,13 +190,18 @@ export type IjidokunFinding = { cue: IjidokunCue; suggestion: string; relation: 
  */
 export function inspect(group: IjidokunGroup, variant: number, head: string, text: string, from: number, to: number, joined: boolean): IjidokunFinding | null {
   const form = text.slice(from, to);
-  /** その関係の手掛かり語のうち、別の表記を指していて形の対応も取れるものを探す。 */
+  /**
+   * その関係で当たる手掛かり語のうち、いちばん長いものを採る。書かれている表記を
+   * 指しているなら指摘しない。「話し声を聞く」で、より短い「声」（聴く）だけを見て
+   * 言い換えを勧めてしまうのを防ぐ。
+   */
   const pick = (role: IjidokunRole, test: (word: string) => boolean): IjidokunFinding | null => {
     for (const alternative of equivalentRoles(role)) {
-      const cue = CUE_INDEX.get(group.no)?.get(alternative)?.find(
-        (candidate) => candidate[2] !== variant && comparableHead(group, candidate, variant, head) && test(candidate[1]),
-      );
-      if (cue) return { cue, suggestion: cueHead(group, cue), relation: "" };
+      // 手掛かり語は長い順に並べてある。
+      const cue = CUE_INDEX.get(group.no)?.get(alternative)?.find((candidate) => test(candidate[1]));
+      if (!cue) continue;
+      if (cue[2] === variant || !comparableHead(group, cue, variant, head)) return null;
+      return { cue, suggestion: cueHead(group, cue), relation: "" };
     }
     return null;
   };
@@ -197,12 +215,13 @@ export function inspect(group: IjidokunGroup, variant: number, head: string, tex
   }
 
   if (group.kind === "predicate") {
-    const argument = findArgument(text, from);
-    const asArgument = argument && at(
-      pick(argument.particle as IjidokunRole, (word) => runMatchesCue(argument.run, word)),
-      (cue) => `「${cue[1]}${argument.particle}」`,
-    );
-    if (asArgument) return asArgument;
+    for (const argument of findArguments(text, from)) {
+      const asArgument = at(
+        pick(argument.particle as IjidokunRole, (word) => runMatchesCue(argument.run, word)),
+        (cue) => `「${cue[1]}${argument.particle}」`,
+      );
+      if (asArgument) return asArgument;
+    }
     const modifiee = findModifiee(text, to);
     if (!modifiee) return null;
     return at(pick("連体", (word) => runStartsWithCue(modifiee, word)), (cue) => `修飾先の「${cue[1]}」`);

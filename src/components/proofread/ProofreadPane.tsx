@@ -370,7 +370,12 @@ export default function ProofreadPane({
     const extra = currentNlp?.result;
     if (!extra) return baseResult;
     // Replace overlapping lexical fallback hints with the contextual explanation.
-    const basic = baseResult.issues.filter(issue => issue.ruleId !== "ijidokun" || !extra.issues.some(other => other.ruleId === "nlp-collocation" && other.from < issue.to && other.to > issue.from));
+    // 常時動作するルールと同じ箇所を指す文脈解析の結果は、説明が詳しい後者を残す。
+    const supersedes = { ijidokun: "nlp-collocation", "topic-predicate": "nlp-dependency" } as Record<string, string>;
+    const basic = baseResult.issues.filter(issue => {
+      const replacedBy = supersedes[issue.ruleId];
+      return !replacedBy || !extra.issues.some(other => other.ruleId === replacedBy && other.from < issue.to && other.to > issue.from);
+    });
     const combined = [...basic, ...extra.issues].sort((a, b) => a.from - b.from);
     return { ...baseResult, truncated: baseResult.truncated || extra.truncated || combined.length > MAX_PROOFREAD_ISSUES, issues: combined.slice(0, MAX_PROOFREAD_ISSUES) };
   }, [baseResult, currentNlp]);
