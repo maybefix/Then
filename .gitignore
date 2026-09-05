@@ -1,5 +1,5 @@
 node_modules/
-.venv-nlp/
+.venv-build/
 __pycache__/
 dist/
 /.edge-ui-check*/

@@ -1,0 +1,5 @@
+# 異字同訓の手掛かり語テーブルを生成するためだけの依存。アプリには入らない。
+# scripts/nlp/build-ijidokun.py を参照。
+pymupdf==1.26.6
+SudachiPy==0.6.11
+SudachiDict-core==20260723

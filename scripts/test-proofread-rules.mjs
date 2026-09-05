@@ -63,7 +63,7 @@ const expectNone = (text, ruleId, overrides) => {
 };
 
 // --- ルールの棚卸し -----------------------------------------------------------
-assert.equal(PROOFREAD_RULES.length, 15, "15種類のルールを保つ");
+assert.equal(PROOFREAD_RULES.length, 13, "13種類のルールを保つ");
 for (const rule of PROOFREAD_RULES) {
   assert.ok(rule.sources.length > 0, `${rule.id} must carry a citation`);
   assert.equal(typeof rule.wordScoped, "boolean", `${rule.id} must say what it points at`);
@@ -75,7 +75,7 @@ for (const rule of PROOFREAD_RULES) {
 // 文全体を指すルールは、その範囲を辞書に登録させない。
 assert.deepEqual(
   PROOFREAD_RULES.filter((rule) => !rule.wordScoped).map((rule) => rule.id).sort(),
-  ["nlp-dependency", "sentence-flow", "style-consistency", "topic-predicate"],
+  ["sentence-flow", "style-consistency", "topic-predicate"],
 );
 
 // --- 1. 話し言葉 --------------------------------------------------------------

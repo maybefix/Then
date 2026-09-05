@@ -6,15 +6,15 @@
 を選ばせているか（格の項・連体修飾の被修飾名詞・複合の隣接語・名詞を承ける述語）を
 共起として集めて src/proofread/ijidokunData.ts を書き出す。
 
-    py -3 -m pip install pymupdf
-    .venv-nlp/Scripts/python.exe -m pip install pymupdf
-    .venv-nlp/Scripts/python.exe scripts/nlp/build-ijidokun.py <報告のPDF>
+    python -m venv .venv-build
+    .venv-build/Scripts/python.exe -m pip install -r scripts/nlp/requirements-build.txt
+    .venv-build/Scripts/python.exe scripts/nlp/build-ijidokun.py <報告のPDF>
 
 PDFは文化庁のサイトで公開されている。
 https://www.bunka.go.jp/seisaku/bunkashingikai/kokugo/hokoku/pdf/93927001_12.pdf
 
-出力は生成物なので手で直さない。報告に載っていない語を足すときは
-src/proofread/ijidokunExtra.ts に書く。
+開発時にテーブルを作り直すためのもので、アプリには入らない。出力は生成物なので
+手で直さない。報告に載っていない語を足すときは src/proofread/ijidokunExtra.ts に書く。
 """
 import collections
 import json

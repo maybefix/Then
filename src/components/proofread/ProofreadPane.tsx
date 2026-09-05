@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { invoke, isTauri } from "@tauri-apps/api/core";
-import { prepareNlpText, runNlpChecks, type AnalysisMode, type NlpAnalysis } from "../../proofread/nlp";
-import { MAX_PROOFREAD_ISSUES, runProofread, type ProofreadResult } from "../../proofread/engine";
+import { runProofread, type ProofreadResult } from "../../proofread/engine";
 import { PROOFREAD_RULES, proofreadRuleById } from "../../proofread/rules";
 import {
   mergeProofreadTerms,
@@ -340,10 +338,7 @@ export default function ProofreadPane({
   onDisabledCheckIdsChange,
 }: ProofreadPaneProps) {
   const [view, setView] = useState<"issues" | "rules" | "dictionary">("issues");
-  const [baseResult, setResult] = useState<ProofreadResult>(EMPTY_RESULT);
-  const [nlpMode, setNlpMode] = useState<AnalysisMode>("dependency");
-  const [nlpBusy, setNlpBusy] = useState(false);
-  const [nlpState, setNlpState] = useState<{ stamp: string; result?: ProofreadResult; message: string } | null>(null);
+  const [result, setResult] = useState<ProofreadResult>(EMPTY_RESULT);
   const [isScanning, setIsScanning] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [showIgnored, setShowIgnored] = useState(false);
@@ -363,39 +358,6 @@ export default function ProofreadPane({
     }
     return [...bySurface.values()];
   }, [globalTerms, projectTerms]);
-
-  const nlpStamp = JSON.stringify([documentKey, text, options, activeTerms, disabledRuleIds, disabledCheckIds, nlpMode]);
-  const currentNlp = nlpState?.stamp === nlpStamp ? nlpState : null;
-  const result = useMemo(() => {
-    const extra = currentNlp?.result;
-    if (!extra) return baseResult;
-    // Replace overlapping lexical fallback hints with the contextual explanation.
-    // 常時動作するルールと同じ箇所を指す文脈解析の結果は、説明が詳しい後者を残す。
-    const supersedes = { ijidokun: "nlp-collocation", "topic-predicate": "nlp-dependency" } as Record<string, string>;
-    const basic = baseResult.issues.filter(issue => {
-      const replacedBy = supersedes[issue.ruleId];
-      return !replacedBy || !extra.issues.some(other => other.ruleId === replacedBy && other.from < issue.to && other.to > issue.from);
-    });
-    const combined = [...basic, ...extra.issues].sort((a, b) => a.from - b.from);
-    return { ...baseResult, truncated: baseResult.truncated || extra.truncated || combined.length > MAX_PROOFREAD_ISSUES, issues: combined.slice(0, MAX_PROOFREAD_ISSUES) };
-  }, [baseResult, currentNlp]);
-
-  const analyzeContext = async () => {
-    const stamp = nlpStamp;
-    setNlpBusy(true);
-    setNlpState(null);
-    try {
-      const effectiveOptions = { ...options, disabledChecks: disabledCheckIds };
-      const input = prepareNlpText(text, effectiveOptions, activeTerms);
-      const analysis = await invoke<NlpAnalysis>("analyze_proofread_nlp", { text: input, mode: nlpMode });
-      const checked = runNlpChecks(text, analysis, effectiveOptions, activeTerms, disabledRuleIds);
-      setNlpState({ stamp, result: checked, message: `文脈解析が完了しました（${checked.issues.length}件）。` });
-    } catch (error) {
-      setNlpState({ stamp, message: String(error) });
-    } finally {
-      setNlpBusy(false);
-    }
-  };
 
   useEffect(() => {
     setSelectedKey(null);
@@ -523,20 +485,6 @@ export default function ProofreadPane({
 
       {view === "issues" ? (
         <div className="proofBody">
-          <div className="proofContextControls">
-            <label>文脈解析（試験機能）
-              <select aria-label="文脈解析の方法" value={nlpMode} onChange={event => setNlpMode(event.target.value as AnalysisMode)} disabled={nlpBusy}>
-                <option value="morphology">形態素解析＋連語辞書</option>
-                <option value="dependency">係り受け解析＋確認ルール</option>
-              </select>
-            </label>
-            <button type="button" onClick={analyzeContext} disabled={!isTauri() || nlpBusy || !text.trim() || text.length > 12000 || (disabledRuleIds.includes("nlp-collocation") && (nlpMode === "morphology" || disabledRuleIds.includes("nlp-dependency")))}>
-              {nlpBusy ? "文脈を解析中…" : "この原稿を解析"}
-            </button>
-            <p className="proofOptionNote" role="status">
-              {!isTauri() ? "デスクトップ版で利用できます。" : text.length > 12000 ? "試験版は12,000文字（UTF-16）までの原稿が対象です。" : nlpBusy ? "本文は端末内で解析します。初回の読込みには時間がかかります。" : currentNlp?.message ?? (nlpState ? "本文または設定が変わりました。再解析してください。" : "端末内で解析します。本文・設定を変更した場合は再解析してください。")}
-            </p>
-          </div>
           {countByRule.size > 0 && (
             <div className="proofFilterRow">
               <button

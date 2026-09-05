@@ -2,7 +2,6 @@ import { isRangeMasked, maskSurfaces, sentenceLength } from "./context";
 import { collectRubyAnnotations } from "./ruby";
 import { homophoneRule } from "./homophones";
 import { ijidokunRule } from "./ijidokun";
-import { nlpCollocationRule, nlpDependencyRule } from "./nlpRules";
 import { topicPredicateRule } from "./topicPredicate";
 import {
   ESTABLISHED_DOUBLE_HONORIFICS,
@@ -1127,8 +1126,6 @@ export const PROOFREAD_RULES: ProofreadRule[] = [
   ijidokunRule,
   homophoneRule,
   topicPredicateRule,
-  nlpCollocationRule,
-  nlpDependencyRule,
 ];
 
 export const proofreadRuleById = new Map(PROOFREAD_RULES.map((rule) => [rule.id, rule]));

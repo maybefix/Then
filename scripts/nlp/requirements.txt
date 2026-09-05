@@ -1,7 +1,0 @@
-ginza==5.2.0
-ja-ginza==5.2.0
-spacy==3.8.7
-SudachiPy==0.6.11
-SudachiDict-core==20260723
-confection==0.1.5
-thinc==8.3.11
