@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite",
     "dev:local": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "test:markdown-tables": "node scripts/test-markdown-tables.mjs",
+    "test:markdown-table-ime": "node scripts/test-markdown-table-ime.mjs",
+    "test:table-navigation": "node scripts/test-table-navigation.mjs",
     "build": "tsc && vite build",
     "test:heading-extract-state": "node scripts/test-heading-extract-state.mjs",
     "test:heading-move": "node scripts/test-heading-move.mjs",

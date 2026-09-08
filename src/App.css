@@ -2228,6 +2228,83 @@ body.thenPdfExporting .printExportViewport {
   text-spacing-trim: trim-start;
 }
 
+.verticalTypewriterEditor .pm-root p.pm-table-row {
+  display: grid;
+  grid-template-columns: repeat(var(--table-columns), 0 minmax(0, 1fr)) 0;
+  inline-size: calc(100% * var(--editor-measure-v-ratio, 0.75));
+  align-items: stretch;
+  text-align: start;
+  text-indent: 0;
+  content-visibility: visible;
+  contain: style;
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+.verticalTypewriterEditor .pm-table-cell {
+  grid-row: 1;
+  min-inline-size: 0;
+  min-block-size: 1lh;
+  padding: 0.25em;
+  border-inline: 1px solid var(--border-subtle);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.verticalTypewriterEditor .pm-table-marker {
+  grid-row: 1;
+  /* Retain source positions without giving Markdown pipes visible space. */
+  font-size: 0;
+  line-height: 0;
+  overflow: hidden;
+}
+
+.verticalTypewriterEditor .pm-table-empty-input {
+  display: block;
+  min-block-size: 1lh;
+  min-inline-size: 1em;
+  outline: none;
+  white-space: pre-wrap;
+}
+
+.verticalTypewriterEditor .pm-table-header {
+  font-weight: bold;
+  background: var(--bg-panel-strong);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.verticalTypewriterEditor .pm-root p.pm-table-rule {
+  /* A zero-size block retains a local caret coordinate, unlike display:none.
+     Keep this stable even when the selection passes through the source rule. */
+  block-size: 0;
+  min-block-size: 0;
+  max-block-size: 0;
+  border: 0;
+  padding: 0;
+  font-size: 0;
+  line-height: 0;
+  overflow: hidden;
+}
+
+.verticalTypewriterEditor .pm-table-rule .pm-table-cell {
+  min-block-size: 0;
+  padding: 0;
+  border: 0;
+}
+
+.verticalTypewriterEditor .pm-root p.pm-table-rule::before,
+.verticalTypewriterEditor .pm-root p.pm-table-rule::after {
+  display: none;
+}
+
+.verticalTypewriterEditor .pm-table-row > .ProseMirror-trailingBreak,
+.verticalTypewriterEditor .pm-table-row > .ProseMirror-separator {
+  display: none;
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.pm-table-row {
+  inline-size: 100%;
+}
+
 .verticalTypewriterEditor .pm-root p.blank {
   min-block-size: 1lh;
 }

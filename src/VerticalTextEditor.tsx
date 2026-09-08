@@ -9,6 +9,7 @@ import { keymap } from "@tiptap/pm/keymap";
 import {
   Plugin,
   PluginKey,
+  TextSelection,
   type EditorState,
   type Transaction,
 } from "@tiptap/pm/state";
@@ -31,6 +32,8 @@ import {
 } from "./editor/selectionMetrics";
 import { updateTextFromLineDiff } from "./editor/lineTextUpdate";
 import { findJapaneseQuoteRanges } from "./editor/japaneseQuoteRanges";
+import { markdownTableRows, type TableRow } from "./editor/markdownTables";
+import { tableCaretTarget } from "./editor/tableNavigation";
 import {
   createVisualLineBands,
   findClosestVisualLineBand,
@@ -1479,6 +1482,161 @@ function pushLineDecos(
   }
 }
 
+function handleTableKeyDown(view: EditorView, event: KeyboardEvent, position = view.state.selection.head): boolean {
+  if (event.isComposing || view.composing || event.keyCode === 229 || event.ctrlKey || event.metaKey || event.altKey) return false;
+  if (!view.state.selection.empty && event.key !== "Tab") return false;
+  // Preserve native range selection; ordinary navigation uses visible cells.
+  if (event.shiftKey && event.key !== "Tab") return false;
+  const target = tableCaretTarget(docToText(view.state.doc), textOffsetFromPmPos(view.state.doc, position), event.key,
+    getComputedStyle(view.dom).writingMode === "vertical-rl", event.shiftKey);
+  if (!target) return false;
+  event.preventDefault();
+  if ("insertBefore" in target && target.insertBefore) {
+    const tr = view.state.tr.insert(0, view.state.schema.nodes.paragraph.create());
+    view.dispatch(tr.setSelection(TextSelection.create(tr.doc, 1)));
+    view.focus();
+    return true;
+  }
+  const pos = pmPosFromTextOffset(view.state.doc, target.pos);
+  view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, pos)));
+  const rowDOM = view.dom.children[target.line];
+  const cellDOM = target.column >= 0 ? rowDOM?.querySelector<HTMLElement>(`.pm-table-cell[data-table-column="${target.column}"]`) : null;
+  const emptyInput = cellDOM?.querySelector<HTMLElement>(".pm-table-empty-input");
+  if (emptyInput) {
+    emptyInput.focus({ preventScroll: true });
+    const range = document.createRange();
+    range.selectNodeContents(emptyInput);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  } else {
+    view.focus();
+    // Explicitly anchor the DOM caret in the visible span, never in an adjacent
+    // zero-font-size pipe. ProseMirror's document position stays unchanged.
+    if (cellDOM?.firstChild?.nodeType === Node.TEXT_NODE) {
+      const selection = window.getSelection();
+      selection?.collapse(cellDOM.firstChild, Math.min(cellDOM.firstChild.textContent?.length ?? 0, target.pos - target.from));
+    }
+  }
+  return true;
+}
+
+function pushTableRowDecos(out: Decoration[], node: PMNode, start: number, row: TableRow, active: boolean) {
+  out.push(Decoration.node(start, start + node.nodeSize, {
+    class: `pm-line pm-table-row pm-table-${row.kind}${active ? " active-line" : ""}`,
+    style: `--table-columns: ${row.columns}`,
+  }));
+  let end = 0;
+  const marker = (from: number, to: number, column: number) => {
+    if (to > from) out.push(Decoration.inline(start + 1 + from, start + 1 + to, {
+      class: "pm-table-marker", style: `grid-column: ${column}`,
+    }));
+  };
+  for (let i = 0; i < row.columns; i++) {
+    const rawCell = row.cells[i];
+    const cell = rawCell ? { ...rawCell } : undefined;
+    // Markdown padding is syntax, not cell content. Preserve it in the source
+    // while keeping it out of the visible editable text.
+    if (cell) {
+      while (cell.from < cell.to && /[ \t]/.test(node.textContent[cell.from])) cell.from++;
+      while (cell.to > cell.from && /[ \t]/.test(node.textContent[cell.to - 1])) cell.to--;
+    }
+    const attrs = {
+      class: "pm-table-cell",
+      "data-table-column": String(i),
+      style: `grid-column: ${2 * i + 2}; text-align: ${row.alignments[i] ?? "start"}`,
+    };
+    if (cell) marker(end, cell.from, 2 * i + 1);
+    if (cell && cell.to > cell.from) {
+      // During IME composition decorations are mapped rather than rebuilt.
+      // Include input at either edge so it stays inside the cell's grid item.
+      out.push(Decoration.inline(start + 1 + cell.from, start + 1 + cell.to, attrs, {
+        inclusiveStart: true,
+        inclusiveEnd: true,
+      }));
+    } else {
+      out.push(Decoration.widget(start + 1 + (cell?.from ?? node.content.size), (view, getPos) => {
+        const span = document.createElement("span");
+        span.className = attrs.class;
+        span.setAttribute("data-table-column", String(i));
+        span.setAttribute("style", attrs.style);
+        const input = document.createElement("span");
+        input.contentEditable = "true";
+        input.className = "pm-table-empty-input";
+        input.setAttribute("role", "textbox");
+        input.setAttribute("aria-label", `${i + 1}列目の空セル`);
+        input.appendChild(document.createElement("br"));
+        span.appendChild(input);
+        let composing = false;
+        let committed = false;
+        const commit = () => {
+          if (composing || committed) return;
+          const value = input.textContent ?? "";
+          const pos = getPos();
+          if (!value || pos === undefined) return;
+          committed = true;
+          const tr = view.state.tr;
+          let cursor: number;
+          if (rawCell) {
+            const from = pos - (cell!.from - rawCell.from);
+            tr.insertText(value, from, from + rawCell.to - rawCell.from);
+            cursor = from + value.length;
+          } else {
+            const last = row.cells[row.cells.length - 1];
+            const suffix = (last && last.to < node.content.size ? "" : "|") +
+              "|".repeat(i - row.cells.length) + value + "|";
+            tr.insertText(suffix, pos);
+            cursor = pos + suffix.length - 1;
+          }
+          view.dispatch(tr.setSelection(TextSelection.create(tr.doc, cursor)));
+          view.focus();
+        };
+        input.addEventListener("compositionstart", () => { composing = true; });
+        input.addEventListener("compositionend", () => { composing = false; commit(); });
+        input.addEventListener("input", (event) => {
+          if (!(event as InputEvent).isComposing) commit();
+        });
+        input.addEventListener("blur", commit);
+        input.addEventListener("focus", () => {
+          const pos = getPos();
+          if (pos !== undefined && (!view.state.selection.empty || view.state.selection.head !== pos)) {
+            view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, pos)));
+          }
+        });
+        input.addEventListener("keydown", (event) => {
+          if (composing) return;
+          const pos = getPos();
+          if (pos !== undefined && handleTableKeyDown(view, event, pos)) {
+            event.stopPropagation();
+          } else if ((event.ctrlKey || event.metaKey) && ["z", "y"].includes(event.key.toLowerCase())) {
+            // Empty cells share the document undo history, not the browser's
+            // independent contenteditable history.
+            view.focus();
+            if (view.someProp("handleKeyDown", handler => handler(view, event))) {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          }
+        });
+        span.addEventListener("mousedown", (event) => {
+          if (event.target === input || input.contains(event.target as Node)) return;
+          event.preventDefault();
+          input.focus();
+        });
+        return span;
+      }, {
+        side: -1,
+        key: `table-empty-${i}-${rawCell?.from}-${rawCell?.to}-${row.columns}-${row.alignments[i]}`,
+        ignoreSelection: true,
+        stopEvent: () => true,
+      }));
+    }
+    if (cell) end = cell.to;
+  }
+  marker(end, node.content.size, 2 * row.columns + 1);
+}
+
 function buildWindowDecos(
   doc: PMNode,
   lines: LineNode[],
@@ -1488,6 +1646,13 @@ function buildWindowDecos(
 ): DecorationSet {
   const out: Decoration[] = [];
   const count = Math.min(doc.childCount, lines.length);
+  // Keep table geometry stable outside the decoration window as well: moving
+  // the caret or scrolling must never replace the grid with raw paragraphs.
+  const tableRows = markdownTableRows(lines);
+  if (tableRows.size) doc.forEach((node, start, index) => {
+    const row = tableRows.get(index);
+    if (row) pushTableRowDecos(out, node, start, row, index === activeIndex);
+  });
   const ranges = fullDecorations
     ? [{ from: 0, to: count }]
     : decorationRange(activeIndex, count, visibleCenter);
@@ -1498,7 +1663,7 @@ function buildWindowDecos(
 
     for (let i = range.from; i < Math.min(count, range.to); i += 1) {
       const node = doc.child(i);
-      pushLineDecos(out, lines, i, nodeStart, node, i === activeIndex);
+      if (!tableRows.has(i)) pushLineDecos(out, lines, i, nodeStart, node, i === activeIndex);
       nodeStart += node.nodeSize;
     }
   }
@@ -1647,11 +1812,30 @@ const LayoutAstExtension = Extension.create({
     return [
       new Plugin<AstPluginState>({
         key: astKey,
+        view: () => {
+          let frame: number | null = null;
+          return {
+            update(view) {
+              if (frame !== null) cancelAnimationFrame(frame);
+              frame = requestAnimationFrame(() => {
+                frame = null;
+                if (view.composing || !view.hasFocus() || !view.state.selection.empty) return;
+                const offset = textOffsetFromPmPos(view.state.doc, view.state.selection.head);
+                const cell = tableCaretTarget(docToText(view.state.doc), offset, "Home", getComputedStyle(view.dom).writingMode === "vertical-rl");
+                if (!cell || cell.from !== cell.to) return;
+                const input = view.dom.children[cell.line]?.querySelector<HTMLElement>(`.pm-table-cell[data-table-column="${cell.column}"] .pm-table-empty-input`);
+                if (input && document.activeElement !== input) input.focus({ preventScroll: true });
+              });
+            },
+            destroy() { if (frame !== null) cancelAnimationFrame(frame); },
+          };
+        },
         state: {
           init: (_config, state) => makeAstState(state),
           apply: applyAst,
         },
         props: {
+          handleKeyDown: handleTableKeyDown,
           decorations(state) {
             return astKey.getState(state)?.decoSet ?? DecorationSet.empty;
           },
@@ -1889,6 +2073,27 @@ function selectionColumnAnchor(
   const head = selection.head;
   const parentSize = selection.$head.parent ? selection.$head.parent.content.size : 0;
   const parentOffset = selection.$head.parentOffset || 0;
+
+  // A table cell starts after hidden pipes/padding. Measuring the preceding
+  // source character anchors the scroll to that invisible grid track instead
+  // of the caret, especially at the beginning of a header cell.
+  if (activeBlockElement(view)?.classList.contains("pm-table-row")) {
+    const offset = textOffsetFromPmPos(view.state.doc, head);
+    const target = tableCaretTarget(docToText(view.state.doc), offset, "Home", !isHorizontalWriting(writingMode));
+    const cell = target && activeBlockElement(view)?.querySelector<HTMLElement>(`.pm-table-cell[data-table-column="${target.column}"]`);
+    if (cell) {
+      const text = cell.firstChild;
+      if (text?.nodeType === Node.TEXT_NODE) {
+        const range = document.createRange();
+        range.setStart(text, Math.max(0, Math.min(text.textContent?.length ?? 0, offset - target!.from)));
+        range.collapse(true);
+        const rect = range.getBoundingClientRect();
+        if (rectHasArea(rect)) return { rect, source: "table-cell-caret" };
+      }
+      const input = cell.querySelector(".pm-table-empty-input");
+      if (input) return { rect: input.getBoundingClientRect(), source: "table-empty-cell" };
+    }
+  }
 
   if (parentSize === 0) {
     return { rect: activeBlockColumnRect(view, writingMode), source: "block-empty" };
@@ -3106,6 +3311,7 @@ export function VerticalTextEditor({
     stopCenterAnimationRef.current = stopCenterAnimation;
 
     const syncVisibleWindow = (editor: Editor, currentScroller: HTMLElement): boolean => {
+      if (isEditorComposing(editor, composingRef)) return false;
       const index = estimateVisibleCenterIndex(editor, currentScroller, writingModeRef.current);
       if (index < 0 || Math.abs(index - lastVisibleCenter) < VISIBLE_UPDATE_STEP) return false;
 
@@ -4023,6 +4229,7 @@ export function VerticalTextEditor({
       compositionFrame = requestAnimationFrame(() => {
         compositionFrame = null;
         if (tiptapRef.current !== editor) return;
+        if (isEditorComposing(editor, composingRef)) return;
         editor.view.dispatch(
           editor.state.tr
             .setMeta(astKey, { rebuild: true } satisfies AstMeta)
