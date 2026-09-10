@@ -20,6 +20,7 @@ let todoTasks = [];
 let todoSaveQueue = Promise.resolve();
 let todoIdSequence = 0;
 let todoMutationVersion = 0;
+let workspaceVersion = 0;
 let nextTicketNumber = 1;
 let currentTicketId = null;
 let ticketDetailOpenEditor = null;
@@ -75,12 +76,13 @@ const notifyTodoListeners = () => {
 };
 
 const loadTodoTasks = async () => {
+  const workspaceAtStart = workspaceVersion;
   const versionAtStart = todoMutationVersion;
   const [stored, storedNextNumber] = await Promise.all([
     then.storage.get(TODO_STORAGE_KEY),
     then.storage.get(NEXT_TICKET_NUMBER_STORAGE_KEY),
   ]);
-  if (todoMutationVersion === versionAtStart) {
+  if (workspaceVersion === workspaceAtStart && todoMutationVersion === versionAtStart) {
     todoTasks = assignMissingTicketNumbers(
       Array.isArray(stored) ? stored.map(normalizeTask).filter(Boolean) : [],
     );
@@ -101,6 +103,7 @@ const loadTodoTasks = async () => {
 };
 
 const updateTodoTasks = (updater) => {
+  const workspaceAtStart = workspaceVersion;
   const previous = todoTasks.map((task) => ({ ...task }));
   const next = assignMissingTicketNumbers(updater(previous).map(normalizeTask).filter(Boolean));
   const mutationVersion = ++todoMutationVersion;
@@ -112,6 +115,7 @@ const updateTodoTasks = (updater) => {
   );
   todoSaveQueue = pending;
   return pending.then(async (value) => {
+    if (workspaceVersion !== workspaceAtStart) return value;
     if (currentTicketId) {
       if (todoTasks.some((task) => task.id === currentTicketId && !task.deletedAt)) {
         await syncCurrentTicketStatus();
@@ -121,7 +125,7 @@ const updateTodoTasks = (updater) => {
     }
     return value;
   }).catch((error) => {
-    if (todoMutationVersion === mutationVersion) {
+    if (workspaceVersion === workspaceAtStart && todoMutationVersion === mutationVersion) {
       todoTasks = previous;
       notifyTodoListeners();
     }
@@ -255,9 +259,24 @@ const syncCurrentTicketStatus = async () => {
 };
 
 const loadCurrentTicket = async () => {
+  const workspaceAtStart = workspaceVersion;
   const stored = await then.storage.get(CURRENT_TICKET_STORAGE_KEY);
+  if (workspaceVersion !== workspaceAtStart) return;
   currentTicketId = typeof stored === "string" ? stored : null;
   await syncCurrentTicketStatus();
+};
+
+const reloadWorkspaceTickets = async (hasProject) => {
+  workspaceVersion += 1;
+  currentTicketId = null;
+  pendingTicketEditor = null;
+  todoTasks = [];
+  notifyTodoListeners();
+  await then.views.closeModal("ticket-detail");
+  await then.statusBar.removeItem("current-ticket");
+  if (!hasProject) return;
+  await loadTodoTasks();
+  await loadCurrentTicket();
 };
 
 const setCurrentTicket = async (taskId) => {
@@ -994,5 +1013,9 @@ then.commands.registerCommand(
   { id: "create-ticket", title: "Ticket: 新しいチケットを作成" },
   () => requestTicketEditor({ status: "backlog" }),
 );
+
+then.workspace.onDidChangeWorkspace(({ hasProject }) => {
+  reloadWorkspaceTickets(hasProject).catch(() => undefined);
+});
 
 loadTodoTasks().then(() => loadCurrentTicket()).catch(() => undefined);

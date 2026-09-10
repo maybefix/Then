@@ -4,7 +4,24 @@ export type TableRow = {
   columns: number;
   alignments: string[];
   kind: "header" | "rule" | "body";
+  /** Column extents in em, shared by every row of the same table. */
+  widths: number[];
 };
+
+/** Narrowest and widest column a table may lay out before its cells wrap. */
+const MIN_COLUMN_EM = 2;
+const MAX_COLUMN_EM = 24;
+
+/**
+ * Rough advance of a cell's text in em. Latin letters, digits and half-width
+ * katakana are narrower than an em square, but not by half in the serif faces
+ * this editor ships, so a column sized on 0.5em would wrap its own heading.
+ */
+export function textExtent(text: string): number {
+  let extent = 0;
+  for (const char of text) extent += /[ -~｡-ﾟ]/.test(char) ? 0.7 : 1;
+  return extent;
+}
 
 export function tableAtOffset(text: string, offset: number) {
   const sources = text.split("\n");
@@ -96,17 +113,29 @@ export function markdownTableRows(lines: readonly { source: string }[]): Map<num
     const columns = header.length;
     const tableStart = i;
     let tableColumns = columns;
-    rows.set(i, { cells: header, columns, alignments, kind: "header" });
-    rows.set(++i, { cells: rule, columns, alignments, kind: "rule" });
+    rows.set(i, { cells: header, columns, alignments, kind: "header", widths: [] });
+    rows.set(++i, { cells: rule, columns, alignments, kind: "rule", widths: [] });
     while (i + 1 < lines.length) {
       const next = lines[i + 1].source;
       if (/^\s*(`{3,}|~{3,})|^ {4}|^\t/.test(next)) break;
       const cells = splitTableRow(next);
       if (!cells) break;
       tableColumns = Math.max(tableColumns, cells.length);
-      rows.set(++i, { cells, columns: Math.max(columns, cells.length), alignments, kind: "body" });
+      rows.set(++i, { cells, columns: Math.max(columns, cells.length), alignments, kind: "body", widths: [] });
     }
-    for (let line = tableStart; line <= i; line++) rows.get(line)!.columns = tableColumns;
+    // Every row of one table shares one set of column extents, so the cell
+    // borders keep lining up even though each row lays out its own grid.
+    const widths = Array.from({ length: tableColumns }, () => MIN_COLUMN_EM);
+    for (let line = tableStart; line <= i; line++) {
+      const row = rows.get(line)!;
+      row.columns = tableColumns;
+      if (row.kind === "rule") continue;
+      row.cells.forEach((cell, column) => {
+        const content = lines[line].source.slice(cell.from, cell.to).trim();
+        widths[column] = Math.max(widths[column], Math.min(MAX_COLUMN_EM, textExtent(content)));
+      });
+    }
+    for (let line = tableStart; line <= i; line++) rows.get(line)!.widths = widths;
   }
   cache.set(lines, rows);
   return rows;

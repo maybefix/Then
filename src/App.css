@@ -2230,8 +2230,14 @@ body.thenPdfExporting .printExportViewport {
 
 .verticalTypewriterEditor .pm-root p.pm-table-row {
   display: grid;
-  grid-template-columns: repeat(var(--table-columns), 0 minmax(0, 1fr)) 0;
-  inline-size: calc(100% * var(--editor-measure-v-ratio, 0.75));
+  /* Tracks come from the table's own content; the fallback keeps a table
+     readable if a row is rendered before its column extents are known. */
+  grid-template-columns: var(--table-tracks, repeat(var(--table-columns), 0 minmax(0, 1fr)) 0);
+  inline-size: min(var(--table-extent, 100%), calc(100% * var(--editor-measure-v-ratio, 0.75)));
+  /* 本文の行は auto マージンで中央に置かれるが、表は本文と同じ行頭から
+     始める。中央寄せのままだと、幅の狭い表だけ起点が本文とずれる。 */
+  margin-inline-start: calc(100% * (1 - var(--editor-measure-v-ratio, 0.75)) / 2);
+  margin-inline-end: auto;
   align-items: stretch;
   text-align: start;
   text-indent: 0;
@@ -2302,7 +2308,7 @@ body.thenPdfExporting .printExportViewport {
 }
 
 .appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.pm-table-row {
-  inline-size: 100%;
+  inline-size: min(var(--table-extent, 100%), 100%);
 }
 
 .verticalTypewriterEditor .pm-root p.blank {

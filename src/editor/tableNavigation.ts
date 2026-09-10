@@ -1,5 +1,17 @@
 import { tableAtOffset } from "./markdownTables";
 
+/**
+ * Caret home for an offset that landed on hidden table syntax. Arrow keys from
+ * the line beside a table let the browser place the caret on a pipe, the cell
+ * padding or the zero-height rule row, where it has no size to draw and typing
+ * lands outside the cell. Snap such a caret onto the cell it belongs to.
+ */
+export function tableCellCaret(text: string, offset: number, vertical: boolean) {
+  const target = tableCaretTarget(text, offset, "Home", vertical);
+  if (!target || target.column < 0) return null;
+  return { ...target, pos: Math.max(target.from, Math.min(target.to, offset)) };
+}
+
 /** Visible cell positions only: hidden pipes, padding and rules are never targets. */
 export function tableCaretTarget(text: string, offset: number, key: string, vertical: boolean, shift = false) {
   const table = tableAtOffset(text, offset);

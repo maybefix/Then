@@ -51,6 +51,7 @@ const rustSource = await readFile("src-tauri/src/lib.rs", "utf8");
 const manifestSchema = JSON.parse(await readFile("plugin-sdk/manifest.schema.json", "utf8"));
 const sampleManifest = JSON.parse(await readFile("docs/plugin-example/manifest.json", "utf8"));
 assert.match(appSource, /pluginRuntimeHostRef\.current\?\.emit\([\s\S]*?"document\.change"/);
+assert.match(appSource, /pluginRuntimeHostRef\.current\?\.emit\("workspace\.change"/);
 assert.match(appSource, /editor\.getSelection/);
 assert.match(appSource, /editor\.moveCursor/);
 assert.match(appSource, /const revealPluginRange[\s\S]*?setAppMode\("write"\)/, "navigation from a plugin screen must reveal the editor");
@@ -71,6 +72,7 @@ assert.match(appSource, /commands\.register/);
 assert.match(runtimeSource, /registerScreen: async/);
 assert.match(runtimeSource, /open: \(viewId\) => request\("views\.open"/);
 assert.match(runtimeSource, /registerModal: async/);
+assert.match(runtimeSource, /onDidChangeWorkspace: \(listener\) => subscribe\("workspace\.change", listener\)/);
 assert.match(runtimeSource, /openModal: \(modalId\) => request\("views\.openModal"/);
 assert.match(runtimeSource, /then-plugin-modal/);
 assert.match(runtimeSource, /kind: "view\.activated"/, "plugin frames must acknowledge that the requested view is active");
@@ -221,6 +223,7 @@ sampleWindow.then = {
     },
   },
   workspace: {
+    onDidChangeWorkspace: () => ({ dispose() {} }),
     onDidChangeTextDocument: () => ({ dispose() {} }),
     onDidChangeSelection: () => ({ dispose() {} }),
   },
@@ -312,6 +315,7 @@ const todoOpenedViews = [];
 const todoOpenedModals = [];
 const todoClosedModals = [];
 const todoStatusItems = new Map();
+let todoWorkspaceChangeListener = null;
 let todoScreenDefinition = null;
 let todoModalDefinition = null;
 todoWindow.then = {
@@ -326,6 +330,10 @@ todoWindow.then = {
     }),
   },
   workspace: {
+    onDidChangeWorkspace: (listener) => {
+      todoWorkspaceChangeListener = listener;
+      return { dispose() {} };
+    },
     onDidChangeTextDocument: () => ({ dispose() {} }),
   },
   storage: {
@@ -402,6 +410,7 @@ assert.equal(todoManifest.name, "Ticket");
 assert.ok(todoManifest.permissions.includes("statusbar"));
 assert.equal(todoManifest.permissions.includes("document:read"), false, "Ticket must not subscribe to document edits just to refresh an unchanged status item");
 assert.doesNotMatch(todoSource, /onDidChangeTextDocument/, "typing in the editor must not remove and recreate the current-ticket status item");
+assert.equal(typeof todoWorkspaceChangeListener, "function", "Ticket must reload when the project changes");
 assert.match(todoWindow.document.querySelector("#todo-screen-root").textContent, /未着手/);
 assert.doesNotMatch(todoWindow.document.querySelector("#todo-screen-root").textContent, /このプロジェクトの作業を/);
 
@@ -565,6 +574,34 @@ todoWindow.document.querySelector(".ticketModalSave").click();
 await new Promise((resolve) => setTimeout(resolve, 20));
 assert.ok(todoStorage.get("todoBoard.v1").some((task) => task.ticketNumber === 3));
 assert.equal(todoStorage.get("ticket.next-number.v1"), 4);
+
+const switchedTicket = {
+  id: "second-project-ticket",
+  title: "別プロジェクトを確認する",
+  details: "切り替え後に自動で表示される",
+  ticketNumber: 12,
+  type: "issue",
+  target: "第2章",
+  status: "backlog",
+  order: 0,
+  deletedAt: null,
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+};
+todoStorage.clear();
+todoStorage.set("todoBoard.v1", [switchedTicket]);
+todoStorage.set("ticket.next-number.v1", 13);
+todoStorage.set("ticket.current.v1", switchedTicket.id);
+todoWorkspaceChangeListener({ name: "Second project", hasProject: true });
+await new Promise((resolve) => setTimeout(resolve, 30));
+assert.equal(todoClosedModals.at(-1), "ticket-detail", "switching projects must close a stale ticket editor");
+assert.equal(
+  todoWindow.document.querySelectorAll("#todo-screen-root .todoCard").length,
+  1,
+  "switching projects must replace the board without a manual reload",
+);
+assert.match(todoWindow.document.querySelector("#todo-screen-root .todoCard").textContent, /#012 別プロジェクトを確認する/);
+assert.equal(todoStatusItems.get("current-ticket")?.text, "#012 別プロジェクトを確認する");
 todoDom.window.close();
 
 console.log("v0.6.1 plugin platform tests passed");

@@ -7,7 +7,7 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { JSDOM } from "jsdom";
 
 const source = await readFile("src/VerticalTextEditor.tsx", "utf8");
-const functionSource = source.slice(source.indexOf("function pushTableRowDecos("), source.indexOf("function buildWindowDecos("));
+const functionSource = source.slice(source.indexOf("function focusEmptyCell("), source.indexOf("function buildWindowDecos("));
 const js = ts.transpileModule(functionSource, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 const decorate = new Function("Decoration", "TextSelection", `${js}; return pushTableRowDecos;`)(Decoration, TextSelection);
 const schema = new Schema({ nodes: { doc: { content: "paragraph+" }, paragraph: { content: "text*" }, text: {} } });
@@ -18,7 +18,7 @@ const stateFor = (text) => EditorState.create({ schema, doc: schema.node("doc", 
 for (const pos of [2, 4]) {
   const state = stateFor("|ab|");
   const decos = [];
-  decorate(decos, state.doc.firstChild, 0, { cells: [{ from: 1, to: 3 }], columns: 1, alignments: ["start"], kind: "body" }, true);
+  decorate(decos, state.doc.firstChild, 0, { cells: [{ from: 1, to: 3 }], columns: 1, alignments: ["start"], kind: "body", widths: [3] }, true);
   const tr = state.tr.insertText("にほん", pos).setMeta("composition", 1);
   const mapped = DecorationSet.create(state.doc, decos).map(tr.mapping, tr.doc);
   const cell = mapped.find().find((d) => d.type.attrs?.class === "pm-table-cell");
@@ -32,16 +32,21 @@ for (const pos of [2, 4]) {
 
 const dom = new JSDOM("<!doctype html><body></body>");
 globalThis.document = dom.window.document;
+globalThis.window = dom.window;
 const empty = stateFor("||");
 const decos = [];
-decorate(decos, empty.doc.firstChild, 0, { cells: [{ from: 1, to: 1 }], columns: 1, alignments: ["start"], kind: "body" }, true);
+decorate(decos, empty.doc.firstChild, 0, { cells: [{ from: 1, to: 1 }], columns: 1, alignments: ["start"], kind: "body", widths: [3] }, true);
 const widget = decos.find((d) => d.spec.key?.startsWith("table-empty-0-"));
 let resulting;
 let focused = false;
 const span = widget.type.toDOM({ state: empty, dispatch: (tr) => { resulting = empty.apply(tr); }, focus: () => { focused = true; } }, () => 2);
+dom.window.document.body.appendChild(span);
 span.dispatchEvent(new dom.window.MouseEvent("mousedown", { cancelable: true }));
 assert.equal(resulting, undefined, "focusing an empty cell must not change source text");
 const input = span.firstElementChild;
+const placed = dom.window.getSelection();
+assert.ok(placed.isCollapsed && input.contains(placed.anchorNode),
+  "clicking an empty cell must place the caret in it, not only move focus");
 input.dispatchEvent(new dom.window.CompositionEvent("compositionstart"));
 input.textContent = "日本";
 input.dispatchEvent(new dom.window.InputEvent("input", { isComposing: true }));

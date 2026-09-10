@@ -6,7 +6,7 @@ const source = await readFile("src/editor/markdownTables.ts", "utf8");
 const code = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 }).outputText;
-const { splitTableRow, markdownTableRows, createMarkdownTable, tableAtOffset, tableAlignmentEdit } = await import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`);
+const { splitTableRow, markdownTableRows, createMarkdownTable, tableAtOffset, tableAlignmentEdit, textExtent } = await import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`);
 const parse = (text) => markdownTableRows(text.split("\n").map((source) => ({ source })));
 const sample = "前文\n| 名前 | 個数 |\n| :--- | ---: |\n| りんご | 12 |\n| みかん | 3 |\n\n後文";
 const rows = parse(sample);
@@ -41,6 +41,21 @@ assert.ok([...uneven.values()].every((row) => row.columns === 3));
 assert.equal(parse(sample.replace("りんご", "長い日本語のセル内容")).size, 4);
 assert.equal(parse(sample.replace("| :--- | ---: |", "通常の文章")).size, 0);
 console.log("Markdown table parsing and source preservation passed.");
+
+const widthSample = "| 品名 | 数量 | 備考 |\n| --- | --- | --- |\n| りんご | 12 | 青森県産のとても甘いりんごです |\n| み | 3 | 甘い |";
+const widthRows = parse(widthSample);
+const widths = widthRows.get(0).widths;
+assert.equal(widths.length, 3);
+for (const row of widthRows.values()) assert.equal(row.widths, widths, "one table shares one set of column extents");
+assert.ok(widths[2] > widths[0] && widths[0] > widths[1], "columns are ordered by their widest cell");
+assert.equal(widths[0], textExtent("りんご"), "a column is as wide as its widest cell, header included");
+assert.ok(widths[1] >= 2, "a narrow column still keeps a usable minimum");
+assert.ok(textExtent("12") < 2 * textExtent("あ"), "half-width characters advance less than an em");
+assert.deepEqual(parse(createMarkdownTable(2, 1)).get(0).widths,
+  [textExtent("見出し1"), textExtent("見出し2")], "a new table is sized by its headings");
+assert.equal(parse("| a |\n| --- |\n| " + "あ".repeat(80) + " |").get(0).widths[0], 24,
+  "a very long cell is capped so the other columns stay readable");
+console.log("Table column extents passed.");
 
 const created = createMarkdownTable(3, 2);
 assert.equal(created.includes(" "), false, "generated tables must not contain padding spaces");

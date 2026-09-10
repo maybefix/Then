@@ -79,6 +79,10 @@ export interface ThenPluginApi {
     delete(anchorId: string): Promise<boolean>;
   };
   readonly workspace: {
+    onDidChangeWorkspace(listener: (event: {
+      name: string | null;
+      hasProject: boolean;
+    }) => void): Disposable;
     onDidChangeTextDocument(listener: (event: {
       documentPath: string | null;
       version: number;

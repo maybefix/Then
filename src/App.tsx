@@ -2515,6 +2515,7 @@ export default function App() {
   } | null>(null);
   const editorInstanceRef = useRef<TextEditorHandle | null>(null);
   const pluginRuntimeHostRef = useRef<ThenPluginRuntimeHostHandle | null>(null);
+  const pluginWorkspacePathRef = useRef<string | null>(null);
   const pluginAnchorSaveTimerRef = useRef<number | null>(null);
   const pluginAnchorSaveRootRef = useRef<string | null>(null);
   const pluginAnchorsRef = useRef<ThenPluginAnchor[]>([]);
@@ -2782,6 +2783,16 @@ export default function App() {
   useEffect(() => {
     void reloadInstalledPlugins();
   }, [reloadInstalledPlugins]);
+
+  useEffect(() => {
+    const workspacePath = projectFolder?.path ?? null;
+    if (pluginWorkspacePathRef.current === workspacePath) return;
+    pluginWorkspacePathRef.current = workspacePath;
+    pluginRuntimeHostRef.current?.emit("workspace.change", {
+      name: projectFolder?.name ?? null,
+      hasProject: Boolean(projectFolder),
+    });
+  }, [projectFolder?.name, projectFolder?.path]);
 
   useEffect(() => {
     if (pluginAnchorSaveTimerRef.current !== null) {

@@ -33,7 +33,7 @@ import {
 import { updateTextFromLineDiff } from "./editor/lineTextUpdate";
 import { findJapaneseQuoteRanges } from "./editor/japaneseQuoteRanges";
 import { markdownTableRows, type TableRow } from "./editor/markdownTables";
-import { tableCaretTarget } from "./editor/tableNavigation";
+import { tableCaretTarget, tableCellCaret } from "./editor/tableNavigation";
 import {
   createVisualLineBands,
   findClosestVisualLineBand,
@@ -1482,6 +1482,104 @@ function pushLineDecos(
   }
 }
 
+/** Put the DOM caret inside an empty cell's own editable span. */
+function focusEmptyCell(input: HTMLElement) {
+  input.focus({ preventScroll: true });
+  const range = document.createRange();
+  range.selectNodeContents(input);
+  range.collapse(true);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+/**
+ * Anchor the DOM caret in the cell's own span. A document position at a cell
+ * edge has an equivalent DOM position inside the neighbouring zero-font-size
+ * pipe, and a caret placed there is invisible.
+ */
+function placeCaretInCell(
+  view: EditorView,
+  target: { line: number; column: number; from: number; pos: number },
+) {
+  const rowDOM = view.dom.children[target.line];
+  const cellDOM = target.column >= 0
+    ? rowDOM?.querySelector<HTMLElement>(`.pm-table-cell[data-table-column="${target.column}"]`)
+    : null;
+  const input = cellDOM?.querySelector<HTMLElement>(".pm-table-empty-input");
+  if (input) {
+    focusEmptyCell(input);
+    return;
+  }
+  view.focus();
+  const text = cellDOM?.firstChild;
+  if (text?.nodeType === Node.TEXT_NODE) {
+    const length = text.textContent?.length ?? 0;
+    window.getSelection()?.collapse(text, Math.max(0, Math.min(length, target.pos - target.from)));
+  }
+}
+
+/**
+ * Character the click landed on, measured from the rendered glyphs. A table row
+ * is a grid of blockified spans separated by zero-size Markdown syntax, and not
+ * every engine resolves a caret inside that layout — WebView2 leaves the caret
+ * where it was — so the cell tells us the position rather than the hit test.
+ */
+function caretPointInCell(cell: HTMLElement, event: MouseEvent, vertical: boolean) {
+  const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  let best: { node: Text; offset: number } | null = null;
+  let bestDistance = Infinity;
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = node as Text;
+    for (let i = 0; i < text.data.length; i++) {
+      range.setStart(text, i);
+      range.setEnd(text, i + 1);
+      for (const rect of Array.from(range.getClientRects())) {
+        const dx = Math.max(rect.left - event.clientX, event.clientX - rect.right, 0);
+        const dy = Math.max(rect.top - event.clientY, event.clientY - rect.bottom, 0);
+        const distance = dx * dx + dy * dy;
+        if (distance >= bestDistance) continue;
+        bestDistance = distance;
+        const past = vertical
+          ? event.clientY > (rect.top + rect.bottom) / 2
+          : event.clientX > (rect.left + rect.right) / 2;
+        best = { node: text, offset: past ? i + 1 : i };
+      }
+    }
+  }
+  return best;
+}
+
+/** Where the current click started, so that a drag keeps the native selection. */
+let tableClickOrigin: { x: number; y: number; target: EventTarget | null } | null = null;
+
+function handleTableMouseUp(view: EditorView, event: MouseEvent): boolean {
+  const origin = tableClickOrigin;
+  tableClickOrigin = null;
+  if (view.composing || event.button !== 0 || event.detail > 1) return false;
+  if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return false;
+  // A drag selects text; only a click in place is placed by hand.
+  if (!origin || origin.target !== event.target) return false;
+  if (Math.abs(event.clientX - origin.x) > 3 || Math.abs(event.clientY - origin.y) > 3) return false;
+  const target = event.target instanceof Element ? event.target : null;
+  const cell = target?.closest<HTMLElement>(".pm-table-cell");
+  if (!cell || !view.dom.contains(cell)) return false;
+  const input = cell.querySelector<HTMLElement>(".pm-table-empty-input");
+  if (input) {
+    focusEmptyCell(input);
+    return true;
+  }
+  const point = caretPointInCell(cell, event, getComputedStyle(view.dom).writingMode === "vertical-rl");
+  if (!point) return false;
+  const pos = view.posAtDOM(point.node, point.offset, 0);
+  if (pos < 0) return false;
+  view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, pos)));
+  view.focus();
+  window.getSelection()?.collapse(point.node, point.offset);
+  return true;
+}
+
 function handleTableKeyDown(view: EditorView, event: KeyboardEvent, position = view.state.selection.head): boolean {
   if (event.isComposing || view.composing || event.keyCode === 229 || event.ctrlKey || event.metaKey || event.altKey) return false;
   if (!view.state.selection.empty && event.key !== "Tab") return false;
@@ -1499,33 +1597,23 @@ function handleTableKeyDown(view: EditorView, event: KeyboardEvent, position = v
   }
   const pos = pmPosFromTextOffset(view.state.doc, target.pos);
   view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, pos)));
-  const rowDOM = view.dom.children[target.line];
-  const cellDOM = target.column >= 0 ? rowDOM?.querySelector<HTMLElement>(`.pm-table-cell[data-table-column="${target.column}"]`) : null;
-  const emptyInput = cellDOM?.querySelector<HTMLElement>(".pm-table-empty-input");
-  if (emptyInput) {
-    emptyInput.focus({ preventScroll: true });
-    const range = document.createRange();
-    range.selectNodeContents(emptyInput);
-    range.collapse(true);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-  } else {
-    view.focus();
-    // Explicitly anchor the DOM caret in the visible span, never in an adjacent
-    // zero-font-size pipe. ProseMirror's document position stays unchanged.
-    if (cellDOM?.firstChild?.nodeType === Node.TEXT_NODE) {
-      const selection = window.getSelection();
-      selection?.collapse(cellDOM.firstChild, Math.min(cellDOM.firstChild.textContent?.length ?? 0, target.pos - target.from));
-    }
-  }
+  placeCaretInCell(view, target);
   return true;
 }
 
 function pushTableRowDecos(out: Decoration[], node: PMNode, start: number, row: TableRow, active: boolean) {
+  // Content-sized columns: every row of the table gets the same track list, so
+  // the cells stay aligned while the table only takes the width it needs. Once
+  // the content no longer fits the measure the fractions share it out instead.
+  // Each track carries the cell padding (0.25em per side) plus slack for the
+  // ideographic spacing the browser adds where Latin meets Japanese.
+  const padding = 0.75;
+  const tracks = row.widths.map((width) => `0 minmax(0, ${width + padding}fr)`);
+  const extent = row.widths.reduce((sum, width) => sum + width + padding, 0);
   out.push(Decoration.node(start, start + node.nodeSize, {
     class: `pm-line pm-table-row pm-table-${row.kind}${active ? " active-line" : ""}`,
-    style: `--table-columns: ${row.columns}`,
+    style: `--table-columns: ${row.columns}; --table-tracks: ${tracks.join(" ")} 0;` +
+      ` --table-extent: calc(${extent}em + ${row.columns * 2}px)`,
   }));
   let end = 0;
   const marker = (from: number, to: number, column: number) => {
@@ -1622,7 +1710,7 @@ function pushTableRowDecos(out: Decoration[], node: PMNode, start: number, row: 
         span.addEventListener("mousedown", (event) => {
           if (event.target === input || input.contains(event.target as Node)) return;
           event.preventDefault();
-          input.focus();
+          focusEmptyCell(input);
         });
         return span;
       }, {
@@ -1821,10 +1909,18 @@ const LayoutAstExtension = Extension.create({
                 frame = null;
                 if (view.composing || !view.hasFocus() || !view.state.selection.empty) return;
                 const offset = textOffsetFromPmPos(view.state.doc, view.state.selection.head);
-                const cell = tableCaretTarget(docToText(view.state.doc), offset, "Home", getComputedStyle(view.dom).writingMode === "vertical-rl");
-                if (!cell || cell.from !== cell.to) return;
-                const input = view.dom.children[cell.line]?.querySelector<HTMLElement>(`.pm-table-cell[data-table-column="${cell.column}"] .pm-table-empty-input`);
-                if (input && document.activeElement !== input) input.focus({ preventScroll: true });
+                const cell = tableCellCaret(docToText(view.state.doc), offset,
+                  getComputedStyle(view.dom).writingMode === "vertical-rl");
+                if (!cell) return;
+                // Arrow keys from the line beside a table let the browser land on
+                // hidden syntax. Bring the caret back onto the cell it belongs to.
+                if (cell.pos !== offset) {
+                  const pos = pmPosFromTextOffset(view.state.doc, cell.pos);
+                  view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, pos)));
+                }
+                const anchor = window.getSelection()?.anchorNode ?? null;
+                const element = anchor?.nodeType === Node.TEXT_NODE ? anchor.parentElement : (anchor as Element | null);
+                if (!element?.closest(".pm-table-cell")) placeCaretInCell(view, cell);
               });
             },
             destroy() { if (frame !== null) cancelAnimationFrame(frame); },
@@ -1836,6 +1932,13 @@ const LayoutAstExtension = Extension.create({
         },
         props: {
           handleKeyDown: handleTableKeyDown,
+          handleDOMEvents: {
+            mousedown: (_view, event) => {
+              tableClickOrigin = { x: event.clientX, y: event.clientY, target: event.target };
+              return false;
+            },
+            mouseup: handleTableMouseUp,
+          },
           decorations(state) {
             return astKey.getState(state)?.decoSet ?? DecorationSet.empty;
           },

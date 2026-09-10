@@ -93,6 +93,18 @@ const selectionSubscription = then.workspace.onDidChangeSelection((selection) =>
 changeSubscription.dispose();
 ```
 
+プロジェクトを切り替えたとき、プロジェクト保存領域を使うプラグインは
+`onDidChangeWorkspace` で状態を読み直す。通知にはプロジェクト名と、プロジェクトが
+開かれているかどうかが含まれる。
+
+```js
+const workspaceSubscription = then.workspace.onDidChangeWorkspace(async ({ hasProject }) => {
+  if (!hasProject) return;
+  const notes = (await then.storage.get("notes")) ?? [];
+  renderNotes(notes);
+});
+```
+
 ### プロジェクト保存領域
 
 ```js

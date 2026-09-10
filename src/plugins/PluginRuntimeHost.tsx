@@ -196,6 +196,7 @@ button,input,textarea,select{font:inherit}button{cursor:pointer}
       delete: (anchorId) => request("anchors.delete", { anchorId }),
     }),
     workspace: Object.freeze({
+      onDidChangeWorkspace: (listener) => subscribe("workspace.change", listener),
       onDidChangeTextDocument: (listener) => subscribe("document.change", listener),
       onDidChangeSelection: (listener) => subscribe("selection.change", listener),
     }),
