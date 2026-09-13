@@ -7,6 +7,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
+mod submission_export;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -518,6 +519,7 @@ pub fn run() {
             open_text_file_dialog,
             read_text_file,
             save_text_file_dialog,
+            save_submission_text_dialog,
             save_text_file,
             save_export_file_dialog,
             pick_export_path,
@@ -1003,6 +1005,25 @@ fn save_text_file(path: String, content: String) -> Result<TextDocument, String>
     let path = PathBuf::from(path);
     write_text_file(&path, &content)?;
     read_text_document(&path)
+}
+
+#[tauri::command]
+async fn save_submission_text_dialog(
+    app: tauri::AppHandle,
+    content: String,
+    file_name: String,
+) -> Result<Option<ExportResult>, String> {
+    // Keep the blocking native dialog and disk write off the UI thread.
+    tauri::async_runtime::spawn_blocking(move || {
+        let selected = app.dialog().file()
+            .add_filter("テキスト文書", &["txt"])
+            .set_file_name(submission_export::safe_file_name(&file_name))
+            .blocking_save_file()
+            .map(dialog_path_to_path_buf)
+            .transpose()?;
+        submission_export::save_selected(selected, &content)
+            .map(|path| path.map(|path| export_result(&path)))
+    }).await.map_err(|error| format!("テキスト保存処理に失敗しました: {error}"))?
 }
 
 // Must be async: synchronous commands run on the main thread, and

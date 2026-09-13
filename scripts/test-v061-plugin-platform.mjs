@@ -73,6 +73,16 @@ assert.match(runtimeSource, /registerScreen: async/);
 assert.match(runtimeSource, /open: \(viewId\) => request\("views\.open"/);
 assert.match(runtimeSource, /registerModal: async/);
 assert.match(runtimeSource, /onDidChangeWorkspace: \(listener\) => subscribe\("workspace\.change", listener\)/);
+assert.match(
+  runtimeSource,
+  /data\.kind === "ready"[\s\S]*?sendEvent\(runtime\.plugin\.manifest\.id, "workspace\.change", workspaceRef\.current\)/,
+  "the host must replay the current workspace after plugin activation",
+);
+assert.match(
+  appSource,
+  /<ThenPluginRuntimeHost[\s\S]*?workspace=\{\{[\s\S]*?name: projectFolder\?\.name \?\? null,[\s\S]*?hasProject: Boolean\(projectFolder\)/,
+  "the runtime host must receive the current workspace snapshot",
+);
 assert.match(runtimeSource, /openModal: \(modalId\) => request\("views\.openModal"/);
 assert.match(runtimeSource, /then-plugin-modal/);
 assert.match(runtimeSource, /kind: "view\.activated"/, "plugin frames must acknowledge that the requested view is active");
@@ -308,7 +318,8 @@ Object.defineProperty(todoWindow.crypto, "randomUUID", {
   configurable: true,
   value: () => { throw new todoWindow.DOMException("opaque origin"); },
 });
-const todoStorage = new Map();
+let todoStorage = new Map();
+let todoBoardSaveGate = null;
 const todoCommands = [];
 const todoToolDefinitions = [];
 const todoOpenedViews = [];
@@ -339,7 +350,13 @@ todoWindow.then = {
   storage: {
     get: async (key) => todoStorage.get(key) ?? null,
     set: async (key, value) => {
-      todoStorage.set(key, value);
+      const targetStorage = todoStorage;
+      if (key === "todoBoard.v1" && todoBoardSaveGate) {
+        const gate = todoBoardSaveGate;
+        todoBoardSaveGate = null;
+        await gate;
+      }
+      targetStorage.set(key, value);
       return true;
     },
     delete: async (key) => todoStorage.delete(key),
@@ -588,13 +605,36 @@ const switchedTicket = {
   createdAt: Date.now(),
   updatedAt: Date.now(),
 };
-todoStorage.clear();
-todoStorage.set("todoBoard.v1", [switchedTicket]);
-todoStorage.set("ticket.next-number.v1", 13);
-todoStorage.set("ticket.current.v1", switchedTicket.id);
+
+// Keep one old-project save in flight and another queued behind it. A storage
+// request is scoped when it reaches the host, so the queued request must be
+// cancelled instead of writing the old board into the newly selected project.
+let releaseOldProjectSave;
+todoBoardSaveGate = new Promise((resolve) => { releaseOldProjectSave = resolve; });
+const quickStatusBeforeSwitch = todoWindow.document.querySelector(
+  "#todo-tool-root-ticket-unstarted .todoQuickStatus",
+);
+quickStatusBeforeSwitch.value = "doing";
+quickStatusBeforeSwitch.dispatchEvent(new todoWindow.Event("change", { bubbles: true }));
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(todoBoardSaveGate, null, "the first old-project save must be in flight");
+quickStatusBeforeSwitch.value = "backlog";
+quickStatusBeforeSwitch.dispatchEvent(new todoWindow.Event("change", { bubbles: true }));
+
+const secondProjectStorage = new Map();
+secondProjectStorage.set("todoBoard.v1", [switchedTicket]);
+secondProjectStorage.set("ticket.next-number.v1", 13);
+secondProjectStorage.set("ticket.current.v1", switchedTicket.id);
+todoStorage = secondProjectStorage;
 todoWorkspaceChangeListener({ name: "Second project", hasProject: true });
-await new Promise((resolve) => setTimeout(resolve, 30));
+releaseOldProjectSave();
+await new Promise((resolve) => setTimeout(resolve, 50));
 assert.equal(todoClosedModals.at(-1), "ticket-detail", "switching projects must close a stale ticket editor");
+assert.deepEqual(
+  todoStorage.get("todoBoard.v1").map((task) => task.id),
+  [switchedTicket.id],
+  "queued saves from the old project must not overwrite the new project",
+);
 assert.equal(
   todoWindow.document.querySelectorAll("#todo-screen-root .todoCard").length,
   1,

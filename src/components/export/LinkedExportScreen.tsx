@@ -1,4 +1,6 @@
-import { useMemo, useRef, useState } from "react";
+import { ExportSourceSelector } from "./ExportSourceSelector";
+import { useMemo, useState } from "react";
+import { SubmissionExportPanel } from "./SubmissionExportPanel";
 
 // This screen is mounted as the complete contents of a dedicated Tauri window.
 import { exportBlockHtml } from "../../export/linkedDocument";
@@ -13,7 +15,6 @@ import type {
   ExportLayoutProfile,
   ExportPageModel,
   ExportResult,
-  ExportStartMode,
   ExportViewState,
   LinkedExportDocument,
   LoadedExportSource,
@@ -90,12 +91,6 @@ function readSavedPresets(): SavedPreset[] {
   }
 }
 
-const startModeLabels: Record<ExportStartMode, string> = {
-  continue: "前の続き",
-  "new-page": "改ページ",
-  "odd-page": "奇数ページ開始",
-  "even-page": "偶数ページ開始",
-};
 
 const headerContentLabels: Record<ExportLayoutProfile["header"]["content"], string> = {
   none: "なし",
@@ -244,6 +239,7 @@ export function LinkedExportScreen({
   onExportDocx,
   onOpenResult,
 }: LinkedExportScreenProps) {
+  const [purpose, setPurpose] = useState<"print" | "submission">("print");
   const [format, setFormat] = useState<ExportFormat>("pdf");
   const [sources, setSources] = useState(() => withOrder(initialSources));
   const [layout, setLayout] = useState(() => initialLayout(initialSources));
@@ -269,7 +265,7 @@ export function LinkedExportScreen({
   const [savedPresets, setSavedPresets] = useState<SavedPreset[]>(readSavedPresets);
   const [presetChoice, setPresetChoice] = useState("");
   const [presetName, setPresetName] = useState("");
-  const dragIndexRef = useRef<number | null>(null);
+
 
   const job = useMemo<ExportJob>(() => ({
     format,
@@ -301,28 +297,6 @@ export function LinkedExportScreen({
   const updateSources = (updater: (current: LoadedExportSource[]) => LoadedExportSource[]) => {
     setSources((current) => withOrder(updater(current)));
     if (viewState === "preview-ready" || viewState === "preview-loading") setPreviewStale(true);
-  };
-
-  const moveSource = (index: number, direction: -1 | 1) => {
-    updateSources((current) => {
-      const target = index + direction;
-      if (target < 0 || target >= current.length) return current;
-      const next = [...current];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
-  };
-
-  const moveDraggedSource = (targetIndex: number) => {
-    const sourceIndex = dragIndexRef.current;
-    dragIndexRef.current = null;
-    if (sourceIndex === null || sourceIndex === targetIndex) return;
-    updateSources((current) => {
-      const next = [...current];
-      const [dragged] = next.splice(sourceIndex, 1);
-      next.splice(targetIndex, 0, dragged);
-      return next;
-    });
   };
 
   const refreshPreview = () => {
@@ -507,6 +481,8 @@ export function LinkedExportScreen({
     ? `${footerContentLabels[layout.footer.content]} ${layout.footer.pageNumberPosition}${footerHiddenSummary ? `・${footerHiddenSummary}非表示` : ""}`
     : "非表示";
   const showWindowHeader = !embedded;
+  const sourceSelector = <ExportSourceSelector sources={sources} activeTab={activeTab}
+    showStartMode={purpose === "print"} updateSources={updateSources} onOpenSource={onOpenSource} />;
 
   return (
     <div className="exportModalBackdrop" role="presentation">
@@ -525,6 +501,10 @@ export function LinkedExportScreen({
           </header>
         )}
 
+        <div className="exportPurposeSwitch exportPillGroup" role="group" aria-label="出力用途">
+          <button type="button" aria-pressed={purpose === "print"} className={purpose === "print" ? "active" : ""} disabled={viewState === "pdf-generating"} onClick={() => setPurpose("print")}>印刷・文書</button>
+          <button type="button" aria-pressed={purpose === "submission"} className={purpose === "submission" ? "active" : ""} disabled={viewState === "pdf-generating"} onClick={() => setPurpose("submission")}>投稿用テキスト</button>
+        </div>
         <nav className="exportResponsiveTabs" aria-label="エクスポート画面">
           {(["files", "settings", "preview"] as const).map((tab) => (
             <button key={tab} type="button" className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>
@@ -533,72 +513,10 @@ export function LinkedExportScreen({
           ))}
         </nav>
 
+        {purpose === "submission" ? <SubmissionExportPanel title={title} sources={sources} sourceError={sourceError}
+          activeTab={activeTab} sourceSelector={sourceSelector} onClose={onClose} onOpenSource={onOpenSource} /> : <>
         <div className="exportModalBody">
-          <aside className={`exportFilesPanel ${activeTab === "files" ? "mobileActive" : ""}`}>
-            <div className="exportPanelHeading" title="⋮⋮ をドラッグまたは ▲▼ で並べ替え・チェックで出力対象を切替">
-              <div><strong>出力対象ファイル</strong><span>{includedCount} / {sources.length}</span></div>
-              <div className="exportSelectAllRow">
-                <button
-                  type="button"
-                  className="exportBtn exportSelectAllButton"
-                  disabled={includedCount === sources.length}
-                  onClick={() => updateSources((current) => current.map((item) => ({ ...item, enabled: true })))}
-                >
-                  すべて選択
-                </button>
-                <button
-                  type="button"
-                  className="exportBtn exportSelectAllButton"
-                  disabled={includedCount === 0}
-                  onClick={() => updateSources((current) => current.map((item) => ({ ...item, enabled: false })))}
-                >
-                  すべて解除
-                </button>
-              </div>
-            </div>
-            <div className="exportSourceList">
-              {sources.map((source, index) => (
-                <article
-                  key={source.id}
-                  className={`exportSourceRow ${source.enabled ? "" : "disabled"}`}
-                  draggable
-                  onDragStart={() => { dragIndexRef.current = index; }}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={() => moveDraggedSource(index)}
-                >
-                  <div className="exportSourceMainRow">
-                    <span className="exportDragHandle" aria-hidden="true">⋮⋮</span>
-                    <input
-                      type="checkbox"
-                      checked={source.enabled}
-                      aria-label={`${source.displayName}を出力に含める`}
-                      onChange={() => updateSources((current) => current.map((item) => item.id === source.id ? { ...item, enabled: !item.enabled } : item))}
-                    />
-                    <button type="button" className="exportSourceName" title={source.path} onClick={() => source.path && onOpenSource(source.path)}>
-                      {source.displayName}
-                    </button>
-                    <span className={`exportExtensionBadge ext-${source.extension.toLowerCase()}`}>{source.extension.toUpperCase()}</span>
-                    <span className="exportMoveButtons">
-                      <button type="button" onClick={() => moveSource(index, -1)} disabled={index === 0} aria-label="上へ移動">▲</button>
-                      <button type="button" onClick={() => moveSource(index, 1)} disabled={index === sources.length - 1} aria-label="下へ移動">▼</button>
-                    </span>
-                  </div>
-                  <div className="exportSourceMeta">
-                    <span>{source.chars ?? source.content.length}字</span>
-                    <label>開始
-                      <select
-                        value={source.startMode}
-                        onChange={(event) => updateSources((current) => current.map((item) => item.id === source.id ? { ...item, startMode: event.target.value as ExportStartMode } : item))}
-                      >
-                        {Object.entries(startModeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                      </select>
-                    </label>
-                  </div>
-                </article>
-              ))}
-            </div>
-            <div className="exportPanelFoot"><span>出力 {includedCount} / 全 {sources.length} ファイル</span><span>連結順 = 上から</span></div>
-          </aside>
+          {sourceSelector}
 
           <section className={`exportPreviewPanel ${activeTab === "preview" ? "mobileActive" : ""}`}>
             <div className="exportPreviewToolbar">
@@ -733,6 +651,7 @@ export function LinkedExportScreen({
           <button type="button" className="exportBtn" onClick={() => void runExport("docx")} disabled={includedCount === 0}>DOCXを書き出す</button>
           <button type="button" className="exportBtn primary" onClick={() => void runExport("pdf")} disabled={includedCount === 0}>PDFを書き出す</button>
         </footer>
+        </>}
 
         {viewState === "pdf-generating" && (
           <div className="exportProgressOverlay"><div><span className="exportSpinner"/><strong>{format.toUpperCase()}生成中…</strong><p>{progress.message}</p><div className="exportProgressBar"><i style={{ width: `${progress.percent}%` }}/></div><div className="exportProgressMeta"><span>{progress.currentPage} / {progress.totalPages} ページ</span><span>{Math.round(progress.percent)}%</span></div></div></div>

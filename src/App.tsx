@@ -11390,6 +11390,11 @@ export default function App() {
                       threads={snippets}
                       draggingId={draggingId}
                       focusRequest={ideaFocusRequest}
+                      onFocusRequestConsumed={(nonce) =>
+                        setIdeaFocusRequest((current) =>
+                          current?.nonce === nonce ? null : current,
+                        )
+                      }
                       onCapture={captureFragment}
                       onCreateThread={createIdeaThread}
                       onRenameThread={renameIdeaThread}
@@ -11420,6 +11425,10 @@ export default function App() {
             ref={pluginRuntimeHostRef}
             plugins={loadedPlugins}
             activeView={pluginRuntimeActiveView}
+            workspace={{
+              name: projectFolder?.name ?? null,
+              hasProject: Boolean(projectFolder),
+            }}
             visible={Boolean(activePluginModal) || isDockedPluginRuntimeVisible}
             modal={Boolean(activePluginModal)}
             anchorElement={pluginRuntimeAnchor}

@@ -110,9 +110,13 @@ const updateTodoTasks = (updater) => {
   todoTasks = next;
   notifyTodoListeners();
   const snapshot = next.map((task) => ({ ...task }));
-  const pending = todoSaveQueue.catch(() => undefined).then(
-    () => then.storage.set(TODO_STORAGE_KEY, snapshot),
-  );
+  const pending = todoSaveQueue.catch(() => undefined).then(() => {
+    // The storage API is scoped to whichever project is current when the
+    // request reaches the host. Never let a save queued in the old project run
+    // after workspace.change, or it would overwrite the new project's board.
+    if (workspaceVersion !== workspaceAtStart) return undefined;
+    return then.storage.set(TODO_STORAGE_KEY, snapshot);
+  });
   todoSaveQueue = pending;
   return pending.then(async (value) => {
     if (workspaceVersion !== workspaceAtStart) return value;
@@ -134,6 +138,7 @@ const updateTodoTasks = (updater) => {
 };
 
 const createTodoTask = (input, legacyDetails = "", legacyStatus = "backlog") => {
+  const workspaceAtStart = workspaceVersion;
   const definition = input && typeof input === "object"
     ? input
     : { title: input, details: legacyDetails, status: legacyStatus };
@@ -141,9 +146,11 @@ const createTodoTask = (input, legacyDetails = "", legacyStatus = "backlog") => 
   if (!normalizedTitle) return Promise.reject(new Error("チケット名を入力してください。"));
   const now = Date.now();
   let createdId = null;
+  let nextNumberAfterCreate = nextTicketNumber;
   return updateTodoTasks((tasks) => {
     const status = TODO_STATUSES.includes(definition.status) ? definition.status : "backlog";
     const ticketNumber = nextTicketNumber++;
+    nextNumberAfterCreate = nextTicketNumber;
     const order = tasks
       .filter((task) => task.status === status && !task.deletedAt)
       .reduce((maximum, task) => Math.max(maximum, task.order), -1) + 1;
@@ -162,7 +169,9 @@ const createTodoTask = (input, legacyDetails = "", legacyStatus = "backlog") => 
       updatedAt: now,
     }, ...tasks];
   }).then(async () => {
-    await then.storage.set(NEXT_TICKET_NUMBER_STORAGE_KEY, nextTicketNumber);
+    if (workspaceVersion !== workspaceAtStart) return null;
+    await then.storage.set(NEXT_TICKET_NUMBER_STORAGE_KEY, nextNumberAfterCreate);
+    if (workspaceVersion !== workspaceAtStart) return null;
     return todoTasks.find((task) => task.id === createdId) ?? null;
   });
 };
@@ -243,7 +252,8 @@ const subscribeTodoTasks = (listener) => {
   return () => todoListeners.delete(listener);
 };
 
-const syncCurrentTicketStatus = async () => {
+const syncCurrentTicketStatus = async (workspaceAtStart = workspaceVersion) => {
+  if (workspaceVersion !== workspaceAtStart) return;
   const current = todoTasks.find((task) => task.id === currentTicketId && !task.deletedAt) ?? null;
   if (!current) {
     currentTicketId = null;
@@ -263,27 +273,31 @@ const loadCurrentTicket = async () => {
   const stored = await then.storage.get(CURRENT_TICKET_STORAGE_KEY);
   if (workspaceVersion !== workspaceAtStart) return;
   currentTicketId = typeof stored === "string" ? stored : null;
-  await syncCurrentTicketStatus();
+  await syncCurrentTicketStatus(workspaceAtStart);
 };
 
 const reloadWorkspaceTickets = async (hasProject) => {
-  workspaceVersion += 1;
+  const workspaceAtStart = ++workspaceVersion;
   currentTicketId = null;
   pendingTicketEditor = null;
   todoTasks = [];
   notifyTodoListeners();
   await then.views.closeModal("ticket-detail");
+  if (workspaceVersion !== workspaceAtStart) return;
   await then.statusBar.removeItem("current-ticket");
+  if (workspaceVersion !== workspaceAtStart) return;
   if (!hasProject) return;
   await loadTodoTasks();
+  if (workspaceVersion !== workspaceAtStart) return;
   await loadCurrentTicket();
 };
 
 const setCurrentTicket = async (taskId) => {
+  const workspaceAtStart = workspaceVersion;
   currentTicketId = taskId;
   if (taskId) await then.storage.set(CURRENT_TICKET_STORAGE_KEY, taskId);
   else await then.storage.delete(CURRENT_TICKET_STORAGE_KEY);
-  await syncCurrentTicketStatus();
+  await syncCurrentTicketStatus(workspaceAtStart);
 };
 
 const requestTicketEditor = async (request = {}) => {

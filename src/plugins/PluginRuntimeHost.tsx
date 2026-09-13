@@ -36,6 +36,7 @@ export type ThenPluginRuntimeHostHandle = {
 type ThenPluginRuntimeHostProps = {
   plugins: LoadedThenPlugin[];
   activeView: { pluginId: string; viewId: string } | null;
+  workspace: { name: string | null; hasProject: boolean };
   visible: boolean;
   modal: boolean;
   anchorElement: HTMLElement | null;
@@ -282,7 +283,7 @@ export const ThenPluginRuntimeHost = forwardRef<
   ThenPluginRuntimeHostHandle,
   ThenPluginRuntimeHostProps
 >(function ThenPluginRuntimeHost(
-  { plugins, activeView, visible, modal, anchorElement, themeKey, onRequest, onError },
+  { plugins, activeView, workspace, visible, modal, anchorElement, themeKey, onRequest, onError },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -290,9 +291,11 @@ export const ThenPluginRuntimeHost = forwardRef<
   const requestRef = useRef(onRequest);
   const errorRef = useRef(onError);
   const activeViewRef = useRef(activeView);
+  const workspaceRef = useRef(workspace);
   requestRef.current = onRequest;
   errorRef.current = onError;
   activeViewRef.current = activeView;
+  workspaceRef.current = workspace;
 
   const runtimes = useMemo<RuntimeRecord[]>(
     () => plugins.map((plugin) => ({ plugin, token: crypto.randomUUID() })),
@@ -372,6 +375,13 @@ export const ThenPluginRuntimeHost = forwardRef<
         if (current?.pluginId === runtime.plugin.manifest.id && data.viewId === current.viewId) {
           hostRef.current?.setAttribute("data-active-view-ready", "true");
         }
+        return;
+      }
+      if (data.kind === "ready") {
+        // A project can finish hydrating before the plugin iframe has installed
+        // its listeners. Replay the current workspace after activation so the
+        // plugin never depends on winning that startup race.
+        sendEvent(runtime.plugin.manifest.id, "workspace.change", workspaceRef.current);
         return;
       }
       if (data.kind !== "request" || !data.requestId || !data.method) return;

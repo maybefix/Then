@@ -13,6 +13,7 @@ type IdeaPaneProps = {
     fragmentId?: string;
     nonce: number;
   } | null;
+  onFocusRequestConsumed?: (nonce: number) => void;
   onCapture: (body: string, destId: string) => void;
   /** 新規スレッドを作成し、その ID を返す。 */
   onCreateThread: () => string;
@@ -167,6 +168,7 @@ export function IdeaPane({
   threads,
   draggingId,
   focusRequest,
+  onFocusRequestConsumed,
   onCapture,
   onCreateThread,
   onRenameThread,
@@ -253,7 +255,8 @@ export function IdeaPane({
     setSelectedId(focusRequest.threadId);
     setView("detail");
     setFocusedFragmentId(focusRequest.fragmentId ?? null);
-  }, [focusRequest]);
+    onFocusRequestConsumed?.(focusRequest.nonce);
+  }, [focusRequest, onFocusRequestConsumed]);
 
   useEffect(() => {
     if (!focusedFragmentId) return;
