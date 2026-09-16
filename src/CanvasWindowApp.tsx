@@ -48,6 +48,13 @@ import IntermediateDraftPane from "./components/canvas/IntermediateDraftPane";
 import { draftBoardKey, type DraftCanvasContext, type DraftHistory } from "./intermediateDraft";
 import { prepareDraftBoardTrash } from "./intermediateDraftStore";
 import { CanvasBoardSaveQueue, canvasBoardTargetKey, type CanvasBoardTarget } from "./canvasBoardSaveQueue";
+import {
+  attachNodeToThread,
+  collectThreadDescendantIds,
+  detachNodeFromThread,
+  findThreadDropTarget,
+  hiddenThreadNodeIds,
+} from "./canvasThreads";
 
 const CANVAS_WIDTH = 6400;
 const CANVAS_HEIGHT = 4200;
@@ -104,13 +111,18 @@ type DragState =
       kind: "pan";
       start: Point;
       pan: Point;
+      background?: boolean;
+      moved?: boolean;
     }
   | {
       kind: "node";
       start: Point;
       nodeIds: string[];
+      primaryNodeId: string;
+      canThread: boolean;
       originals: Map<string, Point>;
       pushed?: boolean;
+      moved?: boolean;
     }
   | {
       kind: "resize";
@@ -480,6 +492,13 @@ function edgePath(from: CanvasNode, to: CanvasNode, edge?: CanvasEdge) {
   };
 }
 
+function threadPath(parent: CanvasTextNode, child: CanvasTextNode) {
+  const start = { x: parent.x + 22, y: parent.y + parent.height };
+  const end = { x: child.x + 12, y: child.y };
+  const middleY = start.y + (end.y - start.y) / 2;
+  return `M ${start.x} ${start.y} C ${start.x} ${middleY}, ${end.x} ${middleY}, ${end.x} ${end.y}`;
+}
+
 function arrowHeadPath(tip: Point, direction: Point) {
   const length = Math.hypot(direction.x, direction.y);
   if (length === 0) return "";
@@ -595,9 +614,13 @@ function toolLabel(tool: CanvasTool) {
 
 const TOOL_SHORTCUTS: Record<string, CanvasTool> = {
   v: "select",
-  t: "text",
+  c: "text",
   g: "group",
-  c: "edge",
+  e: "edge",
+};
+
+const TOOL_SHORTCUT_ALIASES: Record<string, CanvasTool> = {
+  t: "text",
 };
 
 function toolShortcutLabel(tool: CanvasTool) {
@@ -1000,6 +1023,7 @@ export default function CanvasWindowApp({
   const editSessionRef = useRef<string | null>(null);
   const marqueePointRef = useRef<Point | null>(null);
   const spaceDownRef = useRef(false);
+  const threadDropTargetRef = useRef<string | null>(null);
 
   const [payload, setPayload] = useState<CanvasWindowPayload | null>(null);
   const [scope, setScope] = useState<CanvasScope>("global");
@@ -1013,6 +1037,8 @@ export default function CanvasWindowApp({
   const [edgeCursor, setEdgeCursor] = useState<Point | null>(null);
   const [marqueeRect, setMarqueeRect] = useState<MarqueeRect | null>(null);
   const [pendingFocusNodeId, setPendingFocusNodeId] = useState<string | null>(null);
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const [threadDropTargetId, setThreadDropTargetId] = useState<string | null>(null);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [targetThreadId, setTargetThreadId] = useState("idea-inbox");
@@ -1074,6 +1100,18 @@ export default function CanvasWindowApp({
     () => board?.edges.find((edge) => edge.id === selectedEdgeId) ?? null,
     [board, selectedEdgeId],
   );
+  const hiddenThreadIds = useMemo(
+    () => hiddenThreadNodeIds(board?.nodes ?? []),
+    [board],
+  );
+  const threadChildCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    (board?.nodes ?? []).forEach((node) => {
+      if (!isTextNode(node) || !node.threadParentId) return;
+      counts.set(node.threadParentId, (counts.get(node.threadParentId) ?? 0) + 1);
+    });
+    return counts;
+  }, [board]);
   // 優先順: embedded の props > 別ウィンドウのライブイベント > 開いた時点の payload。
   // 資料一覧のライブ反映は、開いた時点でプロジェクト情報がある（=プレビュー可能な）
   // ウィンドウに限る。global で開いた場合は従来どおり空のまま。
@@ -1168,7 +1206,7 @@ export default function CanvasWindowApp({
     setBoard((current) => {
       if (!current) return current;
       const next = updater(current);
-      return {
+      const updated: JsonCanvasDocument = {
         ...next,
         then: {
           version: 1,
@@ -1178,7 +1216,14 @@ export default function CanvasWindowApp({
           updatedAt: Date.now(),
         },
       };
+      boardRef.current = updated;
+      return updated;
     });
+  }, []);
+
+  const setThreadDropTarget = useCallback((nodeId: string | null) => {
+    threadDropTargetRef.current = nodeId;
+    setThreadDropTargetId(nodeId);
   }, []);
 
   /** 変更前のボードを履歴に積む。sessionKey が前回と同じ間は積み直さない（連続入力の合体用）。 */
@@ -1442,6 +1487,8 @@ export default function CanvasWindowApp({
       setEdgeFromId(null);
       setEdgeCursor(null);
       setSelectedEdgeId(null);
+      setEditingNodeId(null);
+      setThreadDropTarget(null);
       try {
         await boardSaveQueue.flush();
         if (generation !== boardLoadGenerationRef.current) return;
@@ -1480,7 +1527,7 @@ export default function CanvasWindowApp({
         if (generation === boardLoadGenerationRef.current) setStatus(String(error));
       }
     },
-    [payload, clearHistory, boardSaveQueue],
+    [payload, clearHistory, boardSaveQueue, setThreadDropTarget],
   );
 
   useEffect(() => {
@@ -1594,6 +1641,9 @@ export default function CanvasWindowApp({
       const drag = dragStateRef.current;
       if (!drag) return;
       if (drag.kind === "pan") {
+        if (Math.hypot(point.clientX - drag.start.x, point.clientY - drag.start.y) >= 3) {
+          drag.moved = true;
+        }
         setPan({
           x: drag.pan.x + point.clientX - drag.start.x,
           y: drag.pan.y + point.clientY - drag.start.y,
@@ -1618,6 +1668,23 @@ export default function CanvasWindowApp({
       if (drag.kind === "node") {
         const dx = (point.clientX - drag.start.x) / zoom;
         const dy = (point.clientY - drag.start.y) / zoom;
+        if (Math.hypot(point.clientX - drag.start.x, point.clientY - drag.start.y) >= 3) {
+          drag.moved = true;
+        }
+        const currentNodes = boardRef.current?.nodes ?? [];
+        const primary = currentNodes.find((node) => node.id === drag.primaryNodeId);
+        const original = drag.originals.get(drag.primaryNodeId);
+        if (drag.canThread && primary && original && isTextNode(primary)) {
+          setThreadDropTarget(
+            findThreadDropTarget(
+              currentNodes,
+              { ...primary, x: original.x + dx, y: original.y + dy },
+              new Set(drag.nodeIds),
+            ),
+          );
+        } else {
+          setThreadDropTarget(null);
+        }
         patchBoard((current) => ({
           ...current,
           nodes: current.nodes.map((node) => {
@@ -1652,11 +1719,43 @@ export default function CanvasWindowApp({
       event.preventDefault();
       pointerMoveScheduler.schedule({ clientX: event.clientX, clientY: event.clientY });
     };
-    const clearDrag = () => {
+    const clearDrag = (event: PointerEvent) => {
       pointerMoveScheduler.flush();
       const drag = dragStateRef.current;
       dragStateRef.current = null;
-      if (drag?.kind !== "marquee") return;
+      const dropTargetId = threadDropTargetRef.current;
+      setThreadDropTarget(null);
+      if (!drag) return;
+
+      if (drag.kind === "pan") {
+        if (drag.background && !drag.moved) {
+          setEditingNodeId(null);
+          setSelectedIds(new Set());
+          setSelectedEdgeId(null);
+        }
+        return;
+      }
+
+      if (drag.kind === "node") {
+        if (event.type !== "pointerup" || !drag.moved || !drag.canThread) return;
+        const current = boardRef.current;
+        const primary = current?.nodes.find((node) => node.id === drag.primaryNodeId);
+        if (!current || !primary || !isTextNode(primary)) return;
+        if (dropTargetId) {
+          patchBoard((document) => attachNodeToThread(document, primary.id, dropTargetId));
+          const parent = current.nodes.find((node) => node.id === dropTargetId);
+          const label = parent && isTextNode(parent)
+            ? parent.text.trim().split(/\r?\n/, 1)[0].slice(0, 24) || "カード"
+            : "カード";
+          setStatus(`「${label}」のスレッドに追加しました`);
+        } else if (primary.threadParentId) {
+          patchBoard((document) => detachNodeFromThread(document, primary.id));
+          setStatus("カードをスレッドから外しました");
+        }
+        return;
+      }
+
+      if (drag.kind !== "marquee") return;
 
       setMarqueeRect(null);
       const point = marqueePointRef.current ?? drag.start;
@@ -1676,6 +1775,7 @@ export default function CanvasWindowApp({
       const hits = (boardRef.current?.nodes ?? [])
         .filter(
           (node) =>
+            !hiddenThreadIds.has(node.id) &&
             node.x < rect.x + rect.width &&
             node.x + node.width > rect.x &&
             node.y < rect.y + rect.height &&
@@ -1693,7 +1793,7 @@ export default function CanvasWindowApp({
       window.removeEventListener("pointerup", clearDrag);
       window.removeEventListener("pointercancel", clearDrag);
     };
-  }, [patchBoard, pushHistory, screenToWorld, zoom]);
+  }, [hiddenThreadIds, patchBoard, pushHistory, screenToWorld, setThreadDropTarget, zoom]);
 
   const switchScope = (nextScope: CanvasScope) => {
     if (nextScope === "project" && !payload?.rootPath) {
@@ -1845,9 +1945,15 @@ export default function CanvasWindowApp({
     }
     event.preventDefault();
     event.stopPropagation();
+    setEditingNodeId(null);
     selectNode(node.id, event);
     const baseNodeIds = selectedIds.has(node.id) ? [...selectedIds] : [node.id];
     const nodeIds = new Set(baseNodeIds);
+    baseNodeIds.forEach((nodeId) => {
+      const selected = board?.nodes.find((item) => item.id === nodeId);
+      if (!selected || !isTextNode(selected)) return;
+      collectThreadDescendantIds(board?.nodes ?? [], nodeId).forEach((id) => nodeIds.add(id));
+    });
     const dragGroups = (board?.nodes ?? []).filter(
       (item): item is CanvasGroupNode => nodeIds.has(item.id) && isGroupNode(item),
     );
@@ -1863,12 +1969,33 @@ export default function CanvasWindowApp({
       kind: "node",
       start: { x: event.clientX, y: event.clientY },
       nodeIds: [...nodeIds],
+      primaryNodeId: node.id,
+      canThread: isTextNode(node) && baseNodeIds.length === 1,
       originals: new Map(
         (board?.nodes ?? [])
           .filter((item) => nodeIds.has(item.id))
           .map((item) => [item.id, { x: item.x, y: item.y }]),
       ),
     };
+  };
+
+  const beginTextEditing = (nodeId: string) => {
+    const node = boardRef.current?.nodes.find((item) => item.id === nodeId);
+    if (!node || !isTextNode(node)) return;
+    setTool("select");
+    setSelectedEdgeId(null);
+    setSelectedIds(new Set([nodeId]));
+    setEditingNodeId(nodeId);
+    setPendingFocusNodeId(nodeId);
+  };
+
+  const handleTextNodeDoubleClick = (
+    node: CanvasTextNode,
+    event: ReactMouseEvent<HTMLElement>,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    beginTextEditing(node.id);
   };
 
   const handleNodePointerDown = (node: CanvasNode, event: ReactPointerEvent) => {
@@ -2010,6 +2137,7 @@ export default function CanvasWindowApp({
     patchBoard((current) => ({ ...current, nodes: [...current.nodes, node] }));
     setSelectedEdgeId(null);
     setSelectedIds(new Set([node.id]));
+    setEditingNodeId(node.id);
     setPendingFocusNodeId(node.id);
   };
 
@@ -2052,7 +2180,17 @@ export default function CanvasWindowApp({
       setEdgeCursor(null);
       return;
     }
-    // 選択ツール: 背景ドラッグは矩形選択。選択解除は pointerup 側で判定する。
+    // Weje型の直接操作: 通常の背景ドラッグはパン、修飾キー付きだけ矩形選択。
+    if (!event.shiftKey && !event.ctrlKey && !event.metaKey) {
+      event.preventDefault();
+      dragStateRef.current = {
+        kind: "pan",
+        start: { x: event.clientX, y: event.clientY },
+        pan,
+        background: true,
+      };
+      return;
+    }
     marqueePointRef.current = point;
     dragStateRef.current = {
       kind: "marquee",
@@ -2116,15 +2254,38 @@ export default function CanvasWindowApp({
       return;
     }
     if (selectedIds.size === 0) return;
+    const removedIds = new Set(selectedIds);
     pushHistory();
     patchBoard((current) => ({
       ...current,
-      nodes: current.nodes.filter((node) => !selectedIds.has(node.id)),
+      nodes: current.nodes
+        .filter((node) => !removedIds.has(node.id))
+        .map((node) =>
+          isTextNode(node) && node.threadParentId && removedIds.has(node.threadParentId)
+            ? { ...node, threadParentId: undefined, threadOrder: undefined }
+            : node,
+        ),
       edges: current.edges.filter(
-        (edge) => !selectedIds.has(edge.fromNode) && !selectedIds.has(edge.toNode),
+        (edge) => !removedIds.has(edge.fromNode) && !removedIds.has(edge.toNode),
       ),
     }));
+    if (editingNodeId && removedIds.has(editingNodeId)) setEditingNodeId(null);
     setSelectedIds(new Set());
+  };
+
+  const toggleThreadCollapsed = (node: CanvasTextNode) => {
+    pushHistory();
+    patchBoard((current) => ({
+      ...current,
+      nodes: current.nodes.map((item) =>
+        item.id === node.id && isTextNode(item)
+          ? { ...item, threadCollapsed: !item.threadCollapsed }
+          : item,
+      ),
+    }));
+    setEditingNodeId(null);
+    setSelectedIds(new Set([node.id]));
+    setSelectedEdgeId(null);
   };
 
   useEffect(() => {
@@ -2157,6 +2318,12 @@ export default function CanvasWindowApp({
       }
 
       if (event.key === "Escape") {
+        if (editingNodeId) {
+          event.preventDefault();
+          (document.activeElement as HTMLElement | null)?.blur();
+          setEditingNodeId(null);
+          return;
+        }
         setEdgeFromId(null);
         setEdgeCursor(null);
         setIsStyleOpen(false);
@@ -2166,7 +2333,17 @@ export default function CanvasWindowApp({
       }
 
       if (!mod && !event.altKey && !isEditableTarget) {
-        const shortcutTool = TOOL_SHORTCUTS[event.key.toLowerCase()];
+        if (event.key === "Enter" && selectedIds.size === 1) {
+          const nodeId = [...selectedIds][0];
+          const selected = boardRef.current?.nodes.find((node) => node.id === nodeId);
+          if (selected && isTextNode(selected)) {
+            event.preventDefault();
+            beginTextEditing(selected.id);
+            return;
+          }
+        }
+        const key = event.key.toLowerCase();
+        const shortcutTool = TOOL_SHORTCUTS[key] ?? TOOL_SHORTCUT_ALIASES[key];
         if (shortcutTool) {
           setTool(shortcutTool);
           setEdgeFromId(null);
@@ -2213,18 +2390,28 @@ export default function CanvasWindowApp({
     if (!board || selectedIds.size === 0) return;
     pushHistory();
     const selectedNodeList = board.nodes.filter((node) => selectedIds.has(node.id));
-    const idMap = new Map<string, string>();
+    const idMap = new Map(
+      selectedNodeList.map((node) => [
+        node.id,
+        nextCanvasId(
+          node.type === "group" ? "group" : node.type === "reference" ? "reference" : "node",
+        ),
+      ]),
+    );
     const duplicatedNodes: CanvasNode[] = selectedNodeList.map((node) => {
-      const id = nextCanvasId(
-        node.type === "group" ? "group" : node.type === "reference" ? "reference" : "node",
-      );
-      idMap.set(node.id, id);
-      return {
+      const duplicate = {
         ...node,
-        id,
+        id: idMap.get(node.id)!,
         x: node.x + 36,
         y: node.y + 36,
       } as CanvasNode;
+      if (!isTextNode(duplicate) || !duplicate.threadParentId) return duplicate;
+      const duplicatedParentId = idMap.get(duplicate.threadParentId);
+      return {
+        ...duplicate,
+        threadParentId: duplicatedParentId,
+        threadOrder: duplicatedParentId ? duplicate.threadOrder : undefined,
+      };
     });
     const duplicatedEdges = board.edges
       .filter((edge) => idMap.has(edge.fromNode) && idMap.has(edge.toNode))
@@ -2339,7 +2526,7 @@ export default function CanvasWindowApp({
     if (!board) return null;
     const from = board.nodes.find((node) => node.id === edge.fromNode);
     const to = board.nodes.find((node) => node.id === edge.toNode);
-    if (!from || !to) return null;
+    if (!from || !to || hiddenThreadIds.has(from.id) || hiddenThreadIds.has(to.id)) return null;
     const connector = edgeConnector(edge);
     const { d, start, end, fromControl, toControl, mid } = edgePath(from, to, edge);
     const active = selectedEdgeId === edge.id;
@@ -2385,7 +2572,8 @@ export default function CanvasWindowApp({
 
   const groups = board?.nodes.filter(isGroupNode) ?? [];
   const referenceNodes = board?.nodes.filter(isReferenceNode) ?? [];
-  const textNodes = board?.nodes.filter(isTextNode) ?? [];
+  const allTextNodes = board?.nodes.filter(isTextNode) ?? [];
+  const textNodes = allTextNodes.filter((node) => !hiddenThreadIds.has(node.id));
 
   const edgeSourceNode = edgeFromId
     ? board?.nodes.find((node) => node.id === edgeFromId) ?? null
@@ -2549,24 +2737,6 @@ export default function CanvasWindowApp({
             <CanvasGlyph name="trash" />
           </button>
         </div>
-        <div className="canvasToolbarCluster canvasToolGroup" aria-label="ツール">
-          {(["select", "text", "group", "edge"] as CanvasTool[]).map((item) => (
-            <button
-              key={item}
-              className={tool === item ? "isActive" : ""}
-              type="button"
-              title={`${toolLabel(item)} (${toolShortcutLabel(item)})`}
-              onClick={() => {
-                setTool(item);
-                setEdgeFromId(null);
-                setEdgeCursor(null);
-              }}
-            >
-              <CanvasGlyph name={item} />
-              <span>{toolLabel(item)}</span>
-            </button>
-          ))}
-        </div>
         <div className="canvasTopbarRight">
           <div className="canvasReferenceHost">
             <button
@@ -2651,12 +2821,15 @@ export default function CanvasWindowApp({
               <div className="canvasHelpPopover" role="dialog" aria-label="ボード操作ヘルプ">
                 <h2>ボードの操作</h2>
                 <ul>
-                  <li>カード作成: 余白をダブルクリック、またはカードツール (T)</li>
+                  <li>カード作成: 余白をダブルクリック、またはカードツール (C／T)</li>
+                  <li>カード編集: ダブルクリック、または選択して Enter</li>
+                  <li>カード移動: カード面をそのままドラッグ</li>
+                  <li>スレッド化: カードを別のカードへ近づけてドロップ</li>
                   <li>グループ: グループツール (G) で余白をクリック</li>
-                  <li>接続線: 接続線ツール (C) で元のカード、先のカードの順にクリック</li>
-                  <li>範囲選択: 選択ツール (V) で余白をドラッグ</li>
+                  <li>接続線: 接続線ツール (E) で元のカード、先のカードの順にクリック</li>
+                  <li>範囲選択: Shift / Ctrl を押しながら余白をドラッグ</li>
                   <li>追加選択: Shift / Ctrl を押しながらクリック</li>
-                  <li>パン: Space + ドラッグ、中ボタン、ホイール</li>
+                  <li>パン: 余白をドラッグ、Space + ドラッグ、中ボタン、ホイール</li>
                   <li>ズーム: Ctrl + ホイール（カーソル位置を中心に拡縮）</li>
                   <li>取り消し: Ctrl+Z ／ やり直し: Ctrl+Y</li>
                   <li>選択中の操作: カード上部のツールバーから複製・接続・送信・削除</li>
@@ -2674,7 +2847,7 @@ export default function CanvasWindowApp({
       >
         <div
           ref={viewportRef}
-          className="canvasViewport"
+          className={`canvasViewport canvasViewport-${tool}`}
           onPointerDown={handleViewportPointerDown}
           onDoubleClick={handleViewportDoubleClick}
           onPointerMove={handleViewportPointerMove}
@@ -2731,6 +2904,12 @@ export default function CanvasWindowApp({
               </article>
             ))}
             <svg className="canvasEdgeLayer" width={CANVAS_WIDTH} height={CANVAS_HEIGHT}>
+              {textNodes.map((node) => {
+                if (!node.threadParentId) return null;
+                const parent = allTextNodes.find((item) => item.id === node.threadParentId);
+                if (!parent || hiddenThreadIds.has(parent.id)) return null;
+                return <path key={`thread-${node.id}`} className="canvasThreadEdge" d={threadPath(parent, node)} />;
+              })}
               {board?.edges.map(renderEdge)}
               {edgeSourceNode && edgeCursor && (
                 <path
@@ -2793,12 +2972,15 @@ export default function CanvasWindowApp({
                   selectedIds.has(node.id) ? "isSelected" : ""
                 } ${selectedGroupChildIds.has(node.id) ? "isInSelectedGroup" : ""} ${
                   edgeFromId === node.id ? "isEdgeSource" : ""
-                } ${
+                } ${node.threadParentId ? "isThreadChild" : ""} ${
+                  threadDropTargetId === node.id ? "isThreadDropTarget" : ""
+                } ${editingNodeId === node.id ? "isEditing" : ""} ${
                   isVerticalTextNode(node) ? "isVerticalWriting" : ""
                 }`}
                 style={textNodeStyle(node)}
                 data-node-id={node.id}
                 onPointerDown={(event) => handleNodePointerDown(node, event)}
+                onDoubleClick={(event) => handleTextNodeDoubleClick(node, event)}
               >
                 {node.thenOrigin && (
                   <button
@@ -2809,15 +2991,39 @@ export default function CanvasWindowApp({
                     元Idea
                   </button>
                 )}
-                <textarea
-                  value={node.text}
-                  spellCheck={false}
-                  placeholder="アイデアを書く…"
-                  aria-label="カードの本文"
-                  onFocus={() => handleNodeFocus(node.id)}
-                  onChange={(event) => updateNode(node.id, { text: event.target.value })}
-                  onWheel={(event) => handleTextNodeWheel(node, event)}
-                />
+                {threadChildCounts.has(node.id) && (
+                  <button
+                    className="canvasThreadToggle"
+                    type="button"
+                    title={node.threadCollapsed ? "スレッドを開く" : "スレッドを閉じる"}
+                    aria-label={node.threadCollapsed ? "スレッドを開く" : "スレッドを閉じる"}
+                    aria-expanded={!node.threadCollapsed}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleThreadCollapsed(node);
+                    }}
+                  >
+                    {node.threadCollapsed ? "▸" : "▾"}
+                    <span>{threadChildCounts.get(node.id)}</span>
+                  </button>
+                )}
+                {editingNodeId === node.id ? (
+                  <textarea
+                    value={node.text}
+                    spellCheck={false}
+                    placeholder="アイデアを書く…"
+                    aria-label="カードの本文"
+                    onFocus={() => handleNodeFocus(node.id)}
+                    onBlur={() => setEditingNodeId((current) => current === node.id ? null : current)}
+                    onChange={(event) => updateNode(node.id, { text: event.target.value })}
+                    onWheel={(event) => handleTextNodeWheel(node, event)}
+                  />
+                ) : (
+                  <div className={`canvasCardText ${node.text ? "" : "isPlaceholder"}`}>
+                    {node.text || "アイデアを書く…"}
+                  </div>
+                )}
                 <span
                   className="canvasResizeHandle"
                   onPointerDown={(event) => startResize(node, event)}
@@ -2840,6 +3046,28 @@ export default function CanvasWindowApp({
                 余白をダブルクリックしてカードを作成できます
               </div>
             )}
+          </div>
+          <div
+            className="canvasCreationPalette canvasToolGroup"
+            aria-label="作成ツール"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            {(["select", "text", "group", "edge"] as CanvasTool[]).map((item) => (
+              <button
+                key={item}
+                className={tool === item ? "isActive" : ""}
+                type="button"
+                title={`${toolLabel(item)} (${toolShortcutLabel(item)})`}
+                onClick={() => {
+                  setTool(item);
+                  setEdgeFromId(null);
+                  setEdgeCursor(null);
+                }}
+              >
+                <CanvasGlyph name={item} />
+                <span>{toolLabel(item)}</span>
+              </button>
+            ))}
           </div>
           {floatingBarStyle && !marqueeRect && (
             <div

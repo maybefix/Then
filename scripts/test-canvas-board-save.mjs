@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url);
 const dom = new JSDOM('<div id="root"></div>', { url: "http://localhost", pretendToBeVisual: true });
 Object.assign(globalThis, { window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage,
   HTMLElement: dom.window.HTMLElement, HTMLTextAreaElement: dom.window.HTMLTextAreaElement,
+  CSS: { escape: (value) => String(value).replace(/[^a-zA-Z0-9_-]/g, "\\$&") },
   IS_REACT_ACT_ENVIRONMENT: true });
 const { default: React, act } = await import("react");
 const { createRoot } = await import("react-dom/client");
@@ -57,6 +58,7 @@ const canvasUrl = await compile("src/CanvasWindowApp.tsx", {
   "@tauri-apps/api/core": url("export const invoke = (...args) => globalThis.canvasTestInvoke(...args);"),
   "@tauri-apps/api/event": url("export const emit = async () => {}; export const emitTo = emit; export const listen = async () => () => {};"),
   "./canvasTypes": await compile("src/canvasTypes.ts"),
+  "./canvasThreads": await compile("src/canvasThreads.ts"),
   "./utils/latestFrameScheduler": await compile("src/utils/latestFrameScheduler.ts"),
   "./components/references/ReferenceLayer": url("export const ReferenceReadOnlyPreview = () => null;"),
   "./components/canvas/IntermediateDraftPane": url("export default () => null;"),
@@ -112,6 +114,13 @@ async function click(selector) {
 }
 async function select(id) { await click('[aria-label="ボードを切り替え"]'); await click(`.canvasBoardSelectButton[title="${id}"]`); }
 async function edit(text) {
+  if (!document.querySelector('[aria-label="カードの本文"]')) {
+    const card = document.querySelector(".canvasTextNode"); assert.ok(card);
+    await act(async () => {
+      card.dispatchEvent(new dom.window.MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+      await settle();
+    });
+  }
   const area = document.querySelector('[aria-label="カードの本文"]'); assert.ok(area);
   await act(async () => {
     Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value").set.call(area, text);
@@ -120,7 +129,8 @@ async function edit(text) {
   assert.equal(area.value, text);
 }
 const textAt = (scope, project, id) => docs.get(key(scope, project, id)).nodes[0].text;
-const shownText = () => document.querySelector('[aria-label="カードの本文"]')?.value;
+const shownText = () => document.querySelector('[aria-label="カードの本文"]')?.value
+  ?? document.querySelector(".canvasCardText")?.textContent;
 async function unmount() { await act(async () => { root.unmount(); await settle(); }); }
 
 await mount();

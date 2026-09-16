@@ -29,6 +29,12 @@ export type CanvasTextNode = {
   fontSource?: CanvasNodeFontSource;
   color?: string;
   thenOrigin?: CanvasNodeOriginRef;
+  /** Then固有: 近接ドロップで作るカードスレッドの親。 */
+  threadParentId?: string;
+  /** Then固有: 同じ親を持つカード内での順序。 */
+  threadOrder?: number;
+  /** Then固有: このカード以下のスレッドを折りたたむ。 */
+  threadCollapsed?: boolean;
 };
 
 export type CanvasGroupNode = {
@@ -216,6 +222,9 @@ export function createCanvasTextNode(
     fontSource: options.fontSource,
     color: options.color,
     thenOrigin: options.thenOrigin,
+    threadParentId: options.threadParentId,
+    threadOrder: options.threadOrder,
+    threadCollapsed: options.threadCollapsed,
   };
 }
 
@@ -357,15 +366,16 @@ function normalizeNode(value: unknown): CanvasNode | null {
   }
 
   if (node.type === "text") {
+    const textNode = node as Partial<CanvasTextNode>;
     const writingMode =
-      (node as Partial<CanvasTextNode>).writingMode === "vertical-rl" ||
-      (node as Partial<CanvasTextNode>).writingMode === "horizontal-tb"
-        ? (node as Partial<CanvasTextNode>).writingMode
+      textNode.writingMode === "vertical-rl" ||
+      textNode.writingMode === "horizontal-tb"
+        ? textNode.writingMode
         : undefined;
     const fontSource =
-      (node as Partial<CanvasTextNode>).fontSource === "editor" ||
-      (node as Partial<CanvasTextNode>).fontSource === "ui"
-        ? (node as Partial<CanvasTextNode>).fontSource
+      textNode.fontSource === "editor" ||
+      textNode.fontSource === "ui"
+        ? textNode.fontSource
         : undefined;
     return {
       id,
@@ -375,13 +385,18 @@ function normalizeNode(value: unknown): CanvasNode | null {
       width,
       height,
       text:
-        typeof (node as Partial<CanvasTextNode>).text === "string"
-          ? (node as Partial<CanvasTextNode>).text ?? ""
+        typeof textNode.text === "string"
+          ? textNode.text ?? ""
           : "",
       writingMode,
       fontSource,
       color,
       thenOrigin,
+      threadParentId:
+        typeof textNode.threadParentId === "string" ? textNode.threadParentId : undefined,
+      threadOrder: isFiniteNumber(textNode.threadOrder) ? textNode.threadOrder : undefined,
+      threadCollapsed:
+        typeof textNode.threadCollapsed === "boolean" ? textNode.threadCollapsed : undefined,
     };
   }
 
@@ -421,7 +436,26 @@ export function normalizeCanvasDocument(
   const nodes = Array.isArray(source.nodes)
     ? source.nodes.map(normalizeNode).filter((node): node is CanvasNode => Boolean(node))
     : [];
-  const nodeIds = new Set(nodes.map((node) => node.id));
+  const textNodes = new Map(
+    nodes
+      .filter((node): node is CanvasTextNode => node.type === "text")
+      .map((node) => [node.id, node] as const),
+  );
+  const sanitizedNodes = nodes.map((node) => {
+    if (node.type !== "text" || !node.threadParentId) return node;
+    const visited = new Set<string>([node.id]);
+    let parentId: string | undefined = node.threadParentId;
+    while (parentId) {
+      const parent = textNodes.get(parentId);
+      if (!parent || visited.has(parent.id)) {
+        return { ...node, threadParentId: undefined, threadOrder: undefined };
+      }
+      visited.add(parent.id);
+      parentId = parent.threadParentId;
+    }
+    return node;
+  });
+  const nodeIds = new Set(sanitizedNodes.map((node) => node.id));
   const edges = Array.isArray(source.edges)
     ? source.edges
         .map((edge) => normalizeEdge(edge, nodeIds))
@@ -431,7 +465,7 @@ export function normalizeCanvasDocument(
   const then = source.then && typeof source.then === "object" ? source.then : undefined;
   const now = Date.now();
   return {
-    nodes,
+    nodes: sanitizedNodes,
     edges,
     then: {
       version: 1,
