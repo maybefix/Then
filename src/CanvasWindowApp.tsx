@@ -54,6 +54,7 @@ import {
   detachNodeFromThread,
   findThreadDropTarget,
   hiddenThreadNodeIds,
+  THREAD_DROP_DISTANCE,
 } from "./canvasThreads";
 
 const CANVAS_WIDTH = 6400;
@@ -63,6 +64,8 @@ const LOCAL_STORAGE_PREFIX = "then.canvas-board";
 const HISTORY_LIMIT = 60;
 const MIN_ZOOM = 0.35;
 const MAX_ZOOM = 1.8;
+const WHEEL_ZOOM_SENSITIVITY = 0.0015;
+const MAX_WHEEL_DELTA = 240;
 
 type TrashedCanvasBoardSummary = {
   trashId: string;
@@ -95,6 +98,16 @@ const EDGE_CONNECTORS: Array<{ value: CanvasEdgeConnector; label: string; title:
   { value: "bidirectional", label: "双方向", title: "双方向の矢印" },
   { value: "dashed", label: "破線", title: "補助的なつながり" },
 ];
+
+const CARD_COLORS = [
+  { value: "", label: "標準" },
+  { value: "1", label: "赤" },
+  { value: "2", label: "橙" },
+  { value: "3", label: "黄" },
+  { value: "4", label: "緑" },
+  { value: "5", label: "青" },
+  { value: "6", label: "紫" },
+] as const;
 
 const SIDE_NORMALS: Record<CanvasEdgeSide, Point> = {
   top: { x: 0, y: -1 },
@@ -1044,6 +1057,8 @@ export default function CanvasWindowApp({
   const [targetThreadId, setTargetThreadId] = useState("idea-inbox");
   const [pan, setPan] = useState<Point>({ x: 180, y: 120 });
   const [zoom, setZoom] = useState(1);
+  const panRef = useRef(pan);
+  const zoomRef = useRef(zoom);
   const [status, setStatus] = useState("読み込み中");
   const [isBoardMenuOpen, setIsBoardMenuOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
@@ -1072,6 +1087,14 @@ export default function CanvasWindowApp({
   useEffect(() => {
     boardRef.current = board;
   }, [board]);
+
+  useEffect(() => {
+    panRef.current = pan;
+  }, [pan]);
+
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
 
   const rootPath = payload?.rootPath ?? null;
   useEffect(() => {
@@ -1106,9 +1129,21 @@ export default function CanvasWindowApp({
   );
   const threadChildCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    (board?.nodes ?? []).forEach((node) => {
-      if (!isTextNode(node) || !node.threadParentId) return;
-      counts.set(node.threadParentId, (counts.get(node.threadParentId) ?? 0) + 1);
+    const textById = new Map(
+      (board?.nodes ?? [])
+        .filter((node): node is CanvasTextNode => isTextNode(node))
+        .map((node) => [node.id, node] as const),
+    );
+    textById.forEach((node) => {
+      const visited = new Set<string>([node.id]);
+      let parentId = node.threadParentId;
+      while (parentId && !visited.has(parentId)) {
+        const parent = textById.get(parentId);
+        if (!parent) break;
+        counts.set(parent.id, (counts.get(parent.id) ?? 0) + 1);
+        visited.add(parent.id);
+        parentId = parent.threadParentId;
+      }
     });
     return counts;
   }, [board]);
@@ -1188,6 +1223,15 @@ export default function CanvasWindowApp({
       ? selectedTextNodesForStyle[0].fontSource ?? payload?.canvasDefaultFontSource ?? "ui"
       : null
     : null;
+  const selectedCardColor = selectedTextNodesForStyle.length
+    ? selectedTextNodesForStyle.every(
+        (node) => (node.color ?? "") === (selectedTextNodesForStyle[0].color ?? ""),
+      )
+      ? selectedTextNodesForStyle[0].color ?? ""
+      : null
+    : null;
+  const singleSelectedTextNode =
+    selectedNodes.length === 1 && isTextNode(selectedNodes[0]) ? selectedNodes[0] : null;
 
   const themeStyle = useMemo(
     () =>
@@ -1644,10 +1688,12 @@ export default function CanvasWindowApp({
         if (Math.hypot(point.clientX - drag.start.x, point.clientY - drag.start.y) >= 3) {
           drag.moved = true;
         }
-        setPan({
+        const nextPan = {
           x: drag.pan.x + point.clientX - drag.start.x,
           y: drag.pan.y + point.clientY - drag.start.y,
-        });
+        };
+        panRef.current = nextPan;
+        setPan(nextPan);
         return;
       }
       if (drag.kind === "marquee") {
@@ -1680,6 +1726,7 @@ export default function CanvasWindowApp({
               currentNodes,
               { ...primary, x: original.x + dx, y: original.y + dy },
               new Set(drag.nodeIds),
+              THREAD_DROP_DISTANCE / zoom,
             ),
           );
         } else {
@@ -1745,7 +1792,9 @@ export default function CanvasWindowApp({
           patchBoard((document) => attachNodeToThread(document, primary.id, dropTargetId));
           const parent = current.nodes.find((node) => node.id === dropTargetId);
           const label = parent && isTextNode(parent)
-            ? parent.text.trim().split(/\r?\n/, 1)[0].slice(0, 24) || "カード"
+            ? parent.title?.trim().slice(0, 24) ||
+              parent.text.trim().split(/\r?\n/, 1)[0].slice(0, 24) ||
+              "カード"
             : "カード";
           setStatus(`「${label}」のスレッドに追加しました`);
         } else if (primary.threadParentId) {
@@ -2043,6 +2092,7 @@ export default function CanvasWindowApp({
 
   const updateNode = (nodeId: string, patch: Partial<CanvasTextNode> | Partial<CanvasGroupNode>) => {
     if ("text" in patch) pushHistory(`text:${nodeId}`);
+    else if ("title" in patch) pushHistory(`title:${nodeId}`);
     else if ("label" in patch) pushHistory(`label:${nodeId}`);
     else pushHistory();
     patchBoard((current) => ({
@@ -2052,7 +2102,7 @@ export default function CanvasWindowApp({
   };
 
   const updateSelectedTextNodes = (
-    patch: { writingMode?: WritingMode; fontSource?: CanvasNodeFontSource },
+    patch: { writingMode?: WritingMode; fontSource?: CanvasNodeFontSource; color?: string },
   ) => {
     if (selectedTextNodesForStyle.length === 0) return;
     const targetIds = new Set(selectedTextNodesForStyle.map((node) => node.id));
@@ -2152,7 +2202,7 @@ export default function CanvasWindowApp({
       dragStateRef.current = {
         kind: "pan",
         start: { x: event.clientX, y: event.clientY },
-        pan,
+        pan: panRef.current,
       };
       return;
     }
@@ -2186,7 +2236,7 @@ export default function CanvasWindowApp({
       dragStateRef.current = {
         kind: "pan",
         start: { x: event.clientX, y: event.clientY },
-        pan,
+        pan: panRef.current,
         background: true,
       };
       return;
@@ -2214,29 +2264,37 @@ export default function CanvasWindowApp({
   /** ズーム値を変更しつつ、center（viewport 座標）直下のワールド位置を固定する。 */
   const zoomTo = (nextZoom: number, center?: Point) => {
     const clamped = clampZoom(nextZoom);
+    const currentZoom = zoomRef.current;
+    if (Math.abs(clamped - currentZoom) < 0.0001) return;
     const viewport = viewportRef.current;
     const anchor = center ?? {
       x: (viewport?.clientWidth ?? window.innerWidth) / 2,
       y: (viewport?.clientHeight ?? window.innerHeight) / 2,
     };
-    setPan((current) => ({
-      x: anchor.x - ((anchor.x - current.x) / zoom) * clamped,
-      y: anchor.y - ((anchor.y - current.y) / zoom) * clamped,
-    }));
+    const currentPan = panRef.current;
+    const nextPan = {
+      x: anchor.x - ((anchor.x - currentPan.x) / currentZoom) * clamped,
+      y: anchor.y - ((anchor.y - currentPan.y) / currentZoom) * clamped,
+    };
+    zoomRef.current = clamped;
+    panRef.current = nextPan;
+    setPan(nextPan);
     setZoom(clamped);
   };
 
   const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
-    if (!event.ctrlKey && !event.metaKey) {
-      setPan((current) => ({
-        x: current.x - event.deltaX,
-        y: current.y - event.deltaY,
-      }));
-      return;
-    }
     event.preventDefault();
     const rect = viewportRef.current?.getBoundingClientRect();
-    zoomTo(zoom + (event.deltaY > 0 ? -0.08 : 0.08), {
+    const modeScale = event.deltaMode === 1
+      ? 16
+      : event.deltaMode === 2
+        ? viewportRef.current?.clientHeight ?? window.innerHeight
+        : 1;
+    const rawDelta = (event.deltaY || event.deltaX) * modeScale;
+    if (rawDelta === 0) return;
+    const delta = Math.max(-MAX_WHEEL_DELTA, Math.min(MAX_WHEEL_DELTA, rawDelta));
+    const nextZoom = zoomRef.current * Math.exp(-delta * WHEEL_ZOOM_SENSITIVITY);
+    zoomTo(nextZoom, {
       x: event.clientX - (rect?.left ?? 0),
       y: event.clientY - (rect?.top ?? 0),
     });
@@ -2432,7 +2490,10 @@ export default function CanvasWindowApp({
   };
 
   const resetViewport = () => {
-    setPan({ x: 180, y: 120 });
+    const nextPan = { x: 180, y: 120 };
+    panRef.current = nextPan;
+    zoomRef.current = 1;
+    setPan(nextPan);
     setZoom(1);
   };
 
@@ -2452,11 +2513,14 @@ export default function CanvasWindowApp({
     const nextZoom = clampZoom(
       Math.min(viewport.clientWidth / (maxX - minX), viewport.clientHeight / (maxY - minY), 1),
     );
-    setZoom(nextZoom);
-    setPan({
+    const nextPan = {
       x: viewport.clientWidth / 2 - ((minX + maxX) / 2) * nextZoom,
       y: viewport.clientHeight / 2 - ((minY + maxY) / 2) * nextZoom,
-    });
+    };
+    zoomRef.current = nextZoom;
+    panRef.current = nextPan;
+    setZoom(nextZoom);
+    setPan(nextPan);
   };
 
   const sendSelectedToIdea = async () => {
@@ -2829,8 +2893,8 @@ export default function CanvasWindowApp({
                   <li>接続線: 接続線ツール (E) で元のカード、先のカードの順にクリック</li>
                   <li>範囲選択: Shift / Ctrl を押しながら余白をドラッグ</li>
                   <li>追加選択: Shift / Ctrl を押しながらクリック</li>
-                  <li>パン: 余白をドラッグ、Space + ドラッグ、中ボタン、ホイール</li>
-                  <li>ズーム: Ctrl + ホイール（カーソル位置を中心に拡縮）</li>
+                  <li>パン: 余白をドラッグ、Space + ドラッグ、中ボタン</li>
+                  <li>ズーム: ホイール（カーソル位置を中心に滑らかに拡縮）</li>
                   <li>取り消し: Ctrl+Z ／ やり直し: Ctrl+Y</li>
                   <li>選択中の操作: カード上部のツールバーから複製・接続・送信・削除</li>
                 </ul>
@@ -2979,8 +3043,14 @@ export default function CanvasWindowApp({
                 }`}
                 style={textNodeStyle(node)}
                 data-node-id={node.id}
+                data-color={node.color || undefined}
                 onPointerDown={(event) => handleNodePointerDown(node, event)}
                 onDoubleClick={(event) => handleTextNodeDoubleClick(node, event)}
+                onBlur={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                    setEditingNodeId((current) => current === node.id ? null : current);
+                  }
+                }}
               >
                 {node.thenOrigin && (
                   <button
@@ -3009,20 +3079,32 @@ export default function CanvasWindowApp({
                   </button>
                 )}
                 {editingNodeId === node.id ? (
-                  <textarea
-                    value={node.text}
-                    spellCheck={false}
-                    placeholder="アイデアを書く…"
-                    aria-label="カードの本文"
-                    onFocus={() => handleNodeFocus(node.id)}
-                    onBlur={() => setEditingNodeId((current) => current === node.id ? null : current)}
-                    onChange={(event) => updateNode(node.id, { text: event.target.value })}
-                    onWheel={(event) => handleTextNodeWheel(node, event)}
-                  />
+                  <>
+                    <input
+                      className="canvasCardTitleInput"
+                      value={node.title ?? ""}
+                      placeholder="タイトル…"
+                      aria-label="カードのタイトル"
+                      onFocus={() => handleNodeFocus(node.id)}
+                      onChange={(event) => updateNode(node.id, { title: event.target.value })}
+                    />
+                    <textarea
+                      value={node.text}
+                      spellCheck={false}
+                      placeholder="アイデアを書く…"
+                      aria-label="カードの本文"
+                      onFocus={() => handleNodeFocus(node.id)}
+                      onChange={(event) => updateNode(node.id, { text: event.target.value })}
+                      onWheel={(event) => handleTextNodeWheel(node, event)}
+                    />
+                  </>
                 ) : (
-                  <div className={`canvasCardText ${node.text ? "" : "isPlaceholder"}`}>
-                    {node.text || "アイデアを書く…"}
-                  </div>
+                  <>
+                    {node.title?.trim() && <strong className="canvasCardTitle">{node.title}</strong>}
+                    <div className={`canvasCardText ${node.text ? "" : "isPlaceholder"}`}>
+                      {node.text || "アイデアを書く…"}
+                    </div>
+                  </>
                 )}
                 <span
                   className="canvasResizeHandle"
@@ -3126,6 +3208,41 @@ export default function CanvasWindowApp({
                       <div className="canvasStylePopover" role="dialog" aria-label="表示設定">
                         <h2>表示設定</h2>
                         <p>{selectedTextNodesForStyle.length}枚のカードに適用</p>
+                        {singleSelectedTextNode && (
+                          <section>
+                            <span>タイトル</span>
+                            <input
+                              className="canvasStyleTitleInput"
+                              value={singleSelectedTextNode.title ?? ""}
+                              placeholder="タイトルを追加"
+                              aria-label="選択カードのタイトル"
+                              onChange={(event) =>
+                                updateNode(singleSelectedTextNode.id, { title: event.target.value })
+                              }
+                            />
+                          </section>
+                        )}
+                        <section>
+                          <span>カード色</span>
+                          <div className="canvasColorChoices">
+                            {CARD_COLORS.map((color) => (
+                              <button
+                                key={color.value || "default"}
+                                type="button"
+                                className={`canvasColorChoice ${
+                                  selectedCardColor === color.value ? "isActive" : ""
+                                }`}
+                                title={color.label}
+                                aria-label={`カード色: ${color.label}`}
+                                onClick={() =>
+                                  updateSelectedTextNodes({ color: color.value || undefined })
+                                }
+                              >
+                                <i data-color={color.value || undefined} />
+                              </button>
+                            ))}
+                          </div>
+                        </section>
                         <section>
                           <span>書字方向</span>
                           <div>
@@ -3262,7 +3379,7 @@ export default function CanvasWindowApp({
               <CanvasGlyph name="redo" />
             </button>
             <span className="canvasFloatingBarDivider" aria-hidden="true" />
-            <button type="button" aria-label="縮小" onClick={() => zoomTo(zoom - 0.1)}>
+            <button type="button" aria-label="縮小" onClick={() => zoomTo(zoomRef.current - 0.1)}>
               -
             </button>
             <button
@@ -3273,7 +3390,7 @@ export default function CanvasWindowApp({
             >
               {Math.round(zoom * 100)}%
             </button>
-            <button type="button" aria-label="拡大" onClick={() => zoomTo(zoom + 0.1)}>
+            <button type="button" aria-label="拡大" onClick={() => zoomTo(zoomRef.current + 0.1)}>
               +
             </button>
           </div>

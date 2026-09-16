@@ -71,6 +71,7 @@ export function findThreadDropTarget(
   nodes: CanvasNode[],
   movingNode: CanvasTextNode,
   movingIds: Set<string>,
+  maxDistance = THREAD_DROP_DISTANCE,
 ): string | null {
   const descendants = collectThreadDescendantIds(nodes, movingNode.id);
   const hidden = hiddenThreadNodeIds(nodes);
@@ -81,7 +82,7 @@ export function findThreadDropTarget(
         !movingIds.has(node.id) &&
         !descendants.has(node.id) &&
         !hidden.has(node.id) &&
-        rectGap(movingNode, node) <= THREAD_DROP_DISTANCE,
+        rectGap(movingNode, node) <= maxDistance,
     )
     .map((node) => ({
       node,
@@ -143,6 +144,9 @@ export function attachNodeToThread(
           threadParentId: parent.id,
           threadOrder: nextOrder,
         };
+      }
+      if (item.id === parent.id && isTextNode(item) && item.threadCollapsed) {
+        return { ...item, threadCollapsed: false };
       }
       return descendants.has(item.id)
         ? { ...item, x: item.x + dx, y: item.y + dy }

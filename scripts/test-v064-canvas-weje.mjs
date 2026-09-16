@@ -33,13 +33,15 @@ const document = (nodes) => ({ nodes, edges: [] });
 
 const normalized = canvasTypes.normalizeCanvasDocument(
   document([
-    node("parent", 0, 0, { threadCollapsed: true }),
+    node("parent", 0, 0, { title: "親カード", color: "4", threadCollapsed: true }),
     node("child", 30, 120, { threadParentId: "parent", threadOrder: 1 }),
     node("orphan", 400, 0, { threadParentId: "missing", threadOrder: 2 }),
   ]),
 );
 assert.equal(normalized.nodes[1].threadParentId, "parent");
 assert.equal(normalized.nodes[2].threadParentId, undefined);
+assert.equal(normalized.nodes[0].title, "親カード");
+assert.equal(normalized.nodes[0].color, "4");
 assert.deepEqual([...threads.hiddenThreadNodeIds(normalized.nodes)], ["child"]);
 
 const cyclic = canvasTypes.normalizeCanvasDocument(
@@ -52,7 +54,7 @@ assert.equal(cyclic.nodes[0].threadParentId, undefined);
 assert.equal(cyclic.nodes[1].threadParentId, undefined);
 
 const tree = document([
-  node("root", 0, 0),
+  node("root", 0, 0, { threadCollapsed: true }),
   node("moving", 500, 500),
   node("leaf", 520, 620, { threadParentId: "moving" }),
 ]);
@@ -60,6 +62,7 @@ const attached = threads.attachNodeToThread(tree, "moving", "root");
 const attachedMoving = attached.nodes.find((item) => item.id === "moving");
 const attachedLeaf = attached.nodes.find((item) => item.id === "leaf");
 assert.equal(attachedMoving.threadParentId, "root");
+assert.equal(attached.nodes.find((item) => item.id === "root").threadCollapsed, false);
 assert.deepEqual(
   [attachedMoving.x, attachedMoving.y],
   [threads.THREAD_INDENT, 100 + threads.THREAD_GAP],
@@ -89,6 +92,11 @@ const far = node("far", 1000, 0);
 assert.equal(
   threads.findThreadDropTarget([near, far], node("moving", 210, 0), new Set(["moving"])),
   "near",
+);
+assert.equal(
+  threads.findThreadDropTarget([near], node("moving", 0, 0), new Set(["moving"]), 20),
+  null,
+  "the caller can keep proximity constant in screen pixels across zoom levels",
 );
 const collapsedNodes = [
   node("parent", -1000, 0, { threadCollapsed: true }),

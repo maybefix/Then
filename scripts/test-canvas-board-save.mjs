@@ -128,16 +128,50 @@ async function edit(text) {
   });
   assert.equal(area.value, text);
 }
+async function setTitle(title) {
+  const input = document.querySelector('[aria-label="カードのタイトル"]'); assert.ok(input);
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value").set.call(input, title);
+    input.dispatchEvent(new dom.window.Event("input", { bubbles: true })); await settle();
+  });
+  assert.equal(input.value, title);
+}
 const textAt = (scope, project, id) => docs.get(key(scope, project, id)).nodes[0].text;
+const titleAt = (scope, project, id) => docs.get(key(scope, project, id)).nodes[0].title;
+const colorAt = (scope, project, id) => docs.get(key(scope, project, id)).nodes[0].color;
 const shownText = () => document.querySelector('[aria-label="カードの本文"]')?.value
   ?? document.querySelector(".canvasCardText")?.textContent;
 async function unmount() { await act(async () => { root.unmount(); await settle(); }); }
 
 await mount();
-await edit("A edited"); await select("B"); await unmount();
+const viewport = document.querySelector(".canvasViewport"); assert.ok(viewport);
+const world = document.querySelector(".canvasWorld"); assert.ok(world);
+const transformBeforeWheel = world.style.transform;
+await act(async () => {
+  for (let index = 0; index < 2; index += 1) {
+    viewport.dispatchEvent(new dom.window.WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 420,
+      clientY: 280,
+      deltaY: -120,
+    }));
+  }
+  await settle();
+});
+assert.notEqual(world.style.transform, transformBeforeWheel);
+assert.ok(Number.parseInt(document.querySelector(".canvasZoomValue").textContent, 10) > 130);
+console.log("PASS navigation: plain wheel zooms smoothly around the pointer");
+await edit("A edited");
+await setTitle("導入");
+await click('[aria-label="表示設定"]');
+await click('[aria-label="カード色: 緑"]');
+await select("B"); await unmount();
 assert.equal(textAt("project", "one", "a"), "A edited");
+assert.equal(titleAt("project", "one", "a"), "導入");
+assert.equal(colorAt("project", "one", "a"), "4");
 assert.equal(textAt("project", "one", "b"), "B");
-console.log("PASS regression: edit A, switch to B within debounce, unmount preserves both boards");
+console.log("PASS regression: title, color, and body survive an immediate board switch");
 
 await mount(); await edit("A newest");
 writeGate = deferred();

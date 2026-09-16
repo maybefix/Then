@@ -9297,7 +9297,7 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
 
 .canvasStylePopover {
   display: grid;
-  width: 240px;
+  width: 260px;
   gap: 10px;
 }
 
@@ -9406,6 +9406,60 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   gap: 6px;
 }
 
+.canvasStyleTitleInput {
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: 5px;
+  background: var(--canvas-toolbar-control);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+  padding: 0 9px;
+}
+
+.canvasStyleTitleInput:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--canvas-focus-ring);
+}
+
+.canvasStylePopover section > .canvasColorChoices {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.canvasStylePopover .canvasColorChoice {
+  display: grid;
+  width: 100%;
+  height: 30px;
+  place-items: center;
+  padding: 0;
+}
+
+.canvasStylePopover .canvasColorChoice i {
+  width: 15px;
+  height: 15px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 80%, transparent);
+  border-radius: 50%;
+  background: var(--canvas-card-color, var(--canvas-node-bg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, white 14%, transparent);
+}
+
+.canvasStylePopover .canvasColorChoice i:not([data-color]) {
+  background:
+    linear-gradient(135deg, transparent 44%, var(--text-secondary) 46% 54%, transparent 56%),
+    var(--canvas-node-bg);
+}
+
+.canvasStylePopover .canvasColorChoice.isActive {
+  border-color: var(--accent);
+  background: var(--canvas-toolbar-control-hover);
+  box-shadow: 0 0 0 2px var(--canvas-focus-ring);
+  color: var(--text-primary);
+}
+
 .canvasStylePopover button {
   height: 32px;
   border: 1px solid var(--canvas-toolbar-border);
@@ -9486,6 +9540,10 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   cursor: grab;
 }
 
+.canvasViewport-select:active {
+  cursor: grabbing;
+}
+
 .canvasCreationPalette {
   position: absolute;
   z-index: 22;
@@ -9564,12 +9622,89 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   color: var(--canvas-node-text);
   box-shadow: 0 12px 30px var(--canvas-shadow);
   cursor: move;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.canvasNode:active {
+  cursor: grabbing;
 }
 
 .canvasTextNode {
   flex-direction: column;
   padding: 12px;
   background: var(--canvas-node-bg);
+}
+
+.canvasTextNode[data-color] {
+  border-color: color-mix(in srgb, var(--canvas-card-color) 54%, var(--border-strong));
+  background: color-mix(in srgb, var(--canvas-card-color) 16%, var(--canvas-node-bg));
+}
+
+.canvasTextNode[data-color="1"],
+.canvasColorChoice i[data-color="1"] {
+  --canvas-card-color: #e06c75;
+}
+
+.canvasTextNode[data-color="2"],
+.canvasColorChoice i[data-color="2"] {
+  --canvas-card-color: #dd8b46;
+}
+
+.canvasTextNode[data-color="3"],
+.canvasColorChoice i[data-color="3"] {
+  --canvas-card-color: #d6b84c;
+}
+
+.canvasTextNode[data-color="4"],
+.canvasColorChoice i[data-color="4"] {
+  --canvas-card-color: #63a76f;
+}
+
+.canvasTextNode[data-color="5"],
+.canvasColorChoice i[data-color="5"] {
+  --canvas-card-color: #548dc7;
+}
+
+.canvasTextNode[data-color="6"],
+.canvasColorChoice i[data-color="6"] {
+  --canvas-card-color: #9a72c7;
+}
+
+.canvasCardTitle,
+.canvasCardTitleInput {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  flex: 0 0 auto;
+  color: var(--canvas-node-text);
+  font-family: var(--canvas-node-font-family, var(--ui-font-family));
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.canvasCardTitle {
+  margin: 0 0 8px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.canvasCardTitleInput {
+  height: 30px;
+  margin: 0 0 8px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-strong) 68%, transparent);
+  background: transparent;
+  outline: none;
+  padding: 0 0 6px;
+}
+
+.canvasCardTitleInput:focus {
+  border-bottom-color: var(--accent);
 }
 
 .canvasTextNode textarea,
@@ -9616,6 +9751,10 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
 }
 
 .canvasTextNode.isEditing {
+  cursor: default;
+}
+
+.canvasTextNode.isEditing:active {
   cursor: default;
 }
 
@@ -9797,6 +9936,10 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   box-shadow:
     0 0 0 3px var(--canvas-focus-ring),
     0 14px 34px var(--canvas-shadow);
+}
+
+.canvasTextNode.isSelected[data-color] {
+  background: color-mix(in srgb, var(--canvas-card-color) 20%, var(--canvas-node-bg-active));
 }
 
 .canvasNode.isEdgeSource {

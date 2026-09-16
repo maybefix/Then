@@ -24,6 +24,7 @@ export type CanvasTextNode = {
   y: number;
   width: number;
   height: number;
+  title?: string;
   text: string;
   writingMode?: WritingMode;
   fontSource?: CanvasNodeFontSource;
@@ -217,6 +218,7 @@ export function createCanvasTextNode(
     y: options.y ?? 120,
     width: options.width ?? 260,
     height: options.height ?? 150,
+    title: options.title,
     text,
     writingMode: options.writingMode,
     fontSource: options.fontSource,
@@ -384,6 +386,7 @@ function normalizeNode(value: unknown): CanvasNode | null {
       y,
       width,
       height,
+      title: typeof textNode.title === "string" ? textNode.title : undefined,
       text:
         typeof textNode.text === "string"
           ? textNode.text ?? ""
