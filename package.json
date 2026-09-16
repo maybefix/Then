@@ -1,9 +1,11 @@
 {
   "name": "then",
   "private": true,
-  "version": "0.6.2",
+  "version": "0.6.3",
   "type": "module",
   "scripts": {
+    "test:canvas-save": "node scripts/test-canvas-board-save.mjs",
+    "test:v063-draft": "node scripts/test-v063-intermediate-draft.mjs",
     "dev": "vite",
     "dev:local": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "test:markdown-tables": "node scripts/test-markdown-tables.mjs",

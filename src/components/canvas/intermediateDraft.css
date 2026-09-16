@@ -1,0 +1,96 @@
+.intermediateDraftPane {
+  display: flex; width: 100%; min-width: 0; height: 100%; min-height: 0; flex: 1 1 auto;
+  flex-direction: column; gap: 10px; padding: 12px 14px 16px; overflow: hidden;
+  color: var(--text-primary); font-size: 12px;
+}
+.intermediateDraftPane button, .intermediateDraftPane select {
+  min-width: 0; height: 30px; border: 0.5px solid var(--border-subtle); border-radius: 6px;
+  background: var(--bg-panel-strong); color: var(--text-primary); font: inherit;
+}
+.intermediateDraftPane button { cursor: pointer; transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease; }
+.intermediateDraftPane button:hover:not(:disabled) { border-color: var(--border-strong, var(--border-subtle)); background: var(--bg-hover, var(--bg-tertiary)); }
+.intermediateDraftPane button:disabled { cursor: default; opacity: 0.38; }
+.intermediateDraftPane button:focus-visible, .intermediateDraftPane select:focus-visible, .draftTextEditor:focus-visible {
+  outline: none; border-color: var(--accent-border, var(--accent)); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.draftBoardPicker, .draftVersionActions, .draftTextActions { display: flex; align-items: center; gap: 8px; }
+.draftBoardPicker select, .draftVersionActions select { width: 100px; flex: 1 1 auto; padding: 0 28px 0 9px; }
+.intermediateDraftPane .draftUtilityButton {
+  display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 6px;
+  padding: 0 10px; background: transparent; white-space: nowrap;
+}
+.draftUtilityButton .draftIcon { transform: translateY(1px); }
+.draftIcon {
+  width: 15px; height: 15px; flex: 0 0 auto; stroke: currentColor; stroke-width: 1.35;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.draftTabs {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 2px;
+  border: 0.5px solid var(--border-subtle); border-radius: 8px; background: var(--bg-panel-strong);
+}
+.intermediateDraftPane .draftTabs button { height: 27px; border: 0; border-radius: 5px; background: transparent; color: var(--text-secondary); }
+.intermediateDraftPane .draftTabs button[aria-selected="true"] {
+  background: var(--bg-panel); color: var(--text-primary); box-shadow: 0 1px 3px rgba(20, 25, 32, 0.12); font-weight: 650;
+}
+.draftHint { margin: 0; padding: 10px 2px; color: var(--text-secondary); font-size: 11px; line-height: 1.65; }
+.draftOrderList {
+  min-height: 0; flex: 1 1 auto; margin: 0; padding: 0 2px 4px; overflow: auto;
+  overscroll-behavior: contain; list-style: none;
+}
+.draftOrderList li {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 9px; padding: 10px 7px;
+  border: 0.5px solid var(--border-subtle); border-radius: 10px; background: var(--bg-secondary, var(--bg-panel));
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.draftOrderList li:hover { background: var(--bg-panel-strong); }
+.draftOrderList li.isSelected { border-color: var(--accent-border, var(--accent)); background: color-mix(in srgb, var(--accent-soft) 68%, var(--bg-panel)); }
+.draftOrderList li.isExcluded { background: transparent; }
+.draftOrderList li.isExcluded .draftOrderNumber, .draftOrderList li.isExcluded .draftExcerpt { color: var(--text-muted); opacity: 0.55; }
+.draftOrderNumber { min-width: 14px; color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; text-align: center; }
+.intermediateDraftPane .draftDragHandle {
+  display: grid; width: 22px; height: 28px; flex: 0 0 22px; place-items: center; padding: 0;
+  border: 0; background: transparent; color: var(--text-faint, var(--text-muted)); cursor: grab;
+}
+.intermediateDraftPane .draftExcerpt {
+  display: -webkit-box; height: auto; flex: 1 1 auto; padding: 1px 2px; overflow: hidden;
+  border: 0; background: transparent; color: var(--text-primary); line-height: 1.65; text-align: left;
+  overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+}
+.intermediateDraftPane .draftExcerpt:hover:not(:disabled) { border-color: transparent; background: transparent; }
+.intermediateDraftPane .draftExcludeButton {
+  display: grid; width: 24px; height: 24px; flex: 0 0 24px; place-items: center; padding: 0;
+  border: 0; background: transparent; color: var(--text-muted);
+}
+.intermediateDraftPane .draftExcludeButton:hover:not(:disabled) { border-color: transparent; background: var(--bg-hover, var(--bg-tertiary)); color: var(--text-primary); }
+.draftOrderList li.isExcluded .draftExcludeButton { color: var(--accent-strong); }
+.draftMoveActions { display: flex; flex: 0 0 22px; flex-direction: column; gap: 2px; }
+.intermediateDraftPane .draftMoveActions button {
+  display: grid; width: 22px; height: 22px; place-items: center; padding: 0; border: 0;
+  background: transparent; color: var(--text-secondary);
+}
+.draftMoveActions .draftIcon { width: 13px; height: 13px; }
+.draftGenerateActions { display: grid; }
+.intermediateDraftPane .draftPrimary {
+  height: 34px; border: 0; border-radius: 7px; background: var(--accent); color: var(--on-accent, #fff); font-weight: 650;
+}
+.intermediateDraftPane .draftPrimary:hover:not(:disabled) { border-color: transparent; background: var(--accent-strong); }
+.draftTextActions { min-height: 30px; justify-content: flex-end; color: var(--text-secondary); font-size: 11px; }
+.draftTextActions span { margin-right: auto; color: var(--text-muted); }
+.intermediateDraftPane .draftTextActions button {
+  display: inline-flex; height: 28px; align-items: center; gap: 5px; padding: 0 9px; background: transparent;
+}
+.draftTextActions .draftIcon { width: 14px; height: 14px; }
+.draftTextEditor {
+  width: 100%; min-height: 80px; flex: 1 1 auto; resize: none; padding: 12px 13px; overflow: auto;
+  overscroll-behavior: contain; border: 0.5px solid var(--border-subtle); border-radius: 10px;
+  background: var(--bg-secondary, var(--bg-panel)); color: var(--text-primary); font-family: var(--editor-font-family);
+  font-size: 13px; line-height: 1.78; writing-mode: horizontal-tb;
+}
+.draftFooter { display: grid; gap: 5px; color: var(--text-muted); font-size: 10px; overflow-wrap: anywhere; }
+.draftError { max-height: 130px; overflow: auto; color: var(--danger); font-size: 11px; }
+.draftError button { margin: 5px 5px 0 0; }
+.draftEmpty { color: var(--text-muted); }
+.draftPaneHost { display: flex; width: 100%; min-width: 0; height: 100%; min-height: 0; flex: 1 1 auto; }
+.draftPaneHost[hidden] { display: none; }
+.canvasWorkspace.hasCanvasDraftPanel { grid-template-columns: minmax(0, 1fr) 288px; }
+.canvasDraftSidebar { min-width: 0; min-height: 0; border-left: 1px solid var(--border-subtle); background: var(--bg-panel); }

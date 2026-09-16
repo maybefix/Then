@@ -44,6 +44,10 @@ import {
 } from "./canvasTypes";
 import type { CanvasNodeFontSource, ReferenceFileInfo, WritingMode } from "./types";
 import { ReferenceReadOnlyPreview } from "./components/references/ReferenceLayer";
+import IntermediateDraftPane from "./components/canvas/IntermediateDraftPane";
+import { draftBoardKey, type DraftCanvasContext, type DraftHistory } from "./intermediateDraft";
+import { prepareDraftBoardTrash } from "./intermediateDraftStore";
+import { CanvasBoardSaveQueue, canvasBoardTargetKey, type CanvasBoardTarget } from "./canvasBoardSaveQueue";
 
 const CANVAS_WIDTH = 6400;
 const CANVAS_HEIGHT = 4200;
@@ -67,6 +71,7 @@ type LocalTrashedCanvasBoard = {
   boardId: string;
   board: JsonCanvasDocument;
   deletedAt: number;
+  draft?: DraftHistory;
 };
 
 type CanvasTool = "select" | "text" | "group" | "edge";
@@ -289,6 +294,10 @@ async function saveBoard(
   writeLocalBoards(scope, rootPath, boards);
 }
 
+// Mode changes can remount Canvas while a native save is still in flight.
+// The next instance must wait for the same queue before loading its board.
+const canvasBoardSaveQueue = new CanvasBoardSaveQueue(saveBoard);
+
 async function reorderBoards(
   scope: CanvasScope,
   rootPath: string | null,
@@ -302,6 +311,7 @@ async function reorderBoards(
 }
 
 async function trashBoard(scope: CanvasScope, rootPath: string | null, boardId: string) {
+  await prepareDraftBoardTrash({ scope, rootPath, boardId });
   if (isTauriRuntime()) {
     await invoke("trash_canvas_board", { scope, rootPath, boardId });
     return;
@@ -312,10 +322,13 @@ async function trashBoard(scope: CanvasScope, rootPath: string | null, boardId: 
   const deletedAt = Date.now();
   const trashId = `${deletedAt}--${boardId}`;
   const trash = readLocalBoardTrash(scope, rootPath);
-  trash[trashId] = { boardId, board, deletedAt };
+  const draftKey = `then.draft.${draftBoardKey({ scope, rootPath, boardId })}`;
+  const draft = JSON.parse(localStorage.getItem(draftKey) ?? "null") as DraftHistory | null;
+  trash[trashId] = { boardId, board, deletedAt, draft: draft ?? undefined };
   writeLocalBoardTrash(scope, rootPath, trash);
   delete boards[boardId];
   writeLocalBoards(scope, rootPath, boards);
+  localStorage.removeItem(draftKey);
   writeLocalBoardOrder(
     scope,
     rootPath,
@@ -367,6 +380,10 @@ async function restoreTrashedBoard(
     suffix += 1;
   }
   boards[boardId] = item.board;
+  if (item.draft) {
+    localStorage.setItem(`then.draft.${draftBoardKey({ scope, rootPath, boardId })}`,
+      JSON.stringify({ ...item.draft, boardId }));
+  }
   delete trash[trashId];
   writeLocalBoards(scope, rootPath, boards);
   writeLocalBoardTrash(scope, rootPath, trash);
@@ -949,6 +966,10 @@ type CanvasWindowAppProps = {
   liveIdeaThreads?: CanvasIdeaThreadOption[];
   /** embedded 時に資料メニューへ反映する最新の資料一覧。 */
   liveReferenceFiles?: ReferenceFileInfo[];
+  onDraftCanvasChange?: (context: DraftCanvasContext | null) => void;
+  draftSelectRequest?: { id: string; nonce: number } | null;
+  onDraftSelectionConsumed?: (nonce: number) => void;
+  onOpenDraft?: () => void;
 };
 
 export default function CanvasWindowApp({
@@ -956,14 +977,21 @@ export default function CanvasWindowApp({
   embeddedPayload = null,
   liveIdeaThreads,
   liveReferenceFiles,
+  onDraftCanvasChange,
+  draftSelectRequest,
+  onDraftSelectionConsumed,
+  onOpenDraft,
 }: CanvasWindowAppProps = {}) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const saveTimerRef = useRef<number | null>(null);
-  const activeSaveRef = useRef<Promise<void> | null>(null);
+  const boardSaveQueue = canvasBoardSaveQueue;
+  const loadedBoardTargetRef = useRef<CanvasBoardTarget | null>(null);
+  const boardLoadGenerationRef = useRef(0);
   const boardOrderSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const suppressNextSaveRef = useRef(false);
   const boardRef = useRef<JsonCanvasDocument | null>(null);
+  const draftCanvasReadyRef = useRef(false);
   const historyRef = useRef<{ undo: JsonCanvasDocument[]; redo: JsonCanvasDocument[] }>({
     undo: [],
     redo: [],
@@ -972,12 +1000,6 @@ export default function CanvasWindowApp({
   const editSessionRef = useRef<string | null>(null);
   const marqueePointRef = useRef<Point | null>(null);
   const spaceDownRef = useRef(false);
-
-  const pendingSaveRef = useRef<{
-    scope: CanvasScope;
-    rootPath: string | null;
-    boardId: string;
-  } | null>(null);
 
   const [payload, setPayload] = useState<CanvasWindowPayload | null>(null);
   const [scope, setScope] = useState<CanvasScope>("global");
@@ -1013,6 +1035,7 @@ export default function CanvasWindowApp({
   const [isTrashLoading, setIsTrashLoading] = useState(false);
   // 別ウィンドウ表示のときだけ使う Idea・資料サイドパネル。
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(true);
+  const [isDraftPanelOpen, setIsDraftPanelOpen] = useState(false);
   /**
    * メイン画面から届く Idea・資料の最新一覧（別ウィンドウ用）。payload と違い
    * ボードの再読込を伴わないため、断片の追加・編集が開いたままのウィンドウにも
@@ -1025,6 +1048,24 @@ export default function CanvasWindowApp({
   }, [board]);
 
   const rootPath = payload?.rootPath ?? null;
+  useEffect(() => {
+    onDraftCanvasChange?.(board && activeBoardId && draftCanvasReadyRef.current && status !== "読み込み中"
+      ? { boardId: activeBoardId, scope, rootPath, board, selectedIds: [...selectedIds] } : null);
+  }, [board, activeBoardId, scope, rootPath, selectedIds, status, onDraftCanvasChange]);
+  const selectDraftNode = useCallback((id: string) => {
+    const node = boardRef.current?.nodes.find((item) => item.id === id);
+    if (!node) return;
+    setSelectedIds(new Set([id]));
+    setSelectedEdgeId(null);
+    const viewport = viewportRef.current;
+    if (viewport) setPan({ x: viewport.clientWidth / 2 - (node.x + node.width / 2) * zoom,
+      y: viewport.clientHeight / 2 - (node.y + node.height / 2) * zoom });
+  }, [zoom]);
+  useEffect(() => {
+    if (!draftSelectRequest) return;
+    selectDraftNode(draftSelectRequest.id);
+    onDraftSelectionConsumed?.(draftSelectRequest.nonce);
+  }, [draftSelectRequest, selectDraftNode, onDraftSelectionConsumed]);
   const selectedNodes = useMemo(
     () => board?.nodes.filter((node) => selectedIds.has(node.id)) ?? [],
     [board, selectedIds],
@@ -1123,6 +1164,7 @@ export default function CanvasWindowApp({
   const defaultCanvasFontSource = payload?.canvasDefaultFontSource ?? "ui";
 
   const patchBoard = useCallback((updater: (current: JsonCanvasDocument) => JsonCanvasDocument) => {
+    if (!draftCanvasReadyRef.current) return;
     setBoard((current) => {
       if (!current) return current;
       const next = updater(current);
@@ -1161,6 +1203,7 @@ export default function CanvasWindowApp({
   }, []);
 
   const undoBoard = useCallback(() => {
+    if (!draftCanvasReadyRef.current) return;
     const stack = historyRef.current;
     const previous = stack.undo.pop();
     const current = boardRef.current;
@@ -1177,6 +1220,7 @@ export default function CanvasWindowApp({
   }, []);
 
   const redoBoard = useCallback(() => {
+    if (!draftCanvasReadyRef.current) return;
     const stack = historyRef.current;
     const next = stack.redo.pop();
     const current = boardRef.current;
@@ -1388,14 +1432,26 @@ export default function CanvasWindowApp({
   const loadBoardList = useCallback(
     async (nextScope: CanvasScope, preferredBoardId?: string, selectNodeId?: string) => {
       if (!payload) return;
+      const generation = ++boardLoadGenerationRef.current;
+      draftCanvasReadyRef.current = false;
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
       setStatus("読み込み中");
       setEdgeFromId(null);
       setEdgeCursor(null);
       setSelectedEdgeId(null);
       try {
+        await boardSaveQueue.flush();
+        if (generation !== boardLoadGenerationRef.current) return;
         const summaries = await listBoards(nextScope, payload.rootPath);
-        setBoards(summaries);
+        if (generation !== boardLoadGenerationRef.current) return;
         if (summaries.length === 0) {
+          setBoards(summaries);
+          setScope(nextScope);
+          loadedBoardTargetRef.current = null;
+          boardRef.current = null;
           setActiveBoardId(null);
           suppressNextSaveRef.current = true;
           setBoard(null);
@@ -1406,18 +1462,25 @@ export default function CanvasWindowApp({
         }
         const nextBoard =
           summaries.find((item) => item.id === preferredBoardId) ?? summaries[0];
-        setActiveBoardId(nextBoard.id);
         const rawBoard = await loadBoard(nextScope, payload.rootPath, nextBoard.id);
+        if (generation !== boardLoadGenerationRef.current) return;
+        const document = normalizeCanvasDocument(rawBoard, nextBoard.name, nextScope);
+        loadedBoardTargetRef.current = { scope: nextScope, rootPath: payload.rootPath, boardId: nextBoard.id };
+        boardRef.current = document;
+        setBoards(summaries);
+        setScope(nextScope);
+        setActiveBoardId(nextBoard.id);
         suppressNextSaveRef.current = true;
-        setBoard(normalizeCanvasDocument(rawBoard, nextBoard.name, nextScope));
+        draftCanvasReadyRef.current = true;
+        setBoard(document);
         setSelectedIds(selectNodeId ? new Set([selectNodeId]) : new Set());
         clearHistory();
         setStatus("保存済み");
       } catch (error) {
-        setStatus(String(error));
+        if (generation === boardLoadGenerationRef.current) setStatus(String(error));
       }
     },
-    [payload, clearHistory],
+    [payload, clearHistory, boardSaveQueue],
   );
 
   useEffect(() => {
@@ -1447,7 +1510,6 @@ export default function CanvasWindowApp({
 
   useEffect(() => {
     if (!payload) return;
-    setScope(payload.scope);
     setTargetThreadId(
       payload.ideaThreads.find((thread) => thread.kind === "inbox")?.id ??
         payload.ideaThreads[0]?.id ??
@@ -1484,27 +1546,30 @@ export default function CanvasWindowApp({
 
   useEffect(() => {
     if (!board || !activeBoardId || !payload) return;
+    const target = loadedBoardTargetRef.current;
+    if (!draftCanvasReadyRef.current || !target || canvasBoardTargetKey(target) !==
+      canvasBoardTargetKey({ scope, rootPath: payload.rootPath, boardId: activeBoardId })) return;
     if (suppressNextSaveRef.current) {
       suppressNextSaveRef.current = false;
       return;
     }
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     setStatus("保存中");
-    pendingSaveRef.current = { scope, rootPath: payload.rootPath, boardId: activeBoardId };
+    boardSaveQueue.enqueue(target, board);
+    const generation = boardLoadGenerationRef.current;
     saveTimerRef.current = window.setTimeout(() => {
-      const saveRequest = saveBoard(scope, payload.rootPath, activeBoardId, board)
+      saveTimerRef.current = null;
+      void boardSaveQueue.flush()
         .then(async () => {
-          pendingSaveRef.current = null;
-          const summaries = await listBoards(scope, payload.rootPath);
+          if (generation !== boardLoadGenerationRef.current) return;
+          const summaries = await listBoards(target.scope, target.rootPath);
+          if (generation !== boardLoadGenerationRef.current) return;
           setBoards(summaries);
           setStatus(`保存済み ${formatSaveTime(Date.now())}`);
         })
-        .catch((error) => setStatus(String(error)))
-        .finally(() => {
-          if (activeSaveRef.current === saveRequest) activeSaveRef.current = null;
-          saveTimerRef.current = null;
+        .catch((error) => {
+          if (generation === boardLoadGenerationRef.current) setStatus(String(error));
         });
-      activeSaveRef.current = saveRequest;
     }, 500);
 
     return () => {
@@ -1513,18 +1578,16 @@ export default function CanvasWindowApp({
         saveTimerRef.current = null;
       }
     };
-  }, [activeBoardId, board, payload, scope]);
+  }, [activeBoardId, board, payload, scope, boardSaveQueue]);
 
   // モード切替などでアンマウントされる際、デバウンス待ちの保存を取りこぼさない。
   useEffect(() => {
     return () => {
-      const pending = pendingSaveRef.current;
-      const currentBoard = boardRef.current;
-      if (!pending || !currentBoard) return;
-      pendingSaveRef.current = null;
-      void saveBoard(pending.scope, pending.rootPath, pending.boardId, currentBoard).catch(() => {});
+      ++boardLoadGenerationRef.current;
+      draftCanvasReadyRef.current = false;
+      void boardSaveQueue.flush().catch(() => {});
     };
-  }, []);
+  }, [boardSaveQueue]);
 
   useEffect(() => {
     const applyPointerMove = (point: { clientX: number; clientY: number }) => {
@@ -1637,7 +1700,6 @@ export default function CanvasWindowApp({
       setStatus("作品ボードはプロジェクトを開いているときに使えます");
       return;
     }
-    setScope(nextScope);
     void loadBoardList(nextScope);
   };
 
@@ -1711,14 +1773,13 @@ export default function CanvasWindowApp({
         window.clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
       }
-      pendingSaveRef.current = null;
+      draftCanvasReadyRef.current = false;
+      ++boardLoadGenerationRef.current;
     }
 
     try {
       await boardOrderSaveQueueRef.current.catch(() => {});
-      if (target.id === activeBoardId && activeSaveRef.current) {
-        await activeSaveRef.current;
-      }
+      await boardSaveQueue.flush();
       setStatus("ボードをゴミ箱へ移動中");
       await trashBoard(scope, payload.rootPath, target.id);
       const summaries = await listBoards(scope, payload.rootPath);
@@ -1729,6 +1790,8 @@ export default function CanvasWindowApp({
           await loadBoardList(scope, nextBoard.id);
         } else {
           setActiveBoardId(null);
+          loadedBoardTargetRef.current = null;
+          boardRef.current = null;
           suppressNextSaveRef.current = true;
           setBoard(null);
           setSelectedIds(new Set());
@@ -2556,6 +2619,11 @@ export default function CanvasWindowApp({
           >
             <CanvasGlyph name="fit" />
           </button>
+          <button type="button" className="canvasIconButton" title="中間稿" aria-label="中間稿を開く"
+            onClick={() => {
+              if (embedded) onOpenDraft?.();
+              else { setIsDraftPanelOpen((value) => !value); setIsSidePanelOpen(false); }
+            }}>稿</button>
           {!embedded && (
             <button
               className={`canvasIconButton ${isSidePanelOpen ? "isActive" : ""}`}
@@ -2563,7 +2631,7 @@ export default function CanvasWindowApp({
               title="Idea・資料パネル"
               aria-label="Idea・資料パネル"
               aria-expanded={isSidePanelOpen}
-              onClick={() => setIsSidePanelOpen((value) => !value)}
+              onClick={() => { setIsSidePanelOpen((value) => !value); setIsDraftPanelOpen(false); }}
             >
               <CanvasGlyph name="panel" />
             </button>
@@ -2601,7 +2669,7 @@ export default function CanvasWindowApp({
 
       <section
         className={`canvasWorkspace ${
-          !embedded && isSidePanelOpen ? "hasCanvasSidePanel" : ""
+          !embedded && isDraftPanelOpen ? "hasCanvasDraftPanel" : !embedded && isSidePanelOpen ? "hasCanvasSidePanel" : ""
         }`}
       >
         <div
@@ -2982,6 +3050,14 @@ export default function CanvasWindowApp({
             </button>
           </div>
         </div>
+        {!embedded && isDraftPanelOpen && (
+          <aside className="canvasDraftSidebar">
+            <IntermediateDraftPane rootPath={rootPath}
+              liveCanvas={board && activeBoardId && draftCanvasReadyRef.current && status !== "読み込み中" ? { boardId: activeBoardId, scope, rootPath, board, selectedIds: [...selectedIds] } : null}
+              onSelectNode={selectDraftNode}
+              onOpenCanvas={(nextScope, boardId) => { void loadBoardList(nextScope, boardId); }} />
+          </aside>
+        )}
         {!embedded && isSidePanelOpen && (
           <CanvasSidePanel
             threads={ideaThreadOptions}

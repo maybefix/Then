@@ -198,6 +198,8 @@ import {
   type LoadedExportSource,
 } from "./export/types";
 import CanvasWindowApp from "./CanvasWindowApp";
+import IntermediateDraftPane from "./components/canvas/IntermediateDraftPane";
+import type { DraftCanvasContext } from "./intermediateDraft";
 import { LinkedExportScreen } from "./components/export/LinkedExportScreen";
 import {
   ThenPluginRuntimeHost,
@@ -2675,6 +2677,10 @@ export default function App() {
     sourceError?: string;
   } | null>(null);
   const [rightSidebarTab, setRightSidebarTab] = useState<string>("plot");
+  const [draftCanvasContext, setDraftCanvasContext] = useState<DraftCanvasContext | null>(null);
+  const [draftSelectRequest, setDraftSelectRequest] = useState<{ id: string; nonce: number } | null>(null);
+  const [hasOpenedDraft, setHasOpenedDraft] = useState(false);
+  useEffect(() => { if (rightSidebarTab === "draft") setHasOpenedDraft(true); }, [rightSidebarTab]);
   const activePluginView = pluginViews.find(
     (view) => rightSidebarTab === `plugin:${view.pluginId}:${view.id}`,
   ) ?? null;
@@ -7384,6 +7390,8 @@ export default function App() {
   const projectPathForModeReset = projectFolder?.path ?? null;
   useEffect(() => {
     setCanvasEmbedPayload(null);
+    setDraftCanvasContext(null);
+    setDraftSelectRequest(null);
     setExportEmbedPayload(null);
     setAppMode("write");
   }, [projectPathForModeReset]);
@@ -11147,6 +11155,10 @@ export default function App() {
                 <CanvasWindowApp
                   embedded
                   embeddedPayload={canvasEmbedPayload}
+                  onDraftCanvasChange={setDraftCanvasContext}
+                  draftSelectRequest={draftSelectRequest}
+                  onDraftSelectionConsumed={(nonce) => setDraftSelectRequest((current) => current?.nonce === nonce ? null : current)}
+                  onOpenDraft={() => { setRightSidebarTab("draft"); setIsRightSidebarCollapsed(false); }}
                   liveIdeaThreads={snippets.map((thread) => ({
                     id: thread.id,
                     kind: thread.kind,
@@ -11244,6 +11256,11 @@ export default function App() {
                         <polyline points="9 13.5 11 15.5 15 11" />
                       </svg>
                     </button>
+                    <button className={`rightTab ${rightSidebarTab === "draft" ? "activeRightTab" : ""}`}
+                      type="button" role="tab" aria-label="中間稿" title="中間稿" aria-selected={rightSidebarTab === "draft"}
+                      onClick={() => setRightSidebarTab("draft")}>
+                      <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 3h9l3 3v13H8Z" /><path d="M4 7v15h12M11 8h6M11 12h6M11 16h4" /></svg>
+                    </button>
                     {pluginViews.map((view) => {
                       const tabId = `plugin:${view.pluginId}:${view.id}`;
                       const icon = view.icon ?? loadedPlugins.find(
@@ -11325,7 +11342,13 @@ export default function App() {
                     className={`pluginRuntimeAnchor${isDockedPluginRuntimeVisible ? " visiblePluginRuntimeAnchor" : ""}`}
                     aria-hidden="true"
                   />
-                  {activePluginView ? (
+                  {hasOpenedDraft && <div className="draftPaneHost" hidden={rightSidebarTab !== "draft"}>
+                    <IntermediateDraftPane key={projectFolder?.path ?? "global"} rootPath={projectFolder?.path ?? null}
+                      liveCanvas={appMode === "canvas" ? draftCanvasContext : null}
+                      onOpenCanvas={(scope, boardId) => void openIdeaCanvasBoard(scope, boardId)}
+                      onSelectNode={(id) => setDraftSelectRequest({ id, nonce: Date.now() })} />
+                  </div>}
+                  {rightSidebarTab === "draft" ? null : activePluginView ? (
                     <div className="pluginViewBody" aria-label={activePluginView.title} />
                   ) : rightSidebarTab === "proof" ? (
                     <ProofreadPane

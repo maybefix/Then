@@ -8,6 +8,7 @@ use std::time::Duration;
 use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 mod submission_export;
+mod intermediate_draft;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -584,6 +585,8 @@ pub fn run() {
             create_canvas_board,
             load_canvas_board,
             save_canvas_board,
+            intermediate_draft::load_intermediate_draft,
+            intermediate_draft::save_intermediate_draft,
             reorder_canvas_boards,
             trash_canvas_board,
             list_trashed_canvas_boards,
@@ -3068,8 +3071,11 @@ fn trash_canvas_board(
     std::fs::create_dir_all(&trash_dir)
         .map_err(|error| format!("failed to create canvas board trash: {error}"))?;
     let trash_path = unique_trashed_canvas_board_path(&trash_dir, &board_id);
-    std::fs::rename(&path, &trash_path)
-        .map_err(|error| format!("failed to move canvas board to trash: {error}"))?;
+    intermediate_draft::move_board_with_draft(
+        &path, &trash_path,
+        &dir.join(".intermediate-drafts").join(&board_id),
+        &trash_path.with_extension("draft"),
+    )?;
     let order: Vec<String> = read_canvas_board_order(&dir)
         .into_iter()
         .filter(|id| id != &board_id)
@@ -3156,13 +3162,16 @@ fn restore_canvas_board(
     } else {
         original_path
     };
-    std::fs::rename(&trash_path, &restored_path)
-        .map_err(|error| format!("failed to restore canvas board: {error}"))?;
     let restored_id = restored_path
         .file_stem()
         .and_then(|value| value.to_str())
         .ok_or_else(|| "restored canvas board id is invalid".to_string())?
         .to_string();
+    intermediate_draft::move_board_with_draft(
+        &trash_path, &restored_path,
+        &trash_path.with_extension("draft"),
+        &dir.join(".intermediate-drafts").join(&restored_id),
+    )?;
     let mut order: Vec<String> = current_boards.into_iter().map(|board| board.id).collect();
     order.push(restored_id);
     let _ = write_canvas_board_order(&dir, &order);
