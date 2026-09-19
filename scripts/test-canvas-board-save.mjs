@@ -59,6 +59,7 @@ const canvasUrl = await compile("src/CanvasWindowApp.tsx", {
   "@tauri-apps/api/event": url("export const emit = async () => {}; export const emitTo = emit; export const listen = async () => () => {};"),
   "./canvasTypes": await compile("src/canvasTypes.ts"),
   "./canvasThreads": await compile("src/canvasThreads.ts"),
+  "./canvasResize": await compile("src/canvasResize.ts"),
   "./utils/latestFrameScheduler": await compile("src/utils/latestFrameScheduler.ts"),
   "./components/references/ReferenceLayer": url("export const ReferenceReadOnlyPreview = () => null;"),
   "./components/canvas/IntermediateDraftPane": url("export default () => null;"),

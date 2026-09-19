@@ -145,6 +145,8 @@ export const appThemeValues = [
   "paper-dark",
   "newsroom-light",
   "newsroom-dark",
+  "sen-light",
+  "sen-dark",
   "precious-light",
   "express-light",
   "express-dark",

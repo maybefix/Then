@@ -14,6 +14,7 @@ const [
   nightLibraryCss,
   flatCss,
   newsroomCss,
+  senCss,
   blueSkyCss,
   orchestratingCss,
   techCss,
@@ -34,6 +35,7 @@ const [
     readFile("src/styles/themes/night-library.css", "utf8"),
     readFile("src/styles/themes/flat.css", "utf8"),
     readFile("src/styles/themes/newsroom.css", "utf8"),
+    readFile("src/styles/themes/sen.css", "utf8"),
     readFile("src/styles/themes/blue-sky.css", "utf8"),
     readFile("src/styles/themes/orchestrating.css", "utf8"),
     readFile("src/styles/themes/tech.css", "utf8"),
@@ -54,6 +56,8 @@ assert.match(catalog, /id: "flat-light", label: "Flat"/);
 assert.match(catalog, /id: "flat-dark", label: "Flat"/);
 assert.match(catalog, /id: "newsroom-light", label: "Newsroom"/);
 assert.match(catalog, /id: "newsroom-dark", label: "Newsroom"/);
+assert.match(catalog, /id: "sen-light", label: "Shuboku"/);
+assert.match(catalog, /id: "sen-dark", label: "Shuboku"[\s\S]*?mode: "dark"/);
 assert.doesNotMatch(catalog, /label: "Modern Skeuo"/);
 
 assert.match(defaultCss, /data-theme="default"/);
@@ -65,6 +69,7 @@ assert.match(themeIndex, /@import "\.\/index-card\.css";/);
 assert.match(themeIndex, /@import "\.\/night-library\.css";/);
 assert.doesNotMatch(themeIndex, /@import "\.\/(?:acrylic|note)\.css";/);
 assert.match(themeIndex, /@import "\.\/newsroom\.css";/);
+assert.match(themeIndex, /@import "\.\/sen\.css";/);
 assert.doesNotMatch(themeIndex, /modern-skeuo/);
 assert.match(sharedVariants, /data-theme="standard"/);
 assert.match(
@@ -94,6 +99,32 @@ assert.match(types, /"newsroom-dark"/);
 assert.doesNotMatch(types, /"skeuo-(?:light|dark)"/);
 assert.match(newsroomCss, /data-theme="newsroom-light"/);
 assert.match(newsroomCss, /data-theme="newsroom-dark"/);
+assert.match(types, /"sen-light"/);
+assert.match(types, /"sen-dark"/);
+assert.match(senCss, /data-theme\|="sen"/);
+assert.match(senCss, /data-theme="sen-dark"/);
+assert.match(senCss, /--sen-ink: #1c1b18/);
+assert.match(senCss, /--sen-vermilion: #b33b25/);
+assert.match(senCss, /data-theme="sen-dark"[\s\S]*?--sen-paper: #1c1b18/);
+assert.match(senCss, /data-theme="sen-dark"[\s\S]*?--sen-vermilion: #d85f46/);
+assert.match(senCss, /\.themePreview-sen-dark/);
+assert.match(
+  senCss,
+  /\.appFrame \{[\s\S]*?border: 0;[\s\S]*?box-shadow: none;[\s\S]*?\.appFrame::after \{[\s\S]*?z-index: 100;[\s\S]*?inset: 0;[\s\S]*?border: 3px double var\(--sen-ink\);[\s\S]*?pointer-events: none;/,
+  "Shuboku's sheet edge must overlay sidebars without insetting or blocking edge hover targets",
+);
+assert.doesNotMatch(senCss, /linear-gradient/);
+assert.doesNotMatch(senCss, /Yu Gothic UI/, "Shuboku must inherit the configured UI font");
+assert.match(
+  senCss,
+  /\.plotRightSidebarBody > \.plotPane,[\s\S]*?\.plotCard:not\(:last-child\),[\s\S]*?\.expandedPlotCard \.plotCardNum,[\s\S]*?\.plotCardTitle, \.plotCardBody, \.plotToolButton\)[\s\S]*?border: 0;/,
+  "Shuboku plot surfaces must be borderless when collapsed or expanded",
+);
+assert.ok(
+  [...senCss.matchAll(/(?:^|\n)\s*box-shadow:\s*([^;]+);/g)]
+    .every(([, value]) => value.trim() === "none"),
+  "SEN must not use elevation shadows",
+);
 
 for (const token of [
   "--focus-ring:",

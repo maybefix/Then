@@ -54,8 +54,14 @@ import {
   detachNodeFromThread,
   findThreadDropTarget,
   hiddenThreadNodeIds,
-  THREAD_DROP_DISTANCE,
+  shouldDetachFromThread,
+  THREAD_DETACH_MARGIN,
+  THREAD_DROP_MARGIN,
 } from "./canvasThreads";
+import {
+  resizeCanvasRect,
+  type CanvasResizeCorner,
+} from "./canvasResize";
 
 const CANVAS_WIDTH = 6400;
 const CANVAS_HEIGHT = 4200;
@@ -66,6 +72,7 @@ const MIN_ZOOM = 0.35;
 const MAX_ZOOM = 1.8;
 const WHEEL_ZOOM_SENSITIVITY = 0.0015;
 const MAX_WHEEL_DELTA = 240;
+const CANVAS_RESIZE_CORNERS: CanvasResizeCorner[] = ["nw", "ne", "sw", "se"];
 
 type TrashedCanvasBoardSummary = {
   trashId: string;
@@ -141,6 +148,9 @@ type DragState =
       kind: "resize";
       start: Point;
       nodeId: string;
+      corner: CanvasResizeCorner;
+      x: number;
+      y: number;
       width: number;
       height: number;
       pushed?: boolean;
@@ -506,10 +516,12 @@ function edgePath(from: CanvasNode, to: CanvasNode, edge?: CanvasEdge) {
 }
 
 function threadPath(parent: CanvasTextNode, child: CanvasTextNode) {
-  const start = { x: parent.x + 22, y: parent.y + parent.height };
-  const end = { x: child.x + 12, y: child.y };
-  const middleY = start.y + (end.y - start.y) / 2;
-  return `M ${start.x} ${start.y} C ${start.x} ${middleY}, ${end.x} ${middleY}, ${end.x} ${end.y}`;
+  const railX = parent.x + 14;
+  const startY = parent.y + parent.height;
+  const endX = child.x + 4;
+  const endY = child.y;
+  const turnY = Math.max(startY + 8, endY - 10);
+  return `M ${railX} ${startY} L ${railX} ${turnY} Q ${railX} ${endY}, ${endX} ${endY}`;
 }
 
 function arrowHeadPath(tip: Point, direction: Point) {
@@ -1721,12 +1733,14 @@ export default function CanvasWindowApp({
         const primary = currentNodes.find((node) => node.id === drag.primaryNodeId);
         const original = drag.originals.get(drag.primaryNodeId);
         if (drag.canThread && primary && original && isTextNode(primary)) {
+          const dropPoint = screenToWorld(point.clientX, point.clientY);
           setThreadDropTarget(
             findThreadDropTarget(
               currentNodes,
               { ...primary, x: original.x + dx, y: original.y + dy },
               new Set(drag.nodeIds),
-              THREAD_DROP_DISTANCE / zoom,
+              dropPoint,
+              THREAD_DROP_MARGIN / zoom,
             ),
           );
         } else {
@@ -1745,15 +1759,18 @@ export default function CanvasWindowApp({
       const dy = (point.clientY - drag.start.y) / zoom;
       patchBoard((current) => ({
         ...current,
-        nodes: current.nodes.map((node) =>
-          node.id === drag.nodeId
-            ? {
-                ...node,
-                width: Math.max(node.type === "group" ? 260 : 150, drag.width + dx),
-                height: Math.max(node.type === "group" ? 160 : 90, drag.height + dy),
-              }
-            : node,
-        ),
+        nodes: current.nodes.map((node) => {
+          if (node.id !== drag.nodeId) return node;
+          const resized = resizeCanvasRect(
+            { x: drag.x, y: drag.y, width: drag.width, height: drag.height },
+            drag.corner,
+            dx,
+            dy,
+            node.type === "group" ? 260 : 150,
+            node.type === "group" ? 160 : 90,
+          );
+          return { ...node, ...resized };
+        }),
       }));
     };
     const pointerMoveScheduler = createLatestFrameScheduler(
@@ -1798,8 +1815,23 @@ export default function CanvasWindowApp({
             : "カード";
           setStatus(`「${label}」のスレッドに追加しました`);
         } else if (primary.threadParentId) {
-          patchBoard((document) => detachNodeFromThread(document, primary.id));
-          setStatus("カードをスレッドから外しました");
+          const releasePoint = screenToWorld(event.clientX, event.clientY);
+          if (
+            shouldDetachFromThread(
+              current.nodes,
+              primary.id,
+              releasePoint,
+              THREAD_DETACH_MARGIN / zoom,
+            )
+          ) {
+            patchBoard((document) => detachNodeFromThread(document, primary.id));
+            setStatus("カードをスレッドから外しました");
+          } else {
+            patchBoard((document) =>
+              attachNodeToThread(document, primary.id, primary.threadParentId!),
+            );
+            setStatus("カードをスレッド内に戻しました");
+          }
         }
         return;
       }
@@ -2162,7 +2194,11 @@ export default function CanvasWindowApp({
     }
   };
 
-  const startResize = (node: CanvasNode, event: ReactPointerEvent) => {
+  const startResize = (
+    node: CanvasNode,
+    corner: CanvasResizeCorner,
+    event: ReactPointerEvent,
+  ) => {
     event.preventDefault();
     event.stopPropagation();
     setSelectedIds(new Set([node.id]));
@@ -2170,6 +2206,9 @@ export default function CanvasWindowApp({
       kind: "resize",
       start: { x: event.clientX, y: event.clientY },
       nodeId: node.id,
+      corner,
+      x: node.x,
+      y: node.y,
       width: node.width,
       height: node.height,
     };
@@ -2888,7 +2927,8 @@ export default function CanvasWindowApp({
                   <li>カード作成: 余白をダブルクリック、またはカードツール (C／T)</li>
                   <li>カード編集: ダブルクリック、または選択して Enter</li>
                   <li>カード移動: カード面をそのままドラッグ</li>
-                  <li>スレッド化: カードを別のカードへ近づけてドロップ</li>
+                  <li>スレッド化: カードを別のカード本体へ入れてドロップ</li>
+                  <li>サイズ変更: カードの四隅をドラッグ</li>
                   <li>グループ: グループツール (G) で余白をクリック</li>
                   <li>接続線: 接続線ツール (E) で元のカード、先のカードの順にクリック</li>
                   <li>範囲選択: Shift / Ctrl を押しながら余白をドラッグ</li>
@@ -2961,10 +3001,14 @@ export default function CanvasWindowApp({
                     元Idea
                   </button>
                 )}
-                <span
-                  className="canvasResizeHandle"
-                  onPointerDown={(event) => startResize(node, event)}
-                />
+                {CANVAS_RESIZE_CORNERS.map((corner) => (
+                  <span
+                    key={corner}
+                    className={`canvasResizeHandle canvasResizeHandle-${corner}`}
+                    aria-hidden="true"
+                    onPointerDown={(event) => startResize(node, corner, event)}
+                  />
+                ))}
               </article>
             ))}
             <svg className="canvasEdgeLayer" width={CANVAS_WIDTH} height={CANVAS_HEIGHT}>
@@ -3023,10 +3067,14 @@ export default function CanvasWindowApp({
                   <span title={node.sourcePath}>{node.sourcePath}</span>
                   <span>{formatCanvasReferenceSize(node.size)}</span>
                 </footer>
-                <span
-                  className="canvasResizeHandle"
-                  onPointerDown={(event) => startResize(node, event)}
-                />
+                {CANVAS_RESIZE_CORNERS.map((corner) => (
+                  <span
+                    key={corner}
+                    className={`canvasResizeHandle canvasResizeHandle-${corner}`}
+                    aria-hidden="true"
+                    onPointerDown={(event) => startResize(node, corner, event)}
+                  />
+                ))}
               </article>
             ))}
             {textNodes.map((node) => (
@@ -3037,6 +3085,8 @@ export default function CanvasWindowApp({
                 } ${selectedGroupChildIds.has(node.id) ? "isInSelectedGroup" : ""} ${
                   edgeFromId === node.id ? "isEdgeSource" : ""
                 } ${node.threadParentId ? "isThreadChild" : ""} ${
+                  threadChildCounts.has(node.id) ? "hasThreadChildren" : ""
+                } ${
                   threadDropTargetId === node.id ? "isThreadDropTarget" : ""
                 } ${editingNodeId === node.id ? "isEditing" : ""} ${
                   isVerticalTextNode(node) ? "isVerticalWriting" : ""
@@ -3106,10 +3156,14 @@ export default function CanvasWindowApp({
                     </div>
                   </>
                 )}
-                <span
-                  className="canvasResizeHandle"
-                  onPointerDown={(event) => startResize(node, event)}
-                />
+                {CANVAS_RESIZE_CORNERS.map((corner) => (
+                  <span
+                    key={corner}
+                    className={`canvasResizeHandle canvasResizeHandle-${corner}`}
+                    aria-hidden="true"
+                    onPointerDown={(event) => startResize(node, corner, event)}
+                  />
+                ))}
               </article>
             ))}
             {marqueeRect && (

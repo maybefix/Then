@@ -9607,10 +9607,10 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
 
 .canvasThreadEdge {
   fill: none;
-  stroke: color-mix(in srgb, var(--accent) 52%, var(--border-strong));
+  stroke: color-mix(in srgb, var(--accent) 64%, var(--border-strong));
   stroke-linecap: round;
-  stroke-width: 2;
-  stroke-dasharray: 3 6;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
   pointer-events: none;
 }
 
@@ -9760,6 +9760,13 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
 
 .canvasTextNode.isThreadChild {
   border-left: 3px solid color-mix(in srgb, var(--accent) 62%, var(--border-strong));
+  box-shadow:
+    -6px 0 0 color-mix(in srgb, var(--accent) 9%, transparent),
+    0 10px 24px color-mix(in srgb, var(--canvas-shadow) 76%, transparent);
+}
+
+.canvasTextNode.hasThreadChildren {
+  padding-bottom: 20px;
 }
 
 .canvasNode.isThreadDropTarget {
@@ -9770,11 +9777,28 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
     0 14px 34px var(--canvas-shadow);
 }
 
+.canvasNode.isThreadDropTarget::after {
+  position: absolute;
+  z-index: 8;
+  right: 10px;
+  bottom: 9px;
+  padding: 3px 7px;
+  border: 1px solid color-mix(in srgb, var(--success) 54%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--success) 18%, var(--bg-panel));
+  color: var(--text-primary);
+  content: "ここにまとめる";
+  font-size: 10px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
 .canvasThreadToggle {
   position: absolute;
-  z-index: 4;
-  top: calc(100% + 6px);
-  right: 0;
+  z-index: 7;
+  left: 50%;
+  bottom: -12px;
+  transform: translateX(-50%);
   display: inline-flex;
   height: 23px;
   align-items: center;
@@ -9966,13 +9990,76 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
 
 .canvasResizeHandle {
   position: absolute;
-  right: 3px;
-  bottom: 3px;
-  width: 14px;
-  height: 14px;
-  border-right: 2px solid color-mix(in srgb, var(--text-primary) 58%, transparent);
-  border-bottom: 2px solid color-mix(in srgb, var(--text-primary) 58%, transparent);
+  z-index: 6;
+  width: 18px;
+  height: 18px;
+  opacity: 0.46;
+  transition: opacity 100ms ease;
+}
+
+.canvasNode:hover .canvasResizeHandle,
+.canvasNode.isSelected .canvasResizeHandle {
+  opacity: 0.86;
+}
+
+.canvasResizeHandle::after {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-color: color-mix(in srgb, var(--text-primary) 62%, transparent);
+  content: "";
+}
+
+.canvasResizeHandle-nw {
+  top: -5px;
+  left: -5px;
   cursor: nwse-resize;
+}
+
+.canvasResizeHandle-nw::after {
+  top: 4px;
+  left: 4px;
+  border-top: 2px solid;
+  border-left: 2px solid;
+}
+
+.canvasResizeHandle-ne {
+  top: -5px;
+  right: -5px;
+  cursor: nesw-resize;
+}
+
+.canvasResizeHandle-ne::after {
+  top: 4px;
+  right: 4px;
+  border-top: 2px solid;
+  border-right: 2px solid;
+}
+
+.canvasResizeHandle-sw {
+  bottom: -5px;
+  left: -5px;
+  cursor: nesw-resize;
+}
+
+.canvasResizeHandle-sw::after {
+  bottom: 4px;
+  left: 4px;
+  border-bottom: 2px solid;
+  border-left: 2px solid;
+}
+
+.canvasResizeHandle-se {
+  right: -5px;
+  bottom: -5px;
+  cursor: nwse-resize;
+}
+
+.canvasResizeHandle-se::after {
+  right: 4px;
+  bottom: 4px;
+  border-right: 2px solid;
+  border-bottom: 2px solid;
 }
 
 .canvasEmptyHint {

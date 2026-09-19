@@ -1,0 +1,478 @@
+/*
+ * SHUBOKU — a ruled-paper interface drawn in sumi and vermilion.
+ * One white sheet, sumi ink, and a restrained vermilion accent. Hierarchy is
+ * expressed by rule weight instead of tinted surfaces or elevation.
+ */
+.appShell[data-theme|="sen"],
+.appShell[data-theme|="sen"] .appFrame {
+  color-scheme: light;
+  --sen-paper: #fff;
+  --sen-ink: #1c1b18;
+  --sen-ink-72: rgba(28, 27, 24, 0.72);
+  --sen-ink-48: rgba(28, 27, 24, 0.48);
+  --sen-ink-24: rgba(28, 27, 24, 0.24);
+  --sen-vermilion: #b33b25;
+
+  --on-accent: #fff;
+  --brand-gradient: var(--sen-vermilion);
+  --action-gradient: var(--sen-vermilion);
+  --action-text: #fff;
+  --bg-root: var(--sen-paper);
+  --bg-primary: var(--sen-paper);
+  --bg-secondary: var(--sen-paper);
+  --bg-tertiary: var(--sen-paper);
+  --bg-panel: var(--sen-paper);
+  --bg-panel-strong: var(--sen-paper);
+  --border-subtle: var(--sen-ink-24);
+  --border-strong: var(--sen-ink);
+  --text-primary: var(--sen-ink);
+  --text-secondary: var(--sen-ink-72);
+  --text-muted: var(--sen-ink-72);
+  --text-faint: var(--sen-ink-48);
+  --accent: var(--sen-vermilion);
+  --accent-strong: var(--sen-vermilion);
+  --focus-ring: var(--sen-vermilion);
+  --success: var(--sen-ink);
+  --warning: var(--sen-vermilion);
+  --danger: var(--sen-vermilion);
+  --overlay: rgba(28, 27, 24, 0.34);
+  --control-hover: transparent;
+  --accent-soft: transparent;
+  --accent-border: var(--sen-vermilion);
+  --danger-soft: transparent;
+  --editor-bg: var(--sen-paper);
+  --editor-heading-color: var(--sen-ink);
+  --card-bg: var(--sen-paper);
+  --card-hover: var(--sen-paper);
+  --topbar-bg: var(--sen-paper);
+  --sidebar-bg: var(--sen-paper);
+  --canvas-bg: var(--sen-paper);
+  --selection-bg: var(--sen-vermilion);
+  --selection-text: #fff;
+  --navigation-icon: var(--sen-ink-72);
+  --navigation-icon-hover: var(--sen-vermilion);
+  --topbar-text-primary: var(--sen-ink);
+  --topbar-text-secondary: var(--sen-ink);
+  --topbar-text-muted: var(--sen-ink-72);
+  --topbar-text-faint: var(--sen-ink-48);
+  --card-float-shadow: none;
+  --shadow-popover: none;
+  --shadow-modal: none;
+  --radius-control: 0;
+  --radius-card: 0;
+  --radius-button: 0;
+  --silkdown-code-bg: var(--sen-paper);
+  --silkdown-code-color: var(--sen-ink);
+  --silkdown-blockquote-color: var(--sen-ink-72);
+  --silkdown-link-color: var(--sen-vermilion);
+  --silkdown-hr-color: var(--sen-ink);
+}
+
+.appShell[data-theme="sen-dark"],
+.appShell[data-theme="sen-dark"] .appFrame {
+  color-scheme: dark;
+  --sen-paper: #1c1b18;
+  --sen-ink: #fff;
+  --sen-ink-72: rgba(255, 255, 255, 0.72);
+  --sen-ink-48: rgba(255, 255, 255, 0.48);
+  --sen-ink-24: rgba(255, 255, 255, 0.24);
+  --sen-vermilion: #d85f46;
+  --on-accent: #1c1b18;
+  --action-text: #1c1b18;
+  --selection-text: #1c1b18;
+  --overlay: rgba(28, 27, 24, 0.82);
+}
+
+.themePreview-sen-light {
+  border: 2px double #1c1b18;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
+}
+
+.themePreview-sen-light::before {
+  border-right: 1px solid #1c1b18;
+  background: #fff;
+}
+
+.themePreview-sen-light i { background: #1c1b18; }
+
+.themePreview-sen-light b {
+  height: 2px;
+  background: #b33b25;
+}
+
+.themePreview-sen-dark {
+  border: 2px double #fff;
+  border-radius: 0;
+  background: #1c1b18;
+  box-shadow: none;
+}
+
+.themePreview-sen-dark::before {
+  border-right: 1px solid #fff;
+  background: #1c1b18;
+}
+
+.themePreview-sen-dark i { background: #fff; }
+
+.themePreview-sen-dark b {
+  height: 2px;
+  background: #d85f46;
+}
+
+/* 3px: the sheet edge. */
+.appShell[data-theme|="sen"] .appFrame {
+  border: 0;
+  border-radius: 0;
+  background: var(--sen-paper);
+  box-shadow: none;
+}
+
+/* Paint the sheet edge above hover-revealed sidebars without consuming layout
+   space or blocking the workspace edge hit targets. */
+.appShell[data-theme|="sen"] .appFrame::after {
+  position: absolute;
+  z-index: 100;
+  inset: 0;
+  border: 3px double var(--sen-ink);
+  content: "";
+  pointer-events: none;
+}
+
+/* 2px: the application bands and primary panes. */
+.appShell[data-theme|="sen"] .topbar {
+  border-bottom: 2px solid var(--sen-ink);
+  background: var(--sen-paper);
+  box-shadow: none;
+}
+
+.appShell[data-theme|="sen"] .workspace {
+  gap: 0;
+  padding: 0;
+  background: var(--sen-paper);
+}
+
+.appShell[data-theme|="sen"] .leftWorkspaceCluster {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  flex: 0 0 auto;
+  border-right: 2px solid var(--sen-ink);
+  background: var(--sen-paper);
+}
+
+.appShell[data-theme|="sen"] .leftWorkspaceCluster .workspaceActivityBar {
+  height: 100%;
+  border-right: 1px solid var(--sen-ink);
+  background: var(--sen-paper);
+}
+
+.appShell[data-theme|="sen"] .leftWorkspaceCluster .workspaceSidebar {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: var(--sen-paper);
+  box-shadow: none;
+}
+
+.appShell[data-theme|="sen"] .editorColumn {
+  border: 0;
+  border-radius: 0;
+  background: var(--sen-paper);
+  box-shadow: none;
+}
+
+.appShell[data-theme|="sen"] .rightSidebar {
+  border: 0;
+  border-left: 2px solid var(--sen-ink);
+  border-radius: 0;
+  background: var(--sen-paper);
+  box-shadow: none;
+}
+
+.appShell[data-theme|="sen"] .statusbar {
+  border-top: 2px solid var(--sen-ink);
+  background: var(--sen-paper);
+  box-shadow: none;
+}
+
+/* 1px: local sections, controls, and records. */
+.appShell[data-theme|="sen"] :is(
+  .sidebarHeader,
+  .rightSidebarHeader,
+  .panelHeader,
+  .rightTabs,
+  .sidebarFooter,
+  .fileViewSummary,
+  .modalHeader,
+  .modalActions,
+  .plotPaneHeader,
+  .referencePaneTop
+) {
+  border-color: var(--sen-ink);
+  background: var(--sen-paper);
+  box-shadow: none;
+}
+
+.appShell[data-theme|="sen"] :is(.sidebarHeader, .rightSidebarHeader, .panelHeader) {
+  border-bottom: 1px solid var(--sen-ink);
+}
+
+.appShell[data-theme|="sen"] .sidebarFooter,
+.appShell[data-theme|="sen"] .fileViewSummary,
+.appShell[data-theme|="sen"] .modalActions {
+  border-top: 1px solid var(--sen-ink);
+}
+
+.appShell[data-theme|="sen"] :is(
+  .rightTabs,
+  .ideaCard,
+  .rightSidebar .snippetCard,
+  .themeOption,
+  .notationChoiceButton
+) {
+  border: 0;
+  border-bottom: 1px solid var(--sen-ink-24);
+  border-radius: 0;
+  background: var(--sen-paper);
+  box-shadow: none;
+}
+
+.appShell[data-theme|="sen"] .rightTabs {
+  border-top: 1px solid var(--sen-ink);
+  border-bottom-color: var(--sen-ink);
+}
+
+.appShell[data-theme|="sen"] :is(
+  .modalForm input,
+  .modalForm select,
+  .modalForm textarea,
+  .ideaSearch input,
+  .projectSearchInput,
+  .searchBox input,
+  .editorFindInput
+) {
+  border: 1px solid var(--sen-ink);
+  border-radius: 0;
+  background: var(--sen-paper);
+  box-shadow: none;
+  color: var(--sen-ink);
+}
+
+.appShell[data-theme|="sen"] :is(
+  .themePickerButton,
+  .modalActions button,
+  .newTabActions button,
+  .sidebarAddButton,
+  .addButton,
+  .ideaAdd,
+  .notationChoiceButton
+) {
+  border: 1px solid var(--sen-ink);
+  border-radius: 0;
+  background: var(--sen-paper);
+  box-shadow: none;
+  color: var(--sen-ink);
+}
+
+.appShell[data-theme|="sen"] :is(
+  .themePickerButton,
+  .modalActions button,
+  .newTabActions button,
+  .sidebarAddButton,
+  .addButton,
+  .ideaAdd,
+  .notationChoiceButton
+):is(:hover, :focus-visible):not(:disabled) {
+  border-color: var(--sen-vermilion);
+  background: var(--sen-paper);
+  color: var(--sen-vermilion);
+  outline: 1px solid var(--sen-vermilion);
+  outline-offset: 1px;
+}
+
+/* Selection is a red registration mark, never a colored panel. */
+.appShell[data-theme|="sen"] :is(
+  .activeWorkspaceActivityButton,
+  .activeTreeItem,
+  .selectedTreeEntry,
+  .activeOutlineTreeItem,
+  .projectSearchResultButton:focus-visible
+) {
+  background: transparent;
+  color: var(--sen-vermilion);
+  border-left: 3px solid var(--sen-vermilion);
+}
+
+.appShell[data-theme|="sen"] .activeWorkspaceActivityButton::before {
+  width: 3px;
+  border-radius: 0;
+  background: var(--sen-vermilion);
+}
+
+.appShell[data-theme|="sen"] :is(
+  .fileTreeItem:hover,
+  .fileTreeOutlineChildren .outlineTreeItem:hover,
+  .treeItem:hover,
+  .focusedTreeItem,
+  .ideaCard:hover,
+  .rightSidebar .snippetCard:hover,
+  .themeOption:hover,
+  .menuPopover button:hover,
+  .editorContextMenu button:hover:not(:disabled)
+) {
+  background: transparent;
+  color: var(--sen-vermilion);
+}
+
+.appShell[data-theme|="sen"] :is(.activeRightTab, .activeRightTab:hover) {
+  border-bottom: 3px solid var(--sen-vermilion);
+  background: transparent;
+  color: var(--sen-vermilion);
+}
+
+.appShell[data-theme|="sen"] :is(.menuPopover, .editorContextMenu, .modal, .toast) {
+  border: 2px solid var(--sen-ink);
+  border-radius: 0;
+  background: var(--sen-paper);
+  box-shadow: none;
+}
+
+.appShell[data-theme|="sen"] :is(
+  .modalForm input,
+  .modalForm select,
+  .modalForm textarea,
+  .ideaSearch input,
+  .projectSearchInput,
+  .searchBox input,
+  .editorFindInput
+):focus {
+  border-color: var(--sen-vermilion);
+  outline: 2px solid var(--sen-vermilion);
+  outline-offset: 1px;
+  box-shadow: none;
+}
+
+/* Plot is an unboxed writing surface in both collapsed and expanded states. */
+.appShell[data-theme|="sen"] .plotRightSidebarBody > .plotPane,
+.appShell[data-theme|="sen"] .plotCard,
+.appShell[data-theme|="sen"] .plotCard:not(:last-child),
+.appShell[data-theme|="sen"] .plotCardNum,
+.appShell[data-theme|="sen"] .expandedPlotCard .plotCardNum,
+.appShell[data-theme|="sen"] :is(.plotCardTitle, .plotCardBody, .plotToolButton) {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+}
+
+.appShell[data-theme|="sen"] .plotRightSidebarBody > .plotPane,
+.appShell[data-theme|="sen"] :is(.plotCardNum, .plotCardTitle, .plotCardBody) {
+  background: var(--sen-paper);
+}
+
+.appShell[data-theme|="sen"] .plotCardBody,
+.appShell[data-theme|="sen"] :is(.plotCardTitle, .plotCardBody):focus {
+  color: var(--sen-ink);
+}
+
+.appShell[data-theme|="sen"] :is(.plotCardTitle, .plotCardBody):focus {
+  border: 0;
+  background: var(--sen-paper);
+  outline: 0;
+  box-shadow: none;
+}
+
+.appShell[data-theme|="sen"] .plotToolButton:is(:hover, :focus-visible):not(:disabled) {
+  border: 0;
+  background: transparent;
+  color: var(--sen-vermilion);
+  outline: 0;
+  box-shadow: none;
+}
+
+.appShell[data-theme|="sen"] .verticalTypewriterGuide {
+  border-color: var(--sen-ink-24);
+}
+
+.appShell[data-theme|="sen"] .activeVisualLineHighlight {
+  border-color: var(--sen-vermilion);
+  background: transparent;
+}
+
+.appShell[data-theme|="sen"] .verticalTypewriterEditor .pm-root p.heading {
+  color: var(--sen-ink);
+}
+
+.appShell[data-theme|="sen"] :is(a, .silkdown-link, .statusError) {
+  color: var(--sen-vermilion);
+}
+
+.appShell[data-theme|="sen"] :is(.statusDot, .progressDot) {
+  border: 1px solid var(--sen-ink);
+  background: var(--sen-paper);
+}
+
+.appShell[data-theme|="sen"] :is(
+  .status-dirty,
+  .status-saving,
+  .status-loading,
+  .status-error
+) .statusDot {
+  border-color: var(--sen-vermilion);
+  background: var(--sen-vermilion);
+}
+
+.appShell[data-theme|="sen"] .fileTreeItem .fileProgressBadge {
+  border: 1px solid var(--sen-ink-48);
+  border-radius: 0;
+  background: var(--sen-paper);
+  color: var(--sen-ink-72);
+  filter: none;
+}
+
+.appShell[data-theme|="sen"] .fileTreeItem :is(
+  .fileProgressBadge-writing,
+  .fileProgressBadge-revising
+) {
+  border-color: var(--sen-vermilion);
+  color: var(--sen-vermilion);
+}
+
+.appShell[data-theme|="sen"] .fileTreeOutlineChildren .outlineLevelMark {
+  border: 1px solid var(--sen-ink-48);
+  border-radius: 0;
+  background: var(--sen-paper);
+  color: var(--sen-ink-72);
+}
+
+.appShell[data-theme|="sen"] .fileTreeOutlineChildren .activeOutlineTreeItem .outlineLevelMark {
+  border-color: var(--sen-vermilion);
+  background: var(--sen-paper);
+  color: var(--sen-vermilion);
+}
+
+.appShell[data-theme|="sen"] :is(.panelCount, code, pre) {
+  border-radius: 0;
+  background: var(--sen-paper);
+  color: var(--sen-ink);
+}
+
+.appShell[data-theme|="sen"] :is(.editor, .editorContent, .verticalTypewriterShell) {
+  background: var(--sen-paper);
+}
+
+.appShell[data-theme|="sen"] *::-webkit-scrollbar-thumb {
+  border: 2px solid var(--sen-paper);
+  border-radius: 0;
+  background: var(--sen-ink-48);
+}
+
+.appShell[data-theme|="sen"] *::-webkit-scrollbar-thumb:hover {
+  background: var(--sen-vermilion);
+}
+
+.appShell[data-theme|="sen"] ::selection {
+  background: var(--sen-vermilion);
+  color: var(--selection-text);
+}

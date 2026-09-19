@@ -18,6 +18,7 @@ async function compile(path) {
 
 const canvasTypes = await import(await compile("src/canvasTypes.ts"));
 const threads = await import(await compile("src/canvasThreads.ts"));
+const resize = await import(await compile("src/canvasResize.ts"));
 
 const node = (id, x, y, extra = {}) => ({
   id,
@@ -90,13 +91,36 @@ assert.equal(
 const near = node("near", 230, 0);
 const far = node("far", 1000, 0);
 assert.equal(
-  threads.findThreadDropTarget([near, far], node("moving", 210, 0), new Set(["moving"])),
+  threads.findThreadDropTarget(
+    [near, far],
+    node("moving", 0, 0),
+    new Set(["moving"]),
+    { x: 240, y: 50 },
+  ),
   "near",
+  "the target card body acts as the drop area",
 );
 assert.equal(
-  threads.findThreadDropTarget([near], node("moving", 0, 0), new Set(["moving"]), 20),
+  threads.findThreadDropTarget(
+    [near],
+    node("moving", 0, 0),
+    new Set(["moving"]),
+    { x: 205, y: 50 },
+    20,
+  ),
   null,
-  "the caller can keep proximity constant in screen pixels across zoom levels",
+  "a nearby card does not attach until the pointer enters the drop area",
+);
+assert.equal(
+  threads.findThreadDropTarget(
+    [near],
+    node("moving", 0, 0),
+    new Set(["moving"]),
+    { x: 215, y: 50 },
+    20,
+  ),
+  "near",
+  "the small outer margin makes deliberate drops forgiving",
 );
 const collapsedNodes = [
   node("parent", -1000, 0, { threadCollapsed: true }),
@@ -104,9 +128,61 @@ const collapsedNodes = [
   far,
 ];
 assert.equal(
-  threads.findThreadDropTarget(collapsedNodes, node("moving", 210, 0), new Set(["moving"])),
+  threads.findThreadDropTarget(
+    collapsedNodes,
+    node("moving", 210, 0),
+    new Set(["moving"]),
+    { x: 240, y: 50 },
+  ),
   null,
   "collapsed descendants are not drop targets",
 );
 
-console.log("PASS v0.6.4 canvas: thread normalization, attach/detach, cycles, collapse, proximity");
+const draggedThread = [
+  node("parent", 0, 0),
+  node("child", 40, 140, { threadParentId: "parent", threadOrder: 1 }),
+];
+assert.equal(
+  threads.shouldDetachFromThread(draggedThread, "child", { x: 150, y: 180 }),
+  false,
+  "small movement within the list region keeps the card attached",
+);
+assert.equal(
+  threads.shouldDetachFromThread(draggedThread, "child", { x: 380, y: 180 }),
+  true,
+  "dragging clearly sideways out of the list detaches the card",
+);
+assert.equal(
+  threads.shouldDetachFromThread(draggedThread, "child", { x: 150, y: 420 }),
+  true,
+  "dragging clearly below the list detaches the card",
+);
+
+const originalRect = { x: 100, y: 80, width: 240, height: 160 };
+assert.deepEqual(
+  resize.resizeCanvasRect(originalRect, "nw", 20, 30, 150, 90),
+  { x: 120, y: 110, width: 220, height: 130 },
+  "north-west resize keeps the south-east corner fixed",
+);
+assert.deepEqual(
+  resize.resizeCanvasRect(originalRect, "ne", 30, 20, 150, 90),
+  { x: 100, y: 100, width: 270, height: 140 },
+  "north-east resize keeps the south-west corner fixed",
+);
+assert.deepEqual(
+  resize.resizeCanvasRect(originalRect, "sw", -20, 30, 150, 90),
+  { x: 80, y: 80, width: 260, height: 190 },
+  "south-west resize keeps the north-east corner fixed",
+);
+assert.deepEqual(
+  resize.resizeCanvasRect(originalRect, "se", 30, 40, 150, 90),
+  { x: 100, y: 80, width: 270, height: 200 },
+  "south-east resize keeps the north-west corner fixed",
+);
+assert.deepEqual(
+  resize.resizeCanvasRect(originalRect, "nw", 500, 500, 150, 90),
+  { x: 190, y: 150, width: 150, height: 90 },
+  "minimum size stops north-west edges without flipping the card",
+);
+
+console.log("PASS v0.6.4 canvas: thread drop zones, detach threshold, collapse, four-corner resize");
