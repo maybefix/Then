@@ -14,7 +14,7 @@ Thenは、日本語の小説やシナリオを書くためのWindowsデスクト
 - 配布形式: NSISインストーラー
 - 技術構成: Tauri v2 / React / TypeScript / Vite / Tiptap
 
-![Thenの画面](docs/then-ui-mockup-v2.png)
+![Thenの画面](docs/then-ui-v0.6.5.png)
 
 ## 主な機能
 

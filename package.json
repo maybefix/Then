@@ -1,12 +1,13 @@
 {
   "name": "then",
   "private": true,
-  "version": "0.6.4",
+  "version": "0.6.5",
   "type": "module",
   "scripts": {
     "test:canvas-save": "node scripts/test-canvas-board-save.mjs",
     "test:v063-draft": "node scripts/test-v063-intermediate-draft.mjs",
     "test:v064-canvas": "node scripts/test-v064-canvas-weje.mjs",
+    "test:v065-shell": "node scripts/test-v065-native-shell.mjs",
     "dev": "vite",
     "dev:local": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "test:markdown-tables": "node scripts/test-markdown-tables.mjs",
@@ -39,6 +40,7 @@
     "test:page-breaks": "node scripts/test-page-breaks.mjs",
     "test:proofread": "node scripts/test-proofread-rules.mjs",
     "test:proofread-ui": "node scripts/test-proofread-ui.mjs",
+    "test:search": "node scripts/test-search-sidebar-regex.mjs",
     "test:export": "node scripts/verify-export.mjs",
     "test:submission-export": "node scripts/test-submission-export.mjs",
     "test:submission-ui": "node scripts/test-submission-ui.mjs",

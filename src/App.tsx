@@ -17,6 +17,10 @@ import {
 } from "react";
 import { manageAsyncRegistration } from "./utils/asyncRegistration";
 import {
+  isRestorableRightSidebarTab,
+  normalizeRightSidebarTab,
+} from "./utils/rightSidebarState";
+import {
   getBreadcrumbLayout,
   isBreadcrumbTrailItemVisible,
   isOutlineBreadcrumbItemVisible,
@@ -42,6 +46,7 @@ import {
   type SidebarHeadingSelection,
 } from "./components/layout/WorkspaceSidebar";
 import { DocumentTabs } from "./components/layout/DocumentTabs";
+import { WindowControls } from "./components/layout/WindowControls";
 import { StartupPortal } from "./components/startup/StartupPortal";
 import {
   createDocumentAst,
@@ -69,11 +74,16 @@ import {
   createProjectAstSkeleton,
   markProjectAstFileError,
   removeProjectAstPaths,
-  searchProjectAst,
+  searchDocumentAstFullText,
+  searchProjectAstFullTextWithOptions,
   upsertProjectAstDocument,
   upsertProjectAstDocumentAst,
   upsertProjectAstDocumentAsts,
 } from "./editor/ast/projectAst";
+import {
+  replaceTextSearchMatches,
+  type TextSearchOptions,
+} from "./search/textSearch";
 import { collectSnapshotConflictPaths } from "./editor/ast/snapshotConflicts";
 import {
   PlotPane,
@@ -1112,6 +1122,7 @@ function createDefaultState(): AppState {
     snippets: threads,
     profileSnippets: threads,
     settings: defaultSettings,
+    rightSidebarTab: "plot",
     lastWorkspacePath: null,
     lastFilePath: null,
     recentWorkspaces: [],
@@ -1910,63 +1921,16 @@ function replaceMarkdownBodyMatches(
   markdown: string,
   query: string,
   replacement: string,
-): { markdown: string; count: number } {
+  options: TextSearchOptions,
+): { markdown: string; count: number; error: string | null } {
   const frontMatter = parseFrontMatter(markdown);
-  const result = replaceLiteralMatches(frontMatter.body, query, replacement);
-  if (result.count === 0) return { markdown, count: 0 };
+  const result = replaceTextSearchMatches(frontMatter.body, query, replacement, options);
+  if (result.count === 0) return { markdown, count: 0, error: result.error };
   return {
     markdown: updateMarkdownBody(markdown, result.text),
     count: result.count,
+    error: null,
   };
-}
-
-function collectDocumentSearchMatches(
-  documentAst: DocumentAst,
-  rawQuery: string,
-  path: string | null,
-  name: string,
-  maxResults = 80,
-): ProjectSearchResult[] {
-  const query = rawQuery.trim();
-  if (!query) return [];
-
-  const normalizedQuery = query.toLocaleLowerCase();
-  const results: ProjectSearchResult[] = [];
-
-  for (const block of documentAst.blocks) {
-    const source = block.source;
-    const normalizedSource = source.toLocaleLowerCase();
-    let from = 0;
-    let matchIndex = 0;
-
-    while (from <= normalizedSource.length) {
-      const index = normalizedSource.indexOf(normalizedQuery, from);
-      if (index < 0) break;
-
-      const line = block.lineIndex + 1;
-      const headingChain = findActiveOutlineChain(documentAst.outline, line);
-      results.push({
-        id: `current:${path ?? "scratch"}:${line}:${index}:${matchIndex}:${normalizedQuery}`,
-        kind: "fullText",
-        path: path ?? "",
-        name,
-        line,
-        column: index + 1,
-        title: headingChain[headingChain.length - 1]?.title ?? null,
-        excerpt: source,
-        headingChain,
-        matchStart: index,
-        matchLength: query.length,
-        score: index === 0 ? 70 : 50,
-      });
-
-      if (results.length >= maxResults) return results;
-      from = index + Math.max(1, normalizedQuery.length);
-      matchIndex += 1;
-    }
-  }
-
-  return results;
 }
 
 function collectEditorFindMatches(
@@ -2245,6 +2209,7 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
           : defaultSettings.exportOpensInWindow,
       proofread: normalizeProofreadSettings(settings.proofread),
     },
+    rightSidebarTab: normalizeRightSidebarTab(value?.rightSidebarTab),
     lastWorkspacePath:
       typeof value?.lastWorkspacePath === "string" ? value.lastWorkspacePath : null,
     lastFilePath: typeof value?.lastFilePath === "string" ? value.lastFilePath : null,
@@ -2597,7 +2562,9 @@ export default function App() {
   const [workspaceAlert, setWorkspaceAlert] = useState<WorkspaceAlert>(null);
   const [outlineQuery, setOutlineQuery] = useState("");
   const [projectSearchQuery, setProjectSearchQuery] = useState("");
-  const [searchScope, setSearchScope] = useState<WorkspaceSearchScope>("project");
+  const [searchScope, setSearchScope] = useState<WorkspaceSearchScope>("file");
+  const [projectSearchUseRegex, setProjectSearchUseRegex] = useState(false);
+  const [projectSearchMatchCase, setProjectSearchMatchCase] = useState(false);
   const [projectReplaceValue, setProjectReplaceValue] = useState("");
   const [isProjectReplacing, setIsProjectReplacing] = useState(false);
   const [leftSidebarView, setLeftSidebarView] =
@@ -2676,7 +2643,14 @@ export default function App() {
     sources: LoadedExportSource[];
     sourceError?: string;
   } | null>(null);
-  const [rightSidebarTab, setRightSidebarTab] = useState<string>("plot");
+  const [rightSidebarTab, setRightSidebarTabState] = useState<string>("plot");
+  const setRightSidebarTab = useCallback((tab: string) => {
+    setRightSidebarTabState(tab);
+    if (!isRestorableRightSidebarTab(tab)) return;
+    setAppState((current) =>
+      current.rightSidebarTab === tab ? current : { ...current, rightSidebarTab: tab },
+    );
+  }, []);
   const [draftCanvasContext, setDraftCanvasContext] = useState<DraftCanvasContext | null>(null);
   const [draftSelectRequest, setDraftSelectRequest] = useState<{ id: string; nonce: number } | null>(null);
   const [hasOpenedDraft, setHasOpenedDraft] = useState(false);
@@ -3790,15 +3764,26 @@ export default function App() {
     if (!normalized) return outlineFlatItems;
     return outlineFlatItems.filter((item) => item.title.toLowerCase().includes(normalized));
   }, [outlineFlatItems, outlineQuery]);
-  const currentFileSearchResults = useMemo(
+  const projectSearchOptions = useMemo<TextSearchOptions>(
+    () => ({ useRegex: projectSearchUseRegex, matchCase: projectSearchMatchCase }),
+    [projectSearchMatchCase, projectSearchUseRegex],
+  );
+  const currentFileSearchOutcome = useMemo(
     () =>
-      collectDocumentSearchMatches(
+      searchDocumentAstFullText(
         activeDocumentAst,
-        projectSearchQuery,
-        currentFilePath,
+        currentFilePath ?? "",
         currentFileName,
+        projectSearchQuery,
+        projectSearchOptions,
       ),
-    [activeDocumentAst, currentFileName, currentFilePath, projectSearchQuery],
+    [
+      activeDocumentAst,
+      currentFileName,
+      currentFilePath,
+      projectSearchOptions,
+      projectSearchQuery,
+    ],
   );
   const editorFindMatches = useMemo(
     () => collectEditorFindMatches(activeDocumentAst, editorFind.query),
@@ -3816,14 +3801,17 @@ export default function App() {
       activeIndex: Math.max(0, editorFindMatches.length - 1),
     }));
   }, [editorFind.activeIndex, editorFind.open, editorFindMatches.length]);
-  const projectSearchResults = useMemo(
-    () => searchProjectAst(projectAst, projectSearchQuery, "fullText"),
-    [projectAst, projectSearchQuery],
+  const projectSearchOutcome = useMemo(
+    () =>
+      searchProjectAstFullTextWithOptions(
+        projectAst,
+        projectSearchQuery,
+        projectSearchOptions,
+      ),
+    [projectAst, projectSearchOptions, projectSearchQuery],
   );
-  const workspaceSearchResults = useMemo(
-    () => (searchScope === "file" ? currentFileSearchResults : projectSearchResults),
-    [currentFileSearchResults, projectSearchResults, searchScope],
-  );
+  const workspaceSearchOutcome =
+    searchScope === "file" ? currentFileSearchOutcome : projectSearchOutcome;
   const breadcrumbTrail = useMemo(
     () => findPathToEntry(projectFolder, currentFilePath),
     [currentFilePath, projectFolder],
@@ -3950,6 +3938,7 @@ export default function App() {
       projectAstBuildIdRef.current += 1;
       setProjectAst(null);
       setProjectSearchQuery("");
+      setSearchScope("file");
       referenceLayoutLoadedRootRef.current = null;
       setReferenceLayout(defaultReferenceLayout);
       setReferenceCandidates([]);
@@ -4174,6 +4163,8 @@ export default function App() {
         folderPath: state.lastWorkspacePath,
       });
       setProjectFolder(folder);
+      setSearchScope("file");
+      setProjectSearchQuery("");
       setWorkspaceAlert(null);
       const restoredSnippets =
         state.settings.snippetStorageMode === "workspace"
@@ -4287,6 +4278,7 @@ export default function App() {
     loadStoredState()
       .then(async (state) => {
         if (isCancelled) return;
+        setRightSidebarTabState(state.rightSidebarTab);
 
         if (
           isTauriRuntime() &&
@@ -7491,17 +7483,34 @@ export default function App() {
     if (result.path && result.path !== currentFilePath) {
       await handleProjectFileSelect(result.path);
     }
-    jumpToEditorLine(result.line);
-    showToast(`「${result.name}」${result.line}行へ移動しました`);
+    if (result.absoluteFrom !== undefined && result.absoluteTo !== undefined) {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          editorInstanceRef.current?.selectRange(result.absoluteFrom!, result.absoluteTo!);
+          editorInstanceRef.current?.focus();
+        });
+      });
+    } else {
+      jumpToEditorLine(result.line);
+    }
   };
 
   const handleReplaceInCurrentFile = () => {
-    if (!projectSearchQuery.trim()) {
+    if (projectSearchQuery.length === 0) {
       showToast("検索語句を入力してください");
       return;
     }
 
-    const result = replaceMarkdownBodyMatches(markdown, projectSearchQuery, projectReplaceValue);
+    const result = replaceMarkdownBodyMatches(
+      markdown,
+      projectSearchQuery,
+      projectReplaceValue,
+      projectSearchOptions,
+    );
+    if (result.error) {
+      showToast("正規表現に誤りがあります");
+      return;
+    }
     if (result.count === 0) {
       showToast("置換できる一致がありません");
       return;
@@ -7521,15 +7530,19 @@ export default function App() {
       showToast("プロジェクト置換はTauri版で利用できます");
       return;
     }
-    if (!projectSearchQuery.trim()) {
+    if (projectSearchQuery.length === 0) {
       showToast("検索語句を入力してください");
+      return;
+    }
+    if (projectSearchOutcome.error) {
+      showToast("正規表現に誤りがあります");
       return;
     }
 
     const shouldReplace = await requestConfirm({
       title: "プロジェクト全体を置換",
-      message: "開いているフォルダ内のテキストファイルを保存しながら置換します。",
-      detail: `検索: ${projectSearchQuery} / 置換: ${projectReplaceValue || "空文字"}`,
+      message: `${projectSearchOutcome.matchedFileCount}ファイルの${projectSearchOutcome.total}件を置換します。`,
+      detail: `検索: ${projectSearchQuery} / 置換: ${projectReplaceValue || "空文字"}\n開いているフォルダ内の本文を保存しながら置換します。`,
       confirmLabel: "置換",
       danger: true,
     });
@@ -7553,7 +7566,9 @@ export default function App() {
           sourceMarkdown,
           projectSearchQuery,
           projectReplaceValue,
+          projectSearchOptions,
         );
+        if (result.error) throw new Error(result.error);
         if (result.count === 0) continue;
 
         const document = await invoke<TextDocument>("save_text_file", {
@@ -9725,6 +9740,7 @@ export default function App() {
             : undefined
         }
         data-startup-view={startupView}
+        data-native-window={isTauriRuntime() ? "true" : undefined}
         style={
           {
             "--editor-font-family": settings.editorFontFamily,
@@ -9748,8 +9764,9 @@ export default function App() {
           } as React.CSSProperties
         }
       >
+        <WindowControls />
         {startupView === "loading" ? (
-          <div className="startupPortalLoading" role="status">
+          <div className="startupPortalLoading" role="status" data-tauri-drag-region="deep">
             Then を読み込んでいます…
           </div>
         ) : startupView === "portal" ? (
@@ -9781,7 +9798,7 @@ export default function App() {
                 : undefined
             }
           >
-          <header className="topbar">
+          <header className="topbar" data-tauri-drag-region="deep">
             <div
               className="fileMenu"
               ref={fileMenuRef}
@@ -10719,7 +10736,13 @@ export default function App() {
                 collapsedOutlineHeadingKeys={collapsedTreeOutlineHeadingKeys}
                 onOutlineHeadingCollapsedChange={handleOutlineHeadingCollapsedChange}
                 projectSearchQuery={projectSearchQuery}
-                projectSearchResults={workspaceSearchResults}
+                projectSearchResults={workspaceSearchOutcome.results}
+                projectSearchTotal={workspaceSearchOutcome.total}
+                projectSearchMatchedFileCount={workspaceSearchOutcome.matchedFileCount}
+                projectSearchTruncated={workspaceSearchOutcome.truncated}
+                projectSearchError={workspaceSearchOutcome.error}
+                projectSearchUseRegex={projectSearchUseRegex}
+                projectSearchMatchCase={projectSearchMatchCase}
                 searchScope={searchScope}
                 projectReplaceValue={projectReplaceValue}
                 isProjectReplacing={isProjectReplacing}
@@ -10743,6 +10766,8 @@ export default function App() {
                 }
                 onExtractHeading={(source) => void handleHeadingExtract(source)}
                 onProjectSearchQueryChange={setProjectSearchQuery}
+                onProjectSearchUseRegexChange={setProjectSearchUseRegex}
+                onProjectSearchMatchCaseChange={setProjectSearchMatchCase}
                 onSearchScopeChange={setSearchScope}
                 onProjectReplaceValueChange={setProjectReplaceValue}
                 onOpenProjectSearchResult={(result) => void handleProjectSearchResultOpen(result)}

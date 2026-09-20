@@ -1,6 +1,7 @@
 import type { ExportFontFamily } from "./export/types";
 import type { ProofreadOptions } from "./proofread/types";
 import type { ProofreadTerm } from "./proofread/terms";
+import type { RestorableRightSidebarTab } from "./utils/rightSidebarState";
 
 export type {
   ProofreadTerm,
@@ -398,6 +399,8 @@ export type AppState = {
   snippets: IdeaThread[];
   profileSnippets: IdeaThread[];
   settings: EditorSettings;
+  /** 最後に表示していた、次回起動時にも復元可能な右サイドバーのタブ。 */
+  rightSidebarTab: RestorableRightSidebarTab;
   lastWorkspacePath: string | null;
   lastFilePath: string | null;
   recentWorkspaces: WorkspaceRecord[];

@@ -36,6 +36,7 @@
   --document-tabs-height: 35px;
   --document-tabs-hover-strip: 6px;
   --snippet-width: 320px;
+  --window-controls-width: 138px;
 }
 
 * {
@@ -52,6 +53,8 @@ body,
 
 body {
   overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 button,
@@ -59,6 +62,14 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+input,
+textarea,
+[contenteditable="true"],
+.cm-content {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .appShell {
@@ -541,6 +552,77 @@ body.thenPdfExporting .printExportViewport {
   background: linear-gradient(180deg, #20211f 0%, #1b1d1a 100%);
   color: var(--text-muted);
   font-size: 14px;
+}
+
+html:not([data-window-fullscreen="true"])
+  .appShell[data-native-window="true"]
+  .topbar,
+html:not([data-window-fullscreen="true"])
+  .appShell[data-native-window="true"]
+  .startupPortalHeader {
+  padding-right: calc(var(--window-controls-width) + 10px);
+}
+
+.windowControls {
+  position: fixed;
+  z-index: 2400;
+  top: 0;
+  right: 0;
+  display: flex;
+  width: var(--window-controls-width);
+  height: 36px;
+  color: var(--text-secondary);
+}
+
+.windowControls[data-fullscreen="true"] {
+  display: none;
+}
+
+.windowControlButton {
+  display: inline-grid;
+  width: 46px;
+  height: 36px;
+  flex: 0 0 46px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  cursor: default;
+}
+
+.windowControlButton:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.windowControlButton:active {
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.windowControlButton:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.windowControlButton svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  stroke-width: 1;
+}
+
+.windowCloseButton:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+
+.windowCloseButton:active {
+  background: #a92317;
 }
 
 .fileMenu,
@@ -4814,47 +4896,101 @@ body {
   flex-direction: column;
 }
 
-.sidebarSearch {
+.projectSearchInputShell {
   position: relative;
-  display: grid;
-  gap: 4px;
-  padding: 3px 10px 8px;
+  display: flex;
+  align-items: center;
+  margin: 7px 10px 6px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-panel-strong);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
-.searchFieldLabel {
-  color: var(--text-faint);
-  font-size: 10px;
+.projectSearchInputShell:focus-within {
+  border-color: rgba(201, 168, 74, 0.55);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
-.sidebarSearch .searchSvgIcon {
+.projectSearchInputShell.projectSearchInputError {
+  border-color: color-mix(in srgb, var(--danger) 72%, transparent);
+}
+
+.projectSearchInputShell .searchSvgIcon {
   position: absolute;
-  bottom: 17px;
-  left: 19px;
+  left: 9px;
+  width: 14px;
+  height: 14px;
   color: var(--text-faint);
   pointer-events: none;
 }
 
-.sidebarSearch input {
-  width: 100%;
-  height: 30px;
-  padding: 0 9px 0 27px;
-  border: 0.5px solid var(--border-subtle);
-  border-radius: 6px;
+.projectSearchInputShell input {
+  width: 0;
+  min-width: 0;
+  height: 34px;
+  flex: 1;
+  padding: 0 4px 0 29px;
+  border: 0;
   outline: none;
-  background: var(--bg-panel-strong);
+  background: transparent;
   color: var(--text-primary);
   font-size: 12px;
 }
 
-.sidebarSearch input:focus {
-  border-color: rgba(201, 168, 74, 0.5);
+.projectSearchOptions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+}
+
+.projectSearchOptions button {
+  display: grid;
+  width: 27px;
+  height: 25px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font: 600 10px/1 var(--font-ui, inherit);
+}
+
+.projectSearchOptions button:hover {
+  background: var(--control-hover, rgba(127, 137, 143, 0.12));
+  color: var(--text-primary);
+}
+
+.projectSearchOptions .activeSearchOption {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent-strong);
+}
+
+.projectSearchError {
+  margin: -1px 10px 7px;
+  color: var(--danger);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.projectSearchScopeRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 8px;
+  color: var(--text-faint);
+  font-size: 10px;
 }
 
 .projectSearchModes {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
-  padding: 0 10px 8px;
 }
 
 .projectSearchModes button,
@@ -4879,8 +5015,14 @@ body {
 }
 
 .projectSearchModes .activeProjectSearchMode {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel-strong));
   border-color: rgba(201, 168, 74, 0.55);
   color: var(--accent-strong);
+}
+
+.projectSearchModes button:disabled {
+  cursor: default;
+  opacity: 0.42;
 }
 
 .projectReplaceDisclosure {
@@ -4957,8 +5099,18 @@ body {
 
 .projectReplaceActions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
+}
+
+.projectSearchSummary {
+  display: flex;
+  min-height: 27px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px;
+  color: var(--text-faint);
+  font-size: 10px;
 }
 
 .projectReplaceActions button:disabled {
@@ -5152,17 +5304,50 @@ body {
   min-height: 0;
   flex: 1;
   align-content: start;
-  gap: 3px;
+  gap: 8px;
   overflow-y: auto;
-  padding: 0 6px 10px;
+  padding: 0 6px 12px;
   overscroll-behavior: contain;
+}
+
+.projectSearchResultGroup {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.projectSearchResultGroupHeader {
+  display: flex;
+  min-width: 0;
+  min-height: 25px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.projectSearchResultGroupHeader span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectSearchResultGroupHeader span:last-child {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 400;
 }
 
 .projectSearchResultItem {
   display: grid;
   min-width: 0;
-  gap: 3px;
-  padding: 7px 8px;
+  gap: 4px;
+  padding: 6px 8px 7px 14px;
   border: 0;
   border-radius: 5px;
   background: transparent;
@@ -5188,7 +5373,6 @@ body {
 }
 
 .projectSearchResultMeta span:first-child,
-.projectSearchResultTitle,
 .projectSearchResultExcerpt {
   min-width: 0;
   overflow: hidden;
@@ -5196,14 +5380,28 @@ body {
   white-space: nowrap;
 }
 
-.projectSearchResultTitle {
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
 .projectSearchResultExcerpt {
   color: var(--text-muted);
   font-size: 11px;
+}
+
+.projectSearchResultExcerpt mark {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.projectSearchResultExcerpt .zeroLengthSearchMatch {
+  background: transparent;
+  color: var(--accent-strong);
+}
+
+.projectSearchLimitNotice {
+  padding: 6px 8px;
+  color: var(--text-faint);
+  font-size: 10px;
+  text-align: center;
 }
 
 .snapshotSection {
@@ -11783,6 +11981,26 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
 .appFrame[data-editor-focus="true"] .breadcrumbs {
   position: absolute;
   inset: 0 54px 0 12px;
+}
+
+html:not([data-window-fullscreen="true"])
+  .appShell[data-native-window="true"]
+  .appFrame[data-editor-focus="true"]
+  .topbar {
+  padding-right: calc(var(--window-controls-width) + 54px);
+}
+
+html:not([data-window-fullscreen="true"])
+  .appShell[data-native-window="true"]
+  .appFrame[data-editor-focus="true"]
+  .breadcrumbs {
+  right: calc(var(--window-controls-width) + 54px);
+}
+
+html:not([data-window-fullscreen="true"])
+  .appShell[data-native-window="true"]
+  .editorFocusExitButton {
+  right: calc(var(--window-controls-width) + 12px);
 }
 
 .appFrame[data-editor-focus="true"] .leftWorkspaceCluster {

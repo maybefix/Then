@@ -137,5 +137,19 @@ export type ProjectSearchResult = {
   headingChain: DocumentOutlineItem[];
   matchStart: number;
   matchLength: number;
+  absoluteFrom?: number;
+  absoluteTo?: number;
+  excerptBefore?: string;
+  excerptMatch?: string;
+  excerptAfter?: string;
+  fileMatchCount?: number;
   score: number;
+};
+
+export type ProjectSearchOutcome = {
+  results: ProjectSearchResult[];
+  total: number;
+  matchedFileCount: number;
+  truncated: boolean;
+  error: string | null;
 };

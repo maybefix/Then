@@ -109,7 +109,7 @@ export function StartupPortal({
 
   return (
     <section className="startupPortal" aria-label="Then 起動ポータル">
-      <header className="startupPortalHeader">
+      <header className="startupPortalHeader" data-tauri-drag-region="deep">
         <span className="startupPortalMenuIcon" aria-hidden="true">
           <PortalIcon name="menu" />
         </span>

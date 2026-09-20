@@ -61,11 +61,19 @@ type WorkspaceSidebarProps = {
   onOutlineHeadingCollapsedChange: (key: string, collapsed: boolean) => void;
   projectSearchQuery: string;
   projectSearchResults: ProjectSearchResult[];
+  projectSearchTotal: number;
+  projectSearchMatchedFileCount: number;
+  projectSearchTruncated: boolean;
+  projectSearchError: string | null;
+  projectSearchUseRegex: boolean;
+  projectSearchMatchCase: boolean;
   searchScope: WorkspaceSearchScope;
   projectReplaceValue: string;
   isProjectReplacing: boolean;
   isProjectSearchMode: boolean;
   onProjectSearchQueryChange: (value: string) => void;
+  onProjectSearchUseRegexChange: (value: boolean) => void;
+  onProjectSearchMatchCaseChange: (value: boolean) => void;
   onSearchScopeChange: (value: WorkspaceSearchScope) => void;
   onProjectReplaceValueChange: (value: string) => void;
   onOpenProjectSearchResult: (result: ProjectSearchResult) => void;
@@ -195,13 +203,13 @@ function getEntryKind(entry: ProjectFolder | ProjectEntry): ProjectEntry["kind"]
   return isProjectEntry(entry) ? entry.kind : "folder";
 }
 
-function getProjectAstStatusLabel(projectAst: ProjectAst | null): string {
-  if (!projectAst) return "未構築";
-  if (projectAst.status === "empty") return "0";
-  if (projectAst.status === "indexing" || projectAst.status === "partial") {
-    return `${projectAst.indexedCount}/${projectAst.files.length}`;
+function getProjectAstStatusLabel(projectAst: ProjectAst | null): string | null {
+  if (!projectAst || projectAst.status === "empty" || projectAst.status === "ready") return null;
+  if (projectAst.status === "indexing") {
+    return `索引作成中 ${projectAst.indexedCount}/${projectAst.files.length}`;
   }
-  return String(projectAst.indexedCount);
+  if (projectAst.status === "partial") return `索引エラー ${projectAst.errorCount}件`;
+  return null;
 }
 
 function formatCharCount(value: number): string {
@@ -494,11 +502,19 @@ export function WorkspaceSidebar({
   onOutlineHeadingCollapsedChange,
   projectSearchQuery,
   projectSearchResults,
+  projectSearchTotal,
+  projectSearchMatchedFileCount,
+  projectSearchTruncated,
+  projectSearchError,
+  projectSearchUseRegex,
+  projectSearchMatchCase,
   searchScope,
   projectReplaceValue,
   isProjectReplacing,
   isProjectSearchMode,
   onProjectSearchQueryChange,
+  onProjectSearchUseRegexChange,
+  onProjectSearchMatchCaseChange,
   onSearchScopeChange,
   onProjectReplaceValueChange,
   onOpenProjectSearchResult,
@@ -1903,19 +1919,39 @@ export function WorkspaceSidebar({
     );
   };
 
-  const emptyProjectSearchMessage = !projectFolder
-    ? searchScope === "project"
-      ? "フォルダ未選択"
-      : "検索語句を入力"
-    : !projectSearchQuery.trim()
+  const groupedProjectSearchResults = useMemo(() => {
+    const groups: { path: string; name: string; count: number; results: ProjectSearchResult[] }[] = [];
+    const byPath = new Map<string, (typeof groups)[number]>();
+    for (const result of projectSearchResults) {
+      const key = result.path || "__current_document__";
+      let group = byPath.get(key);
+      if (!group) {
+        group = {
+          path: result.path,
+          name: result.name,
+          count: result.fileMatchCount ?? 0,
+          results: [],
+        };
+        byPath.set(key, group);
+        groups.push(group);
+      }
+      group.results.push(result);
+      group.count = Math.max(group.count, result.fileMatchCount ?? group.results.length);
+    }
+    return groups;
+  }, [projectSearchResults]);
+
+  const emptyProjectSearchMessage = projectSearchQuery.length === 0
       ? "検索語句を入力"
-      : searchScope === "project" &&
-          projectAst?.status === "indexing" &&
-          !projectSearchResults.length
-        ? "検索用の索引を作成中"
-        : searchScope === "file"
-          ? "ファイル内に一致がありません"
-          : "プロジェクト内に一致がありません";
+      : searchScope === "project" && !projectFolder
+        ? "プロジェクトを開いてください"
+        : searchScope === "project" &&
+            projectAst?.status === "indexing" &&
+            !projectSearchResults.length
+          ? "検索用の索引を作成中"
+          : searchScope === "file"
+            ? "現在の本文に一致がありません"
+            : "プロジェクト内に一致がありません";
 
   const manualSnapshots = snapshots.filter((snapshot) => snapshot.reason === "manual");
   const shelterSnapshots = snapshots.filter(
@@ -2036,39 +2072,72 @@ export function WorkspaceSidebar({
     );
   };
 
-  const renderProjectSearchMode = () => (
+  const renderProjectSearchMode = () => {
+    const indexStatus = searchScope === "project" ? getProjectAstStatusLabel(projectAst) : null;
+    const hasQuery = projectSearchQuery.length > 0;
+    const replaceCount = projectSearchTotal;
+
+    return (
     <section className="sidebarSection projectSearchModeSection" aria-label="検索と置換">
-      <div className="sidebarSectionHeader">
-        <span>検索と置換</span>
-        <span>{getProjectAstStatusLabel(projectAst)}</span>
-      </div>
-      <label className="sidebarSearch">
-        <span className="searchFieldLabel">検索語句</span>
+      <div className={`projectSearchInputShell ${projectSearchError ? "projectSearchInputError" : ""}`}>
         <SidebarIcon name="search" className="searchSvgIcon" />
         <input
           value={projectSearchQuery}
           onChange={(event) => onProjectSearchQueryChange(event.target.value)}
-          placeholder="検索する文字列"
-          type="search"
+          placeholder="本文を検索"
+          aria-label="検索語句"
+          type="text"
+          spellCheck={false}
         />
-      </label>
-      <div className="projectSearchModes" role="group" aria-label="検索範囲">
-        <button
-          className={searchScope === "file" ? "activeProjectSearchMode" : ""}
-          type="button"
-          aria-pressed={searchScope === "file"}
-          onClick={() => onSearchScopeChange("file")}
-        >
-          このファイルを検索
-        </button>
-        <button
-          className={searchScope === "project" ? "activeProjectSearchMode" : ""}
-          type="button"
-          aria-pressed={searchScope === "project"}
-          onClick={() => onSearchScopeChange("project")}
-        >
-          プロジェクトで検索
-        </button>
+        <div className="projectSearchOptions" role="group" aria-label="検索オプション">
+          <button
+            className={projectSearchMatchCase ? "activeSearchOption" : ""}
+            type="button"
+            title="大文字と小文字を区別"
+            aria-label="大文字と小文字を区別"
+            aria-pressed={projectSearchMatchCase}
+            onClick={() => onProjectSearchMatchCaseChange(!projectSearchMatchCase)}
+          >
+            Aa
+          </button>
+          <button
+            className={projectSearchUseRegex ? "activeSearchOption" : ""}
+            type="button"
+            title="正規表現を使用（^ と $ は各行の先頭・末尾）"
+            aria-label="正規表現を使用"
+            aria-pressed={projectSearchUseRegex}
+            onClick={() => onProjectSearchUseRegexChange(!projectSearchUseRegex)}
+          >
+            .*
+          </button>
+        </div>
+      </div>
+      {projectSearchError && (
+        <p className="projectSearchError" role="alert">
+          正規表現に誤りがあります：{projectSearchError}
+        </p>
+      )}
+      <div className="projectSearchScopeRow">
+        <span>範囲</span>
+        <div className="projectSearchModes" role="group" aria-label="検索範囲">
+          <button
+            className={searchScope === "file" ? "activeProjectSearchMode" : ""}
+            type="button"
+            aria-pressed={searchScope === "file"}
+            onClick={() => onSearchScopeChange("file")}
+          >
+            現在の本文
+          </button>
+          <button
+            className={searchScope === "project" ? "activeProjectSearchMode" : ""}
+            type="button"
+            aria-pressed={searchScope === "project"}
+            disabled={!projectFolder}
+            onClick={() => onSearchScopeChange("project")}
+          >
+            プロジェクト
+          </button>
+        </div>
       </div>
       <div className="projectReplaceDisclosure">
         <button
@@ -2077,7 +2146,7 @@ export function WorkspaceSidebar({
           aria-expanded={isReplaceExpanded}
           onClick={() => setIsReplaceExpanded((current) => !current)}
         >
-          <span>{isReplaceExpanded ? "置換を隠す" : "置換を表示"}</span>
+          <span>置換</span>
           <SidebarIcon
             name={isReplaceExpanded ? "chevronDown" : "chevronRight"}
             className="projectReplaceToggleIcon"
@@ -2086,7 +2155,7 @@ export function WorkspaceSidebar({
         {isReplaceExpanded && (
           <div className="projectReplacePanel">
             <label>
-              <span>置換後</span>
+              <span>{projectSearchUseRegex ? "置換後（$1 などを使用可）" : "置換後"}</span>
               <input
                 value={projectReplaceValue}
                 onChange={(event) => onProjectReplaceValueChange(event.target.value)}
@@ -2096,48 +2165,78 @@ export function WorkspaceSidebar({
             <div className="projectReplaceActions">
               <button
                 type="button"
-                disabled={isProjectReplacing || !projectSearchQuery.trim()}
-                onClick={onReplaceInCurrentFile}
+                disabled={
+                  isProjectReplacing ||
+                  !hasQuery ||
+                  Boolean(projectSearchError) ||
+                  replaceCount === 0 ||
+                  (searchScope === "project" && !projectFolder)
+                }
+                onClick={searchScope === "file" ? onReplaceInCurrentFile : onReplaceInProject}
               >
-                ファイル内で置換
-              </button>
-              <button
-                type="button"
-                disabled={isProjectReplacing || !projectFolder || !projectSearchQuery.trim()}
-                onClick={onReplaceInProject}
-              >
-                プロジェクト全置換
+                {isProjectReplacing
+                  ? "置換中…"
+                  : searchScope === "file"
+                    ? `${replaceCount}件を置換`
+                    : `${projectSearchMatchedFileCount}ファイル・${replaceCount}件を置換`}
               </button>
             </div>
           </div>
         )}
       </div>
+      <div className="projectSearchSummary" aria-live="polite">
+        <span>
+          {hasQuery && !projectSearchError
+            ? `本文のみ · ${projectSearchTotal}件`
+            : "本文のみ"}
+        </span>
+        {indexStatus && <span>{indexStatus}</span>}
+      </div>
       <div className="projectSearchList">
-        {projectSearchResults.length ? (
-          projectSearchResults.map((result) => (
-            <button
-              className="projectSearchResultItem"
-              key={result.id}
-              type="button"
-              title={result.path}
-              onClick={() => onOpenProjectSearchResult(result)}
-            >
-              <span className="projectSearchResultMeta">
-                <span>{result.name}</span>
-                <span>{result.line}行:{result.column}</span>
-              </span>
-              <span className="projectSearchResultTitle">
-                {result.title ?? result.name}
-              </span>
-              <span className="projectSearchResultExcerpt">{result.excerpt}</span>
-            </button>
+        {groupedProjectSearchResults.length ? (
+          groupedProjectSearchResults.map((group) => (
+            <section className="projectSearchResultGroup" key={group.path || group.name}>
+              <header className="projectSearchResultGroupHeader" title={group.path}>
+                <span>{group.name}</span>
+                <span>{group.count}件</span>
+              </header>
+              {group.results.map((result) => (
+                <button
+                  className="projectSearchResultItem"
+                  key={result.id}
+                  type="button"
+                  title={`${result.path || result.name} ${result.line}行 ${result.column}列`}
+                  onClick={() => onOpenProjectSearchResult(result)}
+                >
+                  <span className="projectSearchResultMeta">
+                    <span>{result.title ?? "本文"}</span>
+                    <span>{result.line}行 {result.column}列</span>
+                  </span>
+                  <span className="projectSearchResultExcerpt">
+                    {result.excerptBefore ?? result.excerpt}
+                    {result.excerptMatch !== undefined && (
+                      <mark className={result.matchLength === 0 ? "zeroLengthSearchMatch" : ""}>
+                        {result.excerptMatch || "│"}
+                      </mark>
+                    )}
+                    {result.excerptAfter ?? ""}
+                  </span>
+                </button>
+              ))}
+            </section>
           ))
-        ) : (
+        ) : projectSearchError ? null : (
           <div className="outlineEmptyState">{emptyProjectSearchMessage}</div>
+        )}
+        {projectSearchTruncated && (
+          <div className="projectSearchLimitNotice">
+            先頭{projectSearchResults.length}件を表示しています
+          </div>
         )}
       </div>
     </section>
-  );
+    );
+  };
 
   const renderSnapshotSection = () => (
     <section className="sidebarSection snapshotSection" aria-label="スナップショット">

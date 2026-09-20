@@ -21,8 +21,13 @@ import type {
   ProjectAst,
   ProjectAstFile,
   ProjectSearchMode,
+  ProjectSearchOutcome,
   ProjectSearchResult,
 } from "./types";
+import {
+  findTextSearchMatches,
+  type TextSearchOptions,
+} from "../../search/textSearch";
 
 type ProjectAstDocumentInput = Pick<TextDocument, "path" | "name"> & {
   text: string;
@@ -35,6 +40,14 @@ type ProjectAstFileRef = {
 };
 
 const DEFAULT_MAX_PROJECT_SEARCH_RESULTS = 80;
+
+const EMPTY_SEARCH_OUTCOME: ProjectSearchOutcome = {
+  results: [],
+  total: 0,
+  matchedFileCount: 0,
+  truncated: false,
+  error: null,
+};
 
 export function collectProjectTextFiles(folder: ProjectFolder | null): ProjectAstFileRef[] {
   if (!folder) return [];
@@ -209,6 +222,125 @@ function createExcerpt(text: string, index: number, length: number): string {
   const tail = suffix < text.length ? "..." : "";
   const excerpt = `${head}${text.slice(prefix, suffix).trim()}${tail}`;
   return excerpt.length > maxLength ? `${excerpt.slice(0, maxLength - 3)}...` : excerpt;
+}
+
+function createExcerptParts(text: string, index: number, length: number) {
+  const prefix = Math.max(0, index - 36);
+  const suffix = Math.min(text.length, index + length + 54);
+  const normalizeLineBreaks = (value: string) => value.replace(/\n/g, " ↵ ");
+  return {
+    before: `${prefix > 0 ? "…" : ""}${normalizeLineBreaks(text.slice(prefix, index))}`,
+    match: normalizeLineBreaks(text.slice(index, index + length)),
+    after: `${normalizeLineBreaks(text.slice(index + length, suffix))}${suffix < text.length ? "…" : ""}`,
+  };
+}
+
+function documentAstText(documentAst: DocumentAst): string {
+  return documentAst.blocks.map((block) => block.source).join("\n");
+}
+
+function findBlockAtOffset(documentAst: DocumentAst, offset: number) {
+  let active = documentAst.blocks[0] ?? null;
+  for (const block of documentAst.blocks) {
+    if (block.from > offset) break;
+    active = block;
+  }
+  return active;
+}
+
+export function searchDocumentAstFullText(
+  documentAst: DocumentAst,
+  path: string,
+  name: string,
+  rawQuery: string,
+  options: TextSearchOptions,
+  maxResults = DEFAULT_MAX_PROJECT_SEARCH_RESULTS,
+): ProjectSearchOutcome {
+  if (rawQuery.length === 0) return EMPTY_SEARCH_OUTCOME;
+
+  const text = documentAstText(documentAst);
+  const found = findTextSearchMatches(text, rawQuery, options, maxResults);
+  if (found.error) return { ...EMPTY_SEARCH_OUTCOME, error: found.error };
+
+  const results = found.matches.map((match, matchIndex) => {
+    const block = findBlockAtOffset(documentAst, match.index);
+    const line = (block?.lineIndex ?? 0) + 1;
+    const column = match.index - (block?.from ?? 0) + 1;
+    const headingChain = findActiveOutlineChain(documentAst.outline, line);
+    const excerpt = createExcerptParts(text, match.index, match.length);
+    return {
+      id: resultId(path, "fullText", line, column, rawQuery, matchIndex),
+      kind: "fullText" as const,
+      path,
+      name,
+      line,
+      column,
+      title: headingChain[headingChain.length - 1]?.title ?? null,
+      excerpt: `${excerpt.before}${excerpt.match}${excerpt.after}`,
+      excerptBefore: excerpt.before,
+      excerptMatch: excerpt.match,
+      excerptAfter: excerpt.after,
+      headingChain,
+      matchStart: match.index - (block?.from ?? 0),
+      matchLength: match.length,
+      absoluteFrom: match.index,
+      absoluteTo: match.index + match.length,
+      fileMatchCount: found.total,
+      score: column === 1 ? 70 : 50,
+    };
+  });
+
+  return {
+    results,
+    total: found.total,
+    matchedFileCount: found.total > 0 ? 1 : 0,
+    truncated: found.truncated,
+    error: null,
+  };
+}
+
+export function searchProjectAstFullTextWithOptions(
+  projectAst: ProjectAst | null,
+  rawQuery: string,
+  options: TextSearchOptions,
+  maxResults = DEFAULT_MAX_PROJECT_SEARCH_RESULTS,
+): ProjectSearchOutcome {
+  if (!projectAst || rawQuery.length === 0) return EMPTY_SEARCH_OUTCOME;
+
+  const results: ProjectSearchResult[] = [];
+  let total = 0;
+  let matchedFileCount = 0;
+
+  for (const file of projectAst.files) {
+    if (!file.documentAst) continue;
+    const outcome = searchDocumentAstFullText(
+      file.documentAst,
+      file.path,
+      file.name,
+      rawQuery,
+      options,
+      Math.max(0, maxResults - results.length),
+    );
+    if (outcome.error) return { ...EMPTY_SEARCH_OUTCOME, error: outcome.error };
+    total += outcome.total;
+    matchedFileCount += outcome.matchedFileCount;
+    results.push(...outcome.results);
+  }
+
+  results.sort((left, right) => {
+    const nameCompare = left.name.localeCompare(right.name, "ja");
+    if (nameCompare !== 0) return nameCompare;
+    if (left.line !== right.line) return left.line - right.line;
+    return left.column - right.column;
+  });
+
+  return {
+    results: results.slice(0, maxResults),
+    total,
+    matchedFileCount,
+    truncated: total > maxResults,
+    error: null,
+  };
 }
 
 function resultId(
