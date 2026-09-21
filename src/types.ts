@@ -506,6 +506,8 @@ export type ManuscriptSnapshotFile = {
 export type ManuscriptSnapshot = {
   id: string;
   revision: number;
+  /** 共有JSON全体のhash。同期による同一revision分岐の検出に使う。 */
+  storageHash: string;
   workspacePath: string;
   workspaceName: string;
   createdAt: number;

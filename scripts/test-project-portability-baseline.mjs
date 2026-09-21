@@ -24,6 +24,7 @@ assert.match(types, /fileProgress: Record<string, FileProgressStatus>/);
 assert.match(types, /fileProgressMigrationVersions: Record<string, number>/);
 assert.match(types, /checkpointMigrationVersions: Record<string, number>/);
 assert.match(types, /revision: number/);
+assert.match(types, /storageHash: string/);
 assert.match(types, /snapshots: ManuscriptSnapshot\[\]/);
 assert.match(app, /const MAX_AUTO_SHELTER_SNAPSHOTS = 3/);
 assert.equal(legacyState.fileProgress["C:\\Cloud\\Novel\\chapter.md"], "writing");
@@ -53,6 +54,9 @@ assert.ok(
   mirroredProgressIndex > persistedProgressIndex,
   "the compatibility mirror must update only after project persistence succeeds",
 );
+assert.match(progressSetter, /expectedRevision: expected\?\.revision/);
+assert.match(progressSetter, /expectedContentHash: expected\?\.contentHash/);
+assert.match(progressSetter, /saved\.rebased/);
 
 const snapshotBuilder = section(
   app,
@@ -124,6 +128,10 @@ assert.match(projectState, /fn validate_stored_project_path/);
 assert.match(projectState, /fn legacy_project_file_relative_path/);
 assert.match(projectState, /pub\(super\) fn load_project_file_progress/);
 assert.match(projectState, /pub\(super\) fn set_project_file_progress/);
+assert.match(projectState, /set_project_file_progress_guarded/);
+assert.match(projectState, /project_config_digest/);
+assert.match(projectState, /project state rollback conflict/);
+assert.match(projectState, /project state branch conflict/);
 assert.match(projectState, /config\.file_progress\.contains_key\(&relative_path\)/);
 
 const deleteConfig = section(
@@ -161,6 +169,8 @@ const storedCheckpoint = section(
 assert.doesNotMatch(storedCheckpoint, /workspace_path/);
 assert.match(checkpointStore, /temporary checkpoint verification failed/);
 assert.match(checkpointStore, /checkpoint revision conflict/);
+assert.match(checkpointStore, /checkpoint content conflict/);
+assert.match(checkpointStore, /storage_hash/);
 assert.match(checkpointStore, /warnings: Vec<String>/);
 assert.match(checkpointStore, /migrate_legacy_checkpoints/);
 assert.match(checkpointStore, /migration_complete/);
@@ -178,12 +188,29 @@ assert.ok(
   "checkpoint mirror must update only after project persistence succeeds",
 );
 assert.match(app, /expectedRevision: snapshot\.revision/);
+assert.match(app, /expectedHash: snapshot\.storageHash/);
+assert.match(app, /detectPortableProjectConflict/);
+assert.match(app, /portableProjectConflictsRef/);
+assert.match(app, /portableStorageErrorMessage/);
+const portableRefresh = section(
+  app,
+  "const refreshPortableProjectState = useCallback",
+  "const openIdeaCanvasBoard",
+);
+assert.match(portableRefresh, /loadWorkspaceFileProgress/);
+assert.match(portableRefresh, /loadWorkspaceCheckpoints/);
+assert.match(portableRefresh, /window\.addEventListener\("focus", refreshOnFocus\)/);
+assert.match(portableRefresh, /appMode !== "checkpoint"/);
+assert.match(portableRefresh, /portableProjectMutationGenerationRef/);
+assert.match(portableRefresh, /canWritePortableProjectState/);
 
 assert.match(plan, /### Phase 0: 基準固定と失敗時設計/);
 assert.match(plan, /### Phase 1: プロジェクト保存基盤の強化/);
 assert.match(plan, /### Phase 2: 進捗ラベルの共有化/);
 assert.match(plan, /### Phase 3: チェックポイントストアの導入/);
+assert.match(plan, /### Phase 4: 外部変更と同期遅延への防御/);
+assert.match(plan, /Phase 4[\s\S]*実装状況（2026-09-21）: 実装済み/);
 
 console.log(
-  "PASS portability Phase 0-3: project-backed progress and checkpoints, migrations, restore safety",
+  "PASS portability Phase 0-4: portable state, migrations, restore safety, sync conflict guards",
 );

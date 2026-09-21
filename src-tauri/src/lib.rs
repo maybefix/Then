@@ -23,7 +23,8 @@ use project_state::{
     legacy_project_config_path, load_project_config, load_project_config_unlocked,
     load_project_file_progress as read_project_file_progress, lock_project_config,
     project_config_path, remove_file_progress_path, retarget_file_progress_path,
-    save_project_config_unlocked, set_project_file_progress as write_project_file_progress,
+    save_project_config_unlocked,
+    set_project_file_progress_guarded as write_project_file_progress,
     trusted_project_relative_path, update_project_config, ProjectConfig,
     ProjectFileProgressState,
 };
@@ -2967,9 +2968,17 @@ fn set_project_file_progress(
     root_path: String,
     path: String,
     status: String,
+    expected_revision: Option<u64>,
+    expected_content_hash: Option<String>,
 ) -> Result<ProjectFileProgressState, String> {
     let root = PathBuf::from(root_path);
-    write_project_file_progress(&root, Path::new(&path), &status)
+    write_project_file_progress(
+        &root,
+        Path::new(&path),
+        &status,
+        expected_revision,
+        expected_content_hash.as_deref(),
+    )
 }
 
 #[tauri::command]
@@ -2995,6 +3004,7 @@ fn update_project_checkpoint_metadata(
     root_path: String,
     checkpoint_id: String,
     expected_revision: u64,
+    expected_hash: Option<String>,
     label: String,
     memo: String,
 ) -> Result<CheckpointLoadResult, String> {
@@ -3003,6 +3013,7 @@ fn update_project_checkpoint_metadata(
         &root,
         &checkpoint_id,
         expected_revision,
+        expected_hash.as_deref(),
         &label,
         &memo,
     )
@@ -3013,9 +3024,15 @@ fn delete_project_checkpoint(
     root_path: String,
     checkpoint_id: String,
     expected_revision: u64,
+    expected_hash: Option<String>,
 ) -> Result<CheckpointLoadResult, String> {
     let root = PathBuf::from(root_path);
-    delete_checkpoint(&root, &checkpoint_id, expected_revision)
+    delete_checkpoint(
+        &root,
+        &checkpoint_id,
+        expected_revision,
+        expected_hash.as_deref(),
+    )
 }
 
 #[tauri::command]

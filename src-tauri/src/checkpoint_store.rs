@@ -35,6 +35,8 @@ pub(super) struct ManuscriptSnapshot {
     pub(super) id: String,
     #[serde(default = "default_checkpoint_revision")]
     pub(super) revision: u64,
+    #[serde(default)]
+    pub(super) storage_hash: String,
     pub(super) workspace_path: String,
     pub(super) workspace_name: String,
     pub(super) created_at: i64,
@@ -447,10 +449,15 @@ fn runtime_tree_entry(root: &Path, entry: StoredProjectEntry) -> ProjectEntry {
     }
 }
 
-fn runtime_from_stored(root: &Path, checkpoint: StoredCheckpoint) -> ManuscriptSnapshot {
-    ManuscriptSnapshot {
+fn runtime_from_stored(
+    root: &Path,
+    checkpoint: StoredCheckpoint,
+) -> Result<ManuscriptSnapshot, String> {
+    let storage_hash = checkpoint_digest(&checkpoint)?;
+    Ok(ManuscriptSnapshot {
         id: checkpoint.id,
         revision: checkpoint.revision,
+        storage_hash,
         workspace_path: root.to_string_lossy().to_string(),
         workspace_name: checkpoint.project_tree.name.clone(),
         created_at: checkpoint.created_at,
@@ -486,7 +493,7 @@ fn runtime_from_stored(root: &Path, checkpoint: StoredCheckpoint) -> ManuscriptS
         file_count: checkpoint.file_count,
         total_text_length: checkpoint.total_text_length,
         total_visible_text_length: checkpoint.total_visible_text_length,
-    }
+    })
 }
 
 fn same_workspace(root: &Path, candidate: &Path) -> bool {
@@ -523,8 +530,16 @@ fn list_stored_checkpoints(root: &Path) -> (Vec<StoredCheckpoint>, Vec<String>) 
     };
     let mut checkpoints = Vec::new();
     let mut warnings = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
+    for entry in entries {
+        let path = match entry {
+            Ok(entry) => entry.path(),
+            Err(error) => {
+                warnings.push(format!(
+                    "チェックポイント項目を読み込めませんでした: {error}"
+                ));
+                continue;
+            }
+        };
         if path.extension().and_then(|value| value.to_str()) != Some("json") {
             continue;
         }
@@ -644,18 +659,18 @@ fn load_result_unlocked(
     migrated_count: usize,
     migration_complete: bool,
     mut warnings: Vec<String>,
-) -> CheckpointLoadResult {
+) -> Result<CheckpointLoadResult, String> {
     let (checkpoints, read_warnings) = list_stored_checkpoints(root);
     warnings.extend(read_warnings);
-    CheckpointLoadResult {
+    Ok(CheckpointLoadResult {
         snapshots: checkpoints
             .into_iter()
             .map(|checkpoint| runtime_from_stored(root, checkpoint))
-            .collect(),
+            .collect::<Result<Vec<_>, _>>()?,
         warnings,
         migrated_count,
         migration_complete,
-    }
+    })
 }
 
 pub(super) fn load_project_checkpoints(
@@ -675,12 +690,7 @@ pub(super) fn load_project_checkpoints(
         },
     };
     prune_auto_shelters(root)?;
-    Ok(load_result_unlocked(
-        root,
-        migration.migrated_count,
-        migration.complete,
-        warnings,
-    ))
+    load_result_unlocked(root, migration.migrated_count, migration.complete, warnings)
 }
 
 pub(super) fn create_project_checkpoint(
@@ -697,13 +707,14 @@ pub(super) fn create_project_checkpoint(
     if stored.reason == "auto-before-restore" {
         prune_auto_shelters(root)?;
     }
-    Ok(load_result_unlocked(root, 0, true, Vec::new()))
+    load_result_unlocked(root, 0, true, Vec::new())
 }
 
 pub(super) fn update_project_checkpoint_metadata(
     root: &Path,
     checkpoint_id: &str,
     expected_revision: u64,
+    expected_hash: Option<&str>,
     label: &str,
     memo: &str,
 ) -> Result<CheckpointLoadResult, String> {
@@ -719,6 +730,13 @@ pub(super) fn update_project_checkpoint_metadata(
             checkpoint.revision
         ));
     }
+    if let Some(expected_hash) = expected_hash.filter(|hash| !hash.is_empty()) {
+        if checkpoint_digest(&checkpoint)? != expected_hash {
+            return Err(format!(
+                "checkpoint content conflict: revision {expected_revision} has different content"
+            ));
+        }
+    }
     checkpoint.revision = checkpoint
         .revision
         .checked_add(1)
@@ -726,13 +744,14 @@ pub(super) fn update_project_checkpoint_metadata(
     checkpoint.label = label.to_string();
     checkpoint.memo = memo.to_string();
     replace_checkpoint_file(&path, &checkpoint)?;
-    Ok(load_result_unlocked(root, 0, true, Vec::new()))
+    load_result_unlocked(root, 0, true, Vec::new())
 }
 
 pub(super) fn delete_project_checkpoint(
     root: &Path,
     checkpoint_id: &str,
     expected_revision: u64,
+    expected_hash: Option<&str>,
 ) -> Result<CheckpointLoadResult, String> {
     if !root.is_dir() {
         return Err("project root does not exist".to_string());
@@ -745,6 +764,13 @@ pub(super) fn delete_project_checkpoint(
             "checkpoint revision conflict: expected {expected_revision}, found {}",
             checkpoint.revision
         ));
+    }
+    if let Some(expected_hash) = expected_hash.filter(|hash| !hash.is_empty()) {
+        if checkpoint_digest(&checkpoint)? != expected_hash {
+            return Err(format!(
+                "checkpoint content conflict: revision {expected_revision} has different content"
+            ));
+        }
     }
     let deletion_id = super::now_millis();
     let tombstone = path.with_extension(format!("json.deleted-{deletion_id}"));
@@ -780,7 +806,7 @@ pub(super) fn delete_project_checkpoint(
             ));
         }
     }
-    Ok(load_result_unlocked(root, 0, true, warnings))
+    load_result_unlocked(root, 0, true, warnings)
 }
 
 #[cfg(test)]
@@ -814,6 +840,7 @@ mod tests {
         ManuscriptSnapshot {
             id: id.to_string(),
             revision: 1,
+            storage_hash: String::new(),
             workspace_path: root.to_string_lossy().to_string(),
             workspace_name: "Novel".to_string(),
             created_at,
@@ -878,6 +905,7 @@ mod tests {
         let persisted = std::fs::read_to_string(destination_path).unwrap();
         assert!(!persisted.contains(&source.0.to_string_lossy().to_string()));
         assert!(!persisted.contains("workspacePath"));
+        assert!(!persisted.contains("storageHash"));
         assert!(persisted.contains("chapters/one.md"));
     }
 
@@ -951,7 +979,7 @@ mod tests {
         let root = TestDirectory::new("backup-recovery");
         let original = snapshot(&root.0, "snapshot-backup", "manual", 10);
         create_project_checkpoint(&root.0, &original).unwrap();
-        update_project_checkpoint_metadata(&root.0, &original.id, 1, "Updated", "").unwrap();
+        update_project_checkpoint_metadata(&root.0, &original.id, 1, None, "Updated", "").unwrap();
         let path = checkpoint_path(&root.0, &original.id).unwrap();
         std::fs::write(&path, "{").unwrap();
 
@@ -969,24 +997,56 @@ mod tests {
         create_project_checkpoint(&root.0, &original).unwrap();
 
         let updated =
-            update_project_checkpoint_metadata(&root.0, &original.id, 1, "Renamed", "Memo")
+            update_project_checkpoint_metadata(&root.0, &original.id, 1, None, "Renamed", "Memo")
                 .unwrap();
         assert_eq!(updated.snapshots[0].revision, 2);
         assert_eq!(updated.snapshots[0].label, "Renamed");
         assert!(
-            update_project_checkpoint_metadata(&root.0, &original.id, 1, "Stale", "",)
+            update_project_checkpoint_metadata(&root.0, &original.id, 1, None, "Stale", "",)
                 .err()
                 .unwrap()
                 .contains("revision conflict")
         );
 
-        let deleted = delete_project_checkpoint(&root.0, &original.id, 2).unwrap();
+        let deleted = delete_project_checkpoint(&root.0, &original.id, 2, None).unwrap();
         assert!(deleted.snapshots.is_empty());
         assert!(!checkpoint_path(&root.0, &original.id).unwrap().exists());
         assert!(!checkpoint_path(&root.0, &original.id)
             .unwrap()
             .with_extension("json.bak")
             .exists());
+    }
+
+    #[test]
+    fn metadata_update_rejects_same_revision_with_different_content() {
+        let root = TestDirectory::new("content-conflict");
+        let original = snapshot(&root.0, "snapshot-content-conflict", "manual", 10);
+        let created = create_project_checkpoint(&root.0, &original).unwrap();
+        let known_hash = created.snapshots[0].storage_hash.clone();
+        let path = checkpoint_path(&root.0, &original.id).unwrap();
+        let mut externally_changed = read_stored_checkpoint_file(&path).unwrap();
+        externally_changed.label = "別端末の変更".to_string();
+        std::fs::write(
+            &path,
+            serde_json::to_string_pretty(&externally_changed).unwrap(),
+        )
+        .unwrap();
+
+        let error = update_project_checkpoint_metadata(
+            &root.0,
+            &original.id,
+            1,
+            Some(&known_hash),
+            "Local",
+            "",
+        )
+        .err()
+        .unwrap();
+        assert!(error.contains("content conflict"));
+        assert_eq!(
+            read_stored_checkpoint_file(&path).unwrap().label,
+            "別端末の変更"
+        );
     }
 
     #[test]

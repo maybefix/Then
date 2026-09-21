@@ -354,6 +354,8 @@ type ProjectFileProgressState = {
   fileProgress: Record<string, FileProgressStatus>;
   revision: number;
   migratedCount: number;
+  contentHash: string;
+  rebased: boolean;
 };
 
 type CheckpointLoadResult = {
@@ -362,6 +364,86 @@ type CheckpointLoadResult = {
   migratedCount: number;
   migrationComplete: boolean;
 };
+
+type PortableStoreVersion = {
+  revision: number;
+  contentHash: string;
+};
+
+function portableProjectKey(rootPath: string): string {
+  return workspaceDocumentTabsKey(rootPath);
+}
+
+function detectPortableProjectConflict(
+  knownProgress: PortableStoreVersion | undefined,
+  nextProgress: ProjectFileProgressState,
+  knownSnapshots: ManuscriptSnapshot[],
+  nextSnapshots: ManuscriptSnapshot[],
+): string | null {
+  if (knownProgress) {
+    if (nextProgress.revision < knownProgress.revision) {
+      return "同期されたproject.jsonが、すでに確認した版より古くなっています。同期完了を待って再読込してください。";
+    }
+    if (
+      nextProgress.revision === knownProgress.revision &&
+      knownProgress.contentHash &&
+      nextProgress.contentHash &&
+      knownProgress.contentHash !== nextProgress.contentHash
+    ) {
+      return "project.jsonに同じrevisionの異なる内容が見つかりました。競合コピーを確認してください。";
+    }
+  }
+
+  return detectPortableCheckpointConflict(knownSnapshots, nextSnapshots);
+}
+
+function detectPortableCheckpointConflict(
+  knownSnapshots: ManuscriptSnapshot[],
+  nextSnapshots: ManuscriptSnapshot[],
+  allowAllRemoved = false,
+): string | null {
+  if (!allowAllRemoved && knownSnapshots.length > 0 && nextSnapshots.length === 0) {
+    return "チェックポイントが一度にすべて見えなくなりました。クラウド同期またはファイル取得の完了を待って再読込してください。";
+  }
+  const nextById = new Map(nextSnapshots.map((snapshot) => [snapshot.id, snapshot] as const));
+  for (const known of knownSnapshots) {
+    const next = nextById.get(known.id);
+    if (!next) continue;
+    if (next.revision < known.revision) {
+      return `チェックポイント「${known.label}」が既知の版より古くなっています。同期完了を待って再読込してください。`;
+    }
+    if (
+      next.revision === known.revision &&
+      known.storageHash &&
+      next.storageHash &&
+      known.storageHash !== next.storageHash
+    ) {
+      return `チェックポイント「${known.label}」に同じrevisionの異なる内容が見つかりました。競合コピーを確認してください。`;
+    }
+  }
+  return null;
+}
+
+function portableStorageErrorMessage(error: unknown): string {
+  const message = String(error);
+  if (/rollback conflict|branch conflict|content conflict|revision conflict/i.test(message)) {
+    return "同期されたプロジェクト状態と競合したため保存を止めました。同期完了後に再読込してください。";
+  }
+  if (/access is denied|permission denied|read-only|readonly|os error 5|アクセスが拒否|書き込み禁止|読み取り専用/i.test(message)) {
+    return "プロジェクト状態が読み取り専用です。クラウドストレージやフォルダの権限を確認してください。";
+  }
+  if (/offline|placeholder|not available|cloud file|network|os error 362|os error 1168|オフライン|クラウド.?ファイル|利用できません/i.test(message)) {
+    return "クラウド上のプロジェクト状態が未取得または同期中です。端末へダウンロードしてから再試行してください。";
+  }
+  return "プロジェクト状態を読み書きできませんでした。同期状況とファイルの取得状態を確認してください。";
+}
+
+function checkpointWarningMessage(warning: string): string {
+  if (/access is denied|permission denied|read-only|readonly|os error 5|アクセスが拒否|書き込み禁止|読み取り専用|offline|placeholder|not available|cloud file|network|os error 362|os error 1168|オフライン|クラウド.?ファイル|利用できません/i.test(warning)) {
+    return portableStorageErrorMessage(warning);
+  }
+  return `チェックポイントの警告: ${warning}`;
+}
 
 type NotationModalState =
   | {
@@ -1324,6 +1406,7 @@ function normalizeSnapshots(value: unknown): ManuscriptSnapshot[] {
           snapshot.revision > 0
             ? snapshot.revision
             : 1,
+        storageHash: typeof snapshot.storageHash === "string" ? snapshot.storageHash : "",
         workspacePath,
         workspaceName,
         createdAt:
@@ -2425,6 +2508,8 @@ async function loadWorkspaceFileProgress(
       fileProgress: state.fileProgress,
       revision: 0,
       migratedCount: 0,
+      contentHash: "",
+      rebased: false,
     };
   }
   const workspaceKey = workspaceDocumentTabsKey(folderPath);
@@ -2617,6 +2702,11 @@ export default function App() {
   const headingMoveInProgressRef = useRef(false);
   const projectEntryPathChangeInProgressRef = useRef(false);
   const fileProgressSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const fileProgressStoreVersionsRef = useRef<Map<string, PortableStoreVersion>>(new Map());
+  const portableProjectConflictsRef = useRef<Map<string, string>>(new Map());
+  const portableProjectRefreshesRef = useRef<Map<string, Promise<void>>>(new Map());
+  const deletedCheckpointIdsRef = useRef<Map<string, Set<string>>>(new Map());
+  const portableProjectMutationGenerationRef = useRef<Map<string, number>>(new Map());
   const workspaceSwitchInProgressRef = useRef(false);
   const workspaceSwitchGenerationRef = useRef(0);
   const toastTimerRef = useRef<number | null>(null);
@@ -4330,6 +4420,10 @@ export default function App() {
       const restoredProofreadIgnored = await loadWorkspaceProofreadIgnored(folder.path);
       const restoredFileProgress = await loadWorkspaceFileProgress(folder.path, state);
       const restoredCheckpoints = await loadWorkspaceCheckpoints(folder.path, state);
+      fileProgressStoreVersionsRef.current.set(portableProjectKey(folder.path), {
+        revision: restoredFileProgress.revision,
+        contentHash: restoredFileProgress.contentHash,
+      });
       setSnippetWorkspacePath(
         state.settings.snippetStorageMode === "workspace" ? folder.path : null,
       );
@@ -4419,7 +4513,7 @@ export default function App() {
         },
       });
       if (restoredCheckpoints.warnings.length) {
-        showToast(`チェックポイントの警告: ${restoredCheckpoints.warnings[0]}`);
+        showToast(checkpointWarningMessage(restoredCheckpoints.warnings[0]));
       }
       setLastError("");
       setSaveStatus("saved");
@@ -4619,6 +4713,10 @@ export default function App() {
       ]) => {
         if (isCancelled) return;
         if (workspaceSwitchGeneration !== workspaceSwitchGenerationRef.current) return;
+        fileProgressStoreVersionsRef.current.set(portableProjectKey(folder.path), {
+          revision: workspaceFileProgress.revision,
+          contentHash: workspaceFileProgress.contentHash,
+        });
         setProjectFolder(folder);
         setFocusedFolderPath(null);
         setWorkspaceAlert(null);
@@ -4654,7 +4752,7 @@ export default function App() {
           ),
         }));
         if (workspaceCheckpoints.warnings.length) {
-          showToast(`チェックポイントの警告: ${workspaceCheckpoints.warnings[0]}`);
+          showToast(checkpointWarningMessage(workspaceCheckpoints.warnings[0]));
         }
       })
       .catch((error) => {
@@ -5012,6 +5110,179 @@ export default function App() {
       setToastAction(null);
       toastTimerRef.current = null;
     }, action ? 5000 : 2200);
+  };
+
+  const refreshPortableProjectState = useCallback(
+    async (rootPath: string, source: "focus" | "checkpoint") => {
+      if (!isTauriRuntime()) return;
+      const key = portableProjectKey(rootPath);
+      const existing = portableProjectRefreshesRef.current.get(key);
+      if (existing) return existing;
+
+      const notify = (message: string, duration = 3200) => {
+        setToast(message);
+        setToastAction(null);
+        if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = window.setTimeout(() => {
+          setToast("");
+          setToastAction(null);
+          toastTimerRef.current = null;
+        }, duration);
+      };
+
+      const operation = (async () => {
+        await fileProgressSaveQueueRef.current.catch(() => undefined);
+        const mutationGeneration = portableProjectMutationGenerationRef.current.get(key) ?? 0;
+        const state = appStateRef.current;
+        const [progress, checkpoints] = await Promise.all([
+          loadWorkspaceFileProgress(rootPath, state),
+          loadWorkspaceCheckpoints(rootPath, state),
+        ]);
+        if (
+          (portableProjectMutationGenerationRef.current.get(key) ?? 0) !== mutationGeneration
+        ) {
+          return;
+        }
+        const knownProgress = fileProgressStoreVersionsRef.current.get(key);
+        const knownSnapshots = state.snapshots.filter((snapshot) =>
+          isSamePath(snapshot.workspacePath, rootPath),
+        );
+        const deletedIds = deletedCheckpointIdsRef.current.get(key);
+        const resurrected = deletedIds
+          ? checkpoints.snapshots.find((snapshot) => deletedIds.has(snapshot.id))
+          : null;
+        const conflict = resurrected
+          ? `削除済みのチェックポイント「${resurrected.label}」が再出現しました。同期の巻き戻りを確認してください。`
+          : detectPortableProjectConflict(
+              knownProgress,
+              progress,
+              knownSnapshots,
+              checkpoints.snapshots,
+            );
+        if (conflict) {
+          portableProjectConflictsRef.current.set(key, conflict);
+          setLastError(conflict);
+          notify(conflict, 6000);
+          return;
+        }
+
+        const changed = Boolean(
+          knownProgress &&
+            (knownProgress.revision !== progress.revision ||
+              knownProgress.contentHash !== progress.contentHash),
+        ) || knownSnapshots.length !== checkpoints.snapshots.length ||
+          knownSnapshots.some((known) => {
+            const next = checkpoints.snapshots.find((snapshot) => snapshot.id === known.id);
+            return !next ||
+              next.revision !== known.revision ||
+              next.storageHash !== known.storageHash;
+          });
+
+        fileProgressStoreVersionsRef.current.set(key, {
+          revision: progress.revision,
+          contentHash: progress.contentHash,
+        });
+        portableProjectConflictsRef.current.delete(key);
+        setAppState((current) => ({
+          ...current,
+          fileProgress: replaceWorkspaceFileProgress(
+            current.fileProgress,
+            rootPath,
+            progress.fileProgress,
+          ),
+          fileProgressMigrationVersions: markFileProgressMigration(
+            current.fileProgressMigrationVersions,
+            rootPath,
+          ),
+          snapshots: replaceWorkspaceSnapshots(
+            current.snapshots,
+            rootPath,
+            checkpoints.snapshots,
+          ),
+          checkpointMigrationVersions: markCheckpointMigration(
+            current.checkpointMigrationVersions,
+            rootPath,
+            checkpoints.migrationComplete,
+          ),
+        }));
+
+        if (checkpoints.warnings.length) {
+          notify(checkpointWarningMessage(checkpoints.warnings[0]), 5000);
+        } else if (changed) {
+          notify(
+            source === "checkpoint"
+              ? "同期されたチェックポイントを再読込しました"
+              : "同期されたプロジェクト状態を再読込しました",
+          );
+        }
+      })().catch((error) => {
+        const message = portableStorageErrorMessage(error);
+        portableProjectConflictsRef.current.set(key, message);
+        setLastError(`${message} ${String(error)}`);
+        notify(message, 5000);
+      });
+
+      portableProjectRefreshesRef.current.set(key, operation);
+      try {
+        await operation;
+      } finally {
+        if (portableProjectRefreshesRef.current.get(key) === operation) {
+          portableProjectRefreshesRef.current.delete(key);
+        }
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const rootPath = projectFolder?.path;
+    if (!isHydrated || !rootPath || !isTauriRuntime()) return;
+    const refreshOnFocus = () => {
+      if (document.visibilityState === "hidden") return;
+      void refreshPortableProjectState(rootPath, "focus");
+    };
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshOnFocus);
+    return () => {
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshOnFocus);
+    };
+  }, [isHydrated, projectFolder?.path, refreshPortableProjectState]);
+
+  useEffect(() => {
+    const rootPath = projectFolder?.path;
+    if (appMode !== "checkpoint" || !rootPath) return;
+    void refreshPortableProjectState(rootPath, "checkpoint");
+  }, [appMode, projectFolder?.path, refreshPortableProjectState]);
+
+  const canWritePortableProjectState = (rootPath: string): boolean => {
+    const conflict = portableProjectConflictsRef.current.get(portableProjectKey(rootPath));
+    if (!conflict) return true;
+    setLastError(conflict);
+    showToast("同期・取得状態を確認して再読込するまで、プロジェクト状態の保存を停止します");
+    return false;
+  };
+
+  const waitForPortableProjectWrite = async (rootPath: string): Promise<boolean> => {
+    await portableProjectRefreshesRef.current
+      .get(portableProjectKey(rootPath))
+      ?.catch(() => undefined);
+    return canWritePortableProjectState(rootPath);
+  };
+
+  const beginPortableProjectMutation = (rootPath: string) => {
+    const key = portableProjectKey(rootPath);
+    portableProjectMutationGenerationRef.current.set(
+      key,
+      (portableProjectMutationGenerationRef.current.get(key) ?? 0) + 1,
+    );
+  };
+
+  const reportPortableStorageError = (rootPath: string, error: unknown) => {
+    const message = portableStorageErrorMessage(error);
+    portableProjectConflictsRef.current.set(portableProjectKey(rootPath), message);
+    setLastError(`${message} ${String(error)}`);
+    showToast(message);
   };
 
   const openIdeaCanvasBoard = async (
@@ -5987,7 +6258,18 @@ export default function App() {
   const applyCheckpointStoreResult = (
     rootPath: string,
     result: CheckpointLoadResult,
-  ) => {
+    allowAllRemoved = false,
+  ): boolean => {
+    const known = appStateRef.current.snapshots.filter((snapshot) =>
+      isSamePath(snapshot.workspacePath, rootPath),
+    );
+    const conflict = detectPortableCheckpointConflict(known, result.snapshots, allowAllRemoved);
+    if (conflict) {
+      portableProjectConflictsRef.current.set(portableProjectKey(rootPath), conflict);
+      setLastError(conflict);
+      showToast(conflict);
+      return false;
+    }
     setAppState((current) => ({
       ...current,
       snapshots: replaceWorkspaceSnapshots(current.snapshots, rootPath, result.snapshots),
@@ -5996,6 +6278,7 @@ export default function App() {
         rootPath,
       ),
     }));
+    return true;
   };
 
   const buildManuscriptSnapshot = useCallback(
@@ -6065,6 +6348,7 @@ export default function App() {
       return {
         id: snapshotId(reason === "manual" ? "snapshot" : "shelter"),
         revision: 1,
+        storageHash: "",
         workspacePath: projectFolder.path,
         workspaceName: projectFolder.name,
         createdAt: Date.now(),
@@ -6090,6 +6374,7 @@ export default function App() {
       showToast("先にフォルダを開いてください");
       return;
     }
+    if (!canWritePortableProjectState(projectFolder.path)) return;
 
     const now = new Date();
     const snapshotDraft = await requestMultiInput({
@@ -6116,6 +6401,7 @@ export default function App() {
       confirmLabel: "作成",
     });
     if (!snapshotDraft) return;
+    if (!(await waitForPortableProjectWrite(projectFolder.path))) return;
 
     try {
       const snapshot = buildManuscriptSnapshot(
@@ -6125,13 +6411,14 @@ export default function App() {
         currentWorkspaceSnapshots[0] ? [currentWorkspaceSnapshots[0].id] : [],
       );
       if (isTauriRuntime()) {
+        beginPortableProjectMutation(projectFolder.path);
         const stored = await invoke<CheckpointLoadResult>("create_project_checkpoint", {
           rootPath: projectFolder.path,
           snapshot,
         });
-        applyCheckpointStoreResult(projectFolder.path, stored);
+        if (!applyCheckpointStoreResult(projectFolder.path, stored)) return;
         if (stored.warnings.length) {
-          showToast(`チェックポイントの警告: ${stored.warnings[0]}`);
+          showToast(checkpointWarningMessage(stored.warnings[0]));
           return;
         }
       } else {
@@ -6142,8 +6429,14 @@ export default function App() {
       }
       showToast("チェックポイントを作成しました");
     } catch (error) {
-      setLastError(String(error));
-      showToast(error instanceof Error ? error.message : "チェックポイントを作成できませんでした");
+      if (error instanceof Error) {
+        setLastError(error.message);
+        showToast(error.message);
+      } else if (isTauriRuntime()) reportPortableStorageError(projectFolder.path, error);
+      else {
+        setLastError(String(error));
+        showToast(error instanceof Error ? error.message : "チェックポイントを作成できませんでした");
+      }
     }
   }, [buildManuscriptSnapshot, currentWorkspaceSnapshots, projectFolder]);
 
@@ -6153,6 +6446,7 @@ export default function App() {
         showToast("復元前の退避は自動管理のため削除できません");
         return;
       }
+      if (projectFolder && !canWritePortableProjectState(projectFolder.path)) return;
       const shouldDelete = await requestConfirm({
         title: "チェックポイントを削除",
         message: `「${snapshot.label}」を削除しますか？`,
@@ -6161,15 +6455,22 @@ export default function App() {
         danger: true,
       });
       if (!shouldDelete) return;
+      if (projectFolder && !(await waitForPortableProjectWrite(projectFolder.path))) return;
 
       try {
         if (projectFolder && isTauriRuntime()) {
+          beginPortableProjectMutation(projectFolder.path);
           const stored = await invoke<CheckpointLoadResult>("delete_project_checkpoint", {
             rootPath: projectFolder.path,
             checkpointId: snapshot.id,
             expectedRevision: snapshot.revision,
+            expectedHash: snapshot.storageHash || null,
           });
-          applyCheckpointStoreResult(projectFolder.path, stored);
+          const key = portableProjectKey(projectFolder.path);
+          const deletedIds = deletedCheckpointIdsRef.current.get(key) ?? new Set<string>();
+          deletedIds.add(snapshot.id);
+          deletedCheckpointIdsRef.current.set(key, deletedIds);
+          if (!applyCheckpointStoreResult(projectFolder.path, stored, true)) return;
         } else {
           setAppState((current) => ({
             ...current,
@@ -6178,14 +6479,18 @@ export default function App() {
         }
         showToast("チェックポイントを削除しました");
       } catch (error) {
-        setLastError(String(error));
-        showToast("チェックポイントを削除できませんでした");
+        if (projectFolder) reportPortableStorageError(projectFolder.path, error);
+        else {
+          setLastError(String(error));
+          showToast("チェックポイントを削除できませんでした");
+        }
       }
     },
     [projectFolder],
   );
 
   const handleRenameManuscriptSnapshot = useCallback(async (snapshot: ManuscriptSnapshot) => {
+    if (projectFolder && !canWritePortableProjectState(projectFolder.path)) return;
     const label = await requestInput({
       title: "タイトルを編集",
       label: "タイトル",
@@ -6195,17 +6500,20 @@ export default function App() {
     });
     if (!label) return;
     if (label === snapshot.label) return;
+    if (projectFolder && !(await waitForPortableProjectWrite(projectFolder.path))) return;
 
     try {
       if (projectFolder && isTauriRuntime()) {
+        beginPortableProjectMutation(projectFolder.path);
         const stored = await invoke<CheckpointLoadResult>("update_project_checkpoint_metadata", {
           rootPath: projectFolder.path,
           checkpointId: snapshot.id,
           expectedRevision: snapshot.revision,
+          expectedHash: snapshot.storageHash || null,
           label,
           memo: snapshot.memo,
         });
-        applyCheckpointStoreResult(projectFolder.path, stored);
+        if (!applyCheckpointStoreResult(projectFolder.path, stored)) return;
       } else {
         setAppState((current) => ({
           ...current,
@@ -6216,12 +6524,16 @@ export default function App() {
       }
       showToast("チェックポイントのタイトルを変更しました");
     } catch (error) {
-      setLastError(String(error));
-      showToast("チェックポイントのタイトルを変更できませんでした");
+      if (projectFolder) reportPortableStorageError(projectFolder.path, error);
+      else {
+        setLastError(String(error));
+        showToast("チェックポイントのタイトルを変更できませんでした");
+      }
     }
   }, [projectFolder]);
 
   const handleEditManuscriptSnapshotMemo = useCallback(async (snapshot: ManuscriptSnapshot) => {
+    if (projectFolder && !canWritePortableProjectState(projectFolder.path)) return;
     const result = await requestMultiInput({
       title: "メモを編集",
       fields: [
@@ -6239,17 +6551,20 @@ export default function App() {
     if (!result) return;
     const memo = result.memo ?? "";
     if (memo === snapshot.memo) return;
+    if (projectFolder && !(await waitForPortableProjectWrite(projectFolder.path))) return;
 
     try {
       if (projectFolder && isTauriRuntime()) {
+        beginPortableProjectMutation(projectFolder.path);
         const stored = await invoke<CheckpointLoadResult>("update_project_checkpoint_metadata", {
           rootPath: projectFolder.path,
           checkpointId: snapshot.id,
           expectedRevision: snapshot.revision,
+          expectedHash: snapshot.storageHash || null,
           label: snapshot.label,
           memo,
         });
-        applyCheckpointStoreResult(projectFolder.path, stored);
+        if (!applyCheckpointStoreResult(projectFolder.path, stored)) return;
       } else {
         setAppState((current) => ({
           ...current,
@@ -6260,8 +6575,11 @@ export default function App() {
       }
       showToast("チェックポイントのメモを変更しました");
     } catch (error) {
-      setLastError(String(error));
-      showToast("チェックポイントのメモを変更できませんでした");
+      if (projectFolder) reportPortableStorageError(projectFolder.path, error);
+      else {
+        setLastError(String(error));
+        showToast("チェックポイントのメモを変更できませんでした");
+      }
     }
   }, [projectFolder]);
 
@@ -6315,6 +6633,10 @@ export default function App() {
       const nextProofreadIgnored = await loadWorkspaceProofreadIgnored(folder.path);
       const nextFileProgress = await loadWorkspaceFileProgress(folder.path, appStateRef.current);
       const nextCheckpoints = await loadWorkspaceCheckpoints(folder.path, appStateRef.current);
+      fileProgressStoreVersionsRef.current.set(portableProjectKey(folder.path), {
+        revision: nextFileProgress.revision,
+        contentHash: nextFileProgress.contentHash,
+      });
       if (nextSnippets) {
         setSnippetWorkspacePath(folder.path);
       }
@@ -6373,7 +6695,7 @@ export default function App() {
         };
       });
       if (nextCheckpoints.warnings.length) {
-        showToast(`チェックポイントの警告: ${nextCheckpoints.warnings[0]}`);
+        showToast(checkpointWarningMessage(nextCheckpoints.warnings[0]));
       }
       return { folder, switched };
     },
@@ -6405,6 +6727,7 @@ export default function App() {
         showToast("チェックポイントへの復元はTauri版で利用できます");
         return;
       }
+      if (!canWritePortableProjectState(projectFolder.path)) return;
 
       const shouldRestore = await requestConfirm({
         title: "チェックポイントに戻す",
@@ -6413,6 +6736,7 @@ export default function App() {
         confirmLabel: "戻す",
       });
       if (!shouldRestore) return;
+      if (!(await waitForPortableProjectWrite(projectFolder.path))) return;
 
       try {
         const shelter = buildManuscriptSnapshot(
@@ -6421,11 +6745,12 @@ export default function App() {
           "auto-before-restore",
           currentWorkspaceSnapshots[0] ? [currentWorkspaceSnapshots[0].id] : [],
         );
+        beginPortableProjectMutation(projectFolder.path);
         const storedShelter = await invoke<CheckpointLoadResult>("create_project_checkpoint", {
           rootPath: projectFolder.path,
           snapshot: shelter,
         });
-        applyCheckpointStoreResult(projectFolder.path, storedShelter);
+        if (!applyCheckpointStoreResult(projectFolder.path, storedShelter)) return;
         const restoredDocuments: TextDocument[] = [];
         const snapshotPathKeys = new Set(
           snapshot.files.map((file) => normalizePathForCompare(file.path)),
@@ -6565,6 +6890,7 @@ export default function App() {
         showToast("チェックポイントへの復元はTauri版で利用できます");
         return;
       }
+      if (!canWritePortableProjectState(projectFolder.path)) return;
       const selectedPathKeys = new Set(selectedPaths.map(normalizePathForCompare));
       const files = snapshot.files.filter((file) => selectedPathKeys.has(normalizePathForCompare(file.path)));
       const relocationBySnapshotPath = new Map(relocations.map((item) => [normalizePathForCompare(item.snapshotPath), item.currentPath] as const));
@@ -6586,6 +6912,7 @@ export default function App() {
         confirmLabel: "復元",
       });
       if (!shouldRestore) return;
+      if (!(await waitForPortableProjectWrite(projectFolder.path))) return;
 
       try {
         const shelter = buildManuscriptSnapshot(
@@ -6595,11 +6922,12 @@ export default function App() {
           currentWorkspaceSnapshots[0] ? [currentWorkspaceSnapshots[0].id] : [],
         );
         // 先に退避を履歴へ確定する。以降のファイル操作が途中で失敗しても戻り先を失わない。
+        beginPortableProjectMutation(projectFolder.path);
         const storedShelter = await invoke<CheckpointLoadResult>("create_project_checkpoint", {
           rootPath: projectFolder.path,
           snapshot: shelter,
         });
-        applyCheckpointStoreResult(projectFolder.path, storedShelter);
+        if (!applyCheckpointStoreResult(projectFolder.path, storedShelter)) return;
         const selectedTree = selectedFolderPathKeys.size
           ? selectedSnapshotFolderTree(snapshot.projectTree, selectedFolderPathKeys)
           : null;
@@ -7024,6 +7352,10 @@ export default function App() {
         folder.path,
         appStateRef.current,
       );
+      fileProgressStoreVersionsRef.current.set(portableProjectKey(folder.path), {
+        revision: restoredFileProgress.revision,
+        contentHash: restoredFileProgress.contentHash,
+      });
       const firstFile = findFirstTextFile(preferredFiles) ?? findFirstTextFile(folder.children);
       const workspaceKey = workspaceDocumentTabsKey(folder.path);
       const savedTabs = appState.documentTabsByWorkspace[workspaceKey];
@@ -7121,7 +7453,7 @@ export default function App() {
         };
       });
       if (restoredCheckpoints.warnings.length) {
-        showToast(`チェックポイントの警告: ${restoredCheckpoints.warnings[0]}`);
+        showToast(checkpointWarningMessage(restoredCheckpoints.warnings[0]));
       }
       return {
         movedCount: restoredTabs?.moved.length ?? 0,
@@ -9974,13 +10306,24 @@ export default function App() {
       return;
     }
     const rootPath = projectFolder.path;
+    if (!canWritePortableProjectState(rootPath)) return;
+    const key = portableProjectKey(rootPath);
+    const pendingRefresh = portableProjectRefreshesRef.current.get(key);
     const operation = fileProgressSaveQueueRef.current
       .catch(() => undefined)
+      .then(() => pendingRefresh?.catch(() => undefined))
       .then(async () => {
+        const expected = fileProgressStoreVersionsRef.current.get(key);
         const saved = await invoke<ProjectFileProgressState>("set_project_file_progress", {
           rootPath,
           path,
           status,
+          expectedRevision: expected?.revision ?? null,
+          expectedContentHash: expected?.contentHash || null,
+        });
+        fileProgressStoreVersionsRef.current.set(key, {
+          revision: saved.revision,
+          contentHash: saved.contentHash,
         });
         setAppState((current) => ({
           ...current,
@@ -9994,11 +10337,16 @@ export default function App() {
             rootPath,
           ),
         }));
+        if (saved.rebased) {
+          showToast("同期された最新状態へ進捗変更を再適用しました");
+        }
       });
     fileProgressSaveQueueRef.current = operation;
     void operation.catch((error) => {
-      setLastError(String(error));
-      showToast("進捗ラベルを保存できませんでした");
+      const message = portableStorageErrorMessage(error);
+      portableProjectConflictsRef.current.set(portableProjectKey(rootPath), message);
+      setLastError(`${message} ${String(error)}`);
+      showToast(message);
     });
   };
 

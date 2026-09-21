@@ -1,5 +1,6 @@
 use super::{IdeaThreadConfig, PlotCardConfig, ProofreadTermConfig, SnippetConfig};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::Component;
@@ -27,6 +28,8 @@ pub(super) struct ProjectFileProgressState {
     pub(super) file_progress: BTreeMap<String, String>,
     pub(super) revision: u64,
     pub(super) migrated_count: usize,
+    pub(super) content_hash: String,
+    pub(super) rebased: bool,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -201,6 +204,12 @@ fn absolute_file_progress(root: &Path, config: &ProjectConfig) -> BTreeMap<Strin
             )
         })
         .collect()
+}
+
+fn project_config_digest(config: &ProjectConfig) -> Result<String, String> {
+    let bytes = serde_json::to_vec(config)
+        .map_err(|error| format!("failed to hash project config: {error}"))?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
 }
 
 pub(super) fn remove_file_progress_path(
@@ -443,6 +452,8 @@ pub(super) fn load_project_file_progress(
         file_progress: absolute_file_progress(root, &config),
         revision: config.revision,
         migrated_count,
+        content_hash: project_config_digest(&config)?,
+        rebased: false,
     })
 }
 
@@ -451,10 +462,41 @@ pub(super) fn set_project_file_progress(
     path: &Path,
     status: &str,
 ) -> Result<ProjectFileProgressState, String> {
+    set_project_file_progress_guarded(root, path, status, None, None)
+}
+
+pub(super) fn set_project_file_progress_guarded(
+    root: &Path,
+    path: &Path,
+    status: &str,
+    expected_revision: Option<u64>,
+    expected_content_hash: Option<&str>,
+) -> Result<ProjectFileProgressState, String> {
     validate_file_progress_status(status, true)?;
     let relative_path = existing_project_file_relative_path(root, path)?;
     let _guard = lock_project_config()?;
     let mut config = load_project_config_unlocked(root)?;
+    let current_hash = project_config_digest(&config)?;
+    let mut rebased = false;
+    if let Some(expected_revision) = expected_revision {
+        if config.revision < expected_revision {
+            return Err(format!(
+                "project state rollback conflict: expected revision {expected_revision}, found {}",
+                config.revision
+            ));
+        }
+        if config.revision == expected_revision {
+            if let Some(expected_hash) = expected_content_hash.filter(|hash| !hash.is_empty()) {
+                if current_hash != expected_hash {
+                    return Err(format!(
+                        "project state branch conflict: revision {expected_revision} has different content"
+                    ));
+                }
+            }
+        } else {
+            rebased = true;
+        }
+    }
     let unchanged = match config.file_progress.get(&relative_path) {
         Some(progress) => progress.status == status,
         None => status == "todo",
@@ -479,6 +521,8 @@ pub(super) fn set_project_file_progress(
         file_progress: absolute_file_progress(root, &config),
         revision: config.revision,
         migrated_count: 0,
+        content_hash: project_config_digest(&config)?,
+        rebased,
     })
 }
 
@@ -786,6 +830,61 @@ mod tests {
         assert!(!loaded
             .file_progress
             .contains_key(&source_file.to_string_lossy().to_string()));
+    }
+
+    #[test]
+    fn progress_patch_rebases_forward_and_rejects_rollback_or_branch() {
+        let root = TestDirectory::new("progress-conflict");
+        let chapter = root.0.join("chapter.md");
+        std::fs::write(&chapter, "chapter").unwrap();
+        let initial = load_project_file_progress(&root.0, None).unwrap();
+
+        update_project_config(&root.0, |config| {
+            config.order.insert(".".into(), vec!["chapter.md".into()]);
+            Ok(())
+        })
+        .unwrap();
+        let rebased = set_project_file_progress_guarded(
+            &root.0,
+            &chapter,
+            "writing",
+            Some(initial.revision),
+            Some(&initial.content_hash),
+        )
+        .unwrap();
+        assert!(rebased.rebased);
+        assert_eq!(
+            rebased.file_progress[&chapter.to_string_lossy().to_string()],
+            "writing"
+        );
+
+        let path = project_config_path(&root.0);
+        let mut branched = load_project_config(&root.0).unwrap();
+        branched.order.insert("external".into(), Vec::new());
+        std::fs::write(&path, serde_json::to_string_pretty(&branched).unwrap()).unwrap();
+        let branch_error = set_project_file_progress_guarded(
+            &root.0,
+            &chapter,
+            "done",
+            Some(rebased.revision),
+            Some(&rebased.content_hash),
+        )
+        .err()
+        .unwrap();
+        assert!(branch_error.contains("branch conflict"));
+
+        branched.revision = rebased.revision.saturating_sub(1);
+        std::fs::write(&path, serde_json::to_string_pretty(&branched).unwrap()).unwrap();
+        let rollback_error = set_project_file_progress_guarded(
+            &root.0,
+            &chapter,
+            "done",
+            Some(rebased.revision),
+            Some(&rebased.content_hash),
+        )
+        .err()
+        .unwrap();
+        assert!(rollback_error.contains("rollback conflict"));
     }
 
     #[test]
