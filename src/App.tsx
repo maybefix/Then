@@ -254,6 +254,10 @@ const scratchWorkspaceName = "一時ファイル";
 const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
 const EDITOR_CONTEXT_MENU_WIDTH = 236;
 type AppMode = "write" | "canvas" | "export" | "checkpoint" | "plugin";
+type ToastAction = {
+  label: string;
+  onClick: () => void;
+};
 const EDITOR_CONTEXT_MENU_HEIGHT = 292;
 const defaultReferenceLayout: ReferenceLayout = {
   version: 1,
@@ -2578,6 +2582,7 @@ export default function App() {
     activeIndex: 0,
   });
   const [toast, setToast] = useState("");
+  const [toastAction, setToastAction] = useState<ToastAction | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingBreadcrumbEntryPath, setDraggingBreadcrumbEntryPath] =
     useState<string | null>(null);
@@ -3557,8 +3562,12 @@ export default function App() {
           : "通常ウィンドウへの復帰に失敗しました";
         setLastError(`${message}: ${String(error)}`);
         setToast(message);
+        setToastAction(null);
         if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-        toastTimerRef.current = window.setTimeout(() => setToast(""), 2400);
+        toastTimerRef.current = window.setTimeout(() => {
+          setToast("");
+          setToastAction(null);
+        }, 2400);
       });
   }, [isEditorFocusMode, settings.focusModeUsesNativeFullscreen]);
   const collapsedTreeFolderPaths = useMemo(
@@ -4803,8 +4812,9 @@ export default function App() {
     // App 側の scheduleTypewriterScroll は設定・オフセット変更時の再適用専用に残す。
   }, [currentFilePath, projectFolder, updateSelectionCharCount]);
 
-  const showToast = (message: string) => {
+  const showToast = (message: string, action: ToastAction | null = null) => {
     setToast(message);
+    setToastAction(action);
 
     if (toastTimerRef.current) {
       window.clearTimeout(toastTimerRef.current);
@@ -4812,8 +4822,9 @@ export default function App() {
 
     toastTimerRef.current = window.setTimeout(() => {
       setToast("");
+      setToastAction(null);
       toastTimerRef.current = null;
-    }, 2200);
+    }, action ? 5000 : 2200);
   };
 
   const openIdeaCanvasBoard = async (
@@ -9025,10 +9036,16 @@ export default function App() {
   const addFragment = (threadId: string, body: string) => {
     const text = body.trim();
     if (!text) return;
-    patchThread(threadId, (thread) => ({
-      ...thread,
-      fragments: [...thread.fragments, makeIdeaFragment(text)],
-    }));
+    patchThread(threadId, (thread) => {
+      const fragment = makeIdeaFragment(text);
+      return {
+        ...thread,
+        fragments:
+          thread.kind === "inbox"
+            ? [fragment, ...thread.fragments]
+            : [...thread.fragments, fragment],
+      };
+    });
   };
 
   const updateFragmentBody = (threadId: string, fragmentId: string, body: string) => {
@@ -9062,20 +9079,46 @@ export default function App() {
     markFragmentUsed(threadId, fragmentId, !fragment.used);
   };
 
-  const deleteFragment = (threadId: string, fragmentId: string) => {
+  const deleteFragment = async (threadId: string, fragmentId: string) => {
+    const thread = snippets.find((item) => item.id === threadId);
+    const fragmentIndex = thread?.fragments.findIndex((item) => item.id === fragmentId) ?? -1;
+    const fragment = fragmentIndex >= 0 ? thread?.fragments[fragmentIndex] : null;
+    if (!thread || !fragment) return;
+
+    const preview = fragment.body.length > 36 ? `${fragment.body.slice(0, 36)}…` : fragment.body;
+    const shouldDelete = await requestConfirm({
+      title: "断片を削除",
+      message: `「${preview}」を削除しますか？`,
+      confirmLabel: "削除",
+      danger: true,
+    });
+    if (!shouldDelete) return;
+
     patchThread(threadId, (thread) => ({
       ...thread,
       fragments: thread.fragments.filter((fragment) => fragment.id !== fragmentId),
     }));
-    showToast("断片を削除しました");
+    showToast("断片を削除しました", {
+      label: "元に戻す",
+      onClick: () => {
+        patchThread(threadId, (current) => {
+          if (current.fragments.some((item) => item.id === fragmentId)) return current;
+          const fragments = [...current.fragments];
+          fragments.splice(Math.min(fragmentIndex, fragments.length), 0, fragment);
+          return { ...current, fragments };
+        });
+        showToast("削除を元に戻しました");
+      },
+    });
   };
 
   const moveFragment = (fromThreadId: string, fragmentId: string, toThreadId: string) => {
     if (fromThreadId === toThreadId) return;
     const fromThread = snippets.find((thread) => thread.id === fromThreadId);
     const fragment = fromThread?.fragments.find((item) => item.id === fragmentId);
+    const fromIndex = fromThread?.fragments.findIndex((item) => item.id === fragmentId) ?? -1;
     const toThread = snippets.find((thread) => thread.id === toThreadId);
-    if (!fragment || !toThread) return;
+    if (!fragment || !toThread || fromIndex < 0) return;
 
     const now = Date.now();
     updateIdeaThreads((threads) =>
@@ -9088,16 +9131,51 @@ export default function App() {
           };
         }
         if (thread.id === toThreadId) {
+          const movedFragment = { ...fragment, updatedAt: now };
           return {
             ...thread,
-            fragments: [...thread.fragments, { ...fragment, updatedAt: now }],
+            fragments:
+              thread.kind === "inbox"
+                ? [movedFragment, ...thread.fragments]
+                : [...thread.fragments, movedFragment],
             updatedAt: now,
           };
         }
         return thread;
       }),
     );
-    showToast(`「${toThread.title}」へ移動しました`);
+    showToast(`「${toThread.title}」へ移動しました`, {
+      label: "元に戻す",
+      onClick: () => {
+        const undoAt = Date.now();
+        updateIdeaThreads((threads) => {
+          const destination = threads.find((thread) => thread.id === toThreadId);
+          const currentFragment = destination?.fragments.find((item) => item.id === fragmentId);
+          if (!currentFragment) return threads;
+
+          return threads.map((thread) => {
+            if (thread.id === toThreadId) {
+              return {
+                ...thread,
+                fragments: thread.fragments.filter((item) => item.id !== fragmentId),
+                updatedAt: undoAt,
+              };
+            }
+            if (thread.id === fromThreadId) {
+              const fragments = [...thread.fragments];
+              fragments.splice(
+                Math.min(fromIndex, fragments.length),
+                0,
+                { ...currentFragment, updatedAt: undoAt },
+              );
+              return { ...thread, fragments, updatedAt: undoAt };
+            }
+            return thread;
+          });
+        });
+        showToast("移動を元に戻しました");
+      },
+    });
   };
 
   const reorderFragment = (
@@ -9107,32 +9185,38 @@ export default function App() {
     position: "before" | "after",
   ) => {
     if (fragmentId === targetFragmentId) return;
+    const thread = snippets.find((item) => item.id === threadId);
+    const originalIndex = thread?.fragments.findIndex((item) => item.id === fragmentId) ?? -1;
+    const moving = originalIndex >= 0 ? thread?.fragments[originalIndex] : null;
+    if (!thread || !moving) return;
 
-    updateIdeaThreads((threads) =>
-      threads.map((thread) => {
-        if (thread.id !== threadId) return thread;
+    const withoutMoving = thread.fragments.filter((fragment) => fragment.id !== fragmentId);
+    const targetIndex = withoutMoving.findIndex((fragment) => fragment.id === targetFragmentId);
+    if (targetIndex < 0) return;
 
-        const moving = thread.fragments.find((fragment) => fragment.id === fragmentId);
-        if (!moving || !thread.fragments.some((fragment) => fragment.id === targetFragmentId)) {
-          return thread;
-        }
-
-        const withoutMoving = thread.fragments.filter((fragment) => fragment.id !== fragmentId);
-        const targetIndex = withoutMoving.findIndex(
-          (fragment) => fragment.id === targetFragmentId,
-        );
-        if (targetIndex < 0) return thread;
-
-        const insertIndex = position === "after" ? targetIndex + 1 : targetIndex;
-        const fragments = [...withoutMoving];
-        fragments.splice(insertIndex, 0, moving);
-
-        const orderChanged = fragments.some(
-          (fragment, index) => fragment.id !== thread.fragments[index]?.id,
-        );
-        return orderChanged ? { ...thread, fragments, updatedAt: Date.now() } : thread;
-      }),
+    const insertIndex = position === "after" ? targetIndex + 1 : targetIndex;
+    const fragments = [...withoutMoving];
+    fragments.splice(insertIndex, 0, moving);
+    const orderChanged = fragments.some(
+      (fragment, index) => fragment.id !== thread.fragments[index]?.id,
     );
+    if (!orderChanged) return;
+
+    patchThread(threadId, (current) => ({ ...current, fragments }));
+    showToast("並び順を変更しました", {
+      label: "元に戻す",
+      onClick: () => {
+        patchThread(threadId, (current) => {
+          const currentIndex = current.fragments.findIndex((item) => item.id === fragmentId);
+          if (currentIndex < 0) return current;
+          const next = [...current.fragments];
+          const [currentFragment] = next.splice(currentIndex, 1);
+          next.splice(Math.min(originalIndex, next.length), 0, currentFragment);
+          return { ...current, fragments: next };
+        });
+        showToast("並び替えを元に戻しました");
+      },
+    });
   };
 
   const createIdeaThread = (): string => {
@@ -9168,6 +9252,7 @@ export default function App() {
 
   const deleteIdeaThread = async (threadId: string) => {
     const thread = snippets.find((item) => item.id === threadId);
+    const threadIndex = snippets.findIndex((item) => item.id === threadId);
     if (!thread || thread.kind === "inbox") return;
     const shouldDelete = await requestConfirm({
       title: "スレッドを削除",
@@ -9178,7 +9263,18 @@ export default function App() {
     });
     if (!shouldDelete) return;
     updateIdeaThreads((threads) => threads.filter((item) => item.id !== threadId));
-    showToast("スレッドを削除しました");
+    showToast("スレッドを削除しました", {
+      label: "元に戻す",
+      onClick: () => {
+        updateIdeaThreads((threads) => {
+          if (threads.some((item) => item.id === threadId)) return threads;
+          const next = [...threads];
+          next.splice(Math.min(Math.max(threadIndex, 0), next.length), 0, thread);
+          return next;
+        });
+        showToast("スレッドの削除を元に戻しました");
+      },
+    });
   };
 
   const insertFragmentToEditor = (threadId: string, fragmentId: string) => {
@@ -11450,17 +11546,9 @@ export default function App() {
                       onDeleteThread={deleteIdeaThread}
                       onAddFragment={addFragment}
                       onUpdateFragment={updateFragmentBody}
-                      onToggleUsed={toggleFragmentUsed}
                       onDeleteFragment={deleteFragment}
                       onMoveFragment={moveFragment}
                       onReorderFragment={reorderFragment}
-                      onInsertFragment={insertFragmentToEditor}
-                      onInsertThread={insertThreadToEditor}
-                      onSendFragmentToCanvas={(threadId, fragmentId) =>
-                        void sendIdeaFragmentToCanvas(threadId, fragmentId)
-                      }
-                      onSendThreadToCanvas={(threadId) => void sendIdeaThreadToCanvas(threadId)}
-                      onOpenCanvasOrigin={openCanvasOrigin}
                       onFragmentDragStart={handleFragmentDragStart}
                       onFragmentDragEnd={handleFragmentDragEnd}
                     />
@@ -11546,8 +11634,28 @@ export default function App() {
             />
           )}
 
-          <div className={`toast ${toast ? "showToast" : ""}`} role="status">
-            {toast}
+          <div
+            className={`toast ${toast ? "showToast" : ""} ${toastAction ? "hasAction" : ""}`}
+            role="status"
+          >
+            <span>{toast}</span>
+            {toastAction && (
+              <button
+                type="button"
+                onClick={() => {
+                  const action = toastAction;
+                  if (toastTimerRef.current) {
+                    window.clearTimeout(toastTimerRef.current);
+                    toastTimerRef.current = null;
+                  }
+                  setToast("");
+                  setToastAction(null);
+                  action.onClick();
+                }}
+              >
+                {toastAction.label}
+              </button>
+            )}
           </div>
 
           {notationModal && (

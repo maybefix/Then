@@ -1,0 +1,73 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+const [app, ideaPane, css, userManual, packageJson, packageLock, tauriConfig, cargoToml] =
+  await Promise.all([
+    readFile("src/App.tsx", "utf8"),
+    readFile("src/components/snippets/IdeaPane.tsx", "utf8"),
+    readFile("src/App.css", "utf8"),
+    readFile("docs/USER_MANUAL.md", "utf8"),
+    readFile("package.json", "utf8").then(JSON.parse),
+    readFile("package-lock.json", "utf8").then(JSON.parse),
+    readFile("src-tauri/tauri.conf.json", "utf8").then(JSON.parse),
+    readFile("src-tauri/Cargo.toml", "utf8"),
+  ]);
+
+assert.equal(packageJson.version, "0.6.6");
+assert.equal(packageLock.version, "0.6.6");
+assert.equal(packageLock.packages[""].version, "0.6.6");
+assert.equal(tauriConfig.version, "0.6.6");
+assert.match(cargoToml, /^version = "0\.6\.6"$/m);
+
+for (const removedUi of [
+  "未使用",
+  "消化済み",
+  "onToggleUsed",
+  "onInsertFragment",
+  "onInsertThread",
+  "onSendFragmentToCanvas",
+  "onSendThreadToCanvas",
+  "CanvasSendIcon",
+]) {
+  assert.ok(!ideaPane.includes(removedUi), `IdeaPane must not expose ${removedUi}`);
+}
+
+assert.match(ideaPane, /type IdeaFilter = "all" \| "starred"/);
+assert.match(ideaPane, /className="ideaMiniIcon ideaDeleteBtn"/);
+assert.match(ideaPane, /title="ドラッグで並び替え \/ Canvasへ"/);
+const dragOverSource = ideaPane.slice(
+  ideaPane.indexOf("const handleFragmentDragOver"),
+  ideaPane.indexOf("const handleFragmentDrop"),
+);
+const dropStart = ideaPane.indexOf("const handleFragmentDrop");
+const dropSource = ideaPane.slice(
+  dropStart,
+  ideaPane.indexOf("\n  return (", dropStart),
+);
+assert.doesNotMatch(
+  dragOverSource,
+  /onReorderFragment/,
+  "reordering must not commit while merely hovering",
+);
+assert.match(
+  dropSource,
+  /onReorderFragment\(threadId, source\.fragmentId, targetFragmentId, position\)/,
+  "reordering must commit on drop",
+);
+
+assert.match(
+  app,
+  /thread\.kind === "inbox"\s*\? \[fragment, \.\.\.thread\.fragments\]\s*: \[\.\.\.thread\.fragments, fragment\]/,
+  "Inbox detail additions must use the same newest-first order as quick capture",
+);
+assert.match(app, /title: "断片を削除"/);
+assert.match(app, /showToast\("断片を削除しました", \{\s*label: "元に戻す"/);
+assert.match(app, /showToast\(`「\$\{toThread\.title\}」へ移動しました`, \{\s*label: "元に戻す"/);
+assert.match(app, /showToast\("並び順を変更しました", \{\s*label: "元に戻す"/);
+assert.match(css, /\.toast\.hasAction\s*\{[^}]*pointer-events:\s*auto;/s);
+assert.match(css, /\.ideaMiniIcon\.ideaDeleteBtn:hover\s*\{[^}]*var\(--danger\)/s);
+
+assert.match(userManual, /> 対象バージョン: 0\.6\.6/);
+assert.doesNotMatch(userManual, /「すべて」「未使用」「スター」/);
+
+console.log("PASS v0.6.6 Idea UI: focused actions, consistent Inbox order, confirmations, undo");

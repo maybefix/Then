@@ -3209,6 +3209,9 @@ html:not([data-window-fullscreen="true"])
   z-index: 7;
   bottom: 38px;
   left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   max-width: calc(100% - 48px);
   padding: 7px 14px;
   border: 1px solid var(--border-strong);
@@ -3230,6 +3233,32 @@ html:not([data-window-fullscreen="true"])
 .toast.showToast {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+.toast.hasAction {
+  pointer-events: auto;
+}
+
+.toast > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toast button {
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent-strong);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.toast button:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .modalBackdrop {
@@ -7332,10 +7361,6 @@ body {
   font-size: 11px;
 }
 
-.ideaRowMeta .unused {
-  color: var(--warning);
-}
-
 .ideaRowChevron {
   display: grid;
   place-items: center;
@@ -7459,10 +7484,6 @@ body {
   font-size: 11px;
 }
 
-.ideaDetailStats .unused {
-  color: var(--warning);
-}
-
 .ideaFragment {
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr);
@@ -7497,12 +7518,6 @@ body {
 
 .ideaFragment.isReorderAfter {
   box-shadow: inset 0 -2px 0 var(--accent);
-}
-
-.ideaFragment.isUsed .ideaFragmentBody {
-  color: var(--text-faint);
-  text-decoration: line-through;
-  text-decoration-color: var(--border-strong);
 }
 
 .ideaDragHandle {
@@ -7610,10 +7625,6 @@ body {
   color: var(--text-primary);
 }
 
-.ideaMiniIcon.isOn {
-  color: var(--success);
-}
-
 .ideaMiniIcon svg {
   width: 13px;
   height: 13px;
@@ -7622,6 +7633,10 @@ body {
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.9;
+}
+
+.ideaMiniIcon.ideaDeleteBtn:hover {
+  color: var(--danger);
 }
 
 .ideaEmpty {
