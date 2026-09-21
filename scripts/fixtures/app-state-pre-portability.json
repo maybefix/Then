@@ -1,0 +1,48 @@
+{
+  "lastWorkspacePath": "C:\\Cloud\\Novel",
+  "lastFilePath": "C:\\Cloud\\Novel\\chapter.md",
+  "fileProgress": {
+    "C:\\Cloud\\Novel\\chapter.md": "writing",
+    "C:\\Cloud\\Novel\\notes\\ending.md": "done"
+  },
+  "snapshots": [
+    {
+      "id": "snapshot-legacy-fixture",
+      "workspacePath": "C:\\Cloud\\Novel",
+      "workspaceName": "Novel",
+      "createdAt": 1789945200000,
+      "reason": "manual",
+      "label": "移行前fixture",
+      "memo": "Phase 0 baseline",
+      "parentIds": [],
+      "projectTree": {
+        "path": "C:\\Cloud\\Novel",
+        "name": "Novel",
+        "children": [
+          {
+            "path": "C:\\Cloud\\Novel\\chapter.md",
+            "name": "chapter.md",
+            "kind": "file",
+            "children": []
+          }
+        ]
+      },
+      "files": [
+        {
+          "path": "C:\\Cloud\\Novel\\chapter.md",
+          "name": "chapter.md",
+          "text": "# Chapter\n\nLegacy snapshot body.",
+          "textHash": "fixture-text-hash",
+          "semanticHash": "fixture-semantic-hash",
+          "lineCount": 3,
+          "textLength": 32,
+          "visibleTextLength": 27,
+          "outlineCount": 1
+        }
+      ],
+      "fileCount": 1,
+      "totalTextLength": 32,
+      "totalVisibleTextLength": 27
+    }
+  ]
+}

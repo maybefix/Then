@@ -7,8 +7,15 @@ use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
-mod submission_export;
 mod intermediate_draft;
+mod project_state;
+mod submission_export;
+
+use project_state::{
+    legacy_project_config_path, load_project_config, load_project_config_unlocked,
+    lock_project_config, project_config_path, save_project_config_unlocked,
+    update_project_config, ProjectConfig,
+};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -210,25 +217,6 @@ struct DeleteProjectEntryResult {
     trash_path: Option<String>,
     fallback_used: String,
     completed_at: i64,
-}
-
-#[derive(Default, Deserialize, Serialize)]
-struct ProjectConfig {
-    order: BTreeMap<String, Vec<String>>,
-    /// 旧 Idea（フラット付箋）。`ideaThreads` への移行用に読み込むだけで、
-    /// 保存時にはクリアされる。
-    #[serde(default)]
-    snippets: Vec<SnippetConfig>,
-    #[serde(default, rename = "ideaThreads")]
-    idea_threads: Vec<IdeaThreadConfig>,
-    #[serde(default, rename = "plotCards")]
-    plot_cards: Vec<PlotCardConfig>,
-    /// 校正辞書。固有名詞やキャラクター名など、原稿ごとの語彙。
-    #[serde(default, rename = "proofreadTerms")]
-    proofread_terms: Vec<ProofreadTermConfig>,
-    /// 無視した校正の指摘。ワークスペース内の相対パスごとに持つ。
-    #[serde(default, rename = "proofreadIgnored")]
-    proofread_ignored: BTreeMap<String, Vec<String>>,
 }
 
 fn default_proofread_term_kind() -> String {
@@ -2395,28 +2383,34 @@ fn cleanup_project_config_after_delete(
     deleted_path: &Path,
     deleted_was_dir: bool,
 ) -> Result<(), String> {
-    let mut config = load_project_config(root)?;
     let deleted_name = deleted_path
         .file_name()
         .and_then(|value| value.to_str())
         .unwrap_or("")
         .to_string();
-    if let Some(parent) = deleted_path.parent() {
-        let parent_key = project_order_key(root, parent)?;
-        if let Some(order) = config.order.get_mut(&parent_key) {
-            order.retain(|name| name != &deleted_name);
+    let parent_key = deleted_path
+        .parent()
+        .map(|parent| project_order_key(root, parent))
+        .transpose()?;
+    let deleted_key = deleted_was_dir
+        .then(|| project_order_key(root, deleted_path))
+        .transpose()?;
+
+    update_project_config(root, move |config| {
+        if let Some(parent_key) = &parent_key {
+            if let Some(order) = config.order.get_mut(parent_key) {
+                order.retain(|name| name != &deleted_name);
+            }
         }
-    }
-
-    if deleted_was_dir {
-        let deleted_key = project_order_key(root, deleted_path)?;
-        let deleted_prefix = format!("{deleted_key}/");
-        config
-            .order
-            .retain(|key, _| key != &deleted_key && !key.starts_with(&deleted_prefix));
-    }
-
-    save_project_config(root, &config)
+        if let Some(deleted_key) = &deleted_key {
+            let deleted_prefix = format!("{deleted_key}/");
+            config
+                .order
+                .retain(|key, _| key != deleted_key && !key.starts_with(&deleted_prefix));
+        }
+        Ok(())
+    })
+    .map(|_| ())
 }
 
 fn hash_path_for_trash(path: &Path) -> String {
@@ -2448,6 +2442,23 @@ fn sanitize_trash_name(name: &str) -> String {
 
 #[tauri::command]
 fn move_project_entry(
+    root_path: String,
+    source_path: String,
+    target_folder_path: String,
+    target_path: Option<String>,
+    position: Option<String>,
+) -> Result<MoveProjectEntryResult, String> {
+    let _project_config_guard = lock_project_config()?;
+    move_project_entry_unlocked(
+        root_path,
+        source_path,
+        target_folder_path,
+        target_path,
+        position,
+    )
+}
+
+fn move_project_entry_unlocked(
     root_path: String,
     source_path: String,
     target_folder_path: String,
@@ -2536,7 +2547,9 @@ fn move_project_entry(
         return Err("folder cannot be moved into itself or its descendants".to_string());
     }
 
+    let current_config = load_project_config_unlocked(&root)?;
     let config_updates = prepare_project_config_after_move(
+        current_config,
         &root,
         &source,
         &next_path,
@@ -2549,7 +2562,7 @@ fn move_project_entry(
 
     std::fs::rename(&source, &next_path)
         .map_err(|error| format!("failed to move entry: {error}"))?;
-    if let Err(config_error) = save_project_config(&root, &config_updates) {
+    if let Err(config_error) = save_project_config_unlocked(&root, &config_updates) {
         return match std::fs::rename(&next_path, &source) {
             Ok(()) => Err(format!("failed to update project config after move: {config_error}")),
             Err(rollback_error) => Err(format!(
@@ -2557,7 +2570,6 @@ fn move_project_entry(
             )),
         };
     }
-
     let moved_document = if next_path.is_file() {
         Some(read_text_document(&next_path)?)
     } else {
@@ -2637,10 +2649,11 @@ fn move_project_entries(
         destinations.push(destination_key);
     }
 
-    let original_config = load_project_config(&root)?;
+    let _project_config_guard = lock_project_config()?;
+    let original_config = load_project_config_unlocked(&root)?;
     let mut completed = Vec::<MovedProjectEntry>::new();
     for source_path in candidates {
-        match move_project_entry(
+        match move_project_entry_unlocked(
             root_path.clone(),
             source_path,
             target_folder_path.clone(),
@@ -2659,7 +2672,7 @@ fn move_project_entries(
                     .iter()
                     .rev()
                     .filter_map(|moved| {
-                        move_project_entry(
+                        move_project_entry_unlocked(
                             root_path.clone(),
                             moved.new_path.clone(),
                             moved.old_parent_path.clone(),
@@ -2671,7 +2684,16 @@ fn move_project_entries(
                     })
                     .collect::<Vec<_>>();
                 let config_rollback_error = if rollback_errors.is_empty() {
-                    save_project_config(&root, &original_config).err()
+                    match load_project_config_unlocked(&root) {
+                        Ok(current_config) => {
+                            let mut rollback_config = original_config.clone();
+                            // Keep revisions monotonic even though the content returns to the
+                            // state from before this multi-file operation.
+                            rollback_config.revision = current_config.revision;
+                            save_project_config_unlocked(&root, &rollback_config).err()
+                        }
+                        Err(error) => Some(error),
+                    }
                 } else {
                     None
                 };
@@ -2732,10 +2754,11 @@ fn reorder_project_entries(
         }
     }
 
-    let mut config = load_project_config(&root)?;
     let key = project_order_key(&root, &folder)?;
-    config.order.insert(key, names);
-    save_project_config(&root, &config)?;
+    let config = update_project_config(&root, move |config| {
+        config.order.insert(key, names);
+        Ok(())
+    })?;
     Ok(ProjectFolder {
         path: folder.to_string_lossy().to_string(),
         name: folder
@@ -2771,11 +2794,13 @@ fn save_project_snippets(root_path: String, snippets: Vec<IdeaThreadConfig>) -> 
         return Err("project root does not exist".to_string());
     }
 
-    let mut config = load_project_config(&root)?;
-    config.idea_threads = snippets;
-    // 旧スキーマは移行後に残さない。
-    config.snippets = Vec::new();
-    save_project_config(&root, &config)
+    update_project_config(&root, move |config| {
+        config.idea_threads = snippets;
+        // 旧スキーマは移行後に残さない。
+        config.snippets = Vec::new();
+        Ok(())
+    })
+    .map(|_| ())
 }
 
 #[tauri::command]
@@ -2798,9 +2823,11 @@ fn save_project_plot_cards(
         return Err("project root does not exist".to_string());
     }
 
-    let mut config = load_project_config(&root)?;
-    config.plot_cards = plot_cards;
-    save_project_config(&root, &config)
+    update_project_config(&root, move |config| {
+        config.plot_cards = plot_cards;
+        Ok(())
+    })
+    .map(|_| ())
 }
 
 #[tauri::command]
@@ -2823,9 +2850,11 @@ fn save_project_proofread_terms(
         return Err("project root does not exist".to_string());
     }
 
-    let mut config = load_project_config(&root)?;
-    config.proofread_terms = proofread_terms;
-    save_project_config(&root, &config)
+    update_project_config(&root, move |config| {
+        config.proofread_terms = proofread_terms;
+        Ok(())
+    })
+    .map(|_| ())
 }
 
 /// 校正辞書をタブ区切りのテキストとして書き出す。保存先のパスを返す。
@@ -2889,9 +2918,11 @@ fn save_project_proofread_ignored(
         return Err("project root does not exist".to_string());
     }
 
-    let mut config = load_project_config(&root)?;
-    config.proofread_ignored = proofread_ignored;
-    save_project_config(&root, &config)
+    update_project_config(&root, move |config| {
+        config.proofread_ignored = proofread_ignored;
+        Ok(())
+    })
+    .map(|_| ())
 }
 
 #[tauri::command]
@@ -3566,10 +3597,6 @@ fn list_project_entries(
     Ok(entries)
 }
 
-fn project_config_path(root: &Path) -> PathBuf {
-    root.join(".then").join("project.json")
-}
-
 fn reference_layout_path(root: &Path) -> PathBuf {
     root.join(".then")
         .join("reference-layouts")
@@ -3640,46 +3667,6 @@ fn reference_imports_dir_for_scope(
         "global" => global_reference_imports_dir(app),
         _ => Err("unknown reference scope".to_string()),
     }
-}
-
-fn legacy_project_config_path(root: &Path) -> PathBuf {
-    root.join(".brew").join("project.json")
-}
-
-fn load_project_config(root: &Path) -> Result<ProjectConfig, String> {
-    let path = project_config_path(root);
-    let legacy_path = legacy_project_config_path(root);
-    let (path, should_migrate) = if path.exists() {
-        (path, false)
-    } else if legacy_path.exists() {
-        (legacy_path, true)
-    } else {
-        return Ok(ProjectConfig::default());
-    };
-
-    let content = std::fs::read_to_string(&path)
-        .map_err(|error| format!("failed to read project config: {error}"))?;
-    let config: ProjectConfig = serde_json::from_str(&content)
-        .map_err(|error| format!("failed to parse project config: {error}"))?;
-
-    if should_migrate {
-        save_project_config(root, &config)?;
-    }
-
-    Ok(config)
-}
-
-fn save_project_config(root: &Path, config: &ProjectConfig) -> Result<(), String> {
-    let path = project_config_path(root);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| format!("failed to create project config directory: {error}"))?;
-    }
-
-    let content = serde_json::to_string_pretty(config)
-        .map_err(|error| format!("failed to serialize project config: {error}"))?;
-    std::fs::write(path, content)
-        .map_err(|error| format!("failed to write project config: {error}"))
 }
 
 fn default_reference_layout() -> ReferenceLayoutConfig {
@@ -4229,37 +4216,45 @@ fn update_project_config_after_rename(old_path: &Path, new_path: &Path) -> Resul
         .and_then(|value| value.to_str())
         .ok_or_else(|| "entry name is not valid unicode".to_string())?;
 
-    let mut config = load_project_config(&root)?;
     let parent_key = project_order_key(&root, old_parent)?;
-    if let Some(order) = config.order.get_mut(&parent_key) {
-        for name in order {
-            if name == old_name {
-                *name = new_name.to_string();
+    let directory_keys = if old_path.is_dir() || new_path.is_dir() {
+        Some((
+            project_order_key(&root, old_path)?,
+            project_order_key(&root, new_path)?,
+        ))
+    } else {
+        None
+    };
+
+    update_project_config(&root, move |config| {
+        if let Some(order) = config.order.get_mut(&parent_key) {
+            for name in order {
+                if name == old_name {
+                    *name = new_name.to_string();
+                }
             }
         }
-    }
 
-    if old_path.is_dir() || new_path.is_dir() {
-        let old_key = project_order_key(&root, old_path)?;
-        let new_key = project_order_key(&root, new_path)?;
-        let old_prefix = format!("{old_key}/");
-        let new_prefix = format!("{new_key}/");
-        let mut next_order = BTreeMap::new();
+        if let Some((old_key, new_key)) = &directory_keys {
+            let old_prefix = format!("{old_key}/");
+            let new_prefix = format!("{new_key}/");
+            let mut next_order = BTreeMap::new();
 
-        for (key, value) in config.order {
-            let next_key = if key == old_key {
-                new_key.clone()
-            } else if key.starts_with(&old_prefix) {
-                format!("{}{}", new_prefix, &key[old_prefix.len()..])
-            } else {
-                key
-            };
-            next_order.insert(next_key, value);
+            for (key, value) in std::mem::take(&mut config.order) {
+                let next_key = if key == *old_key {
+                    new_key.clone()
+                } else if key.starts_with(&old_prefix) {
+                    format!("{}{}", new_prefix, &key[old_prefix.len()..])
+                } else {
+                    key
+                };
+                next_order.insert(next_key, value);
+            }
+            config.order = next_order;
         }
-        config.order = next_order;
-    }
-
-    save_project_config(&root, &config)
+        Ok(())
+    })
+    .map(|_| ())
 }
 
 fn project_entry_names_in_display_order(
@@ -4274,6 +4269,7 @@ fn project_entry_names_in_display_order(
 }
 
 fn prepare_project_config_after_move(
+    mut config: ProjectConfig,
     root: &Path,
     old_path: &Path,
     new_path: &Path,
@@ -4292,7 +4288,6 @@ fn prepare_project_config_after_move(
         .and_then(|value| value.to_str())
         .ok_or_else(|| "entry name is not valid unicode".to_string())?;
 
-    let mut config = load_project_config(root)?;
     let old_parent_order = project_entry_names_in_display_order(root, old_parent, &config)?
         .into_iter()
         .filter(|name| name != old_name)
@@ -4327,7 +4322,7 @@ fn prepare_project_config_after_move(
         let new_prefix = format!("{new_key}/");
         let mut next_order = BTreeMap::new();
 
-        for (key, value) in config.order {
+        for (key, value) in std::mem::take(&mut config.order) {
             let next_key = if key == old_key {
                 new_key.clone()
             } else if key.starts_with(&old_prefix) {

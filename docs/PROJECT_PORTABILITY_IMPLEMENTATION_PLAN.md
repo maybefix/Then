@@ -254,6 +254,8 @@ Windowsで既存ファイルへのrenameが失敗する挙動も含めて実装�
 
 完了条件: 新旧project.jsonを読み書きでき、保存失敗時に旧正本が残る。
 
+実装状況（2026-09-21）: Phase 0–1 実装済み。旧AppState fixtureと現行チェックポイント／ファイル操作の回帰基準を追加し、ProjectConfigのversion/revision、プロセス内直列化、検証付きatomic write、`.bak`復旧、旧形式・既存領域の往復テストを導入した。
+
 ### Phase 2: 進捗ラベルの共有化
 
 - project-relative path変換／検証helperをバックエンドへ追加する。

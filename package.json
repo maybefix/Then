@@ -9,6 +9,7 @@
     "test:v064-canvas": "node scripts/test-v064-canvas-weje.mjs",
     "test:v065-shell": "node scripts/test-v065-native-shell.mjs",
     "test:v066-idea": "node scripts/test-v066-idea-ui.mjs",
+    "test:project-portability": "node scripts/test-project-portability-baseline.mjs",
     "dev": "vite",
     "dev:local": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "test:markdown-tables": "node scripts/test-markdown-tables.mjs",
