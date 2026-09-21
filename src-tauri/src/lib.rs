@@ -7,9 +7,17 @@ use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
+mod checkpoint_store;
 mod intermediate_draft;
 mod project_state;
 mod submission_export;
+
+use checkpoint_store::{
+    create_project_checkpoint as create_checkpoint, delete_project_checkpoint as delete_checkpoint,
+    load_project_checkpoints as read_checkpoints,
+    update_project_checkpoint_metadata as update_checkpoint_metadata, CheckpointLoadResult,
+    ManuscriptSnapshot,
+};
 
 use project_state::{
     legacy_project_config_path, load_project_config, load_project_config_unlocked,
@@ -561,6 +569,10 @@ pub fn run() {
             save_project_proofread_ignored,
             load_project_file_progress,
             set_project_file_progress,
+            load_project_checkpoints,
+            create_project_checkpoint,
+            update_project_checkpoint_metadata,
+            delete_project_checkpoint,
             export_proofread_dictionary_dialog,
             import_proofread_dictionary_dialog,
             load_reference_layout,
@@ -2958,6 +2970,52 @@ fn set_project_file_progress(
 ) -> Result<ProjectFileProgressState, String> {
     let root = PathBuf::from(root_path);
     write_project_file_progress(&root, Path::new(&path), &status)
+}
+
+#[tauri::command]
+fn load_project_checkpoints(
+    root_path: String,
+    legacy_snapshots: Option<Vec<ManuscriptSnapshot>>,
+) -> Result<CheckpointLoadResult, String> {
+    let root = PathBuf::from(root_path);
+    read_checkpoints(&root, legacy_snapshots.as_deref())
+}
+
+#[tauri::command]
+fn create_project_checkpoint(
+    root_path: String,
+    snapshot: ManuscriptSnapshot,
+) -> Result<CheckpointLoadResult, String> {
+    let root = PathBuf::from(root_path);
+    create_checkpoint(&root, &snapshot)
+}
+
+#[tauri::command]
+fn update_project_checkpoint_metadata(
+    root_path: String,
+    checkpoint_id: String,
+    expected_revision: u64,
+    label: String,
+    memo: String,
+) -> Result<CheckpointLoadResult, String> {
+    let root = PathBuf::from(root_path);
+    update_checkpoint_metadata(
+        &root,
+        &checkpoint_id,
+        expected_revision,
+        &label,
+        &memo,
+    )
+}
+
+#[tauri::command]
+fn delete_project_checkpoint(
+    root_path: String,
+    checkpoint_id: String,
+    expected_revision: u64,
+) -> Result<CheckpointLoadResult, String> {
+    let root = PathBuf::from(root_path);
+    delete_checkpoint(&root, &checkpoint_id, expected_revision)
 }
 
 #[tauri::command]

@@ -109,7 +109,7 @@ fn validate_file_progress_status(status: &str, allow_todo: bool) -> Result<(), S
     }
 }
 
-fn validate_stored_project_path(path: &str) -> Result<(), String> {
+pub(super) fn validate_stored_project_path(path: &str) -> Result<(), String> {
     if path.is_empty() || path.contains('\\') {
         return Err("project-relative path is not normalized".to_string());
     }
@@ -117,7 +117,12 @@ fn validate_stored_project_path(path: &str) -> Result<(), String> {
     let Some(first) = components.next() else {
         return Err("project-relative path is empty".to_string());
     };
-    if first.is_empty() || first == "." || first == ".." || first.eq_ignore_ascii_case(".then") {
+    if first.is_empty()
+        || first == "."
+        || first == ".."
+        || first.contains(':')
+        || first.eq_ignore_ascii_case(".then")
+    {
         return Err("project-relative path is not allowed".to_string());
     }
     if components.any(|component| component.is_empty() || component == "." || component == "..") {
@@ -708,6 +713,7 @@ mod tests {
         assert!(validate_stored_project_path("notes//chapter.md").is_err());
         assert!(validate_stored_project_path(".then/project.json").is_err());
         assert!(validate_stored_project_path("notes\\chapter.md").is_err());
+        assert!(validate_stored_project_path("C:/Novel/chapter.md").is_err());
         assert!(validate_stored_project_path("notes/chapter.md").is_ok());
 
         let root = TestDirectory::new("path-escape");

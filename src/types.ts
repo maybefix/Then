@@ -414,6 +414,8 @@ export type AppState = {
   fileProgress: Record<string, FileProgressStatus>;
   /** プロジェクトごとの進捗ラベル移行バージョン。旧ローカル値の再取込を防ぐ。 */
   fileProgressMigrationVersions: Record<string, number>;
+  /** プロジェクトごとのチェックポイント移行バージョン。 */
+  checkpointMigrationVersions: Record<string, number>;
   /** ファイルパスごとに記憶した最後のカーソル位置。 */
   cursorPositions: Record<string, CursorPosition>;
   /** プロジェクトごとに記憶した、開いている文書タブと選択状態。 */
@@ -503,6 +505,7 @@ export type ManuscriptSnapshotFile = {
 
 export type ManuscriptSnapshot = {
   id: string;
+  revision: number;
   workspacePath: string;
   workspaceName: string;
   createdAt: number;

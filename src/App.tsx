@@ -356,6 +356,13 @@ type ProjectFileProgressState = {
   migratedCount: number;
 };
 
+type CheckpointLoadResult = {
+  snapshots: ManuscriptSnapshot[];
+  warnings: string[];
+  migratedCount: number;
+  migrationComplete: boolean;
+};
+
 type NotationModalState =
   | {
       type: "ruby";
@@ -1141,6 +1148,7 @@ function createDefaultState(): AppState {
     collapsedOutlineHeadingKeysByWorkspace: {},
     fileProgress: {},
     fileProgressMigrationVersions: {},
+    checkpointMigrationVersions: {},
     cursorPositions: {},
     proofreadTerms: [],
     documentTabsByWorkspace: {},
@@ -1310,6 +1318,12 @@ function normalizeSnapshots(value: unknown): ManuscriptSnapshot[] {
 
       return {
         id: typeof snapshot.id === "string" ? snapshot.id : snapshotId(),
+        revision:
+          typeof snapshot.revision === "number" &&
+          Number.isInteger(snapshot.revision) &&
+          snapshot.revision > 0
+            ? snapshot.revision
+            : 1,
         workspacePath,
         workspaceName,
         createdAt:
@@ -2238,6 +2252,9 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
     fileProgressMigrationVersions: normalizeFileProgressMigrationVersions(
       value?.fileProgressMigrationVersions,
     ),
+    checkpointMigrationVersions: normalizeFileProgressMigrationVersions(
+      value?.checkpointMigrationVersions,
+    ),
     cursorPositions: normalizeCursorPositions(value?.cursorPositions),
     proofreadTerms: normalizeProofreadTerms(value?.proofreadTerms, "global"),
     documentTabsByWorkspace: normalizeWorkspaceDocumentTabs(
@@ -2443,6 +2460,62 @@ function markFileProgressMigration(
   return {
     ...current,
     [workspaceDocumentTabsKey(folderPath)]: FILE_PROGRESS_MIGRATION_VERSION,
+  };
+}
+
+const CHECKPOINT_MIGRATION_VERSION = 1;
+
+async function loadWorkspaceCheckpoints(
+  folderPath: string,
+  state: AppState,
+): Promise<CheckpointLoadResult> {
+  if (!isTauriRuntime()) {
+    return {
+      snapshots: state.snapshots.filter((snapshot) =>
+        isSamePath(snapshot.workspacePath, folderPath),
+      ),
+      warnings: [],
+      migratedCount: 0,
+      migrationComplete: true,
+    };
+  }
+  const workspaceKey = workspaceDocumentTabsKey(folderPath);
+  const shouldMigrate =
+    (state.checkpointMigrationVersions[workspaceKey] ?? 0) <
+    CHECKPOINT_MIGRATION_VERSION;
+  const loaded = await invoke<CheckpointLoadResult>("load_project_checkpoints", {
+    rootPath: folderPath,
+    legacySnapshots: shouldMigrate ? state.snapshots : null,
+  });
+  return {
+    ...loaded,
+    snapshots: normalizeSnapshots(loaded.snapshots),
+    warnings: Array.isArray(loaded.warnings)
+      ? loaded.warnings.filter((warning): warning is string => typeof warning === "string")
+      : [],
+  };
+}
+
+function replaceWorkspaceSnapshots(
+  current: ManuscriptSnapshot[],
+  folderPath: string,
+  shared: ManuscriptSnapshot[],
+): ManuscriptSnapshot[] {
+  return [
+    ...shared,
+    ...current.filter((snapshot) => !isSamePath(snapshot.workspacePath, folderPath)),
+  ];
+}
+
+function markCheckpointMigration(
+  current: AppState["checkpointMigrationVersions"],
+  folderPath: string,
+  complete = true,
+): AppState["checkpointMigrationVersions"] {
+  if (!complete) return current;
+  return {
+    ...current,
+    [workspaceDocumentTabsKey(folderPath)]: CHECKPOINT_MIGRATION_VERSION,
   };
 }
 
@@ -4256,6 +4329,7 @@ export default function App() {
       const restoredProofreadTerms = await loadWorkspaceProofreadTerms(folder.path);
       const restoredProofreadIgnored = await loadWorkspaceProofreadIgnored(folder.path);
       const restoredFileProgress = await loadWorkspaceFileProgress(folder.path, state);
+      const restoredCheckpoints = await loadWorkspaceCheckpoints(folder.path, state);
       setSnippetWorkspacePath(
         state.settings.snippetStorageMode === "workspace" ? folder.path : null,
       );
@@ -4329,11 +4403,24 @@ export default function App() {
           restoredState.fileProgressMigrationVersions,
           folder.path,
         ),
+        snapshots: replaceWorkspaceSnapshots(
+          restoredState.snapshots,
+          folder.path,
+          restoredCheckpoints.snapshots,
+        ),
+        checkpointMigrationVersions: markCheckpointMigration(
+          restoredState.checkpointMigrationVersions,
+          folder.path,
+          restoredCheckpoints.migrationComplete,
+        ),
         documentTabsByWorkspace: {
           ...restoredState.documentTabsByWorkspace,
           [workspaceKey]: createWorkspaceDocumentTabs(nextTabs, nextTab.id),
         },
       });
+      if (restoredCheckpoints.warnings.length) {
+        showToast(`チェックポイントの警告: ${restoredCheckpoints.warnings[0]}`);
+      }
       setLastError("");
       setSaveStatus("saved");
       const restoreSummary = [
@@ -4519,6 +4606,7 @@ export default function App() {
       loadWorkspaceProofreadTerms(activeWorkspaceRootPath),
       loadWorkspaceProofreadIgnored(activeWorkspaceRootPath),
       loadWorkspaceFileProgress(activeWorkspaceRootPath, appStateRef.current),
+      loadWorkspaceCheckpoints(activeWorkspaceRootPath, appStateRef.current),
     ])
       .then(([
         folder,
@@ -4527,6 +4615,7 @@ export default function App() {
         workspaceProofreadTerms,
         workspaceProofreadIgnored,
         workspaceFileProgress,
+        workspaceCheckpoints,
       ]) => {
         if (isCancelled) return;
         if (workspaceSwitchGeneration !== workspaceSwitchGenerationRef.current) return;
@@ -4553,7 +4642,20 @@ export default function App() {
             current.fileProgressMigrationVersions,
             folder.path,
           ),
+          snapshots: replaceWorkspaceSnapshots(
+            current.snapshots,
+            folder.path,
+            workspaceCheckpoints.snapshots,
+          ),
+          checkpointMigrationVersions: markCheckpointMigration(
+            current.checkpointMigrationVersions,
+            folder.path,
+            workspaceCheckpoints.migrationComplete,
+          ),
         }));
+        if (workspaceCheckpoints.warnings.length) {
+          showToast(`チェックポイントの警告: ${workspaceCheckpoints.warnings[0]}`);
+        }
       })
       .catch((error) => {
         if (isCancelled) return;
@@ -5882,6 +5984,20 @@ export default function App() {
     setLastError("");
   }, [openDocumentInTab, projectFolder, replaceActiveTabWithDocument]);
 
+  const applyCheckpointStoreResult = (
+    rootPath: string,
+    result: CheckpointLoadResult,
+  ) => {
+    setAppState((current) => ({
+      ...current,
+      snapshots: replaceWorkspaceSnapshots(current.snapshots, rootPath, result.snapshots),
+      checkpointMigrationVersions: markCheckpointMigration(
+        current.checkpointMigrationVersions,
+        rootPath,
+      ),
+    }));
+  };
+
   const buildManuscriptSnapshot = useCallback(
     (
       label: string,
@@ -5948,6 +6064,7 @@ export default function App() {
 
       return {
         id: snapshotId(reason === "manual" ? "snapshot" : "shelter"),
+        revision: 1,
         workspacePath: projectFolder.path,
         workspaceName: projectFolder.name,
         createdAt: Date.now(),
@@ -6007,10 +6124,22 @@ export default function App() {
         "manual",
         currentWorkspaceSnapshots[0] ? [currentWorkspaceSnapshots[0].id] : [],
       );
-      setAppState((current) => ({
-        ...current,
-        snapshots: [snapshot, ...current.snapshots],
-      }));
+      if (isTauriRuntime()) {
+        const stored = await invoke<CheckpointLoadResult>("create_project_checkpoint", {
+          rootPath: projectFolder.path,
+          snapshot,
+        });
+        applyCheckpointStoreResult(projectFolder.path, stored);
+        if (stored.warnings.length) {
+          showToast(`チェックポイントの警告: ${stored.warnings[0]}`);
+          return;
+        }
+      } else {
+        setAppState((current) => ({
+          ...current,
+          snapshots: [snapshot, ...current.snapshots],
+        }));
+      }
       showToast("チェックポイントを作成しました");
     } catch (error) {
       setLastError(String(error));
@@ -6033,13 +6162,27 @@ export default function App() {
       });
       if (!shouldDelete) return;
 
-      setAppState((current) => ({
-        ...current,
-        snapshots: current.snapshots.filter((item) => item.id !== snapshot.id),
-      }));
-      showToast("チェックポイントを削除しました");
+      try {
+        if (projectFolder && isTauriRuntime()) {
+          const stored = await invoke<CheckpointLoadResult>("delete_project_checkpoint", {
+            rootPath: projectFolder.path,
+            checkpointId: snapshot.id,
+            expectedRevision: snapshot.revision,
+          });
+          applyCheckpointStoreResult(projectFolder.path, stored);
+        } else {
+          setAppState((current) => ({
+            ...current,
+            snapshots: current.snapshots.filter((item) => item.id !== snapshot.id),
+          }));
+        }
+        showToast("チェックポイントを削除しました");
+      } catch (error) {
+        setLastError(String(error));
+        showToast("チェックポイントを削除できませんでした");
+      }
     },
-    [],
+    [projectFolder],
   );
 
   const handleRenameManuscriptSnapshot = useCallback(async (snapshot: ManuscriptSnapshot) => {
@@ -6053,14 +6196,30 @@ export default function App() {
     if (!label) return;
     if (label === snapshot.label) return;
 
-    setAppState((current) => ({
-      ...current,
-      snapshots: current.snapshots.map((item) =>
-        item.id === snapshot.id ? { ...item, label } : item,
-      ),
-    }));
-    showToast("チェックポイントのタイトルを変更しました");
-  }, []);
+    try {
+      if (projectFolder && isTauriRuntime()) {
+        const stored = await invoke<CheckpointLoadResult>("update_project_checkpoint_metadata", {
+          rootPath: projectFolder.path,
+          checkpointId: snapshot.id,
+          expectedRevision: snapshot.revision,
+          label,
+          memo: snapshot.memo,
+        });
+        applyCheckpointStoreResult(projectFolder.path, stored);
+      } else {
+        setAppState((current) => ({
+          ...current,
+          snapshots: current.snapshots.map((item) =>
+            item.id === snapshot.id ? { ...item, label } : item,
+          ),
+        }));
+      }
+      showToast("チェックポイントのタイトルを変更しました");
+    } catch (error) {
+      setLastError(String(error));
+      showToast("チェックポイントのタイトルを変更できませんでした");
+    }
+  }, [projectFolder]);
 
   const handleEditManuscriptSnapshotMemo = useCallback(async (snapshot: ManuscriptSnapshot) => {
     const result = await requestMultiInput({
@@ -6081,14 +6240,30 @@ export default function App() {
     const memo = result.memo ?? "";
     if (memo === snapshot.memo) return;
 
-    setAppState((current) => ({
-      ...current,
-      snapshots: current.snapshots.map((item) =>
-        item.id === snapshot.id ? { ...item, memo } : item,
-      ),
-    }));
-    showToast("チェックポイントのメモを変更しました");
-  }, []);
+    try {
+      if (projectFolder && isTauriRuntime()) {
+        const stored = await invoke<CheckpointLoadResult>("update_project_checkpoint_metadata", {
+          rootPath: projectFolder.path,
+          checkpointId: snapshot.id,
+          expectedRevision: snapshot.revision,
+          label: snapshot.label,
+          memo,
+        });
+        applyCheckpointStoreResult(projectFolder.path, stored);
+      } else {
+        setAppState((current) => ({
+          ...current,
+          snapshots: current.snapshots.map((item) =>
+            item.id === snapshot.id ? { ...item, memo } : item,
+          ),
+        }));
+      }
+      showToast("チェックポイントのメモを変更しました");
+    } catch (error) {
+      setLastError(String(error));
+      showToast("チェックポイントのメモを変更できませんでした");
+    }
+  }, [projectFolder]);
 
   const setWorkspaceFromDocumentPath = useCallback(
     async (document: TextDocument, options: { loadWorkspaceSnippets?: boolean } = {}) => {
@@ -6139,6 +6314,7 @@ export default function App() {
       const nextProofreadTerms = await loadWorkspaceProofreadTerms(folder.path);
       const nextProofreadIgnored = await loadWorkspaceProofreadIgnored(folder.path);
       const nextFileProgress = await loadWorkspaceFileProgress(folder.path, appStateRef.current);
+      const nextCheckpoints = await loadWorkspaceCheckpoints(folder.path, appStateRef.current);
       if (nextSnippets) {
         setSnippetWorkspacePath(folder.path);
       }
@@ -6174,6 +6350,16 @@ export default function App() {
             current.fileProgressMigrationVersions,
             folder.path,
           ),
+          snapshots: replaceWorkspaceSnapshots(
+            current.snapshots,
+            folder.path,
+            nextCheckpoints.snapshots,
+          ),
+          checkpointMigrationVersions: markCheckpointMigration(
+            current.checkpointMigrationVersions,
+            folder.path,
+            nextCheckpoints.migrationComplete,
+          ),
           documentTabsByWorkspace:
             nextTabs && nextTab
               ? {
@@ -6186,6 +6372,9 @@ export default function App() {
               : current.documentTabsByWorkspace,
         };
       });
+      if (nextCheckpoints.warnings.length) {
+        showToast(`チェックポイントの警告: ${nextCheckpoints.warnings[0]}`);
+      }
       return { folder, switched };
     },
     [
@@ -6232,10 +6421,11 @@ export default function App() {
           "auto-before-restore",
           currentWorkspaceSnapshots[0] ? [currentWorkspaceSnapshots[0].id] : [],
         );
-        setAppState((current) => ({
-          ...current,
-          snapshots: trimAutoShelterSnapshots([shelter, ...current.snapshots]),
-        }));
+        const storedShelter = await invoke<CheckpointLoadResult>("create_project_checkpoint", {
+          rootPath: projectFolder.path,
+          snapshot: shelter,
+        });
+        applyCheckpointStoreResult(projectFolder.path, storedShelter);
         const restoredDocuments: TextDocument[] = [];
         const snapshotPathKeys = new Set(
           snapshot.files.map((file) => normalizePathForCompare(file.path)),
@@ -6405,10 +6595,11 @@ export default function App() {
           currentWorkspaceSnapshots[0] ? [currentWorkspaceSnapshots[0].id] : [],
         );
         // 先に退避を履歴へ確定する。以降のファイル操作が途中で失敗しても戻り先を失わない。
-        setAppState((current) => ({
-          ...current,
-          snapshots: trimAutoShelterSnapshots([shelter, ...current.snapshots]),
-        }));
+        const storedShelter = await invoke<CheckpointLoadResult>("create_project_checkpoint", {
+          rootPath: projectFolder.path,
+          snapshot: shelter,
+        });
+        applyCheckpointStoreResult(projectFolder.path, storedShelter);
         const selectedTree = selectedFolderPathKeys.size
           ? selectedSnapshotFolderTree(snapshot.projectTree, selectedFolderPathKeys)
           : null;
@@ -6829,6 +7020,10 @@ export default function App() {
         folder.path,
         appStateRef.current,
       );
+      const restoredCheckpoints = await loadWorkspaceCheckpoints(
+        folder.path,
+        appStateRef.current,
+      );
       const firstFile = findFirstTextFile(preferredFiles) ?? findFirstTextFile(folder.children);
       const workspaceKey = workspaceDocumentTabsKey(folder.path);
       const savedTabs = appState.documentTabsByWorkspace[workspaceKey];
@@ -6904,6 +7099,16 @@ export default function App() {
             current.fileProgressMigrationVersions,
             folder.path,
           ),
+          snapshots: replaceWorkspaceSnapshots(
+            current.snapshots,
+            folder.path,
+            restoredCheckpoints.snapshots,
+          ),
+          checkpointMigrationVersions: markCheckpointMigration(
+            current.checkpointMigrationVersions,
+            folder.path,
+            restoredCheckpoints.migrationComplete,
+          ),
           documentTabsByWorkspace: {
             ...current.documentTabsByWorkspace,
             [workspaceKey]: createWorkspaceDocumentTabs(nextTabs, nextTab.id),
@@ -6915,6 +7120,9 @@ export default function App() {
           ),
         };
       });
+      if (restoredCheckpoints.warnings.length) {
+        showToast(`チェックポイントの警告: ${restoredCheckpoints.warnings[0]}`);
+      }
       return {
         movedCount: restoredTabs?.moved.length ?? 0,
         missingNames: restoredTabs?.missingNames ?? [],

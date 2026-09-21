@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [app, types, rustLib, projectState, plan, legacyStateText] = await Promise.all([
+const [app, types, rustLib, projectState, checkpointStore, plan, legacyStateText] = await Promise.all([
   readFile("src/App.tsx", "utf8"),
   readFile("src/types.ts", "utf8"),
   readFile("src-tauri/src/lib.rs", "utf8"),
   readFile("src-tauri/src/project_state.rs", "utf8"),
+  readFile("src-tauri/src/checkpoint_store.rs", "utf8"),
   readFile("docs/PROJECT_PORTABILITY_IMPLEMENTATION_PLAN.md", "utf8"),
   readFile("scripts/fixtures/app-state-pre-portability.json", "utf8"),
 ]);
@@ -21,6 +22,8 @@ const section = (source, start, end) => {
 
 assert.match(types, /fileProgress: Record<string, FileProgressStatus>/);
 assert.match(types, /fileProgressMigrationVersions: Record<string, number>/);
+assert.match(types, /checkpointMigrationVersions: Record<string, number>/);
+assert.match(types, /revision: number/);
 assert.match(types, /snapshots: ManuscriptSnapshot\[\]/);
 assert.match(app, /const MAX_AUTO_SHELTER_SNAPSHOTS = 3/);
 assert.equal(legacyState.fileProgress["C:\\Cloud\\Novel\\chapter.md"], "writing");
@@ -66,11 +69,12 @@ const fullRestore = section(
   "const handleRestoreManuscriptSnapshotFiles = useCallback",
 );
 const shelterIndex = fullRestore.indexOf('"復元前の退避"');
+const shelterPersistIndex = fullRestore.indexOf('"create_project_checkpoint"');
 const treeRestoreIndex = fullRestore.indexOf('invoke("ensure_project_folder_tree"');
 assert.ok(shelterIndex >= 0, "full restore must create a pre-restore shelter");
 assert.ok(
-  treeRestoreIndex > shelterIndex,
-  "the shelter must be recorded before restoring the project tree",
+  shelterPersistIndex > shelterIndex && treeRestoreIndex > shelterPersistIndex,
+  "the shelter must be persisted before restoring the project tree",
 );
 assert.match(fullRestore, /delete_project_entry_to_trash/);
 
@@ -81,6 +85,11 @@ const partialRestore = section(
 );
 assert.match(partialRestore, /selectedSnapshotFolderTree/);
 assert.match(partialRestore, /selectedPathKeys/);
+assert.ok(
+  partialRestore.indexOf('"create_project_checkpoint"') <
+    partialRestore.indexOf('invoke("ensure_project_folder_tree"'),
+  "partial restore must persist its shelter before changing project files",
+);
 
 const renameFlow = section(
   app,
@@ -137,11 +146,44 @@ const moveConfig = section(
 assert.match(moveConfig, /retarget_file_progress_path/);
 assert.match(rustLib, /load_project_file_progress,/);
 assert.match(rustLib, /set_project_file_progress,/);
+assert.match(rustLib, /load_project_checkpoints,/);
+assert.match(rustLib, /create_project_checkpoint,/);
+assert.match(rustLib, /update_project_checkpoint_metadata,/);
+assert.match(rustLib, /delete_project_checkpoint,/);
+
+assert.match(checkpointStore, /const MAX_AUTO_SHELTERS: usize = 3/);
+assert.match(checkpointStore, /struct StoredCheckpoint/);
+const storedCheckpoint = section(
+  checkpointStore,
+  "struct StoredCheckpoint {",
+  "pub(super) struct CheckpointLoadResult",
+);
+assert.doesNotMatch(storedCheckpoint, /workspace_path/);
+assert.match(checkpointStore, /temporary checkpoint verification failed/);
+assert.match(checkpointStore, /checkpoint revision conflict/);
+assert.match(checkpointStore, /warnings: Vec<String>/);
+assert.match(checkpointStore, /migrate_legacy_checkpoints/);
+assert.match(checkpointStore, /migration_complete/);
+assert.match(app, /restoredCheckpoints\.migrationComplete/);
+assert.match(checkpointStore, /runtime_from_stored/);
+
+const createSnapshot = section(
+  app,
+  "const handleCreateManuscriptSnapshot",
+  "const handleDeleteManuscriptSnapshot",
+);
+assert.ok(
+  createSnapshot.indexOf('invoke<CheckpointLoadResult>("create_project_checkpoint"') <
+    createSnapshot.indexOf("applyCheckpointStoreResult"),
+  "checkpoint mirror must update only after project persistence succeeds",
+);
+assert.match(app, /expectedRevision: snapshot\.revision/);
 
 assert.match(plan, /### Phase 0: 基準固定と失敗時設計/);
 assert.match(plan, /### Phase 1: プロジェクト保存基盤の強化/);
 assert.match(plan, /### Phase 2: 進捗ラベルの共有化/);
+assert.match(plan, /### Phase 3: チェックポイントストアの導入/);
 
 console.log(
-  "PASS portability Phase 0-2: project-backed progress, migration, path retargeting, checkpoint invariants",
+  "PASS portability Phase 0-3: project-backed progress and checkpoints, migrations, restore safety",
 );
