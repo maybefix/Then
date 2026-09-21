@@ -13,8 +13,11 @@ mod submission_export;
 
 use project_state::{
     legacy_project_config_path, load_project_config, load_project_config_unlocked,
-    lock_project_config, project_config_path, save_project_config_unlocked,
-    update_project_config, ProjectConfig,
+    load_project_file_progress as read_project_file_progress, lock_project_config,
+    project_config_path, remove_file_progress_path, retarget_file_progress_path,
+    save_project_config_unlocked, set_project_file_progress as write_project_file_progress,
+    trusted_project_relative_path, update_project_config, ProjectConfig,
+    ProjectFileProgressState,
 };
 
 #[derive(Serialize)]
@@ -556,6 +559,8 @@ pub fn run() {
             save_project_proofread_terms,
             load_project_proofread_ignored,
             save_project_proofread_ignored,
+            load_project_file_progress,
+            set_project_file_progress,
             export_proofread_dictionary_dialog,
             import_proofread_dictionary_dialog,
             load_reference_layout,
@@ -2002,7 +2007,16 @@ fn rename_project_entry(path: String, name: String) -> Result<TextDocument, Stri
 
     std::fs::rename(&path, &next_path)
         .map_err(|error| format!("failed to rename entry: {error}"))?;
-    update_project_config_after_rename(&path, &next_path)?;
+    if let Err(config_error) = update_project_config_after_rename(&path, &next_path) {
+        return match std::fs::rename(&next_path, &path) {
+            Ok(()) => Err(format!(
+                "failed to update project config after rename: {config_error}"
+            )),
+            Err(rollback_error) => Err(format!(
+                "failed to update project config after rename and rollback failed: {config_error}; {rollback_error}"
+            )),
+        };
+    }
 
     if next_path.is_file() {
         read_text_document(&next_path)
@@ -2395,6 +2409,7 @@ fn cleanup_project_config_after_delete(
     let deleted_key = deleted_was_dir
         .then(|| project_order_key(root, deleted_path))
         .transpose()?;
+    let deleted_progress_path = trusted_project_relative_path(root, deleted_path)?;
 
     update_project_config(root, move |config| {
         if let Some(parent_key) = &parent_key {
@@ -2408,6 +2423,7 @@ fn cleanup_project_config_after_delete(
                 .order
                 .retain(|key, _| key != deleted_key && !key.starts_with(&deleted_prefix));
         }
+        remove_file_progress_path(config, &deleted_progress_path, deleted_was_dir);
         Ok(())
     })
     .map(|_| ())
@@ -2923,6 +2939,25 @@ fn save_project_proofread_ignored(
         Ok(())
     })
     .map(|_| ())
+}
+
+#[tauri::command]
+fn load_project_file_progress(
+    root_path: String,
+    legacy_file_progress: Option<BTreeMap<String, String>>,
+) -> Result<ProjectFileProgressState, String> {
+    let root = PathBuf::from(root_path);
+    read_project_file_progress(&root, legacy_file_progress.as_ref())
+}
+
+#[tauri::command]
+fn set_project_file_progress(
+    root_path: String,
+    path: String,
+    status: String,
+) -> Result<ProjectFileProgressState, String> {
+    let root = PathBuf::from(root_path);
+    write_project_file_progress(&root, Path::new(&path), &status)
 }
 
 #[tauri::command]
@@ -4215,6 +4250,9 @@ fn update_project_config_after_rename(old_path: &Path, new_path: &Path) -> Resul
         .file_name()
         .and_then(|value| value.to_str())
         .ok_or_else(|| "entry name is not valid unicode".to_string())?;
+    let old_progress_path = trusted_project_relative_path(&root, old_path)?;
+    let new_progress_path = trusted_project_relative_path(&root, new_path)?;
+    let renamed_directory = new_path.is_dir();
 
     let parent_key = project_order_key(&root, old_parent)?;
     let directory_keys = if old_path.is_dir() || new_path.is_dir() {
@@ -4252,6 +4290,12 @@ fn update_project_config_after_rename(old_path: &Path, new_path: &Path) -> Resul
             }
             config.order = next_order;
         }
+        retarget_file_progress_path(
+            config,
+            &old_progress_path,
+            &new_progress_path,
+            renamed_directory,
+        );
         Ok(())
     })
     .map(|_| ())
@@ -4287,6 +4331,8 @@ fn prepare_project_config_after_move(
         .file_name()
         .and_then(|value| value.to_str())
         .ok_or_else(|| "entry name is not valid unicode".to_string())?;
+    let old_progress_path = trusted_project_relative_path(root, old_path)?;
+    let new_progress_path = trusted_project_relative_path(root, new_path)?;
 
     let old_parent_order = project_entry_names_in_display_order(root, old_parent, &config)?
         .into_iter()
@@ -4339,6 +4385,12 @@ fn prepare_project_config_after_move(
     let new_parent_key = project_order_key(root, new_parent)?;
     config.order.insert(old_parent_key, old_parent_order);
     config.order.insert(new_parent_key, new_parent_order);
+    retarget_file_progress_path(
+        &mut config,
+        &old_progress_path,
+        &new_progress_path,
+        source_is_dir,
+    );
 
     Ok(config)
 }

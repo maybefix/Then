@@ -412,6 +412,8 @@ export type AppState = {
   collapsedOutlineHeadingKeysByWorkspace: Record<string, string[]>;
   /** ファイルパスごとの進捗ラベル。未登録は "todo"（未着手）として扱う。 */
   fileProgress: Record<string, FileProgressStatus>;
+  /** プロジェクトごとの進捗ラベル移行バージョン。旧ローカル値の再取込を防ぐ。 */
+  fileProgressMigrationVersions: Record<string, number>;
   /** ファイルパスごとに記憶した最後のカーソル位置。 */
   cursorPositions: Record<string, CursorPosition>;
   /** プロジェクトごとに記憶した、開いている文書タブと選択状態。 */

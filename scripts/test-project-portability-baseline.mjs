@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [app, types, projectState, plan, legacyStateText] = await Promise.all([
+const [app, types, rustLib, projectState, plan, legacyStateText] = await Promise.all([
   readFile("src/App.tsx", "utf8"),
   readFile("src/types.ts", "utf8"),
+  readFile("src-tauri/src/lib.rs", "utf8"),
   readFile("src-tauri/src/project_state.rs", "utf8"),
   readFile("docs/PROJECT_PORTABILITY_IMPLEMENTATION_PLAN.md", "utf8"),
   readFile("scripts/fixtures/app-state-pre-portability.json", "utf8"),
@@ -19,6 +20,7 @@ const section = (source, start, end) => {
 };
 
 assert.match(types, /fileProgress: Record<string, FileProgressStatus>/);
+assert.match(types, /fileProgressMigrationVersions: Record<string, number>/);
 assert.match(types, /snapshots: ManuscriptSnapshot\[\]/);
 assert.match(app, /const MAX_AUTO_SHELTER_SNAPSHOTS = 3/);
 assert.equal(legacyState.fileProgress["C:\\Cloud\\Novel\\chapter.md"], "writing");
@@ -26,6 +28,28 @@ assert.equal(legacyState.snapshots[0].workspacePath, "C:\\Cloud\\Novel");
 assert.equal(legacyState.snapshots[0].files[0].path, "C:\\Cloud\\Novel\\chapter.md");
 assert.match(app, /fileProgress: normalizeFileProgress\(value\?\.fileProgress\)/);
 assert.match(app, /snapshots: normalizeSnapshots\(value\?\.snapshots\)/);
+assert.match(app, /const FILE_PROGRESS_MIGRATION_VERSION = 1/);
+
+const progressLoader = section(
+  app,
+  "async function loadWorkspaceFileProgress",
+  "function replaceWorkspaceFileProgress",
+);
+assert.match(progressLoader, /load_project_file_progress/);
+assert.match(progressLoader, /legacyFileProgress: shouldMigrate \? state\.fileProgress : null/);
+
+const progressSetter = section(
+  app,
+  "const handleSetFileProgress =",
+  "const handleSnippetStorageModeChange",
+);
+const persistedProgressIndex = progressSetter.indexOf('invoke<ProjectFileProgressState>("set_project_file_progress"');
+const mirroredProgressIndex = progressSetter.indexOf("setAppState((current)", persistedProgressIndex);
+assert.ok(persistedProgressIndex >= 0, "progress changes must use the project store");
+assert.ok(
+  mirroredProgressIndex > persistedProgressIndex,
+  "the compatibility mirror must update only after project persistence succeeds",
+);
 
 const snapshotBuilder = section(
   app,
@@ -87,10 +111,37 @@ assert.match(projectState, /file\.sync_all\(\)/);
 assert.match(projectState, /temporary project config verification failed/);
 assert.match(projectState, /backup rollback failed/);
 assert.match(projectState, /static PROJECT_CONFIG_LOCK: Mutex<\(\)>/);
+assert.match(projectState, /fn validate_stored_project_path/);
+assert.match(projectState, /fn legacy_project_file_relative_path/);
+assert.match(projectState, /pub\(super\) fn load_project_file_progress/);
+assert.match(projectState, /pub\(super\) fn set_project_file_progress/);
+assert.match(projectState, /config\.file_progress\.contains_key\(&relative_path\)/);
+
+const deleteConfig = section(
+  rustLib,
+  "fn cleanup_project_config_after_delete",
+  "fn hash_path_for_trash",
+);
+assert.match(deleteConfig, /remove_file_progress_path/);
+const renameConfig = section(
+  rustLib,
+  "fn update_project_config_after_rename",
+  "fn project_entry_names_in_display_order",
+);
+assert.match(renameConfig, /retarget_file_progress_path/);
+const moveConfig = section(
+  rustLib,
+  "fn prepare_project_config_after_move",
+  "fn find_project_root",
+);
+assert.match(moveConfig, /retarget_file_progress_path/);
+assert.match(rustLib, /load_project_file_progress,/);
+assert.match(rustLib, /set_project_file_progress,/);
 
 assert.match(plan, /### Phase 0: 基準固定と失敗時設計/);
 assert.match(plan, /### Phase 1: プロジェクト保存基盤の強化/);
+assert.match(plan, /### Phase 2: 進捗ラベルの共有化/);
 
 console.log(
-  "PASS portability Phase 0-1: checkpoint invariants, path retargeting, versioned atomic project state",
+  "PASS portability Phase 0-2: project-backed progress, migration, path retargeting, checkpoint invariants",
 );

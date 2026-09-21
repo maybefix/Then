@@ -2,6 +2,7 @@ use super::{IdeaThreadConfig, PlotCardConfig, ProofreadTermConfig, SnippetConfig
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::io::Write;
+use std::path::Component;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 
@@ -16,7 +17,16 @@ fn default_project_config_schema_version() -> u32 {
 #[serde(rename_all = "camelCase")]
 pub(super) struct ProjectFileProgress {
     pub(super) status: String,
+    #[serde(default)]
     pub(super) updated_at: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct ProjectFileProgressState {
+    pub(super) file_progress: BTreeMap<String, String>,
+    pub(super) revision: u64,
+    pub(super) migrated_count: usize,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -84,7 +94,141 @@ fn validate_project_config(config: &ProjectConfig) -> Result<(), String> {
             config.schema_version
         ));
     }
+    for (path, progress) in &config.file_progress {
+        validate_stored_project_path(path)?;
+        validate_file_progress_status(&progress.status, true)?;
+    }
     Ok(())
+}
+
+fn validate_file_progress_status(status: &str, allow_todo: bool) -> Result<(), String> {
+    if matches!(status, "writing" | "revising" | "done") || (allow_todo && status == "todo") {
+        Ok(())
+    } else {
+        Err(format!("unsupported file progress status: {status}"))
+    }
+}
+
+fn validate_stored_project_path(path: &str) -> Result<(), String> {
+    if path.is_empty() || path.contains('\\') {
+        return Err("project-relative path is not normalized".to_string());
+    }
+    let mut components = path.split('/');
+    let Some(first) = components.next() else {
+        return Err("project-relative path is empty".to_string());
+    };
+    if first.is_empty() || first == "." || first == ".." || first.eq_ignore_ascii_case(".then") {
+        return Err("project-relative path is not allowed".to_string());
+    }
+    if components.any(|component| component.is_empty() || component == "." || component == "..") {
+        return Err("project-relative path is not normalized".to_string());
+    }
+    if Path::new(path).is_absolute() {
+        return Err("project-relative path must not be absolute".to_string());
+    }
+    Ok(())
+}
+
+fn normalized_relative_path(path: &Path) -> Result<String, String> {
+    let mut parts = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(value) => {
+                let value = value
+                    .to_str()
+                    .ok_or_else(|| "project path is not valid unicode".to_string())?;
+                parts.push(value.to_string());
+            }
+            _ => return Err("project-relative path contains an invalid component".to_string()),
+        }
+    }
+    let normalized = parts.join("/");
+    validate_stored_project_path(&normalized)?;
+    Ok(normalized)
+}
+
+pub(super) fn trusted_project_relative_path(root: &Path, path: &Path) -> Result<String, String> {
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|_| "path is outside project root".to_string())?;
+    normalized_relative_path(relative)
+}
+
+fn existing_project_file_relative_path(root: &Path, path: &Path) -> Result<String, String> {
+    if !root.is_dir() {
+        return Err("project root does not exist".to_string());
+    }
+    if !path.is_file() {
+        return Err("file progress target does not exist".to_string());
+    }
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve project root: {error}"))?;
+    let canonical_path = path
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve file progress target: {error}"))?;
+    let relative = canonical_path
+        .strip_prefix(&canonical_root)
+        .map_err(|_| "file progress target is outside project root".to_string())?;
+    normalized_relative_path(relative)
+}
+
+fn legacy_project_file_relative_path(root: &Path, path: &Path) -> Result<String, String> {
+    if path.exists() {
+        existing_project_file_relative_path(root, path)
+    } else {
+        trusted_project_relative_path(root, path)
+    }
+}
+
+fn absolute_file_progress(root: &Path, config: &ProjectConfig) -> BTreeMap<String, String> {
+    config
+        .file_progress
+        .iter()
+        .filter(|(_, progress)| progress.status != "todo")
+        .map(|(relative, progress)| {
+            let absolute = relative
+                .split('/')
+                .fold(root.to_path_buf(), |path, component| path.join(component));
+            (
+                absolute.to_string_lossy().to_string(),
+                progress.status.clone(),
+            )
+        })
+        .collect()
+}
+
+pub(super) fn remove_file_progress_path(
+    config: &mut ProjectConfig,
+    relative_path: &str,
+    is_directory: bool,
+) {
+    let prefix = format!("{relative_path}/");
+    config
+        .file_progress
+        .retain(|path, _| path != relative_path && !(is_directory && path.starts_with(&prefix)));
+}
+
+pub(super) fn retarget_file_progress_path(
+    config: &mut ProjectConfig,
+    old_relative_path: &str,
+    new_relative_path: &str,
+    is_directory: bool,
+) {
+    let old_prefix = format!("{old_relative_path}/");
+    let new_prefix = format!("{new_relative_path}/");
+    let mut next = BTreeMap::new();
+    for (path, progress) in std::mem::take(&mut config.file_progress) {
+        let path = if path == old_relative_path {
+            new_relative_path.to_string()
+        } else if is_directory && path.starts_with(&old_prefix) {
+            format!("{}{}", new_prefix, &path[old_prefix.len()..])
+        } else {
+            path
+        };
+        next.insert(path, progress);
+    }
+    config.file_progress = next;
 }
 
 fn read_project_config_file(path: &Path) -> Result<ProjectConfig, String> {
@@ -250,6 +394,87 @@ where
     let mut config = load_project_config_unlocked(root)?;
     update(&mut config)?;
     save_project_config_unlocked(root, &config)
+}
+
+pub(super) fn load_project_file_progress(
+    root: &Path,
+    legacy_file_progress: Option<&BTreeMap<String, String>>,
+) -> Result<ProjectFileProgressState, String> {
+    if !root.is_dir() {
+        return Err("project root does not exist".to_string());
+    }
+    let _guard = lock_project_config()?;
+    let mut config = load_project_config_unlocked(root)?;
+    let mut migrated_count = 0;
+
+    if let Some(legacy_file_progress) = legacy_file_progress {
+        let updated_at = super::now_millis();
+        for (path, status) in legacy_file_progress {
+            if validate_file_progress_status(status, false).is_err() {
+                continue;
+            }
+            let Ok(relative_path) = legacy_project_file_relative_path(root, Path::new(path)) else {
+                continue;
+            };
+            if config.file_progress.contains_key(&relative_path) {
+                continue;
+            }
+            config.file_progress.insert(
+                relative_path,
+                ProjectFileProgress {
+                    status: status.clone(),
+                    updated_at,
+                },
+            );
+            migrated_count += 1;
+        }
+    }
+
+    if migrated_count > 0 {
+        config = save_project_config_unlocked(root, &config)?;
+    }
+
+    Ok(ProjectFileProgressState {
+        file_progress: absolute_file_progress(root, &config),
+        revision: config.revision,
+        migrated_count,
+    })
+}
+
+pub(super) fn set_project_file_progress(
+    root: &Path,
+    path: &Path,
+    status: &str,
+) -> Result<ProjectFileProgressState, String> {
+    validate_file_progress_status(status, true)?;
+    let relative_path = existing_project_file_relative_path(root, path)?;
+    let _guard = lock_project_config()?;
+    let mut config = load_project_config_unlocked(root)?;
+    let unchanged = match config.file_progress.get(&relative_path) {
+        Some(progress) => progress.status == status,
+        None => status == "todo",
+    };
+
+    if !unchanged {
+        if status == "todo" {
+            config.file_progress.remove(&relative_path);
+        } else {
+            config.file_progress.insert(
+                relative_path,
+                ProjectFileProgress {
+                    status: status.to_string(),
+                    updated_at: super::now_millis(),
+                },
+            );
+        }
+        config = save_project_config_unlocked(root, &config)?;
+    }
+
+    Ok(ProjectFileProgressState {
+        file_progress: absolute_file_progress(root, &config),
+        revision: config.revision,
+        migrated_count: 0,
+    })
 }
 
 #[cfg(test)]
@@ -474,5 +699,118 @@ mod tests {
         let config = load_project_config(&root.0).unwrap();
         assert_eq!(config.order.len(), 40);
         assert_eq!(config.revision, 40);
+    }
+
+    #[test]
+    fn relative_paths_reject_escape_absolute_and_then_entries() {
+        assert!(validate_stored_project_path("").is_err());
+        assert!(validate_stored_project_path("../chapter.md").is_err());
+        assert!(validate_stored_project_path("notes//chapter.md").is_err());
+        assert!(validate_stored_project_path(".then/project.json").is_err());
+        assert!(validate_stored_project_path("notes\\chapter.md").is_err());
+        assert!(validate_stored_project_path("notes/chapter.md").is_ok());
+
+        let root = TestDirectory::new("path-escape");
+        assert!(trusted_project_relative_path(&root.0, &root.0.join("../outside.md")).is_err());
+    }
+
+    #[test]
+    fn legacy_progress_migration_is_idempotent_and_shared_values_win() {
+        let root = TestDirectory::new("progress-migration");
+        let chapter = root.0.join("chapter.md");
+        let ending = root.0.join("notes").join("ending.md");
+        let pending = root.0.join("notes").join("pending.md");
+        std::fs::write(&chapter, "chapter").unwrap();
+        std::fs::create_dir_all(ending.parent().unwrap()).unwrap();
+        std::fs::write(&ending, "ending").unwrap();
+
+        set_project_file_progress(&root.0, &chapter, "revising").unwrap();
+        let legacy = BTreeMap::from([
+            (chapter.to_string_lossy().to_string(), "writing".to_string()),
+            (ending.to_string_lossy().to_string(), "done".to_string()),
+            (pending.to_string_lossy().to_string(), "writing".to_string()),
+            ("C:/outside.md".to_string(), "writing".to_string()),
+        ]);
+        let first = load_project_file_progress(&root.0, Some(&legacy)).unwrap();
+        let second = load_project_file_progress(&root.0, Some(&legacy)).unwrap();
+
+        assert_eq!(first.migrated_count, 2);
+        assert_eq!(second.migrated_count, 0);
+        assert_eq!(
+            first.file_progress[&chapter.to_string_lossy().to_string()],
+            "revising"
+        );
+        assert_eq!(
+            first.file_progress[&ending.to_string_lossy().to_string()],
+            "done"
+        );
+        assert_eq!(
+            first.file_progress[&pending.to_string_lossy().to_string()],
+            "writing"
+        );
+
+        let cleared = set_project_file_progress(&root.0, &ending, "todo").unwrap();
+        assert!(!cleared
+            .file_progress
+            .contains_key(&ending.to_string_lossy().to_string()));
+    }
+
+    #[test]
+    fn progress_survives_copy_to_a_different_absolute_root() {
+        let source = TestDirectory::new("portable-source");
+        let destination = TestDirectory::new("portable-destination");
+        let source_file = source.0.join("chapters").join("one.md");
+        let destination_file = destination.0.join("chapters").join("one.md");
+        std::fs::create_dir_all(source_file.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(destination_file.parent().unwrap()).unwrap();
+        std::fs::write(&source_file, "source").unwrap();
+        std::fs::write(&destination_file, "copy").unwrap();
+        set_project_file_progress(&source.0, &source_file, "writing").unwrap();
+
+        let source_config = project_config_path(&source.0);
+        let destination_config = project_config_path(&destination.0);
+        std::fs::create_dir_all(destination_config.parent().unwrap()).unwrap();
+        std::fs::copy(source_config, destination_config).unwrap();
+
+        let loaded = load_project_file_progress(&destination.0, None).unwrap();
+        assert_eq!(
+            loaded.file_progress[&destination_file.to_string_lossy().to_string()],
+            "writing"
+        );
+        assert!(!loaded
+            .file_progress
+            .contains_key(&source_file.to_string_lossy().to_string()));
+    }
+
+    #[test]
+    fn progress_keys_follow_folder_move_and_delete() {
+        let root = TestDirectory::new("progress-retarget");
+        let config = update_project_config(&root.0, |config| {
+            config.file_progress.insert(
+                "drafts/one.md".into(),
+                ProjectFileProgress {
+                    status: "writing".into(),
+                    updated_at: 1,
+                },
+            );
+            config.file_progress.insert(
+                "drafts/nested/two.md".into(),
+                ProjectFileProgress {
+                    status: "done".into(),
+                    updated_at: 2,
+                },
+            );
+            Ok(())
+        })
+        .unwrap();
+        let mut moved = config.clone();
+        retarget_file_progress_path(&mut moved, "drafts", "archive/drafts", true);
+        assert!(moved.file_progress.contains_key("archive/drafts/one.md"));
+        assert!(moved
+            .file_progress
+            .contains_key("archive/drafts/nested/two.md"));
+
+        remove_file_progress_path(&mut moved, "archive/drafts", true);
+        assert!(moved.file_progress.is_empty());
     }
 }

@@ -350,6 +350,12 @@ type MoveProjectEntriesResult = {
   moves: MovedProjectEntry[];
 };
 
+type ProjectFileProgressState = {
+  fileProgress: Record<string, FileProgressStatus>;
+  revision: number;
+  migratedCount: number;
+};
+
 type NotationModalState =
   | {
       type: "ruby";
@@ -1134,6 +1140,7 @@ function createDefaultState(): AppState {
     collapsedOutlinePathsByWorkspace: {},
     collapsedOutlineHeadingKeysByWorkspace: {},
     fileProgress: {},
+    fileProgressMigrationVersions: {},
     cursorPositions: {},
     proofreadTerms: [],
     documentTabsByWorkspace: {},
@@ -2228,6 +2235,9 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
       value?.collapsedOutlineHeadingKeysByWorkspace,
     ),
     fileProgress: normalizeFileProgress(value?.fileProgress),
+    fileProgressMigrationVersions: normalizeFileProgressMigrationVersions(
+      value?.fileProgressMigrationVersions,
+    ),
     cursorPositions: normalizeCursorPositions(value?.cursorPositions),
     proofreadTerms: normalizeProofreadTerms(value?.proofreadTerms, "global"),
     documentTabsByWorkspace: normalizeWorkspaceDocumentTabs(
@@ -2235,6 +2245,17 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
     ),
     snapshots: normalizeSnapshots(value?.snapshots),
   };
+}
+
+function normalizeFileProgressMigrationVersions(value: unknown): Record<string, number> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: Record<string, number> = {};
+  for (const [workspace, version] of Object.entries(value as Record<string, unknown>)) {
+    if (workspace && typeof version === "number" && Number.isInteger(version) && version > 0) {
+      result[workspace] = version;
+    }
+  }
+  return result;
 }
 
 function normalizeCursorPositions(
@@ -2376,6 +2397,55 @@ async function saveWorkspaceProofreadIgnored(
   await invoke("save_project_proofread_ignored", { rootPath: folderPath, proofreadIgnored });
 }
 
+const FILE_PROGRESS_MIGRATION_VERSION = 1;
+
+async function loadWorkspaceFileProgress(
+  folderPath: string,
+  state: AppState,
+): Promise<ProjectFileProgressState> {
+  if (!isTauriRuntime()) {
+    return {
+      fileProgress: state.fileProgress,
+      revision: 0,
+      migratedCount: 0,
+    };
+  }
+  const workspaceKey = workspaceDocumentTabsKey(folderPath);
+  const shouldMigrate =
+    (state.fileProgressMigrationVersions[workspaceKey] ?? 0) <
+    FILE_PROGRESS_MIGRATION_VERSION;
+  const loaded = await invoke<ProjectFileProgressState>("load_project_file_progress", {
+    rootPath: folderPath,
+    legacyFileProgress: shouldMigrate ? state.fileProgress : null,
+  });
+  return {
+    ...loaded,
+    fileProgress: normalizeFileProgress(loaded.fileProgress),
+  };
+}
+
+function replaceWorkspaceFileProgress(
+  current: Record<string, FileProgressStatus>,
+  folderPath: string,
+  shared: Record<string, FileProgressStatus>,
+): Record<string, FileProgressStatus> {
+  const next: Record<string, FileProgressStatus> = {};
+  for (const [path, status] of Object.entries(current)) {
+    if (!isPathSameOrInside(path, folderPath)) next[path] = status;
+  }
+  return { ...next, ...shared };
+}
+
+function markFileProgressMigration(
+  current: AppState["fileProgressMigrationVersions"],
+  folderPath: string,
+): AppState["fileProgressMigrationVersions"] {
+  return {
+    ...current,
+    [workspaceDocumentTabsKey(folderPath)]: FILE_PROGRESS_MIGRATION_VERSION,
+  };
+}
+
 async function loadReferenceLayout(folderPath: string): Promise<ReferenceLayout> {
   if (!isTauriRuntime()) return defaultReferenceLayout;
   const layout = await invoke<ReferenceLayout>("load_reference_layout", { rootPath: folderPath });
@@ -2473,6 +2543,7 @@ export default function App() {
   const documentSaveQueuesRef = useRef<Map<string, DocumentSaveQueue>>(new Map());
   const headingMoveInProgressRef = useRef(false);
   const projectEntryPathChangeInProgressRef = useRef(false);
+  const fileProgressSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const workspaceSwitchInProgressRef = useRef(false);
   const workspaceSwitchGenerationRef = useRef(0);
   const toastTimerRef = useRef<number | null>(null);
@@ -2521,6 +2592,8 @@ export default function App() {
   const activeDocumentAstCacheRef = useRef<DocumentAst | null>(null);
 
   const [appState, setAppState] = useState<AppState>(() => createDefaultState());
+  const appStateRef = useRef(appState);
+  appStateRef.current = appState;
   const [isHydrated, setIsHydrated] = useState(false);
   const [startupView, setStartupView] = useState<"loading" | "portal" | "editor">(
     "loading",
@@ -4182,6 +4255,7 @@ export default function App() {
       const restoredPlotCards = await loadWorkspacePlotCards(folder.path);
       const restoredProofreadTerms = await loadWorkspaceProofreadTerms(folder.path);
       const restoredProofreadIgnored = await loadWorkspaceProofreadIgnored(folder.path);
+      const restoredFileProgress = await loadWorkspaceFileProgress(folder.path, state);
       setSnippetWorkspacePath(
         state.settings.snippetStorageMode === "workspace" ? folder.path : null,
       );
@@ -4231,7 +4305,6 @@ export default function App() {
       syncDocumentTabToEditor(nextTab);
 
       let cursorPositions = { ...restoredState.cursorPositions };
-      let fileProgress = { ...restoredState.fileProgress };
       for (const move of restoredTabs?.moved ?? []) {
         const oldCursorKey = Object.keys(cursorPositions).find((path) =>
           isSamePath(path, move.oldPath),
@@ -4240,13 +4313,6 @@ export default function App() {
           cursorPositions[move.newPath] = cursorPositions[oldCursorKey];
           delete cursorPositions[oldCursorKey];
         }
-        const oldProgressKey = Object.keys(fileProgress).find((path) =>
-          isSamePath(path, move.oldPath),
-        );
-        if (oldProgressKey) {
-          fileProgress[move.newPath] = fileProgress[oldProgressKey];
-          delete fileProgress[oldProgressKey];
-        }
       }
       setAppState({
         ...restoredState,
@@ -4254,7 +4320,15 @@ export default function App() {
         lastWorkspacePath: folder.path,
         lastFilePath: nextTab.path,
         cursorPositions,
-        fileProgress,
+        fileProgress: replaceWorkspaceFileProgress(
+          restoredState.fileProgress,
+          folder.path,
+          restoredFileProgress.fileProgress,
+        ),
+        fileProgressMigrationVersions: markFileProgressMigration(
+          restoredState.fileProgressMigrationVersions,
+          folder.path,
+        ),
         documentTabsByWorkspace: {
           ...restoredState.documentTabsByWorkspace,
           [workspaceKey]: createWorkspaceDocumentTabs(nextTabs, nextTab.id),
@@ -4444,6 +4518,7 @@ export default function App() {
       loadWorkspacePlotCards(activeWorkspaceRootPath),
       loadWorkspaceProofreadTerms(activeWorkspaceRootPath),
       loadWorkspaceProofreadIgnored(activeWorkspaceRootPath),
+      loadWorkspaceFileProgress(activeWorkspaceRootPath, appStateRef.current),
     ])
       .then(([
         folder,
@@ -4451,6 +4526,7 @@ export default function App() {
         workspacePlotCards,
         workspaceProofreadTerms,
         workspaceProofreadIgnored,
+        workspaceFileProgress,
       ]) => {
         if (isCancelled) return;
         if (workspaceSwitchGeneration !== workspaceSwitchGenerationRef.current) return;
@@ -4468,6 +4544,15 @@ export default function App() {
           snippets: workspaceSnippets,
           lastWorkspacePath: folder.path,
           lastFilePath: currentFilePath,
+          fileProgress: replaceWorkspaceFileProgress(
+            current.fileProgress,
+            folder.path,
+            workspaceFileProgress.fileProgress,
+          ),
+          fileProgressMigrationVersions: markFileProgressMigration(
+            current.fileProgressMigrationVersions,
+            folder.path,
+          ),
         }));
       })
       .catch((error) => {
@@ -6053,6 +6138,7 @@ export default function App() {
       const nextPlotCards = await loadWorkspacePlotCards(folder.path);
       const nextProofreadTerms = await loadWorkspaceProofreadTerms(folder.path);
       const nextProofreadIgnored = await loadWorkspaceProofreadIgnored(folder.path);
+      const nextFileProgress = await loadWorkspaceFileProgress(folder.path, appStateRef.current);
       if (nextSnippets) {
         setSnippetWorkspacePath(folder.path);
       }
@@ -6063,7 +6149,6 @@ export default function App() {
       setProjectProofreadIgnored(nextProofreadIgnored);
       setAppState((current) => {
         const cursorPositions = { ...current.cursorPositions };
-        const fileProgress = { ...current.fileProgress };
         for (const move of restoredTabs?.moved ?? []) {
           const oldCursorKey = Object.keys(cursorPositions).find((path) =>
             isSamePath(path, move.oldPath),
@@ -6071,13 +6156,6 @@ export default function App() {
           if (oldCursorKey) {
             cursorPositions[move.newPath] = cursorPositions[oldCursorKey];
             delete cursorPositions[oldCursorKey];
-          }
-          const oldProgressKey = Object.keys(fileProgress).find((path) =>
-            isSamePath(path, move.oldPath),
-          );
-          if (oldProgressKey) {
-            fileProgress[move.newPath] = fileProgress[oldProgressKey];
-            delete fileProgress[oldProgressKey];
           }
         }
         return {
@@ -6087,7 +6165,15 @@ export default function App() {
           lastWorkspacePath: folder.path,
           lastFilePath: document.path,
           cursorPositions,
-          fileProgress,
+          fileProgress: replaceWorkspaceFileProgress(
+            current.fileProgress,
+            folder.path,
+            nextFileProgress.fileProgress,
+          ),
+          fileProgressMigrationVersions: markFileProgressMigration(
+            current.fileProgressMigrationVersions,
+            folder.path,
+          ),
           documentTabsByWorkspace:
             nextTabs && nextTab
               ? {
@@ -6739,6 +6825,10 @@ export default function App() {
       const restoredPlotCards = await loadWorkspacePlotCards(folder.path);
       const restoredProofreadTerms = await loadWorkspaceProofreadTerms(folder.path);
       const restoredProofreadIgnored = await loadWorkspaceProofreadIgnored(folder.path);
+      const restoredFileProgress = await loadWorkspaceFileProgress(
+        folder.path,
+        appStateRef.current,
+      );
       const firstFile = findFirstTextFile(preferredFiles) ?? findFirstTextFile(folder.children);
       const workspaceKey = workspaceDocumentTabsKey(folder.path);
       const savedTabs = appState.documentTabsByWorkspace[workspaceKey];
@@ -6789,7 +6879,6 @@ export default function App() {
       setFocusedFolderPath(focusedPath);
       setAppState((current) => {
         const cursorPositions = { ...current.cursorPositions };
-        const fileProgress = { ...current.fileProgress };
         for (const move of restoredTabs?.moved ?? []) {
           const oldCursorKey = Object.keys(cursorPositions).find((path) =>
             isSamePath(path, move.oldPath),
@@ -6797,13 +6886,6 @@ export default function App() {
           if (oldCursorKey) {
             cursorPositions[move.newPath] = cursorPositions[oldCursorKey];
             delete cursorPositions[oldCursorKey];
-          }
-          const oldProgressKey = Object.keys(fileProgress).find((path) =>
-            isSamePath(path, move.oldPath),
-          );
-          if (oldProgressKey) {
-            fileProgress[move.newPath] = fileProgress[oldProgressKey];
-            delete fileProgress[oldProgressKey];
           }
         }
         return {
@@ -6813,7 +6895,15 @@ export default function App() {
           lastWorkspacePath: folder.path,
           lastFilePath: nextTab.path,
           cursorPositions,
-          fileProgress,
+          fileProgress: replaceWorkspaceFileProgress(
+            current.fileProgress,
+            folder.path,
+            restoredFileProgress.fileProgress,
+          ),
+          fileProgressMigrationVersions: markFileProgressMigration(
+            current.fileProgressMigrationVersions,
+            folder.path,
+          ),
           documentTabsByWorkspace: {
             ...current.documentTabsByWorkspace,
             [workspaceKey]: createWorkspaceDocumentTabs(nextTabs, nextTab.id),
@@ -8053,14 +8143,21 @@ export default function App() {
       );
       setAppState((current) => {
         const nextCursorPositions = { ...current.cursorPositions };
+        const nextFileProgress = { ...current.fileProgress };
         for (const path of Object.keys(nextCursorPositions)) {
           if (isPathSameOrInside(path, entry.path)) {
             delete nextCursorPositions[path];
           }
         }
+        for (const path of Object.keys(nextFileProgress)) {
+          if (isPathSameOrInside(path, entry.path)) {
+            delete nextFileProgress[path];
+          }
+        }
         return {
           ...current,
           cursorPositions: nextCursorPositions,
+          fileProgress: nextFileProgress,
           lastFilePath:
             current.lastFilePath && isPathSameOrInside(current.lastFilePath, entry.path)
               ? null
@@ -9658,17 +9755,42 @@ export default function App() {
   };
 
   const handleSetFileProgress = (path: string, status: FileProgressStatus) => {
-    setAppState((current) => {
-      const nextProgress = { ...current.fileProgress };
-      // "todo"（既定値）は保存せずキーを削除し、状態を肥大化させない。
-      if (status === "todo") {
-        if (!(path in nextProgress)) return current;
-        delete nextProgress[path];
-      } else {
-        if (nextProgress[path] === status) return current;
-        nextProgress[path] = status;
-      }
-      return { ...current, fileProgress: nextProgress };
+    if (!projectFolder) return;
+    if (!isTauriRuntime()) {
+      setAppState((current) => {
+        const next = { ...current.fileProgress };
+        if (status === "todo") delete next[path];
+        else next[path] = status;
+        return { ...current, fileProgress: next };
+      });
+      return;
+    }
+    const rootPath = projectFolder.path;
+    const operation = fileProgressSaveQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        const saved = await invoke<ProjectFileProgressState>("set_project_file_progress", {
+          rootPath,
+          path,
+          status,
+        });
+        setAppState((current) => ({
+          ...current,
+          fileProgress: replaceWorkspaceFileProgress(
+            current.fileProgress,
+            rootPath,
+            normalizeFileProgress(saved.fileProgress),
+          ),
+          fileProgressMigrationVersions: markFileProgressMigration(
+            current.fileProgressMigrationVersions,
+            rootPath,
+          ),
+        }));
+      });
+    fileProgressSaveQueueRef.current = operation;
+    void operation.catch((error) => {
+      setLastError(String(error));
+      showToast("進捗ラベルを保存できませんでした");
     });
   };
 
