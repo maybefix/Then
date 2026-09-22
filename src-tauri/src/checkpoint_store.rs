@@ -1,4 +1,6 @@
-use super::project_state::{trusted_project_relative_path, validate_stored_project_path};
+use super::project_state::{
+    path_exists_checked, trusted_project_relative_path, validate_stored_project_path,
+};
 use super::{ProjectEntry, ProjectFolder};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -200,17 +202,23 @@ fn validate_stored_checkpoint(checkpoint: &StoredCheckpoint) -> Result<(), Strin
     Ok(())
 }
 
-fn parse_stored_checkpoint_file(path: &Path) -> Result<StoredCheckpoint, String> {
-    let content = std::fs::read_to_string(path)
-        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+fn parse_stored_checkpoint_content(path: &Path, content: &str) -> Result<StoredCheckpoint, String> {
     let checkpoint: StoredCheckpoint = serde_json::from_str(&content)
         .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
     validate_stored_checkpoint(&checkpoint)?;
     Ok(checkpoint)
 }
 
-fn read_stored_checkpoint_file(path: &Path) -> Result<StoredCheckpoint, String> {
-    let checkpoint = parse_stored_checkpoint_file(path)?;
+fn parse_stored_checkpoint_file(path: &Path) -> Result<StoredCheckpoint, String> {
+    let content = std::fs::read_to_string(path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    parse_stored_checkpoint_content(path, &content)
+}
+
+fn validate_checkpoint_filename(
+    path: &Path,
+    checkpoint: StoredCheckpoint,
+) -> Result<StoredCheckpoint, String> {
     let expected_id = path
         .file_stem()
         .and_then(|value| value.to_str())
@@ -221,15 +229,27 @@ fn read_stored_checkpoint_file(path: &Path) -> Result<StoredCheckpoint, String> 
     Ok(checkpoint)
 }
 
+fn read_stored_checkpoint_file(path: &Path) -> Result<StoredCheckpoint, String> {
+    validate_checkpoint_filename(path, parse_stored_checkpoint_file(path)?)
+}
+
 fn read_stored_checkpoint(path: &Path) -> Result<StoredCheckpoint, String> {
-    match read_stored_checkpoint_file(path) {
+    // A read failure can mean a temporarily unavailable file. Only a readable
+    // but invalid primary may be recovered from its backup.
+    let bytes = std::fs::read(path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    let parsed = String::from_utf8(bytes)
+        .map_err(|error| format!("failed to decode {}: {error}", path.display()))
+        .and_then(|content| parse_stored_checkpoint_content(path, &content))
+        .and_then(|checkpoint| validate_checkpoint_filename(path, checkpoint));
+    match parsed {
         Ok(checkpoint) => Ok(checkpoint),
         Err(primary_error) => {
             if primary_error.contains("unsupported checkpoint schema version") {
                 return Err(primary_error);
             }
             let backup_path = path.with_extension("json.bak");
-            if !backup_path.exists() {
+            if !path_exists_checked(&backup_path)? {
                 return Err(primary_error);
             }
             let backup = parse_stored_checkpoint_file(&backup_path).map_err(|backup_error| {
@@ -303,7 +323,7 @@ fn write_verified_checkpoint(
 
 fn create_checkpoint_file(root: &Path, checkpoint: &StoredCheckpoint) -> Result<(), String> {
     let path = checkpoint_path(root, &checkpoint.id)?;
-    if path.exists() {
+    if path_exists_checked(&path)? {
         return Err("checkpoint already exists".to_string());
     }
     std::fs::create_dir_all(checkpoint_directory(root))
@@ -512,22 +532,13 @@ fn same_workspace(root: &Path, candidate: &Path) -> bool {
     }
 }
 
-fn list_stored_checkpoints(root: &Path) -> (Vec<StoredCheckpoint>, Vec<String>) {
+fn list_stored_checkpoints(root: &Path) -> Result<(Vec<StoredCheckpoint>, Vec<String>), String> {
     let directory = checkpoint_directory(root);
-    if !directory.is_dir() {
-        return (Vec::new(), Vec::new());
+    if !path_exists_checked(&directory)? {
+        return Ok((Vec::new(), Vec::new()));
     }
-    let entries = match std::fs::read_dir(&directory) {
-        Ok(entries) => entries,
-        Err(error) => {
-            return (
-                Vec::new(),
-                vec![format!(
-                    "チェックポイント一覧を読み込めませんでした: {error}"
-                )],
-            )
-        }
-    };
+    let entries = std::fs::read_dir(&directory)
+        .map_err(|error| format!("チェックポイント一覧を読み込めませんでした: {error}"))?;
     let mut checkpoints = Vec::new();
     let mut warnings = Vec::new();
     for entry in entries {
@@ -554,7 +565,13 @@ fn list_stored_checkpoints(root: &Path) -> (Vec<StoredCheckpoint>, Vec<String>) 
         }
     }
     checkpoints.sort_by(|left, right| right.created_at.cmp(&left.created_at));
-    (checkpoints, warnings)
+    if checkpoints.is_empty() && !warnings.is_empty() {
+        return Err(format!(
+            "チェックポイントを読み込めませんでした。最初のエラー: {}",
+            warnings[0]
+        ));
+    }
+    Ok((checkpoints, warnings))
 }
 
 fn checkpoint_digest(checkpoint: &StoredCheckpoint) -> Result<String, String> {
@@ -639,14 +656,18 @@ fn migrate_legacy_checkpoints(
 }
 
 fn prune_auto_shelters(root: &Path) -> Result<(), String> {
-    let (checkpoints, _) = list_stored_checkpoints(root);
+    let (checkpoints, warnings) = list_stored_checkpoints(root)?;
+    if !warnings.is_empty() {
+        // Do not delete older shelters while the store is only partially visible.
+        return Ok(());
+    }
     for checkpoint in checkpoints
         .into_iter()
         .filter(|checkpoint| checkpoint.reason == "auto-before-restore")
         .skip(MAX_AUTO_SHELTERS)
     {
         let path = checkpoint_path(root, &checkpoint.id)?;
-        if path.exists() {
+        if path_exists_checked(&path)? {
             std::fs::remove_file(&path)
                 .map_err(|error| format!("failed to prune old shelter: {error}"))?;
         }
@@ -660,7 +681,7 @@ fn load_result_unlocked(
     migration_complete: bool,
     mut warnings: Vec<String>,
 ) -> Result<CheckpointLoadResult, String> {
-    let (checkpoints, read_warnings) = list_stored_checkpoints(root);
+    let (checkpoints, read_warnings) = list_stored_checkpoints(root)?;
     warnings.extend(read_warnings);
     Ok(CheckpointLoadResult {
         snapshots: checkpoints
@@ -681,6 +702,9 @@ pub(super) fn load_project_checkpoints(
         return Err("project root does not exist".to_string());
     }
     let _guard = lock_checkpoint_store()?;
+    // Refuse to treat a wholly unreadable existing store as an empty one,
+    // including before legacy migration could add new files to it.
+    list_stored_checkpoints(root)?;
     let mut warnings = Vec::new();
     let migration = match legacy {
         Some(legacy) => migrate_legacy_checkpoints(root, legacy, &mut warnings)?,
@@ -910,6 +934,15 @@ mod tests {
     }
 
     #[test]
+    fn new_project_without_checkpoints_starts_empty() {
+        let root = TestDirectory::new("new-project");
+        let loaded = load_project_checkpoints(&root.0, None).unwrap();
+        assert!(loaded.snapshots.is_empty());
+        assert!(loaded.warnings.is_empty());
+        assert!(!checkpoint_directory(&root.0).exists());
+    }
+
+    #[test]
     fn legacy_migration_is_idempotent_and_conflicts_get_deterministic_ids() {
         let root = TestDirectory::new("migration");
         let first = snapshot(&root.0, "snapshot-legacy", "manual", 10);
@@ -975,6 +1008,33 @@ mod tests {
     }
 
     #[test]
+    fn wholly_corrupt_checkpoint_store_is_not_reported_as_empty() {
+        let root = TestDirectory::new("all-corrupt");
+        let path = checkpoint_directory(&root.0).join("snapshot-broken.json");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "{").unwrap();
+
+        let error = load_project_checkpoints(&root.0, None).err().unwrap();
+        assert!(error.contains("チェックポイントを読み込めませんでした"));
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "{");
+    }
+
+    #[test]
+    fn inaccessible_checkpoint_directory_is_not_reported_as_empty() {
+        let root = TestDirectory::new("unreadable-directory");
+        let directory = checkpoint_directory(&root.0);
+        std::fs::create_dir_all(directory.parent().unwrap()).unwrap();
+        std::fs::write(&directory, "not a directory").unwrap();
+
+        let error = load_project_checkpoints(&root.0, None).err().unwrap();
+        assert!(error.contains("チェックポイント一覧を読み込めませんでした"));
+        assert_eq!(
+            std::fs::read_to_string(directory).unwrap(),
+            "not a directory"
+        );
+    }
+
+    #[test]
     fn corrupt_checkpoint_recovers_its_last_valid_backup() {
         let root = TestDirectory::new("backup-recovery");
         let original = snapshot(&root.0, "snapshot-backup", "manual", 10);
@@ -988,6 +1048,37 @@ mod tests {
         assert_eq!(loaded.snapshots[0].revision, 1);
         assert_eq!(loaded.snapshots[0].label, original.label);
         assert!(read_stored_checkpoint_file(&path).is_ok());
+    }
+
+    #[test]
+    fn invalid_utf8_checkpoint_recovers_its_last_valid_backup() {
+        let root = TestDirectory::new("invalid-utf8");
+        let original = snapshot(&root.0, "snapshot-invalid-utf8", "manual", 10);
+        create_project_checkpoint(&root.0, &original).unwrap();
+        update_project_checkpoint_metadata(&root.0, &original.id, 1, None, "Updated", "").unwrap();
+        let path = checkpoint_path(&root.0, &original.id).unwrap();
+        std::fs::write(&path, [0xff]).unwrap();
+
+        let loaded = load_project_checkpoints(&root.0, None).unwrap();
+        assert_eq!(loaded.snapshots[0].revision, 1);
+        assert!(read_stored_checkpoint_file(&path).is_ok());
+    }
+
+    #[test]
+    fn unreadable_checkpoint_does_not_restore_an_older_backup() {
+        let root = TestDirectory::new("unreadable-primary");
+        let original = snapshot(&root.0, "snapshot-unreadable", "manual", 10);
+        create_project_checkpoint(&root.0, &original).unwrap();
+        update_project_checkpoint_metadata(&root.0, &original.id, 1, None, "Updated", "").unwrap();
+        let path = checkpoint_path(&root.0, &original.id).unwrap();
+        let backup = path.with_extension("json.bak");
+        std::fs::remove_file(&path).unwrap();
+        std::fs::create_dir(&path).unwrap();
+
+        let error = load_project_checkpoints(&root.0, None).err().unwrap();
+        assert!(error.contains("failed to read"));
+        assert!(path.is_dir());
+        assert!(backup.is_file());
     }
 
     #[test]

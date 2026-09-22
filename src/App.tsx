@@ -427,15 +427,21 @@ function detectPortableCheckpointConflict(
 function portableStorageErrorMessage(error: unknown): string {
   const message = String(error);
   if (/rollback conflict|branch conflict|content conflict|revision conflict/i.test(message)) {
-    return "同期されたプロジェクト状態と競合したため保存を止めました。同期完了後に再読込してください。";
+    return "プロジェクトの管理データに食い違いがあるため保存を止めました。現在の作業を保全し、フォルダの状態を確認してください。";
   }
   if (/access is denied|permission denied|read-only|readonly|os error 5|アクセスが拒否|書き込み禁止|読み取り専用/i.test(message)) {
     return "プロジェクト状態が読み取り専用です。クラウドストレージやフォルダの権限を確認してください。";
   }
   if (/offline|placeholder|not available|cloud file|network|os error 362|os error 1168|オフライン|クラウド.?ファイル|利用できません/i.test(message)) {
-    return "クラウド上のプロジェクト状態が未取得または同期中です。端末へダウンロードしてから再試行してください。";
+    return "プロジェクトの管理データを読み込めません。ファイルの取得が完了しているか確認してから再試行してください。";
   }
-  return "プロジェクト状態を読み書きできませんでした。同期状況とファイルの取得状態を確認してください。";
+  if (/failed to (read|inspect)|読み込めませんでした/i.test(message)) {
+    return "必要なファイルを読み込めません。空の状態として扱わず、元のデータを上書きしません。ファイルが利用可能になったら再試行してください。";
+  }
+  if (/failed to (parse|decode)|unsupported .*schema version|project-relative path/i.test(message)) {
+    return "プロジェクトの管理データを確認できません。空の状態で上書きせず、保存を止めました。元のファイルとバックアップを確認してください。";
+  }
+  return "プロジェクトの管理データを読み書きできませんでした。フォルダの状態を確認してください。";
 }
 
 function checkpointWarningMessage(warning: string): string {
@@ -4527,11 +4533,13 @@ export default function App() {
       ].filter(Boolean).join(" / ");
       if (restoreSummary) showToast(restoreSummary);
       return true;
-    } catch {
+    } catch (error) {
+      const message = portableStorageErrorMessage(error);
       openScratchFromStoredState(state, {
         path: state.lastWorkspacePath,
-        message: "前回の作業フォルダを開けませんでした",
+        message: `前回の作業フォルダを開けませんでした。${message}`,
       });
+      setLastError(`${message} ${String(error)}`);
       return false;
     }
   };
@@ -7540,8 +7548,10 @@ export default function App() {
       showToast(restoreSummary ? `${baseMessage}（${restoreSummary}）` : baseMessage);
       return true;
     } catch (error) {
-      setLastError(String(error));
-      setSaveStatus("error");
+      const message = portableStorageErrorMessage(error);
+      setLastError(`${message} ${String(error)}`);
+      showToast(`フォルダを開けませんでした。${message}`);
+      setSaveStatus(previousSaveStatus);
       return false;
     }
   }

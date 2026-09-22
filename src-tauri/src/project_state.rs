@@ -84,6 +84,14 @@ pub(super) fn legacy_project_config_path(root: &Path) -> PathBuf {
     root.join(".brew").join("project.json")
 }
 
+pub(super) fn path_exists_checked(path: &Path) -> Result<bool, String> {
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format!("failed to inspect {}: {error}", path.display())),
+    }
+}
+
 pub(super) fn lock_project_config() -> Result<MutexGuard<'static, ()>, String> {
     PROJECT_CONFIG_LOCK
         .lock()
@@ -245,13 +253,17 @@ pub(super) fn retarget_file_progress_path(
     config.file_progress = next;
 }
 
-fn read_project_config_file(path: &Path) -> Result<ProjectConfig, String> {
-    let content = std::fs::read_to_string(path)
-        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+fn parse_project_config_content(path: &Path, content: &str) -> Result<ProjectConfig, String> {
     let config: ProjectConfig = serde_json::from_str(&content)
         .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
     validate_project_config(&config)?;
     Ok(config)
+}
+
+fn read_project_config_file(path: &Path) -> Result<ProjectConfig, String> {
+    let content = std::fs::read_to_string(path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    parse_project_config_content(path, &content)
 }
 
 fn restore_project_config_backup(path: &Path, backup_path: &Path) -> Result<ProjectConfig, String> {
@@ -267,15 +279,22 @@ fn restore_project_config_backup(path: &Path, backup_path: &Path) -> Result<Proj
 
 fn read_primary_or_backup(path: &Path) -> Result<ProjectConfig, String> {
     let backup_path = path.with_extension("json.bak");
-    if path.exists() {
-        match read_project_config_file(path) {
+    if path_exists_checked(path)? {
+        // An unreadable primary is not evidence of corruption: it may be an
+        // unavailable cloud placeholder. Never replace it with an older backup.
+        let bytes = std::fs::read(path)
+            .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+        let parsed = String::from_utf8(bytes)
+            .map_err(|error| format!("failed to decode {}: {error}", path.display()))
+            .and_then(|content| parse_project_config_content(path, &content));
+        match parsed {
             Ok(config) => return Ok(config),
             Err(primary_error) => {
                 // A newer schema must never be replaced by an older backup.
                 if primary_error.contains("unsupported project config schema version") {
                     return Err(primary_error);
                 }
-                if backup_path.exists() {
+                if path_exists_checked(&backup_path)? {
                     return restore_project_config_backup(path, &backup_path).map_err(
                         |backup_error| {
                             format!(
@@ -289,7 +308,7 @@ fn read_primary_or_backup(path: &Path) -> Result<ProjectConfig, String> {
         }
     }
 
-    if backup_path.exists() {
+    if path_exists_checked(&backup_path)? {
         return restore_project_config_backup(path, &backup_path);
     }
 
@@ -298,12 +317,12 @@ fn read_primary_or_backup(path: &Path) -> Result<ProjectConfig, String> {
 
 pub(super) fn load_project_config_unlocked(root: &Path) -> Result<ProjectConfig, String> {
     let path = project_config_path(root);
-    if path.exists() || path.with_extension("json.bak").exists() {
+    if path_exists_checked(&path)? || path_exists_checked(&path.with_extension("json.bak"))? {
         return read_primary_or_backup(&path);
     }
 
     let legacy_path = legacy_project_config_path(root);
-    if !legacy_path.exists() {
+    if !path_exists_checked(&legacy_path)? {
         return Ok(ProjectConfig::default());
     }
 
@@ -365,12 +384,16 @@ pub(super) fn save_project_config_unlocked(
     std::fs::create_dir_all(parent)
         .map_err(|error| format!("failed to create project config directory: {error}"))?;
 
-    let temporary_path = write_verified_temporary_config(&path, &next)?;
     let backup_path = path.with_extension("json.bak");
-    let had_primary = path.exists();
+    let had_primary = path_exists_checked(&path)?;
+    let had_backup = path_exists_checked(&backup_path)?;
+    if !had_primary && had_backup {
+        return Err("project config changed during save: backup appeared without primary".to_string());
+    }
+    let temporary_path = write_verified_temporary_config(&path, &next)?;
 
     if had_primary {
-        if backup_path.exists() {
+        if had_backup {
             if let Err(error) = std::fs::remove_file(&backup_path) {
                 let _ = std::fs::remove_file(&temporary_path);
                 return Err(format!("failed to replace project config backup: {error}"));
@@ -565,6 +588,15 @@ mod tests {
     }
 
     #[test]
+    fn new_project_without_shared_data_starts_empty() {
+        let root = TestDirectory::new("new-project");
+        let config = load_project_config(&root.0).unwrap();
+        assert_eq!(config.revision, 0);
+        assert!(config.file_progress.is_empty());
+        assert!(!project_config_path(&root.0).exists());
+    }
+
+    #[test]
     fn atomic_save_keeps_previous_revision_as_backup() {
         let root = TestDirectory::new("backup");
         let mut first = ProjectConfig::default();
@@ -682,6 +714,56 @@ mod tests {
         assert_eq!(recovered.revision, 1);
         assert_eq!(recovered.order.get(".").unwrap(), &["safe.md"]);
         assert_eq!(read_project_config_file(&path).unwrap().revision, 1);
+    }
+
+    #[test]
+    fn invalid_utf8_primary_recovers_from_valid_backup() {
+        let root = TestDirectory::new("invalid-utf8");
+        update_project_config(&root.0, |_| Ok(())).unwrap();
+        update_project_config(&root.0, |_| Ok(())).unwrap();
+        let path = project_config_path(&root.0);
+        std::fs::write(&path, [0xff]).unwrap();
+
+        assert_eq!(load_project_config(&root.0).unwrap().revision, 1);
+        assert_eq!(read_project_config_file(&path).unwrap().revision, 1);
+    }
+
+    #[test]
+    fn unreadable_primary_does_not_restore_an_older_backup() {
+        let root = TestDirectory::new("unreadable-primary");
+        update_project_config(&root.0, |config| {
+            config.order.insert(".".into(), vec!["first.md".into()]);
+            Ok(())
+        })
+        .unwrap();
+        update_project_config(&root.0, |config| {
+            config.order.insert(".".into(), vec!["second.md".into()]);
+            Ok(())
+        })
+        .unwrap();
+
+        let path = project_config_path(&root.0);
+        let backup = path.with_extension("json.bak");
+        std::fs::remove_file(&path).unwrap();
+        std::fs::create_dir(&path).unwrap();
+
+        let error = update_project_config(&root.0, |_| Ok(())).err().unwrap();
+        assert!(error.contains("failed to read"));
+        assert!(path.is_dir());
+        assert_eq!(read_project_config_file(&backup).unwrap().revision, 1);
+    }
+
+    #[test]
+    fn invalid_primary_without_backup_is_not_replaced_by_defaults() {
+        let root = TestDirectory::new("invalid-without-backup");
+        let path = project_config_path(&root.0);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "{").unwrap();
+
+        let error = update_project_config(&root.0, |_| Ok(())).err().unwrap();
+        assert!(error.contains("failed to parse"));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "{");
+        assert!(!path.with_extension("json.bak").exists());
     }
 
     #[test]
