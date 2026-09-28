@@ -4,6 +4,7 @@
   "version": "0.6.6",
   "type": "module",
   "scripts": {
+    "test:comment-out": "node scripts/test-comment-out.mjs",
     "test:checkpoint": "node --experimental-strip-types scripts/test-checkpoint-comparison.mjs",
     "test:checkpoint-ui": "node scripts/test-checkpoint-ui.mjs",
     "test:canvas-save": "node scripts/test-canvas-board-save.mjs",

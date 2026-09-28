@@ -9,6 +9,93 @@ import type {
   RubyItem,
 } from "./types";
 
+// Line comments (docs/COMMENT_OUT_SPEC.md). A comment is always a whole line:
+//   - `//` at the start of the line (after half/full-width indentation)
+//   - `<!-- ... -->` spanning one line, or a run of lines opened by a line that
+//     starts with `<!--` and closed by a line that ends with `-->`.
+// Lines inside code fences are never comments. An unclosed `<!--` is plain text
+// so a forgotten close cannot swallow the rest of the manuscript.
+
+export type CommentSyntax = "slash" | "html";
+
+const LEADING_SPACE = /^[ \t　]*/;
+const FENCE_PATTERN = /^\s{0,3}(?:```|~~~)/;
+const TRAILING_SPACE = /[ \t　]*$/;
+
+function leadingSpaceLength(line: string): number {
+  return LEADING_SPACE.exec(line)?.[0].length ?? 0;
+}
+
+function trimmedEnd(line: string): string {
+  return line.replace(TRAILING_SPACE, "");
+}
+
+export function isSlashCommentLine(line: string): boolean {
+  return line.startsWith("//", leadingSpaceLength(line));
+}
+
+/** `\//` at the start of a line writes a literal `//`; returns the backslash offset. */
+export function escapedSlashOffset(line: string): number {
+  const start = leadingSpaceLength(line);
+  return line.startsWith("\\//", start) ? start : -1;
+}
+
+function opensHtmlComment(line: string): boolean {
+  return line.startsWith("<!--", leadingSpaceLength(line));
+}
+
+function closesHtmlComment(line: string, isOpeningLine: boolean): boolean {
+  const body = trimmedEnd(line);
+  if (!body.endsWith("-->")) return false;
+  // `<!-->` must not both open and close the comment on the same characters.
+  if (isOpeningLine) return body.length - leadingSpaceLength(line) >= "<!---->".length;
+  return true;
+}
+
+/**
+ * Classifies every line. Linear in the line count; callers re-run it on each
+ * document change because a multi-line HTML comment makes the result depend on
+ * lines other than the one that changed.
+ */
+export function detectCommentLines(lines: readonly string[]): Array<CommentSyntax | null> {
+  const out: Array<CommentSyntax | null> = new Array(lines.length).fill(null);
+  let insideFence = false;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (FENCE_PATTERN.test(line)) {
+      insideFence = !insideFence;
+      continue;
+    }
+    if (insideFence) continue;
+
+    if (isSlashCommentLine(line)) {
+      out[index] = "slash";
+      continue;
+    }
+    if (!opensHtmlComment(line)) continue;
+
+    let close = -1;
+    for (let probe = index; probe < lines.length; probe += 1) {
+      if (probe > index && FENCE_PATTERN.test(lines[probe])) break;
+      if (closesHtmlComment(lines[probe], probe === index)) {
+        close = probe;
+        break;
+      }
+    }
+    if (close < 0) continue;
+    for (let probe = index; probe <= close; probe += 1) out[probe] = "html";
+    index = close;
+  }
+  return out;
+}
+
+/** `source.slice(from, to)` with a leading `\//` escape reduced to a literal `//`. */
+export function sliceWithoutSlashEscape(source: string, from: number, to = source.length): string {
+  const escape = escapedSlashOffset(source);
+  if (escape < from || escape >= to) return source.slice(from, to);
+  return source.slice(from, escape) + source.slice(escape + 1, to);
+}
+
 type RawMarkup =
   | {
       type: "layout";
@@ -459,7 +546,12 @@ function measureLineCharacters(text: string): {
   };
 }
 
-export function parseLineNode(text: string, index: number, from = 0): LineNode {
+export function parseLineNode(
+  text: string,
+  index: number,
+  from = 0,
+  comment: CommentSyntax | null = null,
+): LineNode {
   let kind: LineKind = "paragraph";
   let level = 0;
   let marker = "";
@@ -468,7 +560,12 @@ export function parseLineNode(text: string, index: number, from = 0): LineNode {
   let inlineMarkups: InlineMarkup[] = [];
   let cleanText = text;
 
-  if (text.length === 0) {
+  if (comment) {
+    // Comments are not manuscript: no markup, no characters, no alignment.
+    kind = "comment";
+    align = null;
+    cleanText = "";
+  } else if (text.length === 0) {
     kind = "blank";
     cleanText = "";
   } else {
@@ -498,7 +595,10 @@ export function parseLineNode(text: string, index: number, from = 0): LineNode {
       cleanText = cleanLineTextForAst(text);
       inlineMarkups = parseInlines(text, 0);
     } else {
-      cleanText = cleanLineTextForAst(text);
+      const escape = escapedSlashOffset(text);
+      cleanText = cleanLineTextForAst(
+        escape >= 0 ? text.slice(0, escape) + text.slice(escape + 1) : text,
+      );
       inlineMarkups = parseInlines(text, 0);
     }
 
@@ -515,7 +615,9 @@ export function parseLineNode(text: string, index: number, from = 0): LineNode {
     if (align === "end") jitsuki = true;
   }
 
-  const characterMetrics = measureLineCharacters(text);
+  const characterMetrics = comment
+    ? { textLength: 0, visibleTextLength: 0 }
+    : measureLineCharacters(text);
   return {
     id: hash16(`L|${kind}|${level}|${align || ""}|${text}`),
     semanticHash: hash16(`S|${kind}|${level}|${align || ""}|${cleanText}`),
@@ -538,13 +640,23 @@ export function parseLineNode(text: string, index: number, from = 0): LineNode {
 
 export function parseDocumentBlocks(text: string): LineNode[] {
   const lines = normalizeText(text).split("\n");
+  const comments = detectCommentLines(lines);
   let offset = 0;
 
   return lines.map((line, index) => {
-    const block = parseLineNode(line, index, offset);
+    const block = parseLineNode(line, index, offset, comments[index]);
     offset += line.length + 1;
     return block;
   });
+}
+
+/** Line breaks counted as characters: the manuscript as if comment lines were absent. */
+function countedLineBreaks(blocks: readonly LineNode[]): number {
+  let lines = 0;
+  for (const block of blocks) {
+    if (block.kind !== "comment") lines += 1;
+  }
+  return Math.max(0, lines - 1);
 }
 
 function normalizeHeadingTitle(text: string): string {
@@ -589,7 +701,8 @@ export function buildOutlineFromBlocks(blocks: LineNode[], sourceId = "document"
 
     if (currentSection) {
       currentSection.sectionTextLength +=
-        block.textLength + (blockIndex < blocks.length - 1 ? 1 : 0);
+        block.textLength +
+        (blockIndex < blocks.length - 1 && block.kind !== "comment" ? 1 : 0);
       currentSection.sectionVisibleTextLength += block.visibleTextLength;
     }
   }
@@ -610,7 +723,7 @@ function assembleDocumentAst(
 ): DocumentAst {
   const outline = buildOutlineFromBlocks(blocks, input.path ?? input.name ?? "document");
   const semanticParts: string[] = [];
-  let textLength = Math.max(0, blocks.length - 1);
+  let textLength = countedLineBreaks(blocks);
   let visibleTextLength = 0;
   for (const block of blocks) {
     semanticParts.push(block.semanticHash);
@@ -669,6 +782,10 @@ export function updateDocumentAst(
     suffixCount += 1;
   }
 
+  // Multi-line HTML comments make a line's kind depend on its neighbours, so
+  // comment state is re-derived for every line and reused blocks are re-parsed
+  // when it flips.
+  const comments = detectCommentLines(lines);
   const blocks: LineNode[] = [];
   let offset = 0;
   const changedEnd = newCount - suffixCount;
@@ -680,7 +797,10 @@ export function updateDocumentAst(
         : index >= changedEnd
           ? oldCount - (newCount - index)
           : -1;
-    const oldBlock = oldIndex >= 0 ? oldBlocks[oldIndex] : null;
+    const comment = comments[index];
+    const candidate = oldIndex >= 0 ? oldBlocks[oldIndex] : null;
+    const oldBlock =
+      candidate && (candidate.kind === "comment") === Boolean(comment) ? candidate : null;
     const to = offset + source.length;
     if (
       oldBlock &&
@@ -697,7 +817,7 @@ export function updateDocumentAst(
         to,
       });
     } else {
-      blocks.push(parseLineNode(source, index, offset));
+      blocks.push(parseLineNode(source, index, offset, comment));
     }
     offset = to + 1;
   }

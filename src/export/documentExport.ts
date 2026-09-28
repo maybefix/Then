@@ -1,4 +1,5 @@
 import type { DocumentAst, InlineMarkup, LineNode } from "../editor/ast/types";
+import { sliceWithoutSlashEscape } from "../editor/ast/documentAst";
 import {
   DEFAULT_EXPORT_PAGE,
   type ExportBlock,
@@ -46,7 +47,7 @@ function markupToInlines(markup: InlineMarkup): ExportInline[] {
   return [{ kind: "bold", text: markup.contentText }];
 }
 
-function blockToExportBlock(block: LineNode): ExportBlock {
+function blockToExportBlock(block: LineNode & { kind: ExportBlock["kind"] }): ExportBlock {
   const source = block.source;
   const inlines: ExportInline[] = [];
   let cursor = contentStartForBlock(block);
@@ -54,12 +55,12 @@ function blockToExportBlock(block: LineNode): ExportBlock {
   for (const markup of block.inlineMarkups) {
     const from = Math.max(cursor, markup.fullRange.offset);
     const to = markup.fullRange.offset + markup.fullRange.length;
-    if (from > cursor) inlines.push({ kind: "text", text: source.slice(cursor, from) });
+    if (from > cursor) inlines.push({ kind: "text", text: sliceWithoutSlashEscape(source, cursor, from) });
     inlines.push(...markupToInlines(markup));
     cursor = Math.max(cursor, to);
   }
 
-  if (cursor < source.length) inlines.push({ kind: "text", text: source.slice(cursor) });
+  if (cursor < source.length) inlines.push({ kind: "text", text: sliceWithoutSlashEscape(source, cursor) });
 
   return {
     kind: block.kind,
@@ -80,6 +81,8 @@ export function createExportDocument(
     title: ast.name.replace(/\.(?:txt|md)$/i, ""),
     fontFamily,
     page: { ...DEFAULT_EXPORT_PAGE },
-    blocks: ast.blocks.map(blockToExportBlock),
+    blocks: ast.blocks
+      .filter((block): block is LineNode & { kind: ExportBlock["kind"] } => block.kind !== "comment")
+      .map(blockToExportBlock),
   };
 }

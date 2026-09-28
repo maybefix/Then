@@ -1,6 +1,6 @@
 export type LayoutAlign = "start" | "center" | "end";
 
-export type LineKind = "blank" | "paragraph" | "heading" | "list";
+export type LineKind = "blank" | "paragraph" | "heading" | "list" | "comment";
 
 export type TextRange = {
   offset: number;

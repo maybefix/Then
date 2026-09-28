@@ -1,23 +1,24 @@
 import { createDocumentAst } from "../../editor/ast/documentAst";
 import type { DocumentAst } from "../../editor/ast/types";
+import { sliceWithoutSlashEscape } from "../../editor/ast/documentAst";
 import type { ExportSourceFile, LoadedExportSource } from "../types";
 import type { SubmissionDocument, SubmissionInline, SubmissionSection } from "./types";
 
 export function createSubmissionSection(ast: Readonly<DocumentAst>, source: ExportSourceFile): SubmissionSection {
   return {
     source: { ...source },
-    lines: ast.blocks.map((block) => {
+    lines: ast.blocks.filter((block) => block.kind !== "comment").map((block) => {
       const inlines: SubmissionInline[] = [];
       let cursor = block.kind === "heading" || block.jitsuki ? block.marker.length : 0;
       for (const markup of block.inlineMarkups) {
         if (markup.fullRange.offset < cursor) continue;
         if (markup.fullRange.offset > cursor) {
-          inlines.push({ kind: "text", text: block.source.slice(cursor, markup.fullRange.offset) });
+          inlines.push({ kind: "text", text: sliceWithoutSlashEscape(block.source, cursor, markup.fullRange.offset) });
         }
         inlines.push({ kind: "markup", markup: structuredClone(markup) });
         cursor = markup.fullRange.offset + markup.fullRange.length;
       }
-      if (cursor < block.source.length) inlines.push({ kind: "text", text: block.source.slice(cursor) });
+      if (cursor < block.source.length) inlines.push({ kind: "text", text: sliceWithoutSlashEscape(block.source, cursor) });
       return { sourceLine: block.lineIndex + 1, kind: block.kind, level: block.level, inlines };
     }),
   };

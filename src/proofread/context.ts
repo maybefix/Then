@@ -1,3 +1,4 @@
+import { detectCommentLines } from "../editor/ast/documentAst";
 import { findJapaneseQuoteRanges } from "../editor/japaneseQuoteRanges";
 import { collectProtectedSurfaces, type ProofreadTerm } from "./terms";
 import type { ProofreadContext, ProofreadOptions, ProofreadSentence } from "./types";
@@ -32,10 +33,20 @@ function collectMaskRanges(text: string, lineStarts: number[]): Range[] {
   const ranges: Range[] = [];
 
   let insideFence = false;
+  const lineEnd = (line: number) =>
+    line + 1 < lineStarts.length ? lineStarts[line + 1] - 1 : text.length;
+  const comments = detectCommentLines(
+    lineStarts.map((start, line) => text.slice(start, lineEnd(line)).replace(/\r$/, "")),
+  );
   for (let line = 0; line < lineStarts.length; line += 1) {
     const start = lineStarts[line];
-    const end = line + 1 < lineStarts.length ? lineStarts[line + 1] - 1 : text.length;
+    const end = lineEnd(line);
     const body = text.slice(start, end);
+
+    if (comments[line]) {
+      pushRange(ranges, start, end);
+      continue;
+    }
 
     if (FENCE_PATTERN.test(body)) {
       insideFence = !insideFence;
