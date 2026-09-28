@@ -35,23 +35,25 @@ for (const removedUi of [
 assert.match(ideaPane, /type IdeaFilter = "all" \| "starred"/);
 assert.match(ideaPane, /className="ideaMiniIcon ideaDeleteBtn"/);
 assert.match(ideaPane, /title="ドラッグで並び替え \/ Canvasへ"/);
+assert.match(ideaPane, /className="ideaMiniIcon ideaOpenCardBtn"/);
+assert.match(ideaPane, /title="ポップアップで開く"/);
 const dragOverSource = ideaPane.slice(
-  ideaPane.indexOf("const handleFragmentDragOver"),
-  ideaPane.indexOf("const handleFragmentDrop"),
+  ideaPane.indexOf("const dragOverItem"),
+  ideaPane.indexOf("const dropItem"),
 );
-const dropStart = ideaPane.indexOf("const handleFragmentDrop");
+const dropStart = ideaPane.indexOf("const dropItem");
 const dropSource = ideaPane.slice(
   dropStart,
-  ideaPane.indexOf("\n  return (", dropStart),
+  ideaPane.indexOf("\n\n  const renderClipButton", dropStart),
 );
 assert.doesNotMatch(
   dragOverSource,
-  /onReorderFragment/,
+  /onReorderItem/,
   "reordering must not commit while merely hovering",
 );
 assert.match(
   dropSource,
-  /onReorderFragment\(threadId, source\.fragmentId, targetFragmentId, position\)/,
+  /onReorderItem\(threadId, source\.key, targetKey/,
   "reordering must commit on drop",
 );
 

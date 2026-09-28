@@ -39,18 +39,17 @@ const saving = queue.flush();
 await Promise.resolve();
 queue.enqueue(target, board("latest"));
 queue.enqueue({ ...target, rootPath: "two" }, board("other project"));
-queue.enqueue({ ...target, scope: "global" }, board("global"));
 assert.equal(queue.flush(), saving);
 gate.resolve(); await saving;
-assert.deepEqual(writes.map(w => w.name), ["first", "latest", "other project", "global"]);
-assert.deepEqual(writes.map(w => [w.scope, w.rootPath]), [["project", "one"], ["project", "one"], ["project", "two"], ["global", "one"]]);
+assert.deepEqual(writes.map(w => w.name), ["first", "latest", "other project"]);
+assert.deepEqual(writes.map(w => [w.scope, w.rootPath]), [["project", "one"], ["project", "one"], ["project", "two"]]);
 let fail = true, recovered;
 const retryQueue = new CanvasBoardSaveQueue(async (...args) => { if (fail) throw Error("disk full"); recovered = args; });
 retryQueue.enqueue(target, board("unsaved"));
 await assert.rejects(retryQueue.flush(), /disk full/);
 fail = false; await retryQueue.flush();
 assert.equal(recovered[3].then.name, "unsaved");
-console.log("PASS queue: immutable destinations and snapshots, serialized edits, separate projects/scopes, retry after failure");
+console.log("PASS queue: immutable destinations and snapshots, serialized edits, separate projects, retry after failure");
 
 const canvasUrl = await compile("src/CanvasWindowApp.tsx", {
   react: pathToFileURL(require.resolve("react")).href,
@@ -70,12 +69,12 @@ const canvasUrl = await compile("src/CanvasWindowApp.tsx", {
 const { default: Canvas } = await import(canvasUrl);
 window.__TAURI_INTERNALS__ = {};
 let docs, calls, loadGate, writeGate, failingWrite;
-const key = (scope, rootPath, boardId) => JSON.stringify([scope, scope === "global" ? null : rootPath, boardId]);
+const key = (scope, rootPath, boardId) => JSON.stringify([scope, rootPath, boardId]);
 globalThis.canvasTestInvoke = async (command, args) => {
   calls.push({ command, ...structuredClone(args) });
   const k = key(args.scope, args.rootPath, args.boardId);
   if (command === "list_canvas_boards") return [...docs].filter(([id]) => {
-    const [scope, root] = JSON.parse(id); return scope === args.scope && root === (scope === "global" ? null : args.rootPath);
+    const [scope, root] = JSON.parse(id); return scope === args.scope && root === args.rootPath;
   }).map(([id, doc]) => ({ id: JSON.parse(id)[2], name: doc.then.name, scope: args.scope, nodeCount: doc.nodes.length, edgeCount: 0 }));
   if (command === "load_canvas_board") {
     if (loadGate?.key === k) await loadGate.promise;
@@ -93,8 +92,7 @@ const settle = async () => { await new Promise(resolve => setTimeout(resolve, 0)
 let root, payload, strict = false;
 async function mount() {
   docs = new Map([[key("project", "one", "a"), board("A")], [key("project", "one", "b"), board("B")],
-    [key("project", "one", "c"), board("C")], [key("global", null, "g"), board("G")],
-    [key("project", "two", "a"), board("Other")]]);
+    [key("project", "one", "c"), board("C")], [key("project", "two", "a"), board("Other")]]);
   calls = []; loadGate = null; writeGate = null; failingWrite = false;
   payload = { requestId: "test", scope: "project", rootPath: "one", boardId: "a", workspaceName: "Test",
     theme: "light", uiFontScale: 1, ideaThreads: [], referenceFiles: [] };
@@ -190,22 +188,12 @@ failingWrite = false; await select("B"); await unmount();
 assert.equal(textAt("project", "one", "a"), "Keep A");
 console.log("PASS switch: waits for saving and retains failed edits for retry");
 
-await mount(); await edit("Project A");
-loadGate = { ...deferred(), key: key("global", null, "g") };
-await click('[title="すべての作品で使えるボード"]');
-await act(async () => { await new Promise(resolve => setTimeout(resolve, 550)); });
-assert.equal(docs.has(key("global", null, "a")), false, "scope change must not create a copy in global boards");
-await act(async () => { loadGate.resolve(); await settle(); });
-assert.equal(shownText(), "G"); await edit("Global edited"); await unmount();
-assert.equal(textAt("project", "one", "a"), "Project A");
-assert.equal(textAt("global", null, "g"), "Global edited");
-
 await mount(); await edit("First project");
 payload = { ...payload, rootPath: "two", requestId: "two" }; await render();
 assert.equal(shownText(), "Other"); await unmount();
 assert.equal(textAt("project", "one", "a"), "First project");
 assert.equal(textAt("project", "two", "a"), "Other");
-console.log("PASS scopes and projects: delayed loading never saves an old board to a new destination");
+console.log("PASS projects: changing projects never saves an old board to a new destination");
 
 await mount();
 loadGate = { ...deferred(), key: key("project", "one", "b") };

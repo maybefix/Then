@@ -429,7 +429,11 @@ where
 {
     let _guard = lock_project_config()?;
     let mut config = load_project_config_unlocked(root)?;
+    let original_digest = project_config_digest(&config)?;
     update(&mut config)?;
+    if project_config_digest(&config)? == original_digest {
+        return Ok(config);
+    }
     save_project_config_unlocked(root, &config)
 }
 
@@ -623,6 +627,32 @@ mod tests {
     }
 
     #[test]
+    fn unchanged_update_does_not_create_a_new_revision() {
+        let root = TestDirectory::new("unchanged-update");
+        let empty = update_project_config(&root.0, |_| Ok(())).unwrap();
+        assert_eq!(empty.revision, 0);
+        assert!(!project_config_path(&root.0).exists());
+
+        let first = update_project_config(&root.0, |config| {
+            config.order.insert(".".into(), vec!["first.md".into()]);
+            Ok(())
+        })
+        .unwrap();
+        let path = project_config_path(&root.0);
+        let content_before = std::fs::read(&path).unwrap();
+
+        let unchanged = update_project_config(&root.0, |config| {
+            config.order.insert(".".into(), vec!["first.md".into()]);
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(unchanged.revision, first.revision);
+        assert_eq!(std::fs::read(&path).unwrap(), content_before);
+        assert!(!path.with_extension("json.bak").exists());
+    }
+
+    #[test]
     fn temporary_write_failure_preserves_primary() {
         let root = TestDirectory::new("write-failure");
         let first = update_project_config(&root.0, |config| {
@@ -719,8 +749,16 @@ mod tests {
     #[test]
     fn invalid_utf8_primary_recovers_from_valid_backup() {
         let root = TestDirectory::new("invalid-utf8");
-        update_project_config(&root.0, |_| Ok(())).unwrap();
-        update_project_config(&root.0, |_| Ok(())).unwrap();
+        update_project_config(&root.0, |config| {
+            config.order.insert(".".into(), vec!["first.md".into()]);
+            Ok(())
+        })
+        .unwrap();
+        update_project_config(&root.0, |config| {
+            config.order.insert(".".into(), vec!["second.md".into()]);
+            Ok(())
+        })
+        .unwrap();
         let path = project_config_path(&root.0);
         std::fs::write(&path, [0xff]).unwrap();
 
@@ -792,8 +830,16 @@ mod tests {
     #[test]
     fn unsupported_schema_is_not_replaced_by_backup() {
         let root = TestDirectory::new("future-schema");
-        update_project_config(&root.0, |_| Ok(())).unwrap();
-        update_project_config(&root.0, |_| Ok(())).unwrap();
+        update_project_config(&root.0, |config| {
+            config.order.insert(".".into(), vec!["first.md".into()]);
+            Ok(())
+        })
+        .unwrap();
+        update_project_config(&root.0, |config| {
+            config.order.insert(".".into(), vec!["second.md".into()]);
+            Ok(())
+        })
+        .unwrap();
         let path = project_config_path(&root.0);
         std::fs::write(&path, r#"{"schemaVersion":99,"revision":99}"#).unwrap();
 

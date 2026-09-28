@@ -19,13 +19,19 @@ export default function IntermediateDraftPane({ rootPath, liveCanvas, onOpenCanv
   const [refresh, setRefresh] = useState(0);
   useEffect(() => {
     let cancelled = false;
-    Promise.all([listDraftBoards("global", rootPath), rootPath ? listDraftBoards("project", rootPath) : []])
-      .then(([global, project]) => {
+    if (!rootPath) {
+      setBoards([]);
+      setTarget(null);
+      setError("");
+      return () => { cancelled = true; };
+    }
+    listDraftBoards("project", rootPath)
+      .then((project) => {
         if (cancelled) return;
-        const next = [...project, ...global];
+        const next = project;
         setBoards(next); setError("");
         setTarget((current) => {
-          if (liveCanvas) return { boardId: liveCanvas.boardId, scope: liveCanvas.scope, rootPath };
+          if (liveCanvas?.scope === "project") return { boardId: liveCanvas.boardId, scope: "project", rootPath };
           const match = next.find((board) => board.id === current?.boardId && board.scope === current?.scope) ?? next[0];
           return match ? { boardId: match.id, scope: match.scope, rootPath } : null;
         });
@@ -49,18 +55,21 @@ export default function IntermediateDraftPane({ rootPath, liveCanvas, onOpenCanv
         }}>
         {!target && <option value="">ボードを選択</option>}
         {boards.map((board) => <option key={`${board.scope}:${board.id}`} value={`${board.scope}:${board.id}`}>
-          {board.scope === "global" ? "共通" : "作品"} · {board.name}
+          {board.name}
         </option>)}
       </select>
       {!matchingLive && <button type="button" className="draftUtilityButton" aria-label="Canvasを開く"
-        onClick={() => onOpenCanvas(target?.scope ?? (rootPath ? "project" : "global"), target?.boardId)}>
+        disabled={!rootPath}
+        onClick={() => onOpenCanvas("project", target?.boardId)}>
         <OpenIcon />開く
       </button>}
     </div>
     {error && <p className="draftError" role="alert">{error}</p>}
     {target ? <DraftEditor key={draftBoardKey(target)} target={target} liveCanvas={matchingLive}
       onSelectNode={matchingLive ? onSelectNode : undefined} /> :
-      <p className="draftHint">Canvasでボードを作成すると、ここで文章を並べ替えて中間稿を作れます。</p>}
+      <p className="draftHint">{rootPath
+        ? "Canvasでボードを作成すると、ここで文章を並べ替えて中間稿を作れます。"
+        : "作品フォルダを開くと、その作品のCanvasから中間稿を作れます。"}</p>}
   </section>;
 }
 
@@ -81,6 +90,7 @@ function DraftEditor({ target, liveCanvas, onSelectNode }: {
   const version = history?.versions.find((item) => item.version === selectedVersion) ?? latest;
   const oldVersion = Boolean(version && latest && version.version !== latest.version);
   const shownCapture = capture ?? version;
+  const canEditOrder = Boolean(capture);
   const cards = new Map(shownCapture?.cards.map((card) => [card.id, card.text]));
   const excluded = new Set(shownCapture?.excluded ?? []);
   useEffect(() => {
@@ -123,16 +133,7 @@ function DraftEditor({ target, liveCanvas, onSelectNode }: {
     setSelectedVersion(next.version); setCapture(null); setTab("text"); setMessage("");
   };
   const editCapture = (change: (source: DraftCapture) => DraftCapture) => {
-    if (!shownCapture) return;
-    const source: DraftCapture = capture ?? {
-      capturedAt: shownCapture.capturedAt,
-      boardUpdatedAt: shownCapture.boardUpdatedAt,
-      cards: shownCapture.cards.map((card) => ({ ...card })),
-      order: [...shownCapture.order],
-      excluded: [...(shownCapture.excluded ?? [])],
-    };
-    setCapture(change(source));
-    setSelectedVersion(null);
+    setCapture((current) => current ? change(current) : null);
   };
   const move = (id: string, targetId: string) => {
     editCapture((source) => moveDraftCard(source, id, targetId));
@@ -163,7 +164,7 @@ function DraftEditor({ target, liveCanvas, onSelectNode }: {
   return <>
     <div className="draftVersionActions">
       <select aria-label="中間稿のバージョン" disabled={!latest || busy} value={version?.version ?? ""}
-        onChange={(event) => { setSelectedVersion(Number(event.target.value)); setCapture(null); setTab("text"); }}>
+        onChange={(event) => { setSelectedVersion(Number(event.target.value)); setTab("text"); }}>
         {!latest && <option value="">未生成</option>}
         {[...(history?.versions ?? [])].reverse().map((item) => <option key={item.version} value={item.version}>
           v{item.version}{item === latest ? " · 最新" : ""}
@@ -178,26 +179,27 @@ function DraftEditor({ target, liveCanvas, onSelectNode }: {
       <button type="button" role="tab" aria-selected={tab === "order"} onClick={() => setTab("order")}>並べ替え</button>
       <button type="button" role="tab" aria-selected={tab === "text"} onClick={() => setTab("text")}>テキスト</button>
     </div>
+    {capture && <p className="draftCaptureNotice" role="status">Canvasから取得したカードを編集中です。版を切り替えても、生成前の並べ替え・除外は保持されます。</p>}
     {tab === "order" ? <>
       <ol className="draftOrderList" aria-label="カード順">
         {shownCapture?.order.map((id, index) => <li key={id}
           className={`${(liveCanvas ? liveCanvas.selectedIds.includes(id) : selectedCard === id) ? "isSelected" : ""}${excluded.has(id) ? " isExcluded" : ""}`.trim()}
-          onDragOver={(event) => { if (shownCapture && dragged.current) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }}
-          onDrop={(event) => { if (dragged.current) { event.preventDefault(); event.stopPropagation(); move(dragged.current, id); dragged.current = null; } }}>
+          onDragOver={(event) => { if (canEditOrder && dragged.current) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }}
+          onDrop={(event) => { if (canEditOrder && dragged.current) { event.preventDefault(); event.stopPropagation(); move(dragged.current, id); dragged.current = null; } }}>
           <button type="button" className="draftDragHandle" aria-label={`カード${index + 1}をドラッグで移動`}
-            disabled={!shownCapture} draggable={Boolean(shownCapture)}
-            onDragStart={(event) => { dragged.current = id; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-then-draft-card", id); }}
+            disabled={!canEditOrder} draggable={canEditOrder}
+            onDragStart={(event) => { if (!canEditOrder) return; dragged.current = id; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-then-draft-card", id); }}
             onDragEnd={() => { dragged.current = null; }}><GripIcon /></button>
           <span className="draftOrderNumber">{index + 1}</span>
           <button type="button" className="draftExcerpt" onClick={() => { setSelectedCard(id); onSelectNode?.(id); }}
             title={cards.get(id) || "空のカード"}>{cards.get(id)?.replace(/\s+/g, " ").slice(0, 160) || "空のカード"}</button>
-          {shownCapture && <button type="button" className="draftExcludeButton"
+          {canEditOrder && <button type="button" className="draftExcludeButton"
             aria-label={`カード${index + 1}を${excluded.has(id) ? "中間稿に戻す" : "中間稿から除外"}`}
             title={excluded.has(id) ? "中間稿に戻す" : "中間稿から除外"}
             onClick={() => editCapture((source) => toggleDraftCard(source, id))}>
             <ExcludeIcon restore={excluded.has(id)} />
           </button>}
-          {shownCapture && <div className="draftMoveActions">
+          {canEditOrder && <div className="draftMoveActions">
             <button type="button" aria-label={`カード${index + 1}を上へ`} disabled={index === 0}
               onClick={() => move(id, shownCapture.order[index - 1])}><ChevronIcon direction="up" /></button>
             <button type="button" aria-label={`カード${index + 1}を下へ`} disabled={index === shownCapture.order.length - 1}
@@ -206,6 +208,7 @@ function DraftEditor({ target, liveCanvas, onSelectNode }: {
         </li>)}
         {!shownCapture?.order.length && <li className="draftEmpty">テキストカードがありません。</li>}
       </ol>
+      {!capture && latest && <p className="draftHint">順序や除外を変更するには、Canvasから再取得してください。</p>}
       {capture && <div className="draftGenerateActions">
         <button className="draftPrimary" type="button"
           disabled={!capture.cards.some((card) => card.text.trim() && !excluded.has(card.id)) || !history || busy || Boolean(error)} onClick={generate}>
@@ -221,7 +224,7 @@ function DraftEditor({ target, liveCanvas, onSelectNode }: {
           </button>
         </div>
         <textarea className="draftTextEditor" aria-label="中間稿テキスト" spellCheck={false}
-          readOnly={oldVersion || Boolean(capture)} value={version.text}
+          readOnly={oldVersion} value={version.text}
           onChange={(event) => {
             if (!history || oldVersion) return;
             session.change({ ...history, versions: history.versions.map((item) => item.version === version.version

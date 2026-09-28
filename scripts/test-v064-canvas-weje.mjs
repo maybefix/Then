@@ -54,6 +54,18 @@ const cyclic = canvasTypes.normalizeCanvasDocument(
 assert.equal(cyclic.nodes[0].threadParentId, undefined);
 assert.equal(cyclic.nodes[1].threadParentId, undefined);
 
+const legacyGlobalReference = canvasTypes.normalizeCanvasDocument({
+  nodes: [
+    { id: "global-reference", type: "reference", scope: "global", sourcePath: "legacy.pdf" },
+    { id: "project-reference", type: "reference", scope: "project", sourcePath: "keep.pdf" },
+  ],
+  edges: [{ id: "legacy-edge", fromNode: "project-reference", toNode: "global-reference" }],
+  then: { scope: "global", name: "旧共通ボード" },
+}, "旧共通ボード", "global");
+assert.deepEqual(legacyGlobalReference.nodes.map((item) => item.id), ["project-reference"]);
+assert.deepEqual(legacyGlobalReference.edges, []);
+assert.equal(legacyGlobalReference.then.scope, "project");
+
 const tree = document([
   node("root", 0, 0, { threadCollapsed: true }),
   node("moving", 500, 500),

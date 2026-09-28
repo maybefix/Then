@@ -5,7 +5,7 @@ const [appSource, appCss, settingsSource, tabsSource, typesSource, manualSource]
   await Promise.all([
     readFile("src/App.tsx", "utf8"),
     readFile("src/App.css", "utf8"),
-    readFile("src/components/dialogs/SettingsModal.tsx", "utf8"),
+    readFile("src/components/dialogs/FileSettings.tsx", "utf8"),
     readFile("src/components/layout/DocumentTabs.tsx", "utf8"),
     readFile("src/types.ts", "utf8"),
     readFile("docs/USER_MANUAL.md", "utf8"),
@@ -21,7 +21,7 @@ assert.match(
 assert.match(settingsSource, /checked=\{settings\.showDocumentTabs\}/);
 assert.match(settingsSource, /onUpdateSettings\("showDocumentTabs", event\.target\.checked\)/);
 
-const topbarStart = appSource.indexOf('<header className="topbar">');
+const topbarStart = appSource.indexOf('<header className="topbar"');
 const topbarEnd = appSource.indexOf("</header>", topbarStart);
 const tabBar = appSource.indexOf("<DocumentTabs", topbarEnd);
 const workspace = appSource.indexOf('className={`workspace ', topbarEnd);

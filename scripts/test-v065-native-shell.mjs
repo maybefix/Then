@@ -14,11 +14,11 @@ const [app, css, controls, portal, packageJson, packageLock, tauriConfig, cargoT
     readFile("src-tauri/Cargo.toml", "utf8"),
   ]);
 
-assert.equal(packageJson.version, "0.6.5");
-assert.equal(packageLock.version, "0.6.5");
-assert.equal(packageLock.packages[""].version, "0.6.5");
-assert.equal(tauriConfig.version, "0.6.5");
-assert.match(cargoToml, /^version = "0\.6\.5"$/m);
+assert.equal(packageJson.version, "0.6.6");
+assert.equal(packageLock.version, "0.6.6");
+assert.equal(packageLock.packages[""].version, "0.6.6");
+assert.equal(tauriConfig.version, "0.6.6");
+assert.match(cargoToml, /^version = "0\.6\.6"$/m);
 
 const mainWindow = tauriConfig.app.windows[0];
 assert.equal(mainWindow.decorations, false, "the Windows-native titlebar must be disabled");
@@ -66,4 +66,4 @@ for (const permission of [
   assert.ok(capability.permissions.includes(permission), `${permission} must be scoped to main`);
 }
 
-console.log("PASS v0.6.5 native shell: selection policy, frameless titlebar, controls, permissions");
+console.log("PASS v0.6.6 native shell: selection policy, frameless titlebar, controls, permissions");

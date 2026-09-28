@@ -1,5 +1,6 @@
 import { themeCatalog } from "../../themes";
 import type { AppTheme } from "../../types";
+import { useModalFocus } from "./useModalFocus";
 
 type ThemePickerModalProps = {
   selectedTheme: AppTheme;
@@ -12,13 +13,16 @@ export function ThemePickerModal({
   onClose,
   onSelect,
 }: ThemePickerModalProps) {
+  const dialogRef = useModalFocus(onClose, 'input[name="theme"]:checked');
   return (
     <div className="modalBackdrop themePickerBackdrop" role="presentation">
       <section
+        ref={dialogRef}
         className="modal themePickerModal"
         aria-label="テーマを選択"
         role="dialog"
         aria-modal="true"
+        tabIndex={-1}
       >
         <header className="modalHeader">
           <div className="themePickerHeading">

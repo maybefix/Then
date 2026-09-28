@@ -133,6 +133,8 @@ assert.match(projectState, /project_config_digest/);
 assert.match(projectState, /project state rollback conflict/);
 assert.match(projectState, /project state branch conflict/);
 assert.match(projectState, /config\.file_progress\.contains_key\(&relative_path\)/);
+assert.match(projectState, /original_digest = project_config_digest\(&config\)/);
+assert.match(projectState, /project_config_digest\(&config\)\? == original_digest/);
 
 const deleteConfig = section(
   rustLib,
@@ -203,6 +205,12 @@ assert.match(portableRefresh, /window\.addEventListener\("focus", refreshOnFocus
 assert.match(portableRefresh, /appMode !== "checkpoint"/);
 assert.match(portableRefresh, /portableProjectMutationGenerationRef/);
 assert.match(portableRefresh, /canWritePortableProjectState/);
+assert.match(portableRefresh, /hasWorkspaceFileProgressChanged/);
+assert.doesNotMatch(
+  portableRefresh,
+  /knownProgress\.revision !== progress\.revision/,
+  "unrelated project.json revisions must not produce a reload notification",
+);
 
 assert.match(plan, /### Phase 0: 基準固定と失敗時設計/);
 assert.match(plan, /### Phase 1: プロジェクト保存基盤の強化/);

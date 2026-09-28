@@ -3646,8 +3646,19 @@ html:not([data-window-fullscreen="true"])
   cursor: default;
 }
 
+.commandPaletteText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .commandPaletteLabel {
   font-size: 14px;
+}
+
+.commandPaletteDisabledReason {
+  font-size: 12px;
 }
 
 .commandPaletteHint {
@@ -3721,6 +3732,10 @@ html:not([data-window-fullscreen="true"])
 .settingsTabPanel {
   display: grid;
   gap: 12px;
+}
+
+.settingsTabPanel[hidden] {
+  display: none;
 }
 
 .settingsModal .modalActions {
@@ -6174,6 +6189,18 @@ body {
   white-space: nowrap;
 }
 
+.binderCardSource {
+  flex: 0 0 auto;
+  color: var(--accent-strong);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+}
+
+.binderCardSource.reference {
+  color: #1f8f88;
+}
+
 .referenceCardActions {
   display: inline-flex;
   align-items: center;
@@ -6232,6 +6259,54 @@ body {
   flex: 1;
   flex-direction: column;
   background: var(--bg-panel);
+}
+
+.binderIdeaCardBody {
+  gap: 8px;
+  padding: 10px;
+}
+
+.binderIdeaCardBody textarea {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  resize: none;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 6px;
+  outline: none;
+  padding: 10px;
+  background: var(--bg-input, var(--bg-panel-strong));
+  color: var(--text-primary);
+  font: inherit;
+  line-height: 1.7;
+}
+
+.binderIdeaCardBody textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--border-strong));
+}
+
+.binderIdeaCardFooter {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.binderIdeaCardFooter button {
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.binderIdeaCardFooter button.isUsed {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent-strong);
 }
 
 .referenceBodyToolbar {
@@ -6764,11 +6839,17 @@ body {
 .referenceScopeTop {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   padding-bottom: 8px;
 }
 
-.referenceScopeTabs,
+.referenceProjectLabel {
+  min-width: 0;
+  color: var(--text-muted);
+  font: 600 11px/1.4 var(--ui-font-family);
+}
+
 .referenceKindFilters {
   display: inline-flex;
   min-width: 0;
@@ -6779,11 +6860,6 @@ body {
   padding: 2px;
 }
 
-.referenceScopeTabs {
-  flex: 1;
-}
-
-.referenceScopeTabs button,
 .referenceKindFilters button {
   min-width: 0;
   border: 0;
@@ -6793,11 +6869,6 @@ body {
   cursor: pointer;
   font: 11px/1.4 var(--ui-font-family);
   white-space: nowrap;
-}
-
-.referenceScopeTabs button {
-  flex: 1;
-  padding: 5px 6px;
 }
 
 .referenceKindFilters {
@@ -6811,7 +6882,6 @@ body {
   padding: 4px 5px;
 }
 
-.referenceScopeTabs button.isActive,
 .referenceKindFilters button.isActive {
   background: var(--accent-soft);
   color: var(--accent-strong);
@@ -6954,37 +7024,6 @@ body {
   gap: 3px;
 }
 
-.referenceBadgeRow {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 4px;
-}
-
-.referenceBadge {
-  display: inline-flex;
-  max-width: 44px;
-  align-items: center;
-  border: 0.5px solid var(--border-subtle);
-  border-radius: 999px;
-  padding: 1px 6px;
-  color: var(--text-muted);
-  font-size: 10px;
-  line-height: 1.5;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.referenceScope-global {
-  border-color: color-mix(in srgb, var(--accent-strong) 30%, var(--border-subtle));
-  color: var(--accent-strong);
-}
-
-.referenceScope-project {
-  color: var(--text-secondary);
-}
-
 .referenceRow {
   grid-template-columns: 26px minmax(0, 1fr) auto 28px;
   padding: 7px 8px;
@@ -7060,6 +7099,448 @@ body {
 }
 
 /* ===== Idea（スレッド二段ナビ） ===== */
+.binderPane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0;
+  overflow: auto;
+  padding: 0 0 16px;
+}
+
+.binderModePane {
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
+.binderTop {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 11px;
+  border-bottom: 0.5px solid var(--border-subtle);
+}
+
+.binderModePane > .ideaPane,
+.binderModePane > .referencePane {
+  min-height: 0;
+  flex: 1;
+}
+
+.binderModeTabs {
+  display: grid;
+  grid-template-columns: 0.8fr 1.35fr 0.8fr;
+  min-height: 35px;
+  flex: 0 0 auto;
+  border-bottom: 0.5px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-panel-strong) 76%, transparent);
+}
+
+.binderModeTabs button {
+  position: relative;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.binderModeTabs button:hover,
+.binderModeTabs button.isActive {
+  color: var(--text-primary);
+}
+
+.binderModeTabs button.isActive::after {
+  position: absolute;
+  right: 8px;
+  bottom: 0;
+  left: 8px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+  content: "";
+}
+
+.binderBackButton,
+.binderGroupTitle button {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.binderCapture {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.binderCapture input,
+.binderSearchRow input {
+  min-width: 0;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 7px;
+  outline: none;
+  background: var(--bg-input, var(--bg-panel-strong));
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.binderCapture input {
+  height: 31px;
+  padding: 0 9px;
+}
+
+.binderCapture button {
+  border: 0;
+  border-radius: 7px;
+  padding: 0 11px;
+  background: var(--accent);
+  color: var(--bg-panel);
+  cursor: pointer;
+}
+
+.binderCapture button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.binderCaptureMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.binderCaptureMeta button {
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 5px;
+  padding: 3px 8px;
+  background: var(--bg-panel-strong);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.binderCaptureMeta button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.binderSearchRow input {
+  width: 100%;
+  padding: 7px 9px;
+}
+
+.binderFilters,
+.binderScopeFilters {
+  display: flex;
+  gap: 4px;
+}
+
+.binderFilters button,
+.binderScopeFilters button {
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.binderFilters button.isActive,
+.binderScopeFilters button.isActive {
+  border-color: var(--text-primary);
+  background: var(--text-primary);
+  color: var(--bg-panel);
+}
+
+.binderSectionHeader,
+.binderGroupTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.binderSectionHeader {
+  margin: 10px 11px 4px;
+  padding-bottom: 4px;
+}
+
+.binderLibraryHeader {
+  border-bottom: 0;
+}
+
+.binderSearchOnly {
+  gap: 7px;
+}
+
+.binderResults {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  padding: 0 8px;
+}
+
+.binderSearchResult {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 20px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 7px;
+  border: 0;
+  border-bottom: 0.5px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.binderSearchResult:hover,
+.binderSearchResult:focus-visible {
+  outline: none;
+  background: var(--bg-hover);
+}
+
+.binderResultContent {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.binderResultContent strong,
+.binderResultPreview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.binderResultContent strong {
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.binderResultPreview {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.binderResultOpen {
+  color: var(--text-faint);
+  font-size: 12px;
+  opacity: 0;
+  transform: translate(-2px, 2px);
+  transition: opacity 100ms ease, transform 100ms ease;
+}
+
+.binderSearchResult:hover .binderResultOpen,
+.binderSearchResult:focus-visible .binderResultOpen {
+  color: var(--accent-strong);
+  opacity: 1;
+  transform: translate(0, 0);
+}
+
+.binderEmptyResult {
+  margin: 22px 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.binderSectionHeader h3,
+.binderGroupTitle span {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.binderSectionHeader > span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.binderOpenItems,
+.binderLibraryGroup,
+.binderThreadDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.binderOpenItems,
+.binderLibraryGroup {
+  padding: 0 8px;
+}
+
+.binderLibraryGroup + .binderLibraryGroup {
+  margin-top: 10px;
+}
+
+.binderOpenItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26px 26px;
+  align-items: center;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 7px;
+  background: var(--bg-panel-strong);
+}
+
+.binderOpenItem > button {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.binderOpenItem > button.isActive {
+  color: var(--accent-strong);
+}
+
+.binderOpenMain,
+.binderLibraryItem,
+.binderThreadItem {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
+
+.binderOpenMain {
+  padding: 7px 8px;
+}
+
+.binderOpenMain > span:last-child,
+.binderLibraryItem > span:last-child,
+.binderThreadItem > span:first-child {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.binderOpenMain strong,
+.binderLibraryItem strong,
+.binderThreadItem strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.binderOpenMain small,
+.binderLibraryItem small,
+.binderThreadItem small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.binderTypeBadge {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-panel));
+  color: var(--accent-strong);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.binderTypeBadge.reference {
+  background: color-mix(in srgb, #1f8f88 14%, var(--bg-panel));
+  color: #1f8f88;
+}
+
+.binderLibraryItem,
+.binderThreadItem {
+  width: 100%;
+  border: 0;
+  border-bottom: 0.5px solid var(--border-subtle);
+  border-radius: 0;
+  padding: 7px 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.binderLibraryItem:hover,
+.binderThreadItem:hover {
+  background: var(--bg-hover);
+}
+
+.binderReferenceActions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.binderReferenceActions select {
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 5px;
+  padding: 2px 4px;
+  background: var(--bg-panel-strong);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 10px;
+}
+
+.binderLibraryItem > span:not(.binderTypeBadge):last-child {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.binderThreadDetail h4 {
+  margin: 2px 7px 4px;
+  font-size: 13px;
+}
+
+.binderUsedDot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border: 1px solid var(--text-muted);
+  border-radius: 50%;
+}
+
+.binderUsedDot.used {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.binderEmpty {
+  margin: 5px 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 .ideaPane {
   display: flex;
   min-width: 0;
@@ -7637,6 +8118,328 @@ body {
 
 .ideaMiniIcon.ideaDeleteBtn:hover {
   color: var(--danger);
+}
+
+.ideaCaptureBox.ideaCaptureStacked {
+  padding: 8px 9px 9px;
+}
+
+.ideaCaptureStacked textarea {
+  min-height: 42px;
+  padding: 2px 3px 5px;
+}
+
+.ideaCaptureControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.ideaCaptureControls .ideaDestSelect {
+  flex: 0 1 150px;
+  width: 150px;
+  max-width: calc(100% - 118px);
+}
+
+.ideaCaptureSpacer {
+  flex: 1 1 auto;
+}
+
+.ideaCaptureControls .ideaPrimaryBtn {
+  flex: 0 0 auto;
+}
+
+.ideaClipHost,
+.ideaReferenceMenuHost {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.openCardsPane {
+  height: 100%;
+  overflow: auto;
+  padding: 10px;
+}
+
+.openCardsPaneHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 3px 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.openCardsEmpty {
+  margin: 24px 8px;
+  color: var(--text-faint);
+  font-size: 12px;
+  text-align: center;
+}
+
+.openCardsList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.openCardsItem {
+  padding: 7px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: var(--radius-card, 8px);
+  background: var(--bg-secondary);
+}
+
+.openCardsMain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--ui-font-family);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.openCardsMain > span:last-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.openCardsMain strong,
+.openCardsMain small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.openCardsMain small {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.openCardsKind {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: var(--radius-control, 6px);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.openCardsKind.reference {
+  color: var(--text-muted);
+}
+
+.openCardsActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 3px;
+  margin-top: 6px;
+}
+
+.openCardsActions button {
+  width: 26px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius-control, 5px);
+  background: transparent;
+  color: var(--text-muted);
+  font: 12px/1 var(--ui-font-family);
+  cursor: pointer;
+}
+
+.openCardsActions button:hover,
+.openCardsActions button.isActive {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text-primary);
+}
+
+.ideaClipButton {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-control, 6px);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.ideaClipButton:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.ideaClipButton svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ideaClipMenu {
+  top: calc(100% + 4px);
+  right: 0;
+  left: auto;
+  z-index: 40;
+  min-width: 168px;
+  max-width: calc(100vw - 24px);
+}
+
+.ideaClipMenu.align-start {
+  right: auto;
+  left: 0;
+}
+
+.ideaClipMenu button {
+  font: 12px/1.4 var(--ui-font-family);
+}
+
+.ideaReferenceMenu {
+  top: calc(100% + 4px);
+  right: 0;
+  left: auto;
+  z-index: 40;
+  min-width: 220px;
+  max-width: calc(100vw - 24px);
+}
+
+.ideaReferenceMenu label {
+  display: block;
+  padding: 5px 8px 6px;
+  color: var(--text-muted);
+  font: 10px/1.4 var(--ui-font-family);
+}
+
+.ideaReferenceMenu select {
+  display: block;
+  width: 100%;
+  height: 26px;
+  margin-top: 4px;
+  padding: 0 5px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: var(--radius-control, 5px);
+  outline: none;
+  background: var(--bg-panel-strong);
+  color: var(--text-secondary);
+  font: 11px/1.4 var(--ui-font-family);
+}
+
+.ideaReferenceMenu select:focus {
+  border-color: var(--accent);
+}
+
+.ideaReferenceMenu .dangerMenuItem {
+  color: var(--danger);
+}
+
+.ideaMixedItemMain {
+  min-width: 0;
+  width: 100%;
+}
+
+.ideaReferenceItem {
+  align-items: center;
+}
+
+.ideaReferenceItem.isMissing {
+  opacity: 0.72;
+}
+
+.ideaReferenceOpen {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ideaReferenceOpen:disabled {
+  cursor: default;
+}
+
+.ideaReferenceOpen > svg {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  opacity: 0.55;
+}
+
+.ideaReferenceVisual {
+  display: grid;
+  flex: 0 0 46px;
+  width: 46px;
+  height: 42px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius-control, 6px);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--text-muted);
+  font: 11px/1 var(--ui-font-family);
+}
+
+.ideaReferenceVisual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ideaReferenceCopy {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ideaReferenceCopy strong,
+.ideaReferencePreview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ideaReferencePreview {
+  color: var(--text-secondary);
+  font: 12px/1.5 var(--ui-font-family);
+}
+
+.ideaReferenceCopy strong {
+  color: var(--text-faint);
+  font: 10px/1.4 var(--ui-font-family);
+  font-weight: 500;
+}
+
+.ideaReferenceMenuHost {
+  justify-content: flex-end;
+  width: 100%;
+  margin-top: 7px;
 }
 
 .ideaEmpty {
@@ -9133,7 +9936,6 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
 }
 
 .canvasToolbarCluster,
-.canvasScopeSwitch,
 .canvasToolGroup,
 .canvasZoomControls,
 .canvasSendControls {
@@ -9157,7 +9959,6 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   padding-left: 6px;
 }
 
-.canvasScopeSwitch button,
 .canvasToolGroup button,
 .canvasZoomControls button,
 .canvasSendControls button,
@@ -9174,11 +9975,6 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   color: var(--text-secondary);
   cursor: pointer;
   font-size: 12px;
-}
-
-.canvasScopeSwitch button {
-  padding: 0 10px;
-  white-space: nowrap;
 }
 
 .canvasToolGroup {
@@ -9233,7 +10029,6 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   align-items: center;
 }
 
-.canvasScopeSwitch button:hover,
 .canvasToolGroup button:hover,
 .canvasZoomControls button:hover,
 .canvasSendControls button:hover,
@@ -9242,7 +10037,6 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   color: var(--text-primary);
 }
 
-.canvasScopeSwitch button.isActive,
 .canvasToolGroup button.isActive,
 .canvasIconButton.isActive {
   background: var(--accent);
@@ -9250,7 +10044,6 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 68%, transparent);
 }
 
-.canvasScopeSwitch button:disabled,
 .canvasSendControls button:disabled,
 .canvasIconButton:disabled {
   cursor: default;

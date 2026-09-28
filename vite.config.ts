@@ -27,6 +27,12 @@ export default defineConfig({
           ) {
             return "canvas";
           }
+          if (
+            normalized.includes("/src/components/proofread/") ||
+            normalized.includes("/src/proofread/")
+          ) {
+            return "proofread";
+          }
           if (!normalized.includes("/node_modules/")) return undefined;
           if (
             normalized.includes("/node_modules/react/") ||

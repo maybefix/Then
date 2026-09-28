@@ -55,6 +55,8 @@ import type {
 
 export type TextEditorHandle = {
   focus: () => void;
+  /** 選択もスクロールも動かさずにフォーカスだけ戻す（ダイアログを閉じたときなど）。 */
+  restoreFocus: () => void;
   getValue: () => string;
   getSelection: () => TextEditorSelection;
   selectRange: (from: number, to: number) => void;
@@ -3098,6 +3100,15 @@ export function VerticalTextEditor({
         } else {
           editor.commands.focus();
         }
+      },
+      restoreFocus: () => {
+        const editor = tiptapRef.current;
+        if (!editor || editor.view.hasFocus()) return;
+        // DOM の focus() だけだとブラウザがキャレットを本文冒頭の編集可能な
+        // 位置へ置き直す。見出し記号の後ろなど文書の真の先頭でない場合は
+        // ProseMirror もそれを本物の移動として読み込んでしまう。
+        // view.focus() はフォーカスと同時に状態の選択を DOM へ書き戻す。
+        editor.view.focus();
       },
       getValue: () => {
         const editor = tiptapRef.current;

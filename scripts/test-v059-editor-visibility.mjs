@@ -275,7 +275,10 @@ assert.deepEqual(
 const [appSource, editorSource, settingsSource, appCss, foundationsCss] = await Promise.all([
   readFile("src/App.tsx", "utf8"),
   readFile("src/VerticalTextEditor.tsx", "utf8"),
-  readFile("src/components/dialogs/SettingsModal.tsx", "utf8"),
+  Promise.all([
+    readFile("src/components/dialogs/AppearanceSettings.tsx", "utf8"),
+    readFile("src/components/dialogs/BodySettings.tsx", "utf8"),
+  ]).then((sources) => sources.join("\n")),
   readFile("src/App.css", "utf8"),
   readFile("src/styles/themes/foundations.css", "utf8"),
 ]);

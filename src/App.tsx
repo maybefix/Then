@@ -114,8 +114,16 @@ import {
   replacePlotReferencePath,
 } from "./components/plot/plotCardUtils";
 import { ReferenceLayer } from "./components/references/ReferenceLayer";
-import { ReferencePane } from "./components/references/ReferencePane";
-import { IdeaPane } from "./components/snippets/IdeaPane";
+import { BinderPane } from "./components/binder/BinderPane";
+import { OpenCardsPane } from "./components/binder/OpenCardsPane";
+import {
+  countIdeaReferenceLinks,
+  ideaThreadItemKey,
+  makeIdeaItem,
+  makeReferenceLink,
+  normalizedReferenceKey,
+  reconcileIdeaThreadLayouts,
+} from "./ideaReferenceModel";
 import ProofreadPane from "./components/proofread/ProofreadPane";
 import { PROOFREAD_RULES } from "./proofread/rules";
 import { DEFAULT_PROOFREAD_OPTIONS } from "./proofread/types";
@@ -135,6 +143,7 @@ import type {
 import type {
   AppDialog,
   AppState,
+  BinderCardState,
   BreadcrumbDropTarget,
   CursorPosition,
   DeleteProjectEntryPlan,
@@ -146,7 +155,10 @@ import type {
   FontOption,
   IdeaFragment,
   IdeaOriginRef,
+  IdeaReferenceLink,
   IdeaThread,
+  IdeaThreadItemLink,
+  IdeaThreadLayout,
   ManuscriptSnapshot,
   ManuscriptSnapshotFile,
   OutlineItem,
@@ -167,6 +179,7 @@ import type {
   WorkspaceDocumentTabs,
   WorkspaceRecord,
 } from "./types";
+import { isIdeaBinderCard, isReferenceBinderCard } from "./types";
 import {
   fileProgressStatuses,
   DEFAULT_EDITOR_MEASURE_PERCENT,
@@ -260,10 +273,11 @@ type ToastAction = {
 };
 const EDITOR_CONTEXT_MENU_HEIGHT = 292;
 const defaultReferenceLayout: ReferenceLayout = {
-  version: 1,
+  version: 3,
   name: "default",
   cards: [],
   recent: [],
+  ideaThreads: [],
 };
 const PINNED_REFERENCE_Z_BASE = 10000;
 const NORMAL_REFERENCE_Z_LIMIT = PINNED_REFERENCE_Z_BASE - 1;
@@ -752,11 +766,12 @@ function normalizeIdeaOriginRef(value: unknown): IdeaOriginRef | undefined {
   if (typeof origin.sourceId !== "string" || typeof origin.sourceBoardId !== "string") {
     return undefined;
   }
+  if (origin.sourceBoardScope === "global") return undefined;
   return {
     source: "canvas",
     sourceId: origin.sourceId,
     sourceBoardId: origin.sourceBoardId,
-    sourceBoardScope: origin.sourceBoardScope === "global" ? "global" : "project",
+    sourceBoardScope: "project",
     copiedAt: typeof origin.copiedAt === "number" ? origin.copiedAt : Date.now(),
   };
 }
@@ -1288,12 +1303,13 @@ function selectedSnapshotFolderTree(
 ): ProjectFolder {
   const keepEntry = (entry: ProjectEntry): ProjectEntry | null => {
     if (entry.kind !== "folder") return null;
-    if (selectedFolderPaths.has(normalizePathForCompare(entry.path))) return entry;
     const children = entry.children.flatMap((child) => {
       const kept = keepEntry(child);
       return kept ? [kept] : [];
     });
-    return children.length ? { ...entry, children } : null;
+    return selectedFolderPaths.has(normalizePathForCompare(entry.path)) || children.length
+      ? { ...entry, children }
+      : null;
   };
   return { ...root, children: root.children.flatMap((entry) => {
     const kept = keepEntry(entry);
@@ -1571,6 +1587,13 @@ function upsertRecentReference(
   };
 }
 
+function upsertRecentReferences(
+  layout: ReferenceLayout,
+  files: ReferenceFileInfo[],
+): ReferenceLayout {
+  return files.reduce((current, file) => upsertRecentReference(current, file), layout);
+}
+
 function retargetReferenceSourcePath(
   sourcePath: string,
   oldSourcePath: string,
@@ -1604,10 +1627,11 @@ function retargetReferenceFileInfo(
 }
 
 function retargetReferenceCard(
-  card: ReferenceCardState,
+  card: BinderCardState,
   oldSourcePath: string,
   newSourcePath: string,
-): ReferenceCardState {
+): BinderCardState {
+  if (!isReferenceBinderCard(card)) return card;
   if (card.scope !== "project") return card;
   const sourcePath = retargetReferenceSourcePath(card.sourcePath, oldSourcePath, newSourcePath);
   if (!sourcePath) return card;
@@ -1632,11 +1656,24 @@ function isReferenceCardRecord(
   return typeof record.id === "string" && typeof record.sourcePath === "string";
 }
 
-function clampReferenceCardToStage(
-  card: ReferenceCardState,
+function isIdeaCardRecord(
+  value: unknown,
+): value is Partial<BinderCardState> & { id: string; sourceType: "idea"; threadId: string; fragmentId: string } {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.sourceType === "idea" &&
+    typeof record.id === "string" &&
+    typeof record.threadId === "string" &&
+    typeof record.fragmentId === "string"
+  );
+}
+
+function clampReferenceCardToStage<T extends BinderCardState>(
+  card: T,
   stageWidth: number,
   stageHeight: number,
-): ReferenceCardState {
+): T {
   const width = Math.max(220, Math.min(card.width, Math.max(240, stageWidth - 24)));
   const height = Math.max(140, Math.min(card.height, Math.max(180, stageHeight - 24)));
   return {
@@ -1655,9 +1692,42 @@ function normalizeReferenceLayout(
   const raw = value as Partial<ReferenceLayout> | null;
   const cards: unknown[] = Array.isArray(raw?.cards) ? raw.cards : [];
   const recent: unknown[] = Array.isArray(raw?.recent) ? raw.recent : [];
+  const ideaThreads = Array.isArray(raw?.ideaThreads)
+    ? raw.ideaThreads.filter(
+        (layout): layout is IdeaThreadLayout =>
+          Boolean(layout) &&
+          typeof layout === "object" &&
+          typeof (layout as IdeaThreadLayout).threadId === "string" &&
+          Array.isArray((layout as IdeaThreadLayout).items),
+      )
+    : [];
   const normalizedCards = cards
-    .filter(isReferenceCardRecord)
-    .map((card, index) => {
+    .filter(
+      (card) =>
+        isIdeaCardRecord(card)
+        || (isReferenceCardRecord(card) && card.scope !== "global"),
+    )
+    .map((card, index): BinderCardState => {
+      if (isIdeaCardRecord(card)) {
+        return clampReferenceCardToStage(
+          {
+            id: card.id,
+            sourceType: "idea",
+            threadId: card.threadId,
+            fragmentId: card.fragmentId,
+            x: typeof card.x === "number" ? card.x : 72 + index * 32,
+            y: typeof card.y === "number" ? card.y : 96 + index * 32,
+            width: typeof card.width === "number" ? card.width : 320,
+            height: typeof card.height === "number" ? card.height : 300,
+            zIndex: typeof card.zIndex === "number" ? card.zIndex : index + 1,
+            collapsed: Boolean(card.collapsed),
+            pinned: Boolean(card.pinned),
+          },
+          stageSize.width,
+          stageSize.height,
+        );
+      }
+      if (!isReferenceCardRecord(card)) throw new Error("unreachable binder card");
       const kind =
         card.kind === "text" ||
         card.kind === "markdown" ||
@@ -1670,6 +1740,7 @@ function normalizeReferenceLayout(
       return clampReferenceCardToStage(
         {
           id: card.id,
+          sourceType: "reference",
           scope: normalizeReferenceScope(card.scope),
           sourcePath: card.sourcePath,
           kind,
@@ -1690,25 +1761,28 @@ function normalizeReferenceLayout(
       );
     });
   const normalizedRecent = recent
-    .filter(isReferenceFileInfo)
+    .filter((file): file is ReferenceFileInfo => isReferenceFileInfo(file) && file.scope !== "global")
     .map((file) => ({
       ...file,
       scope: normalizeReferenceScope(file.scope),
       imported: Boolean(file.imported),
     }));
   return {
-    version: 1,
+    version: 3,
     name: typeof raw?.name === "string" && raw.name.trim() ? raw.name : "default",
     recent: mergeReferenceFiles(
       normalizedRecent,
-      normalizedCards.map((card) => makeReferenceFileInfo(card.sourcePath, card.kind, card.scope)),
+      normalizedCards
+        .filter(isReferenceBinderCard)
+        .map((card) => makeReferenceFileInfo(card.sourcePath, card.kind, card.scope)),
     )
       .slice(0, MAX_RECENT_REFERENCES),
     cards: normalizedCards,
+    ideaThreads,
   };
 }
 
-function nextReferenceZIndex(cards: ReferenceCardState[], pinned: boolean): number {
+function nextReferenceZIndex(cards: BinderCardState[], pinned: boolean): number {
   const maxZ = cards
     .filter((card) => (pinned ? card.pinned : !card.pinned))
     .reduce((max, card) => Math.max(max, card.zIndex), pinned ? PINNED_REFERENCE_Z_BASE : 0);
@@ -2199,6 +2273,14 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
       )
         ? settings.exportFontFamily as EditorSettings["exportFontFamily"]
         : defaultSettings.exportFontFamily,
+      fontSize:
+        typeof settings.fontSize === "number" && Number.isFinite(settings.fontSize)
+          ? Math.min(24, Math.max(12, settings.fontSize))
+          : defaultSettings.fontSize,
+      lineHeight:
+        typeof settings.lineHeight === "number" && Number.isFinite(settings.lineHeight)
+          ? Math.min(2.4, Math.max(1.4, settings.lineHeight))
+          : defaultSettings.lineHeight,
       snippetStorageMode:
         settings.snippetStorageMode === "profile" ? "profile" : "workspace",
       sidebarMode: settings.sidebarMode === "navigator" ? "navigator" : "tree",
@@ -2544,6 +2626,25 @@ function replaceWorkspaceFileProgress(
   return { ...next, ...shared };
 }
 
+function hasWorkspaceFileProgressChanged(
+  current: Record<string, FileProgressStatus>,
+  folderPath: string,
+  shared: Record<string, FileProgressStatus>,
+): boolean {
+  const known = new Map(
+    Object.entries(current)
+      .filter(([path, status]) => isPathSameOrInside(path, folderPath) && status !== "todo")
+      .map(([path, status]) => [normalizePathForCompare(path), status] as const),
+  );
+  const next = new Map(
+    Object.entries(shared)
+      .filter(([, status]) => status !== "todo")
+      .map(([path, status]) => [normalizePathForCompare(path), status] as const),
+  );
+  if (known.size !== next.size) return true;
+  return Array.from(known).some(([path, status]) => next.get(path) !== status);
+}
+
 function markFileProgressMigration(
   current: AppState["fileProgressMigrationVersions"],
   folderPath: string,
@@ -2625,7 +2726,7 @@ async function listReferenceCandidates(folderPath: string): Promise<ReferenceFil
   if (!isTauriRuntime()) return [];
   return await invoke<ReferenceFileInfo[]>("list_reference_candidates", {
     rootPath: folderPath,
-    scope: "all",
+    scope: "project",
   });
 }
 
@@ -2719,11 +2820,6 @@ export default function App() {
   const typewriterScrollFrameRef = useRef<number | null>(null);
   const nativeFullscreenRequestedRef = useRef(false);
   const nativeFullscreenRequestIdRef = useRef(0);
-  const draggingSnippetRef = useRef<{
-    threadId: string;
-    fragmentId: string;
-    body: string;
-  } | null>(null);
   const editorInstanceRef = useRef<TextEditorHandle | null>(null);
   const pluginRuntimeHostRef = useRef<ThenPluginRuntimeHostHandle | null>(null);
   const pluginWorkspacePathRef = useRef<string | null>(null);
@@ -2840,8 +2936,6 @@ export default function App() {
   const [editorContextMenu, setEditorContextMenu] =
     useState<EditorContextMenuState | null>(null);
   const [notationModal, setNotationModal] = useState<NotationModalState | null>(null);
-  // ドロップ先インジケーターの位置（縦書きは left, 横書きは top の px）。
-  const [dropIndicatorPos, setDropIndicatorPos] = useState<number | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isPluginManagerOpen, setIsPluginManagerOpen] = useState(false);
   /** エディタのスクロール領域の実測内寸。文字表示幅設定の上限算出に使う。 */
@@ -2978,7 +3072,6 @@ export default function App() {
   const [referenceLayout, setReferenceLayout] =
     useState<ReferenceLayout>(() => defaultReferenceLayout);
   const [referenceCandidates, setReferenceCandidates] = useState<ReferenceFileInfo[]>([]);
-  const [referenceQuery, setReferenceQuery] = useState("");
 
   pluginCommandsRef.current = pluginCommands;
   pluginAnchorsRef.current = pluginAnchors;
@@ -2986,7 +3079,7 @@ export default function App() {
   const reloadInstalledPlugins = useCallback(async () => {
     if (!isTauriRuntime()) {
       setLoadedPlugins([]);
-      return;
+      return true;
     }
     try {
       const result = await invoke<{ plugins: LoadedThenPlugin[]; errors: string[] }>(
@@ -3002,8 +3095,10 @@ export default function App() {
       if (result.errors.length > 0) {
         setLastError(`読み込めないプラグインがあります: ${result.errors.join(" / ")}`);
       }
+      return result.errors.length === 0;
     } catch (error) {
       setLastError(`プラグインの読み込みに失敗しました: ${String(error)}`);
+      return false;
     }
   }, []);
 
@@ -3117,19 +3212,14 @@ export default function App() {
 
   const focusReferenceCard = useCallback((cardId: string) => {
     setReferenceLayout((current) => {
-      const stage = workspaceRef.current?.getBoundingClientRect();
       return {
         ...current,
         cards: current.cards.map((card) => {
           if (card.id !== cardId) return card;
-          const width = card.width;
-          const height = card.height;
           return {
             ...card,
             collapsed: false,
             zIndex: nextReferenceZIndex(current.cards, card.pinned),
-            x: stage ? Math.max(0, (stage.width - width) / 2) : card.x,
-            y: stage ? Math.max(0, (stage.height - height) / 2) : card.y,
           };
         }),
       };
@@ -3154,6 +3244,15 @@ export default function App() {
     }));
   }, []);
 
+  const collapseReferenceCard = useCallback((cardId: string, collapsed: boolean) => {
+    setReferenceLayout((current) => ({
+      ...current,
+      cards: current.cards.map((card) =>
+        card.id === cardId ? { ...card, collapsed } : card,
+      ),
+    }));
+  }, []);
+
   const openReferenceCard = useCallback(
     (
       sourcePath: string,
@@ -3170,7 +3269,9 @@ export default function App() {
         const file = fileInfo ?? makeReferenceFileInfo(sourcePath);
         const nextLayout = upsertRecentReference(current, file);
         const fileKey = referenceFileKey(file);
-        const existing = current.cards.find((card) => referenceCardKey(card) === fileKey);
+        const existing = current.cards.find(
+          (card) => isReferenceBinderCard(card) && referenceCardKey(card) === fileKey,
+        );
         if (existing) {
           return {
             ...nextLayout,
@@ -3196,6 +3297,7 @@ export default function App() {
         const card = clampReferenceCardToStage(
           {
             id: `ref-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+            sourceType: "reference",
             scope: file.scope,
             sourcePath,
             kind,
@@ -3222,7 +3324,42 @@ export default function App() {
     [projectFolder],
   );
 
-  const handleAddReference = useCallback(async (scope: ReferenceScope = "project") => {
+  const addReferencesToIdeaThread = useCallback(
+    (threadId: string, files: ReferenceFileInfo[]) => {
+      setReferenceLayout((current) => {
+        const ideaThreads = reconcileIdeaThreadLayouts(current.ideaThreads, appState.snippets);
+        const target = ideaThreads.find((layout) => layout.threadId === threadId);
+        if (!target) return current;
+        const existing = new Set(
+          target.items
+            .filter((item): item is IdeaReferenceLink => item.sourceType === "reference")
+            .map((item) => normalizedReferenceKey(item.sourcePath)),
+        );
+        const additions = files.flatMap((file) => {
+          const key = normalizedReferenceKey(file.sourcePath);
+          if (!key || existing.has(key)) return [];
+          existing.add(key);
+          return [makeReferenceLink(file.sourcePath)];
+        });
+        if (!additions.length) return current;
+        return {
+          ...upsertRecentReferences(current, files),
+          version: 3,
+          ideaThreads: ideaThreads.map((layout) =>
+            layout.threadId === threadId
+              ? { ...layout, items: [...additions, ...layout.items] }
+              : layout,
+          ),
+        };
+      });
+    },
+    [appState.snippets],
+  );
+
+  const handleAddReference = useCallback(async (
+    scope: ReferenceScope = "project",
+    targetThreadId?: string,
+  ) => {
     if (scope === "project" && !projectFolder) {
       showToast("先にフォルダを開いてください");
       return;
@@ -3233,24 +3370,40 @@ export default function App() {
     }
 
     try {
-      const file = await invoke<ReferenceFileInfo | null>("pick_reference_file", {
+      const result = await invoke<{
+        files: ReferenceFileInfo[];
+        failures: Array<{ path: string; message: string }>;
+      }>("pick_reference_files", {
         rootPath: projectFolder?.path ?? null,
         scope,
       });
-      if (!file) return;
+      if (!result.files.length && !result.failures.length) return;
       setReferenceCandidates((current) =>
-        mergeReferenceFiles([file], current).sort((left, right) =>
+        mergeReferenceFiles(result.files, current).sort((left, right) =>
           left.sourcePath.localeCompare(right.sourcePath),
         ),
       );
-      openReferenceCard(file.sourcePath, file);
+      if (targetThreadId) {
+        addReferencesToIdeaThread(targetThreadId, result.files);
+      } else if (result.files[0]) {
+        openReferenceCard(result.files[0].sourcePath, result.files[0]);
+      }
+      if (result.failures.length) {
+        setLastError(result.failures.map((failure) => `${failure.path}: ${failure.message}`).join("\n"));
+        showToast(`${result.files.length}件追加、${result.failures.length}件失敗しました`);
+      } else if (result.files.length) {
+        showToast(`${result.files.length}件の資料を追加しました`);
+      }
     } catch (error) {
       setLastError(String(error));
       showToast("資料を追加できませんでした");
     }
-  }, [openReferenceCard, projectFolder]);
+  }, [addReferencesToIdeaThread, openReferenceCard, projectFolder]);
 
-  const handleCreateReference = useCallback(async (scope: ReferenceScope = "project") => {
+  const handleCreateReference = useCallback(async (
+    scope: ReferenceScope = "project",
+    targetThreadId?: string,
+  ) => {
     if (scope === "project" && !projectFolder) {
       showToast("先にフォルダを開いてください");
       return;
@@ -3285,25 +3438,34 @@ export default function App() {
           left.sourcePath.localeCompare(right.sourcePath),
         ),
       );
-      openReferenceCard(file.sourcePath, file);
+      if (targetThreadId) {
+        addReferencesToIdeaThread(targetThreadId, [file]);
+        showToast(`「${file.name}」を作成しました`);
+      } else {
+        openReferenceCard(file.sourcePath, file);
+      }
     } catch (error) {
       setLastError(String(error));
       showToast("資料を作成できませんでした");
     }
-  }, [openReferenceCard, projectFolder]);
+  }, [addReferencesToIdeaThread, openReferenceCard, projectFolder]);
 
   const handleDeleteImportedReference = useCallback(
     async (sourcePath: string, scope: ReferenceScope = "project") => {
       if (scope === "project" && !projectFolder) return;
       const fileName = sourcePath.split(/[\\/]/).filter(Boolean).pop() ?? sourcePath;
+      const referenceCount = countIdeaReferenceLinks(referenceLayout.ideaThreads, sourcePath);
       const confirmed = await new Promise<boolean>((resolve) => {
         setAppDialog({
           type: "confirm",
-          title: "資料を削除",
-          message: `「${fileName}」を資料ライブラリから削除しますか？`,
-          detail:
-            "取り込んだコピーだけを削除します。元ファイルが別の場所にある場合、その元ファイルは削除されません。",
-          confirmLabel: "削除",
+          title: "資料ファイルを削除",
+          message: referenceCount > 0
+            ? `この資料は${referenceCount}個のIdeaスレッドから参照されています。`
+            : `「${fileName}」をこのプロジェクトから削除しますか？`,
+          detail: referenceCount > 0
+            ? "資料ファイルと、すべてのスレッドからの参照を削除します。"
+            : "取り込んだ資料ファイルを削除します。この操作は元に戻せません。",
+          confirmLabel: "削除する",
           danger: true,
           resolve,
         });
@@ -3320,11 +3482,19 @@ export default function App() {
         setReferenceLayout((current) => ({
           ...current,
           cards: current.cards.filter(
-            (card) => referenceCardKey(card) !== deletedKey,
+            (card) => !isReferenceBinderCard(card) || referenceCardKey(card) !== deletedKey,
           ),
           recent: current.recent.filter(
             (file) => referenceFileKey(file) !== deletedKey,
           ),
+          ideaThreads: current.ideaThreads.map((layout) => ({
+            ...layout,
+            items: layout.items.filter(
+              (item) =>
+                item.sourceType !== "reference"
+                || normalizedReferenceKey(item.sourcePath) !== normalizedReferenceKey(sourcePath),
+            ),
+          })),
         }));
         setReferenceCandidates((current) =>
           current.filter((file) => referenceFileKey(file) !== deletedKey),
@@ -3335,113 +3505,136 @@ export default function App() {
         showToast("資料を削除できませんでした");
       }
     },
-    [projectFolder],
+    [projectFolder, referenceLayout.ideaThreads],
   );
 
-  const handleCopyReferenceToScope = useCallback(
-    async (file: ReferenceFileInfo, targetScope: ReferenceScope) => {
-      if (targetScope === "project" && !projectFolder) {
-        showToast("先にフォルダを開いてください");
-        return;
-      }
-      if (file.scope === targetScope) return;
-      if (!isTauriRuntime()) {
-        showToast("資料のコピーはTauri版で利用できます");
-        return;
-      }
+  const moveIdeaReference = useCallback((
+    fromThreadId: string,
+    linkId: string,
+    toThreadId: string,
+    keepOriginal: boolean,
+  ) => {
+    if (fromThreadId === toThreadId) return;
+    setReferenceLayout((current) => {
+      const layouts = reconcileIdeaThreadLayouts(current.ideaThreads, appState.snippets);
+      const source = layouts.find((layout) => layout.threadId === fromThreadId);
+      const target = layouts.find((layout) => layout.threadId === toThreadId);
+      const link = source?.items.find(
+        (item): item is IdeaReferenceLink => item.sourceType === "reference" && item.id === linkId,
+      );
+      if (!source || !target || !link) return current;
+      const alreadyThere = target.items.some(
+        (item) =>
+          item.sourceType === "reference"
+          && normalizedReferenceKey(item.sourcePath) === normalizedReferenceKey(link.sourcePath),
+      );
+      return {
+        ...current,
+        version: 3,
+        ideaThreads: layouts.map((layout) => {
+          if (layout.threadId === fromThreadId && !keepOriginal) {
+            return { ...layout, items: layout.items.filter((item) => ideaThreadItemKey(item) !== `reference:${linkId}`) };
+          }
+          if (layout.threadId === toThreadId && !alreadyThere) {
+            return { ...layout, items: [makeReferenceLink(link.sourcePath), ...layout.items] };
+          }
+          return layout;
+        }),
+      };
+    });
+  }, [appState.snippets]);
 
-      try {
-        const copied = await invoke<ReferenceFileInfo>("copy_reference_to_scope", {
-          rootPath: projectFolder?.path ?? null,
-          sourcePath: file.sourcePath,
-          sourceScope: file.scope,
-          targetScope,
-        });
-        setReferenceCandidates((current) =>
-          mergeReferenceFiles([copied], current).sort((left, right) =>
-            left.sourcePath.localeCompare(right.sourcePath),
-          ),
-        );
-        setReferenceLayout((current) => upsertRecentReference(current, copied));
-        showToast(targetScope === "global" ? "共通資料へコピーしました" : "プロジェクト資料へコピーしました");
-      } catch (error) {
-        setLastError(String(error));
-        showToast("資料をコピーできませんでした");
-      }
-    },
-    [projectFolder],
-  );
-
-  const handleMoveReferenceToScope = useCallback(
-    async (file: ReferenceFileInfo, targetScope: ReferenceScope) => {
-      if (targetScope === "project" && !projectFolder) {
-        showToast("先にフォルダを開いてください");
-        return;
-      }
-      if (file.scope === targetScope) return;
-      if (!file.imported) {
-        showToast("取り込んだ資料だけ移転できます");
-        return;
-      }
-      if (!isTauriRuntime()) {
-        showToast("資料の移転はTauri版で利用できます");
-        return;
-      }
-
+  const removeIdeaReference = useCallback(async (threadId: string, linkId: string) => {
+    const source = referenceLayout.ideaThreads.find((layout) => layout.threadId === threadId);
+    const link = source?.items.find(
+      (item): item is IdeaReferenceLink => item.sourceType === "reference" && item.id === linkId,
+    );
+    if (!link) return;
+    const count = countIdeaReferenceLinks(referenceLayout.ideaThreads, link.sourcePath);
+    if (count <= 1) {
+      const fileExists = referenceCandidates.some(
+        (file) => normalizedReferenceKey(file.sourcePath) === normalizedReferenceKey(link.sourcePath),
+      );
       const confirmed = await new Promise<boolean>((resolve) => {
         setAppDialog({
           type: "confirm",
-          title: "資料を移転",
-          message: `「${file.name}」を${targetScope === "global" ? "共通" : "プロジェクト"}へ移転しますか？`,
-          detail: "移転元の取り込みコピーは削除され、開いている資料カードも移転先へ付け替えます。",
-          confirmLabel: "移転",
-          danger: false,
+          title: fileExists ? "資料を削除" : "見つからない資料の参照を削除",
+          message: fileExists
+            ? "この資料はほかのスレッドから参照されていません。"
+            : "資料ファイルが見つかりません。この参照を削除しますか？",
+          detail: fileExists
+            ? "このプロジェクトからの削除になりますが、よろしいですか？"
+            : undefined,
+          confirmLabel: fileExists ? "削除する" : "参照を削除",
+          danger: true,
           resolve,
         });
       });
-      if (!confirmed) return;
-
+      if (!confirmed || !projectFolder) return;
       try {
-        const moved = await invoke<ReferenceFileInfo>("move_reference_to_scope", {
-          rootPath: projectFolder?.path ?? null,
-          sourcePath: file.sourcePath,
-          sourceScope: file.scope,
-          targetScope,
-        });
-        const oldKey = referenceFileKey(file);
-        setReferenceCandidates((current) =>
-          mergeReferenceFiles([moved], current.filter((item) => referenceFileKey(item) !== oldKey)).sort(
-            (left, right) => left.sourcePath.localeCompare(right.sourcePath),
+        if (fileExists) {
+          await invoke("delete_imported_reference", {
+            rootPath: projectFolder.path,
+            sourcePath: link.sourcePath,
+            scope: "project",
+          });
+        }
+        const key = normalizedReferenceKey(link.sourcePath);
+        setReferenceLayout((current) => ({
+          ...current,
+          cards: current.cards.filter(
+            (card) => !isReferenceBinderCard(card) || normalizedReferenceKey(card.sourcePath) !== key,
           ),
-        );
-        setReferenceLayout((current) => {
-          const withoutOld = {
-            ...current,
-            recent: current.recent.filter((item) => referenceFileKey(item) !== oldKey),
-          };
-          const nextLayout = upsertRecentReference(withoutOld, moved);
-          return {
-            ...nextLayout,
-            cards: nextLayout.cards.map((card) =>
-              referenceCardKey(card) === oldKey
-                ? {
-                    ...card,
-                    scope: moved.scope,
-                    sourcePath: moved.sourcePath,
-                    kind: moved.kind,
-                  }
-                : card,
+          recent: current.recent.filter((file) => normalizedReferenceKey(file.sourcePath) !== key),
+          ideaThreads: current.ideaThreads.map((layout) => ({
+            ...layout,
+            items: layout.items.filter(
+              (item) => item.sourceType !== "reference" || normalizedReferenceKey(item.sourcePath) !== key,
             ),
-          };
-        });
-        showToast("資料を移転しました");
+          })),
+        }));
+        setReferenceCandidates((current) =>
+          current.filter((file) => normalizedReferenceKey(file.sourcePath) !== key),
+        );
+        showToast(fileExists ? "資料を削除しました" : "見つからない資料の参照を削除しました");
       } catch (error) {
         setLastError(String(error));
-        showToast("資料を移転できませんでした");
+        showToast("資料を削除できませんでした");
       }
-    },
-    [projectFolder],
-  );
+      return;
+    }
+    setReferenceLayout((current) => ({
+      ...current,
+      ideaThreads: current.ideaThreads.map((layout) =>
+        layout.threadId === threadId
+          ? { ...layout, items: layout.items.filter((item) => ideaThreadItemKey(item) !== `reference:${linkId}`) }
+          : layout,
+      ),
+    }));
+    showToast("このスレッドから資料を外しました");
+  }, [projectFolder, referenceCandidates, referenceLayout.ideaThreads]);
+
+  const reorderIdeaThreadItem = useCallback((
+    threadId: string,
+    itemKey: string,
+    targetKey: string,
+    position: "before" | "after",
+  ) => {
+    if (itemKey === targetKey) return;
+    setReferenceLayout((current) => ({
+      ...current,
+      ideaThreads: current.ideaThreads.map((layout) => {
+        if (layout.threadId !== threadId) return layout;
+        const moving = layout.items.find((item) => ideaThreadItemKey(item) === itemKey);
+        if (!moving) return layout;
+        const items = layout.items.filter((item) => ideaThreadItemKey(item) !== itemKey);
+        const targetIndex = items.findIndex((item) => ideaThreadItemKey(item) === targetKey);
+        if (targetIndex < 0) return layout;
+        items.splice(position === "after" ? targetIndex + 1 : targetIndex, 0, moving);
+        return { ...layout, items };
+      }),
+    }));
+  }, []);
 
   const returnFocusToEditor = useCallback(() => {
     editorInstanceRef.current?.focus();
@@ -4141,7 +4334,7 @@ export default function App() {
     }
   }, [breadcrumbOverflowItems.length]);
   const sortedReferenceCandidates = useMemo(() => {
-    const candidates = mergeReferenceFiles(referenceLayout.recent, referenceCandidates);
+    const candidates = [...referenceCandidates];
     const recentIndex = new Map(
       referenceLayout.recent.map((file, index) => [referenceFileKey(file), index]),
     );
@@ -4193,7 +4386,6 @@ export default function App() {
       referenceLayoutLoadedRootRef.current = null;
       setReferenceLayout(defaultReferenceLayout);
       setReferenceCandidates([]);
-      setReferenceQuery("");
       return;
     }
 
@@ -4220,13 +4412,14 @@ export default function App() {
           height: rect?.height ?? 800,
         });
         setReferenceLayout(normalizedLayout);
-        setReferenceCandidates(mergeReferenceFiles(normalizedLayout.recent, candidates));
+        setReferenceCandidates(candidates);
         referenceLayoutLoadedRootRef.current = rootPath;
       } catch (error) {
         if (isCancelled) return;
         setReferenceLayout(defaultReferenceLayout);
         setReferenceCandidates([]);
-        referenceLayoutLoadedRootRef.current = rootPath;
+        // A failed load must not authorize the autosave effect to replace the on-disk layout.
+        referenceLayoutLoadedRootRef.current = null;
         setLastError(String(error));
       }
     };
@@ -4263,6 +4456,35 @@ export default function App() {
       }
     };
   }, [isHydrated, projectFolder?.path, referenceLayout]);
+
+  useEffect(() => {
+    const rootPath = projectFolder?.path ?? null;
+    if (!rootPath || referenceLayoutLoadedRootRef.current !== rootPath) return;
+    setReferenceLayout((current) => {
+      const ideaThreads = reconcileIdeaThreadLayouts(
+        current.ideaThreads,
+        snippets,
+        referenceCandidates.filter((file) => file.scope === "project" && file.imported),
+      );
+      if (JSON.stringify(ideaThreads) === JSON.stringify(current.ideaThreads)) return current;
+      return { ...current, version: 3, ideaThreads };
+    });
+  }, [projectFolder?.path, referenceCandidates, snippets]);
+
+  useEffect(() => {
+    const liveIdeas = new Set(
+      snippets.flatMap((thread) =>
+        thread.fragments.map((fragment) => `${thread.id}:${fragment.id}`),
+      ),
+    );
+    setReferenceLayout((current) => {
+      const cards = current.cards.filter(
+        (card) =>
+          !isIdeaBinderCard(card) || liveIdeas.has(`${card.threadId}:${card.fragmentId}`),
+      );
+      return cards.length === current.cards.length ? current : { ...current, cards };
+    });
+  }, [snippets]);
 
   useEffect(() => {
     const rootPath = projectFolder?.path ?? null;
@@ -4393,7 +4615,6 @@ export default function App() {
     referenceLayoutLoadedRootRef.current = null;
     setReferenceLayout(defaultReferenceLayout);
     setReferenceCandidates([]);
-    setReferenceQuery("");
     setFocusedFolderPath(null);
     replaceActiveTab(
       createScratchDocumentTab("", {
@@ -5174,10 +5395,10 @@ export default function App() {
           return;
         }
 
-        const changed = Boolean(
-          knownProgress &&
-            (knownProgress.revision !== progress.revision ||
-              knownProgress.contentHash !== progress.contentHash),
+        const changed = hasWorkspaceFileProgressChanged(
+          state.fileProgress,
+          rootPath,
+          progress.fileProgress,
         ) || knownSnapshots.length !== checkpoints.snapshots.length ||
           knownSnapshots.some((known) => {
             const next = checkpoints.snapshots.find((snapshot) => snapshot.id === known.id);
@@ -5294,20 +5515,24 @@ export default function App() {
   };
 
   const openIdeaCanvasBoard = async (
-    scope: CanvasScope = projectFolder ? "project" : "global",
+    scope: CanvasScope = "project",
     boardId?: string,
     selectNodeId?: string,
   ) => {
-    if (scope === "project" && !projectFolder) {
+    if (scope !== "project") {
+      showToast("共通Canvasは廃止されました");
+      return;
+    }
+    if (!projectFolder) {
       showToast("Project Canvas はプロジェクトを開いている時に利用できます");
       return;
     }
 
     const payload: CanvasWindowPayload = {
       requestId: String(Date.now()),
-      rootPath: scope === "project" ? projectFolder?.path ?? null : null,
-      workspaceName: scope === "project" ? projectFolder?.name ?? "Project" : "Global",
-      scope,
+      rootPath: projectFolder.path,
+      workspaceName: projectFolder.name,
+      scope: "project",
       boardId,
       selectNodeId,
       theme: settings.theme,
@@ -5549,6 +5774,20 @@ export default function App() {
     return normalizeSelectionRange(editor.getSelection(), editor.getValue());
   };
 
+  const closeCommandPalette = (_reason: "dismiss" | "command") => {
+    setIsCommandPaletteOpen(false);
+    commandPaletteSelectionRef.current = null;
+  };
+
+  const restoreFocusAfterCommandPalette = (target: HTMLElement) => {
+    const editor = editorInstanceRef.current;
+    if (editor && target.closest(".pm-root")) {
+      editor.restoreFocus();
+    } else {
+      target.focus({ preventScroll: true });
+    }
+  };
+
   const applyBoldShortcut = (selectionOverride?: EditorSelectionSnapshot) => {
     const editor = editorInstanceRef.current;
     if (!editor) return;
@@ -5695,7 +5934,7 @@ export default function App() {
     if (mod && event.altKey && !event.shiftKey && (key === "b" || key === "B")) {
       event.preventDefault();
       setIsCommandPaletteOpen(false);
-      void openIdeaCanvasBoard(projectFolder ? "project" : "global");
+      void openIdeaCanvasBoard("project");
       return;
     }
 
@@ -5734,14 +5973,12 @@ export default function App() {
     // Ctrl+P：コマンドパレット。印刷ダイアログの既定動作を抑止する。
     if (key === "p" || key === "P") {
       event.preventDefault();
-      setIsCommandPaletteOpen((open) => {
-        if (open) {
-          commandPaletteSelectionRef.current = null;
-          return false;
-        }
+      if (isCommandPaletteOpen) {
+        closeCommandPalette("dismiss");
+      } else {
         commandPaletteSelectionRef.current = getCurrentEditorSelection();
-        return true;
-      });
+        setIsCommandPaletteOpen(true);
+      }
       return;
     }
 
@@ -5900,7 +6137,8 @@ export default function App() {
         id: "idea-board-open",
         label: "Idea Board を開く",
         hint: "Ctrl+Alt+B",
-        run: () => void openIdeaCanvasBoard(projectFolder ? "project" : "global"),
+        disabledReason: projectFolder ? undefined : "プロジェクトを開いてください",
+        run: () => void openIdeaCanvasBoard("project"),
       },
       {
         id: "idea-board-project",
@@ -5908,12 +6146,6 @@ export default function App() {
         hint: "Canvas",
         disabledReason: projectFolder ? undefined : "プロジェクトを開いてください",
         run: () => void openIdeaCanvasBoard("project"),
-      },
-      {
-        id: "idea-board-global",
-        label: "Global Canvas を開く",
-        hint: "Canvas",
-        run: () => void openIdeaCanvasBoard("global"),
       },
       {
         id: "ruby",
@@ -6112,8 +6344,8 @@ export default function App() {
     });
   };
 
-  const submitAppDialog = (event?: FormEvent<HTMLFormElement>) => {
-    event?.preventDefault();
+  const submitAppDialog = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setAppDialog((current) => {
       if (!current) return null;
       if (current.type === "confirm") {
@@ -7011,7 +7243,7 @@ export default function App() {
           return;
         }
         if (restoreOrder && selectedTree) {
-          await restoreSnapshotTreeOrder(projectFolder.path, selectedTree, selectedFolderPathKeys);
+          await restoreSnapshotTreeOrder(projectFolder.path, snapshot.projectTree, selectedFolderPathKeys);
         }
         const restoredByPath = new Map(restoredDocuments.map((document) => [normalizePathForCompare(document.path), document] as const));
         const relocatedTargets = new Map([...revertedRelocations].map(([currentPath, snapshotPath]) => [normalizePathForCompare(currentPath), normalizePathForCompare(snapshotPath)] as const));
@@ -7306,7 +7538,7 @@ export default function App() {
         setAppMode("canvas");
         return;
       }
-      void openIdeaCanvasBoard(projectFolder ? "project" : "global");
+      void openIdeaCanvasBoard("project");
       return;
     }
     void handleOpenLinkedExport();
@@ -9152,7 +9384,7 @@ export default function App() {
   ) => {
     breadcrumbDragEntryRef.current = { folderPath, entryPath };
     setDraggingBreadcrumbEntryPath(entryPath);
-    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.effectAllowed = "copyMove";
     event.dataTransfer.setData(BREADCRUMB_ENTRY_DRAG_MIME, entryPath);
   };
 
@@ -9523,26 +9755,8 @@ export default function App() {
     setIsOutlineMenuOpen(false);
   };
 
-  const clearDropIndicator = () => {
-    setDropIndicatorPos(null);
-  };
-
   const isSnippetDragEvent = (event: DragEvent<HTMLElement>) => {
     return Array.from(event.dataTransfer.types).includes(SNIPPET_DRAG_MIME);
-  };
-
-  const getDraggedFragment = (event: DragEvent<HTMLElement>) => {
-    if (draggingSnippetRef.current) return draggingSnippetRef.current;
-
-    const fragmentId = event.dataTransfer.getData(SNIPPET_DRAG_MIME);
-    if (!fragmentId) return null;
-    for (const thread of snippets) {
-      const fragment = thread.fragments.find((item) => item.id === fragmentId);
-      if (fragment) {
-        return { threadId: thread.id, fragmentId, body: fragment.body };
-      }
-    }
-    return null;
   };
 
   const getEditorView = () => {
@@ -9577,68 +9791,20 @@ export default function App() {
     const thread = snippets.find((item) => item.id === threadId);
     const fragment = thread?.fragments.find((item) => item.id === fragmentId);
     if (!fragment) return;
-    draggingSnippetRef.current = { threadId, fragmentId, body: fragment.body };
     setDraggingId(fragmentId);
-    event.dataTransfer.effectAllowed = "copyMove";
+    event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData(SNIPPET_DRAG_MIME, fragmentId);
-    event.dataTransfer.setData("text/plain", fragment.body);
   };
 
   const handleFragmentDragEnd = () => {
-    draggingSnippetRef.current = null;
     setDraggingId(null);
-    clearDropIndicator();
   };
 
-  const handleEditorDragOver = (event: DragEvent<HTMLDivElement>) => {
-    if (!draggingSnippetRef.current && !isSnippetDragEvent(event)) return;
-
+  const blockIdeaDropOnEditor = (event: DragEvent<HTMLDivElement>) => {
+    if (!isSnippetDragEvent(event)) return;
     event.preventDefault();
     event.stopPropagation();
-    event.dataTransfer.dropEffect = "copy";
-
-    const rect = editorShellRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    const vertical = settings.writingMode.startsWith("vertical");
-    const view = getEditorView();
-    // 実際の挿入位置（キャレット座標）にインジケーターを合わせる。
-    const pos = view?.positionFromPoint(event.clientX, event.clientY) ?? null;
-    const coords = pos !== null ? view?.coordsAtPos(pos) ?? null : null;
-
-    if (vertical) {
-      setDropIndicatorPos((coords ? coords.left : event.clientX) - rect.left);
-    } else {
-      setDropIndicatorPos((coords ? coords.top : event.clientY) - rect.top);
-    }
-  };
-
-  const handleEditorDragLeave = (event: DragEvent<HTMLDivElement>) => {
-    const nextTarget = event.relatedTarget;
-
-    if (!(nextTarget instanceof Node) || !editorShellRef.current?.contains(nextTarget)) {
-      clearDropIndicator();
-    }
-  };
-
-  const handleEditorDrop = (event: DragEvent<HTMLDivElement>) => {
-    const dragged = getDraggedFragment(event);
-    const view = getEditorView();
-
-    if (!dragged || !view) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    const resolvedPos = view.positionFromPoint(event.clientX, event.clientY);
-    clearDropIndicator();
-
-    if (insertParagraph(dragged.body, resolvedPos ?? undefined)) {
-      markFragmentUsed(dragged.threadId, dragged.fragmentId, true);
-      showToast("本文へ挿入しました");
-    }
-    draggingSnippetRef.current = null;
-    setDraggingId(null);
+    event.dataTransfer.dropEffect = "none";
   };
 
   const updateIdeaThreads = (updater: (threads: IdeaThread[]) => IdeaThread[]) => {
@@ -9669,22 +9835,36 @@ export default function App() {
     if (!text) return;
     const dest = snippets.find((thread) => thread.id === destId) ?? snippets[0];
     if (!dest) return;
+    const fragment = makeIdeaFragment(text);
     patchThread(dest.id, (thread) => {
-      const fragment = makeIdeaFragment(text);
       const fragments =
         thread.kind === "inbox"
           ? [fragment, ...thread.fragments]
           : [...thread.fragments, fragment];
       return { ...thread, fragments };
     });
+    setReferenceLayout((current) => ({
+      ...current,
+      ideaThreads: current.ideaThreads.map((layout) =>
+        layout.threadId === dest.id
+          ? {
+              ...layout,
+              items: dest.kind === "inbox"
+                ? [makeIdeaItem(fragment.id), ...layout.items]
+                : [...layout.items, makeIdeaItem(fragment.id)],
+            }
+          : layout,
+      ),
+    }));
     showToast(`「${dest.title}」に追加しました`);
   };
 
   const addFragment = (threadId: string, body: string) => {
     const text = body.trim();
     if (!text) return;
+    const fragment = makeIdeaFragment(text);
+    const destination = snippets.find((thread) => thread.id === threadId);
     patchThread(threadId, (thread) => {
-      const fragment = makeIdeaFragment(text);
       return {
         ...thread,
         fragments:
@@ -9693,6 +9873,19 @@ export default function App() {
             : [...thread.fragments, fragment],
       };
     });
+    setReferenceLayout((current) => ({
+      ...current,
+      ideaThreads: current.ideaThreads.map((layout) =>
+        layout.threadId === threadId
+          ? {
+              ...layout,
+              items: destination?.kind === "inbox"
+                ? [makeIdeaItem(fragment.id), ...layout.items]
+                : [...layout.items, makeIdeaItem(fragment.id)],
+            }
+          : layout,
+      ),
+    }));
   };
 
   const updateFragmentBody = (threadId: string, fragmentId: string, body: string) => {
@@ -9724,6 +9917,59 @@ export default function App() {
     const fragment = thread?.fragments.find((item) => item.id === fragmentId);
     if (!fragment) return;
     markFragmentUsed(threadId, fragmentId, !fragment.used);
+  };
+
+  const openIdeaBinderCard = (threadId: string, fragmentId: string) => {
+    const thread = snippets.find((item) => item.id === threadId);
+    const fragment = thread?.fragments.find((item) => item.id === fragmentId);
+    if (!thread || !fragment) return;
+
+    setReferenceLayout((current) => {
+      const existing = current.cards.find(
+        (card) =>
+          isIdeaBinderCard(card) &&
+          card.threadId === threadId &&
+          card.fragmentId === fragmentId,
+      );
+      if (existing) {
+        return {
+          ...current,
+          cards: current.cards.map((card) =>
+            card.id === existing.id
+              ? {
+                  ...card,
+                  collapsed: false,
+                  zIndex: nextReferenceZIndex(current.cards, card.pinned),
+                }
+              : card,
+          ),
+        };
+      }
+
+      const stageRect = workspaceRef.current?.getBoundingClientRect();
+      const editorRect = editorShellRef.current?.getBoundingClientRect();
+      const index = current.cards.length;
+      const originX = editorRect && stageRect ? editorRect.left - stageRect.left : 0;
+      const originY = editorRect && stageRect ? editorRect.top - stageRect.top : 0;
+      const card = clampReferenceCardToStage(
+        {
+          id: `idea-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+          sourceType: "idea" as const,
+          threadId,
+          fragmentId,
+          x: originX + 88 + index * 28,
+          y: originY + 88 + index * 28,
+          width: 320,
+          height: 300,
+          zIndex: nextReferenceZIndex(current.cards, false),
+          collapsed: false,
+          pinned: false,
+        },
+        stageRect?.width ?? 1200,
+        stageRect?.height ?? 800,
+      );
+      return { ...current, version: 3, cards: [...current.cards, card] };
+    });
   };
 
   const deleteFragment = async (threadId: string, fragmentId: string) => {
@@ -9866,14 +10112,14 @@ export default function App() {
     });
   };
 
-  const createIdeaThread = (): string => {
+  const createIdeaThread = (initialTitle = "新しいスレッド"): string => {
     const id = nextIdeaId("thread");
     const now = Date.now();
     updateIdeaThreads((threads) => {
       const thread: IdeaThread = {
         id,
         kind: "thread",
-        title: "新しいスレッド",
+        title: initialTitle.trim() || "新しいスレッド",
         starred: false,
         createdAt: now,
         updatedAt: now,
@@ -9885,6 +10131,132 @@ export default function App() {
       return next;
     });
     return id;
+  };
+
+  const requestNewIdeaThreadName = async (): Promise<string | null> => {
+    const value = await new Promise<string | null>((resolve) => {
+      setAppDialog({
+        type: "input",
+        title: "新規スレッドに追加",
+        label: "スレッド名",
+        value: "",
+        placeholder: "新しいスレッド名",
+        confirmLabel: "作成",
+        error: "",
+        resolve,
+      });
+    });
+    const title = value?.trim() ?? "";
+    return title || null;
+  };
+
+  const moveFragmentToNewThread = async (fromThreadId: string, fragmentId: string) => {
+    const source = snippets.find((thread) => thread.id === fromThreadId);
+    const fragment = source?.fragments.find((item) => item.id === fragmentId);
+    if (!source || !fragment) return;
+    const title = await requestNewIdeaThreadName();
+    if (!title) return;
+    const now = Date.now();
+    const newThreadId = nextIdeaId("thread");
+    const newThread: IdeaThread = {
+      id: newThreadId,
+      kind: "thread",
+      title,
+      starred: false,
+      createdAt: now,
+      updatedAt: now,
+      fragments: [{ ...fragment, updatedAt: now }],
+    };
+    updateIdeaThreads((threads) => {
+      const withoutFragment = threads.map((thread) =>
+        thread.id === fromThreadId
+          ? {
+              ...thread,
+              fragments: thread.fragments.filter((item) => item.id !== fragmentId),
+              updatedAt: now,
+            }
+          : thread,
+      );
+      const inboxIndex = withoutFragment.findIndex((thread) => thread.kind === "inbox");
+      const next = [...withoutFragment];
+      next.splice(inboxIndex >= 0 ? inboxIndex + 1 : 0, 0, newThread);
+      return next;
+    });
+    setReferenceLayout((current) => {
+      const layouts = reconcileIdeaThreadLayouts(current.ideaThreads, snippets);
+      return {
+        ...current,
+        version: 3,
+        ideaThreads: [
+          ...layouts.map((layout) =>
+            layout.threadId === fromThreadId
+              ? {
+                  ...layout,
+                  items: layout.items.filter(
+                    (item) => item.sourceType !== "idea" || item.fragmentId !== fragmentId,
+                  ),
+                }
+              : layout,
+          ),
+          { threadId: newThreadId, items: [makeIdeaItem(fragmentId)] },
+        ],
+      };
+    });
+    showToast(`新規スレッド「${title}」へ移動しました`);
+  };
+
+  const moveReferenceToNewThread = async (
+    fromThreadId: string,
+    linkId: string,
+    copy: boolean,
+  ) => {
+    const sourceLayout = referenceLayout.ideaThreads.find(
+      (layout) => layout.threadId === fromThreadId,
+    );
+    const sourceLink = sourceLayout?.items.find(
+      (item): item is IdeaReferenceLink => item.sourceType === "reference" && item.id === linkId,
+    );
+    if (!sourceLink) return;
+    const title = await requestNewIdeaThreadName();
+    if (!title) return;
+    const now = Date.now();
+    const newThreadId = nextIdeaId("thread");
+    const newThread: IdeaThread = {
+      id: newThreadId,
+      kind: "thread",
+      title,
+      starred: false,
+      createdAt: now,
+      updatedAt: now,
+      fragments: [],
+    };
+    updateIdeaThreads((threads) => {
+      const inboxIndex = threads.findIndex((thread) => thread.kind === "inbox");
+      const next = [...threads];
+      next.splice(inboxIndex >= 0 ? inboxIndex + 1 : 0, 0, newThread);
+      return next;
+    });
+    setReferenceLayout((current) => {
+      const layouts = reconcileIdeaThreadLayouts(current.ideaThreads, snippets);
+      return {
+        ...current,
+        version: 3,
+        ideaThreads: [
+          ...layouts.map((layout) =>
+            layout.threadId === fromThreadId && !copy
+              ? {
+                  ...layout,
+                  items: layout.items.filter(
+                    (item) => item.sourceType !== "reference" || item.id !== linkId,
+                  ),
+                }
+              : layout,
+          ),
+          { threadId: newThreadId, items: [makeReferenceLink(sourceLink.sourcePath)] },
+        ],
+      };
+    });
+    showToast(`新規スレッド「${title}」へ${copy ? "追加" : "移動"}しました`);
   };
 
   const renameIdeaThread = (threadId: string, title: string) => {
@@ -9970,13 +10342,17 @@ export default function App() {
       return;
     }
 
-    const scope: CanvasScope = projectFolder ? "project" : "global";
-    const rootPath = scope === "project" ? projectFolder?.path ?? null : null;
+    if (!projectFolder) {
+      showToast("先にプロジェクトを開いてください");
+      return;
+    }
+    const scope: CanvasScope = "project";
+    const rootPath = projectFolder.path;
     try {
       const summary = await ensureCanvasBoard(
         scope,
         rootPath,
-        scope === "project" ? `${projectFolder?.name ?? "Project"} Board` : "Global Idea Board",
+        `${projectFolder.name} Board`,
       );
       const board = await loadCanvasBoard(scope, rootPath, summary.id);
       const position = nextCanvasPlacement(board);
@@ -10012,13 +10388,17 @@ export default function App() {
       return;
     }
 
-    const scope: CanvasScope = projectFolder ? "project" : "global";
-    const rootPath = scope === "project" ? projectFolder?.path ?? null : null;
+    if (!projectFolder) {
+      showToast("先にプロジェクトを開いてください");
+      return;
+    }
+    const scope: CanvasScope = "project";
+    const rootPath = projectFolder.path;
     try {
       const summary = await ensureCanvasBoard(
         scope,
         rootPath,
-        scope === "project" ? `${projectFolder?.name ?? "Project"} Board` : "Global Idea Board",
+        `${projectFolder.name} Board`,
       );
       const board = await loadCanvasBoard(scope, rootPath, summary.id);
       const position = nextCanvasPlacement(board);
@@ -11410,8 +11790,8 @@ export default function App() {
                         : ""
                     }`}
                     type="button"
-                    aria-label="資料"
-                    title="資料"
+                    aria-label="開いているカード"
+                    title="開いているカード"
                     aria-pressed={leftSidebarView === "reference" && !isLeftSidebarCollapsed}
                     onClick={() => {
                       setIsLeftSidebarCollapsed(false);
@@ -11446,10 +11826,10 @@ export default function App() {
                 {leftSidebarView === "reference" ? (
                   <aside
                     className="workspaceSidebar referenceWorkspaceSidebar"
-                    aria-label="資料"
+                    aria-label="開いているカード"
                   >
                     <div className="sidebarHeader">
-                      <span className="sidebarHeaderLabel">資料</span>
+                      <span className="sidebarHeaderLabel">開いているカード</span>
                       <div className="sidebarHeaderActions">
                         <button
                           className="sidebarIconButton"
@@ -11463,34 +11843,14 @@ export default function App() {
                       </div>
                     </div>
                     <div className="leftReferenceSidebarBody">
-                      <ReferencePane
-                        rootPath={projectFolder?.path ?? null}
+                      <OpenCardsPane
                         cards={referenceLayout.cards}
+                        threads={snippets}
                         candidates={sortedReferenceCandidates}
-                        query={referenceQuery}
-                        onQueryChange={setReferenceQuery}
-                        onAddReference={(scope) => void handleAddReference(scope)}
-                        onCreateReference={(scope) => void handleCreateReference(scope)}
-                        onOpenReference={(targetFile) => {
-                          const file =
-                            sortedReferenceCandidates.find(
-                              (item) =>
-                                referenceFileKey(item) === referenceFileKey(targetFile),
-                            ) ?? targetFile;
-                          openReferenceCard(file.sourcePath, file);
-                        }}
-                        onFocusReference={focusReferenceCard}
-                        onCloseReference={closeReferenceCard}
-                        onPinReference={pinReferenceCard}
-                        onCopyReference={(file, targetScope) =>
-                          void handleCopyReferenceToScope(file, targetScope)
-                        }
-                        onMoveReference={(file, targetScope) =>
-                          void handleMoveReferenceToScope(file, targetScope)
-                        }
-                        onDeleteImportedReference={(file) =>
-                          void handleDeleteImportedReference(file.sourcePath, file.scope)
-                        }
+                        onFocusCard={focusReferenceCard}
+                        onCloseCard={closeReferenceCard}
+                        onPinCard={pinReferenceCard}
+                        onCollapseCard={collapseReferenceCard}
                       />
                     </div>
                   </aside>
@@ -11611,9 +11971,8 @@ export default function App() {
                   ref={editorShellRef}
                   className="editor"
                   onContextMenu={handleEditorContextMenu}
-                  onDragOverCapture={handleEditorDragOver}
-                  onDragLeave={handleEditorDragLeave}
-                  onDropCapture={handleEditorDrop}
+                  onDragOverCapture={blockIdeaDropOnEditor}
+                  onDropCapture={blockIdeaDropOnEditor}
                 >
                   <div className="editorContent">
                     {workspaceAlert && (
@@ -11804,20 +12163,6 @@ export default function App() {
                       </>
                     )}
                   </div>
-                  <div
-                    className={`dropIndicator ${
-                      settings.writingMode.startsWith("vertical")
-                        ? "verticalDropIndicator"
-                        : "horizontalDropIndicator"
-                    } ${dropIndicatorPos === null ? "" : "showDropIndicator"}`}
-                    style={
-                      dropIndicatorPos === null
-                        ? undefined
-                        : settings.writingMode.startsWith("vertical")
-                          ? { left: dropIndicatorPos }
-                          : { top: dropIndicatorPos }
-                    }
-                  />
                   {editorContextMenu && (
                     <div
                       ref={editorContextMenuRef}
@@ -12022,9 +12367,9 @@ export default function App() {
                       className={`rightTab ${rightSidebarTab === "idea" ? "activeRightTab" : ""}`}
                       type="button"
                       role="tab"
-                      aria-label="Idea"
+                      aria-label="バインダー"
                       aria-selected={rightSidebarTab === "idea"}
-                      title="Idea"
+                      title="バインダー"
                       onClick={() => setRightSidebarTab("idea")}
                     >
                       <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
@@ -12103,13 +12448,13 @@ export default function App() {
                     />
                   )}
                   {rightSidebarTab === "idea" && (
-                    <div className="plotPaneHeaderActions" aria-label="Idea 操作">
+                    <div className="plotPaneHeaderActions" aria-label="バインダー操作">
                       <button
                         className="sidebarIconButton plotHeaderActionButton"
                         type="button"
                         aria-label="Idea Board を開く"
                         title="Idea Board を開く"
-                        onClick={() => void openIdeaCanvasBoard(projectFolder ? "project" : "global")}
+                        onClick={() => void openIdeaCanvasBoard("project")}
                       >
                         <AppIcon name="canvas" />
                       </button>
@@ -12152,7 +12497,7 @@ export default function App() {
                     aria-hidden="true"
                   />
                   {hasOpenedDraft && <div className="draftPaneHost" hidden={rightSidebarTab !== "draft"}>
-                    <IntermediateDraftPane key={projectFolder?.path ?? "global"} rootPath={projectFolder?.path ?? null}
+                    <IntermediateDraftPane key={projectFolder?.path ?? "no-project"} rootPath={projectFolder?.path ?? null}
                       liveCanvas={appMode === "canvas" ? draftCanvasContext : null}
                       onOpenCanvas={(scope, boardId) => void openIdeaCanvasBoard(scope, boardId)}
                       onSelectNode={(id) => setDraftSelectRequest({ id, nonce: Date.now() })} />
@@ -12218,8 +12563,11 @@ export default function App() {
                       onManagerOpenChange={setIsPlotManagerOpen}
                     />
                   ) : (
-                    <IdeaPane
+                    <BinderPane
+                      rootPath={projectFolder?.path ?? null}
                       threads={snippets}
+                      threadLayouts={referenceLayout.ideaThreads}
+                      candidates={sortedReferenceCandidates}
                       draggingId={draggingId}
                       focusRequest={ideaFocusRequest}
                       onFocusRequestConsumed={(nonce) =>
@@ -12228,6 +12576,7 @@ export default function App() {
                         )
                       }
                       onCapture={captureFragment}
+                      onOpenIdea={openIdeaBinderCard}
                       onCreateThread={createIdeaThread}
                       onRenameThread={renameIdeaThread}
                       onToggleStar={toggleThreadStar}
@@ -12236,9 +12585,29 @@ export default function App() {
                       onUpdateFragment={updateFragmentBody}
                       onDeleteFragment={deleteFragment}
                       onMoveFragment={moveFragment}
-                      onReorderFragment={reorderFragment}
+                      onMoveFragmentToNewThread={(threadId, fragmentId) =>
+                        void moveFragmentToNewThread(threadId, fragmentId)
+                      }
                       onFragmentDragStart={handleFragmentDragStart}
                       onFragmentDragEnd={handleFragmentDragEnd}
+                      onAddReference={(threadId) => void handleAddReference("project", threadId)}
+                      onCreateReference={(threadId) => void handleCreateReference("project", threadId)}
+                      onOpenReference={(targetFile) => {
+                        const file =
+                          sortedReferenceCandidates.find(
+                            (item) => referenceFileKey(item) === referenceFileKey(targetFile),
+                          ) ?? targetFile;
+                        openReferenceCard(file.sourcePath, file, { switchToReferenceTab: false });
+                      }}
+                      onMoveReference={moveIdeaReference}
+                      onMoveReferenceToNewThread={(threadId, linkId, copy) =>
+                        void moveReferenceToNewThread(threadId, linkId, copy)
+                      }
+                      onRemoveReference={(threadId, linkId) => void removeIdeaReference(threadId, linkId)}
+                      onDeleteReferenceFile={(file) =>
+                        void handleDeleteImportedReference(file.sourcePath, file.scope)
+                      }
+                      onReorderItem={reorderIdeaThreadItem}
                     />
                   )}
                 </div>
@@ -12270,6 +12639,8 @@ export default function App() {
             onLayoutChange={patchReferenceLayout}
             onReturnFocusToEditor={returnFocusToEditor}
             onTextSaved={handleReferenceTextSaved}
+            ideaThreads={snippets}
+            onUpdateIdeaFragment={updateFragmentBody}
           />
 
           {appMode === "export" && exportEmbedPayload && (
@@ -12433,7 +12804,11 @@ export default function App() {
               plugins={loadedPlugins}
               onClose={() => setIsPluginManagerOpen(false)}
               onInstall={handleInstallPlugin}
-              onReload={reloadInstalledPlugins}
+              onReload={async () => {
+                if (!(await reloadInstalledPlugins())) {
+                  showToast("プラグインの再読み込みでエラーが発生しました");
+                }
+              }}
               onUninstall={handleUninstallPlugin}
             />
           )}
@@ -12452,10 +12827,8 @@ export default function App() {
           {isCommandPaletteOpen && (
             <CommandPalette
               commands={buildPaletteCommands()}
-              onClose={() => {
-                setIsCommandPaletteOpen(false);
-                commandPaletteSelectionRef.current = null;
-              }}
+              onClose={closeCommandPalette}
+              restoreFocus={restoreFocusAfterCommandPalette}
             />
           )}
           {isQuickIdeaModalOpen && (

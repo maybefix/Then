@@ -107,6 +107,20 @@ struct ReferenceBinary {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReferenceImportFailure {
+    path: String,
+    message: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReferenceImportBatchResult {
+    files: Vec<ReferenceFileInfo>,
+    failures: Vec<ReferenceImportFailure>,
+}
+
+#[derive(Serialize)]
 struct ExportResult {
     path: String,
     name: String,
@@ -373,10 +387,18 @@ struct PlotCardConfig {
 #[serde(rename_all = "camelCase")]
 struct ReferenceCardConfig {
     id: String,
+    #[serde(default = "default_binder_source_type")]
+    source_type: String,
     #[serde(default = "default_reference_scope")]
     scope: String,
+    #[serde(default)]
     source_path: String,
+    #[serde(default)]
     kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    thread_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    fragment_id: Option<String>,
     x: f64,
     y: f64,
     width: f64,
@@ -395,7 +417,11 @@ struct ReferenceCardConfig {
 }
 
 fn default_reference_layout_version() -> i64 {
-    1
+    3
+}
+
+fn default_binder_source_type() -> String {
+    "reference".to_string()
 }
 
 fn default_reference_layout_name() -> String {
@@ -416,6 +442,16 @@ struct ReferenceLayoutConfig {
     cards: Vec<ReferenceCardConfig>,
     #[serde(default)]
     recent: Vec<ReferenceFileInfo>,
+    #[serde(default, rename = "ideaThreads")]
+    idea_threads: Vec<IdeaThreadLayoutConfig>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct IdeaThreadLayoutConfig {
+    thread_id: String,
+    #[serde(default)]
+    items: Vec<serde_json::Value>,
 }
 
 #[derive(Serialize)]
@@ -499,6 +535,7 @@ pub fn run() {
         .manage(CanvasWindowState::default())
         .manage(ViewerExportState::default())
         .setup(|app| {
+            purge_deprecated_global_content(app.handle()).map_err(std::io::Error::other)?;
             if let Some(main_window) = app.get_webview_window("main") {
                 let _ = restore_main_window_state(app.handle(), &main_window);
                 disable_webview_native_ui(&main_window);
@@ -578,11 +615,9 @@ pub fn run() {
             import_proofread_dictionary_dialog,
             load_reference_layout,
             save_reference_layout,
-            pick_reference_file,
+            pick_reference_files,
             create_reference_text_file,
             list_reference_candidates,
-            copy_reference_to_scope,
-            move_reference_to_scope,
             delete_imported_reference,
             read_reference_text,
             save_reference_text,
@@ -3049,16 +3084,22 @@ fn load_reference_layout(root_path: String) -> Result<ReferenceLayoutConfig, Str
 
     let content = std::fs::read_to_string(&path)
         .map_err(|error| format!("failed to read reference layout: {error}"))?;
-    serde_json::from_str(&content).or_else(|_| Ok(default_reference_layout()))
+    let mut layout: ReferenceLayoutConfig = serde_json::from_str(&content)
+        .map_err(|error| format!("failed to parse reference layout: {error}"))?;
+    if purge_global_reference_layout(&mut layout) {
+        save_reference_layout_file(&root, &layout)?;
+    }
+    Ok(layout)
 }
 
 #[tauri::command]
-fn save_reference_layout(root_path: String, layout: ReferenceLayoutConfig) -> Result<(), String> {
+fn save_reference_layout(root_path: String, mut layout: ReferenceLayoutConfig) -> Result<(), String> {
     let root = PathBuf::from(root_path);
     if !root.is_dir() {
         return Err("project root does not exist".to_string());
     }
 
+    purge_global_reference_layout(&mut layout);
     save_reference_layout_file(&root, &layout)
 }
 
@@ -3145,7 +3186,12 @@ fn load_canvas_board(
 
     let content = std::fs::read_to_string(&path)
         .map_err(|error| format!("failed to read canvas board: {error}"))?;
-    serde_json::from_str(&content).map_err(|error| format!("failed to parse canvas board: {error}"))
+    let mut board: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|error| format!("failed to parse canvas board: {error}"))?;
+    if purge_global_reference_nodes(&mut board) {
+        write_canvas_board_file(&path, &board)?;
+    }
+    Ok(board)
 }
 
 #[tauri::command]
@@ -3160,6 +3206,7 @@ fn save_canvas_board(
     std::fs::create_dir_all(&dir)
         .map_err(|error| format!("failed to create canvas board directory: {error}"))?;
     let path = canvas_board_path(&dir, &board_id)?;
+    purge_global_reference_nodes(&mut board);
     stamp_canvas_board(&mut board, &scope)?;
     write_canvas_board_file(&path, &board)
 }
@@ -3320,33 +3367,50 @@ fn restore_canvas_board(
 }
 
 #[tauri::command]
-fn pick_reference_file(
+fn pick_reference_files(
     app: tauri::AppHandle,
     root_path: Option<String>,
     scope: Option<String>,
-) -> Result<Option<ReferenceFileInfo>, String> {
+) -> Result<ReferenceImportBatchResult, String> {
     let scope = normalize_reference_scope(scope.as_deref())?;
     let root = reference_scope_root(&app, &scope, root_path.as_deref())?;
 
-    let Some(path) = app
+    let Some(paths) = app
         .dialog()
         .file()
         .add_filter(
             "Reference",
             &["txt", "md", "png", "jpg", "jpeg", "webp", "pdf"],
         )
-        .blocking_pick_file()
+        .blocking_pick_files()
     else {
-        return Ok(None);
+        return Ok(ReferenceImportBatchResult {
+            files: Vec::new(),
+            failures: Vec::new(),
+        });
     };
 
-    let path = dialog_path_to_path_buf(path)?;
-    if !is_supported_reference_extension(&path) {
-        return Err("unsupported reference file type".to_string());
+    let mut files = Vec::new();
+    let mut failures = Vec::new();
+    for selected in paths {
+        let display_path = selected.to_string();
+        let result = dialog_path_to_path_buf(selected).and_then(|path| {
+            if !is_supported_reference_extension(&path) {
+                return Err("unsupported reference file type".to_string());
+            }
+            let imported = import_reference_file(&app, &scope, &root, &path)?;
+            reference_file_info(&root, &imported, &scope)
+        });
+        match result {
+            Ok(file) => files.push(file),
+            Err(message) => failures.push(ReferenceImportFailure {
+                path: display_path,
+                message,
+            }),
+        }
     }
 
-    let imported = import_reference_file(&app, &scope, &root, &path)?;
-    reference_file_info(&root, &imported, &scope).map(Some)
+    Ok(ReferenceImportBatchResult { files, failures })
 }
 
 #[tauri::command]
@@ -3378,10 +3442,9 @@ fn list_reference_candidates(
     let scope = normalize_reference_scope_filter(scope.as_deref())?;
     let mut files = Vec::new();
 
-    if scope == "project" || scope == "all" {
+    if scope == "project" {
         if let Some(root_path) = root_path.as_deref() {
             let root = reference_scope_root(&app, "project", Some(root_path))?;
-            collect_reference_candidates(&root, &root, "project", &mut files)?;
             let imports_dir = reference_imports_dir(&root);
             if imports_dir.is_dir() {
                 collect_reference_candidates(&root, &imports_dir, "project", &mut files)?;
@@ -3391,56 +3454,8 @@ fn list_reference_candidates(
         }
     }
 
-    if scope == "global" || scope == "all" {
-        let root = reference_scope_root(&app, "global", None)?;
-        std::fs::create_dir_all(&root)
-            .map_err(|error| format!("failed to create global reference directory: {error}"))?;
-        collect_reference_candidates(&root, &root, "global", &mut files)?;
-    }
-
     files.sort_by_key(|file| file.source_path.to_lowercase());
     Ok(files)
-}
-
-#[tauri::command]
-fn copy_reference_to_scope(
-    app: tauri::AppHandle,
-    root_path: Option<String>,
-    source_path: String,
-    source_scope: Option<String>,
-    target_scope: String,
-) -> Result<ReferenceFileInfo, String> {
-    let source_scope = normalize_reference_scope(source_scope.as_deref())?;
-    let target_scope = normalize_reference_scope(Some(&target_scope))?;
-    let source = resolve_reference_source_path(&app, root_path.as_deref(), &source_scope, &source_path)?;
-    let target_root = reference_scope_root(&app, &target_scope, root_path.as_deref())?;
-    if source_scope == target_scope && source.starts_with(&target_root) {
-        return reference_file_info(&target_root, &source, &target_scope);
-    }
-    let copied = import_reference_file(&app, &target_scope, &target_root, &source)?;
-    reference_file_info(&target_root, &copied, &target_scope)
-}
-
-#[tauri::command]
-fn move_reference_to_scope(
-    app: tauri::AppHandle,
-    root_path: Option<String>,
-    source_path: String,
-    source_scope: Option<String>,
-    target_scope: String,
-) -> Result<ReferenceFileInfo, String> {
-    let source_scope = normalize_reference_scope(source_scope.as_deref())?;
-    let copied = copy_reference_to_scope(
-        app.clone(),
-        root_path.clone(),
-        source_path.clone(),
-        Some(source_scope.clone()),
-        target_scope,
-    )?;
-    if copied.scope != source_scope {
-        delete_imported_reference(app, root_path, source_path, Some(source_scope))?;
-    }
-    Ok(copied)
 }
 
 #[tauri::command]
@@ -3721,18 +3736,29 @@ fn reference_imports_dir(root: &Path) -> PathBuf {
     root.join(".then").join("references").join("imports")
 }
 
-fn global_reference_imports_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let dir = app
+fn purge_deprecated_global_content_at(app_data_dir: &Path) -> Result<(), String> {
+    for path in [app_data_dir.join("references"), app_data_dir.join("boards")] {
+        if path.exists() {
+            std::fs::remove_dir_all(&path).map_err(|error| {
+                format!("failed to purge deprecated global content at {}: {error}", path.display())
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn purge_deprecated_global_content(app: &tauri::AppHandle) -> Result<(), String> {
+    let app_data_dir = app
         .path()
         .app_data_dir()
         .map_err(|error| format!("failed to resolve app data directory: {error}"))?;
-    Ok(dir.join("references").join("imports"))
+    purge_deprecated_global_content_at(&app_data_dir)
 }
 
 fn normalize_reference_scope(scope: Option<&str>) -> Result<String, String> {
     match scope.unwrap_or("project") {
         "project" => Ok("project".to_string()),
-        "global" => Ok("global".to_string()),
+        "global" => Err("global references are no longer supported".to_string()),
         _ => Err("unknown reference scope".to_string()),
     }
 }
@@ -3740,14 +3766,13 @@ fn normalize_reference_scope(scope: Option<&str>) -> Result<String, String> {
 fn normalize_reference_scope_filter(scope: Option<&str>) -> Result<String, String> {
     match scope.unwrap_or("project") {
         "project" => Ok("project".to_string()),
-        "global" => Ok("global".to_string()),
-        "all" => Ok("all".to_string()),
+        "all" | "global" => Err("global references are no longer supported".to_string()),
         _ => Err("unknown reference scope".to_string()),
     }
 }
 
 fn reference_scope_root(
-    app: &tauri::AppHandle,
+    _app: &tauri::AppHandle,
     scope: &str,
     root_path: Option<&str>,
 ) -> Result<PathBuf, String> {
@@ -3762,30 +3787,39 @@ fn reference_scope_root(
             root.canonicalize()
                 .map_err(|error| format!("failed to resolve project root: {error}"))
         }
-        "global" => Ok(global_reference_imports_dir(app)?),
+        "global" => Err("global references are no longer supported".to_string()),
         _ => Err("unknown reference scope".to_string()),
     }
 }
 
 fn reference_imports_dir_for_scope(
-    app: &tauri::AppHandle,
+    _app: &tauri::AppHandle,
     scope: &str,
     root: &Path,
 ) -> Result<PathBuf, String> {
     match scope {
         "project" => Ok(reference_imports_dir(root)),
-        "global" => global_reference_imports_dir(app),
+        "global" => Err("global references are no longer supported".to_string()),
         _ => Err("unknown reference scope".to_string()),
     }
 }
 
 fn default_reference_layout() -> ReferenceLayoutConfig {
     ReferenceLayoutConfig {
-        version: 1,
+        version: 3,
         name: "default".to_string(),
         cards: Vec::new(),
         recent: Vec::new(),
+        idea_threads: Vec::new(),
     }
+}
+
+fn purge_global_reference_layout(layout: &mut ReferenceLayoutConfig) -> bool {
+    let card_count = layout.cards.len();
+    let recent_count = layout.recent.len();
+    layout.cards.retain(|card| card.scope != "global");
+    layout.recent.retain(|file| file.scope != "global");
+    layout.cards.len() != card_count || layout.recent.len() != recent_count
 }
 
 fn save_reference_layout_file(root: &Path, layout: &ReferenceLayoutConfig) -> Result<(), String> {
@@ -3820,7 +3854,7 @@ fn save_reference_layout_file(root: &Path, layout: &ReferenceLayoutConfig) -> Re
 }
 
 fn canvas_boards_dir(
-    app: &tauri::AppHandle,
+    _app: &tauri::AppHandle,
     scope: &str,
     root_path: Option<String>,
 ) -> Result<PathBuf, String> {
@@ -3834,13 +3868,7 @@ fn canvas_boards_dir(
             }
             Ok(project_canvas_boards_dir(&root))
         }
-        "global" => {
-            let dir = app
-                .path()
-                .app_data_dir()
-                .map_err(|error| format!("failed to resolve app data directory: {error}"))?;
-            Ok(dir.join("boards"))
-        }
+        "global" => Err("global canvas boards are no longer supported".to_string()),
         _ => Err("unknown canvas scope".to_string()),
     }
 }
@@ -4086,6 +4114,57 @@ fn write_canvas_board_file(path: &Path, board: &serde_json::Value) -> Result<(),
     std::fs::write(path, content).map_err(|error| format!("failed to write canvas board: {error}"))
 }
 
+fn purge_global_reference_nodes(board: &mut serde_json::Value) -> bool {
+    let Some(object) = board.as_object_mut() else {
+        return false;
+    };
+    let Some(nodes) = object
+        .get_mut("nodes")
+        .and_then(serde_json::Value::as_array_mut)
+    else {
+        return false;
+    };
+
+    let removed_ids = nodes
+        .iter()
+        .filter(|node| {
+            node.get("type").and_then(serde_json::Value::as_str) == Some("reference")
+                && node.get("scope").and_then(serde_json::Value::as_str) == Some("global")
+        })
+        .filter_map(|node| node.get("id").and_then(serde_json::Value::as_str))
+        .map(str::to_string)
+        .collect::<std::collections::BTreeSet<_>>();
+    if removed_ids.is_empty() {
+        return false;
+    }
+
+    nodes.retain(|node| {
+        node.get("id")
+            .and_then(serde_json::Value::as_str)
+            .map(|id| !removed_ids.contains(id))
+            .unwrap_or(true)
+    });
+    if let Some(edges) = object
+        .get_mut("edges")
+        .and_then(serde_json::Value::as_array_mut)
+    {
+        edges.retain(|edge| {
+            let from_removed = edge
+                .get("fromNode")
+                .and_then(serde_json::Value::as_str)
+                .map(|id| removed_ids.contains(id))
+                .unwrap_or(false);
+            let to_removed = edge
+                .get("toNode")
+                .and_then(serde_json::Value::as_str)
+                .map(|id| removed_ids.contains(id))
+                .unwrap_or(false);
+            !from_removed && !to_removed
+        });
+    }
+    true
+}
+
 fn collect_reference_candidates(
     root: &Path,
     folder: &Path,
@@ -4153,13 +4232,15 @@ fn import_reference_file(
     } else {
         root.to_path_buf()
     };
-    if source.starts_with(&root) {
-        return Ok(source);
-    }
-
     let imports_dir = reference_imports_dir_for_scope(app, scope, &root)?;
     std::fs::create_dir_all(&imports_dir)
         .map_err(|error| format!("failed to create reference import directory: {error}"))?;
+    let resolved_imports_dir = imports_dir
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve reference import directory: {error}"))?;
+    if source.starts_with(&resolved_imports_dir) {
+        return Ok(source);
+    }
 
     let file_name = source
         .file_name()
@@ -4765,7 +4846,12 @@ fn wide_null_terminated_to_string(value: &[u16]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{content_hash, read_text_document, stable_file_id};
+    use super::{
+        content_hash, load_reference_layout, purge_deprecated_global_content_at,
+        purge_global_reference_layout, purge_global_reference_nodes, read_text_document,
+        reference_layout_path, stable_file_id, ReferenceCardConfig, ReferenceFileInfo,
+        ReferenceLayoutConfig,
+    };
 
     #[test]
     fn sha256_content_hash_is_stable() {
@@ -4773,6 +4859,121 @@ mod tests {
             content_hash(b"abc"),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
+    }
+
+    #[test]
+    fn deprecated_global_reference_and_canvas_directories_are_deleted() {
+        let unique = format!(
+            "then-global-purge-test-{}-{}",
+            std::process::id(),
+            super::now_millis()
+        );
+        let test_dir = std::env::temp_dir().join(unique);
+        let references = test_dir.join("references").join("imports");
+        let boards = test_dir.join("boards").join(".trash");
+        std::fs::create_dir_all(&references).expect("create legacy reference directory");
+        std::fs::create_dir_all(&boards).expect("create legacy canvas directory");
+        std::fs::write(references.join("legacy.pdf"), b"legacy")
+            .expect("write legacy reference");
+        std::fs::write(boards.join("legacy.canvas"), b"{}")
+            .expect("write legacy canvas");
+        std::fs::write(test_dir.join("app-state.json"), b"{}")
+            .expect("write unrelated app state");
+
+        purge_deprecated_global_content_at(&test_dir).expect("purge deprecated global content");
+
+        assert!(!test_dir.join("references").exists());
+        assert!(!test_dir.join("boards").exists());
+        assert!(test_dir.join("app-state.json").is_file());
+        std::fs::remove_dir_all(&test_dir).expect("remove test directory");
+    }
+
+    #[test]
+    fn invalid_reference_layout_is_reported_without_replacing_it() {
+        let unique = format!(
+            "then-invalid-reference-layout-{}-{}",
+            std::process::id(),
+            super::now_millis()
+        );
+        let test_dir = std::env::temp_dir().join(unique);
+        let path = reference_layout_path(&test_dir);
+        std::fs::create_dir_all(path.parent().unwrap()).expect("create layout directory");
+        let invalid_content = b"{invalid json";
+        std::fs::write(&path, invalid_content).expect("write invalid layout");
+
+        let result = load_reference_layout(test_dir.to_string_lossy().into_owned());
+
+        assert!(result.is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), invalid_content);
+        std::fs::remove_dir_all(&test_dir).expect("remove test directory");
+    }
+
+    #[test]
+    fn global_reference_nodes_and_connected_edges_are_purged_from_project_canvas() {
+        let mut board = serde_json::json!({
+            "nodes": [
+                { "id": "idea", "type": "text", "text": "keep" },
+                { "id": "legacy", "type": "reference", "scope": "global" },
+                { "id": "project", "type": "reference", "scope": "project" }
+            ],
+            "edges": [
+                { "id": "remove", "fromNode": "idea", "toNode": "legacy" },
+                { "id": "keep", "fromNode": "idea", "toNode": "project" }
+            ]
+        });
+
+        assert!(purge_global_reference_nodes(&mut board));
+        let nodes = board["nodes"].as_array().expect("nodes array");
+        let edges = board["edges"].as_array().expect("edges array");
+        assert_eq!(nodes.len(), 2);
+        assert!(nodes.iter().all(|node| node["id"] != "legacy"));
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0]["id"], "keep");
+    }
+
+    #[test]
+    fn global_entries_are_purged_from_project_reference_layout() {
+        let card = |id: &str, scope: &str| ReferenceCardConfig {
+            id: id.to_string(),
+            source_type: "reference".to_string(),
+            scope: scope.to_string(),
+            source_path: format!("{id}.pdf"),
+            kind: "pdf".to_string(),
+            thread_id: None,
+            fragment_id: None,
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 100.0,
+            z_index: 1,
+            collapsed: false,
+            pinned: false,
+            scroll_top: None,
+            zoom: None,
+            page: None,
+            editing: None,
+        };
+        let file = |scope: &str| ReferenceFileInfo {
+            source_path: format!("{scope}.pdf"),
+            name: format!("{scope}.pdf"),
+            kind: "pdf".to_string(),
+            size: 1,
+            imported: true,
+            scope: scope.to_string(),
+        };
+        let mut layout = ReferenceLayoutConfig {
+            version: 2,
+            name: "default".to_string(),
+            cards: vec![card("global", "global"), card("project", "project")],
+            recent: vec![file("global"), file("project")],
+            idea_threads: Vec::new(),
+        };
+
+        assert!(purge_global_reference_layout(&mut layout));
+        assert_eq!(layout.cards.len(), 1);
+        assert_eq!(layout.cards[0].scope, "project");
+        assert_eq!(layout.recent.len(), 1);
+        assert_eq!(layout.recent[0].scope, "project");
     }
 
     #[cfg(windows)]

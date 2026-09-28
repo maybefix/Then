@@ -433,11 +433,14 @@ function normalizeEdge(value: unknown, nodeIds: Set<string>): CanvasEdge | null 
 export function normalizeCanvasDocument(
   value: unknown,
   fallbackName = "Idea Board",
-  fallbackScope: CanvasScope = "project",
+  _fallbackScope: CanvasScope = "project",
 ): JsonCanvasDocument {
   const source = value && typeof value === "object" ? (value as Partial<JsonCanvasDocument>) : {};
   const nodes = Array.isArray(source.nodes)
-    ? source.nodes.map(normalizeNode).filter((node): node is CanvasNode => Boolean(node))
+    ? source.nodes
+        .map(normalizeNode)
+        .filter((node): node is CanvasNode => Boolean(node))
+        .filter((node) => node.type !== "reference" || node.scope !== "global")
     : [];
   const textNodes = new Map(
     nodes
@@ -476,7 +479,7 @@ export function normalizeCanvasDocument(
         typeof then?.name === "string" && then.name.trim()
           ? then.name
           : fallbackName,
-      scope: then?.scope === "global" || then?.scope === "project" ? then.scope : fallbackScope,
+      scope: "project",
       createdAt: isFiniteNumber(then?.createdAt) ? then.createdAt : now,
       updatedAt: isFiniteNumber(then?.updatedAt) ? then.updatedAt : now,
     },

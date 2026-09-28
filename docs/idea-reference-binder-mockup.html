@@ -1,0 +1,147 @@
+<div id="then-binder-mock">
+  <style>
+    #then-binder-mock { color-scheme:dark; --root:#20262a; --chrome:#22292e; --side:#2d3439; --panel:#171b1f; --editor:#20262a; --raised:#30373d; --border:#414a50; --muted:#a4afb6; --text:#e7e9e9; --gold:#d3aa69; --gold-soft:#41382c; --blue:#80b4cf; --blue-soft:#283a45; font-family:system-ui,"Yu Gothic UI",sans-serif; font-size:13px; color:var(--text); }
+    #then-binder-mock * { box-sizing:border-box; }
+    #then-binder-mock button, #then-binder-mock input, #then-binder-mock textarea, #then-binder-mock select { font:inherit; }
+    #then-binder-mock button { color:inherit; }
+    #then-binder-mock .window { position:relative; width:100%; max-width:1024px; min-width:900px; height:676px; overflow:hidden; border:1px solid var(--border); border-radius:7px; background:var(--root); }
+    #then-binder-mock .topbar { height:40px; display:flex; align-items:center; gap:11px; padding:0 12px; border-bottom:1px solid var(--border); background:var(--chrome); font-size:12px; }
+    #then-binder-mock .topbar .brand { font-weight:600; letter-spacing:.04em; }
+    #then-binder-mock .topbar .crumb { color:var(--muted); }
+    #then-binder-mock .topbar .spacer { flex:1; }
+    #then-binder-mock .top-icon { border:0; background:transparent; padding:5px 7px; color:var(--muted); }
+    #then-binder-mock .tabs { height:36px; display:flex; border-bottom:1px solid var(--border); background:var(--chrome); }
+    #then-binder-mock .tab { width:230px; border:0; border-right:1px solid var(--border); padding:0 13px; display:flex; align-items:center; gap:9px; background:transparent; color:var(--muted); text-align:left; }
+    #then-binder-mock .tab.active { background:var(--root); color:var(--text); box-shadow:inset 0 -2px 0 var(--text); }
+    #then-binder-mock .work { position:relative; height:calc(100% - 76px); display:grid; grid-template-columns:38px 190px minmax(0,1fr) 286px; grid-template-rows:minmax(0,1fr); }
+    #then-binder-mock .activity { display:flex; flex-direction:column; gap:4px; align-items:center; padding-top:8px; border-right:1px solid var(--border); background:var(--chrome); }
+    #then-binder-mock .activity button { width:31px; height:31px; display:grid; place-items:center; border:0; border-radius:5px; background:transparent; color:var(--muted); font-size:18px; }
+    #then-binder-mock .activity button.active { background:var(--raised); color:var(--text); box-shadow:inset 2px 0 0 var(--text); }
+    #then-binder-mock .files { min-width:0; border-right:1px solid var(--border); background:var(--side); }
+    #then-binder-mock .files-head { height:38px; display:flex; align-items:center; justify-content:space-between; padding:0 11px; color:var(--muted); border-bottom:1px solid var(--border); font-size:12px; }
+    #then-binder-mock .file-group { padding:13px 8px 4px; color:var(--text); font-weight:600; font-size:12px; }
+    #then-binder-mock .file-row { padding:7px 11px 7px 20px; color:var(--muted); font-size:12px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+    #then-binder-mock .file-row.active { background:#3c444a; color:var(--text); }
+    #then-binder-mock .file-row .mark { color:var(--blue); font-size:10px; margin-right:6px; }
+    #then-binder-mock .editor-area { min-width:0; display:flex; flex-direction:column; background:var(--editor); }
+    #then-binder-mock .editor-screen { flex:1; position:relative; overflow:hidden; }
+    #then-binder-mock .guide { position:absolute; top:0; bottom:0; left:46%; border-left:1px solid color-mix(in srgb,var(--gold) 35%,transparent); }
+    #then-binder-mock .page-text { position:absolute; inset:37px 15% 20px 15%; display:flex; flex-direction:row-reverse; justify-content:center; gap:13px; overflow:hidden; pointer-events:none; }
+    #then-binder-mock .vcol { width:21px; height:100%; flex:0 0 21px; writing-mode:vertical-rl; font-family:"Yu Mincho", "Hiragino Mincho ProN",serif; font-size:16px; line-height:1.5; letter-spacing:.08em; white-space:nowrap; }
+    #then-binder-mock .vcol.active { color:var(--gold); }
+    #then-binder-mock .status { height:28px; display:flex; justify-content:space-between; align-items:center; padding:0 10px; border-top:1px solid var(--border); color:var(--muted); font-size:11px; }
+    #then-binder-mock .binder { min-width:0; min-height:0; border-left:1px solid var(--border); background:var(--side); display:flex; flex-direction:column; }
+    #then-binder-mock .binder-head { height:42px; display:flex; align-items:center; justify-content:space-between; padding:0 11px; border-bottom:1px solid var(--border); }
+    #then-binder-mock .binder-head strong { font-weight:600; }
+    #then-binder-mock .binder-head small { color:var(--gold); font-size:10px; margin-left:5px; }
+    #then-binder-mock .binder-head button { border:0; background:transparent; color:var(--muted); font-size:15px; }
+    #then-binder-mock .binder-top { padding:10px; border-bottom:1px solid var(--border); }
+    #then-binder-mock .binder-search { width:100%; height:29px; padding:0 9px; border:1px solid var(--border); border-radius:5px; background:var(--raised); color:var(--text); outline:none; }
+    #then-binder-mock .binder-search:focus { border-color:var(--gold); }
+    #then-binder-mock .capture { display:flex; gap:5px; margin-top:9px; }
+    #then-binder-mock .capture input { min-width:0; flex:1; height:29px; padding:0 8px; border:1px solid var(--border); border-radius:5px; background:var(--raised); color:var(--text); }
+    #then-binder-mock .capture button, #then-binder-mock .add-file { border:1px solid var(--border); border-radius:5px; background:var(--raised); padding:3px 8px; white-space:nowrap; }
+    #then-binder-mock .new-row { display:flex; justify-content:space-between; align-items:center; margin-top:7px; color:var(--muted); font-size:11px; }
+    #then-binder-mock .add-file { font-size:11px; }
+    #then-binder-mock .filters { display:flex; gap:5px; margin-top:10px; }
+    #then-binder-mock .filters button { border:1px solid var(--border); border-radius:5px; padding:4px 8px; background:transparent; color:var(--muted); font-size:11px; }
+    #then-binder-mock .filters button[aria-pressed="true"] { background:var(--text); color:var(--panel); border-color:var(--text); }
+    #then-binder-mock .binder-scroll { flex:1; min-height:0; overflow-y:auto; }
+    #then-binder-mock .section-title { display:flex; justify-content:space-between; margin:11px 11px 4px; color:var(--muted); font-size:11px; }
+    #then-binder-mock .open-list { padding:0 8px; }
+    #then-binder-mock .open-row { display:flex; align-items:center; gap:7px; width:100%; border:0; border-radius:5px; background:#394148; text-align:left; padding:7px 8px; margin-top:4px; font-size:12px; }
+    #then-binder-mock .open-row .tiny { color:var(--gold); font-size:10px; }
+    #then-binder-mock .open-row .grow { flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+    #then-binder-mock .library-list { padding:0 8px 12px; }
+    #then-binder-mock .library-row { width:100%; display:block; border:0; border-bottom:1px solid var(--border); background:transparent; text-align:left; padding:8px 5px; }
+    #then-binder-mock .library-row:hover { background:#374046; }
+    #then-binder-mock .library-row strong { display:block; font-size:12px; font-weight:600; margin-bottom:2px; }
+    #then-binder-mock .library-row .meta { font-size:10px; color:var(--muted); }
+    #then-binder-mock .library-row .preview { font-size:11px; color:var(--muted); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; margin-top:3px; }
+    #then-binder-mock .kind { display:inline-block; min-width:28px; margin-right:5px; color:var(--gold); }
+    #then-binder-mock .kind.file { color:var(--blue); }
+    #then-binder-mock .empty { color:var(--muted); padding:12px; font-size:12px; }
+    #then-binder-mock .card-layer { position:absolute; inset:0; z-index:5; pointer-events:none; }
+    #then-binder-mock .float-card { position:absolute; width:278px; height:224px; display:flex; flex-direction:column; overflow:hidden; border:1px solid #6c706d; border-radius:7px; background:#272e32; box-shadow:0 15px 38px #0008; pointer-events:auto; }
+    #then-binder-mock .float-card.pinned { border-color:var(--gold); }
+    #then-binder-mock .card-head { height:35px; flex:0 0 35px; display:flex; align-items:center; gap:5px; padding:0 6px 0 10px; border-bottom:1px solid var(--border); background:#30383d; user-select:none; touch-action:none; }
+    #then-binder-mock .card-head .name { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:12px; font-weight:600; }
+    #then-binder-mock .card-head .source { color:var(--gold); font-size:10px; }
+    #then-binder-mock .card-head button { width:23px; height:23px; border:1px solid var(--border); border-radius:5px; background:var(--raised); font-size:13px; }
+    #then-binder-mock .card-body { flex:1; min-height:0; padding:11px; overflow:auto; color:var(--text); font-size:13px; line-height:1.7; }
+    #then-binder-mock .card-body textarea { width:100%; height:100%; min-height:105px; resize:none; border:0; outline:none; background:transparent; color:var(--text); line-height:1.7; }
+    #then-binder-mock .card-note { padding:5px 10px; border-top:1px solid var(--border); color:var(--muted); font-size:10px; }
+    #then-binder-mock .float-card.collapsed { height:35px; }
+    #then-binder-mock .float-card.collapsed .card-body, #then-binder-mock .float-card.collapsed .card-note { display:none; }
+    #then-binder-mock .toast { position:absolute; bottom:38px; left:50%; transform:translateX(-50%); z-index:20; background:#394147; border:1px solid var(--border); border-radius:5px; padding:7px 10px; font-size:11px; opacity:0; pointer-events:none; transition:opacity .18s; }
+    #then-binder-mock .toast.show { opacity:1; }
+  </style>
+  <div class="window" aria-label="現行のThenを基にしたバインダー統合モック">
+    <header class="topbar"><span>☰</span><span>▣</span><span class="brand">Then</span><span class="crumb">デモ用　›　第一章　›　雨の場面.txt</span><span class="spacer"></span><button type="button" class="top-icon" aria-label="チェックポイント">◴</button><button type="button" class="top-icon" aria-label="集中表示">⛶</button><button type="button" class="top-icon" aria-label="設定">⚙</button></header>
+    <div class="tabs"><button type="button" class="tab active">▤　雨の場面.txt</button><button type="button" class="tab">▤　次の場面.txt</button></div>
+    <div class="work">
+      <nav class="activity" aria-label="左サイドバー操作"><button type="button" class="active" aria-label="ファイル">▤</button><button type="button" aria-label="検索">⌕</button><button type="button" aria-label="新規ファイル">＋</button><button type="button" aria-label="新規フォルダ">▣</button></nav>
+      <aside class="files" aria-label="ファイル一覧"><div class="files-head"><span>ファイル</span><span>‹</span></div><div class="file-group">⌄　第一章</div><div class="file-row active"><span class="mark">●</span>雨の場面.txt</div><div class="file-row">　次の場面.txt</div><div class="file-group">›　第二章</div><div class="file-group">›　第三章</div></aside>
+      <main class="editor-area"><div class="editor-screen" aria-label="縦書き本文"><div class="guide"></div><div class="page-text"><div class="vcol">雨はまだ、屋根を静かに叩いていた。</div><div class="vcol">彼女は戸口で足を止めた。</div><div class="vcol">「その名前を、ここで呼ぶのはやめて」</div><div class="vcol active">声は思ったより小さく響いた。</div><div class="vcol">彼は返事をせず、窓の外を見た。</div><div class="vcol">二人のあいだに、長い沈黙が残った。</div><div class="vcol">それでも、話は終わっていなかった。</div></div></div><div class="status"><span>● 保存済み</span><span>第一章 / 1,284文字</span></div></main>
+      <aside class="binder" aria-label="バインダー"><div class="binder-head"><strong>バインダー <small>提案</small></strong><button type="button" aria-label="バインダーを畳む">×</button></div><div class="binder-top"><input class="binder-search" type="search" placeholder="Ideaと資料を検索" aria-label="バインダーを検索"><div class="capture"><input type="text" placeholder="メモを書いて追加…" aria-label="新しいIdea"><button type="button" class="capture-add">追加</button></div><div class="new-row"><span>追加先：インボックス</span><button type="button" class="add-file">＋ ファイルを追加</button></div><div class="filters" aria-label="種類で絞り込み"><button type="button" data-kind="all" aria-pressed="true">すべて</button><button type="button" data-kind="idea" aria-pressed="false">Idea</button><button type="button" data-kind="file" aria-pressed="false">資料</button></div></div><div class="binder-scroll"><div class="section-title"><span>開いている</span><span class="open-count">1</span></div><div class="open-list"></div><div class="section-title"><span>バインダー</span><span class="library-count">4</span></div><div class="library-list"></div></div></aside>
+      <div class="card-layer" aria-label="開いているカード"></div><div class="toast" role="status" aria-live="polite"></div>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const root = document.getElementById('then-binder-mock');
+      const work = root.querySelector('.work');
+      const library = root.querySelector('.library-list');
+      const openList = root.querySelector('.open-list');
+      const layer = root.querySelector('.card-layer');
+      const search = root.querySelector('.binder-search');
+      const capture = root.querySelector('.capture input');
+      const items = [
+        { id:'idea-1', type:'idea', title:'台詞案', group:'インボックス', scope:'作品', body:'「その名前を、ここで呼ぶのはやめて」\nこの場面と第五章のどちらでも使える。' },
+        { id:'idea-2', type:'idea', title:'雨の匂い', group:'場面メモ', scope:'作品', body:'雨のあと、部屋に残る匂い。会話が途切れた瞬間に思い出す。' },
+        { id:'file-1', type:'file', title:'人物設定.md', group:'テキスト資料', scope:'作品', body:'主人公：答える前に窓を見る癖がある。\n彼女：言い直したい言葉ほど、短くなる。' },
+        { id:'file-2', type:'file', title:'街の地図.pdf', group:'PDF', scope:'共通', body:'街の地図\n駅から古い通りまで徒歩十二分。\n川沿いに裏道がある。' }
+      ];
+      const cards = [{ id:'idea-1', x:244, y:118, collapsed:false, pinned:false, z:1 }];
+      const state = { kind:'all', query:'', top:1 };
+      let toastTimer;
+      function notify(message) { const toast=root.querySelector('.toast'); toast.textContent=message; toast.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>toast.classList.remove('show'),2300); }
+      function escapeHtml(value) { return String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+      function itemById(id) { return items.find(item => item.id === id); }
+      function renderLibrary() {
+        const q=state.query.trim().toLocaleLowerCase();
+        const visible=items.filter(item => (state.kind==='all'||state.kind===item.type) && (!q||`${item.title} ${item.group} ${item.body}`.toLocaleLowerCase().includes(q)));
+        library.innerHTML=visible.length?visible.map(item=>`<button type="button" class="library-row" data-open="${item.id}"><strong><span class="kind ${item.type==='file'?'file':''}">${item.type==='idea'?'Idea':'資料'}</span>${escapeHtml(item.title)}</strong><span class="meta">${escapeHtml(item.group)} · ${escapeHtml(item.scope)}</span><div class="preview">${escapeHtml(item.body.replace(/\n/g,' '))}</div></button>`).join(''):'<div class="empty">該当する項目はありません</div>';
+        root.querySelector('.library-count').textContent=visible.length;
+        root.querySelectorAll('[data-kind]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.kind===state.kind)));
+      }
+      function renderCards() {
+        layer.innerHTML=cards.map(card=>{const item=itemById(card.id); return `<section class="float-card ${card.collapsed?'collapsed':''} ${card.pinned?'pinned':''}" data-card="${card.id}" style="left:${card.x}px;top:${card.y}px;z-index:${card.z}"><header class="card-head"><span class="source">${item.type==='idea'?'Idea':'資料'}</span><span class="name">${escapeHtml(item.title)}</span><button type="button" data-action="pin" aria-label="${card.pinned?'最前面を解除':'最前面にする'}">${card.pinned?'●':'○'}</button><button type="button" data-action="collapse" aria-label="${card.collapsed?'展開':'折り畳む'}">${card.collapsed?'＋':'−'}</button><button type="button" data-action="close" aria-label="閉じる">×</button></header><div class="card-body">${item.type==='idea'?`<textarea aria-label="${escapeHtml(item.title)}を編集">${escapeHtml(item.body)}</textarea>`:`<div>${escapeHtml(item.body).replace(/\n/g,'<br>')}</div>`}</div><div class="card-note">${item.type==='idea'?'Ideaの内容を表示 · 本文とは別':'資料を表示 · 本文とは別'}</div></section>`}).join('');
+        openList.innerHTML=cards.length?cards.map(card=>{const item=itemById(card.id); return `<button type="button" class="open-row" data-focus="${card.id}"><span class="tiny">${item.type==='idea'?'Idea':'資料'}</span><span class="grow">${escapeHtml(item.title)}</span><span>${card.collapsed?'＋':'↗'}</span></button>`}).join(''):'<div class="empty">開いている項目はありません</div>';
+        root.querySelector('.open-count').textContent=cards.length;
+      }
+      function render() { renderLibrary(); renderCards(); }
+      function focusCard(card) { card.z=++state.top; renderCards(); }
+      function openItem(id) { let card=cards.find(entry=>entry.id===id); if(card){card.collapsed=false;focusCard(card);return;} const n=cards.length; card={id,x:244+25*n,y:118+25*n,collapsed:false,pinned:false,z:++state.top}; cards.push(card); renderCards(); }
+      root.addEventListener('click', event=>{
+        const filter=event.target.closest('[data-kind]'); if(filter){state.kind=filter.dataset.kind;renderLibrary();return;}
+        const row=event.target.closest('[data-open]'); if(row){openItem(row.dataset.open);return;}
+        const opened=event.target.closest('[data-focus]'); if(opened){const card=cards.find(entry=>entry.id===opened.dataset.focus);if(card){card.collapsed=false;focusCard(card);}return;}
+        const action=event.target.closest('[data-action]'); if(action){const el=action.closest('[data-card]');const card=cards.find(entry=>entry.id===el.dataset.card);if(!card)return; if(action.dataset.action==='close')cards.splice(cards.indexOf(card),1);if(action.dataset.action==='collapse')card.collapsed=!card.collapsed;if(action.dataset.action==='pin')card.pinned=!card.pinned;card.z=++state.top;renderCards();return;}
+        if(event.target.closest('.capture-add')){addNote();return;}
+        if(event.target.closest('.add-file')){notify('資料の取り込み先もバインダーに統合する案');return;}
+        if(event.target.closest('.binder-head button')){notify('現行の右サイドバーと同じく畳める想定');return;}
+      });
+      function addNote(){const body=capture.value.trim();if(!body)return;const id=`idea-${Date.now()}`;items.unshift({id,type:'idea',title:body.split('\n')[0].slice(0,15)||'新しいメモ',group:'インボックス',scope:'作品',body});capture.value='';state.kind='all';state.query='';search.value='';renderLibrary();openItem(id);notify('Ideaをインボックスへ追加');}
+      capture.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.isComposing){event.preventDefault();addNote();}});
+      search.addEventListener('input',()=>{state.query=search.value;renderLibrary();});
+      layer.addEventListener('input',event=>{if(event.target.matches('textarea')){const cardEl=event.target.closest('[data-card]');const item=itemById(cardEl.dataset.card);item.body=event.target.value;renderLibrary();}});
+      let drag=null;
+      layer.addEventListener('pointerdown',event=>{const head=event.target.closest('.card-head');if(!head||event.target.closest('button'))return;const el=head.closest('[data-card]');const card=cards.find(entry=>entry.id===el.dataset.card);if(!card)return;card.z=++state.top;el.style.zIndex=card.z;drag={card,el,startX:event.clientX,startY:event.clientY,x:card.x,y:card.y};head.setPointerCapture(event.pointerId);});
+      layer.addEventListener('pointermove',event=>{if(!drag)return;const rect=work.getBoundingClientRect();drag.card.x=Math.max(0,Math.min(rect.width-100,drag.x+event.clientX-drag.startX));drag.card.y=Math.max(0,Math.min(rect.height-35,drag.y+event.clientY-drag.startY));drag.el.style.left=`${drag.card.x}px`;drag.el.style.top=`${drag.card.y}px`;});
+      layer.addEventListener('pointerup',()=>{if(!drag)return;drag=null;renderCards();});
+      layer.addEventListener('pointercancel',()=>{if(!drag)return;drag=null;renderCards();});
+      render();
+    })();
+  </script>
+</div>

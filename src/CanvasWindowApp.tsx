@@ -170,9 +170,9 @@ const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
 
 const fallbackPayload: CanvasWindowPayload = {
   requestId: "browser-preview",
-  rootPath: null,
-  workspaceName: "Global",
-  scope: "global",
+  rootPath: "browser-preview",
+  workspaceName: "Preview",
+  scope: "project",
   theme: "dark",
   editorFontFamily: "Noto Serif JP, serif",
   uiFontFamily: "Segoe UI, Noto Sans JP, sans-serif",
@@ -183,7 +183,7 @@ const fallbackPayload: CanvasWindowPayload = {
 };
 
 function localStorageKey(scope: CanvasScope, rootPath: string | null) {
-  return `${LOCAL_STORAGE_PREFIX}.${scope}.${rootPath ?? "global"}`;
+  return `${LOCAL_STORAGE_PREFIX}.${scope}.${rootPath ?? "unbound"}`;
 }
 
 function localStorageOrderKey(scope: CanvasScope, rootPath: string | null) {
@@ -1051,7 +1051,7 @@ export default function CanvasWindowApp({
   const threadDropTargetRef = useRef<string | null>(null);
 
   const [payload, setPayload] = useState<CanvasWindowPayload | null>(null);
-  const [scope, setScope] = useState<CanvasScope>("global");
+  const [scope, setScope] = useState<CanvasScope>("project");
   const [boards, setBoards] = useState<CanvasBoardSummary[]>([]);
   const [activeBoardId, setActiveBoardId] = useState<string | null>(null);
   const [board, setBoard] = useState<JsonCanvasDocument | null>(null);
@@ -1161,7 +1161,7 @@ export default function CanvasWindowApp({
   }, [board]);
   // 優先順: embedded の props > 別ウィンドウのライブイベント > 開いた時点の payload。
   // 資料一覧のライブ反映は、開いた時点でプロジェクト情報がある（=プレビュー可能な）
-  // ウィンドウに限る。global で開いた場合は従来どおり空のまま。
+  // 別ウィンドウに限り、メイン画面から最新の候補を受け取る。
   const referenceFiles =
     liveReferenceFiles ??
     (payload?.rootPath ? livePanelData?.referenceFiles : undefined) ??
@@ -1371,7 +1371,7 @@ export default function CanvasWindowApp({
   };
 
   const defaultBoardName = () =>
-    scope === "project" && payload ? `${payload.workspaceName} ボード` : "共通ボード";
+    payload ? `${payload.workspaceName} ボード` : "作品ボード";
 
   const openCreateModal = () => {
     setIsBoardMenuOpen(false);
@@ -1425,32 +1425,11 @@ export default function CanvasWindowApp({
   };
 
   const materializeReferenceForBoard = async (file: ReferenceFileInfo): Promise<ReferenceFileInfo | null> => {
-    const normalized: ReferenceFileInfo = {
-      ...file,
-      scope: file.scope === "global" ? "global" : "project",
-    };
-    if (scope !== "global" || normalized.scope !== "project") return normalized;
-    if (!rootPath) {
-      setStatus("共通ボードには共通資料のみ追加できます");
+    if (file.scope === "global") {
+      setStatus("共通資料は廃止されました");
       return null;
     }
-    if (!isTauriRuntime()) {
-      setStatus("共通ボードへ追加するには共通資料へコピーしてください");
-      return null;
-    }
-    try {
-      const copied = await invoke<ReferenceFileInfo>("copy_reference_to_scope", {
-        rootPath,
-        sourcePath: normalized.sourcePath,
-        sourceScope: normalized.scope,
-        targetScope: "global",
-      });
-      setStatus("共通資料へコピーして追加しました");
-      return copied;
-    } catch (error) {
-      setStatus(String(error));
-      return null;
-    }
+    return { ...file, scope: "project" };
   };
 
   const insertReferenceNodeAt = async (file: ReferenceFileInfo, point: Point) => {
@@ -1622,7 +1601,7 @@ export default function CanvasWindowApp({
     if (!embedded) setIsSidePanelOpen(payload.rightSidebarVisible ?? true);
     // 開き直しの payload は最新のスナップショットなので、古いライブ差分は破棄する。
     setLivePanelData(null);
-    void loadBoardList(payload.scope, payload.boardId, payload.selectNodeId);
+    void loadBoardList("project", payload.boardId, payload.selectNodeId);
   }, [payload, loadBoardList, embedded]);
 
   // メイン画面からの Idea・資料のライブ更新（別ウィンドウのみ）。ボードには触れない。
@@ -1875,14 +1854,6 @@ export default function CanvasWindowApp({
       window.removeEventListener("pointercancel", clearDrag);
     };
   }, [hiddenThreadIds, patchBoard, pushHistory, screenToWorld, setThreadDropTarget, zoom]);
-
-  const switchScope = (nextScope: CanvasScope) => {
-    if (nextScope === "project" && !payload?.rootPath) {
-      setStatus("作品ボードはプロジェクトを開いているときに使えます");
-      return;
-    }
-    void loadBoardList(nextScope);
-  };
 
   const switchBoard = (boardId: string) => {
     setIsBoardMenuOpen(false);
@@ -2716,20 +2687,6 @@ export default function CanvasWindowApp({
       style={embedded ? undefined : themeStyle}
     >
       <header className="canvasTopbar">
-        <div className="canvasToolbarCluster canvasScopeSwitch" aria-label="ボードの範囲">
-          {(["global", "project"] as CanvasScope[]).map((item) => (
-            <button
-              key={item}
-              type="button"
-              className={scope === item ? "isActive" : ""}
-              disabled={item === "project" && !payload?.rootPath}
-              title={item === "project" ? "この作品のボード" : "すべての作品で使えるボード"}
-              onClick={() => switchScope(item)}
-            >
-              {item === "project" ? "作品" : "共通"}
-            </button>
-          ))}
-        </div>
         <div className="canvasToolbarCluster canvasBoardCluster">
           <div className="canvasBoardMenuHost">
             <button
@@ -3049,7 +3006,7 @@ export default function CanvasWindowApp({
                   className="canvasReferencePreview"
                   onWheel={(event) => event.stopPropagation()}
                 >
-                  {rootPath || node.scope === "global" ? (
+                  {rootPath ? (
                     <ReferenceReadOnlyPreview
                       rootPath={rootPath}
                       sourcePath={node.sourcePath}
@@ -3059,7 +3016,7 @@ export default function CanvasWindowApp({
                     />
                   ) : (
                     <div className="referenceReadOnlyPreview referencePlaceholder">
-                      プロジェクト資料は作品ボードで表示できます
+                      資料を表示するにはプロジェクトを開いてください
                     </div>
                   )}
                 </div>
@@ -3571,7 +3528,7 @@ export default function CanvasWindowApp({
             <header>
               <div>
                 <h2 id="canvas-trash-title">ゴミ箱</h2>
-                <span>{scope === "project" ? "作品ボード" : "共通ボード"}</span>
+                <span>作品ボード</span>
               </div>
               <button
                 type="button"

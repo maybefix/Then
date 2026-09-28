@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { PDFDocumentProxy } from "pdfjs-dist";
+import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import type { ReactNode } from "react";
 import {
@@ -10,12 +10,18 @@ import {
   useState,
 } from "react";
 import type {
+  BinderCardState,
+  BinderCardFrame,
+  IdeaBinderCardState,
+  IdeaFragment,
+  IdeaThread,
   ReferenceBinary,
   ReferenceCardState,
   ReferenceKind,
   ReferenceLayout,
   ReferenceScope,
 } from "../../types";
+import { isIdeaBinderCard } from "../../types";
 
 type ReferenceLayerProps = {
   rootPath: string | null;
@@ -23,21 +29,33 @@ type ReferenceLayerProps = {
   onLayoutChange: (updater: (layout: ReferenceLayout) => ReferenceLayout) => void;
   onReturnFocusToEditor: () => void;
   onTextSaved: (sourcePath: string, scope: ReferenceScope, text: string) => void;
+  ideaThreads: IdeaThread[];
+  onUpdateIdeaFragment: (threadId: string, fragmentId: string, body: string) => void;
 };
 
 type ReferenceCardProps = {
   rootPath: string;
-  card: ReferenceCardState;
+  card: BinderCardState;
   isFocused: boolean;
-  onPatch: (patch: Partial<ReferenceCardState>) => void;
+  onPatch: (patch: BinderCardPatch) => void;
   onClose: () => void;
   onBringToFront: () => void;
   onTextSaved: (sourcePath: string, scope: ReferenceScope, text: string) => void;
+  ideaThread?: IdeaThread;
+  ideaFragment?: IdeaFragment;
+  onUpdateIdeaFragment: (threadId: string, fragmentId: string, body: string) => void;
+};
+
+type BinderCardPatch = Partial<BinderCardFrame> & {
+  scrollTop?: number;
+  zoom?: number;
+  page?: number;
+  editing?: boolean;
 };
 
 type DragMode =
-  | { kind: "move"; startX: number; startY: number; original: ReferenceCardState }
-  | { kind: "resize"; startX: number; startY: number; original: ReferenceCardState };
+  | { kind: "move"; startX: number; startY: number; original: BinderCardState }
+  | { kind: "resize"; startX: number; startY: number; original: BinderCardState };
 
 const MIN_CARD_WIDTH = 220;
 const MIN_CARD_HEIGHT = 140;
@@ -60,14 +78,37 @@ const base64ToUint8Array = (value: string) => {
   return bytes;
 };
 
+const renderPdfPageAtDisplayScale = (
+  pdfPage: PDFPageProxy,
+  canvas: HTMLCanvasElement,
+  displayScale: number,
+) => {
+  const viewport = pdfPage.getViewport({ scale: displayScale });
+  const outputScale = Math.min(2.5, Math.max(1, window.devicePixelRatio || 1));
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  canvas.width = Math.max(1, Math.floor(viewport.width * outputScale));
+  canvas.height = Math.max(1, Math.floor(viewport.height * outputScale));
+  canvas.style.width = `${viewport.width}px`;
+  canvas.style.height = "auto";
+  return pdfPage.render({
+    canvas,
+    canvasContext: context,
+    viewport,
+    transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
+  });
+};
+
 function patchCard(
   layout: ReferenceLayout,
   cardId: string,
-  patch: Partial<ReferenceCardState>,
+  patch: BinderCardPatch,
 ): ReferenceLayout {
   return {
     ...layout,
-    cards: layout.cards.map((card) => (card.id === cardId ? { ...card, ...patch } : card)),
+    cards: layout.cards.map((card) =>
+      card.id === cardId ? ({ ...card, ...patch } as BinderCardState) : card,
+    ),
   };
 }
 
@@ -95,33 +136,51 @@ export function ReferenceLayer({
   onLayoutChange,
   onReturnFocusToEditor,
   onTextSaved,
+  ideaThreads,
+  onUpdateIdeaFragment,
 }: ReferenceLayerProps) {
   const maxZ = useMemo(
     () => layout.cards.reduce((max, card) => Math.max(max, card.zIndex), 0),
     [layout.cards],
   );
+  const visibleCards = rootPath
+    ? layout.cards
+    : layout.cards.filter(isIdeaBinderCard);
 
-  if (!rootPath || layout.cards.length === 0) return null;
+  if (visibleCards.length === 0) return null;
 
   return (
-    <div className="referenceLayer" aria-label="資料レイヤー" onDoubleClick={onReturnFocusToEditor}>
-      {layout.cards.map((card) => (
-        <ReferenceCard
+    <div className="referenceLayer" aria-label="バインダーカードレイヤー" onDoubleClick={onReturnFocusToEditor}>
+      {visibleCards.map((card) => (
+        <BinderCard
           key={card.id}
-          rootPath={rootPath}
+          rootPath={rootPath ?? ""}
           card={card}
           isFocused={card.zIndex === maxZ}
           onPatch={(patch) => onLayoutChange((current) => patchCard(current, card.id, patch))}
           onClose={() => onLayoutChange((current) => removeCard(current, card.id))}
           onBringToFront={() => onLayoutChange((current) => bringCardToFront(current, card.id))}
           onTextSaved={onTextSaved}
+          ideaThread={
+            isIdeaBinderCard(card)
+              ? ideaThreads.find((thread) => thread.id === card.threadId)
+              : undefined
+          }
+          ideaFragment={
+            isIdeaBinderCard(card)
+              ? ideaThreads
+                  .find((thread) => thread.id === card.threadId)
+                  ?.fragments.find((fragment) => fragment.id === card.fragmentId)
+              : undefined
+          }
+          onUpdateIdeaFragment={onUpdateIdeaFragment}
         />
       ))}
     </div>
   );
 }
 
-function ReferenceCard({
+function BinderCard({
   rootPath,
   card,
   isFocused,
@@ -129,6 +188,9 @@ function ReferenceCard({
   onClose,
   onBringToFront,
   onTextSaved,
+  ideaThread,
+  ideaFragment,
+  onUpdateIdeaFragment,
 }: ReferenceCardProps) {
   const [dragMode, setDragMode] = useState<DragMode | null>(null);
 
@@ -179,6 +241,10 @@ function ReferenceCard({
     setDragMode(null);
   };
 
+  const cardTitle = isIdeaBinderCard(card)
+    ? ideaThread?.title ?? "削除された Idea"
+    : fileNameFromPath(card.sourcePath);
+
   return (
     <article
       className={`referenceCard ${isFocused ? "focusedReferenceCard" : ""} ${
@@ -199,7 +265,10 @@ function ReferenceCard({
         onPointerUp={stopDrag}
         onPointerCancel={stopDrag}
       >
-        <strong>{fileNameFromPath(card.sourcePath)}</strong>
+        <span className={`binderCardSource ${isIdeaBinderCard(card) ? "idea" : "reference"}`}>
+          {isIdeaBinderCard(card) ? "Idea" : "資料"}
+        </span>
+        <strong>{cardTitle}</strong>
         <div className="referenceCardActions" onPointerDown={(event) => event.stopPropagation()}>
           <button
             type="button"
@@ -233,12 +302,21 @@ function ReferenceCard({
       </header>
       {!card.collapsed && (
         <>
-          <ReferenceCardBody
-            rootPath={rootPath}
-            card={card}
-            onPatch={onPatch}
-            onTextSaved={onTextSaved}
-          />
+          {isIdeaBinderCard(card) ? (
+            <IdeaBinderCardBody
+              card={card}
+              thread={ideaThread}
+              fragment={ideaFragment}
+              onUpdate={onUpdateIdeaFragment}
+            />
+          ) : (
+            <ReferenceCardBody
+              rootPath={rootPath}
+              card={card}
+              onPatch={onPatch}
+              onTextSaved={onTextSaved}
+            />
+          )}
           <span
             className="referenceResizeHandle"
             role="presentation"
@@ -253,6 +331,60 @@ function ReferenceCard({
   );
 }
 
+function IdeaBinderCardBody({
+  card,
+  thread,
+  fragment,
+  onUpdate,
+}: {
+  card: IdeaBinderCardState;
+  thread?: IdeaThread;
+  fragment?: IdeaFragment;
+  onUpdate: (threadId: string, fragmentId: string, body: string) => void;
+}) {
+  const [draft, setDraft] = useState(fragment?.body ?? "");
+  const editingRef = useRef(false);
+
+  useEffect(() => {
+    if (!editingRef.current) setDraft(fragment?.body ?? "");
+  }, [fragment?.body]);
+
+  if (!thread || !fragment) {
+    return <div className="referenceCardBody referencePlaceholder">この Idea は削除されています</div>;
+  }
+
+  const save = () => {
+    editingRef.current = false;
+    if (draft.trim() && draft !== fragment.body) {
+      onUpdate(card.threadId, card.fragmentId, draft);
+    } else if (!draft.trim()) {
+      setDraft(fragment.body);
+    }
+  };
+
+  return (
+    <div className="referenceCardBody binderIdeaCardBody">
+      <textarea
+        aria-label={`${thread.title}のIdea本文`}
+        value={draft}
+        onFocus={() => {
+          editingRef.current = true;
+        }}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={save}
+        onKeyDown={(event) => {
+          if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+            event.currentTarget.blur();
+          }
+        }}
+      />
+      <div className="binderIdeaCardFooter">
+        <span>{draft.length} 文字</span>
+      </div>
+    </div>
+  );
+}
+
 function ReferenceCardBody({
   rootPath,
   card,
@@ -261,7 +393,7 @@ function ReferenceCardBody({
 }: {
   rootPath: string;
   card: ReferenceCardState;
-  onPatch: (patch: Partial<ReferenceCardState>) => void;
+  onPatch: (patch: BinderCardPatch) => void;
   onTextSaved: (sourcePath: string, scope: ReferenceScope, text: string) => void;
 }) {
   if (isTextualReference(card.kind)) {
@@ -461,12 +593,9 @@ function ReadOnlyPdfReferencePreview({
     pdf.getPage(Math.min(page, pdf.numPages))
       .then((pdfPage) => {
         if (cancelled) return;
-        const viewport = pdfPage.getViewport({ scale: 1 });
-        const context = canvas.getContext("2d");
-        if (!context) return;
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        void pdfPage.render({ canvas, canvasContext: context, viewport }).promise.catch((reason) => {
+        const renderTask = renderPdfPageAtDisplayScale(pdfPage, canvas, 1);
+        if (!renderTask) return;
+        void renderTask.promise.catch((reason) => {
           if (!cancelled) setError(String(reason));
         });
       })
@@ -1082,12 +1211,9 @@ function PdfReferenceBody({
 
     pdf.getPage(Math.min(page, pdf.numPages)).then((pdfPage) => {
       if (cancelled) return;
-      const viewport = pdfPage.getViewport({ scale: zoom });
-      const context = canvas.getContext("2d");
-      if (!context) return;
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      void pdfPage.render({ canvas, canvasContext: context, viewport }).promise.catch((reason) => {
+      const renderTask = renderPdfPageAtDisplayScale(pdfPage, canvas, zoom);
+      if (!renderTask) return;
+      void renderTask.promise.catch((reason) => {
         if (!cancelled) setError(String(reason));
       });
     });

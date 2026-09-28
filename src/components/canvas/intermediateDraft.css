@@ -33,6 +33,7 @@
   background: var(--bg-panel); color: var(--text-primary); box-shadow: 0 1px 3px rgba(20, 25, 32, 0.12); font-weight: 650;
 }
 .draftHint { margin: 0; padding: 10px 2px; color: var(--text-secondary); font-size: 11px; line-height: 1.65; }
+.draftCaptureNotice { margin: 0; color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
 .draftOrderList {
   min-height: 0; flex: 1 1 auto; margin: 0; padding: 0 2px 4px; overflow: auto;
   overscroll-behavior: contain; list-style: none;

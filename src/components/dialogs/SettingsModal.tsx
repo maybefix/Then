@@ -1,20 +1,16 @@
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 import type { EditorSettings, FontOption } from "../../types";
-import {
-  EDITOR_MEASURE_PERCENT_MAX,
-  EDITOR_MEASURE_PERCENT_MIN,
-  UI_FONT_SCALE_CHOICES,
-} from "../../types";
-import { exportFontFamilies, type ExportFontFamily } from "../../export/types";
-import { getThemeDefinition } from "../../themes";
+import { AppearanceSettings } from "./AppearanceSettings";
+import { BodySettings } from "./BodySettings";
+import { CanvasSettings } from "./CanvasSettings";
+import { ExportSettings } from "./ExportSettings";
+import { FileSettings } from "./FileSettings";
+import { useModalFocus } from "./useModalFocus";
 
 type SettingsModalProps = {
   settings: EditorSettings;
   systemFonts: FontOption[];
-  /**
-   * 文字表示幅 100% に相当する編集領域の実測px。百分率の実寸表示に使う。
-   * エディタ非表示中（実測不能）は null。
-   */
+  /** 編集領域の実測px。エディタ非表示中は null。 */
   editorMeasureLimit: number | null;
   onClose: () => void;
   onOpenThemePicker: () => void;
@@ -45,24 +41,70 @@ export function SettingsModal({
   onSnippetStorageModeChange,
 }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
-  const themeDefinition = getThemeDefinition(settings.theme);
+  const dialogRef = useModalFocus(onClose);
 
-  const isHorizontalWriting = settings.writingMode === "horizontal-tb";
-  const editorMeasureKey = isHorizontalWriting
-    ? "editorMeasureHorizontal"
-    : "editorMeasureVertical";
-  const editorMeasureValue = isHorizontalWriting
-    ? settings.editorMeasureHorizontal
-    : settings.editorMeasureVertical;
-  /** 現在の百分率に相当する実寸（px）。編集領域が実測できないときは null。 */
-  const editorMeasurePx =
-    editorMeasureLimit === null
-      ? null
-      : Math.round((editorMeasureLimit * editorMeasureValue) / 100);
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    let nextIndex: number;
+    switch (event.key) {
+      case "ArrowRight":
+        nextIndex = (index + 1) % settingsTabs.length;
+        break;
+      case "ArrowLeft":
+        nextIndex = (index - 1 + settingsTabs.length) % settingsTabs.length;
+        break;
+      case "Home":
+        nextIndex = 0;
+        break;
+      case "End":
+        nextIndex = settingsTabs.length - 1;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    const nextTab = settingsTabs[nextIndex].id;
+    setActiveTab(nextTab);
+    document.getElementById(`settings-tab-${nextTab}`)?.focus();
+  };
+
+  const panels = {
+    appearance: (
+      <AppearanceSettings
+        settings={settings}
+        systemFonts={systemFonts}
+        onOpenThemePicker={onOpenThemePicker}
+        onUpdateSettings={onUpdateSettings}
+      />
+    ),
+    body: (
+      <BodySettings
+        settings={settings}
+        systemFonts={systemFonts}
+        editorMeasureLimit={editorMeasureLimit}
+        onUpdateSettings={onUpdateSettings}
+      />
+    ),
+    files: (
+      <FileSettings
+        settings={settings}
+        onSnippetStorageModeChange={onSnippetStorageModeChange}
+        onUpdateSettings={onUpdateSettings}
+      />
+    ),
+    canvas: <CanvasSettings settings={settings} onUpdateSettings={onUpdateSettings} />,
+    export: <ExportSettings settings={settings} onUpdateSettings={onUpdateSettings} />,
+  };
 
   return (
     <div className="modalBackdrop" role="presentation">
-      <section className="modal settingsModal" aria-label="設定" role="dialog" aria-modal="true">
+      <section
+        ref={dialogRef}
+        className="modal settingsModal"
+        aria-label="設定"
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
+      >
         <header className="modalHeader">
           <h2>設定</h2>
           <button className="modalClose" type="button" aria-label="閉じる" onClick={onClose}>
@@ -70,7 +112,7 @@ export function SettingsModal({
           </button>
         </header>
         <div className="settingsTabList" role="tablist" aria-label="設定カテゴリ">
-          {settingsTabs.map((tab) => (
+          {settingsTabs.map((tab, index) => (
             <button
               key={tab.id}
               type="button"
@@ -78,528 +120,28 @@ export function SettingsModal({
               aria-selected={activeTab === tab.id}
               aria-controls={`settings-panel-${tab.id}`}
               id={`settings-tab-${tab.id}`}
+              tabIndex={activeTab === tab.id ? 0 : -1}
               className={activeTab === tab.id ? "active" : undefined}
               onClick={() => setActiveTab(tab.id)}
+              onKeyDown={(event) => handleTabKeyDown(event, index)}
             >
               {tab.label}
             </button>
           ))}
         </div>
         <div className="modalForm">
-          <section
-            className="settingsTabPanel"
-            role="tabpanel"
-            id={`settings-panel-${activeTab}`}
-            aria-labelledby={`settings-tab-${activeTab}`}
-          >
-            {activeTab === "appearance" && (
-              <>
-                <div className="themeSettingRow">
-                  <span className={`themePreview themePreview-${settings.theme}`} aria-hidden="true">
-                    <i />
-                    <b />
-                  </span>
-                  <span className="themeSettingCopy">
-                    <small>テーマ</small>
-                    <strong>{themeDefinition.label}</strong>
-                    <span>{themeDefinition.description}</span>
-                  </span>
-                  <button className="themePickerButton" type="button" onClick={onOpenThemePicker}>
-                    テーマを選ぶ
-                  </button>
-                </div>
-                <label>
-                  <span>UIフォント</span>
-                  <select
-                    value={settings.uiFontFamily}
-                    onChange={(event) => onUpdateSettings("uiFontFamily", event.target.value)}
-                  >
-                    {systemFonts.map((font) => (
-                      <option key={font.label} value={font.cssFamily}>
-                        {font.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>UI表示サイズ</span>
-                  <select
-                    value={settings.uiFontScale}
-                    onChange={(event) => onUpdateSettings("uiFontScale", Number(event.target.value))}
-                  >
-                    {UI_FONT_SCALE_CHOICES.map((scale) => (
-                      <option key={scale} value={scale}>
-                        {`${Math.round(scale * 100)}%`}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="checkSetting descriptiveCheckSetting">
-                  <input
-                    checked={settings.focusModeUsesNativeFullscreen}
-                    type="checkbox"
-                    onChange={(event) =>
-                      onUpdateSettings("focusModeUsesNativeFullscreen", event.target.checked)
-                    }
-                  />
-                  <span className="checkSettingCopy">
-                    <span>集中表示で完全フルスクリーンを使用</span>
-                    <small>タイトルバーとWindowsのタスクバーも隠します</small>
-                  </span>
-                </label>
-                <label>
-                  <span>サイドペインの表示</span>
-                  <select
-                    value={settings.sidebarHoverMode}
-                    onChange={(event) =>
-                      onUpdateSettings(
-                        "sidebarHoverMode",
-                        event.target.value as EditorSettings["sidebarHoverMode"],
-                      )
-                    }
-                  >
-                    <option value="none">左右とも常に表示</option>
-                    <option value="both">左右ともホバー表示</option>
-                    <option value="left">左側のみホバー表示</option>
-                    <option value="right">右側のみホバー表示</option>
-                  </select>
-                  <small className="dialogFieldHint">
-                    ホバー表示にしたペインは画面端へ隠れ、マウスを移すと本文の上へ表示されます
-                  </small>
-                </label>
-              </>
-            )}
-
-            {activeTab === "body" && (
-              <>
-                <label>
-                  <span>本文フォント</span>
-                  <select
-                    value={settings.editorFontFamily}
-                    onChange={(event) => onUpdateSettings("editorFontFamily", event.target.value)}
-                  >
-                    {systemFonts.map((font) => (
-                      <option key={font.label} value={font.cssFamily}>
-                        {font.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>見出し・太字フォント</span>
-                  <select
-                    value={settings.headingFontSource}
-                    onChange={(event) =>
-                      onUpdateSettings(
-                        "headingFontSource",
-                        event.target.value as EditorSettings["headingFontSource"],
-                      )
-                    }
-                  >
-                    <option value="body">本文フォントを使う</option>
-                    <option value="custom">別フォントを指定</option>
-                  </select>
-                </label>
-                {settings.headingFontSource === "custom" && (
-                  <label>
-                    <span>見出し・太字の指定フォント</span>
-                    <select
-                      value={settings.headingFontFamily}
-                      onChange={(event) =>
-                        onUpdateSettings("headingFontFamily", event.target.value)
-                      }
-                    >
-                      {systemFonts.map((font) => (
-                        <option key={font.label} value={font.cssFamily}>
-                          {font.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-                <label>
-                  <span>プロット表示フォント</span>
-                  <select
-                    value={settings.plotFontSource}
-                    onChange={(event) =>
-                      onUpdateSettings(
-                        "plotFontSource",
-                        event.target.value as EditorSettings["plotFontSource"],
-                      )
-                    }
-                  >
-                    <option value="editor">本文フォント</option>
-                    <option value="ui">UIフォント</option>
-                  </select>
-                </label>
-                <label>
-                  <span>本文方向</span>
-                  <select
-                    value={settings.writingMode}
-                    onChange={(event) =>
-                      onUpdateSettings(
-                        "writingMode",
-                        event.target.value as EditorSettings["writingMode"],
-                      )
-                    }
-                  >
-                    <option value="vertical-rl">縦書き</option>
-                    <option value="horizontal-tb">横書き</option>
-                  </select>
-                </label>
-                <label>
-                  <span>編集表示</span>
-                  <select
-                    value={settings.editorDisplayMode}
-                    onChange={(event) =>
-                      onUpdateSettings(
-                        "editorDisplayMode",
-                        event.target.value as EditorSettings["editorDisplayMode"],
-                      )
-                    }
-                  >
-                    <option value="continuous">連続表示</option>
-                    <option value="paged">ページ表示</option>
-                  </select>
-                </label>
-                {settings.editorDisplayMode === "paged" && (
-                  <label>
-                    <span>ページ送り</span>
-                    <select
-                      value={settings.pageFlowDirection}
-                      onChange={(event) =>
-                        onUpdateSettings(
-                          "pageFlowDirection",
-                          event.target.value as EditorSettings["pageFlowDirection"],
-                        )
-                      }
-                    >
-                      <option value="horizontal-rtl">横（右から左）</option>
-                      <option value="vertical">縦（上から下）</option>
-                    </select>
-                  </label>
-                )}
-                <div className="modalFormGrid">
-                  <label>
-                    <span>文字サイズ</span>
-                    <input
-                      min="12"
-                      max="24"
-                      type="number"
-                      value={settings.fontSize}
-                      onChange={(event) => onUpdateSettings("fontSize", Number(event.target.value))}
-                    />
-                  </label>
-                  <label>
-                    <span>行間</span>
-                    <input
-                      min="1.4"
-                      max="2.4"
-                      step="0.05"
-                      type="number"
-                      value={settings.lineHeight}
-                      onChange={(event) => onUpdateSettings("lineHeight", Number(event.target.value))}
-                    />
-                  </label>
-                </div>
-                <label className="rangeSetting">
-                  <span>
-                    文字表示幅（{isHorizontalWriting ? "横幅" : "縦幅"}）{" "}
-                    {editorMeasureValue}%
-                    {editorMeasurePx !== null && `（${editorMeasurePx}px）`}
-                  </span>
-                  <input
-                    min={EDITOR_MEASURE_PERCENT_MIN}
-                    max={EDITOR_MEASURE_PERCENT_MAX}
-                    step="1"
-                    type="range"
-                    value={editorMeasureValue}
-                    onChange={(event) =>
-                      onUpdateSettings(editorMeasureKey, Number(event.target.value))
-                    }
-                  />
-                </label>
-                <label className="checkSetting">
-                  <input
-                    checked={settings.typewriterScroll}
-                    type="checkbox"
-                    onChange={(event) =>
-                      onUpdateSettings("typewriterScroll", event.target.checked)
-                    }
-                  />
-                  <span>タイプライタースクロール</span>
-                </label>
-                <label className="rangeSetting">
-                  <span>固定位置 {settings.typewriterOffset}%</span>
-                  <input
-                    disabled={!settings.typewriterScroll}
-                    min="30"
-                    max="65"
-                    type="range"
-                    value={settings.typewriterOffset}
-                    onChange={(event) =>
-                      onUpdateSettings("typewriterOffset", Number(event.target.value))
-                    }
-                  />
-                </label>
-                <label className="checkSetting">
-                  <input
-                    checked={settings.showTypewriterGuide}
-                    disabled={!settings.typewriterScroll}
-                    type="checkbox"
-                    onChange={(event) =>
-                      onUpdateSettings("showTypewriterGuide", event.target.checked)
-                    }
-                  />
-                  <span>タイプライター中央線を表示</span>
-                </label>
-                <label className="checkSetting">
-                  <input
-                    checked={settings.showLineBreakMarks}
-                    type="checkbox"
-                    onChange={(event) =>
-                      onUpdateSettings("showLineBreakMarks", event.target.checked)
-                    }
-                  />
-                  <span>改行記号を表示</span>
-                </label>
-                <label className="checkSetting">
-                  <input
-                    checked={settings.showLineNumbers}
-                    type="checkbox"
-                    onChange={(event) =>
-                      onUpdateSettings("showLineNumbers", event.target.checked)
-                    }
-                  />
-                  <span>行番号を表示</span>
-                </label>
-                <label className="checkSetting">
-                  <input
-                    checked={settings.highlightCurrentLine}
-                    type="checkbox"
-                    onChange={(event) =>
-                      onUpdateSettings("highlightCurrentLine", event.target.checked)
-                    }
-                  />
-                  <span>現在行をハイライト</span>
-                </label>
-                <label className="checkSetting descriptiveCheckSetting">
-                  <input
-                    checked={settings.colorizeJapaneseQuotes}
-                    type="checkbox"
-                    onChange={(event) =>
-                      onUpdateSettings("colorizeJapaneseQuotes", event.target.checked)
-                    }
-                  />
-                  <span className="checkSettingCopy">
-                    <span>「」内を色分け</span>
-                    <small>鉤括弧を含む会話文を落ち着いた色で表示します</small>
-                  </span>
-                </label>
-                <label className="checkSetting">
-                  <input
-                    checked={settings.countWhitespace}
-                    type="checkbox"
-                    onChange={(event) => onUpdateSettings("countWhitespace", event.target.checked)}
-                  />
-                  <span>文字数に空白を含める</span>
-                </label>
-              </>
-            )}
-
-            {activeTab === "files" && (
-              <>
-                <label>
-                  <span>ファイル表示方式</span>
-                  <select
-                    value={settings.sidebarMode}
-                    onChange={(event) =>
-                      onUpdateSettings(
-                        "sidebarMode",
-                        event.target.value as EditorSettings["sidebarMode"],
-                      )
-                    }
-                  >
-                    <option value="tree">ファイルツリー</option>
-                    <option value="navigator">ナビゲータ</option>
-                  </select>
-                </label>
-                <label>
-                  <span>ナビゲータのプレビュー行数</span>
-                  <select
-                    value={settings.navigatorPreviewLines}
-                    disabled={settings.sidebarMode !== "navigator"}
-                    onChange={(event) =>
-                      onUpdateSettings("navigatorPreviewLines", Number(event.target.value))
-                    }
-                  >
-                    <option value={0}>なし</option>
-                    <option value={1}>1行</option>
-                    <option value={2}>2行</option>
-                    <option value={3}>3行</option>
-                  </select>
-                </label>
-                <label className="checkSetting">
-                  <input
-                    checked={settings.showOutlineGuides}
-                    type="checkbox"
-                    onChange={(event) =>
-                      onUpdateSettings("showOutlineGuides", event.target.checked)
-                    }
-                  />
-                  <span>見出しのガイド線を表示</span>
-                </label>
-                <label className="checkSetting">
-                  <input
-                    checked={settings.showWorkspacePaths}
-                    type="checkbox"
-                    onChange={(event) =>
-                      onUpdateSettings("showWorkspacePaths", event.target.checked)
-                    }
-                  />
-                  <span>プロジェクト切替にパスを表示</span>
-                </label>
-                <label className="checkSetting">
-                  <input
-                    checked={settings.showStatusFilePath}
-                    type="checkbox"
-                    onChange={(event) =>
-                      onUpdateSettings("showStatusFilePath", event.target.checked)
-                    }
-                  />
-                  <span>画面下部にファイルパスを表示</span>
-                </label>
-                <label className="checkSetting descriptiveCheckSetting">
-                  <input
-                    checked={settings.showDocumentTabs}
-                    type="checkbox"
-                    onChange={(event) =>
-                      onUpdateSettings("showDocumentTabs", event.target.checked)
-                    }
-                  />
-                  <span className="checkSettingCopy">
-                    <span>タブを表示</span>
-                    <small>開いている文書をパンくずの下に表示します</small>
-                  </span>
-                </label>
-                <label>
-                  <span>タブバーの表示方法</span>
-                  <select
-                    value={settings.documentTabsDisplayMode}
-                    disabled={!settings.showDocumentTabs}
-                    onChange={(event) =>
-                      onUpdateSettings(
-                        "documentTabsDisplayMode",
-                        event.target.value as EditorSettings["documentTabsDisplayMode"],
-                      )
-                    }
-                  >
-                    <option value="always">常に表示</option>
-                    <option value="hover">上端にカーソルを寄せたときだけ表示</option>
-                  </select>
-                </label>
-                <label className="checkSetting">
-                  <input
-                    checked={settings.skipStartupPortal}
-                    type="checkbox"
-                    onChange={(event) =>
-                      onUpdateSettings("skipStartupPortal", event.target.checked)
-                    }
-                  />
-                  <span>起動時に前回のワークスペースを直接開く</span>
-                </label>
-                <label>
-                  <span>スニペット保存先</span>
-                  <select
-                    value={settings.snippetStorageMode}
-                    onChange={(event) =>
-                      onSnippetStorageModeChange(
-                        event.target.value as EditorSettings["snippetStorageMode"],
-                      )
-                    }
-                  >
-                    <option value="workspace">フォルダごと</option>
-                    <option value="profile">固定プロフィール</option>
-                  </select>
-                </label>
-              </>
-            )}
-
-            {activeTab === "canvas" && (
-              <>
-                <label>
-                  <span>Canvas node 既定方向</span>
-                  <select
-                    value={settings.canvasDefaultWritingMode}
-                    onChange={(event) =>
-                      onUpdateSettings(
-                        "canvasDefaultWritingMode",
-                        event.target.value as EditorSettings["canvasDefaultWritingMode"],
-                      )
-                    }
-                  >
-                    <option value="horizontal-tb">横書き</option>
-                    <option value="vertical-rl">縦書き</option>
-                  </select>
-                </label>
-                <label>
-                  <span>Canvas node 既定フォント</span>
-                  <select
-                    value={settings.canvasDefaultFontSource}
-                    onChange={(event) =>
-                      onUpdateSettings(
-                        "canvasDefaultFontSource",
-                        event.target.value as EditorSettings["canvasDefaultFontSource"],
-                      )
-                    }
-                  >
-                    <option value="ui">UIフォント</option>
-                    <option value="editor">本文フォント</option>
-                  </select>
-                </label>
-                <label className="checkSetting">
-                  <input
-                    checked={settings.canvasOpensInWindow}
-                    type="checkbox"
-                    onChange={(event) =>
-                      onUpdateSettings("canvasOpensInWindow", event.target.checked)
-                    }
-                  />
-                  <span>キャンバスを別ウィンドウで開く</span>
-                </label>
-              </>
-            )}
-
-            {activeTab === "export" && (
-              <>
-                <label>
-                  <span>DOCX・PDF出力フォント</span>
-                  <select
-                    value={settings.exportFontFamily}
-                    onChange={(event) =>
-                      onUpdateSettings("exportFontFamily", event.target.value as ExportFontFamily)
-                    }
-                  >
-                    {exportFontFamilies.map((fontFamily) => (
-                      <option key={fontFamily} value={fontFamily}>
-                        {fontFamily}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="checkSetting">
-                  <input
-                    checked={settings.exportOpensInWindow}
-                    type="checkbox"
-                    onChange={(event) =>
-                      onUpdateSettings("exportOpensInWindow", event.target.checked)
-                    }
-                  />
-                  <span>エクスポートを別ウィンドウで開く</span>
-                </label>
-              </>
-            )}
-          </section>
+          {settingsTabs.map((tab) => (
+            <section
+              key={tab.id}
+              className="settingsTabPanel"
+              role="tabpanel"
+              id={`settings-panel-${tab.id}`}
+              aria-labelledby={`settings-tab-${tab.id}`}
+              hidden={activeTab !== tab.id}
+            >
+              {activeTab === tab.id ? panels[tab.id] : null}
+            </section>
+          ))}
         </div>
         <footer className="modalActions">
           <button type="button" onClick={onClose}>

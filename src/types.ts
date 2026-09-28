@@ -61,6 +61,32 @@ export type IdeaThread = {
   fragments: IdeaFragment[];
 };
 
+/** 作品内の資料ファイルを Idea スレッドから参照するリンク。 */
+export type IdeaReferenceLink = {
+  id: string;
+  sourceType: "reference";
+  /** 作品ルートからの正規化相対パス。 */
+  sourcePath: string;
+  createdAt: number;
+};
+
+/** Idea 本体は既存の保存先に置いたまま、作品側では ID だけを順序へ記録する。 */
+export type IdeaFragmentLink = {
+  sourceType: "idea";
+  fragmentId: string;
+};
+
+export type IdeaThreadItemLink = IdeaFragmentLink | IdeaReferenceLink;
+
+/**
+ * Idea と資料の混在順序。資料参照を profileSnippets へ保存しないため、
+ * ReferenceLayout（作品内の .then/references/layout.json）に保持する。
+ */
+export type IdeaThreadLayout = {
+  threadId: string;
+  items: IdeaThreadItemLink[];
+};
+
 export type PlotCardKind = "section" | "chapter";
 
 export type PlotCard = {
@@ -81,11 +107,8 @@ export type PlotCard = {
 
 export type ReferenceKind = "text" | "markdown" | "image" | "pdf" | "unknown";
 
-export type ReferenceCardState = {
+export type BinderCardFrame = {
   id: string;
-  scope: ReferenceScope;
-  sourcePath: string;
-  kind: ReferenceKind;
   x: number;
   y: number;
   width: number;
@@ -93,17 +116,43 @@ export type ReferenceCardState = {
   zIndex: number;
   collapsed: boolean;
   pinned: boolean;
+};
+
+export type ReferenceCardState = BinderCardFrame & {
+  /** Old saved layouts do not have this field and are normalized as references. */
+  sourceType?: "reference";
+  scope: ReferenceScope;
+  sourcePath: string;
+  kind: ReferenceKind;
   scrollTop?: number;
   zoom?: number;
   page?: number;
   editing?: boolean;
 };
 
+export type IdeaBinderCardState = BinderCardFrame & {
+  sourceType: "idea";
+  threadId: string;
+  fragmentId: string;
+};
+
+export type BinderCardState = ReferenceCardState | IdeaBinderCardState;
+
+export function isIdeaBinderCard(card: BinderCardState): card is IdeaBinderCardState {
+  return card.sourceType === "idea";
+}
+
+export function isReferenceBinderCard(card: BinderCardState): card is ReferenceCardState {
+  return card.sourceType !== "idea";
+}
+
 export type ReferenceLayout = {
-  version: 1;
+  version: 1 | 2 | 3;
   name: string;
-  cards: ReferenceCardState[];
+  cards: BinderCardState[];
   recent: ReferenceFileInfo[];
+  /** version 3 で追加。旧データは読み込み時に fragments から補完する。 */
+  ideaThreads: IdeaThreadLayout[];
 };
 
 export type ReferenceFileInfo = {

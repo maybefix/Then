@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type {
   LoadedThenPlugin,
   ThenPluginPermission,
@@ -12,6 +12,11 @@ type PluginManagerModalProps = {
   onReload: () => void | Promise<void>;
   onUninstall: (plugin: LoadedThenPlugin) => void | Promise<void>;
 };
+
+type BusyAction = "install" | "reload" | `uninstall:${string}`;
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 const permissionLabels: Record<ThenPluginPermission, string> = {
   "document:read": "文書の読み取り",
@@ -31,9 +36,99 @@ export function PluginManagerModal({
   onReload,
   onUninstall,
 }: PluginManagerModalProps) {
-  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<BusyAction | null>(null);
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const lastActionButtonRef = useRef<HTMLButtonElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  const busyActionRef = useRef(busyAction);
+  onCloseRef.current = onClose;
+  busyActionRef.current = busyAction;
 
-  const runAction = async (action: string, run: () => void | Promise<void>) => {
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    const previouslyFocused = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const focusableElements = () =>
+      Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+        (element) => element.getClientRects().length > 0,
+      );
+    const isTopmostDialog = () => {
+      const dialogs = document.querySelectorAll('[aria-modal="true"]');
+      return dialogs[dialogs.length - 1] === dialog;
+    };
+
+    (dialog.querySelector<HTMLElement>(".modalClose") ?? dialog).focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isTopmostDialog()) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (busyActionRef.current === null) onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const focusable = focusableElements();
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (!dialog.contains(active) || active === dialog) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    const handleFocusIn = (event: FocusEvent) => {
+      if (isTopmostDialog() && !dialog.contains(event.target as Node)) {
+        (focusableElements()[0] ?? dialog).focus();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    document.addEventListener("focusin", handleFocusIn);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+      document.removeEventListener("focusin", handleFocusIn);
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current;
+    const actionButton = lastActionButtonRef.current;
+    if (!dialog || !actionButton) return;
+    const dialogs = document.querySelectorAll('[aria-modal="true"]');
+    if (dialogs[dialogs.length - 1] !== dialog) return;
+    if (busyAction !== null) {
+      dialog.focus();
+      return;
+    }
+    const focusTarget = actionButton.isConnected && !actionButton.disabled
+      ? actionButton
+      : dialog.querySelector<HTMLElement>(".modalClose") ?? dialog;
+    focusTarget.focus();
+  }, [busyAction]);
+
+  const runAction = async (
+    action: BusyAction,
+    run: () => void | Promise<void>,
+    button: HTMLButtonElement,
+  ) => {
+    lastActionButtonRef.current = button;
     setBusyAction(action);
     try {
       await run();
@@ -45,14 +140,16 @@ export function PluginManagerModal({
   return (
     <div className="modalBackdrop" role="presentation">
       <section
+        ref={dialogRef}
         className="modal pluginManagerModal"
-        aria-label="プラグイン管理"
+        aria-labelledby="plugin-manager-title"
         role="dialog"
         aria-modal="true"
+        tabIndex={-1}
       >
         <header className="modalHeader">
           <div className="pluginManagerHeading">
-            <h2>プラグイン</h2>
+            <h2 id="plugin-manager-title">プラグイン</h2>
             <span>{plugins.length}個を導入済み</span>
           </div>
           <button
@@ -71,7 +168,7 @@ export function PluginManagerModal({
           <div>
             <button
               type="button"
-              onClick={() => void runAction("reload", onReload)}
+              onClick={(event) => void runAction("reload", onReload, event.currentTarget)}
               disabled={busyAction !== null}
             >
               {busyAction === "reload" ? "再読み込み中…" : "再読み込み"}
@@ -79,7 +176,7 @@ export function PluginManagerModal({
             <button
               className="pluginManagerPrimaryButton"
               type="button"
-              onClick={() => void runAction("install", onInstall)}
+              onClick={(event) => void runAction("install", onInstall, event.currentTarget)}
               disabled={busyAction !== null}
             >
               {busyAction === "install" ? "導入中…" : "プラグインを追加…"}
@@ -96,7 +193,7 @@ export function PluginManagerModal({
           ) : (
             <ul className="pluginManagerList">
               {plugins.map((plugin) => {
-                const actionId = `uninstall:${plugin.manifest.id}`;
+                const actionId: BusyAction = `uninstall:${plugin.manifest.id}`;
                 return (
                   <li className="pluginManagerItem" key={plugin.manifest.id}>
                     <div className="pluginManagerItemHeader">
@@ -108,15 +205,15 @@ export function PluginManagerModal({
                           />
                         )}
                         <div>
-                        <strong>{plugin.manifest.name}</strong>
-                        <span>v{plugin.manifest.version}</span>
+                          <strong>{plugin.manifest.name}</strong>
+                          <span>v{plugin.manifest.version}</span>
                         </div>
                       </div>
                       <button
                         className="pluginManagerDeleteButton"
                         type="button"
-                        onClick={() =>
-                          void runAction(actionId, () => onUninstall(plugin))
+                        onClick={(event) =>
+                          void runAction(actionId, () => onUninstall(plugin), event.currentTarget)
                         }
                         disabled={busyAction !== null}
                         aria-label={`${plugin.manifest.name}を削除`}

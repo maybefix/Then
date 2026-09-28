@@ -5,7 +5,7 @@ import { draftBoardKey, type DraftBoard, type DraftHistory } from "./intermediat
 
 const native = () => "__TAURI_INTERNALS__" in window;
 const localBoardsKey = (scope: CanvasScope, rootPath: string | null) =>
-  `then.canvas-board.${scope}.${rootPath ?? "global"}`;
+  `then.canvas-board.${scope}.${rootPath ?? "unbound"}`;
 
 export async function listDraftBoards(scope: CanvasScope, rootPath: string | null): Promise<CanvasBoardSummary[]> {
   if (native()) return invoke("list_canvas_boards", { scope, rootPath });

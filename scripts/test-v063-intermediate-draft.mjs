@@ -67,13 +67,13 @@ assert.equal(new Set(cyclic.order).size, 4, "cycles retain every card exactly on
 assert.equal(captureDraft({ nodes: [], edges: [] }).order.length, 0);
 console.log("PASS ordering: arrows, ties, branches, merges, duplicate edges, cycles, empty cards, snapshot isolation");
 
-localStorage.setItem("then.canvas-board.global.global", JSON.stringify({ board }));
-const target = { boardId: "board", scope: "global", rootPath: null };
+localStorage.setItem("then.canvas-board.project.one", JSON.stringify({ board }));
+const target = { boardId: "board", scope: "project", rootPath: "one" };
 const session = store.getDraftSession(target);
 let root = createRoot(document.getElementById("root"));
 let live = { ...target, board, selectedIds: ["a"] };
 let selected;
-const render = () => root.render(React.createElement(Pane, { rootPath: null, liveCanvas: live,
+const render = () => root.render(React.createElement(Pane, { rootPath: "one", liveCanvas: live,
   onOpenCanvas: () => {}, onSelectNode: (id) => { selected = id; } }));
 const settle = async () => { await new Promise((resolve) => setTimeout(resolve, 5)); };
 await act(async () => { render(); await settle(); });
@@ -107,9 +107,10 @@ await click(document.querySelector('[aria-label="カード1を下へ"]'));
 await click(button("テキストを生成"));
 assert.equal(document.querySelector("textarea").value, "二番目\n段落\n\n最初");
 await click(button("並べ替え"));
-assert.ok(document.querySelector('[aria-label="カード1を中間稿から除外"]'), "saved versions expose exclusion controls");
+assert.equal(document.querySelector(".draftExcludeButton"), null, "saved versions cannot change their card selection");
+assert.equal(document.querySelector(".draftMoveActions"), null, "saved versions cannot be reordered");
 await click(button("テキスト"));
-const edited = "編集済みの文章\n\n旧版に残す文章。";
+let edited = "編集済みの文章\n\n旧版に残す文章。";
 await act(async () => {
   const textarea = document.querySelector("textarea");
   Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value").set.call(textarea, edited);
@@ -122,6 +123,16 @@ await act(async () => { render(); await settle(); });
 assert.equal(document.querySelector("textarea").value, edited, "Canvas changes do not overwrite draft edits");
 await click(button("再取得"));
 assert.equal(document.querySelectorAll(".draftOrderList li").length, 1);
+await click(button("テキスト"));
+assert.equal(document.querySelector("textarea").readOnly, false, "the latest text remains editable during recapture");
+edited += "\n再取得中の追記";
+await act(async () => {
+  const textarea = document.querySelector("textarea");
+  Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value").set.call(textarea, edited);
+  textarea.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+});
+assert.equal(session.snapshot.history.versions[0].text, edited);
+await click(button("並べ替え"));
 await click(button("テキストを生成"));
 assert.equal(document.querySelector("textarea").value, "Canvasの新しい本文");
 await act(async () => { await session.flush(); });
@@ -132,6 +143,12 @@ await act(async () => {
 });
 assert.equal(document.querySelector("textarea").value, edited);
 assert.equal(document.querySelector("textarea").readOnly, true);
+await click(button("並べ替え"));
+assert.equal(document.querySelector(".draftExcludeButton"), null, "past versions do not create a new capture");
+assert.equal(document.querySelector(".draftMoveActions"), null);
+assert.equal(document.querySelector(".draftDragHandle").draggable, false);
+assert.equal(button("テキストを生成"), undefined);
+await click(button("テキスト"));
 let exported;
 globalThis.draftTestInvoke = async (command, args) => {
   assert.equal(command, "save_submission_text_dialog");
@@ -142,13 +159,35 @@ await click(button("書き出し"));
 assert.equal(exported.content, edited);
 assert.equal(exported.fileName, "中間稿-v1.txt");
 assert.match(document.body.textContent, /中間稿-v1\.txtを保存しました/);
+live = { ...live, board: { ...board, nodes: [node("a", "Canvasの追加本文", 0), node("b", "除外予定", 100)], edges: [] } };
+await act(async () => { render(); await settle(); });
+await click(button("再取得"));
+await click(document.querySelector('[aria-label="カード2を中間稿から除外"]'));
+await click(document.querySelector('[aria-label="カード2を上へ"]'));
+assert.match(document.querySelector(".draftOrderList li.isExcluded").textContent, /除外予定/);
+const chooseVersion = async (number) => act(async () => {
+  const select = document.querySelector('[aria-label="中間稿のバージョン"]');
+  select.value = String(number); select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+  await settle();
+});
+await chooseVersion(1);
+assert.equal(document.querySelector("textarea").readOnly, true);
+await chooseVersion(2);
+assert.equal(document.querySelector("textarea").readOnly, false);
+await click(button("並べ替え"));
+assert.match(document.querySelector(".draftOrderList li.isExcluded").textContent, /除外予定/,
+  "version changes retain pending order and exclusions");
+assert.match(document.querySelector(".draftOrderList li:first-child").textContent, /除外予定/);
+await click(button("テキストを生成"));
+assert.equal(document.querySelector("textarea").value, "Canvasの追加本文");
+await act(async () => { await session.flush(); });
 await act(async () => { root.unmount(); });
 root = createRoot(document.getElementById("root")); live = null;
 await act(async () => { render(); await settle(); }); await act(settle);
-assert.equal(document.querySelector("textarea").value, "Canvasの新しい本文", "write mode can read the saved draft");
+assert.equal(document.querySelector("textarea").value, "Canvasの追加本文", "write mode can read the saved draft");
 await act(async () => { root.unmount(); });
 const stored = JSON.parse(localStorage.getItem(`then.draft.${draftBoardKey(target)}`));
-assert.equal(stored.versions.length, 2); assert.equal(stored.versions[0].text, edited);
+assert.equal(stored.versions.length, 3); assert.equal(stored.versions[0].text, edited);
 console.log("PASS sidebar: reorder, card selection, generation, editing, regeneration, old versions, mode remount, persistence");
 
 // Exercise serialized native saves with edits arriving while a write is pending.
