@@ -228,6 +228,19 @@ export function BodySettings({ settings, systemFonts, editorMeasureLimit, onUpda
           <small>鉤括弧を含む会話文を落ち着いた色で表示します</small>
         </span>
       </label>
+      <label className="checkSetting descriptiveCheckSetting">
+        <input
+          checked={settings.showComments}
+          type="checkbox"
+          onChange={(event) =>
+            onUpdateSettings("showComments", event.target.checked)
+          }
+        />
+        <span className="checkSettingCopy">
+          <span>コメントを表示</span>
+          <small>行頭が // の行と &lt;!-- --&gt; で囲んだ行。オフにすると畳みます（Ctrl+Shift+/）</small>
+        </span>
+      </label>
       <label className="checkSetting">
         <input
           checked={settings.countWhitespace}

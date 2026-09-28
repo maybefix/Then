@@ -259,7 +259,12 @@ export function searchDocumentAstFullText(
   if (rawQuery.length === 0) return EMPTY_SEARCH_OUTCOME;
 
   const text = documentAstText(documentAst);
-  const found = findTextSearchMatches(text, rawQuery, options, maxResults);
+  const skip = options.includeComments
+    ? []
+    : documentAst.blocks
+        .filter((block) => block.kind === "comment")
+        .map((block) => ({ from: block.from, to: block.to }));
+  const found = findTextSearchMatches(text, rawQuery, options, maxResults, skip);
   if (found.error) return { ...EMPTY_SEARCH_OUTCOME, error: found.error };
 
   const results = found.matches.map((match, matchIndex) => {

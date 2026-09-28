@@ -51,6 +51,7 @@ import { StartupPortal } from "./components/startup/StartupPortal";
 import {
   createDocumentAst,
   findActiveOutlineChain,
+  findCommentLineRanges,
   flattenOutline,
   hash16,
   normalizeText,
@@ -63,6 +64,7 @@ import {
 } from "./editor/ast/headingMove";
 import { reconcileSavedDocumentTabs } from "./editor/documentTabState";
 import { createMarkdownTable, tableAtOffset, tableAlignmentEdit } from "./editor/markdownTables";
+import { toggleLineComments } from "./editor/lineComments";
 import {
   createWorkspaceDocumentTabs,
   normalizeWorkspaceDocumentTabs,
@@ -1018,6 +1020,7 @@ const defaultSettings: EditorSettings = {
   showLineNumbers: false,
   highlightCurrentLine: false,
   colorizeJapaneseQuotes: false,
+  showComments: true,
   snippetStorageMode: "workspace",
   sidebarMode: "tree",
   showWorkspacePaths: true,
@@ -2082,9 +2085,27 @@ function replaceLiteralMatches(
   text: string,
   rawQuery: string,
   replacement: string,
+  includeComments: boolean,
 ): { text: string; count: number } {
   const query = rawQuery.trim();
   if (!query) return { text, count: 0 };
+
+  if (!includeComments) {
+    const comments = findCommentLineRanges(text);
+    if (comments.length > 0) {
+      // コメント行の間の区間ごとに置換し、コメント行はそのまま残す。
+      const chunks: string[] = [];
+      let count = 0;
+      let cursor = 0;
+      for (const range of [...comments, { from: text.length, to: text.length }]) {
+        const segment = replaceLiteralMatches(text.slice(cursor, range.from), rawQuery, replacement, true);
+        chunks.push(segment.text, text.slice(range.from, range.to));
+        count += segment.count;
+        cursor = range.to;
+      }
+      return { text: count > 0 ? chunks.join("") : text, count };
+    }
+  }
 
   const haystack = text.toLocaleLowerCase();
   const needle = query.toLocaleLowerCase();
@@ -2112,7 +2133,13 @@ function replaceMarkdownBodyMatches(
   options: TextSearchOptions,
 ): { markdown: string; count: number; error: string | null } {
   const frontMatter = parseFrontMatter(markdown);
-  const result = replaceTextSearchMatches(frontMatter.body, query, replacement, options);
+  const result = replaceTextSearchMatches(
+    frontMatter.body,
+    query,
+    replacement,
+    options,
+    options.includeComments ? [] : findCommentLineRanges(frontMatter.body),
+  );
   if (result.count === 0) return { markdown, count: 0, error: result.error };
   return {
     markdown: updateMarkdownBody(markdown, result.text),
@@ -2124,6 +2151,7 @@ function replaceMarkdownBodyMatches(
 function collectEditorFindMatches(
   documentAst: DocumentAst,
   rawQuery: string,
+  includeComments: boolean,
   maxResults = 500,
 ): EditorFindMatch[] {
   const query = rawQuery.trim();
@@ -2133,6 +2161,7 @@ function collectEditorFindMatches(
   const matches: EditorFindMatch[] = [];
 
   for (const block of documentAst.blocks) {
+    if (!includeComments && block.kind === "comment") continue;
     const source = block.source;
     const normalizedSource = source.toLocaleLowerCase();
     let from = 0;
@@ -2360,6 +2389,10 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         typeof settings.colorizeJapaneseQuotes === "boolean"
           ? settings.colorizeJapaneseQuotes
           : defaultSettings.colorizeJapaneseQuotes,
+      showComments:
+        typeof settings.showComments === "boolean"
+          ? settings.showComments
+          : defaultSettings.showComments,
       typewriterOffset:
         typeof settings.typewriterOffset === "number" && Number.isFinite(settings.typewriterOffset)
           ? Math.min(65, Math.max(30, settings.typewriterOffset))
@@ -2906,6 +2939,8 @@ export default function App() {
   const [projectSearchQuery, setProjectSearchQuery] = useState("");
   const [searchScope, setSearchScope] = useState<WorkspaceSearchScope>("file");
   const [projectSearchUseRegex, setProjectSearchUseRegex] = useState(false);
+  /** 検索・置換でコメント行も対象にするか（サイドバー検索とファイル内検索で共通）。 */
+  const [searchIncludeComments, setSearchIncludeComments] = useState(false);
   const [projectSearchMatchCase, setProjectSearchMatchCase] = useState(false);
   const [projectReplaceValue, setProjectReplaceValue] = useState("");
   const [isProjectReplacing, setIsProjectReplacing] = useState(false);
@@ -4209,8 +4244,12 @@ export default function App() {
     return outlineFlatItems.filter((item) => item.title.toLowerCase().includes(normalized));
   }, [outlineFlatItems, outlineQuery]);
   const projectSearchOptions = useMemo<TextSearchOptions>(
-    () => ({ useRegex: projectSearchUseRegex, matchCase: projectSearchMatchCase }),
-    [projectSearchMatchCase, projectSearchUseRegex],
+    () => ({
+      useRegex: projectSearchUseRegex,
+      matchCase: projectSearchMatchCase,
+      includeComments: searchIncludeComments,
+    }),
+    [projectSearchMatchCase, projectSearchUseRegex, searchIncludeComments],
   );
   const currentFileSearchOutcome = useMemo(
     () =>
@@ -4230,8 +4269,8 @@ export default function App() {
     ],
   );
   const editorFindMatches = useMemo(
-    () => collectEditorFindMatches(activeDocumentAst, editorFind.query),
-    [activeDocumentAst, editorFind.query],
+    () => collectEditorFindMatches(activeDocumentAst, editorFind.query, searchIncludeComments),
+    [activeDocumentAst, editorFind.query, searchIncludeComments],
   );
   const activeEditorFindIndex =
     editorFindMatches.length === 0
@@ -5827,6 +5866,24 @@ export default function App() {
     showToast(level <= 0 ? "見出しを解除しました" : `見出し${level}を設定しました`);
   };
 
+  const applyLineCommentToggle = (selectionOverride?: EditorSelectionSnapshot) => {
+    const editor = editorInstanceRef.current;
+    if (!editor) return;
+    const text = editor.getValue();
+    const selection = normalizeSelectionRange(selectionOverride ?? editor.getSelection(), text);
+    const edit = toggleLineComments(text, selection.from, selection.to);
+    if (!edit) return;
+    editor.replaceRange(edit.from, edit.to, edit.insert, edit.selectionTo);
+    if (edit.selectionFrom !== edit.selectionTo) editor.selectRange(edit.selectionFrom, edit.selectionTo);
+    editor.focus();
+  };
+
+  const toggleShowComments = () => {
+    const next = !settings.showComments;
+    updateSettings("showComments", next);
+    showToast(next ? "コメントを表示しました" : "コメントを非表示にしました");
+  };
+
   const focusEditorFindInput = () => {
     window.requestAnimationFrame(() => {
       editorFindInputRef.current?.focus();
@@ -5891,7 +5948,12 @@ export default function App() {
     const editor = editorInstanceRef.current;
     if (!editor || !editorFind.query.trim()) return;
     const currentText = editor.getValue();
-    const result = replaceLiteralMatches(currentText, editorFind.query, editorFind.replaceValue);
+    const result = replaceLiteralMatches(
+      currentText,
+      editorFind.query,
+      editorFind.replaceValue,
+      searchIncludeComments,
+    );
     if (result.count === 0) {
       showToast("置換できる一致がありません");
       return;
@@ -5940,6 +6002,7 @@ export default function App() {
 
     const reservedThenShortcut = mod && (
       (!event.altKey && !event.shiftKey && ["n", "f", "p", "b", "i", "0", "1", "2", "3", "4", "5", "6"].includes(key.toLowerCase())) ||
+      (!event.altKey && event.code === "Slash") ||
       (event.altKey && !event.shiftKey && ["i", "b"].includes(key.toLowerCase()))
     );
     if (!reservedThenShortcut) {
@@ -5955,6 +6018,14 @@ export default function App() {
     }
 
     if (!mod || event.altKey) return;
+
+    // Ctrl+Shift+/：コメントの表示・非表示（エディタ外でも有効）。
+    if (event.code === "Slash" && event.shiftKey) {
+      event.preventDefault();
+      setIsCommandPaletteOpen(false);
+      toggleShowComments();
+      return;
+    }
 
     if (key === "n" || key === "N") {
       event.preventDefault();
@@ -5997,6 +6068,9 @@ export default function App() {
     } else if (/^[0-6]$/.test(key)) {
       event.preventDefault();
       applyHeadingShortcut(Number(key));
+    } else if (event.code === "Slash") {
+      event.preventDefault();
+      applyLineCommentToggle();
     }
   };
 
@@ -6114,6 +6188,19 @@ export default function App() {
           showToast(`列を${label}にしました`);
         },
       })),
+      {
+        id: "line-comment-toggle",
+        label: "行をコメントにする／戻す",
+        hint: "Ctrl+/",
+        disabledReason: editor ? undefined : "本文を開いてください",
+        run: () => applyLineCommentToggle(selection ?? undefined),
+      },
+      {
+        id: "comments-visibility",
+        label: settings.showComments ? "コメントを非表示にする" : "コメントを表示する",
+        hint: "Ctrl+Shift+/",
+        run: toggleShowComments,
+      },
       {
         id: "bold",
         label: "太字",
@@ -11887,6 +11974,7 @@ export default function App() {
                 projectSearchError={workspaceSearchOutcome.error}
                 projectSearchUseRegex={projectSearchUseRegex}
                 projectSearchMatchCase={projectSearchMatchCase}
+                projectSearchIncludeComments={searchIncludeComments}
                 searchScope={searchScope}
                 projectReplaceValue={projectReplaceValue}
                 isProjectReplacing={isProjectReplacing}
@@ -11912,6 +12000,7 @@ export default function App() {
                 onProjectSearchQueryChange={setProjectSearchQuery}
                 onProjectSearchUseRegexChange={setProjectSearchUseRegex}
                 onProjectSearchMatchCaseChange={setProjectSearchMatchCase}
+                onProjectSearchIncludeCommentsChange={setSearchIncludeComments}
                 onSearchScopeChange={setSearchScope}
                 onProjectReplaceValueChange={setProjectReplaceValue}
                 onOpenProjectSearchResult={(result) => void handleProjectSearchResultOpen(result)}
@@ -12041,6 +12130,7 @@ export default function App() {
                             showLineNumbers={settings.showLineNumbers}
                             highlightCurrentLine={settings.highlightCurrentLine}
                             colorizeJapaneseQuotes={settings.colorizeJapaneseQuotes}
+                            showComments={settings.showComments}
                             textLayoutSignature={[
                               settings.editorFontFamily,
                               settings.headingFontSource,
@@ -12099,6 +12189,15 @@ export default function App() {
                                 onClick={() => moveEditorFindMatch(1)}
                               >
                                 ↓
+                              </button>
+                              <button
+                                type="button"
+                                title="コメント行も検索・置換の対象にする"
+                                aria-label="コメントを含む"
+                                aria-pressed={searchIncludeComments}
+                                onClick={() => setSearchIncludeComments((current) => !current)}
+                              >
+                                //
                               </button>
                               <button
                                 type="button"

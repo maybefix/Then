@@ -10,9 +10,12 @@ export type VisualRect = {
 export type VisualBlockRect = VisualRect & {
   /** Range#getClientRects() が返した、ブラウザによる実際の行断片。 */
   fragments?: readonly VisualRect[];
+  /** 行番号を消費しない段落（コメント行）。行帯は作るが number は 0。 */
+  unnumbered?: boolean;
 };
 
 export type VisualLineBand = {
+  /** 1始まりの行番号。コメント行など番号を持たない行は 0。 */
   number: number;
   blockIndex: number;
   lineIndex: number;
@@ -197,7 +200,7 @@ export function createVisualLineBands(
       const top = vertical && !options?.fragmented ? block.top : line.top;
       const bottom = vertical && !options?.fragmented ? block.bottom : line.bottom;
       bands.push({
-        number,
+        number: block.unnumbered ? 0 : number,
         blockIndex,
         lineIndex,
         left,
@@ -207,7 +210,7 @@ export function createVisualLineBands(
         centerX: (left + right) / 2,
         centerY: (top + bottom) / 2,
       });
-      number += 1;
+      if (!block.unnumbered) number += 1;
     });
   });
 

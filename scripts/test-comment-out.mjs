@@ -8,11 +8,14 @@ export * from './src/export/submission/createSubmissionDocument';
 export * from './src/export/submission/serializeSubmission';
 export * from './src/export/submission/types';
 export { createProofreadContext, MASK_CHAR } from './src/proofread/context';
+export { toggleLineComments } from './src/editor/lineComments';
+export { findTextSearchMatches, replaceTextSearchMatches } from './src/search/textSearch';
 `, resolveDir: process.cwd() }, bundle: true, platform: "node", format: "esm", write: false });
 const {
   detectCommentLines, createDocumentAst, updateDocumentAst, createExportDocument,
   createSubmissionDocument, serializeSubmission, DEFAULT_SUBMISSION_OPTIONS,
-  createProofreadContext, MASK_CHAR,
+  createProofreadContext, MASK_CHAR, toggleLineComments,
+  findTextSearchMatches, replaceTextSearchMatches, findCommentLineRanges,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString("base64")}`);
 
 const kinds = (text) => detectCommentLines(text.split("\n"));
@@ -68,5 +71,36 @@ assert.ok(!submission.text.includes("\\//"));
 // Proofread never inspects comment lines.
 const proof = createProofreadContext("本文\n// ここは校正しない", { skipDialogue: false });
 assert.ok(proof.scanText.split("\n")[1].split("").every((character) => character === MASK_CHAR));
+
+// Ctrl+/ toggle.
+const apply = (text, from, to = from) => {
+  const edit = toggleLineComments(text, from, to);
+  if (!edit) return { text, selection: [from, to] };
+  return { text: text.slice(0, edit.from) + edit.insert + text.slice(edit.to), selection: [edit.selectionFrom, edit.selectionTo] };
+};
+assert.deepEqual(apply("本文", 1), { text: "//本文", selection: [3, 3] }, "caret stays on its character");
+assert.deepEqual(apply("//本文", 3).text, "本文");
+assert.deepEqual(apply("// 本文", 3).text, "本文", "one space after // is removed");
+assert.equal(apply("　字下げ", 2).text, "　//字下げ", "// goes after the indentation");
+assert.equal(apply("a\n\nb", 0, 4).text, "//a\n\n//b", "blank lines are skipped in a multi-line toggle");
+assert.equal(apply("//a\nb", 0, 5).text, "//a\n//b", "mixed lines are all commented");
+assert.equal(apply("//a\n//b", 0, 7).text, "a\nb");
+assert.equal(apply("a\nb", 0, 2).text, "//a\nb", "a selection ending at a line start excludes that line");
+assert.equal(apply("<!-- memo -->", 5).text, "memo");
+assert.equal(apply("<!-- a\nb\nc -->\nd", 8).text, "a\nb\nc\nd", "unwraps the whole group from a middle line");
+
+// Search skips comment lines unless asked to include them.
+const searchText = "猫がいる\n// 猫メモ\n猫";
+const skip = findCommentLineRanges(searchText);
+assert.deepEqual(skip, [{ from: 5, to: 11 }]);
+const plainOptions = { useRegex: false, matchCase: false };
+assert.equal(findTextSearchMatches(searchText, "猫", plainOptions, Infinity, skip).total, 2);
+assert.equal(findTextSearchMatches(searchText, "猫", plainOptions).total, 3);
+assert.equal(replaceTextSearchMatches(searchText, "猫", "犬", plainOptions, skip).text, "犬がいる\n// 猫メモ\n犬");
+assert.equal(
+  replaceTextSearchMatches(searchText, "^猫", "犬", { useRegex: true, matchCase: false }, skip).text,
+  "犬がいる\n// 猫メモ\n犬",
+  "line anchors still work around skipped lines",
+);
 
 console.log("comment-out tests passed");

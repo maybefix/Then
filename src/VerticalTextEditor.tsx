@@ -30,6 +30,7 @@ import {
   lineNumberFromTopLevelIndex,
   type TextEditorSelection,
 } from "./editor/selectionMetrics";
+import { detectCommentLines } from "./editor/ast/documentAst";
 import { updateTextFromLineDiff } from "./editor/lineTextUpdate";
 import { findJapaneseQuoteRanges } from "./editor/japaneseQuoteRanges";
 import { markdownTableRows, type TableRow } from "./editor/markdownTables";
@@ -85,6 +86,8 @@ type VerticalTextEditorProps = {
   showLineNumbers: boolean;
   highlightCurrentLine: boolean;
   colorizeJapaneseQuotes: boolean;
+  /** コメント行（// と <!-- -->）を表示するか。false で畳む。 */
+  showComments: boolean;
   /**
    * 文字寸法に影響する設定（フォント・文字サイズ・行間・文字表示幅）の合成値。
    * ページ表示中の .pm-root はCSSで寸法固定されておりResizeObserverが発火しない
@@ -110,7 +113,7 @@ type VerticalTextEditorProps = {
 };
 
 type LayoutAlign = "start" | "center" | "end";
-type LineKind = "blank" | "paragraph" | "heading" | "list";
+type LineKind = "blank" | "paragraph" | "heading" | "list" | "comment";
 
 type TextRange = {
   offset: number;
@@ -175,6 +178,8 @@ type AstPluginState = {
   activeIndex: number;
   visibleCenter: number;
   fullDecorations: boolean;
+  /** コメント行を畳むか（キャレットのあるコメントのまとまりは除く）。 */
+  commentsHidden: boolean;
 };
 
 type RawMarkup =
@@ -225,6 +230,7 @@ type AstMeta = {
   visibleCenter?: number;
   rebuild?: boolean;
   fullDecorations?: boolean;
+  commentsHidden?: boolean;
 };
 
 type EditorViewWithInput = EditorView & {
@@ -688,7 +694,7 @@ function cleanLineTextForAst(text: string): string {
     .replace(/^>>\s*/, "");
 }
 
-function parseLineNode(text: string, index: number): LineNode {
+function parseLineNode(text: string, index: number, comment = false): LineNode {
   let kind: LineKind = "paragraph";
   let level = 0;
   let marker = "";
@@ -697,7 +703,11 @@ function parseLineNode(text: string, index: number): LineNode {
   let inlineMarkups: InlineMarkup[] = [];
   let cleanText = text;
 
-  if (text.length === 0) {
+  if (comment) {
+    kind = "comment";
+    align = null;
+    cleanText = "";
+  } else if (text.length === 0) {
     kind = "blank";
     cleanText = "";
   } else {
@@ -767,6 +777,36 @@ function cloneLineNode(line: LineNode, lineIndex: number): LineNode {
   };
 }
 
+/**
+ * Multi-line HTML comments make a line's kind depend on its neighbours, so the
+ * comment state is re-derived for the whole document after every change and
+ * only lines whose state flipped are re-parsed.
+ */
+function applyCommentKinds(lines: LineNode[]): LineNode[] {
+  const comments = detectCommentLines(lines.map((line) => line.source));
+  let next: LineNode[] | null = null;
+  for (let index = 0; index < lines.length; index += 1) {
+    const comment = comments[index] !== null;
+    if ((lines[index].kind === "comment") === comment) continue;
+    next ??= lines.slice();
+    next[index] = parseLineNode(lines[index].source, index, comment);
+  }
+  return next ?? lines;
+}
+
+/** The run of comment lines around `index`, or null when that line is not a comment. */
+function commentGroupAt(
+  lines: readonly LineNode[],
+  index: number,
+): { from: number; to: number } | null {
+  if (lines[index]?.kind !== "comment") return null;
+  let from = index;
+  let to = index + 1;
+  while (from > 0 && lines[from - 1].kind === "comment") from -= 1;
+  while (to < lines.length && lines[to].kind === "comment") to += 1;
+  return { from, to };
+}
+
 function diffTopLevelNodes(oldDoc: PMNode, newDoc: PMNode): DocumentLineDiff {
   const oldCount = oldDoc.childCount;
   const newCount = newDoc.childCount;
@@ -816,7 +856,7 @@ function incrementalLines(
     next.push(oldLine.lineIndex === next.length ? oldLine : cloneLineNode(oldLine, next.length));
   }
 
-  return next;
+  return applyCommentKinds(next);
 }
 
 function pmStartAtIndex(doc: PMNode, index: number): number | null {
@@ -1448,7 +1488,7 @@ function pushLineDecos(
   active: boolean,
 ): void {
   const line = lines[index];
-  if (!line) return;
+  if (!line || line.kind === "comment") return;
 
   const classes = ["pm-line"];
   if (line.kind === "blank") classes.push("blank");
@@ -1727,15 +1767,80 @@ function pushTableRowDecos(out: Decoration[], node: PMNode, start: number, row: 
   marker(end, node.content.size, 2 * row.columns + 1);
 }
 
+function pushCommentDecos(
+  out: Decoration[],
+  doc: PMNode,
+  lines: readonly LineNode[],
+  activeIndex: number,
+  commentsHidden: boolean,
+): void {
+  if (!lines.some((line) => line.kind === "comment")) return;
+  // The comment group holding the caret stays open so it can be read and edited.
+  const open = commentGroupAt(lines, activeIndex);
+  doc.forEach((node, start, index) => {
+    if (lines[index]?.kind !== "comment") return;
+    const hidden = commentsHidden && !(open && index >= open.from && index < open.to);
+    out.push(Decoration.node(start, start + node.nodeSize, {
+      class: hidden ? "pm-line pm-comment pm-comment-hidden" : "pm-line pm-comment",
+    }));
+  });
+}
+
+/**
+ * With comments folded, Backspace at a line start (Delete at a line end) next
+ * to a folded comment joins with the nearest visible line instead. The default
+ * join would merge the text into the comment line, where it would disappear.
+ */
+function handleFoldedCommentJoin(view: EditorView, event: KeyboardEvent): boolean {
+  const backward = event.key === "Backspace";
+  if ((!backward && event.key !== "Delete") || event.ctrlKey || event.metaKey || event.altKey) {
+    return false;
+  }
+  const ast = astKey.getState(view.state);
+  const { selection, doc } = view.state;
+  if (!ast?.commentsHidden || !selection.empty || view.composing) return false;
+  const { $head } = selection;
+  const index = $head.index(0);
+  const lines = ast.lines;
+  if (lines[index]?.kind === "comment") return false;
+  const atEdge = backward ? $head.parentOffset === 0 : $head.parentOffset === $head.parent.content.size;
+  const neighbour = backward ? index - 1 : index + 1;
+  if (!atEdge || lines[neighbour]?.kind !== "comment") return false;
+
+  let target = neighbour;
+  while (lines[target]?.kind === "comment") target += backward ? -1 : 1;
+  if (target < 0 || target >= doc.childCount) return true;
+
+  // Always move the later line's content onto the end of the earlier one, so
+  // the folded comments end up after the joined line.
+  const [earlier, later] = backward ? [target, index] : [index, target];
+  const earlierStart = pmStartAtIndex(doc, earlier);
+  const laterStart = pmStartAtIndex(doc, later);
+  if (earlierStart === null || laterStart === null) return true;
+  const earlierNode = doc.child(earlier);
+  const laterNode = doc.child(later);
+  const joinPos = earlierStart + 1 + earlierNode.content.size;
+  const tr = view.state.tr
+    .delete(laterStart, laterStart + laterNode.nodeSize)
+    .insert(joinPos, laterNode.content);
+  tr.setSelection(TextSelection.create(tr.doc, joinPos)).scrollIntoView();
+  view.dispatch(tr);
+  return true;
+}
+
 function buildWindowDecos(
   doc: PMNode,
   lines: LineNode[],
   activeIndex: number,
   visibleCenter: number,
   fullDecorations: boolean,
+  commentsHidden: boolean,
 ): DecorationSet {
   const out: Decoration[] = [];
   const count = Math.min(doc.childCount, lines.length);
+  // Comment lines are styled (and folded) across the whole document, not only
+  // inside the decoration window, so hiding never depends on the scroll position.
+  pushCommentDecos(out, doc, lines, activeIndex, commentsHidden);
   // Keep table geometry stable outside the decoration window as well: moving
   // the caret or scrolling must never replace the grid with raw paragraphs.
   const tableRows = markdownTableRows(lines);
@@ -1763,7 +1868,7 @@ function buildWindowDecos(
 
 function makeAstState(state: EditorState): AstPluginState {
   const texts = topTexts(state.doc);
-  const lines = texts.map((line, index) => parseLineNode(line, index));
+  const lines = applyCommentKinds(texts.map((line, index) => parseLineNode(line, index)));
   const activeIndex = activeLineIndex(state);
   return {
     lines,
@@ -1772,7 +1877,8 @@ function makeAstState(state: EditorState): AstPluginState {
     activeIndex,
     visibleCenter: activeIndex,
     fullDecorations: false,
-    decoSet: buildWindowDecos(state.doc, lines, activeIndex, activeIndex, false),
+    commentsHidden: false,
+    decoSet: buildWindowDecos(state.doc, lines, activeIndex, activeIndex, false, false),
   };
 }
 
@@ -1828,6 +1934,10 @@ function applyAst(
     typeof meta?.fullDecorations === "boolean"
       ? meta.fullDecorations
       : value.fullDecorations;
+  const commentsHidden =
+    typeof meta?.commentsHidden === "boolean"
+      ? meta.commentsHidden
+      : value.commentsHidden;
 
   if (typeof meta?.visibleCenter === "number") {
     visibleCenter = Math.max(0, Math.min(newState.doc.childCount - 1, meta.visibleCenter));
@@ -1839,7 +1949,8 @@ function applyAst(
       meta?.rebuild !== true &&
       activeIndex === value.activeIndex &&
       visibleCenter === value.visibleCenter &&
-      fullDecorations === value.fullDecorations
+      fullDecorations === value.fullDecorations &&
+      commentsHidden === value.commentsHidden
     ) {
       return value;
     }
@@ -1849,12 +1960,14 @@ function applyAst(
       activeIndex,
       visibleCenter,
       fullDecorations,
+      commentsHidden,
       decoSet: buildWindowDecos(
         newState.doc,
         value.lines,
         activeIndex,
         visibleCenter,
         fullDecorations,
+        commentsHidden,
       ),
     };
   }
@@ -1874,6 +1987,7 @@ function applyAst(
       activeIndex,
       visibleCenter,
       fullDecorations,
+      commentsHidden,
       decoSet: value.decoSet.map(tr.mapping, newState.doc),
     };
   }
@@ -1885,12 +1999,14 @@ function applyAst(
     activeIndex,
     visibleCenter,
     fullDecorations,
+    commentsHidden,
     decoSet: buildWindowDecos(
       newState.doc,
       lines,
       activeIndex,
       visibleCenter,
       fullDecorations,
+      commentsHidden,
     ),
   };
 }
@@ -1933,7 +2049,8 @@ const LayoutAstExtension = Extension.create({
           apply: applyAst,
         },
         props: {
-          handleKeyDown: handleTableKeyDown,
+          handleKeyDown: (view, event) =>
+            handleTableKeyDown(view, event) || handleFoldedCommentJoin(view, event),
           handleDOMEvents: {
             mousedown: (_view, event) => {
               tableClickOrigin = { x: event.clientX, y: event.clientY, target: event.target };
@@ -2453,6 +2570,7 @@ export function VerticalTextEditor({
   showLineNumbers,
   highlightCurrentLine,
   colorizeJapaneseQuotes,
+  showComments,
   textLayoutSignature,
   initialSelectionOffset,
   initialViewportState,
@@ -2496,6 +2614,7 @@ export function VerticalTextEditor({
   const typewriterOffsetRef = useRef(typewriterOffset);
   const showLineBreakMarksRef = useRef(showLineBreakMarks);
   const showLineNumbersRef = useRef(showLineNumbers);
+  const showCommentsRef = useRef(showComments);
   const highlightCurrentLineRef = useRef(highlightCurrentLine);
   const renderLineBreakMarksRef = useRef<(() => void) | null>(null);
   const requestLineBreakMarksRef = useRef<(() => void) | null>(null);
@@ -3025,6 +3144,52 @@ export function VerticalTextEditor({
       renderLineBreakMarksRef.current?.();
     }
   }, [showLineBreakMarks]);
+
+  // コメントの表示切替。畳む行にキャレットがあれば直後（なければ直前）の表示行へ
+  // 移し、キャレットの画面位置を保つようスクロールを補正する（勝手に追わない）。
+  useEffect(() => {
+    if (showCommentsRef.current === showComments) return;
+    showCommentsRef.current = showComments;
+    const editor = tiptapRef.current;
+    if (!editor) return;
+    const { view } = editor;
+    const caretPoint = () => {
+      try {
+        return view.coordsAtPos(view.state.selection.head);
+      } catch {
+        return null;
+      }
+    };
+    const before = caretPoint();
+    const tr = view.state.tr
+      .setMeta(astKey, { rebuild: true, commentsHidden: !showComments } satisfies AstMeta)
+      .setMeta("addToHistory", false);
+    const ast = astKey.getState(view.state);
+    const group = !showComments && ast ? commentGroupAt(ast.lines, activeLineIndex(view.state)) : null;
+    if (group) {
+      const { doc } = view.state;
+      const forward = group.to < doc.childCount;
+      const target = forward ? group.to : group.from - 1;
+      const start = pmStartAtIndex(doc, target);
+      if (start !== null) {
+        const pos = forward ? start + 1 : start + 1 + doc.child(target).content.size;
+        tr.setSelection(TextSelection.create(doc, pos));
+      }
+    }
+    view.dispatch(tr);
+
+    const scroller = scrollerRef.current;
+    if (editorDisplayModeRef.current === "paged") {
+      requestPagedAnchorRestoreRef.current?.();
+    } else if (scroller && before) {
+      const after = caretPoint();
+      if (after) {
+        scroller.scrollLeft += after.left - before.left;
+        scroller.scrollTop += after.top - before.top;
+      }
+    }
+    requestVisualLinesRef.current?.();
+  }, [showComments]);
 
   useEffect(() => {
     showLineNumbersRef.current = showLineNumbers;
@@ -3793,6 +3958,7 @@ export function VerticalTextEditor({
           top: rect.top,
           bottom: rect.bottom,
           fragments,
+          unnumbered: element.classList.contains("pm-comment"),
         };
       });
       const mode = writingModeRef.current;
@@ -3886,10 +4052,10 @@ export function VerticalTextEditor({
           }
 
           const blockRect = blockRects[band.blockIndex];
-          if (!blockRect) continue;
+          if (!blockRect || band.number === 0) continue;
           const number = document.createElement("span");
           number.className = `visibleLineNumber${
-            activeBand?.number === band.number ? " active" : ""
+            activeBand === band ? " active" : ""
           }`;
           number.dataset.visualLineNumber = String(band.number);
           number.textContent = String(band.number);
@@ -4180,12 +4346,13 @@ export function VerticalTextEditor({
     });
 
     tiptapRef.current = editor;
-    if (showLineNumbersRef.current) {
+    if (showLineNumbersRef.current || !showCommentsRef.current) {
       editor.view.dispatch(
         editor.state.tr
           .setMeta(astKey, {
             rebuild: true,
-            fullDecorations: true,
+            fullDecorations: showLineNumbersRef.current,
+            commentsHidden: !showCommentsRef.current,
           } satisfies AstMeta)
           .setMeta("addToHistory", false),
       );

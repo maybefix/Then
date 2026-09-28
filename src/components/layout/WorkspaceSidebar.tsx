@@ -67,6 +67,7 @@ type WorkspaceSidebarProps = {
   projectSearchError: string | null;
   projectSearchUseRegex: boolean;
   projectSearchMatchCase: boolean;
+  projectSearchIncludeComments: boolean;
   searchScope: WorkspaceSearchScope;
   projectReplaceValue: string;
   isProjectReplacing: boolean;
@@ -74,6 +75,7 @@ type WorkspaceSidebarProps = {
   onProjectSearchQueryChange: (value: string) => void;
   onProjectSearchUseRegexChange: (value: boolean) => void;
   onProjectSearchMatchCaseChange: (value: boolean) => void;
+  onProjectSearchIncludeCommentsChange: (value: boolean) => void;
   onSearchScopeChange: (value: WorkspaceSearchScope) => void;
   onProjectReplaceValueChange: (value: string) => void;
   onOpenProjectSearchResult: (result: ProjectSearchResult) => void;
@@ -508,6 +510,7 @@ export function WorkspaceSidebar({
   projectSearchError,
   projectSearchUseRegex,
   projectSearchMatchCase,
+  projectSearchIncludeComments,
   searchScope,
   projectReplaceValue,
   isProjectReplacing,
@@ -515,6 +518,7 @@ export function WorkspaceSidebar({
   onProjectSearchQueryChange,
   onProjectSearchUseRegexChange,
   onProjectSearchMatchCaseChange,
+  onProjectSearchIncludeCommentsChange,
   onSearchScopeChange,
   onProjectReplaceValueChange,
   onOpenProjectSearchResult,
@@ -2109,6 +2113,16 @@ export function WorkspaceSidebar({
             onClick={() => onProjectSearchUseRegexChange(!projectSearchUseRegex)}
           >
             .*
+          </button>
+          <button
+            className={projectSearchIncludeComments ? "activeSearchOption" : ""}
+            type="button"
+            title="コメント行も検索・置換の対象にする"
+            aria-label="コメントを含む"
+            aria-pressed={projectSearchIncludeComments}
+            onClick={() => onProjectSearchIncludeCommentsChange(!projectSearchIncludeComments)}
+          >
+            //
           </button>
         </div>
       </div>

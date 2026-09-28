@@ -314,6 +314,8 @@ export type EditorSettings = {
   highlightCurrentLine: boolean;
   /** 日本語の鉤括弧「」で囲まれた本文を色分けするか。 */
   colorizeJapaneseQuotes: boolean;
+  /** コメント行（行頭 // と <!-- -->）を本文中に表示するか。false で畳む。 */
+  showComments: boolean;
   snippetStorageMode: "workspace" | "profile";
   sidebarMode: SidebarMode;
   /** プロジェクト切替メニューでフォルダパスを表示するか。 */

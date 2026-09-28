@@ -2604,6 +2604,15 @@ html:not([data-window-fullscreen="true"])
   display: none;
 }
 
+/* コメント行（docs/COMMENT_OUT_SPEC.md）。記号ごと弱い色で見せ、非表示設定では畳む。 */
+.verticalTypewriterEditor .pm-comment {
+  color: var(--comment-color, var(--text-muted));
+}
+
+.verticalTypewriterEditor .pm-comment-hidden {
+  display: none;
+}
+
 .verticalTypewriterEditor .ruby-base {
   display: ruby;
   color: var(--ruby-base-color, var(--text-primary));

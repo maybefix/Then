@@ -414,6 +414,7 @@ export default function PagedOpenQaApp() {
                     showLineNumbers
                     highlightCurrentLine={false}
                     colorizeJapaneseQuotes={false}
+                    showComments
                     textLayoutSignature={'"BIZ UDゴシック"|body|"游ゴシック"|17|1.55|85|81'}
                     initialSelectionOffset={text.length}
                     initialViewportState={null}
