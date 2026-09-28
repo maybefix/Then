@@ -65,6 +65,7 @@ import {
 import { reconcileSavedDocumentTabs } from "./editor/documentTabState";
 import { createMarkdownTable, tableAtOffset, tableAlignmentEdit } from "./editor/markdownTables";
 import { toggleLineComments } from "./editor/lineComments";
+import { displayedCharacterCount } from "./editor/ast/characterCount";
 import {
   createWorkspaceDocumentTabs,
   normalizeWorkspaceDocumentTabs,
@@ -1033,6 +1034,7 @@ const defaultSettings: EditorSettings = {
   zoneModeOpacity: 0.42,
   navigatorPreviewLines: DEFAULT_NAVIGATOR_PREVIEW_LINES,
   countWhitespace: true,
+  countCode: true,
   showOutlineGuides: true,
   checkpointSectionCollapsed: false,
   canvasOpensInWindow: false,
@@ -2361,6 +2363,10 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         typeof settings.countWhitespace === "boolean"
           ? settings.countWhitespace
           : defaultSettings.countWhitespace,
+      countCode:
+        typeof settings.countCode === "boolean"
+          ? settings.countCode
+          : defaultSettings.countCode,
       showOutlineGuides:
         typeof settings.showOutlineGuides === "boolean"
           ? settings.showOutlineGuides
@@ -4221,9 +4227,10 @@ export default function App() {
     activeDocumentAstCacheRef.current = next;
     return next;
   }, [currentFileName, currentFilePath, editorText]);
-  const charCount = settings.countWhitespace
-    ? activeDocumentAst.textLength
-    : activeDocumentAst.visibleTextLength;
+  const charCount = displayedCharacterCount(activeDocumentAst, {
+    includeWhitespace: settings.countWhitespace,
+    includeCode: settings.countCode,
+  });
   const outlineItems = activeDocumentAst.outline;
   const outlineFlatItems = useMemo<FlatOutlineItem[]>(
     () => flattenOutline(outlineItems),
@@ -11957,6 +11964,7 @@ export default function App() {
                 sidebarMode={settings.sidebarMode}
                 navigatorPreviewLines={settings.navigatorPreviewLines}
                 countWhitespace={settings.countWhitespace}
+                countCode={settings.countCode}
                 showOutlineGuides={settings.showOutlineGuides}
                 fileProgress={appState.fileProgress}
                 onSetFileProgress={handleSetFileProgress}

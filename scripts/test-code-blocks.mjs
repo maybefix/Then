@@ -3,12 +3,13 @@ import { build } from "esbuild";
 
 const bundle = await build({ stdin: { contents: `
 export * from './src/editor/ast/documentAst';
+export * from './src/editor/ast/characterCount';
 export { markdownTableRows } from './src/editor/markdownTables';
 export { createProofreadContext, MASK_CHAR } from './src/proofread/context';
 `, resolveDir: process.cwd() }, bundle: true, platform: "node", format: "esm", write: false });
 const {
   classifyLines, createDocumentAst, updateDocumentAst, parseInlines, markdownTableRows,
-  createProofreadContext, MASK_CHAR,
+  createProofreadContext, MASK_CHAR, displayedCharacterCount, displayedSectionCount,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString("base64")}`);
 
 const roles = (text) => classifyLines(text.split("\n"));
@@ -67,5 +68,13 @@ assert.equal(markdownTableRows("```\n| a | b |\n| --- | --- |\n```".split("\n").
 assert.equal(markdownTableRows("```\n| a | b |\n| --- | --- |".split("\n").map((source) => ({ source }))).size, 2, "an unclosed fence does not hide a table");
 const proof = createProofreadContext("本文\n```\nコード\n```", { skipDialogue: false });
 assert.ok(proof.scanText.split("\n").slice(1).every((line) => [...line].every((character) => character === MASK_CHAR)));
+
+// Display options pick the right figure.
+const withCode = { includeWhitespace: true, includeCode: true };
+const withoutCode = { includeWhitespace: true, includeCode: false };
+assert.equal(displayedCharacterCount(ast, withCode), ast.textLength);
+assert.equal(displayedCharacterCount(ast, withoutCode), plain.textLength);
+assert.equal(displayedCharacterCount(ast, { includeWhitespace: false, includeCode: false }), plain.visibleTextLength);
+assert.equal(displayedSectionCount(ast.outline[0], withoutCode), plain.outline[0].sectionTextLength);
 
 console.log("code block tests passed");
