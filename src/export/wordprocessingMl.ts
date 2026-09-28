@@ -37,6 +37,9 @@ function runProperties(font: ExportFontFamily, extra = ""): string {
   return `<w:rPr><w:rFonts w:ascii="${name}" w:hAnsi="${name}" w:eastAsia="${name}" w:cs="${name}"/><w:lang w:val="ja-JP" w:eastAsia="ja-JP"/>${extra}</w:rPr>`;
 }
 
+/** Gothic, fixed-pitch face for code in DOCX (bundled on Windows). */
+const CODE_FONT = "MS Gothic";
+
 function normalRun(font: ExportFontFamily, text: string, extra = ""): string {
   if (!text) return "";
   return `<w:r>${runProperties(font, extra)}${textElement(text)}</w:r>`;
@@ -84,9 +87,16 @@ function inlineXml(
       return writingMode === "vertical-rl"
         ? normalRun(font, inline.text, '<w:eastAsianLayout w:vert="1" w:vertCompress="1"/>')
         : normalRun(font, inline.text);
+    case "code":
+      return codeRun(inline.text);
     case "break":
       return "<w:r><w:br/></w:r>";
   }
+}
+
+/** Code keeps every space and uses a gothic face to stand apart from the body. */
+function codeRun(text: string): string {
+  return `<w:r><w:rPr><w:rFonts w:ascii="${CODE_FONT}" w:hAnsi="${CODE_FONT}" w:eastAsia="${CODE_FONT}" w:cs="${CODE_FONT}"/></w:rPr><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
 }
 
 function paragraphXml(
@@ -96,6 +106,12 @@ function paragraphXml(
   writingMode: ExportLayoutProfile["body"]["writingMode"],
 ): string {
   if (block.kind === "blank") return "<w:p/>";
+  if (block.kind === "code") {
+    const runs = block.inlines
+      .map((inline) => (inline.kind === "break" ? "<w:r><w:br/></w:r>" : codeRun(inline.text)))
+      .join("");
+    return `<w:p><w:pPr><w:jc w:val="start"/><w:widowControl/></w:pPr>${runs}</w:p>`;
+  }
   const style = block.kind === "heading"
     ? `<w:pStyle w:val="Heading${Math.max(1, Math.min(6, block.level))}"/>`
     : "";

@@ -27,6 +27,8 @@ function inlineHtml(inline: ExportInline): string {
       return `<span class="emphasis emphasis-${inline.style}">${text}</span>`;
     case "tcy":
       return `<span class="tcy">${text}</span>`;
+    case "code":
+      return `<code class="code-inline">${text}</code>`;
     case "break":
       return "<br>";
   }
@@ -114,6 +116,8 @@ rt { font-size: 0.5em; }
 .emphasis-auto, .emphasis-goma { text-emphasis-style: sesame; }
 .emphasis-dot { text-emphasis-style: dot; }
 .tcy { text-combine-upright: all; }
+.code, .code-inline { font-family: "Noto Sans CJK JP", monospace; font-size: 0.92em; }
+.code { white-space: pre-wrap; }
 strong { font-weight: 700; }
 </style>
 </head>

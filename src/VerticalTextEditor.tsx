@@ -841,6 +841,15 @@ function pushInlineDecos(markup: InlineMarkup, contentStart: number, out: Decora
     return;
   }
 
+  if (markup.type === "code") {
+    const contentOffset = markup.contentRange.offset;
+    const contentEnd = contentOffset + markup.contentRange.length;
+    addInlineDecoration(out, contentStart, fullStart, contentOffset, "mk-hidden");
+    addInlineDecoration(out, contentStart, contentOffset, contentEnd, "mk-code");
+    addInlineDecoration(out, contentStart, contentEnd, fullEnd, "mk-hidden");
+    return;
+  }
+
   if (markup.type === "tcy") {
     const contentOffset = markup.contentRange.offset;
     const contentEnd = contentOffset + markup.contentRange.length;
@@ -925,7 +934,7 @@ function pushLineDecos(
   active: boolean,
 ): void {
   const line = lines[index];
-  if (!line || line.kind === "comment") return;
+  if (!line || line.kind === "comment" || line.kind === "code") return;
 
   const classes = ["pm-line"];
   if (line.kind === "blank") classes.push("blank");
@@ -1204,23 +1213,83 @@ function pushTableRowDecos(out: Decoration[], node: PMNode, start: number, row: 
   marker(end, node.content.size, 2 * row.columns + 1);
 }
 
-function pushCommentDecos(
+/**
+ * Comment and code lines are styled across the whole document, not only inside
+ * the decoration window: folding and the code font change layout, so they must
+ * not depend on the scroll position.
+ */
+function pushStructureDecos(
   out: Decoration[],
   doc: PMNode,
   lines: readonly LineNode[],
   activeIndex: number,
   commentsHidden: boolean,
 ): void {
-  if (!lines.some((line) => line.kind === "comment")) return;
+  if (!lines.some((line) => line.kind === "comment" || line.kind === "code")) return;
   // The comment group holding the caret stays open so it can be read and edited.
   const open = commentGroupAt(lines, activeIndex);
+  let insideCode = false;
   doc.forEach((node, start, index) => {
-    if (lines[index]?.kind !== "comment") return;
-    const hidden = commentsHidden && !(open && index >= open.from && index < open.to);
-    out.push(Decoration.node(start, start + node.nodeSize, {
-      class: hidden ? "pm-line pm-comment pm-comment-hidden" : "pm-line pm-comment",
-    }));
+    const line = lines[index];
+    if (line?.kind === "comment") {
+      const hidden = commentsHidden && !(open && index >= open.from && index < open.to);
+      out.push(Decoration.node(start, start + node.nodeSize, {
+        class: hidden ? "pm-line pm-comment pm-comment-hidden" : "pm-line pm-comment",
+      }));
+      return;
+    }
+    if (line?.kind !== "code") return;
+    const classes = ["pm-line", "pm-code"];
+    if (line.codeFence) {
+      classes.push("pm-code-fence", insideCode ? "pm-code-end" : "pm-code-start");
+      insideCode = !insideCode;
+    }
+    out.push(Decoration.node(start, start + node.nodeSize, { class: classes.join(" ") }));
   });
+}
+
+const CODE_INDENT = "    ";
+
+/**
+ * Tab / Shift+Tab inside a code block (docs/CODE_BLOCK_SPEC.md §7): Tab inserts
+ * four spaces at the caret, or indents every selected line; Shift+Tab removes up
+ * to four leading spaces from every selected line. Fence lines are left alone.
+ */
+function handleCodeIndent(view: EditorView, event: KeyboardEvent): boolean {
+  if (event.key !== "Tab" || event.ctrlKey || event.metaKey || event.altKey || view.composing) {
+    return false;
+  }
+  const ast = astKey.getState(view.state);
+  if (!ast) return false;
+  const { selection, doc } = view.state;
+  const firstIndex = selection.$from.index(0);
+  const lastIndex = selection.$to.index(0);
+  const lines = ast.lines;
+  for (let index = firstIndex; index <= lastIndex; index += 1) {
+    if (lines[index]?.kind !== "code") return false;
+  }
+
+  const tr = view.state.tr;
+  if (!event.shiftKey && selection.empty) {
+    if (lines[firstIndex].codeFence) return true;
+    tr.insertText(CODE_INDENT, selection.from);
+  } else {
+    // Walk bottom-up so earlier positions stay valid while editing.
+    for (let index = lastIndex; index >= firstIndex; index -= 1) {
+      if (lines[index].codeFence) continue;
+      const start = pmStartAtIndex(doc, index);
+      if (start === null) continue;
+      const lineStart = start + 1;
+      if (event.shiftKey) {
+        const leading = /^ {1,4}/.exec(doc.child(index).textContent)?.[0].length ?? 0;
+        if (leading > 0) tr.delete(lineStart, lineStart + leading);
+      } else if (doc.child(index).content.size > 0 || firstIndex === lastIndex) {
+        tr.insertText(CODE_INDENT, lineStart);
+      }
+    }
+  }
+  if (tr.docChanged) view.dispatch(tr.scrollIntoView());
+  return true;
 }
 
 /**
@@ -1277,7 +1346,7 @@ function buildWindowDecos(
   const count = Math.min(doc.childCount, lines.length);
   // Comment lines are styled (and folded) across the whole document, not only
   // inside the decoration window, so hiding never depends on the scroll position.
-  pushCommentDecos(out, doc, lines, activeIndex, commentsHidden);
+  pushStructureDecos(out, doc, lines, activeIndex, commentsHidden);
   // Keep table geometry stable outside the decoration window as well: moving
   // the caret or scrolling must never replace the grid with raw paragraphs.
   const tableRows = markdownTableRows(lines);
@@ -1487,7 +1556,9 @@ const LayoutAstExtension = Extension.create({
         },
         props: {
           handleKeyDown: (view, event) =>
-            handleTableKeyDown(view, event) || handleFoldedCommentJoin(view, event),
+            handleTableKeyDown(view, event) ||
+            handleCodeIndent(view, event) ||
+            handleFoldedCommentJoin(view, event),
           handleDOMEvents: {
             mousedown: (_view, event) => {
               tableClickOrigin = { x: event.clientX, y: event.clientY, target: event.target };

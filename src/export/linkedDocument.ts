@@ -73,7 +73,8 @@ function mergeSoftBreaks(blocks: ExportBlock[]): ExportBlock[] {
       flush();
       continue;
     }
-    if (block.kind === "heading") {
+    // Headings and code blocks stand alone; body lines never merge into them.
+    if (block.kind === "heading" || block.kind === "code") {
       flush();
       out.push(block);
       continue;
@@ -359,6 +360,7 @@ export function exportInlineHtml(inline: ExportInline): string {
     case "ruby": return `<ruby>${text}<rp>（</rp><rt>${escapeHtml(inline.reading)}</rt><rp>）</rp></ruby>`;
     case "emphasis": return `<span class="then-emphasis then-emphasis-${inline.style}">${text}</span>`;
     case "tcy": return `<span class="then-tcy">${text}</span>`;
+    case "code": return `<code class="then-code-inline">${text}</code>`;
     case "break": return "<br>";
   }
 }
@@ -462,6 +464,9 @@ rt { font-size:.5em; }
 .then-emphasis-auto,.then-emphasis-goma { text-emphasis-style:sesame; }
 .then-emphasis-dot { text-emphasis-style:dot; }
 .then-tcy { text-combine-upright:${tcyStyle}; }
+@font-face { font-family:"Then Code"; src:url("${new URL("/fonts/NotoSansCJKjp-Regular.otf", baseUrl).href}") format("opentype"); font-display:block; }
+.then-code, .then-code-inline { font-family:"Then Code",monospace; font-size:0.92em; }
+.then-code { white-space:pre-wrap; text-align:start; }
 strong { font-weight:700; }
 `;
 }

@@ -111,12 +111,14 @@ export type ExportInline =
   | { kind: "ruby"; text: string; reading: string; mode: "group" | "mono" }
   | { kind: "emphasis"; text: string; style: "auto" | "goma" | "dot" }
   | { kind: "tcy"; text: string }
+  | { kind: "code"; text: string }
   // Soft line break inside a paragraph (one editor line break). `text` is always
   // empty; it exists so every inline uniformly carries a `text` field.
   | { kind: "break"; text: string };
 
 export type ExportBlock = {
-  kind: "blank" | "paragraph" | "heading" | "list";
+  // "code" is one whole code block; its lines are joined with "break" inlines.
+  kind: "blank" | "paragraph" | "heading" | "list" | "code";
   level: number;
   align: "start" | "center" | "end";
   inlines: ExportInline[];

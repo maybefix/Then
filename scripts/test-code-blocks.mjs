@@ -6,7 +6,16 @@ export * from './src/editor/ast/documentAst';
 export * from './src/editor/ast/characterCount';
 export { markdownTableRows } from './src/editor/markdownTables';
 export { createProofreadContext, MASK_CHAR } from './src/proofread/context';
+export { createExportDocument } from './src/export/documentExport';
+export { createLinkedExportDocument, buildLinkedPrintHtml, paginateLinkedDocument } from './src/export/linkedDocument';
+export { buildLinkedVivliostyleHtml } from './src/export/vivliostyleHtml';
+export { generateVerticalDocx } from './src/export/wordprocessingMl';
+export { DEFAULT_EXPORT_LAYOUT } from './src/export/types';
+export * from './src/export/submission/createSubmissionDocument';
+export * from './src/export/submission/serializeSubmission';
+export * from './src/export/submission/types';
 `, resolveDir: process.cwd() }, bundle: true, platform: "node", format: "esm", write: false });
+const exportsModule = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString("base64")}`);
 const {
   classifyLines, createDocumentAst, updateDocumentAst, parseInlines, markdownTableRows,
   createProofreadContext, MASK_CHAR, displayedCharacterCount, displayedSectionCount,
@@ -76,5 +85,49 @@ assert.equal(displayedCharacterCount(ast, withCode), ast.textLength);
 assert.equal(displayedCharacterCount(ast, withoutCode), plain.textLength);
 assert.equal(displayedCharacterCount(ast, { includeWhitespace: false, includeCode: false }), plain.visibleTextLength);
 assert.equal(displayedSectionCount(ast.outline[0], withoutCode), plain.outline[0].sectionTextLength);
+
+// Export: code keeps its lines verbatim, fences are not printed, notation is literal.
+const {
+  createExportDocument, createLinkedExportDocument, buildLinkedPrintHtml, paginateLinkedDocument,
+  buildLinkedVivliostyleHtml, generateVerticalDocx, DEFAULT_EXPORT_LAYOUT,
+  createSubmissionDocument, serializeSubmission, DEFAULT_SUBMISSION_OPTIONS,
+} = exportsModule;
+const manuscript = "本文一行目\n本文二行目\n```js\nif (a) {\n    **b**();\n}\n```\n本文`x<y`の続き";
+const exported = createExportDocument(createDocumentAst({ text: manuscript, name: "e.md", indexedAt: 1 }), "Noto Serif CJK JP");
+const codeBlock = exported.blocks.find((block) => block.kind === "code");
+assert.ok(codeBlock, "a code block is exported as one block");
+assert.deepEqual(
+  codeBlock.inlines.map((inline) => (inline.kind === "break" ? "\n" : inline.text)).join(""),
+  "if (a) {\n    **b**();\n}",
+  "code lines are verbatim and fences are dropped",
+);
+assert.ok(exported.blocks.at(-1).inlines.some((inline) => inline.kind === "code" && inline.text === "x<y"));
+
+const source = { id: "s", path: "s.md", extension: "md", displayName: "s.md", chars: 0, enabled: true, order: 0, startMode: "continue", markupMode: "then-markup", content: manuscript };
+const job = { format: "pdf", title: "t", sources: [{ ...source, content: undefined }], layout: JSON.parse(JSON.stringify(DEFAULT_EXPORT_LAYOUT)) };
+const linked = createLinkedExportDocument(job, [source]);
+const blocks = linked.sections[0].blocks;
+assert.deepEqual(blocks.map((block) => block.kind), ["paragraph", "code", "paragraph"], "code is not merged into body paragraphs");
+assert.ok(paginateLinkedDocument(linked).length >= 1);
+const viv = buildLinkedVivliostyleHtml(linked, "http://127.0.0.1:1420/");
+assert.match(viv, /<p class="then-block then-code[^"]*">if \(a\) \{<br>    \*\*b\*\*\(\);<br>\}<\/p>/);
+assert.match(viv, /<code class="then-code-inline">x&lt;y<\/code>/);
+assert.match(viv, /\.then-code \{ white-space: pre-wrap;/);
+assert.doesNotMatch(viv, /```/, "fences are not printed");
+assert.match(buildLinkedPrintHtml(linked, "http://127.0.0.1:1420/"), /then-code/);
+
+const { readFile } = await import("node:fs/promises");
+const JSZip = (await import("jszip")).default;
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async (input) => new Response(await readFile(`public/fonts/${String(input).includes("Sans") ? "NotoSansCJKjp-Regular.otf" : "NotoSerifCJKjp-Regular.otf"}`));
+const docx = await generateVerticalDocx(linked);
+globalThis.fetch = originalFetch;
+const documentXml = await (await JSZip.loadAsync(docx)).file("word/document.xml").async("string");
+assert.match(documentXml, /<w:t xml:space="preserve">    \*\*b\*\*\(\);<\/w:t>/, "DOCX keeps code spaces and notation");
+assert.match(documentXml, /w:ascii="MS Gothic"/);
+
+const submission = serializeSubmission(createSubmissionDocument([source]), { ...DEFAULT_SUBMISSION_OPTIONS, lineEnding: "lf" });
+assert.ok(submission.text.includes("```js\nif (a) {\n    **b**();\n}\n```"), "novel text keeps code as typed");
+assert.ok(submission.text.includes("本文`x<y`の続き"));
 
 console.log("code block tests passed");

@@ -70,7 +70,7 @@ assert.doesNotMatch(
 const appSource = await readFile("src/App.tsx", "utf8");
 assert.match(
   appSource,
-  /const charCount = settings\.countWhitespace\s*\? activeDocumentAst\.textLength\s*:\s*activeDocumentAst\.visibleTextLength;/,
+  /const charCount = displayedCharacterCount\(activeDocumentAst, \{\s*includeWhitespace: settings\.countWhitespace,\s*includeCode: settings\.countCode,\s*\}\);/,
   "the status bar must consume Document AST aggregate metrics",
 );
 assert.match(
@@ -87,7 +87,7 @@ assert.doesNotMatch(
 const sidebarSource = await readFile("src/components/layout/sidebarMetrics.ts", "utf8");
 assert.match(
   sidebarSource,
-  /includeWhitespace \? item\.sectionTextLength : item\.sectionVisibleTextLength/,
+  /const count = displayedSectionCount\(item, options\);/,
   "heading counts must read the range aggregate stored on each outline item",
 );
 assert.doesNotMatch(

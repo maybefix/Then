@@ -479,7 +479,7 @@ assert.doesNotMatch(
 );
 assert.match(
   appSource,
-  /const charCount = settings\.countWhitespace\s*\? activeDocumentAst\.textLength\s*:\s*activeDocumentAst\.visibleTextLength;/,
+  /const charCount = displayedCharacterCount\(activeDocumentAst, \{\s*includeWhitespace: settings\.countWhitespace,\s*includeCode: settings\.countCode,\s*\}\);/,
   "character counts must update from the active incremental Document AST",
 );
 assert.doesNotMatch(

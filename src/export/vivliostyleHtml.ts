@@ -170,6 +170,13 @@ rt { font-size: 0.5em; }
 .then-emphasis-auto, .then-emphasis-goma { text-emphasis-style: sesame; }
 .then-emphasis-dot { text-emphasis-style: dot; }
 .then-tcy { text-combine-upright: ${tcyStyle}; }
+@font-face {
+  font-family: "Then Code";
+  src: url("${new URL("/fonts/NotoSansCJKjp-Regular.otf", baseUrl).href}") format("opentype");
+  font-style: normal; font-weight: 400; font-display: block;
+}
+.then-code, .then-code-inline { font-family: "Then Code", monospace; font-size: 0.92em; }
+.then-code { white-space: pre-wrap; text-align: start; }
 strong { font-weight: 700; }
 </style>
 </head>
