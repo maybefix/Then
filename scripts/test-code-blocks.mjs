@@ -78,6 +78,18 @@ assert.equal(markdownTableRows("```\n| a | b |\n| --- | --- |".split("\n").map((
 const proof = createProofreadContext("本文\n```\nコード\n```", { skipDialogue: false });
 assert.ok(proof.scanText.split("\n").slice(1).every((line) => [...line].every((character) => character === MASK_CHAR)));
 
+// Ctrl+/ refuses inside code unless whole blocks are selected.
+const { toggleLineComments } = await import(`data:text/javascript;base64,${Buffer.from((await build({ entryPoints: ["src/editor/lineComments.ts"], bundle: true, platform: "node", format: "esm", write: false })).outputFiles[0].text).toString("base64")}`);
+const codeDoc = "本文\n```\nx = 1\n```\n後文";
+assert.deepEqual(toggleLineComments(codeDoc, codeDoc.indexOf("x"), codeDoc.indexOf("x")), { blocked: "code" });
+assert.deepEqual(toggleLineComments(codeDoc, 0, codeDoc.indexOf("x")), { blocked: "code" }, "a selection reaching into code is refused");
+const whole = toggleLineComments(codeDoc, codeDoc.indexOf("```"), codeDoc.lastIndexOf("```") + 3);
+assert.equal(whole.insert, "//```\n//x = 1\n//```", "a whole block becomes comments");
+const commented = codeDoc.slice(0, whole.from) + whole.insert + codeDoc.slice(whole.to);
+assert.deepEqual(roles(commented), [null, "slash", "slash", "slash", null]);
+const restored = toggleLineComments(commented, whole.from, whole.from + whole.insert.length);
+assert.equal(commented.slice(0, restored.from) + restored.insert + commented.slice(restored.to), codeDoc);
+
 // Display options pick the right figure.
 const withCode = { includeWhitespace: true, includeCode: true };
 const withoutCode = { includeWhitespace: true, includeCode: false };
