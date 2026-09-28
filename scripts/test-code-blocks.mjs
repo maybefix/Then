@@ -84,7 +84,7 @@ const codeDoc = "本文\n```\nx = 1\n```\n後文";
 assert.deepEqual(toggleLineComments(codeDoc, codeDoc.indexOf("x"), codeDoc.indexOf("x")), { blocked: "code" });
 assert.deepEqual(toggleLineComments(codeDoc, 0, codeDoc.indexOf("x")), { blocked: "code" }, "a selection reaching into code is refused");
 const whole = toggleLineComments(codeDoc, codeDoc.indexOf("```"), codeDoc.lastIndexOf("```") + 3);
-assert.equal(whole.insert, "//```\n//x = 1\n//```", "a whole block becomes comments");
+assert.equal(whole.insert, "// ```\n// x = 1\n// ```", "a whole block becomes comments");
 const commented = codeDoc.slice(0, whole.from) + whole.insert + codeDoc.slice(whole.to);
 assert.deepEqual(roles(commented), [null, "slash", "slash", "slash", null]);
 const restored = toggleLineComments(commented, whole.from, whole.from + whole.insert.length);

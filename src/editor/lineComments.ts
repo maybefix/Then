@@ -46,7 +46,7 @@ function uncommentSlash(line: string): string {
 
 function commentSlash(line: string): string {
   const indent = LEADING_SPACE.exec(line)?.[0] ?? "";
-  return `${indent}//${line.slice(indent.length)}`;
+  return `${indent}// ${line.slice(indent.length)}`;
 }
 
 function unwrapHtmlOpener(line: string): string {

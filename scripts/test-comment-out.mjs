@@ -78,14 +78,15 @@ const apply = (text, from, to = from) => {
   if (!edit) return { text, selection: [from, to] };
   return { text: text.slice(0, edit.from) + edit.insert + text.slice(edit.to), selection: [edit.selectionFrom, edit.selectionTo] };
 };
-assert.deepEqual(apply("本文", 1), { text: "//本文", selection: [3, 3] }, "caret stays on its character");
+assert.deepEqual(apply("本文", 1), { text: "// 本文", selection: [4, 4] }, "caret stays on its character");
 assert.deepEqual(apply("//本文", 3).text, "本文");
 assert.deepEqual(apply("// 本文", 3).text, "本文", "one space after // is removed");
-assert.equal(apply("　字下げ", 2).text, "　//字下げ", "// goes after the indentation");
-assert.equal(apply("a\n\nb", 0, 4).text, "//a\n\n//b", "blank lines are skipped in a multi-line toggle");
-assert.equal(apply("//a\nb", 0, 5).text, "//a\n//b", "mixed lines are all commented");
+assert.equal(apply("　字下げ", 2).text, "　// 字下げ", "// goes after the indentation");
+assert.equal(apply("a\n\nb", 0, 4).text, "// a\n\n// b", "blank lines are skipped in a multi-line toggle");
+assert.equal(apply("//a\nb", 0, 5).text, "//a\n// b", "mixed lines are all commented");
 assert.equal(apply("//a\n//b", 0, 7).text, "a\nb");
-assert.equal(apply("a\nb", 0, 2).text, "//a\nb", "a selection ending at a line start excludes that line");
+assert.equal(apply("a\nb", 0, 2).text, "// a\nb", "a selection ending at a line start excludes that line");
+assert.equal(apply(apply("本文", 0).text, 0).text, "本文", "toggling twice restores the line");
 assert.equal(apply("<!-- memo -->", 5).text, "memo");
 assert.equal(apply("<!-- a\nb\nc -->\nd", 8).text, "a\nb\nc\nd", "unwraps the whole group from a middle line");
 
