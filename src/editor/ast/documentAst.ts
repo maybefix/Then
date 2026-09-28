@@ -9,18 +9,42 @@ import type {
   RubyItem,
 } from "./types";
 
-// Line comments (docs/COMMENT_OUT_SPEC.md). A comment is always a whole line:
+// Multi-line structure (docs/COMMENT_OUT_SPEC.md, docs/CODE_BLOCK_SPEC.md).
+// This is the single place that decides which lines are comments and which are
+// code; the AST, editor, proofreading and table detection all use it.
+//
+// Comments are whole lines:
 //   - `//` at the start of the line (after half/full-width indentation)
 //   - `<!-- ... -->` spanning one line, or a run of lines opened by a line that
 //     starts with `<!--` and closed by a line that ends with `-->`.
-// Lines inside code fences are never comments. An unclosed `<!--` is plain text
-// so a forgotten close cannot swallow the rest of the manuscript.
+// Code blocks are fenced with 3+ backticks or tildes (CommonMark rules for the
+// closing fence). A construct that is never closed stays plain text, so a
+// forgotten close cannot swallow the rest of the manuscript. Whichever
+// construct opens first owns the lines up to its close.
 
 export type CommentSyntax = "slash" | "html";
+export type LineRole = CommentSyntax | "codeFence" | "code";
 
 const LEADING_SPACE = /^[ \t　]*/;
-const FENCE_PATTERN = /^\s{0,3}(?:```|~~~)/;
 const TRAILING_SPACE = /[ \t　]*$/;
+const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+const FENCE_CLOSE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
+
+type FenceOpening = { marker: string; length: number; info: string };
+
+/** The opening fence on this line, or null. Backtick fences cannot carry backticks in the info string. */
+export function parseFenceOpening(line: string): FenceOpening | null {
+  const match = FENCE_OPEN.exec(line);
+  if (!match) return null;
+  const marker = match[1][0];
+  if (marker === "`" && match[2].includes("`")) return null;
+  return { marker, length: match[1].length, info: match[2].trim() };
+}
+
+function closesFence(line: string, opening: FenceOpening): boolean {
+  const match = FENCE_CLOSE.exec(line);
+  return Boolean(match && match[1][0] === opening.marker && match[1].length >= opening.length);
+}
 
 function leadingSpaceLength(line: string): number {
   return LEADING_SPACE.exec(line)?.[0].length ?? 0;
@@ -53,30 +77,41 @@ function closesHtmlComment(line: string, isOpeningLine: boolean): boolean {
 }
 
 /**
- * Classifies every line. Linear in the line count; callers re-run it on each
- * document change because a multi-line HTML comment makes the result depend on
- * lines other than the one that changed.
+ * Classifies every line as comment, code or neither. Callers re-run it on each
+ * document change because multi-line constructs make a line's role depend on
+ * other lines. Unclosed openers make it quadratic in the worst case; each
+ * unclosed opener rescans the rest of the document once.
  */
-export function detectCommentLines(lines: readonly string[]): Array<CommentSyntax | null> {
-  const out: Array<CommentSyntax | null> = new Array(lines.length).fill(null);
-  let insideFence = false;
+export function classifyLines(lines: readonly string[]): Array<LineRole | null> {
+  const out: Array<LineRole | null> = new Array(lines.length).fill(null);
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
-    if (FENCE_PATTERN.test(line)) {
-      insideFence = !insideFence;
-      continue;
-    }
-    if (insideFence) continue;
 
     if (isSlashCommentLine(line)) {
       out[index] = "slash";
       continue;
     }
-    if (!opensHtmlComment(line)) continue;
 
+    const fence = parseFenceOpening(line);
+    if (fence) {
+      let close = -1;
+      for (let probe = index + 1; probe < lines.length; probe += 1) {
+        if (closesFence(lines[probe], fence)) {
+          close = probe;
+          break;
+        }
+      }
+      if (close < 0) continue;
+      out[index] = "codeFence";
+      for (let probe = index + 1; probe < close; probe += 1) out[probe] = "code";
+      out[close] = "codeFence";
+      index = close;
+      continue;
+    }
+
+    if (!opensHtmlComment(line)) continue;
     let close = -1;
     for (let probe = index; probe < lines.length; probe += 1) {
-      if (probe > index && FENCE_PATTERN.test(lines[probe])) break;
       if (closesHtmlComment(lines[probe], probe === index)) {
         close = probe;
         break;
@@ -87,6 +122,18 @@ export function detectCommentLines(lines: readonly string[]): Array<CommentSynta
     index = close;
   }
   return out;
+}
+
+export function isCommentRole(role: LineRole | null | undefined): role is CommentSyntax {
+  return role === "slash" || role === "html";
+}
+
+export function isCodeRole(role: LineRole | null | undefined): role is "codeFence" | "code" {
+  return role === "codeFence" || role === "code";
+}
+
+export function detectCommentLines(lines: readonly string[]): Array<CommentSyntax | null> {
+  return classifyLines(lines).map((role) => (isCommentRole(role) ? role : null));
 }
 
 /** Offsets of each comment line (without its line break), in ascending order. */
@@ -110,6 +157,13 @@ export function sliceWithoutSlashEscape(source: string, from: number, to = sourc
 }
 
 type RawMarkup =
+  | {
+      type: "code";
+      start: number;
+      len: number;
+      /** Number of backticks on each side. */
+      ticks: number;
+    }
   | {
       type: "layout";
       start: number;
@@ -296,6 +350,35 @@ function parseLayoutInvocation(
   };
 }
 
+/**
+ * Inline code spans: a run of N backticks closed by the next run of exactly N
+ * backticks on the same line, with at least one character between them.
+ */
+function findInlineCodeSpans(text: string): Array<RawMarkup & { type: "code" }> {
+  const spans: Array<RawMarkup & { type: "code" }> = [];
+  const runs: Array<{ start: number; ticks: number }> = [];
+  const pattern = /`+/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(text))) runs.push({ start: match.index, ticks: match[0].length });
+  for (let open = 0; open < runs.length; open += 1) {
+    const opening = runs[open];
+    const close = runs.findIndex(
+      (run, index) => index > open && run.ticks === opening.ticks,
+    );
+    if (close < 0) continue;
+    const closing = runs[close];
+    if (closing.start === opening.start + opening.ticks) continue;
+    spans.push({
+      type: "code",
+      start: opening.start,
+      len: closing.start + closing.ticks - opening.start,
+      ticks: opening.ticks,
+    });
+    open = close;
+  }
+  return spans;
+}
+
 export function parseInlines(text: string, base = 0): InlineMarkup[] {
   const raw: RawMarkup[] = [];
   let match: RegExpExecArray | null;
@@ -379,6 +462,17 @@ export function parseInlines(text: string, base = 0): InlineMarkup[] {
     });
   }
 
+  // Inline code is literal: notation inside it (or overlapping it) is not markup.
+  const codeSpans = findInlineCodeSpans(text);
+  if (codeSpans.length > 0) {
+    const overlapsCode = (item: RawMarkup) =>
+      codeSpans.some((span) => item.start < span.start + span.len && span.start < item.start + item.len);
+    for (let index = raw.length - 1; index >= 0; index -= 1) {
+      if (overlapsCode(raw[index])) raw.splice(index, 1);
+    }
+    raw.push(...codeSpans);
+  }
+
   raw.sort((left, right) => left.start - right.start || right.len - left.len);
 
   const picked: RawMarkup[] = [];
@@ -406,6 +500,35 @@ export function parseInlines(text: string, base = 0): InlineMarkup[] {
         item.methodOffset,
       );
       if (markup) out.push(markup);
+      continue;
+    }
+
+    if (item.type === "code") {
+      const contentStart = start + item.ticks;
+      const contentLength = item.len - item.ticks * 2;
+      const ticks = "`".repeat(item.ticks);
+      out.push({
+        id: hash16(`code|${full}|${start}`),
+        type: "code",
+        fullText: full,
+        contentText: full.slice(item.ticks, item.len - item.ticks),
+        fullRange: { offset: start, length: item.len },
+        contentRange: { offset: contentStart, length: contentLength },
+        metadata: "inlineCode",
+        markers: [
+          { role: "opening", text: ticks, range: { offset: start, length: item.ticks } },
+          {
+            role: "content",
+            text: full.slice(item.ticks, item.len - item.ticks),
+            range: { offset: contentStart, length: contentLength },
+          },
+          {
+            role: "closing",
+            text: ticks,
+            range: { offset: contentStart + contentLength, length: item.ticks },
+          },
+        ],
+      });
       continue;
     }
 
@@ -563,7 +686,7 @@ export function parseLineNode(
   text: string,
   index: number,
   from = 0,
-  comment: CommentSyntax | null = null,
+  role: LineRole | null = null,
 ): LineNode {
   let kind: LineKind = "paragraph";
   let level = 0;
@@ -572,12 +695,23 @@ export function parseLineNode(
   let align = detectLayoutAlign(text);
   let inlineMarkups: InlineMarkup[] = [];
   let cleanText = text;
+  let codeFence: boolean | undefined;
+  let codeInfo: string | undefined;
 
-  if (comment) {
+  if (isCommentRole(role)) {
     // Comments are not manuscript: no markup, no characters, no alignment.
     kind = "comment";
     align = null;
     cleanText = "";
+  } else if (isCodeRole(role)) {
+    // Code is literal: no headings, lists, alignment or inline notation.
+    kind = "code";
+    align = null;
+    codeFence = role === "codeFence";
+    if (codeFence) {
+      const info = parseFenceOpening(text)?.info;
+      if (info) codeInfo = info;
+    }
   } else if (text.length === 0) {
     kind = "blank";
     cleanText = "";
@@ -628,9 +762,22 @@ export function parseLineNode(
     if (align === "end") jitsuki = true;
   }
 
-  const characterMetrics = comment
+  const characterMetrics = isCommentRole(role)
     ? { textLength: 0, visibleTextLength: 0 }
     : measureLineCharacters(text);
+  let codeMetrics = { textLength: 0, visibleTextLength: 0 };
+  if (kind === "code") {
+    codeMetrics = characterMetrics;
+  } else {
+    for (const markup of inlineMarkups) {
+      if (markup.type !== "code") continue;
+      const span = measureLineCharacters(markup.fullText);
+      codeMetrics = {
+        textLength: codeMetrics.textLength + span.textLength,
+        visibleTextLength: codeMetrics.visibleTextLength + span.visibleTextLength,
+      };
+    }
+  }
   return {
     id: hash16(`L|${kind}|${level}|${align || ""}|${text}`),
     semanticHash: hash16(`S|${kind}|${level}|${align || ""}|${cleanText}`),
@@ -646,6 +793,10 @@ export function parseLineNode(
     to: from + text.length,
     textLength: characterMetrics.textLength,
     visibleTextLength: characterMetrics.visibleTextLength,
+    codeTextLength: codeMetrics.textLength,
+    codeVisibleTextLength: codeMetrics.visibleTextLength,
+    ...(codeFence === undefined ? {} : { codeFence }),
+    ...(codeInfo === undefined ? {} : { codeInfo }),
     length: text.length,
     inlineMarkups,
   };
@@ -653,23 +804,43 @@ export function parseLineNode(
 
 export function parseDocumentBlocks(text: string): LineNode[] {
   const lines = normalizeText(text).split("\n");
-  const comments = detectCommentLines(lines);
+  const roles = classifyLines(lines);
   let offset = 0;
 
   return lines.map((line, index) => {
-    const block = parseLineNode(line, index, offset, comments[index]);
+    const block = parseLineNode(line, index, offset, roles[index]);
     offset += line.length + 1;
     return block;
   });
 }
 
-/** Line breaks counted as characters: the manuscript as if comment lines were absent. */
-function countedLineBreaks(blocks: readonly LineNode[]): number {
+/**
+ * Line breaks counted as characters: the manuscript as if comment lines were
+ * absent (and, for `withoutCode`, code-block lines as well).
+ */
+function countedLineBreaks(blocks: readonly LineNode[], withoutCode = false): number {
   let lines = 0;
   for (const block of blocks) {
-    if (block.kind !== "comment") lines += 1;
+    if (block.kind === "comment" || (withoutCode && block.kind === "code")) continue;
+    lines += 1;
   }
   return Math.max(0, lines - 1);
+}
+
+/** The role a parsed block was built with, for deciding whether it can be reused. */
+function blockRole(block: LineNode): "comment" | "codeFence" | "code" | null {
+  if (block.kind === "comment") return "comment";
+  if (block.kind === "code") return block.codeFence ? "codeFence" : "code";
+  return null;
+}
+
+function roleSignature(role: LineRole | null): "comment" | "codeFence" | "code" | null {
+  return isCommentRole(role) ? "comment" : role;
+}
+
+/** Whether `block` was parsed with the given role (and can be kept as is). */
+export function blockHasRole(block: LineNode, role: LineRole | null | undefined): boolean {
+  return blockRole(block) === roleSignature(role ?? null);
 }
 
 function normalizeHeadingTitle(text: string): string {
@@ -694,6 +865,8 @@ export function buildOutlineFromBlocks(blocks: LineNode[], sourceId = "document"
           line: block.lineIndex + 1,
           sectionTextLength: 0,
           sectionVisibleTextLength: 0,
+          sectionCodeTextLength: 0,
+          sectionCodeVisibleTextLength: 0,
           children: [],
         };
 
@@ -713,10 +886,12 @@ export function buildOutlineFromBlocks(blocks: LineNode[], sourceId = "document"
     }
 
     if (currentSection) {
-      currentSection.sectionTextLength +=
-        block.textLength +
-        (blockIndex < blocks.length - 1 && block.kind !== "comment" ? 1 : 0);
+      const lineBreak = blockIndex < blocks.length - 1 && block.kind !== "comment" ? 1 : 0;
+      currentSection.sectionTextLength += block.textLength + lineBreak;
       currentSection.sectionVisibleTextLength += block.visibleTextLength;
+      currentSection.sectionCodeTextLength +=
+        block.codeTextLength + (block.kind === "code" ? lineBreak : 0);
+      currentSection.sectionCodeVisibleTextLength += block.codeVisibleTextLength;
     }
   }
 
@@ -736,12 +911,17 @@ function assembleDocumentAst(
 ): DocumentAst {
   const outline = buildOutlineFromBlocks(blocks, input.path ?? input.name ?? "document");
   const semanticParts: string[] = [];
-  let textLength = countedLineBreaks(blocks);
+  const lineBreaks = countedLineBreaks(blocks);
+  let textLength = lineBreaks;
   let visibleTextLength = 0;
+  let codeTextLength = lineBreaks - countedLineBreaks(blocks, true);
+  let codeVisibleTextLength = 0;
   for (const block of blocks) {
     semanticParts.push(block.semanticHash);
     textLength += block.textLength;
     visibleTextLength += block.visibleTextLength;
+    codeTextLength += block.codeTextLength;
+    codeVisibleTextLength += block.codeVisibleTextLength;
   }
   const semanticHash = hash16(semanticParts.join("|"));
 
@@ -754,6 +934,8 @@ function assembleDocumentAst(
     semanticHash,
     textLength,
     visibleTextLength,
+    codeTextLength,
+    codeVisibleTextLength,
     lineCount: blocks.length,
     blocks,
     outline,
@@ -795,10 +977,10 @@ export function updateDocumentAst(
     suffixCount += 1;
   }
 
-  // Multi-line HTML comments make a line's kind depend on its neighbours, so
-  // comment state is re-derived for every line and reused blocks are re-parsed
-  // when it flips.
-  const comments = detectCommentLines(lines);
+  // Multi-line comments and code blocks make a line's kind depend on its
+  // neighbours, so roles are re-derived for every line and reused blocks are
+  // re-parsed when their role changes.
+  const roles = classifyLines(lines);
   const blocks: LineNode[] = [];
   let offset = 0;
   const changedEnd = newCount - suffixCount;
@@ -810,10 +992,10 @@ export function updateDocumentAst(
         : index >= changedEnd
           ? oldCount - (newCount - index)
           : -1;
-    const comment = comments[index];
+    const role = roles[index];
     const candidate = oldIndex >= 0 ? oldBlocks[oldIndex] : null;
     const oldBlock =
-      candidate && (candidate.kind === "comment") === Boolean(comment) ? candidate : null;
+      candidate && blockRole(candidate) === roleSignature(role) ? candidate : null;
     const to = offset + source.length;
     if (
       oldBlock &&
@@ -830,7 +1012,7 @@ export function updateDocumentAst(
         to,
       });
     } else {
-      blocks.push(parseLineNode(source, index, offset, comment));
+      blocks.push(parseLineNode(source, index, offset, role));
     }
     offset = to + 1;
   }

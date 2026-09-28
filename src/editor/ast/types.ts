@@ -1,6 +1,6 @@
 export type LayoutAlign = "start" | "center" | "end";
 
-export type LineKind = "blank" | "paragraph" | "heading" | "list" | "comment";
+export type LineKind = "blank" | "paragraph" | "heading" | "list" | "comment" | "code";
 
 export type TextRange = {
   offset: number;
@@ -21,7 +21,7 @@ export type RubyItem = {
 
 export type InlineMarkup = {
   id: string;
-  type: "ruby" | "emphasis" | "tcy" | "layoutAlign" | "aozoraAnnotation" | "bold";
+  type: "ruby" | "emphasis" | "tcy" | "layoutAlign" | "aozoraAnnotation" | "bold" | "code";
   syntax?: "layoutsystem_v1" | "legacy";
   fullText: string;
   contentText: string;
@@ -53,6 +53,14 @@ export type LineNode = {
   textLength: number;
   /** Unicode code-point count excluding half/full-width whitespace. */
   visibleTextLength: number;
+  /** Part of textLength that is code (a whole code-block line, or inline code spans). */
+  codeTextLength: number;
+  /** Part of visibleTextLength that is code. */
+  codeVisibleTextLength: number;
+  /** For kind "code": whether this line is an opening or closing fence. */
+  codeFence?: boolean;
+  /** For an opening fence: the info string (language name etc.). */
+  codeInfo?: string;
   length: number;
   inlineMarkups: InlineMarkup[];
 };
@@ -67,6 +75,10 @@ export type DocumentOutlineItem = {
   sectionTextLength: number;
   /** The same heading range count excluding half/full-width whitespace. */
   sectionVisibleTextLength: number;
+  /** Part of sectionTextLength that is code (subtracted when code is not counted). */
+  sectionCodeTextLength: number;
+  /** Part of sectionVisibleTextLength that is code. */
+  sectionCodeVisibleTextLength: number;
   children: DocumentOutlineItem[];
 };
 
@@ -80,6 +92,10 @@ export type DocumentAst = {
   textLength: number;
   /** 空白文字（半角・全角スペース、タブ、改行など）を除いた文字数。 */
   visibleTextLength: number;
+  /** textLength のうちコード（コードブロックと行内コード）の文字数。 */
+  codeTextLength: number;
+  /** visibleTextLength のうちコードの文字数。 */
+  codeVisibleTextLength: number;
   lineCount: number;
   blocks: LineNode[];
   outline: DocumentOutlineItem[];
@@ -99,6 +115,10 @@ export type ProjectAstFile = {
   textLength: number;
   /** 空白文字を除いた文字数。 */
   visibleTextLength: number;
+  /** textLength のうちコードの文字数。 */
+  codeTextLength: number;
+  /** visibleTextLength のうちコードの文字数。 */
+  codeVisibleTextLength: number;
   outlineCount: number;
   indexedAt: number | null;
   error: string | null;

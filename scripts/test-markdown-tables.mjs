@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import ts from "typescript";
+import { build } from "esbuild";
 
-const source = await readFile("src/editor/markdownTables.ts", "utf8");
-const code = ts.transpileModule(source, {
-  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-}).outputText;
+const bundle = await build({ entryPoints: ["src/editor/markdownTables.ts"], bundle: true, platform: "node", format: "esm", write: false });
+const code = bundle.outputFiles[0].text;
 const { splitTableRow, markdownTableRows, createMarkdownTable, tableAtOffset, tableAlignmentEdit, textExtent } = await import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`);
 const parse = (text) => markdownTableRows(text.split("\n").map((source) => ({ source })));
 const sample = "前文\n| 名前 | 個数 |\n| :--- | ---: |\n| りんご | 12 |\n| みかん | 3 |\n\n後文";

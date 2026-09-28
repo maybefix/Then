@@ -1,3 +1,5 @@
+import { classifyLines } from "./ast/documentAst";
+
 export type TableCell = { from: number; to: number };
 export type TableRow = {
   cells: TableCell[];
@@ -90,17 +92,11 @@ export function markdownTableRows(lines: readonly { source: string }[]): Map<num
   const cached = cache.get(lines);
   if (cached) return cached;
   const rows = new Map<number, TableRow>();
-  let fence: { marker: string; length: number } | null = null;
+  // Code blocks and comments are never tables.
+  const roles = classifyLines(lines.map((line) => line.source));
   for (let i = 0; i < lines.length; i++) {
     const source = lines[i].source;
-    const fenceMatch = source.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
-    if (fenceMatch) {
-      const marker = fenceMatch[1][0];
-      if (!fence) fence = { marker, length: fenceMatch[1].length };
-      else if (marker === fence.marker && fenceMatch[1].length >= fence.length && !fenceMatch[2].trim()) fence = null;
-      continue;
-    }
-    if (fence || /^ {4}|^\t/.test(source) || i + 1 >= lines.length) continue;
+    if (roles[i] || roles[i + 1] || /^ {4}|^\t/.test(source) || i + 1 >= lines.length) continue;
     const header = splitTableRow(source);
     const ruleSource = lines[i + 1].source;
     const rule = splitTableRow(ruleSource);
@@ -117,7 +113,7 @@ export function markdownTableRows(lines: readonly { source: string }[]): Map<num
     rows.set(++i, { cells: rule, columns, alignments, kind: "rule", widths: [] });
     while (i + 1 < lines.length) {
       const next = lines[i + 1].source;
-      if (/^\s*(`{3,}|~{3,})|^ {4}|^\t/.test(next)) break;
+      if (roles[i + 1] || /^ {4}|^\t/.test(next)) break;
       const cells = splitTableRow(next);
       if (!cells) break;
       tableColumns = Math.max(tableColumns, cells.length);

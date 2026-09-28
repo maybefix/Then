@@ -30,7 +30,8 @@ import {
   lineNumberFromTopLevelIndex,
   type TextEditorSelection,
 } from "./editor/selectionMetrics";
-import { detectCommentLines } from "./editor/ast/documentAst";
+import { blockHasRole, classifyLines, parseLineNode } from "./editor/ast/documentAst";
+import type { InlineMarker, InlineMarkup, LayoutAlign, LineNode } from "./editor/ast/types";
 import { updateTextFromLineDiff } from "./editor/lineTextUpdate";
 import { findJapaneseQuoteRanges } from "./editor/japaneseQuoteRanges";
 import { markdownTableRows, type TableRow } from "./editor/markdownTables";
@@ -112,64 +113,6 @@ type VerticalTextEditorProps = {
   onPageMetricsChange?: (metrics: { current: number; total: number } | null) => void;
 };
 
-type LayoutAlign = "start" | "center" | "end";
-type LineKind = "blank" | "paragraph" | "heading" | "list" | "comment";
-
-type TextRange = {
-  offset: number;
-  length: number;
-};
-
-type InlineMarker = {
-  role: string;
-  text: string;
-  range: TextRange;
-};
-
-type RubyItem = {
-  text: string;
-  reading: string;
-  range: TextRange;
-};
-
-type InlineMarkup = {
-  id: string;
-  type:
-    | "ruby"
-    | "emphasis"
-    | "tcy"
-    | "layoutAlign"
-    | "aozoraAnnotation"
-    | "bold";
-  syntax?: "layoutsystem_v1" | "legacy";
-  fullText: string;
-  contentText: string;
-  fullRange: TextRange;
-  contentRange: TextRange;
-  metadata?: string;
-  rubyText?: string;
-  rubyMode?: "mono" | "group";
-  rubyItems?: RubyItem[] | null;
-  emStyle?: "auto" | "goma" | "dot";
-  align?: LayoutAlign;
-  markers: InlineMarker[];
-};
-
-type LineNode = {
-  id: string;
-  semanticHash: string;
-  kind: LineKind;
-  level: number;
-  marker: string;
-  jitsuki: boolean;
-  align: LayoutAlign | null;
-  source: string;
-  text: string;
-  lineIndex: number;
-  length: number;
-  inlineMarkups: InlineMarkup[];
-};
-
 type AstPluginState = {
   lines: LineNode[];
   documentIndex: DocumentIndex | null;
@@ -181,50 +124,6 @@ type AstPluginState = {
   /** コメント行を畳むか（キャレットのあるコメントのまとまりは除く）。 */
   commentsHidden: boolean;
 };
-
-type RawMarkup =
-  | {
-      type: "layout";
-      start: number;
-      len: number;
-      full: string;
-      content: string;
-      method: "rb" | "em" | "tcy";
-      argText: string;
-      methodOffset: number;
-    }
-  | {
-      type: "alignCommand";
-      start: number;
-      len: number;
-      value: LayoutAlign;
-    }
-  | {
-      type: "legacyRuby";
-      start: number;
-      len: number;
-      pipe: boolean;
-      base: string;
-      reading: string;
-    }
-  | {
-      type: "aozora";
-      start: number;
-      len: number;
-      cmd: string;
-    }
-  | {
-      type: "legacyEmphasis";
-      start: number;
-      len: number;
-      inner: string;
-    }
-  | {
-      type: "bold";
-      start: number;
-      len: number;
-      inner: string;
-    };
 
 type AstMeta = {
   visibleCenter?: number;
@@ -309,467 +208,6 @@ function updateEmptyAttribute(editor: Editor, knownText?: string): void {
   editor.view.dom.dataset.placeholder = PLACEHOLDER;
 }
 
-function hash16(s: string): string {
-  let h1 = 0x811c9dc5 >>> 0;
-  let h2 = 0xc2b2ae35 >>> 0;
-
-  for (let i = 0; i < s.length; i += 1) {
-    const c = s.charCodeAt(i);
-    h1 = ((h1 ^ c) * 0x01000193) >>> 0;
-    h2 = ((h2 ^ c) * 0x85ebca77) >>> 0;
-  }
-
-  return h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0");
-}
-
-function splitMonoRubyBase(
-  baseText: string,
-  readingText: string,
-  contentOffset: number,
-): RubyItem[] | null {
-  const bases = Array.from(baseText);
-  const readings = readingText.trim().split(/\s+/).filter(Boolean);
-  if (readings.length !== bases.length || bases.length <= 1) return null;
-
-  const items: RubyItem[] = [];
-  let offset = contentOffset;
-
-  for (let i = 0; i < bases.length; i += 1) {
-    const ch = bases[i];
-    items.push({
-      text: ch,
-      reading: readings[i],
-      range: { offset, length: ch.length },
-    });
-    offset += ch.length;
-  }
-
-  return items;
-}
-
-function parseLayoutInvocation(
-  full: string,
-  start: number,
-  content: string,
-  method: "rb" | "em" | "tcy",
-  argText: string,
-  methodOffset: number,
-): InlineMarkup | null {
-  const contentStart = start + 1;
-  const trimmedContent = content.replace(/\s+$/, "");
-  const trailing = content.length - trimmedContent.length;
-  const contentLen = trimmedContent.length;
-  const arg = argText.trim();
-  const close = full.lastIndexOf(")");
-  const markers: InlineMarker[] = [
-    { role: "opening", text: "[", range: { offset: start, length: 1 } },
-    { role: "method", text: method, range: { offset: methodOffset, length: method.length } },
-    {
-      role: "closing",
-      text: "]",
-      range: { offset: start + full.length - 1, length: 1 },
-    },
-  ];
-
-  if (trailing > 0) {
-    markers.push({
-      role: "separator",
-      text: content.slice(contentLen),
-      range: { offset: contentStart + contentLen, length: trailing },
-    });
-  }
-
-  if (close >= 0 && close + 1 < full.length - 1) {
-    markers.push({
-      role: "tail",
-      text: full.slice(close + 1, full.length - 1),
-      range: { offset: start + close + 1, length: full.length - 1 - (close + 1) },
-    });
-  }
-
-  if (method === "rb") {
-    if (!arg) return null;
-    markers.push({
-      role: "annotation",
-      text: arg,
-      range: { offset: methodOffset + method.length + 1, length: arg.length },
-    });
-    const mono = splitMonoRubyBase(trimmedContent, arg, contentStart);
-
-    return {
-      id: hash16(`layout-rb|${full}|${start}`),
-      type: "ruby",
-      syntax: "layoutsystem_v1",
-      fullText: full,
-      contentText: trimmedContent,
-      fullRange: { offset: start, length: full.length },
-      contentRange: { offset: contentStart, length: contentLen },
-      metadata: `layoutsystem_v1.rb("${arg}")`,
-      rubyText: arg,
-      rubyMode: mono ? "mono" : "group",
-      rubyItems: mono,
-      markers,
-    };
-  }
-
-  if (method === "em") {
-    const style = arg === "goma" || arg === "dot" ? arg : "auto";
-    return {
-      id: hash16(`layout-em|${full}|${start}`),
-      type: "emphasis",
-      syntax: "layoutsystem_v1",
-      fullText: full,
-      contentText: trimmedContent,
-      fullRange: { offset: start, length: full.length },
-      contentRange: { offset: contentStart, length: contentLen },
-      metadata: `layoutsystem_v1.em("${style}")`,
-      emStyle: style,
-      markers,
-    };
-  }
-
-  return {
-    id: hash16(`layout-tcy|${full}|${start}`),
-    type: "tcy",
-    syntax: "layoutsystem_v1",
-    fullText: full,
-    contentText: trimmedContent,
-    fullRange: { offset: start, length: full.length },
-    contentRange: { offset: contentStart, length: contentLen },
-    metadata: "layoutsystem_v1.tcy",
-    markers,
-  };
-}
-
-function parseInlines(text: string, base = 0): InlineMarkup[] {
-  const raw: RawMarkup[] = [];
-  let match: RegExpExecArray | null;
-
-  const layout = /\[([^\[\]\n]*?)\s*\((rb|em|tcy)(?:,([^)]*))?\)\]/g;
-  while ((match = layout.exec(text))) {
-    const method = match[2] as "rb" | "em" | "tcy";
-    const full = match[0];
-    raw.push({
-      type: "layout",
-      start: match.index,
-      len: full.length,
-      full,
-      content: match[1],
-      method,
-      argText: match[3] || "",
-      methodOffset: base + match.index + full.indexOf(`(${method}`) + 1,
-    });
-  }
-
-  const align = /\[\(al:(start|center|end)\)\]/g;
-  while ((match = align.exec(text))) {
-    raw.push({
-      type: "alignCommand",
-      start: match.index,
-      len: match[0].length,
-      value: match[1] as LayoutAlign,
-    });
-  }
-
-  const ruby = /｜([^《》｜]+)《([^《》]+)》|([一-龠々〆ヶ]+)《([^《》]+)》/g;
-  while ((match = ruby.exec(text))) {
-    if (match[1] !== undefined) {
-      raw.push({
-        type: "legacyRuby",
-        start: match.index,
-        len: match[0].length,
-        pipe: true,
-        base: match[1],
-        reading: match[2],
-      });
-    } else {
-      raw.push({
-        type: "legacyRuby",
-        start: match.index,
-        len: match[0].length,
-        pipe: false,
-        base: match[3],
-        reading: match[4],
-      });
-    }
-  }
-
-  const aozora = /［＃([^］]+)］/g;
-  while ((match = aozora.exec(text))) {
-    raw.push({
-      type: "aozora",
-      start: match.index,
-      len: match[0].length,
-      cmd: match[1],
-    });
-  }
-
-  const emphasis = /《《([^《》]+)》》/g;
-  while ((match = emphasis.exec(text))) {
-    raw.push({
-      type: "legacyEmphasis",
-      start: match.index,
-      len: match[0].length,
-      inner: match[1],
-    });
-  }
-
-  const bold = /\*\*([^*]+)\*\*/g;
-  while ((match = bold.exec(text))) {
-    raw.push({
-      type: "bold",
-      start: match.index,
-      len: match[0].length,
-      inner: match[1],
-    });
-  }
-
-  raw.sort((left, right) => left.start - right.start || right.len - left.len);
-
-  const picked: RawMarkup[] = [];
-  let currentEnd = -1;
-  for (const item of raw) {
-    if (item.start > currentEnd) {
-      picked.push(item);
-      currentEnd = item.start + item.len - 1;
-    }
-  }
-
-  const out: InlineMarkup[] = [];
-
-  for (const item of picked) {
-    const start = base + item.start;
-    const full = text.slice(item.start, item.start + item.len);
-
-    if (item.type === "layout") {
-      const markup = parseLayoutInvocation(
-        item.full,
-        start,
-        item.content,
-        item.method,
-        item.argText,
-        item.methodOffset,
-      );
-      if (markup) out.push(markup);
-      continue;
-    }
-
-    if (item.type === "alignCommand") {
-      const contentStart = start + 2;
-      const contentLength = 2 + item.value.length;
-      out.push({
-        id: hash16(`layout-al|${full}|${start}`),
-        type: "layoutAlign",
-        syntax: "layoutsystem_v1",
-        fullText: full,
-        contentText: `al:${item.value}`,
-        fullRange: { offset: start, length: item.len },
-        contentRange: { offset: contentStart, length: contentLength },
-        metadata: `layoutsystem_v1.al("${item.value}")`,
-        align: item.value,
-        markers: [
-          { role: "opening", text: "[(", range: { offset: start, length: 2 } },
-          {
-            role: "annotation",
-            text: `al:${item.value}`,
-            range: { offset: contentStart, length: contentLength },
-          },
-          {
-            role: "closing",
-            text: ")]",
-            range: { offset: start + item.len - 2, length: 2 },
-          },
-        ],
-      });
-      continue;
-    }
-
-    if (item.type === "legacyRuby") {
-      let offset = start;
-      const markers: InlineMarker[] = [];
-      if (item.pipe) {
-        markers.push({ role: "prefix", text: "｜", range: { offset, length: 1 } });
-        offset += 1;
-      }
-      const baseStart = offset;
-      offset += item.base.length;
-      markers.push({ role: "opening", text: "《", range: { offset, length: 1 } });
-      offset += 1;
-      markers.push({
-        role: "annotation",
-        text: item.reading,
-        range: { offset, length: item.reading.length },
-      });
-      offset += item.reading.length;
-      markers.push({ role: "closing", text: "》", range: { offset, length: 1 } });
-      out.push({
-        id: hash16(`ruby|${full}|${start}`),
-        type: "ruby",
-        syntax: "legacy",
-        fullText: full,
-        contentText: item.base,
-        fullRange: { offset: start, length: item.len },
-        contentRange: { offset: baseStart, length: item.base.length },
-        metadata: `rubyText("${item.reading}")`,
-        rubyText: item.reading,
-        rubyMode: "group",
-        markers,
-      });
-      continue;
-    }
-
-    if (item.type === "aozora") {
-      const contentStart = start + 2;
-      out.push({
-        id: hash16(`aozora|${full}|${start}`),
-        type: "aozoraAnnotation",
-        fullText: full,
-        contentText: item.cmd,
-        fullRange: { offset: start, length: item.len },
-        contentRange: { offset: contentStart, length: item.cmd.length },
-        metadata: `aozoraCommand("${item.cmd}")`,
-        markers: [
-          { role: "opening", text: "［＃", range: { offset: start, length: 2 } },
-          {
-            role: "annotation",
-            text: item.cmd,
-            range: { offset: contentStart, length: item.cmd.length },
-          },
-          {
-            role: "closing",
-            text: "］",
-            range: { offset: contentStart + item.cmd.length, length: 1 },
-          },
-        ],
-      });
-      continue;
-    }
-
-    const contentStart = start + 2;
-    const contentLength = item.inner.length;
-    const isEmphasis = item.type === "legacyEmphasis";
-    out.push({
-      id: hash16(`${isEmphasis ? "em" : "bold"}|${full}|${start}`),
-      type: isEmphasis ? "emphasis" : "bold",
-      syntax: isEmphasis ? "legacy" : undefined,
-      fullText: full,
-      contentText: item.inner,
-      fullRange: { offset: start, length: item.len },
-      contentRange: { offset: contentStart, length: contentLength },
-      metadata: isEmphasis ? "emphasisDots" : "strong",
-      emStyle: isEmphasis ? "auto" : undefined,
-      markers: [
-        {
-          role: "opening",
-          text: isEmphasis ? "《《" : "**",
-          range: { offset: start, length: 2 },
-        },
-        {
-          role: "content",
-          text: item.inner,
-          range: { offset: contentStart, length: contentLength },
-        },
-        {
-          role: "closing",
-          text: isEmphasis ? "》》" : "**",
-          range: { offset: contentStart + contentLength, length: 2 },
-        },
-      ],
-    });
-  }
-
-  out.sort((left, right) => left.fullRange.offset - right.fullRange.offset);
-  return out;
-}
-
-function detectLayoutAlign(text: string): LayoutAlign | null {
-  const match = text.match(/\[\(al:(start|center|end)\)\]/);
-  return match ? (match[1] as LayoutAlign) : null;
-}
-
-function cleanLineTextForAst(text: string): string {
-  return text
-    .replace(/\[\(al:(?:start|center|end)\)\]/g, "")
-    .replace(/^［＃地付き］/, "")
-    .replace(/^>>\s*/, "");
-}
-
-function parseLineNode(text: string, index: number, comment = false): LineNode {
-  let kind: LineKind = "paragraph";
-  let level = 0;
-  let marker = "";
-  let jitsuki = false;
-  let align = detectLayoutAlign(text);
-  let inlineMarkups: InlineMarkup[] = [];
-  let cleanText = text;
-
-  if (comment) {
-    kind = "comment";
-    align = null;
-    cleanText = "";
-  } else if (text.length === 0) {
-    kind = "blank";
-    cleanText = "";
-  } else {
-    const heading = text.match(/^(#{1,6})(\s+|$)/);
-    const jitsukiMatch = text.match(/^(>>)(\s*)/);
-    const unordered = text.match(/^(\s*)([-*+])(\s+)/);
-    const ordered = text.match(/^(\s*)(\d+[.)])(\s+)/);
-    const list = unordered || ordered;
-
-    if (heading) {
-      kind = "heading";
-      level = heading[1].length;
-      marker = heading[0];
-      const body = text.slice(heading[0].length);
-      cleanText = cleanLineTextForAst(body);
-      inlineMarkups = parseInlines(body, heading[0].length);
-    } else if (jitsukiMatch) {
-      marker = jitsukiMatch[0];
-      jitsuki = true;
-      align = "end";
-      cleanText = cleanLineTextForAst(text.slice(jitsukiMatch[0].length));
-      inlineMarkups = parseInlines(text.slice(jitsukiMatch[0].length), jitsukiMatch[0].length);
-    } else if (list) {
-      const indent = (list[1] || "").replace(/\t/g, "  ");
-      kind = "list";
-      level = Math.min(6, Math.floor(indent.length / 2));
-      cleanText = cleanLineTextForAst(text);
-      inlineMarkups = parseInlines(text, 0);
-    } else {
-      cleanText = cleanLineTextForAst(text);
-      inlineMarkups = parseInlines(text, 0);
-    }
-
-    if (
-      inlineMarkups.length > 0 &&
-      inlineMarkups[0].type === "aozoraAnnotation" &&
-      inlineMarkups[0].contentText === "地付き" &&
-      inlineMarkups[0].fullRange.offset === 0
-    ) {
-      jitsuki = true;
-      align = "end";
-    }
-
-    if (align === "end") jitsuki = true;
-  }
-
-  return {
-    id: hash16(`L|${kind}|${level}|${align || ""}|${text}`),
-    semanticHash: hash16(`S|${kind}|${level}|${align || ""}|${cleanText}`),
-    kind,
-    level,
-    marker,
-    jitsuki,
-    align,
-    source: text,
-    text: cleanText,
-    lineIndex: index,
-    length: text.length,
-    inlineMarkups,
-  };
-}
-
 function cloneLineNode(line: LineNode, lineIndex: number): LineNode {
   return {
     ...line,
@@ -778,18 +216,17 @@ function cloneLineNode(line: LineNode, lineIndex: number): LineNode {
 }
 
 /**
- * Multi-line HTML comments make a line's kind depend on its neighbours, so the
- * comment state is re-derived for the whole document after every change and
- * only lines whose state flipped are re-parsed.
+ * Multi-line comments and code blocks make a line's kind depend on its
+ * neighbours, so roles are re-derived for the whole document after every change
+ * and only lines whose role changed are re-parsed.
  */
-function applyCommentKinds(lines: LineNode[]): LineNode[] {
-  const comments = detectCommentLines(lines.map((line) => line.source));
+function applyLineRoles(lines: LineNode[]): LineNode[] {
+  const roles = classifyLines(lines.map((line) => line.source));
   let next: LineNode[] | null = null;
   for (let index = 0; index < lines.length; index += 1) {
-    const comment = comments[index] !== null;
-    if ((lines[index].kind === "comment") === comment) continue;
+    if (blockHasRole(lines[index], roles[index])) continue;
     next ??= lines.slice();
-    next[index] = parseLineNode(lines[index].source, index, comment);
+    next[index] = parseLineNode(lines[index].source, index, 0, roles[index]);
   }
   return next ?? lines;
 }
@@ -856,7 +293,7 @@ function incrementalLines(
     next.push(oldLine.lineIndex === next.length ? oldLine : cloneLineNode(oldLine, next.length));
   }
 
-  return applyCommentKinds(next);
+  return applyLineRoles(next);
 }
 
 function pmStartAtIndex(doc: PMNode, index: number): number | null {
@@ -1868,7 +1305,7 @@ function buildWindowDecos(
 
 function makeAstState(state: EditorState): AstPluginState {
   const texts = topTexts(state.doc);
-  const lines = applyCommentKinds(texts.map((line, index) => parseLineNode(line, index)));
+  const lines = applyLineRoles(texts.map((line, index) => parseLineNode(line, index)));
   const activeIndex = activeLineIndex(state);
   return {
     lines,

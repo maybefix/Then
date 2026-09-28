@@ -1,3 +1,4 @@
+import { classifyLines } from "../editor/ast/documentAst";
 import { collectRubyAnnotations } from "./ruby";
 import { isUsableTermSurface, type ProofreadTerm, type ProofreadTermKind } from "./terms";
 
@@ -40,19 +41,11 @@ const KATAKANA_PATTERN = /[ァ-ヴ][ァ-ヴー]{2,}/g;
 /** 片仮名語は繰り返し出てくるものだけを候補にする。 */
 const KATAKANA_MIN_COUNT = 2;
 
-const FENCE_LINE = /^\s{0,3}(?:```|~~~)/;
-
-/** ルビの読みとコードブロックを外した本文。候補を数える対象。 */
+/** ルビの読み・コードブロック・コメント行を外した本文。候補を数える対象。 */
 function stripNonBody(text: string): string {
   const lines = text.split("\n");
-  let insideFence = false;
-  const kept = lines.map((line) => {
-    if (FENCE_LINE.test(line)) {
-      insideFence = !insideFence;
-      return "";
-    }
-    return insideFence ? "" : line;
-  });
+  const roles = classifyLines(lines);
+  const kept = lines.map((line, index) => (roles[index] ? "" : line));
   // 読みそのものは本文ではないので、片仮名語として数えない。
   return kept.join("\n").replace(/《[^》\n]*》/g, "");
 }

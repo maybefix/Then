@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import ts from "typescript";
-const asModule = source => `data:text/javascript;base64,${Buffer.from(ts.transpileModule(source, {
-  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
-}).outputText).toString("base64")}`;
-const parser = asModule(await readFile("src/editor/markdownTables.ts", "utf8"));
-const module = asModule((await readFile("src/editor/tableNavigation.ts", "utf8")).replace('"./markdownTables"', JSON.stringify(parser)));
+import { build } from "esbuild";
+const bundle = await build({ entryPoints: ["src/editor/tableNavigation.ts"], bundle: true, platform: "node", format: "esm", write: false });
+const module = `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString("base64")}`;
 const { tableCaretTarget: move, tableCellCaret: home } = await import(module);
 const text = "前文\n|甲|乙|\n|---|---|\n||内容|\n|末尾|次|\n後文";
 const header = text.indexOf("甲");
