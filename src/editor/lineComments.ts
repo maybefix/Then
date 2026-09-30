@@ -1,4 +1,9 @@
-import { detectCommentLines, isSlashCommentLine } from "./ast/documentAst";
+import {
+  classifyLines,
+  isCommentRole,
+  isSlashCommentLine,
+  type LineRole,
+} from "./ast/documentAst";
 
 export type LineCommentEdit = {
   from: number;
@@ -41,7 +46,7 @@ function uncommentSlash(line: string): string {
 
 function commentSlash(line: string): string {
   const indent = LEADING_SPACE.exec(line)?.[0] ?? "";
-  return `${indent}//${line.slice(indent.length)}`;
+  return `${indent}// ${line.slice(indent.length)}`;
 }
 
 function unwrapHtmlOpener(line: string): string {
@@ -53,23 +58,47 @@ function unwrapHtmlCloser(line: string): string {
   return line.replace(/ ?-->[ \t　]*$/, "");
 }
 
+/** Line ranges [open, close] of every code block, from its opening to its closing fence. */
+function codeBlockRanges(roles: ReadonlyArray<LineRole | null>): Array<[number, number]> {
+  const blocks: Array<[number, number]> = [];
+  let open = -1;
+  roles.forEach((role, index) => {
+    if (role !== "codeFence") return;
+    if (open < 0) {
+      open = index;
+    } else {
+      blocks.push([open, index]);
+      open = -1;
+    }
+  });
+  return blocks;
+}
+
 /**
  * Ctrl+/ (docs/COMMENT_OUT_SPEC.md §1.3). Toggles `//` on every line the
  * selection touches; lines inside `<!-- -->` are only ever unwrapped.
- * Returns null when there is nothing to change.
+ * Inside code, `//` is code rather than a Then comment, so the toggle is
+ * refused unless every code block it touches is selected fence to fence
+ * (docs/CODE_BLOCK_SPEC.md §7). Returns null when there is nothing to change.
  */
 export function toggleLineComments(
   text: string,
   selectionFrom: number,
   selectionTo: number,
-): LineCommentEdit | null {
+): LineCommentEdit | { blocked: "code" } | null {
   const spans = lineSpans(text);
-  const comments = detectCommentLines(spans.map((span) => span.text));
+  const roles = classifyLines(spans.map((span) => span.text));
+  const comments = roles.map((role) => (isCommentRole(role) ? role : null));
   const from = Math.min(selectionFrom, selectionTo);
   const to = Math.max(selectionFrom, selectionTo);
   let first = lineIndexAt(spans, from);
   // A selection ending at the start of a line does not include that line.
   let last = lineIndexAt(spans, to > from && text[to - 1] === "\n" ? to - 1 : to);
+
+  const touchesPartialCode = codeBlockRanges(roles).some(
+    ([open, close]) => open <= last && close >= first && (open < first || close > last),
+  );
+  if (touchesPartialCode) return { blocked: "code" };
 
   const html = comments.slice(first, last + 1);
   let replaced: string[];

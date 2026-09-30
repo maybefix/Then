@@ -49,12 +49,14 @@ import { DocumentTabs } from "./components/layout/DocumentTabs";
 import { WindowControls } from "./components/layout/WindowControls";
 import { StartupPortal } from "./components/startup/StartupPortal";
 import {
+  classifyLines,
   createDocumentAst,
   findActiveOutlineChain,
   findCommentLineRanges,
   flattenOutline,
   hash16,
   normalizeText,
+  parseInlines,
   updateDocumentAst,
 } from "./editor/ast/documentAst";
 import {
@@ -65,6 +67,7 @@ import {
 import { reconcileSavedDocumentTabs } from "./editor/documentTabState";
 import { createMarkdownTable, tableAtOffset, tableAlignmentEdit } from "./editor/markdownTables";
 import { toggleLineComments } from "./editor/lineComments";
+import { displayedCharacterCount } from "./editor/ast/characterCount";
 import {
   createWorkspaceDocumentTabs,
   normalizeWorkspaceDocumentTabs,
@@ -1033,6 +1036,7 @@ const defaultSettings: EditorSettings = {
   zoneModeOpacity: 0.42,
   navigatorPreviewLines: DEFAULT_NAVIGATOR_PREVIEW_LINES,
   countWhitespace: true,
+  countCode: true,
   showOutlineGuides: true,
   checkpointSectionCollapsed: false,
   canvasOpensInWindow: false,
@@ -1935,13 +1939,23 @@ function clearNotationInLine(
     pushClearReplacement(replacements, match.index, match.index + match[0].length, "");
   }
 
-  if (replacements.length === 0) {
+  // Notation-like text inside inline code is literal and stays as typed.
+  const codeSpans = parseInlines(line).filter((markup) => markup.type === "code");
+  const outsideCode = replacements.filter(
+    (replacement) =>
+      !codeSpans.some(
+        (span) =>
+          replacement.from < span.fullRange.offset + span.fullRange.length &&
+          span.fullRange.offset < replacement.to,
+      ),
+  );
+  if (outsideCode.length === 0) {
     return { text: line, changed: false };
   }
 
-  replacements.sort((left, right) => right.from - left.from);
+  outsideCode.sort((left, right) => right.from - left.from);
   let next = line;
-  for (const replacement of replacements) {
+  for (const replacement of outsideCode) {
     next = `${next.slice(0, replacement.from)}${replacement.insert}${next.slice(replacement.to)}`;
   }
 
@@ -1961,14 +1975,19 @@ function clearNotationFromSelection(
   const nextBreak = text.indexOf("\n", normalizedEnd);
   const end = nextBreak === -1 ? text.length : nextBreak;
   const lines = text.slice(start, end).split("\n");
+  // Roles depend on the whole document (a fence may open far above the selection).
+  const firstLine = text.slice(0, start).split("\n").length - 1;
+  const roles = classifyLines(text.split("\n"));
   let offset = start;
   let changed = false;
 
   const insert = lines
-    .map((line) => {
+    .map((line, index) => {
       const lineStart = offset;
       const lineEnd = lineStart + line.length;
       offset = lineEnd + 1;
+      // Code and comment lines are literal; nothing in them is notation.
+      if (roles[firstLine + index]) return line;
       const localFrom = Math.max(0, Math.min(line.length, selection.from - lineStart));
       const localTo = selection.from === selection.to
         ? localFrom
@@ -2361,6 +2380,10 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         typeof settings.countWhitespace === "boolean"
           ? settings.countWhitespace
           : defaultSettings.countWhitespace,
+      countCode:
+        typeof settings.countCode === "boolean"
+          ? settings.countCode
+          : defaultSettings.countCode,
       showOutlineGuides:
         typeof settings.showOutlineGuides === "boolean"
           ? settings.showOutlineGuides
@@ -4221,9 +4244,10 @@ export default function App() {
     activeDocumentAstCacheRef.current = next;
     return next;
   }, [currentFileName, currentFilePath, editorText]);
-  const charCount = settings.countWhitespace
-    ? activeDocumentAst.textLength
-    : activeDocumentAst.visibleTextLength;
+  const charCount = displayedCharacterCount(activeDocumentAst, {
+    includeWhitespace: settings.countWhitespace,
+    includeCode: settings.countCode,
+  });
   const outlineItems = activeDocumentAst.outline;
   const outlineFlatItems = useMemo<FlatOutlineItem[]>(
     () => flattenOutline(outlineItems),
@@ -5873,6 +5897,10 @@ export default function App() {
     const selection = normalizeSelectionRange(selectionOverride ?? editor.getSelection(), text);
     const edit = toggleLineComments(text, selection.from, selection.to);
     if (!edit) return;
+    if ("blocked" in edit) {
+      showToast("コード内ではコメントにできません（ブロック全体を選ぶとまとめてコメントにできます）");
+      return;
+    }
     editor.replaceRange(edit.from, edit.to, edit.insert, edit.selectionTo);
     if (edit.selectionFrom !== edit.selectionTo) editor.selectRange(edit.selectionFrom, edit.selectionTo);
     editor.focus();
@@ -11957,6 +11985,7 @@ export default function App() {
                 sidebarMode={settings.sidebarMode}
                 navigatorPreviewLines={settings.navigatorPreviewLines}
                 countWhitespace={settings.countWhitespace}
+                countCode={settings.countCode}
                 showOutlineGuides={settings.showOutlineGuides}
                 fileProgress={appState.fileProgress}
                 onSetFileProgress={handleSetFileProgress}

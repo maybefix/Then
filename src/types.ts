@@ -338,6 +338,8 @@ export type EditorSettings = {
   navigatorPreviewLines: number;
   /** 文字数カウントに空白文字（スペース・タブ・改行など）を含めるか。 */
   countWhitespace: boolean;
+  /** 文字数カウントにコード（コードブロック・行内コード）を含めるか。 */
+  countCode: boolean;
   /** ファイルツリーの見出し階層に縦のガイド線を表示するか。 */
   showOutlineGuides: boolean;
   /** チェックポイントセクションを折りたたんで表示するか。 */

@@ -79,6 +79,8 @@ function createPendingProjectAstFile(file: ProjectAstFileRef): ProjectAstFile {
     lineCount: 0,
     textLength: 0,
     visibleTextLength: 0,
+    codeTextLength: 0,
+    codeVisibleTextLength: 0,
     outlineCount: 0,
     indexedAt: null,
     error: null,

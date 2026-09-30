@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
-import ts from "typescript";
+import { build } from "esbuild";
 
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
 const tauriConfig = JSON.parse(await readFile("src-tauri/tauri.conf.json", "utf8"));
@@ -15,14 +15,16 @@ assert.match(
   "Rust package version must match the frontend package version",
 );
 
+// Bundled so modules that import shared helpers (e.g. character counting) load.
 async function importStandaloneTypeScript(path) {
-  const source = await readFile(path, "utf8");
-  const code = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.ESNext,
-      target: ts.ScriptTarget.ES2022,
-    },
-  }).outputText;
+  const bundle = await build({
+    entryPoints: [path],
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    write: false,
+  });
+  const code = bundle.outputFiles[0].text;
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(code).toString("base64")}`;
   return import(moduleUrl);
 }
@@ -477,7 +479,7 @@ assert.doesNotMatch(
 );
 assert.match(
   appSource,
-  /const charCount = settings\.countWhitespace\s*\? activeDocumentAst\.textLength\s*:\s*activeDocumentAst\.visibleTextLength;/,
+  /const charCount = displayedCharacterCount\(activeDocumentAst, \{\s*includeWhitespace: settings\.countWhitespace,\s*includeCode: settings\.countCode,\s*\}\);/,
   "character counts must update from the active incremental Document AST",
 );
 assert.doesNotMatch(

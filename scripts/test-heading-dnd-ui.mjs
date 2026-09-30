@@ -38,6 +38,10 @@ sidebarSource = sidebarSource
     "const getScaledFixedMenuPosition = (x, y) => ({ left: x, top: y });",
   )
   .replace(
+    'import { displayedCharacterCount } from "../../editor/ast/characterCount";',
+    "const displayedCharacterCount = (metrics, options) => options.includeWhitespace ? metrics.textLength : metrics.visibleTextLength;",
+  )
+  .replace(
     /import \{\s*buildSidebarMetrics,\s*getSidebarFolderCharCount,\s*getSidebarHeadingCharCount,\s*\} from "\.\/sidebarMetrics";/,
     `const buildSidebarMetrics = (_folder, projectAst) => ({
       projectAstFiles: new Map((projectAst?.files ?? []).map((file) => [file.path, file])),

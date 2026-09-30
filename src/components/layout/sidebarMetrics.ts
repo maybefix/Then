@@ -4,6 +4,12 @@ import type {
   ProjectAstFile,
 } from "../../editor/ast/types";
 import type { OutlineItem, ProjectEntry, ProjectFolder } from "../../types";
+import {
+  characterCountOptionsKey,
+  displayedCharacterCount,
+  displayedSectionCount,
+  type CharacterCountOptions,
+} from "../../editor/ast/characterCount";
 
 export type SidebarMetrics = {
   projectAstFiles: ReadonlyMap<string, ProjectAstFile>;
@@ -12,12 +18,8 @@ export type SidebarMetrics = {
   projectTotalCharCount: number | null;
 };
 
-type HeadingCountCacheEntry = {
-  withWhitespace?: ReadonlyMap<string, number>;
-  withoutWhitespace?: ReadonlyMap<string, number>;
-};
-
-const headingCountCache = new WeakMap<object, HeadingCountCacheEntry>();
+/** Heading counts per document, keyed by characterCountOptionsKey. */
+const headingCountCache = new WeakMap<object, Map<string, ReadonlyMap<string, number>>>();
 
 function flattenOutline(items: DocumentOutlineItem[]): DocumentOutlineItem[] {
   const result: DocumentOutlineItem[] = [];
@@ -33,13 +35,13 @@ function flattenOutline(items: DocumentOutlineItem[]): DocumentOutlineItem[] {
 
 function buildHeadingCounts(
   documentAst: NonNullable<ProjectAstFile["documentAst"]>,
-  includeWhitespace: boolean,
+  options: CharacterCountOptions,
 ): ReadonlyMap<string, number> {
   const headings = flattenOutline(documentAst.outline);
 
   const counts = new Map<string, number>();
   for (const item of headings) {
-    const count = includeWhitespace ? item.sectionTextLength : item.sectionVisibleTextLength;
+    const count = displayedSectionCount(item, options);
     counts.set(item.blockId, count);
     counts.set(item.id, count);
   }
@@ -48,15 +50,19 @@ function buildHeadingCounts(
 
 function getCachedHeadingCounts(
   documentAst: NonNullable<ProjectAstFile["documentAst"]>,
-  includeWhitespace: boolean,
+  options: CharacterCountOptions,
 ): ReadonlyMap<string, number> {
-  const cacheKey = includeWhitespace ? "withWhitespace" : "withoutWhitespace";
-  const cached = headingCountCache.get(documentAst);
-  const counts = cached?.[cacheKey];
+  const cacheKey = characterCountOptionsKey(options);
+  let cached = headingCountCache.get(documentAst);
+  const counts = cached?.get(cacheKey);
   if (counts) return counts;
 
-  const nextCounts = buildHeadingCounts(documentAst, includeWhitespace);
-  headingCountCache.set(documentAst, { ...cached, [cacheKey]: nextCounts });
+  const nextCounts = buildHeadingCounts(documentAst, options);
+  if (!cached) {
+    cached = new Map();
+    headingCountCache.set(documentAst, cached);
+  }
+  cached.set(cacheKey, nextCounts);
   return nextCounts;
 }
 
@@ -70,7 +76,9 @@ export function buildSidebarMetrics(
   projectFolder: ProjectFolder | null,
   projectAst: ProjectAst | null,
   includeWhitespace: boolean,
+  includeCode = true,
 ): SidebarMetrics {
+  const options: CharacterCountOptions = { includeWhitespace, includeCode };
   const projectAstFiles = new Map(
     projectAst?.files.map((file) => [file.path, file] as const) ?? [],
   );
@@ -79,7 +87,7 @@ export function buildSidebarMetrics(
     if (file.status === "indexed" && file.documentAst) {
       headingCharCounts.set(
         file.path,
-        getCachedHeadingCounts(file.documentAst, includeWhitespace),
+        getCachedHeadingCounts(file.documentAst, options),
       );
     }
   }
@@ -99,7 +107,7 @@ export function buildSidebarMetrics(
       const astFile = projectAstFiles.get(entry.path);
       if (astFile?.status !== "indexed") continue;
       result.indexedFileCount += 1;
-      result.total += includeWhitespace ? astFile.textLength : astFile.visibleTextLength;
+      result.total += displayedCharacterCount(astFile, options);
     }
     folderCharCounts.set(
       path,
@@ -116,8 +124,7 @@ export function buildSidebarMetrics(
     headingCharCounts,
     projectTotalCharCount: projectAst
       ? projectAst.files.reduce(
-          (sum, file) =>
-            sum + (includeWhitespace ? file.textLength : file.visibleTextLength),
+          (sum, file) => sum + displayedCharacterCount(file, options),
           0,
         )
       : null,

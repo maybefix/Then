@@ -2613,6 +2613,28 @@ html:not([data-window-fullscreen="true"])
   display: none;
 }
 
+/* コードブロック・行内コード（docs/CODE_BLOCK_SPEC.md）。本文と同じ組方向のまま
+   等幅フォントと背景で区別する。長い行は本文と同じく折り返す。 */
+.verticalTypewriterEditor .pm-code,
+.verticalTypewriterEditor .mk-code {
+  font-family: var(--code-font-family, "BIZ UDゴシック", "BIZ UDGothic", "MS Gothic", monospace);
+  background: var(--code-background, color-mix(in srgb, var(--text-primary) 6%, transparent));
+}
+
+.verticalTypewriterEditor .pm-code {
+  white-space: pre-wrap;
+  text-align: start;
+  text-indent: 0;
+}
+
+.verticalTypewriterEditor .pm-code-fence {
+  color: var(--text-muted);
+}
+
+.verticalTypewriterEditor .mk-code {
+  border-radius: 2px;
+}
+
 .verticalTypewriterEditor .ruby-base {
   display: ruby;
   color: var(--ruby-base-color, var(--text-primary));

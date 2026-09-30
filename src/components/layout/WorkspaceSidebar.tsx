@@ -26,6 +26,7 @@ import type {
 import { fileProgressLabels, fileProgressStatuses } from "../../types";
 import { logHeadingDnd } from "../../utils/headingDndDiagnostics";
 import { getScaledFixedMenuPosition } from "../../utils/contextMenuPosition";
+import { displayedCharacterCount } from "../../editor/ast/characterCount";
 import {
   buildFilePreview,
   buildHeadingPreview,
@@ -50,6 +51,8 @@ type WorkspaceSidebarProps = {
   navigatorPreviewLines: number;
   /** 文字数カウントに空白文字を含めるか。false なら空白を除いた文字数を表示する。 */
   countWhitespace: boolean;
+  /** 文字数にコードを含めるか。 */
+  countCode: boolean;
   showOutlineGuides: boolean;
   fileProgress: Record<string, FileProgressStatus>;
   onSetFileProgress: (path: string, status: FileProgressStatus) => void;
@@ -493,6 +496,7 @@ export function WorkspaceSidebar({
   sidebarMode,
   navigatorPreviewLines,
   countWhitespace,
+  countCode,
   showOutlineGuides,
   fileProgress,
   onSetFileProgress,
@@ -590,8 +594,8 @@ export function WorkspaceSidebar({
     setSelectedFilePaths(next);
   };
   const sidebarMetrics = useMemo(
-    () => buildSidebarMetrics(projectFolder, projectAst, countWhitespace),
-    [countWhitespace, projectAst, projectFolder],
+    () => buildSidebarMetrics(projectFolder, projectAst, countWhitespace, countCode),
+    [countCode, countWhitespace, projectAst, projectFolder],
   );
   const projectAstFiles = sidebarMetrics.projectAstFiles;
 
@@ -1491,7 +1495,12 @@ export function WorkspaceSidebar({
         ? null
         : formatCharCount(folderCharCount)
       : astFile?.status === "indexed"
-        ? formatCharCount(countWhitespace ? astFile.textLength : astFile.visibleTextLength)
+        ? formatCharCount(
+            displayedCharacterCount(astFile, {
+              includeWhitespace: countWhitespace,
+              includeCode: countCode,
+            }),
+          )
         : null;
     const treeItemIndent = 10 + depth * 14;
 

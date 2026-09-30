@@ -249,6 +249,17 @@ export function BodySettings({ settings, systemFonts, editorMeasureLimit, onUpda
         />
         <span>文字数に空白を含める</span>
       </label>
+      <label className="checkSetting descriptiveCheckSetting">
+        <input
+          checked={settings.countCode}
+          type="checkbox"
+          onChange={(event) => onUpdateSettings("countCode", event.target.checked)}
+        />
+        <span className="checkSettingCopy">
+          <span>文字数にコードを含める</span>
+          <small>``` で囲んだコードブロックと ` で囲んだ行内コード</small>
+        </span>
+      </label>
     </>
   );
 }

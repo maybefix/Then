@@ -15,6 +15,7 @@ function contentStartForBlock(block: LineNode): number {
 
 function markupToInlines(markup: InlineMarkup): ExportInline[] {
   if (markup.type === "layoutAlign") return [];
+  if (markup.type === "code") return [{ kind: "code", text: markup.contentText }];
   if (markup.type === "aozoraAnnotation") {
     return markup.contentText === "地付き"
       ? []
@@ -47,7 +48,7 @@ function markupToInlines(markup: InlineMarkup): ExportInline[] {
   return [{ kind: "bold", text: markup.contentText }];
 }
 
-function blockToExportBlock(block: LineNode & { kind: ExportBlock["kind"] }): ExportBlock {
+function blockToExportBlock(block: LineNode & { kind: Exclude<ExportBlock["kind"], "code"> }): ExportBlock {
   const source = block.source;
   const inlines: ExportInline[] = [];
   let cursor = contentStartForBlock(block);
@@ -70,6 +71,31 @@ function blockToExportBlock(block: LineNode & { kind: ExportBlock["kind"] }): Ex
   };
 }
 
+/**
+ * Comments are dropped; each fenced code block becomes one "code" block whose
+ * lines are kept verbatim (fence lines are not printed).
+ */
+function toExportBlocks(lines: readonly LineNode[]): ExportBlock[] {
+  const blocks: ExportBlock[] = [];
+  let code: ExportBlock | null = null;
+  for (const line of lines) {
+    if (line.kind === "comment") continue;
+    if (line.kind === "code") {
+      if (line.codeFence) {
+        if (code && code.inlines.length > 0) blocks.push(code);
+        code = code ? null : { kind: "code", level: 0, align: "start", inlines: [] };
+        continue;
+      }
+      if (!code) continue;
+      if (code.inlines.length > 0) code.inlines.push({ kind: "break", text: "" });
+      code.inlines.push({ kind: "text", text: line.source });
+      continue;
+    }
+    blocks.push(blockToExportBlock(line as LineNode & { kind: Exclude<ExportBlock["kind"], "code"> }));
+  }
+  return blocks;
+}
+
 export function createExportDocument(
   ast: Readonly<DocumentAst>,
   fontFamily: ExportFontFamily,
@@ -81,8 +107,6 @@ export function createExportDocument(
     title: ast.name.replace(/\.(?:txt|md)$/i, ""),
     fontFamily,
     page: { ...DEFAULT_EXPORT_PAGE },
-    blocks: ast.blocks
-      .filter((block): block is LineNode & { kind: ExportBlock["kind"] } => block.kind !== "comment")
-      .map(blockToExportBlock),
+    blocks: toExportBlocks(ast.blocks),
   };
 }

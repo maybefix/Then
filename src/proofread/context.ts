@@ -1,4 +1,4 @@
-import { detectCommentLines } from "../editor/ast/documentAst";
+import { classifyLines } from "../editor/ast/documentAst";
 import { findJapaneseQuoteRanges } from "../editor/japaneseQuoteRanges";
 import { collectProtectedSurfaces, type ProofreadTerm } from "./terms";
 import type { ProofreadContext, ProofreadOptions, ProofreadSentence } from "./types";
@@ -9,7 +9,6 @@ const MASK_PATTERN = /\uFFFD/g;
 
 type Range = { from: number; to: number };
 
-const FENCE_PATTERN = /^\s{0,3}(?:```|~~~)/;
 const HEADING_PATTERN = /^\s{0,3}#{1,6}(?:\s|$)/;
 /** 行頭の箇条書き・引用・番号の記号。本文ではないので潰す。 */
 const LINE_MARKER_PATTERN = /^(\s*(?:(?:[-*+]|\d+[.)]|>)\s+)+)/;
@@ -32,10 +31,9 @@ const pushRange = (ranges: Range[], from: number, to: number) => {
 function collectMaskRanges(text: string, lineStarts: number[]): Range[] {
   const ranges: Range[] = [];
 
-  let insideFence = false;
   const lineEnd = (line: number) =>
     line + 1 < lineStarts.length ? lineStarts[line + 1] - 1 : text.length;
-  const comments = detectCommentLines(
+  const roles = classifyLines(
     lineStarts.map((start, line) => text.slice(start, lineEnd(line)).replace(/\r$/, "")),
   );
   for (let line = 0; line < lineStarts.length; line += 1) {
@@ -43,17 +41,8 @@ function collectMaskRanges(text: string, lineStarts: number[]): Range[] {
     const end = lineEnd(line);
     const body = text.slice(start, end);
 
-    if (comments[line]) {
-      pushRange(ranges, start, end);
-      continue;
-    }
-
-    if (FENCE_PATTERN.test(body)) {
-      insideFence = !insideFence;
-      pushRange(ranges, start, end);
-      continue;
-    }
-    if (insideFence) {
+    // コメント行とコードブロック（フェンス行を含む）は丸ごと校正対象外。
+    if (roles[line]) {
       pushRange(ranges, start, end);
       continue;
     }

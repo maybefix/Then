@@ -54,6 +54,8 @@ export function createIndexedProjectAstFile(documentAst: DocumentAst): ProjectAs
     lineCount: documentAst.lineCount,
     textLength: documentAst.textLength,
     visibleTextLength: documentAst.visibleTextLength,
+    codeTextLength: documentAst.codeTextLength,
+    codeVisibleTextLength: documentAst.codeVisibleTextLength,
     outlineCount: countOutlineItems(documentAst.outline),
     indexedAt: documentAst.indexedAt,
     error: null,

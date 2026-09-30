@@ -1,16 +1,18 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
-import ts from "typescript";
+import { build } from "esbuild";
 
+// Bundled so modules that import shared helpers (e.g. character counting) load.
 async function importStandaloneTypeScript(path) {
-  const source = await readFile(path, "utf8");
-  const code = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.ESNext,
-      target: ts.ScriptTarget.ES2022,
-    },
-  }).outputText;
+  const bundle = await build({
+    entryPoints: [path],
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    write: false,
+  });
+  const code = bundle.outputFiles[0].text;
   return import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`);
 }
 
