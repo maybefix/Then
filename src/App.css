@@ -12419,64 +12419,6 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   color: var(--text-secondary);
 }
 
-.fileTreeItem .fileProgressControl {
-  width: 50px;
-  min-width: 50px;
-  justify-content: stretch;
-}
-
-.fileTreeItem .fileProgressBadge {
-  width: 50px;
-  min-height: 18px;
-  justify-content: center;
-  gap: 0;
-  padding: 0;
-  border-radius: 3px;
-  font-size: 8.5px;
-  font-weight: 650;
-  letter-spacing: 0.035em;
-}
-
-.fileTreeItem .fileProgressBadge .progressDot {
-  display: none;
-}
-
-.fileTreeItem .fileProgressBadge-todo {
-  border-color: rgba(146, 149, 158, 0.3);
-  background: rgba(146, 149, 158, 0.1);
-  color: #a4a7af;
-}
-
-.fileTreeItem .fileProgressBadge-writing {
-  border-color: rgba(105, 168, 255, 0.35);
-  background: rgba(77, 143, 240, 0.16);
-  color: #75b0ff;
-}
-
-.fileTreeItem .fileProgressBadge-revising {
-  border-color: rgba(228, 174, 85, 0.36);
-  background: rgba(220, 158, 61, 0.15);
-  color: #e4ae55;
-}
-
-.fileTreeItem .fileProgressBadge-done {
-  border-color: rgba(99, 196, 142, 0.36);
-  background: rgba(74, 177, 119, 0.15);
-  color: #69c792;
-}
-
-.fileTreeItem .fileProgressBadge-todo:hover,
-.fileTreeItem .fileProgressBadge-writing:hover,
-.fileTreeItem .fileProgressBadge-revising:hover,
-.fileTreeItem .fileProgressBadge-done:hover {
-  filter: brightness(1.12);
-}
-
-.fileTreeItem .fileProgressMenu {
-  right: auto;
-  left: 0;
-}
-
 .fileTreeItemPrimary {
   width: 100%;
   min-height: 28px;
@@ -13853,6 +13795,7 @@ html:not([data-window-fullscreen="true"])
 }
 
 /* ---- サイドバー: VSCode風ステータス表示 ---- */
+/* 状態色。既存の進捗ドットの色を変数として共有する。 */
 :root {
   --progress-todo: #9aa4ad;
   --progress-writing: #4a90d9;
@@ -13860,35 +13803,86 @@ html:not([data-window-fullscreen="true"])
   --progress-done: #45ab78;
 }
 
-.progressText-todo { --progress-color: var(--progress-todo); }
+.appShell:is([data-theme="dark"], [data-theme$="-dark"]) {
+  --progress-writing: #75b0ff;
+  --progress-revising: #e4ae55;
+  --progress-done: #69c792;
+}
+
+.progressDot-todo { --progress-color: var(--progress-todo); border-color: var(--progress-todo); }
+.progressDot-writing { --progress-color: var(--progress-writing); }
+.progressDot-revising { --progress-color: var(--progress-revising); }
+.progressDot-done { --progress-color: var(--progress-done); }
+
+.progressText-todo { --progress-color: var(--text-faint, var(--progress-todo)); }
 .progressText-writing { --progress-color: var(--progress-writing); }
 .progressText-revising { --progress-color: var(--progress-revising); }
 .progressText-done { --progress-color: var(--progress-done); }
 
+.sidebarHeaderUnit {
+  flex: none;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+/* 行: [シェブロン][名前][字数][状態記号][•••(ホバー時)] */
+.fileTreeItem {
+  min-height: 28px;
+  grid-template-columns: 16px minmax(0, 1fr) 14px 20px;
+  gap: 5px;
+  padding: 0 5px 0 var(--tree-item-indent, 10px);
+}
+
+.folderTreeItemPrimary {
+  min-height: 28px;
+  grid-template-columns: 14px minmax(0, 1fr) auto 14px;
+  gap: 5px;
+  /* ファイル行の ••• 列(20px)+gap+右余白と揃えて、状態記号の列を縦一列にする */
+  padding-right: 30px;
+}
+
 .treeStatusColumn {
   display: inline-flex;
-  flex: none;
   width: 14px;
+  height: 100%;
   align-items: center;
   justify-content: center;
-  margin-right: 6px;
   position: relative;
 }
 
-.fileProgressMarker {
+.fileTreeItem .treeStatusColumn .fileProgressControl {
   width: 14px;
+  min-width: 14px;
+}
+
+.fileProgressMarker {
+  display: inline-grid;
+  width: 14px;
+  height: 20px;
   padding: 0;
+  place-items: center;
   border: 0;
+  border-radius: 3px;
   background: none;
   color: var(--progress-color);
+  cursor: pointer;
+  font: inherit;
   font-size: 11.5px;
   font-weight: 500;
   line-height: 1;
-  cursor: pointer;
+}
+
+.fileProgressMarker:hover {
+  background: rgba(127, 127, 127, 0.14);
 }
 
 .fileProgressMarkerHidden > span {
   visibility: hidden;
+}
+
+.fileTreeItem .treeStatusColumn .fileProgressMenu {
+  right: 0;
+  left: auto;
 }
 
 .folderProgressDot {
@@ -13898,18 +13892,9 @@ html:not([data-window-fullscreen="true"])
   background: var(--progress-color);
 }
 
-.fileTreeItem .treeItemName-writing { color: var(--progress-writing); }
-.fileTreeItem .treeItemName-revising { color: var(--progress-revising); }
-.fileTreeItem .treeItemName-todo { color: var(--muted, #9aa4ad); }
-
-.fileTreeItem .treeItemCharCount {
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.folderTreeItem .treeItemCharCount {
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
+.folderTreeItemPrimary .treeChevronIcon {
+  width: 14px;
+  height: 14px;
 }
 
 .fileTreeItem .treeFileDisclosure .treeChevronIcon {
@@ -13917,23 +13902,75 @@ html:not([data-window-fullscreen="true"])
   height: 12px;
 }
 
+/* ファイル名の状態色。完了は通常色、未着手は薄く。 */
+.fileTreeItem .treeItemName-done { color: var(--text-primary); }
+.fileTreeItem .treeItemName-writing { color: var(--progress-writing); }
+.fileTreeItem .treeItemName-revising { color: var(--progress-revising); }
+.fileTreeItem .treeItemName-todo { color: var(--text-faint); }
+
+.fileTreeItemPrimary {
+  font-size: 12px;
+}
+
+.fileTreeItem .fileTreeItemPrimary > .treeItemCharCount {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.folderTreeItem .treeItemCharCount {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+/* アウトライン: 縦ガイド線(showOutlineGuides 設定時)の内側に # + 見出し */
+
+.fileTreeOutlineChildren .outlineTreeItem {
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.outlineHashMark {
+  color: var(--text-faint);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.fileTreeOutlineChildren .activeOutlineTreeItem {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow: inset 2px 0 var(--accent-strong);
+  color: var(--text-primary);
+}
+
+/* フッター: 凡例 + 合計 */
 .fileViewSummary {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
 
 .progressLegend {
   display: flex;
+  min-width: 0;
   flex-wrap: wrap;
   gap: 2px 8px;
+  color: var(--text-faint);
   font-size: 11px;
-  font-weight: 400;
+}
+
+.progressLegendItem {
+  white-space: nowrap;
 }
 
 .progressLegendMark {
   margin-right: 2px;
   color: var(--progress-color);
   font-weight: 500;
+}
+
+.fileViewSummary > strong {
+  flex: none;
 }

@@ -1472,11 +1472,21 @@ export function WorkspaceSidebar({
                 : undefined
             }
           >
-            <span className="outlineLevelMark">H{item.level}</span>
+            {filePath ? (
+              <span
+                className="outlineHashMark"
+                aria-label={`見出し${item.level}`}
+                title={`見出し${item.level}`}
+              >
+                #
+              </span>
+            ) : (
+              <span className="outlineLevelMark">H{item.level}</span>
+            )}
             <span className="outlineItemTitle">{item.title}</span>
             {headingCharCount !== null && (
               <span className="treeItemCharCount">
-                {formatCharCount(headingCharCount)}
+                {filePath ? formatTreeCharCount(headingCharCount) : formatCharCount(headingCharCount)}
               </span>
             )}
           </button>
@@ -1507,7 +1517,7 @@ export function WorkspaceSidebar({
     const isFolder = kind === "folder";
     const hasChildren = isFolder && entry.children.length > 0;
     const isFolderExpanded = isFolder && !collapsedFolderPaths.has(entry.path);
-    const isActive = entry.path === currentFilePath;
+    const isCurrentFile = entry.path === currentFilePath;
     const isFocused = entry.path === focusedFolderPath;
     const isSelectedFile = !isFolder && selectedFilePaths.has(entry.path);
     const isDraggable = Boolean(parentFolderPath && isProjectEntry(entry));
@@ -1523,23 +1533,28 @@ export function WorkspaceSidebar({
       headingDropTarget.path === entry.path
         ? "headingFileDropTarget"
         : "";
+    const astFile = !isFolder ? projectAstFiles.get(entry.path) : null;
+    const outline = astFile?.documentAst?.outline ?? [];
+    const hasOutline = outline.length > 0;
+    const isOutlineExpanded = hasOutline && !collapsedOutlinePaths.has(entry.path);
+    // 見出しを展開していてカーソル位置の見出しが光っている間は、親のファイル行は光らせない。
+    const isActive = isCurrentFile && !(isOutlineExpanded && activeOutlineIds.size > 0);
     const rowClass = [
       "treeItem",
       isDraggable ? "draggableTreeItem" : "",
       dropClass,
       headingFileDropClass,
       draggingEntryPaths.has(entry.path) ? "draggingTreeEntry" : "",
-      isSelectedFile ? "selectedTreeEntry" : "",
+      // 現在ファイルは既定で選択済みなので、見出し側が光っている間は単独選択の枠も出さない。
+      isSelectedFile && !(isCurrentFile && !isActive && selectedFilePaths.size === 1)
+        ? "selectedTreeEntry"
+        : "",
       isActive ? "activeTreeItem" : "",
       isFocused && !isActive ? "focusedTreeItem" : "",
       isFolder ? "folderTreeItem" : "fileTreeItem",
     ]
       .filter(Boolean)
       .join(" ");
-    const astFile = !isFolder ? projectAstFiles.get(entry.path) : null;
-    const outline = astFile?.documentAst?.outline ?? [];
-    const hasOutline = outline.length > 0;
-    const isOutlineExpanded = hasOutline && !collapsedOutlinePaths.has(entry.path);
     const folderCharCount = isFolder
       ? getSidebarFolderCharCount(sidebarMetrics, entry.path)
       : null;
@@ -1558,6 +1573,12 @@ export function WorkspaceSidebar({
     const treeItemIndent = 10 + depth * 14;
     const fileStatus = !isFolder ? getFileProgress(fileProgress, entry.path) : null;
     const folderStatus = isFolder ? getFolderProgress(entry, fileProgress) : null;
+    const folderProgressTitle =
+      folderStatus === "done"
+        ? "すべて完了"
+        : folderStatus
+          ? `${fileProgressLabels[folderStatus]}を含む`
+          : null;
     const entryDisplayName = displayEntryName(entry.name, isFolder);
 
     return (
@@ -1620,14 +1641,11 @@ export function WorkspaceSidebar({
               {charCountLabel && (
                 <span className="treeItemCharCount">{charCountLabel}</span>
               )}
-              <span
-                className="treeStatusColumn"
-                title={folderStatus ? `${fileProgressLabels[folderStatus]}を含む` : undefined}
-              >
+              <span className="treeStatusColumn" title={folderProgressTitle ?? undefined}>
                 {folderStatus && (
                   <span
                     className={`folderProgressDot progressText-${folderStatus}`}
-                    aria-label={`${fileProgressLabels[folderStatus]}を含む`}
+                    aria-label={folderProgressTitle ?? undefined}
                   />
                 )}
               </span>
@@ -2412,6 +2430,11 @@ export function WorkspaceSidebar({
         <span className="sidebarHeaderLabel">
           {isProjectSearchMode ? "検索" : "ファイル"}
         </span>
+        {!isProjectSearchMode && sidebarMode === "tree" && projectFolder && (
+          <span className="sidebarHeaderUnit" title="各行の数字は字数（単位：字）">
+            字数
+          </span>
+        )}
         <div className="sidebarHeaderActions">
           <button
             className="sidebarIconButton"
