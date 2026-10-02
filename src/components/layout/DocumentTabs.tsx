@@ -35,13 +35,17 @@ export function DocumentTabs({
   onNewTab,
 }: DocumentTabsProps) {
   const isHoverMode = displayMode === "hover";
+  const visibleTabs = openTabs.filter((tab) => tab.kind !== "empty");
   const tabBar = (
     <nav
       className={`documentTabs ${isHoverMode ? "hoverDocumentTabs" : ""}`}
       aria-label="開いている文書"
     >
       <div className="documentTabsList" role="tablist" aria-orientation="horizontal">
-        {openTabs.map((tab) => {
+        {visibleTabs.length === 0 && (
+          <span className="documentTabsEmpty">開いている文書はありません</span>
+        )}
+        {visibleTabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const tabStatus = getTabStatusLabel(tab);
           const isDirty = isDirtyDocumentTab(tab);
@@ -63,10 +67,10 @@ export function DocumentTabs({
                 onKeyDown={(event) => {
                   if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
                   event.preventDefault();
-                  const currentIndex = openTabs.findIndex((item) => item.id === tab.id);
+                  const currentIndex = visibleTabs.findIndex((item) => item.id === tab.id);
                   const delta = event.key === "ArrowLeft" ? -1 : 1;
-                  const nextIndex = (currentIndex + delta + openTabs.length) % openTabs.length;
-                  onActivateTab(openTabs[nextIndex].id);
+                  const nextIndex = (currentIndex + delta + visibleTabs.length) % visibleTabs.length;
+                  onActivateTab(visibleTabs[nextIndex].id);
                   const tabButtons = event.currentTarget
                     .closest('[role="tablist"]')
                     ?.querySelectorAll<HTMLButtonElement>(".documentTabButton");

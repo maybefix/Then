@@ -46,6 +46,7 @@ import {
   type SidebarHeadingSelection,
 } from "./components/layout/WorkspaceSidebar";
 import { DocumentTabs } from "./components/layout/DocumentTabs";
+import { ScopeStartPage } from "./components/layout/ScopeStartPage";
 import { WindowControls } from "./components/layout/WindowControls";
 import { StartupPortal } from "./components/startup/StartupPortal";
 import {
@@ -68,6 +69,7 @@ import { reconcileSavedDocumentTabs } from "./editor/documentTabState";
 import { createMarkdownTable, tableAtOffset, tableAlignmentEdit } from "./editor/markdownTables";
 import { toggleLineComments } from "./editor/lineComments";
 import { mapTextOffsetThroughChange } from "./editor/textOffsetMapping";
+import { copyWorkspaceLocalState } from "./utils/library";
 import { displayedCharacterCount } from "./editor/ast/characterCount";
 import {
   createWorkspaceDocumentTabs,
@@ -170,7 +172,10 @@ import type {
   OutlineItem,
   PlotCard,
   ProjectEntry,
+  FolderInspection,
+  LibraryContext,
   ProjectFolder,
+  ProjectImportReport,
   ProofreadSettings,
   ReferenceCardState,
   ReferenceFileInfo,
@@ -213,12 +218,13 @@ import {
   getVisibleWorkspaceFolderTreeRows,
   getWorkspaceName,
   isPathSameOrInside,
+  retargetFilesystemPath,
   movePathInOrder,
   movePathToDropPosition,
   movePathsToDropPosition,
-  removeNestedRecentWorkspaces,
+  recordOpenedWorkspace,
+  scopeDisplayName,
   replaceFolderChildren,
-  upsertRecentWorkspace,
 } from "./utils/projectTree";
 import { logHeadingDnd } from "./utils/headingDndDiagnostics";
 import { getScaledFixedMenuPosition } from "./utils/contextMenuPosition";
@@ -1083,6 +1089,18 @@ function createScratchDocumentTab(
   };
 }
 
+/** 文書を一つも開いていない状態を表すタブ。タブ帯には出ない。 */
+function createEmptyDocumentTab(): DocumentTab {
+  const id = `empty-${Date.now()}`;
+  return {
+    ...createScratchDocumentTab("", { id, documentKey: id, saveStatus: "saved" }),
+    kind: "empty",
+    name: "",
+  };
+}
+
+const withoutEmptyTabs = (tabs: DocumentTab[]) => tabs.filter((tab) => tab.kind !== "empty");
+
 function normalizePathForCompare(path: string): string {
   return path.replace(/[\\/]+/g, "\\").replace(/\\+$/, "").toLocaleLowerCase();
 }
@@ -1143,18 +1161,6 @@ function isPathInsideFolder(path: string, folderPath: string): boolean {
     normalizedPath !== normalizedFolder &&
     normalizedPath.startsWith(`${normalizedFolder}\\`)
   );
-}
-
-function retargetFilesystemPath(path: string, oldPath: string, newPath: string): string | null {
-  const comparablePath = normalizePathForCompare(path);
-  const comparableOldPath = normalizePathForCompare(oldPath);
-  if (comparablePath === comparableOldPath) return newPath;
-  if (!comparablePath.startsWith(`${comparableOldPath}\\`)) return null;
-
-  const stablePath = path.replace(/[\\/]+/g, "\\").replace(/\\+$/, "");
-  const stableOldPath = oldPath.replace(/[\\/]+/g, "\\").replace(/\\+$/, "");
-  const suffix = stablePath.slice(stableOldPath.length);
-  return `${newPath.replace(/[\\/]+$/, "")}${suffix}`;
 }
 
 function toProjectRelativePath(rootPath: string, path: string): string {
@@ -3795,26 +3801,6 @@ export default function App() {
       `${workspace.name}\n${workspace.path}`.toLocaleLowerCase().includes(normalizedQuery),
     );
   }, [appState.recentWorkspaces, workspaceSwitcherQuery]);
-  const findKnownParentWorkspace = useCallback(
-    (path: string): WorkspaceRecord | null => {
-      const candidates = new Map<string, WorkspaceRecord>();
-      if (projectFolder) {
-        candidates.set(normalizePathForCompare(projectFolder.path), {
-          path: projectFolder.path,
-          name: projectFolder.name,
-          lastOpenedAt: Date.now(),
-        });
-      }
-      for (const workspace of appState.recentWorkspaces) {
-        candidates.set(normalizePathForCompare(workspace.path), workspace);
-      }
-
-      return Array.from(candidates.values())
-        .filter((workspace) => isPathInsideFolder(path, workspace.path))
-        .sort((left, right) => right.path.length - left.path.length)[0] ?? null;
-    },
-    [appState.recentWorkspaces, projectFolder],
-  );
   const patchActiveTab = useCallback(
     (updater: (tab: DocumentTab) => DocumentTab) => {
       setOpenTabs((current) =>
@@ -3892,7 +3878,7 @@ export default function App() {
       }
 
       const nextTab = createFileDocumentTab(document);
-      setOpenTabs((current) => [...current, nextTab]);
+      setOpenTabs((current) => [...withoutEmptyTabs(current), nextTab]);
       syncDocumentTabToEditor(nextTab);
       return nextTab;
     },
@@ -3902,7 +3888,9 @@ export default function App() {
     (document: TextDocument) => {
       const nextTab = createFileDocumentTab(document);
       setOpenTabs((current) => [
-        ...current.filter((tab) => tab.id !== activeTabId && tab.path !== document.path),
+        ...withoutEmptyTabs(current).filter(
+          (tab) => tab.id !== activeTabId && tab.path !== document.path,
+        ),
         nextTab,
       ]);
       syncDocumentTabToEditor(nextTab);
@@ -3917,7 +3905,7 @@ export default function App() {
         name,
         saveStatus: name === newTabName ? "saved" : "dirty",
       });
-      setOpenTabs((current) => [...current, nextTab]);
+      setOpenTabs((current) => [...withoutEmptyTabs(current), nextTab]);
       syncDocumentTabToEditor(nextTab);
       return nextTab;
     },
@@ -4103,7 +4091,8 @@ export default function App() {
     if (projectFolder && findContainingFolderPath(projectFolder, currentFilePath)) {
       return projectFolder.path;
     }
-    return getParentPath(currentFilePath);
+    // 作品はライブラリの中で開くため、作業フォルダの外のファイルから作業フォルダを推測しない。
+    return null;
   }, [currentFilePath, projectFolder]);
   const currentWorkspaceSnapshots = useMemo(() => {
     if (!projectFolder) return [];
@@ -4691,13 +4680,17 @@ export default function App() {
     setLastError("");
   };
 
-  const restoreWorkspaceFromState = async (state: AppState): Promise<boolean> => {
+  const restoreWorkspaceFromState = async (
+    state: AppState,
+  ): Promise<boolean | "outsideLibrary"> => {
     if (!isTauriRuntime() || !state.lastWorkspacePath) return false;
 
     try {
       const folder = await invoke<ProjectFolder>("list_project_text_files", {
         folderPath: state.lastWorkspacePath,
       });
+      // 旧版のワークスペースはそのまま開かず、取り込みへ誘導する。
+      if (!folder.library) return "outsideLibrary";
       setProjectFolder(folder);
       setSearchScope("file");
       setProjectSearchQuery("");
@@ -4727,21 +4720,18 @@ export default function App() {
       const restoredState: AppState = {
         ...state,
         snippets: restoredSnippets,
-        recentWorkspaces: upsertRecentWorkspace(
-          removeNestedRecentWorkspaces(state.recentWorkspaces, folder.path),
-          folder.path,
-          folder.name,
-        ),
+        recentWorkspaces: recordOpenedWorkspace(state.recentWorkspaces, folder),
       };
       const workspaceKey = workspaceDocumentTabsKey(folder.path);
       const savedTabs = state.documentTabsByWorkspace[workspaceKey];
       const restoredTabs = savedTabs?.tabs.length
         ? await loadWorkspaceDocumentTabs(folder, savedTabs)
         : null;
+      // 保存タブがなければ空の状態にする（最初のファイルは自動で開かない）。
       const filePath = !restoredTabs?.tabs.length
-        ? state.lastFilePath && findProjectEntry(folder.children, state.lastFilePath)
-          ? state.lastFilePath
-          : findFirstTextFile(folder.children)?.path ?? null
+        && state.lastFilePath
+        && findProjectEntry(folder.children, state.lastFilePath)
+        ? state.lastFilePath
         : null;
       const fallbackDocument = filePath
         ? await invoke<TextDocument>("read_text_file", { path: filePath })
@@ -4751,10 +4741,7 @@ export default function App() {
         : [
             fallbackDocument
               ? createFileDocumentTab(fallbackDocument)
-              : createScratchDocumentTab("", {
-                  documentKey: `workspace-new-${Date.now()}`,
-                  saveStatus: "saved",
-                }),
+              : createEmptyDocumentTab(),
           ];
       const nextTab = nextTabs[restoredTabs?.activeIndex ?? 0] ?? nextTabs[0];
 
@@ -4843,7 +4830,8 @@ export default function App() {
           state.lastWorkspacePath
         ) {
           const restored = await restoreWorkspaceFromState(state);
-          if (!isCancelled) setStartupView(restored ? "editor" : "portal");
+          if (!isCancelled) setStartupView(restored === true ? "editor" : "portal");
+          if (restored === "outsideLibrary") openScratchFromStoredState(state);
           return;
         }
 
@@ -6473,6 +6461,7 @@ export default function App() {
         current.resolve("primary");
         return null;
       }
+      if (current.type === "options") return current;
       if (current.type === "multiInput") {
         const values: Record<string, string> = {};
         for (const field of current.fields) {
@@ -6531,6 +6520,29 @@ export default function App() {
     });
   };
 
+  const requestOption = ({
+    title,
+    message,
+    detail,
+    options,
+  }: {
+    title: string;
+    message: string;
+    detail?: string;
+    options: { id: string; label: string; description?: string }[];
+  }) =>
+    new Promise<string | null>((resolve) => {
+      setAppDialog({ type: "options", title, message, detail, options, resolve });
+    });
+
+  const chooseAppDialogOption = (id: string) => {
+    setAppDialog((current) => {
+      if (current?.type !== "options") return current;
+      current.resolve(id);
+      return null;
+    });
+  };
+
   const chooseAppDialog = (value: "primary" | "secondary") => {
     setAppDialog((current) => {
       if (current?.type !== "choice") return current;
@@ -6585,10 +6597,7 @@ export default function App() {
     const fallbackTab =
       remainingTabs[targetIndex] ??
       remainingTabs[targetIndex - 1] ??
-      createScratchDocumentTab("", {
-        documentKey: `closed-last-tab-${Date.now()}`,
-        saveStatus: "dirty",
-      });
+      createEmptyDocumentTab();
 
     setOpenTabs(remainingTabs.length ? remainingTabs : [fallbackTab]);
     if (isClosingActiveTab) syncDocumentTabToEditor(fallbackTab);
@@ -6949,9 +6958,20 @@ export default function App() {
           : getParentPath(document.path);
       if (!folderPath) return null;
 
-      const folder = await invoke<ProjectFolder>("list_project_text_files", {
+      let folder = await invoke<ProjectFolder>("list_project_text_files", {
         folderPath,
       });
+      if (!folder.library) {
+        // 作品はライブラリの中で開く。ライブラリの外のファイルは作業フォルダを切り替えずに開く。
+        const inspection = await invoke<FolderInspection>("inspect_workspace_folder", {
+          folderPath: folder.path,
+        });
+        const enclosingPath = inspection.projectPath ?? inspection.libraryPath;
+        if (!enclosingPath) return null;
+        folder = await invoke<ProjectFolder>("list_project_text_files", {
+          folderPath: enclosingPath,
+        });
+      }
       const switched = !projectFolder || !isSamePath(projectFolder.path, folder.path);
       let restoredTabs: LoadedWorkspaceDocumentTabs | null = null;
       let nextTabs: DocumentTab[] | null = null;
@@ -6959,7 +6979,7 @@ export default function App() {
       if (switched) {
         rememberCurrentWorkspaceTabs();
         const workspaceKey = workspaceDocumentTabsKey(folder.path);
-        const savedTabs = appState.documentTabsByWorkspace[workspaceKey];
+        const savedTabs = appStateRef.current.documentTabsByWorkspace[workspaceKey];
         restoredTabs = savedTabs?.tabs.length
           ? await loadWorkspaceDocumentTabs(folder, savedTabs)
           : null;
@@ -7552,6 +7572,10 @@ export default function App() {
       showToast("名前を付けて保存はTauri版で利用できます");
       return;
     }
+    if (activeTab?.kind === "empty") {
+      showToast("保存する文書が開かれていません");
+      return;
+    }
 
     const previousSaveStatus = saveStatus;
     setSaveStatus("saving");
@@ -7686,12 +7710,6 @@ export default function App() {
     rememberCurrentWorkspaceTabs();
 
     const focusedPath = options.focusFolderPath ?? folder.path;
-    const focusedEntry =
-      focusedPath && !isSamePath(focusedPath, folder.path)
-        ? findProjectEntry(folder.children, focusedPath)
-        : null;
-    const preferredFiles =
-      focusedEntry?.kind === "folder" ? focusedEntry.children : folder.children;
 
     try {
       const restoredSnippets =
@@ -7713,26 +7731,10 @@ export default function App() {
         revision: restoredFileProgress.revision,
         contentHash: restoredFileProgress.contentHash,
       });
-      const firstFile = findFirstTextFile(preferredFiles) ?? findFirstTextFile(folder.children);
       const workspaceKey = workspaceDocumentTabsKey(folder.path);
-      const savedTabs = appState.documentTabsByWorkspace[workspaceKey];
+      const savedTabs = appStateRef.current.documentTabsByWorkspace[workspaceKey];
       const restoredTabs = savedTabs?.tabs.length
         ? await loadWorkspaceDocumentTabs(folder, savedTabs)
-        : null;
-      const firstDocument = !restoredTabs?.tabs.length && firstFile
-        ? await (async () => {
-            debugLog("before invoke read_text_file firstFile", {
-              path: firstFile.path,
-            });
-            const document = await invoke<TextDocument>("read_text_file", {
-              path: firstFile.path,
-            });
-            debugLog("after invoke read_text_file firstFile", {
-              path: document.path,
-              contentLength: document.content.length,
-            });
-            return document;
-          })()
         : null;
 
       setProjectFolder(folder);
@@ -7746,17 +7748,10 @@ export default function App() {
       setProjectProofreadTerms(restoredProofreadTerms);
       setProjectProofreadIgnored(restoredProofreadIgnored);
 
+      // 保存タブがなければ空の状態にする（最初のファイルは自動で開かない）。
       const nextTabs = restoredTabs?.tabs.length
         ? restoredTabs.tabs
-        : [
-            firstDocument
-              ? createFileDocumentTab(firstDocument)
-              : createScratchDocumentTab("", {
-                  documentKey: `workspace-empty-${Date.now()}`,
-                  saveStatus: "saved",
-                  savedMarkdown: "",
-                }),
-          ];
+        : [createEmptyDocumentTab()];
       const nextTab = nextTabs[restoredTabs?.activeIndex ?? 0] ?? nextTabs[0];
       setOpenTabs(nextTabs);
       syncDocumentTabToEditor(nextTab);
@@ -7802,11 +7797,7 @@ export default function App() {
             ...current.documentTabsByWorkspace,
             [workspaceKey]: createWorkspaceDocumentTabs(nextTabs, nextTab.id),
           },
-          recentWorkspaces: upsertRecentWorkspace(
-            removeNestedRecentWorkspaces(current.recentWorkspaces, folder.path),
-            folder.path,
-            folder.name,
-          ),
+          recentWorkspaces: recordOpenedWorkspace(current.recentWorkspaces, folder),
         };
       });
       if (restoredCheckpoints.warnings.length) {
@@ -7823,10 +7814,141 @@ export default function App() {
     }
   };
 
-  async function openWorkspace(
-    path?: string,
-    options: { skipKnownParentPrompt?: boolean } = {},
-  ): Promise<boolean> {
+  /** 作品はライブラリの中で開く。ライブラリの外のフォルダは取り込みかライブラリ化へ誘導する。 */
+  const resolveWorkspaceFolder = async (
+    folder: ProjectFolder,
+  ): Promise<{ folder: ProjectFolder; focusFolderPath: string | null } | null> => {
+    if (folder.library) return { folder, focusFolderPath: null };
+
+    const inspection = await invoke<FolderInspection>("inspect_workspace_folder", {
+      folderPath: folder.path,
+    });
+    const enclosingPath = inspection.projectPath ?? inspection.libraryPath;
+    if (enclosingPath) {
+      const enclosing = await invoke<ProjectFolder>("list_project_text_files", {
+        folderPath: enclosingPath,
+      });
+      return { folder: enclosing, focusFolderPath: folder.path };
+    }
+
+    const choice = await requestOption({
+      title: "ライブラリの外のフォルダです",
+      message: `「${folder.name}」はライブラリに入っていません。作品はライブラリの中で開きます。`,
+      detail: "取り込みでは元のフォルダには書き込まず、ライブラリ内へコピーしてから検証します。",
+      options: [
+        {
+          id: "import",
+          label: "既存のライブラリへ取り込む",
+          description: "ライブラリのフォルダを選び、この作品をコピーします。",
+        },
+        {
+          id: "import-new",
+          label: "新しいライブラリを作って取り込む",
+          description: "ライブラリにするフォルダを選び、この作品をコピーします。",
+        },
+        ...(inspection.kind === "folder"
+          ? [{
+              id: "make-library",
+              label: "このフォルダをライブラリにする",
+              description: "フォルダ内のファイルは、ライブラリ直下のファイルになります。",
+            }]
+          : []),
+      ],
+    });
+    if (!choice) return null;
+
+    if (choice === "make-library") {
+      await invoke<LibraryContext>("create_library", { folderPath: folder.path, name: "" });
+      const library = await invoke<ProjectFolder>("list_project_text_files", {
+        folderPath: folder.path,
+      });
+      return { folder: library, focusFolderPath: null };
+    }
+
+    const libraryPath = await invoke<string | null>("pick_folder_dialog");
+    if (!libraryPath) return null;
+    if (choice === "import-new") {
+      await invoke<LibraryContext>("create_library", { folderPath: libraryPath, name: "" });
+    } else {
+      const target = await invoke<FolderInspection>("inspect_workspace_folder", {
+        folderPath: libraryPath,
+      });
+      if (target.kind !== "library") {
+        showToast("選んだフォルダはライブラリではありません");
+        return null;
+      }
+    }
+
+    const imported = await importProjectIntoLibrary(folder.path, libraryPath);
+    if (!imported) return null;
+    const project = await invoke<ProjectFolder>("list_project_text_files", {
+      folderPath: imported.projectPath,
+    });
+    return { folder: project, focusFolderPath: null };
+  };
+
+  const importProjectIntoLibrary = async (
+    sourcePath: string,
+    libraryPath: string,
+  ): Promise<ProjectImportReport | null> => {
+    showToast("作品を取り込んでいます…");
+    let report: ProjectImportReport;
+    try {
+      report = await invoke<ProjectImportReport>("import_project_into_library", {
+        sourcePath,
+        libraryPath,
+      });
+    } catch (error) {
+      setLastError(String(error));
+      await requestConfirm({
+        title: "取り込めませんでした",
+        message: String(error),
+        detail: "元のフォルダは変更していません。作成途中のコピーは片付けました。",
+        confirmLabel: "閉じる",
+      });
+      return null;
+    }
+
+    setAppState((current) =>
+      copyWorkspaceLocalState(current, sourcePath, report.projectPath, report.name),
+    );
+    const choice = await requestChoice({
+      title: "取り込みました",
+      message: `「${report.name}」をライブラリに取り込みました（${report.fileCount}ファイル・チェックポイント${report.checkpointCount}件）。`,
+      detail: [
+        `元のフォルダはそのまま残っています: ${sourcePath}`,
+        ...report.warnings,
+      ].join("\n"),
+      primaryLabel: "作品を開く",
+      secondaryLabel: "元のフォルダを表示",
+    });
+    if (choice === "secondary") {
+      void invoke("open_export_location", { path: sourcePath }).catch((error) =>
+        setLastError(String(error)),
+      );
+    }
+    return report;
+  };
+
+  /** 途中で終了した取り込みのコピーが残っていれば、削除するか確認する。 */
+  const offerToDiscardStaleImports = async (libraryPath: string) => {
+    try {
+      const stale = await invoke<string[]>("list_stale_library_imports", { libraryPath });
+      if (!stale.length) return;
+      const discard = await requestConfirm({
+        title: "途中で終わった取り込みがあります",
+        message: `完了しなかった取り込みのコピーが${stale.length}件残っています。削除しますか？`,
+        detail: "取り込み元のフォルダには影響しません。",
+        confirmLabel: "削除",
+        danger: true,
+      });
+      if (discard) await invoke("discard_stale_library_imports", { libraryPath });
+    } catch (error) {
+      setLastError(String(error));
+    }
+  };
+
+  async function openWorkspace(path?: string): Promise<boolean> {
     if (!isTauriRuntime()) {
       showToast("フォルダを開く機能はTauri版で利用できます");
       return false;
@@ -7850,31 +7972,12 @@ export default function App() {
         return false;
       }
 
-      let folderToOpen = folder;
-      let focusFolderPath: string | null = null;
-      if (!path && !options.skipKnownParentPrompt) {
-        const parentWorkspace = findKnownParentWorkspace(folder.path);
-        if (parentWorkspace) {
-          const choice = await requestChoice({
-            title: "フォルダの開き方",
-            message: `「${folder.name}」は「${parentWorkspace.name}」内のフォルダです。`,
-            detail:
-              "独立プロジェクトとして開くと、このフォルダ自身に .then/project.json が作られ、スニペットやプロットも別管理になります。",
-            primaryLabel: `${parentWorkspace.name} を開いて移動`,
-            secondaryLabel: `${folder.name} を独立プロジェクトとして開く`,
-          });
-          if (!choice) {
-            setSaveStatus(previousSaveStatus);
-            return false;
-          }
-          if (choice === "primary") {
-            folderToOpen = await invoke<ProjectFolder>("list_project_text_files", {
-              folderPath: parentWorkspace.path,
-            });
-            focusFolderPath = folder.path;
-          }
-        }
+      const resolved = await resolveWorkspaceFolder(folder);
+      if (!resolved) {
+        setSaveStatus(previousSaveStatus);
+        return false;
       }
+      const { folder: folderToOpen, focusFolderPath } = resolved;
 
       debugLog("before setProjectFolder", {
         path: folderToOpen.path,
@@ -7883,8 +7986,8 @@ export default function App() {
       const tabRestore = await openWorkspaceFolder(folderToOpen, { focusFolderPath });
       setIsWorkspaceSwitcherOpen(false);
       const baseMessage = focusFolderPath
-        ? `「${folderToOpen.name}」内の「${folder.name}」へ移動しました`
-        : `「${folderToOpen.name}」を開きました`;
+        ? `「${scopeDisplayName(folderToOpen)}」内の「${folder.name}」へ移動しました`
+        : `「${scopeDisplayName(folderToOpen)}」を開きました`;
       const restoreSummary = [
         projectFolder && !isSamePath(projectFolder.path, folderToOpen.path)
           ? `「${projectFolder.name}」のタブを記憶`
@@ -7895,6 +7998,7 @@ export default function App() {
           : "",
       ].filter(Boolean).join(" / ");
       showToast(restoreSummary ? `${baseMessage}（${restoreSummary}）` : baseMessage);
+      if (folderToOpen.library) void offerToDiscardStaleImports(folderToOpen.library.path);
       return true;
     } catch (error) {
       const message = portableStorageErrorMessage(error);
@@ -7904,6 +8008,50 @@ export default function App() {
       return false;
     }
   }
+
+  const libraryContext = projectFolder?.library ?? null;
+
+  // サイドバーの「← ライブラリ」とパンくずのライブラリ名は、どちらもこの関数を呼ぶ。
+  const enterLibraryRoot = () => {
+    if (!libraryContext || libraryContext.role === "root") return;
+    void openWorkspace(libraryContext.path);
+  };
+
+  // サイドバーの作品の行とパンくずの作品名は、どちらもこの関数を呼ぶ。
+  const enterProject = (path: string) => {
+    if (projectFolder && isSamePath(projectFolder.path, path)) return;
+    void openWorkspace(path);
+  };
+
+  const handleCreateLibraryProject = async () => {
+    if (!libraryContext) return;
+    const name = await requestInput({
+      title: "新しい作品",
+      label: "作品名",
+      initialValue: "",
+      confirmLabel: "作成",
+      placeholder: "作品のフォルダ名",
+    });
+    if (!name) return;
+    try {
+      const path = await invoke<string>("create_library_project", {
+        libraryPath: libraryContext.path,
+        name,
+      });
+      enterProject(path);
+    } catch (error) {
+      setLastError(String(error));
+      showToast(`作品を作成できませんでした: ${String(error)}`);
+    }
+  };
+
+  const handleImportProjectIntoLibrary = async () => {
+    if (!libraryContext) return;
+    const sourcePath = await invoke<string | null>("pick_folder_dialog");
+    if (!sourcePath) return;
+    const report = await importProjectIntoLibrary(sourcePath, libraryContext.path);
+    if (report) enterProject(report.projectPath);
+  };
 
   const handleOpenProjectFolder = async () => {
     await openWorkspace();
@@ -10711,6 +10859,11 @@ export default function App() {
     if (!appState.lastWorkspacePath) return;
     setStartupView("loading");
     const restored = await restoreWorkspaceFromState(appState);
+    if (restored === "outsideLibrary") {
+      setStartupView("portal");
+      await handleOpenWorkspaceFromPortal(appState.lastWorkspacePath);
+      return;
+    }
     setStartupView(restored ? "editor" : "portal");
   };
 
@@ -11051,6 +11204,19 @@ export default function App() {
             Then を読み込んでいます…
           </div>
         ) : startupView === "portal" ? (
+          <>
+          {/* 起動画面から開いたフォルダでも、取り込みなどの確認ダイアログを出す。 */}
+          {appDialog && (
+            <AppDialogModal
+              dialog={appDialog}
+              onClose={closeAppDialog}
+              onSubmit={submitAppDialog}
+              onValueChange={updateAppDialogValue}
+              onFieldValueChange={updateAppDialogFieldValue}
+              onChoice={chooseAppDialog}
+              onOption={chooseAppDialogOption}
+            />
+          )}
           <StartupPortal
             recentWorkspaces={appState.recentWorkspaces}
             lastWorkspacePath={appState.lastWorkspacePath}
@@ -11067,6 +11233,7 @@ export default function App() {
               setIsSettingsModalOpen(true);
             }}
           />
+          </>
         ) : (
           <section
             className="appFrame"
@@ -11173,6 +11340,19 @@ export default function App() {
               {breadcrumbLayout === "minimal" &&
                 breadcrumbOverflowItems.length > 0 &&
                 renderBreadcrumbOverflow("breadcrumb-overflow-minimal")}
+              {libraryContext?.role === "project" && (
+                <div className="breadcrumbSegment breadcrumbLibrarySegment">
+                  <button
+                    className="breadcrumbFolderButton breadcrumbLibraryButton"
+                    type="button"
+                    title={`ライブラリ「${libraryContext.name}」へ戻る`}
+                    onClick={enterLibraryRoot}
+                  >
+                    <span>{libraryContext.name}</span>
+                  </button>
+                  <span className="crumbSeparator">›</span>
+                </div>
+              )}
               {projectFolder ? (
                 breadcrumbTrail.map((crumb, index) => {
                   const isFolder =
@@ -11250,12 +11430,12 @@ export default function App() {
                                 className="workspaceSwitcherBookIcon"
                               />
                             )}
-                            <span>{crumb.name}</span>
+                            <span>{index === 0 ? scopeDisplayName(projectFolder) : crumb.name}</span>
                           </button>
                           {index === 0 && isWorkspaceSwitcherOpen && (
                             <div className="menuPopover workspaceSwitcherPopover" role="menu">
                               <div className="workspaceSwitcherHeader">
-                                <span className="workspaceSwitcherTitle">{projectFolder.name}</span>
+                                <span className="workspaceSwitcherTitle">{scopeDisplayName(projectFolder)}</span>
                                 {settings.showWorkspacePaths && (
                                   <span className="workspaceSwitcherPath">{projectFolder.path}</span>
                                 )}
@@ -12066,6 +12246,11 @@ export default function App() {
                 onRestoreSnapshot={(snapshot) => void handleRestoreManuscriptSnapshot(snapshot)}
                 onDeleteSnapshot={(snapshot) => void handleDeleteManuscriptSnapshot(snapshot)}
                     onCollapse={() => setIsLeftSidebarCollapsed(true)}
+                    library={libraryContext}
+                    onEnterLibraryRoot={enterLibraryRoot}
+                    onEnterProject={enterProject}
+                    onCreateLibraryProject={() => void handleCreateLibraryProject()}
+                    onImportProject={() => void handleImportProjectIntoLibrary()}
                 />
                 )}
             </div>
@@ -12117,7 +12302,18 @@ export default function App() {
                         </div>
                       </section>
                     )}
-                    {isNewTabStartPage ? (
+                    {activeTab?.kind === "empty" && projectFolder ? (
+                      <ScopeStartPage
+                        folder={projectFolder}
+                        onOpenFile={(path) => void handleProjectFileSelect(path)}
+                        onCreateFile={() => void handleCreateProjectFile(projectFolder.path)}
+                        onOpenPlot={() => {
+                          setRightSidebarTab("plot");
+                          setIsRightSidebarCollapsed(false);
+                        }}
+                        onOpenCanvas={() => void openIdeaCanvasBoard("project")}
+                      />
+                    ) : isNewTabStartPage || activeTab?.kind === "empty" ? (
                       <section className="newTabStart" aria-label="新しいタブ">
                         <div>
                           <p className="newTabEyebrow">New tab</p>
@@ -12951,6 +13147,7 @@ export default function App() {
               onValueChange={updateAppDialogValue}
               onFieldValueChange={updateAppDialogFieldValue}
               onChoice={chooseAppDialog}
+              onOption={chooseAppDialogOption}
             />
           )}
 

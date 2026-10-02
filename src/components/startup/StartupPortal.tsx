@@ -87,6 +87,17 @@ function formatLastOpened(timestamp: number): string {
   );
 }
 
+function workspaceKindLabel(workspace: WorkspaceRecord) {
+  if (!workspace.library) {
+    return <span className="startupPortalWorkspaceKind needsImport">取り込みが必要</span>;
+  }
+  return (
+    <span className="startupPortalWorkspaceKind">
+      {workspace.library.role === "root" ? "ライブラリ" : workspace.library.name}
+    </span>
+  );
+}
+
 export function StartupPortal({
   recentWorkspaces,
   lastWorkspacePath,
@@ -121,7 +132,7 @@ export function StartupPortal({
           <div className="startupPortalMark" aria-hidden="true">
             T
           </div>
-          <h1>執筆するワークスペースを選んでください。</h1>
+          <h1>執筆するライブラリか作品を選んでください。</h1>
           {workspaceAlert && (
             <div className="startupPortalAlert" role="alert">
               <strong>{workspaceAlert.message}</strong>
@@ -152,10 +163,10 @@ export function StartupPortal({
           </div>
         </section>
 
-        <section className="startupPortalRecent" aria-label="最近のワークスペース">
+        <section className="startupPortalRecent" aria-label="最近のライブラリ・プロジェクト">
           <div className="startupPortalRecentHeader">
             <div>
-              <h2>最近のワークスペース</h2>
+              <h2>最近のライブラリ・プロジェクト</h2>
               <p>選択すると、そのまま執筆画面へ移動します</p>
             </div>
             {sortedWorkspaces.length > 0 && (
@@ -177,6 +188,7 @@ export function StartupPortal({
                     <span className="startupPortalWorkspaceTitle">
                       <strong>{workspace.name}</strong>
                       {workspace.path === lastWorkspacePath && <em>前回</em>}
+                      {workspaceKindLabel(workspace)}
                     </span>
                     <span className="startupPortalWorkspaceMeta">
                       <span title={workspace.path}>{workspace.path}</span>
@@ -189,7 +201,7 @@ export function StartupPortal({
                 </button>
               ))
             ) : (
-              <p className="startupPortalEmpty">最近開いたワークスペースはありません。</p>
+              <p className="startupPortalEmpty">最近開いたライブラリや作品はありません。</p>
             )}
           </div>
         </section>
@@ -206,7 +218,7 @@ export function StartupPortal({
             type="checkbox"
             onChange={(event) => onSkipStartupPortalChange(event.target.checked)}
           />
-          <span>次回から前回のワークスペースを直接開く</span>
+          <span>次回から前回のライブラリ・作品を直接開く</span>
         </label>
         <span className="startupPortalVersion">Then {packageMetadata.version}</span>
       </footer>

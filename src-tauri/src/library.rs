@@ -56,7 +56,10 @@ pub(super) struct FolderInspection {
     kind: String,
     path: String,
     name: String,
+    /// The library containing this folder (or the folder itself), if any.
     library_path: Option<String>,
+    /// The library project containing this folder (or the folder itself), if any.
+    project_path: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -165,24 +168,29 @@ pub(super) fn inspect_folder(path: &Path) -> Result<FolderInspection, String> {
     if !path.is_dir() {
         return Err("folder does not exist".to_string());
     }
-    let parent_library = path
-        .parent()
-        .filter(|parent| is_library_root(parent))
-        .map(|parent| parent.to_string_lossy().to_string());
+    let library = path.ancestors().find(|candidate| is_library_root(candidate));
+    // The project is the ancestor sitting directly under the library.
+    let project = library.and_then(|library| {
+        path.ancestors()
+            .find(|candidate| candidate.parent() == Some(library))
+            .filter(|candidate| is_project_root(candidate))
+    });
     let kind = if is_library_root(path) {
         "library"
-    } else if is_project_root(path) && parent_library.is_some() {
+    } else if project == Some(path) {
         "libraryProject"
-    } else if is_project_root(path) {
+    } else if library.is_none() && is_project_root(path) {
         "project"
     } else {
         "folder"
     };
+    let as_string = |path: &Path| path.to_string_lossy().to_string();
     Ok(FolderInspection {
         kind: kind.to_string(),
-        path: path.to_string_lossy().to_string(),
+        path: as_string(path),
         name: folder_name(path),
-        library_path: if kind == "libraryProject" { parent_library } else { None },
+        library_path: library.map(as_string),
+        project_path: project.map(as_string),
     })
 }
 
@@ -517,7 +525,14 @@ mod tests {
         let project = library_context_for(Path::new(&work), Vec::new()).unwrap().unwrap();
         assert_eq!(project.role, "project");
         assert_eq!(inspect_folder(Path::new(&work)).unwrap().kind, "libraryProject");
-        assert_eq!(inspect_folder(&library.join("資料")).unwrap().kind, "folder");
+        let shared = inspect_folder(&library.join("資料")).unwrap();
+        assert_eq!(shared.kind, "folder");
+        assert_eq!(shared.library_path.as_deref(), Some(library.to_str().unwrap()));
+        assert!(shared.project_path.is_none());
+        std::fs::create_dir_all(Path::new(&work).join("01_本文")).unwrap();
+        let chapter = inspect_folder(&Path::new(&work).join("01_本文")).unwrap();
+        assert_eq!(chapter.kind, "folder");
+        assert_eq!(chapter.project_path.as_deref(), Some(work.as_str()));
         assert!(library_context_for(&library.join("資料"), Vec::new()).unwrap().is_none());
     }
 

@@ -331,6 +331,20 @@ textarea,
 
 .startupPortalWorkspaceBody,
 .startupPortalWorkspaceTitle,
+.startupPortalWorkspaceKind {
+  padding: 1px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.startupPortalWorkspaceKind.needsImport {
+  border-color: var(--progress-revising, #d8a13a);
+  color: var(--progress-revising, #d8a13a);
+}
+
 .startupPortalWorkspaceMeta {
   display: flex;
   min-width: 0;
@@ -1582,6 +1596,62 @@ html:not([data-window-fullscreen="true"])
   color: #bbc0b8;
   font-size: 15px;
   line-height: 1.8;
+}
+
+.scopeStartRecent {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  list-style: none;
+  overflow: hidden;
+}
+
+.scopeStartRecent li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.scopeStartRecent button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+
+.scopeStartRecent button:hover,
+.scopeStartRecent button:focus-visible {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.scopeStartRecentName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scopeStartRecentTime {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.documentTabsEmpty {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .newTabEyebrow {
@@ -3957,7 +4027,40 @@ html:not([data-window-fullscreen="true"])
   font-size: 12px;
   line-height: 1.55;
   overflow-wrap: anywhere;
-  white-space: normal;
+  white-space: pre-line;
+}
+
+.dialogOptionList {
+  display: grid;
+  gap: 6px;
+}
+
+.dialogOption {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.dialogOption:hover,
+.dialogOption:focus-visible {
+  border-color: var(--accent);
+}
+
+.dialogOption strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dialogOption span {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .dialogError {
@@ -4365,6 +4468,184 @@ body {
 .treeNode,
 .treeChildren {
   min-width: 0;
+}
+
+.breadcrumbLibrarySegment {
+  flex: none;
+}
+
+.breadcrumbLibraryButton span {
+  color: var(--text-muted);
+}
+
+.breadcrumbLibraryButton:hover span {
+  color: var(--text-primary);
+}
+
+.libraryBackButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 6px 8px 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-panel-strong);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.libraryBackButton:hover,
+.libraryBackButton:focus-visible {
+  border-color: var(--accent);
+}
+
+.libraryBackIcon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--accent);
+}
+
+.libraryBackName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.libraryBackButton small {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+/* ライブラリ直下では、ツリーの下に作品の一覧が見えるようにする。 */
+.hasLibraryProjects > .outlineExplorerSection {
+  min-height: auto;
+}
+
+.libraryProjects {
+  margin: 10px 0 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.libraryProjectsHeader {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 14px 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.libraryProjectsEmpty {
+  margin: 0;
+  padding: 4px 14px 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.libraryProjectRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 12px);
+  min-width: 0;
+  margin: 1px 6px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+
+.libraryProjectRow:hover,
+.libraryProjectRow:focus-visible {
+  border-color: var(--border-subtle);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.libraryProjectBook {
+  flex: none;
+  width: 14px;
+  height: 17px;
+  border-radius: 1px 3px 3px 1px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 55%, #000) 0 3px,
+    color-mix(in srgb, var(--accent) 70%, transparent) 3px
+  );
+}
+
+.libraryProjectName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.libraryProjectGo {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-left: auto;
+  color: var(--text-muted);
+}
+
+.libraryMisplaced {
+  display: grid;
+  gap: 2px;
+  margin: 8px 10px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--progress-revising, #d8a13a) 55%, transparent);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.libraryMisplaced strong {
+  color: var(--progress-revising, #d8a13a);
+  font-weight: 600;
+}
+
+.libraryMisplacedPath {
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.libraryProjectActions {
+  display: grid;
+  gap: 1px;
+  padding: 6px 6px 0;
+}
+
+.libraryProjectActions button {
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.libraryProjectActions button:hover,
+.libraryProjectActions button:focus-visible {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
 }
 
 .treeItem {

@@ -15,6 +15,7 @@
     "test:v066-idea": "node scripts/test-v066-idea-ui.mjs",
     "test:binder": "node scripts/test-idea-reference-binder.mjs",
     "test:project-portability": "node scripts/test-project-portability-baseline.mjs",
+    "test:library": "node scripts/test-library-local-state.mjs",
     "dev": "vite",
     "dev:local": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "test:markdown-tables": "node scripts/test-markdown-tables.mjs",

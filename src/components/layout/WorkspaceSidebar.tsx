@@ -17,6 +17,7 @@ import type {
 } from "../../editor/ast/types";
 import type {
   FileProgressStatus,
+  LibraryContext,
   ManuscriptSnapshot,
   OutlineItem,
   ProjectEntry,
@@ -122,6 +123,12 @@ type WorkspaceSidebarProps = {
   onRestoreSnapshot: (snapshot: ManuscriptSnapshot) => void;
   onDeleteSnapshot: (snapshot: ManuscriptSnapshot) => void;
   onCollapse: () => void;
+  /** 開いているフォルダがライブラリ直下かライブラリ内の作品のとき。 */
+  library: LibraryContext | null;
+  onEnterLibraryRoot: () => void;
+  onEnterProject: (path: string) => void;
+  onCreateLibraryProject: () => void;
+  onImportProject: () => void;
 };
 
 type TreeContextMenu = {
@@ -536,6 +543,85 @@ function SidebarIcon({ name, className = "" }: { name: SidebarIconName; classNam
   }
 }
 
+/** 作品を開いているとき、サイドバー最上部に出すライブラリへ戻るボタン。 */
+function LibraryBackButton({
+  library,
+  onEnterLibraryRoot,
+}: {
+  library: LibraryContext;
+  onEnterLibraryRoot: () => void;
+}) {
+  return (
+    <button
+      className="libraryBackButton"
+      type="button"
+      title={`ライブラリ「${library.name}」へ戻る`}
+      onClick={onEnterLibraryRoot}
+    >
+      <SidebarIcon name="chevronLeft" className="libraryBackIcon" />
+      <span className="libraryBackName">{library.name}</span>
+      <small>ライブラリ</small>
+    </button>
+  );
+}
+
+/** ライブラリ直下を開いているとき、ツリーの下に出す作品の一覧。 */
+function LibraryProjectList({
+  library,
+  onEnterProject,
+  onCreateProject,
+  onImportProject,
+}: {
+  library: LibraryContext;
+  onEnterProject: (path: string) => void;
+  onCreateProject: () => void;
+  onImportProject: () => void;
+}) {
+  return (
+    <section className="libraryProjects" aria-label="作品">
+      <div className="libraryProjectsHeader">
+        <span>作品</span>
+        <span>{library.projects.length}</span>
+      </div>
+      {library.projects.length === 0 && (
+        <p className="libraryProjectsEmpty">まだ作品がありません。</p>
+      )}
+      {library.projects.map((project) => (
+        <button
+          key={project.path}
+          className="libraryProjectRow"
+          type="button"
+          title={project.path}
+          onClick={() => onEnterProject(project.path)}
+        >
+          <span className="libraryProjectBook" aria-hidden="true" />
+          <span className="libraryProjectName">{project.name}</span>
+          <SidebarIcon name="chevronRight" className="libraryProjectGo" />
+        </button>
+      ))}
+      {library.misplacedProjects.length > 0 && (
+        <div className="libraryMisplaced" role="note">
+          <strong>作品として扱われていないフォルダがあります</strong>
+          <span>作品フォルダはライブラリ直下に移してください。</span>
+          {library.misplacedProjects.map((path) => (
+            <span key={path} className="libraryMisplacedPath" title={path}>
+              {path.slice(library.path.length).replace(/^[\\/]+/, "")}
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="libraryProjectActions">
+        <button type="button" onClick={onCreateProject}>
+          ＋ 新しい作品
+        </button>
+        <button type="button" onClick={onImportProject}>
+          既存の作品を取り込む…
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export function WorkspaceSidebar({
   projectFolder,
   currentFilePath,
@@ -603,6 +689,11 @@ export function WorkspaceSidebar({
   onRestoreSnapshot,
   onDeleteSnapshot,
   onCollapse,
+  library,
+  onEnterLibraryRoot,
+  onEnterProject,
+  onCreateLibraryProject,
+  onImportProject,
 }: WorkspaceSidebarProps) {
   const [contextMenu, setContextMenu] = useState<TreeContextMenu>(null);
   const [headingContextMenu, setHeadingContextMenu] = useState<HeadingContextMenu>(null);
@@ -2448,15 +2539,27 @@ export function WorkspaceSidebar({
         </div>
       </div>
 
+      {!isProjectSearchMode && library?.role === "project" && (
+        <LibraryBackButton library={library} onEnterLibraryRoot={onEnterLibraryRoot} />
+      )}
+
       <div
         className={`sidebarScroll ${
           isProjectSearchMode ? "projectSearchSidebarScroll" : ""
-        }`}
+        } ${!isProjectSearchMode && library?.role === "root" ? "hasLibraryProjects" : ""}`}
       >
         {isProjectSearchMode ? (
           renderProjectSearchMode()
         ) : (
           sidebarMode === "navigator" ? renderNavigatorMode() : renderOutlineMode()
+        )}
+        {!isProjectSearchMode && library?.role === "root" && (
+          <LibraryProjectList
+            library={library}
+            onEnterProject={onEnterProject}
+            onCreateProject={onCreateLibraryProject}
+            onImportProject={onImportProject}
+          />
         )}
       </div>
 

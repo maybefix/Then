@@ -466,6 +466,7 @@ fn runtime_tree_entry(root: &Path, entry: StoredProjectEntry) -> ProjectEntry {
             .collect(),
         file_id: entry.file_id,
         content_hash: entry.content_hash,
+        modified_at: None,
     }
 }
 
@@ -891,6 +892,7 @@ mod tests {
                     children: Vec::new(),
                     file_id: None,
                     content_hash: None,
+                    modified_at: None,
                 }],
                 library: None,
             },

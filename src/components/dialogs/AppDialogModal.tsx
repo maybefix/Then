@@ -11,6 +11,7 @@ type AppDialogModalProps = {
   onValueChange: (value: string) => void;
   onFieldValueChange: (fieldId: string, value: string) => void;
   onChoice: (value: "primary" | "secondary") => void;
+  onOption: (id: string) => void;
 };
 
 export function AppDialogModal({
@@ -20,6 +21,7 @@ export function AppDialogModal({
   onValueChange,
   onFieldValueChange,
   onChoice,
+  onOption,
 }: AppDialogModalProps) {
   const dialogRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
@@ -44,7 +46,9 @@ export function AppDialogModal({
     const initialFocus = dialogElement.querySelector<HTMLElement>("input, select, textarea")
       ?? (dialog.type === "confirm"
         ? dialogElement.querySelector<HTMLElement>(".modalActions button")
-        : null)
+        : dialog.type === "options"
+          ? dialogElement.querySelector<HTMLElement>(".dialogOption")
+          : null)
       ?? dialogElement.querySelector<HTMLElement>(".modalClose");
     (initialFocus ?? dialogElement).focus();
 
@@ -240,6 +244,31 @@ export function AppDialogModal({
               </button>
               <button type="button" onClick={() => onChoice("primary")}>
                 {dialog.primaryLabel}
+              </button>
+            </footer>
+          </div>
+        ) : dialog.type === "options" ? (
+          <div className="modalForm">
+            <div className="dialogMessage">
+              <p>{dialog.message}</p>
+              {dialog.detail && <span>{dialog.detail}</span>}
+            </div>
+            <div className="dialogOptionList">
+              {dialog.options.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className="dialogOption"
+                  onClick={() => onOption(option.id)}
+                >
+                  <strong>{option.label}</strong>
+                  {option.description && <span>{option.description}</span>}
+                </button>
+              ))}
+            </div>
+            <footer className="modalActions">
+              <button type="button" onClick={onClose}>
+                キャンセル
               </button>
             </footer>
           </div>

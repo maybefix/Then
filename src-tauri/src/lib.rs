@@ -183,6 +183,9 @@ struct ProjectEntry {
     file_id: Option<String>,
     #[serde(default)]
     content_hash: Option<String>,
+    /// Last modification time in milliseconds, for "recently edited" lists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    modified_at: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -3750,6 +3753,7 @@ fn list_project_entries_within(
                 children,
                 file_id: None,
                 content_hash: None,
+                modified_at: None,
             });
             continue;
         }
@@ -3771,6 +3775,12 @@ fn list_project_entries_within(
             content_hash: std::fs::read(&entry_path)
                 .ok()
                 .map(|content| content_hash(&content)),
+            modified_at: entry
+                .metadata()
+                .ok()
+                .and_then(|metadata| metadata.modified().ok())
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|duration| duration.as_millis() as i64),
         });
     }
     debug_log(&format!(

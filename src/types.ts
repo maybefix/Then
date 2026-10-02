@@ -402,7 +402,8 @@ export type TextEditorViewportState = {
 
 export type DocumentTab = {
   id: string;
-  kind: "file" | "scratch";
+  /** empty: 文書を一つも開いていない状態。タブ帯には出さず、編集面にスタートページを出す。 */
+  kind: "file" | "scratch" | "empty";
   path: string | null;
   /** OSが提供するファイル識別子。同一ボリューム内の移動・改名を追跡する。 */
   fileId: string | null;
@@ -493,6 +494,41 @@ export type ProjectFolder = {
   path: string;
   name: string;
   children: ProjectEntry[];
+  /** 一覧したフォルダがライブラリ直下か、ライブラリ内の作品のときだけ入る。 */
+  library?: LibraryContext;
+};
+
+export type LibraryProjectSummary = {
+  path: string;
+  name: string;
+};
+
+export type LibraryContext = {
+  path: string;
+  name: string;
+  /** root: ライブラリ直下を開いている / project: ライブラリ内の作品を開いている */
+  role: "root" | "project";
+  projects: LibraryProjectSummary[];
+  /** ライブラリ直下以外の場所に置かれ、作品として扱われていないフォルダ。 */
+  misplacedProjects: string[];
+};
+
+export type FolderInspection = {
+  kind: "library" | "libraryProject" | "project" | "folder";
+  path: string;
+  name: string;
+  /** このフォルダを含むライブラリ（自身を含む）。 */
+  libraryPath: string | null;
+  /** このフォルダを含むライブラリ内の作品（自身を含む）。 */
+  projectPath: string | null;
+};
+
+export type ProjectImportReport = {
+  projectPath: string;
+  name: string;
+  fileCount: number;
+  checkpointCount: number;
+  warnings: string[];
 };
 
 export type ProjectEntry = {
@@ -502,6 +538,8 @@ export type ProjectEntry = {
   children: ProjectEntry[];
   fileId?: string | null;
   contentHash?: string | null;
+  /** 最終更新時刻（ミリ秒）。ファイル一覧から得たものだけに入る。 */
+  modifiedAt?: number;
 };
 
 export type DeleteProjectEntryPlan = {
@@ -540,6 +578,8 @@ export type WorkspaceRecord = {
   path: string;
   name: string;
   lastOpenedAt: number;
+  /** 開いたときにライブラリ直下かライブラリ内の作品だった場合。旧版の記録にはない。 */
+  library?: { name: string; role: LibraryContext["role"] };
 };
 
 export type ManuscriptSnapshotReason = "manual" | "auto-before-restore";
@@ -661,6 +701,14 @@ export type AppDialog =
       primaryLabel: string;
       secondaryLabel: string;
       resolve: (value: "primary" | "secondary" | null) => void;
+    }
+  | {
+      type: "options";
+      title: string;
+      message: string;
+      detail?: string;
+      options: { id: string; label: string; description?: string }[];
+      resolve: (value: string | null) => void;
     };
 
 export type FontOption = {

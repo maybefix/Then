@@ -265,8 +265,9 @@ export function upsertRecentWorkspace(
   records: WorkspaceRecord[],
   path: string,
   name = getWorkspaceName(path),
+  library?: WorkspaceRecord["library"],
 ): WorkspaceRecord[] {
-  const nextRecord = { path, name, lastOpenedAt: Date.now() };
+  const nextRecord: WorkspaceRecord = { path, name, lastOpenedAt: Date.now(), ...(library ? { library } : {}) };
   return [
     nextRecord,
     ...records.filter((record) => record.path !== path),
@@ -291,9 +292,43 @@ export function isPathSameOrInside(path: string, folderPath: string): boolean {
     || isPathInsideFolder(path, folderPath);
 }
 
+/** The name shown for an opened folder: a library root goes by its library name. */
+export function scopeDisplayName(folder: ProjectFolder): string {
+  return folder.library?.role === "root" ? folder.library.name : folder.name;
+}
+
+/** Records an opened folder. A library root keeps its projects' entries. */
+export function recordOpenedWorkspace(
+  records: WorkspaceRecord[],
+  folder: ProjectFolder,
+): WorkspaceRecord[] {
+  const kept = folder.library?.role === "root"
+    ? records
+    : removeNestedRecentWorkspaces(records, folder.path);
+  return upsertRecentWorkspace(
+    kept,
+    folder.path,
+    scopeDisplayName(folder),
+    folder.library ? { name: folder.library.name, role: folder.library.role } : undefined,
+  );
+}
+
 export function removeNestedRecentWorkspaces(
   records: WorkspaceRecord[],
   rootPath: string,
 ): WorkspaceRecord[] {
   return records.filter((record) => !isPathInsideFolder(record.path, rootPath));
+}
+
+/** Rewrites `path` from under `oldPath` to under `newPath`; null when it is outside. */
+export function retargetFilesystemPath(path: string, oldPath: string, newPath: string): string | null {
+  const comparablePath = normalizePathForCompare(path);
+  const comparableOldPath = normalizePathForCompare(oldPath);
+  if (comparablePath === comparableOldPath) return newPath;
+  if (!comparablePath.startsWith(`${comparableOldPath}\\`)) return null;
+
+  const stablePath = path.replace(/[\\/]+/g, "\\").replace(/\\+$/, "");
+  const stableOldPath = oldPath.replace(/[\\/]+/g, "\\").replace(/\\+$/, "");
+  const suffix = stablePath.slice(stableOldPath.length);
+  return `${newPath.replace(/[\\/]+$/, "")}${suffix}`;
 }
