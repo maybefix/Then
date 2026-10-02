@@ -133,6 +133,19 @@ struct ExportWindowState(Mutex<Option<serde_json::Value>>);
 #[derive(Default)]
 struct CanvasWindowState(Mutex<Option<serde_json::Value>>);
 
+/// 起動時に廃止済みの共通データを消しきれなかった場合の内容。画面側が取り出して知らせる。
+#[derive(Default)]
+struct DeprecatedContentPurgeState(Mutex<Option<DeprecatedContentPurgeFailure>>);
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeprecatedContentPurgeFailure {
+    /// 削除できなかったファイル（またはフォルダ）。
+    paths: Vec<String>,
+    /// 最初に起きたエラーの内容。
+    error: String,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HeadingMoveDocuments {
@@ -540,9 +553,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(ExportWindowState::default())
         .manage(CanvasWindowState::default())
+        .manage(DeprecatedContentPurgeState::default())
         .manage(ViewerExportState::default())
         .setup(|app| {
-            purge_deprecated_global_content(app.handle()).map_err(std::io::Error::other)?;
+            // 消しきれなくても起動は止めない。残りは画面で知らせ、再試行できるようにする。
+            let purge_failure = purge_deprecated_global_content(app.handle()).err();
+            if let Ok(mut slot) = app.state::<DeprecatedContentPurgeState>().0.lock() {
+                *slot = purge_failure;
+            }
             if let Some(main_window) = app.get_webview_window("main") {
                 let _ = restore_main_window_state(app.handle(), &main_window);
                 disable_webview_native_ui(&main_window);
@@ -558,6 +576,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            deprecated_content_purge_failure,
+            retry_deprecated_content_purge,
             inspect_workspace_folder,
             pick_folder_dialog,
             create_library_folder,
@@ -3934,23 +3954,98 @@ fn reference_imports_dir(root: &Path) -> PathBuf {
     root.join(".then").join("references").join("imports")
 }
 
-fn purge_deprecated_global_content_at(app_data_dir: &Path) -> Result<(), String> {
-    for path in [app_data_dir.join("references"), app_data_dir.join("boards")] {
-        if path.exists() {
-            std::fs::remove_dir_all(&path).map_err(|error| {
-                format!("failed to purge deprecated global content at {}: {error}", path.display())
-            })?;
+/// Removes `path` entirely, continuing past entries that cannot be removed
+/// (typically files another app holds open) and collecting them in `failed`.
+fn remove_tree_collecting_failures(
+    path: &Path,
+    failed: &mut Vec<(PathBuf, std::io::Error)>,
+) {
+    let metadata = match std::fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return,
+        Err(error) => {
+            failed.push((path.to_path_buf(), error));
+            return;
+        }
+    };
+    if !metadata.is_dir() {
+        if let Err(error) = std::fs::remove_file(path) {
+            // Windows のディレクトリへのシンボリックリンクは remove_dir でしか消せない。
+            if std::fs::remove_dir(path).is_err() {
+                failed.push((path.to_path_buf(), error));
+            }
+        }
+        return;
+    }
+    let before = failed.len();
+    match std::fs::read_dir(path) {
+        Ok(entries) => {
+            for entry in entries {
+                match entry {
+                    Ok(entry) => remove_tree_collecting_failures(&entry.path(), failed),
+                    Err(error) => failed.push((path.to_path_buf(), error)),
+                }
+            }
+        }
+        Err(error) => {
+            failed.push((path.to_path_buf(), error));
+            return;
         }
     }
-    Ok(())
+    // 中身が残っていればフォルダは消せない。原因の中身だけを報告する。
+    if failed.len() == before {
+        if let Err(error) = std::fs::remove_dir(path) {
+            failed.push((path.to_path_buf(), error));
+        }
+    }
 }
 
-fn purge_deprecated_global_content(app: &tauri::AppHandle) -> Result<(), String> {
-    let app_data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("failed to resolve app data directory: {error}"))?;
+fn purge_deprecated_global_content_at(
+    app_data_dir: &Path,
+) -> Result<(), DeprecatedContentPurgeFailure> {
+    let mut failed = Vec::new();
+    for path in [app_data_dir.join("references"), app_data_dir.join("boards")] {
+        remove_tree_collecting_failures(&path, &mut failed);
+    }
+    let Some((_, first_error)) = failed.first() else {
+        return Ok(());
+    };
+    Err(DeprecatedContentPurgeFailure {
+        error: first_error.to_string(),
+        paths: failed
+            .iter()
+            .map(|(path, _)| path.to_string_lossy().to_string())
+            .collect(),
+    })
+}
+
+fn purge_deprecated_global_content(
+    app: &tauri::AppHandle,
+) -> Result<(), DeprecatedContentPurgeFailure> {
+    let app_data_dir = app.path().app_data_dir().map_err(|error| DeprecatedContentPurgeFailure {
+        paths: Vec::new(),
+        error: format!("failed to resolve app data directory: {error}"),
+    })?;
     purge_deprecated_global_content_at(&app_data_dir)
+}
+
+#[tauri::command]
+fn deprecated_content_purge_failure(
+    state: tauri::State<'_, DeprecatedContentPurgeState>,
+) -> Option<DeprecatedContentPurgeFailure> {
+    state.0.lock().ok().and_then(|slot| slot.clone())
+}
+
+#[tauri::command]
+fn retry_deprecated_content_purge(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, DeprecatedContentPurgeState>,
+) -> Option<DeprecatedContentPurgeFailure> {
+    let failure = purge_deprecated_global_content(&app).err();
+    if let Ok(mut slot) = state.0.lock() {
+        *slot = failure.clone();
+    }
+    failure
 }
 
 fn normalize_reference_scope(scope: Option<&str>) -> Result<String, String> {
@@ -5087,6 +5182,45 @@ mod tests {
         assert!(!test_dir.join("references").exists());
         assert!(!test_dir.join("boards").exists());
         assert!(test_dir.join("app-state.json").is_file());
+        std::fs::remove_dir_all(&test_dir).expect("remove test directory");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn deprecated_global_content_purge_reports_files_held_open_and_removes_the_rest() {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let unique = format!(
+            "then-global-purge-locked-test-{}-{}",
+            std::process::id(),
+            super::now_millis()
+        );
+        let test_dir = std::env::temp_dir().join(unique);
+        let references = test_dir.join("references").join("imports");
+        let boards = test_dir.join("boards");
+        std::fs::create_dir_all(&references).expect("create legacy reference directory");
+        std::fs::create_dir_all(&boards).expect("create legacy canvas directory");
+        let locked = references.join("open-in-viewer.pdf");
+        std::fs::write(&locked, b"legacy").expect("write locked reference");
+        std::fs::write(references.join("other.pdf"), b"legacy").expect("write other reference");
+        std::fs::write(boards.join("legacy.canvas"), b"{}").expect("write legacy canvas");
+
+        // 共有なしで開き、別のアプリが使用中の状態を作る。
+        let handle = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(&locked)
+            .expect("hold the reference open");
+
+        let failure = purge_deprecated_global_content_at(&test_dir)
+            .expect_err("a file held open cannot be deleted");
+        assert_eq!(failure.paths, vec![locked.to_string_lossy().to_string()]);
+        assert!(!references.join("other.pdf").exists());
+        assert!(!boards.exists());
+
+        drop(handle);
+        purge_deprecated_global_content_at(&test_dir).expect("retry after the file is closed");
+        assert!(!test_dir.join("references").exists());
         std::fs::remove_dir_all(&test_dir).expect("remove test directory");
     }
 

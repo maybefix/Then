@@ -11625,6 +11625,42 @@ export default function App() {
     return null;
   };
 
+  // 廃止した共通キャンバス・共通資料を起動時に消しきれなかったら、使用中のファイルを閉じてもらう。
+  const didCheckDeprecatedContentPurgeRef = useRef(false);
+  useEffect(() => {
+    if (startupView === "loading" || didCheckDeprecatedContentPurgeRef.current) return;
+    if (!isTauriRuntime()) return;
+    didCheckDeprecatedContentPurgeRef.current = true;
+    type PurgeFailure = { paths: string[]; error: string };
+    const describe = (failure: PurgeFailure) => {
+      const shown = failure.paths.slice(0, 5);
+      const rest = failure.paths.length - shown.length;
+      return [
+        ...shown,
+        ...(rest > 0 ? [`ほか ${rest} 件`] : []),
+        ...(shown.length ? [] : [failure.error]),
+        "",
+        "「あとで」を選んだ場合は、次回の起動時にもう一度削除します。",
+      ].join("\n");
+    };
+    void (async () => {
+      let failure = await invoke<PurgeFailure | null>("deprecated_content_purge_failure");
+      while (failure) {
+        const choice = await requestChoice({
+          title: "古い共通データを削除できませんでした",
+          message:
+            "廃止した共通キャンバス・共通資料の一部が使用中のため削除できませんでした。次のファイルを開いているアプリを閉じてから「再試行」を押してください。",
+          detail: describe(failure),
+          primaryLabel: "再試行",
+          secondaryLabel: "あとで",
+        });
+        if (choice !== "primary") return;
+        failure = await invoke<PurgeFailure | null>("retry_deprecated_content_purge");
+        if (!failure) showToast("古い共通データを削除しました");
+      }
+    })();
+  }, [startupView]);
+
   // ライブラリをまだ持っていなければ、起動画面の前にライブラリの準備画面を出す。
   useEffect(() => {
     if (startupView !== "portal" || hasKnownLibrary || isLibrarySetupDismissed) return;
