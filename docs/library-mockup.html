@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Then ライブラリ モック</title>
+<style>
+  :root {
+    --bg: #1d2023;
+    --chrome: #17191b;
+    --sidebar: #212427;
+    --panel: #25292d;
+    --line: #34393e;
+    --text: #d9dde1;
+    --muted: #8d959c;
+    --faint: #5f676e;
+    --hover: #2c3135;
+    --active: #333a40;
+    --accent: #d97757;
+    --todo: #9aa4ad;
+    --writing: #75b0ff;
+    --revising: #e4ae55;
+    --done: #69c792;
+    --note-bg: #fff8e6;
+    --note-text: #4a3b16;
+    --page: #eceae4;
+    --page-text: #2a2c2e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--page-text);
+    font-family: "BIZ UDPGothic", "Yu Gothic UI", "Hiragino Sans", system-ui, sans-serif;
+    font-size: 14px;
+  }
+  header.doc {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 24px 16px 8px;
+  }
+  header.doc h1 { font-size: 20px; margin: 0 0 4px; }
+  header.doc p { margin: 0; color: #5d6166; }
+  nav.screens {
+    max-width: 1280px;
+    margin: 12px auto 0;
+    padding: 0 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  nav.screens button {
+    border: 1px solid #c9c6bd;
+    background: #f7f6f2;
+    color: #3a3d40;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font: inherit;
+    cursor: pointer;
+  }
+  nav.screens button[aria-pressed="true"] {
+    background: #2a2d30;
+    border-color: #2a2d30;
+    color: #fff;
+  }
+  nav.screens .phase { font-size: 11px; opacity: .7; margin-left: 4px; }
+  main {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 12px 16px 40px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 16px;
+    align-items: start;
+  }
+  @media (max-width: 980px) { main { grid-template-columns: minmax(0, 1fr); } }
+
+  /* ---------- app window ---------- */
+  .app {
+    background: var(--bg);
+    color: var(--text);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    display: grid;
+    grid-template-rows: 40px 36px minmax(520px, 1fr) 24px;
+    font-size: 13px;
+  }
+  .titlebar {
+    background: var(--chrome);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .titlebar .menu { color: var(--muted); margin-right: 6px; }
+  .crumb {
+    background: none;
+    border: 0;
+    color: var(--muted);
+    font: inherit;
+    padding: 3px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .crumb:hover { background: var(--hover); color: var(--text); }
+  .crumb.current { color: var(--text); font-weight: 600; cursor: default; }
+  .crumb.library::before { content: "▤ "; color: var(--faint); }
+  .crumb.project::before { content: "📖 "; font-size: 11px; }
+  .sep { color: var(--faint); }
+  .tabs {
+    background: var(--chrome);
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid var(--line);
+  }
+  .tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 14px;
+    min-width: 150px;
+    color: var(--muted);
+    border-right: 1px solid var(--line);
+  }
+  .tab.active { background: var(--bg); color: var(--text); font-weight: 600; box-shadow: inset 0 -2px 0 var(--accent); }
+  .tab .x { margin-left: auto; color: var(--faint); }
+  .tabs .plus { margin-left: auto; padding: 0 14px; display: flex; align-items: center; color: var(--muted); }
+  .tabs .empty-hint { padding: 0 14px; display: flex; align-items: center; color: var(--faint); font-size: 12px; }
+
+  .body { display: grid; grid-template-columns: 40px 270px minmax(0, 1fr); min-height: 0; }
+  .activity {
+    background: var(--chrome);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding-top: 12px;
+    color: var(--faint);
+  }
+  .activity .on { color: var(--text); }
+  .sidebar {
+    background: var(--sidebar);
+    border-right: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .sb-head {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px 6px;
+    color: var(--muted);
+    font-size: 12px;
+    gap: 8px;
+  }
+  .sb-head .unit { margin-left: auto; font-size: 11px; color: var(--faint); }
+  .back {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 8px 4px;
+    padding: 7px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+    text-align: left;
+  }
+  .back:hover { border-color: var(--accent); }
+  .back .arrow { color: var(--accent); }
+  .back small { margin-left: auto; color: var(--faint); font-size: 11px; }
+  .scope-title {
+    padding: 8px 12px 4px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .scope-title .kind { font-size: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; font-weight: 400; }
+  .tree { list-style: none; margin: 0; padding: 2px 0; }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding-right: 10px;
+    cursor: default;
+    white-space: nowrap;
+  }
+  .row:hover { background: var(--hover); }
+  .row.active { background: var(--active); box-shadow: inset 2px 0 0 var(--accent); }
+  .row .chev { width: 12px; color: var(--faint); font-size: 10px; text-align: center; }
+  .row .name { overflow: hidden; text-overflow: ellipsis; }
+  .row .count { margin-left: auto; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .row .mark { width: 14px; text-align: center; font-size: 11px; font-weight: 700; }
+  .row .dot { width: 14px; display: flex; justify-content: center; }
+  .row .dot i { width: 6px; height: 6px; border-radius: 50%; display: block; }
+  .row.folder .name { font-weight: 600; }
+  .row.heading .name { color: var(--muted); }
+  .row.heading .hash { color: var(--faint); width: 12px; text-align: center; }
+  .s-todo { color: var(--todo); } .s-writing { color: var(--writing); } .s-revising { color: var(--revising); } .s-done { color: var(--done); }
+  .b-todo { background: var(--todo); } .b-writing { background: var(--writing); } .b-revising { background: var(--revising); } .b-done { background: var(--done); }
+
+  .section-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 10px 12px 4px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: .04em;
+  }
+  .section-label span:last-child { margin-left: auto; }
+  .project-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 2px 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .project-row:hover { background: var(--hover); border-color: var(--line); }
+  .project-row .book {
+    width: 22px; height: 26px;
+    border-radius: 2px 4px 4px 2px;
+    background: linear-gradient(90deg, #5a4a40 0 3px, #8a6a55 3px);
+    flex: none;
+  }
+  .project-row .book.b2 { background: linear-gradient(90deg, #3f4c5a 0 3px, #5e7690 3px); }
+  .project-row .book.b3 { background: linear-gradient(90deg, #47553f 0 3px, #6b8460 3px); }
+  .project-row .meta { display: flex; flex-direction: column; min-width: 0; }
+  .project-row .meta b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .project-row .meta small { color: var(--muted); font-size: 11px; }
+  .project-row .go { margin-left: auto; color: var(--faint); }
+  .sb-actions { padding: 6px 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+  .sb-actions button {
+    background: none; border: 0; color: var(--muted); font: inherit; text-align: left;
+    padding: 5px 8px; border-radius: 4px; cursor: pointer;
+  }
+  .sb-actions button:hover { background: var(--hover); color: var(--text); }
+  .sb-foot {
+    margin-top: auto;
+    border-top: 1px solid var(--line);
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-between;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .editor { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  .vertical {
+    writing-mode: vertical-rl;
+    height: 440px;
+    line-height: 2;
+    font-family: "BIZ UDPMincho", "Yu Mincho", serif;
+    font-size: 16px;
+    color: var(--text);
+    max-width: 100%;
+    overflow: hidden;
+  }
+  .vertical h2 { font-family: "BIZ UDPGothic", sans-serif; margin: 0 0 0 16px; font-size: 22px; }
+  .vertical p { margin: 0; }
+
+  .start {
+    width: min(460px, 90%);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .start .eyebrow { color: var(--faint); font-size: 11px; letter-spacing: .08em; margin: 0; }
+  .start h2 { margin: 0; font-size: 22px; }
+  .start p { margin: 0; color: var(--muted); line-height: 1.7; }
+  .start .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .start .actions button {
+    background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 7px 12px; font: inherit; cursor: pointer;
+  }
+  .start .actions button.primary { border-color: var(--accent); }
+  .recent { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .recent li { display: flex; gap: 10px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--line); }
+  .recent li:first-child { border-top: 0; }
+  .recent li:hover { background: var(--hover); }
+  .recent .path { color: var(--faint); font-size: 11px; margin-left: auto; }
+
+  /* dialog */
+  .scrim { position: absolute; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; }
+  .dialog {
+    width: min(520px, 92%);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .dialog h3 { margin: 0; font-size: 16px; }
+  .field { display: grid; grid-template-columns: 90px 1fr; gap: 8px; align-items: center; }
+  .field label { color: var(--muted); font-size: 12px; }
+  .field .val { background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 6px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+  .checks li { display: flex; gap: 8px; }
+  .checks .ok { color: var(--done); }
+  .checks .run { color: var(--writing); }
+  .checks .wait { color: var(--faint); }
+  .checks .num { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .safe { background: rgba(105,199,146,.1); border: 1px solid rgba(105,199,146,.35); border-radius: 6px; padding: 8px 10px; font-size: 12px; color: #bfe8cf; line-height: 1.6; }
+  .dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .dialog .actions button { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 14px; font: inherit; }
+  .dialog .actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* library home */
+  .home { align-self: stretch; width: 100%; padding: 22px 26px; overflow: auto; display: flex; flex-direction: column; gap: 14px; }
+  .home-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .home-head h2 { margin: 0; font-size: 20px; }
+  .home-head small { color: var(--muted); }
+  .filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .filters .search { flex: 1 1 180px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; color: var(--faint); }
+  .chip { border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; color: var(--muted); font-size: 12px; }
+  .chip.on { border-color: var(--accent); color: var(--text); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; cursor: pointer; }
+  .card:hover { border-color: var(--accent); }
+  .card h4 { margin: 0; font-size: 15px; }
+  .card .summary { color: var(--muted); font-size: 12px; line-height: 1.6; }
+  .bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--bg); }
+  .card .foot { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .status-pill { font-size: 11px; font-weight: 700; }
+
+  .statusbar { background: var(--chrome); color: var(--muted); font-size: 11px; display: flex; align-items: center; padding: 0 12px; gap: 12px; }
+  .statusbar .ok::before { content: "● "; color: var(--done); }
+
+  /* notes */
+  aside.notes { display: flex; flex-direction: column; gap: 10px; }
+  .note { background: var(--note-bg); color: var(--note-text); border-radius: 8px; padding: 12px 14px; line-height: 1.7; font-size: 13px; }
+  .note h3 { margin: 0 0 4px; font-size: 14px; }
+  .note ul { margin: 0; padding-left: 18px; }
+  .note code { background: rgba(0,0,0,.06); padding: 0 4px; border-radius: 3px; }
+  .note .q { display: block; margin-top: 6px; font-weight: 700; }
+
+  .screen[hidden] { display: none !important; }
+  @media (max-width: 720px) {
+    .body { grid-template-columns: 0 220px minmax(0, 1fr); }
+    .activity { display: none; }
+    .tab { min-width: 110px; }
+  }
+</style>
+</head>
+<body>
+<header class="doc">
+  <h1>Then ライブラリ モック</h1>
+  <p>仕様書 <code>docs/LIBRARY_SPEC.md</code> のイメージすり合わせ用です。サイドバーの作品の行と「← ライブラリ名」、パンくずはクリックで画面が切り替わります。</p>
+</header>
+
+<nav class="screens" aria-label="画面">
+  <button data-go="root" aria-pressed="true">① ライブラリ直下</button>
+  <button data-go="project" aria-pressed="false">② プロジェクト内</button>
+  <button data-go="empty" aria-pressed="false">③ プロジェクトの空の状態</button>
+  <button data-go="import" aria-pressed="false">④ 既存プロジェクトの取り込み</button>
+  <button data-go="home" aria-pressed="false">⑤ ライブラリホーム<span class="phase">第2段階</span></button>
+</nav>
+
+<main>
+  <div class="app" id="app">
+    <!-- タイトルバー（パンくず） -->
+    <div class="titlebar" id="crumbs"></div>
+    <!-- タブ -->
+    <div class="tabs" id="tabs"></div>
+
+    <div class="body">
+      <div class="activity" aria-hidden="true">
+        <span class="on">▤</span><span>⌕</span><span>▢</span><span>＋</span>
+      </div>
+
+      <!-- サイドバー：ライブラリ直下 -->
+      <div class="sidebar screen" data-sidebar="root">
+        <div class="sb-head"><span>ファイル</span><span class="unit">字数</span></div>
+        <div class="scope-title">わたしの作品集 <span class="kind">ライブラリ</span></div>
+        <ul class="tree">
+          <li class="row folder" style="padding-left:10px"><span class="chev">▾</span><span class="name">共有設定</span><span class="count">1.2k</span><span class="dot"><i class="b-writing"></i></span></li>
+          <li class="row" style="padding-left:24px"><span class="chev"></span><span class="name s-writing">用語集</span><span class="count">820</span><span class="mark s-writing">執</span></li>
+          <li class="row" style="padding-left:24px"><span class="chev"></span><span class="name s-todo">年表</span><span class="count">410</span><span class="mark s-todo">未</span></li>
+          <li class="row active" style="padding-left:10px"><span class="chev"></span><span class="name s-revising">世界観メモ</span><span class="count">2.4k</span><span class="mark s-revising">推</span></li>
+        </ul>
+        <div class="section-label"><span>作品</span><span>3</span></div>
+        <div class="project-row" data-go="project" title="作品を開く">
+          <span class="book"></span>
+          <span class="meta"><b>星を数える人</b><small>48,210字 · 執筆中</small></span>
+          <span class="go">›</span>
+        </div>
+        <div class="project-row" data-go="empty" title="作品を開く（保存タブなし）">
+          <span class="book b2"></span>
+          <span class="meta"><b>海辺の図書館</b><small>0字 · 構想中</small></span>
+          <span class="go">›</span>
+        </div>
+        <div class="project-row" data-go="project" title="作品を開く">
+          <span class="book b3"></span>
+          <span class="meta"><b>夏の終わりの短編集</b><small>31,900字 · 完了</small></span>
+          <span class="go">›</span>
+        </div>
+        <div class="sb-actions">
+          <button type="button">＋ 新しいプロジェクト</button>
+          <button type="button" data-go="import">⇣ 既存プロジェクトを取り込む…</button>
+        </div>
+        <div class="sb-foot"><span>ライブラリ直下</span><span>合計 3.6k字</span></div>
+      </div>
+
+      <!-- サイドバー：プロジェクト内 -->
+      <div class="sidebar screen" data-sidebar="project" hidden>
+        <button class="back" type="button" data-go="root"><span class="arrow">←</span> わたしの作品集 <small>ライブラリ</small></button>
+        <div class="sb-head"><span>ファイル</span><span class="unit">字数</span></div>
+        <div class="scope-title">📖 星を数える人</div>
+        <ul class="tree">
+          <li class="row folder" style="padding-left:10px"><span class="chev">▾</span><span class="name">01_本文</span><span class="count">48k</span><span class="dot"><i class="b-writing"></i></span></li>
+          <li class="row" style="padding-left:24px"><span class="chev">›</span><span class="name s-done">第一章 観測所</span><span class="count">12k</span><span class="mark s-done">完</span></li>
+          <li class="row" style="padding-left:24px"><span class="chev">›</span><span class="name s-revising">第二章 灯台守</span><span class="count">15k</span><span class="mark s-revising">推</span></li>
+          <li class="row active" style="padding-left:24px"><span class="chev">▾</span><span class="name s-writing">第三章 遠い光</span><span class="count">9.8k</span><span class="mark s-writing">執</span></li>
+          <li class="row heading" style="padding-left:38px"><span class="hash">#</span><span class="name">夜明け前</span><span class="count">4.1k</span><span class="mark"></span></li>
+          <li class="row heading" style="padding-left:38px"><span class="hash">#</span><span class="name">再会</span><span class="count">5.7k</span><span class="mark"></span></li>
+          <li class="row" style="padding-left:24px"><span class="chev"></span><span class="name s-todo">第四章</span><span class="count">0</span><span class="mark s-todo">未</span></li>
+          <li class="row folder" style="padding-left:10px"><span class="chev">›</span><span class="name">02_設定</span><span class="count">3.0k</span><span class="dot"><i class="b-todo"></i></span></li>
+        </ul>
+        <div class="sb-foot"><span>未 執 推 完</span><span>合計 51k字</span></div>
+      </div>
+
+      <!-- サイドバー：空の状態のプロジェクト -->
+      <div class="sidebar screen" data-sidebar="empty" hidden>
+        <button class="back" type="button" data-go="root"><span class="arrow">←</span> わたしの作品集 <small>ライブラリ</small></button>
+        <div class="sb-head"><span>ファイル</span><span class="unit">字数</span></div>
+        <div class="scope-title">📖 海辺の図書館</div>
+        <ul class="tree">
+          <li class="row folder" style="padding-left:10px"><span class="chev">▾</span><span class="name">01_本文</span><span class="count">0</span><span class="dot"></span></li>
+          <li class="row" style="padding-left:24px"><span class="chev"></span><span class="name s-todo">プロローグ</span><span class="count">0</span><span class="mark s-todo">未</span></li>
+          <li class="row" style="padding-left:10px"><span class="chev"></span><span class="name s-todo">構想メモ</span><span class="count">640</span><span class="mark s-todo">未</span></li>
+        </ul>
+        <div class="sb-foot"><span>未 執 推 完</span><span>合計 640字</span></div>
+      </div>
+
+      <!-- エディタ領域 -->
+      <div class="editor">
+        <div class="screen" data-editor="root">
+          <div class="vertical">
+            <h2>世界観メモ</h2>
+            <p>この世界では、星の数を数え終えた者は一人もいない。</p>
+            <p>観測所は北の岬に三つ、南の群島に一つ。</p>
+            <p>灯台守は代々、観測記録を口伝で残してきた。</p>
+          </div>
+        </div>
+
+        <div class="screen" data-editor="project" hidden>
+          <div class="vertical">
+            <h2>第三章 遠い光</h2>
+            <p># 夜明け前</p>
+            <p>岬の先で、ミナは最後の星を指でなぞった。</p>
+            <p>あと一つ数えれば、帳面は終わる。</p>
+          </div>
+        </div>
+
+        <div class="screen start" data-editor="empty" hidden>
+          <p class="eyebrow">PROJECT</p>
+          <h2>海辺の図書館</h2>
+          <p>開いている文書はありません。左のツリーから文書を選ぶか、新しく作成してください。</p>
+          <div class="actions">
+            <button class="primary" type="button">＋ 新規ファイル</button>
+            <button type="button">Plot を開く</button>
+            <button type="button">Canvas を開く</button>
+          </div>
+          <ul class="recent" aria-label="最近編集した文書">
+            <li>構想メモ<span class="path">3日前</span></li>
+            <li>プロローグ<span class="path">5日前</span></li>
+          </ul>
+        </div>
+
+        <div class="screen" data-editor="import" hidden style="position:absolute;inset:0">
+          <div class="vertical" style="position:absolute;right:120px;top:40px;opacity:.5">
+            <h2>世界観メモ</h2>
+            <p>この世界では、星の数を数え終えた者は一人もいない。</p>
+          </div>
+          <div class="scrim">
+            <div class="dialog" role="dialog" aria-label="既存プロジェクトを取り込む">
+              <h3>既存プロジェクトを取り込む</h3>
+              <div class="field"><label>取り込み元</label><div class="val">D:\執筆\夏の終わりの短編集</div></div>
+              <div class="field"><label>取り込み先</label><div class="val">わたしの作品集 \ 夏の終わりの短編集</div></div>
+              <ul class="checks" aria-label="検証">
+                <li><span class="ok">✓</span>旧版データの移行（進捗ラベル・チェックポイント）<span class="num">済</span></li>
+                <li><span class="ok">✓</span>コピー<span class="num">214 ファイル</span></li>
+                <li><span class="ok">✓</span>ファイル数・サイズ・内容ハッシュ<span class="num">214 / 214</span></li>
+                <li><span class="ok">✓</span>project.json（revision 37）<span class="num">一致</span></li>
+                <li><span class="run">◌</span>チェックポイントの読み込み<span class="num">9 / 12</span></li>
+                <li><span class="wait">・</span>進捗ラベル・Canvas・中間稿・資料<span class="num"></span></li>
+              </ul>
+              <div class="safe">取り込み元のフォルダには書き込みません。完了後も自動では削除しません。<br>検証に失敗した場合は、作成途中のコピーだけを片付けます。</div>
+              <div class="actions">
+                <button type="button">キャンセル</button>
+                <button class="primary" type="button" disabled>検証中…</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen home" data-editor="home" hidden>
+          <div class="home-head">
+            <h2>わたしの作品集</h2>
+            <small>3作品 · 合計 80,110字</small>
+          </div>
+          <div class="filters">
+            <span class="search">⌕ 作品名・あらすじで絞り込み</span>
+            <span class="chip on">すべて</span><span class="chip">執筆中</span><span class="chip">完了</span><span class="chip">並び: 更新日 ▾</span>
+          </div>
+          <div class="cards">
+            <div class="card" data-go="project">
+              <h4>星を数える人</h4>
+              <span class="status-pill s-writing">執筆中</span>
+              <div class="summary">北の岬の観測所で、星を数え続ける少女と灯台守の物語。</div>
+                            <div class="bar"><i class="b-done" style="width:25%"></i><i class="b-revising" style="width:30%"></i><i class="b-writing" style="width:20%"></i><i class="b-todo" style="width:25%"></i></div>
+              <div class="foot"><span>48,210字</span><span>今日</span></div>
+            </div>
+            <div class="card" data-go="empty">
+              <h4>海辺の図書館</h4>
+              <span class="status-pill s-todo">構想中</span>
+              <div class="summary">（あらすじ未設定）</div>
+                            <div class="bar"><i class="b-todo" style="width:100%"></i></div>
+              <div class="foot"><span>0字</span><span>3日前</span></div>
+            </div>
+            <div class="card" data-go="project">
+              <h4>夏の終わりの短編集</h4>
+              <span class="status-pill s-done">完了</span>
+              <div class="summary">夏休み最後の一週間をめぐる五つの短編。</div>
+                            <div class="bar"><i class="b-done" style="width:100%"></i></div>
+              <div class="foot"><span>31,900字</span><span>2026-08-31</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="statusbar"><span class="ok">保存済み</span><span id="scopeLabel" style="margin-left:auto"></span></div>
+  </div>
+
+  <aside class="notes">
+    <div class="note screen" data-note="root">
+      <h3>① ライブラリ直下</h3>
+      <ul>
+        <li>上段は、ライブラリ直下のフォルダとファイル。今のツリーと同じ見た目と操作。</li>
+        <li>下段の「作品」は、プロジェクトの一覧。本アイコンと字数で、上段のファイルやフォルダと区別する。</li>
+        <li>作品の行をクリックすると、その作品のスコープへ切り替わり、保存タブを復元する。</li>
+        <li>パンくずはライブラリ名から始まる。</li>
+        <li>右パネル（Idea、Plot など）は、ライブラリ直下の項目を表示する。</li>
+      </ul>
+      <span class="q">試しに「星を数える人」や「海辺の図書館」をクリックしてください。</span>
+    </div>
+    <div class="note screen" data-note="project" hidden>
+      <h3>② プロジェクト内</h3>
+      <ul>
+        <li>最上部の「← わたしの作品集」でライブラリ直下へ戻る。</li>
+        <li>パンくずの「わたしの作品集」も <b>同じ関数</b>（<code>enterLibraryRoot()</code>）を呼ぶ。</li>
+        <li>タブにはこの作品の文書だけが並ぶ。別の作品の文書が混ざることはない。</li>
+        <li>ツリーは今のプロジェクト表示そのまま（状態の記号、# 見出し、字数）。</li>
+      </ul>
+    </div>
+    <div class="note screen" data-note="empty" hidden>
+      <h3>③ 空の状態（新規）</h3>
+      <ul>
+        <li>保存タブがない作品に入ったときの画面。タブは0枚。</li>
+        <li>今の Then は最初のファイルを自動で開くため、この状態は存在しない。新しく作る。</li>
+        <li>最近編集した文書と、よく使う操作だけを出す。</li>
+      </ul>
+      <span class="q">最後のタブを閉じたときも、この画面になる（空の無題タブは作らない）。</span>
+    </div>
+    <div class="note screen" data-note="import" hidden>
+      <h3>④ 既存プロジェクトの取り込み</h3>
+      <ul>
+        <li>第1段階では保存形式が変わらないので、「変換」ではなく「コピー＋検証」。</li>
+        <li><code>.then-import-*</code> という一時フォルダへコピーし、検証に通ったら改名する。</li>
+        <li>取り込み元には書き込まず、自動削除もしない。</li>
+        <li>エクスプローラーでライブラリへ移動するだけでも、作品として認識される（タブ構成は引き継がない）。</li>
+      </ul>
+    </div>
+    <div class="note screen" data-note="home" hidden>
+      <h3>⑤ ライブラリホーム（第2段階）</h3>
+      <ul>
+        <li>ライブラリ直下にタブが一枚もないとき、エディタ領域に作品の一覧を出す。</li>
+        <li>状態とあらすじは各作品の <code>project.json</code> に保存する。一覧は端末ローカルのキャッシュから作る。</li>
+        <li>カードをクリックすると、その作品へ入る（サイドバーの作品の行と同じ処理）。</li>
+        <li>横断検索は検索パネルの範囲に「ライブラリ全体」を追加する（モック省略）。</li>
+      </ul>
+    </div>
+  </aside>
+</main>
+
+<script>
+  const crumbsBy = {
+    root: [["library", "わたしの作品集", null], ["file", "世界観メモ", null]],
+    project: [["library", "わたしの作品集", "root"], ["project", "星を数える人", null], ["folder", "01_本文", null], ["file", "第三章 遠い光", null]],
+    empty: [["library", "わたしの作品集", "root"], ["project", "海辺の図書館", null]],
+    import: [["library", "わたしの作品集", null], ["file", "世界観メモ", null]],
+    home: [["library", "わたしの作品集", null]],
+  };
+  const tabsBy = {
+    root: ["世界観メモ", "用語集"],
+    project: ["第二章 灯台守", "第三章 遠い光"],
+    empty: [],
+    import: ["世界観メモ", "用語集"],
+    home: [],
+  };
+  const activeTab = { root: "世界観メモ", project: "第三章 遠い光", import: "世界観メモ" };
+  const sidebarFor = { root: "root", project: "project", empty: "empty", import: "root", home: "root" };
+  const scopeLabel = { root: "スコープ: ライブラリ直下", project: "スコープ: 星を数える人", empty: "スコープ: 海辺の図書館", import: "スコープ: ライブラリ直下", home: "スコープ: ライブラリ直下" };
+
+  function el(tag, cls, text) {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+
+  function show(screen) {
+    document.querySelectorAll("nav.screens button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.go === screen)));
+    document.querySelectorAll("[data-sidebar]").forEach((n) => (n.hidden = n.dataset.sidebar !== sidebarFor[screen]));
+    document.querySelectorAll("[data-editor]").forEach((n) => (n.hidden = n.dataset.editor !== screen));
+    document.querySelectorAll("[data-note]").forEach((n) => (n.hidden = n.dataset.note !== screen));
+
+    const crumbs = document.getElementById("crumbs");
+    crumbs.replaceChildren(el("span", "menu", "≡"));
+    crumbsBy[screen].forEach(([kind, label, target], i, all) => {
+      if (i) crumbs.append(el("span", "sep", "›"));
+      const b = el("button", "crumb " + kind + (i === all.length - 1 ? " current" : ""), label);
+      if (target) { b.dataset.go = target; b.title = "ライブラリへ戻る（サイドバーと同じ処理）"; }
+      crumbs.append(b);
+    });
+
+    const tabs = document.getElementById("tabs");
+    tabs.replaceChildren();
+    if (!tabsBy[screen].length) tabs.append(el("span", "empty-hint", "開いている文書はありません"));
+    tabsBy[screen].forEach((name) => {
+      const t = el("div", "tab" + (activeTab[screen] === name ? " active" : ""));
+      t.append(el("span", null, "▢"), el("span", null, name), el("span", "x", "×"));
+      tabs.append(t);
+    });
+    tabs.append(el("span", "plus", "＋"));
+    document.getElementById("scopeLabel").textContent = scopeLabel[screen];
+  }
+
+  document.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-go]");
+    if (target) show(target.dataset.go);
+  });
+  show("root");
+</script>
+</body>
+</html>

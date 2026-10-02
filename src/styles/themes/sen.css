@@ -423,22 +423,6 @@
   background: var(--sen-vermilion);
 }
 
-.appShell[data-theme|="sen"] .fileTreeItem .fileProgressBadge {
-  border: 1px solid var(--sen-ink-48);
-  border-radius: 0;
-  background: var(--sen-paper);
-  color: var(--sen-ink-72);
-  filter: none;
-}
-
-.appShell[data-theme|="sen"] .fileTreeItem :is(
-  .fileProgressBadge-writing,
-  .fileProgressBadge-revising
-) {
-  border-color: var(--sen-vermilion);
-  color: var(--sen-vermilion);
-}
-
 .appShell[data-theme|="sen"] .fileTreeOutlineChildren .outlineLevelMark {
   border: 1px solid var(--sen-ink-48);
   border-radius: 0;
@@ -475,4 +459,11 @@
 .appShell[data-theme|="sen"] ::selection {
   background: var(--sen-vermilion);
   color: var(--selection-text);
+}
+
+/* 状態色: 朱と墨の二色に寄せる。執/推は記号で区別する。 */
+.appShell[data-theme|="sen"] {
+  --progress-writing: var(--sen-vermilion);
+  --progress-revising: var(--sen-vermilion);
+  --progress-done: var(--sen-ink-72);
 }

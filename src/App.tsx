@@ -67,6 +67,7 @@ import {
 import { reconcileSavedDocumentTabs } from "./editor/documentTabState";
 import { createMarkdownTable, tableAtOffset, tableAlignmentEdit } from "./editor/markdownTables";
 import { toggleLineComments } from "./editor/lineComments";
+import { mapTextOffsetThroughChange } from "./editor/textOffsetMapping";
 import { displayedCharacterCount } from "./editor/ast/characterCount";
 import {
   createWorkspaceDocumentTabs,
@@ -5986,7 +5987,8 @@ export default function App() {
       showToast("置換できる一致がありません");
       return;
     }
-    editor.replaceRange(0, currentText.length, result.text, 0);
+    const caret = mapTextOffsetThroughChange(currentText, result.text, editor.getSelection().head);
+    editor.replaceRange(0, currentText.length, result.text, caret);
     setEditorFind((current) => ({ ...current, activeIndex: 0 }));
     showToast(`${result.count}件を置換しました`);
   };

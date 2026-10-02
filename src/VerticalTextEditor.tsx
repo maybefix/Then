@@ -1,4 +1,5 @@
 import { Editor, Extension, type JSONContent } from "@tiptap/core";
+import { mapTextOffsetThroughChange } from "./editor/textOffsetMapping";
 import Document from "@tiptap/extension-document";
 import History from "@tiptap/extension-history";
 import Paragraph from "@tiptap/extension-paragraph";
@@ -1645,6 +1646,13 @@ function setSelectionByTextOffset(editor: Editor, offset: number): void {
   editor.commands.setTextSelection(pos);
 }
 
+function setSelectionByTextOffsets(editor: Editor, anchor: number, head: number): void {
+  editor.commands.setTextSelection({
+    from: pmPosFromTextOffset(editor.state.doc, anchor),
+    to: pmPosFromTextOffset(editor.state.doc, head),
+  });
+}
+
 function isEditorComposing(editor: Editor | null, composingRef?: { current: boolean }): boolean {
   if (!editor) return false;
 
@@ -2965,8 +2973,16 @@ export function VerticalTextEditor({
       return;
     }
 
+    // 置換などで本文全体が差し替わっても、キャレットは変更箇所に沿って
+    // 元の位置へ写す（先頭へ戻さない）。
+    const selection = getTextSelection(editor);
+    const anchorOffset = selection.head === selection.from ? selection.to : selection.from;
     editor.commands.setContent(textToDoc(text), false);
-    setSelectionByTextOffset(editor, 0);
+    setSelectionByTextOffsets(
+      editor,
+      mapTextOffsetThroughChange(editorText, text, anchorOffset),
+      mapTextOffsetThroughChange(editorText, text, selection.head),
+    );
     textRef.current = text;
     updateEmptyAttribute(editor);
     requestAnimationFrame(() => {
