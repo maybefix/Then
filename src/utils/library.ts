@@ -114,3 +114,35 @@ export function copyWorkspaceLocalState(
     snapshots: [...state.snapshots, ...copiedSnapshots],
   };
 }
+
+/**
+ * Applies a finished import to the device-local state: the copy inherits the
+ * source's local state, and the source's recent entry (and "last opened") now
+ * points at the imported project.
+ */
+export function recordImportedProject(
+  state: AppState,
+  sourcePath: string,
+  projectPath: string,
+  projectName: string,
+  libraryName: string,
+): AppState {
+  const next = copyWorkspaceLocalState(state, sourcePath, projectPath, projectName);
+  return {
+    ...next,
+    lastWorkspacePath:
+      next.lastWorkspacePath && isSameWorkspace(next.lastWorkspacePath, sourcePath)
+        ? projectPath
+        : next.lastWorkspacePath,
+    recentWorkspaces: next.recentWorkspaces.map((record) =>
+      isSameWorkspace(record.path, sourcePath)
+        ? {
+            path: projectPath,
+            name: projectName,
+            lastOpenedAt: record.lastOpenedAt,
+            library: { name: libraryName, role: "project" as const },
+          }
+        : record,
+    ),
+  };
+}

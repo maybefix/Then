@@ -47,6 +47,11 @@ import {
 } from "./components/layout/WorkspaceSidebar";
 import { DocumentTabs } from "./components/layout/DocumentTabs";
 import { ScopeStartPage } from "./components/layout/ScopeStartPage";
+import {
+  LibrarySetup,
+  type LibrarySetupCandidate,
+  type LibrarySetupResult,
+} from "./components/startup/LibrarySetup";
 import { WindowControls } from "./components/layout/WindowControls";
 import { StartupPortal } from "./components/startup/StartupPortal";
 import {
@@ -69,7 +74,7 @@ import { reconcileSavedDocumentTabs } from "./editor/documentTabState";
 import { createMarkdownTable, tableAtOffset, tableAlignmentEdit } from "./editor/markdownTables";
 import { toggleLineComments } from "./editor/lineComments";
 import { mapTextOffsetThroughChange } from "./editor/textOffsetMapping";
-import { copyWorkspaceLocalState } from "./utils/library";
+import { recordImportedProject } from "./utils/library";
 import { displayedCharacterCount } from "./editor/ast/characterCount";
 import {
   createWorkspaceDocumentTabs,
@@ -173,7 +178,6 @@ import type {
   PlotCard,
   ProjectEntry,
   FolderInspection,
-  LibraryContext,
   ProjectFolder,
   ProjectImportReport,
   ProofreadSettings,
@@ -3022,6 +3026,12 @@ export default function App() {
   const [isBreadcrumbOverflowOpen, setIsBreadcrumbOverflowOpen] = useState(false);
   const [isWorkspaceSwitcherOpen, setIsWorkspaceSwitcherOpen] = useState(false);
   const [workspaceSwitcherQuery, setWorkspaceSwitcherQuery] = useState("");
+  /** ライブラリの準備画面。null なら閉じている。 */
+  const [librarySetupRequest, setLibrarySetupRequest] = useState<{
+    id: number;
+    candidates: LibrarySetupCandidate[];
+  } | null>(null);
+  const [isLibrarySetupDismissed, setIsLibrarySetupDismissed] = useState(false);
   const [collapsedWorkspaceFolderPaths, setCollapsedWorkspaceFolderPaths] =
     useState<ReadonlySet<string>>(() => new Set());
   const [isOutlineMenuOpen, setIsOutlineMenuOpen] = useState(false);
@@ -3794,6 +3804,34 @@ export default function App() {
       },
     }));
   }, [activeTabId, openTabs, projectFolder]);
+  /** 最近開いたライブラリ（新しい順）。 */
+  const knownLibraries = useMemo(
+    () =>
+      [...appState.recentWorkspaces]
+        .filter((record) => record.library?.role === "root")
+        .sort((left, right) => right.lastOpenedAt - left.lastOpenedAt),
+    [appState.recentWorkspaces],
+  );
+  const hasKnownLibrary = appState.recentWorkspaces.some((record) => record.library);
+  /** ライブラリに取り込まれていない旧版のワークスペース。 */
+  const legacyWorkspaceCandidates = useMemo<LibrarySetupCandidate[]>(
+    () =>
+      appState.recentWorkspaces
+        .filter((record) => !record.library)
+        .map((record) => ({ path: record.path, name: record.name })),
+    [appState.recentWorkspaces],
+  );
+  // 候補は開いた時点で確定する。取り込みが進んで履歴が変わっても画面を作り直さない。
+  const openLibrarySetup = useCallback(
+    (candidates: LibrarySetupCandidate[] = []) => {
+      const merged: LibrarySetupCandidate[] = [];
+      for (const candidate of [...candidates, ...legacyWorkspaceCandidates]) {
+        if (!merged.some((item) => isSamePath(item.path, candidate.path))) merged.push(candidate);
+      }
+      setLibrarySetupRequest({ id: Date.now(), candidates: merged });
+    },
+    [legacyWorkspaceCandidates],
+  );
   const visibleRecentWorkspaces = useMemo(() => {
     const normalizedQuery = workspaceSwitcherQuery.trim().toLocaleLowerCase();
     if (!normalizedQuery) return appState.recentWorkspaces;
@@ -4831,7 +4869,13 @@ export default function App() {
         ) {
           const restored = await restoreWorkspaceFromState(state);
           if (!isCancelled) setStartupView(restored === true ? "editor" : "portal");
-          if (restored === "outsideLibrary") openScratchFromStoredState(state);
+          if (restored === "outsideLibrary") {
+            openScratchFromStoredState(state);
+            setWorkspaceAlert({
+              path: state.lastWorkspacePath,
+              message: "前回の作品はライブラリに取り込まれていません。一覧から選ぶと取り込めます。",
+            });
+          }
           return;
         }
 
@@ -7831,52 +7875,55 @@ export default function App() {
       return { folder: enclosing, focusFolderPath: folder.path };
     }
 
+    // ライブラリをまだ持っていなければ、まずライブラリを作ってもらう。
+    const knownLibrary = knownLibraries[0];
+    if (!knownLibrary) {
+      openLibrarySetup([{ path: folder.path, name: folder.name }]);
+      return null;
+    }
+
     const choice = await requestOption({
-      title: "ライブラリの外のフォルダです",
+      title: "ライブラリへの取り込みが必要です",
       message: `「${folder.name}」はライブラリに入っていません。作品はライブラリの中で開きます。`,
       detail: "取り込みでは元のフォルダには書き込まず、ライブラリ内へコピーしてから検証します。",
       options: [
         {
-          id: "import",
-          label: "既存のライブラリへ取り込む",
-          description: "ライブラリのフォルダを選び、この作品をコピーします。",
+          id: "import-known",
+          label: `「${knownLibrary.name}」に取り込む`,
+          description: knownLibrary.path,
         },
         {
-          id: "import-new",
-          label: "新しいライブラリを作って取り込む",
-          description: "ライブラリにするフォルダを選び、この作品をコピーします。",
+          id: "import-other",
+          label: "別のライブラリに取り込む…",
+          description: "ライブラリのフォルダを選びます。",
         },
-        ...(inspection.kind === "folder"
-          ? [{
-              id: "make-library",
-              label: "このフォルダをライブラリにする",
-              description: "フォルダ内のファイルは、ライブラリ直下のファイルになります。",
-            }]
-          : []),
+        {
+          id: "setup",
+          label: "新しいライブラリを作って取り込む…",
+          description: "ライブラリの準備画面を開きます。",
+        },
       ],
     });
     if (!choice) return null;
-
-    if (choice === "make-library") {
-      await invoke<LibraryContext>("create_library", { folderPath: folder.path, name: "" });
-      const library = await invoke<ProjectFolder>("list_project_text_files", {
-        folderPath: folder.path,
-      });
-      return { folder: library, focusFolderPath: null };
+    if (choice === "setup") {
+      openLibrarySetup([{ path: folder.path, name: folder.name }]);
+      return null;
     }
 
-    const libraryPath = await invoke<string | null>("pick_folder_dialog");
-    if (!libraryPath) return null;
-    if (choice === "import-new") {
-      await invoke<LibraryContext>("create_library", { folderPath: libraryPath, name: "" });
-    } else {
+    let libraryPath = knownLibrary.path;
+    if (choice === "import-other") {
+      const picked = await invoke<string | null>("pick_folder_dialog", {
+        title: "取り込み先のライブラリのフォルダを選ぶ",
+      });
+      if (!picked) return null;
       const target = await invoke<FolderInspection>("inspect_workspace_folder", {
-        folderPath: libraryPath,
+        folderPath: picked,
       });
       if (target.kind !== "library") {
         showToast("選んだフォルダはライブラリではありません");
         return null;
       }
+      libraryPath = picked;
     }
 
     const imported = await importProjectIntoLibrary(folder.path, libraryPath);
@@ -7909,8 +7956,12 @@ export default function App() {
       return null;
     }
 
+    const library = await invoke<ProjectFolder>("list_project_text_files", {
+      folderPath: libraryPath,
+    }).catch(() => null);
+    const libraryName = library ? scopeDisplayName(library) : getWorkspaceName(libraryPath);
     setAppState((current) =>
-      copyWorkspaceLocalState(current, sourcePath, report.projectPath, report.name),
+      recordImportedProject(current, sourcePath, report.projectPath, report.name, libraryName),
     );
     const choice = await requestChoice({
       title: "取り込みました",
@@ -10867,6 +10918,53 @@ export default function App() {
     setStartupView(restored ? "editor" : "portal");
   };
 
+  const loadDefaultLibraryParent = useCallback(
+    () => invoke<string>("default_library_parent"),
+    [],
+  );
+  const pickFolderWithTitle = useCallback(
+    (title: string, defaultPath?: string) =>
+      invoke<string | null>("pick_folder_dialog", { title, defaultPath: defaultPath ?? null }),
+    [],
+  );
+  const closeLibrarySetup = () => {
+    setLibrarySetupRequest(null);
+    setIsLibrarySetupDismissed(true);
+  };
+  const handleLibrarySetupImported = (
+    sourcePath: string,
+    report: ProjectImportReport,
+    libraryName: string,
+  ) => {
+    setAppState((current) =>
+      recordImportedProject(current, sourcePath, report.projectPath, report.name, libraryName),
+    );
+  };
+  const openLibraryFromSetup = async (libraryPath: string) => {
+    closeLibrarySetup();
+    const opened = await openWorkspace(libraryPath);
+    if (opened) setStartupView("editor");
+  };
+  const handleOpenExistingLibraryFromSetup = async (): Promise<string | null> => {
+    const picked = await pickFolderWithTitle("ライブラリのフォルダを選ぶ");
+    if (!picked) return null;
+    const inspection = await invoke<FolderInspection>("inspect_workspace_folder", {
+      folderPath: picked,
+    });
+    if (inspection.kind !== "library") {
+      return `「${inspection.name}」はライブラリではありません。ライブラリのフォルダを選んでください。`;
+    }
+    await openLibraryFromSetup(picked);
+    return null;
+  };
+
+  // ライブラリをまだ持っていなければ、起動画面の前にライブラリの準備画面を出す。
+  useEffect(() => {
+    if (startupView !== "portal" || hasKnownLibrary || isLibrarySetupDismissed) return;
+    if (librarySetupRequest || !isTauriRuntime()) return;
+    openLibrarySetup();
+  }, [hasKnownLibrary, isLibrarySetupDismissed, librarySetupRequest, openLibrarySetup, startupView]);
+
   const handleOpenWorkspaceFromPortal = async (path?: string) => {
     setWorkspaceAlert(null);
     const opened = await openWorkspace(path);
@@ -11199,6 +11297,27 @@ export default function App() {
         }
       >
         <WindowControls />
+        {librarySetupRequest && (
+          <LibrarySetup
+            key={librarySetupRequest.id}
+            candidates={librarySetupRequest.candidates}
+            loadDefaultParent={loadDefaultLibraryParent}
+            pickFolder={pickFolderWithTitle}
+            inspectFolder={(folderPath) =>
+              invoke<FolderInspection>("inspect_workspace_folder", { folderPath })
+            }
+            createLibrary={(parentPath, name) =>
+              invoke<string>("create_library_folder", { parentPath, name })
+            }
+            importProject={(sourcePath, libraryPath) =>
+              invoke<ProjectImportReport>("import_project_into_library", { sourcePath, libraryPath })
+            }
+            onImported={handleLibrarySetupImported}
+            onOpenLibrary={(result: LibrarySetupResult) => void openLibraryFromSetup(result.libraryPath)}
+            onOpenExistingLibrary={handleOpenExistingLibraryFromSetup}
+            onLater={closeLibrarySetup}
+          />
+        )}
         {startupView === "loading" ? (
           <div className="startupPortalLoading" role="status" data-tauri-drag-region="deep">
             Then を読み込んでいます…
@@ -11207,15 +11326,17 @@ export default function App() {
           <>
           {/* 起動画面から開いたフォルダでも、取り込みなどの確認ダイアログを出す。 */}
           {appDialog && (
-            <AppDialogModal
-              dialog={appDialog}
-              onClose={closeAppDialog}
-              onSubmit={submitAppDialog}
-              onValueChange={updateAppDialogValue}
-              onFieldValueChange={updateAppDialogFieldValue}
-              onChoice={chooseAppDialog}
-              onOption={chooseAppDialogOption}
-            />
+            <div className="portalDialogLayer">
+              <AppDialogModal
+                dialog={appDialog}
+                onClose={closeAppDialog}
+                onSubmit={submitAppDialog}
+                onValueChange={updateAppDialogValue}
+                onFieldValueChange={updateAppDialogFieldValue}
+                onChoice={chooseAppDialog}
+                onOption={chooseAppDialogOption}
+              />
+            </div>
           )}
           <StartupPortal
             recentWorkspaces={appState.recentWorkspaces}

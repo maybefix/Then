@@ -560,7 +560,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             inspect_workspace_folder,
             pick_folder_dialog,
-            create_library,
+            create_library_folder,
+            default_library_parent,
             create_library_project,
             import_project_into_library,
             list_stale_library_imports,
@@ -1820,16 +1821,38 @@ fn inspect_workspace_folder(folder_path: String) -> Result<library::FolderInspec
 }
 
 #[tauri::command]
-fn pick_folder_dialog(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    let Some(path) = app.dialog().file().blocking_pick_folder() else {
+fn pick_folder_dialog(
+    app: tauri::AppHandle,
+    title: Option<String>,
+    default_path: Option<String>,
+) -> Result<Option<String>, String> {
+    let mut dialog = app.dialog().file();
+    if let Some(title) = title {
+        dialog = dialog.set_title(title);
+    }
+    if let Some(default_path) = default_path.filter(|path| Path::new(path).is_dir()) {
+        dialog = dialog.set_directory(default_path);
+    }
+    let Some(path) = dialog.blocking_pick_folder() else {
         return Ok(None);
     };
     Ok(Some(dialog_path_to_path_buf(path)?.to_string_lossy().to_string()))
 }
 
+/// Where a first library is suggested: Documents\Then.
 #[tauri::command]
-fn create_library(folder_path: String, name: String) -> Result<library::LibraryContext, String> {
-    library::create_library(Path::new(&folder_path), &name)
+fn default_library_parent(app: tauri::AppHandle) -> Result<String, String> {
+    let documents = app
+        .path()
+        .document_dir()
+        .map_err(|error| format!("failed to resolve the documents folder: {error}"))?;
+    Ok(documents.join("Then").to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn create_library_folder(parent_path: String, name: String) -> Result<String, String> {
+    let folder_name = normalize_project_entry_name(&name)?;
+    library::create_library_folder(Path::new(&parent_path), &folder_name, name.trim())
 }
 
 #[tauri::command]

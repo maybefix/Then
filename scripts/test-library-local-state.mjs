@@ -9,7 +9,7 @@ const bundled = await build({
   write: false,
 });
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`;
-const { copyWorkspaceLocalState } = await import(moduleUrl);
+const { copyWorkspaceLocalState, recordImportedProject } = await import(moduleUrl);
 
 const from = "D:\\執筆\\夏の終わり";
 const to = "C:\\Lib\\夏の終わり";
@@ -64,5 +64,14 @@ assert.equal(copiedSnapshot.projectTree.path, to);
 assert.equal(copiedSnapshot.projectTree.children[0].path, copiedFile);
 assert.equal(copiedSnapshot.files[0].path, copiedFile);
 assert.equal(state.snapshots.length, 1, "input state is not mutated");
+
+const recorded = recordImportedProject(
+  { ...state, lastWorkspacePath: from, recentWorkspaces: [{ path: from, name: "夏の終わり", lastOpenedAt: 5 }] },
+  from, to, "夏の終わり", "わたしの作品集",
+);
+assert.equal(recorded.lastWorkspacePath, to);
+assert.deepEqual(recorded.recentWorkspaces, [{
+  path: to, name: "夏の終わり", lastOpenedAt: 5, library: { name: "わたしの作品集", role: "project" },
+}]);
 
 console.log("library local state tests passed");

@@ -238,6 +238,30 @@ pub(super) fn create_library(folder: &Path, name: &str) -> Result<LibraryContext
     library_context_for(folder, Vec::new())?.ok_or_else(|| "library could not be opened".to_string())
 }
 
+/// Creates a new folder under `parent` and makes it a library. An existing
+/// folder is never turned into one here, so its contents cannot end up as
+/// library-root files by accident.
+pub(super) fn create_library_folder(
+    parent: &Path,
+    folder_name: &str,
+    display_name: &str,
+) -> Result<String, String> {
+    if parent.ancestors().any(is_library_root) {
+        return Err("ライブラリの中に別のライブラリは作れません".to_string());
+    }
+    let path = parent.join(folder_name);
+    if path.exists() {
+        return Err(format!("同じ名前のフォルダが既にあります: {}", path.display()));
+    }
+    std::fs::create_dir_all(&path)
+        .map_err(|error| format!("failed to create library folder: {error}"))?;
+    if let Err(error) = create_library(&path, display_name) {
+        let _ = std::fs::remove_dir_all(&path);
+        return Err(error);
+    }
+    Ok(path.to_string_lossy().to_string())
+}
+
 fn unique_child_path(parent: &Path, name: &str) -> PathBuf {
     let first = parent.join(name);
     if !first.exists() {
@@ -534,6 +558,16 @@ mod tests {
         assert_eq!(chapter.kind, "folder");
         assert_eq!(chapter.project_path.as_deref(), Some(work.as_str()));
         assert!(library_context_for(&library.join("資料"), Vec::new()).unwrap().is_none());
+    }
+
+    #[test]
+    fn creates_a_new_library_folder_but_never_reuses_an_existing_one() {
+        let dir = TestDirectory::new("folder");
+        let library = create_library_folder(&dir.0.join("Then"), "作品集", "わたしの作品集").unwrap();
+        let context = library_context_for(Path::new(&library), Vec::new()).unwrap().unwrap();
+        assert_eq!(context.name, "わたしの作品集");
+        assert!(create_library_folder(&dir.0.join("Then"), "作品集", "").is_err());
+        assert!(create_library_folder(Path::new(&library), "inner", "").is_err());
     }
 
     #[test]
