@@ -12494,48 +12494,76 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
 
 /* ===== 画面モード（本文 / キャンバス / エクスポート / チェックポイント） ===== */
 
-.modeSwitcher {
+.modeMenu {
+  position: relative;
   display: inline-flex;
-  height: 30px;
+  flex: 0 0 auto;
+}
+
+.modeMenuButton {
+  display: inline-flex;
+  height: 26px;
+  max-width: 180px;
   align-items: center;
-  gap: 2px;
-  padding: 2px;
+  gap: 6px;
+  padding: 0 6px 0 8px;
   border: 0.5px solid var(--border-subtle);
   border-radius: 6px;
   background: color-mix(in srgb, var(--bg-panel) 72%, transparent);
-  max-width: min(55vw, 520px);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.modeSwitcher::-webkit-scrollbar {
-  display: none;
-}
-
-.modeSwitcher button {
-  display: inline-flex;
-  width: 31px;
-  height: 25px;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   cursor: pointer;
-  font-size: 11.5px;
+  font: inherit;
+  font-family: var(--ui-font-family);
+  font-size: 12px;
   line-height: 1;
-  padding: 0;
   white-space: nowrap;
 }
 
-.modeSwitcher button:hover {
-  color: var(--text-primary);
+.modeMenuButton:hover,
+.modeMenuButton[aria-expanded="true"] {
+  background: var(--bg-panel-strong);
 }
 
-.modeSwitcher button.isActiveMode {
-  background: var(--bg-panel-strong);
-  color: var(--text-primary);
+.modeMenuButtonLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modeMenuChevron,
+.modeMenuExternalIcon {
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.modeMenuChevron {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2;
+  color: var(--text-muted);
+}
+
+.modeMenuPopover {
+  right: 0;
+  min-width: 180px;
+}
+
+.modeMenuPopover .modeMenuItemLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modeMenuExternalIcon {
+  width: 12px;
+  height: 12px;
+  stroke-width: 1.8;
+  color: var(--text-muted);
 }
 
 /* モード切替中も状態を保つため、非表示ペインはアンマウントせず CSS で隠す。 */

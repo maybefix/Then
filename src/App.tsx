@@ -8,6 +8,7 @@ import {
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -553,6 +554,7 @@ const directionOptions: Array<{
 type AppIconName =
   | "book"
   | "canvas"
+  | "chevronDown"
   | "export"
   | "file"
   | "files"
@@ -563,6 +565,7 @@ type AppIconName =
   | "history"
   | "horizontal"
   | "menu"
+  | "openExternal"
   | "panelLeft"
   | "panelRight"
   | "plus"
@@ -596,6 +599,12 @@ function AppIcon({ name, className = "" }: { name: AppIconName; className?: stri
           <rect x="13" y="13" width="7" height="6" rx="1.5" />
           <path d="M11 8h3.5A2.5 2.5 0 0 1 17 10.5V13" />
           <path d="M13 16H9.5A2.5 2.5 0 0 1 7 13.5V11" />
+        </svg>
+      );
+    case "chevronDown":
+      return (
+        <svg {...common}>
+          <path d="m6 9 6 6 6-6" />
         </svg>
       );
     case "export":
@@ -674,6 +683,14 @@ function AppIcon({ name, className = "" }: { name: AppIconName; className?: stri
           <path d="M4 6h16" />
           <path d="M4 12h16" />
           <path d="M4 18h16" />
+        </svg>
+      );
+    case "openExternal":
+      return (
+        <svg {...common}>
+          <path d="M14 4h6v6" />
+          <path d="M20 4 11 13" />
+          <path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" />
         </svg>
       );
     case "panelLeft":
@@ -2909,6 +2926,7 @@ export default function App() {
   const typewriterScrollFrameRef = useRef<number | null>(null);
   const nativeFullscreenRequestedRef = useRef(false);
   const nativeFullscreenRequestIdRef = useRef(0);
+  const restoreMaximizedAfterFullscreenRef = useRef(false);
   const editorInstanceRef = useRef<TextEditorHandle | null>(null);
   const pluginRuntimeHostRef = useRef<ThenPluginRuntimeHostHandle | null>(null);
   const pluginWorkspacePathRef = useRef<string | null>(null);
@@ -2929,6 +2947,8 @@ export default function App() {
   // 記法コマンドの対象が変わらないよう、開いた時点の範囲を保持する。
   const commandPaletteSelectionRef = useRef<EditorSelectionSnapshot | null>(null);
   const fileMenuRef = useRef<HTMLDivElement | null>(null);
+  const modeMenuRef = useRef<HTMLDivElement | null>(null);
+  const modeMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const breadcrumbMenuRef = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const didMountEditorRef = useRef(false);
@@ -3041,6 +3061,7 @@ export default function App() {
   const [shouldReturnToSettingsAfterThemePicker, setShouldReturnToSettingsAfterThemePicker] =
     useState(false);
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
+  const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
   const [activeBreadcrumbPath, setActiveBreadcrumbPath] = useState<string | null>(null);
   const [breadcrumbBrowsePath, setBreadcrumbBrowsePath] = useState<string | null>(null);
   const [breadcrumbLayout, setBreadcrumbLayout] =
@@ -4095,8 +4116,27 @@ export default function App() {
     const requestId = nativeFullscreenRequestIdRef.current + 1;
     nativeFullscreenRequestIdRef.current = requestId;
 
-    void getCurrentWindow()
-      .setFullscreen(shouldUseNativeFullscreen)
+    const appWindow = getCurrentWindow();
+    // tao clamps a maximized borderless window's client area to the monitor
+    // work area even while fullscreen, leaving the taskbar strip unpainted.
+    // Leave the maximized state first and restore it after fullscreen ends.
+    const applyFullscreen = async () => {
+      if (shouldUseNativeFullscreen) {
+        if (await appWindow.isMaximized()) {
+          restoreMaximizedAfterFullscreenRef.current = true;
+          await appWindow.unmaximize();
+        }
+        await appWindow.setFullscreen(true);
+        return;
+      }
+      await appWindow.setFullscreen(false);
+      if (restoreMaximizedAfterFullscreenRef.current) {
+        restoreMaximizedAfterFullscreenRef.current = false;
+        await appWindow.maximize();
+      }
+    };
+
+    void applyFullscreen()
       .catch((error) => {
         if (nativeFullscreenRequestIdRef.current !== requestId) return;
         const message = shouldUseNativeFullscreen
@@ -5232,12 +5272,25 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!isModeMenuOpen) return;
+    // 開いたら現在のモードにフォーカスし、矢印キーでそのまま選べるようにする。
+    const menu = modeMenuRef.current;
+    const target =
+      menu?.querySelector<HTMLButtonElement>('[role="menuitemradio"][aria-checked="true"]') ??
+      menu?.querySelector<HTMLButtonElement>('[role="menuitemradio"]');
+    target?.focus();
+  }, [isModeMenuOpen]);
+
+  useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
 
       if (!fileMenuRef.current?.contains(target)) {
         setIsFileMenuOpen(false);
+      }
+      if (!modeMenuRef.current?.contains(target)) {
+        setIsModeMenuOpen(false);
       }
       if (!breadcrumbMenuRef.current?.contains(target)) {
         setActiveBreadcrumbPath(null);
@@ -5254,6 +5307,7 @@ export default function App() {
       if (event.key !== "Escape") return;
       setIsEditorFocusMode(false);
       setIsFileMenuOpen(false);
+      setIsModeMenuOpen(false);
       setActiveBreadcrumbPath(null);
       setBreadcrumbBrowsePath(null);
       setIsBreadcrumbOverflowOpen(false);
@@ -7828,6 +7882,101 @@ export default function App() {
       return;
     }
     void handleOpenLinkedExport();
+  };
+
+  const modeMenuEntries: {
+    key: string;
+    label: string;
+    title: string;
+    icon: ReactNode;
+    isActive: boolean;
+    opensInWindow: boolean;
+    select: () => void;
+  }[] = [
+    {
+      key: "write",
+      label: "本文",
+      title: "本文モード",
+      icon: <AppIcon name="write" className="modeSwitcherIcon" />,
+      isActive: appMode === "write",
+      opensInWindow: false,
+      select: () => switchAppMode("write"),
+    },
+    {
+      key: "canvas",
+      label: "キャンバス",
+      title: settings.canvasOpensInWindow ? "キャンバスを別ウィンドウで開く" : "キャンバスモード",
+      icon: <AppIcon name="canvas" className="modeSwitcherIcon" />,
+      isActive: appMode === "canvas",
+      opensInWindow: settings.canvasOpensInWindow,
+      select: () => switchAppMode("canvas"),
+    },
+    {
+      key: "export",
+      label: "エクスポート",
+      title: settings.exportOpensInWindow ? "エクスポートを別ウィンドウで開く" : "エクスポートモード",
+      icon: <AppIcon name="export" className="modeSwitcherIcon" />,
+      isActive: appMode === "export",
+      opensInWindow: settings.exportOpensInWindow,
+      select: () => switchAppMode("export"),
+    },
+    {
+      key: "checkpoint",
+      label: "チェックポイント",
+      title: "チェックポイント",
+      icon: <AppIcon name="history" className="modeSwitcherIcon" />,
+      isActive: appMode === "checkpoint",
+      opensInWindow: false,
+      select: () => switchAppMode("checkpoint"),
+    },
+    ...pluginScreens.flatMap((screen) => {
+      const plugin = loadedPlugins.find((item) => item.manifest.id === screen.pluginId);
+      const icon = screen.icon ?? plugin?.manifest.icon;
+      if (!plugin || !icon) return [];
+      const screenKey = `${screen.pluginId}:${screen.id}`;
+      return [
+        {
+          key: screenKey,
+          label: screen.title,
+          title: `${screen.title}（${plugin.manifest.name}）`,
+          icon: <PluginIcon icon={icon} className="modeSwitcherIcon pluginModeSwitcherIcon" />,
+          isActive: appMode === "plugin" && activePluginScreenKey === screenKey,
+          opensInWindow: false,
+          select: () => {
+            setActivePluginScreenKey(screenKey);
+            setAppMode("plugin");
+          },
+        },
+      ];
+    }),
+  ];
+  const activeModeMenuEntry = modeMenuEntries.find((entry) => entry.isActive);
+
+  const handleModeMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const items = Array.from(
+      event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'),
+    );
+    if (items.length === 0) return;
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowDown") nextIndex = (currentIndex + 1) % items.length;
+    else if (event.key === "ArrowUp") nextIndex = (currentIndex - 1 + items.length) % items.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = items.length - 1;
+    else if (event.key === "Escape") {
+      // 他の Escape 処理（フォーカスモード解除など）まで届かせない。
+      event.preventDefault();
+      event.stopPropagation();
+      setIsModeMenuOpen(false);
+      modeMenuButtonRef.current?.focus();
+      return;
+    } else if (event.key === "Tab") {
+      setIsModeMenuOpen(false);
+      return;
+    }
+    if (nextIndex === null) return;
+    event.preventDefault();
+    items[nextIndex].focus();
   };
 
   const toggleEditorFocusMode = () => {
@@ -12498,94 +12647,6 @@ export default function App() {
               aria-hidden={isEditorFocusMode}
               {...(isEditorFocusMode ? { inert: "" } : {})}
             >
-              <div className="modeSwitcher" role="tablist" aria-label="画面モード">
-                <button
-                  className={appMode === "write" ? "isActiveMode" : ""}
-                  type="button"
-                  role="tab"
-                  aria-selected={appMode === "write"}
-                  aria-label="本文"
-                  title="本文モード"
-                  onClick={() => switchAppMode("write")}
-                >
-                  <AppIcon name="write" className="modeSwitcherIcon" />
-                </button>
-                <button
-                  className={appMode === "canvas" ? "isActiveMode" : ""}
-                  type="button"
-                  role="tab"
-                  aria-selected={appMode === "canvas"}
-                  aria-label="キャンバス"
-                  title={
-                    settings.canvasOpensInWindow
-                      ? "キャンバスを別ウィンドウで開く"
-                      : "キャンバスモード"
-                  }
-                  onClick={() => switchAppMode("canvas")}
-                >
-                  <AppIcon name="canvas" className="modeSwitcherIcon" />
-                </button>
-                <button
-                  className={appMode === "export" ? "isActiveMode" : ""}
-                  type="button"
-                  role="tab"
-                  aria-selected={appMode === "export"}
-                  aria-label="エクスポート"
-                  title={
-                    settings.exportOpensInWindow
-                      ? "エクスポートを別ウィンドウで開く"
-                      : "エクスポートモード"
-                  }
-                  onClick={() => switchAppMode("export")}
-                >
-                  <AppIcon name="export" className="modeSwitcherIcon" />
-                </button>
-                <button
-                  className={appMode === "checkpoint" ? "isActiveMode" : ""}
-                  type="button"
-                  role="tab"
-                  aria-selected={appMode === "checkpoint"}
-                  title="チェックポイント"
-                  aria-label="チェックポイント"
-                  onClick={() => switchAppMode("checkpoint")}
-                >
-                  <AppIcon name="history" className="modeSwitcherIcon" />
-                </button>
-                {pluginScreens.map((screen) => {
-                  const plugin = loadedPlugins.find(
-                    (item) => item.manifest.id === screen.pluginId,
-                  );
-                  const icon = screen.icon ?? plugin?.manifest.icon;
-                  if (!plugin || !icon) return null;
-                  const screenKey = `${screen.pluginId}:${screen.id}`;
-                  return (
-                    <button
-                      className={
-                        appMode === "plugin" && activePluginScreenKey === screenKey
-                          ? "isActiveMode"
-                          : ""
-                      }
-                      type="button"
-                      role="tab"
-                      key={screenKey}
-                      aria-selected={
-                        appMode === "plugin" && activePluginScreenKey === screenKey
-                      }
-                      aria-label={screen.title}
-                      title={`${screen.title}（${plugin.manifest.name}）`}
-                      onClick={() => {
-                        setActivePluginScreenKey(screenKey);
-                        setAppMode("plugin");
-                      }}
-                    >
-                      <PluginIcon
-                        icon={icon}
-                        className="modeSwitcherIcon pluginModeSwitcherIcon"
-                      />
-                    </button>
-                  );
-                })}
-              </div>
               {appMode === "write" && (
                 <button
                   className={`iconButton editorFocusModeButton ${
@@ -12657,6 +12718,61 @@ export default function App() {
               >
                 <AppIcon name="settings" className="topbarSvgIcon" />
               </button>
+              <div className="modeMenu" ref={modeMenuRef}>
+                <button
+                  ref={modeMenuButtonRef}
+                  className="modeMenuButton"
+                  type="button"
+                  aria-haspopup="menu"
+                  aria-expanded={isModeMenuOpen}
+                  aria-label={`画面モード：${activeModeMenuEntry?.label ?? ""}`}
+                  title="画面モードを切り替え"
+                  onClick={() => setIsModeMenuOpen((isOpen) => !isOpen)}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                      event.preventDefault();
+                      setIsModeMenuOpen(true);
+                    }
+                  }}
+                >
+                  {activeModeMenuEntry?.icon}
+                  <span className="modeMenuButtonLabel">{activeModeMenuEntry?.label}</span>
+                  <AppIcon name="chevronDown" className="modeMenuChevron" />
+                </button>
+                {isModeMenuOpen && (
+                  <div
+                    className="menuPopover modeMenuPopover"
+                    role="menu"
+                    aria-label="画面モード"
+                    onKeyDown={handleModeMenuKeyDown}
+                  >
+                    {modeMenuEntries.map((entry) => (
+                      <button
+                        key={entry.key}
+                        className={entry.isActive ? "activeMenuItem" : ""}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={entry.isActive}
+                        title={entry.title}
+                        onClick={() => {
+                          setIsModeMenuOpen(false);
+                          modeMenuButtonRef.current?.focus();
+                          entry.select();
+                        }}
+                      >
+                        {entry.icon}
+                        <span className="modeMenuItemLabel">{entry.label}</span>
+                        {entry.opensInWindow && (
+                          <AppIcon
+                            name="openExternal"
+                            className="modeMenuExternalIcon"
+                          />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </header>
 

@@ -3,5 +3,9 @@
   "identifier": "main-fullscreen",
   "description": "Allows the main editor window to enter and leave native fullscreen.",
   "windows": ["main"],
-  "permissions": ["core:window:allow-set-fullscreen"]
+  "permissions": [
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize"
+  ]
 }
