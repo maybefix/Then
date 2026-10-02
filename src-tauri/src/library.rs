@@ -164,6 +164,30 @@ pub(super) fn library_context_for(
     }))
 }
 
+/// The library a scope (library root or library project) belongs to.
+pub(super) fn library_of_scope(path: &Path) -> Option<PathBuf> {
+    if is_library_root(path) {
+        return Some(path.to_path_buf());
+    }
+    let parent = path.parent()?;
+    (is_library_root(parent) && is_project_root(path)).then(|| parent.to_path_buf())
+}
+
+/// Items may only move between the root and the projects of one library.
+pub(super) fn ensure_same_library(source: &Path, target: &Path) -> Result<(), String> {
+    let source_library = library_of_scope(source)
+        .ok_or_else(|| "移動元がライブラリまたはライブラリ内の作品ではありません".to_string())?;
+    let target_library = library_of_scope(target)
+        .ok_or_else(|| "移動先がライブラリまたはライブラリ内の作品ではありません".to_string())?;
+    if source_library != target_library {
+        return Err("別のライブラリへは移動・コピーできません".to_string());
+    }
+    if source == target {
+        return Err("移動元と移動先が同じです".to_string());
+    }
+    Ok(())
+}
+
 pub(super) fn inspect_folder(path: &Path) -> Result<FolderInspection, String> {
     if !path.is_dir() {
         return Err("folder does not exist".to_string());
@@ -568,6 +592,20 @@ mod tests {
         assert_eq!(context.name, "わたしの作品集");
         assert!(create_library_folder(&dir.0.join("Then"), "作品集", "").is_err());
         assert!(create_library_folder(Path::new(&library), "inner", "").is_err());
+    }
+
+    #[test]
+    fn transfers_stay_within_one_library() {
+        let dir = TestDirectory::new("same");
+        let first = PathBuf::from(create_library_folder(&dir.0, "a", "").unwrap());
+        let second = PathBuf::from(create_library_folder(&dir.0, "b", "").unwrap());
+        let work = PathBuf::from(create_library_project(&first, "作品").unwrap());
+        let other = PathBuf::from(create_library_project(&second, "別").unwrap());
+        assert!(ensure_same_library(&first, &work).is_ok());
+        assert!(ensure_same_library(&work, &first).is_ok());
+        assert!(ensure_same_library(&work, &work).is_err());
+        assert!(ensure_same_library(&work, &other).is_err());
+        assert!(ensure_same_library(&dir.0, &work).is_err());
     }
 
     #[test]

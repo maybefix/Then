@@ -561,6 +561,7 @@ pub fn run() {
             inspect_workspace_folder,
             pick_folder_dialog,
             create_library_folder,
+            transfer_reference_files,
             default_library_parent,
             create_library_project,
             import_project_into_library,
@@ -1839,14 +1840,14 @@ fn pick_folder_dialog(
     Ok(Some(dialog_path_to_path_buf(path)?.to_string_lossy().to_string()))
 }
 
-/// Where a first library is suggested: Documents\Then.
+/// Where a first library is suggested: the user's Documents folder.
 #[tauri::command]
 fn default_library_parent(app: tauri::AppHandle) -> Result<String, String> {
     let documents = app
         .path()
         .document_dir()
         .map_err(|error| format!("failed to resolve the documents folder: {error}"))?;
-    Ok(documents.join("Then").to_string_lossy().to_string())
+    Ok(documents.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -1871,6 +1872,48 @@ async fn import_project_into_library(
     })
     .await
     .map_err(|error| format!("import task failed: {error}"))?
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TransferredReference {
+    from: String,
+    file: ReferenceFileInfo,
+}
+
+/// Copies reference files from one scope of a library into another's imports.
+/// With `remove_imported_sources`, sources that were themselves imported are
+/// deleted afterwards (a move); files that belong to the source's tree stay.
+#[tauri::command]
+fn transfer_reference_files(
+    app: tauri::AppHandle,
+    source_root: String,
+    target_root: String,
+    source_paths: Vec<String>,
+    remove_imported_sources: bool,
+) -> Result<Vec<TransferredReference>, String> {
+    let source = reference_scope_root(&app, "project", Some(&source_root))?;
+    let target = reference_scope_root(&app, "project", Some(&target_root))?;
+    library::ensure_same_library(Path::new(&source_root), Path::new(&target_root))?;
+    let source_imports = reference_imports_dir(&source).canonicalize().ok();
+
+    let mut transferred = Vec::new();
+    for source_path in source_paths {
+        let absolute = resolve_reference_source_path(&app, Some(&source_root), "project", &source_path)?;
+        let imported = import_reference_file(&app, "project", &target, &absolute)?;
+        transferred.push(TransferredReference {
+            from: source_path,
+            file: reference_file_info(&target, &imported, "project")?,
+        });
+        let was_imported = source_imports
+            .as_ref()
+            .is_some_and(|imports| absolute.starts_with(imports));
+        if remove_imported_sources && was_imported {
+            std::fs::remove_file(&absolute)
+                .map_err(|error| format!("failed to remove the moved reference: {error}"))?;
+        }
+    }
+    Ok(transferred)
 }
 
 #[tauri::command]
