@@ -9,6 +9,7 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 mod checkpoint_store;
 mod intermediate_draft;
+mod library;
 mod project_state;
 mod submission_export;
 
@@ -166,6 +167,9 @@ struct ProjectFolder {
     path: String,
     name: String,
     children: Vec<ProjectEntry>,
+    /// Set when the listed folder is a library root or one of its projects.
+    #[serde(default, skip_deserializing, skip_serializing_if = "Option::is_none")]
+    library: Option<library::LibraryContext>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -551,6 +555,13 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            inspect_workspace_folder,
+            pick_folder_dialog,
+            create_library,
+            create_library_project,
+            import_project_into_library,
+            list_stale_library_imports,
+            discard_stale_library_imports,
             load_app_state,
             save_app_state,
             get_system_fonts,
@@ -1801,6 +1812,52 @@ fn open_project_folder_dialog(app: tauri::AppHandle) -> Result<Option<ProjectFol
 }
 
 #[tauri::command]
+fn inspect_workspace_folder(folder_path: String) -> Result<library::FolderInspection, String> {
+    library::inspect_folder(Path::new(&folder_path))
+}
+
+#[tauri::command]
+fn pick_folder_dialog(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let Some(path) = app.dialog().file().blocking_pick_folder() else {
+        return Ok(None);
+    };
+    Ok(Some(dialog_path_to_path_buf(path)?.to_string_lossy().to_string()))
+}
+
+#[tauri::command]
+fn create_library(folder_path: String, name: String) -> Result<library::LibraryContext, String> {
+    library::create_library(Path::new(&folder_path), &name)
+}
+
+#[tauri::command]
+fn create_library_project(library_path: String, name: String) -> Result<String, String> {
+    let folder_name = normalize_project_entry_name(&name)?;
+    library::create_library_project(Path::new(&library_path), &folder_name)
+}
+
+#[tauri::command]
+async fn import_project_into_library(
+    source_path: String,
+    library_path: String,
+) -> Result<library::ProjectImportReport, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        library::import_project_into_library(Path::new(&source_path), Path::new(&library_path))
+    })
+    .await
+    .map_err(|error| format!("import task failed: {error}"))?
+}
+
+#[tauri::command]
+fn list_stale_library_imports(library_path: String) -> Result<Vec<String>, String> {
+    library::list_stale_imports(Path::new(&library_path))
+}
+
+#[tauri::command]
+fn discard_stale_library_imports(library_path: String) -> Result<(), String> {
+    library::discard_stale_imports(Path::new(&library_path))
+}
+
+#[tauri::command]
 fn list_project_markdown_files(folder_path: String) -> Result<ProjectFolder, String> {
     list_project_text_files(folder_path)
 }
@@ -2433,6 +2490,7 @@ fn ensure_project_folder_tree_entry(
                     path: entry.path.clone(),
                     name: entry.name.clone(),
                     children: entry.children.clone(),
+                    library: None,
                 },
             )?;
         }
@@ -2831,6 +2889,7 @@ fn reorder_project_entries(
             .unwrap_or("Markdown")
             .to_string(),
         children: list_project_entries(&root, &folder, &config)?,
+        library: None,
     })
 }
 
@@ -3626,10 +3685,13 @@ fn list_project_folder(path: &Path) -> Result<ProjectFolder, String> {
         .unwrap_or("Markdown")
         .to_string();
 
+    let mut boundary = library::is_library_root(path).then(Vec::new);
+    let children = list_project_entries_within(path, path, &config, &mut boundary)?;
     Ok(ProjectFolder {
         path: path.to_string_lossy().to_string(),
         name,
-        children: list_project_entries(path, path, &config)?,
+        children,
+        library: library::library_context_for(path, boundary.unwrap_or_default())?,
     })
 }
 
@@ -3637,6 +3699,19 @@ fn list_project_entries(
     root: &Path,
     path: &Path,
     config: &ProjectConfig,
+) -> Result<Vec<ProjectEntry>, String> {
+    let mut boundary = library::is_library_root(root).then(Vec::new);
+    list_project_entries_within(root, path, config, &mut boundary)
+}
+
+/// `library_boundary` is `Some` while listing a library root: project folders
+/// are left out of its tree, and the ones not directly under the root are
+/// collected so the UI can warn about them.
+fn list_project_entries_within(
+    root: &Path,
+    path: &Path,
+    config: &ProjectConfig,
+    library_boundary: &mut Option<Vec<String>>,
 ) -> Result<Vec<ProjectEntry>, String> {
     let mut entries = Vec::new();
     debug_log(&format!("before read_dir path={}", path.display()));
@@ -3652,13 +3727,22 @@ fn list_project_entries(
             continue;
         }
 
+        if let Some(misplaced) = library_boundary.as_mut() {
+            if entry_path.is_dir() && library::is_project_root(&entry_path) {
+                if path != root {
+                    misplaced.push(entry_path.to_string_lossy().to_string());
+                }
+                continue;
+            }
+        }
+
         if entry_path.is_dir() {
             let name = entry_path
                 .file_name()
                 .and_then(|value| value.to_str())
                 .unwrap_or("folder")
                 .to_string();
-            let children = list_project_entries(root, &entry_path, config)?;
+            let children = list_project_entries_within(root, &entry_path, config, library_boundary)?;
             entries.push(ProjectEntry {
                 path: entry_path.to_string_lossy().to_string(),
                 name,
@@ -4186,6 +4270,10 @@ fn collect_reference_candidates(
         }
 
         if path.is_dir() {
+            // A library root's candidates stop at its projects' folders.
+            if library::is_project_root(&path) && library::is_library_root(root) {
+                continue;
+            }
             collect_reference_candidates(root, &path, scope, files)?;
             continue;
         }

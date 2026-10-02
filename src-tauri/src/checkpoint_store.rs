@@ -494,6 +494,7 @@ fn runtime_from_stored(
                 .into_iter()
                 .map(|entry| runtime_tree_entry(root, entry))
                 .collect(),
+            library: None,
         },
         files: checkpoint
             .files
@@ -694,6 +695,14 @@ fn load_result_unlocked(
     })
 }
 
+/// Counts stored checkpoints without migrating or pruning anything:
+/// `(readable, unreadable)`.
+pub(super) fn count_project_checkpoints(root: &Path) -> Result<(usize, usize), String> {
+    let _guard = lock_checkpoint_store()?;
+    let (checkpoints, warnings) = list_stored_checkpoints(root)?;
+    Ok((checkpoints.len(), warnings.len()))
+}
+
 pub(super) fn load_project_checkpoints(
     root: &Path,
     legacy: Option<&[ManuscriptSnapshot]>,
@@ -883,6 +892,7 @@ mod tests {
                     file_id: None,
                     content_hash: None,
                 }],
+                library: None,
             },
             files: vec![ManuscriptSnapshotFile {
                 path: file.to_string_lossy().to_string(),

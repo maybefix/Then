@@ -493,7 +493,7 @@
               <div class="field"><label>取り込み元</label><div class="val">D:\執筆\夏の終わりの短編集</div></div>
               <div class="field"><label>取り込み先</label><div class="val">わたしの作品集 \ 夏の終わりの短編集</div></div>
               <ul class="checks" aria-label="検証">
-                <li><span class="ok">✓</span>旧版データの移行（進捗ラベル・チェックポイント）<span class="num">済</span></li>
+                <li><span class="ok">✓</span>コピー先への旧版データの移行（進捗ラベル・チェックポイント）<span class="num">済</span></li>
                 <li><span class="ok">✓</span>コピー<span class="num">214 ファイル</span></li>
                 <li><span class="ok">✓</span>ファイル数・サイズ・内容ハッシュ<span class="num">214 / 214</span></li>
                 <li><span class="ok">✓</span>project.json（revision 37）<span class="num">一致</span></li>
@@ -582,7 +582,7 @@
       <h3>④ 既存プロジェクトの取り込み</h3>
       <ul>
         <li>第1段階では保存形式が変わらないので、「変換」ではなく「コピー＋検証」。</li>
-        <li><code>.then-import-*</code> という一時フォルダへコピーし、検証に通ったら改名する。</li>
+        <li>ライブラリの <code>.then/importing/</code> へコピーし、検証に通ったら作品名へ改名する。</li>
         <li>取り込み元には書き込まず、自動削除もしない。</li>
         <li>エクスプローラーでライブラリへ移動するだけでも、作品として認識される（タブ構成は引き継がない）。</li>
       </ul>
