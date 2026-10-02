@@ -47,6 +47,16 @@ import {
 } from "./components/layout/WorkspaceSidebar";
 import { DocumentTabs } from "./components/layout/DocumentTabs";
 import { ScopeStartPage } from "./components/layout/ScopeStartPage";
+import { LibraryHome, type LibraryHomeItem } from "./components/layout/LibraryHome";
+import {
+  computeWorkStats,
+  folderSignature,
+  indexFolder,
+  loadScopeIndex,
+  normalizeLibraryWorkStats,
+  searchLibraryScopes,
+  type LibraryProjectOverview,
+} from "./library/libraryData";
 import {
   LibrarySetup,
   type LibrarySetupCandidate,
@@ -186,6 +196,8 @@ import type {
   ProjectEntry,
   FolderInspection,
   LibraryProjectSummary,
+  WorkMeta,
+  WorkStatus,
   ProjectFolder,
   ProjectImportReport,
   ProofreadSettings,
@@ -202,7 +214,7 @@ import type {
   WorkspaceDocumentTabs,
   WorkspaceRecord,
 } from "./types";
-import { isIdeaBinderCard, isReferenceBinderCard } from "./types";
+import { isIdeaBinderCard, isReferenceBinderCard, workStatusLabels } from "./types";
 import {
   fileProgressStatuses,
   DEFAULT_EDITOR_MEASURE_PERCENT,
@@ -311,7 +323,7 @@ const PROJECT_AST_INDEX_BATCH_SIZE = 12;
 
 type LayoutDirection = "start" | "center" | "end";
 
-type WorkspaceSearchScope = "file" | "project";
+type WorkspaceSearchScope = "file" | "project" | "library";
 
 type BreadcrumbOverflowItem =
   | { kind: "folder" | "file"; name: string; path: string }
@@ -1282,6 +1294,7 @@ function createDefaultState(): AppState {
     proofreadTerms: [],
     documentTabsByWorkspace: {},
     snapshots: [],
+    libraryWorkStats: {},
   };
 }
 
@@ -2507,6 +2520,7 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
       value?.documentTabsByWorkspace,
     ),
     snapshots: normalizeSnapshots(value?.snapshots),
+    libraryWorkStats: normalizeLibraryWorkStats(value?.libraryWorkStats),
   };
 }
 
@@ -4353,8 +4367,87 @@ export default function App() {
       ),
     [projectAst, projectSearchOptions, projectSearchQuery],
   );
+  // ライブラリ全体の検索。開いている範囲は編集中の内容を、ほかの範囲はディスクから読んだ索引を使う。
+  const pendingSearchJumpRef = useRef<ProjectSearchResult | null>(null);
+  const searchResultOpenRef = useRef<(result: ProjectSearchResult) => Promise<void>>(async () => {});
+  useEffect(() => {
+    const pending = pendingSearchJumpRef.current;
+    if (!pending || !projectFolder || !findProjectEntry(projectFolder.children, pending.path)) return;
+    pendingSearchJumpRef.current = null;
+    void searchResultOpenRef.current(pending);
+  }, [projectFolder]);
+
+  const [libraryCorpus, setLibraryCorpus] = useState<{
+    libraryPath: string;
+    excludedPath: string;
+    scopes: { path: string; label: string; ast: ProjectAst }[];
+    isLoading: boolean;
+  } | null>(null);
+  const libraryForSearch = projectFolder?.library ?? null;
+  const currentScopeLabel = !projectFolder
+    ? ""
+    : libraryForSearch?.role === "root"
+      ? "ライブラリ直下"
+      : projectFolder.name;
+  useEffect(() => {
+    if (searchScope !== "library" || !libraryForSearch || !projectFolder || !isTauriRuntime()) return;
+    if (
+      libraryCorpus
+      && libraryCorpus.libraryPath === libraryForSearch.path
+      && libraryCorpus.excludedPath === projectFolder.path
+    ) {
+      return;
+    }
+    const scopePaths = [
+      { path: libraryForSearch.path, label: "ライブラリ直下" },
+      ...libraryForSearch.projects.map((project) => ({ path: project.path, label: project.name })),
+    ].filter((scope) => !isSamePath(scope.path, projectFolder.path));
+    const base = {
+      libraryPath: libraryForSearch.path,
+      excludedPath: projectFolder.path,
+    };
+    setLibraryCorpus({ ...base, scopes: [], isLoading: true });
+    let cancelled = false;
+    void (async () => {
+      const scopes: { path: string; label: string; ast: ProjectAst }[] = [];
+      for (const scope of scopePaths) {
+        try {
+          const index = await loadScopeIndex(scope.path);
+          if (cancelled) return;
+          scopes.push({ ...scope, ast: index.ast });
+          setLibraryCorpus({ ...base, scopes: [...scopes], isLoading: true });
+        } catch (error) {
+          setLastError(String(error));
+        }
+      }
+      if (!cancelled) setLibraryCorpus({ ...base, scopes, isLoading: false });
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // libraryCorpus is read only to skip a rebuild for the same library and open scope.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [libraryForSearch, projectFolder, searchScope]);
+  const librarySearchOutcome = useMemo(
+    () =>
+      searchScope !== "library"
+        ? null
+        : searchLibraryScopes(
+            [
+              { label: currentScopeLabel, ast: projectAst },
+              ...(libraryCorpus?.scopes ?? []),
+            ],
+            projectSearchQuery,
+            projectSearchOptions,
+          ),
+    [currentScopeLabel, libraryCorpus, projectAst, projectSearchOptions, projectSearchQuery, searchScope],
+  );
   const workspaceSearchOutcome =
-    searchScope === "file" ? currentFileSearchOutcome : projectSearchOutcome;
+    searchScope === "file"
+      ? currentFileSearchOutcome
+      : searchScope === "library" && librarySearchOutcome
+        ? librarySearchOutcome
+        : projectSearchOutcome;
   const breadcrumbTrail = useMemo(
     () => findPathToEntry(projectFolder, currentFilePath),
     [currentFilePath, projectFolder],
@@ -8104,6 +8197,125 @@ export default function App() {
     }
   };
 
+  // ---- ライブラリホーム（作品の一覧・字数と進捗の集計） ----
+  const [libraryHome, setLibraryHome] = useState<{
+    libraryPath: string;
+    items: LibraryHomeItem[];
+    isLoading: boolean;
+  } | null>(null);
+  const libraryHomeRunRef = useRef(0);
+
+  const refreshLibraryHome = async (libraryPath: string, force = false) => {
+    const runId = ++libraryHomeRunRef.current;
+    const isCurrent = () => libraryHomeRunRef.current === runId;
+    let overview: LibraryProjectOverview[];
+    try {
+      overview = await invoke<LibraryProjectOverview[]>("library_overview", { libraryPath });
+    } catch (error) {
+      setLastError(String(error));
+      return;
+    }
+    if (!isCurrent()) return;
+    const cache = appStateRef.current.libraryWorkStats;
+    let items: LibraryHomeItem[] = overview.map((project) => ({
+      path: project.path,
+      name: project.name,
+      work: project.work,
+      stats: cache[workspaceDocumentTabsKey(project.path)] ?? null,
+    }));
+    setLibraryHome({ libraryPath, items, isLoading: true });
+
+    const countOptions = { includeWhitespace: settings.countWhitespace, includeCode: settings.countCode };
+    for (const project of overview) {
+      try {
+        const folder = await invoke<ProjectFolder>("list_project_text_files", { folderPath: project.path });
+        const key = workspaceDocumentTabsKey(project.path);
+        const cached = appStateRef.current.libraryWorkStats[key];
+        const stats = !force && cached?.signature === folderSignature(folder)
+          ? cached
+          : computeWorkStats(await indexFolder(folder), project.fileProgress, countOptions);
+        if (!isCurrent()) return;
+        items = items.map((item) => (item.path === project.path ? { ...item, stats } : item));
+        setLibraryHome({ libraryPath, items, isLoading: true });
+        if (stats !== cached) {
+          setAppState((current) => ({
+            ...current,
+            libraryWorkStats: { ...current.libraryWorkStats, [key]: stats },
+          }));
+        }
+      } catch (error) {
+        setLastError(String(error));
+      }
+    }
+    if (isCurrent()) setLibraryHome({ libraryPath, items, isLoading: false });
+  };
+
+  // ライブラリ直下で文書を開いていない状態に入るたびに、一覧を読み直す（集計はキャッシュを使う）。
+  const libraryHomeTrigger =
+    libraryContext?.role === "root" && activeTab?.kind === "empty" ? `${libraryContext.path}|${activeTab.id}` : null;
+  useEffect(() => {
+    if (!libraryHomeTrigger || !libraryContext || !isTauriRuntime()) return;
+    void refreshLibraryHome(libraryContext.path);
+    // refreshLibraryHome reads state through refs; the trigger key covers when to run.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [libraryHomeTrigger]);
+
+  const editWorkInfo = async (projectPath: string, name: string, current: WorkMeta | null) => {
+    const values = await requestMultiInput({
+      title: `「${name}」の作品情報`,
+      fields: [
+        {
+          id: "status",
+          label: "状態",
+          initialValue: current?.status ?? "planning",
+          options: (Object.keys(workStatusLabels) as WorkStatus[]).map((status) => ({
+            value: status,
+            label: workStatusLabels[status],
+          })),
+        },
+        {
+          id: "summary",
+          label: "あらすじ",
+          initialValue: current?.summary ?? "",
+          multiline: true,
+          optional: true,
+        },
+      ],
+      confirmLabel: "保存",
+    });
+    if (!values) return;
+    try {
+      const saved = await invoke<WorkMeta>("save_project_work", {
+        projectPath,
+        status: values.status,
+        summary: values.summary,
+      });
+      setLibraryHome((home) =>
+        home && {
+          ...home,
+          items: home.items.map((item) => (item.path === projectPath ? { ...item, work: saved } : item)),
+        },
+      );
+      showToast("作品情報を保存しました");
+    } catch (error) {
+      setLastError(String(error));
+      showToast(`作品情報を保存できませんでした: ${String(error)}`);
+    }
+  };
+
+  const editCurrentWorkInfo = async () => {
+    if (!projectFolder || libraryContext?.role !== "project") return;
+    try {
+      const overview = await invoke<LibraryProjectOverview[]>("library_overview", {
+        libraryPath: libraryContext.path,
+      });
+      const current = overview.find((item) => isSamePath(item.path, projectFolder.path));
+      await editWorkInfo(projectFolder.path, projectFolder.name, current?.work ?? null);
+    } catch (error) {
+      setLastError(String(error));
+    }
+  };
+
   const reorderLibraryProjects = async (orderedPaths: string[]) => {
     if (!libraryContext || libraryContext.role !== "root") return;
     const byPath = new Map(libraryContext.projects.map((project) => [project.path, project]));
@@ -8970,6 +9182,19 @@ export default function App() {
   };
 
   const handleProjectSearchResultOpen = async (result: ProjectSearchResult) => {
+    // ライブラリ全体の検索で別の範囲の結果を選んだら、その範囲へ切り替えてから開く。
+    if (result.path && projectFolder && !findProjectEntry(projectFolder.children, result.path)) {
+      const library = projectFolder.library;
+      const scopePath = library
+        ? [...library.projects.map((project) => project.path), library.path].find((path) =>
+            isPathSameOrInside(result.path, path),
+          )
+        : null;
+      if (!scopePath) return;
+      pendingSearchJumpRef.current = result;
+      if (!(await openWorkspace(scopePath))) pendingSearchJumpRef.current = null;
+      return;
+    }
     if (result.path && result.path !== currentFilePath) {
       await handleProjectFileSelect(result.path);
     }
@@ -8984,6 +9209,8 @@ export default function App() {
       jumpToEditorLine(result.line);
     }
   };
+
+  searchResultOpenRef.current = handleProjectSearchResultOpen;
 
   const handleReplaceInCurrentFile = () => {
     if (projectSearchQuery.length === 0) {
@@ -12664,6 +12891,7 @@ export default function App() {
                     onCreateLibraryProject={() => void handleCreateLibraryProject()}
                     onImportProject={() => void handleImportProjectIntoLibrary()}
                     onReorderLibraryProjects={(paths) => void reorderLibraryProjects(paths)}
+                    isLibrarySearchLoading={Boolean(libraryCorpus?.isLoading)}
                 />
                 )}
             </div>
@@ -12715,8 +12943,30 @@ export default function App() {
                         </div>
                       </section>
                     )}
-                    {activeTab?.kind === "empty" && projectFolder ? (
+                    {activeTab?.kind === "empty" && libraryContext?.role === "root" ? (
+                      <LibraryHome
+                        libraryName={libraryContext.name}
+                        items={
+                          libraryHome?.libraryPath === libraryContext.path
+                            ? libraryHome.items
+                            : libraryContext.projects.map((project) => ({
+                                path: project.path,
+                                name: project.name,
+                                work: null,
+                                stats: null,
+                              }))
+                        }
+                        isLoading={libraryHome?.libraryPath !== libraryContext.path || libraryHome.isLoading}
+                        onOpenProject={enterProject}
+                        onEditWork={(item) => void editWorkInfo(item.path, item.name, item.work)}
+                        onCreateProject={() => void handleCreateLibraryProject()}
+                        onRefresh={() => void refreshLibraryHome(libraryContext.path, true)}
+                      />
+                    ) : activeTab?.kind === "empty" && projectFolder ? (
                       <ScopeStartPage
+                        onEditWork={
+                          libraryContext?.role === "project" ? () => void editCurrentWorkInfo() : undefined
+                        }
                         folder={projectFolder}
                         onOpenFile={(path) => void handleProjectFileSelect(path)}
                         onCreateFile={() => void handleCreateProjectFile(projectFolder.path)}

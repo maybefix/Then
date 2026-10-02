@@ -11,7 +11,8 @@
 use super::checkpoint_store::count_project_checkpoints;
 use super::project_state::{
     legacy_project_config_path, load_project_config, lock_project_config, path_exists_checked,
-    project_config_path, save_project_config_unlocked, ProjectConfig,
+    project_config_path, save_project_config_unlocked, update_project_config,
+    validate_work_status, ProjectConfig, WorkMeta,
 };
 use super::{content_hash, now_millis};
 use serde::{Deserialize, Serialize};
@@ -232,6 +233,62 @@ pub(super) fn ensure_same_library(source: &Path, target: &Path) -> Result<(), St
         return Err("移動元と移動先が同じです".to_string());
     }
     Ok(())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct LibraryProjectOverview {
+    path: String,
+    name: String,
+    work: Option<WorkMeta>,
+    /// Project-relative path -> progress status (todo is not stored).
+    file_progress: BTreeMap<String, String>,
+}
+
+/// What the library home lists for each project, read from its project.json.
+/// A project whose config cannot be read is still listed, without details.
+pub(super) fn library_overview(library: &Path) -> Result<Vec<LibraryProjectOverview>, String> {
+    if !is_library_root(library) {
+        return Err("library does not exist".to_string());
+    }
+    Ok(library_projects(library)?
+        .into_iter()
+        .map(|project| {
+            let config = load_project_config(Path::new(&project.path)).ok();
+            LibraryProjectOverview {
+                work: config.as_ref().and_then(|config| config.work.clone()),
+                file_progress: config
+                    .map(|config| {
+                        config
+                            .file_progress
+                            .into_iter()
+                            .map(|(path, progress)| (path, progress.status))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                path: project.path,
+                name: project.name,
+            }
+        })
+        .collect())
+}
+
+pub(super) fn save_project_work(project: &Path, status: &str, summary: &str) -> Result<WorkMeta, String> {
+    if library_of_scope(project).is_none() || is_library_root(project) {
+        return Err("ライブラリ内の作品ではありません".to_string());
+    }
+    validate_work_status(status)?;
+    let work = WorkMeta {
+        status: status.to_string(),
+        summary: summary.trim().to_string(),
+        updated_at: now_millis(),
+    };
+    let saved = work.clone();
+    update_project_config(project, move |config| {
+        config.work = Some(work);
+        Ok(())
+    })?;
+    Ok(saved)
 }
 
 #[derive(Serialize)]
@@ -708,6 +765,23 @@ mod tests {
         assert_eq!(names(reordered), ["う", "あ", "い"], "unknown names are ignored, unlisted ones follow");
         create_library_project(&library, "え").unwrap();
         assert_eq!(names(library_projects(&library).unwrap()), ["う", "あ", "い", "え"]);
+    }
+
+    #[test]
+    fn overview_reads_work_meta_and_progress() {
+        let dir = TestDirectory::new("overview");
+        let library = PathBuf::from(create_library_folder(&dir.0, "lib", "").unwrap());
+        let work = PathBuf::from(create_library_project(&library, "作品").unwrap());
+        create_library_project(&library, "白紙").unwrap();
+        save_project_work(&work, "writing", "  あらすじ  ").unwrap();
+        assert!(save_project_work(&work, "unknown", "").is_err());
+        assert!(save_project_work(&library, "writing", "").is_err());
+
+        let overview = library_overview(&library).unwrap();
+        assert_eq!(overview.len(), 2);
+        let meta = overview[0].work.as_ref().expect("work meta");
+        assert_eq!((meta.status.as_str(), meta.summary.as_str()), ("writing", "あらすじ"));
+        assert!(overview[1].work.is_none());
     }
 
     #[test]

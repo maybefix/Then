@@ -14540,3 +14540,254 @@ html:not([data-window-fullscreen="true"])
 .fileViewSummary > strong {
   flex: none;
 }
+
+/* ---- ライブラリホーム ---- */
+.libraryHome {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  width: min(980px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 28px 0 40px;
+  color: var(--text-secondary);
+}
+
+.libraryHomeHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.libraryHomeHeader h1 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 26px;
+  font-weight: 650;
+}
+
+.libraryHomeSummary {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.libraryHomeHeaderActions,
+.libraryHomeChips,
+.libraryHomeViewToggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.libraryHome button,
+.libraryHome select,
+.libraryHome input {
+  min-height: 30px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.libraryHome button {
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.libraryHome button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.libraryHome button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.libraryHomeFilters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.libraryHomeFilters input {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.libraryHomeSort {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.libraryHomeSort select {
+  padding: 0 6px;
+}
+
+.libraryHomeEmpty {
+  margin: 24px 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.libraryHomeCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.libraryHomeCard {
+  position: relative;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-panel-strong);
+}
+
+.libraryHomeCard:hover,
+.libraryHomeCard:focus-within {
+  border-color: var(--accent);
+}
+
+.libraryHome .libraryHomeCardOpen {
+  display: grid;
+  width: 100%;
+  min-height: 0;
+  gap: 8px;
+  padding: 12px;
+  border: 0;
+  text-align: left;
+}
+
+.libraryHomeCardTitle {
+  padding-right: 44px;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.libraryHomeCardSummary {
+  display: -webkit-box;
+  min-height: 3em;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.libraryHomeCardFoot {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.libraryHome .libraryHomeEdit {
+  min-height: 24px;
+  padding: 0 8px;
+  border-color: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.libraryHomeCard .libraryHomeEdit {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+.libraryHome .libraryHomeEdit:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.libraryHomeStatus {
+  justify-self: start;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.workStatus-planning { color: var(--text-muted); }
+.workStatus-writing { color: var(--progress-writing); }
+.workStatus-revising { color: var(--progress-revising); }
+.workStatus-done { color: var(--progress-done); }
+.workStatus-paused { color: var(--text-faint, var(--text-muted)); border-style: dashed; }
+
+.libraryHomeBar {
+  display: flex;
+  height: 6px;
+  min-width: 80px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--border-subtle);
+}
+
+.libraryHomeBarSegment {
+  display: block;
+  flex-basis: 0;
+}
+
+.progressFill-todo { background: var(--progress-todo); opacity: 0.45; }
+.progressFill-writing { background: var(--progress-writing); }
+.progressFill-revising { background: var(--progress-revising); }
+.progressFill-done { background: var(--progress-done); }
+
+.libraryHomeTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.libraryHomeTable th,
+.libraryHomeTable td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.libraryHomeTable th {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.libraryHome .libraryHomeTableOpen {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.libraryHome .libraryHomeTableOpen:hover {
+  color: var(--accent);
+}
+
+.libraryHomeNumber {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

@@ -564,6 +564,8 @@ pub fn run() {
             transfer_reference_files,
             library_transfer_destinations,
             reorder_library_projects,
+            library_overview,
+            save_project_work,
             default_library_parent,
             create_library_project,
             import_project_into_library,
@@ -1928,6 +1930,20 @@ fn library_transfer_destinations(
     root_path: String,
 ) -> Result<Vec<library::TransferDestination>, String> {
     library::transfer_destinations(Path::new(&root_path))
+}
+
+#[tauri::command]
+fn library_overview(library_path: String) -> Result<Vec<library::LibraryProjectOverview>, String> {
+    library::library_overview(Path::new(&library_path))
+}
+
+#[tauri::command]
+fn save_project_work(
+    project_path: String,
+    status: String,
+    summary: String,
+) -> Result<project_state::WorkMeta, String> {
+    library::save_project_work(Path::new(&project_path), &status, &summary)
 }
 
 #[tauri::command]

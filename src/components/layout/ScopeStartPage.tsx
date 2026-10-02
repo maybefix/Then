@@ -25,8 +25,11 @@ export function ScopeStartPage({
   onCreateFile,
   onOpenPlot,
   onOpenCanvas,
+  onEditWork,
 }: {
   folder: ProjectFolder;
+  /** ライブラリ内の作品のとき、状態とあらすじを編集する。 */
+  onEditWork?: () => void;
   onOpenFile: (path: string) => void;
   onCreateFile: () => void;
   onOpenPlot: () => void;
@@ -60,6 +63,11 @@ export function ScopeStartPage({
         <button type="button" onClick={onOpenCanvas}>
           Canvas を開く
         </button>
+        {onEditWork && (
+          <button type="button" onClick={onEditWork}>
+            作品情報（状態・あらすじ）
+          </button>
+        )}
       </div>
       {recentFiles.length > 0 && (
         <ul className="scopeStartRecent" aria-label="最近編集した文書">

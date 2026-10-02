@@ -130,6 +130,8 @@ type WorkspaceSidebarProps = {
   onCreateLibraryProject: () => void;
   onImportProject: () => void;
   onReorderLibraryProjects: (orderedPaths: string[]) => void;
+  /** ライブラリ全体の検索で、ほかの作品の索引を読み込んでいる間 true。 */
+  isLibrarySearchLoading: boolean;
 };
 
 type TreeContextMenu = {
@@ -202,7 +204,7 @@ type HeadingDropTarget =
     }
   | null;
 
-type WorkspaceSearchScope = "file" | "project";
+type WorkspaceSearchScope = "file" | "project" | "library";
 
 const HEADING_DRAG_MIME = "application/x-then-heading";
 const TREE_CONTEXT_MENU_WIDTH = 180;
@@ -755,6 +757,7 @@ export function WorkspaceSidebar({
   onCreateLibraryProject,
   onImportProject,
   onReorderLibraryProjects,
+  isLibrarySearchLoading,
 }: WorkspaceSidebarProps) {
   const [contextMenu, setContextMenu] = useState<TreeContextMenu>(null);
   const [headingContextMenu, setHeadingContextMenu] = useState<HeadingContextMenu>(null);
@@ -2400,8 +2403,19 @@ export function WorkspaceSidebar({
             disabled={!projectFolder}
             onClick={() => onSearchScopeChange("project")}
           >
-            プロジェクト
+            {library ? "この範囲" : "プロジェクト"}
           </button>
+          {library && (
+            <button
+              className={searchScope === "library" ? "activeProjectSearchMode" : ""}
+              type="button"
+              aria-pressed={searchScope === "library"}
+              title="ライブラリ直下とすべての作品を検索（置換はできません）"
+              onClick={() => onSearchScopeChange("library")}
+            >
+              ライブラリ全体
+            </button>
+          )}
         </div>
       </div>
       <div className="projectReplaceDisclosure">
@@ -2435,15 +2449,18 @@ export function WorkspaceSidebar({
                   !hasQuery ||
                   Boolean(projectSearchError) ||
                   replaceCount === 0 ||
+                  searchScope === "library" ||
                   (searchScope === "project" && !projectFolder)
                 }
                 onClick={searchScope === "file" ? onReplaceInCurrentFile : onReplaceInProject}
               >
                 {isProjectReplacing
                   ? "置換中…"
-                  : searchScope === "file"
-                    ? `${replaceCount}件を置換`
-                    : `${projectSearchMatchedFileCount}ファイル・${replaceCount}件を置換`}
+                  : searchScope === "library"
+                    ? "ライブラリ全体は置換できません"
+                    : searchScope === "file"
+                      ? `${replaceCount}件を置換`
+                      : `${projectSearchMatchedFileCount}ファイル・${replaceCount}件を置換`}
               </button>
             </div>
           </div>
@@ -2456,6 +2473,7 @@ export function WorkspaceSidebar({
             : "本文のみ"}
         </span>
         {indexStatus && <span>{indexStatus}</span>}
+        {searchScope === "library" && isLibrarySearchLoading && <span>ほかの作品を読み込み中</span>}
       </div>
       <div className="projectSearchList">
         {groupedProjectSearchResults.length ? (

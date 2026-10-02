@@ -58,6 +58,33 @@ pub(super) struct ProjectConfig {
     /// ファイルの進捗ラベル。Phase 2 で端末ローカルから移行する。
     #[serde(default, rename = "fileProgress")]
     pub(super) file_progress: BTreeMap<String, ProjectFileProgress>,
+    /// 作品としての情報（状態・あらすじ）。ライブラリホームの一覧と絞り込みに使う。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) work: Option<WorkMeta>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct WorkMeta {
+    /// planning | writing | revising | done | paused
+    #[serde(default = "default_work_status")]
+    pub(super) status: String,
+    #[serde(default)]
+    pub(super) summary: String,
+    #[serde(default)]
+    pub(super) updated_at: i64,
+}
+
+fn default_work_status() -> String {
+    "planning".to_string()
+}
+
+pub(super) fn validate_work_status(status: &str) -> Result<(), String> {
+    if matches!(status, "planning" | "writing" | "revising" | "done" | "paused") {
+        Ok(())
+    } else {
+        Err(format!("unsupported work status: {status}"))
+    }
 }
 
 impl Default for ProjectConfig {
@@ -72,6 +99,7 @@ impl Default for ProjectConfig {
             proofread_terms: Vec::new(),
             proofread_ignored: BTreeMap::new(),
             file_progress: BTreeMap::new(),
+            work: None,
         }
     }
 }
@@ -108,6 +136,9 @@ fn validate_project_config(config: &ProjectConfig) -> Result<(), String> {
     for (path, progress) in &config.file_progress {
         validate_stored_project_path(path)?;
         validate_file_progress_status(&progress.status, true)?;
+    }
+    if let Some(work) = &config.work {
+        validate_work_status(&work.status)?;
     }
     Ok(())
 }

@@ -478,6 +478,17 @@ export type AppState = {
   snapshots: ManuscriptSnapshot[];
   /** 全ワークスペース共通の校正辞書。プロジェクト固有の語は project.json 側。 */
   proofreadTerms: ProofreadTerm[];
+  /** ライブラリホームに出す作品ごとの字数・進捗の集計（端末ローカルのキャッシュ）。 */
+  libraryWorkStats: Record<string, WorkStats>;
+};
+
+export type WorkStats = {
+  /** 集計したときのファイル構成。変わっていれば集計し直す。 */
+  signature: string;
+  charCount: number;
+  fileCount: number;
+  progress: Record<FileProgressStatus, number>;
+  lastModified: number | null;
 };
 
 export type TextDocument = {
@@ -511,6 +522,24 @@ export type LibraryContext = {
   projects: LibraryProjectSummary[];
   /** ライブラリ直下以外の場所に置かれ、作品として扱われていないフォルダ。 */
   misplacedProjects: string[];
+};
+
+/** 作品の状態。ライブラリホームでの表示と絞り込みに使う。 */
+export type WorkStatus = "planning" | "writing" | "revising" | "done" | "paused";
+
+export const workStatusLabels: Record<WorkStatus, string> = {
+  planning: "構想中",
+  writing: "執筆中",
+  revising: "推敲中",
+  done: "完了",
+  paused: "休止",
+};
+
+/** 作品の .then/project.json に保存する作品情報。 */
+export type WorkMeta = {
+  status: WorkStatus;
+  summary: string;
+  updatedAt: number;
 };
 
 export type FolderInspection = {
