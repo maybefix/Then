@@ -2330,6 +2330,28 @@ export function WorkspaceSidebar({
     );
   };
 
+  // 範囲ボタンは一行に収まる短い名前にし、正式な名前は読み上げとツールチップで示す。
+  const searchScopeOptions: { scope: WorkspaceSearchScope; label: string; name: string; title: string }[] =
+    library
+      ? [
+          { scope: "file", label: "文書", name: "現在の本文", title: "開いている文書だけを検索" },
+          library.role === "root"
+            ? { scope: "project", label: "直下", name: "ライブラリ直下", title: "ライブラリ直下の文書を検索（作品は含まない）" }
+            : { scope: "project", label: "作品", name: "この作品", title: "この作品の文書を検索" },
+          {
+            scope: "library",
+            label: "ライブラリ",
+            name: "ライブラリ全体",
+            title: "ライブラリ直下とすべての作品を検索（置換はできません）",
+          },
+        ]
+      : [
+          { scope: "file", label: "現在の本文", name: "現在の本文", title: "開いている文書だけを検索" },
+          { scope: "project", label: "プロジェクト", name: "プロジェクト", title: "プロジェクトの文書を検索" },
+        ];
+  const activeScopeOption =
+    searchScopeOptions.find((option) => option.scope === searchScope) ?? searchScopeOptions[0];
+
   const renderProjectSearchMode = () => {
     const indexStatus = searchScope === "project" ? getProjectAstStatusLabel(projectAst) : null;
     const hasQuery = projectSearchQuery.length > 0;
@@ -2388,34 +2410,20 @@ export function WorkspaceSidebar({
       <div className="projectSearchScopeRow">
         <span>範囲</span>
         <div className="projectSearchModes" role="group" aria-label="検索範囲">
-          <button
-            className={searchScope === "file" ? "activeProjectSearchMode" : ""}
-            type="button"
-            aria-pressed={searchScope === "file"}
-            onClick={() => onSearchScopeChange("file")}
-          >
-            現在の本文
-          </button>
-          <button
-            className={searchScope === "project" ? "activeProjectSearchMode" : ""}
-            type="button"
-            aria-pressed={searchScope === "project"}
-            disabled={!projectFolder}
-            onClick={() => onSearchScopeChange("project")}
-          >
-            {library ? "この範囲" : "プロジェクト"}
-          </button>
-          {library && (
+          {searchScopeOptions.map((option) => (
             <button
-              className={searchScope === "library" ? "activeProjectSearchMode" : ""}
+              key={option.scope}
+              className={searchScope === option.scope ? "activeProjectSearchMode" : ""}
               type="button"
-              aria-pressed={searchScope === "library"}
-              title="ライブラリ直下とすべての作品を検索（置換はできません）"
-              onClick={() => onSearchScopeChange("library")}
+              aria-pressed={searchScope === option.scope}
+              aria-label={option.name}
+              title={option.title}
+              disabled={option.scope !== "file" && !projectFolder}
+              onClick={() => onSearchScopeChange(option.scope)}
             >
-              ライブラリ全体
+              {option.label}
             </button>
-          )}
+          ))}
         </div>
       </div>
       <div className="projectReplaceDisclosure">
@@ -2467,10 +2475,12 @@ export function WorkspaceSidebar({
         )}
       </div>
       <div className="projectSearchSummary" aria-live="polite">
-        <span>
+        <span title="本文が対象です。メタデータ（フロントマター）は検索しません。">
           {hasQuery && !projectSearchError
-            ? `本文のみ · ${projectSearchTotal}件`
-            : "本文のみ"}
+            ? searchScope === "file"
+              ? `${activeScopeOption.name} · ${projectSearchTotal}件`
+              : `${activeScopeOption.name} · ${projectSearchTotal}件・${projectSearchMatchedFileCount}ファイル`
+            : activeScopeOption.name}
         </span>
         {indexStatus && <span>{indexStatus}</span>}
         {searchScope === "library" && isLibrarySearchLoading && <span>ほかの作品を読み込み中</span>}

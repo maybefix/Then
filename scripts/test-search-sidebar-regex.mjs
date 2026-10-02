@@ -68,7 +68,7 @@ assert.equal(literalReplacement.text, "$&-$1", "literal replacement keeps dollar
 const appSource = await readFile("src/App.tsx", "utf8");
 const sidebarSource = await readFile("src/components/layout/WorkspaceSidebar.tsx", "utf8");
 assert.match(appSource, /useState<WorkspaceSearchScope>\("file"\)/);
-assert.match(sidebarSource, />\s*現在の本文\s*</);
+assert.match(sidebarSource, /name: "現在の本文"/);
 assert.match(sidebarSource, /正規表現を使用/);
 assert.match(sidebarSource, /projectSearchResultGroup/);
 

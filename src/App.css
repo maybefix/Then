@@ -5623,7 +5623,8 @@ body {
 
 .projectSearchModes {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
   gap: 4px;
 }
 
