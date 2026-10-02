@@ -4,7 +4,7 @@ import type {
   IdeaThreadLayout,
   ReferenceFileInfo,
 } from "../../types";
-import { IdeaPane } from "../snippets/IdeaPane";
+import { IdeaPane, type IdeaTransfer } from "../snippets/IdeaPane";
 
 type BinderPaneProps = {
   rootPath: string | null;
@@ -40,6 +40,7 @@ type BinderPaneProps = {
     targetKey: string,
     position: "before" | "after",
   ) => void;
+  transfer?: IdeaTransfer;
 };
 
 /**
@@ -78,6 +79,7 @@ export function BinderPane(props: BinderPaneProps) {
         onRemoveReference={props.onRemoveReference}
         onDeleteReferenceFile={props.onDeleteReferenceFile}
         onReorderItem={props.onReorderItem}
+        transfer={props.transfer}
       />
     </section>
   );

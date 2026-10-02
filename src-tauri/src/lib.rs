@@ -562,6 +562,8 @@ pub fn run() {
             pick_folder_dialog,
             create_library_folder,
             transfer_reference_files,
+            library_transfer_destinations,
+            reorder_library_projects,
             default_library_parent,
             create_library_project,
             import_project_into_library,
@@ -1899,7 +1901,12 @@ fn transfer_reference_files(
 
     let mut transferred = Vec::new();
     for source_path in source_paths {
-        let absolute = resolve_reference_source_path(&app, Some(&source_root), "project", &source_path)?;
+        // A reference that no longer exists stays as it was (already dangling).
+        let Ok(absolute) =
+            resolve_reference_source_path(&app, Some(&source_root), "project", &source_path)
+        else {
+            continue;
+        };
         let imported = import_reference_file(&app, "project", &target, &absolute)?;
         transferred.push(TransferredReference {
             from: source_path,
@@ -1914,6 +1921,21 @@ fn transfer_reference_files(
         }
     }
     Ok(transferred)
+}
+
+#[tauri::command]
+fn library_transfer_destinations(
+    root_path: String,
+) -> Result<Vec<library::TransferDestination>, String> {
+    library::transfer_destinations(Path::new(&root_path))
+}
+
+#[tauri::command]
+fn reorder_library_projects(
+    library_path: String,
+    ordered_names: Vec<String>,
+) -> Result<Vec<library::LibraryProjectSummary>, String> {
+    library::reorder_library_projects(Path::new(&library_path), ordered_names)
 }
 
 #[tauri::command]

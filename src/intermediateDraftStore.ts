@@ -134,6 +134,14 @@ class DraftSession {
 }
 
 const sessions = new Map<string, DraftSession>();
+/** Writes out a board's pending draft edits so its stored history is current. */
+export async function flushDraftBoard(target: DraftBoard) {
+  const session = sessions.get(draftBoardKey(target));
+  if (!session) return;
+  await session.flush();
+  if (session.dirty) throw new Error("中間稿の保存に失敗しています。保存してからやり直してください。");
+}
+
 export async function prepareDraftBoardTrash(target: DraftBoard) {
   const key = draftBoardKey(target);
   const session = sessions.get(key);

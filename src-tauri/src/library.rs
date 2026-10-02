@@ -26,6 +26,10 @@ struct LibraryConfig {
     schema_version: u32,
     id: String,
     name: String,
+    /// Project folder names in the order the sidebar lists them. Projects not
+    /// named here follow, sorted by name.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    project_order: Vec<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -135,8 +139,50 @@ pub(super) fn library_projects(library: &Path) -> Result<Vec<LibraryProjectSumma
             name,
         });
     }
-    projects.sort_by_key(|project| project.name.to_lowercase());
+    let order = read_library_config(library)
+        .map(|config| config.project_order)
+        .unwrap_or_default();
+    projects.sort_by_key(|project| {
+        (
+            order.iter().position(|name| name == &project.name).unwrap_or(usize::MAX),
+            project.name.to_lowercase(),
+        )
+    });
     Ok(projects)
+}
+
+fn write_library_config(root: &Path, config: &LibraryConfig) -> Result<(), String> {
+    let path = library_config_path(root);
+    std::fs::create_dir_all(path.parent().expect("library config has a parent"))
+        .map_err(|error| format!("failed to create .then folder: {error}"))?;
+    let content = serde_json::to_string_pretty(config)
+        .map_err(|error| format!("failed to serialize library.json: {error}"))?;
+    let temporary = path.with_extension("json.tmp");
+    std::fs::write(&temporary, content)
+        .map_err(|error| format!("failed to write library.json: {error}"))?;
+    std::fs::rename(&temporary, &path)
+        .map_err(|error| format!("failed to save library.json: {error}"))
+}
+
+/// Saves the sidebar order of a library's projects (by folder name).
+pub(super) fn reorder_library_projects(
+    library: &Path,
+    ordered_names: Vec<String>,
+) -> Result<Vec<LibraryProjectSummary>, String> {
+    let mut config = read_library_config(library)?;
+    let existing: Vec<String> = library_projects(library)?
+        .into_iter()
+        .map(|project| project.name)
+        .collect();
+    let mut order: Vec<String> = Vec::new();
+    for name in ordered_names {
+        if existing.contains(&name) && !order.contains(&name) {
+            order.push(name);
+        }
+    }
+    config.project_order = order;
+    write_library_config(library, &config)?;
+    library_projects(library)
 }
 
 /// The library an opened folder belongs to, if any. `misplaced_projects` is
@@ -186,6 +232,36 @@ pub(super) fn ensure_same_library(source: &Path, target: &Path) -> Result<(), St
         return Err("移動元と移動先が同じです".to_string());
     }
     Ok(())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct TransferDestination {
+    path: String,
+    label: String,
+}
+
+/// Where items of a scope can be sent: a library root sends to its projects,
+/// a project sends to its library root.
+pub(super) fn transfer_destinations(scope: &Path) -> Result<Vec<TransferDestination>, String> {
+    let Some(context) = library_context_for(scope, Vec::new())? else {
+        return Ok(Vec::new());
+    };
+    Ok(if context.role == "root" {
+        context
+            .projects
+            .into_iter()
+            .map(|project| TransferDestination {
+                label: format!("作品「{}」", project.name),
+                path: project.path,
+            })
+            .collect()
+    } else {
+        vec![TransferDestination {
+            label: format!("ライブラリ「{}」の直下", context.name),
+            path: context.path,
+        }]
+    })
 }
 
 pub(super) fn inspect_folder(path: &Path) -> Result<FolderInspection, String> {
@@ -248,17 +324,9 @@ pub(super) fn create_library(folder: &Path, name: &str) -> Result<LibraryContext
         schema_version: LIBRARY_SCHEMA_VERSION,
         id: format!("lib-{}", now_millis()),
         name: if name.is_empty() { folder_name(folder) } else { name.to_string() },
+        project_order: Vec::new(),
     };
-    let path = library_config_path(folder);
-    std::fs::create_dir_all(path.parent().expect("library config has a parent"))
-        .map_err(|error| format!("failed to create .then folder: {error}"))?;
-    let content = serde_json::to_string_pretty(&config)
-        .map_err(|error| format!("failed to serialize library.json: {error}"))?;
-    let temporary = path.with_extension("json.tmp");
-    std::fs::write(&temporary, content)
-        .map_err(|error| format!("failed to write library.json: {error}"))?;
-    std::fs::rename(&temporary, &path)
-        .map_err(|error| format!("failed to save library.json: {error}"))?;
+    write_library_config(folder, &config)?;
     library_context_for(folder, Vec::new())?.ok_or_else(|| "library could not be opened".to_string())
 }
 
@@ -606,6 +674,40 @@ mod tests {
         assert!(ensure_same_library(&work, &work).is_err());
         assert!(ensure_same_library(&work, &other).is_err());
         assert!(ensure_same_library(&dir.0, &work).is_err());
+    }
+
+    #[test]
+    fn lists_transfer_destinations_for_both_directions() {
+        let dir = TestDirectory::new("dest");
+        let library = PathBuf::from(create_library_folder(&dir.0, "lib", "作品集").unwrap());
+        let work = PathBuf::from(create_library_project(&library, "作品").unwrap());
+        let from_root = transfer_destinations(&library).unwrap();
+        assert_eq!(from_root.len(), 1);
+        assert_eq!(from_root[0].label, "作品「作品」");
+        let from_project = transfer_destinations(&work).unwrap();
+        assert_eq!(from_project[0].path, library.to_string_lossy());
+        assert!(transfer_destinations(&dir.0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn keeps_the_saved_project_order() {
+        let dir = TestDirectory::new("order");
+        let library = PathBuf::from(create_library_folder(&dir.0, "lib", "").unwrap());
+        for name in ["あ", "い", "う"] {
+            create_library_project(&library, name).unwrap();
+        }
+        let names = |projects: Vec<LibraryProjectSummary>| -> Vec<String> {
+            projects.into_iter().map(|project| project.name).collect()
+        };
+        assert_eq!(names(library_projects(&library).unwrap()), ["あ", "い", "う"]);
+        let reordered = reorder_library_projects(
+            &library,
+            vec!["う".into(), "あ".into(), "消えた作品".into()],
+        )
+        .unwrap();
+        assert_eq!(names(reordered), ["う", "あ", "い"], "unknown names are ignored, unlisted ones follow");
+        create_library_project(&library, "え").unwrap();
+        assert_eq!(names(library_projects(&library).unwrap()), ["う", "あ", "い", "え"]);
     }
 
     #[test]

@@ -46,7 +46,9 @@ import type { CanvasNodeFontSource, ReferenceFileInfo, WritingMode } from "./typ
 import { ReferenceReadOnlyPreview } from "./components/references/ReferenceLayer";
 import IntermediateDraftPane from "./components/canvas/IntermediateDraftPane";
 import { draftBoardKey, type DraftCanvasContext, type DraftHistory } from "./intermediateDraft";
-import { prepareDraftBoardTrash } from "./intermediateDraftStore";
+import { flushDraftBoard, prepareDraftBoardTrash } from "./intermediateDraftStore";
+import { boardReferencePaths, rewriteBoard, type ReferenceRewrite } from "./utils/libraryTransfer";
+import { normalizedReferenceKey } from "./ideaReferenceModel";
 import { CanvasBoardSaveQueue, canvasBoardTargetKey, type CanvasBoardTarget } from "./canvasBoardSaveQueue";
 import {
   attachNodeToThread,
@@ -1083,6 +1085,14 @@ export default function CanvasWindowApp({
   const [createDraft, setCreateDraft] = useState("");
   const [draggedBoardId, setDraggedBoardId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CanvasBoardSummary | null>(null);
+  // ライブラリと作品の間でボードを移動・コピーする。
+  const [transferDestinations, setTransferDestinations] = useState<{ path: string; label: string }[]>([]);
+  const [transferTarget, setTransferTarget] = useState<{
+    board: CanvasBoardSummary;
+    referenceCount: number;
+  } | null>(null);
+  const [transferForm, setTransferForm] = useState({ destination: "", mode: "copy", references: "copy" });
+  const [isTransferring, setIsTransferring] = useState(false);
   const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
   const [trashedBoards, setTrashedBoards] = useState<TrashedCanvasBoardSummary[]>([]);
   const [isTrashLoading, setIsTrashLoading] = useState(false);
@@ -1912,11 +1922,128 @@ export default function CanvasWindowApp({
     void persistBoardOrder(withoutSource);
   };
 
+  useEffect(() => {
+    const rootPath = payload?.rootPath;
+    if (!rootPath || !isTauriRuntime()) {
+      setTransferDestinations([]);
+      return;
+    }
+    let cancelled = false;
+    invoke<{ path: string; label: string }[]>("library_transfer_destinations", { rootPath })
+      .then((destinations) => {
+        if (!cancelled) setTransferDestinations(destinations);
+      })
+      .catch(() => {
+        if (!cancelled) setTransferDestinations([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [payload?.rootPath]);
+
+  const openTransfer = async (item: CanvasBoardSummary) => {
+    if (!payload) return;
+    setIsBoardMenuOpen(false);
+    try {
+      await boardSaveQueue.flush();
+      const document = normalizeCanvasDocument(
+        await loadBoard(scope, payload.rootPath, item.id),
+        item.name,
+        scope,
+      );
+      setTransferForm({ destination: transferDestinations[0]?.path ?? "", mode: "copy", references: "copy" });
+      setTransferTarget({ board: item, referenceCount: boardReferencePaths(document).length });
+    } catch (error) {
+      setStatus(String(error));
+    }
+  };
+
+  /** ボード本体・参照している資料・中間稿を送り先へ写す。移動ならボードを元のゴミ箱へ入れる。 */
+  const submitTransfer = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!transferTarget || !payload?.rootPath || isTransferring) return;
+    const source = transferTarget.board;
+    const rootPath = payload.rootPath;
+    const destination = transferDestinations.find((item) => item.path === transferForm.destination);
+    if (!destination) return;
+    setIsTransferring(true);
+    setStatus("ボードを送っています");
+    try {
+      await boardSaveQueue.flush();
+      await flushDraftBoard({ scope, rootPath, boardId: source.id });
+      const document = normalizeCanvasDocument(
+        await loadBoard(scope, rootPath, source.id),
+        source.name,
+        scope,
+      );
+      const referencedPaths = boardReferencePaths(document);
+      const rewrite: ReferenceRewrite = { copied: new Map(), dropped: new Set() };
+      if (referencedPaths.length && transferForm.references === "copy") {
+        const transferred = await invoke<{ from: string; file: ReferenceFileInfo }[]>(
+          "transfer_reference_files",
+          {
+            sourceRoot: rootPath,
+            targetRoot: destination.path,
+            sourcePaths: referencedPaths,
+            removeImportedSources: false,
+          },
+        );
+        for (const item of transferred) rewrite.copied.set(normalizedReferenceKey(item.from), item.file);
+      } else if (referencedPaths.length) {
+        for (const path of referencedPaths) rewrite.dropped.add(normalizedReferenceKey(path));
+      }
+
+      const created = await invoke<CanvasBoardSummary>("create_canvas_board", {
+        scope: "project",
+        rootPath: destination.path,
+        name: source.name,
+      });
+      await invoke("save_canvas_board", {
+        scope: "project",
+        rootPath: destination.path,
+        boardId: created.id,
+        board: rewriteBoard(document, rewrite),
+      });
+      const draft = await invoke<DraftHistory>("load_intermediate_draft", {
+        scope,
+        rootPath,
+        boardId: source.id,
+      });
+      if (draft.versions.length) {
+        await invoke("save_intermediate_draft", {
+          scope: "project",
+          rootPath: destination.path,
+          boardId: created.id,
+          history: { ...draft, boardId: created.id, revision: 0 },
+          expectedRevision: 0,
+        });
+      }
+
+      const move = transferForm.mode === "move";
+      setTransferTarget(null);
+      if (move) {
+        await trashBoardAndRefresh(source);
+        setStatus(`「${source.name}」を${destination.label}へ移動しました（元のボードはゴミ箱にあります）`);
+      } else {
+        setStatus(`「${source.name}」を${destination.label}へコピーしました`);
+      }
+    } catch (error) {
+      setStatus(`送れませんでした: ${String(error)}`);
+    } finally {
+      setIsTransferring(false);
+    }
+  };
+
   const confirmDeleteBoard = async () => {
-    if (!deleteTarget || !payload) return;
+    if (!deleteTarget) return;
     const target = deleteTarget;
-    const deletedIndex = boards.findIndex((item) => item.id === target.id);
     setDeleteTarget(null);
+    await trashBoardAndRefresh(target);
+  };
+
+  const trashBoardAndRefresh = async (target: CanvasBoardSummary) => {
+    if (!payload) return;
+    const deletedIndex = boards.findIndex((item) => item.id === target.id);
     setIsBoardMenuOpen(false);
     setStatus("ボードをゴミ箱へ移動中");
 
@@ -2755,6 +2882,16 @@ export default function CanvasWindowApp({
                       >
                         <CanvasGlyph name="chevronDown" />
                       </button>
+                      {transferDestinations.length > 0 && (
+                        <button
+                          type="button"
+                          aria-label={`「${item.name}」を移動・コピー`}
+                          title="ライブラリ・作品へ移動・コピー"
+                          onClick={() => void openTransfer(item)}
+                        >
+                          <CanvasGlyph name="send" />
+                        </button>
+                      )}
                       <button
                         className="dangerCanvasButton"
                         type="button"
@@ -3480,6 +3617,66 @@ export default function CanvasWindowApp({
                 キャンセル
               </button>
               <button type="submit">作成</button>
+            </footer>
+          </form>
+        </div>
+      )}
+      {transferTarget && (
+        <div className="canvasModalBackdrop" role="presentation">
+          <form className="canvasRenameModal" onSubmit={(event) => void submitTransfer(event)}>
+            <header>
+              <h2>「{transferTarget.board.name}」を移動・コピー</h2>
+              <button type="button" aria-label="閉じる" onClick={() => setTransferTarget(null)}>
+                ×
+              </button>
+            </header>
+            <label>
+              <span>送り先</span>
+              <select
+                value={transferForm.destination}
+                onChange={(event) =>
+                  setTransferForm((current) => ({ ...current, destination: event.target.value }))
+                }
+              >
+                {transferDestinations.map((item) => (
+                  <option key={item.path} value={item.path}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>方法</span>
+              <select
+                value={transferForm.mode}
+                onChange={(event) => setTransferForm((current) => ({ ...current, mode: event.target.value }))}
+              >
+                <option value="copy">コピー（元に残す）</option>
+                <option value="move">移動（元のボードはゴミ箱へ）</option>
+              </select>
+            </label>
+            {transferTarget.referenceCount > 0 && (
+              <label>
+                <span>ボード上の資料（{transferTarget.referenceCount}件）</span>
+                <select
+                  value={transferForm.references}
+                  onChange={(event) =>
+                    setTransferForm((current) => ({ ...current, references: event.target.value }))
+                  }
+                >
+                  <option value="copy">送り先へ資料もコピーする</option>
+                  <option value="drop">資料のカードを外す</option>
+                </select>
+              </label>
+            )}
+            <p className="canvasTransferNote">中間稿もボードと一緒に送ります。</p>
+            <footer>
+              <button type="button" onClick={() => setTransferTarget(null)}>
+                キャンセル
+              </button>
+              <button type="submit" disabled={isTransferring}>
+                {isTransferring ? "送っています…" : "実行"}
+              </button>
             </footer>
           </form>
         </div>

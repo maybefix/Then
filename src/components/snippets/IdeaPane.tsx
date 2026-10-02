@@ -53,6 +53,15 @@ type IdeaPaneProps = {
     targetKey: string,
     position: "before" | "after",
   ) => void;
+  /** ライブラリ内のとき、スレッド・断片・資料をライブラリ・作品へ送る操作。 */
+  transfer?: IdeaTransfer;
+};
+
+export type IdeaTransfer = {
+  label: string;
+  onThread: (threadId: string) => void;
+  onFragment: (threadId: string, fragmentId: string) => void;
+  onReferenceFile: (file: ReferenceFileInfo) => void;
 };
 
 const FILTERS: Array<[IdeaFilter, string]> = [["all", "すべて"], ["starred", "スター"]];
@@ -78,6 +87,9 @@ function ChevronLeftIcon() {
 }
 function StarIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24"><polygon points="12 3 15 9 22 9.8 17 14.5 18.2 21.4 12 18.1 5.8 21.4 7 14.5 2 9.8 9 9" /></svg>;
+}
+function SendIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 12h13m-5-6 6 6-6 6M20 5v14" /></svg>;
 }
 function TrashIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>;
@@ -136,7 +148,7 @@ export function IdeaPane(props: IdeaPaneProps) {
     onFragmentDragStart, onFragmentDragEnd, onAddReference,
     onCreateReference, onOpenReference, onMoveReference, onRemoveReference,
     onMoveReferenceToNewThread,
-    onDeleteReferenceFile, onReorderItem,
+    onDeleteReferenceFile, onReorderItem, transfer,
   } = props;
   const inbox = useMemo(() => threads.find((thread) => thread.kind === "inbox"), [threads]);
   const inboxId = inbox?.id ?? "";
@@ -300,7 +312,7 @@ export function IdeaPane(props: IdeaPaneProps) {
             <div className="ideaFragmentBody" contentEditable spellCheck={false} suppressContentEditableWarning onBlur={(event) => { const next = event.currentTarget.textContent ?? ""; if (next.trim()) onUpdateFragment(thread.id, fragment.id, next); else event.currentTarget.textContent = fragment.body; }}>{fragment.body}</div>
             <div className="ideaFragmentFoot">
               <select className="ideaMoveSelect" aria-label="別スレッドへ移動" value="" onChange={(event) => { const value = event.target.value; if (value === NEW_THREAD_VALUE) onMoveFragmentToNewThread(thread.id, fragment.id); else if (value) onMoveFragment(thread.id, fragment.id, value); }}><option value="">移動…</option>{threads.filter((entry) => entry.id !== thread.id).map((entry) => <option key={entry.id} value={entry.id}>{entry.title}</option>)}<option value={NEW_THREAD_VALUE}>＋ 新規スレッドに移動…</option></select>
-              <span className="ideaFragmentBtns"><button className="ideaMiniIcon ideaOpenCardBtn" type="button" aria-label="ポップアップで開く" title="ポップアップで開く" onClick={() => onOpenFragmentCard(thread.id, fragment.id)}><OpenIcon /></button><button className="ideaMiniIcon ideaDeleteBtn" type="button" aria-label="削除" title="削除" onClick={() => onDeleteFragment(thread.id, fragment.id)}><TrashIcon /></button></span>
+              <span className="ideaFragmentBtns"><button className="ideaMiniIcon ideaOpenCardBtn" type="button" aria-label="ポップアップで開く" title="ポップアップで開く" onClick={() => onOpenFragmentCard(thread.id, fragment.id)}><OpenIcon /></button>{transfer && <button className="ideaMiniIcon" type="button" aria-label={transfer.label} title={transfer.label} onClick={() => transfer.onFragment(thread.id, fragment.id)}><SendIcon /></button>}<button className="ideaMiniIcon ideaDeleteBtn" type="button" aria-label="削除" title="削除" onClick={() => onDeleteFragment(thread.id, fragment.id)}><TrashIcon /></button></span>
             </div>
           </div>
         </article>
@@ -332,6 +344,7 @@ export function IdeaPane(props: IdeaPaneProps) {
                 <label>別スレッドへ移動<select value="" onChange={(event) => { const value = event.target.value; if (value === NEW_THREAD_VALUE) onMoveReferenceToNewThread(thread.id, item.id, false); else if (value) onMoveReference(thread.id, item.id, value, false); if (value) setReferenceMenuId(null); }}><option value="">選択…</option>{threads.filter((entry) => entry.id !== thread.id).map((entry) => <option key={entry.id} value={entry.id}>{entry.title}</option>)}<option value={NEW_THREAD_VALUE}>＋ 新規スレッドに移動…</option></select></label>
                 <label>別スレッドにも追加<select value="" onChange={(event) => { const value = event.target.value; if (value === NEW_THREAD_VALUE) onMoveReferenceToNewThread(thread.id, item.id, true); else if (value) onMoveReference(thread.id, item.id, value, true); if (value) setReferenceMenuId(null); }}><option value="">選択…</option>{threads.filter((entry) => entry.id !== thread.id).map((entry) => <option key={entry.id} value={entry.id}>{entry.title}</option>)}<option value={NEW_THREAD_VALUE}>＋ 新規スレッドに追加…</option></select></label>
                 <button type="button" onClick={() => { setReferenceMenuId(null); onRemoveReference(thread.id, item.id); }}>このスレッドから削除</button>
+                {file && transfer && <button type="button" onClick={() => { setReferenceMenuId(null); transfer.onReferenceFile(file); }}>{transfer.label}</button>}
                 {file && <button type="button" className="dangerMenuItem" onClick={() => { setReferenceMenuId(null); onDeleteReferenceFile(file); }}>資料ファイルを削除</button>}
               </div>
             )}
@@ -363,7 +376,7 @@ export function IdeaPane(props: IdeaPaneProps) {
 
         <section className="ideaView" aria-label="スレッド詳細">{selected && <>
           <div className="ideaViewTop ideaDetailTop">
-            <div className="ideaDetailNav"><button className="ideaBackBtn" type="button" onClick={() => setView("list")}><ChevronLeftIcon /><span>一覧</span></button><div className="ideaDetailActions">{selected.kind !== "inbox" && <button className={`ideaIconBtn ${selected.starred ? "isOn" : ""}`} type="button" aria-label="スター" onClick={() => onToggleStar(selected.id)}><StarIcon /></button>}{selected.kind !== "inbox" && <button className="ideaIconBtn" type="button" aria-label="スレッドを削除" onClick={() => onDeleteThread(selected.id)}><TrashIcon /></button>}</div></div>
+            <div className="ideaDetailNav"><button className="ideaBackBtn" type="button" onClick={() => setView("list")}><ChevronLeftIcon /><span>一覧</span></button><div className="ideaDetailActions">{selected.kind !== "inbox" && <button className={`ideaIconBtn ${selected.starred ? "isOn" : ""}`} type="button" aria-label="スター" onClick={() => onToggleStar(selected.id)}><StarIcon /></button>}{selected.kind !== "inbox" && transfer && <button className="ideaIconBtn" type="button" aria-label={transfer.label} title={transfer.label} onClick={() => transfer.onThread(selected.id)}><SendIcon /></button>}{selected.kind !== "inbox" && <button className="ideaIconBtn" type="button" aria-label="スレッドを削除" onClick={() => onDeleteThread(selected.id)}><TrashIcon /></button>}</div></div>
             <input ref={titleInputRef} className="ideaDetailTitle" aria-label="スレッド名" value={selected.title} readOnly={selected.kind === "inbox"} onChange={(event) => onRenameThread(selected.id, event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} />
             <div className="ideaDetailStats"><span>{threadItems(selected, threadLayouts).length} 項目</span></div>
             <div className="ideaCapture ideaCaptureInline"><div className="ideaCaptureBox ideaCaptureStacked"><textarea value={fragmentText} rows={2} placeholder="Ideaを入力…" onChange={(event) => setFragmentText(event.target.value)} onCompositionStart={() => (composingRef.current = true)} onCompositionEnd={() => (composingRef.current = false)} onKeyDown={(event) => handleComposerKeyDown(event, () => { const text = fragmentText.trim(); if (text) { onAddFragment(selected.id, text); setFragmentText(""); } })} /><div className="ideaCaptureControls">{renderClipButton(selected.id, "start")}<span className="ideaCaptureSpacer" /><button className="ideaPrimaryBtn" type="button" disabled={!fragmentText.trim()} onClick={() => { const text = fragmentText.trim(); if (text) { onAddFragment(selected.id, text); setFragmentText(""); } }}><PlusIcon /><span>追加</span></button></div></div></div>

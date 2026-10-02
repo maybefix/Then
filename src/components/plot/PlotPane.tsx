@@ -292,7 +292,11 @@ type PlotBoardProps = {
   /** 管理画面モード: 折りたたみ状態を保存データではなくローカルに持ち、初期は全展開。 */
   managerMode?: boolean;
   className?: string;
+  /** ライブラリ内のとき、カードをライブラリ・作品へ送るメニュー項目。 */
+  transfer?: PlotCardTransfer;
 };
+
+export type PlotCardTransfer = { label: string; onTransfer: (cardId: string) => void };
 
 function PlotBoard({
   cards,
@@ -302,6 +306,7 @@ function PlotBoard({
   onMissingReference,
   managerMode = false,
   className,
+  transfer,
 }: PlotBoardProps) {
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
   const [movingCardId, setMovingCardId] = useState<string | null>(null);
@@ -1105,6 +1110,18 @@ function PlotBoard({
                     章へ移動…
                   </button>
                 )}
+                {transfer && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setContextMenu(null);
+                      transfer.onTransfer(card.id);
+                    }}
+                  >
+                    {transfer.label}
+                  </button>
+                )}
                 <button
                   type="button"
                   role="menuitem"
@@ -1347,6 +1364,7 @@ type PlotPaneProps = {
   onMissingReference?: () => void;
   isManagerOpen?: boolean;
   onManagerOpenChange?: (open: boolean) => void;
+  transfer?: PlotCardTransfer;
 };
 
 type PlotPaneHeaderActionsProps = {
@@ -1403,6 +1421,7 @@ export function PlotPane({
   onMissingReference,
   isManagerOpen,
   onManagerOpenChange,
+  transfer,
 }: PlotPaneProps) {
   const [localManagerOpen, setLocalManagerOpen] = useState(false);
   const managerOpen = isManagerOpen ?? localManagerOpen;
@@ -1416,6 +1435,7 @@ export function PlotPane({
         referenceCandidates={referenceCandidates}
         onOpenReference={onOpenReference}
         onMissingReference={onMissingReference}
+        transfer={transfer}
       />
       {managerOpen && (
         <PlotManagerModal

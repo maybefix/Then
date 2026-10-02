@@ -129,6 +129,7 @@ type WorkspaceSidebarProps = {
   onEnterProject: (path: string) => void;
   onCreateLibraryProject: () => void;
   onImportProject: () => void;
+  onReorderLibraryProjects: (orderedPaths: string[]) => void;
 };
 
 type TreeContextMenu = {
@@ -565,18 +566,51 @@ function LibraryBackButton({
   );
 }
 
-/** ライブラリ直下を開いているとき、ツリーの下に出す作品の一覧。 */
+const LIBRARY_PROJECT_DRAG_TYPE = "application/x-then-library-project";
+
+/** ライブラリ直下を開いているとき、ツリーの下に出す作品の一覧。ドラッグで並び替えられる。 */
 function LibraryProjectList({
   library,
   onEnterProject,
   onCreateProject,
   onImportProject,
+  onReorderProjects,
 }: {
   library: LibraryContext;
   onEnterProject: (path: string) => void;
   onCreateProject: () => void;
   onImportProject: () => void;
+  onReorderProjects: (orderedPaths: string[]) => void;
 }) {
+  const [draggingPath, setDraggingPath] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ path: string; position: "before" | "after" } | null>(
+    null,
+  );
+
+  const endDrag = () => {
+    setDraggingPath(null);
+    setDropTarget(null);
+  };
+
+  const dropPosition = (event: ReactDragEvent<HTMLElement>): "before" | "after" => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+  };
+
+  const handleDrop = (event: ReactDragEvent<HTMLElement>, targetPath: string) => {
+    event.preventDefault();
+    const sourcePath = event.dataTransfer.getData(LIBRARY_PROJECT_DRAG_TYPE) || draggingPath;
+    const position = dropPosition(event);
+    endDrag();
+    if (!sourcePath || sourcePath === targetPath) return;
+    const paths = library.projects.map((project) => project.path).filter((path) => path !== sourcePath);
+    const targetIndex = paths.indexOf(targetPath);
+    if (targetIndex < 0) return;
+    paths.splice(position === "before" ? targetIndex : targetIndex + 1, 0, sourcePath);
+    if (paths.every((path, index) => path === library.projects[index]?.path)) return;
+    onReorderProjects(paths);
+  };
+
   return (
     <section className="libraryProjects" aria-label="作品">
       <div className="libraryProjectsHeader">
@@ -589,10 +623,36 @@ function LibraryProjectList({
       {library.projects.map((project) => (
         <button
           key={project.path}
-          className="libraryProjectRow"
+          className={[
+            "libraryProjectRow",
+            draggingPath === project.path ? "isDragging" : "",
+            dropTarget?.path === project.path ? `dropIndicator-${dropTarget.position}` : "",
+          ].filter(Boolean).join(" ")}
           type="button"
-          title={project.path}
+          title={`${project.path}\nドラッグで並び替え`}
+          draggable
           onClick={() => onEnterProject(project.path)}
+          onDragStart={(event) => {
+            setDraggingPath(project.path);
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData(LIBRARY_PROJECT_DRAG_TYPE, project.path);
+          }}
+          onDragOver={(event) => {
+            if (!draggingPath || draggingPath === project.path) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+            const position = dropPosition(event);
+            setDropTarget((current) =>
+              current?.path === project.path && current.position === position
+                ? current
+                : { path: project.path, position },
+            );
+          }}
+          onDragLeave={() =>
+            setDropTarget((current) => (current?.path === project.path ? null : current))
+          }
+          onDrop={(event) => handleDrop(event, project.path)}
+          onDragEnd={endDrag}
         >
           <span className="libraryProjectBook" aria-hidden="true" />
           <span className="libraryProjectName">{project.name}</span>
@@ -694,6 +754,7 @@ export function WorkspaceSidebar({
   onEnterProject,
   onCreateLibraryProject,
   onImportProject,
+  onReorderLibraryProjects,
 }: WorkspaceSidebarProps) {
   const [contextMenu, setContextMenu] = useState<TreeContextMenu>(null);
   const [headingContextMenu, setHeadingContextMenu] = useState<HeadingContextMenu>(null);
@@ -2559,6 +2620,7 @@ export function WorkspaceSidebar({
             onEnterProject={onEnterProject}
             onCreateProject={onCreateLibraryProject}
             onImportProject={onImportProject}
+            onReorderProjects={onReorderLibraryProjects}
           />
         )}
       </div>

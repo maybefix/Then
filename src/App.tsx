@@ -75,6 +75,13 @@ import { createMarkdownTable, tableAtOffset, tableAlignmentEdit } from "./editor
 import { toggleLineComments } from "./editor/lineComments";
 import { mapTextOffsetThroughChange } from "./editor/textOffsetMapping";
 import { recordImportedProject } from "./utils/library";
+import {
+  plotCardReferencePaths,
+  rewritePlotCard,
+  rewriteThreadItems,
+  threadItemReferencePaths,
+  type ReferenceRewrite,
+} from "./utils/libraryTransfer";
 import { displayedCharacterCount } from "./editor/ast/characterCount";
 import {
   createWorkspaceDocumentTabs,
@@ -178,6 +185,7 @@ import type {
   PlotCard,
   ProjectEntry,
   FolderInspection,
+  LibraryProjectSummary,
   ProjectFolder,
   ProjectImportReport,
   ProofreadSettings,
@@ -8096,12 +8104,295 @@ export default function App() {
     }
   };
 
+  const reorderLibraryProjects = async (orderedPaths: string[]) => {
+    if (!libraryContext || libraryContext.role !== "root") return;
+    const byPath = new Map(libraryContext.projects.map((project) => [project.path, project]));
+    const reordered = orderedPaths.flatMap((path) => byPath.get(path) ?? []);
+    const applyProjects = (projects: LibraryProjectSummary[]) =>
+      setProjectFolder((current) =>
+        current?.library ? { ...current, library: { ...current.library, projects } } : current,
+      );
+    // 先に画面へ反映し、保存に失敗したら保存済みの順へ戻す。
+    applyProjects(reordered);
+    try {
+      const saved = await invoke<LibraryProjectSummary[]>("reorder_library_projects", {
+        libraryPath: libraryContext.path,
+        orderedNames: reordered.map((project) => project.name),
+      });
+      applyProjects(saved);
+    } catch (error) {
+      applyProjects(libraryContext.projects);
+      setLastError(String(error));
+      showToast("作品の並び順を保存できませんでした");
+    }
+  };
+
   const handleImportProjectIntoLibrary = async () => {
     if (!libraryContext) return;
     const sourcePath = await invoke<string | null>("pick_folder_dialog");
     if (!sourcePath) return;
     const report = await importProjectIntoLibrary(sourcePath, libraryContext.path);
     if (report) enterProject(report.projectPath);
+  };
+
+  // ---- ライブラリと作品の間での項目の移動・コピー ----
+  // ライブラリ直下からは作品へ、作品からはライブラリ直下へ送る。
+
+  /** 移動・コピーのメニュー項目名。ライブラリの外では出さない。 */
+  const transferMenuLabel = !libraryContext
+    ? null
+    : libraryContext.role === "root"
+      ? "作品へ移動・コピー…"
+      : "ライブラリへ移動・コピー…";
+
+  const transferDestinations = (): { path: string; label: string }[] => {
+    if (!libraryContext || !projectFolder) return [];
+    return libraryContext.role === "root"
+      ? libraryContext.projects.map((project) => ({ path: project.path, label: `作品「${project.name}」` }))
+      : [{ path: libraryContext.path, label: `ライブラリ「${libraryContext.name}」の直下` }];
+  };
+
+  /** 送り先・移動かコピーか・資料の扱いを尋ねる。 */
+  const requestTransferOptions = async ({
+    itemLabel,
+    referenceCount,
+    canMove = true,
+  }: {
+    itemLabel: string;
+    referenceCount: number;
+    canMove?: boolean;
+  }): Promise<{ target: string; targetLabel: string; move: boolean; copyReferences: boolean } | null> => {
+    const destinations = transferDestinations();
+    if (!destinations.length) {
+      showToast(
+        libraryContext?.role === "root"
+          ? "送り先の作品がありません"
+          : "ライブラリ内の作品を開いているときに使えます",
+      );
+      return null;
+    }
+    const values = await requestMultiInput({
+      title: `${itemLabel}を移動・コピー`,
+      fields: [
+        {
+          id: "target",
+          label: "送り先",
+          initialValue: destinations[0].path,
+          options: destinations.map((item) => ({ value: item.path, label: item.label })),
+        },
+        {
+          id: "mode",
+          label: "方法",
+          initialValue: "copy",
+          options: [
+            { value: "copy", label: "コピー（元に残す）" },
+            ...(canMove ? [{ value: "move", label: "移動（元から取り除く）" }] : []),
+          ],
+        },
+        ...(referenceCount > 0
+          ? [{
+              id: "references",
+              label: `参照している資料（${referenceCount}件）`,
+              initialValue: "copy",
+              options: [
+                { value: "copy", label: "送り先へ資料もコピーする" },
+                { value: "drop", label: "資料への参照を外す" },
+              ],
+            }]
+          : []),
+      ],
+      confirmLabel: "実行",
+    });
+    if (!values) return null;
+    const target = destinations.find((item) => item.path === values.target) ?? destinations[0];
+    return {
+      target: target.path,
+      targetLabel: target.label,
+      move: values.mode === "move",
+      copyReferences: values.references !== "drop",
+    };
+  };
+
+  const isExistingReference = (path: string) =>
+    referenceCandidates.some(
+      (file) => normalizedReferenceKey(file.sourcePath) === normalizedReferenceKey(path),
+    );
+
+  /** 送る項目が参照している資料を、送り先へコピーするか参照を外すかに振り分ける。 */
+  const prepareReferenceRewrite = async (
+    targetPath: string,
+    referencedPaths: string[],
+    copyReferences: boolean,
+  ): Promise<ReferenceRewrite> => {
+    const existing = referencedPaths.filter(isExistingReference);
+    if (!existing.length || !projectFolder) return { copied: new Map(), dropped: new Set() };
+    if (!copyReferences) {
+      return { copied: new Map(), dropped: new Set(existing.map(normalizedReferenceKey)) };
+    }
+    const transferred = await invoke<{ from: string; file: ReferenceFileInfo }[]>(
+      "transfer_reference_files",
+      {
+        sourceRoot: projectFolder.path,
+        targetRoot: targetPath,
+        sourcePaths: existing,
+        removeImportedSources: false,
+      },
+    );
+    return {
+      copied: new Map(transferred.map((item) => [normalizedReferenceKey(item.from), item.file])),
+      dropped: new Set(),
+    };
+  };
+
+  const reportTransferError = (error: unknown) => {
+    setLastError(String(error));
+    showToast(`移動・コピーできませんでした: ${String(error)}`);
+  };
+
+  const transferPlotCard = async (cardId: string) => {
+    const card = plotCards.find((item) => item.id === cardId);
+    if (!card) return;
+    const referencedPaths = plotCardReferencePaths([card]);
+    const options = await requestTransferOptions({
+      itemLabel: card.kind === "chapter" ? "章ラベル" : "プロット",
+      referenceCount: referencedPaths.filter(isExistingReference).length,
+    });
+    if (!options) return;
+    try {
+      const rewrite = await prepareReferenceRewrite(options.target, referencedPaths, options.copyReferences);
+      const targetCards = await loadWorkspacePlotCards(options.target);
+      await saveWorkspacePlotCards(options.target, [
+        ...targetCards,
+        { ...rewritePlotCard(card, rewrite), id: crypto.randomUUID() },
+      ]);
+      if (options.move) setPlotCards((current) => current.filter((item) => item.id !== cardId));
+      showToast(`${options.targetLabel}へ${options.move ? "移動" : "コピー"}しました`);
+    } catch (error) {
+      reportTransferError(error);
+    }
+  };
+
+  const ensureIdeaTransferAvailable = () => {
+    if (settings.snippetStorageMode === "workspace") return true;
+    showToast("Idea をプロファイルに保存している間は、作品ごとの移動・コピーはできません");
+    return false;
+  };
+
+  const transferIdeaThread = async (threadId: string) => {
+    if (!ensureIdeaTransferAvailable()) return;
+    const thread = snippets.find((item) => item.id === threadId);
+    if (!thread || thread.kind === "inbox") return;
+    const layout = referenceLayout.ideaThreads.find((item) => item.threadId === threadId);
+    const referencedPaths = threadItemReferencePaths(layout?.items ?? []);
+    const options = await requestTransferOptions({
+      itemLabel: "スレッド",
+      referenceCount: referencedPaths.filter(isExistingReference).length,
+    });
+    if (!options) return;
+    try {
+      const rewrite = await prepareReferenceRewrite(options.target, referencedPaths, options.copyReferences);
+      const fragmentIds = new Map(thread.fragments.map((fragment) => [fragment.id, crypto.randomUUID()]));
+      const copiedThread: IdeaThread = {
+        ...thread,
+        id: crypto.randomUUID(),
+        updatedAt: Date.now(),
+        fragments: thread.fragments.map((fragment) => ({
+          ...fragment,
+          id: fragmentIds.get(fragment.id) ?? crypto.randomUUID(),
+        })),
+      };
+      const [targetThreads, targetLayout] = await Promise.all([
+        loadWorkspaceSnippets(options.target),
+        loadReferenceLayout(options.target),
+      ]);
+      await saveWorkspaceSnippets(options.target, [...targetThreads, copiedThread]);
+      if (layout) {
+        const items = rewriteThreadItems(layout.items, rewrite).map((item) =>
+          item.sourceType === "idea"
+            ? { ...item, fragmentId: fragmentIds.get(item.fragmentId) ?? item.fragmentId }
+            : { ...item, id: crypto.randomUUID() },
+        );
+        await saveReferenceLayout(options.target, {
+          ...targetLayout,
+          ideaThreads: [...targetLayout.ideaThreads, { threadId: copiedThread.id, items }],
+        });
+      }
+      if (options.move) updateIdeaThreads((threads) => threads.filter((item) => item.id !== threadId));
+      showToast(`スレッドを${options.targetLabel}へ${options.move ? "移動" : "コピー"}しました`);
+    } catch (error) {
+      reportTransferError(error);
+    }
+  };
+
+  const transferIdeaFragment = async (threadId: string, fragmentId: string) => {
+    if (!ensureIdeaTransferAvailable()) return;
+    const fragment = snippets
+      .find((item) => item.id === threadId)
+      ?.fragments.find((item) => item.id === fragmentId);
+    if (!fragment) return;
+    const options = await requestTransferOptions({ itemLabel: "断片", referenceCount: 0 });
+    if (!options) return;
+    try {
+      const targetThreads = await loadWorkspaceSnippets(options.target);
+      const copiedFragment = { ...fragment, id: crypto.randomUUID(), updatedAt: Date.now() };
+      // 送り先では未整理メモ（インボックス）に入れる。読み込みで必ずインボックスが補われる。
+      const nextThreads = targetThreads.map((item) =>
+        item.kind === "inbox"
+          ? { ...item, updatedAt: Date.now(), fragments: [...item.fragments, copiedFragment] }
+          : item,
+      );
+      await saveWorkspaceSnippets(options.target, nextThreads);
+      if (options.move) {
+        patchThread(threadId, (thread) => ({
+          ...thread,
+          fragments: thread.fragments.filter((item) => item.id !== fragmentId),
+        }));
+      }
+      showToast(`断片を${options.targetLabel}のインボックスへ${options.move ? "移動" : "コピー"}しました`);
+    } catch (error) {
+      reportTransferError(error);
+    }
+  };
+
+  const transferReferenceFile = async (file: ReferenceFileInfo) => {
+    if (!projectFolder) return;
+    const options = await requestTransferOptions({
+      itemLabel: "資料",
+      referenceCount: 0,
+      // ツリー内の文書として置かれた資料は元の場所から動かさない。
+      canMove: file.imported,
+    });
+    if (!options) return;
+    try {
+      await invoke("transfer_reference_files", {
+        sourceRoot: projectFolder.path,
+        targetRoot: options.target,
+        sourcePaths: [file.sourcePath],
+        removeImportedSources: options.move,
+      });
+      if (options.move) {
+        const key = normalizedReferenceKey(file.sourcePath);
+        setReferenceCandidates((current) =>
+          current.filter((item) => normalizedReferenceKey(item.sourcePath) !== key),
+        );
+        setReferenceLayout((current) => ({
+          ...current,
+          cards: current.cards.filter(
+            (card) => !isReferenceBinderCard(card) || normalizedReferenceKey(card.sourcePath) !== key,
+          ),
+          recent: current.recent.filter((item) => normalizedReferenceKey(item.sourcePath) !== key),
+          ideaThreads: current.ideaThreads.map((layout) => ({
+            ...layout,
+            items: layout.items.filter(
+              (item) => item.sourceType !== "reference" || normalizedReferenceKey(item.sourcePath) !== key,
+            ),
+          })),
+        }));
+      }
+      showToast(`「${file.name}」を${options.targetLabel}へ${options.move ? "移動" : "コピー"}しました`);
+    } catch (error) {
+      reportTransferError(error);
+    }
   };
 
   const handleOpenProjectFolder = async () => {
@@ -12372,6 +12663,7 @@ export default function App() {
                     onEnterProject={enterProject}
                     onCreateLibraryProject={() => void handleCreateLibraryProject()}
                     onImportProject={() => void handleImportProjectIntoLibrary()}
+                    onReorderLibraryProjects={(paths) => void reorderLibraryProjects(paths)}
                 />
                 )}
             </div>
@@ -13008,6 +13300,11 @@ export default function App() {
                       onMissingReference={() => showToast("存在しないファイルです")}
                       isManagerOpen={isPlotManagerOpen}
                       onManagerOpenChange={setIsPlotManagerOpen}
+                      transfer={
+                        transferMenuLabel
+                          ? { label: transferMenuLabel, onTransfer: (cardId) => void transferPlotCard(cardId) }
+                          : undefined
+                      }
                     />
                   ) : (
                     <BinderPane
@@ -13055,6 +13352,16 @@ export default function App() {
                         void handleDeleteImportedReference(file.sourcePath, file.scope)
                       }
                       onReorderItem={reorderIdeaThreadItem}
+                      transfer={
+                        transferMenuLabel
+                          ? {
+                              label: transferMenuLabel,
+                              onThread: (threadId) => void transferIdeaThread(threadId),
+                              onFragment: (threadId, fragmentId) => void transferIdeaFragment(threadId, fragmentId),
+                              onReferenceFile: (file) => void transferReferenceFile(file),
+                            }
+                          : undefined
+                      }
                     />
                   )}
                 </div>

@@ -4840,6 +4840,18 @@ body {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.libraryProjectRow.isDragging {
+  opacity: 0.4;
+}
+
+.libraryProjectRow.dropIndicator-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.libraryProjectRow.dropIndicator-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
 .libraryProjectBook {
   flex: none;
   width: 14px;
@@ -11958,7 +11970,8 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   font-size: 12px;
 }
 
-.canvasRenameModal input {
+.canvasRenameModal input,
+.canvasRenameModal select {
   height: 36px;
   min-width: 0;
   border: 1px solid var(--canvas-toolbar-border);
@@ -11988,6 +12001,12 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--selection-text);
+}
+
+.canvasTransferNote {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .canvasDeleteModal p {

@@ -63,7 +63,9 @@ const canvasUrl = await compile("src/CanvasWindowApp.tsx", {
   "./components/references/ReferenceLayer": url("export const ReferenceReadOnlyPreview = () => null;"),
   "./components/canvas/IntermediateDraftPane": url("export default () => null;"),
   "./intermediateDraft": await compile("src/intermediateDraft.ts"),
-  "./intermediateDraftStore": url("export const prepareDraftBoardTrash = async () => {};"),
+  "./intermediateDraftStore": url("export const prepareDraftBoardTrash = async () => {}; export const flushDraftBoard = async () => {};"),
+  "./utils/libraryTransfer": url("export const boardReferencePaths = () => []; export const rewriteBoard = (board) => board;"),
+  "./ideaReferenceModel": url("export const normalizedReferenceKey = (path) => path;"),
   "./canvasBoardSaveQueue": queueUrl,
 });
 const { default: Canvas } = await import(canvasUrl);
