@@ -712,6 +712,7 @@ export type AppDialog =
       type: "createFile";
       title: string;
       fileName: string;
+      extension: "txt" | "md";
       templateId: string;
       templates: TextTemplateSummary[];
       confirmLabel: string;

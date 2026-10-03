@@ -4217,6 +4217,48 @@ html:not([data-window-fullscreen="true"])
   padding: 0;
 }
 
+.dialogRadioGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.dialogRadioGroup legend {
+  float: left;
+  margin-right: 6px;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.modalForm .dialogRadioGroup label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.modalForm .dialogRadioGroup input[type="radio"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent, currentColor);
+}
+
+.dialogRadioGroup small {
+  margin-left: 5px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
 .modalForm textarea {
   min-height: 138px;
   resize: vertical;

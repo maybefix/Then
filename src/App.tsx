@@ -6586,7 +6586,8 @@ export default function App() {
       setAppDialog({
         type: "createFile",
         title: "新規ファイルを作成",
-        fileName: "新規ノート.txt",
+        fileName: "新規ノート",
+        extension: "txt",
         templateId: "",
         templates,
         confirmLabel: "作成",
@@ -6689,12 +6690,12 @@ export default function App() {
         return null;
       }
       if (current.type === "createFile") {
-        const fileName = current.fileName.trim();
-        if (!fileName) {
+        const baseName = current.fileName.trim().replace(/\.(?:txt|md)$/i, "").trim();
+        if (!baseName) {
           return { ...current, error: "テキストファイル名を入力してください" };
         }
         current.resolve({
-          fileName,
+          fileName: `${baseName}.${current.extension}`,
           templateId: current.templateId || null,
         });
         return null;
@@ -6719,6 +6720,11 @@ export default function App() {
     setAppDialog((current) => {
       if (current?.type === "createFile") {
         if (fieldId === "fileName") return { ...current, fileName: value, error: "" };
+        if (fieldId === "extension") {
+          return value === "txt" || value === "md"
+            ? { ...current, extension: value, error: "" }
+            : current;
+        }
         if (fieldId === "templateId") return { ...current, templateId: value, error: "" };
         return current;
       }

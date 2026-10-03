@@ -184,10 +184,33 @@ export function AppDialogModal({
               <span>テキストファイル名</span>
               <input
                 value={dialog.fileName}
-                placeholder="例: chapter-01.txt"
+                placeholder="例: chapter-01"
                 onChange={(event) => onFieldValueChange("fileName", event.target.value)}
               />
             </label>
+            <fieldset className="dialogRadioGroup">
+              <legend>形式</legend>
+              {(
+                [
+                  { value: "txt", label: ".txt", hint: "テキスト" },
+                  { value: "md", label: ".md", hint: "Markdown" },
+                ] as const
+              ).map((option) => (
+                <label key={option.value}>
+                  <input
+                    type="radio"
+                    name="createFileExtension"
+                    value={option.value}
+                    checked={dialog.extension === option.value}
+                    onChange={() => onFieldValueChange("extension", option.value)}
+                  />
+                  <span>
+                    {option.label}
+                    <small>{option.hint}</small>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
             <label>
               <span>テンプレート</span>
               <select
