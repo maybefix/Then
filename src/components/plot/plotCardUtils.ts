@@ -30,30 +30,43 @@ export const renumberPlotCards = (cards: PlotCard[]) => {
   });
 };
 
+const newPlotCardId = (prefix: string) =>
+  `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+export const createPlotSection = (patch: Partial<Pick<PlotCard, "title" | "body">> = {}): PlotCard => ({
+  id: newPlotCardId("plot"),
+  kind: "section",
+  num: "",
+  title: "",
+  body: "",
+  ...patch,
+  // 追加直後にそのままタイトルを打てるよう、新しいセクションは展開状態で作る。
+  expanded: true,
+  managerCollapsed: false,
+});
+
+export const createPlotChapter = (): PlotCard => ({
+  id: newPlotCardId("chapter"),
+  kind: "chapter",
+  num: "",
+  title: "",
+  body: "",
+  expanded: true,
+  managerCollapsed: false,
+});
+
+/** 章カードの位置から、その章に属するセクション群の直後（次の章 or 末尾）の index を返す。 */
+export const plotChapterGroupEnd = (cards: PlotCard[], chapterIndex: number) => {
+  let end = chapterIndex + 1;
+  while (end < cards.length && cards[end].kind !== "chapter") end += 1;
+  return end;
+};
+
+export const insertPlotCard = (cards: PlotCard[], index: number, card: PlotCard) =>
+  renumberPlotCards([...cards.slice(0, index), card, ...cards.slice(index)]);
+
 export const appendPlotSection = (cards: PlotCard[]) =>
-  renumberPlotCards([
-    ...cards,
-    {
-      id: `plot-${Date.now()}`,
-      kind: "section",
-      num: "",
-      title: "",
-      body: "",
-      expanded: false,
-      managerCollapsed: false,
-    },
-  ]);
+  insertPlotCard(cards, cards.length, createPlotSection());
 
 export const appendPlotChapter = (cards: PlotCard[]) =>
-  renumberPlotCards([
-    ...cards,
-    {
-      id: `chapter-${Date.now()}`,
-      kind: "chapter",
-      num: "",
-      title: "",
-      body: "",
-      expanded: true,
-      managerCollapsed: false,
-    },
-  ]);
+  insertPlotCard(cards, cards.length, createPlotChapter());

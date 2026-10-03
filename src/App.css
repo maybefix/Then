@@ -3598,7 +3598,8 @@ html:not([data-window-fullscreen="true"])
 
 .toast {
   position: absolute;
-  z-index: 7;
+  /* 削除の「元に戻す」をプロット管理画面（モーダル z-index 10）の上でも押せるように。 */
+  z-index: 11;
   bottom: 38px;
   left: 50%;
   display: flex;
@@ -9179,6 +9180,7 @@ body {
 }
 
 .plotCard {
+  position: relative;
   display: flex;
   min-width: 0;
   flex: 0 0 auto;
@@ -9196,65 +9198,11 @@ body {
   border-right: 0.5px solid var(--border-subtle);
 }
 
-.plotCardToolbar {
-  display: grid;
-  flex: 0 0 auto;
-  align-self: flex-end;
-  justify-items: center;
-  gap: 5px;
-  margin-bottom: 8px;
-  padding-right: 2px;
-}
-
-.plotToolButton {
-  display: inline-grid;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
-  place-items: center;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.plotToolButton:hover:not(:disabled) {
-  background: rgba(201, 168, 74, 0.08);
-  color: var(--accent);
-}
-
-.plotToolButton:disabled {
-  cursor: default;
-  opacity: 0.35;
-}
-
-.plotToolButton svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.7;
-}
-
-.plotToolButton svg circle {
-  fill: currentColor;
-  stroke: none;
-}
-
-.plotDragHandle {
-  cursor: grab;
+/* 番号バッジは開閉ボタン兼ドラッグハンドル。 */
+.plotCardNum {
+  position: relative;
   touch-action: none;
   user-select: none;
-}
-
-.plotDragHandle:active {
-  cursor: grabbing;
-}
-
-.plotCardNum {
   writing-mode: vertical-rl;
   min-width: 30px;
   flex: 0 0 auto;
@@ -9270,6 +9218,50 @@ body {
   font-size: 15px;
   font-weight: 600;
   letter-spacing: 0.2em;
+}
+
+/* 畳んだカードに本文があるときの印。以前の開閉ボタンと同じ、カード下端の位置に置く。 */
+.plotCardBodyMark {
+  display: grid;
+  width: 30px;
+  height: 26px;
+  flex: 0 0 26px;
+  place-items: center;
+  margin-top: 16px;
+}
+
+.plotCardBodyMark::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  content: "";
+}
+
+.plotPane:has(.draggingPlotCard),
+.plotPane:has(.draggingPlotCard) * {
+  cursor: grabbing !important;
+}
+
+/* ドラッグ中の差し込み位置。論理的な「前」は右側、「後ろ」は左側。 */
+.plotDropBefore::after,
+.plotDropAfter::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  content: "";
+  pointer-events: none;
+}
+
+.plotDropBefore::after {
+  right: -1px;
+}
+
+.plotDropAfter::after {
+  left: -1px;
 }
 
 .expandedPlotCard .plotCardNum {
@@ -9502,26 +9494,6 @@ body {
   opacity: 1;
 }
 
-.plotCardToggle {
-  display: inline-grid;
-  width: 26px;
-  height: 26px;
-  flex: 0 0 26px;
-  place-items: center;
-  margin-top: 16px;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 20px;
-}
-
-.plotCardToggle:hover {
-  background: rgba(201, 168, 74, 0.08);
-  color: var(--accent);
-}
-
 /* カードの右クリックメニュー（章へ移動／削除）。 */
 .plotContextMenu {
   width: auto;
@@ -9561,15 +9533,17 @@ body {
 /* 章ラベル（プロットの上位概念）。トラック内で縦帯として表示する。
    セクションカードと縦方向のリズム（ツールバー高さ・番号/ブックマーク帯・余白）を揃える。 */
 .plotChapterBand {
+  position: relative;
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
   align-items: flex-end;
-  padding: 0 9px;
+  padding: 0 9px 12px;
   border-radius: 8px;
   background: var(--accent-soft);
 }
 
+/* 章マークは開閉ボタン兼ドラッグハンドル。 */
 .plotChapterMark {
   display: inline-grid;
   min-width: 33px;
@@ -9577,6 +9551,17 @@ body {
   flex: 0 0 auto;
   place-items: center;
   margin-bottom: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.plotChapterMark:hover {
+  background: var(--accent-soft);
 }
 
 .plotChapterMark svg {
@@ -9632,6 +9617,7 @@ body {
 
 .plotChapterCount {
   display: inline-grid;
+  align-self: center;
   flex: 0 0 auto;
   place-items: center;
   min-width: 20px;
@@ -9642,6 +9628,13 @@ body {
   color: var(--accent-strong);
   font-size: 11px;
   font-weight: 600;
+}
+
+/* 開いた章では件数を控えめに。 */
+.plotChapterBand:not(.collapsedPlotChapterBand) .plotChapterCount {
+  background: transparent;
+  color: var(--accent);
+  opacity: 0.75;
 }
 
 /* セクションを別の章へ移動するピッカー。 */

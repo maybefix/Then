@@ -360,7 +360,7 @@
 .appShell[data-theme|="sen"] .plotCard:not(:last-child),
 .appShell[data-theme|="sen"] .plotCardNum,
 .appShell[data-theme|="sen"] .expandedPlotCard .plotCardNum,
-.appShell[data-theme|="sen"] :is(.plotCardTitle, .plotCardBody, .plotToolButton) {
+.appShell[data-theme|="sen"] :is(.plotCardTitle, .plotCardBody) {
   border: 0;
   outline: 0;
   box-shadow: none;
@@ -379,14 +379,6 @@
 .appShell[data-theme|="sen"] :is(.plotCardTitle, .plotCardBody):focus {
   border: 0;
   background: var(--sen-paper);
-  outline: 0;
-  box-shadow: none;
-}
-
-.appShell[data-theme|="sen"] .plotToolButton:is(:hover, :focus-visible):not(:disabled) {
-  border: 0;
-  background: transparent;
-  color: var(--sen-vermilion);
   outline: 0;
   box-shadow: none;
 }

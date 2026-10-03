@@ -22,6 +22,10 @@ import { getScaledFixedMenuPosition } from "../../utils/contextMenuPosition";
 import {
   appendPlotChapter,
   appendPlotSection,
+  createPlotChapter,
+  createPlotSection,
+  insertPlotCard,
+  plotChapterGroupEnd,
   renumberPlotCards,
 } from "./plotCardUtils";
 
@@ -32,7 +36,17 @@ import {
 const modalRoot = (): HTMLElement =>
   (document.querySelector(".appShell") as HTMLElement | null) ?? document.body;
 
-type PlotIconName = "grip" | "list" | "bookmark";
+type PlotIconName = "list" | "bookmark" | "expandAll" | "collapseAll";
+
+/** 論理順（配列順）での差し込み位置。画面上は before = 右側、after = 左側。 */
+type PlotDropTarget = { anchorId: string; position: "before" | "after" };
+
+export type PlotNotify = (message: string, action?: { label: string; onClick: () => void }) => void;
+
+/** 管理画面のヘッダーから「すべて展開/折りたたむ」を頼むためのリクエスト。 */
+type PlotBulkRequest = { nonce: number; expand: boolean };
+
+type PlotMenuItem = { label: string; onSelect: () => void; danger?: boolean };
 
 type PlotCardStyle = CSSProperties & {
   "--plot-body-width"?: string;
@@ -48,8 +62,12 @@ type PlotReferenceSuggestionState = {
   selectedIndex: number;
 };
 
-const PLOT_CONTEXT_MENU_WIDTH = 180;
-const PLOT_CONTEXT_MENU_HEIGHT = 92;
+const PLOT_CONTEXT_MENU_WIDTH = 220;
+const PLOT_CONTEXT_MENU_ITEM_HEIGHT = 30;
+const PLOT_CONTEXT_MENU_DIVIDER_HEIGHT = 9;
+const PLOT_DRAG_THRESHOLD = 4;
+const PLOT_DRAG_EDGE = 36;
+const PLOT_DRAG_EDGE_SPEED = 14;
 const PLOT_REFERENCE_SUGGEST_MENU_WIDTH = 136;
 const PLOT_REFERENCE_SUGGEST_MENU_HEIGHT = 340;
 const DEFAULT_ROWS_PER_COLUMN = 24;
@@ -163,12 +181,65 @@ const measureBodyWidth = (element: HTMLElement) => {
   return Math.max(1, width);
 };
 
-const getPlotContextMenuStyle = (x: number, y: number): CSSProperties => {
+const getPlotContextMenuStyle = (
+  x: number,
+  y: number,
+  itemCount: number,
+  dividerCount: number,
+): CSSProperties => {
   return getScaledFixedMenuPosition(x, y, {
     width: PLOT_CONTEXT_MENU_WIDTH,
-    height: PLOT_CONTEXT_MENU_HEIGHT,
+    height:
+      itemCount * PLOT_CONTEXT_MENU_ITEM_HEIGHT +
+      dividerCount * PLOT_CONTEXT_MENU_DIVIDER_HEIGHT +
+      12,
   });
 };
+
+const isPlotCardExpandedIn = (card: PlotCard, managerMode: boolean) =>
+  managerMode ? !card.managerCollapsed : card.expanded;
+
+const withPlotCardExpanded = (card: PlotCard, expanded: boolean, managerMode: boolean): PlotCard =>
+  managerMode ? { ...card, managerCollapsed: !expanded } : { ...card, expanded };
+
+/** ドラッグしたカード（章なら配下セクションごと）を差し込み位置へ移す。論理順で計算する。 */
+const movePlotCards = (
+  cards: PlotCard[],
+  draggedId: string,
+  drop: PlotDropTarget,
+  managerMode: boolean,
+) => {
+  const draggedIndex = cards.findIndex((card) => card.id === draggedId);
+  if (draggedIndex < 0) return cards;
+  const dragged = cards[draggedIndex];
+  const blockEnd =
+    dragged.kind === "chapter" ? plotChapterGroupEnd(cards, draggedIndex) : draggedIndex + 1;
+  const block = cards.slice(draggedIndex, blockEnd);
+  if (block.some((card) => card.id === drop.anchorId)) return cards;
+
+  const rest = [...cards.slice(0, draggedIndex), ...cards.slice(blockEnd)];
+  const anchorIndex = rest.findIndex((card) => card.id === drop.anchorId);
+  if (anchorIndex < 0) return cards;
+  const anchor = rest[anchorIndex];
+
+  let insertAt = drop.position === "before" ? anchorIndex : anchorIndex + 1;
+  // 折りたたんだ章の「後ろ」は、帯が代表している配下セクション群の後ろ。
+  if (
+    drop.position === "after" &&
+    anchor.kind === "chapter" &&
+    !isPlotCardExpandedIn(anchor, managerMode)
+  ) {
+    insertAt = plotChapterGroupEnd(rest, anchorIndex);
+  }
+
+  const next = [...rest.slice(0, insertAt), ...block, ...rest.slice(insertAt)];
+  return next.every((card, index) => card.id === cards[index].id) ? cards : renumberPlotCards(next);
+};
+
+const plotCardPlainText = (card: PlotCard, referenceByPath: Map<string, ReferenceFileInfo>) =>
+  [card.title.trim(), displayPlotReferenceLinks(card.body, referenceByPath).trim()]
+    .filter(Boolean)
+    .join("\n");
 
 /** 章ごとに [章カード, ...配下のセクション] をまとめたグループ列を返す。
  *  先頭の章ラベルが付く前のセクション群は chapter=null の「冒頭」グループになる。 */
@@ -201,15 +272,18 @@ function PlotIcon({ name }: { name: PlotIconName }) {
   };
 
   switch (name) {
-    case "grip":
+    case "expandAll":
       return (
         <svg {...common}>
-          <circle cx="9" cy="6" r="1.2" />
-          <circle cx="15" cy="6" r="1.2" />
-          <circle cx="9" cy="12" r="1.2" />
-          <circle cx="15" cy="12" r="1.2" />
-          <circle cx="9" cy="18" r="1.2" />
-          <circle cx="15" cy="18" r="1.2" />
+          <path d="M9 6l-6 6 6 6" />
+          <path d="M15 6l6 6-6 6" />
+        </svg>
+      );
+    case "collapseAll":
+      return (
+        <svg {...common}>
+          <path d="M3 6l6 6-6 6" />
+          <path d="M21 6l-6 6 6 6" />
         </svg>
       );
     case "list":
@@ -294,6 +368,11 @@ type PlotBoardProps = {
   className?: string;
   /** ライブラリ内のとき、カードをライブラリ・作品へ送るメニュー項目。 */
   transfer?: PlotCardTransfer;
+  /** 削除の取り消しやコピー完了を伝えるトースト。 */
+  onNotify?: PlotNotify;
+  bulkRequest?: PlotBulkRequest | null;
+  /** 管理画面の背後にあるボードなど、フォーカスを奪ってはいけないとき true。 */
+  inactive?: boolean;
 };
 
 export type PlotCardTransfer = { label: string; onTransfer: (cardId: string) => void };
@@ -307,10 +386,13 @@ function PlotBoard({
   managerMode = false,
   className,
   transfer,
+  onNotify,
+  bulkRequest,
+  inactive = false,
 }: PlotBoardProps) {
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<PlotDropTarget | null>(null);
   const [movingCardId, setMovingCardId] = useState<string | null>(null);
-  const [deletingCardId, setDeletingCardId] = useState<string | null>(null);
   const [editingBodyCardId, setEditingBodyCardId] = useState<string | null>(null);
   const [bodyDrafts, setBodyDrafts] = useState<Record<string, string>>({});
   const [referenceSuggestion, setReferenceSuggestion] =
@@ -321,7 +403,12 @@ function PlotBoard({
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const paneRef = useRef<HTMLDivElement | null>(null);
   const isPinnedToRightRef = useRef(true);
-  const draggingCardIdRef = useRef<string | null>(null);
+  /** 番号バッジ／章マークを押した直後。しきい値を超えて動いたらドラッグに昇格する。 */
+  const pendingDragRef = useRef<{ cardId: string; x: number; y: number } | null>(null);
+  const suppressToggleClickRef = useRef(false);
+  const dropTargetRef = useRef<PlotDropTarget | null>(null);
+  const prevCardIdsRef = useRef<Set<string> | null>(null);
+  const revealCardIdRef = useRef<string | null>(null);
   // 初回表示で先頭（右端）に合わせたかどうかの判定に使う直前の scrollWidth。
   const prevScrollWidthRef = useRef(0);
   const prevClientWidthRef = useRef(0);
@@ -393,34 +480,95 @@ function PlotBoard({
     }
   }
 
-  const moveCard = useCallback(
-    (draggedId: string, targetId: string) => {
-      if (draggedId === targetId) return;
+  /** ポインタ位置から差し込み位置を求める。章のドラッグは章の区切りにだけ落とせる。 */
+  const resolveDropTarget = useCallback(
+    (draggedId: string, clientX: number, clientY: number): PlotDropTarget | null => {
+      const pane = paneRef.current;
+      const element = document
+        .elementFromPoint(clientX, clientY)
+        ?.closest<HTMLElement>("[data-plot-card-id]");
+      if (!pane || !element || !pane.contains(element)) return null;
+      const anchorId = element.dataset.plotCardId;
+      if (!anchorId) return null;
 
-      onCardsChange((current) => {
-        const visualOrder = [...current].reverse();
-        const draggedIndex = visualOrder.findIndex((card) => card.id === draggedId);
-        const targetVisualIndex = visualOrder.findIndex((card) => card.id === targetId);
-        const draggedCard = visualOrder.find((card) => card.id === draggedId);
-        if (!draggedCard || draggedIndex < 0 || targetVisualIndex < 0) return current;
+      const rect = element.getBoundingClientRect();
+      // 縦書きの並びは右から左。カードの右半分なら論理的に「前」。
+      const position = clientX > rect.left + rect.width / 2 ? "before" : "after";
 
-        const withoutDragged = visualOrder.filter((card) => card.id !== draggedId);
-        const targetIndex = withoutDragged.findIndex((card) => card.id === targetId);
-        if (targetIndex < 0) return current;
+      const dragged = cards.find((card) => card.id === draggedId);
+      if (!dragged) return null;
+      if (dragged.kind === "section") {
+        return anchorId === draggedId ? null : { anchorId, position };
+      }
 
-        const nextVisualOrder = [...withoutDragged];
-        const insertIndex = draggedIndex < targetVisualIndex ? targetIndex + 1 : targetIndex;
-        nextVisualOrder.splice(insertIndex, 0, draggedCard);
-
-        return renumberPlotCards([...nextVisualOrder].reverse());
-      });
+      // 章: ポインタ下のカードが属する章グループの前後に丸める。
+      const anchorIndex = cards.findIndex((card) => card.id === anchorId);
+      let groupStart = anchorIndex;
+      while (groupStart >= 0 && cards[groupStart].kind !== "chapter") groupStart -= 1;
+      if (groupStart >= 0 && cards[groupStart].id === draggedId) return null;
+      const groupEnd = groupStart >= 0 ? plotChapterGroupEnd(cards, groupStart) : plotChapterGroupEnd(cards, -1);
+      // 冒頭グループ（章なし）の前に章を置くと冒頭が章に吸収されるので、常にその後ろへ。
+      if (groupStart < 0 || position === "after") {
+        const lastVisible =
+          groupStart >= 0 && !isCardExpanded(cards[groupStart])
+            ? cards[groupStart]
+            : cards[groupEnd - 1];
+        if (!lastVisible || lastVisible.id === draggedId) return null;
+        return { anchorId: lastVisible.id, position: "after" };
+      }
+      return { anchorId: cards[groupStart].id, position: "before" };
     },
-    [onCardsChange],
+    [cards, isCardExpanded],
   );
+
+  const commitDrop = useCallback(
+    (draggedId: string, drop: PlotDropTarget) => {
+      onCardsChange((current) => movePlotCards(current, draggedId, drop, managerMode));
+    },
+    [managerMode, onCardsChange],
+  );
+
+  // 追加・挿入・複製で 1 枚だけ増えたら、そのカードを見える位置に出してタイトルへフォーカスする。
+  useLayoutEffect(() => {
+    const previous = prevCardIdsRef.current;
+    prevCardIdsRef.current = new Set(cards.map((card) => card.id));
+    if (!previous) return;
+    const added = cards.filter((card) => !previous.has(card.id));
+    const removedAny = [...previous].some((id) => !prevCardIdsRef.current?.has(id));
+    if (added.length === 1 && !removedAny) revealCardIdRef.current = added[0].id;
+  }, [cards]);
 
   useLayoutEffect(() => {
     const pane = paneRef.current;
     if (!pane) return;
+
+    const revealId = revealCardIdRef.current;
+    if (revealId) {
+      revealCardIdRef.current = null;
+      const element = pane.querySelector<HTMLElement>(
+        `[data-plot-card-id="${CSS.escape(revealId)}"]`,
+      );
+      if (element) {
+        const paneRect = pane.getBoundingClientRect();
+        const rect = element.getBoundingClientRect();
+        const margin = 16;
+        if (rect.left < paneRect.left + margin) {
+          pane.scrollLeft -= paneRect.left + margin - rect.left;
+        } else if (rect.right > paneRect.right - margin) {
+          pane.scrollLeft += rect.right - (paneRect.right - margin);
+        }
+        const maxScrollLeft = Math.max(0, pane.scrollWidth - pane.clientWidth);
+        isPinnedToRightRef.current = Math.abs(pane.scrollLeft - maxScrollLeft) < SCROLL_PIN_TOLERANCE;
+        prevScrollWidthRef.current = pane.scrollWidth;
+        prevClientWidthRef.current = pane.clientWidth;
+        if (!inactive) {
+          element
+            .querySelector<HTMLTextAreaElement>(".plotCardTitle, .plotChapterTitle")
+            ?.focus({ preventScroll: true });
+        }
+        return;
+      }
+    }
 
     const maxScrollLeft = Math.max(0, pane.scrollWidth - pane.clientWidth);
     const prevMaxScrollLeft = Math.max(
@@ -506,39 +654,118 @@ function PlotBoard({
     element.setSelectionRange(cursor, cursor);
   }, [editingBodyCardId]);
 
+  // ドラッグ中は差し込み位置の線だけを動かし、離したときに一度だけ並べ替える。
+  // ペインの端に近づいたら自動で横スクロールする。
   useLayoutEffect(() => {
     if (!draggingCardId) return;
+    const pane = paneRef.current;
+    let pointer: { x: number; y: number } | null = null;
+    let frameId = 0;
 
-    const handlePointerMove = (event: PointerEvent) => {
-      const draggedId = draggingCardIdRef.current;
-      if (!draggedId) return;
-
-      const target = document
-        .elementFromPoint(event.clientX, event.clientY)
-        ?.closest<HTMLElement>("[data-plot-card-id]");
-      const targetId = target?.dataset.plotCardId;
-
-      if (targetId && targetId !== draggedId) {
-        event.preventDefault();
-        moveCard(draggedId, targetId);
-      }
+    const updateDrop = () => {
+      if (!pointer) return;
+      const next = resolveDropTarget(draggingCardId, pointer.x, pointer.y);
+      const current = dropTargetRef.current;
+      if (next?.anchorId === current?.anchorId && next?.position === current?.position) return;
+      dropTargetRef.current = next;
+      setDropTarget(next);
     };
 
-    const handlePointerUp = () => {
-      draggingCardIdRef.current = null;
+    const autoScroll = () => {
+      frameId = requestAnimationFrame(autoScroll);
+      if (!pane || !pointer) return;
+      const rect = pane.getBoundingClientRect();
+      let delta = 0;
+      if (pointer.x < rect.left + PLOT_DRAG_EDGE) delta = -PLOT_DRAG_EDGE_SPEED;
+      else if (pointer.x > rect.right - PLOT_DRAG_EDGE) delta = PLOT_DRAG_EDGE_SPEED;
+      if (!delta) return;
+      const before = pane.scrollLeft;
+      pane.scrollLeft = before + delta;
+      if (pane.scrollLeft !== before) updateDrop();
+    };
+    frameId = requestAnimationFrame(autoScroll);
+
+    const handlePointerMove = (event: PointerEvent) => {
+      event.preventDefault();
+      pointer = { x: event.clientX, y: event.clientY };
+      updateDrop();
+    };
+
+    const finish = (commit: boolean) => {
+      const drop = dropTargetRef.current;
+      dropTargetRef.current = null;
+      setDropTarget(null);
       setDraggingCardId(null);
+      // ボタン外で離すと click が来ないので、抑止フラグはこのイベント処理の後で戻す。
+      window.setTimeout(() => {
+        suppressToggleClickRef.current = false;
+      }, 0);
+      if (commit && drop) commitDrop(draggingCardId, drop);
+    };
+    const handlePointerUp = () => finish(true);
+    const handlePointerCancel = () => finish(false);
+    const handleKeyDown = (event: WindowEventMap["keydown"]) => {
+      if (event.key === "Escape") finish(false);
     };
 
     window.addEventListener("pointermove", handlePointerMove, { passive: false });
     window.addEventListener("pointerup", handlePointerUp);
-    window.addEventListener("pointercancel", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerCancel);
+    window.addEventListener("keydown", handleKeyDown);
 
     return () => {
+      cancelAnimationFrame(frameId);
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
-      window.removeEventListener("pointercancel", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerCancel);
+      window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [draggingCardId, moveCard]);
+  }, [commitDrop, draggingCardId, resolveDropTarget]);
+
+  const handleCardPointerDown = (cardId: string, event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return;
+    // テキスト選択とフォーカス移動を起こさない（click は引き続き届く）。
+    event.preventDefault();
+    pendingDragRef.current = { cardId, x: event.clientX, y: event.clientY };
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      const pending = pendingDragRef.current;
+      if (!pending) return;
+      if (
+        Math.hypot(moveEvent.clientX - pending.x, moveEvent.clientY - pending.y) <
+        PLOT_DRAG_THRESHOLD
+      ) {
+        return;
+      }
+      pendingDragRef.current = null;
+      suppressToggleClickRef.current = true;
+      setReferenceSuggestion(null);
+      setDraggingCardId(pending.cardId);
+      cleanup();
+    };
+    const handleUp = () => {
+      pendingDragRef.current = null;
+      cleanup();
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("pointercancel", handleUp);
+    };
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    window.addEventListener("pointercancel", handleUp);
+  };
+
+  /** ドラッグの直後に飛んでくる click では開閉しない。 */
+  const handleToggleClick = (cardId: string) => {
+    if (suppressToggleClickRef.current) {
+      suppressToggleClickRef.current = false;
+      return;
+    }
+    toggleCard(cardId);
+  };
 
   const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
     const pane = event.currentTarget;
@@ -565,52 +792,90 @@ function PlotBoard({
       maxScrollLeft <= 0 || Math.abs(pane.scrollLeft - maxScrollLeft) < SCROLL_PIN_TOLERANCE;
   };
 
-  /** トグル対象カードの柱（番号バッジ）の画面位置。再レイアウト後に同じ位置へ戻すための基準。 */
-  const numScreenRight = (cardId: string): number | null => {
+  /** カードの柱（番号バッジ／章マーク）の画面位置。再レイアウト後に同じ位置へ戻すための基準。 */
+  const anchorScreenRight = (cardId: string): number | null => {
     const pane = paneRef.current;
-    const numEl = pane?.querySelector<HTMLElement>(
-      `[data-plot-card-id="${CSS.escape(cardId)}"] .plotCardNum`,
+    const anchorEl = pane?.querySelector<HTMLElement>(
+      `[data-plot-card-id="${CSS.escape(cardId)}"] :is(.plotCardNum, .plotChapterMark)`,
     );
-    if (!pane || !numEl) return null;
-    return numEl.getBoundingClientRect().right - pane.getBoundingClientRect().left;
+    if (!pane || !anchorEl) return null;
+    return anchorEl.getBoundingClientRect().right - pane.getBoundingClientRect().left;
+  };
+
+  /** 開閉で幅が変わっても、指定カードの柱の見た目位置を据え置く。
+   *  再レイアウトが複数フレームに分かれても追従できるよう、数フレーム合わせ直す。 */
+  const keepCardInPlace = (cardId: string) => {
+    const pane = paneRef.current;
+    const beforeRight = anchorScreenRight(cardId);
+    if (!pane || beforeRight === null) return;
+    let frames = 4;
+    const repin = () => {
+      const currentRight = anchorScreenRight(cardId);
+      if (currentRight !== null) {
+        const maxScrollLeft = Math.max(0, pane.scrollWidth - pane.clientWidth);
+        pane.scrollLeft = Math.max(
+          0,
+          Math.min(maxScrollLeft, pane.scrollLeft + (currentRight - beforeRight)),
+        );
+      }
+      if (--frames > 0) requestAnimationFrame(repin);
+    };
+    requestAnimationFrame(repin);
+  };
+
+  /** 画面内でいちばん右（読み順で最初）に見えているカード。一括開閉の基準にする。 */
+  const firstVisibleCardId = (): string | null => {
+    const pane = paneRef.current;
+    if (!pane) return null;
+    const paneRect = pane.getBoundingClientRect();
+    const elements = Array.from(pane.querySelectorAll<HTMLElement>("[data-plot-card-id]")).reverse();
+    const visible = elements.find((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.right > paneRect.left && rect.left < paneRect.right;
+    });
+    return visible?.dataset.plotCardId ?? null;
   };
 
   const toggleCard = (cardId: string) => {
-    // トグル前に柱の画面位置を記録。開閉で本文幅が変わっても柱の見た目位置を据え置く。
-    // 再レイアウトが複数フレームに分かれても追従できるよう、数フレーム合わせ直す。
-    const pane = paneRef.current;
-    const beforeRight = numScreenRight(cardId);
-    if (pane && beforeRight !== null) {
-      let frames = 4;
-      const repin = () => {
-        const currentRight = numScreenRight(cardId);
-        if (currentRight !== null) {
-          const maxScrollLeft = Math.max(0, pane.scrollWidth - pane.clientWidth);
-          pane.scrollLeft = Math.max(
-            0,
-            Math.min(maxScrollLeft, pane.scrollLeft + (currentRight - beforeRight)),
-          );
-        }
-        if (--frames > 0) requestAnimationFrame(repin);
-      };
-      requestAnimationFrame(repin);
-    }
-
-    if (managerMode) {
-      onCardsChange((current) =>
-        current.map((card) =>
-          card.id === cardId ? { ...card, managerCollapsed: !card.managerCollapsed } : card,
-        ),
-      );
-      return;
-    }
-
+    keepCardInPlace(cardId);
     onCardsChange((current) =>
       current.map((card) =>
-        card.id === cardId ? { ...card, expanded: !card.expanded } : card,
+        card.id === cardId
+          ? withPlotCardExpanded(card, !isPlotCardExpandedIn(card, managerMode), managerMode)
+          : card,
       ),
     );
   };
+
+  /** すべて（chapterId 指定時はその章の配下だけ）を展開／折りたたむ。
+   *  展開は章も開く。折りたたみはセクションだけ畳み、章の帯は目次として残す。 */
+  const setAllExpanded = (expand: boolean, chapterId?: string) => {
+    if (!isPinnedToRightRef.current) {
+      const anchorId = chapterId ?? firstVisibleCardId();
+      if (anchorId) keepCardInPlace(anchorId);
+    }
+    onCardsChange((current) => {
+      let inScope = chapterId === undefined;
+      return current.map((card) => {
+        if (chapterId !== undefined && card.kind === "chapter") {
+          inScope = card.id === chapterId;
+          return inScope && expand ? withPlotCardExpanded(card, true, managerMode) : card;
+        }
+        if (!inScope) return card;
+        if (card.kind === "chapter") return expand ? withPlotCardExpanded(card, true, managerMode) : card;
+        return withPlotCardExpanded(card, expand, managerMode);
+      });
+    });
+  };
+
+  const lastBulkNonceRef = useRef(bulkRequest?.nonce);
+  useLayoutEffect(() => {
+    if (!bulkRequest || bulkRequest.nonce === lastBulkNonceRef.current) return;
+    lastBulkNonceRef.current = bulkRequest.nonce;
+    setAllExpanded(bulkRequest.expand);
+    // setAllExpanded は描画ごとに作り直されるが、リクエスト 1 件につき 1 回だけ動かす。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bulkRequest]);
 
   const updateCard = (cardId: string, patch: Partial<Pick<PlotCard, "title" | "body">>) => {
     onCardsChange((current) =>
@@ -618,15 +883,67 @@ function PlotBoard({
     );
   };
 
+  /** 確認なしで消し、トーストの「元に戻す」で同じ位置へ戻す。 */
   const deleteCard = (cardId: string) => {
-    setDeletingCardId(cardId);
+    const index = cards.findIndex((card) => card.id === cardId);
+    const card = cards[index];
+    if (!card) return;
+    onCardsChange((current) => renumberPlotCards(current.filter((item) => item.id !== cardId)));
+
+    const isChapter = card.kind === "chapter";
+    const label = card.title.trim() || (isChapter ? "無題の章" : card.num);
+    onNotify?.(isChapter ? `章「${label}」を削除しました` : `「${label}」を削除しました`, {
+      label: "元に戻す",
+      onClick: () =>
+        onCardsChange((current) =>
+          current.some((item) => item.id === card.id)
+            ? current
+            : insertPlotCard(current, Math.min(index, current.length), card),
+        ),
+    });
   };
 
-  const confirmDelete = () => {
-    if (!deletingCardId) return;
-    const id = deletingCardId;
-    onCardsChange((current) => renumberPlotCards(current.filter((item) => item.id !== id)));
-    setDeletingCardId(null);
+  /** カードの直後（章なら章グループの直後）に新しいカードを差し込む。 */
+  const insertAfter = (cardId: string, kind: "section" | "chapter") => {
+    onCardsChange((current) => {
+      const index = current.findIndex((card) => card.id === cardId);
+      if (index < 0) return current;
+      const target = current[index];
+      const insertAt =
+        target.kind === "chapter" && kind === "chapter"
+          ? plotChapterGroupEnd(current, index)
+          : index + 1;
+      const card = kind === "chapter" ? createPlotChapter() : createPlotSection();
+      // 章の先頭に入れたセクションが見えるよう、畳まれた章は開く。
+      const next =
+        target.kind === "chapter" && kind === "section"
+          ? current.map((item) =>
+              item.id === target.id ? withPlotCardExpanded(item, true, managerMode) : item,
+            )
+          : current;
+      return insertPlotCard(next, insertAt, card);
+    });
+  };
+
+  const duplicateCard = (cardId: string) => {
+    onCardsChange((current) => {
+      const index = current.findIndex((card) => card.id === cardId);
+      const source = current[index];
+      if (!source || source.kind !== "section") return current;
+      return insertPlotCard(
+        current,
+        index + 1,
+        createPlotSection({ title: source.title, body: source.body }),
+      );
+    });
+  };
+
+  const copyCardText = (card: PlotCard) => {
+    const text = plotCardPlainText(card, referenceByPath);
+    navigator.clipboard
+      .writeText(text)
+      .then(() => onNotify?.("コピーしました"))
+      .catch(() => onNotify?.("コピーできませんでした"));
   };
 
   const handleCardContextMenu = (cardId: string, event: ReactMouseEvent<HTMLElement>) => {
@@ -659,12 +976,6 @@ function PlotBoard({
       next.splice(insertAt, 0, section);
       return renumberPlotCards(next);
     });
-  };
-
-  const handleCardDragStart = (cardId: string, event: ReactPointerEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    setDraggingCardId(cardId);
-    draggingCardIdRef.current = cardId;
   };
 
   const handleBodyChange = (cardId: string, event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -928,6 +1239,13 @@ function PlotBoard({
       >
         <div className="plotTrack">
           {visualCards.map((card) => {
+            const dropClass =
+              dropTarget?.anchorId === card.id
+                ? dropTarget.position === "before"
+                  ? "plotDropBefore"
+                  : "plotDropAfter"
+                : "";
+
             if (card.kind === "chapter") {
               const chapterOpen = isCardExpanded(card);
               const count = sectionCountByChapter.get(card.id) ?? 0;
@@ -936,25 +1254,22 @@ function PlotBoard({
                 <section
                   className={`plotChapterBand ${chapterOpen ? "" : "collapsedPlotChapterBand"} ${
                     draggingCardId === card.id ? "draggingPlotCard" : ""
-                  }`}
+                  } ${dropClass}`}
                   key={card.id}
                   data-plot-card-id={card.id}
                   onContextMenu={(event) => handleCardContextMenu(card.id, event)}
                 >
-                  <div className="plotCardToolbar">
-                    <button
-                      className="plotToolButton plotDragHandle"
-                      type="button"
-                      aria-label="章をドラッグして並び替え"
-                      title="ドラッグして並び替え"
-                      onPointerDown={(event) => handleCardDragStart(card.id, event)}
-                    >
-                      <PlotIcon name="grip" />
-                    </button>
-                  </div>
-                  <span className="plotChapterMark" aria-hidden="true">
+                  <button
+                    className="plotChapterMark"
+                    type="button"
+                    aria-label={chapterOpen ? "章を折りたたむ" : "章を展開する"}
+                    aria-expanded={chapterOpen}
+                    title="クリックで展開/折りたたみ・ドラッグで並び替え"
+                    onPointerDown={(event) => handleCardPointerDown(card.id, event)}
+                    onClick={() => handleToggleClick(card.id)}
+                  >
                     <PlotIcon name="bookmark" />
-                  </span>
+                  </button>
                   <textarea
                     className="plotChapterTitle"
                     value={card.title}
@@ -965,20 +1280,11 @@ function PlotBoard({
                     onChange={(event) => handleTitleChange(card.id, event)}
                     onKeyDown={handleTitleKeyDown}
                   />
-                  {!chapterOpen && count > 0 && (
-                    <span className="plotChapterCount" aria-hidden="true">
+                  {count > 0 && (
+                    <span className="plotChapterCount" title={`セクション ${count} 件`}>
                       {count}
                     </span>
                   )}
-                  <button
-                    className="plotCardToggle"
-                    type="button"
-                    aria-label={chapterOpen ? "章を折りたたむ" : "章を展開する"}
-                    title={chapterOpen ? "章を折りたたむ" : "章を展開する"}
-                    onClick={() => toggleCard(card.id)}
-                  >
-                    {chapterOpen ? "›" : "‹"}
-                  </button>
                 </section>
               );
             }
@@ -986,33 +1292,28 @@ function PlotBoard({
             if (hiddenSectionIds.has(card.id)) return null;
 
             const expanded = isCardExpanded(card);
+            const hasBody = card.body.trim().length > 0;
 
             return (
               <article
                 className={`plotCard ${expanded ? "expandedPlotCard" : ""} ${
                   draggingCardId === card.id ? "draggingPlotCard" : ""
-                }`}
+                } ${dropClass}`}
                 key={card.id}
                 data-plot-card-id={card.id}
                 style={getPlotCardStyle(card, expanded)}
                 onContextMenu={(event) => handleCardContextMenu(card.id, event)}
               >
-                <div className="plotCardToolbar">
-                  <button
-                    className="plotToolButton plotDragHandle"
-                    type="button"
-                    aria-label={`${card.num} をドラッグして並び替え`}
-                    title="ドラッグして並び替え"
-                    onPointerDown={(event) => handleCardDragStart(card.id, event)}
-                  >
-                    <PlotIcon name="grip" />
-                  </button>
-                </div>
                 <button
                   className="plotCardNum"
                   type="button"
-                  onClick={() => toggleCard(card.id)}
-                  title="クリックで展開/折りたたみ"
+                  aria-expanded={expanded}
+                  aria-label={`${card.num} を${expanded ? "折りたたむ" : "展開する"}${
+                    !expanded && hasBody ? "（本文あり）" : ""
+                  }`}
+                  title="クリックで展開/折りたたみ・ドラッグで並び替え"
+                  onPointerDown={(event) => handleCardPointerDown(card.id, event)}
+                  onClick={() => handleToggleClick(card.id)}
                 >
                   {card.num}
                 </button>
@@ -1051,15 +1352,9 @@ function PlotBoard({
                     />
                   )}
                 </div>
-                <button
-                  className="plotCardToggle"
-                  type="button"
-                  aria-label={expanded ? "折りたたむ" : "展開する"}
-                  title={expanded ? "折りたたむ" : "展開する"}
-                  onClick={() => toggleCard(card.id)}
-                >
-                  {expanded ? "›" : "‹"}
-                </button>
+                {!expanded && hasBody && (
+                  <span className="plotCardBodyMark" title="本文あり" aria-hidden="true" />
+                )}
               </article>
             );
           })}
@@ -1076,67 +1371,87 @@ function PlotBoard({
           }}
         />
       )}
-      {deletingCardId && (
-        <PlotDeleteDialog
-          card={cards.find((card) => card.id === deletingCardId) ?? null}
-          onCancel={() => setDeletingCardId(null)}
-          onConfirm={confirmDelete}
-        />
-      )}
       {contextMenu &&
         createPortal(
           (() => {
-          const card = cards.find((item) => item.id === contextMenu.cardId);
-          if (!card) return null;
-          const isChapter = card.kind === "chapter";
+            const card = cards.find((item) => item.id === contextMenu.cardId);
+            if (!card) return null;
+            const isChapter = card.kind === "chapter";
+            const transferItem: PlotMenuItem[] = transfer
+              ? [{ label: transfer.label, onSelect: () => transfer.onTransfer(card.id) }]
+              : [];
 
-          return (
-            <div
-              ref={contextMenuRef}
-              className="editorContextMenu plotContextMenu"
-              role="menu"
-              style={getPlotContextMenuStyle(contextMenu.x, contextMenu.y)}
-            >
-              <div className="contextMenuSection">
-                {!isChapter && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setMovingCardId(card.id);
-                      setContextMenu(null);
-                    }}
-                  >
-                    章へ移動…
-                  </button>
+            const anyExpanded = hasExpandedPlotSection(cards, managerMode);
+            const allItem: PlotMenuItem = anyExpanded
+              ? { label: "すべて折りたたむ", onSelect: () => setAllExpanded(false) }
+              : { label: "すべて展開", onSelect: () => setAllExpanded(true) };
+
+            const groups: PlotMenuItem[][] = isChapter
+              ? [
+                  [
+                    { label: "章の先頭にセクションを挿入", onSelect: () => insertAfter(card.id, "section") },
+                    { label: "この章の後ろに章を挿入", onSelect: () => insertAfter(card.id, "chapter") },
+                  ],
+                  [
+                    { label: "この章をすべて展開", onSelect: () => setAllExpanded(true, card.id) },
+                    { label: "この章をすべて折りたたむ", onSelect: () => setAllExpanded(false, card.id) },
+                    allItem,
+                  ],
+                  [
+                    ...transferItem,
+                    { label: "章を削除", onSelect: () => deleteCard(card.id), danger: true },
+                  ],
+                ]
+              : [
+                  [
+                    { label: "この後ろにセクションを挿入", onSelect: () => insertAfter(card.id, "section") },
+                    { label: "ここで章を区切る", onSelect: () => insertAfter(card.id, "chapter") },
+                  ],
+                  [
+                    { label: "複製", onSelect: () => duplicateCard(card.id) },
+                    { label: "本文をコピー", onSelect: () => copyCardText(card) },
+                    { label: "章へ移動…", onSelect: () => setMovingCardId(card.id) },
+                    ...transferItem,
+                  ],
+                  [allItem],
+                  [{ label: "削除", onSelect: () => deleteCard(card.id), danger: true }],
+                ];
+            const itemCount = groups.reduce((total, group) => total + group.length, 0);
+
+            return (
+              <div
+                ref={contextMenuRef}
+                className="editorContextMenu plotContextMenu"
+                role="menu"
+                style={getPlotContextMenuStyle(
+                  contextMenu.x,
+                  contextMenu.y,
+                  itemCount,
+                  groups.length - 1,
                 )}
-                {transfer && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setContextMenu(null);
-                      transfer.onTransfer(card.id);
-                    }}
-                  >
-                    {transfer.label}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="plotContextDanger"
-                  onClick={() => {
-                    setContextMenu(null);
-                    deleteCard(card.id);
-                  }}
-                >
-                  {isChapter ? "章を削除" : "削除"}
-                </button>
+              >
+                {groups.map((group, groupIndex) => (
+                  <div className="contextMenuSection" key={groupIndex}>
+                    {groupIndex > 0 && <div className="contextMenuDivider" role="separator" />}
+                    {group.map((item) => (
+                      <button
+                        key={item.label}
+                        type="button"
+                        role="menuitem"
+                        className={item.danger ? "plotContextDanger" : undefined}
+                        onClick={() => {
+                          setContextMenu(null);
+                          item.onSelect();
+                        }}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                ))}
               </div>
-            </div>
-          );
-        })(),
+            );
+          })(),
           modalRoot(),
         )}
       {referenceSuggestion &&
@@ -1303,59 +1618,6 @@ function PlotMoveModal({ cards, sectionId, onClose, onMove }: PlotMoveModalProps
   );
 }
 
-type PlotDeleteDialogProps = {
-  card: PlotCard | null;
-  onCancel: () => void;
-  onConfirm: () => void;
-};
-
-function PlotDeleteDialog({ card, onCancel, onConfirm }: PlotDeleteDialogProps) {
-  if (!card) return null;
-
-  const isChapter = card.kind === "chapter";
-  const label = card.title.trim() || (isChapter ? "（無題の章）" : card.num);
-
-  return createPortal(
-    <div className="modalBackdrop" role="presentation" onClick={onCancel}>
-      <section
-        className="modal compactModal"
-        aria-label={isChapter ? "章を削除" : "プロットを削除"}
-        role="dialog"
-        aria-modal="true"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="modalHeader">
-          <h2>{isChapter ? "章を削除" : "プロットを削除"}</h2>
-          <button className="modalClose" type="button" aria-label="閉じる" onClick={onCancel}>
-            ×
-          </button>
-        </header>
-        <div className="modalForm">
-          <div className="dialogMessage">
-            <p>
-              {isChapter ? `章「${label}」を削除しますか？` : `プロット「${label}」を削除しますか？`}
-            </p>
-            <span>
-              {isChapter
-                ? "配下のプロットは前の章に統合されます。この操作は取り消せません。"
-                : "この操作は取り消せません。"}
-            </span>
-          </div>
-          <footer className="modalActions">
-            <button type="button" onClick={onCancel}>
-              キャンセル
-            </button>
-            <button className="dangerAction" type="button" onClick={onConfirm}>
-              削除
-            </button>
-          </footer>
-        </div>
-      </section>
-    </div>,
-    modalRoot(),
-  );
-}
-
 type PlotPaneProps = {
   cards: PlotCard[];
   onCardsChange: Dispatch<SetStateAction<PlotCard[]>>;
@@ -1365,19 +1627,30 @@ type PlotPaneProps = {
   isManagerOpen?: boolean;
   onManagerOpenChange?: (open: boolean) => void;
   transfer?: PlotCardTransfer;
+  onNotify?: PlotNotify;
 };
+
+/** 開いているセクションが 1 枚でもあれば true。一括ボタンを「折りたたむ」側にする。 */
+const hasExpandedPlotSection = (cards: PlotCard[], managerMode = false) =>
+  cards.some((card) => card.kind === "section" && isPlotCardExpandedIn(card, managerMode));
 
 type PlotPaneHeaderActionsProps = {
   onAddSection: () => void;
   onAddChapter: () => void;
   onOpenManager?: () => void;
+  /** anyExpanded=true なら「すべて折りたたむ」、false なら「すべて展開」。 */
+  anyExpanded?: boolean;
+  onToggleAll?: () => void;
 };
 
 export function PlotPaneHeaderActions({
   onAddSection,
   onAddChapter,
   onOpenManager,
+  anyExpanded = false,
+  onToggleAll,
 }: PlotPaneHeaderActionsProps) {
+  const toggleAllLabel = anyExpanded ? "すべて折りたたむ" : "すべて展開";
   return (
     <div className="plotPaneHeaderActions" aria-label="プロット操作">
       <button
@@ -1398,6 +1671,17 @@ export function PlotPaneHeaderActions({
       >
         <PlotIcon name="bookmark" />
       </button>
+      {onToggleAll && (
+        <button
+          className="sidebarIconButton plotHeaderActionButton"
+          type="button"
+          aria-label={toggleAllLabel}
+          title={toggleAllLabel}
+          onClick={onToggleAll}
+        >
+          <PlotIcon name={anyExpanded ? "collapseAll" : "expandAll"} />
+        </button>
+      )}
       {onOpenManager && (
         <button
           className="sidebarIconButton plotHeaderActionButton"
@@ -1422,6 +1706,7 @@ export function PlotPane({
   isManagerOpen,
   onManagerOpenChange,
   transfer,
+  onNotify,
 }: PlotPaneProps) {
   const [localManagerOpen, setLocalManagerOpen] = useState(false);
   const managerOpen = isManagerOpen ?? localManagerOpen;
@@ -1436,6 +1721,8 @@ export function PlotPane({
         onOpenReference={onOpenReference}
         onMissingReference={onMissingReference}
         transfer={transfer}
+        onNotify={onNotify}
+        inactive={managerOpen}
       />
       {managerOpen && (
         <PlotManagerModal
@@ -1444,6 +1731,7 @@ export function PlotPane({
           referenceCandidates={referenceCandidates}
           onOpenReference={onOpenReference}
           onMissingReference={onMissingReference}
+          onNotify={onNotify}
           onClose={() => setManagerOpen(false)}
         />
       )}
@@ -1457,6 +1745,7 @@ type PlotManagerModalProps = {
   referenceCandidates?: ReferenceFileInfo[];
   onOpenReference?: (sourcePath: string, fileInfo: ReferenceFileInfo) => void;
   onMissingReference?: () => void;
+  onNotify?: PlotNotify;
   onClose: () => void;
 };
 
@@ -1466,8 +1755,11 @@ function PlotManagerModal({
   referenceCandidates,
   onOpenReference,
   onMissingReference,
+  onNotify,
   onClose,
 }: PlotManagerModalProps) {
+  const [bulkRequest, setBulkRequest] = useState<PlotBulkRequest | null>(null);
+  const anyExpanded = hasExpandedPlotSection(cards, true);
   const addSection = () => onCardsChange((current) => appendPlotSection(current));
   const addChapter = () => onCardsChange((current) => appendPlotChapter(current));
 
@@ -1481,7 +1773,12 @@ function PlotManagerModal({
       >
         <header className="modalHeader">
           <h2>プロットを管理</h2>
-          <PlotPaneHeaderActions onAddSection={addSection} onAddChapter={addChapter} />
+          <PlotPaneHeaderActions
+            onAddSection={addSection}
+            onAddChapter={addChapter}
+            anyExpanded={anyExpanded}
+            onToggleAll={() => setBulkRequest({ nonce: Date.now(), expand: !anyExpanded })}
+          />
           <button className="modalClose" type="button" aria-label="閉じる" onClick={onClose}>
             ×
           </button>
@@ -1494,6 +1791,8 @@ function PlotManagerModal({
           onMissingReference={onMissingReference}
           managerMode
           className="plotManagerBoard"
+          onNotify={onNotify}
+          bulkRequest={bulkRequest}
         />
         <footer className="modalActions">
           <button type="button" onClick={onClose}>

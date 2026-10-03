@@ -13752,6 +13752,7 @@ export default function App() {
                       referenceCandidates={sortedReferenceCandidates}
                       onOpenReference={openPlotReference}
                       onMissingReference={() => showToast("存在しないファイルです")}
+                      onNotify={showToast}
                       isManagerOpen={isPlotManagerOpen}
                       onManagerOpenChange={setIsPlotManagerOpen}
                       transfer={

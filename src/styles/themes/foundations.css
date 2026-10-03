@@ -317,9 +317,7 @@
 
 .appShell[data-theme] .activeTreeItem,
 .appShell[data-theme] .projectSearchResultButton:hover,
-.appShell[data-theme] .projectSearchResultButton:focus-visible,
-.appShell[data-theme] .plotToolButton:hover:not(:disabled),
-.appShell[data-theme] .plotCardToggle:hover { background: var(--accent-soft); }
+.appShell[data-theme] .projectSearchResultButton:focus-visible { background: var(--accent-soft); }
 
 .appShell[data-theme] .activeTreeItem {
   color: var(--text-primary);
