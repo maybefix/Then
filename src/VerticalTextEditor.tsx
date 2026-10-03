@@ -6,6 +6,7 @@ import Paragraph from "@tiptap/extension-paragraph";
 import Text from "@tiptap/extension-text";
 import { Fragment, Slice, type Node as PMNode } from "@tiptap/pm/model";
 import { baseKeymap } from "@tiptap/pm/commands";
+import { closeHistory } from "@tiptap/pm/history";
 import { keymap } from "@tiptap/pm/keymap";
 import {
   Plugin,
@@ -1321,6 +1322,83 @@ function handleCodeIndent(view: EditorView, event: KeyboardEvent): boolean {
   return true;
 }
 
+const LIST_INDENT = "  ";
+const LIST_MAX_LEVEL = 6;
+
+/** 直前の空行でない行が箇条書きならその行番号。違えば null。 */
+function previousListIndex(lines: LineNode[], index: number): number | null {
+  for (let prev = index - 1; prev >= 0; prev -= 1) {
+    if (lines[prev].kind === "blank") continue;
+    return lines[prev].kind === "list" ? prev : null;
+  }
+  return null;
+}
+
+/**
+ * Tab / Shift+Tab で箇条書きを1段深く・浅くする（docs/LIST_SPEC.md）。
+ * 選択範囲にある箇条書きの行を、その子孫（後に続く、より深い行）ごと動かす。
+ * 段を飛ばす結果（直前の項目より2段以上深い）やレベル0〜6の外に出る結果になるときは
+ * 何もしない。箇条書きの行を含むときは、何もしなくてもキーを消費する。
+ */
+function handleListIndent(view: EditorView, event: KeyboardEvent): boolean {
+  if (event.key !== "Tab" || event.ctrlKey || event.metaKey || event.altKey) return false;
+  if (view.composing || event.isComposing) return false;
+  const ast = astKey.getState(view.state);
+  if (!ast) return false;
+  const { selection, doc } = view.state;
+  const lines = ast.lines;
+  const firstIndex = selection.$from.index(0);
+  const lastIndex = selection.$to.index(0);
+
+  const moved = new Set<number>();
+  for (let index = firstIndex; index <= lastIndex; index += 1) {
+    if (lines[index]?.kind !== "list" || moved.has(index)) continue;
+    moved.add(index);
+    for (let next = index + 1; next < lines.length; next += 1) {
+      if (lines[next].kind === "blank") continue;
+      if (lines[next].kind !== "list" || lines[next].level <= lines[index].level) break;
+      moved.add(next);
+    }
+  }
+  if (moved.size === 0) return false;
+
+  const delta = event.shiftKey ? -1 : 1;
+  for (const index of moved) {
+    const level = lines[index].level + delta;
+    if (level < 0 || level > LIST_MAX_LEVEL) return true;
+    const prev = previousListIndex(lines, index);
+    if (prev !== null && moved.has(prev)) continue;
+    const parentLimit = prev === null ? 0 : lines[prev].level + 1;
+    if (level > parentLimit) return true;
+  }
+
+  const tr = view.state.tr;
+  // 下の行から編集し、上の行の位置をずらさない。
+  for (const index of [...moved].sort((a, b) => b - a)) {
+    const start = pmStartAtIndex(doc, index);
+    if (start === null) continue;
+    const lineStart = start + 1;
+    if (delta > 0) {
+      tr.insertText(LIST_INDENT, lineStart);
+    } else {
+      // AST と同じくタブは空白2個ぶんと数え、字下げ1段（空白2個ぶん）を取り除く。
+      const text = doc.child(index).textContent;
+      let remove = 0;
+      let width = 0;
+      while (width < 2 && (text[remove] === " " || text[remove] === "\t")) {
+        width += text[remove] === "\t" ? 2 : 1;
+        remove += 1;
+      }
+      if (remove > 0) tr.delete(lineStart, lineStart + remove);
+    }
+  }
+  if (!tr.docChanged) return true;
+  // Tab 1回を Ctrl+Z 1回で戻せるよう、前後の入力と履歴をまとめない。
+  view.dispatch(closeHistory(tr).scrollIntoView());
+  view.dispatch(closeHistory(view.state.tr));
+  return true;
+}
+
 /**
  * With comments folded, Backspace at a line start (Delete at a line end) next
  * to a folded comment joins with the nearest visible line instead. The default
@@ -1587,6 +1665,7 @@ const LayoutAstExtension = Extension.create({
           handleKeyDown: (view, event) =>
             handleTableKeyDown(view, event) ||
             handleCodeIndent(view, event) ||
+            handleListIndent(view, event) ||
             handleFoldedCommentJoin(view, event),
           handleDOMEvents: {
             mousedown: (_view, event) => {
