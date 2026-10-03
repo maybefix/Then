@@ -2765,28 +2765,52 @@ html:not([data-window-fullscreen="true"])
   font-size: 1em;
 }
 
+/* 箇条書きは通常の行と同じ行間で組み、折り返し行は本文頭に揃える（ぶら下げ）。
+   行頭の字下げ＋マーカーを幅 --list-marker-size の箱（.list-marker）に入れ、
+   同じ幅だけ padding を足して text-indent で1行目だけ戻す。 */
 .verticalTypewriterEditor .pm-root p.list-line {
-  line-height: 2.15;
+  --list-level-indent: 0em;
+  padding-inline-start: calc(var(--list-level-indent) + var(--list-marker-size, 0em));
+  text-indent: calc(-1 * var(--list-marker-size, 0em));
 }
 
 .verticalTypewriterEditor .pm-root p.list-line[data-level="0"] {
-  padding-inline-start: 0.6em;
+  --list-level-indent: 0.6em;
 }
 
 .verticalTypewriterEditor .pm-root p.list-line[data-level="1"] {
-  padding-inline-start: 1.5em;
+  --list-level-indent: 1.5em;
 }
 
 .verticalTypewriterEditor .pm-root p.list-line[data-level="2"] {
-  padding-inline-start: 2.4em;
+  --list-level-indent: 2.4em;
 }
 
 .verticalTypewriterEditor .pm-root p.list-line[data-level="3"] {
-  padding-inline-start: 3.3em;
+  --list-level-indent: 3.3em;
 }
 
 .verticalTypewriterEditor .pm-root p.list-line[data-level="4"] {
-  padding-inline-start: 4.2em;
+  --list-level-indent: 4.2em;
+}
+
+.verticalTypewriterEditor .pm-root p.list-line[data-level="5"] {
+  --list-level-indent: 5.1em;
+}
+
+.verticalTypewriterEditor .pm-root p.list-line[data-level="6"] {
+  --list-level-indent: 6em;
+}
+
+/* 箱の幅は1文字1ch。空白・記号・数字はどれも1ch以内なので箱からはみ出さない。
+   字間とタブ幅も1文字ぶんに収める。 */
+.verticalTypewriterEditor .pm-root p.list-line .list-marker {
+  display: inline-block;
+  inline-size: var(--list-marker-size);
+  letter-spacing: 0;
+  tab-size: 1ch;
+  text-indent: 0;
+  white-space: pre;
 }
 
 .verticalTypewriterEditor .pm-root p.jitsuki,

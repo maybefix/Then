@@ -598,10 +598,27 @@ function pushKinsokuRange(
   out.push(Decoration.inline(contentStart + from, contentStart + to, { class: className }));
 }
 
+const LIST_MARKER = /^\s*(?:[-*+]|\d+[.)])\s+/;
+
+/**
+ * 箇条書きの行頭（字下げの空白＋`- ` や `1. ` などの記号＋空白）の範囲。
+ * 折り返し行を本文頭に揃えるぶら下げは、この範囲を固定幅の箱に入れて実現する。
+ * 字下げの空白も本文中に描画されるので、箱に含めないと折り返し行がその分ずれる。
+ */
+function listMarkerRange(line: LineNode): { from: number; to: number } | null {
+  if (line.kind !== "list") return null;
+  const match = LIST_MARKER.exec(line.source);
+  return match ? { from: 0, to: match[0].length } : null;
+}
+
 function pushKinsokuDecos(out: Decoration[], line: LineNode, contentStart: number): void {
   if (!line.source) return;
 
-  const markupRanges = inlineMarkupRanges(line);
+  // マーカーは固定幅の箱（list-marker）に入れるので、他の装飾で分割させない。
+  const listMarker = listMarkerRange(line);
+  const markupRanges = listMarker
+    ? [...inlineMarkupRanges(line), listMarker]
+    : inlineMarkupRanges(line);
   const breakableTokens = findBreakableTokens(line.source, markupRanges);
   const protectedRanges = [
     ...markupRanges,
@@ -947,11 +964,22 @@ function pushLineDecos(
   if (active) classes.push("active-line");
 
   const attrs: Record<string, string> = { class: classes.join(" ") };
+  const listMarker = listMarkerRange(line);
   if (line.kind === "list") attrs["data-level"] = String(line.level);
+  // マーカーの箱は1文字1chで取る。記号・数字・空白はどれも1ch以内に収まるので、
+  // フォントが変わっても箱からはみ出さず、ぶら下げ幅と箱の幅が常に一致する。
+  if (listMarker) attrs.style = `--list-marker-size: ${listMarker.to - listMarker.from}ch`;
 
   out.push(Decoration.node(nodeStart, nodeStart + node.nodeSize, attrs));
 
   const contentStart = nodeStart + 1;
+  if (listMarker) {
+    out.push(
+      Decoration.inline(contentStart + listMarker.from, contentStart + listMarker.to, {
+        class: "list-marker",
+      }),
+    );
+  }
   pushKinsokuDecos(out, line, contentStart);
   pushJapaneseQuoteDecos(out, line, contentStart);
   pushLatinOpticalCenterDecos(out, line, contentStart);
