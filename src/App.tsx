@@ -3880,13 +3880,23 @@ export default function App() {
     },
     [legacyWorkspaceCandidates],
   );
+  // ライブラリ直下はプロジェクトより一段上の階層なので「最近開いたプロジェクト」には混ぜない。
   const visibleRecentWorkspaces = useMemo(() => {
     const normalizedQuery = workspaceSwitcherQuery.trim().toLocaleLowerCase();
-    if (!normalizedQuery) return appState.recentWorkspaces;
-    return appState.recentWorkspaces.filter((workspace) =>
-      `${workspace.name}\n${workspace.path}`.toLocaleLowerCase().includes(normalizedQuery),
+    return appState.recentWorkspaces.filter(
+      (workspace) =>
+        workspace.library?.role !== "root" &&
+        (!normalizedQuery ||
+          `${workspace.name}\n${workspace.path}`.toLocaleLowerCase().includes(normalizedQuery)),
     );
   }, [appState.recentWorkspaces, workspaceSwitcherQuery]);
+  const visibleKnownLibraries = useMemo(() => {
+    const normalizedQuery = workspaceSwitcherQuery.trim().toLocaleLowerCase();
+    if (!normalizedQuery) return knownLibraries;
+    return knownLibraries.filter((library) =>
+      `${library.name}\n${library.path}`.toLocaleLowerCase().includes(normalizedQuery),
+    );
+  }, [knownLibraries, workspaceSwitcherQuery]);
   const patchActiveTab = useCallback(
     (updater: (tab: DocumentTab) => DocumentTab) => {
       setOpenTabs((current) =>
@@ -12604,6 +12614,33 @@ export default function App() {
                           </span>
                         )}
                       </div>
+                      {visibleKnownLibraries.length > 0 && (
+                        <>
+                          <div className="menuDivider" role="separator" />
+                          <span className="workspaceSwitcherSectionLabel">ライブラリ</span>
+                          <div className="workspaceSwitcherList">
+                            {visibleKnownLibraries.map((library) => (
+                              <button
+                                key={library.path}
+                                className="workspaceRecordButton"
+                                type="button"
+                                role="menuitem"
+                                onClick={() =>
+                                  closeBreadcrumbMenuAndRun(() => void openWorkspace(library.path))
+                                }
+                              >
+                                <AppIcon name="book" className="menuSvgIcon" />
+                                <span className="workspaceRecordText">
+                                  <span className="workspaceRecordName">{library.name}</span>
+                                  {settings.showWorkspacePaths && (
+                                    <span className="workspaceRecordPath">{library.path}</span>
+                                  )}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
                       <div className="menuDivider" role="separator" />
                       <button
                         type="button"
