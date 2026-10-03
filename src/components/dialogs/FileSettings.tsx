@@ -104,7 +104,7 @@ export function FileSettings({ settings, onSnippetStorageModeChange, onUpdateSet
         <span>起動時に前回のワークスペースを直接開く</span>
       </label>
       <label>
-        <span>スニペット保存先</span>
+        <span>Ideaの管理単位</span>
         <select
           value={settings.snippetStorageMode}
           onChange={(event) =>
@@ -113,8 +113,8 @@ export function FileSettings({ settings, onSnippetStorageModeChange, onUpdateSet
             )
           }
         >
-          <option value="workspace">フォルダごと</option>
-          <option value="profile">固定プロフィール</option>
+          <option value="workspace">作品ごとに分ける</option>
+          <option value="profile">全作品で共有する</option>
         </select>
       </label>
     </>
