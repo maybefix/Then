@@ -1062,6 +1062,7 @@ const defaultSettings: EditorSettings = {
   canvasDefaultWritingMode: "horizontal-tb",
   canvasDefaultFontSource: "ui",
   plotFontSource: "editor",
+  startPageFontSource: "ui",
   headingFontSource: "body",
   headingFontFamily: toCssFontFamilyValue("Noto Sans JP"),
   typewriterScroll: true,
@@ -2490,6 +2491,10 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         settings.plotFontSource === "editor" || settings.plotFontSource === "ui"
           ? settings.plotFontSource
           : defaultSettings.plotFontSource,
+      startPageFontSource:
+        settings.startPageFontSource === "editor" || settings.startPageFontSource === "ui"
+          ? settings.startPageFontSource
+          : defaultSettings.startPageFontSource,
       editorMeasureHorizontal: normalizeEditorMeasure(settings.editorMeasureHorizontal),
       editorMeasureVertical: normalizeEditorMeasure(settings.editorMeasureVertical),
       headingFontSource:
@@ -11984,6 +11989,10 @@ export default function App() {
               settings.plotFontSource === "ui"
                 ? settings.uiFontFamily
                 : settings.editorFontFamily,
+            "--start-page-font-family":
+              settings.startPageFontSource === "editor"
+                ? settings.editorFontFamily
+                : settings.uiFontFamily,
             "--ui-font-scale": settings.uiFontScale,
             "--editor-font-size": `${settings.fontSize}px`,
             "--editor-line-height": settings.lineHeight,

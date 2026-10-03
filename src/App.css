@@ -1845,6 +1845,7 @@ html:not([data-window-fullscreen="true"])
   gap: 28px;
   margin: 0 auto;
   color: var(--text-secondary);
+  font-family: var(--start-page-font-family, var(--ui-font-family));
 }
 
 .newTabStart h1 {
@@ -1859,7 +1860,7 @@ html:not([data-window-fullscreen="true"])
 .newTabStart p {
   max-width: 520px;
   margin: 0;
-  color: #bbc0b8;
+  color: var(--text-muted);
   font-size: 15px;
   line-height: 1.8;
 }
@@ -1894,7 +1895,7 @@ html:not([data-window-fullscreen="true"])
 
 .scopeStartRecent button:hover,
 .scopeStartRecent button:focus-visible {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--control-hover);
 }
 
 .scopeStartRecentName {
@@ -1940,15 +1941,15 @@ html:not([data-window-fullscreen="true"])
   padding: 0 14px;
   border: 1px solid var(--border-strong);
   border-radius: 6px;
-  background: #282b27;
+  background: var(--bg-panel-strong);
   color: var(--text-primary);
   cursor: pointer;
   font: inherit;
 }
 
 .newTabActions button:hover {
-  border-color: #5c6259;
-  background: #30342f;
+  border-color: var(--accent-border, var(--border-strong));
+  background: var(--control-hover);
 }
 
 .editorContent {
@@ -4837,7 +4838,7 @@ body {
 .libraryProjectRow:hover,
 .libraryProjectRow:focus-visible {
   border-color: var(--border-subtle);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--control-hover);
 }
 
 .libraryProjectRow.isDragging {
@@ -4922,7 +4923,7 @@ body {
 
 .libraryProjectActions button:hover,
 .libraryProjectActions button:focus-visible {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--control-hover);
   color: var(--text-primary);
 }
 
@@ -14579,6 +14580,7 @@ html:not([data-window-fullscreen="true"])
   margin: 0 auto;
   padding: 28px 0 40px;
   color: var(--text-secondary);
+  font-family: var(--start-page-font-family, var(--ui-font-family));
 }
 
 .libraryHomeHeader {
@@ -14658,6 +14660,14 @@ html:not([data-window-fullscreen="true"])
 
 .libraryHomeSort select {
   padding: 0 6px;
+}
+
+/* 透明背景の select は、ドロップダウン一覧が OS 既定の白地に本文色の文字で
+   描かれてしまう。地の色を明示して一覧もテーマ色で描かせる。 */
+.libraryHome select,
+.libraryHome select option {
+  background: var(--bg-panel);
+  color: var(--text-primary);
 }
 
 .libraryHomeEmpty {

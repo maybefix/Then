@@ -31,6 +31,21 @@ export function AppearanceSettings({ settings, systemFonts, onOpenThemePicker, o
         />
       </label>
       <label>
+        <span>作品一覧・スタート画面のフォント</span>
+        <select
+          value={settings.startPageFontSource}
+          onChange={(event) =>
+            onUpdateSettings(
+              "startPageFontSource",
+              event.target.value as EditorSettings["startPageFontSource"],
+            )
+          }
+        >
+          <option value="ui">UIフォント</option>
+          <option value="editor">本文フォント</option>
+        </select>
+      </label>
+      <label>
         <span>UI表示サイズ</span>
         <select
           value={settings.uiFontScale}

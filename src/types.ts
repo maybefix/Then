@@ -253,6 +253,9 @@ export type CanvasNodeFontSource = "ui" | "editor";
 /** プロット表示に適用するフォント種別。 */
 export type PlotFontSource = "ui" | "editor";
 
+/** 作品一覧・空タブなどのスタート画面に適用するフォント種別。 */
+export type StartPageFontSource = "ui" | "editor";
+
 /** 見出し・太字に適用するフォント種別。本文フォントを流用するか個別指定するか。 */
 export type HeadingFontSource = "body" | "custom";
 
@@ -350,6 +353,8 @@ export type EditorSettings = {
   canvasDefaultFontSource: CanvasNodeFontSource;
   /** プロット表示に使うフォント種別。 */
   plotFontSource: PlotFontSource;
+  /** 作品一覧・空タブなどのスタート画面に使うフォント種別。 */
+  startPageFontSource: StartPageFontSource;
   /** 見出し・太字に別フォントを使うか。 */
   headingFontSource: HeadingFontSource;
   /** headingFontSource === "custom" のときに見出し・太字へ適用するフォント。 */
