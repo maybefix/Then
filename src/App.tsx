@@ -1144,6 +1144,29 @@ function createEmptyDocumentTab(): DocumentTab {
 
 const withoutEmptyTabs = (tabs: DocumentTab[]) => tabs.filter((tab) => tab.kind !== "empty");
 
+/** 新しいタブは、アクティブなタブのすぐ右に置く。基準が見つからなければ末尾。 */
+function insertTabAfter(tabs: DocumentTab[], nextTab: DocumentTab, anchorTabId: string | null) {
+  const visible = withoutEmptyTabs(tabs);
+  const anchorIndex = anchorTabId ? visible.findIndex((tab) => tab.id === anchorTabId) : -1;
+  if (anchorIndex < 0) return [...visible, nextTab];
+  return [...visible.slice(0, anchorIndex + 1), nextTab, ...visible.slice(anchorIndex + 1)];
+}
+
+/** 閉じたタブを開き直すときのための記録。保存先のあるファイルタブだけを残す。 */
+type ClosedDocumentTab = {
+  workspacePath: string | null;
+  path: string;
+  index: number;
+  viewportState: DocumentTab["viewportState"];
+};
+
+const CLOSED_DOCUMENT_TAB_LIMIT = 10;
+
+function isClosedTabInWorkspace(record: ClosedDocumentTab, workspacePath: string | null) {
+  if (!record.workspacePath || !workspacePath) return record.workspacePath === workspacePath;
+  return isSamePath(record.workspacePath, workspacePath);
+}
+
 function normalizePathForCompare(path: string): string {
   return path.replace(/[\\/]+/g, "\\").replace(/\\+$/, "").toLocaleLowerCase();
 }
@@ -2989,6 +3012,11 @@ export default function App() {
   ]);
   const [activeTabId, setActiveTabId] = useState("initial-document-tab");
   activeTabIdRef.current = activeTabId;
+  // 確認ダイアログを待つ間にタブの状態が進むため、閉じる処理は最新の一覧を参照する。
+  const openTabsRef = useRef(openTabs);
+  openTabsRef.current = openTabs;
+  const [closedDocumentTabs, setClosedDocumentTabs] = useState<ClosedDocumentTab[]>([]);
+  const isClosingDocumentTabsRef = useRef(false);
   const [projectFolder, setProjectFolder] = useState<ProjectFolder | null>(null);
   const [loadedPlugins, setLoadedPlugins] = useState<LoadedThenPlugin[]>([]);
   const [pluginCommands, setPluginCommands] = useState<ThenPluginCommand[]>([]);
@@ -3967,15 +3995,27 @@ export default function App() {
     [openTabs, syncDocumentTabToEditor],
   );
   const openDocumentInTab = useCallback(
-    (document: TextDocument) => {
+    (
+      document: TextDocument,
+      placement: { index?: number; viewportState?: DocumentTab["viewportState"] } = {},
+    ) => {
       const existingTab = openTabs.find((tab) => tab.path === document.path);
       if (existingTab) {
         syncDocumentTabToEditor(existingTab);
         return existingTab;
       }
 
-      const nextTab = createFileDocumentTab(document);
-      setOpenTabs((current) => [...withoutEmptyTabs(current), nextTab]);
+      const nextTab: DocumentTab = {
+        ...createFileDocumentTab(document),
+        viewportState: placement.viewportState ?? null,
+      };
+      const anchorTabId = activeTabIdRef.current;
+      setOpenTabs((current) => {
+        if (placement.index === undefined) return insertTabAfter(current, nextTab, anchorTabId);
+        const visible = withoutEmptyTabs(current);
+        const index = Math.min(Math.max(placement.index, 0), visible.length);
+        return [...visible.slice(0, index), nextTab, ...visible.slice(index)];
+      });
       syncDocumentTabToEditor(nextTab);
       return nextTab;
     },
@@ -3984,12 +4024,15 @@ export default function App() {
   const replaceActiveTabWithDocument = useCallback(
     (document: TextDocument) => {
       const nextTab = createFileDocumentTab(document);
-      setOpenTabs((current) => [
-        ...withoutEmptyTabs(current).filter(
-          (tab) => tab.id !== activeTabId && tab.path !== document.path,
-        ),
-        nextTab,
-      ]);
+      // 置き換えたタブは元の位置に残す。同じファイルを開いている別のタブは畳む。
+      setOpenTabs((current) => {
+        const replaced = current.some((tab) => tab.id === activeTabId)
+          ? current.map((tab) => (tab.id === activeTabId ? nextTab : tab))
+          : [...current, nextTab];
+        return withoutEmptyTabs(replaced).filter(
+          (tab) => tab.id === nextTab.id || tab.path !== document.path,
+        );
+      });
       syncDocumentTabToEditor(nextTab);
       return nextTab;
     },
@@ -4002,7 +4045,8 @@ export default function App() {
         name,
         saveStatus: name === newTabName ? "saved" : "dirty",
       });
-      setOpenTabs((current) => [...withoutEmptyTabs(current), nextTab]);
+      const anchorTabId = activeTabIdRef.current;
+      setOpenTabs((current) => insertTabAfter(current, nextTab, anchorTabId));
       syncDocumentTabToEditor(nextTab);
       return nextTab;
     },
@@ -6233,6 +6277,33 @@ export default function App() {
       return;
     }
 
+    // タブ操作：Ctrl+W / Ctrl+(Shift+)Tab / Ctrl+PageUp・PageDown / Ctrl+Shift+T。
+    const isDocumentTabShortcut = mod && !event.altKey && (
+      (!event.shiftKey && (key === "w" || key === "W")) ||
+      key === "Tab" ||
+      (!event.shiftKey && (key === "PageUp" || key === "PageDown")) ||
+      (event.shiftKey && (key === "t" || key === "T"))
+    );
+    if (isDocumentTabShortcut) {
+      if (appMode !== "write" || event.isComposing) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.repeat && (key === "w" || key === "W")) return;
+      // 設定画面や確認ダイアログの裏でタブが動かないようにする。
+      if (document.querySelector(".modalBackdrop")) return;
+      setIsCommandPaletteOpen(false);
+      if (key === "w" || key === "W") {
+        void closeDocumentTab();
+      } else if (key === "t" || key === "T") {
+        void reopenClosedDocumentTab();
+      } else if (key === "Tab") {
+        activateRelativeDocumentTab(event.shiftKey ? -1 : 1);
+      } else {
+        activateRelativeDocumentTab(key === "PageUp" ? -1 : 1);
+      }
+      return;
+    }
+
     const reservedThenShortcut = mod && (
       (!event.altKey && !event.shiftKey && ["n", "f", "p", "b", "i", "0", "1", "2", "3", "4", "5", "6"].includes(key.toLowerCase())) ||
       (!event.altKey && event.code === "Slash") ||
@@ -6787,50 +6858,157 @@ export default function App() {
     });
   };
 
-  const confirmCloseDocumentTab = async (tab: DocumentTab) => {
-    if (!isDirtyDocumentTab(tab)) return true;
+  const confirmCloseDocumentTabs = async (tabs: DocumentTab[]) => {
+    const dirtyTabs = tabs.filter(isDirtyDocumentTab);
+    if (dirtyTabs.length === 0) return true;
     return requestConfirm({
       title: "未保存の変更があります",
-      message: "このタブを閉じると未保存の変更は破棄されます。",
-      detail: tab.name,
+      message:
+        tabs.length === 1
+          ? "このタブを閉じると未保存の変更は破棄されます。"
+          : `${dirtyTabs.length}個のタブに未保存の変更があります。閉じると変更は破棄されます。`,
+      detail: dirtyTabs.map((tab) => tab.name).join(" / "),
       confirmLabel: "破棄して閉じる",
       danger: true,
     });
   };
 
   const activateRelativeDocumentTab = (direction: -1 | 1) => {
-    if (openTabs.length <= 1) return;
-    const currentIndex = openTabs.findIndex((tab) => tab.id === activeTabId);
+    const visibleTabs = withoutEmptyTabs(openTabs);
+    if (visibleTabs.length <= 1) return;
+    const currentIndex = visibleTabs.findIndex((tab) => tab.id === activeTabId);
     const startIndex = currentIndex < 0 ? 0 : currentIndex;
-    const nextIndex = (startIndex + direction + openTabs.length) % openTabs.length;
-    activateDocumentTab(openTabs[nextIndex].id);
+    const nextIndex = (startIndex + direction + visibleTabs.length) % visibleTabs.length;
+    activateDocumentTab(visibleTabs[nextIndex].id);
   };
 
-  const closeDocumentTab = async (tabId = activeTabId) => {
-    const targetIndex = openTabs.findIndex((tab) => tab.id === tabId);
-    if (targetIndex < 0) return;
+  const moveDocumentTab = (tabId: string, beforeTabId: string | null) => {
+    if (tabId === beforeTabId) return;
+    setOpenTabs((current) => {
+      const movingTab = current.find((tab) => tab.id === tabId);
+      if (!movingTab) return current;
+      const rest = current.filter((tab) => tab.id !== tabId);
+      const insertIndex = beforeTabId ? rest.findIndex((tab) => tab.id === beforeTabId) : -1;
+      if (insertIndex < 0) return [...rest, movingTab];
+      return [...rest.slice(0, insertIndex), movingTab, ...rest.slice(insertIndex)];
+    });
+  };
 
-    const targetTab = openTabs[targetIndex];
-    if (!(await confirmCloseDocumentTab(targetTab))) return;
+  const closeDocumentTabs = async (tabIds: string[]) => {
+    if (isClosingDocumentTabsRef.current) return;
+    const targetIds = new Set(tabIds);
+    const targets = openTabsRef.current.filter((tab) => targetIds.has(tab.id) && tab.kind !== "empty");
+    if (targets.length === 0) return;
 
-    const remainingTabs = openTabs.filter((tab) => tab.id !== tabId);
-    const isClosingActiveTab = tabId === activeTabId;
+    isClosingDocumentTabsRef.current = true;
+    try {
+      if (!(await confirmCloseDocumentTabs(targets))) return;
+    } finally {
+      isClosingDocumentTabsRef.current = false;
+    }
+
+    const currentTabs = withoutEmptyTabs(openTabsRef.current);
+    const currentActiveId = activeTabIdRef.current;
+    const activeIndex = currentTabs.findIndex((tab) => tab.id === currentActiveId);
+    const remainingTabs = currentTabs.filter((tab) => !targetIds.has(tab.id));
+    const isClosingActiveTab = targetIds.has(currentActiveId);
+    // アクティブなタブを閉じたら、右隣（なければ左隣）の残っているタブへ移る。
     const fallbackTab =
-      remainingTabs[targetIndex] ??
-      remainingTabs[targetIndex - 1] ??
+      currentTabs.slice(activeIndex + 1).find((tab) => !targetIds.has(tab.id)) ??
+      currentTabs.slice(0, Math.max(activeIndex, 0)).reverse().find((tab) => !targetIds.has(tab.id)) ??
       createEmptyDocumentTab();
+
+    const workspacePath = projectFolder?.path ?? null;
+    const activeViewportState = editorInstanceRef.current?.getViewportState() ?? null;
+    const closedRecords = currentTabs.flatMap((tab, index): ClosedDocumentTab[] =>
+      targetIds.has(tab.id) && tab.kind === "file" && tab.path
+        ? [{
+            workspacePath,
+            path: tab.path,
+            index,
+            viewportState: tab.id === currentActiveId ? activeViewportState : tab.viewportState,
+          }]
+        : [],
+    );
+    if (closedRecords.length) {
+      // 右のタブから順に積み、開き直すときは左から元の位置へ戻るようにする。
+      const stackedRecords = [...closedRecords].reverse();
+      setClosedDocumentTabs((current) =>
+        [...current, ...stackedRecords].slice(-CLOSED_DOCUMENT_TAB_LIMIT),
+      );
+    }
 
     setOpenTabs(remainingTabs.length ? remainingTabs : [fallbackTab]);
     if (isClosingActiveTab) syncDocumentTabToEditor(fallbackTab);
-    showToast(`「${targetTab.name}」を閉じました`);
+    showToast(
+      targets.length === 1
+        ? `「${targets[0].name}」を閉じました`
+        : `${targets.length}個のタブを閉じました`,
+    );
   };
 
-  const loadDocumentIntoEditor = useCallback((document: TextDocument, options: { replaceActive?: boolean } = {}) => {
+  const closeDocumentTab = (tabId = activeTabId) => closeDocumentTabs([tabId]);
+
+  const reopenClosedDocumentTab = async () => {
+    const workspacePath = projectFolder?.path ?? null;
+    const record = [...closedDocumentTabs]
+      .reverse()
+      .find((item) => isClosedTabInWorkspace(item, workspacePath));
+    if (!record) {
+      showToast("開き直せるタブはありません");
+      return;
+    }
+    setClosedDocumentTabs((current) => current.filter((item) => item !== record));
+
+    const existingTab = openTabs.find((tab) => tab.path && isSamePath(tab.path, record.path));
+    if (existingTab) {
+      activateDocumentTab(existingTab.id);
+      return;
+    }
+    try {
+      const document = await invoke<TextDocument>("read_text_file", { path: record.path });
+      loadDocumentIntoEditor(document, { index: record.index, viewportState: record.viewportState });
+      showToast(`「${document.name}」を開き直しました`);
+    } catch (error) {
+      setLastError(String(error));
+      showToast("閉じたタブのファイルを開けませんでした");
+    }
+  };
+
+  const copyDocumentTabPath = async (tab: DocumentTab) => {
+    if (!tab.path) return;
+    try {
+      await writeClipboardText(tab.path);
+      showToast("パスをコピーしました");
+    } catch (error) {
+      setLastError(String(error));
+    }
+  };
+
+  const revealDocumentTab = (tab: DocumentTab) => {
+    if (!tab.path) return;
+    if (!isTauriRuntime()) {
+      showToast("フォルダーで表示する機能はTauri版で利用できます");
+      return;
+    }
+    void invoke("open_export_location", { path: tab.path }).catch((error) =>
+      setLastError(String(error)),
+    );
+  };
+
+  const loadDocumentIntoEditor = useCallback((
+    document: TextDocument,
+    options: {
+      replaceActive?: boolean;
+      index?: number;
+      viewportState?: DocumentTab["viewportState"];
+    } = {},
+  ) => {
     didMountEditorRef.current = false;
     if (options.replaceActive) {
       replaceActiveTabWithDocument(document);
     } else {
-      openDocumentInTab(document);
+      openDocumentInTab(document, { index: options.index, viewportState: options.viewportState });
     }
     setFocusedFolderPath(null);
     setAppState((current) => ({
@@ -12872,8 +13050,15 @@ export default function App() {
               displayMode={settings.documentTabsDisplayMode}
               activeTabId={activeTabId}
               onActivateTab={activateDocumentTab}
-              onCloseTab={(tabId) => void closeDocumentTab(tabId)}
+              onCloseTabs={(tabIds) => void closeDocumentTabs(tabIds)}
+              onMoveTab={moveDocumentTab}
               onNewTab={handleNewTab}
+              canReopenClosedTab={closedDocumentTabs.some((record) =>
+                isClosedTabInWorkspace(record, projectFolder?.path ?? null),
+              )}
+              onReopenClosedTab={() => void reopenClosedDocumentTab()}
+              onCopyTabPath={(tab) => void copyDocumentTabPath(tab)}
+              onRevealTab={revealDocumentTab}
             />
           )}
 

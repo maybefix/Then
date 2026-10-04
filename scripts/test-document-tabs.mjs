@@ -34,19 +34,38 @@ assert.match(
   /settings\.showDocumentTabs && appMode === "write" && !isEditorFocusMode/,
 );
 assert.match(appSource, /onActivateTab=\{activateDocumentTab\}/);
-assert.match(appSource, /onCloseTab=\{\(tabId\) => void closeDocumentTab\(tabId\)\}/);
+assert.match(appSource, /onCloseTabs=\{\(tabIds\) => void closeDocumentTabs\(tabIds\)\}/);
+assert.match(appSource, /onMoveTab=\{moveDocumentTab\}/);
+assert.match(appSource, /onReopenClosedTab=\{\(\) => void reopenClosedDocumentTab\(\)\}/);
 assert.match(appSource, /onNewTab=\{handleNewTab\}/);
 assert.match(
   appSource,
-  /const isClosingActiveTab = tabId === activeTabId;[\s\S]*?if \(isClosingActiveTab\) syncDocumentTabToEditor\(fallbackTab\);/,
+  /const isClosingActiveTab = targetIds\.has\(currentActiveId\);[\s\S]*?if \(isClosingActiveTab\) syncDocumentTabToEditor\(fallbackTab\);/,
   "closing a background tab must not switch away from the active document",
 );
 
 assert.match(tabsSource, /aria-orientation="horizontal"/);
-assert.match(tabsSource, /onClick=\{\(\) => onActivateTab\(tab\.id\)\}/);
-assert.match(tabsSource, /onCloseTab\(tab\.id\)/);
+assert.match(tabsSource, /if \(suppressClickRef\.current\) return;\s*onActivateTab\(tab\.id\);/);
+assert.match(tabsSource, /onCloseTabs\(\[tab\.id\]\)/);
 assert.match(tabsSource, /onClick=\{onNewTab\}/);
 assert.match(tabsSource, /event\.key !== "ArrowLeft" && event\.key !== "ArrowRight"/);
+
+// 中クリックで閉じ、押下時の自動スクロールカーソルは出さない。
+assert.match(tabsSource, /onAuxClick=\{\(event\) => \{\s*if \(event\.button !== 1\) return;/);
+assert.match(tabsSource, /if \(event\.button === 1\) \{\s*event\.preventDefault\(\);/);
+// ドラッグはポインターキャプチャで続け、ホバー表示モードでもバーを保持する。
+assert.match(tabsSource, /setPointerCapture\(event\.pointerId\)/);
+assert.match(tabsSource, /heldDocumentTabs/);
+assert.match(appCss, /\.hoverDocumentTabs\.heldDocumentTabs \{/);
+// ホイールの横送りは非 passive で登録する。
+assert.match(tabsSource, /addEventListener\("wheel", handleWheel, \{ passive: false \}\)/);
+// アクティブタブの追従は scrollIntoView を使わず、リストの横スクロールだけで行う。
+assert.doesNotMatch(tabsSource, /\.scrollIntoView\(/);
+// タブ操作のショートカット。
+assert.match(appSource, /const isDocumentTabShortcut = mod && !event\.altKey/);
+// 新しいタブはアクティブなタブの右に置く。置き換えは元の位置で行う。
+assert.match(appSource, /function insertTabAfter\(/);
+assert.match(appSource, /current\.map\(\(tab\) => \(tab\.id === activeTabId \? nextTab : tab\)\)/);
 
 assert.match(appCss, /--document-tabs-height: 35px/);
 assert.match(appCss, /\.documentTabs \{[\s\S]*?width: 100%;[\s\S]*?flex: 0 0 var\(--document-tabs-height\)/);

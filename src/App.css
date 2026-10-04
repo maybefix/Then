@@ -1757,6 +1757,54 @@ html:not([data-window-fullscreen="true"])
   opacity: 0;
 }
 
+/* ドラッグ中は掴んだタブを薄くし、挿入位置に縦線を出す。 */
+.draggingDocumentTabsList,
+.draggingDocumentTabsList .documentTabButton {
+  cursor: grabbing;
+}
+
+.draggingDocumentTabItem {
+  opacity: 0.5;
+}
+
+.dropBeforeDocumentTabItem::before,
+.dropAfterDocumentTabItem::after {
+  position: absolute;
+  z-index: 1;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  content: "";
+  pointer-events: none;
+}
+
+.dropBeforeDocumentTabItem::before {
+  left: -1px;
+}
+
+.dropAfterDocumentTabItem::after {
+  right: -1px;
+}
+
+.documentTabContextMenu {
+  min-width: 188px;
+}
+
+.documentTabContextMenu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.documentTabContextMenu kbd {
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 10px;
+}
+
 .documentTabsNewButton {
   display: inline-grid;
   width: 36px;
@@ -1806,7 +1854,8 @@ html:not([data-window-fullscreen="true"])
 }
 
 .documentTabsHoverZone:hover .hoverDocumentTabs,
-.documentTabsHoverZone:focus-within .hoverDocumentTabs {
+.documentTabsHoverZone:focus-within .hoverDocumentTabs,
+.hoverDocumentTabs.heldDocumentTabs {
   box-shadow: 0 8px 18px rgb(0 0 0 / 18%);
   opacity: 1;
   pointer-events: auto;
