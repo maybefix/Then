@@ -17,6 +17,7 @@ import {
   useState,
 } from "react";
 import { manageAsyncRegistration } from "./utils/asyncRegistration";
+import { withIdeographicSpaceFont } from "./utils/fontStack";
 import {
   isRestorableRightSidebarTab,
   normalizeRightSidebarTab,
@@ -11999,15 +12000,15 @@ export default function App() {
         data-native-window={isTauriRuntime() ? "true" : undefined}
         style={
           {
-            "--editor-font-family": settings.editorFontFamily,
+            "--editor-font-family": withIdeographicSpaceFont(settings.editorFontFamily),
             "--ui-font-family": settings.uiFontFamily,
             "--plot-font-family":
               settings.plotFontSource === "ui"
                 ? settings.uiFontFamily
-                : settings.editorFontFamily,
+                : withIdeographicSpaceFont(settings.editorFontFamily),
             "--start-page-font-family":
               settings.startPageFontSource === "editor"
-                ? settings.editorFontFamily
+                ? withIdeographicSpaceFont(settings.editorFontFamily)
                 : settings.uiFontFamily,
             "--ui-font-scale": settings.uiFontScale,
             "--editor-font-size": `${settings.fontSize}px`,
@@ -12015,10 +12016,11 @@ export default function App() {
             // 編集領域に対する比率（0〜1）。CSS 側で実寸に乗算する。
             "--editor-measure-h-ratio": settings.editorMeasureHorizontal / 100,
             "--editor-measure-v-ratio": settings.editorMeasureVertical / 100,
-            "--editor-heading-font-family":
+            "--editor-heading-font-family": withIdeographicSpaceFont(
               settings.headingFontSource === "custom"
                 ? settings.headingFontFamily
                 : settings.editorFontFamily,
+            ),
             "--typewriter-guide-position": `${settings.typewriterOffset}%`,
             "--zone-sidebar-opacity": settings.zoneModeOpacity,
           } as React.CSSProperties

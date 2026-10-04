@@ -14,6 +14,7 @@ import {
   type WheelEvent,
 } from "react";
 import { createLatestFrameScheduler } from "./utils/latestFrameScheduler";
+import { withIdeographicSpaceFont } from "./utils/fontStack";
 import {
   CANVAS_LIVE_DATA_EVENT,
   createCanvasDocument,
@@ -1258,7 +1259,7 @@ export default function CanvasWindowApp({
   const themeStyle = useMemo(
     () =>
       ({
-        "--editor-font-family": payload?.editorFontFamily,
+        "--editor-font-family": withIdeographicSpaceFont(payload?.editorFontFamily),
         "--ui-font-family": payload?.uiFontFamily,
         "--ui-font-scale": payload?.uiFontScale,
       }) as CSSProperties,
@@ -2268,7 +2269,7 @@ export default function CanvasWindowApp({
       "--canvas-node-writing-mode": node.writingMode ?? defaultCanvasWritingMode,
       "--canvas-node-font-family":
         (node.fontSource ?? defaultCanvasFontSource) === "editor"
-          ? payload?.editorFontFamily
+          ? withIdeographicSpaceFont(payload?.editorFontFamily)
           : payload?.uiFontFamily,
     }) as CSSProperties;
 

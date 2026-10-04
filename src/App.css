@@ -1,3 +1,17 @@
+/* 全角スペース（U+3000）だけを等幅和文フォントから描く（src/utils/fontStack.ts）。
+   プロポーショナル和文フォントは U+3000 を 0.6〜0.67em で持つため、字下げが
+   半角幅に見える。local() は最初に見つかったものを使う。 */
+@font-face {
+  font-family: "Then Ideographic Space";
+  src:
+    local("BIZ UDGothic"), local("BIZUDGothic-Regular"),
+    local("Yu Gothic Regular"), local("YuGothic-Regular"),
+    local("MS Gothic"), local("MS-Gothic"),
+    local("Hiragino Sans W3"), local("HiraginoSans-W3"),
+    local("Noto Sans CJK JP"), local("NotoSansCJKjp-Regular");
+  unicode-range: U+3000;
+}
+
 :root {
   color: #f0f2ef;
   background: #181917;
@@ -5,7 +19,7 @@
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     "Noto Sans JP", sans-serif;
   --editor-font-family:
-    "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", YuMincho, serif;
+    "Then Ideographic Space", "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", YuMincho, serif;
   --plot-font-family: var(--editor-font-family);
   --editor-font-size: 24px;
   --editor-line-height: 2.3;
