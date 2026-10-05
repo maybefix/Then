@@ -1,7 +1,7 @@
 # Then 書き出し 表紙・目次（前付け）仕様
 
 作成日: 2026-10-02
-状態: 仕様案（未着手・未決事項あり → §8）
+状態: v1 実装済み（2026-10-04。旧未決事項は §8 で確定）
 
 ## 0. 目的
 
@@ -18,8 +18,9 @@
 | `src/export/vivliostyleHtml.ts` | Vivliostyle に渡す流し込みHTML（`@page` で柱・ノンブル） |
 | `src/export/wordprocessingMl.ts` | DOCX 生成（ファイルごとにセクション分割） |
 | `src/components/export/LinkedExportScreen.tsx` | 書き出し画面、プリセット保存（localStorage） |
+| `src/export/frontMatterStore.ts` / `src-tauri/src/export_front_matter.rs` | 作品ごとの値（タイトル上書き・副題・著者名・表紙画像）の保存 |
 
-前付けは上記3つの出力系（プレビュー・Vivliostyle・DOCX）すべてに反映する。
+アプリ内プレビューは PDF と同じ Vivliostyle の流し込み HTML を表示しているため、前付けの描画は **Vivliostyle と DOCX の2系統**で足りる（`paginateLinkedDocument` は進捗表示用のページ数の目安にだけ使い、前付け分は `estimateFrontMatterPages` で足す）。
 
 ## 1. 表紙（扉）
 
@@ -33,10 +34,16 @@
 - 扉ページには柱・ノンブルを出さない（§3）。
 - 見開き有効時は扉の裏を白ページにする。
 
-### 1.2 v2（後回し）: 画像表紙
+### 1.2 画像表紙（v1 に含めた）
 
-- 画像を余白なしで全面に配置する表紙。
-- Vivliostyle は名前付きページ `@page cover { margin: 0 }` で実現できる見込み。DOCX は画像パーツ・余白・アンカー配置が別作業になるため v1 から切り離す。
+- 画像（PNG / JPEG）を余白なしでページ全面に配置する。縦横比が合わない分は `object-fit: cover` 相当で切り取る。
+- 画像表紙を選んで画像が未設定のときは文字扉にする。
+- オプションで画像の上にタイトル・副題・著者名を重ねられる（`cover.overlayText`、文字色は白／黒の `cover.textColor`）。配置・倍率は文字扉と同じ設定を使い、文字は通常のページ余白の内側に組む。
+  - Vivliostyle: 余白0のページいっぱいの要素の背景に画像を敷き（`background-size: cover`。PDF 印刷は背景を出力する設定）、余白ぶんの padding の内側に文字扉と同じボックスを置く。可読性のため薄い text-shadow を付ける。
+  - DOCX: 文字扉と同じ余白・`vAlign` のセクションに文字を組み、先頭段落にページ全面・背面の画像アンカーを入れる。文字色は `w:color`。
+- 画像は作品の `.then/export/cover.<ext>` にコピーして保存する（project.json にはファイル名のみ）。
+- Vivliostyle: 名前付きページ `thencover`（`margin: 0`）に、ページ大の要素を置いて背景に画像を敷く。組版文書は data URL の hash で Viewer に渡るため画像は埋め込まず、Rust のカスタムスキーム `then-cover` で配信する（`<project>/.then/export/cover.*` 以外は返さない）。
+- DOCX: 余白0のセクションに、ページ左上基準・ページ全面の `wp:anchor`（背面）で配置。切り取りは `a:srcRect`。
 
 ## 2. 目次
 
@@ -53,9 +60,10 @@
 | --- | --- |
 | Vivliostyle | 各項目の対象（セクション／見出し）に一意な id を振り、目次側は `<a href="#id">` + `target-counter(attr(href url), page)` で参照する。番号は組版エンジンが確定させる |
 | DOCX | 見出しにブックマークを振り、`TOC` フィールド（`\h` 付き）を出力する。`settings.xml` に `w:updateFields` を入れ、開いた時に Word に番号を確定させる。自前ページ分割の番号は Word の組版と一致しないため埋め込まない（フィールドのキャッシュには項目名のみ） |
-| アプリ内プレビュー | `paginateLinkedDocument` の結果から番号を引く（目安表示） |
+| アプリ内プレビュー | Vivliostyle と同じ（プレビューは Vivliostyle の組版結果） |
 
-- DOCX のファイル単位目次では、ファイル先頭に見出しが無い場合もあるため、`chapterTitle` を持つ非表示にしない段落（またはブックマーク＋`TC` フィールド）で目次エントリを立てる。方式は実装時に検証して決める。
+- DOCX の目次項目はすべて `TC` フィールドで立てる（ファイル項目はセクション先頭段落、見出し項目はその見出し段落）。`TOC  l "1-3" h z` で TC だけから目次を作るため、見出しスタイルとの二重登録や、先頭に見出しが無いファイルの扱いに悩まない。
+- ファイル内で最初の見出しが `chapterTitle` の由来である場合（文字列が一致する場合）は、その見出しを項目に加えない。
 
 ### 2.3 体裁
 
@@ -72,13 +80,17 @@
 
 - 前付けページ（扉・扉裏・目次）には**柱・ノンブルを出さない**。
 - 本文の先頭ページを既存の `footer.startPageNumber`（既定1）から数える。
-  - Vivliostyle: 前付けを名前付きページ（`@page frontmatter`）にして margin box を空にし、本文先頭で `counter-reset: page <startPageNumber-1>`。
+  - Vivliostyle: 前付けを名前付きページ（`thencover` / `thenfront`）にして margin box を空にし、`counter-increment: page 0` で数えない。最初の前付けページ（`:first`）だけ `startPageNumber-1` を足して、本文先頭を `startPageNumber` にする。
+    - **要素への `counter-reset: page` は使わない。** Vivliostyle は要素側に `page` カウンタがあると `target-counter()` をそれで解決してしまい、目次の番号が全項目同じ値になる（2026-10-04 に検証）。
+    - 本文を `thenmain` ページでくくり、本文直前に挿入される白ページを `@page thenmain:nth(1 of thenmain):blank` で数えず柱も出さない。本文途中の白ページ（奇数ページ始まり等）は従来どおり。
   - DOCX: 前付けを独立セクションにし、ヘッダー・フッター参照なし。本文先頭セクションに `w:pgNumType w:start`。
 - 既存の `hideOnFirstPage`（先頭ページで非表示）は「本文の先頭ページ」を指すものとして扱う。
 
 ## 4. 改ページ
 
 - 見開き有効時: 目次・本文はそれぞれ奇数ページ（recto）から開始。必要なら白ページを挟む。
+  - Vivliostyle は `break-before: recto`。
+  - DOCX: Word は奇数／偶数ページ区切りをノンブルで判定するため、本文で番号を振り直すと `oddPage` が物理位置を表せない。前付けは番号を振り直さず物理ページ＝番号なので、扉の裏は白ページのセクションを明示し、目次の末尾には `IF MOD(PAGE,2) = 1` で改ページを入れて偶数ページで終える。本文は `nextPage`。
 - 見開き無効時: 単純に改ページ。
 - 前付けがある場合、先頭ファイルの `startMode` は無視し、上記規則で本文を開始する。
 
@@ -109,7 +121,10 @@ frontMatter: {
 ```
 
 - 著者名・副題をプリセットに入れないのは、プリセットを作品間で使い回すため。
-- 既存の保存済みプリセット・前回レイアウト（localStorage）に `frontMatter` が無い場合は、両方 `enabled: false` で補完する。
+- 既存の保存済みプリセット・前回レイアウト（localStorage）に `frontMatter` が無い場合は、両方 `enabled: false` で補完する（`withFrontMatterDefaults`）。
+- 作品ごとの値は `.then/project.json` の `exportFrontMatter`（`title` / `subtitle` / `author` / `coverImage`）に保存する。`title` は作品名の上書きで、空ならフォルダ名。扉だけでなく柱・DOCX のタイトル・出力ファイル名にも使う。著者名は DOCX の作成者にも入れる。
+- **表紙・目次の体裁（`ExportLayoutProfile.frontMatter`）は作品ごとに記憶する。** 書き出しを待たず変更のたびに `.then/project.json` の `exportFrontMatter.layout` へ保存し、あわせて直前の値を localStorage（`then-linked-export-front-matter-v1`）にも保存する。画面を開いたときは、作品の保存値 → 直前の値 → 前回レイアウトの値の順に使う。
+- プリセット（標準・保存済み・前回の書き出し設定）を適用しても表紙・目次の設定は切り替えない。標準プリセットは表紙・目次を無効で持つため、適用のたびに表紙が消えてしまうのを避ける。
 - `DEFAULT_EXPORT_LAYOUT`（標準・縦書き文庫）の既定値は §8 の決定に従う。
 - `LinkedExportDocument` には解決済みの前付け（扉の文字列、目次項目と参照id）を持たせ、3つの出力系はそれを描画するだけにする。
 
@@ -127,12 +142,17 @@ frontMatter: {
 - DOCX を Word で開き、目次更新後の番号が本文と一致すること。LibreOffice での表示も確認する。
 - 前付けページに柱・ノンブルが出ないこと、本文1ページ目が `startPageNumber` になること。
 
-## 8. 未決事項
+## 8. 決定事項（旧・未決事項）
 
-| # | 論点 | 案 |
+| # | 論点 | 決定 |
 | --- | --- | --- |
-| 1 | 目次の既定収録範囲 | ファイル単位（推奨） / 見出しベース |
-| 2 | 前付けのノンブル | 番号なし・本文が1から（推奨） / 前付けから通し番号も選択可にする |
-| 3 | DOCX 目次の更新ダイアログ | 許容して `TOC` フィールド（推奨） / 許容しないならページ番号なしの静的目次 |
-| 4 | 画像表紙 | v2 に回す（推奨） |
-| 5 | 文庫プリセットの既定 | 表紙・目次とも無効（既存出力を変えない）を推奨 |
+| 1 | 目次の既定収録範囲 | ファイル単位 |
+| 2 | 前付けのノンブル | 番号なし・本文が開始番号から |
+| 3 | DOCX 目次の更新ダイアログ | 許容して `TOC` フィールド |
+| 4 | 画像表紙 | **v1 に含める** |
+| 5 | 文庫プリセットの既定 | 表紙・目次とも無効（既存出力を変えない） |
+
+関連して直したこと:
+
+- DOCX の `w:type`（セクションの開始方法）が1つ後ろのファイルの設定で決まっていた。ECMA-376 では sectPr の `w:type` はそのセクション自身の開始方法なので、各ファイルの設定を自分のセクションに付けるよう修正した。
+- DOCX の sectPr の子要素をスキーマ順（`pgNumType` → `cols` → `titlePg` → `textDirection`）に並べ替えた。

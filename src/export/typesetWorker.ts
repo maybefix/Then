@@ -7,6 +7,7 @@ import {
   buildLinkedPrintCss,
   buildLinkedPrintMarkup,
   createLinkedExportDocument,
+  estimateFrontMatterPages,
   paginateLinkedDocument,
 } from "./linkedDocument";
 import type { ExportJob, LoadedExportSource } from "./types";
@@ -43,7 +44,7 @@ ctx.onmessage = async (event) => {
       ctx.postMessage({
         id: request.id,
         ok: true,
-        result: { css, markup, vivliostyleHtml, pageCount: pages.length },
+        result: { css, markup, vivliostyleHtml, pageCount: pages.length + estimateFrontMatterPages(document) },
       });
       return;
     }
@@ -52,7 +53,7 @@ ctx.onmessage = async (event) => {
     const pages = paginateLinkedDocument(document);
     const bytes = await generateVerticalDocx(document);
     ctx.postMessage(
-      { id: request.id, ok: true, result: { bytes, pageCount: pages.length } },
+      { id: request.id, ok: true, result: { bytes, pageCount: pages.length + estimateFrontMatterPages(document) } },
       [bytes.buffer],
     );
   } catch (error) {

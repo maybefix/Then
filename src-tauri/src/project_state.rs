@@ -61,6 +61,27 @@ pub(super) struct ProjectConfig {
     /// 作品としての情報（状態・あらすじ）。ライブラリホームの一覧と絞り込みに使う。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) work: Option<WorkMeta>,
+    /// 書き出しの前付け（表紙・目次）に使う作品ごとの値。
+    #[serde(default, rename = "exportFrontMatter", skip_serializing_if = "Option::is_none")]
+    pub(super) export_front_matter: Option<ExportFrontMatterConfig>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct ExportFrontMatterConfig {
+    /// 空なら作品フォルダ名を使う。
+    #[serde(default)]
+    pub(super) title: String,
+    #[serde(default)]
+    pub(super) subtitle: String,
+    #[serde(default)]
+    pub(super) author: String,
+    /// `.then/export/` 内の表紙画像のファイル名。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) cover_image: Option<String>,
+    /// 表紙・目次の有無や体裁（書き出し画面の frontMatter 設定）。形はフロント側で補完する。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) layout: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -100,6 +121,7 @@ impl Default for ProjectConfig {
             proofread_ignored: BTreeMap::new(),
             file_progress: BTreeMap::new(),
             work: None,
+            export_front_matter: None,
         }
     }
 }
@@ -139,6 +161,15 @@ fn validate_project_config(config: &ProjectConfig) -> Result<(), String> {
     }
     if let Some(work) = &config.work {
         validate_work_status(&work.status)?;
+    }
+    if let Some(name) = config
+        .export_front_matter
+        .as_ref()
+        .and_then(|front_matter| front_matter.cover_image.as_deref())
+    {
+        if !super::export_front_matter::is_cover_file_name(name) {
+            return Err(format!("unsupported export cover image name: {name}"));
+        }
     }
     Ok(())
 }

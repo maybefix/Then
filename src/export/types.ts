@@ -45,6 +45,46 @@ export type LoadedExportSource = ExportSourceFile & {
   content: string;
 };
 
+export type ExportCoverKind = "text" | "image";
+
+export type ExportTocDepth = "file" | 1 | 2;
+
+/** 前付け（表紙・目次）の体裁。プリセットに含めて作品間で使い回す。 */
+export type ExportFrontMatterLayout = {
+  cover: {
+    enabled: boolean;
+    kind: ExportCoverKind;
+    align: "center" | "upper";
+    /** タイトル文字サイズの本文比 */
+    titleScale: number;
+    /** 画像表紙の上にタイトル・副題・著者名を重ねる */
+    overlayText: boolean;
+    /** 重ねる文字の色（light = 白、dark = 黒） */
+    textColor: "light" | "dark";
+  };
+  toc: {
+    enabled: boolean;
+    depth: ExportTocDepth;
+    title: string;
+  };
+};
+
+export type ExportCoverImage = {
+  /** Vivliostyle が読み込む URL。 */
+  url: string;
+  mime: "image/png" | "image/jpeg";
+  dataBase64: string;
+  widthPx: number;
+  heightPx: number;
+};
+
+/** 前付けの中身。作品ごとの値で、.then/project.json に保存する。 */
+export type ExportFrontMatterContent = {
+  subtitle?: string;
+  author?: string;
+  coverImage?: ExportCoverImage | null;
+};
+
 export type ExportLayoutProfile = {
   name?: string;
   page: {
@@ -85,6 +125,7 @@ export type ExportLayoutProfile = {
     hideOnFirstPage: boolean;
     differentOddEven: boolean;
   };
+  frontMatter: ExportFrontMatterLayout;
 };
 
 export type ExportJob = {
@@ -92,6 +133,7 @@ export type ExportJob = {
   title: string;
   sources: ExportSourceFile[];
   layout: ExportLayoutProfile;
+  frontMatter?: ExportFrontMatterContent;
 };
 
 /** Compatibility shape retained for the single-document AST conversion boundary. */
@@ -122,6 +164,8 @@ export type ExportBlock = {
   level: number;
   align: "start" | "center" | "end";
   inlines: ExportInline[];
+  /** 目次から参照される見出しの id。 */
+  anchorId?: string;
 };
 
 export type ExportDocument = {
@@ -138,6 +182,39 @@ export type LinkedExportSection = {
   source: ExportSourceFile;
   blocks: ExportBlock[];
   chapterTitle: string;
+  /** 目次から参照されるセクションの id。 */
+  anchorId?: string;
+};
+
+export type ExportTocEntry = {
+  /** 参照先のセクションまたは見出しの anchorId。 */
+  id: string;
+  label: string;
+  /** 0 = ファイル、1〜2 = その下の見出し（1字下げ単位）。 */
+  indent: number;
+};
+
+export type ResolvedCoverText = {
+  title: string;
+  subtitle: string;
+  author: string;
+  align: ExportFrontMatterLayout["cover"]["align"];
+  titleScale: number;
+};
+
+export type ResolvedExportCover =
+  | ({ kind: "text" } & ResolvedCoverText)
+  | {
+    kind: "image";
+    image: ExportCoverImage;
+    /** 画像の上に重ねる文字。重ねないときは null。 */
+    overlay: (ResolvedCoverText & { color: ExportFrontMatterLayout["cover"]["textColor"] }) | null;
+  };
+
+/** 解決済みの前付け。出力系はこれを描画するだけにする。 */
+export type ResolvedFrontMatter = {
+  cover: ResolvedExportCover | null;
+  toc: { title: string; entries: ExportTocEntry[] } | null;
 };
 
 export type LinkedExportDocument = {
@@ -145,6 +222,9 @@ export type LinkedExportDocument = {
   title: string;
   layout: ExportLayoutProfile;
   sections: LinkedExportSection[];
+  /** 表紙・目次のどちらかがあるときだけ入る。 */
+  frontMatter?: ResolvedFrontMatter;
+  author?: string;
 };
 
 export type ExportPageModel = {
@@ -168,6 +248,11 @@ export const EXPORT_PAGE_DIMENSIONS: Record<Exclude<ExportPageSize, "custom">, [
   A6: [105, 148],
   B5: [182, 257],
   A4: [210, 297],
+};
+
+export const DEFAULT_FRONT_MATTER_LAYOUT: ExportFrontMatterLayout = {
+  cover: { enabled: false, kind: "text", align: "center", titleScale: 2, overlayText: false, textColor: "light" },
+  toc: { enabled: false, depth: "file", title: "目次" },
 };
 
 export const DEFAULT_EXPORT_LAYOUT: ExportLayoutProfile = {
@@ -206,7 +291,20 @@ export const DEFAULT_EXPORT_LAYOUT: ExportLayoutProfile = {
     hideOnFirstPage: false,
     differentOddEven: false,
   },
+  frontMatter: DEFAULT_FRONT_MATTER_LAYOUT,
 };
+
+/** 保存済みプリセットや前回レイアウトに前付けが無ければ、無効の既定値で補う。 */
+export function withFrontMatterDefaults(layout: ExportLayoutProfile): ExportLayoutProfile {
+  const stored = (layout as Partial<ExportLayoutProfile>).frontMatter;
+  return {
+    ...layout,
+    frontMatter: {
+      cover: { ...DEFAULT_FRONT_MATTER_LAYOUT.cover, ...stored?.cover },
+      toc: { ...DEFAULT_FRONT_MATTER_LAYOUT.toc, ...stored?.toc },
+    },
+  };
+}
 
 export function resolvePageDimensions(layout: ExportLayoutProfile): [number, number] {
   if (layout.page.size === "custom") {

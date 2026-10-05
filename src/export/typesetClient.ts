@@ -125,8 +125,13 @@ export async function prepareExportPdf(
       // fall through to synchronous fallback below
     }
   }
-  const { createLinkedExportDocument, paginateLinkedDocument, buildLinkedPrintCss, buildLinkedPrintMarkup } =
-    await import("./linkedDocument");
+  const {
+    buildLinkedPrintCss,
+    buildLinkedPrintMarkup,
+    createLinkedExportDocument,
+    estimateFrontMatterPages,
+    paginateLinkedDocument,
+  } = await import("./linkedDocument");
   const { buildLinkedVivliostyleHtml } = await import("./vivliostyleHtml");
   const document = createLinkedExportDocument(job, sources);
   const pages = paginateLinkedDocument(document);
@@ -134,7 +139,7 @@ export async function prepareExportPdf(
     css: buildLinkedPrintCss(document, baseUrl),
     markup: buildLinkedPrintMarkup(document, pages),
     vivliostyleHtml: buildLinkedVivliostyleHtml(document, baseUrl),
-    pageCount: pages.length,
+    pageCount: pages.length + estimateFrontMatterPages(document),
   };
 }
 
@@ -150,9 +155,13 @@ export async function prepareExportDocx(
       // fall through to synchronous fallback below
     }
   }
-  const { createLinkedExportDocument, paginateLinkedDocument } = await import("./linkedDocument");
+  const { createLinkedExportDocument, estimateFrontMatterPages, paginateLinkedDocument } =
+    await import("./linkedDocument");
   const { generateVerticalDocx } = await import("./wordprocessingMl");
   const document = createLinkedExportDocument(job, sources);
   const pages = paginateLinkedDocument(document);
-  return { bytes: await generateVerticalDocx(document), pageCount: pages.length };
+  return {
+    bytes: await generateVerticalDocx(document),
+    pageCount: pages.length + estimateFrontMatterPages(document),
+  };
 }

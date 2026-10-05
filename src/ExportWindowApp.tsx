@@ -21,6 +21,7 @@ import { resolvePageDimensions } from "./export/types";
 type ExportWindowPayload = {
   requestId: string;
   title: string;
+  projectPath?: string | null;
   sources: LoadedExportSource[];
   sourceError?: string;
 };
@@ -166,6 +167,7 @@ export default function ExportWindowApp() {
       <LinkedExportScreen
         key={payload.requestId}
         title={payload.title}
+        projectPath={payload.projectPath ?? null}
         initialSources={payload.sources}
         sourceError={payload.sourceError}
         onClose={() => void invoke("close_export_window")}

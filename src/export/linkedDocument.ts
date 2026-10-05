@@ -2,14 +2,22 @@ import { createDocumentAst } from "../editor/ast/documentAst";
 import { createExportDocument } from "./documentExport";
 import type {
   ExportBlock,
+  ExportFrontMatterContent,
+  ExportFrontMatterLayout,
   ExportInline,
   ExportJob,
   ExportLayoutProfile,
   ExportPageModel,
+  ExportTocDepth,
+  ExportTocEntry,
   LinkedExportDocument,
+  LinkedExportSection,
   LoadedExportSource,
+  ResolvedCoverText,
+  ResolvedExportCover,
+  ResolvedFrontMatter,
 } from "./types";
-import { resolvePageDimensions } from "./types";
+import { resolvePageDimensions, withFrontMatterDefaults } from "./types";
 
 function inlineLength(inline: ExportInline): number {
   return inline.text.length;
@@ -129,12 +137,90 @@ export function createLinkedExportDocument(
 
   if (sections.length === 0) throw new Error("出力対象の本文ファイルを1つ以上選択してください");
 
+  const layout = withFrontMatterDefaults(job.layout);
+  const title = job.title.trim() || "本文連結";
+  const author = job.frontMatter?.author?.trim() ?? "";
+  const toc = layout.frontMatter.toc;
+  const anchored = toc.enabled ? anchorTocTargets(sections, toc.depth) : null;
+  const cover = resolveCover(layout.frontMatter.cover, job.frontMatter, title, author);
+  const frontMatter: ResolvedFrontMatter | undefined = cover || anchored
+    ? {
+      cover,
+      toc: anchored ? { title: toc.title.trim() || "目次", entries: anchored.entries } : null,
+    }
+    : undefined;
+
   return {
     schemaVersion: 2,
-    title: job.title.trim() || "本文連結",
-    layout: job.layout,
-    sections,
+    title,
+    layout,
+    sections: anchored?.sections ?? sections,
+    ...(frontMatter ? { frontMatter } : {}),
+    ...(author ? { author } : {}),
   };
+}
+
+function resolveCover(
+  settings: ExportFrontMatterLayout["cover"],
+  content: ExportFrontMatterContent | undefined,
+  title: string,
+  author: string,
+): ResolvedExportCover | null {
+  if (!settings.enabled) return null;
+  const text: ResolvedCoverText = {
+    title,
+    subtitle: content?.subtitle?.trim() ?? "",
+    author,
+    align: settings.align,
+    titleScale: Number.isFinite(settings.titleScale) && settings.titleScale > 0 ? settings.titleScale : 2,
+  };
+  // 画像が未設定なら文字扉にする。表紙を有効にしたのに何も出ないよりよい。
+  if (settings.kind === "image" && content?.coverImage) {
+    return {
+      kind: "image",
+      image: content.coverImage,
+      overlay: settings.overlayText ? { ...text, color: settings.textColor } : null,
+    };
+  }
+  return { kind: "text", ...text };
+}
+
+function blockText(block: ExportBlock): string {
+  return block.inlines.map((inline) => inline.text).join("").trim();
+}
+
+// Gives every TOC target an id and lists the entries. Each file is one entry
+// (its chapterTitle); with a heading depth, headings up to that level follow,
+// except the file's first heading when it is where the chapterTitle came from.
+function anchorTocTargets(
+  sections: LinkedExportSection[],
+  depth: ExportTocDepth,
+): { sections: LinkedExportSection[]; entries: ExportTocEntry[] } {
+  const entries: ExportTocEntry[] = [];
+  const anchoredSections = sections.map((section, sectionIndex) => {
+    const anchorId = `then-toc-s${sectionIndex}`;
+    entries.push({ id: anchorId, label: section.chapterTitle, indent: 0 });
+    if (depth === "file") return { ...section, anchorId };
+
+    const leadIndex = section.blocks.findIndex((block) => block.kind === "heading");
+    const lead = section.blocks[leadIndex];
+    const mergedLevel = lead?.kind === "heading" && blockText(lead) === section.chapterTitle
+      ? lead.level
+      : null;
+    const blocks = section.blocks.map((block, blockIndex) => {
+      if (block.kind !== "heading" || block.level > depth || blockIndex === leadIndex && mergedLevel !== null) {
+        return block;
+      }
+      const label = blockText(block);
+      if (!label) return block;
+      const id = `then-toc-s${sectionIndex}-b${blockIndex}`;
+      const indent = mergedLevel === null ? block.level : Math.max(1, block.level - mergedLevel);
+      entries.push({ id, label, indent: Math.min(2, indent) });
+      return { ...block, anchorId: id };
+    });
+    return { ...section, anchorId, blocks };
+  });
+  return { sections: anchoredSections, entries };
 }
 
 function pageCapacity(layout: ExportLayoutProfile): { page: number; line: number } {
@@ -155,6 +241,21 @@ function pageCapacity(layout: ExportLayoutProfile): { page: number; line: number
     line: charactersPerLine,
     page: Math.max(80, Math.floor(charactersPerLine * lines * layout.body.columns * 0.9)),
   };
+}
+
+/** 前付けのページ数の目安（進捗表示用）。実際のページは Vivliostyle / Word が決める。 */
+export function estimateFrontMatterPages(document: LinkedExportDocument): number {
+  const frontMatter = document.frontMatter;
+  if (!frontMatter) return 0;
+  const padToEven = (pages: number) =>
+    document.layout.page.facingPages && pages % 2 === 1 ? pages + 1 : pages;
+  let pages = frontMatter.cover ? padToEven(1) : 0;
+  if (frontMatter.toc) {
+    const capacity = pageCapacity(document.layout);
+    const lines = Math.max(4, Math.floor(capacity.page / 0.9 / capacity.line / document.layout.body.columns));
+    pages += padToEven(Math.ceil((frontMatter.toc.entries.length + 2) / lines));
+  }
+  return pages;
 }
 
 type WorkingPage = ExportPageModel & { used: number };
@@ -368,7 +469,8 @@ export function exportInlineHtml(inline: ExportInline): string {
 export function exportBlockHtml(block: ExportBlock): string {
   if (block.kind === "blank") return '<p class="then-blank" aria-hidden="true">&#x3000;</p>';
   const tag = block.kind === "heading" ? `h${Math.max(1, Math.min(6, block.level))}` : "p";
-  return `<${tag} class="then-block then-${block.kind} then-align-${block.align}">${block.inlines.map(exportInlineHtml).join("")}</${tag}>`;
+  const id = block.anchorId ? ` id="${escapeHtml(block.anchorId)}"` : "";
+  return `<${tag}${id} class="then-block then-${block.kind} then-align-${block.align}">${block.inlines.map(exportInlineHtml).join("")}</${tag}>`;
 }
 
 function headerText(document: LinkedExportDocument, page: ExportPageModel): string {

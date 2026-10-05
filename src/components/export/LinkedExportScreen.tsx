@@ -1,5 +1,5 @@
 import { ExportSourceSelector } from "./ExportSourceSelector";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SubmissionExportPanel } from "./SubmissionExportPanel";
 
 // This screen is mounted as the complete contents of a dedicated Tauri window.
@@ -8,7 +8,16 @@ import {
   prepareExportDocx,
   prepareExportPdf,
 } from "../../export/typesetClient";
+import {
+  clearCoverImage,
+  loadFrontMatter,
+  pickCoverImage,
+  saveFrontMatterLayout,
+  saveFrontMatterText,
+} from "../../export/frontMatterStore";
 import type {
+  ExportCoverImage,
+  ExportFrontMatterLayout,
   ExportErrorKind,
   ExportFormat,
   ExportJob,
@@ -22,6 +31,7 @@ import type {
 import {
   DEFAULT_EXPORT_LAYOUT,
   resolvePageDimensions,
+  withFrontMatterDefaults,
 } from "../../export/types";
 
 // The heavy typesetting now runs in a worker (see typesetClient), so the screen
@@ -56,6 +66,8 @@ type ExportFailure = {
 
 type LinkedExportScreenProps = {
   title: string;
+  /** 作品フォルダ。表紙の文字列・画像の保存先で、無ければ保存しない。 */
+  projectPath?: string | null;
   initialSources: LoadedExportSource[];
   sourceError?: string;
   embedded?: boolean;
@@ -85,7 +97,8 @@ function readSavedPresets(): SavedPreset[] {
     if (!Array.isArray(parsed)) return [];
     return parsed.filter((preset) =>
       typeof preset?.name === "string" &&
-      (preset.layout?.body?.writingMode === "vertical-rl" || preset.layout?.body?.writingMode === "horizontal-tb"));
+      (preset.layout?.body?.writingMode === "vertical-rl" || preset.layout?.body?.writingMode === "horizontal-tb"))
+      .map((preset) => ({ ...preset, layout: withFrontMatterDefaults(preset.layout) }));
   } catch {
     return [];
   }
@@ -117,8 +130,25 @@ function readLastLayout(): ExportLayoutProfile | null {
     if (!stored) return null;
     const parsed = JSON.parse(stored) as ExportLayoutProfile;
     return parsed?.body?.writingMode === "vertical-rl" || parsed?.body?.writingMode === "horizontal-tb"
-      ? parsed
+      ? withFrontMatterDefaults(parsed)
       : null;
+  } catch {
+    return null;
+  }
+}
+
+// 表紙・目次の設定は書き出しを待たずに変更のたびに覚える。作品フォルダが
+// あれば作品ごとに project.json へ、どの作品でも直前の値を localStorage へ。
+const LAST_FRONT_MATTER_KEY = "then-linked-export-front-matter-v1";
+
+function normalizeFrontMatter(value: Partial<ExportFrontMatterLayout> | null | undefined): ExportFrontMatterLayout {
+  return withFrontMatterDefaults({ ...DEFAULT_EXPORT_LAYOUT, frontMatter: value as ExportFrontMatterLayout }).frontMatter;
+}
+
+function readLastFrontMatter(): ExportFrontMatterLayout | null {
+  try {
+    const stored = localStorage.getItem(LAST_FRONT_MATTER_KEY);
+    return stored ? normalizeFrontMatter(JSON.parse(stored)) : null;
   } catch {
     return null;
   }
@@ -128,7 +158,8 @@ function initialLayout(sources: LoadedExportSource[]): ExportLayoutProfile {
   const stored = readLastLayout();
   const layout = cloneLayout(stored ?? DEFAULT_EXPORT_LAYOUT);
   if (sources.length > 0 && !stored) layout.body.fontFamily = "Noto Serif CJK JP";
-  return layout;
+  const frontMatter = readLastFrontMatter();
+  return frontMatter ? { ...layout, frontMatter } : layout;
 }
 
 function withOrder(sources: LoadedExportSource[]): LoadedExportSource[] {
@@ -228,8 +259,20 @@ function PreviewPage({
   );
 }
 
+// An array keeps "file" first; object keys that look like integers sort first.
+const tocDepthOptions = [
+  ["file", "ファイル単位"],
+  ["1", "見出し1まで"],
+  ["2", "見出し2まで"],
+] as const;
+
+function tocDepthLabel(depth: ExportLayoutProfile["frontMatter"]["toc"]["depth"]): string {
+  return tocDepthOptions.find(([value]) => value === String(depth))?.[1] ?? "";
+}
+
 export function LinkedExportScreen({
   title,
+  projectPath = null,
   initialSources,
   sourceError,
   embedded = false,
@@ -265,21 +308,103 @@ export function LinkedExportScreen({
   const [savedPresets, setSavedPresets] = useState<SavedPreset[]>(readSavedPresets);
   const [presetChoice, setPresetChoice] = useState("");
   const [presetName, setPresetName] = useState("");
+  const [frontText, setFrontText] = useState({ title: "", subtitle: "", author: "" });
+  const [coverImage, setCoverImage] = useState<ExportCoverImage | null>(null);
+  const frontLoaded = useRef(false);
+
+  // 作品ごとの前付けの値を読み込み、編集したら少し待って保存する。
+  useEffect(() => {
+    if (!projectPath) return;
+    let cancelled = false;
+    void loadFrontMatter(projectPath)
+      .then((stored) => {
+        if (cancelled) return;
+        setFrontText({ title: stored.title, subtitle: stored.subtitle, author: stored.author });
+        setCoverImage(stored.coverImage);
+        // この作品で前回使った表紙・目次の設定を優先する。
+        if (stored.layout) {
+          const frontMatter = normalizeFrontMatter(stored.layout);
+          setLayout((current) => ({ ...current, frontMatter }));
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) frontLoaded.current = true; });
+    return () => { cancelled = true; };
+  }, [projectPath]);
+
+  useEffect(() => {
+    if (!projectPath || !frontLoaded.current) return;
+    const timer = window.setTimeout(() => {
+      void saveFrontMatterText(projectPath, frontText)
+        .catch(() => flashSavedLabel("表紙の情報を保存できませんでした"));
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [frontText, projectPath]);
+
+  const frontMatterJson = JSON.stringify(layout.frontMatter);
+  useEffect(() => {
+    try {
+      localStorage.setItem(LAST_FRONT_MATTER_KEY, frontMatterJson);
+    } catch {
+      // 記憶できなくても書き出しには影響しない。
+    }
+    if (!projectPath || !frontLoaded.current) return;
+    const timer = window.setTimeout(() => {
+      void saveFrontMatterLayout(projectPath, JSON.parse(frontMatterJson) as ExportFrontMatterLayout)
+        .catch(() => flashSavedLabel("表紙・目次の設定を保存できませんでした"));
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [frontMatterJson, projectPath]);
+
+  const workTitle = frontText.title.trim() || title;
 
 
   const job = useMemo<ExportJob>(() => ({
     format,
-    title,
+    title: workTitle,
     sources: sources.map(({ content: _content, ...source }) => source),
     layout,
-  }), [format, layout, sources, title]);
+    frontMatter: { subtitle: frontText.subtitle, author: frontText.author, coverImage },
+  }), [coverImage, format, frontText.author, frontText.subtitle, layout, sources, workTitle]);
   const includedCount = sources.filter((source) => source.enabled).length;
+
+  // Keep the current preview on screen and flag it as stale instead of
+  // dropping back to the empty state on every tweak.
+  const markPreviewStale = () => {
+    if (viewState === "preview-ready" || viewState === "preview-loading") setPreviewStale(true);
+  };
+
+  const patchFrontText = (patch: Partial<typeof frontText>) => {
+    setFrontText((current) => ({ ...current, ...patch }));
+    markPreviewStale();
+  };
+
+  const chooseCoverImage = async () => {
+    if (!projectPath) return;
+    try {
+      const picked = await pickCoverImage(projectPath);
+      if (!picked) return;
+      setCoverImage(picked);
+      markPreviewStale();
+    } catch (error) {
+      flashSavedLabel(String(error));
+    }
+  };
+
+  const removeCoverImage = async () => {
+    if (!projectPath) return;
+    try {
+      await clearCoverImage(projectPath);
+      setCoverImage(null);
+      markPreviewStale();
+    } catch (error) {
+      flashSavedLabel(String(error));
+    }
+  };
 
   const patchLayout = (updater: (current: ExportLayoutProfile) => ExportLayoutProfile) => {
     setLayout((current) => updater(cloneLayout(current)));
-    // Keep the current preview on screen and flag it as stale instead of
-    // dropping back to the empty state on every tweak.
-    if (viewState === "preview-ready" || viewState === "preview-loading") setPreviewStale(true);
+    markPreviewStale();
     // Manual edits detach the layout from the selected preset. applyPresetChoice
     // re-selects afterwards within the same batch, so preset loads keep theirs.
     setPresetChoice("");
@@ -351,7 +476,7 @@ export function LinkedExportScreen({
       next.body.fontSize = 13;
       next.body.lineHeight = 1.75;
     }
-    patchLayout(() => next);
+    patchLayout((current) => ({ ...next, frontMatter: current.frontMatter }));
   };
 
   const flashSavedLabel = (message: string) => {
@@ -366,11 +491,12 @@ export function LinkedExportScreen({
     } else if (value === "last") {
       const stored = readLastLayout();
       if (!stored) return;
-      patchLayout(() => stored);
+      patchLayout((current) => ({ ...stored, frontMatter: current.frontMatter }));
     } else if (value.startsWith("saved:")) {
       const preset = savedPresets.find((item) => item.name === value.slice("saved:".length));
       if (!preset) return;
-      patchLayout(() => cloneLayout(preset.layout));
+      // 表紙・目次は作品ごとの設定なので、プリセットでは切り替えない。
+      patchLayout((current) => ({ ...cloneLayout(preset.layout), frontMatter: current.frontMatter }));
     }
     setPresetChoice(value);
   };
@@ -426,13 +552,13 @@ export function LinkedExportScreen({
         const assets = await prepareExportPdf(nextJob, sources);
         pageCount = assets.pageCount;
         result = await onExportPdf(
-          { ...assets, layout: nextJob.layout, title },
+          { ...assets, layout: nextJob.layout, title: workTitle },
           reportProgress,
         );
       } else {
         const assets = await prepareExportDocx(nextJob, sources);
         pageCount = assets.pageCount;
-        result = await onExportDocx({ bytes: assets.bytes, title }, reportProgress);
+        result = await onExportDocx({ bytes: assets.bytes, title: workTitle }, reportProgress);
       }
       setProgress({
         percent: 100,
@@ -480,6 +606,13 @@ export function LinkedExportScreen({
   const footerSummary = layout.footer.enabled && layout.footer.content !== "none"
     ? `${footerContentLabels[layout.footer.content]} ${layout.footer.pageNumberPosition}${footerHiddenSummary ? `・${footerHiddenSummary}非表示` : ""}`
     : "非表示";
+  const frontMatter = layout.frontMatter;
+  const frontSummary = [
+    frontMatter.cover.enabled
+      ? `表紙（${frontMatter.cover.kind === "text" ? "文字" : frontMatter.cover.overlayText ? "画像＋文字" : "画像"}）`
+      : "",
+    frontMatter.toc.enabled ? `目次（${tocDepthLabel(frontMatter.toc.depth)}）` : "",
+  ].filter(Boolean).join("・") || "なし";
   const showWindowHeader = !embedded;
   const sourceSelector = <ExportSourceSelector sources={sources} activeTab={activeTab}
     showStartMode={purpose === "print"} updateSources={updateSources} onOpenSource={onOpenSource} />;
@@ -600,6 +733,48 @@ export function LinkedExportScreen({
               <div className="exportFieldGrid two"><label>開始番号<input type="number" min="1" value={layout.footer.startPageNumber} onChange={(event) => patchLayout((next) => { next.footer.startPageNumber = Number(event.target.value); return next; })}/></label><label>位置<select value={layout.footer.pageNumberPosition} onChange={(event) => patchLayout((next) => { next.footer.pageNumberPosition = event.target.value as ExportLayoutProfile["footer"]["pageNumberPosition"]; return next; })}><option value="bottom-center">下中央</option><option value="top-center">上中央</option><option value="outer">外側</option><option value="inner">内側</option></select></label></div>
               {([['章扉では非表示','hideOnTitlePage'],['先頭ページでは非表示','hideOnFirstPage']] as const).map(([label, key]) => <label className="exportCheckRow" key={key}><input type="checkbox" checked={layout.footer[key]} onChange={() => patchLayout((next) => { next.footer[key] = !next.footer[key]; return next; })}/>{label}</label>)}
               <p className="exportHelp">外側 = 見開きの左右端 ／ 内側 = 綴じ側</p>
+            </div>}
+
+            {renderSectionHeader("frontmatter", "表紙・目次", frontSummary)}
+            {openSections.has("frontmatter") && <div className="exportSettingsContent">
+              <label>作品名<input type="text" placeholder={title} value={frontText.title} onChange={(event) => patchFrontText({ title: event.target.value })}/></label>
+              <p className="exportHelp">表紙・ヘッダー・ファイル名に使います。空欄ならフォルダ名を使います</p>
+              <label className="exportCheckRow"><input type="checkbox" checked={frontMatter.cover.enabled} onChange={() => patchLayout((next) => { next.frontMatter.cover.enabled = !next.frontMatter.cover.enabled; return next; })}/>表紙を付ける</label>
+              {frontMatter.cover.enabled && <>
+                <div className="exportPillGroup">
+                  <button type="button" className={frontMatter.cover.kind === "text" ? "active" : ""} onClick={() => patchLayout((next) => { next.frontMatter.cover.kind = "text"; return next; })}>文字</button>
+                  <button type="button" className={frontMatter.cover.kind === "image" ? "active" : ""} onClick={() => patchLayout((next) => { next.frontMatter.cover.kind = "image"; return next; })}>画像</button>
+                </div>
+                {frontMatter.cover.kind === "image" && <>
+                  {coverImage && <img className="exportCoverThumb" src={`data:${coverImage.mime};base64,${coverImage.dataBase64}`} alt="表紙画像"/>}
+                  <div className="exportCoverActions">
+                    <button type="button" className="exportBtn" disabled={!projectPath} onClick={() => void chooseCoverImage()}>{coverImage ? "画像を差し替え…" : "画像を選択…"}</button>
+                    {coverImage && <button type="button" className="exportBtn ghost" onClick={() => void removeCoverImage()}>削除</button>}
+                  </div>
+                  <p className="exportHelp">{projectPath
+                    ? "PNG・JPEG。余白なしでページ全面に配置し、はみ出す部分は切り取ります。画像が無いときは文字の表紙になります"
+                    : "画像の表紙は作品フォルダを開いているときに使えます"}</p>
+                  <label className="exportCheckRow"><input type="checkbox" checked={frontMatter.cover.overlayText} onChange={() => patchLayout((next) => { next.frontMatter.cover.overlayText = !next.frontMatter.cover.overlayText; return next; })}/>画像の上にタイトルを重ねる</label>
+                  {frontMatter.cover.overlayText && <div className="exportPillGroup" role="group" aria-label="文字の色">
+                    <button type="button" className={frontMatter.cover.textColor === "light" ? "active" : ""} onClick={() => patchLayout((next) => { next.frontMatter.cover.textColor = "light"; return next; })}>白い文字</button>
+                    <button type="button" className={frontMatter.cover.textColor === "dark" ? "active" : ""} onClick={() => patchLayout((next) => { next.frontMatter.cover.textColor = "dark"; return next; })}>黒い文字</button>
+                  </div>}
+                </>}
+                {(frontMatter.cover.kind === "text" || frontMatter.cover.overlayText) && <>
+                  <label>副題<input type="text" value={frontText.subtitle} onChange={(event) => patchFrontText({ subtitle: event.target.value })}/></label>
+                  <label>著者名<input type="text" value={frontText.author} onChange={(event) => patchFrontText({ author: event.target.value })}/></label>
+                  <div className="exportFieldGrid two">
+                    <label>配置<select value={frontMatter.cover.align} onChange={(event) => patchLayout((next) => { next.frontMatter.cover.align = event.target.value as ExportLayoutProfile["frontMatter"]["cover"]["align"]; return next; })}><option value="center">天地中央</option><option value="upper">やや上寄せ</option></select></label>
+                    <label>タイトル倍率<input type="number" min="1" max="5" step="0.1" value={frontMatter.cover.titleScale} onChange={(event) => patchLayout((next) => { next.frontMatter.cover.titleScale = Number(event.target.value); return next; })}/></label>
+                  </div>
+                </>}
+              </>}
+              <label className="exportCheckRow"><input type="checkbox" checked={frontMatter.toc.enabled} onChange={() => patchLayout((next) => { next.frontMatter.toc.enabled = !next.frontMatter.toc.enabled; return next; })}/>目次を付ける</label>
+              {frontMatter.toc.enabled && <div className="exportFieldGrid two">
+                <label>収録範囲<select value={String(frontMatter.toc.depth)} onChange={(event) => patchLayout((next) => { const value = event.target.value; next.frontMatter.toc.depth = value === "file" ? "file" : Number(value) as 1 | 2; return next; })}>{tocDepthOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                <label>目次見出し<input type="text" value={frontMatter.toc.title} onChange={(event) => patchLayout((next) => { next.frontMatter.toc.title = event.target.value; return next; })}/></label>
+              </div>}
+              {(frontMatter.cover.enabled || frontMatter.toc.enabled) && <p className="exportHelp">表紙・目次のページにはヘッダー・ページ番号を付けず、本文の1ページ目を開始番号から数えます。DOCXの目次は、Wordで開いたときの「フィールドの更新」でページ番号が入ります</p>}
             </div>}
 
             {renderSectionHeader("preset", "プリセット", layout.name ?? "カスタム")}

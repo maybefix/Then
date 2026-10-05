@@ -3133,6 +3133,7 @@ export default function App() {
   const [exportEmbedPayload, setExportEmbedPayload] = useState<{
     requestId: string;
     title: string;
+    projectPath: string | null;
     sources: LoadedExportSource[];
     sourceError?: string;
   } | null>(null);
@@ -8047,6 +8048,8 @@ export default function App() {
       const payload = {
         requestId: String(Date.now()),
         title: workspaceTitle,
+        // 表紙の文字列・画像を作品の .then/project.json から読み書きするため。
+        projectPath: projectFolder?.path ?? null,
         sources,
         sourceError: readErrors.length > 0 ? readErrors.join("\n") : undefined,
       };
@@ -14045,6 +14048,7 @@ export default function App() {
                 key={exportEmbedPayload.requestId}
                 embedded
                 title={exportEmbedPayload.title}
+                projectPath={exportEmbedPayload.projectPath}
                 initialSources={exportEmbedPayload.sources}
                 sourceError={exportEmbedPayload.sourceError}
                 onClose={() => {

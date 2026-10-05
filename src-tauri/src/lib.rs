@@ -8,6 +8,7 @@ use std::time::Duration;
 use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 mod checkpoint_store;
+mod export_front_matter;
 mod intermediate_draft;
 mod library;
 mod project_state;
@@ -555,6 +556,10 @@ pub fn run() {
         .manage(CanvasWindowState::default())
         .manage(DeprecatedContentPurgeState::default())
         .manage(ViewerExportState::default())
+        // 書き出しの表紙画像を Vivliostyle に渡す（組版文書は data URL なので埋め込まない）。
+        .register_uri_scheme_protocol(export_front_matter::COVER_SCHEME, |_context, request| {
+            export_front_matter::serve_cover(&request)
+        })
         .setup(|app| {
             // 消しきれなくても起動は止めない。残りは画面で知らせ、再試行できるようにする。
             let purge_failure = purge_deprecated_global_content(app.handle()).err();
@@ -601,6 +606,11 @@ pub fn run() {
             save_text_file,
             save_export_file_dialog,
             pick_export_path,
+            export_front_matter::load_export_front_matter,
+            export_front_matter::save_export_front_matter,
+            export_front_matter::save_export_front_matter_layout,
+            export_front_matter::pick_export_cover_image,
+            export_front_matter::clear_export_cover_image,
             export_pdf,
             export_pdf_vivliostyle,
             get_viewer_doc,
@@ -1470,20 +1480,42 @@ const VIEWER_INIT_SCRIPT: &str = r#"(function(){
     if (String(location.pathname).indexOf('vivliostyle-viewer/index.html') < 0) return;
     function invoke(c,a){ return window.__TAURI_INTERNALS__.invoke(c, a||{}); }
     function done(ok,err){ try{ invoke('viewer_render_done',{ok:ok,error:String(err||'')}); }catch(e){} }
+    // On timeout, say what the viewer was waiting for: Vivliostyle stays in
+    // "loading" until every image/font resolves. Resource Timing lists only
+    // finished loads, so a cover image missing from loaded=[...] never arrived.
+    function diagnose(st){
+      var loaded=[];
+      try{ performance.getEntriesByType('resource').forEach(function(e){
+        if(e.name.indexOf('then-cover')>=0||e.name.indexOf('/fonts/')>=0){
+          loaded.push(decodeURIComponent(e.name).split(/[\\/]/).pop().split('?')[0]+':'+Math.round(e.duration)+'ms');
+        }
+      }); }catch(e){}
+      var pages=document.querySelectorAll('[data-vivliostyle-page-container]').length;
+      return 'viewer stalled (no new page for 60s) status='+st+' visibility='+document.visibilityState+' pages='+pages+' loaded=['+loaded.join(', ')+']';
+    }
     if (String(location.hash).indexOf('src=') >= 0) {
-      var n=0;
+      // Long manuscripts legitimately take minutes, so give up only when the
+      // layout stops making progress (no new page for STALL_MS), not after a
+      // fixed total time.
+      var STALL_MS=60000;
+      var lastPages=-1, lastProgress=Date.now();
       var iv=setInterval(function(){
-        n++;
         var b=document.body;
         var st=b?b.getAttribute('data-vivliostyle-viewer-status'):null;
-        if(st==='complete'){ clearInterval(iv); done(true,''); }
-        else if(n>600){ clearInterval(iv); done(false,'viewer timeout status='+st); }
+        if(st==='complete'){ clearInterval(iv); done(true,''); return; }
+        var pages=document.querySelectorAll('[data-vivliostyle-page-container]').length;
+        if(pages!==lastPages){ lastPages=pages; lastProgress=Date.now(); }
+        else if(Date.now()-lastProgress>STALL_MS){ clearInterval(iv); done(false,diagnose(st)); }
       },150);
       return;
     }
     invoke('get_viewer_doc').then(function(html){
       var dataUrl='data:text/html;charset=utf-8;base64,'+btoa(unescape(encodeURIComponent(html)));
-      location.hash='src='+encodeURIComponent(dataUrl)+'&renderAllPages=true&bookMode=true&spreadView=false';
+      // Pass the data URL as is, like the in-app preview. Percent-encoding it
+      // makes Vivliostyle treat it as a relative path (fetching
+      // ".../vivliostyle-viewer/data%3Atext%2F...") and stay in "loading".
+      // Base64 never contains "&", so the hash parameters stay intact.
+      location.hash='src='+dataUrl+'&renderAllPages=true&bookMode=true&spreadView=false';
       location.reload();
     }).catch(function(e){ done(false,'get_viewer_doc '+e); });
   } catch(e) {
@@ -1581,7 +1613,9 @@ async fn export_pdf_vivliostyle(
         .map_err(|error| format!("Vivliostyleビューアを開けませんでした: {error}"))?;
 
         let render = tauri::async_runtime::spawn_blocking(move || {
-            receiver.recv_timeout(Duration::from_secs(120))
+            // The viewer reports a stall itself (no new page for 60 s); this is
+            // only a backstop in case the viewer page never reports back.
+            receiver.recv_timeout(Duration::from_secs(30 * 60))
         })
         .await
         .map_err(|error| format!("Vivliostyle待機に失敗しました: {error}"))?;

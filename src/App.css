@@ -12481,6 +12481,19 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   gap: 6px;
 }
 
+.exportCoverActions {
+  display: flex;
+  gap: 6px;
+}
+
+.exportCoverThumb {
+  display: block;
+  max-width: 120px;
+  max-height: 160px;
+  border: 1px solid var(--border-subtle);
+  object-fit: contain;
+}
+
 .exportPresetSaveRow input {
   min-width: 0;
   flex: 1;
