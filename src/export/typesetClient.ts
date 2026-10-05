@@ -6,12 +6,14 @@
 // (or one fails), every call transparently falls back to running the same pure
 // functions on the main thread, so the feature keeps working — just without the
 // off-thread benefit.
+import { convertFileSrc } from "@tauri-apps/api/core";
 import type {
   ExportJob,
   ExportPageModel,
   LinkedExportDocument,
   LoadedExportSource,
 } from "./types";
+import { IMAGE_SCHEME, resolveImageUrl, scanImageSources } from "../utils/markdownImage";
 
 export type PreviewAssets = {
   document: LinkedExportDocument;
@@ -24,6 +26,8 @@ export type PrintAssets = {
   // Flowing HTML for the Vivliostyle viewer engine (CSS Paged Media).
   vivliostyleHtml: string;
   pageCount: number;
+  /** Images that did not load before typesetting; they print as their alt text. */
+  unavailableImageUrls: string[];
 };
 
 export type DocxAssets = {
@@ -95,10 +99,52 @@ function callWorker<T>(message: Record<string, unknown>): Promise<T> | null {
   });
 }
 
+// The worker cannot call convertFileSrc, so the local image URL prefix is
+// attached to the job here, on the UI thread.
+function withImageUrlBase(job: ExportJob): ExportJob {
+  if (job.imageUrlBase || !("__TAURI_INTERNALS__" in window)) return job;
+  return { ...job, imageUrlBase: convertFileSrc("", IMAGE_SCHEME) };
+}
+
+// Vivliostyle stays "loading" until every image settles, so an image that
+// never answers would stall the export. Each image gets this long to load;
+// the ones that fail or do not answer print as their alt text instead.
+const IMAGE_PROBE_TIMEOUT_MS = 15_000;
+
+function probeImage(url: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    const timer = window.setTimeout(() => finish(false), IMAGE_PROBE_TIMEOUT_MS);
+    function finish(ok: boolean) {
+      window.clearTimeout(timer);
+      image.onload = null;
+      image.onerror = null;
+      if (!ok) image.src = "";
+      resolve(ok);
+    }
+    image.onload = () => finish(true);
+    image.onerror = () => finish(false);
+    image.src = url;
+  });
+}
+
+async function findUnavailableImages(job: ExportJob, sources: LoadedExportSource[]): Promise<string[]> {
+  const urls = new Set<string>();
+  for (const source of sources) {
+    for (const src of scanImageSources(source.content)) {
+      const url = resolveImageUrl(src, source.path, job.imageUrlBase);
+      if (url) urls.add(url);
+    }
+  }
+  const checked = await Promise.all([...urls].map(async (url) => ((await probeImage(url)) ? null : url)));
+  return checked.filter((url): url is string => url !== null);
+}
+
 export async function prepareExportPreview(
   job: ExportJob,
   sources: LoadedExportSource[],
 ): Promise<PreviewAssets> {
+  job = withImageUrlBase(job);
   const viaWorker = callWorker<PreviewAssets>({ task: "preview", job, sources });
   if (viaWorker) {
     try {
@@ -117,10 +163,13 @@ export async function prepareExportPdf(
   sources: LoadedExportSource[],
 ): Promise<PrintAssets> {
   const baseUrl = window.location.href;
-  const viaWorker = callWorker<PrintAssets>({ task: "pdf", job, sources, baseUrl });
+  const withBase = withImageUrlBase(job);
+  const unavailableImageUrls = await findUnavailableImages(withBase, sources);
+  job = { ...withBase, unavailableImageUrls };
+  const viaWorker = callWorker<Omit<PrintAssets, "unavailableImageUrls">>({ task: "pdf", job, sources, baseUrl });
   if (viaWorker) {
     try {
-      return await viaWorker;
+      return { ...(await viaWorker), unavailableImageUrls };
     } catch {
       // fall through to synchronous fallback below
     }
@@ -140,6 +189,7 @@ export async function prepareExportPdf(
     markup: buildLinkedPrintMarkup(document, pages),
     vivliostyleHtml: buildLinkedVivliostyleHtml(document, baseUrl),
     pageCount: pages.length + estimateFrontMatterPages(document),
+    unavailableImageUrls,
   };
 }
 
@@ -147,6 +197,7 @@ export async function prepareExportDocx(
   job: ExportJob,
   sources: LoadedExportSource[],
 ): Promise<DocxAssets> {
+  job = withImageUrlBase(job);
   const viaWorker = callWorker<DocxAssets>({ task: "docx", job, sources });
   if (viaWorker) {
     try {

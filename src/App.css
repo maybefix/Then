@@ -3059,6 +3059,55 @@ html:not([data-window-fullscreen="true"])
   border-radius: 2px;
 }
 
+/* 画像記法 ![alt](src)。文字はそのまま見せ、ホバー表示の手がかりだけ添える。 */
+.verticalTypewriterEditor .mk-image {
+  color: var(--text-muted);
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+  text-underline-offset: 0.2em;
+}
+
+.imageHoverPreview {
+  position: fixed;
+  z-index: 40;
+  display: grid;
+  gap: 6px;
+  max-width: 360px;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-panel-strong);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.32);
+  color: var(--text-secondary);
+  font-family: var(--ui-font-family);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow: hidden;
+  writing-mode: horizontal-tb;
+  pointer-events: none;
+}
+
+.imageHoverPreview img {
+  display: block;
+  max-width: min(348px, 100%);
+  max-height: 280px;
+  object-fit: contain;
+  justify-self: center;
+  border-radius: 3px;
+  background: repeating-conic-gradient(rgba(127, 127, 127, 0.14) 0% 25%, transparent 0% 50%) 0 0 / 12px 12px;
+}
+
+.imageHoverPreview p {
+  margin: 0;
+}
+
+.imageHoverPreviewSource {
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .verticalTypewriterEditor .ruby-base {
   display: ruby;
   color: var(--ruby-base-color, var(--text-primary));
@@ -10579,6 +10628,17 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   overflow: hidden;
   align-items: stretch;
   justify-content: stretch;
+}
+.exportPreviewStage:has(.exportImageNotice) {
+  flex-direction: column;
+}
+.exportImageNotice {
+  flex: none;
+  padding: 6px 12px;
+  font-size: var(--export-font-caption);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-root) 80%, #d9a400);
+  border-bottom: 1px solid var(--border-subtle, transparent);
 }
 .exportPreviewEngineTag {
   font-size: var(--export-font-caption);

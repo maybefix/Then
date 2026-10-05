@@ -4,7 +4,7 @@
 // produces the source document. Pagination, running headers and page numbers
 // are expressed as @page rules so Vivliostyle — not our own code — lays out the
 // pages, after which WebView2 PrintToPdf serializes them.
-import { exportBlockHtml } from "./linkedDocument";
+import { exportBlockHtml, exportImageCss } from "./linkedDocument";
 import type {
   ExportLayoutProfile,
   LinkedExportDocument,
@@ -291,6 +291,7 @@ rt { font-size: 0.5em; }
 .then-code, .then-code-inline { font-family: "Then Code", monospace; font-size: 0.92em; }
 .then-code { white-space: pre-wrap; text-align: start; }
 strong { font-weight: 700; }
+${exportImageCss(layout)}
 </style>
 </head>
 <body><main class="then-viv-document">${documentHtml}</main></body>

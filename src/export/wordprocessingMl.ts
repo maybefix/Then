@@ -99,6 +99,9 @@ function inlineXml(
       return codeRun(inline.text);
     case "break":
       return "<w:r><w:br/></w:r>";
+    // Images are not embedded in DOCX yet; the alt text marks where one stands.
+    case "image":
+      return normalRun(font, `［${inline.alt || "画像"}］`);
   }
 }
 

@@ -134,6 +134,14 @@ export type ExportJob = {
   sources: ExportSourceFile[];
   layout: ExportLayoutProfile;
   frontMatter?: ExportFrontMatterContent;
+  /**
+   * `convertFileSrc("", "then-image")`: the prefix for local image URLs. Set on
+   * the UI thread (the typesetting worker cannot call convertFileSrc); absent
+   * outside Tauri, where local images print as their alt text.
+   */
+  imageUrlBase?: string;
+  /** Image URLs that failed to load before export; they print as their alt text. */
+  unavailableImageUrls?: string[];
 };
 
 /** Compatibility shape retained for the single-document AST conversion boundary. */
@@ -154,13 +162,18 @@ export type ExportInline =
   | { kind: "emphasis"; text: string; style: "auto" | "goma" | "dot" }
   | { kind: "tcy"; text: string }
   | { kind: "code"; text: string }
+  // `![alt](src)`. `text` is always empty (an image has no characters); `url` is
+  // the resolved display URL, or null when the image cannot be shown (the alt
+  // text is printed instead).
+  | { kind: "image"; text: string; alt: string; src: string; url: string | null }
   // Soft line break inside a paragraph (one editor line break). `text` is always
   // empty; it exists so every inline uniformly carries a `text` field.
   | { kind: "break"; text: string };
 
 export type ExportBlock = {
   // "code" is one whole code block; its lines are joined with "break" inlines.
-  kind: "blank" | "paragraph" | "heading" | "list" | "code";
+  // "figure" is a line holding nothing but one image; it is set as its own block.
+  kind: "blank" | "paragraph" | "heading" | "list" | "code" | "figure";
   level: number;
   align: "start" | "center" | "end";
   inlines: ExportInline[];

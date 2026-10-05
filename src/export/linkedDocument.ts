@@ -18,9 +18,11 @@ import type {
   ResolvedFrontMatter,
 } from "./types";
 import { resolvePageDimensions, withFrontMatterDefaults } from "./types";
+import { resolveImageUrl } from "../utils/markdownImage";
 
 function inlineLength(inline: ExportInline): number {
-  return inline.text.length;
+  // An inline image takes about one character cell in the page estimate.
+  return inline.kind === "image" ? 1 : inline.text.length;
 }
 
 function blockLength(block: ExportBlock): number {
@@ -81,8 +83,8 @@ function mergeSoftBreaks(blocks: ExportBlock[]): ExportBlock[] {
       flush();
       continue;
     }
-    // Headings and code blocks stand alone; body lines never merge into them.
-    if (block.kind === "heading" || block.kind === "code") {
+    // Headings, code blocks and figures stand alone; body lines never merge into them.
+    if (block.kind === "heading" || block.kind === "code" || block.kind === "figure") {
       flush();
       out.push(block);
       continue;
@@ -101,6 +103,34 @@ function mergeSoftBreaks(blocks: ExportBlock[]): ExportBlock[] {
   }
   flush();
   return out;
+}
+
+function resolveImages(blocks: ExportBlock[], documentPath: string, job: ExportJob): ExportBlock[] {
+  const unavailable = new Set(job.unavailableImageUrls ?? []);
+  return blocks.map((block) => {
+    if (!block.inlines.some((inline) => inline.kind === "image")) return block;
+    return {
+      ...block,
+      inlines: block.inlines.map((inline) => {
+        if (inline.kind !== "image") return inline;
+        const url = resolveImageUrl(inline.src, documentPath, job.imageUrlBase);
+        return { ...inline, url: url && !unavailable.has(url) ? url : null };
+      }),
+    };
+  });
+}
+
+/** Image URLs a job will load; the export probes them before typesetting. */
+export function collectExportImageUrls(job: ExportJob, loadedSources: LoadedExportSource[]): string[] {
+  const urls = new Set<string>();
+  for (const section of createLinkedExportDocument({ ...job, unavailableImageUrls: [] }, loadedSources).sections) {
+    for (const block of section.blocks) {
+      for (const inline of block.inlines) {
+        if (inline.kind === "image" && inline.url) urls.add(inline.url);
+      }
+    }
+  }
+  return [...urls];
 }
 
 function firstHeading(blocks: ExportBlock[], fallback: string): string {
@@ -127,7 +157,7 @@ export function createLinkedExportDocument(
         text: loaded.content,
       });
       const converted = createExportDocument(ast, job.layout.body.fontFamily);
-      const blocks = mergeSoftBreaks(converted.blocks);
+      const blocks = mergeSoftBreaks(resolveImages(converted.blocks, source.path, job));
       return {
         source,
         blocks,
@@ -360,6 +390,23 @@ export function paginateLinkedDocument(document: LinkedExportDocument): ExportPa
           page.isSourceFirstPage = sourceFirstPage;
         }
 
+        if (block.kind === "figure") {
+          // The image size is unknown here; estimate it as filling one page.
+          if (page.blocks.length > 0) {
+            page = addSourcePage(
+              section.source.id,
+              section.source.displayName,
+              section.chapterTitle,
+              sourceFirstPage,
+            );
+          }
+          page.blocks.push(block);
+          page.used = capacity.page;
+          block = null;
+          sourceFirstPage = false;
+          continue;
+        }
+
         const rawLength = block.kind === "blank" ? capacity.line : blockLength(block);
         const headingExtra = block.kind === "heading" ? capacity.line : 0;
         const required = Math.max(1, rawLength + headingExtra);
@@ -463,13 +510,48 @@ export function exportInlineHtml(inline: ExportInline): string {
     case "tcy": return `<span class="then-tcy">${text}</span>`;
     case "code": return `<code class="then-code-inline">${text}</code>`;
     case "break": return "<br>";
+    case "image": return imageHtml(inline, "then-image-inline");
   }
+}
+
+function imageHtml(inline: Extract<ExportInline, { kind: "image" }>, className: string): string {
+  if (!inline.url) return `<span class="then-image-missing">［${escapeHtml(inline.alt || "画像")}］</span>`;
+  return `<img class="${className}" src="${escapeHtml(inline.url)}" alt="${escapeHtml(inline.alt)}">`;
+}
+
+/**
+ * Image rules shared by the paged preview and Vivliostyle. A figure is capped at
+ * the type area (one column of it), so it never overflows a page; an inline
+ * image is set one character tall.
+ */
+export function exportImageCss(layout: ExportLayoutProfile): string {
+  const [widthMm, heightMm] = resolvePageDimensions(layout);
+  const page = layout.page;
+  const body = layout.body;
+  let areaWidth = widthMm - page.marginInnerMm - page.marginOuterMm;
+  let areaHeight = heightMm - page.marginTopMm - page.marginBottomMm;
+  if (body.columns > 1) {
+    const gaps = body.columnGapMm * (body.columns - 1);
+    if (body.writingMode === "horizontal-tb") areaWidth = (areaWidth - gaps) / body.columns;
+    else areaHeight = (areaHeight - gaps) / body.columns;
+  }
+  const mm = (value: number) => `${Math.max(1, Math.floor(value * 10) / 10)}mm`;
+  return `.then-figure { margin: 0 0 0.9em; padding: 0; text-align: center; break-inside: avoid; }
+.then-figure img { display: block; margin-inline: auto; max-width: ${mm(areaWidth)}; max-height: ${mm(areaHeight)}; object-fit: contain; }
+.then-figure.then-align-start img { margin-inline: 0 auto; }
+.then-figure.then-align-end img { margin-inline: auto 0; }
+.then-image-inline { block-size: 1em; inline-size: auto; vertical-align: middle; }
+.then-image-missing { color: #666; }`;
 }
 
 export function exportBlockHtml(block: ExportBlock): string {
   if (block.kind === "blank") return '<p class="then-blank" aria-hidden="true">&#x3000;</p>';
-  const tag = block.kind === "heading" ? `h${Math.max(1, Math.min(6, block.level))}` : "p";
   const id = block.anchorId ? ` id="${escapeHtml(block.anchorId)}"` : "";
+  const image = block.inlines.find((inline) => inline.kind === "image");
+  if (block.kind === "figure" && image?.kind === "image") {
+    return `<figure${id} class="then-block then-figure then-align-${block.align}">${imageHtml(image, "then-figure-image")}</figure>`;
+  }
+  const tag = block.kind === "heading" ? `h${Math.max(1, Math.min(6, block.level))}` : "p";
   return `<${tag}${id} class="then-block then-${block.kind} then-align-${block.align}">${block.inlines.map(exportInlineHtml).join("")}</${tag}>`;
 }
 
@@ -570,6 +652,7 @@ rt { font-size:.5em; }
 .then-code, .then-code-inline { font-family:"Then Code",monospace; font-size:0.92em; }
 .then-code { white-space:pre-wrap; text-align:start; }
 strong { font-weight:700; }
+${exportImageCss(document.layout)}
 `;
 }
 

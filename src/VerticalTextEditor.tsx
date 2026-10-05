@@ -21,6 +21,7 @@ import {
   type EditorView,
 } from "@tiptap/pm/view";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ImageHoverPreview } from "./components/editor/ImageHoverPreview";
 import {
   areDocumentIndexesEquivalent,
   createDocumentIndexFromLines,
@@ -88,6 +89,8 @@ type VerticalTextEditorProps = {
   showLineBreakMarks: boolean;
   showLineNumbers: boolean;
   highlightCurrentLine: boolean;
+  /** 開いている原稿ファイルの絶対パス。画像記法の相対パスの基準。 */
+  documentPath?: string | null;
   colorizeJapaneseQuotes: boolean;
   /** コメント行（// と <!-- -->）を表示するか。false で畳む。 */
   showComments: boolean;
@@ -827,6 +830,9 @@ function pushInlineDecos(markup: InlineMarkup, contentStart: number, out: Decora
   const fullStart = markup.fullRange.offset;
   const fullEnd = fullStart + markup.fullRange.length;
 
+  // Image notation stays as typed; pushImageDecos marks it for the hover preview.
+  if (markup.type === "image") return;
+
   if (markup.type === "ruby") {
     const contentOffset = markup.contentRange.offset;
     const contentEnd = contentOffset + markup.contentRange.length;
@@ -944,6 +950,25 @@ function pushInlineDecos(markup: InlineMarkup, contentStart: number, out: Decora
   addInlineDecoration(out, contentStart, contentEnd, fullEnd, "mk-hidden");
 }
 
+/**
+ * Marks `![alt](src)` (also on the caret line) so ImageHoverPreview can find
+ * the source under the mouse. The text itself is left as typed.
+ */
+function pushImageDecos(out: Decoration[], line: LineNode, contentStart: number): void {
+  for (const markup of line.inlineMarkups) {
+    if (markup.type !== "image") continue;
+    const from = contentStart + markup.fullRange.offset;
+    out.push(
+      Decoration.inline(from, from + markup.fullRange.length, {
+        class: "mk-image",
+        "data-image-src": markup.imageSrc ?? "",
+        "data-image-alt": markup.contentText,
+        "data-image-key": `${line.lineIndex}:${markup.fullRange.offset}`,
+      }),
+    );
+  }
+}
+
 function pushLineDecos(
   out: Decoration[],
   lines: LineNode[],
@@ -984,6 +1009,7 @@ function pushLineDecos(
   pushKinsokuDecos(out, line, contentStart);
   pushJapaneseQuoteDecos(out, line, contentStart);
   pushLatinOpticalCenterDecos(out, line, contentStart);
+  pushImageDecos(out, line, contentStart);
 
   if (active) return;
 
@@ -2192,6 +2218,7 @@ export function VerticalTextEditor({
   showLineBreakMarks,
   showLineNumbers,
   highlightCurrentLine,
+  documentPath = null,
   colorizeJapaneseQuotes,
   showComments,
   textLayoutSignature,
@@ -4381,6 +4408,7 @@ export function VerticalTextEditor({
         aria-hidden="true"
       />
       <div ref={lineBreakLayerRef} className="visibleLineBreakLayer" aria-hidden="true" />
+      <ImageHoverPreview hostRef={editorHostRef} documentPath={documentPath} />
       {editorDisplayMode === "continuous" && typewriterScroll && showTypewriterGuide && (
         <div className="verticalTypewriterGuide" />
       )}

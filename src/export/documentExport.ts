@@ -45,6 +45,9 @@ function markupToInlines(markup: InlineMarkup): ExportInline[] {
     }];
   }
   if (markup.type === "tcy") return [{ kind: "tcy", text: markup.contentText }];
+  if (markup.type === "image") {
+    return [{ kind: "image", text: "", alt: markup.contentText, src: markup.imageSrc ?? "", url: null }];
+  }
   return [{ kind: "bold", text: markup.contentText }];
 }
 
@@ -63,8 +66,10 @@ function blockToExportBlock(block: LineNode & { kind: Exclude<ExportBlock["kind"
 
   if (cursor < source.length) inlines.push({ kind: "text", text: sliceWithoutSlashEscape(source, cursor) });
 
+  const visible = inlines.filter((inline) => inline.kind !== "text" || inline.text.trim() !== "");
+  const isFigure = block.kind === "paragraph" && visible.length === 1 && visible[0].kind === "image";
   return {
-    kind: block.kind,
+    kind: isFigure ? "figure" : block.kind,
     level: block.level,
     align: block.align ?? (block.jitsuki ? "end" : "start"),
     inlines,

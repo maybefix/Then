@@ -156,7 +156,19 @@ export function sliceWithoutSlashEscape(source: string, from: number, to = sourc
   return source.slice(from, escape) + source.slice(escape + 1, to);
 }
 
+/** `![alt](src "title")`。1 = alt, 2 = src。呼ぶたびに新しい global RegExp を返す。 */
+export function imageMarkupPattern(): RegExp {
+  return /!\[([^\[\]\n]*)\]\(([^()\s]+)(?:\s+"[^"\n]*")?\)/g;
+}
+
 type RawMarkup =
+  | {
+      type: "image";
+      start: number;
+      len: number;
+      alt: string;
+      src: string;
+    }
   | {
       type: "code";
       start: number;
@@ -452,6 +464,17 @@ export function parseInlines(text: string, base = 0): InlineMarkup[] {
     });
   }
 
+  const image = imageMarkupPattern();
+  while ((match = image.exec(text))) {
+    raw.push({
+      type: "image",
+      start: match.index,
+      len: match[0].length,
+      alt: match[1],
+      src: match[2],
+    });
+  }
+
   const bold = /\*\*([^*]+)\*\*/g;
   while ((match = bold.exec(text))) {
     raw.push({
@@ -526,6 +549,33 @@ export function parseInlines(text: string, base = 0): InlineMarkup[] {
             role: "closing",
             text: ticks,
             range: { offset: contentStart + contentLength, length: item.ticks },
+          },
+        ],
+      });
+      continue;
+    }
+
+    if (item.type === "image") {
+      const altStart = start + 2;
+      const srcStart = altStart + item.alt.length + 2;
+      out.push({
+        id: hash16(`image|${full}|${start}`),
+        type: "image",
+        fullText: full,
+        contentText: item.alt,
+        fullRange: { offset: start, length: item.len },
+        contentRange: { offset: altStart, length: item.alt.length },
+        metadata: "markdownImage",
+        imageSrc: item.src,
+        markers: [
+          { role: "opening", text: "![", range: { offset: start, length: 2 } },
+          { role: "content", text: item.alt, range: { offset: altStart, length: item.alt.length } },
+          { role: "separator", text: "](", range: { offset: altStart + item.alt.length, length: 2 } },
+          { role: "annotation", text: item.src, range: { offset: srcStart, length: item.src.length } },
+          {
+            role: "closing",
+            text: full.slice(srcStart - start + item.src.length),
+            range: { offset: srcStart + item.src.length, length: item.len - (srcStart - start + item.src.length) },
           },
         ],
       });

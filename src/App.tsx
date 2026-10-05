@@ -13413,6 +13413,7 @@ export default function App() {
                             showLineBreakMarks={settings.showLineBreakMarks}
                             showLineNumbers={settings.showLineNumbers}
                             highlightCurrentLine={settings.highlightCurrentLine}
+                            documentPath={currentFilePath}
                             colorizeJapaneseQuotes={settings.colorizeJapaneseQuotes}
                             showComments={settings.showComments}
                             textLayoutSignature={[

@@ -12,8 +12,8 @@ function serializeInline(inline: SubmissionInline, options: SubmissionExportOpti
     return inline.text;
   }
   const markup = inline.markup;
-  // Code has no counterpart on novel sites; it is written out as typed.
-  if (markup.type === "code") return markup.fullText;
+  // Code and images have no counterpart on novel sites; they are written out as typed.
+  if (markup.type === "code" || markup.type === "image") return markup.fullText;
   if (markup.type === "layoutAlign" || (markup.type === "aozoraAnnotation" && markup.contentText === "地付き")) return "";
   if (markup.type === "aozoraAnnotation") {
     warn("unsupported-markup", `未対応の青空文庫注記: ${markup.contentText}`);

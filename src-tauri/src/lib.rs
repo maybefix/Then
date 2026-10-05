@@ -11,6 +11,7 @@ mod checkpoint_store;
 mod export_front_matter;
 mod intermediate_draft;
 mod library;
+mod markdown_image;
 mod project_state;
 mod submission_export;
 
@@ -559,6 +560,10 @@ pub fn run() {
         // 書き出しの表紙画像を Vivliostyle に渡す（組版文書は data URL なので埋め込まない）。
         .register_uri_scheme_protocol(export_front_matter::COVER_SCHEME, |_context, request| {
             export_front_matter::serve_cover(&request)
+        })
+        // 本文の画像記法が指す、作品フォルダ内のローカル画像（Web の画像は通らない）。
+        .register_uri_scheme_protocol(markdown_image::IMAGE_SCHEME, |_context, request| {
+            markdown_image::serve_image(&request)
         })
         .setup(|app| {
             // 消しきれなくても起動は止めない。残りは画面で知らせ、再試行できるようにする。

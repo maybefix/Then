@@ -270,6 +270,14 @@ function tocDepthLabel(depth: ExportLayoutProfile["frontMatter"]["toc"]["depth"]
   return tocDepthOptions.find(([value]) => value === String(depth))?.[1] ?? "";
 }
 
+function readableImageUrl(url: string): string {
+  try {
+    return decodeURIComponent(url);
+  } catch {
+    return url;
+  }
+}
+
 export function LinkedExportScreen({
   title,
   projectPath = null,
@@ -291,6 +299,7 @@ export function LinkedExportScreen({
   const [activeTab, setActiveTab] = useState<"files" | "settings" | "preview">("files");
   const [openSections, setOpenSections] = useState(() => new Set(["page"]));
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const [unavailableImages, setUnavailableImages] = useState<string[]>([]);
   const [failure, setFailure] = useState<ExportFailure | null>(sourceError ? {
     kind: "source-read",
     message: "本文ファイルを読み込めませんでした",
@@ -434,6 +443,7 @@ export function LinkedExportScreen({
     void prepareExportPdf(job, sources)
       .then((assets) => {
         setPreviewSrc(vivliostyleViewerSrc(assets.vivliostyleHtml));
+        setUnavailableImages(assets.unavailableImageUrls);
         setViewState("preview-ready");
         setActiveTab("preview");
       })
@@ -551,6 +561,7 @@ export function LinkedExportScreen({
       if (targetFormat === "pdf") {
         const assets = await prepareExportPdf(nextJob, sources);
         pageCount = assets.pageCount;
+        setUnavailableImages(assets.unavailableImageUrls);
         result = await onExportPdf(
           { ...assets, layout: nextJob.layout, title: workTitle },
           reportProgress,
@@ -673,6 +684,11 @@ export function LinkedExportScreen({
               )}
               {viewState === "preview-loading" && (
                 <div className="exportEmptyState"><span className="exportSpinner"/><strong>プレビュー生成中…</strong><p>本文を連結して組版しています</p></div>
+              )}
+              {viewState === "preview-ready" && previewSrc && unavailableImages.length > 0 && (
+                <div className="exportImageNotice" role="status" title={unavailableImages.map(readableImageUrl).join("\n")}>
+                  読み込めない画像が{unavailableImages.length}件あります。該当箇所には画像の説明文を印字します。
+                </div>
               )}
               {viewState === "preview-ready" && previewSrc && (
                 <iframe

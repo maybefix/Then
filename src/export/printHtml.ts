@@ -31,6 +31,8 @@ function inlineHtml(inline: ExportInline): string {
       return `<code class="code-inline">${text}</code>`;
     case "break":
       return "<br>";
+    case "image":
+      return `<span class="image-missing">［${escapeHtml(inline.alt || "画像")}］</span>`;
   }
 }
 

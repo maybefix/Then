@@ -50,6 +50,7 @@
     "test:proofread-ui": "node scripts/test-proofread-ui.mjs",
     "test:search": "node scripts/test-search-sidebar-regex.mjs",
     "test:export": "node scripts/verify-export.mjs",
+    "test:markdown-images": "node scripts/test-markdown-images.mjs",
     "test:submission-export": "node scripts/test-submission-export.mjs",
     "test:submission-ui": "node scripts/test-submission-ui.mjs",
     "test:submission-worker": "node scripts/test-submission-worker.mjs",

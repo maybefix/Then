@@ -21,7 +21,7 @@ export type RubyItem = {
 
 export type InlineMarkup = {
   id: string;
-  type: "ruby" | "emphasis" | "tcy" | "layoutAlign" | "aozoraAnnotation" | "bold" | "code";
+  type: "ruby" | "emphasis" | "tcy" | "layoutAlign" | "aozoraAnnotation" | "bold" | "code" | "image";
   syntax?: "layoutsystem_v1" | "legacy";
   fullText: string;
   contentText: string;
@@ -33,6 +33,8 @@ export type InlineMarkup = {
   rubyItems?: RubyItem[] | null;
   emStyle?: "auto" | "goma" | "dot";
   align?: LayoutAlign;
+  /** For type "image": the raw `src` of `![alt](src)` (contentText is the alt). */
+  imageSrc?: string;
   markers: InlineMarker[];
 };
 
