@@ -42,19 +42,22 @@ assert.equal(resolveImageUrl("a.png", doc, base), `${base}${encodeURIComponent(w
 const sources: LoadedExportSource[] = [{
   id: "s", path: doc, extension: "txt", displayName: "01.txt", chars: 10, enabled: true, order: 0,
   startMode: "continue", markupMode: "then-markup",
-  content: "本文の行\n\n![扉絵](img/door.png)\n\n文中に![印](https://example.com/mark.png)がある。\n\n![消えた](missing.png)",
+  content: "本文の行\n\n![扉絵](img/door.png)\n\n文中に![印](https://example.com/mark.png)がある。\n\n![消えた](missing.png)\n\n[(al:end)]![地付き](img/end.png)",
 }];
 const job: ExportJob = {
   format: "pdf", title: "画像", sources, layout: structuredClone(DEFAULT_EXPORT_LAYOUT), imageUrlBase: base,
 };
 const urls = collectExportImageUrls(job, sources);
-assert.equal(urls.length, 3);
+assert.equal(urls.length, 4);
 const missing = `${base}${encodeURIComponent(win("C:/作品/本文/missing.png"))}`;
 const document = createLinkedExportDocument({ ...job, unavailableImageUrls: [missing] }, sources);
 const blocks = document.sections[0].blocks;
-assert.deepEqual(blocks.map((b) => b.kind), ["paragraph", "figure", "paragraph", "figure"]);
+assert.deepEqual(blocks.map((b) => b.kind), ["paragraph", "figure", "paragraph", "figure", "figure"]);
+// Figures are centred by default; an explicit alignment on the line wins.
+assert.equal(blocks[1].align, "center");
+assert.equal(blocks[4].align, "end");
 const figureHtml = exportBlockHtml(blocks[1]);
-assert.match(figureHtml, /^<figure class="then-block then-figure then-align-start"><img class="then-figure-image" src="http:\/\/then-image\.localhost\/C%3A%5C/);
+assert.match(figureHtml, /^<figure class="then-block then-figure then-align-center"><img class="then-figure-image" src="http:\/\/then-image\.localhost\/C%3A%5C/);
 assert.match(figureHtml, /alt="扉絵"><figcaption class="then-figure-caption">扉絵<\/figcaption><\/figure>$/);
 const uncaptioned = createLinkedExportDocument(
   { ...job, layout: { ...job.layout, body: { ...job.layout.body, figureCaptions: false } } },
@@ -62,7 +65,7 @@ const uncaptioned = createLinkedExportDocument(
 );
 assert.doesNotMatch(exportBlockHtml(uncaptioned.sections[0].blocks[1]), /figcaption/);
 assert.match(exportBlockHtml(blocks[2]), /<img class="then-image-inline" src="https:\/\/example\.com\/mark\.png" alt="印">/);
-assert.equal(exportBlockHtml(blocks[3]), '<figure class="then-block then-figure then-align-start"><span class="then-image-missing">［消えた］</span></figure>');
+assert.equal(exportBlockHtml(blocks[3]), '<figure class="then-block then-figure then-align-center"><span class="then-image-missing">［消えた］</span></figure>');
 const html = buildLinkedVivliostyleHtml(document, "http://localhost/");
 assert.match(html, /\.then-figure \{ display: flex; flex-direction: column; align-items: center; max-block-size: [\d.]+mm;/);
 assert.match(html, /\.then-figure img \{ [^}]*max-width: [\d.]+mm; max-height: [\d.]+mm;/);

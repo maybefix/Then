@@ -71,7 +71,8 @@ function blockToExportBlock(block: LineNode & { kind: Exclude<ExportBlock["kind"
   return {
     kind: isFigure ? "figure" : block.kind,
     level: block.level,
-    align: block.align ?? (block.jitsuki ? "end" : "start"),
+    // A figure is centred unless the line asks for an alignment ([(al:…)], >>).
+    align: block.align ?? (block.jitsuki ? "end" : isFigure ? "center" : "start"),
     inlines,
   };
 }
