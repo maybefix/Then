@@ -55,11 +55,17 @@ const blocks = document.sections[0].blocks;
 assert.deepEqual(blocks.map((b) => b.kind), ["paragraph", "figure", "paragraph", "figure"]);
 const figureHtml = exportBlockHtml(blocks[1]);
 assert.match(figureHtml, /^<figure class="then-block then-figure then-align-start"><img class="then-figure-image" src="http:\/\/then-image\.localhost\/C%3A%5C/);
-assert.match(figureHtml, /alt="扉絵"/);
+assert.match(figureHtml, /alt="扉絵"><figcaption class="then-figure-caption">扉絵<\/figcaption><\/figure>$/);
+const uncaptioned = createLinkedExportDocument(
+  { ...job, layout: { ...job.layout, body: { ...job.layout.body, figureCaptions: false } } },
+  sources,
+);
+assert.doesNotMatch(exportBlockHtml(uncaptioned.sections[0].blocks[1]), /figcaption/);
 assert.match(exportBlockHtml(blocks[2]), /<img class="then-image-inline" src="https:\/\/example\.com\/mark\.png" alt="印">/);
 assert.equal(exportBlockHtml(blocks[3]), '<figure class="then-block then-figure then-align-start"><span class="then-image-missing">［消えた］</span></figure>');
 const html = buildLinkedVivliostyleHtml(document, "http://localhost/");
-assert.match(html, /\.then-figure img \{ display: block; margin-inline: auto; max-width: [\d.]+mm; max-height: [\d.]+mm;/);
+assert.match(html, /\.then-figure \{ display: flex; flex-direction: column; align-items: center; max-block-size: [\d.]+mm;/);
+assert.match(html, /\.then-figure img \{ [^}]*max-width: [\d.]+mm; max-height: [\d.]+mm;/);
 // Submission text keeps the notation as typed.
 const submission = serializeSubmission(
   { sections: [{ source: { id: "s", displayName: "01.txt" }, lines: [{ kind: "paragraph", sourceLine: 1, inlines: [{ kind: "markup", markup: image }] }] }] } as never,

@@ -152,6 +152,7 @@ export function ImageHoverPreview({
         />
       )}
       {message && <p className="imageHoverPreviewMessage">{message}</p>}
+      {target.alt.trim() && <p className="imageHoverPreviewCaption">{target.alt}</p>}
       <p className="imageHoverPreviewSource" title={target.src}>{target.src}</p>
     </div>,
     portalRoot,

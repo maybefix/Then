@@ -105,6 +105,8 @@ export type ExportLayoutProfile = {
     fontSize: number;
     fontSizeUnit: "Q" | "pt";
     lineHeight: number;
+    /** 図版（画像だけの行）の alt をキャプションとして印字する。未設定は true。 */
+    figureCaptions?: boolean;
   };
   header: {
     enabled: boolean;
@@ -179,6 +181,8 @@ export type ExportBlock = {
   inlines: ExportInline[];
   /** 目次から参照される見出しの id。 */
   anchorId?: string;
+  /** "figure" のキャプション（画像の alt）。印字しないときは無い。 */
+  caption?: string;
 };
 
 export type ExportDocument = {

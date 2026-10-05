@@ -107,16 +107,20 @@ function mergeSoftBreaks(blocks: ExportBlock[]): ExportBlock[] {
 
 function resolveImages(blocks: ExportBlock[], documentPath: string, job: ExportJob): ExportBlock[] {
   const unavailable = new Set(job.unavailableImageUrls ?? []);
+  const captions = job.layout.body.figureCaptions !== false;
   return blocks.map((block) => {
     if (!block.inlines.some((inline) => inline.kind === "image")) return block;
-    return {
-      ...block,
-      inlines: block.inlines.map((inline) => {
-        if (inline.kind !== "image") return inline;
-        const url = resolveImageUrl(inline.src, documentPath, job.imageUrlBase);
-        return { ...inline, url: url && !unavailable.has(url) ? url : null };
-      }),
-    };
+    const inlines = block.inlines.map((inline) => {
+      if (inline.kind !== "image") return inline;
+      const url = resolveImageUrl(inline.src, documentPath, job.imageUrlBase);
+      return { ...inline, url: url && !unavailable.has(url) ? url : null };
+    });
+    const image = inlines.find((inline) => inline.kind === "image");
+    // An image that cannot be shown already prints its alt in its place.
+    const caption = block.kind === "figure" && captions && image?.kind === "image" && image.url
+      ? image.alt.trim()
+      : "";
+    return { ...block, inlines, ...(caption ? { caption } : {}) };
   });
 }
 
@@ -536,10 +540,15 @@ export function exportImageCss(layout: ExportLayoutProfile): string {
     else areaHeight = (areaHeight - gaps) / body.columns;
   }
   const mm = (value: number) => `${Math.max(1, Math.floor(value * 10) / 10)}mm`;
-  return `.then-figure { margin: 0 0 0.9em; padding: 0; text-align: center; break-inside: avoid; }
-.then-figure img { display: block; margin-inline: auto; max-width: ${mm(areaWidth)}; max-height: ${mm(areaHeight)}; object-fit: contain; }
-.then-figure.then-align-start img { margin-inline: 0 auto; }
-.then-figure.then-align-end img { margin-inline: auto 0; }
+  const blockArea = body.writingMode === "horizontal-tb" ? areaHeight : areaWidth;
+  // The figure is a column flex box (column = the block axis in either writing
+  // mode) capped at the type area. The caption keeps its size and the image
+  // shrinks into what is left, so a figure with a caption still fits one page.
+  return `.then-figure { display: flex; flex-direction: column; align-items: center; max-block-size: ${mm(blockArea)}; margin: 0 0 0.9em; padding: 0; text-align: center; break-inside: avoid; }
+.then-figure.then-align-start { align-items: flex-start; text-align: start; }
+.then-figure.then-align-end { align-items: flex-end; text-align: end; }
+.then-figure img { display: block; flex: 0 1 auto; min-block-size: 0; min-inline-size: 0; max-width: ${mm(areaWidth)}; max-height: ${mm(areaHeight)}; object-fit: contain; }
+.then-figure-caption { flex: none; margin-block-start: 0.4em; font-size: 0.85em; line-height: 1.5; }
 .then-image-inline { block-size: 1em; inline-size: auto; vertical-align: middle; }
 .then-image-missing { color: #666; }`;
 }
@@ -549,7 +558,8 @@ export function exportBlockHtml(block: ExportBlock): string {
   const id = block.anchorId ? ` id="${escapeHtml(block.anchorId)}"` : "";
   const image = block.inlines.find((inline) => inline.kind === "image");
   if (block.kind === "figure" && image?.kind === "image") {
-    return `<figure${id} class="then-block then-figure then-align-${block.align}">${imageHtml(image, "then-figure-image")}</figure>`;
+    const caption = block.caption ? `<figcaption class="then-figure-caption">${escapeHtml(block.caption)}</figcaption>` : "";
+    return `<figure${id} class="then-block then-figure then-align-${block.align}">${imageHtml(image, "then-figure-image")}${caption}</figure>`;
   }
   const tag = block.kind === "heading" ? `h${Math.max(1, Math.min(6, block.level))}` : "p";
   return `<${tag}${id} class="then-block then-${block.kind} then-align-${block.align}">${block.inlines.map(exportInlineHtml).join("")}</${tag}>`;

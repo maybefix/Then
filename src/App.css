@@ -3101,6 +3101,11 @@ html:not([data-window-fullscreen="true"])
   margin: 0;
 }
 
+.imageHoverPreviewCaption {
+  color: var(--text-primary);
+  text-align: center;
+}
+
 .imageHoverPreviewSource {
   overflow: hidden;
   color: var(--text-muted);
