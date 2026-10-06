@@ -94,6 +94,9 @@ function SendIcon() {
 function TrashIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>;
 }
+/** 移動先がこれより多いときは、メニューに絞り込み欄を出す。 */
+const MOVE_FILTER_THRESHOLD = 6;
+
 function MoveIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 8h14l-4-4M19 16H5l4 4" /></svg>;
 }
@@ -174,7 +177,8 @@ export function IdeaPane(props: IdeaPaneProps) {
   const [focusedFragmentId, setFocusedFragmentId] = useState<string | null>(null);
   const [clipMenuThreadId, setClipMenuThreadId] = useState<string | null>(null);
   const [referenceMenuId, setReferenceMenuId] = useState<string | null>(null);
-  const [fragmentMenu, setFragmentMenu] = useState<{ id: string; kind: "move" | "more" } | null>(null);
+  const [fragmentMenu, setFragmentMenu] = useState<{ id: string; kind: "move" | "more"; up: boolean } | null>(null);
+  const [moveQuery, setMoveQuery] = useState("");
   const [referencePreviews, setReferencePreviews] = useState<Record<string, string>>({});
   const [reorderTarget, setReorderTarget] = useState<{ key: string; position: "before" | "after" } | null>(null);
   const composingRef = useRef(false);
@@ -203,8 +207,23 @@ export function IdeaPane(props: IdeaPaneProps) {
       document.removeEventListener("keydown", handleKeyDown, true);
     };
   }, [fragmentMenu]);
-  const toggleFragmentMenu = (id: string, kind: "move" | "more") =>
-    setFragmentMenu((current) => (current?.id === id && current.kind === kind ? null : { id, kind }));
+  // 一覧の下のほうでは下に開くとメニューが切れるので、余白が足りなければ上に開く。
+  const toggleFragmentMenu = (id: string, kind: "move" | "more", anchor: HTMLElement) => {
+    const scroller = anchor.closest(".ideaScroll");
+    const spaceBelow = scroller
+      ? scroller.getBoundingClientRect().bottom - anchor.getBoundingClientRect().bottom
+      : Infinity;
+    setMoveQuery("");
+    setFragmentMenu((current) => (
+      current?.id === id && current.kind === kind ? null : { id, kind, up: spaceBelow < 280 }
+    ));
+  };
+  const moveDestinations = (fromThreadId: string) => threads.filter((entry) => entry.id !== fromThreadId);
+  const filteredMoveDestinations = (fromThreadId: string) => {
+    const needle = moveQuery.trim().toLocaleLowerCase();
+    const destinations = moveDestinations(fromThreadId);
+    return needle ? destinations.filter((entry) => entry.title.toLocaleLowerCase().includes(needle)) : destinations;
+  };
 
   const candidateByPath = useMemo(
     () => new Map(candidates.map((file) => [candidateKey(file), file])),
@@ -341,24 +360,26 @@ export function IdeaPane(props: IdeaPaneProps) {
       if (!fragment || !itemMatches(thread, item)) return null;
       return (
         <article key={key} className={`ideaFragment ${draggingId === fragment.id ? "isDragging" : ""} ${focusedFragmentId === fragment.id ? "isFocusedOrigin" : ""} ${targetClass}`} data-idea-fragment-id={fragment.id} onDragOver={(event) => dragOverItem(event, thread.id, key)} onDrop={(event) => dropItem(event, thread.id, key)}>
-          <span className="ideaDragHandle" draggable title="ドラッグで並び替え / Canvasへ" onDragStart={(event) => beginIdeaDrag(event, thread.id, fragment.id)} onDragEnd={endDrag}><GripIcon /></span>
           <div className="ideaMixedItemMain">
             <div className="ideaFragmentBody" contentEditable spellCheck={false} suppressContentEditableWarning onBlur={(event) => { const next = event.currentTarget.textContent ?? ""; if (next.trim()) onUpdateFragment(thread.id, fragment.id, next); else event.currentTarget.textContent = fragment.body; }}>{fragment.body}</div>
-            <div className="ideaFragmentFoot">
+            {/* 日付の行全体をつかんで並び替え・Canvas へのドラッグができる。 */}
+            <div className="ideaFragmentFoot" draggable={!fragmentMenu} onDragStart={(event) => beginIdeaDrag(event, thread.id, fragment.id)} onDragEnd={endDrag}>
               <time className="ideaFragmentDate" dateTime={new Date(fragment.createdAt).toISOString()}>{formatFragmentDate(fragment.createdAt)}</time>
               <span className="ideaFragmentBtns ideaFragmentMenuHost">
-                <button className="ideaMiniIcon" type="button" aria-label="別スレッドへ移動" title="別スレッドへ移動" aria-haspopup="menu" aria-expanded={fragmentMenu?.id === fragment.id && fragmentMenu.kind === "move"} onClick={() => toggleFragmentMenu(fragment.id, "move")}><MoveIcon /></button>
+                <span className="ideaMiniIcon ideaDragHandle" title="ドラッグで並び替え / Canvasへ" aria-hidden="true"><GripIcon /></span>
+                <button className="ideaMiniIcon" type="button" aria-label="別スレッドへ移動" title="別スレッドへ移動" aria-haspopup="menu" aria-expanded={fragmentMenu?.id === fragment.id && fragmentMenu.kind === "move"} onClick={(event) => toggleFragmentMenu(fragment.id, "move", event.currentTarget)}><MoveIcon /></button>
                 <button className="ideaMiniIcon ideaOpenCardBtn" type="button" aria-label="カードで開く" title="カードで開く" onClick={() => onOpenFragmentCard(thread.id, fragment.id)}><OpenIcon /></button>
-                <button className="ideaMiniIcon" type="button" aria-label="その他の操作" title="その他の操作" aria-haspopup="menu" aria-expanded={fragmentMenu?.id === fragment.id && fragmentMenu.kind === "more"} onClick={() => toggleFragmentMenu(fragment.id, "more")}><MoreIcon /></button>
+                <button className="ideaMiniIcon" type="button" aria-label="その他の操作" title="その他の操作" aria-haspopup="menu" aria-expanded={fragmentMenu?.id === fragment.id && fragmentMenu.kind === "more"} onClick={(event) => toggleFragmentMenu(fragment.id, "more", event.currentTarget)}><MoreIcon /></button>
                 {fragmentMenu?.id === fragment.id && fragmentMenu.kind === "move" && (
-                  <div className="referenceContextMenu ideaReferenceMenu ideaFragmentMenu" role="menu" aria-label="移動先">
+                  <div className={`referenceContextMenu ideaReferenceMenu ideaFragmentMenu ${fragmentMenu.up ? "opensUp" : ""}`} role="menu" aria-label="移動先">
                     <span className="ideaFragmentMenuLabel">移動先</span>
-                    {threads.filter((entry) => entry.id !== thread.id).map((entry) => <button key={entry.id} type="button" role="menuitem" onClick={() => { setFragmentMenu(null); onMoveFragment(thread.id, fragment.id, entry.id); }}>{entry.title}</button>)}
+                    {moveDestinations(thread.id).length > MOVE_FILTER_THRESHOLD && <input className="ideaFragmentMenuFilter" type="search" autoFocus value={moveQuery} placeholder="スレッドを絞り込み" aria-label="移動先を絞り込み" onChange={(event) => setMoveQuery(event.target.value)} onKeyDown={(event) => { if (event.key !== "Enter") return; event.preventDefault(); const first = filteredMoveDestinations(thread.id)[0]; if (first) { setFragmentMenu(null); onMoveFragment(thread.id, fragment.id, first.id); } }} />}
+                    {filteredMoveDestinations(thread.id).map((entry) => <button key={entry.id} type="button" role="menuitem" onClick={() => { setFragmentMenu(null); onMoveFragment(thread.id, fragment.id, entry.id); }}>{entry.title}</button>)}
                     <button type="button" role="menuitem" onClick={() => { setFragmentMenu(null); onMoveFragmentToNewThread(thread.id, fragment.id); }}>＋ 新規スレッドに移動…</button>
                   </div>
                 )}
                 {fragmentMenu?.id === fragment.id && fragmentMenu.kind === "more" && (
-                  <div className="referenceContextMenu ideaReferenceMenu ideaFragmentMenu" role="menu" aria-label="その他の操作">
+                  <div className={`referenceContextMenu ideaReferenceMenu ideaFragmentMenu ${fragmentMenu.up ? "opensUp" : ""}`} role="menu" aria-label="その他の操作">
                     {transfer && <button type="button" role="menuitem" onClick={() => { setFragmentMenu(null); transfer.onFragment(thread.id, fragment.id); }}>{transfer.label}</button>}
                     <button type="button" role="menuitem" className="dangerMenuItem" onClick={() => { setFragmentMenu(null); onDeleteFragment(thread.id, fragment.id); }}>削除</button>
                   </div>
@@ -381,13 +402,13 @@ export function IdeaPane(props: IdeaPaneProps) {
       : "ファイルが見つかりません";
     return (
       <article key={key} className={`ideaFragment ideaReferenceItem ${!file ? "isMissing" : ""} ${targetClass}`} onDragOver={(event) => dragOverItem(event, thread.id, key)} onDrop={(event) => dropItem(event, thread.id, key)}>
-        <span className="ideaDragHandle" draggable={Boolean(file)} title="ドラッグで並び替え / Canvasへ" onDragStart={(event) => file && beginReferenceDrag(event, thread.id, item, file)} onDragEnd={endDrag}><GripIcon /></span>
         <div className="ideaMixedItemMain">
           <button type="button" className="ideaReferenceOpen" disabled={!file} onClick={() => file && onOpenReference(file)}>
             {file?.kind === "image" ? <ReferenceThumbnail rootPath={rootPath} file={file} /> : <span className="ideaReferenceVisual"><ReferenceKindIcon kind={fallback.kind} /></span>}
             <span className="ideaReferenceCopy"><span className="ideaReferencePreview">{primary}</span>{(!file || textual) && <strong>{fallback.name}</strong>}</span>
             <OpenIcon />
           </button>
+          <span className="ideaMiniIcon ideaDragHandle" draggable={Boolean(file)} title="ドラッグで並び替え / Canvasへ" onDragStart={(event) => file && beginReferenceDrag(event, thread.id, item, file)} onDragEnd={endDrag}><GripIcon /></span>
           <div className="ideaReferenceMenuHost">
             <button type="button" className="ideaMiniIcon" aria-label="資料の操作" title="資料の操作" onClick={() => setReferenceMenuId((current) => current === item.id ? null : item.id)}>…</button>
             {referenceMenuId === item.id && (
