@@ -6641,13 +6641,12 @@ body {
   color: var(--text-faint);
 }
 
+/* 右サイドバーは左と鏡写しの構成。ペインと、外側の端に置く切り替えレールをひとまとめにする。 */
 .rightSidebar {
   display: flex;
-  width: var(--right-sidebar-width);
-  min-width: var(--right-sidebar-width);
   height: 100%;
-  flex: 0 0 var(--right-sidebar-width);
-  flex-direction: column;
+  flex: 0 0 auto;
+  flex-direction: row;
   overflow: hidden;
   border-left: 0.5px solid var(--border-subtle);
   background: #17181d;
@@ -6657,47 +6656,56 @@ body {
     transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.wideRightSidebar {
+.rightSidebarPanel {
+  display: flex;
+  width: var(--right-sidebar-width);
+  min-width: var(--right-sidebar-width);
+  min-height: 0;
+  height: 100%;
+  flex: 0 0 var(--right-sidebar-width);
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.wideRightSidebar .rightSidebarPanel {
   width: 480px;
   min-width: 480px;
   flex-basis: 480px;
 }
 
-.collapsedRightSidebar,
-.rightSidebar.collapsedRightSidebar {
-  width: 0;
-  min-width: 0;
-  flex-basis: 0;
+.rightSidebar[data-sidebar-collapsed="true"] .rightSidebarPanel {
+  display: none;
+}
+
+.rightActivityBar {
+  border-right: 0;
+  border-left: 0.5px solid var(--border-subtle);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.rightActivityBar::-webkit-scrollbar {
+  display: none;
+}
+
+/* 畳んだときはサイドバー自身の左罫と二重にならないようにする。 */
+.rightSidebar[data-sidebar-collapsed="true"] > .rightActivityBar {
   border-left-color: transparent;
-  opacity: 0;
-  pointer-events: none;
+}
+
+.rightActivityBar .workspaceActivityButton {
+  flex: 0 0 auto;
+}
+
+.rightActivityBar .workspaceActivityButton::before {
+  right: 0;
+  left: auto;
+  border-radius: 2px 0 0 2px;
 }
 
 .rightSidebarHeader {
   padding: 0 10px 0 12px;
-}
-
-.rightTabs {
-  display: inline-flex;
-  /*
-   * プラグインがビューを足すとタブが増える。縮まない指定にしていると、
-   * 右端の畳むボタンをヘッダーの外へ押し出してしまうので、ここで縮めて
-   * 内側で横スクロールさせる。
-   */
-  min-width: 0;
-  flex: 0 1 auto;
-  gap: 2px;
-  padding: 2px;
-  border: 0.5px solid var(--border-subtle);
-  border-radius: 7px;
-  background: #1d1e24;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-}
-
-.rightTabs::-webkit-scrollbar {
-  display: none;
 }
 
 .plotPaneHeaderActions,
@@ -6709,12 +6717,7 @@ body {
 }
 
 .plotPaneHeaderActions {
-  margin-left: auto;
   padding-left: 2px;
-}
-
-.pushRightSidebarChromeActions {
-  margin-left: auto;
 }
 
 .plotHeaderActionButton {
@@ -6730,43 +6733,6 @@ body {
   height: 15px;
 }
 
-.rightTab {
-  display: grid;
-  width: 28px;
-  min-width: 28px;
-  height: 26px;
-  place-items: center;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  line-height: 1;
-}
-
-.rightTab svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.7;
-}
-
-.rightTab:hover {
-  color: var(--text-primary);
-}
-
-.activeRightTab {
-  background: #f0e7d2;
-  color: #171411;
-}
-
-.activeRightTab:hover {
-  color: #1a1a1a;
-}
-
 .rightSidebarBody {
   display: flex;
   min-height: 0;
@@ -6774,20 +6740,10 @@ body {
   overflow: hidden;
 }
 
-.pluginRightTab span {
-  font-size: 12px;
+.pluginActivityInitial {
+  font-size: 13px;
   font-weight: 700;
   line-height: 1;
-}
-
-.pluginRightTabIcon {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.7;
 }
 
 .pluginViewBody {

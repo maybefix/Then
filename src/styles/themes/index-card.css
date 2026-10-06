@@ -81,6 +81,10 @@
   background: transparent;
 }
 
+.appShell[data-theme="index-light"] .rightSidebar:not([data-sidebar-collapsed="true"]) > .rightActivityBar {
+  border-left-color: var(--border-strong);
+}
+
 .appShell[data-theme="index-light"] .leftWorkspaceCluster .workspaceSidebar {
   height: 100%;
   border: 0;
@@ -123,7 +127,7 @@
   color: #fff;
 }
 
-.appShell[data-theme="index-light"] :is(.rightTabs, .ideaCard, .rightSidebar .snippetCard) {
+.appShell[data-theme="index-light"] :is(.ideaCard, .rightSidebar .snippetCard) {
   border: 1px solid var(--border-subtle);
   background: var(--card-bg);
   box-shadow: 0 2px 0 rgba(93, 80, 55, 0.08);

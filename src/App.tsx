@@ -779,6 +779,55 @@ function debugLog(message: string, data?: unknown): void {
   console.log(`[folder-debug] ${timestamp} ${message}`, data);
 }
 
+// 右サイドバーの切り替えボタン。左サイドバーと同じく、ペインの外側の端に縦に並べる。
+const rightSidebarBuiltinTabs: Array<{ id: string; label: string; icon: ReactNode }> = [
+  {
+    id: "idea",
+    label: "バインダー",
+    icon: (
+      <svg className="workspaceActivityIcon" aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+        <path d="M9 18h6" />
+        <path d="M10 22h4" />
+        <path d="M8.4 14.6c-1.7-1.2-2.6-3-2.6-5.1A6.2 6.2 0 0 1 12 3.3a6.2 6.2 0 0 1 6.2 6.2c0 2.1-.9 3.9-2.6 5.1-.8.6-1.2 1.3-1.3 2.2H9.7c-.1-.9-.5-1.6-1.3-2.2Z" />
+      </svg>
+    ),
+  },
+  {
+    id: "plot",
+    label: "Plot",
+    icon: (
+      <svg className="workspaceActivityIcon" aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+        <path d="M4 5.5c2.3-.9 4.8-.6 8 1.1v12c-3.2-1.7-5.7-2-8-1.1v-12Z" />
+        <path d="M20 5.5c-2.3-.9-4.8-.6-8 1.1v12c3.2-1.7 5.7-2 8-1.1v-12Z" />
+        <path d="M12 6.6v12" />
+        <path d="M6.5 8.8c1.1-.1 2.2.1 3.4.7" />
+        <path d="M17.5 8.8c-1.1-.1-2.2.1-3.4.7" />
+      </svg>
+    ),
+  },
+  {
+    id: "proof",
+    label: "校正",
+    icon: (
+      <svg className="workspaceActivityIcon" aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+        <path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7Z" />
+        <polyline points="14 3 14 7 18 7" />
+        <polyline points="9 13.5 11 15.5 15 11" />
+      </svg>
+    ),
+  },
+  {
+    id: "draft",
+    label: "中間稿",
+    icon: (
+      <svg className="workspaceActivityIcon" aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+        <path d="M8 3h9l3 3v13H8Z" />
+        <path d="M4 7v15h12M11 8h6M11 12h6M11 16h4" />
+      </svg>
+    ),
+  },
+];
+
 const documentData = {
   title: "剣士の目覚め",
 };
@@ -3116,7 +3165,7 @@ export default function App() {
   const [systemFonts, setSystemFonts] = useState<FontOption[]>(fallbackFontOptions);
   const [isMetadataOpen, setIsMetadataOpen] = useState(false);
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
-  const rightTabsRef = useRef<HTMLDivElement | null>(null);
+  const rightActivityBarRef = useRef<HTMLElement | null>(null);
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
   const [isRightSidebarWide, setIsRightSidebarWide] = useState(false);
   const [isEditorFocusMode, setIsEditorFocusMode] = useState(false);
@@ -3152,6 +3201,9 @@ export default function App() {
   const activePluginView = pluginViews.find(
     (view) => rightSidebarTab === `plugin:${view.pluginId}:${view.id}`,
   ) ?? null;
+  const rightSidebarLabel = activePluginView?.title
+    ?? rightSidebarBuiltinTabs.find((tab) => tab.id === rightSidebarTab)?.label
+    ?? "";
   const pluginSelectionCommands = pluginCommands.filter(
     (command) => command.menus?.includes("editor.selection"),
   );
@@ -3185,21 +3237,20 @@ export default function App() {
       setRightSidebarTab("plot");
     }
   }, [activePluginView, rightSidebarTab]);
-  // タブが溢れているときに、選択中のタブが見えない位置に残らないようにする。
+  // プラグインのビューでボタンが溢れたときに、選択中のボタンが見えない位置に残らないようにする。
   useEffect(() => {
-    const strip = rightTabsRef.current;
-    const active = strip?.querySelector<HTMLElement>(".activeRightTab");
-    if (!strip || !active) return;
+    const rail = rightActivityBarRef.current;
+    const active = rail?.querySelector<HTMLElement>(".activeWorkspaceActivityButton");
+    if (!rail || !active) return;
 
-    // scrollIntoView は祖先までさかのぼってスクロールするため、サイドバーを
-    // 畳んでいるときにアプリ全体が横へずれて右端に余白が出てしまう。
-    // ここはタブ帯の中だけを動かす。
-    const left = active.offsetLeft;
-    const right = left + active.offsetWidth;
-    if (left < strip.scrollLeft) {
-      strip.scrollLeft = left;
-    } else if (right > strip.scrollLeft + strip.clientWidth) {
-      strip.scrollLeft = right - strip.clientWidth;
+    // scrollIntoView は祖先までさかのぼってスクロールするため、アプリ全体が
+    // ずれて余白が出てしまう。ここはボタン列の中だけを動かす。
+    const top = active.offsetTop;
+    const bottom = top + active.offsetHeight;
+    if (top < rail.scrollTop) {
+      rail.scrollTop = top;
+    } else if (bottom > rail.scrollTop + rail.clientHeight) {
+      rail.scrollTop = bottom - rail.clientHeight;
     }
   }, [pluginViews.length, rightSidebarTab]);
   useEffect(() => {
@@ -13719,111 +13770,20 @@ export default function App() {
               </main>
             )}
 
-            {appMode !== "plugin" && !isRightSidebarCollapsed && !isEditorFocusMode && (
-              <div className="zoneRightSidebarHoverTarget" aria-hidden="true" />
-            )}
             <aside
-              className={`rightSidebar ${isRightSidebarWide ? "wideRightSidebar" : ""}${
-                isRightSidebarCollapsed ? " collapsedRightSidebar" : ""
-              }`}
+              className={`rightSidebar ${isRightSidebarWide ? "wideRightSidebar" : ""}`}
+              data-sidebar-collapsed={isRightSidebarCollapsed}
               aria-label="補助ペイン"
-              aria-hidden={appMode === "plugin" || isRightSidebarCollapsed || isEditorFocusMode}
-              {...(
-                appMode === "plugin" || isRightSidebarCollapsed || isEditorFocusMode
-                  ? { inert: "" }
-                  : {}
-              )}
+              aria-hidden={appMode === "plugin" || isEditorFocusMode}
+              {...(appMode === "plugin" || isEditorFocusMode ? { inert: "" } : {})}
             >
+              <div
+                className="rightSidebarPanel"
+                aria-hidden={isRightSidebarCollapsed}
+                {...(isRightSidebarCollapsed ? { inert: "" } : {})}
+              >
                 <div className="rightSidebarHeader">
-                  <div
-                    ref={rightTabsRef}
-                    className="rightTabs"
-                    role="tablist"
-                    aria-label="補助ペイン"
-                    onWheel={(event) => {
-                      // タブが溢れているときだけ、縦の回転を横送りに振り替える。
-                      const strip = event.currentTarget;
-                      if (strip.scrollWidth <= strip.clientWidth) return;
-                      strip.scrollLeft += event.deltaY || event.deltaX;
-                    }}
-                  >
-                    <button
-                      className={`rightTab ${rightSidebarTab === "idea" ? "activeRightTab" : ""}`}
-                      type="button"
-                      role="tab"
-                      aria-label="バインダー"
-                      aria-selected={rightSidebarTab === "idea"}
-                      title="バインダー"
-                      onClick={() => setRightSidebarTab("idea")}
-                    >
-                      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-                        <path d="M9 18h6" />
-                        <path d="M10 22h4" />
-                        <path d="M8.4 14.6c-1.7-1.2-2.6-3-2.6-5.1A6.2 6.2 0 0 1 12 3.3a6.2 6.2 0 0 1 6.2 6.2c0 2.1-.9 3.9-2.6 5.1-.8.6-1.2 1.3-1.3 2.2H9.7c-.1-.9-.5-1.6-1.3-2.2Z" />
-                      </svg>
-                    </button>
-                    <button
-                      className={`rightTab ${rightSidebarTab === "plot" ? "activeRightTab" : ""}`}
-                      type="button"
-                      role="tab"
-                      aria-label="Plot"
-                      aria-selected={rightSidebarTab === "plot"}
-                      title="Plot"
-                      onClick={() => setRightSidebarTab("plot")}
-                    >
-                      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-                        <path d="M4 5.5c2.3-.9 4.8-.6 8 1.1v12c-3.2-1.7-5.7-2-8-1.1v-12Z" />
-                        <path d="M20 5.5c-2.3-.9-4.8-.6-8 1.1v12c3.2-1.7 5.7-2 8-1.1v-12Z" />
-                        <path d="M12 6.6v12" />
-                        <path d="M6.5 8.8c1.1-.1 2.2.1 3.4.7" />
-                        <path d="M17.5 8.8c-1.1-.1-2.2.1-3.4.7" />
-                      </svg>
-                    </button>
-                    <button
-                      className={`rightTab ${rightSidebarTab === "proof" ? "activeRightTab" : ""}`}
-                      type="button"
-                      role="tab"
-                      aria-label="校正"
-                      aria-selected={rightSidebarTab === "proof"}
-                      title="校正"
-                      onClick={() => setRightSidebarTab("proof")}
-                    >
-                      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-                        <path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7Z" />
-                        <polyline points="14 3 14 7 18 7" />
-                        <polyline points="9 13.5 11 15.5 15 11" />
-                      </svg>
-                    </button>
-                    <button className={`rightTab ${rightSidebarTab === "draft" ? "activeRightTab" : ""}`}
-                      type="button" role="tab" aria-label="中間稿" title="中間稿" aria-selected={rightSidebarTab === "draft"}
-                      onClick={() => setRightSidebarTab("draft")}>
-                      <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 3h9l3 3v13H8Z" /><path d="M4 7v15h12M11 8h6M11 12h6M11 16h4" /></svg>
-                    </button>
-                    {pluginViews.map((view) => {
-                      const tabId = `plugin:${view.pluginId}:${view.id}`;
-                      const icon = view.icon ?? loadedPlugins.find(
-                        (plugin) => plugin.manifest.id === view.pluginId,
-                      )?.manifest.icon;
-                      return (
-                        <button
-                          className={`rightTab pluginRightTab ${rightSidebarTab === tabId ? "activeRightTab" : ""}`}
-                          type="button"
-                          role="tab"
-                          key={tabId}
-                          aria-label={view.title}
-                          aria-selected={rightSidebarTab === tabId}
-                          title={view.title}
-                          onClick={() => setRightSidebarTab(tabId)}
-                        >
-                          {icon ? (
-                            <PluginIcon icon={icon} className="pluginRightTabIcon" />
-                          ) : (
-                            <span aria-hidden="true">{view.title.slice(0, 1).toUpperCase()}</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <span className="sidebarHeaderLabel">{rightSidebarLabel}</span>
                   {rightSidebarTab === "plot" && (
                     <PlotPaneHeaderActions
                       onAddSection={addPlotSection}
@@ -14011,6 +13971,62 @@ export default function App() {
                     />
                   )}
                 </div>
+              </div>
+              <nav
+                ref={rightActivityBarRef}
+                className="workspaceActivityBar rightActivityBar"
+                aria-label="右サイドバー操作"
+              >
+                {rightSidebarBuiltinTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    className={`workspaceActivityButton ${
+                      rightSidebarTab === tab.id && !isRightSidebarCollapsed
+                        ? "activeWorkspaceActivityButton"
+                        : ""
+                    }`}
+                    type="button"
+                    aria-label={tab.label}
+                    title={tab.label}
+                    aria-pressed={rightSidebarTab === tab.id && !isRightSidebarCollapsed}
+                    onClick={() => {
+                      setIsRightSidebarCollapsed(false);
+                      setRightSidebarTab(tab.id);
+                    }}
+                  >
+                    {tab.icon}
+                  </button>
+                ))}
+                {pluginViews.map((view) => {
+                  const tabId = `plugin:${view.pluginId}:${view.id}`;
+                  const icon = view.icon ?? loadedPlugins.find(
+                    (plugin) => plugin.manifest.id === view.pluginId,
+                  )?.manifest.icon;
+                  const isActive = rightSidebarTab === tabId && !isRightSidebarCollapsed;
+                  return (
+                    <button
+                      className={`workspaceActivityButton ${isActive ? "activeWorkspaceActivityButton" : ""}`}
+                      type="button"
+                      key={tabId}
+                      aria-label={view.title}
+                      title={view.title}
+                      aria-pressed={isActive}
+                      onClick={() => {
+                        setIsRightSidebarCollapsed(false);
+                        setRightSidebarTab(tabId);
+                      }}
+                    >
+                      {icon ? (
+                        <PluginIcon icon={icon} className="workspaceActivityIcon" />
+                      ) : (
+                        <span className="pluginActivityInitial" aria-hidden="true">
+                          {view.title.slice(0, 1).toUpperCase()}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </nav>
             </aside>
           </div>
 

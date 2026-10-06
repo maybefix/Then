@@ -168,6 +168,15 @@
   background: var(--sen-paper);
 }
 
+.appShell[data-theme|="sen"] .rightSidebar > .rightActivityBar {
+  border-left: 1px solid var(--sen-ink);
+  background: var(--sen-paper);
+}
+
+.appShell[data-theme|="sen"] .rightSidebar[data-sidebar-collapsed="true"] > .rightActivityBar {
+  border-left-color: transparent;
+}
+
 .appShell[data-theme|="sen"] .leftWorkspaceCluster .workspaceSidebar {
   height: 100%;
   border: 0;
@@ -202,7 +211,6 @@
   .sidebarHeader,
   .rightSidebarHeader,
   .panelHeader,
-  .rightTabs,
   .sidebarFooter,
   .fileViewSummary,
   .modalHeader,
@@ -226,7 +234,6 @@
 }
 
 .appShell[data-theme|="sen"] :is(
-  .rightTabs,
   .ideaCard,
   .rightSidebar .snippetCard,
   .themeOption,
@@ -237,11 +244,6 @@
   border-radius: 0;
   background: var(--sen-paper);
   box-shadow: none;
-}
-
-.appShell[data-theme|="sen"] .rightTabs {
-  border-top: 1px solid var(--sen-ink);
-  border-bottom-color: var(--sen-ink);
 }
 
 .appShell[data-theme|="sen"] :is(
@@ -322,12 +324,6 @@
   .menuPopover button:hover,
   .editorContextMenu button:hover:not(:disabled)
 ) {
-  background: transparent;
-  color: var(--sen-vermilion);
-}
-
-.appShell[data-theme|="sen"] :is(.activeRightTab, .activeRightTab:hover) {
-  border-bottom: 3px solid var(--sen-vermilion);
   background: transparent;
   color: var(--sen-vermilion);
 }

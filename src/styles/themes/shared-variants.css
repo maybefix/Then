@@ -185,6 +185,23 @@
   [data-theme^="blue-sky-"],
   [data-theme^="shaping-"],
   [data-theme^="promise-"]
+) .rightActivityBar .workspaceActivityButton::before {
+  right: 3px;
+  left: auto;
+}
+
+.appShell:is(
+  [data-theme^="flat-"], [data-theme^="bronze-"], [data-theme^="moss-"], [data-theme^="violet-"], [data-theme^="rose-"],
+  [data-theme="standard"],
+  [data-theme^="signal-red-"],
+  [data-theme^="mono-press-"],
+  [data-theme^="express-"],
+  [data-theme^="resonance-"],
+  [data-theme^="minimal-"],
+  [data-theme^="orchestrating-"],
+  [data-theme^="blue-sky-"],
+  [data-theme^="shaping-"],
+  [data-theme^="promise-"]
 ) .activeWorkspaceActivityButton {
   background: color-mix(in srgb, var(--accent) 11%, transparent);
 }
@@ -204,6 +221,15 @@
 .appShell[data-theme="mono-press-light"] .leftWorkspaceCluster .workspaceActivityBar {
   border-right: 2px solid var(--border-strong);
   background: #000;
+}
+
+.appShell[data-theme="mono-press-light"] .rightSidebar > .rightActivityBar {
+  border-left: 2px solid var(--border-strong);
+  background: #000;
+}
+
+.appShell[data-theme="mono-press-light"] .rightSidebar[data-sidebar-collapsed="true"] > .rightActivityBar {
+  border-left-color: transparent;
 }
 
 .appShell[data-theme="mono-press-light"] .workspaceActivityButton {
@@ -261,7 +287,7 @@
   overflow: hidden;
 }
 
-.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="bronze-"], [data-theme^="moss-"], [data-theme^="violet-"], [data-theme^="rose-"], [data-theme="standard"], [data-theme^="signal-red-"], [data-theme^="mono-press-"]) :is(.activeRightTab, .exportProgressBar i) {
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="bronze-"], [data-theme^="moss-"], [data-theme^="violet-"], [data-theme^="rose-"], [data-theme="standard"], [data-theme^="signal-red-"], [data-theme^="mono-press-"]) .exportProgressBar i {
   border-color: transparent;
   background: var(--action-gradient);
   color: var(--action-text);

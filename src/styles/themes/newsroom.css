@@ -219,7 +219,7 @@
   box-shadow: none;
 }
 
-.appShell[data-theme="newsroom-light"] :is(.rightTabs, .ideaCard, .rightSidebar .snippetCard, .plotCard, .themeOption) {
+.appShell[data-theme="newsroom-light"] :is(.ideaCard, .rightSidebar .snippetCard, .plotCard, .themeOption) {
   border: 0;
   border-bottom: 1px solid var(--border-subtle);
   border-radius: 0;
@@ -227,22 +227,20 @@
   box-shadow: none;
 }
 
-.appShell[data-theme="newsroom-light"] .rightTabs {
-  border-top: 1px solid var(--text-primary);
-}
-
 .appShell[data-theme="newsroom-light"] :is(.ideaCard, .rightSidebar .snippetCard, .themeOption):hover {
   background: var(--card-hover);
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
-.appShell[data-theme="newsroom-light"] :is(.activeWorkspaceActivityButton, .activeRightTab) {
+.appShell[data-theme="newsroom-light"] .activeWorkspaceActivityButton {
   background: var(--accent-soft);
   color: var(--accent-strong);
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
-.appShell[data-theme="newsroom-light"] .activeRightTab:hover { color: var(--accent-strong); }
+.appShell[data-theme="newsroom-light"] .rightActivityBar .activeWorkspaceActivityButton {
+  box-shadow: inset -3px 0 0 var(--accent);
+}
 
 .appShell[data-theme="newsroom-light"] :is(.rightSidebarHeader, .panelHeader) {
   border-bottom-color: var(--text-primary);
@@ -395,7 +393,7 @@
   box-shadow: none;
 }
 
-.appShell[data-theme="newsroom-dark"] :is(.rightTabs, .ideaCard, .rightSidebar .snippetCard, .plotCard, .themeOption) {
+.appShell[data-theme="newsroom-dark"] :is(.ideaCard, .rightSidebar .snippetCard, .plotCard, .themeOption) {
   border: 0;
   border-bottom: 1px solid var(--border-subtle);
   border-radius: 0;
@@ -403,22 +401,20 @@
   box-shadow: none;
 }
 
-.appShell[data-theme="newsroom-dark"] .rightTabs {
-  border-top: 1px solid var(--text-primary);
-}
-
 .appShell[data-theme="newsroom-dark"] :is(.ideaCard, .rightSidebar .snippetCard, .themeOption):hover {
   background: var(--card-hover);
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
-.appShell[data-theme="newsroom-dark"] :is(.activeWorkspaceActivityButton, .activeRightTab) {
+.appShell[data-theme="newsroom-dark"] .activeWorkspaceActivityButton {
   background: var(--accent-soft);
   color: var(--accent-strong);
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
-.appShell[data-theme="newsroom-dark"] .activeRightTab:hover { color: var(--accent-strong); }
+.appShell[data-theme="newsroom-dark"] .rightActivityBar .activeWorkspaceActivityButton {
+  box-shadow: inset -3px 0 0 var(--accent);
+}
 
 .appShell[data-theme="newsroom-dark"] :is(.rightSidebarHeader, .panelHeader) {
   border-bottom-color: var(--text-primary);
