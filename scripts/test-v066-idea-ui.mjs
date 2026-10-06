@@ -33,10 +33,11 @@ for (const removedUi of [
 }
 
 assert.match(ideaPane, /type IdeaFilter = "all" \| "starred"/);
-assert.match(ideaPane, /className="ideaMiniIcon ideaDeleteBtn"/);
+assert.match(ideaPane, /className="dangerMenuItem" onClick=\{\(\) => \{ setFragmentMenu\(null\); onDeleteFragment/);
 assert.match(ideaPane, /title="ドラッグで並び替え \/ Canvasへ"/);
 assert.match(ideaPane, /className="ideaMiniIcon ideaOpenCardBtn"/);
-assert.match(ideaPane, /title="ポップアップで開く"/);
+assert.match(ideaPane, /title="カードで開く"/);
+assert.match(ideaPane, /aria-label="別スレッドへ移動"[\s\S]*?aria-label="カードで開く"[\s\S]*?aria-label="その他の操作"/);
 const dragOverSource = ideaPane.slice(
   ideaPane.indexOf("const dragOverItem"),
   ideaPane.indexOf("const dropItem"),
@@ -72,7 +73,7 @@ assert.match(app, /showToast\("断片を削除しました", \{\s*label: "元に
 assert.match(app, /showToast\(`「\$\{toThread\.title\}」へ移動しました`, \{\s*label: "元に戻す"/);
 assert.match(app, /showToast\("並び順を変更しました", \{\s*label: "元に戻す"/);
 assert.match(css, /\.toast\.hasAction\s*\{[^}]*pointer-events:\s*auto;/s);
-assert.match(css, /\.ideaMiniIcon\.ideaDeleteBtn:hover\s*\{[^}]*var\(--danger\)/s);
+assert.match(css, /\.referenceContextMenu \.dangerMenuItem\s*\{[^}]*var\(--danger\)/s);
 
 assert.match(userManual, /> 対象バージョン: 0\.6\.6/);
 assert.doesNotMatch(userManual, /「すべて」「未使用」「スター」/);

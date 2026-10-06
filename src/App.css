@@ -8875,31 +8875,6 @@ body {
   gap: 4px;
 }
 
-.ideaMoveSelect {
-  min-width: 0;
-  flex: 0 1 auto;
-  height: 24px;
-  max-width: 132px;
-  border: 0.5px solid var(--border-subtle);
-  border-radius: 5px;
-  background: var(--bg-panel-strong);
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 11px;
-  padding: 0 4px;
-}
-
-.ideaMoveSelect:hover {
-  border-color: var(--border-strong);
-  color: var(--text-secondary);
-}
-
-.ideaMoveSelect:focus {
-  outline: none;
-  border-color: var(--accent);
-  color: var(--text-secondary);
-}
-
 .ideaTextBtn {
   height: 24px;
   padding: 0 8px;
@@ -8941,10 +8916,6 @@ body {
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.9;
-}
-
-.ideaMiniIcon.ideaDeleteBtn:hover {
-  color: var(--danger);
 }
 
 .ideaCaptureBox.ideaCaptureStacked {
@@ -9290,7 +9261,6 @@ body {
 .ideaCaptureBox,
 .ideaSearchInput,
 .ideaDestSelect,
-.ideaMoveSelect,
 .ideaDetailTitle {
   border-radius: var(--radius-control, 6px);
 }
@@ -9429,14 +9399,31 @@ body {
   }
 }
 
-.ideaMoveSelect {
-  border-color: transparent;
-  background: transparent;
+/* 左に書いた日、右に「移動・カードで開く・その他」。 */
+.ideaFragmentDate {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
-.ideaMoveSelect:hover {
-  border-color: var(--border-subtle);
-  background: var(--idea-card);
+.ideaFragmentMenuHost {
+  position: relative;
+}
+
+.ideaFragmentMenu {
+  min-width: 180px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.ideaFragmentMenuLabel {
+  padding: 4px 8px 2px;
+  color: var(--text-muted);
+  font: 10px/1.4 var(--ui-font-family);
+}
+
+.ideaFragmentFoot:has(.ideaFragmentMenu) {
+  opacity: 1;
 }
 
 /* 入力欄: 空でフォーカスもないときは1行にたたみ、追加先・添付・追加ボタンを隠す。 */

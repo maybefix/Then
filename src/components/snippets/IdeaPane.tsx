@@ -94,6 +94,18 @@ function SendIcon() {
 function TrashIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>;
 }
+function MoveIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 8h14l-4-4M19 16H5l4 4" /></svg>;
+}
+function MoreIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="18" cy="12" r="1" /></svg>;
+}
+/** Idea を書いた日。今年なら「月/日」、それ以外は年も付ける。 */
+function formatFragmentDate(timestamp: number): string {
+  const date = new Date(timestamp);
+  const monthDay = `${date.getMonth() + 1}/${date.getDate()}`;
+  return date.getFullYear() === new Date().getFullYear() ? monthDay : `${date.getFullYear()}/${monthDay}`;
+}
 function GripIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24" className="ideaGripGlyph"><circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" /><circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" /><circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" /></svg>;
 }
@@ -162,6 +174,7 @@ export function IdeaPane(props: IdeaPaneProps) {
   const [focusedFragmentId, setFocusedFragmentId] = useState<string | null>(null);
   const [clipMenuThreadId, setClipMenuThreadId] = useState<string | null>(null);
   const [referenceMenuId, setReferenceMenuId] = useState<string | null>(null);
+  const [fragmentMenu, setFragmentMenu] = useState<{ id: string; kind: "move" | "more" } | null>(null);
   const [referencePreviews, setReferencePreviews] = useState<Record<string, string>>({});
   const [reorderTarget, setReorderTarget] = useState<{ key: string; position: "before" | "after" } | null>(null);
   const composingRef = useRef(false);
@@ -171,6 +184,27 @@ export function IdeaPane(props: IdeaPaneProps) {
   const focusTitleRef = useRef(false);
   const dragSourceRef = useRef<{ threadId: string; key: string } | null>(null);
   const lastFocusNonceRef = useRef<number | null>(null);
+
+  // Idea の「移動」「その他」メニューは、外側を押すか Esc で閉じる。
+  useEffect(() => {
+    if (!fragmentMenu) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Element) || !event.target.closest(".ideaFragmentMenuHost")) setFragmentMenu(null);
+    };
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      setFragmentMenu(null);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, [fragmentMenu]);
+  const toggleFragmentMenu = (id: string, kind: "move" | "more") =>
+    setFragmentMenu((current) => (current?.id === id && current.kind === kind ? null : { id, kind }));
 
   const candidateByPath = useMemo(
     () => new Map(candidates.map((file) => [candidateKey(file), file])),
@@ -311,8 +345,25 @@ export function IdeaPane(props: IdeaPaneProps) {
           <div className="ideaMixedItemMain">
             <div className="ideaFragmentBody" contentEditable spellCheck={false} suppressContentEditableWarning onBlur={(event) => { const next = event.currentTarget.textContent ?? ""; if (next.trim()) onUpdateFragment(thread.id, fragment.id, next); else event.currentTarget.textContent = fragment.body; }}>{fragment.body}</div>
             <div className="ideaFragmentFoot">
-              <select className="ideaMoveSelect" aria-label="別スレッドへ移動" value="" onChange={(event) => { const value = event.target.value; if (value === NEW_THREAD_VALUE) onMoveFragmentToNewThread(thread.id, fragment.id); else if (value) onMoveFragment(thread.id, fragment.id, value); }}><option value="">移動…</option>{threads.filter((entry) => entry.id !== thread.id).map((entry) => <option key={entry.id} value={entry.id}>{entry.title}</option>)}<option value={NEW_THREAD_VALUE}>＋ 新規スレッドに移動…</option></select>
-              <span className="ideaFragmentBtns"><button className="ideaMiniIcon ideaOpenCardBtn" type="button" aria-label="ポップアップで開く" title="ポップアップで開く" onClick={() => onOpenFragmentCard(thread.id, fragment.id)}><OpenIcon /></button>{transfer && <button className="ideaMiniIcon" type="button" aria-label={transfer.label} title={transfer.label} onClick={() => transfer.onFragment(thread.id, fragment.id)}><SendIcon /></button>}<button className="ideaMiniIcon ideaDeleteBtn" type="button" aria-label="削除" title="削除" onClick={() => onDeleteFragment(thread.id, fragment.id)}><TrashIcon /></button></span>
+              <time className="ideaFragmentDate" dateTime={new Date(fragment.createdAt).toISOString()}>{formatFragmentDate(fragment.createdAt)}</time>
+              <span className="ideaFragmentBtns ideaFragmentMenuHost">
+                <button className="ideaMiniIcon" type="button" aria-label="別スレッドへ移動" title="別スレッドへ移動" aria-haspopup="menu" aria-expanded={fragmentMenu?.id === fragment.id && fragmentMenu.kind === "move"} onClick={() => toggleFragmentMenu(fragment.id, "move")}><MoveIcon /></button>
+                <button className="ideaMiniIcon ideaOpenCardBtn" type="button" aria-label="カードで開く" title="カードで開く" onClick={() => onOpenFragmentCard(thread.id, fragment.id)}><OpenIcon /></button>
+                <button className="ideaMiniIcon" type="button" aria-label="その他の操作" title="その他の操作" aria-haspopup="menu" aria-expanded={fragmentMenu?.id === fragment.id && fragmentMenu.kind === "more"} onClick={() => toggleFragmentMenu(fragment.id, "more")}><MoreIcon /></button>
+                {fragmentMenu?.id === fragment.id && fragmentMenu.kind === "move" && (
+                  <div className="referenceContextMenu ideaReferenceMenu ideaFragmentMenu" role="menu" aria-label="移動先">
+                    <span className="ideaFragmentMenuLabel">移動先</span>
+                    {threads.filter((entry) => entry.id !== thread.id).map((entry) => <button key={entry.id} type="button" role="menuitem" onClick={() => { setFragmentMenu(null); onMoveFragment(thread.id, fragment.id, entry.id); }}>{entry.title}</button>)}
+                    <button type="button" role="menuitem" onClick={() => { setFragmentMenu(null); onMoveFragmentToNewThread(thread.id, fragment.id); }}>＋ 新規スレッドに移動…</button>
+                  </div>
+                )}
+                {fragmentMenu?.id === fragment.id && fragmentMenu.kind === "more" && (
+                  <div className="referenceContextMenu ideaReferenceMenu ideaFragmentMenu" role="menu" aria-label="その他の操作">
+                    {transfer && <button type="button" role="menuitem" onClick={() => { setFragmentMenu(null); transfer.onFragment(thread.id, fragment.id); }}>{transfer.label}</button>}
+                    <button type="button" role="menuitem" className="dangerMenuItem" onClick={() => { setFragmentMenu(null); onDeleteFragment(thread.id, fragment.id); }}>削除</button>
+                  </div>
+                )}
+              </span>
             </div>
           </div>
         </article>
