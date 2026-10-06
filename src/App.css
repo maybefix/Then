@@ -6740,11 +6740,12 @@ body {
 }
 
 /* 右サイドバー下端の切り替え。上部バーの画面モードと同じ見た目のプルダウンで、上向きに開く。 */
+/* 本文側のステータスバーと高さ・罫をそろえ、下端を一直線に通す。 */
 .rightSidebarFooter {
   display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  padding: 6px 10px;
+  height: var(--statusbar-height);
+  flex: 0 0 var(--statusbar-height);
+  align-items: stretch;
   border-top: 0.5px solid var(--border-subtle);
 }
 
@@ -6755,29 +6756,41 @@ body {
   flex: 1 1 auto;
 }
 
+/* 帯全体をひとつの切り替え行にする（左に機能名、右端に開く向きの印）。 */
 .rightPaneSwitcherButton {
-  display: inline-flex;
-  height: 28px;
+  display: flex;
+  width: 100%;
   min-width: 0;
-  max-width: 100%;
   align-items: center;
   gap: 7px;
-  padding: 0 8px;
-  border: 0.5px solid var(--border-subtle);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--bg-panel) 72%, transparent);
-  color: var(--text-primary);
+  padding: 0 12px 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
   cursor: pointer;
   font: inherit;
   font-family: var(--ui-font-family);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1;
   white-space: nowrap;
 }
 
 .rightPaneSwitcherButton:hover,
 .rightPaneSwitcherButton[aria-expanded="true"] {
-  background: var(--bg-panel-strong);
+  background: var(--control-hover, rgba(255, 255, 255, 0.04));
+  color: var(--text-primary);
+}
+
+.rightPaneSwitcherButton .rightPaneSwitcherIcon,
+.rightPaneSwitcherButton .rightPaneSwitcherIcon svg {
+  width: 14px;
+  height: 14px;
+  flex-basis: 14px;
+}
+
+.rightPaneSwitcherButton .rightPaneSwitcherChevron {
+  margin-left: auto;
 }
 
 .rightPaneSwitcherIcon {
@@ -6831,7 +6844,7 @@ body {
 .rightPaneSwitcherPopover {
   top: auto;
   bottom: calc(100% + 4px);
-  left: 0;
+  left: 6px;
   min-width: 180px;
 }
 
