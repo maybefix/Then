@@ -9304,6 +9304,157 @@ body {
   border-radius: var(--radius-button, 6px);
 }
 
+/* ---- バインダーの読みやすさ ----
+   ペインの地を一段沈め、カードを浮かせて境目を明暗で示す。本文は通常の文字色にし、
+   操作類はポインタを乗せたときだけ出す。明暗の向きはテーマの明暗で切り替える。 */
+.ideaPane {
+  --idea-ground: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 94%, #000);
+  --idea-card: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 25%, #fff);
+  --idea-card-hover: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 12%, #fff);
+}
+
+.appShell:is([data-theme="dark"], [data-theme$="-dark"]) .ideaPane {
+  --idea-ground: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 82%, #000);
+  --idea-card: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 93%, #fff);
+  --idea-card-hover: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 89%, #fff);
+}
+
+.ideaScroll {
+  background: var(--idea-ground);
+}
+
+/* スレッド一覧: カードではなく、区切り線で分けた行として並べる。 */
+.ideaView:first-child .ideaScroll {
+  padding: 0 0 18px;
+}
+
+.ideaThreadRow {
+  margin-top: 0;
+  padding: 12px 12px 12px 16px;
+  border: 0;
+  border-bottom: 0.5px solid var(--border-subtle);
+  border-radius: 0;
+  background: transparent;
+}
+
+.ideaThreadRow:hover {
+  background: var(--idea-card);
+}
+
+.ideaThreadRow.isInbox {
+  background: transparent;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.ideaThreadRow.isStarred {
+  box-shadow: inset 3px 0 0 var(--warning);
+}
+
+.ideaThreadRow.isInbox:hover {
+  background: var(--idea-card);
+}
+
+.ideaRowTitle {
+  font-size: 13.5px;
+}
+
+.ideaRowSummary {
+  color: var(--text-secondary);
+}
+
+.ideaRowAside {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ideaRowCount {
+  min-width: 22px;
+  padding: 2px 7px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--idea-card);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.ideaRowAside .ideaRowChevron {
+  width: 16px;
+}
+
+/* スレッド詳細: 沈めた地の上に、明るいカードを置く。 */
+.ideaFragment {
+  border-color: var(--border-subtle);
+  background: var(--idea-card);
+}
+
+.ideaFragment:hover,
+.ideaFragment:focus-within {
+  border-color: var(--border-strong);
+  background: var(--idea-card-hover);
+}
+
+.ideaFragmentBody {
+  color: var(--text-primary);
+  font-size: 13.5px;
+  line-height: 1.75;
+}
+
+.ideaReferencePreview {
+  color: var(--text-primary);
+}
+
+/* 操作類は、ポインタを乗せるかフォーカスしたときだけ出す。高さは確保したまま
+   にして、ポインタの移動でカードの位置が動かないようにする。 */
+.ideaFragmentFoot,
+.ideaReferenceMenuHost,
+.ideaDragHandle {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.ideaFragment:is(:hover, :focus-within) :is(.ideaFragmentFoot, .ideaReferenceMenuHost, .ideaDragHandle),
+.ideaReferenceMenuHost:has(.ideaReferenceMenu) {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .ideaFragmentFoot,
+  .ideaReferenceMenuHost,
+  .ideaDragHandle {
+    opacity: 1;
+  }
+}
+
+.ideaMoveSelect {
+  border-color: transparent;
+  background: transparent;
+}
+
+.ideaMoveSelect:hover {
+  border-color: var(--border-subtle);
+  background: var(--idea-card);
+}
+
+/* 入力欄: 空でフォーカスもないときは1行にたたみ、追加先・添付・追加ボタンを隠す。 */
+.ideaCaptureBox.ideaCaptureStacked:not(:focus-within):has(textarea:placeholder-shown) {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.ideaCaptureBox.ideaCaptureStacked:not(:focus-within):has(textarea:placeholder-shown) textarea {
+  min-height: 22px;
+  height: 22px;
+  overflow: hidden;
+}
+
+.ideaCaptureBox.ideaCaptureStacked:not(:focus-within):has(textarea:placeholder-shown) .ideaCaptureControls {
+  display: none;
+}
+
 .plotPane {
   min-width: 0;
   flex: 1;
