@@ -168,15 +168,6 @@
   background: var(--sen-paper);
 }
 
-.appShell[data-theme|="sen"] .rightSidebar > .rightActivityBar {
-  border-left: 1px solid var(--sen-ink);
-  background: var(--sen-paper);
-}
-
-.appShell[data-theme|="sen"] .rightSidebar[data-sidebar-collapsed="true"] > .rightActivityBar {
-  border-left-color: transparent;
-}
-
 .appShell[data-theme|="sen"] .leftWorkspaceCluster .workspaceSidebar {
   height: 100%;
   border: 0;

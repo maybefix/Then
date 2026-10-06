@@ -489,16 +489,17 @@ assert.match(
   /data-zone-mode="true"\]\[data-zone-left="true"\][\s\S]*?> \.leftWorkspaceCluster\s*> \.workspaceSidebar[\s\S]*?position: absolute/,
   "the left panel must leave normal layout flow only when left hover display is selected",
 );
-assert.match(
-  foundationsCss,
-  /data-zone-mode="true"\]\[data-zone-right="true"\][\s\S]*?> \.rightSidebar\s*> \.rightSidebarPanel[\s\S]*?position: absolute/,
-  "the right panel must leave normal layout flow only when right hover display is selected",
-);
 assert.doesNotMatch(
   foundationsCss,
-  /> \.(?:leftWorkspaceCluster|rightSidebar)\s*\{[^}]*position: absolute/,
-  "hover display must keep both switching rails docked at the window edges",
+  /> \.leftWorkspaceCluster\s*\{[^}]*position: absolute/,
+  "left hover display must keep the activity rail docked at the window edge",
 );
+assert.match(
+  foundationsCss,
+  /data-zone-mode="true"\]\[data-zone-right="true"\][\s\S]*?> \.rightSidebar[\s\S]*?position: absolute/,
+  "the right sidebar must leave normal layout flow only when right hover display is selected",
+);
+assert.match(foundationsCss, /translateX\(calc\(100% - 7px\)\)/);
 assert.match(
   appCss,
   /\.appShell\s*\{[\s\S]*?min-width:\s*0;/,
@@ -511,8 +512,8 @@ assert.doesNotMatch(
 );
 assert.match(
   appSource,
-  /className="workspaceActivityBar rightActivityBar"/,
-  "the right sidebar needs its own switching rail on its outer edge",
+  /className="zoneRightSidebarHoverTarget"/,
+  "zone mode needs a viewport-edge hover target independent of the scaled sidebar",
 );
 assert.match(appSource, /data-zone-left=/);
 assert.match(appSource, /data-zone-right=/);
@@ -526,8 +527,13 @@ assert.match(settingsSource, /<option value="left">左側のみホバー表示<\
 assert.match(settingsSource, /<option value="right">右側のみホバー表示<\/option>/);
 assert.match(
   foundationsCss,
-  /> \.rightSidebar:is\(:hover, :focus-within\)\s*> \.rightSidebarPanel/,
-  "hovering the docked right rail must reveal the right panel",
+  /> \.zoneRightSidebarHoverTarget:hover\s*\+ \.rightSidebar/,
+  "hovering the fixed right-edge target must reveal the right sidebar",
+);
+assert.match(
+  foundationsCss,
+  /workspace:is\(\[data-app-mode="write"\], \[data-app-mode="plugin"\]\)[\s\S]*?> \.rightSidebar[\s\S]*?transform:\s*translateX\(calc\(100% - 7px\)\)/,
+  "a Zone sidebar must keep its final editor position while covered by a plugin screen",
 );
 assert.match(
   foundationsCss,
@@ -546,12 +552,12 @@ assert.doesNotMatch(
 );
 assert.match(
   foundationsCss,
-  /:has\(\.rightSidebar:is\(:hover, :focus-within\)\)[\s\S]*?\.activePluginRuntimeFrame[\s\S]*?pointer-events:\s*auto/,
+  /:has\(\.zoneRightSidebarHoverTarget:hover\)[\s\S]*?\.activePluginRuntimeFrame[\s\S]*?pointer-events:\s*auto/,
   "revealing the Zone sidebar must restore interaction with its active plugin frame",
 );
 assert.match(
   foundationsCss,
-  /:has\(\.pluginRuntimeDetachedHost:not\(\.pluginModalRuntimeHost\):hover\)[\s\S]*?> \.rightSidebarPanel[\s\S]*?transform:\s*translateX\(0\)/,
+  /:has\(\.pluginRuntimeDetachedHost:not\(\.pluginModalRuntimeHost\):hover\)[\s\S]*?> \.rightSidebar[\s\S]*?transform:\s*translateX\(0\)/,
   "moving from the sidebar into its detached plugin frame must keep the sidebar revealed",
 );
 assert.doesNotMatch(

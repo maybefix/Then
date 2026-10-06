@@ -77,14 +77,12 @@
 .appShell[data-theme] .workspaceSidebar,
 .appShell[data-theme] .rightSidebar { background: var(--sidebar-bg); }
 
-/* ホバー表示: 切り替えレールは画面端に残し、ペインだけをフローから外して本文領域へ
-   幅を渡す。レールかペインにポインタを乗せるか、キーボードフォーカスで一時表示する。 */
+/* ホバー表示（左）: 切り替えレールは画面端に残し、ファイルツリーなどのペインだけを
+   フローから外して本文領域へ幅を渡す。レールかペインにポインタを乗せるか、
+   キーボードフォーカスで一時表示する。 */
 .appShell[data-zone-mode="true"][data-zone-left="true"]
   .workspace:is([data-app-mode="write"], [data-app-mode="plugin"])
-  > .leftWorkspaceCluster,
-.appShell[data-zone-mode="true"][data-zone-right="true"]
-  .workspace:is([data-app-mode="write"], [data-app-mode="plugin"])
-  > .rightSidebar {
+  > .leftWorkspaceCluster {
   position: relative;
   z-index: 70;
   overflow: visible;
@@ -93,17 +91,15 @@
 .appShell[data-zone-mode="true"][data-zone-left="true"]
   .workspace:is([data-app-mode="write"], [data-app-mode="plugin"])
   > .leftWorkspaceCluster
-  > .workspaceSidebar,
-.appShell[data-zone-mode="true"][data-zone-right="true"]
-  .workspace:is([data-app-mode="write"], [data-app-mode="plugin"])
-  > .rightSidebar
-  > .rightSidebarPanel {
+  > .workspaceSidebar {
   position: absolute;
   top: 0;
   bottom: 0;
+  left: 100%;
   background: var(--auxiliary-depth-bg, var(--sidebar-bg));
   opacity: 0;
   pointer-events: none;
+  transform: translateX(-12px);
   visibility: hidden;
   transition:
     opacity 140ms ease,
@@ -112,51 +108,10 @@
 }
 
 .appShell[data-zone-mode="true"][data-zone-left="true"]
-  .workspace:is([data-app-mode="write"], [data-app-mode="plugin"])
-  > .leftWorkspaceCluster
-  > .workspaceSidebar {
-  left: 100%;
-  transform: translateX(-12px);
-}
-
-.appShell[data-zone-mode="true"][data-zone-right="true"]
-  .workspace:is([data-app-mode="write"], [data-app-mode="plugin"])
-  > .rightSidebar
-  > .rightSidebarPanel {
-  right: 100%;
-  transform: translateX(12px);
-}
-
-.appShell[data-zone-mode="true"][data-zone-left="true"]
   .workspace[data-app-mode="write"]
   > .leftWorkspaceCluster:is(:hover, :focus-within)
   > .workspaceSidebar {
   box-shadow: 18px 0 36px rgba(0, 0, 0, 0.32);
-}
-
-.appShell[data-zone-mode="true"][data-zone-right="true"]
-  .workspace[data-app-mode="write"]
-  > .rightSidebar:is(:hover, :focus-within)
-  > .rightSidebarPanel,
-.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost):hover)
-  .workspace[data-app-mode="write"]
-  > .rightSidebar
-  > .rightSidebarPanel {
-  box-shadow: -18px 0 36px rgba(0, 0, 0, 0.32);
-}
-
-.appShell[data-zone-mode="true"][data-zone-left="true"]
-  .workspace[data-app-mode="write"]
-  > .leftWorkspaceCluster:is(:hover, :focus-within)
-  > .workspaceSidebar,
-.appShell[data-zone-mode="true"][data-zone-right="true"]
-  .workspace[data-app-mode="write"]
-  > .rightSidebar:is(:hover, :focus-within)
-  > .rightSidebarPanel,
-.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost):hover)
-  .workspace[data-app-mode="write"]
-  > .rightSidebar
-  > .rightSidebarPanel {
   opacity: 1;
   pointer-events: auto;
   transform: translateX(0);
@@ -164,10 +119,58 @@
   transition-delay: 0s;
 }
 
+/* ホバー表示（右）: ペインごとフローから外し、画面端に残した7pxのホバー領域、
+   またはキーボードフォーカスで一時表示する。 */
+.appShell[data-zone-mode="true"][data-zone-right="true"]
+  .workspace:is([data-app-mode="write"], [data-app-mode="plugin"])
+  > .rightSidebar {
+  position: absolute;
+  z-index: 70;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  opacity: 0;
+  transform: translateX(calc(100% - 7px));
+  transition:
+    opacity 140ms ease,
+    transform 190ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Keep the edge hit target in the real workspace coordinate system. The
+   sidebar itself is UI-scaled, so using its translated 7px remainder as the
+   only target can move the hoverable area outside a narrow window. */
+.zoneRightSidebarHoverTarget {
+  display: none;
+}
+
+.appShell[data-zone-mode="true"][data-zone-right="true"]
+  .workspace[data-app-mode="write"]
+  > .zoneRightSidebarHoverTarget {
+  position: absolute;
+  z-index: 71;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: block;
+  width: 10px;
+}
+
+.appShell[data-zone-mode="true"][data-zone-right="true"]
+  .workspace[data-app-mode="write"]
+  > .zoneRightSidebarHoverTarget:hover
+  + .rightSidebar,
+.appShell[data-zone-mode="true"][data-zone-right="true"]
+  .workspace[data-app-mode="write"]
+  > .rightSidebar:is(:hover, :focus-within) {
+  box-shadow: -18px 0 36px rgba(0, 0, 0, 0.32);
+  opacity: 1;
+  transform: translateX(0);
+}
+
 /* The plugin iframe is intentionally detached from the sidebar so it can also
-   become a full-window modal. While the hover-mode panel is hidden, keep that
-   detached iframe invisible and non-interactive so its transparent frame does
-   not cover the editor. */
+   become a full-window modal. While the Zone sidebar is parked off-screen,
+   keep that detached iframe non-interactive; otherwise its transparent frame
+   covers the real edge hover target. */
 .appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"])
   .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost) {
   opacity: 0;
@@ -180,6 +183,8 @@
   pointer-events: none;
 }
 
+.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"]):has(.zoneRightSidebarHoverTarget:hover)
+  .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost),
 .appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"]):has(.rightSidebar:is(:hover, :focus-within))
   .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost),
 .appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"]):has(.pluginRuntimeDetachedHost:hover)
@@ -187,6 +192,9 @@
   opacity: 1;
 }
 
+.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"]):has(.zoneRightSidebarHoverTarget:hover)
+  .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost)
+  .activePluginRuntimeFrame,
 .appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"]):has(.rightSidebar:is(:hover, :focus-within))
   .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost)
   .activePluginRuntimeFrame,
@@ -196,8 +204,13 @@
   pointer-events: auto;
 }
 
-/* 切り替えレールは本体と同じ面に溶け込ませ、罫の向きだけ左右で反転する。 */
-.appShell[data-theme] .rightSidebar > .rightActivityBar { background: transparent; }
+.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost):hover)
+  .workspace[data-app-mode="write"]
+  > .rightSidebar {
+  box-shadow: -18px 0 36px rgba(0, 0, 0, 0.32);
+  opacity: 1;
+  transform: translateX(0);
+}
 
 .appShell[data-theme] .iconButton,
 .appShell[data-theme] .sidebarIconButton {

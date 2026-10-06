@@ -238,9 +238,6 @@
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
-.appShell[data-theme="newsroom-light"] .rightActivityBar .activeWorkspaceActivityButton {
-  box-shadow: inset -3px 0 0 var(--accent);
-}
 
 .appShell[data-theme="newsroom-light"] :is(.rightSidebarHeader, .panelHeader) {
   border-bottom-color: var(--text-primary);
@@ -412,9 +409,6 @@
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
-.appShell[data-theme="newsroom-dark"] .rightActivityBar .activeWorkspaceActivityButton {
-  box-shadow: inset -3px 0 0 var(--accent);
-}
 
 .appShell[data-theme="newsroom-dark"] :is(.rightSidebarHeader, .panelHeader) {
   border-bottom-color: var(--text-primary);
