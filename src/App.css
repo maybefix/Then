@@ -9283,10 +9283,12 @@ body {
   --idea-card-hover: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 12%, #fff);
 }
 
+/* ダークでは地を深く沈めると一覧全体が重く平板になるので、沈めるのはわずかにし、
+   カードの側を持ち上げて差を付ける。 */
 .appShell:is([data-theme="dark"], [data-theme$="-dark"]) .ideaPane {
-  --idea-ground: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 82%, #000);
-  --idea-card: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 93%, #fff);
-  --idea-card-hover: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 89%, #fff);
+  --idea-ground: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 96%, #000);
+  --idea-card: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 91%, #fff);
+  --idea-card-hover: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 87%, #fff);
 }
 
 .ideaScroll {
