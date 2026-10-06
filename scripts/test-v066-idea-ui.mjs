@@ -59,8 +59,13 @@ assert.match(
 
 assert.match(
   app,
-  /thread\.kind === "inbox"\s*\? \[fragment, \.\.\.thread\.fragments\]\s*: \[\.\.\.thread\.fragments, fragment\]/,
-  "Inbox detail additions must use the same newest-first order as quick capture",
+  /const captureFragment[\s\S]*?fragments: \[fragment, \.\.\.thread\.fragments\][\s\S]*?items: \[makeIdeaItem\(fragment\.id\), \.\.\.layout\.items\]/,
+  "quick capture must put new Ideas at the top of every thread",
+);
+assert.match(
+  app,
+  /const addFragment[\s\S]*?fragments: \[fragment, \.\.\.thread\.fragments\][\s\S]*?items: \[makeIdeaItem\(fragment\.id\), \.\.\.layout\.items\]/,
+  "thread detail additions must use the same newest-first order as quick capture",
 );
 assert.match(app, /title: "断片を削除"/);
 assert.match(app, /showToast\("断片を削除しました", \{\s*label: "元に戻す"/);

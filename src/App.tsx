@@ -11119,22 +11119,15 @@ export default function App() {
     const dest = snippets.find((thread) => thread.id === destId) ?? snippets[0];
     if (!dest) return;
     const fragment = makeIdeaFragment(text);
-    patchThread(dest.id, (thread) => {
-      const fragments =
-        thread.kind === "inbox"
-          ? [fragment, ...thread.fragments]
-          : [...thread.fragments, fragment];
-      return { ...thread, fragments };
-    });
+    // 追加した Idea は、どのスレッドでも先頭（新しい順）に入れる。
+    patchThread(dest.id, (thread) => ({ ...thread, fragments: [fragment, ...thread.fragments] }));
     setReferenceLayout((current) => ({
       ...current,
       ideaThreads: current.ideaThreads.map((layout) =>
         layout.threadId === dest.id
           ? {
               ...layout,
-              items: dest.kind === "inbox"
-                ? [makeIdeaItem(fragment.id), ...layout.items]
-                : [...layout.items, makeIdeaItem(fragment.id)],
+              items: [makeIdeaItem(fragment.id), ...layout.items],
             }
           : layout,
       ),
@@ -11146,25 +11139,14 @@ export default function App() {
     const text = body.trim();
     if (!text) return;
     const fragment = makeIdeaFragment(text);
-    const destination = snippets.find((thread) => thread.id === threadId);
-    patchThread(threadId, (thread) => {
-      return {
-        ...thread,
-        fragments:
-          thread.kind === "inbox"
-            ? [fragment, ...thread.fragments]
-            : [...thread.fragments, fragment],
-      };
-    });
+    patchThread(threadId, (thread) => ({ ...thread, fragments: [fragment, ...thread.fragments] }));
     setReferenceLayout((current) => ({
       ...current,
       ideaThreads: current.ideaThreads.map((layout) =>
         layout.threadId === threadId
           ? {
               ...layout,
-              items: destination?.kind === "inbox"
-                ? [makeIdeaItem(fragment.id), ...layout.items]
-                : [...layout.items, makeIdeaItem(fragment.id)],
+              items: [makeIdeaItem(fragment.id), ...layout.items],
             }
           : layout,
       ),
