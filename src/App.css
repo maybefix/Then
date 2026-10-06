@@ -6702,8 +6702,9 @@ body {
   pointer-events: none;
 }
 
+/* 切り替えボタンの内側の余白ぶん詰め、機能名の位置を左サイドバーの見出しにそろえる。 */
 .rightSidebarHeader {
-  padding: 0 10px 0 12px;
+  padding: 0 10px 0 6px;
 }
 
 .plotPaneHeaderActions,
@@ -6747,14 +6748,14 @@ body {
   margin-right: auto;
 }
 
+/* 外枠の幅を内容から決めるので、負のマージンや max-width: 100% を使うと
+   機能名が削られる。狭いときだけ flex の縮みで省略させる。 */
 .rightPaneSwitcherButton {
   display: inline-flex;
   height: 26px;
   min-width: 0;
-  max-width: 100%;
   align-items: center;
   gap: 6px;
-  margin-left: -6px;
   padding: 0 6px;
   border: 0;
   border-radius: 6px;
@@ -6823,7 +6824,7 @@ body {
 }
 
 .rightPaneSwitcherPopover {
-  left: -6px;
+  left: 0;
   min-width: 180px;
 }
 
