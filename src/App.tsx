@@ -34,6 +34,8 @@ import { CommandPalette, type PaletteCommand } from "./components/dialogs/Comman
 import { PluginManagerModal } from "./components/dialogs/PluginManagerModal";
 import { SettingsModal } from "./components/dialogs/SettingsModal";
 import { ThemePickerModal } from "./components/dialogs/ThemePickerModal";
+import { ManuscriptTidyModal } from "./components/dialogs/ManuscriptTidyModal";
+import type { ManuscriptTidyLineRange, ManuscriptTidyResult } from "./editor/manuscriptTidy";
 import { normalizeAppTheme } from "./themes";
 import { MetadataPanel } from "./components/editor/MetadataPanel";
 import {
@@ -3130,6 +3132,10 @@ export default function App() {
   const [editorContextMenu, setEditorContextMenu] =
     useState<EditorContextMenuState | null>(null);
   const [notationModal, setNotationModal] = useState<NotationModalState | null>(null);
+  const [manuscriptTidyRequest, setManuscriptTidyRequest] = useState<{
+    text: string;
+    selectionLines: ManuscriptTidyLineRange | null;
+  } | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isPluginManagerOpen, setIsPluginManagerOpen] = useState(false);
   /** エディタのスクロール領域の実測内寸。文字表示幅設定の上限算出に使う。 */
@@ -6452,6 +6458,41 @@ export default function App() {
     closeEditorContextMenu();
   };
 
+  const openManuscriptTidy = (selection: EditorSelectionSnapshot | null) => {
+    const editor = editorInstanceRef.current;
+    closeEditorContextMenu();
+    if (!editor) return;
+    const text = editor.getValue();
+    let selectionLines: ManuscriptTidyLineRange | null = null;
+    if (selection && selection.from !== selection.to) {
+      const lineAt = (offset: number) => text.slice(0, offset).split("\n").length - 1;
+      const from = lineAt(selection.from);
+      // 次の行の頭で終わる選択は、その行を含めない。
+      const endsAtLineStart = text[selection.to - 1] === "\n";
+      selectionLines = { from, to: Math.max(from, lineAt(selection.to) - (endsAtLineStart ? 1 : 0)) };
+    }
+    setManuscriptTidyRequest({ text, selectionLines });
+  };
+
+  const applyManuscriptTidy = (result: ManuscriptTidyResult) => {
+    const editor = editorInstanceRef.current;
+    const request = manuscriptTidyRequest;
+    setManuscriptTidyRequest(null);
+    if (!editor || !request) return;
+    const currentText = editor.getValue();
+    if (currentText !== request.text) {
+      showToast("本文が変わったため、整えませんでした");
+      return;
+    }
+    const caret = mapTextOffsetThroughChange(currentText, result.text, editor.getSelection().head);
+    editor.replaceRange(0, currentText.length, result.text, caret);
+    const parts = [
+      result.indented > 0 ? `字下げ${result.indented}行` : "",
+      result.spaced > 0 ? `空き${result.spaced}か所` : "",
+    ].filter(Boolean);
+    showToast(`原稿を整えました（${parts.join("・")}）`);
+  };
+
   const submitRubyNotation = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (notationModal?.type !== "ruby") return;
@@ -6623,6 +6664,13 @@ export default function App() {
         id: "clear-notation",
         label: "記法をクリア",
         run: () => clearSelectionNotation(selection),
+      },
+      {
+        id: "manuscript-tidy",
+        label: "原稿を整える…",
+        hint: "字下げ・！？の後の空き",
+        disabledReason: editor ? undefined : "エディタを開いてください",
+        run: () => openManuscriptTidy(selection),
       },
       ...workspaceCommands,
       {
@@ -12386,6 +12434,14 @@ export default function App() {
                   <button
                     type="button"
                     role="menuitem"
+                    disabled={appMode !== "write"}
+                    onClick={() => closeFileMenuAndRun(() => openManuscriptTidy(getCurrentEditorSelection()))}
+                  >
+                    原稿を整える…
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
                     onClick={() => closeFileMenuAndRun(handleOpenLinkedExport)}
                   >
                     エクスポート…
@@ -13720,6 +13776,18 @@ export default function App() {
                           文章方向...
                         </button>
                       </div>
+                      <div className="contextMenuDivider" role="separator" />
+                      <div className="contextMenuSection">
+                        <span className="contextMenuLabel">整形</span>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          title="段落頭の字下げと「！」「？」のあとの空きを入れます"
+                          onClick={() => openManuscriptTidy(editorContextMenu)}
+                        >
+                          原稿を整える...
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -14214,6 +14282,16 @@ export default function App() {
                 )}
               </section>
             </div>
+          )}
+
+          {manuscriptTidyRequest && (
+            <ManuscriptTidyModal
+              text={manuscriptTidyRequest.text}
+              selectionLines={manuscriptTidyRequest.selectionLines}
+              onApply={applyManuscriptTidy}
+              onClose={() => setManuscriptTidyRequest(null)}
+              onRestoreFocus={restoreFocusAfterCommandPalette}
+            />
           )}
 
           {isPluginManagerOpen && (

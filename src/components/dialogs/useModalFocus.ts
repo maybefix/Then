@@ -3,10 +3,16 @@ import { useLayoutEffect, useRef } from "react";
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export function useModalFocus(onClose: () => void, initialFocusSelector = ".modalClose") {
+export function useModalFocus(
+  onClose: () => void,
+  initialFocusSelector = ".modalClose",
+  restoreFocus?: (previouslyFocused: HTMLElement) => void,
+) {
   const dialogRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const restoreFocusRef = useRef(restoreFocus);
+  restoreFocusRef.current = restoreFocus;
 
   useLayoutEffect(() => {
     const dialog = dialogRef.current;
@@ -67,7 +73,9 @@ export function useModalFocus(onClose: () => void, initialFocusSelector = ".moda
     return () => {
       window.removeEventListener("keydown", handleKeyDown, true);
       document.removeEventListener("focusin", handleFocusIn);
-      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+      if (!previouslyFocused?.isConnected) return;
+      if (restoreFocusRef.current) restoreFocusRef.current(previouslyFocused);
+      else previouslyFocused.focus();
     };
   }, [initialFocusSelector]);
 
