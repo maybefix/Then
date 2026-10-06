@@ -6703,7 +6703,6 @@ body {
 }
 
 .rightSidebarHeader {
-  justify-content: flex-end;
   padding: 0 10px 0 12px;
 }
 
@@ -6739,39 +6738,32 @@ body {
   overflow: hidden;
 }
 
-/* 右サイドバー下端の切り替え。上部バーの画面モードと同じ見た目のプルダウンで、上向きに開く。 */
-/* 本文側のステータスバーと高さ・罫をそろえ、下端を一直線に通す。 */
-.rightSidebarFooter {
-  display: flex;
-  height: var(--statusbar-height);
-  flex: 0 0 var(--statusbar-height);
-  align-items: stretch;
-  border-top: 0.5px solid var(--border-subtle);
-}
-
+/* 右サイドバーのヘッダー左端の切り替え。上部バーの画面モードと同じ「アイコン＋機能名」で、
+   左サイドバーの見出しと同じ位置に置く。 */
 .rightPaneSwitcher {
   position: relative;
   display: flex;
   min-width: 0;
-  flex: 1 1 auto;
+  margin-right: auto;
 }
 
-/* 帯全体をひとつの切り替え行にする（左に機能名、右端に開く向きの印）。 */
 .rightPaneSwitcherButton {
-  display: flex;
-  width: 100%;
+  display: inline-flex;
+  height: 26px;
   min-width: 0;
+  max-width: 100%;
   align-items: center;
-  gap: 7px;
-  padding: 0 12px 0 12px;
+  gap: 6px;
+  margin-left: -6px;
+  padding: 0 6px;
   border: 0;
-  border-radius: 0;
+  border-radius: 6px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   cursor: pointer;
   font: inherit;
   font-family: var(--ui-font-family);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1;
   white-space: nowrap;
 }
@@ -6780,17 +6772,6 @@ body {
 .rightPaneSwitcherButton[aria-expanded="true"] {
   background: var(--control-hover, rgba(255, 255, 255, 0.04));
   color: var(--text-primary);
-}
-
-.rightPaneSwitcherButton .rightPaneSwitcherIcon,
-.rightPaneSwitcherButton .rightPaneSwitcherIcon svg {
-  width: 14px;
-  height: 14px;
-  flex-basis: 14px;
-}
-
-.rightPaneSwitcherButton .rightPaneSwitcherChevron {
-  margin-left: auto;
 }
 
 .rightPaneSwitcherIcon {
@@ -6842,9 +6823,7 @@ body {
 }
 
 .rightPaneSwitcherPopover {
-  top: auto;
-  bottom: calc(100% + 4px);
-  left: 6px;
+  left: -6px;
   min-width: 180px;
 }
 
@@ -6854,8 +6833,8 @@ body {
   gap: 8px;
 }
 
-/* プラグインのビューは iframe をワークスペースの手前に重ねているため、上向きに開いた
-   メニューが隠れてしまう。メニューを開いている間だけ iframe を引っ込める。 */
+/* プラグインのビューは iframe をワークスペースの手前に重ねているため、開いたメニューが
+   隠れてしまう。メニューを開いている間だけ iframe を引っ込める。 */
 .appShell:has(.rightPaneSwitcherButton[aria-expanded="true"])
   .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost) {
   visibility: hidden;

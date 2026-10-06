@@ -19,8 +19,8 @@ type RightPaneSwitcherProps = {
 };
 
 /**
- * 右サイドバー下端の切り替え。上部バーの画面モードと同じ「アイコン＋機能名」の
- * プルダウンで、ペインの下端にあるため上向きに開く。
+ * 右サイドバーのヘッダー左端に置く切り替え。上部バーの画面モードと同じ
+ * 「アイコン＋機能名」のプルダウン。
  */
 export function RightPaneSwitcher({ items, activeId, onSelect }: RightPaneSwitcherProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -96,7 +96,7 @@ export function RightPaneSwitcher({ items, activeId, onSelect }: RightPaneSwitch
         <span className="rightPaneSwitcherIcon" aria-hidden="true">{active.icon}</span>
         <span className="rightPaneSwitcherLabel">{active.label}</span>
         <svg className="rightPaneSwitcherChevron" aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-          <polyline points="6 15 12 9 18 15" />
+          <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
       {isOpen && (

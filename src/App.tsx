@@ -782,7 +782,7 @@ function debugLog(message: string, data?: unknown): void {
   console.log(`[folder-debug] ${timestamp} ${message}`, data);
 }
 
-// 右サイドバーの切り替え先。ペイン下端のプルダウンに「アイコン＋機能名」で並べる。
+// 右サイドバーの切り替え先。ヘッダー左端のプルダウンに「アイコン＋機能名」で並べる。
 const rightSidebarBuiltinTabs: Array<{ id: string; label: string; icon: ReactNode }> = [
   {
     id: "idea",
@@ -13852,6 +13852,11 @@ export default function App() {
               )}
             >
                 <div className="rightSidebarHeader">
+                  <RightPaneSwitcher
+                    items={rightPaneSwitcherItems}
+                    activeId={rightSidebarTab}
+                    onSelect={setRightSidebarTab}
+                  />
                   {rightSidebarTab === "plot" && (
                     <PlotPaneHeaderActions
                       onAddSection={addPlotSection}
@@ -14039,13 +14044,6 @@ export default function App() {
                     />
                   )}
                 </div>
-                <footer className="rightSidebarFooter">
-                  <RightPaneSwitcher
-                    items={rightPaneSwitcherItems}
-                    activeId={rightSidebarTab}
-                    onSelect={setRightSidebarTab}
-                  />
-                </footer>
             </aside>
           </div>
 
