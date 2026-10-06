@@ -11278,7 +11278,31 @@ export default function App() {
     const toThread = snippets.find((thread) => thread.id === toThreadId);
     if (!fragment || !toThread || fromIndex < 0) return;
 
+    // 表示順はレイアウト側の並びで決まる。断片の配列だけを動かすと、整合処理が
+    // 移動先の末尾に足してしまうので、レイアウトも同時に動かす。
+    const isMovedItem = (item: IdeaThreadItemLink) =>
+      item.sourceType === "idea" && item.fragmentId === fragmentId;
+    const fromLayoutIndex = referenceLayout.ideaThreads
+      .find((layout) => layout.threadId === fromThreadId)
+      ?.items.findIndex(isMovedItem) ?? -1;
+
     const now = Date.now();
+    setReferenceLayout((current) => ({
+      ...current,
+      ideaThreads: current.ideaThreads.map((layout) => {
+        if (layout.threadId === fromThreadId) {
+          return { ...layout, items: layout.items.filter((item) => !isMovedItem(item)) };
+        }
+        if (layout.threadId === toThreadId) {
+          // 移動先でも、追加と同じく先頭に入れる。
+          return {
+            ...layout,
+            items: [makeIdeaItem(fragmentId), ...layout.items.filter((item) => !isMovedItem(item))],
+          };
+        }
+        return layout;
+      }),
+    }));
     updateIdeaThreads((threads) =>
       threads.map((thread) => {
         if (thread.id === fromThreadId) {
@@ -11292,10 +11316,7 @@ export default function App() {
           const movedFragment = { ...fragment, updatedAt: now };
           return {
             ...thread,
-            fragments:
-              thread.kind === "inbox"
-                ? [movedFragment, ...thread.fragments]
-                : [...thread.fragments, movedFragment],
+            fragments: [movedFragment, ...thread.fragments],
             updatedAt: now,
           };
         }
@@ -11331,6 +11352,24 @@ export default function App() {
             return thread;
           });
         });
+        setReferenceLayout((current) => ({
+          ...current,
+          ideaThreads: current.ideaThreads.map((layout) => {
+            if (layout.threadId === toThreadId) {
+              return { ...layout, items: layout.items.filter((item) => !isMovedItem(item)) };
+            }
+            if (layout.threadId === fromThreadId) {
+              const items = layout.items.filter((item) => !isMovedItem(item));
+              items.splice(
+                fromLayoutIndex >= 0 ? Math.min(fromLayoutIndex, items.length) : items.length,
+                0,
+                makeIdeaItem(fragmentId),
+              );
+              return { ...layout, items };
+            }
+            return layout;
+          }),
+        }));
         showToast("移動を元に戻しました");
       },
     });
