@@ -9379,26 +9379,158 @@ body {
   color: var(--text-primary);
 }
 
-/* 操作類は、ポインタを乗せるかフォーカスしたときだけ出す。高さは確保したまま
-   にして、ポインタの移動でカードの位置が動かないようにする。 */
-.ideaFragmentFoot,
+/* カードは左右とも同じ余白にする。ドラッグハンドルは専用の列を取らず、
+   ポインタを乗せたときだけ左の余白の上に重ねて出す。 */
+.ideaFragment {
+  position: relative;
+  display: block;
+  padding: 10px 12px;
+}
+
+.ideaDragHandle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  width: 12px;
+  margin: 0;
+  place-items: center;
+}
+
+.ideaDragHandle .ideaGripGlyph {
+  width: 10px;
+  height: 14px;
+}
+
+.ideaFragmentFoot {
+  min-height: 24px;
+  margin-top: 4px;
+}
+
+/* 日付は常に見せ、操作ボタンとハンドルだけをポインタを乗せたとき（または
+   フォーカス中）に出す。場所は確保したままなので、カードの位置は動かない。 */
+.ideaFragmentBtns,
 .ideaReferenceMenuHost,
 .ideaDragHandle {
   opacity: 0;
   transition: opacity 120ms ease;
 }
 
-.ideaFragment:is(:hover, :focus-within) :is(.ideaFragmentFoot, .ideaReferenceMenuHost, .ideaDragHandle),
-.ideaReferenceMenuHost:has(.ideaReferenceMenu) {
+.ideaFragment:is(:hover, :focus-within) :is(.ideaFragmentBtns, .ideaReferenceMenuHost, .ideaDragHandle),
+.ideaReferenceMenuHost:has(.ideaReferenceMenu),
+.ideaFragmentBtns:has(.ideaFragmentMenu) {
   opacity: 1;
 }
 
 @media (hover: none) {
-  .ideaFragmentFoot,
+  .ideaFragmentBtns,
   .ideaReferenceMenuHost,
   .ideaDragHandle {
     opacity: 1;
   }
+}
+
+/* 資料は1行のカードにし、「…」を行の右端に置く。 */
+.ideaReferenceItem .ideaMixedItemMain {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ideaReferenceItem .ideaReferenceOpen {
+  flex: 1 1 auto;
+}
+
+.ideaReferenceItem .ideaReferenceMenuHost {
+  flex: 0 0 auto;
+  width: auto;
+  margin-top: 0;
+}
+
+.ideaReferenceItem .ideaReferenceVisual {
+  flex-basis: 40px;
+  width: 40px;
+  height: 30px;
+}
+
+/* スレッド詳細の見出し: 「‹ スレッド名 (件数)」を1行に並べ、操作は右端に置く。 */
+.ideaDetailHead {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.ideaDetailHead .ideaBackBtn {
+  flex: 0 0 auto;
+  width: 26px;
+  padding: 0;
+  justify-content: center;
+}
+
+.ideaDetailHead .ideaDetailTitle {
+  width: auto;
+  min-width: 3em;
+  max-width: 100%;
+  flex: 0 1 auto;
+  margin-top: 0;
+  field-sizing: content;
+}
+
+.ideaDetailCount {
+  flex: 0 0 auto;
+  padding: 1px 8px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--idea-card);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+
+.ideaDetailHead .ideaDetailActions {
+  margin-left: auto;
+}
+
+.ideaDetailTop .ideaCaptureInline {
+  padding-top: 10px;
+}
+
+/* 入力欄の「＋」と添付は位置を固定する（たたんでも開いても動かないので、
+   押した瞬間に入力欄が開閉してもボタンがずれない）。 */
+.ideaCaptureBox.ideaCaptureStacked {
+  position: relative;
+}
+
+.ideaCapturePlus {
+  position: absolute;
+  top: 12px;
+  left: 10px;
+  display: grid;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.ideaCapturePlus svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+}
+
+.ideaCaptureStacked textarea {
+  padding-right: 30px;
+  padding-left: 22px;
+}
+
+.ideaCaptureStacked .ideaClipHost {
+  position: absolute;
+  top: 4px;
+  right: 4px;
 }
 
 /* 左に書いた日、右に「移動・カードで開く・その他」。 */
@@ -9428,19 +9560,28 @@ body {
   opacity: 1;
 }
 
-/* 入力欄: 空でフォーカスもないときは1行にたたみ、追加先・添付・追加ボタンを隠す。 */
-.ideaCaptureBox.ideaCaptureStacked:not(:focus-within):has(textarea:placeholder-shown) {
+/* 入力欄: 空で、フォーカスが入力欄の外（または添付ボタン）にあるときは1行に
+   たたむ。添付ボタンは位置が変わらないので、たたんだままでも使える。 */
+.ideaCaptureBox.ideaCaptureStacked:is(:not(:focus-within), :has(.ideaClipHost:focus-within)):has(textarea:placeholder-shown) {
   padding-top: 6px;
   padding-bottom: 6px;
 }
 
-.ideaCaptureBox.ideaCaptureStacked:not(:focus-within):has(textarea:placeholder-shown) textarea {
+.ideaCaptureBox.ideaCaptureStacked:is(:not(:focus-within), :has(.ideaClipHost:focus-within)):has(textarea:placeholder-shown) textarea {
   min-height: 22px;
   height: 22px;
   overflow: hidden;
 }
 
-.ideaCaptureBox.ideaCaptureStacked:not(:focus-within):has(textarea:placeholder-shown) .ideaCaptureControls {
+.ideaCaptureBox.ideaCaptureStacked:is(:not(:focus-within), :has(.ideaClipHost:focus-within)):has(textarea:placeholder-shown) .ideaCapturePlus {
+  top: 10px;
+}
+
+.ideaCaptureBox.ideaCaptureStacked:is(:not(:focus-within), :has(.ideaClipHost:focus-within)):has(textarea:placeholder-shown) .ideaCaptureControls {
+  margin-top: 0;
+}
+
+.ideaCaptureBox.ideaCaptureStacked:is(:not(:focus-within), :has(.ideaClipHost:focus-within)):has(textarea:placeholder-shown) .ideaCaptureControls > :not(.ideaClipHost) {
   display: none;
 }
 
