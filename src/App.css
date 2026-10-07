@@ -9275,20 +9275,19 @@ body {
 }
 
 /* ---- バインダーの読みやすさ ----
-   ペインの地を一段沈め、カードを浮かせて境目を明暗で示す。本文は通常の文字色にし、
+   ペインの地は沈めずに明るく保ち、カードをさらに明るくして境目を示す。本文は通常の文字色にし、
    操作類はポインタを乗せたときだけ出す。明暗の向きはテーマの明暗で切り替える。 */
 .ideaPane {
-  --idea-ground: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 94%, #000);
-  --idea-card: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 25%, #fff);
-  --idea-card-hover: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 12%, #fff);
+  --idea-ground: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 65%, #fff);
+  --idea-card: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 10%, #fff);
+  --idea-card-hover: #fff;
 }
 
-/* ダークでは地を深く沈めると一覧全体が重く平板になるので、沈めるのはわずかにし、
-   カードの側を持ち上げて差を付ける。 */
+/* ダークでも地は沈めず、わずかに持ち上げる。カードはさらに持ち上げて差を付ける。 */
 .appShell:is([data-theme="dark"], [data-theme$="-dark"]) .ideaPane {
-  --idea-ground: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 96%, #000);
-  --idea-card: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 91%, #fff);
-  --idea-card-hover: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 87%, #fff);
+  --idea-ground: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 96%, #fff);
+  --idea-card: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 88%, #fff);
+  --idea-card-hover: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 84%, #fff);
 }
 
 .ideaScroll {
