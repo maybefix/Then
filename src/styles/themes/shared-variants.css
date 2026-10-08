@@ -120,6 +120,27 @@
   box-shadow: none;
 }
 
+/* Zone hover lifts the file tree out of the rounded cluster into its own
+   floating panel, so it needs the card corners the cluster was providing. */
+.appShell:is(
+  [data-theme^="flat-"], [data-theme^="bronze-"], [data-theme^="moss-"], [data-theme^="violet-"], [data-theme^="rose-"],
+  [data-theme="standard"],
+  [data-theme^="signal-red-"],
+  [data-theme^="mono-press-"],
+  [data-theme^="express-"],
+  [data-theme^="resonance-"],
+  [data-theme^="minimal-"],
+  [data-theme^="orchestrating-"],
+  [data-theme^="blue-sky-"],
+  [data-theme^="shaping-"],
+  [data-theme^="promise-"]
+)[data-zone-mode="true"][data-zone-left="true"]
+  .workspace:is([data-app-mode="write"], [data-app-mode="plugin"])
+  > .leftWorkspaceCluster
+  > .workspaceSidebar {
+  border-radius: var(--radius-card);
+}
+
 .appShell:is(
   [data-theme^="flat-"], [data-theme^="bronze-"], [data-theme^="moss-"], [data-theme^="violet-"], [data-theme^="rose-"],
   [data-theme="standard"],

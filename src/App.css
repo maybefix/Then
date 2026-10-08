@@ -9613,9 +9613,14 @@ body {
   display: none;
 }
 
+/* ペインから下はすべて縦書き（vertical-rl）で組む。カードは右から左へ積まれるブロックになり、
+   幅（ブロック方向の長さ）は内容から通常のレイアウトで決まる。横書きの箱の中に縦書きを
+   置く（直交フロー）と、Chromium は列の高さを推測で幅を見積もるため、本文の伸びに追従しない。
+   スクロールの起点も右端になり、scrollLeft は右端で 0、左へ行くほど負になる。 */
 .plotPane {
   min-width: 0;
   flex: 1;
+  writing-mode: vertical-rl;
   overflow-x: scroll;
   overflow-y: hidden;
   overscroll-behavior: contain;
@@ -9644,16 +9649,15 @@ body {
   background: var(--border-strong);
 }
 
+/* 縦書きでは column が右→左、row が上→下。 */
 .plotTrack {
   display: flex;
-  width: max-content;
   min-width: 100%;
   height: 100%;
-  flex-direction: row;
+  flex-direction: column;
   align-items: stretch;
-  justify-content: flex-end;
+  justify-content: flex-start;
   padding: 12px 16px;
-  writing-mode: horizontal-tb;
 }
 
 .plotCard {
@@ -9661,8 +9665,8 @@ body {
   display: flex;
   min-width: 0;
   flex: 0 0 auto;
-  flex-direction: column;
-  align-items: flex-end;
+  flex-direction: row;
+  align-items: flex-start;
   overflow: visible;
   padding: 0 9px;
 }
@@ -9683,7 +9687,7 @@ body {
   writing-mode: vertical-rl;
   min-width: 30px;
   flex: 0 0 auto;
-  align-self: flex-end;
+  align-self: flex-start;
   margin-bottom: 16px;
   padding: 10px 1px;
   border: 0.5px solid var(--border-strong);
@@ -9751,18 +9755,11 @@ body {
   height: 100%;
   min-height: 0;
   flex: 1 1 auto;
-  flex-direction: row-reverse;
+  flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
   gap: 0.9em;
   overflow: visible;
-  writing-mode: horizontal-tb;
-}
-
-.expandedPlotCard,
-.expandedPlotCard .plotCardContent {
-  width: max-content;
-  min-width: max-content;
 }
 
 .plotCardTitle,
@@ -9811,8 +9808,7 @@ body {
 }
 
 .plotCardBody {
-  width: max(2.05em, var(--plot-body-width, 2.05em));
-  min-width: max(2.05em, var(--plot-body-width, 2.05em));
+  min-width: 2.05em;
   max-width: none;
   height: 100%;
   flex: 0 0 auto;
@@ -9823,6 +9819,28 @@ body {
   line-height: 2.05;
   overflow-wrap: anywhere;
   word-break: break-all;
+}
+
+/* 編集中の本文。textarea と、同じ文字列を流した見えないミラーを同じセルに重ね、
+   列の数（幅）はミラーのレイアウトで決まる。textarea はセルいっぱいに伸びるだけ。 */
+.plotCardBodyField {
+  display: grid;
+  height: 100%;
+  flex: 0 0 auto;
+  writing-mode: vertical-rl;
+}
+
+.plotCardBodyField > .plotCardBody {
+  box-sizing: border-box;
+  grid-area: 1 / 1;
+  width: auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.plotCardBodyMirror {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .plotCardBodyPreview {
@@ -10013,8 +10031,8 @@ body {
   position: relative;
   display: flex;
   flex: 0 0 auto;
-  flex-direction: column;
-  align-items: flex-end;
+  flex-direction: row;
+  align-items: flex-start;
   padding: 0 9px 12px;
   border-radius: 8px;
   background: var(--accent-soft);
@@ -10101,6 +10119,7 @@ body {
   margin-top: 8px;
   padding: 2px 6px;
   border-radius: 999px;
+  writing-mode: horizontal-tb;
   background: var(--accent-soft);
   color: var(--accent-strong);
   font-size: 11px;

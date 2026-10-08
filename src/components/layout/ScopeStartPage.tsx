@@ -58,7 +58,7 @@ export function ScopeStartPage({
           ＋ 新規ファイル
         </button>
         <button type="button" onClick={onOpenPlot}>
-          Plot を開く
+          プロットを開く
         </button>
         <button type="button" onClick={onOpenCanvas}>
           Canvas を開く

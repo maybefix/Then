@@ -797,7 +797,7 @@ const rightSidebarBuiltinTabs: Array<{ id: string; label: string; icon: ReactNod
   },
   {
     id: "plot",
-    label: "Plot",
+    label: "プロット",
     icon: (
       <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
         <path d="M4 5.5c2.3-.9 4.8-.6 8 1.1v12c-3.2-1.7-5.7-2-8-1.1v-12Z" />

@@ -5,7 +5,6 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type CompositionEvent,
   type CSSProperties,
   type Dispatch,
   type FocusEvent as ReactFocusEvent,
@@ -48,10 +47,6 @@ type PlotBulkRequest = { nonce: number; expand: boolean };
 
 type PlotMenuItem = { label: string; onSelect: () => void; danger?: boolean };
 
-type PlotCardStyle = CSSProperties & {
-  "--plot-body-width"?: string;
-};
-
 type PlotReferenceSuggestionState = {
   cardId: string;
   query: string;
@@ -70,10 +65,7 @@ const PLOT_DRAG_EDGE = 36;
 const PLOT_DRAG_EDGE_SPEED = 14;
 const PLOT_REFERENCE_SUGGEST_MENU_WIDTH = 136;
 const PLOT_REFERENCE_SUGGEST_MENU_HEIGHT = 340;
-const DEFAULT_ROWS_PER_COLUMN = 24;
-const PLOT_BODY_COLUMN_WIDTH_EM = 2.05;
 const PLOT_REFERENCE_LABEL_MAX_LENGTH = 18;
-const SCROLL_PIN_TOLERANCE = 16;
 const PLOT_REFERENCE_LINK_PATTERN = /@\[\[([^\]]+)\]\]/g;
 
 const referenceKey = (sourcePath: string) => sourcePath.replace(/\\/g, "/").toLocaleLowerCase();
@@ -151,34 +143,38 @@ const getPlotReferenceMention = (text: string, cursor: number) => {
 
 const countTextUnits = (text: string) => Array.from(text).length;
 
-const estimatePlotColumns = (
-  text: string,
-  rowsPerColumn = DEFAULT_ROWS_PER_COLUMN,
-) => {
-  const rows = Math.max(1, rowsPerColumn);
-  const lines = text.split("\n");
+/** プレビュー上のクリック位置を、編集用の下書き文字列でのオフセットに直す。
+ *  参照リンクはプレビューでは短縮表示なので、下書きでの表記（data-plot-draft-text）で数える。 */
+const previewCaretOffsetFromPoint = (preview: HTMLElement, x: number, y: number): number | null => {
+  let node: Node | null = null;
+  let offset = 0;
+  if (typeof document.caretPositionFromPoint === "function") {
+    const position = document.caretPositionFromPoint(x, y);
+    node = position?.offsetNode ?? null;
+    offset = position?.offset ?? 0;
+  } else if (typeof document.caretRangeFromPoint === "function") {
+    const range = document.caretRangeFromPoint(x, y);
+    node = range?.startContainer ?? null;
+    offset = range?.startOffset ?? 0;
+  }
+  if (!node || !preview.contains(node)) return null;
 
-  return Math.max(
-    1,
-    lines.reduce((total, line) => total + Math.max(1, Math.ceil(countTextUnits(line) / rows)), 0),
-  );
-};
+  const draftLength = (child: ChildNode) =>
+    (child instanceof HTMLElement ? child.dataset.plotDraftText ?? "" : child.textContent ?? "")
+      .length;
+  const children = Array.from(preview.childNodes);
+  // プレビュー要素自体に当たったときの offset は子ノードの番号。
+  if (node === preview) {
+    return children.slice(0, offset).reduce((total, child) => total + draftLength(child), 0);
+  }
 
-const measureBodyWidth = (element: HTMLElement) => {
-  const previousWidth = element.style.width;
-  const previousMinWidth = element.style.minWidth;
-  const previousFlexBasis = element.style.flexBasis;
-
-  element.style.width = `${PLOT_BODY_COLUMN_WIDTH_EM}em`;
-  element.style.minWidth = `${PLOT_BODY_COLUMN_WIDTH_EM}em`;
-  element.style.flexBasis = "auto";
-  const width = Math.ceil(element.scrollWidth);
-
-  element.style.width = previousWidth;
-  element.style.minWidth = previousMinWidth;
-  element.style.flexBasis = previousFlexBasis;
-
-  return Math.max(1, width);
+  let total = 0;
+  for (const child of children) {
+    if (child === node) return total + offset;
+    if (child.contains(node)) return total + draftLength(child);
+    total += draftLength(child);
+  }
+  return null;
 };
 
 const getPlotContextMenuStyle = (
@@ -306,57 +302,6 @@ function PlotIcon({ name }: { name: PlotIconName }) {
   }
 }
 
-function usePlotBodyWidths(
-  cards: PlotCard[],
-  isExpanded: (card: PlotCard) => boolean,
-  bodyTextForLayout: (card: PlotCard) => string,
-) {
-  const [bodyWidths, setBodyWidths] = useState<Record<string, number>>({});
-  const bodyRefs = useRef<Map<string, HTMLElement>>(new Map());
-  const composingCardIds = useRef<Set<string>>(new Set());
-
-  const setBodyRef = useCallback(
-    (cardId: string) => (element: HTMLElement | null) => {
-      if (element) {
-        bodyRefs.current.set(cardId, element);
-        return;
-      }
-
-      bodyRefs.current.delete(cardId);
-    },
-    [],
-  );
-
-  const setCardWidth = useCallback((cardId: string, width: number) => {
-    setBodyWidths((current) =>
-      current[cardId] === width ? current : { ...current, [cardId]: width },
-    );
-  }, []);
-
-  const syncBodyWidth = useCallback(
-    (cardId: string, element?: HTMLElement | null) => {
-      if (composingCardIds.current.has(cardId)) return;
-      if (!element) return;
-
-      setCardWidth(cardId, measureBodyWidth(element));
-    },
-    [setCardWidth],
-  );
-
-  useLayoutEffect(() => {
-    cards.forEach((card) => {
-      if (card.kind === "chapter") return;
-      if (!isExpanded(card)) return;
-      if (composingCardIds.current.has(card.id)) return;
-
-      const element = bodyRefs.current.get(card.id);
-      syncBodyWidth(card.id, element);
-    });
-  }, [cards, isExpanded, bodyTextForLayout, syncBodyWidth]);
-
-  return { bodyWidths, setBodyRef, syncBodyWidth, composingCardIds, bodyRefs };
-}
-
 type PlotBoardProps = {
   cards: PlotCard[];
   onCardsChange: Dispatch<SetStateAction<PlotCard[]>>;
@@ -402,27 +347,19 @@ function PlotBoard({
   );
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const paneRef = useRef<HTMLDivElement | null>(null);
-  const isPinnedToRightRef = useRef(true);
   /** 番号バッジ／章マークを押した直後。しきい値を超えて動いたらドラッグに昇格する。 */
   const pendingDragRef = useRef<{ cardId: string; x: number; y: number } | null>(null);
   const suppressToggleClickRef = useRef(false);
   const dropTargetRef = useRef<PlotDropTarget | null>(null);
   const prevCardIdsRef = useRef<Set<string> | null>(null);
   const revealCardIdRef = useRef<string | null>(null);
-  // 初回表示で先頭（右端）に合わせたかどうかの判定に使う直前の scrollWidth。
-  const prevScrollWidthRef = useRef(0);
-  const prevClientWidthRef = useRef(0);
+  const keepInPlaceRef = useRef<{ cardId: string; right: number } | null>(null);
 
   // セクションは本文表示、章は配下セクションの表示可否を表す共通の「展開」状態。
   // 管理画面は card.managerCollapsed（右サイドバーの expanded とは独立・保存対象）を見る。
   const isCardExpanded = useCallback(
     (card: PlotCard) => (managerMode ? !card.managerCollapsed : card.expanded),
     [managerMode],
-  );
-
-  const isEditingBody = useCallback(
-    (card: PlotCard) => managerMode || editingBodyCardId === card.id,
-    [editingBodyCardId, managerMode],
   );
 
   const referenceByPath = useMemo(
@@ -436,17 +373,16 @@ function PlotBoard({
     [bodyDrafts, referenceByPath],
   );
 
-  const getBodyTextForLayout = useCallback(
-    (card: PlotCard) =>
-      isEditingBody(card) ? getBodyDraft(card) : displayPlotReferenceLinks(card.body, referenceByPath),
-    [getBodyDraft, isEditingBody, referenceByPath],
+  const bodyRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const setBodyRef = useCallback(
+    (cardId: string) => (element: HTMLElement | null) => {
+      if (element) bodyRefs.current.set(cardId, element);
+      else bodyRefs.current.delete(cardId);
+    },
+    [],
   );
-
-  const { bodyWidths, setBodyRef, syncBodyWidth, composingCardIds, bodyRefs } = usePlotBodyWidths(
-    cards,
-    isCardExpanded,
-    getBodyTextForLayout,
-  );
+  /** プレビューをクリックして編集に入るとき、キャレットを置く下書き上の位置。 */
+  const pendingCaretRef = useRef<number | null>(null);
 
   const filteredReferenceSuggestions = useMemo(() => {
     if (!referenceSuggestion) return [];
@@ -458,8 +394,6 @@ function PlotBoard({
       })
       .slice(0, 8);
   }, [referenceCandidates, referenceSuggestion]);
-
-  const visualCards = [...cards].reverse();
 
   // 章ごとのセクション数と、折りたたまれた章の配下セクション（描画しない）を求める。
   const sectionCountByChapter = new Map<string, number>();
@@ -542,6 +476,13 @@ function PlotBoard({
     const pane = paneRef.current;
     if (!pane) return;
 
+    const keep = keepInPlaceRef.current;
+    if (keep) {
+      keepInPlaceRef.current = null;
+      const right = anchorScreenRight(keep.cardId);
+      if (right !== null) pane.scrollLeft += right - keep.right;
+    }
+
     const revealId = revealCardIdRef.current;
     if (revealId) {
       revealCardIdRef.current = null;
@@ -557,52 +498,15 @@ function PlotBoard({
         } else if (rect.right > paneRect.right - margin) {
           pane.scrollLeft += rect.right - (paneRect.right - margin);
         }
-        const maxScrollLeft = Math.max(0, pane.scrollWidth - pane.clientWidth);
-        isPinnedToRightRef.current = Math.abs(pane.scrollLeft - maxScrollLeft) < SCROLL_PIN_TOLERANCE;
-        prevScrollWidthRef.current = pane.scrollWidth;
-        prevClientWidthRef.current = pane.clientWidth;
         if (!inactive) {
           element
             .querySelector<HTMLTextAreaElement>(".plotCardTitle, .plotChapterTitle")
             ?.focus({ preventScroll: true });
         }
-        return;
       }
     }
-
-    const maxScrollLeft = Math.max(0, pane.scrollWidth - pane.clientWidth);
-    const prevMaxScrollLeft = Math.max(
-      0,
-      prevScrollWidthRef.current - prevClientWidthRef.current,
-    );
-    const wasPinnedBeforeLayout =
-      prevScrollWidthRef.current === 0 ||
-      isPinnedToRightRef.current ||
-      Math.abs(pane.scrollLeft - prevMaxScrollLeft) < SCROLL_PIN_TOLERANCE;
-
-    if (wasPinnedBeforeLayout) {
-      let frames = 4;
-      let frameId = 0;
-      const pinToRight = () => {
-        const nextMaxScrollLeft = Math.max(0, pane.scrollWidth - pane.clientWidth);
-        pane.scrollLeft = nextMaxScrollLeft;
-        isPinnedToRightRef.current = true;
-        prevScrollWidthRef.current = pane.scrollWidth;
-        prevClientWidthRef.current = pane.clientWidth;
-
-        if (--frames > 0) {
-          frameId = requestAnimationFrame(pinToRight);
-        }
-      };
-
-      pinToRight();
-      return () => {
-        if (frameId) cancelAnimationFrame(frameId);
-      };
-    }
-    prevScrollWidthRef.current = pane.scrollWidth;
-    prevClientWidthRef.current = pane.clientWidth;
-  }, [bodyWidths, cards, managerMode]);
+    // 縦書きのスクロール起点は右端なので、左へ伸びる分には何もしなくても視点は動かない。
+  }, [cards, inactive]);
 
   useLayoutEffect(() => {
     if (!contextMenu) return;
@@ -649,8 +553,9 @@ function PlotBoard({
     const element = bodyRefs.current.get(editingBodyCardId);
     if (!(element instanceof HTMLTextAreaElement)) return;
     if (document.activeElement === element) return;
-    element.focus();
-    const cursor = element.value.length;
+    element.focus({ preventScroll: true });
+    const cursor = Math.min(pendingCaretRef.current ?? element.value.length, element.value.length);
+    pendingCaretRef.current = null;
     element.setSelectionRange(cursor, cursor);
   }, [editingBodyCardId]);
 
@@ -769,9 +674,7 @@ function PlotBoard({
 
   const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
     const pane = event.currentTarget;
-    const maxScrollLeft = pane.scrollWidth - pane.clientWidth;
-
-    if (maxScrollLeft <= 0) return;
+    if (pane.scrollWidth <= pane.clientWidth) return;
 
     const dominantDelta =
       Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
@@ -779,17 +682,8 @@ function PlotBoard({
     if (dominantDelta === 0) return;
 
     event.preventDefault();
-    pane.scrollLeft = Math.min(maxScrollLeft, Math.max(0, pane.scrollLeft - dominantDelta));
-    isPinnedToRightRef.current = Math.abs(pane.scrollLeft - maxScrollLeft) < 2;
-  };
-
-  const handleScroll = () => {
-    const pane = paneRef.current;
-    if (!pane) return;
-
-    const maxScrollLeft = pane.scrollWidth - pane.clientWidth;
-    isPinnedToRightRef.current =
-      maxScrollLeft <= 0 || Math.abs(pane.scrollLeft - maxScrollLeft) < SCROLL_PIN_TOLERANCE;
+    // 縦書きのペインは右端が 0 で左へ負。下へ回すと読み進める（左へ送る）。範囲外はブラウザが丸める。
+    pane.scrollLeft -= dominantDelta;
   };
 
   /** カードの柱（番号バッジ／章マーク）の画面位置。再レイアウト後に同じ位置へ戻すための基準。 */
@@ -803,24 +697,10 @@ function PlotBoard({
   };
 
   /** 開閉で幅が変わっても、指定カードの柱の見た目位置を据え置く。
-   *  再レイアウトが複数フレームに分かれても追従できるよう、数フレーム合わせ直す。 */
+   *  ここで位置を控え、描画後のレイアウトエフェクトで一度だけ合わせ直す。 */
   const keepCardInPlace = (cardId: string) => {
-    const pane = paneRef.current;
-    const beforeRight = anchorScreenRight(cardId);
-    if (!pane || beforeRight === null) return;
-    let frames = 4;
-    const repin = () => {
-      const currentRight = anchorScreenRight(cardId);
-      if (currentRight !== null) {
-        const maxScrollLeft = Math.max(0, pane.scrollWidth - pane.clientWidth);
-        pane.scrollLeft = Math.max(
-          0,
-          Math.min(maxScrollLeft, pane.scrollLeft + (currentRight - beforeRight)),
-        );
-      }
-      if (--frames > 0) requestAnimationFrame(repin);
-    };
-    requestAnimationFrame(repin);
+    const right = anchorScreenRight(cardId);
+    keepInPlaceRef.current = right === null ? null : { cardId, right };
   };
 
   /** 画面内でいちばん右（読み順で最初）に見えているカード。一括開閉の基準にする。 */
@@ -828,7 +708,7 @@ function PlotBoard({
     const pane = paneRef.current;
     if (!pane) return null;
     const paneRect = pane.getBoundingClientRect();
-    const elements = Array.from(pane.querySelectorAll<HTMLElement>("[data-plot-card-id]")).reverse();
+    const elements = Array.from(pane.querySelectorAll<HTMLElement>("[data-plot-card-id]"));
     const visible = elements.find((element) => {
       const rect = element.getBoundingClientRect();
       return rect.right > paneRect.left && rect.left < paneRect.right;
@@ -850,10 +730,8 @@ function PlotBoard({
   /** すべて（chapterId 指定時はその章の配下だけ）を展開／折りたたむ。
    *  展開は章も開く。折りたたみはセクションだけ畳み、章の帯は目次として残す。 */
   const setAllExpanded = (expand: boolean, chapterId?: string) => {
-    if (!isPinnedToRightRef.current) {
-      const anchorId = chapterId ?? firstVisibleCardId();
-      if (anchorId) keepCardInPlace(anchorId);
-    }
+    const anchorId = chapterId ?? firstVisibleCardId();
+    if (anchorId) keepCardInPlace(anchorId);
     onCardsChange((current) => {
       let inScope = chapterId === undefined;
       return current.map((card) => {
@@ -983,28 +861,6 @@ function PlotBoard({
     const body = hydratePlotReferenceLinks(draft, referenceCandidates);
     setBodyDrafts((current) => ({ ...current, [cardId]: draft }));
     updateCard(cardId, { body });
-
-    if (!composingCardIds.current.has(cardId)) {
-      syncBodyWidth(cardId, event.currentTarget);
-    }
-
-    updateReferenceSuggestion(cardId, event.currentTarget);
-  };
-
-  const handleBodyCompositionStart = (cardId: string) => {
-    composingCardIds.current.add(cardId);
-  };
-
-  const handleBodyCompositionEnd = (
-    cardId: string,
-    event: CompositionEvent<HTMLTextAreaElement>,
-  ) => {
-    composingCardIds.current.delete(cardId);
-    const draft = event.currentTarget.value;
-    const body = hydratePlotReferenceLinks(draft, referenceCandidates);
-    setBodyDrafts((current) => ({ ...current, [cardId]: draft }));
-    updateCard(cardId, { body });
-    syncBodyWidth(cardId, event.currentTarget);
     updateReferenceSuggestion(cardId, event.currentTarget);
   };
 
@@ -1061,7 +917,6 @@ function PlotBoard({
       if (element instanceof HTMLTextAreaElement) {
         element.focus();
         element.setSelectionRange(nextCursor, nextCursor);
-        syncBodyWidth(suggestion.cardId, element);
       }
     });
   };
@@ -1104,7 +959,6 @@ function PlotBoard({
     window.requestAnimationFrame(() => {
       element.focus();
       element.setSelectionRange(from, from);
-      syncBodyWidth(cardId, element);
     });
 
     return true;
@@ -1190,14 +1044,6 @@ function PlotBoard({
     event.currentTarget.blur();
   };
 
-  const getPlotCardStyle = (card: PlotCard, expanded: boolean): PlotCardStyle => ({
-    "--plot-body-width": expanded
-      ? bodyWidths[card.id] !== undefined
-        ? `${bodyWidths[card.id]}px`
-        : `${estimatePlotColumns(getBodyTextForLayout(card)) * PLOT_BODY_COLUMN_WIDTH_EM}em`
-      : `${PLOT_BODY_COLUMN_WIDTH_EM}em`,
-  });
-
   const renderPlotBodyPreview = (card: PlotCard) => (
     <div
       ref={setBodyRef(card.id)}
@@ -1207,9 +1053,12 @@ function PlotBoard({
       role="textbox"
       tabIndex={0}
       aria-label={`${card.num} 本文`}
-      onClick={() => {
+      onClick={(event) => {
         const selection = window.getSelection();
         if (selection && !selection.isCollapsed) return;
+        pendingCaretRef.current = card.body.trim()
+          ? previewCaretOffsetFromPoint(event.currentTarget, event.clientX, event.clientY)
+          : null;
         setEditingBodyCardId(card.id);
       }}
       onKeyDown={(event) => {
@@ -1233,12 +1082,11 @@ function PlotBoard({
       <div
         ref={paneRef}
         className={`plotPane ${className ?? ""}`.trim()}
-        aria-label="Plot"
-        onScroll={handleScroll}
+        aria-label="プロット"
         onWheel={handleWheel}
       >
         <div className="plotTrack">
-          {visualCards.map((card) => {
+          {cards.map((card) => {
             const dropClass =
               dropTarget?.anchorId === card.id
                 ? dropTarget.position === "before"
@@ -1301,7 +1149,6 @@ function PlotBoard({
                 } ${dropClass}`}
                 key={card.id}
                 data-plot-card-id={card.id}
-                style={getPlotCardStyle(card, expanded)}
                 onContextMenu={(event) => handleCardContextMenu(card.id, event)}
               >
                 <button
@@ -1333,23 +1180,33 @@ function PlotBoard({
                   {expanded && !managerMode && editingBodyCardId !== card.id
                     ? renderPlotBodyPreview(card)
                     : expanded && (
-                    <textarea
-                      ref={setBodyRef(card.id)}
-                      className="plotCardBody"
-                      value={getBodyDraft(card)}
-                      placeholder="本文…"
-                      aria-multiline="true"
-                      aria-label={`${card.num} 本文`}
-                      spellCheck={false}
-                      wrap="soft"
-                      onFocus={(event) => handleBodyFocus(card.id, event)}
-                      onBlur={handleBodyBlur}
-                      onChange={(event) => handleBodyChange(card.id, event)}
-                      onKeyDown={(event) => handleBodyKeyDown(card.id, event)}
-                      onSelect={(event) => updateReferenceSuggestion(card.id, event.currentTarget)}
-                      onCompositionStart={() => handleBodyCompositionStart(card.id)}
-                      onCompositionEnd={(event) => handleBodyCompositionEnd(card.id, event)}
-                    />
+                    // textarea は内容に合わせて幅を伸ばせないので、同じ文字列を流した見えない
+                    // ミラーと同じグリッドセルに重ね、幅はレイアウトに決めさせる。
+                    <div className="plotCardBodyField">
+                      <div className="plotCardBody plotCardBodyMirror" aria-hidden="true">
+                        {/* 末尾の改行だけはミラー側で空の列が立たないので、1 文字足して列を作る。 */}
+                        {getBodyDraft(card).replace(/\n$/, "\n ")}
+                      </div>
+                      <textarea
+                        ref={setBodyRef(card.id)}
+                        className="plotCardBody"
+                        value={getBodyDraft(card)}
+                        placeholder="本文…"
+                        rows={1}
+                        aria-multiline="true"
+                        aria-label={`${card.num} 本文`}
+                        spellCheck={false}
+                        wrap="soft"
+                        onFocus={(event) => handleBodyFocus(card.id, event)}
+                        onBlur={handleBodyBlur}
+                        onChange={(event) => handleBodyChange(card.id, event)}
+                        onKeyDown={(event) => handleBodyKeyDown(card.id, event)}
+                        onSelect={(event) => updateReferenceSuggestion(card.id, event.currentTarget)}
+                        onCompositionEnd={(event) =>
+                          updateReferenceSuggestion(card.id, event.currentTarget)
+                        }
+                      />
+                    </div>
                   )}
                 </div>
                 {!expanded && hasBody && (
@@ -1532,6 +1389,7 @@ function PlotBodyLinks({
         className={`plotReferenceLink ${file ? "" : "missingPlotReferenceLink"}`}
         key={`${sourcePath}-${index}`}
         type="button"
+        data-plot-draft-text={`@${file?.name ?? plotReferenceLabelFromPath(sourcePath)}`}
         title={file ? file.sourcePath : sourcePath}
         onClick={(event) => {
           event.stopPropagation();
