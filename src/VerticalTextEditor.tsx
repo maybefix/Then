@@ -161,6 +161,8 @@ type EditorViewWithInput = EditorView & {
 
 const ACTIVE_BUILD_RADIUS = 72;
 const VISIBLE_BUILD_RADIUS = 72;
+/** Characters typed into existing lines before the visible window is re-measured without a scroll. */
+const VISIBLE_SYNC_TEXT_DRIFT = 200;
 const VISIBLE_UPDATE_STEP = 12;
 const SCROLL_EPS = 0.75;
 const INITIAL_CENTER_SETTLE_MS = 500;
@@ -221,6 +223,38 @@ function topTexts(doc: PMNode): string[] {
 
 function docToText(doc: PMNode): string {
   return topTexts(doc).join("\n");
+}
+
+/** The editor text, kept up to date by the AST plugin; materialized only as a fallback. */
+function editorTextOf(state: EditorState): string {
+  return astKey.getState(state)?.text ?? docToText(state.doc);
+}
+
+/*
+ * The schema holds only paragraphs of plain text, so a paragraph's content size
+ * is its text length and the text is the paragraphs joined by one newline.
+ */
+function docTextLength(doc: PMNode): number {
+  return doc.childCount > 0 ? doc.content.size - doc.childCount - 1 : 0;
+}
+
+/**
+ * React reads the focused element's selection as character offsets before
+ * every commit when that element reports `contentEditable === "true"`, walking
+ * every text node in front of the caret, so each status-bar update while typing
+ * scanned the manuscript. The offsets only serve to restore the selection when
+ * a commit moves focus away, and ProseMirror owns this selection anyway. The
+ * property alone reports "inherit" here; the attribute, which the browser and
+ * ProseMirror use for editing, is untouched.
+ */
+function hideSelectionFromReact(dom: HTMLElement): void {
+  const native = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "contentEditable");
+  if (!native?.set) return;
+  Object.defineProperty(dom, "contentEditable", {
+    configurable: true,
+    get: () => "inherit",
+    set: (value: string) => native.set!.call(dom, value),
+  });
 }
 
 function updateEmptyAttribute(editor: Editor, knownText?: string): void {
@@ -1995,7 +2029,7 @@ function textOffsetFromPmPos(doc: PMNode, pos: number): number {
     const contentStart = nodeStart + 1;
     const contentEnd = contentStart + node.content.size;
     const nodeEnd = nodeStart + node.nodeSize;
-    const lineLength = node.textContent.length;
+    const lineLength = node.content.size;
 
     if (clamped <= contentStart) return textOffset;
     if (clamped <= contentEnd) return textOffset + clamped - contentStart;
@@ -2011,13 +2045,13 @@ function textOffsetFromPmPos(doc: PMNode, pos: number): number {
 }
 
 function pmPosFromTextOffset(doc: PMNode, offset: number): number {
-  const textLength = docToText(doc).length;
+  const textLength = docTextLength(doc);
   let remaining = Math.max(0, Math.min(textLength, offset));
   let nodeStart = 0;
 
   for (let i = 0; i < doc.childCount; i += 1) {
     const node = doc.child(i);
-    const lineLength = node.textContent.length;
+    const lineLength = node.content.size;
     const contentStart = nodeStart + 1;
 
     if (remaining <= lineLength) return contentStart + remaining;
@@ -2040,10 +2074,11 @@ function pmPosFromTextOffset(doc: PMNode, offset: number): number {
 
 function getTextSelection(editor: Editor): TextEditorSelection {
   const selection = editor.state.selection;
+  const head = textOffsetFromPmPos(editor.state.doc, selection.head);
   return {
-    from: textOffsetFromPmPos(editor.state.doc, selection.from),
-    to: textOffsetFromPmPos(editor.state.doc, selection.to),
-    head: textOffsetFromPmPos(editor.state.doc, selection.head),
+    from: selection.empty ? head : textOffsetFromPmPos(editor.state.doc, selection.from),
+    to: selection.empty ? head : textOffsetFromPmPos(editor.state.doc, selection.to),
+    head,
     line: lineNumberFromTopLevelIndex(selection.$head.index(0)),
   };
 }
@@ -3201,7 +3236,7 @@ export function VerticalTextEditor({
       },
       getValue: () => {
         const editor = tiptapRef.current;
-        return editor ? docToText(editor.state.doc) : textRef.current;
+        return editor ? editorTextOf(editor.state) : textRef.current;
       },
       getSelection: () => {
         const editor = tiptapRef.current;
@@ -3371,7 +3406,7 @@ export function VerticalTextEditor({
     const editor = tiptapRef.current;
     if (!editor) return;
 
-    const editorText = docToText(editor.state.doc);
+    const editorText = editorTextOf(editor.state);
     if (editorText === text) {
       textRef.current = text;
       return;
@@ -3413,6 +3448,9 @@ export function VerticalTextEditor({
     let centerWaitFrames = 1;
     let visibleQueued = false;
     let lastVisibleCenter = -1;
+    // What the visible window was last measured against (see requestVisibleWindowAfterEdit).
+    let lastVisibleSyncLines = -1;
+    let lastVisibleSyncTextLength = -1;
     let centerFrame: number | null = null;
     let visibleFrame: number | null = null;
     let scrollFrame: number | null = null;
@@ -3523,6 +3561,8 @@ export function VerticalTextEditor({
 
     const syncVisibleWindow = (editor: Editor, currentScroller: HTMLElement): boolean => {
       if (isEditorComposing(editor, composingRef)) return false;
+      lastVisibleSyncLines = editor.state.doc.childCount;
+      lastVisibleSyncTextLength = docTextLength(editor.state.doc);
       const index = estimateVisibleCenterIndex(editor, currentScroller, writingModeRef.current);
       if (index < 0 || Math.abs(index - lastVisibleCenter) < VISIBLE_UPDATE_STEP) return false;
 
@@ -3837,6 +3877,24 @@ export function VerticalTextEditor({
         visibleQueued = false;
         syncVisibleWindow(editor, currentScroller);
       });
+    };
+
+    /*
+     * Hit-testing the viewport centre forces layout, which on a long manuscript
+     * costs a few milliseconds per keystroke. Scrolling requests a sync from the
+     * scroll handler, so an edit only needs one when it can move lines under
+     * the viewport by itself: lines added or removed, or a line grown a lot.
+     */
+    const requestVisibleWindowAfterEdit = () => {
+      const doc = tiptapRef.current?.state.doc;
+      if (
+        doc &&
+        doc.childCount === lastVisibleSyncLines &&
+        Math.abs(docTextLength(doc) - lastVisibleSyncTextLength) < VISIBLE_SYNC_TEXT_DRIFT
+      ) {
+        return;
+      }
+      requestVisibleWindow();
     };
 
     const renderVisualLines = () => {
@@ -4260,7 +4318,7 @@ export function VerticalTextEditor({
           requestCenterCaret(true, "update");
           requestPagedSelectionAfterReflow(currentEditor);
         }
-        requestVisibleWindow();
+        requestVisibleWindowAfterEdit();
         if (editorDisplayModeRef.current !== "paged") requestLineBreakMarks();
       },
       onSelectionUpdate: () => {
@@ -4272,12 +4330,13 @@ export function VerticalTextEditor({
           requestCenterCaret(false, "selection");
           revealSelectionPageRef.current?.(editor);
         }
-        requestVisibleWindow();
+        requestVisibleWindowAfterEdit();
         requestLineBreakMarks();
       },
     });
 
     tiptapRef.current = editor;
+    hideSelectionFromReact(editor.view.dom);
     if (showLineNumbersRef.current || !showCommentsRef.current) {
       editor.view.dispatch(
         editor.state.tr

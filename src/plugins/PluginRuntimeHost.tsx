@@ -29,7 +29,8 @@ type RuntimeMessage = {
 };
 
 export type ThenPluginRuntimeHostHandle = {
-  emit: (event: string, payload: unknown, requiredPermission?: string) => void;
+  /** A function payload is built only when some running plugin may receive it. */
+  emit: (event: string, payload: unknown | (() => unknown), requiredPermission?: string) => void;
   executeCommand: (pluginId: string, commandId: string) => void;
 };
 
@@ -346,9 +347,15 @@ export const ThenPluginRuntimeHost = forwardRef<
 
   useImperativeHandle(ref, () => ({
     emit: (event, payload, requiredPermission) => {
+      let pending = typeof payload === "function";
+      let built = pending ? undefined : payload;
       for (const runtime of runtimesRef.current) {
         if (hasPermission(runtime.plugin.manifest, requiredPermission)) {
-          sendEvent(runtime.plugin.manifest.id, event, payload);
+          if (pending) {
+            built = (payload as () => unknown)();
+            pending = false;
+          }
+          sendEvent(runtime.plugin.manifest.id, event, built);
         }
       }
     },

@@ -478,10 +478,10 @@ assert.match(
   /\.verticalTypewriterEditor \.pm-root\s*\{[^}]*padding:\s*0 100vw;/,
   "vertical typewriter scrolling needs a full viewport gutter at both document edges",
 );
-assert.match(
+assert.doesNotMatch(
   appCss,
-  /data-show-line-numbers="true"[\s\S]*?content-visibility: visible/,
-  "line-number mode must measure real wrapped blocks instead of intrinsic placeholders",
+  /content-visibility:\s*auto|contain-intrinsic-/,
+  "editor lines must be laid out for real: line numbers, typewriter scrolling and paging measure them, and per-line auto visibility costs an intersection check per line on every frame",
 );
 assert.match(appCss, /data-colorize-japanese-quotes="true"[\s\S]*?\.japanese-quote/);
 assert.match(

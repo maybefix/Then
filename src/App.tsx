@@ -5585,8 +5585,11 @@ export default function App() {
       projectFolder && previousPluginDocument.path
         ? pluginDocumentPath(projectFolder.path, previousPluginDocument.path)
         : null;
-    const pluginChange = computeTextChange(previousPluginDocument.text, nextText);
-    if (relativePath) {
+    // Both scan the whole manuscript, so only run them for an anchor or plugin that needs them.
+    if (
+      relativePath &&
+      pluginAnchorsRef.current.some((anchor) => anchor.documentPath === relativePath)
+    ) {
       const mapped = mapAnchorsThroughTextChange(
         pluginAnchorsRef.current,
         relativePath,
@@ -5598,12 +5601,12 @@ export default function App() {
     pluginActiveDocumentRef.current = { path: previousPluginDocument.path, text: nextText };
     pluginRuntimeHostRef.current?.emit(
       "document.change",
-      {
+      () => ({
         documentPath: relativePath,
         version: editorRevision,
-        changes: pluginChange,
+        changes: computeTextChange(previousPluginDocument.text, nextText),
         text: nextText,
-      },
+      }),
       "document:read",
     );
     const nextFullText = updateMarkdownBody(markdown, nextText);

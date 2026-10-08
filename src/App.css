@@ -2494,7 +2494,6 @@ html:not([data-window-fullscreen="true"])
   margin-inline: 0;
   break-inside: auto;
   contain: none;
-  content-visibility: visible;
   overflow-clip-margin: 0;
   orphans: 2;
   widows: 2;
@@ -2697,10 +2696,10 @@ html:not([data-window-fullscreen="true"])
      置き、縦幅を縮めたときは上下均等に縮む（上基点にしない）。 */
   max-inline-size: calc(100% * var(--editor-measure-v-ratio, 0.75));
   margin-inline: auto;
+  /* Lines are laid out for real, never as content-visibility placeholders:
+     Chromium tracks every auto-visibility block with an intersection
+     observer, which cost more per keystroke than the layout it skipped. */
   contain: layout style;
-  contain-intrinsic-block-size: auto 2.6em;
-  contain-intrinsic-inline-size: auto 82vh;
-  content-visibility: auto;
   overflow-clip-margin: 4em;
   white-space: pre-wrap;
   line-break: strict;
@@ -2723,7 +2722,6 @@ html:not([data-window-fullscreen="true"])
   align-items: stretch;
   text-align: start;
   text-indent: 0;
-  content-visibility: visible;
   contain: style;
   border-block-end: 1px solid var(--border-subtle);
 }
@@ -2900,9 +2898,6 @@ html:not([data-window-fullscreen="true"])
 }
 
 .verticalTypewriterEditor .pm-root p.active-line {
-  /* 空段落を追加した直後も実寸で配置する。仮想レイアウトの 2.6em から
-     1lh への遅延縮小で、タイプライター位置が後からずれるのを防ぐ。 */
-  content-visibility: visible;
   background: none;
 }
 
@@ -2918,8 +2913,6 @@ html:not([data-window-fullscreen="true"])
     calc(100% * var(--editor-measure-v-ratio, 0.75)),
     calc(100% - 28px)
   );
-  /* 全ブロックの折り返し数を正確に測るため、行番号表示中は仮想寸法を使わない。 */
-  content-visibility: visible;
 }
 
 .visibleLineNumberLayer {
@@ -3314,8 +3307,6 @@ html:not([data-window-fullscreen="true"])
      中央寄せマージンを解除）。 */
   max-inline-size: none;
   margin-inline: 0;
-  contain-intrinsic-inline-size: auto 100%;
-  contain-intrinsic-block-size: auto 2.2em;
   text-justify: auto;
 }
 
@@ -3406,7 +3397,6 @@ html:not([data-window-fullscreen="true"])
   max-inline-size: 100%;
   margin-inline: 0;
   contain: none;
-  content-visibility: visible;
   overflow-clip-margin: 0;
 }
 
