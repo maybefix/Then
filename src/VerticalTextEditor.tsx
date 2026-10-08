@@ -123,11 +123,27 @@ type AstPluginState = {
   documentIndex: DocumentIndex | null;
   text: string;
   decoSet: DecorationSet;
+  /** Rows of Markdown tables by line index (empty for most manuscripts). */
+  tableRows: Map<number, TableRow>;
+  /**
+   * What `decoSet` was last decorated for. IME composition only maps the
+   * decorations, so the lines composed into stay `stale` and the window stays
+   * where it was until the next update patches them.
+   */
+  decoWindow: DecorationWindow;
   activeIndex: number;
   visibleCenter: number;
   fullDecorations: boolean;
   /** コメント行を畳むか（キャレットのあるコメントのまとまりは除く）。 */
   commentsHidden: boolean;
+};
+
+type DecorationWindow = {
+  activeIndex: number;
+  visibleCenter: number;
+  stale: { from: number; to: number } | null;
+  /** Composition changed tables or line roles, which only a rebuild restyles. */
+  rebuild: boolean;
 };
 
 type AstMeta = {
@@ -278,11 +294,16 @@ function diffTopLevelNodes(oldDoc: PMNode, newDoc: PMNode): DocumentLineDiff {
   };
 }
 
+/**
+ * Lines after `diff`, with roles re-derived. `rolesChangedOutside` reports a
+ * comment or code block opened or closed by the edit, which re-roles lines the
+ * diff does not cover.
+ */
 function incrementalLines(
   oldLines: LineNode[],
   newDoc: PMNode,
   diff: DocumentLineDiff,
-): LineNode[] {
+): { lines: LineNode[]; rolesChangedOutside: boolean } {
   const next: LineNode[] = [];
 
   for (let i = 0; i < diff.from; i += 1) {
@@ -298,7 +319,18 @@ function incrementalLines(
     next.push(oldLine.lineIndex === next.length ? oldLine : cloneLineNode(oldLine, next.length));
   }
 
-  return applyLineRoles(next);
+  const lines = applyLineRoles(next);
+  let rolesChangedOutside = false;
+  if (lines !== next) {
+    for (let index = 0; index < lines.length; index += 1) {
+      if (index >= diff.from && index < diff.toNew) continue;
+      if (lines[index] !== next[index]) {
+        rolesChangedOutside = true;
+        break;
+      }
+    }
+  }
+  return { lines, rolesChangedOutside };
 }
 
 function pmStartAtIndex(doc: PMNode, index: number): number | null {
@@ -1124,8 +1156,16 @@ function handleTableMouseUp(view: EditorView, event: MouseEvent): boolean {
   return true;
 }
 
+/** Whether `pos` sits on a Markdown table row; avoids materializing the text elsewhere. */
+function isTableRowAt(state: EditorState, pos: number): boolean {
+  const ast = astKey.getState(state);
+  if (!ast?.tableRows.size) return false;
+  return ast.tableRows.has(state.doc.resolve(Math.max(0, Math.min(state.doc.content.size, pos))).index(0));
+}
+
 function handleTableKeyDown(view: EditorView, event: KeyboardEvent, position = view.state.selection.head): boolean {
   if (event.isComposing || view.composing || event.keyCode === 229 || event.ctrlKey || event.metaKey || event.altKey) return false;
+  if (!isTableRowAt(view.state, position)) return false;
   if (!view.state.selection.empty && event.key !== "Tab") return false;
   // Preserve native range selection; ordinary navigation uses visible cells.
   if (event.shiftKey && event.key !== "Tab") return false;
@@ -1467,9 +1507,27 @@ function handleFoldedCommentJoin(view: EditorView, event: KeyboardEvent): boolea
   return true;
 }
 
+type DecorationRangeList = Array<{ from: number; to: number }>;
+
+function windowRanges(
+  lineCount: number,
+  activeIndex: number,
+  visibleCenter: number,
+  fullDecorations: boolean,
+): DecorationRangeList {
+  return fullDecorations
+    ? [{ from: 0, to: lineCount }]
+    : decorationRange(activeIndex, lineCount, visibleCenter);
+}
+
+function inRanges(ranges: DecorationRangeList, index: number): boolean {
+  return ranges.some((range) => index >= range.from && index < range.to);
+}
+
 function buildWindowDecos(
   doc: PMNode,
   lines: LineNode[],
+  tableRows: Map<number, TableRow>,
   activeIndex: number,
   visibleCenter: number,
   fullDecorations: boolean,
@@ -1482,14 +1540,11 @@ function buildWindowDecos(
   pushStructureDecos(out, doc, lines, activeIndex, commentsHidden);
   // Keep table geometry stable outside the decoration window as well: moving
   // the caret or scrolling must never replace the grid with raw paragraphs.
-  const tableRows = markdownTableRows(lines);
   if (tableRows.size) doc.forEach((node, start, index) => {
     const row = tableRows.get(index);
     if (row) pushTableRowDecos(out, node, start, row, index === activeIndex);
   });
-  const ranges = fullDecorations
-    ? [{ from: 0, to: count }]
-    : decorationRange(activeIndex, count, visibleCenter);
+  const ranges = windowRanges(count, activeIndex, visibleCenter, fullDecorations);
 
   for (const range of ranges) {
     let nodeStart = pmStartAtIndex(doc, range.from);
@@ -1505,10 +1560,198 @@ function buildWindowDecos(
   return DecorationSet.create(doc, out);
 }
 
+/** A range of line indices carried through `diff` (lines inside it map onto the diff). */
+function mapLineRange(
+  range: { from: number; to: number },
+  diff: DocumentLineDiff | null,
+): { from: number; to: number } {
+  if (!diff) return range;
+  const delta = diff.toNew - diff.toOld;
+  const from = range.from < diff.from ? range.from : range.from >= diff.toOld ? range.from + delta : diff.from;
+  const to = range.to <= diff.from ? range.to : range.to >= diff.toOld ? range.to + delta : diff.toNew;
+  return { from, to: Math.max(from, to) };
+}
+
+/** Past this many lines to re-decorate, a rebuild is as cheap as a patch. */
+const MAX_PATCHED_DECORATION_LINES = 400;
+
+/**
+ * Patches the previous decorations instead of rebuilding them. Building a
+ * DecorationSet scans every decoration once per top-level node, which costs
+ * more than the rest of a keystroke on a long manuscript. Only the lines that
+ * changed, the old and new caret lines and lines entering or leaving the window
+ * are re-decorated. Returns null when the edit can restyle lines it does not
+ * touch (comments, code blocks), which needs a full rebuild.
+ */
+function patchWindowDecos(
+  previous: AstPluginState,
+  doc: PMNode,
+  mapping: Transaction["mapping"] | null,
+  diff: DocumentLineDiff | null,
+  lines: LineNode[],
+  tableRows: Map<number, TableRow>,
+  activeIndex: number,
+  visibleCenter: number,
+): DecorationSet | null {
+  if (lines.length !== doc.childCount) return null;
+  const isStructure = (line: LineNode | undefined) => line?.kind === "comment" || line?.kind === "code";
+  const delta = diff ? diff.toNew - diff.toOld : 0;
+  const decorated = previous.decoWindow;
+  const stale = decorated.stale ? mapLineRange(decorated.stale, diff) : null;
+  if (diff) {
+    // Neighbours included: their structure decorations are not re-derived here.
+    for (let i = Math.max(0, diff.from - 1); i <= diff.toOld; i += 1) if (isStructure(previous.lines[i])) return null;
+    for (let i = Math.max(0, diff.from - 1); i <= diff.toNew; i += 1) if (isStructure(lines[i])) return null;
+  }
+  if (stale) {
+    for (let i = stale.from; i < stale.to; i += 1) if (isStructure(lines[i])) return null;
+  }
+  // A folded comment group opens around the caret.
+  if (
+    previous.commentsHidden &&
+    (isStructure(previous.lines[decorated.activeIndex]) || isStructure(lines[activeIndex]))
+  ) {
+    return null;
+  }
+
+  const oldToNew = (index: number) =>
+    !diff || index < diff.from ? index : index >= diff.toOld ? index + delta : -1;
+  const newToOld = (index: number) =>
+    !diff || index < diff.from ? index : index >= diff.toNew ? index - delta : -1;
+  const oldRanges = windowRanges(
+    previous.lines.length,
+    decorated.activeIndex,
+    decorated.visibleCenter,
+    previous.fullDecorations,
+  );
+  const newRanges = windowRanges(lines.length, activeIndex, visibleCenter, previous.fullDecorations);
+
+  const dirty = new Set<number>();
+  // The lines either side too: joining or splitting rewrites their node
+  // boundaries, and mapping drops their decorations even when their text is
+  // unchanged.
+  if (diff) for (let i = Math.max(0, diff.from - 1); i <= Math.min(lines.length - 1, diff.toNew); i += 1) dirty.add(i);
+  if (stale) for (let i = stale.from; i < stale.to; i += 1) dirty.add(i);
+  if (oldToNew(decorated.activeIndex) >= 0) dirty.add(oldToNew(decorated.activeIndex));
+  dirty.add(activeIndex);
+  for (const range of newRanges) {
+    for (let i = range.from; i < range.to; i += 1) {
+      const old = newToOld(i);
+      if (old < 0 || !inRanges(oldRanges, old)) dirty.add(i);
+    }
+  }
+  for (const range of oldRanges) {
+    for (let i = range.from; i < range.to; i += 1) {
+      const next = oldToNew(i);
+      if (next >= 0 && !inRanges(newRanges, next)) dirty.add(next);
+    }
+  }
+  if (dirty.size > MAX_PATCHED_DECORATION_LINES) return null;
+
+  let set = mapping ? previous.decoSet.map(mapping, doc) : previous.decoSet;
+  const removed: Decoration[] = [];
+  const added: Decoration[] = [];
+  doc.forEach((node, start, index) => {
+    if (!dirty.has(index) || isStructure(lines[index])) return;
+    // Strictly inside the line, so the neighbours' node decorations stay put.
+    removed.push(...set.find(start + 1, start + node.nodeSize - 1));
+    const row = tableRows.get(index);
+    if (row) pushTableRowDecos(added, node, start, row, index === activeIndex);
+    else if (inRanges(newRanges, index)) pushLineDecos(added, lines, index, start, node, index === activeIndex);
+  });
+  if (removed.length) set = set.remove(removed);
+  if (added.length) set = set.add(doc, added);
+  return set;
+}
+
+function decorationSignature(set: DecorationSet): string[] {
+  return set
+    .find()
+    .map((decoration) => {
+      const type = (decoration as unknown as { type: { attrs?: unknown; constructor: { name: string } } }).type;
+      return `${decoration.from}:${decoration.to}:${type.constructor.name}:${JSON.stringify(type.attrs ?? decoration.spec ?? null)}`;
+    })
+    .sort();
+}
+
+function windowDecosWithShadow(
+  previous: AstPluginState,
+  doc: PMNode,
+  mapping: Transaction["mapping"] | null,
+  diff: DocumentLineDiff | null,
+  lines: LineNode[],
+  tableRows: Map<number, TableRow>,
+  activeIndex: number,
+  visibleCenter: number,
+  fullDecorations: boolean,
+  commentsHidden: boolean,
+  forceRebuild: boolean,
+): DecorationSet {
+  const rebuild = () =>
+    buildWindowDecos(doc, lines, tableRows, activeIndex, visibleCenter, fullDecorations, commentsHidden);
+  if (
+    forceRebuild ||
+    previous.decoWindow.rebuild ||
+    fullDecorations !== previous.fullDecorations ||
+    commentsHidden !== previous.commentsHidden
+  ) {
+    return rebuild();
+  }
+  const patched = patchWindowDecos(previous, doc, mapping, diff, lines, tableRows, activeIndex, visibleCenter);
+  if (!patched) return rebuild();
+  if (!import.meta.env.DEV) return patched;
+
+  const rebuilt = rebuild();
+  const incremental = decorationSignature(patched);
+  const expected = decorationSignature(rebuilt);
+  if (incremental.length === expected.length && incremental.every((value, index) => value === expected[index])) {
+    return patched;
+  }
+  console.error("[decoration-shadow] patched decorations diverged; using full rebuild", {
+    diff,
+    activeIndex,
+    missing: expected.filter((value) => !incremental.includes(value)).slice(0, 10),
+    extra: incremental.filter((value) => !expected.includes(value)).slice(0, 10),
+  });
+  return rebuilt;
+}
+
+/**
+ * Table rows after an edit. Tables are found from pairs of lines with pipes,
+ * so an edit that touches no pipe, next to no pipe, keeps every table as is.
+ */
+function nextTableRows(
+  previous: AstPluginState,
+  lines: LineNode[],
+  diff: DocumentLineDiff,
+  rolesChangedOutside: boolean,
+): { rows: Map<number, TableRow>; changed: boolean } {
+  const hasPipe = (source: readonly LineNode[], from: number, to: number) => {
+    for (let i = Math.max(0, from); i < Math.min(source.length, to); i += 1) {
+      if (source[i].source.includes("|")) return true;
+    }
+    return false;
+  };
+  if (
+    rolesChangedOutside ||
+    hasPipe(previous.lines, diff.from - 1, diff.toOld + 1) ||
+    hasPipe(lines, diff.from - 1, diff.toNew + 1)
+  ) {
+    const rows = markdownTableRows(lines);
+    return { rows, changed: rows.size > 0 || previous.tableRows.size > 0 };
+  }
+  const delta = diff.toNew - diff.toOld;
+  if (delta === 0 || previous.tableRows.size === 0) return { rows: previous.tableRows, changed: false };
+  const rows = new Map<number, TableRow>();
+  for (const [index, row] of previous.tableRows) rows.set(index >= diff.toOld ? index + delta : index, row);
+  return { rows, changed: false };
+}
+
 function makeAstState(state: EditorState): AstPluginState {
   const texts = topTexts(state.doc);
   const lines = applyLineRoles(texts.map((line, index) => parseLineNode(line, index)));
   const activeIndex = activeLineIndex(state);
+  const tableRows = markdownTableRows(lines);
   return {
     lines,
     documentIndex: import.meta.env.DEV ? createDocumentIndexFromLines(texts) : null,
@@ -1517,7 +1760,9 @@ function makeAstState(state: EditorState): AstPluginState {
     visibleCenter: activeIndex,
     fullDecorations: false,
     commentsHidden: false,
-    decoSet: buildWindowDecos(state.doc, lines, activeIndex, activeIndex, false, false),
+    tableRows,
+    decoWindow: { activeIndex, visibleCenter: activeIndex, stale: null, rebuild: false },
+    decoSet: buildWindowDecos(state.doc, lines, tableRows, activeIndex, activeIndex, false, false),
   };
 }
 
@@ -1600,25 +1845,33 @@ function applyAst(
       visibleCenter,
       fullDecorations,
       commentsHidden,
-      decoSet: buildWindowDecos(
+      decoWindow: { activeIndex, visibleCenter, stale: null, rebuild: false },
+      decoSet: windowDecosWithShadow(
+        value,
         newState.doc,
+        null,
+        null,
         value.lines,
+        value.tableRows,
         activeIndex,
         visibleCenter,
         fullDecorations,
         commentsHidden,
+        meta?.rebuild === true,
       ),
     };
   }
 
   const diff = lineDiffFromSelectionTransaction(tr, _oldState, newState)
     ?? diffTopLevelNodes(_oldState.doc, newState.doc);
-  const lines = incrementalLines(value.lines, newState.doc, diff);
+  const { lines, rolesChangedOutside } = incrementalLines(value.lines, newState.doc, diff);
+  const tables = nextTableRows(value, lines, diff, rolesChangedOutside);
   const documentIndex = updateDocumentIndexWithShadow(value.documentIndex, lines, diff);
   const text = updateEditorTextWithShadow(value.text, value.lines, lines, diff);
   const activeIndex = activeLineIndex(newState);
 
   if (tr.getMeta("composition") !== undefined) {
+    const previousStale = value.decoWindow.stale ? mapLineRange(value.decoWindow.stale, diff) : null;
     return {
       lines,
       documentIndex,
@@ -1627,6 +1880,16 @@ function applyAst(
       visibleCenter,
       fullDecorations,
       commentsHidden,
+      tableRows: tables.rows,
+      decoWindow: {
+        ...value.decoWindow,
+        stale: {
+          from: Math.min(diff.from, previousStale?.from ?? diff.from),
+          to: Math.max(diff.toNew, previousStale?.to ?? diff.toNew),
+        },
+        // Mapped decorations no longer line up with a window that lines moved through.
+        rebuild: value.decoWindow.rebuild || rolesChangedOutside || tables.changed || diff.toNew !== diff.toOld,
+      },
       decoSet: value.decoSet.map(tr.mapping, newState.doc),
     };
   }
@@ -1639,13 +1902,20 @@ function applyAst(
     visibleCenter,
     fullDecorations,
     commentsHidden,
-    decoSet: buildWindowDecos(
+    tableRows: tables.rows,
+    decoWindow: { activeIndex, visibleCenter, stale: null, rebuild: false },
+    decoSet: windowDecosWithShadow(
+      value,
       newState.doc,
+      tr.mapping,
+      diff,
       lines,
+      tables.rows,
       activeIndex,
       visibleCenter,
       fullDecorations,
       commentsHidden,
+      meta?.rebuild === true || rolesChangedOutside || tables.changed,
     ),
   };
 }
@@ -1662,9 +1932,13 @@ const LayoutAstExtension = Extension.create({
           return {
             update(view) {
               if (frame !== null) cancelAnimationFrame(frame);
+              frame = null;
+              // Only a caret on a table row can need snapping; skip the text scan otherwise.
+              if (!isTableRowAt(view.state, view.state.selection.head)) return;
               frame = requestAnimationFrame(() => {
                 frame = null;
                 if (view.composing || !view.hasFocus() || !view.state.selection.empty) return;
+                if (!isTableRowAt(view.state, view.state.selection.head)) return;
                 const offset = textOffsetFromPmPos(view.state.doc, view.state.selection.head);
                 const cell = tableCellCaret(docToText(view.state.doc), offset,
                   getComputedStyle(view.dom).writingMode === "vertical-rl");

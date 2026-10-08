@@ -57,6 +57,7 @@
     "test:submission-worker": "node scripts/test-submission-worker.mjs",
     "benchmark:submission": "node scripts/benchmark-submission.mjs",
     "benchmark:typing": "node scripts/benchmark-typing.mjs",
+    "fuzz:editor-decorations": "node scripts/fuzz-editor-decorations.mjs",
     "demo:record": "powershell -ExecutionPolicy Bypass -File scripts/demo/record-desktop.ps1",
     "demo:edit": "node scripts/demo/edit-video.mjs",
     "demo:validate": "node scripts/demo/validate-demo.mjs",

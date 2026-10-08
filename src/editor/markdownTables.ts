@@ -86,17 +86,39 @@ export function splitTableRow(source: string): TableCell[] | null {
   });
 }
 
+/**
+ * Cheap pre-check for a table rule (`| --- | :-: |`): only pipes, colons,
+ * dashes and spaces, with at least one pipe and three dashes. The exact cell
+ * check still runs on the lines that pass.
+ */
+function isRuleCandidate(source: string): boolean {
+  return source.includes("|") && source.includes("---") && /^[\s|:-]+$/.test(source);
+}
+
 const cache = new WeakMap<readonly { source: string }[], Map<number, TableRow>>();
 
 export function markdownTableRows(lines: readonly { source: string }[]): Map<number, TableRow> {
   const cached = cache.get(lines);
   if (cached) return cached;
   const rows = new Map<number, TableRow>();
+  cache.set(lines, rows);
+  // A table needs a header line with a pipe right above a rule line. Most
+  // manuscripts have none (a pipe alone is usually ruby), so skip the role scan
+  // and the row parsing then.
+  let hasRuleCandidate = false;
+  for (let i = 1; i < lines.length; i++) {
+    if (isRuleCandidate(lines[i].source) && lines[i - 1].source.includes("|")) {
+      hasRuleCandidate = true;
+      break;
+    }
+  }
+  if (!hasRuleCandidate) return rows;
   // Code blocks and comments are never tables.
   const roles = classifyLines(lines.map((line) => line.source));
   for (let i = 0; i < lines.length; i++) {
     const source = lines[i].source;
-    if (roles[i] || roles[i + 1] || /^ {4}|^\t/.test(source) || i + 1 >= lines.length) continue;
+    if (i + 1 >= lines.length || !source.includes("|") || !isRuleCandidate(lines[i + 1].source)) continue;
+    if (roles[i] || roles[i + 1] || /^ {4}|^\t/.test(source)) continue;
     const header = splitTableRow(source);
     const ruleSource = lines[i + 1].source;
     const rule = splitTableRow(ruleSource);
@@ -133,6 +155,5 @@ export function markdownTableRows(lines: readonly { source: string }[]): Map<num
     }
     for (let line = tableStart; line <= i; line++) rows.get(line)!.widths = widths;
   }
-  cache.set(lines, rows);
   return rows;
 }
