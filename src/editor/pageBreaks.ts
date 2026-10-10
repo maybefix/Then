@@ -88,15 +88,30 @@ export function measureParagraphs(
 ): ParagraphGeometry[] {
   const vertical = writingMode === "vertical-rl";
   const rootRect = root.getBoundingClientRect();
+  const rootStyle = getComputedStyle(root);
   const measures: ParagraphGeometry[] = [];
+  // 直前までに描かれた段落の終端。非表示段落の位置はここで代用する。
+  let flowEnd =
+    (Number.parseFloat(vertical ? rootStyle.paddingRight : rootStyle.paddingTop) || 0) +
+    (Number.parseFloat(vertical ? rootStyle.borderRightWidth : rootStyle.borderTopWidth) || 0);
 
   for (const child of Array.from(root.children)) {
     if (!(child instanceof HTMLElement)) continue;
 
     const style = getComputedStyle(child);
+    // display:none の段落（非表示コメントなど）は描かれないので0行。矩形は全て
+    // 0になり、そこから位置を出すと本文rootの画面位置が本文内の位置へ混ざる。
+    // ページ先頭に選ばれるとページの移動量がroot位置に依存して循環するので、
+    // 0行にして paginate の割り付けから外し、位置は流れの現在地にしておく。
+    if (style.display === "none") {
+      measures.push({ lineCount: 0, linePitch: 0, gapBefore: 0, blockStart: flowEnd });
+      continue;
+    }
+
     const rect = child.getBoundingClientRect();
     // 縦書きは右から左へ流れるので、流れの先頭は本文の右端。
     const blockStart = vertical ? rootRect.right - rect.right : rect.top - rootRect.top;
+    flowEnd = blockStart + (vertical ? rect.width : rect.height);
     const linePitch = Number.parseFloat(style.lineHeight);
 
     if (!Number.isFinite(linePitch) || linePitch <= 0) {
