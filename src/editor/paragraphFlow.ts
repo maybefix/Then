@@ -129,10 +129,12 @@ export class ParagraphFlow {
         const rect = entry.hidden ? { left: 0, right: 0, top: 0, bottom: 0 } : {
           left, top, right: left + (vertical ? entry.size : entry.inlineSize), bottom: top + (vertical ? entry.inlineSize : entry.size),
         };
+        // Hidden paragraphs draw no lines; keep them out of pagination and at the
+        // current flow position (same rule as measureParagraphs).
+        const pitch = !entry.hidden && Number.isFinite(entry.linePitch) && entry.linePitch > 0 ? entry.linePitch : 0;
         this.paragraphs.push({
-          lineCount: Number.isFinite(entry.linePitch) && entry.linePitch > 0 ? Math.max(1, Math.round(entry.size / entry.linePitch)) : 0,
-          linePitch: Number.isFinite(entry.linePitch) && entry.linePitch > 0 ? entry.linePitch : 0,
-          gapBefore: entry.gapBefore, blockStart,
+          lineCount: pitch ? Math.max(1, Math.round(entry.size / pitch)) : 0,
+          linePitch: pitch, gapBefore: entry.hidden ? 0 : entry.gapBefore, blockStart,
         });
         this.versions.push(entry.version);
         if (!entry.hidden) offset += entry.size;
@@ -145,11 +147,7 @@ export class ParagraphFlow {
       const x = vertical ? root.right : root.left;
       return { left: r.left + x, right: r.right + x, top: r.top + root.top, bottom: r.bottom + root.top };
     });
-    // Match the legacy zero-box origin for hidden paragraphs without making
-    // their position part of the flow. Visible zero-size rule rows still remain.
-    const paragraphs = this.paragraphs.map((p, i) => this.entries.get(this.elements[i])!.hidden
-      ? { ...p, blockStart: vertical ? root.right : -root.top } : p);
-    return { elements: this.elements, blocks, paragraphs, versions: this.versions, root, generation: this.generation, reads };
+    return { elements: this.elements, blocks, paragraphs: this.paragraphs, versions: this.versions, root, generation: this.generation, reads };
   }
 
   dispose(): void { this.mutation.disconnect(); this.resize.disconnect(); this.styles.disconnect(); }
