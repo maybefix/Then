@@ -1,5 +1,10 @@
 import { Editor, Extension, type JSONContent } from "@tiptap/core";
-import { mapTextOffsetThroughChange } from "./editor/textOffsetMapping";
+import { findTextChange, mapTextOffsetThroughChange } from "./editor/textOffsetMapping";
+import { createTypewriterScroller } from "./editor/typewriterScroller";
+import { syncOverlayElements } from "./editor/overlayElements";
+import { VisualLineIndex } from "./editor/visualLineIndex";
+import { indexRootDecorations } from "./editor/indexedDecorations";
+import { spliceRootDecorations } from "./editor/spliceRootDecorations";
 import Document from "@tiptap/extension-document";
 import History from "@tiptap/extension-history";
 import Paragraph from "@tiptap/extension-paragraph";
@@ -40,10 +45,10 @@ import { findJapaneseQuoteRanges } from "./editor/japaneseQuoteRanges";
 import { markdownTableRows, type TableRow } from "./editor/markdownTables";
 import { tableCaretTarget, tableCellCaret } from "./editor/tableNavigation";
 import {
-  createVisualLineBands,
   findClosestVisualLineBand,
   resolveVisualLineLayerUpdate,
-  type VisualBlockRect,
+  type VisualLineBand,
+  type VisualRect,
 } from "./editor/visualLineLayout";
 import { lineDiffFromSelectionTransaction } from "./editor/transactionLineDiff";
 import {
@@ -147,6 +152,7 @@ type DecorationWindow = {
 };
 
 type AstMeta = {
+  refreshComposition?: boolean;
   visibleCenter?: number;
   rebuild?: boolean;
   fullDecorations?: boolean;
@@ -213,6 +219,36 @@ function textToDoc(text: string): JSONContent {
           : { type: "paragraph" },
       ),
   };
+}
+
+/** Replace plain text offsets without recreating unaffected paragraph nodes.
+ * Open paragraph edges join the inserted text to the existing prefix/suffix;
+ * paragraph boundaries inside the slice represent actual newline characters.
+ * The handle emits its own update exactly once, as setContent(false) did. */
+function replaceTextRangeTransaction(
+  tr: Transaction,
+  from: number,
+  to: number,
+  insert: string,
+  cursor: number,
+  currentText?: string,
+): Transaction {
+  // Whole-text commands and external reloads can contain a tiny real edit.
+  // Preserve their unchanged prefix/suffix nodes, selection and history mapping.
+  if (from === 0 && to === docTextLength(tr.doc)) {
+    const change = findTextChange(currentText ?? docToText(tr.doc), normalizeText(insert));
+    from = change.from;
+    to = change.to;
+    insert = change.insert;
+  }
+  const replacement = tr.doc.type.schema.nodeFromJSON(textToDoc(insert));
+  tr.replaceRange(
+    pmPosFromTextOffset(tr.doc, from),
+    pmPosFromTextOffset(tr.doc, to),
+    new Slice(replacement.content, 1, 1),
+  );
+  tr.setSelection(TextSelection.create(tr.doc, pmPosFromTextOffset(tr.doc, cursor)));
+  return tr.setMeta("preventUpdate", true);
 }
 
 function topTexts(doc: PMNode): string[] {
@@ -1682,7 +1718,11 @@ function patchWindowDecos(
   }
   if (dirty.size > MAX_PATCHED_DECORATION_LINES) return null;
 
-  let set = mapping ? previous.decoSet.map(mapping, doc) : previous.decoSet;
+  const retained = mapping && diff
+    ? spliceRootDecorations(previous.decoSet, previous.lines, lines, diff)
+    : mapping ? previous.decoSet.map(mapping, doc) : previous.decoSet;
+  if (!retained) return null;
+  let set: DecorationSet = retained;
   const removed: Decoration[] = [];
   const added: Decoration[] = [];
   doc.forEach((node, start, index) => {
@@ -1865,6 +1905,7 @@ function applyAst(
     const activeIndex = activeLineIndex(newState);
     if (
       meta?.rebuild !== true &&
+      meta?.refreshComposition !== true &&
       activeIndex === value.activeIndex &&
       visibleCenter === value.visibleCenter &&
       fullDecorations === value.fullDecorations &&
@@ -1896,8 +1937,8 @@ function applyAst(
     };
   }
 
-  const diff = lineDiffFromSelectionTransaction(tr, _oldState, newState)
-    ?? diffTopLevelNodes(_oldState.doc, newState.doc);
+  const selectionDiff = lineDiffFromSelectionTransaction(tr, _oldState, newState);
+  const diff = selectionDiff ?? diffTopLevelNodes(_oldState.doc, newState.doc);
   const { lines, rolesChangedOutside } = incrementalLines(value.lines, newState.doc, diff);
   const tables = nextTableRows(value, lines, diff, rolesChangedOutside);
   const documentIndex = updateDocumentIndexWithShadow(value.documentIndex, lines, diff);
@@ -2009,7 +2050,7 @@ const LayoutAstExtension = Extension.create({
             mouseup: handleTableMouseUp,
           },
           decorations(state) {
-            return astKey.getState(state)?.decoSet ?? DecorationSet.empty;
+            return indexRootDecorations(astKey.getState(state)?.decoSet ?? DecorationSet.empty);
           },
         },
       }),
@@ -2579,6 +2620,7 @@ export function VerticalTextEditor({
   const requestLineBreakMarksRef = useRef<(() => void) | null>(null);
   const renderVisualLinesRef = useRef<(() => void) | null>(null);
   const requestVisualLinesRef = useRef<(() => void) | null>(null);
+  const invalidateTextLayoutRef = useRef<(() => void) | null>(null);
   const startCenterAnimationRef = useRef<(() => void) | null>(null);
   const stopCenterAnimationRef = useRef<(() => void) | null>(null);
   const cancelInitialAdjustmentRef = useRef<(() => void) | null>(null);
@@ -3002,6 +3044,12 @@ export function VerticalTextEditor({
     requestAnimationFrame(() => syncPageMetricsRef.current?.());
   }, [text]);
 
+  // CSS-locked page roots need not resize when their font or measure changes.
+  // Treat layout settings separately from document/selection transactions.
+  useEffect(() => {
+    invalidateTextLayoutRef.current?.();
+  }, [textLayoutSignature, writingMode, editorDisplayMode]);
+
   // 編集表示・ページ送り方向・本文方向・文字寸法設定の変更では、断片構成や
   // ページスパンの軸が変わるため、同期に加えて表示位置の復元まで行う。
   // 初回マウント時は初期ビューポート復元と競合させない（同期のみ）。
@@ -3270,11 +3318,11 @@ export function VerticalTextEditor({
         const current = docToText(editor.state.doc);
         const insertFrom = Math.max(0, Math.min(current.length, from));
         const insertTo = Math.max(insertFrom, Math.min(current.length, to));
-        const next = `${current.slice(0, insertFrom)}${normalizeText(insert)}${current.slice(insertTo)}`;
-        const nextCursor = cursorPos ?? insertFrom + normalizeText(insert).length;
+        const inserted = normalizeText(insert);
+        const next = `${current.slice(0, insertFrom)}${inserted}${current.slice(insertTo)}`;
+        const nextCursor = cursorPos ?? insertFrom + inserted.length;
 
-        editor.commands.setContent(textToDoc(next), false);
-        setSelectionByTextOffset(editor, nextCursor);
+        editor.view.dispatch(replaceTextRangeTransaction(editor.state.tr, insertFrom, insertTo, inserted, nextCursor, current));
         updateEmptyAttribute(editor);
         textRef.current = next;
         const nextRevision = ++localRevisionRef.current;
@@ -3420,13 +3468,13 @@ export function VerticalTextEditor({
     // 元の位置へ写す（先頭へ戻さない）。
     const selection = getTextSelection(editor);
     const anchorOffset = selection.head === selection.from ? selection.to : selection.from;
-    editor.commands.setContent(textToDoc(text), false);
-    setSelectionByTextOffsets(
-      editor,
-      mapTextOffsetThroughChange(editorText, text, anchorOffset),
-      mapTextOffsetThroughChange(editorText, text, selection.head),
-    );
-    textRef.current = text;
+    const nextText = normalizeText(text);
+    const anchor = mapTextOffsetThroughChange(editorText, nextText, anchorOffset);
+    const head = mapTextOffsetThroughChange(editorText, nextText, selection.head);
+    const tr = replaceTextRangeTransaction(editor.state.tr, 0, editorText.length, nextText, head, editorText);
+    tr.setSelection(TextSelection.create(tr.doc, pmPosFromTextOffset(tr.doc, anchor), pmPosFromTextOffset(tr.doc, head)));
+    editor.view.dispatch(tr);
+    textRef.current = nextText;
     updateEmptyAttribute(editor);
     requestAnimationFrame(() => {
       const scroller = scrollerRef.current;
@@ -3462,7 +3510,6 @@ export function VerticalTextEditor({
     let imeLayoutTarget: HTMLElement | null = null;
     let pagedReflowFrame: number | null = null;
     let pagedReflowGeneration = 0;
-    let centerAnimFrame: number | null = null;
     let initialAdjustmentFrame: number | null = null;
     let initialAdjustmentExpiryTimer: number | null = null;
     let initialAdjustmentAllowed = true;
@@ -3470,6 +3517,24 @@ export function VerticalTextEditor({
     let visualLineQueued = false;
     let lastPagedWheelAt = 0;
     let lastHorizontalPagedWheelAt = 0;
+    let visualLayoutRevision = 0;
+    const blockVersions = new WeakMap<Element, number>();
+    const visualLineIndex = new VisualLineIndex<Element>();
+    let visualIndexElements: Element[] = [];
+    let visualIndexStructureDirty = true;
+    let observedVisualState: EditorState | null = null;
+    const blockEndCache = new WeakMap<Element, {
+      version: number; revision: number; width: number; height: number;
+      rect: { left: number; right: number; top: number; bottom: number };
+    }>();
+    let visualLayoutCache: {
+      doc: PMNode;
+      decorations: DecorationSet | undefined;
+      mode: WritingMode;
+      revision: number;
+      root: DOMRect;
+      blockRects: VisualRect[];
+    } | null = null;
     const candidateViewport = initialViewportRef.current;
     const validatedInitialViewport =
       candidateViewport &&
@@ -3499,62 +3564,40 @@ export function VerticalTextEditor({
         : null);
     let initialAdjustmentDeadline = Number.POSITIVE_INFINITY;
 
-    const stopCenterAnimation = () => {
-      if (centerAnimFrame !== null) cancelAnimationFrame(centerAnimFrame);
-      centerAnimFrame = null;
-    };
-
-    const startCenterAnimation = () => {
-      stopCenterAnimation();
-      let lastTime = performance.now();
-      let settledFrames = 0;
-      const deadline = lastTime + 600;
-
-      const step = (now: number) => {
-        centerAnimFrame = null;
+    const centerAnimation = createTypewriterScroller({
+      requestFrame: (step) => requestAnimationFrame(step),
+      cancelFrame: (frame) => cancelAnimationFrame(frame),
+      now: () => performance.now(),
+      enabled: () => typewriterScrollRef.current && Boolean(tiptapRef.current) &&
+        !pointerDraggingRef.current && !isEditorComposing(tiptapRef.current, composingRef),
+      pixelSize: () => 1 / (window.devicePixelRatio || 1),
+      read: () => scrollAxis(writingModeRef.current).get(scroller),
+      write: (value) => scrollAxis(writingModeRef.current).set(scroller, value),
+      measureTarget: () => {
         const editor = tiptapRef.current;
-        const currentScroller = scrollerRef.current;
-        if (!typewriterScrollRef.current || !editor || !currentScroller) return;
-        if (isEditorComposing(editor, composingRef)) return;
-
-        const delta = measureCenterDelta(
-          editor,
-          currentScroller,
-          typewriterOffsetRef.current,
-          writingModeRef.current,
-        );
-        if (delta === null) return;
-
-        const axis = scrollAxis(writingModeRef.current);
-        const current = axis.get(currentScroller);
-        const dpr = window.devicePixelRatio || 1;
-        const minStep = 1 / dpr;
-        const exactTarget = snapScrollValue(current + delta);
-
-        if (Math.abs(exactTarget - current) < minStep / 2) {
-          settledFrames += 1;
-          if (settledFrames >= 2 || now > deadline) return;
-          centerAnimFrame = requestAnimationFrame(step);
-          return;
-        }
-        settledFrames = 0;
-
-        const dt = Math.min(64, now - lastTime);
-        lastTime = now;
-
-        if (Math.abs(delta) <= 2 * minStep || now > deadline) {
-          axis.set(currentScroller, exactTarget);
-        } else {
-          const k = 1 - Math.exp(-dt / 90);
-          const move = Math.sign(delta) * Math.max(Math.abs(delta) * k, minStep);
-          axis.set(currentScroller, snapScrollValue(current + move));
-        }
-
-        centerAnimFrame = requestAnimationFrame(step);
-      };
-
-      centerAnimFrame = requestAnimationFrame(step);
+        if (!editor) return null;
+        const mode = writingModeRef.current;
+        const delta = measureCenterDelta(editor, scroller, typewriterOffsetRef.current, mode);
+        if (delta === null) return null;
+        const current = scrollAxis(mode).get(scroller);
+        const extent = isHorizontalWriting(mode)
+          ? scroller.scrollHeight - scroller.clientHeight
+          : scroller.scrollWidth - scroller.clientWidth;
+        return isHorizontalWriting(mode)
+          ? Math.max(0, Math.min(extent, current + delta))
+          : Math.max(-extent, Math.min(0, current + delta));
+      },
+      onSettled: () => { requestVisibleWindow(); requestLineBreakMarks(); },
+    });
+    const stopCenterAnimation = () => {
+      centerAnimation.stop();
+      if (centerFrame !== null) cancelAnimationFrame(centerFrame);
+      centerFrame = null;
+      centerQueued = false;
+      centerInstant = false;
+      centerWaitFrames = 1;
     };
+    const startCenterAnimation = () => centerAnimation.request();
 
     startCenterAnimationRef.current = startCenterAnimation;
     stopCenterAnimationRef.current = stopCenterAnimation;
@@ -3563,7 +3606,12 @@ export function VerticalTextEditor({
       if (isEditorComposing(editor, composingRef)) return false;
       lastVisibleSyncLines = editor.state.doc.childCount;
       lastVisibleSyncTextLength = docTextLength(editor.state.doc);
-      const index = estimateVisibleCenterIndex(editor, currentScroller, writingModeRef.current);
+      // While following the caret its paragraph is already known. Hit-testing
+      // every scroll frame walks the long document and stalls the animation.
+      // Manual scrolling still measures the viewport, and settlement verifies it.
+      const index = centerAnimation.isRunning() || centerQueued
+        ? activeLineIndex(editor.state)
+        : estimateVisibleCenterIndex(editor, currentScroller, writingModeRef.current);
       if (index < 0 || Math.abs(index - lastVisibleCenter) < VISIBLE_UPDATE_STEP) return false;
 
       lastVisibleCenter = index;
@@ -3572,6 +3620,7 @@ export function VerticalTextEditor({
           .setMeta(astKey, { visibleCenter: index } satisfies AstMeta)
           .setMeta("addToHistory", false),
       );
+      centerAnimation.invalidate();
       requestLineBreakMarks();
       return true;
     };
@@ -3842,7 +3891,6 @@ export function VerticalTextEditor({
           const currentEditor = tiptapRef.current;
           const currentScroller = scrollerRef.current;
           if (currentEditor && currentScroller) {
-            syncVisibleWindow(currentEditor, currentScroller);
             centerQueued = false;
             centerWaitFrames = 1;
             if (shouldInstant) {
@@ -3913,55 +3961,67 @@ export function VerticalTextEditor({
       // IME変換中は一時DOMを再計測せず、確定済みの行番号とハイライトを残す。
       if (layerUpdate === "preserve") return;
 
-      layer.textContent = "";
-      if (layerUpdate === "clear" || !currentEditor) return;
+      if (layerUpdate === "clear" || !currentEditor) {
+        if (layer.childNodes.length) layer.replaceChildren();
+        visualLayoutCache = null;
+        return;
+      }
 
       const scrollerRect = scroller.getBoundingClientRect();
       const layerParentRect = layer.parentElement?.getBoundingClientRect();
-      layer.style.left = `${snapScrollValue(
-        scrollerRect.left - (layerParentRect?.left ?? 0),
-      )}px`;
-      layer.style.top = `${snapScrollValue(
-        scrollerRect.top - (layerParentRect?.top ?? 0),
-      )}px`;
-      layer.style.width = `${snapScrollValue(scrollerRect.width)}px`;
-      layer.style.height = `${snapScrollValue(scrollerRect.height)}px`;
-      clipLayerToTextBlock(layer, scrollerRect);
-
-      const blockElements = Array.from(currentEditor.view.dom.children).filter(
-        (element): element is HTMLElement => element instanceof HTMLElement,
-      );
-      const blockRects: VisualBlockRect[] = blockElements.map((element) => {
-        const rect = element.getBoundingClientRect();
-        const contentRange = document.createRange();
-        contentRange.selectNodeContents(element);
-        const fragments = Array.from(contentRange.getClientRects(), (fragment) => ({
-          left: fragment.left,
-          right: fragment.right,
-          top: fragment.top,
-          bottom: fragment.bottom,
-        }));
-        contentRange.detach();
-        return {
-          left: rect.left,
-          right: rect.right,
-          top: rect.top,
-          bottom: rect.bottom,
-          fragments,
-          unnumbered: element.classList.contains("pm-comment"),
-        };
-      });
       const mode = writingModeRef.current;
       const pagedLayout = editorDisplayModeRef.current === "paged";
       const rootRect = currentEditor.view.dom.getBoundingClientRect();
-      const bands = createVisualLineBands(
-        blockRects,
-        mode,
-        // ページ表示でも本文は1つの流れのまま（断片化させない）ので、
-        // 連続表示と同じ測り方でよい。
-        undefined,
-      );
+      collectBlockMutations(blockObserver.takeRecords());
+      const decorations = astKey.getState(currentEditor.state)?.decoSet;
       const activeBlockIndex = activeLineIndex(currentEditor.state);
+      let layout = visualLayoutCache;
+      if (!layout || layout.doc !== currentEditor.state.doc ||
+        layout.decorations !== decorations || layout.mode !== mode ||
+        layout.revision !== visualLayoutRevision ||
+        Math.abs(layout.root.width - rootRect.width) > 0.05 || Math.abs(layout.root.height - rootRect.height) > 0.05) {
+        if (visualIndexStructureDirty || visualIndexElements.length !== currentEditor.view.dom.childElementCount) {
+          visualIndexElements = Array.from(currentEditor.view.dom.children);
+          visualLineIndex.reset(visualIndexElements);
+          visualIndexStructureDirty = false;
+        }
+        // Re-read bounds: an earlier paragraph can move every subsequent one.
+        // Only changed paragraph shapes are regrouped; keep them paragraph-local.
+        const blockRects: VisualRect[] = visualIndexElements.map((element, index) => {
+          const rect = element.getBoundingClientRect();
+          const version = blockVersions.get(element) ?? 0;
+          visualLineIndex.measure(index, rect, version, visualLayoutRevision, mode,
+            element.classList.contains("pm-comment"), () => {
+              const contentRange = document.createRange();
+              contentRange.selectNodeContents(element);
+              return Array.from(contentRange.getClientRects(), fragment => ({
+                left: fragment.left, right: fragment.right, top: fragment.top, bottom: fragment.bottom,
+              }));
+            });
+          return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+        });
+        layout = {
+          doc: currentEditor.state.doc, decorations, mode, revision: visualLayoutRevision,
+          root: rootRect, blockRects,
+        };
+        visualLayoutCache = layout;
+      }
+      // Translate the viewport into the cached coordinate system. Materialize
+      // bands only for visible paragraphs and the caret; prefix sums supply the
+      // exact global number even after a distant split/join or hidden comment.
+      const { blockRects } = layout;
+      const dx = rootRect.left - layout.root.left;
+      const dy = rootRect.top - layout.root.top;
+      const viewport = {
+        left: scrollerRect.left - dx, right: scrollerRect.right - dx,
+        top: scrollerRect.top - dy, bottom: scrollerRect.bottom - dy,
+      };
+      const bands: VisualLineBand[] = [];
+      for (let i = 0; i < blockRects.length; i += 1) {
+        if (i === activeBlockIndex || visualLineIndex.intersects(i, blockRects[i], viewport)) {
+          bands.push(...visualLineIndex.bandsAt(i, blockRects[i]));
+        }
+      }
       let caretX = 0;
       let caretY = 0;
       let affinityPoint: { x: number; y: number } | null = null;
@@ -4013,9 +4073,9 @@ export function VerticalTextEditor({
       const activeBand = findClosestVisualLineBand(
         bands,
         activeBlockIndex,
-        caretX,
-        caretY,
-        affinityPoint,
+        caretX - dx,
+        caretY - dy,
+        affinityPoint ? { x: affinityPoint.x - dx, y: affinityPoint.y - dy } : null,
       );
       const fragment = document.createDocumentFragment();
 
@@ -4023,8 +4083,8 @@ export function VerticalTextEditor({
         const highlight = document.createElement("div");
         highlight.className = "activeVisualLineHighlight";
         highlight.dataset.visualLineNumber = String(activeBand.number);
-        highlight.style.left = `${snapScrollValue(activeBand.left - scrollerRect.left)}px`;
-        highlight.style.top = `${snapScrollValue(activeBand.top - scrollerRect.top)}px`;
+        highlight.style.left = `${snapScrollValue(activeBand.left + dx - scrollerRect.left)}px`;
+        highlight.style.top = `${snapScrollValue(activeBand.top + dy - scrollerRect.top)}px`;
         highlight.style.width = `${snapScrollValue(activeBand.right - activeBand.left)}px`;
         highlight.style.height = `${snapScrollValue(activeBand.bottom - activeBand.top)}px`;
         fragment.appendChild(highlight);
@@ -4033,10 +4093,10 @@ export function VerticalTextEditor({
       if (showLineNumbersRef.current) {
         for (const band of bands) {
           if (
-            band.right < scrollerRect.left ||
-            band.left > scrollerRect.right ||
-            band.bottom < scrollerRect.top ||
-            band.top > scrollerRect.bottom
+            band.right + dx < scrollerRect.left ||
+            band.left + dx > scrollerRect.right ||
+            band.bottom + dy < scrollerRect.top ||
+            band.top + dy > scrollerRect.bottom
           ) {
             continue;
           }
@@ -4051,13 +4111,13 @@ export function VerticalTextEditor({
           number.textContent = String(band.number);
           if (isHorizontalWriting(mode)) {
             number.style.left = `${snapScrollValue(
-              (pagedLayout ? band.left : blockRect.left) - scrollerRect.left - 10,
+              (pagedLayout ? band.left : blockRect.left) + dx - scrollerRect.left - 10,
             )}px`;
-            number.style.top = `${snapScrollValue(band.centerY - scrollerRect.top)}px`;
+            number.style.top = `${snapScrollValue(band.centerY + dy - scrollerRect.top)}px`;
           } else {
-            number.style.left = `${snapScrollValue(band.centerX - scrollerRect.left)}px`;
+            number.style.left = `${snapScrollValue(band.centerX + dx - scrollerRect.left)}px`;
             number.style.top = `${snapScrollValue(
-              (pagedLayout ? band.top : blockRect.top) -
+              (pagedLayout ? band.top : blockRect.top) + dy -
                 scrollerRect.top -
                 VERTICAL_LINE_NUMBER_TOP_OFFSET_PX,
             )}px`;
@@ -4066,7 +4126,13 @@ export function VerticalTextEditor({
         }
       }
 
-      layer.appendChild(fragment);
+      // Finish geometry reads before changing the overlay DOM/styles.
+      layer.style.left = `${snapScrollValue(scrollerRect.left - (layerParentRect?.left ?? 0))}px`;
+      layer.style.top = `${snapScrollValue(scrollerRect.top - (layerParentRect?.top ?? 0))}px`;
+      layer.style.width = `${snapScrollValue(scrollerRect.width)}px`;
+      layer.style.height = `${snapScrollValue(scrollerRect.height)}px`;
+      clipLayerToTextBlock(layer, scrollerRect);
+      syncOverlayElements(layer, fragment);
     };
 
     const requestVisualLines = () => {
@@ -4108,33 +4174,25 @@ export function VerticalTextEditor({
       const currentEditor = tiptapRef.current;
       if (!layer) return;
 
-      layer.textContent = "";
-
-      const scrollerRect = scroller.getBoundingClientRect();
-      const layerParentRect = layer.parentElement?.getBoundingClientRect();
-      layer.style.left = `${snapScrollValue(
-        scrollerRect.left - (layerParentRect?.left ?? 0),
-      )}px`;
-      layer.style.top = `${snapScrollValue(
-        scrollerRect.top - (layerParentRect?.top ?? 0),
-      )}px`;
-      layer.style.width = `${snapScrollValue(scrollerRect.width)}px`;
-      layer.style.height = `${snapScrollValue(scrollerRect.height)}px`;
-      clipLayerToTextBlock(layer, scrollerRect);
-
       if (
         !showLineBreakMarksRef.current ||
         !currentEditor ||
         isEditorComposing(currentEditor, composingRef)
       ) {
+        if (layer.childNodes.length) layer.replaceChildren();
         return;
       }
 
       const state = astKey.getState(currentEditor.state);
       if (!state) return;
 
+      collectBlockMutations(blockObserver.takeRecords());
+      const scrollerRect = scroller.getBoundingClientRect();
+      const layerParentRect = layer.parentElement?.getBoundingClientRect();
       const mode = writingModeRef.current;
-      const estimatedCenter = estimateVisibleCenterIndex(currentEditor, scroller, mode);
+      const estimatedCenter = centerAnimation.isRunning() || centerQueued
+        ? activeLineIndex(currentEditor.state)
+        : estimateVisibleCenterIndex(currentEditor, scroller, mode);
       const visibleCenter = estimatedCenter >= 0 ? estimatedCenter : state.visibleCenter;
       const activeIndex = activeLineIndex(currentEditor.state);
       const fragment = document.createDocumentFragment();
@@ -4146,13 +4204,28 @@ export function VerticalTextEditor({
           const line = state.lines[index];
           if (!line) continue;
 
-          const rect = paragraphEndRect(currentEditor, index, mode);
-          if (!rect) continue;
+          const element = currentEditor.view.dom.children[index];
+          if (!element) continue;
+          const bounds = element.getBoundingClientRect();
+          const version = blockVersions.get(element) ?? 0;
+          let cached = blockEndCache.get(element);
+          if (!cached || cached.version !== version || cached.revision !== visualLayoutRevision ||
+            Math.abs(cached.width - bounds.width) > 0.05 || Math.abs(cached.height - bounds.height) > 0.05) {
+            const measured = paragraphEndRect(currentEditor, index, mode);
+            if (!measured) continue;
+            cached = {
+              version, revision: visualLayoutRevision, width: bounds.width, height: bounds.height,
+              rect: { left: measured.left - bounds.left, right: measured.right - bounds.left,
+                top: measured.top - bounds.top, bottom: measured.bottom - bounds.top },
+            };
+            blockEndCache.set(element, cached);
+          }
+          const rect = { left: cached.rect.left + bounds.left, right: cached.rect.right + bounds.left,
+            top: cached.rect.top + bounds.top, bottom: cached.rect.bottom + bounds.top };
 
-          // ページ表示では他ページ断片の記号が表示域外に大量生成されるため、
-          // スクロール領域（マーク描画余白24px込み）内のものだけを描画する。
+          // 連続表示でも画面外の記号を作り直す必要はない。
+          // スクロール領域（マーク描画余白24px込み）内だけ描画する。
           if (
-            editorDisplayModeRef.current === "paged" &&
             (rect.right < scrollerRect.left - 24 ||
               rect.left > scrollerRect.right + 24 ||
               rect.bottom < scrollerRect.top - 24 ||
@@ -4162,6 +4235,7 @@ export function VerticalTextEditor({
           }
 
           const mark = document.createElement("span");
+          mark.dataset.blockIndex = String(index);
           const blank = line.source.length === 0;
           mark.className = `visibleLineBreakMark${blank ? " blank" : ""}${
             index === activeIndex ? " active" : ""
@@ -4182,7 +4256,12 @@ export function VerticalTextEditor({
         }
       }
 
-      layer.appendChild(fragment);
+      layer.style.left = `${snapScrollValue(scrollerRect.left - (layerParentRect?.left ?? 0))}px`;
+      layer.style.top = `${snapScrollValue(scrollerRect.top - (layerParentRect?.top ?? 0))}px`;
+      layer.style.width = `${snapScrollValue(scrollerRect.width)}px`;
+      layer.style.height = `${snapScrollValue(scrollerRect.height)}px`;
+      clipLayerToTextBlock(layer, scrollerRect);
+      syncOverlayElements(layer, fragment);
     };
 
     const requestLineBreakMarks = () => {
@@ -4289,6 +4368,11 @@ export function VerticalTextEditor({
           spellcheck: "false",
           "data-placeholder": PLACEHOLDER,
         },
+        // ProseMirror's immediate reveal must not race the typewriter animation.
+        // During IME composition the browser retains its native caret reveal.
+        handleScrollToSelection: (view) => typewriterScrollRef.current &&
+          view.state.selection.empty && !pointerDraggingRef.current &&
+          !isEditorComposing(tiptapRef.current, composingRef),
         // Each paragraph is one editor line, so copy/paste must use a single
         // newline per line. The ProseMirror default puts a blank line ("\n\n")
         // between blocks, which is why copying spaced the lines out.
@@ -4306,6 +4390,23 @@ export function VerticalTextEditor({
           return new Slice(Fragment.fromArray(nodes), 1, 1);
         },
       },
+      onTransaction: ({ editor: currentEditor, transaction }) => {
+        const next = currentEditor.state;
+        const previous = observedVisualState;
+        observedVisualState = next;
+        if (!previous || previous.doc === next.doc) return;
+        const diff = previous.doc === transaction.before && next.doc === transaction.doc
+          ? lineDiffFromSelectionTransaction(transaction, previous, next) ?? diffTopLevelNodes(previous.doc, next.doc)
+          : diffTopLevelNodes(previous.doc, next.doc);
+        // Use the transaction for text invalidation even when a command suppresses
+        // onUpdate. DOM mutations separately cover derived decoration changes.
+        for (let index = diff.from; index < diff.toNew; index += 1) {
+          const element = currentEditor.view.dom.children[index];
+          if (element) blockVersions.set(element, (blockVersions.get(element) ?? 0) + 1);
+        }
+        visualLayoutCache = null;
+        requestLineBreakMarks();
+      },
       onUpdate: ({ editor: currentEditor }) => {
         cancelInitialAdjustment();
         const next = astKey.getState(currentEditor.state)?.text ?? docToText(currentEditor.state.doc);
@@ -4315,7 +4416,7 @@ export function VerticalTextEditor({
         onTextChangeRef.current(next, nextRevision);
         onSelectionChangeRef.current();
         if (!isEditorComposing(currentEditor, composingRef)) {
-          requestCenterCaret(true, "update");
+          requestCenterCaret(false, "update");
           requestPagedSelectionAfterReflow(currentEditor);
         }
         requestVisibleWindowAfterEdit();
@@ -4336,6 +4437,7 @@ export function VerticalTextEditor({
     });
 
     tiptapRef.current = editor;
+    observedVisualState = editor.state;
     hideSelectionFromReact(editor.view.dom);
     if (showLineNumbersRef.current || !showCommentsRef.current) {
       editor.view.dispatch(
@@ -4350,7 +4452,57 @@ export function VerticalTextEditor({
     }
     updateEmptyAttribute(editor);
 
-    const visualLayoutObserver = new ResizeObserver(() => requestVisualLines());
+    // Retain geometry for unchanged paragraphs, including when inserting a
+    // newline shifts every subsequent paragraph. Only DOM changes/reflow can
+    // invalidate the fragments inside a paragraph; scrolling just translates it.
+    const collectBlockMutations = (records: MutationRecord[]) => {
+      let changed = false;
+      for (const record of records) {
+        // ProseMirror reapplies equal decoration attributes on unchanged
+        // paragraphs. Those MutationRecords do not change their geometry.
+        if (record.type === "attributes" && record.target instanceof Element &&
+          record.oldValue === record.target.getAttribute(record.attributeName!)) continue;
+        changed = true;
+        if (record.target === editor.view.dom) {
+          if (record.type === "childList") visualIndexStructureDirty = true;
+          if (record.type === "attributes" && (record.attributeName === "style" || record.attributeName === "class")) {
+            visualLayoutRevision += 1;
+            centerAnimation.invalidate();
+            if (record.attributeName === "style") requestCenterCaret(false, "resize");
+          }
+        } else {
+          let element = record.target instanceof Element ? record.target : record.target.parentElement;
+          while (element && element.parentElement !== editor.view.dom) element = element.parentElement;
+          if (element) blockVersions.set(element, (blockVersions.get(element) ?? 0) + 1);
+        }
+      }
+      if (changed) {
+        visualLayoutCache = null;
+        requestLineBreakMarks();
+      }
+    };
+    const blockObserver = new MutationObserver(collectBlockMutations);
+    blockObserver.observe(editor.view.dom, { subtree: true, childList: true, characterData: true, attributes: true, attributeOldValue: true });
+    const layoutSignature = () => {
+      const style = getComputedStyle(editor.view.dom);
+      return `${scroller.clientWidth}:${scroller.clientHeight}:${style.font}:${style.lineHeight}:${style.letterSpacing}:${style.writingMode}`;
+    };
+    let lastLayoutSignature = layoutSignature();
+    const invalidateTextLayout = () => {
+      visualLayoutRevision += 1;
+      visualLayoutCache = null;
+      centerAnimation.invalidate();
+      requestLineBreakMarks();
+    };
+    invalidateTextLayoutRef.current = invalidateTextLayout;
+    const visualLayoutObserver = new ResizeObserver(() => {
+      const signature = layoutSignature();
+      if (signature !== lastLayoutSignature) invalidateTextLayout();
+      lastLayoutSignature = signature;
+      visualLayoutCache = null;
+      centerAnimation.invalidate();
+      requestVisualLines();
+    });
     visualLayoutObserver.observe(editor.view.dom);
     visualLayoutObserver.observe(scroller);
     const pageLayoutObserver = new ResizeObserver(() => syncPageMetricsRef.current?.());
@@ -4504,11 +4656,11 @@ export function VerticalTextEditor({
         if (isEditorComposing(editor, composingRef)) return;
         editor.view.dispatch(
           editor.state.tr
-            .setMeta(astKey, { rebuild: true } satisfies AstMeta)
+            .setMeta(astKey, { refreshComposition: true } satisfies AstMeta)
             .setMeta("addToHistory", false),
         );
       });
-      requestCenterCaret(true, "compositionend");
+      requestCenterCaret(false, "compositionend");
       requestPagedSelectionAfterReflow(editor);
       requestVisibleWindow();
       if (editorDisplayModeRef.current !== "paged") requestLineBreakMarks();
@@ -4526,6 +4678,7 @@ export function VerticalTextEditor({
     };
 
     const handleFontLoadingDone = () => {
+      invalidateTextLayout();
       requestVisibleWindow();
       requestLineBreakMarks();
       // Webフォント適用で文字寸法が変わると断片構成も変わる。ページ表示では
@@ -4555,6 +4708,7 @@ export function VerticalTextEditor({
     const handlePointerDown = (event: PointerEvent) => {
       cancelInitialAdjustment();
       if (event.button !== 0) return;
+      stopCenterAnimation();
       pointerDraggingRef.current = true;
     };
 
@@ -4660,6 +4814,7 @@ export function VerticalTextEditor({
         pagedAnchorRestoreFrameRef.current = null;
       }
       visualLayoutObserver.disconnect();
+      blockObserver.disconnect();
       pageLayoutObserver.disconnect();
       cancelInitialAdjustment();
       stopCenterAnimation();
@@ -4669,6 +4824,7 @@ export function VerticalTextEditor({
       requestLineBreakMarksRef.current = null;
       renderVisualLinesRef.current = null;
       requestVisualLinesRef.current = null;
+      if (invalidateTextLayoutRef.current === invalidateTextLayout) invalidateTextLayoutRef.current = null;
       if (cancelInitialAdjustmentRef.current === cancelInitialAdjustment) {
         cancelInitialAdjustmentRef.current = null;
       }

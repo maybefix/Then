@@ -227,13 +227,15 @@ function getProjectAstStatusLabel(projectAst: ProjectAst | null): string | null 
   return null;
 }
 
+const charCountFormatter = new Intl.NumberFormat("ja-JP");
+
 function formatCharCount(value: number): string {
-  return `${new Intl.NumberFormat("ja-JP").format(value)}字`;
+  return `${charCountFormatter.format(value)}字`;
 }
 
 /** ツリー行の字数。単位はパネルヘッダに一度だけ出すので付けない。 */
 function formatTreeCharCount(value: number): string {
-  return new Intl.NumberFormat("ja-JP").format(value);
+  return charCountFormatter.format(value);
 }
 
 /** ツリー上の表示名。拡張子 .txt は表示だけ省く（内部のファイル名・パスはそのまま）。 */

@@ -1082,6 +1082,7 @@ function PlotBoard({
       <div
         ref={paneRef}
         className={`plotPane ${className ?? ""}`.trim()}
+        data-dragging-card={draggingCardId ? "true" : undefined}
         aria-label="プロット"
         onWheel={handleWheel}
       >

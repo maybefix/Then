@@ -95,6 +95,12 @@ function mapThroughAlignment(oldText: string, newText: string, column: number): 
   return keptBeforeColumn >= 0 ? keptBeforeColumn : newText.length;
 }
 
+/** Exact replacement window; common text outside it keeps its document nodes. */
+export function findTextChange(oldText: string, newText: string): { from: number; to: number; insert: string } {
+  const { prefix, suffix } = changedWindow(oldText, newText);
+  return { from: prefix, to: oldText.length - suffix, insert: newText.slice(prefix, newText.length - suffix) };
+}
+
 function changedWindow(oldText: string, newText: string): { prefix: number; suffix: number } {
   const limit = Math.min(oldText.length, newText.length);
   let prefix = 0;

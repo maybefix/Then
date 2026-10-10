@@ -3,6 +3,8 @@
 //   node scripts/benchmark-typing.mjs [--chars 100000] [--samples 60]
 //        [--dist <dir>] [--no-build] [--profile] [--trace] [--label name] [--at end|middle]
 //        [--project] [--scroll] [--css "<extra css>"]
+//        [--typewriter --scenario typing|selection|ime --at middle]
+//        [--writing-mode vertical-rl|horizontal-tb] [--line-numbers] [--highlight-line] [--line-breaks]
 //
 // Builds the app (unless --dist/--no-build), serves it, opens a blank
 // manuscript, pastes a deterministic manuscript and types one character at a
@@ -15,10 +17,11 @@
 // --profile adds a CPU profile summarised by entry point and self time.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { runTypewriterBenchmark, validateTypewriterOverlays, validateTypewriterManualControls } from "./lib/typewriter-benchmark.mjs";
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => {
@@ -26,7 +29,9 @@ const option = (name, fallback) => {
   return index >= 0 ? args[index + 1] : fallback;
 };
 const flag = (name) => args.includes(`--${name}`);
-const CHARS = Number(option("chars", 100000));
+const MANUSCRIPT_TEXT = option("manuscript-file", null)
+  ? (await readFile(option("manuscript-file"), "utf8")).replace(/^\uFEFF/, "").replace(/\r\n/g, "\n") : null;
+const CHARS = MANUSCRIPT_TEXT?.length ?? Number(option("chars", 100000));
 const SAMPLES = Number(option("samples", 60));
 const WARMUP = 5;
 const label = option("label", "current");
@@ -142,7 +147,7 @@ function manuscript(chars, seed = 42) {
  * of which is the long manuscript being typed into. Typing then also drives the
  * project AST and the sidebar's per-file and per-folder counts.
  */
-function installProjectMock({ chars, manuscriptSource }) {
+function installProjectMock({ chars, manuscriptSource, manuscriptText = null, settings = {} }) {
   const make = new Function(`return (${manuscriptSource})`)();
   const root = "C:/bench/library/work";
   const files = new Map();
@@ -153,7 +158,7 @@ function installProjectMock({ chars, manuscriptSource }) {
     children: Array.from({ length: 8 }, (_, fileIndex) => {
       const name = folderIndex === 0 && fileIndex === 0 ? "第一部.md" : `${folder}${fileIndex + 1}.md`;
       const path = `${root}/${folder}/${name}`;
-      files.set(path, folderIndex === 0 && fileIndex === 0 ? make(chars) : make(3000 + fileIndex * 700, 7 + fileIndex));
+      files.set(path, folderIndex === 0 && fileIndex === 0 ? (manuscriptText ?? make(chars)) : make(3000 + fileIndex * 700, 7 + fileIndex));
       return { path, name, kind: "file", children: [], fileId: path, contentHash: null, modifiedAt: 1 };
     }),
   }));
@@ -166,7 +171,7 @@ function installProjectMock({ chars, manuscriptSource }) {
   const state = {
     lastWorkspacePath: root,
     lastFilePath: `${root}/本編/第一部.md`,
-    settings: { skipStartupPortal: true },
+    settings: { skipStartupPortal: true, ...settings },
   };
   const responses = {
     load_app_state: () => state,
@@ -320,7 +325,12 @@ try {
   };
   if (PROJECT) {
     await page.send("Page.addScriptToEvaluateOnNewDocument", {
-      source: `(${installProjectMock})(${JSON.stringify({ chars: CHARS, manuscriptSource: manuscript.toString() })})`,
+      source: `(${installProjectMock})(${JSON.stringify({ chars: CHARS, manuscriptSource: manuscript.toString(), manuscriptText: MANUSCRIPT_TEXT, settings: flag("typewriter") ? {
+        typewriterScroll: true, editorDisplayMode: "continuous",
+        writingMode: option("writing-mode", "vertical-rl"),
+        showLineNumbers: flag("line-numbers"), highlightCurrentLine: flag("highlight-line"),
+        showLineBreakMarks: flag("line-breaks"),
+      } : {} })})`,
     });
   }
   await page.send("Page.navigate", { url: appUrl });
@@ -356,6 +366,10 @@ try {
     await page.send("Profiler.setSamplingInterval", { interval: 100 });
   }
   await evaluate(`(${pageBenchmark})(${JSON.stringify({ chars: CHARS, samples: SAMPLES, warmup: WARMUP, at: AT, project: PROJECT })})`);
+  if (flag("typewriter")) {
+    // Exclude initial font loading/viewport restoration from the input run.
+    await evaluate("document.fonts.ready.then(() => new Promise(resolve => setTimeout(resolve, 1000)))");
+  }
   // Main-thread time per keystroke. Unlike the latencies it does not jump by a
   // frame when work lands either side of a frame boundary.
   await page.send("Performance.enable", { timeDomain: "threadTicks" });
@@ -368,14 +382,30 @@ try {
       if (message.method === "Tracing.tracingComplete") traceDone?.();
     };
     await page.send("Tracing.start", {
-      traceConfig: { includedCategories: ["devtools.timeline", "disabled-by-default-devtools.timeline", "blink", "v8.execute"] },
+      traceConfig: { includedCategories: ["devtools.timeline", "disabled-by-default-devtools.timeline", "disabled-by-default-devtools.timeline.invalidationTracking", "blink", "v8.execute"] },
     });
   }
   const before = await metrics();
-  const summary = await evaluate("window.__benchType()");
+  if (flag("profile") && flag("typewriter")) await page.send("Profiler.start");
+  const summary = flag("typewriter")
+    ? await runTypewriterBenchmark({ page, evaluate, samples: SAMPLES, scenario: option("scenario", "typing") })
+    : await evaluate("window.__benchType()");
   const after = await metrics();
+  if (flag("profile") && flag("typewriter")) {
+    const { profile } = await page.send("Profiler.stop");
+    if (option("profile-file", null)) await writeFile(option("profile-file"), JSON.stringify(profile));
+    const nodes = new Map(profile.nodes.map(node => [node.id, node]));
+    const self = new Map();
+    for (let i = 0; i < profile.samples.length; i++) {
+      const node = nodes.get(profile.samples[i]);
+      const name = `${node.callFrame.functionName || "(anon)"} ${node.callFrame.url.split("/").pop()}:${node.callFrame.lineNumber + 1}`;
+      self.set(name, (self.get(name) ?? 0) + (profile.timeDeltas[i] ?? 0) / 1000);
+    }
+    console.log("-- typewriter profile, self ms per input --\n" + [...self].filter(([name]) => !name.startsWith("(idle)")).sort((a,b) => b[1]-a[1]).slice(0,30).map(([name,ms]) => `${(ms/SAMPLES).toFixed(2)} ${name}`).join("\n"));
+  }
   if (flag("trace")) {
     await new Promise((resolve) => { traceDone = resolve; page.send("Tracing.end"); });
+    if (option("trace-file", null)) await writeFile(option("trace-file"), JSON.stringify({ traceEvents }));
     // The renderer main thread is the one doing layout.
     const layoutCounts = new Map();
     for (const event of traceEvents) {
@@ -398,6 +428,8 @@ try {
     style: perKey("RecalcStyleDuration"),
     layout: perKey("LayoutDuration"),
   };
+  if (flag("verify-overlays")) summary.overlayChecks = await validateTypewriterOverlays({ page, evaluate });
+  if (flag("verify-controls")) summary.manualChecks = await validateTypewriterManualControls({ evaluate });
   if (flag("scroll")) {
     // Scroll through the manuscript a viewport at a time and record frame gaps.
     summary.scroll = await evaluate(`(async () => {
@@ -418,9 +450,11 @@ try {
       return { p50: +gaps[60].toFixed(1), p95: +gaps[113].toFixed(1), max: +gaps[119].toFixed(1) };
     })()`);
   }
-  console.log(JSON.stringify({ label, at: AT, project: PROJECT, ...summary }));
+  const result = { label, at: AT, project: PROJECT, requestedChars: CHARS, ...summary };
+  if (option("output", null)) await writeFile(option("output"), JSON.stringify(result, null, 2) + "\n");
+  console.log(JSON.stringify(result));
 
-  if (flag("profile")) {
+  if (flag("profile") && !flag("typewriter")) {
     const keys = 20;
     await page.send("Profiler.start");
     await evaluate(`(async () => {

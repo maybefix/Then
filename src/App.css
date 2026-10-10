@@ -9580,26 +9580,26 @@ body {
 
 /* 入力欄: 空で、フォーカスが入力欄の外（または添付ボタン）にあるときは1行に
    たたむ。添付ボタンは位置が変わらないので、たたんだままでも使える。 */
-.ideaCaptureBox.ideaCaptureStacked:is(:not(:focus-within), :has(.ideaClipHost:focus-within)):has(textarea:placeholder-shown) {
+.ideaCaptureBox.ideaCaptureStacked[data-empty="true"]:is(:not(:focus-within), [data-clip-focused="true"]) {
   padding-top: 6px;
   padding-bottom: 6px;
 }
 
-.ideaCaptureBox.ideaCaptureStacked:is(:not(:focus-within), :has(.ideaClipHost:focus-within)):has(textarea:placeholder-shown) textarea {
+.ideaCaptureBox.ideaCaptureStacked[data-empty="true"]:is(:not(:focus-within), [data-clip-focused="true"]) textarea {
   min-height: 22px;
   height: 22px;
   overflow: hidden;
 }
 
-.ideaCaptureBox.ideaCaptureStacked:is(:not(:focus-within), :has(.ideaClipHost:focus-within)):has(textarea:placeholder-shown) .ideaCapturePlus {
+.ideaCaptureBox.ideaCaptureStacked[data-empty="true"]:is(:not(:focus-within), [data-clip-focused="true"]) .ideaCapturePlus {
   top: 10px;
 }
 
-.ideaCaptureBox.ideaCaptureStacked:is(:not(:focus-within), :has(.ideaClipHost:focus-within)):has(textarea:placeholder-shown) .ideaCaptureControls {
+.ideaCaptureBox.ideaCaptureStacked[data-empty="true"]:is(:not(:focus-within), [data-clip-focused="true"]) .ideaCaptureControls {
   margin-top: 0;
 }
 
-.ideaCaptureBox.ideaCaptureStacked:is(:not(:focus-within), :has(.ideaClipHost:focus-within)):has(textarea:placeholder-shown) .ideaCaptureControls > :not(.ideaClipHost) {
+.ideaCaptureBox.ideaCaptureStacked[data-empty="true"]:is(:not(:focus-within), [data-clip-focused="true"]) .ideaCaptureControls > :not(.ideaClipHost) {
   display: none;
 }
 
@@ -9709,8 +9709,8 @@ body {
   content: "";
 }
 
-.plotPane:has(.draggingPlotCard),
-.plotPane:has(.draggingPlotCard) * {
+.plotPane[data-dragging-card="true"],
+.plotPane[data-dragging-card="true"] * {
   cursor: grabbing !important;
 }
 

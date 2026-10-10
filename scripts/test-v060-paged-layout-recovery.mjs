@@ -181,12 +181,12 @@ assert.match(
   "the composition tracking frame must be cancelled on unmount",
 );
 
-// --- 軽微: 改行記号を現在ページに絞る ---
+// --- 改行記号を表示範囲に絞る（連続表示でも同じクリップを適用） ---
 
 assert.match(
-  editorSource,
-  /editorDisplayModeRef\.current === "paged" &&\s*\(rect\.right < scrollerRect\.left - 24/,
-  "line-break marks must be clipped to the visible page in paged mode",
+  editorSource.slice(editorSource.indexOf("const renderLineBreakMarks ="), editorSource.indexOf("const requestLineBreakMarks =")),
+  /if\s*\(\s*\(rect\.right < scrollerRect\.left - 24 \|\|\s*rect\.left > scrollerRect\.right \+ 24 \|\|\s*rect\.bottom < scrollerRect\.top - 24 \|\|\s*rect\.top > scrollerRect\.bottom \+ 24\)\s*\)\s*\{\s*continue;/,
+  "line-break marks must be clipped on all four sides in both paged and continuous modes",
 );
 
 console.log("v0.6.0 paged layout recovery tests passed");

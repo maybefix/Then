@@ -78,8 +78,13 @@ assert.match(
 );
 assert.match(
   editorSource,
-  /editor\.commands\.setContent\(textToDoc\(text\), false\)/,
+  /const tr = replaceTextRangeTransaction\(editor\.state\.tr, 0, editorText\.length, nextText, head, editorText\);[\s\S]*?editor\.view\.dispatch\(tr\);/,
   "external text synchronization must remain explicitly non-emitting",
+);
+assert.match(
+  editorSource,
+  /function replaceTextRangeTransaction\([\s\S]*?return tr\.setMeta\("preventUpdate", true\);/,
+  "external synchronization's shared range helper must suppress duplicate update callbacks",
 );
 assert.match(
   appSource,

@@ -419,7 +419,8 @@ assert.match(
   /className="verticalTypewriterScroller">[\s\S]*?<div ref=\{editorHostRef\}[\s\S]*?<\/div>\s*<div\s+ref=\{visualLineLayerRef\}/,
   "visual overlays must be siblings of the scroller so filtered themes cannot shift their coordinate space",
 );
-assert.match(editorSource, /createVisualLineBands/);
+assert.match(editorSource, /new VisualLineIndex/);
+assert.match(await readFile("src/editor/visualLineIndex.ts", "utf8"), /createVisualLineBands/);
 assert.match(editorSource, /findClosestVisualLineBand/);
 assert.match(
   editorSource,
@@ -443,7 +444,7 @@ assert.match(
 );
 assert.match(
   editorSource,
-  /new ResizeObserver\(\(\) => requestVisualLines\(\)\)/,
+  /const invalidateTextLayout = \(\) => \{[\s\S]*?visualLayoutRevision \+= 1;[\s\S]*?new ResizeObserver\(\(\) => \{[\s\S]*?signature !== lastLayoutSignature\) invalidateTextLayout\(\);[\s\S]*?requestVisualLines\(\);\s*\}\)/,
   "font, measure, and viewport reflow must schedule fresh visual-line measurement",
 );
 assert.match(

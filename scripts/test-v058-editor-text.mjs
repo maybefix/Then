@@ -376,7 +376,7 @@ console.log(JSON.stringify({
 const editorSource = await readFile("src/VerticalTextEditor.tsx", "utf8");
 assert.match(
   editorSource,
-  /const diff = lineDiffFromSelectionTransaction\(tr, _oldState, newState\)\s*\?\? diffTopLevelNodes\(_oldState\.doc, newState\.doc\)/,
+  /const selectionDiff = lineDiffFromSelectionTransaction\(tr, _oldState, newState\);\s*const diff = selectionDiff \?\? diffTopLevelNodes\(_oldState\.doc, newState\.doc\)/,
   "ordinary selection edits must derive their line range from the transaction before falling back",
 );
 assert.match(

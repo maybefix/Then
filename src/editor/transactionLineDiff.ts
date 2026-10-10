@@ -28,6 +28,18 @@ const selectedTopLevelRange = (state: EditorState) => {
   };
 };
 
+// Reuse resolved selection parents for ordinary typing. Resolve a StepMap
+// endpoint only when it lies outside those parents (for example, a split or
+// join). Merely overlapping the selection does not prove which lines changed.
+const topLevelIndexAt = (state: EditorState, position: number): number => {
+  for (const resolved of [state.selection.$from, state.selection.$to]) {
+    if (resolved.depth > 0 && position >= resolved.start(1) && position <= resolved.end(1)) {
+      return resolved.index(0);
+    }
+  }
+  return Math.min(state.doc.childCount - 1, state.doc.resolve(position).index(0));
+};
+
 const singleChangedRange = (transaction: Transaction): ChangedRange | null => {
   if (transaction.mapping.maps.length !== 1) return null;
 
@@ -92,6 +104,16 @@ export function lineDiffFromSelectionTransaction(
   ) {
     return null;
   }
+
+  // Every endpoint of the actual edit must be contained in the proposed
+  // paragraph window in BOTH documents. A programmatic cursor override can
+  // otherwise make a multiline replacement look like a one-line edit.
+  if (
+    topLevelIndexAt(oldState, changed.oldFrom) < from ||
+    topLevelIndexAt(oldState, changed.oldTo) >= toOld ||
+    topLevelIndexAt(newState, changed.newFrom) < from ||
+    topLevelIndexAt(newState, changed.newTo) >= toNew
+  ) return null;
 
   return { from, toOld, toNew };
 }
