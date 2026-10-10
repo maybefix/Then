@@ -67,7 +67,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-const appUrl = `http://127.0.0.1:${server.address().port}/`;
+let appUrl = `http://127.0.0.1:${server.address().port}/`;
 
 const edgePath = process.env.EDGE_PATH ?? [
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
@@ -77,7 +77,10 @@ const edgePath = process.env.EDGE_PATH ?? [
 if (!edgePath) throw new Error("Edge or Chrome was not found; set EDGE_PATH.");
 const profileDir = mkdtempSync(path.join(os.tmpdir(), "then-bench-"));
 const debugPort = 9400 + Math.floor(Math.random() * 400);
-const browser = spawn(edgePath, [
+const browser = flag("webview-exe") ? spawn(option("webview-exe"), [], {
+  stdio: "ignore", windowsHide: true,
+  env: { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${debugPort} --remote-allow-origins=*` },
+}) : spawn(edgePath, [
   "--headless=new", `--remote-debugging-port=${debugPort}`, `--user-data-dir=${profileDir}`,
   "--no-first-run", "--disable-extensions", "--disable-background-timer-throttling",
   "--disable-renderer-backgrounding", "--disable-backgrounding-occluded-windows", "about:blank",
@@ -308,7 +311,15 @@ async function pageBenchmark({ chars, samples, warmup, at, project }) {
 let exitCode = 0;
 try {
   await json(`http://127.0.0.1:${debugPort}/json/version`);
-  const target = await json(`http://127.0.0.1:${debugPort}/json/new?about:blank`, { method: "PUT" });
+  let target;
+  if (flag("webview-exe")) {
+    for (let attempt = 0; attempt < 100 && !target; attempt++) {
+      target = (await json(`http://127.0.0.1:${debugPort}/json/list`)).find(t => t.type === "page" && t.url.includes("tauri.localhost"));
+      if (!target) await sleep(200);
+    }
+  } else target = await json(`http://127.0.0.1:${debugPort}/json/new?about:blank`, { method: "PUT" });
+  if (!target) throw new Error("QA WebView2 page was not found");
+  if (flag("webview-exe")) appUrl = target.url;
   const page = await connect(target.webSocketDebuggerUrl);
   const evaluate = async (expression) => {
     const response = await page.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
@@ -346,6 +357,13 @@ try {
         return false;
       })()`)
     : await evaluate(`(async () => {
+        // The native QA app keeps Tauri's read-only IPC bootstrap. Exercise an
+        // unsaved manuscript with its isolated QA backend instead of replacing
+        // native IPC with the browser-only project mock.
+        if (${flag("webview-exe")}) {
+          [...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='あとで')?.click();
+          await new Promise(resolve=>setTimeout(resolve,250));
+        }
         const button = [...document.querySelectorAll("button")].find((b) => b.textContent.includes("新しい原稿"));
         button?.click();
         await new Promise((resolve) => setTimeout(resolve, 2500));
@@ -355,6 +373,29 @@ try {
     const unknown = PROJECT ? await evaluate("[...(window.__benchUnknownCommands ?? [])].join(', ')") : "";
     const text = await evaluate("document.body.innerText.slice(0, 300) + ' | editor chars: ' + (document.querySelector('.ProseMirror')?.textContent.length ?? 'none')");
     throw new Error(`The editor did not open${unknown ? ` (unmocked commands: ${unknown})` : ""}. Page: ${text}\n${pageErrors.slice(0, 5).join("\n").slice(0, 2000)}`);
+  }
+  if (flag("webview-exe") && flag("typewriter")) {
+    await evaluate(`document.querySelector('button[aria-label="設定"]').click();true`);
+    await sleep(100);
+    await evaluate(`document.getElementById('settings-tab-body').click();true`);
+    await evaluate(`(async()=>{
+      const desired=${JSON.stringify({ "タイプライタースクロール":true,"行番号を表示":flag("line-numbers"),"現在行をハイライト":flag("highlight-line"),"改行記号を表示":flag("line-breaks") })};
+      for(const [text,checked] of Object.entries(desired)){
+        const label=[...document.querySelectorAll('.settingsModal label')].find(l=>l.querySelector('span')?.textContent.trim()===text);
+        const input=label?.querySelector('input[type="checkbox"]');
+        if(!input)throw new Error('Native QA setting missing: '+text);
+        if(input.checked!==checked)input.click();
+        await new Promise(resolve=>setTimeout(resolve,50));
+      }
+      for(const [text,value] of [['本文方向',${JSON.stringify(option("writing-mode","vertical-rl"))}],['編集表示','continuous']]){
+        const select=[...document.querySelectorAll('.settingsModal label')].find(l=>l.textContent.includes(text)&&l.querySelector('select'))?.querySelector('select');
+        if(!select)throw new Error('Native QA select missing: '+text);
+        select.value=value;select.dispatchEvent(new Event('change',{bubbles:true}));
+        await new Promise(resolve=>setTimeout(resolve,50));
+      }
+      document.querySelector('.settingsModal button[aria-label="閉じる"]').click();
+      document.querySelector('.ProseMirror').editor.view.focus();return true;
+    })()`);
   }
   await evaluate(`window.manuscript = ${manuscript}; 1`);
   if (EXTRA_CSS) {
@@ -450,7 +491,9 @@ try {
       return { p50: +gaps[60].toFixed(1), p95: +gaps[113].toFixed(1), max: +gaps[119].toFixed(1) };
     })()`);
   }
-  const result = { label, at: AT, project: PROJECT, requestedChars: CHARS, ...summary };
+  if ((flag("qa-production") || flag("expect-clean")) && pageErrors.length) throw new Error(pageErrors.join("\n"));
+  const runtime = await page.send("Browser.getVersion");
+  const result = { label, at: AT, project: PROJECT, requestedChars: CHARS, runtime, ...summary };
   if (option("output", null)) await writeFile(option("output"), JSON.stringify(result, null, 2) + "\n");
   console.log(JSON.stringify(result));
 

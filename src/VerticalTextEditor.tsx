@@ -3,6 +3,7 @@ import { findTextChange, mapTextOffsetThroughChange } from "./editor/textOffsetM
 import { createTypewriterScroller } from "./editor/typewriterScroller";
 import { syncOverlayElements } from "./editor/overlayElements";
 import { VisualLineIndex } from "./editor/visualLineIndex";
+import { ParagraphFlow } from "./editor/paragraphFlow";
 import { indexRootDecorations } from "./editor/indexedDecorations";
 import { spliceRootDecorations } from "./editor/spliceRootDecorations";
 import Document from "@tiptap/extension-document";
@@ -2602,6 +2603,7 @@ export function VerticalTextEditor({
   // ページの割りと、測り直しが要るかを見分けるための署名。
   const pageBreaksRef = useRef<PageBreaks>({ pages: [], offsets: [] });
   const pageBreaksSignatureRef = useRef("");
+  const paragraphFlowRef = useRef<ParagraphFlow | null>(null);
   // 表示中のページが実際に占めるブロック方向の寸法。版面の幅とは限らない。
   const pageVisibleExtentRef = useRef(0);
   // マウスでのドラッグ範囲選択中は true。ジェスチャ中は再センタリングを抑制し、
@@ -2732,18 +2734,30 @@ export function VerticalTextEditor({
     const flowExtent = verticalWriting ? root.offsetWidth : root.offsetHeight;
     // 段落ごとの実測は重いので、行数が変わり得たときだけ測り直す。スクロール
     // だけでは割りは変わらない。
+    const flow = paragraphFlowRef.current?.flush(writingModeRef.current);
     const breaksSignature = [
       root.childElementCount,
       Math.round(flowExtent),
       Math.round(pageBlockSize),
       verticalWriting ? "v" : "h",
+      flow?.generation ?? "legacy",
     ].join(":");
     if (breaksSignature !== pageBreaksSignatureRef.current) {
       pageBreaksSignatureRef.current = breaksSignature;
+      const paragraphs = flow?.paragraphs ?? measureParagraphs(root, writingModeRef.current);
       pageBreaksRef.current = computePageBreaks(
         pageBlockSize,
-        measureParagraphs(root, writingModeRef.current),
+        paragraphs,
       );
+      if (import.meta.env.VITE_QA_PAGE_DIAGNOSTICS === "1") {
+        const diagnosticRoot = root as HTMLElement & { __pageBreaksHistoryQA?: unknown[] };
+        const history = diagnosticRoot.__pageBreaksHistoryQA ??= [];
+        const bounds = root.getBoundingClientRect();
+        history.push({ signature: breaksSignature, mode: writingModeRef.current, pageBlockSize,
+          root: { left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom },
+          paragraphs, breaks: pageBreaksRef.current });
+        if (history.length > 100) history.shift();
+      }
     }
     const breaks = pageBreaksRef.current;
 
@@ -3534,6 +3548,7 @@ export function VerticalTextEditor({
       revision: number;
       root: DOMRect;
       blockRects: VisualRect[];
+      flowGeneration?: number;
     } | null = null;
     const candidateViewport = initialViewportRef.current;
     const validatedInitialViewport =
@@ -3973,12 +3988,14 @@ export function VerticalTextEditor({
       const pagedLayout = editorDisplayModeRef.current === "paged";
       const rootRect = currentEditor.view.dom.getBoundingClientRect();
       collectBlockMutations(blockObserver.takeRecords());
+      const flow = paragraphFlowRef.current?.flush(mode);
       const decorations = astKey.getState(currentEditor.state)?.decoSet;
       const activeBlockIndex = activeLineIndex(currentEditor.state);
       let layout = visualLayoutCache;
       if (!layout || layout.doc !== currentEditor.state.doc ||
         layout.decorations !== decorations || layout.mode !== mode ||
         layout.revision !== visualLayoutRevision ||
+        layout.flowGeneration !== flow?.generation ||
         Math.abs(layout.root.width - rootRect.width) > 0.05 || Math.abs(layout.root.height - rootRect.height) > 0.05) {
         if (visualIndexStructureDirty || visualIndexElements.length !== currentEditor.view.dom.childElementCount) {
           visualIndexElements = Array.from(currentEditor.view.dom.children);
@@ -3988,8 +4005,8 @@ export function VerticalTextEditor({
         // Re-read bounds: an earlier paragraph can move every subsequent one.
         // Only changed paragraph shapes are regrouped; keep them paragraph-local.
         const blockRects: VisualRect[] = visualIndexElements.map((element, index) => {
-          const rect = element.getBoundingClientRect();
-          const version = blockVersions.get(element) ?? 0;
+          const rect = flow?.blocks[index] ?? element.getBoundingClientRect();
+          const version = flow?.versions[index] ?? blockVersions.get(element) ?? 0;
           visualLineIndex.measure(index, rect, version, visualLayoutRevision, mode,
             element.classList.contains("pm-comment"), () => {
               const contentRange = document.createRange();
@@ -4003,6 +4020,7 @@ export function VerticalTextEditor({
         layout = {
           doc: currentEditor.state.doc, decorations, mode, revision: visualLayoutRevision,
           root: rootRect, blockRects,
+          flowGeneration: flow?.generation,
         };
         visualLayoutCache = layout;
       }
@@ -4402,7 +4420,10 @@ export function VerticalTextEditor({
         // onUpdate. DOM mutations separately cover derived decoration changes.
         for (let index = diff.from; index < diff.toNew; index += 1) {
           const element = currentEditor.view.dom.children[index];
-          if (element) blockVersions.set(element, (blockVersions.get(element) ?? 0) + 1);
+          if (element) {
+            blockVersions.set(element, (blockVersions.get(element) ?? 0) + 1);
+            paragraphFlowRef.current?.mark(element);
+          }
         }
         visualLayoutCache = null;
         requestLineBreakMarks();
@@ -4466,7 +4487,7 @@ export function VerticalTextEditor({
         if (record.target === editor.view.dom) {
           if (record.type === "childList") visualIndexStructureDirty = true;
           if (record.type === "attributes" && (record.attributeName === "style" || record.attributeName === "class")) {
-            visualLayoutRevision += 1;
+            if (!paragraphFlowRef.current) visualLayoutRevision += 1;
             centerAnimation.invalidate();
             if (record.attributeName === "style") requestCenterCaret(false, "resize");
           }
@@ -4490,11 +4511,23 @@ export function VerticalTextEditor({
     let lastLayoutSignature = layoutSignature();
     const invalidateTextLayout = () => {
       visualLayoutRevision += 1;
+      paragraphFlowRef.current?.invalidate();
       visualLayoutCache = null;
       centerAnimation.invalidate();
       requestLineBreakMarks();
     };
     invalidateTextLayoutRef.current = invalidateTextLayout;
+    if (import.meta.env.VITE_QA_PAGE_DIAGNOSTICS === "1") {
+      const root = editor.view.dom as HTMLElement & { __pageBreaksQA?: () => unknown; __pageBreaksHistoryQA?: unknown[] };
+      root.__pageBreaksQA = () => ({ breaks: pageBreaksRef.current, signature: pageBreaksSignatureRef.current, history: root.__pageBreaksHistoryQA ?? [] });
+    }
+    // Compile-time opt-in: normal builds retain the established measurement path.
+    if (import.meta.env.VITE_QA_PARAGRAPH_FLOW === "1") {
+      const flow = new ParagraphFlow(editor.view.dom, () => requestLineBreakMarks());
+      paragraphFlowRef.current = flow;
+      const root = editor.view.dom as HTMLElement & { __paragraphFlowQA?: () => unknown };
+      root.__paragraphFlowQA = () => ({ snapshot: flow.flush(writingModeRef.current), stats: { ...flow.stats }, breaks: pageBreaksRef.current });
+    }
     const visualLayoutObserver = new ResizeObserver(() => {
       const signature = layoutSignature();
       if (signature !== lastLayoutSignature) invalidateTextLayout();
@@ -4815,6 +4848,8 @@ export function VerticalTextEditor({
       }
       visualLayoutObserver.disconnect();
       blockObserver.disconnect();
+      paragraphFlowRef.current?.dispose();
+      paragraphFlowRef.current = null;
       pageLayoutObserver.disconnect();
       cancelInitialAdjustment();
       stopCenterAnimation();
