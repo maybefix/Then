@@ -2437,6 +2437,19 @@ html:not([data-window-fullscreen="true"])
   line-height: 1;
 }
 
+/* ページ割りの結果は入力のたびに本文の枠と本文rootへ書き込む。未登録の
+   カスタムプロパティは子孫へ継承されるので、値が変わるたびに原稿の全要素
+   （長い原稿では数万個）のスタイルが再計算され、Enter 1回に0.5秒かかって
+   いた。どれも書き込んだ要素自身しか読まないので、継承しない登録にする。 */
+@property --paged-clip { syntax: "*"; inherits: false; }
+@property --paged-host-x { syntax: "*"; inherits: false; }
+@property --paged-host-y { syntax: "*"; inherits: false; }
+@property --paged-root-top { syntax: "*"; inherits: false; }
+@property --paged-root-right { syntax: "*"; inherits: false; }
+@property --paged-root-left { syntax: "*"; inherits: false; }
+@property --paged-root-width { syntax: "*"; inherits: false; }
+@property --paged-root-height { syntax: "*"; inherits: false; }
+
 .verticalTypewriterShell[data-editor-display="paged"] .verticalTypewriterEditor {
   position: absolute;
   top: var(--paged-outer-margin, 0px);
