@@ -4329,18 +4329,27 @@ export function VerticalTextEditor({
       }
     };
 
-    // 改行・削除・IME確定では、ProseMirrorの更新通知より後にCSS multicolの
-    // 再分割とReactのページ面サイズ更新が続く。古い総ページ数で一度だけ
-    // キャレットを表示すると末尾で前ページへ丸められるため、寸法が連続して
-    // 安定するまで「ページ数→所属ページ→行表示」の順に同期し直す。
+    // 改行・削除・IME確定の後は、ページ割りを取り直してからキャレットの
+    // ページへ移る。総ページ数が増えるとReactのページ面の追加が1フレーム
+    // 遅れ、その間は新しいページへスクロールできず手前へ丸められる。そこで
+    // 何かが動いたフレームの次だけもう一度確かめ、何も動かなければ終える。
+    // （以前は2フレーム続けて同じになるまで毎回最低3フレーム同期していた。
+    // CSS multicol の再分割を待っていた頃の名残。）
     const requestPagedSelectionAfterReflow = (currentEditor: Editor) => {
       if (editorDisplayModeRef.current !== "paged") return;
       pagedReflowGeneration += 1;
       const generation = pagedReflowGeneration;
       if (pagedReflowFrame !== null) cancelAnimationFrame(pagedReflowFrame);
 
-      let previousSignature: string | null = null;
-      let stableFrames = 0;
+      const signature = () => {
+        const currentScroller = scrollerRef.current;
+        const metrics = pageMetricsRef.current;
+        return currentScroller
+          ? `${currentEditor.state.selection.head}:${metrics.current}:${metrics.total}:` +
+            `${currentScroller.scrollLeft}:${currentScroller.scrollTop}:` +
+            `${currentScroller.scrollWidth}:${currentScroller.scrollHeight}`
+          : "missing";
+      };
       let remainingFrames = 8;
       const step = () => {
         pagedReflowFrame = null;
@@ -4352,23 +4361,19 @@ export function VerticalTextEditor({
           return;
         }
 
+        // 寸法の読み取りはこのフレームの同期でどのみち必要になるので、
+        // 入力ハンドラ側では読まず、ここで前後を比べる。
+        const initial = signature();
         syncPageMetricsRef.current?.();
+        const beforeReveal = signature();
         revealSelectionPageNow(currentEditor);
-        syncPageMetricsRef.current?.();
+        // ページを移ったときだけ、移った先のページ位置を反映し直す。
+        if (signature() !== beforeReveal) syncPageMetricsRef.current?.();
         requestVisibleWindow();
         requestLineBreakMarks();
 
-        const currentScroller = scrollerRef.current;
-        const metrics = pageMetricsRef.current;
-        const signature = currentScroller
-          ? `${currentEditor.state.selection.head}:${metrics.current}:${metrics.total}:` +
-            `${currentScroller.scrollLeft}:${currentScroller.scrollTop}:` +
-            `${currentScroller.scrollWidth}:${currentScroller.scrollHeight}`
-          : "missing";
-        stableFrames = signature === previousSignature ? stableFrames + 1 : 0;
-        previousSignature = signature;
         remainingFrames -= 1;
-        if (stableFrames >= 2 || remainingFrames <= 0) return;
+        if (signature() === initial || remainingFrames <= 0) return;
         pagedReflowFrame = requestAnimationFrame(step);
       };
 
