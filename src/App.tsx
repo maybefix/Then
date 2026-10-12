@@ -76,7 +76,6 @@ import {
   findCommentLineRanges,
   flattenOutline,
   hash16,
-  normalizeText,
   parseInlines,
   updateDocumentAst,
 } from "./editor/ast/documentAst";
@@ -119,7 +118,6 @@ import {
   replaceTextSearchMatches,
   type TextSearchOptions,
 } from "./search/textSearch";
-import { collectSnapshotConflictPaths } from "./editor/ast/snapshotConflicts";
 import {
   PlotPane,
   PlotPaneHeaderActions,
@@ -4316,25 +4314,15 @@ export default function App() {
       .filter((snapshot) => isSamePath(snapshot.workspacePath, projectFolder.path))
       .sort((left, right) => right.createdAt - left.createdAt);
   }, [appState.snapshots, projectFolder]);
-  const checkpointCurrentTextHashes = useMemo(
-    () =>
-      new Map(
-        Array.from(checkpointCurrentProjectFiles.entries(), ([key, file]) => [
-          key,
-          hash16(normalizeText(file.text)),
-        ] as const),
-      ),
-    [checkpointCurrentProjectFiles],
-  );
-  const snapshotConflictPaths = useMemo(
-    () =>
-      collectSnapshotConflictPaths(
-        currentWorkspaceSnapshots,
-        checkpointCurrentTextHashes,
-        normalizePathForCompare,
-      ),
-    [checkpointCurrentTextHashes, currentWorkspaceSnapshots],
-  );
+  // チェックポイント画面の「現在のプロジェクト」。字数は保存点と同じ表示文字数で数える。
+  // 画面を開いているときだけ数え、入力中の経路には載せない。
+  const checkpointProjectStats = useMemo(() => {
+    if (appMode !== "checkpoint" || !projectAst || !projectFolder || projectAst.rootPath !== projectFolder.path) return null;
+    return {
+      fileCount: projectAst.files.length,
+      visibleTextLength: projectAst.files.reduce((sum, file) => sum + file.visibleTextLength, 0),
+    };
+  }, [appMode, projectAst, projectFolder]);
   const frontMatter = useMemo(() => parseFrontMatter(markdown), [markdown]);
   const editorText = frontMatter.body;
   activeDocumentSnapshotRef.current = {
@@ -7235,15 +7223,16 @@ export default function App() {
     [openTabs, projectAst, projectFolder],
   );
 
-  const handleCreateManuscriptSnapshot = useCallback(async () => {
+  /** `draft` を渡すと入力ダイアログを出さずに作る（チェックポイント画面の作成欄）。作れたら ID を返す。 */
+  const handleCreateManuscriptSnapshot = useCallback(async (draft?: { label: string; memo?: string }): Promise<string | null> => {
     if (!projectFolder) {
       showToast("先にフォルダを開いてください");
-      return;
+      return null;
     }
-    if (!canWritePortableProjectState(projectFolder.path)) return;
+    if (!canWritePortableProjectState(projectFolder.path)) return null;
 
     const now = new Date();
-    const snapshotDraft = await requestMultiInput({
+    const snapshotDraft = draft ?? await requestMultiInput({
       title: "チェックポイントを作成",
       fields: [
         {
@@ -7266,8 +7255,8 @@ export default function App() {
       ],
       confirmLabel: "作成",
     });
-    if (!snapshotDraft) return;
-    if (!(await waitForPortableProjectWrite(projectFolder.path))) return;
+    if (!snapshotDraft) return null;
+    if (!(await waitForPortableProjectWrite(projectFolder.path))) return null;
 
     try {
       const snapshot = buildManuscriptSnapshot(
@@ -7282,10 +7271,10 @@ export default function App() {
           rootPath: projectFolder.path,
           snapshot,
         });
-        if (!applyCheckpointStoreResult(projectFolder.path, stored)) return;
+        if (!applyCheckpointStoreResult(projectFolder.path, stored)) return null;
         if (stored.warnings.length) {
           showToast(checkpointWarningMessage(stored.warnings[0]));
-          return;
+          return null;
         }
       } else {
         setAppState((current) => ({
@@ -7294,6 +7283,7 @@ export default function App() {
         }));
       }
       showToast("チェックポイントを作成しました");
+      return snapshot.id;
     } catch (error) {
       if (error instanceof Error) {
         setLastError(error.message);
@@ -7303,6 +7293,7 @@ export default function App() {
         setLastError(String(error));
         showToast(error instanceof Error ? error.message : "チェックポイントを作成できませんでした");
       }
+      return null;
     }
   }, [buildManuscriptSnapshot, currentWorkspaceSnapshots, projectFolder]);
 
@@ -7445,6 +7436,59 @@ export default function App() {
       else {
         setLastError(String(error));
         showToast("チェックポイントのメモを変更できませんでした");
+      }
+    }
+  }, [projectFolder]);
+
+  const handleEditManuscriptSnapshotDetails = useCallback(async (snapshot: ManuscriptSnapshot) => {
+    if (projectFolder && !canWritePortableProjectState(projectFolder.path)) return;
+    const result = await requestMultiInput({
+      title: "名前とメモを編集",
+      fields: [
+        { id: "label", label: "名前", initialValue: snapshot.label, placeholder: "例：第2稿に入る前" },
+        {
+          id: "memo",
+          label: "メモ",
+          initialValue: snapshot.memo,
+          placeholder: "例: 終盤の分岐前。会話のテンポを試す",
+          optional: true,
+          multiline: true,
+        },
+      ],
+      confirmLabel: "変更",
+    });
+    if (!result) return;
+    const label = result.label.trim() || snapshot.label;
+    const memo = result.memo ?? "";
+    if (label === snapshot.label && memo === snapshot.memo) return;
+    if (projectFolder && !(await waitForPortableProjectWrite(projectFolder.path))) return;
+
+    try {
+      if (projectFolder && isTauriRuntime()) {
+        beginPortableProjectMutation(projectFolder.path);
+        const stored = await invoke<CheckpointLoadResult>("update_project_checkpoint_metadata", {
+          rootPath: projectFolder.path,
+          checkpointId: snapshot.id,
+          expectedRevision: snapshot.revision,
+          expectedHash: snapshot.storageHash || null,
+          label,
+          memo,
+        });
+        if (!applyCheckpointStoreResult(projectFolder.path, stored)) return;
+      } else {
+        setAppState((current) => ({
+          ...current,
+          snapshots: current.snapshots.map((item) =>
+            item.id === snapshot.id ? { ...item, label, memo } : item,
+          ),
+        }));
+      }
+      showToast("チェックポイントの名前とメモを変更しました");
+    } catch (error) {
+      if (projectFolder) reportPortableStorageError(projectFolder.path, error);
+      else {
+        setLastError(String(error));
+        showToast("チェックポイントの名前とメモを変更できませんでした");
       }
     }
   }, [projectFolder]);
@@ -7594,26 +7638,27 @@ export default function App() {
     return folder;
   }, [projectFolder]);
 
+  /** `confirmed` は呼び出し側が確認と完了通知を受け持つとき（チェックポイント画面）。成功したら true。 */
   const handleRestoreManuscriptSnapshot = useCallback(
-    async (snapshot: ManuscriptSnapshot) => {
+    async (snapshot: ManuscriptSnapshot, options: { confirmed?: boolean } = {}): Promise<boolean> => {
       if (!projectFolder || !isSamePath(snapshot.workspacePath, projectFolder.path)) {
         showToast("このチェックポイントのプロジェクトを開いてください");
-        return;
+        return false;
       }
       if (!isTauriRuntime()) {
         showToast("チェックポイントへの復元はTauri版で利用できます");
-        return;
+        return false;
       }
-      if (!canWritePortableProjectState(projectFolder.path)) return;
+      if (!canWritePortableProjectState(projectFolder.path)) return false;
 
-      const shouldRestore = await requestConfirm({
+      const shouldRestore = options.confirmed || await requestConfirm({
         title: "チェックポイントに戻す",
         message: `「${snapshot.label}」に戻しますか？`,
         detail: "現在の状態は「復元前の退避」として自動保存されます。",
         confirmLabel: "戻す",
       });
-      if (!shouldRestore) return;
-      if (!(await waitForPortableProjectWrite(projectFolder.path))) return;
+      if (!shouldRestore) return false;
+      if (!(await waitForPortableProjectWrite(projectFolder.path))) return false;
 
       try {
         const shelter = buildManuscriptSnapshot(
@@ -7627,7 +7672,7 @@ export default function App() {
           rootPath: projectFolder.path,
           snapshot: shelter,
         });
-        if (!applyCheckpointStoreResult(projectFolder.path, storedShelter)) return;
+        if (!applyCheckpointStoreResult(projectFolder.path, storedShelter)) return false;
         const restoredDocuments: TextDocument[] = [];
         const snapshotPathKeys = new Set(
           snapshot.files.map((file) => normalizePathForCompare(file.path)),
@@ -7730,14 +7775,18 @@ export default function App() {
             base,
           );
         });
-        showToast(
-          filesToDelete.length > 0
-            ? `チェックポイントに戻しました（追加ファイル${filesToDelete.length}件を削除）`
-            : "チェックポイントに戻しました",
-        );
+        if (!options.confirmed) {
+          showToast(
+            filesToDelete.length > 0
+              ? `チェックポイントに戻しました（追加ファイル${filesToDelete.length}件を削除）`
+              : "チェックポイントに戻しました",
+          );
+        }
+        return true;
       } catch (error) {
         setLastError(String(error));
         showToast(error instanceof Error ? error.message : "チェックポイントに戻せませんでした");
+        return false;
       }
     },
     [
@@ -7758,16 +7807,17 @@ export default function App() {
       conflictPolicy: SnapshotConflictPolicy,
       restoreOrder: boolean,
       relocations: SnapshotRelocation[],
-    ) => {
+      options: { confirmed?: boolean } = {},
+    ): Promise<boolean> => {
       if (!projectFolder || !isSamePath(snapshot.workspacePath, projectFolder.path)) {
         showToast("このチェックポイントのプロジェクトを開いてください");
-        return;
+        return false;
       }
       if (!isTauriRuntime()) {
         showToast("チェックポイントへの復元はTauri版で利用できます");
-        return;
+        return false;
       }
-      if (!canWritePortableProjectState(projectFolder.path)) return;
+      if (!canWritePortableProjectState(projectFolder.path)) return false;
       const selectedPathKeys = new Set(selectedPaths.map(normalizePathForCompare));
       const files = snapshot.files.filter((file) => selectedPathKeys.has(normalizePathForCompare(file.path)));
       const relocationBySnapshotPath = new Map(relocations.map((item) => [normalizePathForCompare(item.snapshotPath), item.currentPath] as const));
@@ -7775,10 +7825,10 @@ export default function App() {
       const selectedFolderPathKeys = new Set(selectedFolderPaths.map(normalizePathForCompare));
       if (!files.length && !selectedFolderPathKeys.size) {
         showToast("復元するファイルまたはフォルダを選択してください");
-        return;
+        return false;
       }
 
-      const shouldRestore = await requestConfirm({
+      const shouldRestore = options.confirmed || await requestConfirm({
         title: "選択したファイルを復元",
         message: `${files.length + selectedFolderPathKeys.size} 件を「${snapshot.label}」の状態へ戻しますか？`,
         detail: `${selectedRelocationCount ? `名前変更・移動を認識した ${selectedRelocationCount} 件は保存点のパスへ戻します。` : ""}${conflictPolicy === "overwrite"
@@ -7788,8 +7838,8 @@ export default function App() {
             : "現在の本文と競合したファイルはスキップします。現在の状態は復元前の退避として保存されます。"}`,
         confirmLabel: "復元",
       });
-      if (!shouldRestore) return;
-      if (!(await waitForPortableProjectWrite(projectFolder.path))) return;
+      if (!shouldRestore) return false;
+      if (!(await waitForPortableProjectWrite(projectFolder.path))) return false;
 
       try {
         const shelter = buildManuscriptSnapshot(
@@ -7804,7 +7854,7 @@ export default function App() {
           rootPath: projectFolder.path,
           snapshot: shelter,
         });
-        if (!applyCheckpointStoreResult(projectFolder.path, storedShelter)) return;
+        if (!applyCheckpointStoreResult(projectFolder.path, storedShelter)) return false;
         const selectedTree = selectedFolderPathKeys.size
           ? selectedSnapshotFolderTree(snapshot.projectTree, selectedFolderPathKeys)
           : null;
@@ -7877,7 +7927,7 @@ export default function App() {
 
         if (!restoredDocuments.length && !selectedTree) {
           showToast("競合したファイルをスキップしたため、復元するファイルはありませんでした");
-          return;
+          return false;
         }
         if (restoreOrder && selectedTree) {
           await restoreSnapshotTreeOrder(projectFolder.path, snapshot.projectTree, selectedFolderPathKeys);
@@ -7913,13 +7963,67 @@ export default function App() {
           }), base);
         });
         const restoredCount = restoredDocuments.length + selectedFolderPathKeys.size;
-        showToast(skipped ? `${restoredCount} 件を復元しました（競合 ${skipped} 件をスキップ）` : `${restoredCount} 件を復元しました`);
+        if (skipped) showToast(`${restoredCount} 件を復元しました（競合 ${skipped} 件をスキップ）`);
+        else if (!options.confirmed) showToast(`${restoredCount} 件を復元しました`);
+        return true;
       } catch (error) {
         setLastError(String(error));
         showToast(error instanceof Error ? error.message : "選択したファイルを復元できませんでした");
+        return false;
       }
     },
     [buildManuscriptSnapshot, currentFilePath, currentWorkspaceSnapshots, loadDocumentIntoEditor, openTabs, projectFolder, refreshProjectFolder],
+  );
+
+  /**
+   * 並び順だけを保存点に戻す（チェックポイント画面で確認済み）。本文には触れず、
+   * フォルダも作り直さない。今もあるフォルダの中の順序だけを合わせる。
+   */
+  const handleRestoreManuscriptSnapshotOrder = useCallback(
+    async (snapshot: ManuscriptSnapshot): Promise<boolean> => {
+      if (!projectFolder || !isSamePath(snapshot.workspacePath, projectFolder.path)) {
+        showToast("このチェックポイントのプロジェクトを開いてください");
+        return false;
+      }
+      if (!isTauriRuntime()) {
+        showToast("チェックポイントへの復元はTauri版で利用できます");
+        return false;
+      }
+      if (!canWritePortableProjectState(projectFolder.path)) return false;
+      if (!(await waitForPortableProjectWrite(projectFolder.path))) return false;
+
+      try {
+        const shelter = buildManuscriptSnapshot(
+          "復元前の退避",
+          "",
+          "auto-before-restore",
+          currentWorkspaceSnapshots[0] ? [currentWorkspaceSnapshots[0].id] : [],
+        );
+        beginPortableProjectMutation(projectFolder.path);
+        const storedShelter = await invoke<CheckpointLoadResult>("create_project_checkpoint", {
+          rootPath: projectFolder.path,
+          snapshot: shelter,
+        });
+        if (!applyCheckpointStoreResult(projectFolder.path, storedShelter)) return false;
+        const existingFolderPaths = new Set([normalizePathForCompare(projectFolder.path)]);
+        const visit = (entries: ProjectEntry[]) => {
+          for (const entry of entries) {
+            if (entry.kind !== "folder") continue;
+            existingFolderPaths.add(normalizePathForCompare(entry.path));
+            visit(entry.children);
+          }
+        };
+        visit(projectFolder.children);
+        await restoreSnapshotTreeOrder(projectFolder.path, snapshot.projectTree, existingFolderPaths);
+        await refreshProjectFolder(projectFolder.path);
+        return true;
+      } catch (error) {
+        setLastError(String(error));
+        showToast(error instanceof Error ? error.message : "並び順を戻せませんでした");
+        return false;
+      }
+    },
+    [buildManuscriptSnapshot, currentWorkspaceSnapshots, projectFolder, refreshProjectFolder],
   );
 
   const handleProjectFolderSelect = useCallback(
@@ -14129,25 +14233,27 @@ export default function App() {
             <CheckpointStudio
               projectFolder={projectFolder}
               snapshots={currentWorkspaceSnapshots}
-              currentFilePath={currentFilePath}
               currentProjectFiles={checkpointCurrentProjectFiles}
               currentProjectStatus={checkpointCurrentProjectStatus}
               unavailableCurrentProjectPaths={checkpointUnavailableProjectPaths}
-              conflictsBySnapshot={snapshotConflictPaths}
+              currentProjectStats={checkpointProjectStats}
               onClose={() => setAppMode("write")}
-              onCreate={() => void handleCreateManuscriptSnapshot()}
+              onCreate={(label) => handleCreateManuscriptSnapshot({ label })}
+              onEditDetails={(snapshot) => void handleEditManuscriptSnapshotDetails(snapshot)}
               onDelete={(snapshot) => void handleDeleteManuscriptSnapshot(snapshot)}
-              onRestore={(snapshot) => void handleRestoreManuscriptSnapshot(snapshot)}
-              onRestoreFiles={(snapshot, paths, folderPaths, policy, restoreOrder, relocations) =>
-                void handleRestoreManuscriptSnapshotFiles(
+              onRestore={(snapshot) => handleRestoreManuscriptSnapshot(snapshot, { confirmed: true })}
+              onRestoreFile={(snapshot, path, relocation) =>
+                handleRestoreManuscriptSnapshotFiles(
                   snapshot,
-                  paths,
-                  folderPaths,
-                  policy,
-                  restoreOrder,
-                  relocations,
+                  [path],
+                  [],
+                  "overwrite",
+                  false,
+                  relocation ? [relocation] : [],
+                  { confirmed: true },
                 )
               }
+              onRestoreOrder={handleRestoreManuscriptSnapshotOrder}
             />
           )}
 

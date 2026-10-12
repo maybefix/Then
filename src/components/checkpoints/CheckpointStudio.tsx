@@ -1,7 +1,12 @@
-﻿import { useMemo, useState } from "react";
-import type { ManuscriptSnapshot, ProjectEntry, ProjectFolder } from "../../types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
+import type { ManuscriptSnapshot, ProjectFolder } from "../../types";
+import { hash16 } from "../../editor/ast/documentAst";
 import { buildComparisonEntries } from "./checkpointComparison";
-import type { ComparisonEntry, ComparisonFile } from "./checkpointComparison";
+import type { ComparisonEntry } from "./checkpointComparison";
+import { buildProjectDiff, diffChars, leadingParagraphs } from "./checkpointDiff";
+import type { FileDiff, OrderChange, ParagraphRow, ProjectDiff, Segment } from "./checkpointDiff";
+import "./checkpointStudio.css";
 
 export type SnapshotConflictPolicy = "overwrite" | "copy" | "skip";
 
@@ -21,293 +26,437 @@ export type SnapshotRelocation = {
 type Props = {
   projectFolder: ProjectFolder | null;
   snapshots: ManuscriptSnapshot[];
-  currentFilePath: string | null;
   currentProjectFiles: ReadonlyMap<string, CheckpointCurrentProjectFile>;
   currentProjectStatus: CheckpointCurrentProjectStatus;
   unavailableCurrentProjectPaths: ReadonlySet<string>;
-  conflictsBySnapshot: ReadonlyMap<string, ReadonlySet<string>>;
+  /** 既存の文字数カウント（表示文字数）による現在のプロジェクトの合計。 */
+  currentProjectStats: { fileCount: number; visibleTextLength: number } | null;
   onClose: () => void;
-  onCreate: () => void;
+  /** 保存点を作り、作れたらその ID を返す。 */
+  onCreate: (label: string) => Promise<string | null>;
+  onEditDetails: (snapshot: ManuscriptSnapshot) => void;
   onDelete: (snapshot: ManuscriptSnapshot) => void;
-  onRestore: (snapshot: ManuscriptSnapshot) => void;
-  onRestoreFiles: (snapshot: ManuscriptSnapshot, paths: string[], folderPaths: string[], policy: SnapshotConflictPolicy, restoreOrder: boolean, relocations: SnapshotRelocation[]) => void;
+  /** 以下の復元は画面側で確認済み。復元前の退避は呼び出し先が先に作る。 */
+  onRestore: (snapshot: ManuscriptSnapshot) => Promise<boolean>;
+  onRestoreFile: (snapshot: ManuscriptSnapshot, path: string, relocation: SnapshotRelocation | null) => Promise<boolean>;
+  onRestoreOrder: (snapshot: ManuscriptSnapshot) => Promise<boolean>;
 };
 
-type LineOperation = { kind: "same" | "removed" | "added"; text: string };
-type DiffLine = { number: number; text: string; kind: LineOperation["kind"] };
-type DiffRow = { left?: DiffLine; right?: DiffLine };
+type CompareId = "current" | "prev" | string;
+type ViewMode = "inline" | "side";
+type ConfirmState =
+  | { scope: "all" }
+  | { scope: "file"; path: string; name: string; relocation: SnapshotRelocation | null }
+  | { scope: "order" };
 
-const date = (value: number) => new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(value);
+const SHELTER_LABEL = "復元前の退避";
+const MAX_ROWS = 120;
 const pathKey = (path: string) => path.replace(/[\\/]+/g, "\\").toLocaleLowerCase();
-const splitLines = (text: string) => text.replace(/\r\n?/g, "\n").split("\n");
-const fileName = (path: string) => path.split(/[\\/]/).pop() ?? path;
-const parentPath = (path: string) => path.replace(/[\\/][^\\/]+$/, "");
-const compactPath = (path: string) => path.split(/[\\/]/).filter(Boolean).slice(-2).join(" / ");
+const isShelter = (snapshot: ManuscriptSnapshot) => snapshot.reason === "auto-before-restore";
+const pad = (value: number) => String(value).padStart(2, "0");
+const timeOf = (value: number) => { const date = new Date(value); return `${pad(date.getHours())}:${pad(date.getMinutes())}`; };
+const monthDay = (value: number) => { const date = new Date(value); return `${date.getMonth() + 1}月${date.getDate()}日`; };
+const stamp = (snapshot: ManuscriptSnapshot) => `${monthDay(snapshot.createdAt)} ${timeOf(snapshot.createdAt)}`;
+const chars = (value: number) => value.toLocaleString("ja-JP");
 
-function RestoreItemIcon({ type }: { type: "file" | "folder" }) {
-  return type === "file" ? (
-    <svg className="checkpointRestoreItemIcon" aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-      <path d="M6.75 3.75h7.5l3 3v13.5H6.75z" />
-      <path d="M14.25 3.75v3h3" />
-    </svg>
-  ) : (
-    <svg className="checkpointRestoreItemIcon" aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-      <path d="M3.75 6.75h6l1.5 2.25h9v9.75H3.75z" />
-    </svg>
-  );
+function dayLabel(value: number, now = new Date()): string {
+  const date = new Date(value);
+  const startOfDay = (target: Date) => new Date(target.getFullYear(), target.getMonth(), target.getDate()).getTime();
+  const days = Math.round((startOfDay(now) - startOfDay(date)) / 86_400_000);
+  if (days === 0) return "今日";
+  if (days === 1) return "昨日";
+  return date.getFullYear() === now.getFullYear() ? monthDay(value) : `${date.getFullYear()}年${monthDay(value)}`;
 }
 
-function relocationLabel(left: ComparisonFile, right: ComparisonFile): string {
-  const renamed = fileName(left.path).toLocaleLowerCase() !== fileName(right.path).toLocaleLowerCase();
-  const moved = pathKey(parentPath(left.path)) !== pathKey(parentPath(right.path));
-  if (renamed && moved) return "名前変更・移動";
-  if (renamed) return "名前変更";
-  return "移動";
+/* 差分は「保存点 + 比較先 + 本文ハッシュ」で覚えておき、保存点を行き来しても再計算しない。 */
+const diffCache = new Map<string, ProjectDiff>();
+function cachedDiff(key: string, compute: () => ProjectDiff): ProjectDiff {
+  const hit = diffCache.get(key);
+  if (hit) return hit;
+  const value = compute();
+  diffCache.set(key, value);
+  if (diffCache.size > 12) diffCache.delete(diffCache.keys().next().value as string);
+  return value;
 }
 
-/**
- * Myers の最短編集列。大規模な全面置換ではメモリを消費しすぎないよう、
- * 編集距離が大きい場合は「削除 + 追加」として全文を正しく表示する。
- */
-function myersLineDiff(before: string[], after: string[]): LineOperation[] | null {
-  const maxEditDistance = Math.min(before.length + after.length, 600);
-  const vectors = new Map<number, number>([[1, 0]]);
-  const trace: Array<Map<number, number>> = [];
+function treeSignature(tree: ProjectFolder | null): string {
+  if (!tree) return "";
+  const parts: string[] = [];
+  const visit = (children: ProjectFolder["children"]) => { for (const child of children) { parts.push(child.path); if (child.kind === "folder") { parts.push("{"); visit(child.children); parts.push("}"); } } };
+  visit(tree.children);
+  return hash16(parts.join("\u0000"));
+}
 
-  for (let distance = 0; distance <= maxEditDistance; distance += 1) {
-    trace.push(new Map(vectors));
-    for (let diagonal = -distance; diagonal <= distance; diagonal += 2) {
-      const movedDown = diagonal === -distance || (
-        diagonal !== distance &&
-        (vectors.get(diagonal - 1) ?? Number.NEGATIVE_INFINITY) < (vectors.get(diagonal + 1) ?? Number.NEGATIVE_INFINITY)
-      );
-      let beforeIndex = movedDown
-        ? vectors.get(diagonal + 1) ?? 0
-        : (vectors.get(diagonal - 1) ?? 0) + 1;
-      let afterIndex = beforeIndex - diagonal;
+const Icon = {
+  back: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>,
+  plus: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>,
+  search: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></svg>,
+  restore: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 5v5h5" /><path d="M4.6 14.5A8 8 0 1 0 6 7.2L4 10" /></svg>,
+  more: <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></svg>,
+  chevron: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>,
+  check: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10" /></svg>,
+};
 
-      while (beforeIndex < before.length && afterIndex < after.length && before[beforeIndex] === after[afterIndex]) {
-        beforeIndex += 1;
-        afterIndex += 1;
-      }
-      vectors.set(diagonal, beforeIndex);
+function Segments({ segments }: { segments: Segment[] }) {
+  return <>{segments.map(([kind, text], index) => kind === "d" ? <del key={index}>{text}</del> : kind === "a" ? <ins key={index}>{text}</ins> : <span key={index}>{text}</span>)}</>;
+}
 
-      if (beforeIndex >= before.length && afterIndex >= after.length) {
-        const operations: LineOperation[] = [];
-        let x = before.length;
-        let y = after.length;
+function rowSegments(row: ParagraphRow): Segment[] {
+  if (row.oldText !== null && row.newText !== null) return diffChars(row.oldText, row.newText);
+  if (row.oldText !== null) return [["d", row.oldText]];
+  return [["a", row.newText ?? ""]];
+}
 
-        for (let step = trace.length - 1; step > 0; step -= 1) {
-          const previous = trace[step];
-          const currentDiagonal = x - y;
-          const cameFromDown = currentDiagonal === -step || (
-            currentDiagonal !== step &&
-            (previous.get(currentDiagonal - 1) ?? Number.NEGATIVE_INFINITY) < (previous.get(currentDiagonal + 1) ?? Number.NEGATIVE_INFINITY)
-          );
-          const previousDiagonal = cameFromDown ? currentDiagonal + 1 : currentDiagonal - 1;
-          const previousX = previous.get(previousDiagonal) ?? 0;
-          const previousY = previousX - previousDiagonal;
+const Gap = ({ count }: { count: number }) => count > 0 ? <div className="cpGap">⋯ {count}段落 変更なし</div> : null;
 
-          while (x > previousX && y > previousY) {
-            operations.push({ kind: "same", text: before[x - 1] });
-            x -= 1;
-            y -= 1;
-          }
+type Labels = { oldLabel: string; newLabel: string };
 
-          if (x === previousX) {
-            operations.push({ kind: "added", text: after[previousY] });
-            y -= 1;
-          } else {
-            operations.push({ kind: "removed", text: before[previousX] });
-            x -= 1;
-          }
-        }
+/** 開いたカードの中身。マウントされたときに初めて文字単位の差分を取る。 */
+function FileBody({ file, view, labels, newSide }: { file: FileDiff; view: ViewMode; labels: Labels; newSide: string }) {
+  const [showAll, setShowAll] = useState(false);
+  const rows = useMemo(() => showAll ? file.rows : file.rows.slice(0, MAX_ROWS), [file.rows, showAll]);
+  const segments = useMemo(() => rows.map(rowSegments), [rows]);
+  const side = view === "side";
+  const content: ReactNode[] = [];
 
-        while (x > 0 && y > 0) {
-          operations.push({ kind: "same", text: before[x - 1] });
-          x -= 1;
-          y -= 1;
-        }
-        while (x > 0) { operations.push({ kind: "removed", text: before[--x] }); }
-        while (y > 0) { operations.push({ kind: "added", text: after[--y] }); }
-        return operations.reverse();
-      }
+  if (file.kind === "relocated" && file.oldFile && file.newFile) {
+    content.push(<div className="cpOrder" key="relocation"><span className="cpOrderKey">{labels.oldLabel}</span><span>{file.oldFile.path}</span><span className="cpOrderKey">{labels.newLabel}</span><span>{file.newFile.path}</span></div>);
+  }
+  if (file.kind === "added" || file.kind === "removed") {
+    const source = file.kind === "added" ? file.newFile : file.oldFile;
+    content.push(<div className="cpAddNote" key="note">{file.kind === "added" ? `新しく加わったファイルです（+${chars(file.plus)}字）` : `${newSide}にはないファイルです（−${chars(file.minus)}字）`}</div>);
+    for (const paragraph of leadingParagraphs(source?.text ?? "", 3)) {
+      content.push(<div className="cpHunk" key={paragraph.line}><div className="cpInlineRow"><span className="cpLn">{paragraph.line}</span><p className="cpProse">{file.kind === "added" ? <ins>{paragraph.text}</ins> : <del>{paragraph.text}</del>}</p></div></div>);
     }
   }
-
-  return null;
-}
-
-function createDiffRows(beforeText: string, afterText: string): DiffRow[] {
-  const before = splitLines(beforeText);
-  const after = splitLines(afterText);
-  const operations = myersLineDiff(before, after)
-    ?? [...before.map((text) => ({ kind: "removed" as const, text })), ...after.map((text) => ({ kind: "added" as const, text }))];
-  const rows: DiffRow[] = [];
-  const removed: DiffLine[] = [];
-  const added: DiffLine[] = [];
-  let beforeNumber = 1;
-  let afterNumber = 1;
-
-  const flushChanged = () => {
-    const count = Math.max(removed.length, added.length);
-    for (let index = 0; index < count; index += 1) rows.push({ left: removed[index], right: added[index] });
-    removed.length = 0;
-    added.length = 0;
-  };
-
-  for (const operation of operations) {
-    if (operation.kind === "same") {
-      flushChanged();
-      rows.push({
-        left: { number: beforeNumber++, text: operation.text, kind: "same" },
-        right: { number: afterNumber++, text: operation.text, kind: "same" },
-      });
-    } else if (operation.kind === "removed") {
-      removed.push({ number: beforeNumber++, text: operation.text, kind: "removed" });
-    } else {
-      added.push({ number: afterNumber++, text: operation.text, kind: "added" });
-    }
+  if (rows.length && side) {
+    content.push(<div className="cpColHead" key="side-head"><div>{labels.oldLabel}</div><div>{labels.newLabel}</div></div>);
   }
-  flushChanged();
-  return rows;
-}
-
-function createOneSidedDiffRows(text: string, side: "left" | "right", kind: LineOperation["kind"]): DiffRow[] {
-  return splitLines(text).map((line, index) => {
-    const value = { number: index + 1, text: line, kind };
-    return side === "left" ? { left: value } : { right: value };
+  rows.forEach((row, index) => {
+    const key = `${row.oldLine ?? "-"}:${row.newLine ?? "-"}`;
+    if (!side) {
+      content.push(<div className="cpHunk" key={key}><Gap count={row.gapBefore} /><div className="cpInlineRow"><span className="cpLn">{row.newLine ?? row.oldLine}</span><p className="cpProse"><Segments segments={segments[index]} /></p></div></div>);
+      return;
+    }
+    const oldSegments = segments[index].filter(([kind]) => kind !== "a");
+    const newSegments = segments[index].filter(([kind]) => kind !== "d");
+    content.push(<div className="cpHunk" key={key}><Gap count={row.gapBefore} /><div className="cpSideRow">
+      <div className="cpSideCol">{row.oldLine !== null && <span className="cpLn">{row.oldLine}</span>}{row.oldText !== null ? <p className="cpProse"><Segments segments={oldSegments} /></p> : <p className="cpMissing">（この時点ではまだありません）</p>}</div>
+      <div className="cpSideCol">{row.newLine !== null && <span className="cpLn">{row.newLine}</span>}{row.newText !== null ? <p className="cpProse"><Segments segments={newSegments} /></p> : <p className="cpMissing">（この段落はなくなっています）</p>}</div>
+    </div></div>);
   });
+  if (file.rows.length > rows.length) {
+    content.push(<div className="cpMore" key="more"><span>ほかに {file.rows.length - rows.length} 段落の変更があります</span><button type="button" className="cpBtnLine" onClick={() => setShowAll(true)}>すべて表示</button></div>);
+  }
+  if (file.kind === "changed" && !file.rows.length) {
+    content.push(<div className="cpAddNote" key="blank">空行だけが変わっています。</div>);
+  }
+  return <>{content}</>;
 }
 
-const renderDiffLine = (line: DiffLine | undefined) => line ? <code className={`checkpointDiffLine ${line.kind}`}><b>{String(line.number)}</b><span>{line.text || " "}</span></code> : <code className="checkpointDiffLine empty"><b> </b><span> </span></code>;
+const KIND_LABEL: Record<FileDiff["kind"], string> = { changed: "変更", added: "追加", removed: "削除", relocated: "移動" };
 
-export function CheckpointStudio({ projectFolder, snapshots, currentFilePath, currentProjectFiles, currentProjectStatus, unavailableCurrentProjectPaths, conflictsBySnapshot, onClose, onCreate, onDelete, onRestore, onRestoreFiles }: Props) {
+function FileCard(props: {
+  file: FileDiff; open: boolean; view: ViewMode; labels: Labels; newSide: string;
+  onToggle: () => void; restore: { label: string; onClick: () => void } | null;
+}) {
+  const { file, open, view, labels, newSide, onToggle, restore } = props;
+  return <section className="cpFile">
+    <div className="cpFileHead">
+      <button type="button" className="cpFileToggle" aria-expanded={open} onClick={onToggle}>
+        {Icon.chevron}
+        <span className="cpFileName">{file.name}</span>
+        {file.folder && <span className="cpFileFolder">{file.folder}</span>}
+        <span className={`cpBadge ${file.kind === "added" ? "add" : ""}`}>{file.relocationLabel ?? KIND_LABEL[file.kind]}</span>
+      </button>
+      {(file.plus > 0 || file.minus > 0) && <span className="cpStats">{file.plus > 0 && <span className="cpPlus">+{chars(file.plus)}</span>}{file.minus > 0 && <span className="cpMinus">−{chars(file.minus)}</span>}</span>}
+      {restore && <button type="button" className="cpBtnLine" onClick={restore.onClick}>{restore.label}</button>}
+    </div>
+    {open && <FileBody file={file} view={view} labels={labels} newSide={newSide} />}
+  </section>;
+}
+
+function OrderCard({ changes, open, labels, onToggle, onRestore }: { changes: OrderChange[]; open: boolean; labels: Labels; onToggle: () => void; onRestore: () => void }) {
+  return <section className="cpFile">
+    <div className="cpFileHead">
+      <button type="button" className="cpFileToggle" aria-expanded={open} onClick={onToggle}>
+        {Icon.chevron}<span className="cpFileName">フォルダの並び順</span><span className="cpBadge">並び順</span>
+      </button>
+      <button type="button" className="cpBtnLine" onClick={onRestore}>並び順だけ戻す</button>
+    </div>
+    {open && changes.map((change) => <div className="cpOrder" key={change.folder}>
+      {changes.length > 1 && <span className="cpOrderFolder">{change.folder || "プロジェクト直下"}</span>}
+      <span className="cpOrderKey">{labels.oldLabel}</span><span>{change.before.join(" → ")}</span>
+      <span className="cpOrderKey">{labels.newLabel}</span><span>{change.after.join(" → ")}</span>
+    </div>)}
+  </section>;
+}
+
+export function CheckpointStudio(props: Props) {
+  const { projectFolder, snapshots, currentProjectFiles, currentProjectStatus, unavailableCurrentProjectPaths, currentProjectStats, onClose, onCreate, onEditDetails, onDelete, onRestore, onRestoreFile, onRestoreOrder } = props;
+  const sorted = useMemo(() => snapshots.slice().sort((left, right) => right.createdAt - left.createdAt), [snapshots]);
+  const [selectedId, setSelectedId] = useState<string | null>(() => sorted[0]?.id ?? null);
+  const [compareId, setCompareId] = useState<CompareId>("current");
+  const [view, setView] = useState<ViewMode>("inline");
+  const [showAuto, setShowAuto] = useState(true);
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(() => snapshots[0]?.id ?? null);
-  const [filePath, setFilePath] = useState<string | null>(null);
-  const [scope, setScope] = useState<"all" | "selected">("all");
-  const [selectedPaths, setSelectedPaths] = useState<ReadonlySet<string>>(() => new Set());
-  const [selectedFolderPaths, setSelectedFolderPaths] = useState<ReadonlySet<string>>(() => new Set());
-  const [policy, setPolicy] = useState<SnapshotConflictPolicy>("overwrite");
-  const [restoreOrder, setRestoreOrder] = useState(true);
-  const [comparisonId, setComparisonId] = useState("current");
-  const [snapshotMenuId, setSnapshotMenuId] = useState<string | null>(null);
-  const selected = snapshots.find((item) => item.id === selectedId) ?? snapshots[0] ?? null;
-  const visible = useMemo(() => snapshots.filter((item) => `${item.label} ${item.memo}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())), [query, snapshots]);
-  const comparisonSnapshot = comparisonId === "current" ? null : snapshots.find((item) => item.id === comparisonId) ?? null;
-  const currentComparisonEntries = useMemo(() => buildComparisonEntries(selected?.files ?? [], [...currentProjectFiles.values()], currentProjectStatus === "ready"), [currentProjectFiles, currentProjectStatus, selected]);
-  const comparisonEntries = useMemo(() => comparisonSnapshot
-    ? buildComparisonEntries(selected?.files ?? [], comparisonSnapshot.files)
-    : currentComparisonEntries, [comparisonSnapshot, currentComparisonEntries, selected]);
-  const activeEntry = comparisonEntries.find((entry) => entry.key === filePath)
-    ?? comparisonEntries.find((entry) => [entry.left, entry.right].some((file) => file && pathKey(file.path) === pathKey(currentFilePath ?? "")))
-    ?? comparisonEntries[0]
-    ?? null;
-  const currentProjectFileUnavailable = !comparisonSnapshot && activeEntry
-    ? unavailableCurrentProjectPaths.has(pathKey(activeEntry.right?.path ?? activeEntry.left?.path ?? ""))
-    : false;
-  const comparisonLabel = comparisonSnapshot?.label ?? "現在のプロジェクト";
-  const diffRows = useMemo(() => {
-    if (!activeEntry) return [];
-    if (activeEntry.left && activeEntry.right) return createDiffRows(activeEntry.left.text, activeEntry.right.text);
-    if (activeEntry.left) {
-      const comparisonPending = !comparisonSnapshot && currentProjectStatus !== "ready";
-      return createOneSidedDiffRows(activeEntry.left.text, "left", comparisonPending || currentProjectFileUnavailable ? "same" : "removed");
+  const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
+  const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [banner, setBanner] = useState("");
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  const selected = sorted.find((item) => item.id === selectedId) ?? sorted[0] ?? null;
+  const selectedIndex = selected ? sorted.indexOf(selected) : -1;
+  const prev = selectedIndex >= 0 ? sorted[selectedIndex + 1] ?? null : null;
+  const effectiveCompare: CompareId = compareId === "prev" && !prev ? "current" : compareId;
+  const target = effectiveCompare === "current" ? null : effectiveCompare === "prev" ? prev : sorted.find((item) => item.id === effectiveCompare) ?? null;
+  const targetOlder = Boolean(selected && target && target.createdAt < selected.createdAt);
+  const currentReady = currentProjectStatus === "ready" || currentProjectStatus === "error";
+
+  const labels: Labels & { oldSide: string; newSide: string } = !selected
+    ? { oldLabel: "", newLabel: "", oldSide: "", newSide: "" }
+    : !target
+      ? { oldLabel: `この保存点（${stamp(selected)}）`, newLabel: "現在のプロジェクト", oldSide: "保存点", newSide: "現在" }
+      : targetOlder
+        ? { oldLabel: `${target.label}（${stamp(target)}）`, newLabel: `この保存点（${stamp(selected)}）`, oldSide: "比較先", newSide: "この保存点" }
+        : { oldLabel: `この保存点（${stamp(selected)}）`, newLabel: `${target.label}（${stamp(target)}）`, oldSide: "この保存点", newSide: "比較先" };
+
+  const currentFiles = useMemo(() => [...currentProjectFiles.values()], [currentProjectFiles]);
+  const currentFingerprint = useMemo(() => currentReady
+    ? hash16(currentFiles.map((file) => `${file.path}\u0000${file.text}`).join("\u0001")) + treeSignature(projectFolder)
+    : "", [currentFiles, currentReady, projectFolder]);
+  // 保存点 → 現在。比較先が別の保存点でも、復元時の移動判定と「後から加わったファイル」の数に使う。
+  const currentEntries = useMemo<ComparisonEntry[] | null>(() => {
+    if (!selected || !currentReady) return null;
+    const left = selected.files.filter((file) => !unavailableCurrentProjectPaths.has(pathKey(file.path)));
+    return buildComparisonEntries(left, currentFiles, currentProjectStatus === "ready");
+  }, [currentFiles, currentProjectStatus, currentReady, selected, unavailableCurrentProjectPaths]);
+
+  const diffKey = selected ? `${selected.id}:${selected.storageHash || selected.revision}|${target ? `${target.id}:${target.storageHash || target.revision}` : `current:${currentFingerprint}`}` : "";
+  const diff = useMemo<ProjectDiff | null>(() => {
+    if (!selected) return null;
+    if (!target) {
+      if (!currentEntries || !projectFolder) return null;
+      return cachedDiff(diffKey, () => buildProjectDiff(currentEntries, selected.projectTree, projectFolder));
     }
-    if (activeEntry.right) return createOneSidedDiffRows(activeEntry.right.text, "right", "added");
-    return [];
-  }, [activeEntry, comparisonSnapshot, currentProjectFileUnavailable, currentProjectStatus]);
-  const comparisonStatus = !activeEntry
-    ? "比較するファイルがありません"
-    : !comparisonSnapshot && (currentProjectStatus === "loading" || currentProjectStatus === "idle")
-      ? "現在のプロジェクトを読み込み中"
-      : currentProjectFileUnavailable
-        ? "現在のファイルを読み込めませんでした"
-        : !comparisonSnapshot && currentProjectStatus === "error"
-          ? "現在の一部のファイルを読み込めませんでした。比較結果は不完全です"
-        : activeEntry.match === "relocated" && activeEntry.left && activeEntry.right
-          ? `${relocationLabel(activeEntry.left, activeEntry.right)}として認識: ${compactPath(activeEntry.left.path)} → ${compactPath(activeEntry.right.path)}`
-        : activeEntry.left && activeEntry.right
-          ? comparisonSnapshot ? "保存点どうしを比較中" : "現在のプロジェクトと比較中"
-          : activeEntry.left
-            ? "比較先にはないファイル（削除）"
-            : "比較元にはないファイル（追加）";
-  const comparisonEntryStatus = (entry: ComparisonEntry) => {
-    if (!comparisonSnapshot && unavailableCurrentProjectPaths.has(pathKey(entry.right?.path ?? entry.left?.path ?? ""))) return "読込失敗";
-    if (!comparisonSnapshot && (currentProjectStatus === "idle" || currentProjectStatus === "loading")) return null;
-    if (!comparisonSnapshot && currentProjectStatus === "error" && !entry.right) return "未確認";
-    if (entry.match === "relocated" && entry.left && entry.right) return relocationLabel(entry.left, entry.right);
-    if (!entry.left) return "追加";
-    if (!entry.right) return "削除";
-    return null;
-  };
-  const relocations = currentComparisonEntries.flatMap((entry) => entry.match === "relocated" && entry.left && entry.right
-    ? [{ snapshotPath: entry.left.path, currentPath: entry.right.path }]
-    : []);
-  const relocationBySnapshotPath = new Map(relocations.map((item) => [pathKey(item.snapshotPath), item] as const));
-  const relocatedConflictPaths = new Set(currentComparisonEntries.flatMap((entry) => entry.match === "relocated" && entry.left && entry.right && entry.left.text.replace(/\r\n?/g, "\n") !== entry.right.text.replace(/\r\n?/g, "\n")
-    ? [pathKey(entry.left.path)]
-    : []));
-  const effectivePaths = scope === "all" ? selected?.files.map((file) => file.path) ?? [] : [...selectedPaths];
-  const conflictPaths = selected ? conflictsBySnapshot.get(selected.id) ?? new Set<string>() : new Set<string>();
-  const selectedConflictCount = effectivePaths.filter((path) => conflictPaths.has(pathKey(path)) || relocatedConflictPaths.has(pathKey(path))).length;
-  const folderSelections = useMemo(() => {
-    const result: Array<{ folder: ProjectEntry; files: string[]; folders: string[] }> = [];
-    const visit = (folder: ProjectEntry): { files: string[]; folders: string[] } => {
-      const item = { folder, files: [] as string[], folders: [] as string[] };
-      result.push(item);
-      for (const child of folder.children) {
-        if (child.kind === "folder") {
-          item.folders.push(child.path);
-          const descendants = visit(child);
-          item.files.push(...descendants.files);
-          item.folders.push(...descendants.folders);
-        } else item.files.push(child.path);
-      }
-      return item;
-    };
-    selected?.projectTree.children.forEach((entry) => { if (entry.kind === "folder") visit(entry); });
+    const [older, newer] = targetOlder ? [target, selected] : [selected, target];
+    return cachedDiff(diffKey, () => buildProjectDiff(buildComparisonEntries(older.files, newer.files), older.projectTree, newer.projectTree));
+  }, [currentEntries, diffKey, projectFolder, selected, target, targetOlder]);
+
+  const visible = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    return sorted.filter((item) =>
+      (showAuto || !isShelter(item) || item.id === selected?.id) &&
+      (!needle || `${item.label}\n${item.memo}`.toLocaleLowerCase().includes(needle)));
+  }, [query, selected?.id, showAuto, sorted]);
+  const groups = useMemo(() => {
+    const result: Array<{ label: string; items: ManuscriptSnapshot[] }> = [];
+    for (const item of visible) {
+      const label = dayLabel(item.createdAt);
+      const last = result[result.length - 1];
+      if (last?.label === label) last.items.push(item);
+      else result.push({ label, items: [item] });
+    }
     return result;
-  }, [selected]);
-  const folderSelectionState = ({ folder, files, folders }: (typeof folderSelections)[number]) => {
-    const all = selectedFolderPaths.has(folder.path)
-      && folders.every((path) => selectedFolderPaths.has(path))
-      && files.every((path) => selectedPaths.has(path));
-    const some = selectedFolderPaths.has(folder.path)
-      || folders.some((path) => selectedFolderPaths.has(path))
-      || files.some((path) => selectedPaths.has(path));
-    return { all, partial: some && !all };
+  }, [visible]);
+  const autoCount = sorted.filter(isShelter).length;
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const close = (event: MouseEvent) => { if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [menuOpen]);
+  useEffect(() => { if (confirm) confirmButtonRef.current?.focus(); }, [confirm]);
+
+  const choose = (snapshot: ManuscriptSnapshot) => { setSelectedId(snapshot.id); setCompareId("current"); setMenuOpen(false); };
+  const saveCreate = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const id = await onCreate(draft.trim() || "名前のない保存点");
+      if (id) { setSelectedId(id); setCompareId("current"); setCreating(false); setDraft(""); setBanner(""); }
+    } finally { setBusy(false); }
+  };
+  const onDraftKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing) return;
+    if (event.key === "Enter") { event.preventDefault(); void saveCreate(); }
+    if (event.key === "Escape") { event.preventDefault(); setCreating(false); }
+  };
+  const runRestore = async () => {
+    if (!selected || !confirm || busy) return;
+    setBusy(true);
+    try {
+      const ok = confirm.scope === "all" ? await onRestore(selected)
+        : confirm.scope === "order" ? await onRestoreOrder(selected)
+          : await onRestoreFile(selected, confirm.path, confirm.relocation);
+      if (ok) {
+        const what = confirm.scope === "all" ? `「${selected.label}」の時点に戻しました。` : confirm.scope === "order" ? "フォルダの並び順を戻しました。" : `「${confirm.name}」を戻しました。`;
+        setBanner(`${what}直前の状態は「${SHELTER_LABEL}」として保存してあります。`);
+      }
+      setConfirm(null);
+    } finally { setBusy(false); }
   };
 
-  const chooseSnapshot = (snapshot: ManuscriptSnapshot) => {
-    setSelectedId(snapshot.id); setFilePath(null); setScope("all"); setSelectedPaths(new Set()); setSelectedFolderPaths(new Set()); setSnapshotMenuId(null);
-  };
-  const togglePath = (path: string) => setSelectedPaths((current) => {
-    const next = new Set(current); if (next.has(path)) next.delete(path); else next.add(path); return next;
-  });
-  const toggleFolder = (item: (typeof folderSelections)[number], wasFullySelected: boolean) => {
-    const paths = [item.folder.path, ...item.folders];
-    setSelectedFolderPaths((current) => {
-      const next = new Set(current);
-      paths.forEach((path) => wasFullySelected ? next.delete(path) : next.add(path));
-      return next;
-    });
-    setSelectedPaths((current) => {
-      const next = new Set(current);
-      item.files.forEach((path) => wasFullySelected ? next.delete(path) : next.add(path));
-      return next;
-    });
-  };
+  if (!projectFolder) return <section className="checkpointStudio cpEmptyScreen"><h1>チェックポイント</h1><p>プロジェクトを開くと、保存点を確認・復元できます。</p><button type="button" className="cpBtnPrimary" onClick={onClose}>本文へ戻る</button></section>;
 
-  if (!projectFolder) return <section className="checkpointStudio checkpointEmpty"><h1>チェックポイント</h1><p>プロジェクトを開くと、保存点を確認・復元できます。</p><button type="button" onClick={onClose}>本文へ戻る</button></section>;
+  const currentMeta = currentProjectStats
+    ? `${currentProjectStats.fileCount}ファイル · ${chars(currentProjectStats.visibleTextLength)}字`
+    : `${currentProjectFiles.size}ファイル`;
+  const snapshotIsOld = !target || !targetOlder;
+  const addedSinceCount = currentEntries?.filter((entry) => !entry.left && entry.right).length ?? 0;
+  const restoreFor = (file: FileDiff) => {
+    const snapshotFile = snapshotIsOld ? file.oldFile : file.newFile;
+    if (!snapshotFile) return null;
+    const entry = currentEntries?.find((item) => item.left && pathKey(item.left.path) === pathKey(snapshotFile.path));
+    const relocation = entry?.match === "relocated" && entry.left && entry.right ? { snapshotPath: entry.left.path, currentPath: entry.right.path } : null;
+    return { label: "このファイルだけ戻す", onClick: () => { setMenuOpen(false); setConfirm({ scope: "file", path: snapshotFile.path, name: snapshotFile.name, relocation }); } };
+  };
+  const isOpen = (key: string, index: number) => openCards[`${diffKey}|${key}`] ?? index === 0;
+  const toggle = (key: string, index: number) => setOpenCards((current) => ({ ...current, [`${diffKey}|${key}`]: !isOpen(key, index) }));
+
+  const sidebar = <aside className="cpSide" aria-label="保存点">
+    <div className="cpSideHead"><h2>保存点</h2><span className="cpCount">{sorted.length}件</span></div>
+    <div className="cpCurrentCard">
+      <div className="cpCurrentRow"><span className="cpRing" aria-hidden="true" /><div><span className="cpCurrentName">現在のプロジェクト</span><span className="cpCurrentMeta">{currentMeta}</span></div></div>
+      {creating
+        ? <div className="cpCreateForm">
+            <label htmlFor="cp-snapshot-name">保存点の名前</label>
+            <input id="cp-snapshot-name" type="text" autoFocus value={draft} placeholder="例：第2稿に入る前" onChange={(event) => setDraft(event.target.value)} onKeyDown={onDraftKeyDown} />
+            <div className="cpRowEnd">
+              <button type="button" className="cpBtnGhost" onClick={() => setCreating(false)}>やめる</button>
+              <button type="button" className="cpBtnPrimary sm" disabled={busy} onClick={() => void saveCreate()}>保存する</button>
+            </div>
+          </div>
+        : <button type="button" className="cpBtnOutline" onClick={() => { setCreating(true); setDraft(""); }}>{Icon.plus}今の状態を保存点にする</button>}
+    </div>
+    <div className="cpTools">
+      <label className="cpSearch">{Icon.search}<input type="search" value={query} aria-label="名前・メモで絞り込む" placeholder="名前・メモで絞り込む" onChange={(event) => setQuery(event.target.value)} /></label>
+      <label className="cpAutoToggle"><input type="checkbox" checked={showAuto} onChange={(event) => setShowAuto(event.target.checked)} />自動退避も表示（{autoCount}件）</label>
+    </div>
+    <nav className="cpGroups" aria-label="保存点の一覧">
+      {groups.map((group) => <div className="cpGroup" key={group.label}>
+        <div className="cpGroupDate">{group.label}</div>
+        {group.items.map((item) => {
+          const on = item.id === selected?.id;
+          return isShelter(item)
+            ? <button type="button" key={item.id} className={`cpSnap auto ${on ? "isSelected" : ""}`} aria-current={on} onClick={() => choose(item)}>
+                <span className="cpDot" /><span className="cpSnapName">{item.label}</span><span className="cpSnapMeta">{timeOf(item.createdAt)} · {item.fileCount}ファイル</span>
+              </button>
+            : <button type="button" key={item.id} className={`cpSnap ${on ? "isSelected" : ""}`} aria-current={on} onClick={() => choose(item)}>
+                <span className="cpDot" />
+                <span className="cpSnapBody">
+                  <span className="cpSnapName">{item.label}</span>
+                  <span className="cpSnapMeta">{timeOf(item.createdAt)} · {item.fileCount}ファイル · {chars(item.totalVisibleTextLength)}字</span>
+                  {item.memo && <span className="cpSnapMemo">{item.memo}</span>}
+                </span>
+              </button>;
+        })}
+      </div>)}
+      {!groups.length && <p className="cpNoResults">{sorted.length ? "一致する保存点はありません" : "保存点はまだありません"}</p>}
+    </nav>
+  </aside>;
+
+  const compareOptions = selected ? [
+    { value: "current", label: "現在のプロジェクト" },
+    ...(prev ? [{ value: "prev", label: `ひとつ前の保存点（${stamp(prev)}）` }] : []),
+    ...sorted.filter((item) => item.id !== selected.id && item.id !== prev?.id).map((item) => ({ value: item.id, label: `${item.label}（${stamp(item)}）` })),
+  ] : [];
+
+  let diffBody: ReactNode;
+  if (!diff) {
+    diffBody = <div className="cpEmpty">現在のプロジェクトを読み込んでいます…</div>;
+  } else {
+    const cards: ReactNode[] = diff.files.map((file, index) => <FileCard key={file.key} file={file} open={isOpen(file.key, index)} view={view} labels={labels} newSide={labels.newSide} onToggle={() => toggle(file.key, index)} restore={restoreFor(file)} />);
+    if (diff.orderChanges.length) {
+      const index = diff.files.length;
+      cards.push(<OrderCard key="order" changes={diff.orderChanges} open={isOpen("order", index)} labels={labels} onToggle={() => toggle("order", index)} onRestore={() => { setMenuOpen(false); setConfirm({ scope: "order" }); }} />);
+    }
+    diffBody = <>
+      <div className="cpSummary">
+        <p>{diff.empty ? "変更はありません" : diff.summary}</p>
+        <span className="cpDir">{labels.oldLabel} → {labels.newLabel}</span>
+        {(diff.plus > 0 || diff.minus > 0) && <span className="cpStats">{diff.plus > 0 && <span className="cpPlus">+{chars(diff.plus)}字</span>}{diff.minus > 0 && <span className="cpMinus">−{chars(diff.minus)}字</span>}</span>}
+      </div>
+      {!target && currentProjectStatus === "error" && <p className="cpWarning">読み込めなかった現在のファイル{unavailableCurrentProjectPaths.size}件は比較から外しています。</p>}
+      {!diff.empty && <div className="cpLegend"><span><del>消えた文</del>{labels.oldSide}にだけある</span><span><ins>加わった文</ins>{labels.newSide}にだけある</span></div>}
+      <div className="cpFiles">
+        {cards}
+        {!diff.empty && diff.unchangedCount > 0 && <div className="cpUnchanged">{Icon.check}<span>変更のないファイル {diff.unchangedCount}件は省略しています</span></div>}
+        {diff.empty && <div className="cpEmpty">比較先と同じ内容です。戻しても何も変わりません。</div>}
+        <p className="cpFootnote">戻すときは、直前の状態を「{SHELTER_LABEL}」として自動で保存します。</p>
+      </div>
+    </>;
+  }
+
+  const main = <main className="cpMain"><div className="cpWrap">
+    {banner && <div className="cpBanner" role="status"><span>{banner}</span><button type="button" onClick={() => setBanner("")}>閉じる</button></div>}
+    {selected ? <>
+      <div className="cpDetailHead">
+        <div className="cpDetailTitle">
+          <h2>{selected.label}</h2>
+          <div className="cpDetailMeta">{stamp(selected)} · {selected.fileCount}ファイル · {chars(selected.totalVisibleTextLength)}字</div>
+          {selected.memo && <p className="cpDetailMemo">{selected.memo}</p>}
+          {isShelter(selected) && <p className="cpDetailAuto">復元を実行する直前に、自動で作られた保存点です。</p>}
+        </div>
+        <div className="cpDetailActions" ref={menuRef}>
+          <button type="button" className="cpBtnPrimary" onClick={() => { setMenuOpen(false); setConfirm({ scope: "all" }); }}>{Icon.restore}この時点に戻す</button>
+          {!isShelter(selected) && <>
+            <button type="button" className="cpBtnIcon" aria-label="その他の操作" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((current) => !current)}>{Icon.more}</button>
+            {menuOpen && <div className="cpMenu" role="menu">
+              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onEditDetails(selected); }}>名前とメモを編集</button>
+              <button type="button" role="menuitem" className="cpDanger" onClick={() => { setMenuOpen(false); onDelete(selected); }}>この保存点を削除</button>
+            </div>}
+          </>}
+        </div>
+      </div>
+      <div className="cpCompareBar">
+        <label>比較先
+          <select value={effectiveCompare} onChange={(event) => setCompareId(event.target.value)}>
+            {compareOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <div className="cpSeg" role="group" aria-label="差分の表示方法">
+          <button type="button" aria-pressed={view === "inline"} onClick={() => setView("inline")}>変わった所だけ</button>
+          <button type="button" aria-pressed={view === "side"} onClick={() => setView("side")}>左右に並べる</button>
+        </div>
+      </div>
+      {diffBody}
+    </> : <div className="cpEmpty">保存点はまだありません。左の「今の状態を保存点にする」から作れます。</div>}
+  </div></main>;
+
+  let dialog: ReactNode = null;
+  if (confirm && selected) {
+    const at = stamp(selected);
+    const [title, body] = confirm.scope === "all"
+      ? [`「${selected.label}」の時点に戻す`, `${selected.fileCount}ファイルの本文と、フォルダの並び順を ${at} の状態に戻します。${addedSinceCount ? `保存点のあとで加わった${addedSinceCount}ファイルはごみ箱へ移します。` : ""}`]
+      : confirm.scope === "order"
+        ? ["フォルダの並び順だけ戻す", `本文には手を触れず、フォルダの並び順だけを ${at} の状態に戻します。`]
+        : [`「${confirm.name}」だけ戻す`, `このファイルの本文を ${at} の状態に戻します。ほかのファイルはそのままです。`];
+    dialog = <div className="cpOverlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setConfirm(null); }}>
+      <div className="cpDialog" role="dialog" aria-modal="true" aria-labelledby="cp-confirm-title" onKeyDown={(event) => { if (event.key === "Escape" && !busy) { event.stopPropagation(); setConfirm(null); } }}>
+        <h3 id="cp-confirm-title">{title}</h3>
+        <p>{body}</p>
+        <p className="cpSafe">今の状態は「{SHELTER_LABEL}」として自動で保存されるので、あとから元に戻せます。</p>
+        <div className="cpRowEnd">
+          <button type="button" className="cpBtnGhost" disabled={busy} onClick={() => setConfirm(null)}>キャンセル</button>
+          <button type="button" className="cpBtnPrimary" ref={confirmButtonRef} disabled={busy} onClick={() => void runRestore()}>戻す</button>
+        </div>
+      </div>
+    </div>;
+  }
 
   return <section className="checkpointStudio" aria-label="チェックポイント">
-    <header className="checkpointStudioHeader"><h1>チェックポイント</h1><div className="checkpointStudioActions"><button type="button" className="checkpointButton checkpointCreateButton" onClick={onCreate}>＋ 保存点を作成</button><button type="button" className="checkpointButton" onClick={onClose}>本文へ戻る</button></div></header>
-    <div className="checkpointStudioLayout">
-      <aside className="checkpointHistory" aria-label="保存点"><header className="checkpointCompactHeader"><strong>保存点</strong><span>{snapshots.length} 件</span></header><label className="checkpointSearch"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="名前・メモを検索" /></label><div className="checkpointSnapshotList">{visible.map((snapshot) => <div key={snapshot.id} className={`checkpointSnapshot ${snapshot.id === selected?.id ? "active" : ""} ${snapshot.reason === "auto-before-restore" ? "shelter" : ""}`}><button type="button" className="checkpointSnapshotSelect" aria-pressed={snapshot.id === selected?.id} onClick={() => chooseSnapshot(snapshot)}><i aria-hidden="true" /><span><strong>{snapshot.label}</strong><small>{date(snapshot.createdAt)} · {snapshot.fileCount}ファイル · {snapshot.totalVisibleTextLength.toLocaleString()}字</small>{snapshot.memo && <em>{snapshot.memo}</em>}</span>{snapshot.reason === "auto-before-restore" && <b>退避</b>}</button>{snapshot.reason === "manual" && <span className="checkpointSnapshotActions"><button type="button" className="checkpointSnapshotMore" aria-label={`${snapshot.label}のメニュー`} aria-expanded={snapshotMenuId === snapshot.id} aria-haspopup="menu" onClick={() => setSnapshotMenuId((current) => current === snapshot.id ? null : snapshot.id)}>…</button>{snapshotMenuId === snapshot.id && <span className="checkpointSnapshotMenu" role="menu"><button type="button" role="menuitem" onClick={() => { setSnapshotMenuId(null); onDelete(snapshot); }}>削除</button></span>}</span>}</div>)}{!visible.length && <p className="checkpointNoResult">該当する保存点はありません。</p>}</div></aside>
-      <main className="checkpointCompare"><header className="checkpointCompareHeader"><strong>{selected?.label ?? "保存点を選択"}</strong><label className="checkpointCompareSelect"><span>比較先</span><select value={comparisonId} onChange={(event) => setComparisonId(event.target.value)}><option value="current">現在のプロジェクト</option>{snapshots.map((snapshot) => <option value={snapshot.id} key={snapshot.id}>{snapshot.label}</option>)}</select></label></header>{selected && activeEntry ? <><nav className="checkpointFileTabs" aria-label="比較するファイル">{comparisonEntries.map((entry) => { const status = comparisonEntryStatus(entry); const statusClass = status === "追加" ? "added" : status === "削除" ? "removed" : (status === "読込失敗" || status === "未確認") ? "unavailable" : "relocated"; return <button type="button" key={entry.key} title={entry.left && entry.right && entry.match === "relocated" ? `${entry.left.path} → ${entry.right.path}` : entry.left?.path ?? entry.right?.path} className={entry.key === activeEntry.key ? "active" : ""} aria-current={entry.key === activeEntry.key ? "page" : undefined} onClick={() => setFilePath(entry.key)}><span>{entry.name}</span>{status && <em className={`checkpointFileStatus ${statusClass}`}>{status}</em>}</button>})}</nav><div className="checkpointDiffMeta" aria-live="polite">{comparisonStatus}</div><div className="checkpointDiff"><header className="checkpointDiffColumnHeaders"><span><b>{selected.label}</b><small>{activeEntry.left?.name ?? "この保存点にはありません"}</small></span><span><b>{comparisonLabel}</b><small>{activeEntry.right?.name ?? (currentProjectFileUnavailable ? "読み込み失敗" : "この比較先にはありません")}</small></span></header><div className="checkpointDiffRows">{diffRows.map((row, index) => <div className="checkpointDiffRow" key={`${row.left?.number ?? "-"}-${row.right?.number ?? "-"}-${index}`}>{renderDiffLine(row.left)}{renderDiffLine(row.right)}</div>)}</div></div></> : <div className="checkpointBlank">比較できるファイルがありません。</div>}</main>
-      <aside className="checkpointPlan" aria-label="復元">{selected ? <><section className="checkpointRestoreHeading"><h2>復元</h2><p><b>{selected.label}</b> · {date(selected.createdAt)}</p></section><section className="checkpointScope" aria-label="復元する範囲"><button type="button" className={scope === "all" ? "active" : ""} aria-pressed={scope === "all"} onClick={() => setScope("all")}>全体</button><button type="button" className={scope === "selected" ? "active" : ""} aria-pressed={scope === "selected"} onClick={() => setScope("selected")}>選択</button></section>{scope === "all" ? <p className="checkpointRestoreSummary">{selected.files.length} ファイル・{folderSelections.length} フォルダを復元します。フォルダの並び順も保存点に戻します。</p> : <section className="checkpointPlanSection"><h3>復元する項目</h3><div className="checkpointRestoreList">{selected.files.map((file) => { const key = pathKey(file.path); const conflicts = conflictPaths.has(key) || relocatedConflictPaths.has(key); const relocation = relocationBySnapshotPath.get(key); return <label key={file.path}><input type="checkbox" checked={selectedPaths.has(file.path)} onChange={() => togglePath(file.path)} /><RestoreItemIcon type="file" /><b>{file.name}</b>{conflicts ? <em className="checkpointConflictMark">変更あり</em> : relocation ? <em>{relocationLabel(file, currentProjectFiles.get(pathKey(relocation.currentPath)) ?? { path: relocation.currentPath, name: fileName(relocation.currentPath), text: file.text })}</em> : file.path === currentFilePath && <em>開いている</em>}</label>})}</div>{folderSelections.length > 0 && <><h3 className="checkpointFolderTitle">フォルダ</h3><div className="checkpointRestoreList checkpointFolderList">{folderSelections.map((item) => { const { folder } = item; const state = folderSelectionState(item); return <label key={folder.path}><input type="checkbox" checked={state.all} ref={(input) => { if (input) input.indeterminate = state.partial; }} onChange={() => toggleFolder(item, state.all)} /><RestoreItemIcon type="folder" /><b>{folder.name}</b><em>{folder.children.length} 項目</em></label>; })}</div></>}{!effectivePaths.length && !selectedFolderPaths.size && <p className="checkpointCaution">復元する項目を選んでください。</p>}<label className="checkpointOrder"><input type="checkbox" checked={restoreOrder} onChange={(event) => setRestoreOrder(event.target.checked)} /><span>フォルダの並び順も戻す</span></label></section>}{scope === "selected" && selectedConflictCount > 0 && <section className="checkpointPlanSection"><h3>変更ありのファイル: {selectedConflictCount}件</h3><div className="checkpointConflictChoices"><label><input type="radio" name="checkpoint-conflict" checked={policy === "overwrite"} onChange={() => setPolicy("overwrite")} /><span><b>保存点の内容で置き換える</b><small>現在の本文を保存点の本文に戻します</small></span></label><label><input type="radio" name="checkpoint-conflict" checked={policy === "copy"} onChange={() => setPolicy("copy")} /><span><b>別ファイルとして残す</b><small>現在のファイルを残し、保存点の内容を別パスへ復元します</small></span></label><label><input type="radio" name="checkpoint-conflict" checked={policy === "skip"} onChange={() => setPolicy("skip")} /><span><b>変更ありのファイルは戻さない</b><small>変更のないファイルだけ復元します</small></span></label></div></section>}<footer><button type="button" className="checkpointRestoreButton" disabled={!effectivePaths.length && !selectedFolderPaths.size} onClick={() => scope === "all" ? onRestore(selected) : onRestoreFiles(selected, effectivePaths, [...selectedFolderPaths], policy, restoreOrder, relocations)}>{scope === "all" ? "この保存点を復元する" : `${effectivePaths.length + selectedFolderPaths.size} 件を復元する`}</button><small>実行前に現在の状態を自動で退避します。</small></footer></> : <p className="checkpointNoSelection">保存点を選ぶと復元できます。</p>}</aside>
-    </div>
+    <header className="cpTopbar">
+      <button type="button" className="cpBack" onClick={onClose}>{Icon.back}本文へ戻る</button>
+      <h1>チェックポイント</h1>
+    </header>
+    <div className="cpLayout">{sidebar}{main}</div>
+    {dialog}
   </section>;
 }
