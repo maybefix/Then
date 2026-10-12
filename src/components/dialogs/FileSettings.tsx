@@ -66,6 +66,29 @@ export function FileSettings({ settings, onSnippetStorageModeChange, onUpdateSet
       </label>
       <label className="checkSetting descriptiveCheckSetting">
         <input
+          checked={settings.showCheckpointStatus}
+          type="checkbox"
+          onChange={(event) =>
+            onUpdateSettings("showCheckpointStatus", event.target.checked)
+          }
+        />
+        <span className="checkSettingCopy">
+          <span>画面下部に最後の保存点を表示</span>
+          <small>保存点を作ってからの時間と、増減した字数を出します</small>
+        </span>
+      </label>
+      <label className="checkSetting">
+        <input
+          checked={settings.showCheckpointSection}
+          type="checkbox"
+          onChange={(event) =>
+            onUpdateSettings("showCheckpointSection", event.target.checked)
+          }
+        />
+        <span>サイドバーにチェックポイントを表示</span>
+      </label>
+      <label className="checkSetting descriptiveCheckSetting">
+        <input
           checked={settings.showDocumentTabs}
           type="checkbox"
           onChange={(event) =>

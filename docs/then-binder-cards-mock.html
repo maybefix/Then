@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Binder Cards Mock</title>
+<!--
+  Then バインダー（Idea）一覧画面 カード化モック。依存なしの1ファイル。
+  - 上部の切替で案A/B/Cとペイン幅を比較する。
+  - データはサンプル。実装では IdeaPane.tsx の threads / threadItems に置き換える。
+-->
+<style>
+  :root {
+    --bg: #2a2e35;
+    --bg-2: #23272d;
+    --card: #323740;
+    --card-hover: #383d47;
+    --line: #3e444e;
+    --line-soft: #353a43;
+    --ink: #eceef1;
+    --ink-2: #b8bdc6;
+    --ink-3: #868d98;
+    --star: #c9a56a;
+    --inbox: #e6e8eb;
+    --chip: #3b414b;
+    --sans: 'BIZ UDPGothic', 'Yu Gothic UI', Meiryo, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #16181c; color: var(--ink); font-family: var(--sans); font-size: 14px; }
+  button, input { font-family: inherit; color: inherit; }
+  button { cursor: pointer; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding: 14px 16px; border-bottom: 1px solid #2a2d33; }
+  .controls .group { display: flex; gap: 4px; align-items: center; }
+  .controls .label { font-size: 12px; color: var(--ink-3); margin-right: 6px; }
+  .seg { min-height: 32px; padding: 0 12px; border: 1px solid var(--line); background: transparent; border-radius: 6px; font-size: 13px; color: var(--ink-2); }
+  .seg.on { background: var(--ink); color: #1b1d21; border-color: var(--ink); font-weight: 700; }
+  .note { flex-basis: 100%; font-size: 12.5px; color: var(--ink-2); line-height: 1.7; margin: 0; }
+
+  .stage { display: flex; justify-content: center; padding: 24px 16px 60px; }
+  .pane { width: var(--w, 375px); max-width: 100%; background: var(--bg); border: 1px solid var(--line); min-height: 900px; display: flex; flex-direction: column; transition: width .15s; }
+
+  /* 既存ヘッダー部分（そのまま） */
+  .head { display: flex; align-items: center; gap: 8px; padding: 14px 16px; }
+  .head .ttl { font-weight: 700; display: flex; gap: 8px; align-items: center; }
+  .head .sp { flex: 1; }
+  .head .ic { width: 28px; height: 28px; display: grid; place-items: center; color: var(--ink-2); }
+  .top { padding: 4px 16px 12px; display: flex; flex-direction: column; gap: 10px; }
+  .row { display: flex; gap: 10px; }
+  .search { flex: 1; min-width: 0; height: 36px; background: var(--bg-2); border: 1px solid var(--line); padding: 0 10px; font-size: 13px; }
+  .search::placeholder, .cap::placeholder { color: var(--ink-3); }
+  .newth { height: 36px; padding: 0 14px; background: var(--bg-2); border: 1px solid var(--line); font-size: 13px; white-space: nowrap; }
+  .cap { height: 44px; background: var(--bg-2); border: 1px solid var(--line); padding: 0 12px; font-size: 13px; width: 100%; }
+  .chips { display: flex; gap: 6px; }
+  .chip { height: 30px; padding: 0 14px; border: 1px solid var(--line); background: transparent; font-size: 13px; color: var(--ink-2); }
+  .chip.on { border-color: var(--ink-2); color: var(--ink); font-weight: 700; }
+
+  .list { padding: 4px 12px 24px; display: flex; flex-direction: column; gap: 10px; }
+
+  /* 共通カード */
+  .card { position: relative; background: var(--card); border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px 14px; text-align: left; width: 100%; display: flex; flex-direction: column; gap: 6px; transition: background .12s, border-color .12s; }
+  .card:hover { background: var(--card-hover); border-color: var(--line); }
+  .card .t { font-weight: 700; font-size: 14.5px; display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .card .t span.name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .star { color: var(--star); flex: none; display: inline-flex; }
+  .card .body { color: var(--ink-2); font-size: 13px; line-height: 1.65; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+  .card .foot { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
+  .card .foot .sp { flex: 1; }
+  .count { display: inline-flex; align-items: center; gap: 4px; }
+  .thumbs { display: flex; gap: 4px; }
+  .thumb { width: 22px; height: 22px; border-radius: 4px; background: var(--chip); display: grid; place-items: center; font-size: 10px; color: var(--ink-2); }
+  .thumb.img { background: linear-gradient(135deg, #5b6b82, #8a7a68); }
+  .thumb.img2 { background: linear-gradient(135deg, #6a7f6c, #3f4d5c); }
+
+  .card.inbox { background: transparent; border: 1px dashed #59606b; }
+  .card.inbox:hover { background: rgba(255,255,255,.03); }
+  .card.inbox .t .tray { color: var(--ink-2); display: inline-flex; }
+
+  /* 案A: ノート — 1列、本文プレビュー3行 */
+  .v-a .card .body { -webkit-line-clamp: 3; }
+
+  /* 案B: タイル — 2列グリッド、インボックスは横長 */
+  .v-b .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .v-b .card { min-height: 128px; padding: 11px 12px; }
+  .v-b .card.inbox { grid-column: 1 / -1; min-height: 0; }
+  .v-b .card .body { -webkit-line-clamp: 3; font-size: 12.5px; flex: 1; }
+  .v-b .card.inbox .body { -webkit-line-clamp: 2; }
+  .v-b .card .t { font-size: 13.5px; }
+  .v-b .thumbs { display: none; }
+  .v-b .card.has-img .cover { display: block; }
+  .cover { display: none; height: 44px; margin: -11px -12px 4px; border-radius: 9px 9px 0 0; background: linear-gradient(135deg, #5b6b82, #8a7a68); }
+
+  /* 案C: 束 — 最新2件を小カードで覗かせる */
+  .v-c .card { padding: 12px 12px 14px; gap: 8px; }
+  .v-c .card .body { display: none; }
+  .frags { display: flex; flex-direction: column; gap: 4px; }
+  .frag { background: var(--bg-2); border-radius: 6px; padding: 7px 10px; font-size: 12.5px; color: var(--ink-2); line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .frag.ref { display: flex; align-items: center; gap: 8px; -webkit-line-clamp: unset; }
+  .frag.ref .thumb { flex: none; }
+  .more { font-size: 11.5px; color: var(--ink-3); padding-left: 2px; }
+  .v-a .frags, .v-b .frags { display: none; }
+  .v-c .thumbs { display: none; }
+  .v-c .stackwrap { position: relative; }
+  .v-c .card:not(.inbox)::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -5px; height: 6px; border: 1px solid var(--line-soft); border-top: 0; border-radius: 0 0 8px 8px; background: #2e333b; z-index: -1; }
+  .v-c .list { gap: 14px; }
+  .v-c .list > * { z-index: 0; }
+</style>
+</head>
+<body>
+<div class="controls">
+  <div class="group"><span class="label">案</span>
+    <button class="seg on" data-v="a">A ノート</button>
+    <button class="seg" data-v="b">B タイル</button>
+    <button class="seg" data-v="c">C 束</button>
+  </div>
+  <div class="group"><span class="label">ペイン幅</span>
+    <button class="seg" data-w="300">300</button>
+    <button class="seg on" data-w="375">375</button>
+    <button class="seg" data-w="480">480</button>
+  </div>
+  <p class="note" id="note"></p>
+</div>
+
+<div class="stage">
+  <div class="pane v-a" id="pane">
+    <div class="head">
+      <span class="ttl">💡 バインダー <span style="color:var(--ink-3);font-weight:400">⌄</span></span>
+      <span class="sp"></span><span class="ic">⧉</span><span class="ic">‹</span><span class="ic">✕</span>
+    </div>
+    <div class="top">
+      <div class="row"><input class="search" placeholder="Ideaと資料を検索"><button class="newth">＋ スレッド</button></div>
+      <input class="cap" placeholder="＋ Ideaを追加…">
+      <div class="chips"><button class="chip on">すべて</button><button class="chip">スター</button></div>
+    </div>
+    <div class="list" id="list"></div>
+  </div>
+</div>
+
+<script>
+const STAR = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3 6.1 20.6l1.3-6.6L2.5 9.4l6.6-.8z"/></svg>';
+const TRAY = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M5 5h14l2 8v6H3v-6z"/></svg>';
+
+const THREADS = [
+  { title: "インボックス", inbox: true, count: 29, when: "今日",
+    frags: ["後はThenのドキュメントを書くだけというところまで行き着いた。さて、どうやって書こうか。", "段落フローのQAメモ：隠し段落のルールを揃える"], refs: 3 },
+  { title: "Inspiration Songs", star: true, count: 2, when: "3日前", img: true,
+    frags: ["麒麟・川島明「where are you」", { ref: "cover.jpg", img: true }] },
+  { title: "What I have to write", star: true, count: 7, when: "昨日",
+    frags: ["書きたいこと（What I want to write）ではなく、書かなければならないこと（What I have to write）を書く。", "締切から逆算して章立てを決める"] },
+  { title: "登場人物とかで使う", count: 1, when: "9/28",
+    frags: ["スレッド機能ってどう使うか悩みどころなんだけど、登場人物とかで使うといいのかもしれない。"] },
+  { title: "Then開発ログについて", count: 4, when: "9/20", refs: 1,
+    frags: ["メモ書きをモーダル経由で残せるようになりました。これまで以上に快適性が上がった。", { ref: "binder-v2.pdf" }] },
+];
+
+const NOTES = {
+  a: "A ノート：今の行をカードにして本文を3行見せる。情報量はほぼ同じで、境界がはっきりする最小変更。フッターに件数・最終更新・資料サムネを集約し、右端のシェブロンと件数バッジはなくす。",
+  b: "B タイル：2列グリッドで一覧性を優先。画像資料があるスレッドは上部に帯状のカバー。インボックスだけ横長で常に先頭。狭いペイン（300）では自動で1列に落ちる。",
+  c: "C 束：スレッドを「Ideaの束」として見せ、最新2件を小カードで覗かせる。中身で思い出せるが、縦に長くなりスレッド数が多いとスクロールが増える。",
+};
+
+function esc(s) { return s.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]); }
+
+function render() {
+  document.getElementById("list").innerHTML = THREADS.map(t => {
+    const first = t.frags.find(f => typeof f === "string") || "";
+    const thumbs = [];
+    if (t.img) thumbs.push('<span class="thumb img"></span>');
+    for (let i = 0; i < (t.refs || 0) && thumbs.length < 3; i++) thumbs.push('<span class="thumb">' + (i % 2 ? "PDF" : "📎") + '</span>');
+    const frags = t.frags.slice(0, 2).map(f => typeof f === "string"
+      ? '<div class="frag">' + esc(f) + '</div>'
+      : '<div class="frag ref"><span class="thumb ' + (f.img ? "img2" : "") + '">' + (f.img ? "" : "PDF") + '</span>' + esc(f.ref) + '</div>').join("");
+    const rest = t.count - Math.min(2, t.frags.length);
+    return '<button class="card' + (t.inbox ? " inbox" : "") + (t.img ? " has-img" : "") + '">'
+      + '<span class="cover"></span>'
+      + '<span class="t">' + (t.inbox ? '<span class="tray">' + TRAY + '</span>' : "") + (t.star ? '<span class="star">' + STAR + '</span>' : "") + '<span class="name">' + esc(t.title) + '</span></span>'
+      + '<span class="body">' + esc(first) + '</span>'
+      + '<span class="frags">' + frags + (rest > 0 ? '<span class="more">ほか ' + rest + ' 件</span>' : "") + '</span>'
+      + '<span class="foot"><span class="count">' + t.count + ' 件</span>·<span>' + t.when + '</span><span class="sp"></span><span class="thumbs">' + thumbs.join("") + '</span></span>'
+      + '</button>';
+  }).join("");
+}
+
+function setV(v) {
+  const pane = document.getElementById("pane");
+  pane.className = "pane v-" + v;
+  document.querySelectorAll("[data-v]").forEach(b => b.classList.toggle("on", b.dataset.v === v));
+  document.getElementById("note").textContent = NOTES[v];
+}
+document.querySelectorAll("[data-v]").forEach(b => b.onclick = () => setV(b.dataset.v));
+document.querySelectorAll("[data-w]").forEach(b => b.onclick = () => {
+  document.getElementById("pane").style.setProperty("--w", b.dataset.w + "px");
+  document.querySelectorAll("[data-w]").forEach(x => x.classList.toggle("on", x === b));
+});
+render(); setV("a");
+</script>
+</body>
+</html>

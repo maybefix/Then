@@ -347,6 +347,10 @@ export type EditorSettings = {
   showOutlineGuides: boolean;
   /** チェックポイントセクションを折りたたんで表示するか。 */
   checkpointSectionCollapsed: boolean;
+  /** 左サイドバーにチェックポイント欄を出すか。 */
+  showCheckpointSection: boolean;
+  /** ステータスバーに最後の保存点からの経過と増減字数を出すか。 */
+  showCheckpointStatus: boolean;
   /** Canvas text node の既定書字方向。 */
   canvasDefaultWritingMode: WritingMode;
   /** Canvas text node の既定フォント種別。 */

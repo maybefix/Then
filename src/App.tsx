@@ -556,6 +556,7 @@ const directionOptions: Array<{
 type AppIconName =
   | "book"
   | "canvas"
+  | "checkpointAdd"
   | "chevronDown"
   | "export"
   | "file"
@@ -669,6 +670,13 @@ function AppIcon({ name, className = "" }: { name: AppIconName; className?: stri
           <path d="M3.5 12a8.5 8.5 0 1 0 2.5-6" />
           <path d="M3.5 4.5v4h4" />
           <path d="M12 7v5l3.5 2" />
+        </svg>
+      );
+    case "checkpointAdd":
+      return (
+        <svg {...common}>
+          <path d="M6.5 3.5h11v17l-5.5-4-5.5 4z" />
+          <path d="M12 7.5v5M9.5 10h5" />
         </svg>
       );
     case "horizontal":
@@ -1139,6 +1147,8 @@ const defaultSettings: EditorSettings = {
   countCode: true,
   showOutlineGuides: true,
   checkpointSectionCollapsed: false,
+  showCheckpointSection: true,
+  showCheckpointStatus: true,
   canvasOpensInWindow: false,
   exportOpensInWindow: false,
   proofread: { ...DEFAULT_PROOFREAD_OPTIONS, disabledRules: [] },
@@ -2516,6 +2526,14 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         typeof settings.checkpointSectionCollapsed === "boolean"
           ? settings.checkpointSectionCollapsed
           : defaultSettings.checkpointSectionCollapsed,
+      showCheckpointSection:
+        typeof settings.showCheckpointSection === "boolean"
+          ? settings.showCheckpointSection
+          : defaultSettings.showCheckpointSection,
+      showCheckpointStatus:
+        typeof settings.showCheckpointStatus === "boolean"
+          ? settings.showCheckpointStatus
+          : defaultSettings.showCheckpointStatus,
       typewriterScroll:
         typeof settings.typewriterScroll === "boolean"
           ? settings.typewriterScroll
@@ -3179,6 +3197,12 @@ export default function App() {
    * 起動へ切り替わる。
    */
   const [appMode, setAppMode] = useState<AppMode>("write");
+  // サイドバー・ステータスバー・通知から、特定の保存点を選んだ状態でチェックポイント画面を開く。
+  const [checkpointFocusRequest, setCheckpointFocusRequest] = useState<{ id: string; nonce: number } | null>(null);
+  const openCheckpointStudio = useCallback((snapshotId?: string) => {
+    setCheckpointFocusRequest(snapshotId ? { id: snapshotId, nonce: Date.now() } : null);
+    setAppMode("checkpoint");
+  }, []);
   useEffect(() => {
     if (appMode !== "write") setIsEditorFocusMode(false);
   }, [appMode]);
@@ -4314,6 +4338,16 @@ export default function App() {
       .filter((snapshot) => isSamePath(snapshot.workspacePath, projectFolder.path))
       .sort((left, right) => right.createdAt - left.createdAt);
   }, [appState.snapshots, projectFolder]);
+  // ステータスバーの「保存点 2時間前 · +1,240字」。合計の引き算だけで、差分計算はしない。
+  const latestManualSnapshot = useMemo(
+    () => currentWorkspaceSnapshots.find((snapshot) => snapshot.reason === "manual") ?? null,
+    [currentWorkspaceSnapshots],
+  );
+  const statusProjectVisibleTextLength = useMemo(() => {
+    if (!settings.showCheckpointStatus || !projectAst || !projectFolder || projectAst.rootPath !== projectFolder.path) return null;
+    if (projectAst.files.some((file) => file.status !== "indexed")) return null;
+    return projectAst.files.reduce((sum, file) => sum + file.visibleTextLength, 0);
+  }, [projectAst, projectFolder, settings.showCheckpointStatus]);
   // チェックポイント画面の「現在のプロジェクト」。字数は保存点と同じ表示文字数で数える。
   // 画面を開いているときだけ数え、入力中の経路には載せない。
   const checkpointProjectStats = useMemo(() => {
@@ -6354,6 +6388,7 @@ export default function App() {
     const reservedThenShortcut = mod && (
       (!event.altKey && !event.shiftKey && ["n", "f", "p", "b", "i", "0", "1", "2", "3", "4", "5", "6"].includes(key.toLowerCase())) ||
       (!event.altKey && event.code === "Slash") ||
+      (!event.altKey && event.shiftKey && key.toLowerCase() === "s") ||
       (event.altKey && !event.shiftKey && ["i", "b"].includes(key.toLowerCase()))
     );
     if (!reservedThenShortcut) {
@@ -6375,6 +6410,15 @@ export default function App() {
       event.preventDefault();
       setIsCommandPaletteOpen(false);
       toggleShowComments();
+      return;
+    }
+
+    // Ctrl+Shift+S：今の状態を保存点にする（どの画面からでも、確認なしの一押し）。
+    if (event.shiftKey && (key === "s" || key === "S")) {
+      event.preventDefault();
+      if (event.repeat || event.isComposing || document.querySelector(".modalBackdrop")) return;
+      setIsCommandPaletteOpen(false);
+      void handleQuickCreateManuscriptSnapshot();
       return;
     }
 
@@ -6599,6 +6643,20 @@ export default function App() {
         hint: "Ctrl+I",
         disabledReason: wrapDisabled,
         run: () => applyEmphasisShortcut(selection ?? undefined),
+      },
+      {
+        id: "checkpoint-create",
+        label: "今の状態を保存点にする",
+        hint: "Ctrl+Shift+S",
+        disabledReason: projectFolder ? undefined : "プロジェクトを開いてください",
+        run: () => void handleQuickCreateManuscriptSnapshot(),
+      },
+      {
+        id: "checkpoint-open",
+        label: "チェックポイントを開く",
+        hint: "Checkpoint",
+        disabledReason: projectFolder ? undefined : "プロジェクトを開いてください",
+        run: () => openCheckpointStudio(),
       },
       {
         id: "idea-quick-capture",
@@ -7297,6 +7355,24 @@ export default function App() {
     }
   }, [buildManuscriptSnapshot, currentWorkspaceSnapshots, projectFolder]);
 
+  /**
+   * ショートカット・コマンドパレット・上部ツールバー・サイドバーの「＋」に共通の一押し作成。
+   * 名前は日時にしておき、あとから画面やメニューで付け直せる。
+   */
+  const quickSnapshotPendingRef = useRef(false);
+  const handleQuickCreateManuscriptSnapshot = useCallback(async () => {
+    if (quickSnapshotPendingRef.current) return;
+    quickSnapshotPendingRef.current = true;
+    try {
+      const now = new Date();
+      const label = `${now.toLocaleDateString("ja-JP")} ${now.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`;
+      const id = await handleCreateManuscriptSnapshot({ label });
+      if (id) showToast(`保存点「${label}」を作りました`, { label: "見る", onClick: () => openCheckpointStudio(id) });
+    } finally {
+      quickSnapshotPendingRef.current = false;
+    }
+  }, [handleCreateManuscriptSnapshot, openCheckpointStudio]);
+
   const handleDeleteManuscriptSnapshot = useCallback(
     async (snapshot: ManuscriptSnapshot) => {
       if (snapshot.reason !== "manual") {
@@ -7345,100 +7421,6 @@ export default function App() {
     },
     [projectFolder],
   );
-
-  const handleRenameManuscriptSnapshot = useCallback(async (snapshot: ManuscriptSnapshot) => {
-    if (projectFolder && !canWritePortableProjectState(projectFolder.path)) return;
-    const label = await requestInput({
-      title: "タイトルを編集",
-      label: "タイトル",
-      initialValue: snapshot.label,
-      confirmLabel: "変更",
-      placeholder: "例: 終盤改稿前",
-    });
-    if (!label) return;
-    if (label === snapshot.label) return;
-    if (projectFolder && !(await waitForPortableProjectWrite(projectFolder.path))) return;
-
-    try {
-      if (projectFolder && isTauriRuntime()) {
-        beginPortableProjectMutation(projectFolder.path);
-        const stored = await invoke<CheckpointLoadResult>("update_project_checkpoint_metadata", {
-          rootPath: projectFolder.path,
-          checkpointId: snapshot.id,
-          expectedRevision: snapshot.revision,
-          expectedHash: snapshot.storageHash || null,
-          label,
-          memo: snapshot.memo,
-        });
-        if (!applyCheckpointStoreResult(projectFolder.path, stored)) return;
-      } else {
-        setAppState((current) => ({
-          ...current,
-          snapshots: current.snapshots.map((item) =>
-            item.id === snapshot.id ? { ...item, label } : item,
-          ),
-        }));
-      }
-      showToast("チェックポイントのタイトルを変更しました");
-    } catch (error) {
-      if (projectFolder) reportPortableStorageError(projectFolder.path, error);
-      else {
-        setLastError(String(error));
-        showToast("チェックポイントのタイトルを変更できませんでした");
-      }
-    }
-  }, [projectFolder]);
-
-  const handleEditManuscriptSnapshotMemo = useCallback(async (snapshot: ManuscriptSnapshot) => {
-    if (projectFolder && !canWritePortableProjectState(projectFolder.path)) return;
-    const result = await requestMultiInput({
-      title: "メモを編集",
-      fields: [
-        {
-          id: "memo",
-          label: "メモ",
-          initialValue: snapshot.memo,
-          placeholder: "例: 終盤の分岐前。会話のテンポを試す",
-          optional: true,
-          multiline: true,
-        },
-      ],
-      confirmLabel: "変更",
-    });
-    if (!result) return;
-    const memo = result.memo ?? "";
-    if (memo === snapshot.memo) return;
-    if (projectFolder && !(await waitForPortableProjectWrite(projectFolder.path))) return;
-
-    try {
-      if (projectFolder && isTauriRuntime()) {
-        beginPortableProjectMutation(projectFolder.path);
-        const stored = await invoke<CheckpointLoadResult>("update_project_checkpoint_metadata", {
-          rootPath: projectFolder.path,
-          checkpointId: snapshot.id,
-          expectedRevision: snapshot.revision,
-          expectedHash: snapshot.storageHash || null,
-          label: snapshot.label,
-          memo,
-        });
-        if (!applyCheckpointStoreResult(projectFolder.path, stored)) return;
-      } else {
-        setAppState((current) => ({
-          ...current,
-          snapshots: current.snapshots.map((item) =>
-            item.id === snapshot.id ? { ...item, memo } : item,
-          ),
-        }));
-      }
-      showToast("チェックポイントのメモを変更しました");
-    } catch (error) {
-      if (projectFolder) reportPortableStorageError(projectFolder.path, error);
-      else {
-        setLastError(String(error));
-        showToast("チェックポイントのメモを変更できませんでした");
-      }
-    }
-  }, [projectFolder]);
 
   const handleEditManuscriptSnapshotDetails = useCallback(async (snapshot: ManuscriptSnapshot) => {
     if (projectFolder && !canWritePortableProjectState(projectFolder.path)) return;
@@ -8276,7 +8258,7 @@ export default function App() {
       return;
     }
     if (mode === "checkpoint") {
-      setAppMode("checkpoint");
+      openCheckpointStudio();
       return;
     }
     if (mode === "canvas") {
@@ -13184,6 +13166,17 @@ export default function App() {
                   <AppIcon name="panelRight" className="topbarSvgIcon" />
                 </button>
               )}
+              {projectFolder && appMode !== "checkpoint" && (
+                <button
+                  className="iconButton"
+                  type="button"
+                  aria-label="今の状態を保存点にする（Ctrl+Shift+S）"
+                  title="今の状態を保存点にする（Ctrl+Shift+S）"
+                  onClick={() => void handleQuickCreateManuscriptSnapshot()}
+                >
+                  <AppIcon name="checkpointAdd" className="topbarSvgIcon" />
+                </button>
+              )}
               <button
                 className={`iconButton ${settings.writingMode === "horizontal-tb" ? "activeIconButton" : ""}`}
                 type="button"
@@ -13506,9 +13499,10 @@ export default function App() {
                 onSnapshotSectionCollapsedChange={(collapsed) =>
                   updateSettings("checkpointSectionCollapsed", collapsed)
                 }
-                onCreateSnapshot={() => void handleCreateManuscriptSnapshot()}
-                onRenameSnapshot={(snapshot) => void handleRenameManuscriptSnapshot(snapshot)}
-                onEditSnapshotMemo={(snapshot) => void handleEditManuscriptSnapshotMemo(snapshot)}
+                showSnapshotSection={settings.showCheckpointSection}
+                onCreateSnapshot={() => void handleQuickCreateManuscriptSnapshot()}
+                onOpenSnapshot={(snapshot) => openCheckpointStudio(snapshot?.id)}
+                onEditSnapshotDetails={(snapshot) => void handleEditManuscriptSnapshotDetails(snapshot)}
                 onRestoreSnapshot={(snapshot) => void handleRestoreManuscriptSnapshot(snapshot)}
                 onDeleteSnapshot={(snapshot) => void handleDeleteManuscriptSnapshot(snapshot)}
                     onCollapse={() => setIsLeftSidebarCollapsed(true)}
@@ -13926,6 +13920,16 @@ export default function App() {
                 charCount={charCount}
                 selectionCharCount={selectionCharCount}
                 pageMetrics={editorPageMetrics}
+                checkpoint={settings.showCheckpointStatus && projectFolder ? {
+                  latest: latestManualSnapshot && {
+                    label: latestManualSnapshot.label,
+                    createdAt: latestManualSnapshot.createdAt,
+                    visibleTextLength: latestManualSnapshot.totalVisibleTextLength,
+                  },
+                  currentVisibleTextLength: statusProjectVisibleTextLength,
+                  onOpen: () => openCheckpointStudio(latestManualSnapshot?.id),
+                  onCreate: () => void handleQuickCreateManuscriptSnapshot(),
+                } : null}
                 pluginItems={pluginStatusItems}
                 onPluginItemClick={(pluginId, commandId) =>
                   pluginRuntimeHostRef.current?.executeCommand(pluginId, commandId)
@@ -14237,6 +14241,7 @@ export default function App() {
               currentProjectStatus={checkpointCurrentProjectStatus}
               unavailableCurrentProjectPaths={checkpointUnavailableProjectPaths}
               currentProjectStats={checkpointProjectStats}
+              focusRequest={checkpointFocusRequest}
               onClose={() => setAppMode("write")}
               onCreate={(label) => handleCreateManuscriptSnapshot({ label })}
               onEditDetails={(snapshot) => void handleEditManuscriptSnapshotDetails(snapshot)}

@@ -1,4 +1,5 @@
 import type { SaveStatus } from "../../types";
+import { CheckpointStatus, type CheckpointStatusInfo } from "./CheckpointStatus";
 
 type StatusBarProps = {
   saveStatus: SaveStatus;
@@ -8,6 +9,8 @@ type StatusBarProps = {
   charCount: number;
   selectionCharCount: number | null;
   pageMetrics: { current: number; total: number } | null;
+  /** null なら出さない（設定で非表示、またはプロジェクト未選択）。 */
+  checkpoint: CheckpointStatusInfo | null;
   pluginItems: Array<{
     pluginId: string;
     id: string;
@@ -34,6 +37,7 @@ export function StatusBar({
   charCount,
   selectionCharCount,
   pageMetrics,
+  checkpoint,
   pluginItems,
   onPluginItemClick,
 }: StatusBarProps) {
@@ -52,6 +56,7 @@ export function StatusBar({
           {pageMetrics.current} / {pageMetrics.total}ページ
         </span>
       )}
+      {checkpoint && <CheckpointStatus {...checkpoint} />}
       {pluginItems.length > 0 && (
         <span className="pluginStatusBarItems" aria-label="プラグインの状態">
           {pluginItems.map((item) => item.commandId ? (

@@ -28,6 +28,7 @@ import { fileProgressLabels, fileProgressStatuses } from "../../types";
 import { logHeadingDnd } from "../../utils/headingDndDiagnostics";
 import { getScaledFixedMenuPosition } from "../../utils/contextMenuPosition";
 import { displayedCharacterCount } from "../../editor/ast/characterCount";
+import { formatSnapshotAge } from "../checkpoints/snapshotAge";
 import {
   buildFilePreview,
   buildHeadingPreview,
@@ -117,9 +118,12 @@ type WorkspaceSidebarProps = {
   snapshots: ManuscriptSnapshot[];
   isSnapshotSectionCollapsed: boolean;
   onSnapshotSectionCollapsedChange: (collapsed: boolean) => void;
+  /** false ならチェックポイント欄を出さない（設定）。 */
+  showSnapshotSection: boolean;
   onCreateSnapshot: () => void;
-  onRenameSnapshot: (snapshot: ManuscriptSnapshot) => void;
-  onEditSnapshotMemo: (snapshot: ManuscriptSnapshot) => void;
+  /** チェックポイント画面を開く。保存点を渡すとそれを選んだ状態で開く。 */
+  onOpenSnapshot: (snapshot: ManuscriptSnapshot | null) => void;
+  onEditSnapshotDetails: (snapshot: ManuscriptSnapshot) => void;
   onRestoreSnapshot: (snapshot: ManuscriptSnapshot) => void;
   onDeleteSnapshot: (snapshot: ManuscriptSnapshot) => void;
   onCollapse: () => void;
@@ -747,9 +751,10 @@ export function WorkspaceSidebar({
   snapshots,
   isSnapshotSectionCollapsed,
   onSnapshotSectionCollapsedChange,
+  showSnapshotSection,
   onCreateSnapshot,
-  onRenameSnapshot,
-  onEditSnapshotMemo,
+  onOpenSnapshot,
+  onEditSnapshotDetails,
   onRestoreSnapshot,
   onDeleteSnapshot,
   onCollapse,
@@ -2213,7 +2218,9 @@ export function WorkspaceSidebar({
             ? "現在の本文に一致がありません"
             : "プロジェクト内に一致がありません";
 
-  const manualSnapshots = snapshots.filter((snapshot) => snapshot.reason === "manual");
+  // サイドバーは最近の数件だけ。全件はチェックポイント画面で見る。
+  const allManualSnapshots = snapshots.filter((snapshot) => snapshot.reason === "manual");
+  const manualSnapshots = allManualSnapshots.slice(0, 5);
   const shelterSnapshots = snapshots.filter(
     (snapshot) => snapshot.reason === "auto-before-restore",
   ).slice(0, 3);
@@ -2230,19 +2237,22 @@ export function WorkspaceSidebar({
 
     return (
       <article className="snapshotItem" key={snapshot.id}>
-        <div
+        <button
           className="snapshotItemBody"
-          title={snapshot.memo ? `${snapshot.label}\n${snapshot.memo}` : snapshot.label}
+          type="button"
+          title={`${snapshot.memo ? `${snapshot.label}\n${snapshot.memo}` : snapshot.label}\nクリックで変更を見る`}
+          onClick={() => onOpenSnapshot(snapshot)}
         >
-          <div className="snapshotItemTitleRow">
+          <span className="snapshotItemTitleRow">
             <strong className="snapshotItemTitle">
               {snapshot.label}
             </strong>
             {snapshot.reason === "auto-before-restore" && (
               <span className="snapshotBadge">退避</span>
             )}
-          </div>
-        </div>
+            <span className="snapshotItemAge">{formatSnapshotAge(snapshot.createdAt)}</span>
+          </span>
+        </button>
         <div className="snapshotItemMenuControl">
           <button
             className="snapshotMoreButton"
@@ -2294,28 +2304,26 @@ export function WorkspaceSidebar({
                 </div>
               </div>
               <div className="snapshotMenuDivider" role="presentation" />
-              {snapshot.reason === "manual" && <>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => closeSnapshotMenuAndRun(() => onRenameSnapshot(snapshot))}
-                >
-                  タイトルを編集
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => closeSnapshotMenuAndRun(() => onEditSnapshotMemo(snapshot))}
-                >
-                  メモを編集
-                </button>
-              </>}
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => closeSnapshotMenuAndRun(() => onOpenSnapshot(snapshot))}
+              >
+                変更を見る
+              </button>
+              {snapshot.reason === "manual" && <button
+                type="button"
+                role="menuitem"
+                onClick={() => closeSnapshotMenuAndRun(() => onEditSnapshotDetails(snapshot))}
+              >
+                名前とメモを編集
+              </button>}
               <button
                 type="button"
                 role="menuitem"
                 onClick={() => closeSnapshotMenuAndRun(() => onRestoreSnapshot(snapshot))}
               >
-                復元
+                この時点に戻す
               </button>
               {snapshot.reason === "manual" && <button
                 className="snapshotMenuDanger"
@@ -2551,8 +2559,8 @@ export function WorkspaceSidebar({
         <button
           className="snapshotCreateButton"
           type="button"
-          aria-label="保存点を作成"
-          title="保存点を作成"
+          aria-label="今の状態を保存点にする（Ctrl+Shift+S）"
+          title="今の状態を保存点にする（Ctrl+Shift+S）"
           disabled={!projectFolder}
           onClick={onCreateSnapshot}
         >
@@ -2569,6 +2577,11 @@ export function WorkspaceSidebar({
                 ) : (
                   <div className="snapshotEmptyState">手動チェックポイントはまだありません</div>
                 )}
+                <button className="snapshotShowAllButton" type="button" onClick={() => onOpenSnapshot(null)}>
+                  {allManualSnapshots.length > manualSnapshots.length
+                    ? `すべて見る（${snapshots.length}件）`
+                    : "チェックポイント画面で見る"}
+                </button>
                 {shelterSnapshots.length > 0 && (
                   <div className="shelterSnapshotGroup">
                     <button
@@ -2654,6 +2667,12 @@ export function WorkspaceSidebar({
           />
         )}
       </div>
+
+      {showSnapshotSection && !isProjectSearchMode && projectFolder && library?.role !== "root" && (
+        <div className={`snapshotDock ${isSnapshotSectionCollapsed ? "collapsedSnapshotDock" : ""}`}>
+          {renderSnapshotSection()}
+        </div>
+      )}
 
       {!isProjectSearchMode && sidebarMode === "tree" && projectFolder && (
         <footer className="fileViewSummary">

@@ -3489,6 +3489,22 @@ html:not([data-window-fullscreen="true"])
   margin-left: auto;
 }
 
+.statusCheckpoint {
+  padding: 0 4px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.statusCheckpoint:hover {
+  background: var(--control-hover);
+  color: var(--text-primary);
+}
+
 .statusPath {
   min-width: 0;
   max-width: 42vw;
@@ -6269,9 +6285,8 @@ body {
 
 .snapshotDock {
   display: flex;
-  min-height: 236px;
-  max-height: 292px;
-  flex: 0 0 184px;
+  max-height: 260px;
+  flex: 0 0 auto;
   flex-direction: column;
   padding: 7px 10px 9px;
   border-top: 0.5px solid var(--border-subtle);
@@ -6391,6 +6406,13 @@ body {
   min-width: 0;
   align-items: center;
   min-height: 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
 }
 
 .snapshotItemTitleRow {
@@ -6398,6 +6420,32 @@ body {
   min-width: 0;
   align-items: center;
   gap: 5px;
+}
+
+.snapshotItemAge {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.snapshotShowAllButton {
+  justify-self: start;
+  margin-top: 4px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.snapshotShowAllButton:hover {
+  background: var(--control-hover);
+  color: var(--text-primary);
 }
 
 .snapshotItemTitle {

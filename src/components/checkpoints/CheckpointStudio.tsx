@@ -31,6 +31,8 @@ type Props = {
   unavailableCurrentProjectPaths: ReadonlySet<string>;
   /** 既存の文字数カウント（表示文字数）による現在のプロジェクトの合計。 */
   currentProjectStats: { fileCount: number; visibleTextLength: number } | null;
+  /** サイドバーや通知から開いたとき、選んでおく保存点。nonce が変わるたびに選び直す。 */
+  focusRequest?: { id: string; nonce: number } | null;
   onClose: () => void;
   /** 保存点を作り、作れたらその ID を返す。 */
   onCreate: (label: string) => Promise<string | null>;
@@ -193,9 +195,9 @@ function OrderCard({ changes, open, labels, onToggle, onRestore }: { changes: Or
 }
 
 export function CheckpointStudio(props: Props) {
-  const { projectFolder, snapshots, currentProjectFiles, currentProjectStatus, unavailableCurrentProjectPaths, currentProjectStats, onClose, onCreate, onEditDetails, onDelete, onRestore, onRestoreFile, onRestoreOrder } = props;
+  const { projectFolder, snapshots, currentProjectFiles, currentProjectStatus, unavailableCurrentProjectPaths, currentProjectStats, focusRequest, onClose, onCreate, onEditDetails, onDelete, onRestore, onRestoreFile, onRestoreOrder } = props;
   const sorted = useMemo(() => snapshots.slice().sort((left, right) => right.createdAt - left.createdAt), [snapshots]);
-  const [selectedId, setSelectedId] = useState<string | null>(() => sorted[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => focusRequest?.id ?? sorted[0]?.id ?? null);
   const [compareId, setCompareId] = useState<CompareId>("current");
   const [view, setView] = useState<ViewMode>("inline");
   const [showAuto, setShowAuto] = useState(true);
@@ -209,6 +211,7 @@ export function CheckpointStudio(props: Props) {
   const [banner, setBanner] = useState("");
   const menuRef = useRef<HTMLDivElement | null>(null);
   const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
+  const mainScrollRef = useRef<HTMLDivElement | null>(null);
 
   const selected = sorted.find((item) => item.id === selectedId) ?? sorted[0] ?? null;
   const selectedIndex = selected ? sorted.indexOf(selected) : -1;
@@ -273,6 +276,13 @@ export function CheckpointStudio(props: Props) {
     return () => document.removeEventListener("mousedown", close);
   }, [menuOpen]);
   useEffect(() => { if (confirm) confirmButtonRef.current?.focus(); }, [confirm]);
+  // 別の保存点・比較先は別の内容なので先頭から読む。表示モードの切り替えでは位置を保つ。
+  useEffect(() => { if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0; }, [selected?.id, effectiveCompare]);
+  useEffect(() => {
+    if (!focusRequest) return;
+    setSelectedId(focusRequest.id);
+    setCompareId("current");
+  }, [focusRequest]);
 
   const choose = (snapshot: ManuscriptSnapshot) => { setSelectedId(snapshot.id); setCompareId("current"); setMenuOpen(false); };
   const saveCreate = async () => {
@@ -394,9 +404,9 @@ export function CheckpointStudio(props: Props) {
     </>;
   }
 
-  const main = <main className="cpMain"><div className="cpWrap">
+  const main = <main className="cpMain"><div className="cpMainHead"><div className="cpWrap">
     {banner && <div className="cpBanner" role="status"><span>{banner}</span><button type="button" onClick={() => setBanner("")}>閉じる</button></div>}
-    {selected ? <>
+    {selected && <>
       <div className="cpDetailHead">
         <div className="cpDetailTitle">
           <h2>{selected.label}</h2>
@@ -426,9 +436,11 @@ export function CheckpointStudio(props: Props) {
           <button type="button" aria-pressed={view === "side"} onClick={() => setView("side")}>左右に並べる</button>
         </div>
       </div>
-      {diffBody}
-    </> : <div className="cpEmpty">保存点はまだありません。左の「今の状態を保存点にする」から作れます。</div>}
-  </div></main>;
+    </>}
+  </div></div>
+  <div className="cpMainScroll" ref={mainScrollRef}><div className="cpWrap">
+    {selected ? diffBody : <div className="cpEmpty">保存点はまだありません。左の「今の状態を保存点にする」から作れます。</div>}
+  </div></div></main>;
 
   let dialog: ReactNode = null;
   if (confirm && selected) {

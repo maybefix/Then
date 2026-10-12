@@ -42,6 +42,10 @@ sidebarSource = sidebarSource
     "const displayedCharacterCount = (metrics, options) => options.includeWhitespace ? metrics.textLength : metrics.visibleTextLength;",
   )
   .replace(
+    'import { formatSnapshotAge } from "../checkpoints/snapshotAge";',
+    'const formatSnapshotAge = () => "たった今";',
+  )
+  .replace(
     /import \{\s*buildSidebarMetrics,\s*getSidebarFolderCharCount,\s*getSidebarHeadingCharCount,\s*\} from "\.\/sidebarMetrics";/,
     `const buildSidebarMetrics = (_folder, projectAst) => ({
       projectAstFiles: new Map((projectAst?.files ?? []).map((file) => [file.path, file])),
@@ -249,8 +253,9 @@ function Harness({ activeOutlineIds = new Set() } = {}) {
     isSnapshotSectionCollapsed: true,
     onSnapshotSectionCollapsedChange() {},
     onCreateSnapshot() {},
-    onRenameSnapshot() {},
-    onEditSnapshotMemo() {},
+    onOpenSnapshot() {},
+    onEditSnapshotDetails() {},
+    showSnapshotSection: true,
     onRestoreSnapshot() {},
     onDeleteSnapshot() {},
     onCollapse() {},

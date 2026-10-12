@@ -141,7 +141,34 @@ try {
   assert.match(text(), /読み込めなかった現在のファイル1件は比較から外しています/);
   assert.doesNotMatch(text(), /なくなり/, "an unreadable file must not be reported as deleted");
 
+  // サイドバー・ステータスバーから特定の保存点を選んで開く
   await act(async () => { reactRoot.unmount(); });
+  const focusedRoot = createRoot(container);
+  await act(async () => { focusedRoot.render(React.createElement(CheckpointStudio, { ...props, focusRequest: { id: "s0", nonce: 1 } })); });
+  assert.equal(container.querySelector(".cpSnap[aria-current='true'] .cpSnapName").textContent, "最初");
+  await act(async () => { focusedRoot.render(React.createElement(CheckpointStudio, { ...props, focusRequest: { id: "s1", nonce: 2 } })); });
+  assert.equal(container.querySelector(".cpSnap[aria-current='true'] .cpSnapName").textContent, "第2稿に入る前");
+  await act(async () => { focusedRoot.unmount(); });
+
+  // ステータスバーの「保存点 N分前 · ±字」
+  const { CheckpointStatus } = await server.ssrLoadModule("/src/components/status/CheckpointStatus.tsx");
+  const statusRoot = createRoot(container);
+  const statusCalls = [];
+  const status = (latest, current) => React.createElement(CheckpointStatus, {
+    latest, currentVisibleTextLength: current, onOpen: () => statusCalls.push("open"), onCreate: () => statusCalls.push("create"),
+  });
+  await act(async () => { statusRoot.render(status({ label: "第2稿", createdAt: Date.now() - 2 * 3_600_000, visibleTextLength: 1000 }, 2240)); });
+  assert.equal(container.textContent, "保存点 2時間前 · +1,240字");
+  await click(container.querySelector("button"));
+  await act(async () => { statusRoot.render(status({ label: "第2稿", createdAt: Date.now() - 5 * 60_000, visibleTextLength: 1000 }, 680)); });
+  assert.equal(container.textContent, "保存点 5分前 · −320字");
+  await act(async () => { statusRoot.render(status({ label: "第2稿", createdAt: Date.now(), visibleTextLength: 1000 }, null)); });
+  assert.equal(container.textContent, "保存点 たった今", "no delta while the project index is incomplete");
+  await act(async () => { statusRoot.render(status(null, 500)); });
+  assert.equal(container.textContent, "保存点なし");
+  await click(container.querySelector("button"));
+  assert.deepEqual(statusCalls, ["open", "create"]);
+  await act(async () => { statusRoot.unmount(); });
   console.log("checkpoint studio UI tests passed");
 } finally {
   await server.close();
