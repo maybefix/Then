@@ -9,8 +9,12 @@
   - `handleCompositionStart` から同期的に呼んでいる `renderLineBreakMarks()`
   - `compositionend` の1フレーム後に流す `refreshComposition` 付きのトランザクションと、それに伴う装飾の作り直し（IME は変換の区切りごとに `compositionend` → `compositionstart` を続けて投げる）
   - 禁則処理などの装飾 span（`.ks-line-head-ban` / `.ks-line-end-ban` / `.ks-keep-short`）の作り直し
-- **調べ方:** 変換中に editor の DOM がどう書き換えられているかを `MutationObserver` で記録する仕掛けを入れ、実機の IME で一度操作して、変換中の文字を含むノードを書き換えている処理を特定する。ブラウザ画面からの合成イベントでは実際の IME の挙動（選択範囲の削除や変換範囲の管理）を再現できないため、実機での操作が必要。
-- **状態:** 未修正。原因は特定していない。
+- **調べ方:** 環境変数 `VITE_QA_IME_TRACE=1` を付けて開発版を起動すると（PowerShell では `$env:VITE_QA_IME_TRACE="1"; npm run tauri:dev`）、`src/editor/imeTrace.ts` が変換ごとにイベント・トランザクション・DOM 変更（スクリプトによる変更は呼び出し元のスタック付き）を記録し、Vite 開発サーバー経由で `tmp/ime-trace/*.json` に保存する。DOM の書き込み処理を差し替えるため、付けない限り動かない。
+- **原因:** 実機の記録で特定した。選択範囲が装飾の境界をまたぐと（例: 段落先頭の `ks-indent-anchor` の span「　千」から通常の文字列まで）、変換中の文字列が複数のテキストノードにまたがる。変換中は装飾の位置をずらして使い回すため、IME が範囲の先頭を置き換えると境界をまたぐ装飾の形が変わる。ProseMirror は変換中のノードを1つしか保護できないので段落を描き直し、IME が書き込んでいたテキストノードが新しいノードに置き換わる。IME は変換範囲を見失い、次の候補を別の位置へ丸ごと挿入していた。選択なしの入力では変換中の文字列が1つのテキストノードに収まるため起きない。
+- **修正:** IME がキーを受け取った `keydown`（`Process` / keyCode 229 / `Convert`）の時点、つまり変換開始前に、選択範囲をまたぐ装飾と範囲内のウィジェットを外し、範囲を1つのテキストノードにする（`clearImeReplaceRange`）。外した行は `compositionend` 後の `refreshComposition` で付け直す。変換が始まらなかった場合は `keyup` で付け直す。`compositionstart` で外すと、ProseMirror が既に変換中として選択位置のノードを保護しているため DOM と内部の対応がずれ、逆効果だった。
+- **確認:** `scripts/repro-ime-selection-replace.mjs`（ヘッドレス Edge、CDP の IME 入力）で、選択範囲を置き換える5ケース（段落先頭・段落途中・ルビと太字をまたぐ範囲）の変換中の DOM 書き換えが、修正前の 50〜204 回から 0 回になった。`scripts/fuzz-editor-decorations.mjs` で装飾の不整合なし。
+- **残り:** 選択なしで段落の1文字目の直後に入力すると、変換中に段落が描き直される（ヘッドレスで 104 回）。今回の修正より前からあり、修正の前後で変わらない。`ks-indent-anchor` の span の末尾に入力が入るためと見られる。実機の IME で症状が出るかは未確認。
+- **状態:** 修正済み。Tauri 開発版の実機 IME で症状が出ないことを確認した（選択範囲の置き換え、候補切り替え56回、変換中の DOM 書き換え0回）。
 
 ## 2026-09-25: コマンドスイッチャーを Esc で閉じると本文カーソルが先頭へ移る
 

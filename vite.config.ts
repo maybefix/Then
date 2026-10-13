@@ -1,14 +1,42 @@
-import { defineConfig } from "vite";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
+// Receives IME sessions recorded by src/editor/imeTrace.ts, which runs only
+// on a dev server started with VITE_QA_IME_TRACE=1.
+const imeTraceSink = (): Plugin => ({
+  name: "then-ime-trace-sink",
+  apply: (_config, { command }) => command === "serve" && process.env.VITE_QA_IME_TRACE === "1",
+  configureServer(server) {
+    server.middlewares.use("/__dev/ime-trace", (request, response) => {
+      if (request.method !== "POST") {
+        response.statusCode = 405;
+        response.end();
+        return;
+      }
+      let body = "";
+      request.setEncoding("utf8");
+      request.on("data", (chunk: string) => (body += chunk));
+      request.on("end", async () => {
+        const directory = path.resolve("tmp/ime-trace");
+        await mkdir(directory, { recursive: true });
+        await writeFile(path.join(directory, `${new Date().toISOString().replace(/[:.]/g, "-")}.json`), body);
+        response.statusCode = 204;
+        response.end();
+      });
+    });
+  },
+});
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), imeTraceSink()],
   clearScreen: false,
   server: {
     port: Number(process.env.PORT) || 1420,
     strictPort: true,
     watch: {
-      ignored: ["**/.edge-ui-check*/**", "**/src-tauri/target/**"],
+      ignored: ["**/.edge-ui-check*/**", "**/src-tauri/target/**", "**/tmp/**"],
     },
   },
   envPrefix: ["VITE_", "TAURI_"],

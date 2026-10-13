@@ -154,6 +154,8 @@ type DecorationWindow = {
 
 type AstMeta = {
   refreshComposition?: boolean;
+  /** A composition is starting over this selection; see `clearImeReplaceRange`. */
+  imeReplaceRange?: { from: number; to: number };
   visibleCenter?: number;
   rebuild?: boolean;
   fullDecorations?: boolean;
@@ -1881,6 +1883,46 @@ function updateEditorTextWithShadow(
   return rebuilt;
 }
 
+/**
+ * IME composition over a selection replaces text that decorations may split
+ * into several DOM text nodes. ProseMirror keeps only one text node under the
+ * IME; when mapping reshapes a decoration that crosses the replaced range, it
+ * redraws the others, the IME loses its composition range and each candidate
+ * is inserted again beside the last. Dropping the decorations that the
+ * replacement would reshape leaves the range plain text. The lines stay stale
+ * until compositionend re-decorates them.
+ */
+function clearImeReplaceRange(
+  value: AstPluginState,
+  doc: PMNode,
+  { from, to }: { from: number; to: number },
+): AstPluginState {
+  const reshaped = value.decoSet.find(from, to).filter((decoration) => {
+    if (decoration.from === decoration.to) return decoration.from > from && decoration.from < to;
+    if (!(decoration as unknown as { inline: boolean }).inline) return false;
+    if (decoration.to < from || decoration.from > to) return false;
+    const spec = decoration.spec as { inclusiveStart?: boolean; inclusiveEnd?: boolean };
+    // Still around the composition after mapping the replacement.
+    const keepsStart = decoration.from < from || (decoration.from === from && spec.inclusiveStart === true);
+    const keepsEnd = decoration.to > to || (decoration.to === to && spec.inclusiveEnd === true);
+    if (keepsStart && keepsEnd) return false;
+    // Merely adjacent: the replacement does not move its boundary.
+    return decoration.to > from && decoration.from < to;
+  });
+  if (!reshaped.length) return value;
+  const first = doc.resolve(from).index(0);
+  const last = doc.resolve(to).index(0) + 1;
+  const stale = value.decoWindow.stale;
+  return {
+    ...value,
+    decoSet: value.decoSet.remove(reshaped),
+    decoWindow: {
+      ...value.decoWindow,
+      stale: { from: Math.min(first, stale?.from ?? first), to: Math.max(last, stale?.to ?? last) },
+    },
+  };
+}
+
 function applyAst(
   tr: Transaction,
   value: AstPluginState,
@@ -1888,6 +1930,7 @@ function applyAst(
   newState: EditorState,
 ): AstPluginState {
   const meta = tr.getMeta(astKey) as AstMeta | undefined;
+  if (meta?.imeReplaceRange && !tr.docChanged) return clearImeReplaceRange(value, newState.doc, meta.imeReplaceRange);
   let visibleCenter = value.visibleCenter;
   const fullDecorations =
     typeof meta?.fullDecorations === "boolean"
@@ -4615,6 +4658,7 @@ export function VerticalTextEditor({
     };
 
     const handleCompositionStart = () => {
+      imeReplacePrepared = false;
       cancelInitialAdjustment();
       stopCenterAnimation();
       prepareImeLayoutTarget();
@@ -4623,6 +4667,34 @@ export function VerticalTextEditor({
       // 動かしたスクロールを、スナップがページ境界へ引き戻してしまうため。
       shellRef.current?.setAttribute("data-composing", "true");
       renderLineBreakMarks();
+    };
+
+    // 選択範囲を変換で置き換えるときは、範囲をまたぐ装飾を変換開始前に外して
+    // 1つのテキストノードにする（clearImeReplaceRange）。compositionstart では
+    // ProseMirror が既に変換中として選択位置のノードを保護するため遅い。
+    let imeReplacePrepared = false;
+    const handleImeKeyDown = (event: KeyboardEvent) => {
+      if (editor.view.composing || editor.state.selection.empty) return;
+      if (event.keyCode !== 229 && event.key !== "Process" && event.key !== "Convert") return;
+      const { from, to } = editor.state.selection;
+      imeReplacePrepared = true;
+      editor.view.dispatch(
+        editor.state.tr
+          .setMeta(astKey, { imeReplaceRange: { from, to } } satisfies AstMeta)
+          .setMeta("addToHistory", false),
+      );
+    };
+    const handleImeKeyUp = () => {
+      if (!imeReplacePrepared || editor.view.composing) return;
+      imeReplacePrepared = false;
+      // 変換が始まらなかった。compositionend と同じく外した装飾を戻す。
+      if (!composingRef.current) {
+        editor.view.dispatch(
+          editor.state.tr
+            .setMeta(astKey, { refreshComposition: true } satisfies AstMeta)
+            .setMeta("addToHistory", false),
+        );
+      }
     };
 
     const handleCompositionUpdate = () => {
@@ -4772,12 +4844,22 @@ export function VerticalTextEditor({
     window.addEventListener("keydown", cancelInitialAdjustment, { capture: true });
     window.addEventListener("pointerup", handlePointerUp);
     window.addEventListener("pointercancel", handlePointerCancel);
+    editor.view.dom.addEventListener("keydown", handleImeKeyDown);
+    editor.view.dom.addEventListener("keyup", handleImeKeyUp);
     editor.view.dom.addEventListener("compositionstart", handleCompositionStart);
     editor.view.dom.addEventListener("compositionupdate", handleCompositionUpdate);
     editor.view.dom.addEventListener("compositionend", handleCompositionEnd);
     scroller.addEventListener("scroll", handleScroll, { passive: true });
     window.addEventListener("resize", handleResize);
     document.fonts?.addEventListener("loadingdone", handleFontLoadingDone);
+    let uninstallImeTrace: (() => void) | null = null;
+    let imeTraceDisposed = false;
+    // IME の記録は開発サーバーを VITE_QA_IME_TRACE=1 で起動したときだけ動かす。
+    if (import.meta.env.DEV && import.meta.env.VITE_QA_IME_TRACE === "1") {
+      void import("./editor/imeTrace").then(({ installImeTrace }) => {
+        if (!imeTraceDisposed) uninstallImeTrace = installImeTrace(editor);
+      });
+    }
 
     const initialOffset = Math.min(initialSelectionRef.current, docToText(editor.state.doc).length);
     if (initialOffset > 0) {
@@ -4824,12 +4906,16 @@ export function VerticalTextEditor({
       window.removeEventListener("keydown", cancelInitialAdjustment, { capture: true });
       window.removeEventListener("pointerup", handlePointerUp);
       window.removeEventListener("pointercancel", handlePointerCancel);
+      editor.view.dom.removeEventListener("keydown", handleImeKeyDown);
+      editor.view.dom.removeEventListener("keyup", handleImeKeyUp);
       editor.view.dom.removeEventListener("compositionstart", handleCompositionStart);
       editor.view.dom.removeEventListener("compositionupdate", handleCompositionUpdate);
       editor.view.dom.removeEventListener("compositionend", handleCompositionEnd);
       scroller.removeEventListener("scroll", handleScroll);
       window.removeEventListener("resize", handleResize);
       document.fonts?.removeEventListener("loadingdone", handleFontLoadingDone);
+      imeTraceDisposed = true;
+      uninstallImeTrace?.();
       if (centerFrame !== null) cancelAnimationFrame(centerFrame);
       if (visibleFrame !== null) cancelAnimationFrame(visibleFrame);
       if (scrollFrame !== null) cancelAnimationFrame(scrollFrame);
