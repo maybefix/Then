@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   useRef,
@@ -26,7 +27,7 @@ import type {
 } from "../../types";
 import { fileProgressLabels, fileProgressStatuses } from "../../types";
 import { logHeadingDnd } from "../../utils/headingDndDiagnostics";
-import { getScaledFixedMenuPosition } from "../../utils/contextMenuPosition";
+import { getScaledFixedMenuPosition, getUiFontScale } from "../../utils/contextMenuPosition";
 import { displayedCharacterCount } from "../../editor/ast/characterCount";
 import { formatSnapshotAge } from "../checkpoints/snapshotAge";
 import {
@@ -789,10 +790,10 @@ export function WorkspaceSidebar({
   const [isShelterListExpanded, setIsShelterListExpanded] = useState(false);
   const [snapshotMenu, setSnapshotMenu] = useState<{
     id: string;
-    placement: "above" | "below";
     x: number;
     y: number;
   } | null>(null);
+  const snapshotMenuRef = useRef<HTMLDivElement | null>(null);
   const [navigatorLocation, setNavigatorLocation] = useState<
     { kind: "folder" | "file"; path: string } | null
   >(null);
@@ -847,6 +848,16 @@ export function WorkspaceSidebar({
       window.removeEventListener("pointerdown", close);
       window.removeEventListener("keydown", handleKeyDown);
     };
+  }, [snapshotMenu]);
+
+  // 行の高さに揃えて開き、窓の下端を越える分だけ上へ寄せる。高さは中身で変わるので実測する。
+  useLayoutEffect(() => {
+    const menu = snapshotMenuRef.current;
+    if (!snapshotMenu || !menu) return;
+    const scale = getUiFontScale();
+    const margin = 8;
+    const maxTop = window.innerHeight / scale - menu.offsetHeight - margin;
+    menu.style.top = `${Math.max(margin, Math.min(snapshotMenu.y, maxTop))}px`;
   }, [snapshotMenu]);
 
   // プロジェクトフォルダが切り替わったらナビゲータをルートに戻す。
@@ -2263,26 +2274,33 @@ export function WorkspaceSidebar({
             aria-haspopup="menu"
             onClick={(event) => {
               event.stopPropagation();
-              const buttonRect = event.currentTarget.getBoundingClientRect();
-              const shouldOpenAbove = window.innerHeight - buttonRect.bottom < 260;
+              // 一覧に被せないよう、サイドバーの右隣に行の高さで開く。
+              // メニューは UI 倍率の zoom 下にあるので、left/top は zoom 前の座標で渡す。
+              const scale = getUiFontScale();
+              const rowRect = event.currentTarget
+                .closest(".snapshotItem")
+                ?.getBoundingClientRect() ?? event.currentTarget.getBoundingClientRect();
+              const sidebarRect = event.currentTarget
+                .closest(".workspaceSidebar")
+                ?.getBoundingClientRect() ?? rowRect;
+              const menuWidth = 248;
+              const left = Math.min(
+                sidebarRect.right / scale + 6,
+                window.innerWidth / scale - menuWidth - 8,
+              );
               setSnapshotMenu((current) =>
                 current?.id === snapshot.id
                   ? null
-                  : {
-                      id: snapshot.id,
-                      placement: shouldOpenAbove ? "above" : "below",
-                      x: buttonRect.right,
-                      y: shouldOpenAbove ? buttonRect.top - 4 : buttonRect.bottom + 4,
-                    },
+                  : { id: snapshot.id, x: left, y: rowRect.top / scale },
               );
             }}
           >
             ･･･
           </button>
-          {isSnapshotMenuOpen && (
+          {isSnapshotMenuOpen && createPortal(
             <div
+              ref={snapshotMenuRef}
               className="snapshotMenu"
-              data-placement={snapshotMenu.placement}
               style={{ left: snapshotMenu.x, top: snapshotMenu.y }}
               role="menu"
               onPointerDown={(event) => event.stopPropagation()}
@@ -2333,7 +2351,8 @@ export function WorkspaceSidebar({
               >
                 削除
               </button>}
-            </div>
+            </div>,
+            document.querySelector<HTMLElement>(".appShell") ?? document.body,
           )}
         </div>
       </article>

@@ -80,8 +80,8 @@ function ClipIcon() {
 function OpenIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="5" y="6" width="12" height="12" rx="2" /><path d="M13 3h8v8m-1-7-8 8" /></svg>;
 }
-function ChevronRightIcon() {
-  return <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>;
+function InboxIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 13h5l1.5 3h5L16 13h5" /><path d="M5.5 5h13L21 13v6H3v-6z" /></svg>;
 }
 function ChevronLeftIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6" /></svg>;
@@ -445,7 +445,7 @@ export function IdeaPane(props: IdeaPaneProps) {
             </IdeaComposerBox></div>
             <div className="ideaChipsRow"><div className="ideaChips" aria-label="フィルタ">{FILTERS.map(([value, label]) => <button key={value} type="button" className={`ideaChip ${filter === value ? "isActive" : ""}`} onClick={() => setFilter(value)}>{label}</button>)}</div></div>
           </div>
-          <div className="ideaScroll">{visibleThreads.length === 0 ? <div className="ideaEmpty">該当するスレッドがありません</div> : visibleThreads.map((thread) => { const items = threadItems(thread, threadLayouts); const first = items.find((item) => itemMatches(thread, item)); const fragment = first ? fragmentForItem(thread, first) : null; const ref = first?.sourceType === "reference" ? candidateByPath.get(normalizedReferenceKey(first.sourcePath)) : null; return <article key={thread.id} className={`ideaThreadRow ${thread.kind === "inbox" ? "isInbox" : ""} ${thread.starred ? "isStarred" : ""}`} onClick={() => openThread(thread.id)}><div className="ideaRowMain"><div className="ideaRowTitle">{thread.starred && <span className="ideaRowStar"><StarIcon /></span>}{thread.title}</div><div className="ideaRowSummary">{fragment?.body ?? ref?.name ?? "（項目なし）"}</div></div><div className="ideaRowAside"><span className="ideaRowCount" title={`${items.length} 項目`} aria-label={`${items.length} 項目`}>{items.length}</span><span className="ideaRowChevron"><ChevronRightIcon /></span></div></article>; })}</div>
+          <div className="ideaScroll">{visibleThreads.length === 0 ? <div className="ideaEmpty">該当するスレッドがありません</div> : visibleThreads.map((thread) => { const items = threadItems(thread, threadLayouts); const first = items.find((item) => itemMatches(thread, item)); const fragment = first ? fragmentForItem(thread, first) : null; const ref = first?.sourceType === "reference" ? candidateByPath.get(normalizedReferenceKey(first.sourcePath)) : null; const refCount = items.filter((item) => item.sourceType === "reference").length; return <article key={thread.id} className={`ideaThreadRow ${thread.kind === "inbox" ? "isInbox" : ""} ${thread.starred ? "isStarred" : ""}`} onClick={() => openThread(thread.id)}><div className="ideaRowTitle">{thread.kind === "inbox" && <span className="ideaRowInbox"><InboxIcon /></span>}{thread.starred && <span className="ideaRowStar"><StarIcon /></span>}<span className="ideaRowName">{thread.title}</span></div><div className="ideaRowSummary">{fragment?.body ?? ref?.name ?? "（項目なし）"}</div><div className="ideaRowFoot"><span>{items.length} 件</span><span aria-hidden="true">·</span><time dateTime={new Date(thread.updatedAt).toISOString()}>{formatFragmentDate(thread.updatedAt)}</time>{refCount > 0 && <span className="ideaRowRefs" title={`資料 ${refCount} 件`}><ClipIcon />{refCount}</span>}</div></article>; })}</div>
         </section>
 
         <section className="ideaView" aria-label="スレッド詳細">{selected && <>

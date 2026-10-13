@@ -733,6 +733,7 @@ textarea,
 .rightSidebar,
 .statusbar,
 .treeContextMenu,
+.snapshotMenu,
 .editorContextMenu,
 .editorFindPopover,
 .modal,
@@ -6293,13 +6294,13 @@ body {
   background: color-mix(in srgb, var(--sidebar-bg, var(--bg-panel)) 88%, var(--bg-root));
 }
 
+/* 畳んだときは見出し1行ぶんだけ。一覧との間隔用の下余白も要らない。 */
 .collapsedSnapshotDock {
-  min-height: 60px;
-  max-height: 60px;
-  flex-basis: 58px;
+  padding-block: 7px;
 }
 
 .collapsedSnapshotDock .snapshotSectionHeader {
+  padding-bottom: 0;
   border-bottom: 0;
 }
 
@@ -6504,19 +6505,15 @@ body {
   position: fixed;
   z-index: 95;
   display: grid;
-  width: min(248px, calc(100vw - 24px));
-  max-height: min(260px, calc(100vh - 24px));
+  /* zoom does not shrink vw/vh, so divide the viewport caps by the UI zoom. */
+  width: min(248px, calc((100vw - 24px) / var(--ui-font-scale, 1)));
+  max-height: min(260px, calc((100vh - 24px) / var(--ui-font-scale, 1)));
   overflow-y: auto;
   padding: 6px;
   border: 0.5px solid var(--border-strong);
   border-radius: 6px;
   background: var(--bg-panel-strong);
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.36);
-  transform: translateX(-100%);
-}
-
-.snapshotMenu[data-placement="above"] {
-  transform: translate(-100%, -100%);
 }
 
 .snapshotMenuInfo {
@@ -8670,10 +8667,6 @@ body {
   background: color-mix(in srgb, var(--accent) 6%, var(--bg-secondary));
 }
 
-.ideaRowMain {
-  min-width: 0;
-}
-
 .ideaRowTitle {
   display: flex;
   align-items: center;
@@ -8709,32 +8702,6 @@ body {
   line-height: 1.55;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-}
-
-.ideaRowMeta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 7px;
-  color: var(--text-faint);
-  font-size: 11px;
-}
-
-.ideaRowChevron {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  color: var(--text-faint);
-}
-
-.ideaRowChevron svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.8;
 }
 
 .ideaDetailTop {
@@ -9345,31 +9312,44 @@ body {
   background: var(--idea-ground);
 }
 
-/* スレッド一覧: カードではなく、区切り線で分けた行として並べる。 */
+/* スレッド一覧: カードとして並べる。ペインが狭いうちは1列で本文を読ませ、
+   広げたら2列のタイルにして一覧性を取る。インボックスは常に先頭で横幅いっぱい。 */
 .ideaView:first-child .ideaScroll {
-  padding: 0 0 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 8px;
+  padding: 10px 12px 18px;
+}
+
+.ideaView:first-child {
+  container-type: inline-size;
+}
+
+.ideaView:first-child .ideaScroll > .ideaEmpty {
+  grid-column: 1 / -1;
 }
 
 .ideaThreadRow {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
   margin-top: 0;
-  padding: 12px 12px 12px 16px;
-  border: 0;
-  border-bottom: 0.5px solid var(--border-subtle);
-  border-radius: 0;
-  background: transparent;
-}
-
-.ideaThreadRow:hover {
+  padding: 11px 13px 10px;
+  border: 0.5px solid var(--border-subtle);
   background: var(--idea-card);
 }
 
-.ideaThreadRow.isInbox {
-  background: transparent;
-  box-shadow: inset 3px 0 0 var(--accent);
+.ideaThreadRow:hover {
+  border-color: var(--border-strong);
+  background: var(--idea-card-hover);
 }
 
-.ideaThreadRow.isStarred {
-  box-shadow: inset 3px 0 0 var(--warning);
+.ideaThreadRow.isInbox {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  background: transparent;
 }
 
 .ideaThreadRow.isInbox:hover {
@@ -9380,31 +9360,70 @@ body {
   font-size: 13.5px;
 }
 
-.ideaRowSummary {
-  color: var(--text-secondary);
+.ideaRowName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.ideaRowAside {
+.ideaRowInbox {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.ideaRowInbox svg,
+.ideaRowRefs svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.ideaRowSummary {
+  margin-top: 0;
+  color: var(--text-secondary);
+  -webkit-line-clamp: 3;
+}
+
+.ideaRowFoot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 2px;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ideaRowRefs {
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  margin-left: auto;
 }
 
-.ideaRowCount {
-  min-width: 22px;
-  padding: 2px 7px;
-  border: 0.5px solid var(--border-subtle);
-  border-radius: 999px;
-  background: var(--idea-card);
-  color: var(--text-muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.3;
-  text-align: center;
-}
+@container (min-width: 420px) {
+  .ideaView:first-child .ideaScroll {
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  }
 
-.ideaRowAside .ideaRowChevron {
-  width: 16px;
+  .ideaThreadRow:not(.isInbox) {
+    min-height: 124px;
+  }
+
+  .ideaThreadRow.isInbox {
+    grid-column: 1 / -1;
+  }
+
+  .ideaThreadRow.isInbox .ideaRowSummary {
+    -webkit-line-clamp: 2;
+  }
 }
 
 /* スレッド詳細: 沈めた地の上に、明るいカードを置く。 */
