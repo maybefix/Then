@@ -13,7 +13,7 @@ import type {
   LinkedExportDocument,
   LoadedExportSource,
 } from "./types";
-import { IMAGE_SCHEME, resolveImageUrl, scanImageSources } from "../utils/markdownImage";
+import { IMAGE_SCHEME } from "../utils/markdownImage";
 
 export type PreviewAssets = {
   document: LinkedExportDocument;
@@ -128,15 +128,12 @@ function probeImage(url: string): Promise<boolean> {
   });
 }
 
+// Probe exactly the images the export will place: only the files ticked for
+// output, and only real image notation (not `![…](…)` written inside code).
 async function findUnavailableImages(job: ExportJob, sources: LoadedExportSource[]): Promise<string[]> {
-  const urls = new Set<string>();
-  for (const source of sources) {
-    for (const src of scanImageSources(source.content)) {
-      const url = resolveImageUrl(src, source.path, job.imageUrlBase);
-      if (url) urls.add(url);
-    }
-  }
-  const checked = await Promise.all([...urls].map(async (url) => ((await probeImage(url)) ? null : url)));
+  const { collectExportImageUrls } = await import("./linkedDocument");
+  const urls = collectExportImageUrls(job, sources);
+  const checked = await Promise.all(urls.map(async (url) => ((await probeImage(url)) ? null : url)));
   return checked.filter((url): url is string => url !== null);
 }
 

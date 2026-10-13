@@ -49,6 +49,11 @@ const job: ExportJob = {
 };
 const urls = collectExportImageUrls(job, sources);
 assert.equal(urls.length, 4);
+// Only ticked files, and never notation written inside code, get probed.
+assert.deepEqual(collectExportImageUrls(
+  { ...job, sources: [{ ...sources[0], content: "`![説明](画像の場所)` の形で書く。" }, { ...sources[0], id: "off", enabled: false }] },
+  [{ ...sources[0], content: "`![説明](画像の場所)` の形で書く。" }, { ...sources[0], id: "off", enabled: false }],
+), []);
 const missing = `${base}${encodeURIComponent(win("C:/作品/本文/missing.png"))}`;
 const document = createLinkedExportDocument({ ...job, unavailableImageUrls: [missing] }, sources);
 const blocks = document.sections[0].blocks;
