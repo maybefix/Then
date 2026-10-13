@@ -13,6 +13,8 @@
 | 5 | `@tiptap/*` | 2.11.5 | 3.30.4 以上 | `mergeAttributes()` の `__proto__` から DOM 属性が注入される（[GHSA-cp6q-959q-f8rh](https://github.com/advisories/GHSA-cp6q-959q-f8rh)）。v2 には修正が出ない | moderate | ほぼなし。`mergeAttributes` を呼ばず、使っているノードに属性がなく、ProseMirror がスキーマ外の属性を捨てる | **高**。メジャー移行。対象は [VerticalTextEditor.tsx](../src/VerticalTextEditor.tsx) の1ファイルだが、エディタの中核（IME・フォーカス・差分処理）に関わる | 下記「tiptap v3 移行」 | 3（保留） | 保留 |
 | — | 開発依存（`undici` など） | — | — | 開発ツールの脆弱性。アプリ本体には含まれない | high | なし（配布物に入らない） | `npm audit fix` で一括更新すると、テストやビルドの道具まで変わる | — | 対象外 | — |
 
+更新後の実機確認で、選択範囲を IME 変換で置き換えると変換候補が積み重なる不具合が見つかった。`prosemirror-view` を 1.41.9 に戻しても再現したため、今回の更新とは無関係な既存の不具合として [KNOWN_ISSUES.md](KNOWN_ISSUES.md) に記録した。
+
 ### 進め方
 
 - 1〜3 は `npm audit fix` を使わず、対象を絞って更新する（開発依存を巻き込まないため）。
