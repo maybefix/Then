@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Then 書き出し（改）モック</title>
+<!--
+  Then 書き出し画面 リデザイン モック（単体で動くHTML）
+  - チェックポイント画面（then-checkpoint-mock.html）と同じトークン・部品で組む。
+    上部バー / 300px の左サイドバー / 主ボタンは右上に一つ / seg / btn-* / 開閉カード。
+  - データはサンプル。状態は state、描画は render()、操作は ACTIONS。
+-->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=BIZ+UDPMincho&display=swap">
+<style>
+  :root {
+    --ink: #1c1c1a; --ink-2: #3d3d39; --ink-3: #5f5f5a;
+    --line: #e4e4e0; --line-soft: #efefeb;
+    --ground: #f6f6f4; --ground-2: #fafaf8; --paper: #ffffff;
+    --desk: #e9e9e5;
+    --add-num: #1d4ed8;
+    --warn-bg: #fdf1dc; --warn-ink: #6b4300;
+    --sans: 'BIZ UDPGothic', 'Hiragino Sans', 'Yu Gothic UI', Meiryo, sans-serif;
+    --serif: 'BIZ UDPMincho', 'Hiragino Mincho ProN', 'Yu Mincho', serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); }
+  button, select, input { font-family: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--add-num); outline-offset: 2px; }
+
+  .app { height: 100vh; display: flex; flex-direction: column; }
+
+  /* ヘッダー（チェックポイントと同じ） */
+  .topbar { display: flex; align-items: center; gap: 16px; padding: 6px 16px 6px 24px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .back { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px 0 6px; background: none; border: 0; border-radius: 8px; font-size: 14px; color: var(--ink-2); }
+  .back:hover { background: var(--ground); }
+  .topbar h1 { margin: 0; font-size: 17px; font-weight: 700; }
+  .spacer { flex: 1; }
+  .hint { font-size: 12px; color: var(--ink-3); }
+  .actions { display: flex; gap: 8px; align-items: center; position: relative; }
+
+  .btn-primary { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 20px; border: 0; border-radius: 10px; background: var(--ink); color: #fff; font-size: 14px; font-weight: 700; white-space: nowrap; }
+  .btn-primary:disabled { opacity: .45; cursor: default; }
+  .btn-ghost { min-height: 32px; padding: 0 10px; border: 0; background: none; color: var(--ink-2); font-size: 12px; border-radius: 8px; }
+  .btn-ghost:hover { background: #ecece8; }
+  .btn-line { min-height: 36px; padding: 0 12px; border: 1px solid #dcdcd6; border-radius: 8px; background: var(--paper); color: var(--ink); font-size: 13px; white-space: nowrap; }
+  .btn-icon { width: 44px; height: 44px; border: 1px solid #dcdcd6; border-radius: 10px; background: var(--paper); color: var(--ink); display: flex; align-items: center; justify-content: center; }
+  .btn-icon.sm { width: 36px; height: 36px; border-radius: 8px; }
+  .menu { position: absolute; top: 52px; right: 0; z-index: 5; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.10); padding: 6px; display: flex; flex-direction: column; min-width: 240px; }
+  .menu button { min-height: 40px; text-align: left; padding: 0 12px; border: 0; background: none; border-radius: 6px; font-size: 14px; color: var(--ink); }
+  .menu button:hover { background: var(--ground); }
+  .menu .sep { height: 1px; background: var(--line); margin: 4px 6px; }
+
+  .seg { display: flex; background: #e6e6e1; border-radius: 9px; padding: 3px; gap: 2px; }
+  .seg button { min-height: 36px; padding: 0 14px; border: 0; border-radius: 7px; font-size: 13px; background: transparent; color: var(--ink-2); }
+  .seg button[aria-pressed="true"] { background: var(--paper); color: var(--ink); font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+  .layout { display: flex; flex: 1; min-height: 0; }
+
+  /* 左：ファイル（チェックポイントの保存点一覧と同じ文法） */
+  .side { flex: 0 0 300px; min-width: 0; min-height: 0; background: var(--ground); border-right: 1px solid var(--line); padding: 20px 16px 0; display: flex; flex-direction: column; gap: 12px; }
+  .side-head { display: flex; align-items: baseline; justify-content: space-between; padding: 0 4px; }
+  .side-head h2 { margin: 0; font-size: 15px; }
+  .count { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .search { position: relative; }
+  .search svg { position: absolute; left: 12px; top: 12px; color: var(--ink-3); }
+  .search input { width: 100%; min-height: 40px; border: 1px solid #dcdcd6; border-radius: 8px; padding: 0 10px 0 36px; font-size: 13px; background: var(--paper); color: var(--ink); }
+  .bulk { display: flex; gap: 4px; padding: 0 0 0 2px; }
+  .groups { flex: 1; min-height: 0; overflow-y: auto; margin: 0 -16px; padding: 0 16px 24px; display: flex; flex-direction: column; gap: 14px; }
+  .group { display: flex; flex-direction: column; gap: 2px; }
+  .group-name { font-size: 12px; color: var(--ink-3); font-weight: 700; padding: 0 10px 4px; }
+  .file { display: flex; gap: 10px; align-items: flex-start; border-radius: 10px; padding: 9px 10px; }
+  .file:hover { background: #efefeb; }
+  .file.on { background: var(--paper); box-shadow: inset 0 0 0 1.5px var(--ink); }
+  .file input[type=checkbox] { width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--ink); flex: none; }
+  .file .body { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
+  .file label { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
+  .file .name { font-size: 14px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+  .file.on .name { color: var(--ink); font-weight: 700; }
+  .file .chars { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .file .start { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-3); }
+  .file .start select { min-height: 30px; border: 1px solid #d0d0ca; border-radius: 6px; padding: 0 6px; font-size: 12px; background: var(--paper); color: var(--ink); }
+  .file .order { font-size: 11px; font-weight: 700; color: var(--paper); background: var(--ink); border-radius: 999px; min-width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; flex: none; }
+  .side-foot { margin: 0 -16px; padding: 10px 20px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-3); }
+
+  /* 中央：プレビュー */
+  .main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; background: var(--desk); }
+  .pv-bar { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--paper); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .pv-title { font-size: 14px; font-weight: 700; }
+  .pv-meta { font-size: 12px; color: var(--ink-3); }
+  .pager { display: flex; align-items: center; gap: 4px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .pager span { min-width: 56px; text-align: center; }
+  .stale { display: flex; align-items: center; gap: 10px; padding: 4px 4px 4px 12px; border-radius: 8px; background: var(--ground); font-size: 12px; color: var(--ink-2); }
+  .stale .btn-line { min-height: 30px; }
+
+  .notice { margin: 12px 16px 0; border-radius: 10px; background: var(--warn-bg); color: var(--warn-ink); font-size: 13px; }
+  .notice-row { display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 14px; }
+  .notice-row span { flex: 1; }
+  .notice button { min-height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--paper); color: var(--warn-ink); font-size: 12px; font-weight: 700; }
+  .notice ul { margin: 0; padding: 0 14px 10px 30px; font-size: 12px; line-height: 1.8; }
+  .notice code { font-size: 11px; word-break: break-all; }
+
+  .viewer { flex: 1; min-height: 0; display: flex; flex-direction: column; margin: 12px 16px 16px; border-radius: 10px; overflow: hidden; border: 1px solid #d6d6d0; background: #c9c9c9; }
+  .vv-bar { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 0 14px; background: #000; color: #fff; font-size: 13px; letter-spacing: .2em; }
+  .vv-bar b { letter-spacing: 0; padding: 2px 8px; background: #333; border-radius: 3px; }
+  .vv-logo { font-family: Georgia, serif; font-size: 16px; letter-spacing: 0; }
+  .pages { flex: 1; min-height: 0; overflow: auto; display: flex; gap: 20px; justify-content: center; align-items: flex-start; padding: 24px; }
+  .page { flex: none; width: 300px; aspect-ratio: 210 / 297; background: var(--paper); box-shadow: 0 1px 3px rgba(0,0,0,.12); padding: 22px 26px; display: flex; flex-direction: column; gap: 7px; font-family: var(--serif); position: relative; }
+  .page .run { font-size: 8px; color: var(--ink-3); text-align: center; margin-bottom: 6px; }
+  .page h3 { margin: 4px 0 6px; font-size: 13px; }
+  .page .l { height: 5px; background: #dedcd6; border-radius: 2px; }
+  .page .fig { height: 88px; margin: 6px 12px 2px; background: #efe9de; border: 1px solid #d8d2c6; border-radius: 2px; }
+  .page .cap { font-size: 7px; text-align: center; color: var(--ink-2); }
+  .page .folio { position: absolute; bottom: 12px; left: 0; right: 0; text-align: center; font-size: 8px; color: var(--ink-3); }
+  .page.cover { justify-content: center; align-items: center; }
+  .page.cover h3 { font-size: 18px; }
+
+  .post { flex: 1; min-height: 0; overflow: auto; padding: 24px; }
+  .post pre { max-width: 720px; margin: 0 auto; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 24px 28px; font-family: var(--sans); font-size: 14px; line-height: 1.9; white-space: pre-wrap; }
+
+  /* 右：設定（チェックポイントのファイルカードと同じ開閉カード） */
+  .settings { flex: 0 0 340px; min-width: 0; min-height: 0; overflow-y: auto; background: var(--ground); border-left: 1px solid var(--line); padding: 20px 16px 32px; display: flex; flex-direction: column; gap: 10px; }
+  .preset { display: flex; flex-direction: column; gap: 6px; padding: 0 4px 6px; }
+  .preset label { font-size: 12px; color: var(--ink-3); font-weight: 700; }
+  .preset-row { display: flex; gap: 6px; }
+  .preset select { flex: 1; min-height: 40px; border: 1px solid #d0d0ca; border-radius: 8px; padding: 0 10px; font-size: 14px; background: var(--paper); color: var(--ink); }
+  .card { border: 1px solid var(--line); border-radius: 12px; background: var(--paper); overflow: hidden; }
+  .card-toggle { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 0 14px 0 10px; background: none; border: 0; text-align: left; color: var(--ink); }
+  .card-toggle svg { flex: none; color: var(--ink-3); transition: transform .15s ease; }
+  .card-toggle[aria-expanded="false"] svg { transform: rotate(-90deg); }
+  .card-title { font-size: 14px; font-weight: 700; white-space: nowrap; }
+  .card-sum { margin-left: auto; font-size: 12px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .card-body { border-top: 1px solid var(--line-soft); padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--ink-2); }
+  .field select, .field input { min-height: 38px; border: 1px solid #d0d0ca; border-radius: 8px; padding: 0 10px; font-size: 14px; background: var(--paper); color: var(--ink); width: 100%; font-variant-numeric: tabular-nums; }
+  .field input:disabled { background: var(--ground-2); color: var(--ink-3); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .note { margin: 0; font-size: 12px; color: var(--ink-3); line-height: 1.7; }
+  .settings .seg { align-self: flex-start; }
+
+  @media (max-width: 1100px) { .settings { flex-basis: 300px; } .side { flex-basis: 260px; } }
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<script>
+const FILES = [
+  { id: 1, folder: "01_記事", name: "Thenを紹介する記事（仮）.txt", chars: 3701 },
+  { id: 2, folder: "01_記事 / 01A_小説", name: "木はイオンを植えています.txt", chars: 4014 },
+  { id: 3, folder: "02_ログ", name: "AIスロップに関する考察.txt", chars: 2438 },
+  { id: 4, folder: "02_ログ", name: "Thenのテーマ解説.txt", chars: 4224 },
+  { id: 5, folder: "02_ログ", name: "Thenの機能紹介の叩き台.txt", chars: 9120 },
+  { id: 6, folder: "02_ログ", name: "Then開発ログ.txt", chars: 18216 },
+  { id: 7, folder: "02_ログ", name: "ただの日記.txt", chars: 3668 },
+  { id: 8, folder: "02_ログ", name: "なぜ「シアノタイプのままでいて」を思いつき、書きたくなったのか.txt", chars: 1857 },
+  { id: 9, folder: "03_検証用", name: "切り出したあとのファイルが未保存とならないようになっているかテスト.txt", chars: 812 },
+  { id: 10, folder: "03_検証用", name: "形態素解析の原稿.txt", chars: 5530 },
+  { id: 11, folder: "04_しょうもないやつ", name: "どのSMILYが好きですか.txt", chars: 1204 },
+  { id: 12, folder: "04_しょうもないやつ", name: "まったく再現性のない「医療情報技師合格への道」2026.txt", chars: 6102 },
+  { id: 13, folder: "04_しょうもないやつ", name: "本家の駒大コンバットは勢いがすごい.txt", chars: 2290 },
+  { id: 14, folder: "04_しょうもないやつ", name: "甲子園2026 出場校徹底比較.txt", chars: 7744 },
+  { id: 15, folder: "05_テンプレート", name: "DESIGN.txt", chars: 980 },
+];
+
+const state = {
+  mode: "print",          // print | post
+  on: new Set([7]),
+  start: { 7: "page" },
+  query: "",
+  menu: false,
+  stale: false,
+  noticeOpen: false,
+  page: 1,
+  open: new Set(["page"]),
+  preset: "A4・横書き",
+};
+
+const ICON = {
+  back: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>',
+  more: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>',
+  search: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
+  chev: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>',
+  prev: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>',
+  next: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>',
+};
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmt = (n) => n.toLocaleString("ja-JP");
+
+function derive() {
+  const chosen = FILES.filter((f) => state.on.has(f.id));
+  const chars = chosen.reduce((a, f) => a + f.chars, 0);
+  const pages = chosen.length ? Math.max(2, Math.ceil(chars / 900) + 2) : 0;
+  return { chosen, chars, pages };
+}
+
+function sideHtml() {
+  const q = state.query.trim();
+  const shown = FILES.filter((f) => !q || f.name.includes(q));
+  const groups = [...new Set(shown.map((f) => f.folder))];
+  let n = 0;
+  const orderOf = new Map(FILES.filter((f) => state.on.has(f.id)).map((f) => [f.id, ++n]));
+  return `
+  <aside class="side" aria-label="出力するファイル">
+    <div class="side-head"><h2>出力するファイル</h2><span class="count">${state.on.size} / ${FILES.length}</span></div>
+    <label class="search">${ICON.search}<input data-input="query" value="${esc(state.query)}" placeholder="ファイル名で絞り込む"></label>
+    <div class="bulk">
+      <button class="btn-ghost" data-act="all">すべて選択</button>
+      <button class="btn-ghost" data-act="none">すべて解除</button>
+    </div>
+    <div class="groups">
+      ${groups.map((g) => `
+        <div class="group">
+          <div class="group-name">${esc(g)}</div>
+          ${shown.filter((f) => f.folder === g).map((f) => {
+            const on = state.on.has(f.id);
+            return `<div class="file${on ? " on" : ""}">
+              <input type="checkbox" id="f${f.id}" data-toggle="${f.id}" ${on ? "checked" : ""}>
+              <div class="body">
+                <label for="f${f.id}" title="${esc(f.name)}">
+                  ${on ? `<span class="order">${orderOf.get(f.id)}</span>` : ""}
+                  <span class="name">${esc(f.name.replace(/\.txt$/, ""))}</span>
+                  <span class="chars">${fmt(f.chars)}字</span>
+                </label>
+                ${on ? `<div class="start">開始
+                  <select data-start="${f.id}">
+                    <option value="page" ${state.start[f.id] !== "cont" ? "selected" : ""}>改ページ</option>
+                    <option value="cont" ${state.start[f.id] === "cont" ? "selected" : ""}>前の続き</option>
+                  </select></div>` : ""}
+              </div>
+            </div>`;
+          }).join("")}
+        </div>`).join("") || '<p class="hint" style="padding:0 10px">一致するファイルはありません</p>'}
+    </div>
+    <div class="side-foot">番号の順に連結します（一覧の上から）</div>
+  </aside>`;
+}
+
+function pagesHtml(d) {
+  if (!d.chosen.length) return '<div class="pages"><p class="hint" style="align-self:center">左でファイルを選ぶとプレビューを表示します</p></div>';
+  const line = (w) => `<div class="l" style="width:${w}%"></div>`;
+  const body = (k) => Array.from({ length: 22 }, (_, i) => line(i % 7 === 6 ? 40 + (k * 13 % 30) : 96 - (i * k % 5))).join("");
+  const p = state.page;
+  const sheet = (n) => n === 1
+    ? `<div class="page cover"><h3>テスト_snapshot検証用</h3><div class="run">表紙</div></div>`
+    : `<div class="page"><div class="run">Then開発ログ</div>${n === 2 ? "<h3>ただの日記</h3>" : ""}${body(n).slice(0, n === 3 ? 600 : undefined)}${n === 3 ? '<div class="fig"></div><div class="cap">テスト画像</div>' + body(n).slice(0, 900) : ""}<div class="folio">${n - 1}</div></div>`;
+  return `<div class="pages">${sheet(p)}${p + 1 <= d.pages ? sheet(p + 1) : ""}</div>`;
+}
+
+function mainHtml(d) {
+  if (state.mode === "post") {
+    return `<main class="main">
+      <div class="pv-bar"><span class="pv-title">投稿用テキスト</span><span class="pv-meta">${d.chosen.length}ファイル · ${fmt(d.chars)}字</span><span class="spacer"></span><button class="btn-line">クリップボードにコピー</button></div>
+      <div class="post"><pre>ただの日記
+
+今日は朝から雨だった。駅まで歩くあいだに、傘の骨が一本折れた。
+
+![テスト画像](https://i.gyazo.com/639684a37724b9c491992d522dba17fc.png)
+
+画像記法はそのまま残します。ルビは《》形式に変換されます。</pre></div>
+    </main>`;
+  }
+  return `<main class="main">
+    <div class="pv-bar">
+      <span class="pv-title">プレビュー</span>
+      <span class="pv-meta">${d.pages ? `${d.pages}ページ · ` : ""}${esc(state.preset)} · 書き出すPDFと同じ組版</span>
+      <span class="spacer"></span>
+      ${state.stale ? `<span class="stale">設定が変わりました<button class="btn-line" data-act="refresh">プレビューを更新</button></span>` : ""}
+    </div>
+    ${d.chosen.some((f) => f.id === 1) ? `
+    <div class="notice" role="status">
+      <div class="notice-row"><span>画像1件を読み込めません。その箇所には説明文を印字します。</span>
+        <button data-act="notice" aria-expanded="${state.noticeOpen}">${state.noticeOpen ? "閉じる" : "どの画像か見る"}</button></div>
+      ${state.noticeOpen ? `<ul><li>Thenを紹介する記事（仮） · 42行目 <code>![図](img/missing.png)</code>（サンプル）</li></ul>` : ""}
+    </div>` : ""}
+    <div class="viewer">
+      <!-- 実装では Vivliostyle Viewer の iframe。ツールバーとロゴは Viewer のまま残す（ライセンス上、消さない）。 -->
+      <div class="vv-bar"><span>☰ ✎ 🔍 ⤒ ˄ ˅ ⤓ <b>${state.page} / ${d.pages || "–"}</b> A A⁺ A⁻ − + ⤢ 🖶</span><span class="spacer"></span><span class="vv-logo">Vivliostyle</span></div>
+      ${pagesHtml(d)}
+    </div>
+  </main>`;
+}
+
+function card(key, title, sum, body) {
+  const open = state.open.has(key);
+  return `<section class="card">
+    <button class="card-toggle" data-card="${key}" aria-expanded="${open}">${ICON.chev}<span class="card-title">${title}</span><span class="card-sum">${sum}</span></button>
+    ${open ? `<div class="card-body">${body}</div>` : ""}
+  </section>`;
+}
+
+function settingsHtml() {
+  if (state.mode === "post") {
+    return `<aside class="settings" aria-label="設定">
+      ${card("fmt", "記法の変換", "カクヨム", `
+        <label class="field">投稿先<select><option>カクヨム</option><option>小説家になろう</option><option>プレーンテキスト</option></select></label>
+        <label class="field">見出し<select><option>そのまま残す</option><option>削除する</option></select></label>`)}
+      ${card("join", "ファイルの区切り", "空行2つ", `
+        <label class="field">区切り<select><option>空行2つ</option><option>区切り線</option></select></label>
+        <label class="field">改行コード<select><option>LF</option><option>CRLF</option></select></label>`)}
+    </aside>`;
+  }
+  return `<aside class="settings" aria-label="レイアウト設定">
+    <div class="preset">
+      <label for="preset">プリセット</label>
+      <div class="preset-row">
+        <select id="preset" data-preset>${["A4・横書き", "標準（文庫）", "同人誌 B6・1段", "A5・2段組"].map((p) => `<option ${p === state.preset ? "selected" : ""}>${p}</option>`).join("")}</select>
+      </div>
+    </div>
+    ${card("page", "ページ", "A4 · 余白 20mm", `
+      <label class="field">サイズ<select data-change><option>A4</option><option>A5</option><option>B6</option><option>文庫</option><option>カスタム</option></select></label>
+      <div class="grid2"><label class="field">幅 mm<input value="210" disabled></label><label class="field">高さ mm<input value="297" disabled></label></div>
+      <div class="field">余白 mm
+        <div class="grid4">
+          <label class="field">天<input data-change value="20"></label>
+          <label class="field">地<input data-change value="20"></label>
+          <label class="field">ノド<input data-change value="22"></label>
+          <label class="field">小口<input data-change value="18"></label>
+        </div>
+      </div>
+      <p class="note">ノド＝綴じ側、小口＝開く側の余白</p>`)}
+    ${card("body", "本文", "横書き · 明朝 13Q · 1段", `
+      <div class="field">組み方向
+        <div class="seg" role="group"><button aria-pressed="false" data-change>縦書き</button><button aria-pressed="true" data-change>横書き</button></div></div>
+      <div class="grid2"><label class="field">書体<select data-change><option>明朝</option><option>ゴシック</option></select></label><label class="field">文字サイズ Q<input data-change value="13"></label></div>
+      <div class="grid2"><label class="field">段数<select data-change><option>1段</option><option>2段</option></select></label><label class="field">行間<input data-change value="1.75"></label></div>`)}
+    ${card("header", "ヘッダー", "作品名", `<label class="field">内容<select data-change><option>作品名</option><option>章見出し</option><option>なし</option></select></label>`)}
+    ${card("footer", "フッター · ノンブル", "下中央", `<label class="field">ノンブル位置<select data-change><option>下中央</option><option>下・小口側</option><option>なし</option></select></label>`)}
+    ${card("front", "表紙 · 目次", "表紙（文字）· 目次 見出し2まで", `
+      <label class="field">表紙<select data-change><option>文字</option><option>画像</option><option>なし</option></select></label>
+      <label class="field">目次<select data-change><option>見出し2まで</option><option>見出し1まで</option><option>なし</option></select></label>`)}
+    <p class="note" style="padding:0 4px">レイアウトは書き出したときに保存し、次回の初期値になります。表紙・目次は作品ごとに保存します。</p>
+  </aside>`;
+}
+
+function render() {
+  const d = derive();
+  const label = state.mode === "print" ? "PDFを書き出す" : "テキストを書き出す";
+  document.getElementById("app").innerHTML = `
+  <header class="topbar">
+    <button class="back">${ICON.back}本文へ戻る</button>
+    <h1>書き出し</h1>
+    <div class="seg" role="group" aria-label="書き出しの種類">
+      <button aria-pressed="${state.mode === "print"}" data-mode="print">印刷・文書</button>
+      <button aria-pressed="${state.mode === "post"}" data-mode="post">投稿用テキスト</button>
+    </div>
+    <span class="spacer"></span>
+    <span class="hint">${d.chosen.length}ファイル · ${fmt(d.chars)}字</span>
+    <div class="actions">
+      <button class="btn-icon" data-act="menu" aria-label="その他" aria-expanded="${state.menu}">${ICON.more}</button>
+      <button class="btn-primary" ${d.chosen.length ? "" : "disabled"}>${label}</button>
+      ${state.menu ? `<div class="menu" role="menu">
+        ${state.mode === "print" ? '<button role="menuitem">DOCXで書き出す</button><div class="sep"></div>' : ""}
+        <button role="menuitem">今の設定をプリセットに保存…</button>
+        <button role="menuitem">プリセットを管理…</button>
+      </div>` : ""}
+    </div>
+  </header>
+  <div class="layout">${sideHtml()}${mainHtml(d)}${settingsHtml()}</div>`;
+}
+
+const ACTIONS = {
+  all: () => { FILES.forEach((f) => state.on.add(f.id)); state.stale = true; },
+  none: () => { state.on.clear(); state.stale = true; },
+  menu: () => { state.menu = !state.menu; },
+  refresh: () => { state.stale = false; state.page = 1; },
+  prev: () => { state.page = Math.max(1, state.page - 2); },
+  next: () => { state.page += 2; },
+  notice: () => { state.noticeOpen = !state.noticeOpen; },
+};
+
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-act],[data-mode],[data-card]");
+  if (!t) { if (state.menu && !e.target.closest(".menu")) { state.menu = false; render(); } return; }
+  if (t.dataset.act) ACTIONS[t.dataset.act]();
+  if (t.dataset.mode) { state.mode = t.dataset.mode; state.menu = false; }
+  if (t.dataset.card) { const k = t.dataset.card; state.open.has(k) ? state.open.delete(k) : state.open.add(k); }
+  render();
+});
+document.addEventListener("change", (e) => {
+  const t = e.target;
+  if (t.dataset.toggle) { const id = +t.dataset.toggle; t.checked ? state.on.add(id) : state.on.delete(id); state.stale = true; }
+  else if (t.dataset.start) { state.start[t.dataset.start] = t.value; state.stale = true; }
+  else if ("preset" in t.dataset) { state.preset = t.value; state.stale = true; }
+  else if ("change" in t.dataset) { state.stale = true; }
+  else return;
+  render();
+});
+document.addEventListener("input", (e) => {
+  if (e.target.dataset.input === "query") {
+    state.query = e.target.value;
+    const pos = e.target.selectionStart;
+    render();
+    const el = document.querySelector('[data-input="query"]');
+    el.focus(); el.setSelectionRange(pos, pos);
+  }
+});
+render();
+</script>
+</body>
+</html>

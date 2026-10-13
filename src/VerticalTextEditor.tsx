@@ -3,6 +3,7 @@ import { findTextChange, mapTextOffsetThroughChange } from "./editor/textOffsetM
 import { createTypewriterScroller } from "./editor/typewriterScroller";
 import { syncOverlayElements } from "./editor/overlayElements";
 import { VisualLineIndex } from "./editor/visualLineIndex";
+import { ParagraphFlow } from "./editor/paragraphFlow";
 import { indexRootDecorations } from "./editor/indexedDecorations";
 import { spliceRootDecorations } from "./editor/spliceRootDecorations";
 import Document from "@tiptap/extension-document";
@@ -153,6 +154,8 @@ type DecorationWindow = {
 
 type AstMeta = {
   refreshComposition?: boolean;
+  /** A composition is starting over this selection; see `clearImeReplaceRange`. */
+  imeReplaceRange?: { from: number; to: number };
   visibleCenter?: number;
   rebuild?: boolean;
   fullDecorations?: boolean;
@@ -1880,6 +1883,46 @@ function updateEditorTextWithShadow(
   return rebuilt;
 }
 
+/**
+ * IME composition over a selection replaces text that decorations may split
+ * into several DOM text nodes. ProseMirror keeps only one text node under the
+ * IME; when mapping reshapes a decoration that crosses the replaced range, it
+ * redraws the others, the IME loses its composition range and each candidate
+ * is inserted again beside the last. Dropping the decorations that the
+ * replacement would reshape leaves the range plain text. The lines stay stale
+ * until compositionend re-decorates them.
+ */
+function clearImeReplaceRange(
+  value: AstPluginState,
+  doc: PMNode,
+  { from, to }: { from: number; to: number },
+): AstPluginState {
+  const reshaped = value.decoSet.find(from, to).filter((decoration) => {
+    if (decoration.from === decoration.to) return decoration.from > from && decoration.from < to;
+    if (!(decoration as unknown as { inline: boolean }).inline) return false;
+    if (decoration.to < from || decoration.from > to) return false;
+    const spec = decoration.spec as { inclusiveStart?: boolean; inclusiveEnd?: boolean };
+    // Still around the composition after mapping the replacement.
+    const keepsStart = decoration.from < from || (decoration.from === from && spec.inclusiveStart === true);
+    const keepsEnd = decoration.to > to || (decoration.to === to && spec.inclusiveEnd === true);
+    if (keepsStart && keepsEnd) return false;
+    // Merely adjacent: the replacement does not move its boundary.
+    return decoration.to > from && decoration.from < to;
+  });
+  if (!reshaped.length) return value;
+  const first = doc.resolve(from).index(0);
+  const last = doc.resolve(to).index(0) + 1;
+  const stale = value.decoWindow.stale;
+  return {
+    ...value,
+    decoSet: value.decoSet.remove(reshaped),
+    decoWindow: {
+      ...value.decoWindow,
+      stale: { from: Math.min(first, stale?.from ?? first), to: Math.max(last, stale?.to ?? last) },
+    },
+  };
+}
+
 function applyAst(
   tr: Transaction,
   value: AstPluginState,
@@ -1887,6 +1930,7 @@ function applyAst(
   newState: EditorState,
 ): AstPluginState {
   const meta = tr.getMeta(astKey) as AstMeta | undefined;
+  if (meta?.imeReplaceRange && !tr.docChanged) return clearImeReplaceRange(value, newState.doc, meta.imeReplaceRange);
   let visibleCenter = value.visibleCenter;
   const fullDecorations =
     typeof meta?.fullDecorations === "boolean"
@@ -2602,6 +2646,7 @@ export function VerticalTextEditor({
   // ページの割りと、測り直しが要るかを見分けるための署名。
   const pageBreaksRef = useRef<PageBreaks>({ pages: [], offsets: [] });
   const pageBreaksSignatureRef = useRef("");
+  const paragraphFlowRef = useRef<ParagraphFlow | null>(null);
   // 表示中のページが実際に占めるブロック方向の寸法。版面の幅とは限らない。
   const pageVisibleExtentRef = useRef(0);
   // マウスでのドラッグ範囲選択中は true。ジェスチャ中は再センタリングを抑制し、
@@ -2732,18 +2777,30 @@ export function VerticalTextEditor({
     const flowExtent = verticalWriting ? root.offsetWidth : root.offsetHeight;
     // 段落ごとの実測は重いので、行数が変わり得たときだけ測り直す。スクロール
     // だけでは割りは変わらない。
+    const flow = paragraphFlowRef.current?.flush(writingModeRef.current);
     const breaksSignature = [
       root.childElementCount,
       Math.round(flowExtent),
       Math.round(pageBlockSize),
       verticalWriting ? "v" : "h",
+      flow?.generation ?? "legacy",
     ].join(":");
     if (breaksSignature !== pageBreaksSignatureRef.current) {
       pageBreaksSignatureRef.current = breaksSignature;
+      const paragraphs = flow?.paragraphs ?? measureParagraphs(root, writingModeRef.current);
       pageBreaksRef.current = computePageBreaks(
         pageBlockSize,
-        measureParagraphs(root, writingModeRef.current),
+        paragraphs,
       );
+      if (import.meta.env.VITE_QA_PAGE_DIAGNOSTICS === "1") {
+        const diagnosticRoot = root as HTMLElement & { __pageBreaksHistoryQA?: unknown[] };
+        const history = diagnosticRoot.__pageBreaksHistoryQA ??= [];
+        const bounds = root.getBoundingClientRect();
+        history.push({ signature: breaksSignature, mode: writingModeRef.current, pageBlockSize,
+          root: { left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom },
+          paragraphs, breaks: pageBreaksRef.current });
+        if (history.length > 100) history.shift();
+      }
     }
     const breaks = pageBreaksRef.current;
 
@@ -3534,6 +3591,7 @@ export function VerticalTextEditor({
       revision: number;
       root: DOMRect;
       blockRects: VisualRect[];
+      flowGeneration?: number;
     } | null = null;
     const candidateViewport = initialViewportRef.current;
     const validatedInitialViewport =
@@ -3973,12 +4031,14 @@ export function VerticalTextEditor({
       const pagedLayout = editorDisplayModeRef.current === "paged";
       const rootRect = currentEditor.view.dom.getBoundingClientRect();
       collectBlockMutations(blockObserver.takeRecords());
+      const flow = paragraphFlowRef.current?.flush(mode);
       const decorations = astKey.getState(currentEditor.state)?.decoSet;
       const activeBlockIndex = activeLineIndex(currentEditor.state);
       let layout = visualLayoutCache;
       if (!layout || layout.doc !== currentEditor.state.doc ||
         layout.decorations !== decorations || layout.mode !== mode ||
         layout.revision !== visualLayoutRevision ||
+        layout.flowGeneration !== flow?.generation ||
         Math.abs(layout.root.width - rootRect.width) > 0.05 || Math.abs(layout.root.height - rootRect.height) > 0.05) {
         if (visualIndexStructureDirty || visualIndexElements.length !== currentEditor.view.dom.childElementCount) {
           visualIndexElements = Array.from(currentEditor.view.dom.children);
@@ -3988,8 +4048,8 @@ export function VerticalTextEditor({
         // Re-read bounds: an earlier paragraph can move every subsequent one.
         // Only changed paragraph shapes are regrouped; keep them paragraph-local.
         const blockRects: VisualRect[] = visualIndexElements.map((element, index) => {
-          const rect = element.getBoundingClientRect();
-          const version = blockVersions.get(element) ?? 0;
+          const rect = flow?.blocks[index] ?? element.getBoundingClientRect();
+          const version = flow?.versions[index] ?? blockVersions.get(element) ?? 0;
           visualLineIndex.measure(index, rect, version, visualLayoutRevision, mode,
             element.classList.contains("pm-comment"), () => {
               const contentRange = document.createRange();
@@ -4003,6 +4063,7 @@ export function VerticalTextEditor({
         layout = {
           doc: currentEditor.state.doc, decorations, mode, revision: visualLayoutRevision,
           root: rootRect, blockRects,
+          flowGeneration: flow?.generation,
         };
         visualLayoutCache = layout;
       }
@@ -4311,18 +4372,27 @@ export function VerticalTextEditor({
       }
     };
 
-    // 改行・削除・IME確定では、ProseMirrorの更新通知より後にCSS multicolの
-    // 再分割とReactのページ面サイズ更新が続く。古い総ページ数で一度だけ
-    // キャレットを表示すると末尾で前ページへ丸められるため、寸法が連続して
-    // 安定するまで「ページ数→所属ページ→行表示」の順に同期し直す。
+    // 改行・削除・IME確定の後は、ページ割りを取り直してからキャレットの
+    // ページへ移る。総ページ数が増えるとReactのページ面の追加が1フレーム
+    // 遅れ、その間は新しいページへスクロールできず手前へ丸められる。そこで
+    // 何かが動いたフレームの次だけもう一度確かめ、何も動かなければ終える。
+    // （以前は2フレーム続けて同じになるまで毎回最低3フレーム同期していた。
+    // CSS multicol の再分割を待っていた頃の名残。）
     const requestPagedSelectionAfterReflow = (currentEditor: Editor) => {
       if (editorDisplayModeRef.current !== "paged") return;
       pagedReflowGeneration += 1;
       const generation = pagedReflowGeneration;
       if (pagedReflowFrame !== null) cancelAnimationFrame(pagedReflowFrame);
 
-      let previousSignature: string | null = null;
-      let stableFrames = 0;
+      const signature = () => {
+        const currentScroller = scrollerRef.current;
+        const metrics = pageMetricsRef.current;
+        return currentScroller
+          ? `${currentEditor.state.selection.head}:${metrics.current}:${metrics.total}:` +
+            `${currentScroller.scrollLeft}:${currentScroller.scrollTop}:` +
+            `${currentScroller.scrollWidth}:${currentScroller.scrollHeight}`
+          : "missing";
+      };
       let remainingFrames = 8;
       const step = () => {
         pagedReflowFrame = null;
@@ -4334,23 +4404,19 @@ export function VerticalTextEditor({
           return;
         }
 
+        // 寸法の読み取りはこのフレームの同期でどのみち必要になるので、
+        // 入力ハンドラ側では読まず、ここで前後を比べる。
+        const initial = signature();
         syncPageMetricsRef.current?.();
+        const beforeReveal = signature();
         revealSelectionPageNow(currentEditor);
-        syncPageMetricsRef.current?.();
+        // ページを移ったときだけ、移った先のページ位置を反映し直す。
+        if (signature() !== beforeReveal) syncPageMetricsRef.current?.();
         requestVisibleWindow();
         requestLineBreakMarks();
 
-        const currentScroller = scrollerRef.current;
-        const metrics = pageMetricsRef.current;
-        const signature = currentScroller
-          ? `${currentEditor.state.selection.head}:${metrics.current}:${metrics.total}:` +
-            `${currentScroller.scrollLeft}:${currentScroller.scrollTop}:` +
-            `${currentScroller.scrollWidth}:${currentScroller.scrollHeight}`
-          : "missing";
-        stableFrames = signature === previousSignature ? stableFrames + 1 : 0;
-        previousSignature = signature;
         remainingFrames -= 1;
-        if (stableFrames >= 2 || remainingFrames <= 0) return;
+        if (signature() === initial || remainingFrames <= 0) return;
         pagedReflowFrame = requestAnimationFrame(step);
       };
 
@@ -4402,7 +4468,10 @@ export function VerticalTextEditor({
         // onUpdate. DOM mutations separately cover derived decoration changes.
         for (let index = diff.from; index < diff.toNew; index += 1) {
           const element = currentEditor.view.dom.children[index];
-          if (element) blockVersions.set(element, (blockVersions.get(element) ?? 0) + 1);
+          if (element) {
+            blockVersions.set(element, (blockVersions.get(element) ?? 0) + 1);
+            paragraphFlowRef.current?.mark(element);
+          }
         }
         visualLayoutCache = null;
         requestLineBreakMarks();
@@ -4466,7 +4535,7 @@ export function VerticalTextEditor({
         if (record.target === editor.view.dom) {
           if (record.type === "childList") visualIndexStructureDirty = true;
           if (record.type === "attributes" && (record.attributeName === "style" || record.attributeName === "class")) {
-            visualLayoutRevision += 1;
+            if (!paragraphFlowRef.current) visualLayoutRevision += 1;
             centerAnimation.invalidate();
             if (record.attributeName === "style") requestCenterCaret(false, "resize");
           }
@@ -4490,11 +4559,23 @@ export function VerticalTextEditor({
     let lastLayoutSignature = layoutSignature();
     const invalidateTextLayout = () => {
       visualLayoutRevision += 1;
+      paragraphFlowRef.current?.invalidate();
       visualLayoutCache = null;
       centerAnimation.invalidate();
       requestLineBreakMarks();
     };
     invalidateTextLayoutRef.current = invalidateTextLayout;
+    if (import.meta.env.VITE_QA_PAGE_DIAGNOSTICS === "1") {
+      const root = editor.view.dom as HTMLElement & { __pageBreaksQA?: () => unknown; __pageBreaksHistoryQA?: unknown[] };
+      root.__pageBreaksQA = () => ({ breaks: pageBreaksRef.current, signature: pageBreaksSignatureRef.current, history: root.__pageBreaksHistoryQA ?? [] });
+    }
+    // Compile-time opt-in: normal builds retain the established measurement path.
+    if (import.meta.env.VITE_QA_PARAGRAPH_FLOW === "1") {
+      const flow = new ParagraphFlow(editor.view.dom, () => requestLineBreakMarks());
+      paragraphFlowRef.current = flow;
+      const root = editor.view.dom as HTMLElement & { __paragraphFlowQA?: () => unknown };
+      root.__paragraphFlowQA = () => ({ snapshot: flow.flush(writingModeRef.current), stats: { ...flow.stats }, breaks: pageBreaksRef.current });
+    }
     const visualLayoutObserver = new ResizeObserver(() => {
       const signature = layoutSignature();
       if (signature !== lastLayoutSignature) invalidateTextLayout();
@@ -4577,6 +4658,7 @@ export function VerticalTextEditor({
     };
 
     const handleCompositionStart = () => {
+      imeReplacePrepared = false;
       cancelInitialAdjustment();
       stopCenterAnimation();
       prepareImeLayoutTarget();
@@ -4585,6 +4667,34 @@ export function VerticalTextEditor({
       // 動かしたスクロールを、スナップがページ境界へ引き戻してしまうため。
       shellRef.current?.setAttribute("data-composing", "true");
       renderLineBreakMarks();
+    };
+
+    // 選択範囲を変換で置き換えるときは、範囲をまたぐ装飾を変換開始前に外して
+    // 1つのテキストノードにする（clearImeReplaceRange）。compositionstart では
+    // ProseMirror が既に変換中として選択位置のノードを保護するため遅い。
+    let imeReplacePrepared = false;
+    const handleImeKeyDown = (event: KeyboardEvent) => {
+      if (editor.view.composing || editor.state.selection.empty) return;
+      if (event.keyCode !== 229 && event.key !== "Process" && event.key !== "Convert") return;
+      const { from, to } = editor.state.selection;
+      imeReplacePrepared = true;
+      editor.view.dispatch(
+        editor.state.tr
+          .setMeta(astKey, { imeReplaceRange: { from, to } } satisfies AstMeta)
+          .setMeta("addToHistory", false),
+      );
+    };
+    const handleImeKeyUp = () => {
+      if (!imeReplacePrepared || editor.view.composing) return;
+      imeReplacePrepared = false;
+      // 変換が始まらなかった。compositionend と同じく外した装飾を戻す。
+      if (!composingRef.current) {
+        editor.view.dispatch(
+          editor.state.tr
+            .setMeta(astKey, { refreshComposition: true } satisfies AstMeta)
+            .setMeta("addToHistory", false),
+        );
+      }
     };
 
     const handleCompositionUpdate = () => {
@@ -4734,12 +4844,22 @@ export function VerticalTextEditor({
     window.addEventListener("keydown", cancelInitialAdjustment, { capture: true });
     window.addEventListener("pointerup", handlePointerUp);
     window.addEventListener("pointercancel", handlePointerCancel);
+    editor.view.dom.addEventListener("keydown", handleImeKeyDown);
+    editor.view.dom.addEventListener("keyup", handleImeKeyUp);
     editor.view.dom.addEventListener("compositionstart", handleCompositionStart);
     editor.view.dom.addEventListener("compositionupdate", handleCompositionUpdate);
     editor.view.dom.addEventListener("compositionend", handleCompositionEnd);
     scroller.addEventListener("scroll", handleScroll, { passive: true });
     window.addEventListener("resize", handleResize);
     document.fonts?.addEventListener("loadingdone", handleFontLoadingDone);
+    let uninstallImeTrace: (() => void) | null = null;
+    let imeTraceDisposed = false;
+    // IME の記録は開発サーバーを VITE_QA_IME_TRACE=1 で起動したときだけ動かす。
+    if (import.meta.env.DEV && import.meta.env.VITE_QA_IME_TRACE === "1") {
+      void import("./editor/imeTrace").then(({ installImeTrace }) => {
+        if (!imeTraceDisposed) uninstallImeTrace = installImeTrace(editor);
+      });
+    }
 
     const initialOffset = Math.min(initialSelectionRef.current, docToText(editor.state.doc).length);
     if (initialOffset > 0) {
@@ -4786,12 +4906,16 @@ export function VerticalTextEditor({
       window.removeEventListener("keydown", cancelInitialAdjustment, { capture: true });
       window.removeEventListener("pointerup", handlePointerUp);
       window.removeEventListener("pointercancel", handlePointerCancel);
+      editor.view.dom.removeEventListener("keydown", handleImeKeyDown);
+      editor.view.dom.removeEventListener("keyup", handleImeKeyUp);
       editor.view.dom.removeEventListener("compositionstart", handleCompositionStart);
       editor.view.dom.removeEventListener("compositionupdate", handleCompositionUpdate);
       editor.view.dom.removeEventListener("compositionend", handleCompositionEnd);
       scroller.removeEventListener("scroll", handleScroll);
       window.removeEventListener("resize", handleResize);
       document.fonts?.removeEventListener("loadingdone", handleFontLoadingDone);
+      imeTraceDisposed = true;
+      uninstallImeTrace?.();
       if (centerFrame !== null) cancelAnimationFrame(centerFrame);
       if (visibleFrame !== null) cancelAnimationFrame(visibleFrame);
       if (scrollFrame !== null) cancelAnimationFrame(scrollFrame);
@@ -4815,6 +4939,8 @@ export function VerticalTextEditor({
       }
       visualLayoutObserver.disconnect();
       blockObserver.disconnect();
+      paragraphFlowRef.current?.dispose();
+      paragraphFlowRef.current = null;
       pageLayoutObserver.disconnect();
       cancelInitialAdjustment();
       stopCenterAnimation();

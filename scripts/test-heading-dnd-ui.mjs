@@ -23,23 +23,27 @@ sidebarSource = sidebarSource
   .replace('from "react-dom"', `from "${reactDomUrl}"`)
   .replace(
     'import { fileProgressLabels, fileProgressStatuses } from "../../types";',
-    'const fileProgressStatuses = ["todo", "writing", "revising", "done"];\nconst fileProgressLabels = { todo: "未着手", writing: "執筆中", revising: "推敲中", done: "完了" };',
+    'const fileProgressStatuses = ["todo", "writing", "revising", "done", "archived"];\nconst fileProgressLabels = { todo: "未着手", writing: "執筆中", revising: "推敲中", done: "完了", archived: "アーカイブ" };',
   )
   .replace(
-    /import \{\s*buildFilePreview,\s*buildHeadingPreview,\s*\} from "\.\.\/\.\.\/utils\/previewText";/,
-    'const buildFilePreview = () => [];\nconst buildHeadingPreview = () => [];',
+    'import { RightPaneSwitcher, type RightPaneSwitcherItem } from "./RightPaneSwitcher";',
+    "const RightPaneSwitcher = () => null;",
   )
   .replace(
     'import { logHeadingDnd } from "../../utils/headingDndDiagnostics";',
     "const logHeadingDnd = (...args) => globalThis.__headingLogs.push(args);",
   )
   .replace(
-    'import { getScaledFixedMenuPosition } from "../../utils/contextMenuPosition";',
-    "const getScaledFixedMenuPosition = (x, y) => ({ left: x, top: y });",
+    'import { getScaledFixedMenuPosition, getUiFontScale } from "../../utils/contextMenuPosition";',
+    "const getScaledFixedMenuPosition = (x, y) => ({ left: x, top: y });\nconst getUiFontScale = () => 1;",
   )
   .replace(
     'import { displayedCharacterCount } from "../../editor/ast/characterCount";',
     "const displayedCharacterCount = (metrics, options) => options.includeWhitespace ? metrics.textLength : metrics.visibleTextLength;",
+  )
+  .replace(
+    'import { formatSnapshotAge } from "../checkpoints/snapshotAge";',
+    'const formatSnapshotAge = () => "たった今";',
   )
   .replace(
     /import \{\s*buildSidebarMetrics,\s*getSidebarFolderCharCount,\s*getSidebarHeadingCharCount,\s*\} from "\.\/sidebarMetrics";/,
@@ -166,8 +170,6 @@ function Harness({ activeOutlineIds = new Set() } = {}) {
     activeOutlineBlockId:
       outline.find((item) => activeOutlineIds.has(item.id))?.blockId ?? null,
     projectAst,
-    sidebarMode: "tree",
-    navigatorPreviewLines: 2,
     countWhitespace: true,
     showOutlineGuides: true,
     fileProgress: {},
@@ -249,8 +251,9 @@ function Harness({ activeOutlineIds = new Set() } = {}) {
     isSnapshotSectionCollapsed: true,
     onSnapshotSectionCollapsedChange() {},
     onCreateSnapshot() {},
-    onRenameSnapshot() {},
-    onEditSnapshotMemo() {},
+    onOpenSnapshot() {},
+    onEditSnapshotDetails() {},
+    showSnapshotSection: true,
     onRestoreSnapshot() {},
     onDeleteSnapshot() {},
     onCollapse() {},

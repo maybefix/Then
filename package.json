@@ -7,6 +7,7 @@
     "test:code-blocks": "node scripts/test-code-blocks.mjs",
     "test:comment-out": "node scripts/test-comment-out.mjs",
     "test:checkpoint": "node --experimental-strip-types scripts/test-checkpoint-comparison.mjs",
+    "test:checkpoint-diff": "node --experimental-strip-types scripts/test-checkpoint-diff.mjs",
     "test:checkpoint-ui": "node scripts/test-checkpoint-ui.mjs",
     "test:canvas-save": "node scripts/test-canvas-board-save.mjs",
     "test:v063-draft": "node scripts/test-v063-intermediate-draft.mjs",
@@ -90,7 +91,7 @@
     "@tiptap/pm": "^2.11.5",
     "codemirror": "^6.0.2",
     "jszip": "^3.10.1",
-    "pdfjs-dist": "^6.1.200",
+    "pdfjs-dist": "^6.4.299",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

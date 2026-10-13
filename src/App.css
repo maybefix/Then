@@ -733,6 +733,7 @@ textarea,
 .rightSidebar,
 .statusbar,
 .treeContextMenu,
+.snapshotMenu,
 .editorContextMenu,
 .editorFindPopover,
 .modal,
@@ -1698,6 +1699,13 @@ html:not([data-window-fullscreen="true"])
   opacity: 0.85;
 }
 
+/* 進捗が付いたファイルは、アイコンだけを進捗色で塗る。名前の文字色は変えない。 */
+.progressDocumentTabKind:is(.progressText-writing, .progressText-revising, .progressText-done) {
+  opacity: 1;
+  stroke: var(--progress-color);
+  fill: color-mix(in srgb, var(--progress-color) 28%, transparent);
+}
+
 /* 未保存の下書きは、輪郭を破線にして通常のファイルと区別する。 */
 .scratchDocumentTabKind {
   stroke-dasharray: 3 2.2;
@@ -2436,6 +2444,19 @@ html:not([data-window-fullscreen="true"])
   font-size: 10px;
   line-height: 1;
 }
+
+/* ページ割りの結果は入力のたびに本文の枠と本文rootへ書き込む。未登録の
+   カスタムプロパティは子孫へ継承されるので、値が変わるたびに原稿の全要素
+   （長い原稿では数万個）のスタイルが再計算され、Enter 1回に0.5秒かかって
+   いた。どれも書き込んだ要素自身しか読まないので、継承しない登録にする。 */
+@property --paged-clip { syntax: "*"; inherits: false; }
+@property --paged-host-x { syntax: "*"; inherits: false; }
+@property --paged-host-y { syntax: "*"; inherits: false; }
+@property --paged-root-top { syntax: "*"; inherits: false; }
+@property --paged-root-right { syntax: "*"; inherits: false; }
+@property --paged-root-left { syntax: "*"; inherits: false; }
+@property --paged-root-width { syntax: "*"; inherits: false; }
+@property --paged-root-height { syntax: "*"; inherits: false; }
 
 .verticalTypewriterShell[data-editor-display="paged"] .verticalTypewriterEditor {
   position: absolute;
@@ -3474,6 +3495,22 @@ html:not([data-window-fullscreen="true"])
 
 .statusRight {
   margin-left: auto;
+}
+
+.statusCheckpoint {
+  padding: 0 4px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.statusCheckpoint:hover {
+  background: var(--control-hover);
+  color: var(--text-primary);
 }
 
 .statusPath {
@@ -5325,69 +5362,6 @@ body {
   align-items: center;
 }
 
-.fileProgressBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 20px;
-  padding: 0 7px;
-  border: 0.5px solid var(--border-strong);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: 10px;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.fileProgressBadge:hover {
-  color: var(--text-primary);
-}
-
-.fileProgressBadgeCompact {
-  min-height: 16px;
-  padding: 2px;
-  margin-right: 8px;
-  border-color: transparent;
-}
-
-.fileProgressBadgeCompact:hover {
-  border-color: var(--border-strong);
-}
-
-.fileProgressLabel {
-  letter-spacing: 0.02em;
-}
-
-.progressDot {
-  width: 8px;
-  height: 8px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--progress-color, #9aa4ad);
-}
-
-.progressDot-todo {
-  --progress-color: #9aa4ad;
-  background: transparent;
-  border: 1.5px solid #9aa4ad;
-  box-sizing: border-box;
-}
-
-.progressDot-writing {
-  --progress-color: #4a90d9;
-}
-
-.progressDot-revising {
-  --progress-color: #d8a13a;
-}
-
-.progressDot-done {
-  --progress-color: #45ab78;
-}
-
 .fileProgressMenu {
   position: absolute;
   top: calc(100% + 4px);
@@ -5426,274 +5400,6 @@ body {
 .fileProgressMenu button.activeProgressOption {
   color: var(--text-primary);
   font-weight: 600;
-}
-
-/* ===== ナビゲータ方式 ===== */
-.navigatorSection {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  padding: 4px 0 8px;
-}
-
-.navigatorHeader {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 4px 10px 8px;
-}
-
-.navigatorBackButton {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 24px;
-  padding: 0 8px 0 4px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-}
-
-.navigatorBackButton:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
-}
-
-.navigatorBackIcon {
-  width: 16px;
-  height: 16px;
-}
-
-.navigatorFolderTitle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.navigatorFolderTitle span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.navigatorList {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.navigatorItem {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  border-radius: 6px;
-}
-
-.navigatorItem:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.navigatorFolderItem {
-  gap: 6px;
-  width: 100%;
-  min-height: 30px;
-  padding: 0 10px;
-  border: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 13.5px;
-  text-align: left;
-}
-
-.navigatorFolderItem:hover {
-  color: var(--text-primary);
-}
-
-.navigatorItemName {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.navigatorItemChevron {
-  width: 14px;
-  height: 14px;
-  margin-left: auto;
-  color: var(--text-faint);
-}
-
-.navigatorFileItemActive {
-  background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent));
-}
-
-.navigatorFileButton {
-  display: grid;
-  flex: 1;
-  min-width: 0;
-  gap: 2px;
-  padding: 6px 4px 6px 10px;
-  border: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-
-.navigatorFileButton:hover {
-  color: var(--text-primary);
-}
-
-.navigatorFileRow {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  font-size: 13.5px;
-  line-height: 1.35;
-}
-
-.navigatorItemPreview {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: var(--preview-lines, 1);
-  padding-left: 21px;
-  color: var(--text-faint);
-  font-size: 10.5px;
-  line-height: 1.45;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: normal;
-  word-break: break-word;
-}
-
-.navigatorFileDetailHeader {
-  flex: 0 0 auto;
-  min-width: 0;
-  padding-bottom: 8px;
-  border-bottom: 2px solid var(--border-strong);
-}
-
-.navigatorCurrentFile {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  margin: 0 8px;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-primary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 13.5px;
-  font-weight: 600;
-  text-align: left;
-}
-
-.navigatorCurrentFileActive {
-  background: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
-}
-
-.navigatorFileName {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.navigatorFilePreview {
-  margin: 6px 12px 0;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: var(--preview-lines, 2);
-  color: var(--text-muted);
-  font-size: 11px;
-  padding-left: 24px;
-  line-height: 1.55;
-  overflow: hidden;
-  word-break: break-word;
-}
-
-.navigatorHeadingList {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  overflow-y: auto;
-  padding-bottom: 6px;
-}
-
-.navigatorHeadingItem {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-  padding: 6px 10px 8px 12px;
-  border: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-
-.navigatorHeadingItem:hover {
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text-primary);
-}
-
-.navigatorHeadingItemActive {
-  background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent));
-  color: var(--text-primary);
-}
-
-.navigatorHeadingTitleRow {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  font-size: 13.5px;
-}
-
-.navigatorHeadingTitle {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.navigatorHeadingPreview {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: var(--preview-lines, 1);
-  color: var(--text-faint);
-  padding-top: 5px;
-  padding-left: 16px;
-  font-size: 11px;
-  line-height: 1.45;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: normal;
-  word-break: break-word;
 }
 
 .sidebarEmptyState,
@@ -6256,22 +5962,21 @@ body {
 
 .snapshotDock {
   display: flex;
-  min-height: 236px;
-  max-height: 292px;
-  flex: 0 0 184px;
+  max-height: 260px;
+  flex: 0 0 auto;
   flex-direction: column;
   padding: 7px 10px 9px;
   border-top: 0.5px solid var(--border-subtle);
   background: color-mix(in srgb, var(--sidebar-bg, var(--bg-panel)) 88%, var(--bg-root));
 }
 
+/* 畳んだときは見出し1行ぶんだけ。一覧との間隔用の下余白も要らない。 */
 .collapsedSnapshotDock {
-  min-height: 60px;
-  max-height: 60px;
-  flex-basis: 58px;
+  padding-block: 7px;
 }
 
 .collapsedSnapshotDock .snapshotSectionHeader {
+  padding-bottom: 0;
   border-bottom: 0;
 }
 
@@ -6378,6 +6083,13 @@ body {
   min-width: 0;
   align-items: center;
   min-height: 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
 }
 
 .snapshotItemTitleRow {
@@ -6385,6 +6097,32 @@ body {
   min-width: 0;
   align-items: center;
   gap: 5px;
+}
+
+.snapshotItemAge {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.snapshotShowAllButton {
+  justify-self: start;
+  margin-top: 4px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.snapshotShowAllButton:hover {
+  background: var(--control-hover);
+  color: var(--text-primary);
 }
 
 .snapshotItemTitle {
@@ -6443,19 +6181,15 @@ body {
   position: fixed;
   z-index: 95;
   display: grid;
-  width: min(248px, calc(100vw - 24px));
-  max-height: min(260px, calc(100vh - 24px));
+  /* zoom does not shrink vw/vh, so divide the viewport caps by the UI zoom. */
+  width: min(248px, calc((100vw - 24px) / var(--ui-font-scale, 1)));
+  max-height: min(260px, calc((100vh - 24px) / var(--ui-font-scale, 1)));
   overflow-y: auto;
   padding: 6px;
   border: 0.5px solid var(--border-strong);
   border-radius: 6px;
   background: var(--bg-panel-strong);
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.36);
-  transform: translateX(-100%);
-}
-
-.snapshotMenu[data-placement="above"] {
-  transform: translate(-100%, -100%);
 }
 
 .snapshotMenuInfo {
@@ -6771,6 +6505,14 @@ body {
   height: 16px;
   flex: 0 0 16px;
   place-items: center;
+}
+
+/* 左サイドバーの絞り込みでは、アイコンの位置に状態記号を出す。 */
+.progressFilterMark {
+  color: var(--progress-color);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1;
 }
 
 .rightPaneSwitcherIcon svg {
@@ -8609,10 +8351,6 @@ body {
   background: color-mix(in srgb, var(--accent) 6%, var(--bg-secondary));
 }
 
-.ideaRowMain {
-  min-width: 0;
-}
-
 .ideaRowTitle {
   display: flex;
   align-items: center;
@@ -8648,32 +8386,6 @@ body {
   line-height: 1.55;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-}
-
-.ideaRowMeta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 7px;
-  color: var(--text-faint);
-  font-size: 11px;
-}
-
-.ideaRowChevron {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  color: var(--text-faint);
-}
-
-.ideaRowChevron svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.8;
 }
 
 .ideaDetailTop {
@@ -9284,31 +8996,44 @@ body {
   background: var(--idea-ground);
 }
 
-/* スレッド一覧: カードではなく、区切り線で分けた行として並べる。 */
+/* スレッド一覧: カードとして並べる。ペインが狭いうちは1列で本文を読ませ、
+   広げたら2列のタイルにして一覧性を取る。インボックスは常に先頭で横幅いっぱい。 */
 .ideaView:first-child .ideaScroll {
-  padding: 0 0 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 8px;
+  padding: 10px 12px 18px;
+}
+
+.ideaView:first-child {
+  container-type: inline-size;
+}
+
+.ideaView:first-child .ideaScroll > .ideaEmpty {
+  grid-column: 1 / -1;
 }
 
 .ideaThreadRow {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
   margin-top: 0;
-  padding: 12px 12px 12px 16px;
-  border: 0;
-  border-bottom: 0.5px solid var(--border-subtle);
-  border-radius: 0;
-  background: transparent;
-}
-
-.ideaThreadRow:hover {
+  padding: 11px 13px 10px;
+  border: 0.5px solid var(--border-subtle);
   background: var(--idea-card);
 }
 
-.ideaThreadRow.isInbox {
-  background: transparent;
-  box-shadow: inset 3px 0 0 var(--accent);
+.ideaThreadRow:hover {
+  border-color: var(--border-strong);
+  background: var(--idea-card-hover);
 }
 
-.ideaThreadRow.isStarred {
-  box-shadow: inset 3px 0 0 var(--warning);
+.ideaThreadRow.isInbox {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  background: transparent;
 }
 
 .ideaThreadRow.isInbox:hover {
@@ -9319,31 +9044,70 @@ body {
   font-size: 13.5px;
 }
 
-.ideaRowSummary {
-  color: var(--text-secondary);
+.ideaRowName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.ideaRowAside {
+.ideaRowInbox {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.ideaRowInbox svg,
+.ideaRowRefs svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.ideaRowSummary {
+  margin-top: 0;
+  color: var(--text-secondary);
+  -webkit-line-clamp: 3;
+}
+
+.ideaRowFoot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 2px;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ideaRowRefs {
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  margin-left: auto;
 }
 
-.ideaRowCount {
-  min-width: 22px;
-  padding: 2px 7px;
-  border: 0.5px solid var(--border-subtle);
-  border-radius: 999px;
-  background: var(--idea-card);
-  color: var(--text-muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.3;
-  text-align: center;
-}
+@container (min-width: 420px) {
+  .ideaView:first-child .ideaScroll {
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  }
 
-.ideaRowAside .ideaRowChevron {
-  width: 16px;
+  .ideaThreadRow:not(.isInbox) {
+    min-height: 124px;
+  }
+
+  .ideaThreadRow.isInbox {
+    grid-column: 1 / -1;
+  }
+
+  .ideaThreadRow.isInbox .ideaRowSummary {
+    -webkit-line-clamp: 2;
+  }
 }
 
 /* スレッド詳細: 沈めた地の上に、明るいカードを置く。 */
@@ -13203,166 +12967,6 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   vector-effect: non-scaling-stroke;
 }
 
-.checkpointStudio {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  background: var(--bg-root);
-  color: var(--text-primary);
-}
-
-.checkpointStudioHeader {
-  display: flex;
-  min-height: 86px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 14px 24px;
-  border-bottom: 0.5px solid var(--border-subtle);
-  background: var(--bg-panel);
-}
-
-.checkpointStudioHeader h1 { margin: 2px 0 0; font-size: 19px; letter-spacing: .02em; }
-.checkpointStudioHeader p { margin: 4px 0 0; color: var(--text-muted); font-size: 13px; }
-.checkpointEyebrow { color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: .08em; }
-.checkpointStudioActions { display: flex; gap: 8px; }
-.checkpointButton { min-height: 36px; padding: 0 13px; border: 1px solid var(--border-strong); border-radius: var(--radius-button); background: var(--bg-panel); color: var(--text-secondary); font-size: 13px; font-weight: 700; }
-.checkpointButton:hover { background: var(--control-hover); color: var(--text-primary); }
-.checkpointCreateButton { border-color: var(--accent-border); background: var(--accent-soft); color: var(--text-primary); }
-.checkpointStudioLayout { display: grid; min-height: 0; flex: 1; grid-template-columns: 286px minmax(460px, 1fr) 336px; }
-.checkpointHistory { display: flex; min-height: 0; flex-direction: column; border-right: 1px solid var(--border-subtle); background: var(--sidebar-bg); }
-.checkpointPaneTitle { display: flex; align-items: flex-start; gap: 9px; }
-.checkpointPaneTitle > span { display: grid; width: 23px; height: 23px; flex: 0 0 23px; place-items: center; border-radius: 50%; background: var(--accent-soft); color: var(--accent-strong); font-size: 12px; font-weight: 800; }
-.checkpointPaneTitle > div { display: grid; gap: 2px; }
-.checkpointPaneTitle strong { color: var(--text-primary); font-size: 14px; line-height: 1.35; }
-.checkpointPaneTitle small { color: var(--text-muted); font-size: 11px; line-height: 1.4; }
-.checkpointHistory > .checkpointPaneTitle { padding: 16px 16px 7px; }
-.checkpointSearch { display: flex; align-items: center; gap: 8px; margin: 7px 14px 10px; padding: 0 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--bg-panel); color: var(--text-muted); }
-.checkpointSearch:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
-.checkpointSearch input { width: 100%; height: 36px; border: 0; outline: 0; background: transparent; color: var(--text-primary); font-size: 13px; }
-.checkpointSnapshotList { min-height: 0; flex: 1; overflow-y: auto; padding: 0 9px 12px; }
-.checkpointSnapshot { display: grid; width: 100%; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 8px; padding: 11px 9px; border: 1px solid transparent; border-radius: var(--radius-card); background: transparent; color: var(--text-secondary); text-align: left; }
-.checkpointSnapshot:hover { background: var(--control-hover); color: var(--text-primary); }
-.checkpointSnapshot.active { border-color: var(--accent-border); background: var(--accent-soft); color: var(--text-primary); }
-.checkpointSnapshot:focus-visible,.checkpointFileTabs button:focus-visible,.checkpointScope button:focus-visible,.checkpointButton:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
-.checkpointSnapshot > i { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--text-faint); }
-.checkpointSnapshot.active > i { background: var(--accent); }.checkpointSnapshot.shelter > i { background: var(--warning); }
-.checkpointSnapshot strong,.checkpointSnapshot small,.checkpointSnapshot em { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.checkpointSnapshot strong { font-size: 13px; }.checkpointSnapshot small,.checkpointSnapshot em { margin-top: 3px; color: var(--text-muted); font-size: 11px; font-style: normal; }
-.checkpointSnapshot > b { align-self: start; padding: 2px 5px; border-radius: 4px; background: color-mix(in srgb, var(--warning) 15%, var(--bg-panel)); color: var(--text-secondary); font-size: 10px; }
-.checkpointNoResult,.checkpointNoSelection { padding: 16px; color: var(--text-muted); font-size: 13px; line-height: 1.55; }.checkpointStorage { padding: 12px 16px; border-top: 1px solid var(--border-subtle); color: var(--text-muted); font-size: 11px; }.checkpointStorage strong,.checkpointStorage span { display: block; }.checkpointStorage span { margin-top: 3px; }
-.checkpointCompare { display: flex; min-width: 0; min-height: 0; flex-direction: column; }.checkpointCompareHeader { display: flex; min-height: 70px; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 18px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-panel); }.checkpointCompareSelect { display: grid; gap: 3px; color: var(--text-muted); font-size: 11px; font-weight: 700; }.checkpointCompareSelect select { min-width: 190px; max-width: 240px; height: 34px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--bg-panel-strong); color: var(--text-primary); font-size: 13px; }
-.checkpointFileTabs { display: flex; gap: 4px; overflow-x: auto; padding: 9px 14px 0; border-bottom: 1px solid var(--border-subtle); background: var(--bg-panel); }.checkpointFileTabs button { max-width: 210px; overflow: hidden; padding: 8px 10px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--text-muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }.checkpointFileTabs button.active { border-bottom-color: var(--accent); color: var(--text-primary); font-weight: 700; }
-.checkpointDiffMeta { display: flex; justify-content: space-between; gap: 12px; padding: 11px 18px 7px; color: var(--text-muted); font-size: 12px; }.checkpointDiffMeta span:first-child { color: var(--text-secondary); font-weight: 700; }.checkpointDiffLegend { display: flex; justify-content: flex-end; gap: 8px; padding: 0 18px 9px; font-size: 11px; }.checkpointDiffLegend span { padding: 3px 7px; border-radius: 4px; color: var(--text-secondary); }.checkpointLegendSnapshot { background: var(--danger-soft); }.checkpointLegendCurrent { background: color-mix(in srgb, var(--success) 14%, transparent); }
-.checkpointDiff { display: grid; min-height: 0; flex: 1; grid-template-columns: 1fr 1fr; overflow: auto; margin: 0 18px 18px; border: 1px solid var(--border-subtle); border-radius: var(--radius-card); background: var(--bg-panel); }.checkpointDiff article + article { border-left: 1px solid var(--border-subtle); }.checkpointDiff article { min-width: 0; }.checkpointDiff article header { display: flex; justify-content: space-between; gap: 10px; padding: 11px 13px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-panel-strong); font-size: 13px; }.checkpointDiff article header span { overflow: hidden; color: var(--text-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }.checkpointDiff pre { margin: 0; padding: 11px 0 22px; overflow: auto; color: var(--text-primary); font: 13px/1.85 "Cascadia Code", Consolas, monospace; }.checkpointDiff code { display: grid; grid-template-columns: 39px 1fr; min-height: 24px; padding-right: 10px; white-space: pre-wrap; }.checkpointDiff code b { padding-right: 8px; color: var(--text-faint); font-weight: 400; text-align: right; user-select: none; }.checkpointDiff code.changed { background: var(--danger-soft); }.checkpointDiff code.current { background: color-mix(in srgb, var(--success) 14%, transparent); }.checkpointDiff pre p { padding: 12px 14px; color: var(--text-muted); font-family: var(--ui-font-family); font-size: 13px; line-height: 1.6; }.checkpointBlank { display: grid; flex: 1; place-items: center; padding: 20px; color: var(--text-muted); font-size: 14px; text-align: center; }
-.checkpointPlan { display: flex; min-height: 0; flex-direction: column; overflow-y: auto; border-left: 1px solid var(--border-subtle); background: var(--sidebar-bg); }.checkpointPlan > section { padding: 15px 17px 0; }.checkpointRestoreHeading { padding-top: 16px !important; }.checkpointPlan p { margin: 8px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.55; }.checkpointPlan p b { color: var(--text-primary); }.checkpointScope { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px !important; margin: 14px 17px 0; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--bg-panel-strong); }.checkpointScope button { min-height: 57px; padding: 6px; border: 1px solid transparent; border-radius: calc(var(--radius-control) - 1px); background: transparent; color: var(--text-muted); font-size: 12px; text-align: left; }.checkpointScope button b,.checkpointScope button small { display: block; }.checkpointScope button b { font-size: 12px; }.checkpointScope button small { margin-top: 3px; font-size: 10px; line-height: 1.3; }.checkpointScope button.active { border-color: var(--accent-border); background: var(--bg-panel); color: var(--text-primary); box-shadow: 0 1px 3px rgba(20, 25, 32, .12); }.checkpointPlanSection { border-top: 1px solid var(--border-subtle); margin-top: 16px; padding-top: 14px !important; }.checkpointPlanSection h3 { margin: 0; color: var(--text-primary); font-size: 13px; }.checkpointPlanSection h3 span { color: var(--danger); }.checkpointSectionHelp { margin-top: 4px !important; font-size: 11px !important; }.checkpointPlanSection ul { margin: 8px 0 0; padding-left: 18px; color: var(--text-muted); font-size: 12px; line-height: 1.65; }.checkpointCaution { margin-top: 10px !important; padding: 8px 9px; border-left: 3px solid var(--warning); background: color-mix(in srgb, var(--warning) 10%, transparent); color: var(--text-secondary) !important; }.checkpointRestoreList { overflow: hidden; margin-top: 8px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--bg-panel); }.checkpointRestoreList label { display: grid; min-height: 35px; grid-template-columns: 16px 14px minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 0 8px; border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary); font-size: 12px; }.checkpointRestoreList label:last-child { border-bottom: 0; }.checkpointRestoreList label:has(input:checked) { background: color-mix(in srgb, var(--accent-soft) 65%, var(--bg-panel)); color: var(--text-primary); }.checkpointRestoreList input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); }.checkpointRestoreList input:disabled { opacity: .65; }.checkpointRestoreList b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }.checkpointRestoreList em { color: var(--text-muted); font-size: 10px; font-style: normal; }.checkpointFolderTitle { margin-top: 14px !important; }.checkpointFolderList { max-height: 132px; overflow-y: auto; }.checkpointConflictMark { color: var(--danger) !important; font-weight: 700; }
-.checkpointConflictChoices { display: grid; gap: 6px; margin-top: 8px; }.checkpointConflictChoices label { display: flex; align-items: flex-start; gap: 8px; padding: 9px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--bg-panel); color: var(--text-secondary); font-size: 12px; }.checkpointConflictChoices label:has(input:checked) { border-color: var(--accent-border); background: var(--accent-soft); color: var(--text-primary); }.checkpointConflictChoices input { width: 15px; height: 15px; margin: 2px 0 0; accent-color: var(--accent); }.checkpointConflictChoices b,.checkpointConflictChoices small { display: block; }.checkpointConflictChoices small { margin-top: 3px; color: var(--text-muted); font-size: 11px; line-height: 1.4; }.checkpointOrder { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; padding: 9px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--bg-panel); color: var(--text-secondary); font-size: 12px; }.checkpointOrder input { width: 15px; height: 15px; margin: 2px 0 0; accent-color: var(--accent); }.checkpointOrder span,.checkpointOrder small { display: block; }.checkpointOrder small { margin-top: 3px; color: var(--text-muted); font-size: 11px; }.checkpointIncludes { padding-bottom: 15px !important; }.checkpointPlan footer { position: sticky; bottom: 0; margin-top: auto; padding: 14px 17px 16px; border-top: 1px solid var(--border-subtle); background: var(--bg-panel); }.checkpointRestoreButton { width: 100%; min-height: 40px; border: 0; border-radius: var(--radius-button); background: var(--accent); color: var(--on-accent); font-size: 14px; font-weight: 800; }.checkpointRestoreButton:hover { background: var(--accent-strong); }.checkpointRestoreButton:disabled { cursor: not-allowed; opacity: .45; }.checkpointPlan footer small { display: block; margin: 8px 1px 0; color: var(--text-muted); font-size: 11px; line-height: 1.45; }.checkpointEmpty { align-items: center; justify-content: center; gap: 10px; }.checkpointEmpty h1,.checkpointEmpty p { margin: 0; }.checkpointEmpty p { color: var(--text-muted); }.checkpointEmpty button { padding: 8px 12px; border: 0; border-radius: var(--radius-button); background: var(--accent); color: var(--on-accent); }
-
-@media (max-width: 1280px) {
-  .checkpointStudioLayout { grid-template-columns: 250px minmax(380px, 1fr) 306px; }
-  .checkpointStudioHeader { padding-inline: 16px; }
-}
-
-/* チェックポイント: 説明を常駐させず、選択・比較・復元の操作を優先する。 */
-.checkpointStudioHeader { min-height: 58px; padding: 10px 18px; }
-.checkpointStudioHeader h1 { margin: 0; font-size: 16px; letter-spacing: 0; }
-.checkpointStudioLayout { grid-template-columns: 250px minmax(420px, 1fr) 292px; }
-.checkpointButton { min-height: 32px; padding-inline: 11px; font-size: 12px; }
-.checkpointCompactHeader { display: flex; align-items: center; justify-content: space-between; padding: 13px 15px 5px; }
-.checkpointCompactHeader strong { font-size: 13px; }
-.checkpointCompactHeader span { color: var(--text-muted); font-size: 11px; }
-.checkpointSearch { margin: 6px 12px 9px; padding-inline: 9px; }
-.checkpointSearch input { height: 33px; font-size: 12px; }
-.checkpointSnapshot { padding: 9px 8px; }
-.checkpointSnapshot strong { font-size: 12px; }
-.checkpointSnapshot small,.checkpointSnapshot em { font-size: 10px; }
-.checkpointSnapshot { position: relative; display: block; padding: 0; }
-.checkpointSnapshotSelect { display: grid; width: 100%; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 8px; padding: 9px 34px 9px 8px; border: 1px solid transparent; border-radius: inherit; background: transparent; color: inherit; text-align: left; }
-.checkpointSnapshot:hover { background: transparent; }
-.checkpointSnapshot:hover .checkpointSnapshotSelect { background: var(--control-hover); }
-.checkpointSnapshot.active .checkpointSnapshotSelect { border-color: var(--accent-border); background: var(--accent-soft); }
-.checkpointSnapshotSelect > i { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--text-faint); }
-.checkpointSnapshot.active .checkpointSnapshotSelect > i { background: var(--accent); }
-.checkpointSnapshot.shelter .checkpointSnapshotSelect > i { background: var(--warning); }
-.checkpointSnapshotSelect > b { align-self: start; padding: 2px 5px; border-radius: 4px; background: color-mix(in srgb, var(--warning) 15%, var(--bg-panel)); color: var(--text-secondary); font-size: 10px; }
-.checkpointSnapshotActions { position: absolute; top: 7px; right: 6px; }
-.checkpointSnapshotMore { display: grid; width: 24px; height: 24px; place-items: center; border: 0; border-radius: 4px; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 17px; line-height: 1; opacity: 0; }
-.checkpointSnapshot:hover .checkpointSnapshotMore,.checkpointSnapshot:focus-within .checkpointSnapshotMore { opacity: 1; }
-.checkpointSnapshotMore:hover,.checkpointSnapshotMore[aria-expanded="true"] { background: var(--bg-panel-strong); color: var(--text-primary); }
-.checkpointSnapshotMenu { position: absolute; z-index: 2; top: 27px; right: 0; min-width: 76px; padding: 4px; border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--bg-panel); box-shadow: var(--shadow-popover, 0 6px 18px rgba(0, 0, 0, .16)); }
-.checkpointSnapshotMenu button { width: 100%; min-height: 28px; border: 0; border-radius: 3px; background: transparent; color: var(--danger); cursor: pointer; font-size: 11px; text-align: left; }
-.checkpointSnapshotMenu button:hover { background: var(--danger-soft); }
-.checkpointCompareHeader { min-height: 54px; padding: 9px 15px; }
-.checkpointCompareHeader > strong { min-width: 0; overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-.checkpointCompareSelect select { min-width: 172px; height: 30px; font-size: 12px; }
-.checkpointFileTabs { padding: 7px 11px 0; }
-.checkpointFileTabs button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 8px; font-size: 12px; }
-.checkpointFileTabs button > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.checkpointFileStatus { flex: 0 0 auto; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-style: normal; font-weight: 700; }
-.checkpointFileStatus.added { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
-.checkpointFileStatus.removed { background: var(--danger-soft); color: var(--danger); }
-.checkpointFileStatus.unavailable { background: color-mix(in srgb, var(--warning) 12%, transparent); color: var(--warning); }
-.checkpointFileStatus.relocated { background: var(--accent-soft); color: var(--accent-strong); }
-.checkpointDiffMeta { justify-content: flex-end; min-height: 32px; padding: 8px 15px; font-size: 11px; }
-.checkpointDiff { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; margin: 0 15px 15px; border: 1px solid var(--border-subtle); }
-.checkpointDiffColumnHeaders { display: grid; grid-template-columns: 1fr 1fr; flex: 0 0 auto; border-bottom: 1px solid var(--border-subtle); background: var(--bg-panel-strong); }
-.checkpointDiffColumnHeaders > span { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 8px; padding: 9px 11px; font-size: 12px; }
-.checkpointDiffColumnHeaders > span + span { border-left: 1px solid var(--border-subtle); }
-.checkpointDiffColumnHeaders b,.checkpointDiffColumnHeaders small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.checkpointDiffColumnHeaders small { color: var(--text-muted); font-size: 10px; font-weight: 400; }
-.checkpointDiffRows { min-height: 0; flex: 1; overflow: auto; }
-.checkpointDiffRow { display: grid; min-width: min-content; grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr); border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 58%, transparent); }
-.checkpointDiffRow:last-child { border-bottom: 0; }
-.checkpointDiff .checkpointDiffLine { display: grid; min-width: 0; min-height: 25px; grid-template-columns: 42px minmax(0, 1fr); padding: 3px 9px 3px 0; background: transparent; color: var(--text-primary); font: 12px/1.65 "Cascadia Code", Consolas, monospace; white-space: pre-wrap; }
-.checkpointDiff .checkpointDiffLine + .checkpointDiffLine { border-left: 1px solid var(--border-subtle); }
-.checkpointDiff .checkpointDiffLine b { padding-right: 8px; color: var(--text-faint); font-weight: 400; text-align: right; user-select: none; }
-.checkpointDiff .checkpointDiffLine span { min-width: 0; overflow-wrap: anywhere; }
-.checkpointDiff .checkpointDiffLine.removed { background: var(--danger-soft); }
-.checkpointDiff .checkpointDiffLine.added { background: color-mix(in srgb, var(--success) 14%, transparent); }
-.checkpointDiff .checkpointDiffLine.empty { background: color-mix(in srgb, var(--bg-panel-strong) 45%, transparent); }
-.checkpointPlan > section { padding-inline: 15px; }
-.checkpointRestoreHeading { padding-top: 13px !important; }
-.checkpointRestoreHeading h2 { margin: 0; font-size: 14px; }
-.checkpointRestoreHeading p { margin-top: 4px; font-size: 11px; }
-.checkpointScope { margin: 11px 15px 0; }
-.checkpointScope button { min-height: 34px; padding: 5px; font-size: 12px; text-align: center; }
-.checkpointScope button small,.checkpointScope button b { display: inline; font-size: inherit; }
-.checkpointRestoreSummary { margin: 13px 15px 0 !important; color: var(--text-secondary) !important; font-size: 12px !important; line-height: 1.55; }
-.checkpointPlanSection { margin-top: 13px; padding-top: 12px !important; }
-.checkpointPlanSection h3 { font-size: 12px; }
-.checkpointRestoreList label { min-height: 32px; font-size: 11px; }
-.checkpointConflictChoices label { padding: 8px; font-size: 11px; }
-.checkpointConflictChoices small { font-size: 10px; }
-.checkpointOrder { padding: 7px; font-size: 11px; }
-.checkpointPlan footer { padding: 11px 15px 13px; }
-.checkpointRestoreButton { min-height: 36px; font-size: 13px; }
-
-@media (max-width: 1280px) {
-  .checkpointStudioLayout { grid-template-columns: 226px minmax(340px, 1fr) 278px; }
-  .checkpointDiffRow { grid-template-columns: minmax(240px, 1fr) minmax(240px, 1fr); }
-}
-
-/* Stable restore-list icons and vertically centered order checkbox. */
-.checkpointRestoreItemIcon {
-  width: 14px;
-  height: 14px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.75;
-}
-
-.checkpointOrder {
-  align-items: center;
-}
-
-.checkpointOrder input {
-  flex: 0 0 auto;
-  margin: 0;
-}
-
 /* ===== 別ウィンドウキャンバスの Idea・資料サイドパネル ===== */
 
 .canvasWorkspace.hasCanvasSidePanel {
@@ -14974,15 +14578,11 @@ html:not([data-window-fullscreen="true"])
   --progress-done: #69c792;
 }
 
-.progressDot-todo { --progress-color: var(--progress-todo); border-color: var(--progress-todo); }
-.progressDot-writing { --progress-color: var(--progress-writing); }
-.progressDot-revising { --progress-color: var(--progress-revising); }
-.progressDot-done { --progress-color: var(--progress-done); }
-
 .progressText-todo { --progress-color: var(--text-faint, var(--progress-todo)); }
 .progressText-writing { --progress-color: var(--progress-writing); }
 .progressText-revising { --progress-color: var(--progress-revising); }
 .progressText-done { --progress-color: var(--progress-done); }
+.progressText-archived { --progress-color: var(--text-faint, var(--progress-todo)); }
 
 .sidebarHeaderUnit {
   flex: none;
@@ -15045,8 +14645,10 @@ html:not([data-window-fullscreen="true"])
   visibility: hidden;
 }
 
+/* 記号の左隣、行の上端から開く。下端に収まらないときは TSX 側で上へ寄せる。 */
 .fileTreeItem .treeStatusColumn .fileProgressMenu {
-  right: 0;
+  top: 0;
+  right: calc(100% + 4px);
   left: auto;
 }
 
@@ -15072,6 +14674,7 @@ html:not([data-window-fullscreen="true"])
 .fileTreeItem .treeItemName-writing { color: var(--progress-writing); }
 .fileTreeItem .treeItemName-revising { color: var(--progress-revising); }
 .fileTreeItem .treeItemName-todo { color: var(--text-faint); }
+.fileTreeItem .treeItemName-archived { color: var(--text-faint); }
 
 .fileTreeItemPrimary {
   font-size: 12px;

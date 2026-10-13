@@ -102,9 +102,6 @@
 
 .appShell[data-theme="workbench-light"] .leftWorkspaceCluster :is(
   .activeTreeItem,
-  .navigatorFileItemActive,
-  .navigatorCurrentFileActive,
-  .navigatorHeadingItemActive,
   .activeOutlineSidebarItem,
   .activeOutlineTreeItem,
   .selectedOutlineTreeItem
@@ -123,13 +120,10 @@
 .appShell[data-theme="workbench-light"] .leftWorkspaceCluster :is(
   .activeTreeItem,
   .selectedTreeEntry,
-  .navigatorFileItemActive,
-  .navigatorCurrentFileActive,
-  .navigatorHeadingItemActive,
   .activeOutlineSidebarItem,
   .activeOutlineTreeItem,
   .selectedOutlineTreeItem
-) :is(.treeChevron, .treeItemCharCount, .navigatorItemPreview, .navigatorHeadingPreview, .outlineLevelMark) {
+) :is(.treeChevron, .treeItemCharCount, .outlineLevelMark) {
   color: #dff5fa;
 }
 

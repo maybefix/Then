@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Then 書き出し 左サイドバー案</title>
+<!--
+  書き出し画面の左サイドバーだけを作り直すためのモック。
+  A / B / C の3案を上部で切り替える。中央・右は配置の目安だけ。
+  実データ（テスト_snapshot検証用 の15ファイル）を使う。
+-->
+<style>
+  :root {
+    --ink: #1c1c1a; --ink-2: #4a4a45; --ink-3: #7a7a74;
+    --line: #e4e4e0; --ground: #f6f6f4; --paper: #fff; --hover: #ecece8; --desk: #e9e9e5;
+    --sans: 'BIZ UDPGothic', 'Yu Gothic UI', Meiryo, sans-serif;
+  }
+  [data-theme="dark"] {
+    --ink: #e8e8e4; --ink-2: #b9b9b2; --ink-3: #85857e;
+    --line: #2e2f33; --ground: #18191c; --paper: #202125; --hover: #2a2b30; --desk: #141518;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 14px; }
+  button, select, input { font-family: inherit; color: inherit; }
+  button { cursor: pointer; }
+
+  .app { height: 100vh; display: flex; flex-direction: column; }
+  .topbar { display: flex; align-items: center; gap: 14px; padding: 6px 16px 6px 20px; border-bottom: 1px solid var(--line); }
+  .topbar h1 { margin: 0; font-size: 17px; }
+  .back { border: 0; background: none; color: var(--ink-2); font-size: 14px; min-height: 40px; padding: 0 10px; border-radius: 8px; }
+  .seg { display: flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--hover); }
+  .seg button { min-height: 32px; padding: 0 12px; border: 0; border-radius: 7px; background: transparent; color: var(--ink-2); font-size: 13px; white-space: nowrap; }
+  .seg button[aria-pressed="true"] { background: var(--paper); color: var(--ink); font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,.1); }
+  .spacer { flex: 1; }
+  .meta { color: var(--ink-3); font-size: 12px; }
+  .primary { min-height: 40px; padding: 0 18px; border: 0; border-radius: 10px; background: var(--ink); color: var(--paper); font-weight: 700; }
+  .variant { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border: 1px dashed var(--ink-3); border-radius: 10px; font-size: 12px; color: var(--ink-3); }
+
+  .layout { flex: 1; min-height: 0; display: flex; }
+  .side { flex: 0 0 300px; min-width: 0; display: flex; flex-direction: column; background: var(--ground); border-right: 1px solid var(--line); }
+  .main { flex: 1; background: var(--desk); display: flex; align-items: center; justify-content: center; color: var(--ink-3); }
+  .right { flex: 0 0 320px; background: var(--ground); border-left: 1px solid var(--line); }
+
+  /* 共通 */
+  .side-head { display: flex; align-items: baseline; justify-content: space-between; padding: 16px 16px 8px; }
+  .side-head h2 { margin: 0; font-size: 15px; }
+  .count { color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .tools { display: flex; align-items: center; gap: 4px; padding: 0 12px 8px; }
+  .search { flex: 1; min-width: 0; min-height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); font-size: 13px; }
+  .link { border: 0; background: none; color: var(--ink-2); font-size: 12px; padding: 4px 6px; border-radius: 6px; white-space: nowrap; }
+  .link:hover { background: var(--hover); }
+  .scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 16px; }
+  .folder { padding: 10px 8px 4px; color: var(--ink-3); font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .folder input { margin: 0; }
+  .row { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px; border-radius: 6px; }
+  .row:hover { background: var(--hover); }
+  .row input[type=checkbox] { width: 15px; height: 15px; margin: 0; flex: none; accent-color: var(--ink); }
+  .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row.off .name { color: var(--ink-3); }
+  .chars { flex: none; color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .num { flex: none; width: 20px; color: var(--ink-3); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* A: 境目に「改ページ／続けて」 */
+  .join { display: flex; align-items: center; gap: 8px; height: 18px; padding: 0 8px 0 31px; }
+  .join::before { content: ""; flex: 1; border-top: 1px dashed var(--line); }
+  .join select { border: 0; background: transparent; color: var(--ink-3); font-size: 11px; padding: 0; cursor: pointer; }
+  .join select:hover { color: var(--ink); }
+
+  /* B: 選ぶ／並べる */
+  .tabs { margin: 0 12px 8px; }
+  .tabs button { flex: 1; }
+  .order-row { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 8px; border-radius: 6px; }
+  .order-row:hover { background: var(--hover); }
+  .grip { color: var(--ink-3); cursor: grab; font-size: 12px; letter-spacing: -2px; }
+  .order-row .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding: 5px 0; line-height: 1.35; }
+  .order-row .name { display: block; }
+  .order-row .sub { overflow: hidden; color: var(--ink-3); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+  .order-row select { flex: none; min-height: 26px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); font-size: 12px; padding: 0 4px; }
+
+  /* C: 開始は記号1字、押すと切り替え */
+  .mark { flex: none; width: 22px; height: 22px; border: 0; border-radius: 5px; background: none; color: var(--ink-3); font-size: 12px; }
+  .mark:hover { background: var(--paper); color: var(--ink); }
+  .row.off .mark { visibility: hidden; }
+
+  .foot { padding: 8px 16px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; color: var(--ink-3); font-size: 12px; }
+
+  /* D: チェックポイントのサイドバーと同じ三段の強弱（カード／見出し／太字名＋薄い補足） */
+  .d { display: flex; flex-direction: column; gap: 16px; min-height: 0; flex: 1; padding: 20px 16px 0; }
+  .d-head { display: flex; align-items: baseline; justify-content: space-between; padding: 0 4px; }
+  .d-head h2 { margin: 0; font-size: 15px; }
+  .d-card { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+  .d-card-row { display: flex; align-items: center; gap: 10px; }
+  .d-ring { width: 12px; height: 12px; flex: none; border: 2px solid #3b78e7; border-radius: 50%; }
+  .d-card b { display: block; font-size: 14px; }
+  .d-card small { color: var(--ink-3); font-size: 12px; }
+  .d-card-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .d-card-btns button { min-height: 36px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); font-size: 13px; }
+  .d-search { min-height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); font-size: 13px; }
+  .d-groups { flex: 1; min-height: 0; overflow-y: auto; margin: 0 -16px; padding: 0 16px 24px; display: flex; flex-direction: column; gap: 16px; }
+  .d-group { display: flex; flex-direction: column; gap: 2px; }
+  .d-group-name { padding: 0 10px 4px; color: var(--ink-3); font-size: 12px; font-weight: 700; }
+  .d-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-radius: 10px; }
+  .d-item:hover { background: var(--hover); }
+  .d-item input { width: 15px; height: 15px; margin: 3px 0 0; flex: none; accent-color: var(--ink); }
+  .d-body { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
+  .d-name { overflow: hidden; font-size: 14px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+  .d-meta { display: flex; align-items: center; gap: 6px; color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .d-meta select { padding: 0; border: 0; background: transparent; color: var(--ink-3); font-size: 12px; cursor: pointer; }
+  .d-meta select:hover { color: var(--ink); }
+  .d-item.off .d-name { color: var(--ink-3); font-weight: 400; }
+  .d-outline { min-height: 40px; border: 1px solid var(--ink); border-radius: 10px; background: var(--paper); font-size: 14px; font-weight: 700; }
+  .d-outline:disabled { opacity: .45; cursor: default; }
+  .d-done { border: 0 !important; background: var(--ink) !important; color: var(--paper); font-weight: 700; }
+  .d-tools { display: flex; flex-direction: column; gap: 6px; }
+  .d-bulk { display: flex; gap: 4px; }
+  .d-bulk button { min-height: 30px; padding: 0 8px; border: 0; border-radius: 6px; background: none; color: var(--ink-2); font-size: 12px; }
+  .d-bulk button:hover { background: var(--hover); }
+  .d-sort { align-items: center; cursor: grab; }
+  .d-sort.dragging { opacity: .4; }
+  .d-sort.over { box-shadow: inset 0 2px 0 var(--ink); }
+  .d-groups.e { gap: 24px; padding-top: 0; }
+  .e-sec { display: flex; flex-direction: column; gap: 8px; }
+  .e-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 4px; }
+  .e-head h2 { margin: 0; font-size: 15px; }
+  .e-head h2.e-sub { color: var(--ink-2); font-size: 13px; }
+  .e-link { align-self: flex-start; padding: 2px 6px; border: 0; border-radius: 6px; background: none; color: var(--ink-2); font-size: 12px; }
+  .e-link:hover { background: var(--hover); }
+  .e-empty { margin: 0; padding: 10px; color: var(--ink-3); font-size: 13px; }
+  .d-sort { position: relative; }
+  .e-remove { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: var(--ink-3); font-size: 15px; opacity: 0; }
+  .d-sort:hover .e-remove, .e-remove:focus-visible { opacity: 1; background: var(--paper); }
+  .e-remove:hover { background: var(--hover); color: var(--ink); }
+  .d-meta { white-space: nowrap; min-width: 0; }
+  .d-meta select { field-sizing: content; flex: none; }
+  .e-folder { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .e-pool { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 10px; border-radius: 6px; color: var(--ink-3); font-size: 13px; cursor: pointer; }
+  .e-pool:hover { background: var(--hover); color: var(--ink); }
+  .e-pool input { width: 14px; height: 14px; margin: 0; flex: none; accent-color: var(--ink); }
+  .d-grip { flex: none; color: var(--ink-3); font-size: 12px; letter-spacing: -2px; }
+  .d-num { flex: none; width: 18px; color: var(--ink-3); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* 見本：チェックポイントのサイドバー */
+  .ref { flex: 0 0 300px; display: flex; flex-direction: column; background: var(--ground); border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+  .ref-label { padding: 6px 16px; color: var(--ink-3); font-size: 11px; border-bottom: 1px solid var(--line); }
+  .ref .d-item { align-items: flex-start; }
+  .ref .dot { width: 9px; height: 9px; margin-top: 6px; flex: none; border-radius: 50%; background: var(--ink); }
+  .ref .d-item.sel { background: var(--paper); box-shadow: inset 0 0 0 1.5px var(--ink); }
+  .ref .btn-outline { min-height: 40px; border: 1px solid var(--ink); border-radius: 10px; background: var(--paper); font-size: 14px; font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<script>
+const FILES = [
+  ["01_記事", "Thenを紹介する記事（仮）", 3701],
+  ["01_記事 / 01A_小説", "木はイオンを植えています", 4014],
+  ["02_ログ", "AIスロップに関する考察", 2438],
+  ["02_ログ", "Thenのテーマ解説", 4224],
+  ["02_ログ", "Thenの機能紹介の叩き台", 6515],
+  ["02_ログ", "Then開発ログ", 18216],
+  ["02_ログ", "ただの日記", 3668],
+  ["02_ログ", "なぜ「シアノタイプのままでいて」を思いつき、書きたくなったのか", 1857],
+  ["03_検証用", "切り出したあとのファイルが未保存とならないようになっているかテスト", 812],
+  ["03_検証用", "形態素解析の原稿", 5530],
+  ["04_しょうもないやつ", "どのSMILYが好きですか", 1204],
+  ["04_しょうもないやつ", "まったく再現性のない「医療情報技師合格への道」2026", 6102],
+  ["04_しょうもないやつ", "本家の駒大コンバットは勢いがすごい", 2290],
+  ["04_しょうもないやつ", "甲子園2026 出場校徹底比較", 7744],
+  ["05_テンプレート", "DESIGN", 980],
+].map(([folder, name, chars], id) => ({ id, folder, name, chars, on: id < 9, start: id === 0 ? "cont" : "page" }));
+
+const state = { variant: "E", theme: "dark", bTab: "pick", sorting: false };
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmt = (n) => n.toLocaleString("ja-JP");
+const folders = () => [...new Set(FILES.map((f) => f.folder))];
+const startSelect = (f, cls = "") => `<select class="${cls}" data-start="${f.id}"><option value="page" ${f.start === "page" ? "selected" : ""}>改ページ</option><option value="cont" ${f.start === "cont" ? "selected" : ""}>続けて</option><option value="odd" ${f.start === "odd" ? "selected" : ""}>奇数ページから</option></select>`;
+
+function head() {
+  const on = FILES.filter((f) => f.on);
+  return `<div class="side-head"><h2>出力するファイル</h2><span class="count">${on.length} / ${FILES.length}</span></div>`;
+}
+function tools() {
+  return `<div class="tools"><input class="search" placeholder="絞り込む"><button class="link" data-act="all">すべて</button><button class="link" data-act="none">解除</button></div>`;
+}
+function foot() {
+  const on = FILES.filter((f) => f.on);
+  return `<div class="foot"><span>${on.length}ファイル</span><span>${fmt(on.reduce((a, f) => a + f.chars, 0))}字</span></div>`;
+}
+
+// A: フォルダ見出し + 1行。選んだファイル同士の境目に「改ページ／続けて」
+function variantA() {
+  let prevOn = false, html = "";
+  for (const g of folders()) {
+    const files = FILES.filter((f) => f.folder === g);
+    const all = files.every((f) => f.on);
+    html += `<div class="folder"><input type="checkbox" data-folder="${esc(g)}" ${all ? "checked" : ""}>${esc(g)}</div>`;
+    for (const f of files) {
+      if (f.on && prevOn) html += `<div class="join">${startSelect(f)}</div>`;
+      html += `<label class="row${f.on ? "" : " off"}"><input type="checkbox" data-toggle="${f.id}" ${f.on ? "checked" : ""}><span class="name" title="${esc(f.name)}">${esc(f.name)}</span><span class="chars">${fmt(f.chars)}</span></label>`;
+      if (f.on) prevOn = true;
+    }
+  }
+  return `${head()}${tools()}<div class="scroll">${html}</div>${foot()}`;
+}
+
+// B: 「選ぶ」と「並べる」を分ける
+function variantB() {
+  const tabs = `<div class="seg tabs"><button aria-pressed="${state.bTab === "pick"}" data-btab="pick">選ぶ</button><button aria-pressed="${state.bTab === "order"}" data-btab="order">並べる（${FILES.filter((f) => f.on).length}）</button></div>`;
+  let body = "";
+  if (state.bTab === "pick") {
+    for (const g of folders()) {
+      const files = FILES.filter((f) => f.folder === g);
+      body += `<div class="folder"><input type="checkbox" data-folder="${esc(g)}" ${files.every((f) => f.on) ? "checked" : ""}>${esc(g)}</div>`;
+      body += files.map((f) => `<label class="row${f.on ? "" : " off"}"><input type="checkbox" data-toggle="${f.id}" ${f.on ? "checked" : ""}><span class="name" title="${esc(f.name)}">${esc(f.name)}</span><span class="chars">${fmt(f.chars)}</span></label>`).join("");
+    }
+  } else {
+    body = FILES.filter((f) => f.on).map((f, i) => `<div class="order-row"><span class="grip">⋮⋮</span><span class="num">${i + 1}</span><span class="body"><span class="name" title="${esc(f.name)}">${esc(f.name)}</span><span class="sub">${esc(f.folder)}・${fmt(f.chars)}字</span></span>${i === 0 ? "" : startSelect(f)}</div>`).join("");
+  }
+  return `${head()}${tabs}${state.bTab === "pick" ? tools() : ""}<div class="scroll">${body}</div>${foot()}`;
+}
+
+// C: フォルダ見出し + 1行。開始は行末の記号（¶＝改ページ、→＝続けて）を押して切り替え
+function variantC() {
+  let n = 0, html = "";
+  for (const g of folders()) {
+    const files = FILES.filter((f) => f.folder === g);
+    html += `<div class="folder"><input type="checkbox" data-folder="${esc(g)}" ${files.every((f) => f.on) ? "checked" : ""}>${esc(g)}</div>`;
+    for (const f of files) {
+      const num = f.on ? ++n : "";
+      html += `<div class="row${f.on ? "" : " off"}"><input type="checkbox" data-toggle="${f.id}" ${f.on ? "checked" : ""}><span class="num">${num}</span><span class="name" title="${esc(f.name)}">${esc(f.name)}</span><span class="chars">${fmt(f.chars)}</span><button class="mark" data-cycle="${f.id}" title="${f.start === "cont" ? "続けて" : f.start === "odd" ? "奇数ページから" : "改ページ"}">${f.start === "cont" ? "→" : f.start === "odd" ? "¶¹" : "¶"}</button></div>`;
+    }
+  }
+  return `${head()}${tools()}<div class="scroll">${html}</div>${foot()}`;
+}
+
+// D: カード（合計と一括操作）→ 検索 → フォルダ見出し → 太字名＋薄い補足（字数・開始）
+// 連結順（ファイルIDの並び）。初期値はツリー順。書き出し画面を閉じれば捨てる。
+let ORDER = FILES.map((f) => f.id);
+const custom = () => ORDER.some((id, i) => id !== i);
+
+function variantD() {
+  const on = ORDER.map((id) => FILES[id]).filter((f) => f.on);
+  const chars = fmt(on.reduce((a, f) => a + f.chars, 0));
+  const card = state.sorting
+    ? `<div class="d-card">
+        <div class="d-card-row"><span class="d-ring"></span><span><b>並べ替え</b><small>${on.length}ファイル · ${chars}字</small></span></div>
+        <div class="d-card-btns">${custom() ? '<button data-act="tree">ツリー順に戻す</button>' : "<span></span>"}<button class="d-done" data-act="sort">完了</button></div>
+      </div>`
+    : `<div class="d-card">
+        <div class="d-card-row"><span class="d-ring"></span><span><b>${on.length}ファイルを連結</b><small>${chars}字${custom() ? " · 並び順は手動" : ""}</small></span></div>
+        <button class="d-outline" data-act="sort" ${on.length < 2 ? "disabled" : ""}>⇅ 並べ替え</button>
+      </div>`;
+
+  let list;
+  if (state.sorting) {
+    list = `<div class="d-group">${on.map((f, i) => `
+      <div class="d-item d-sort" draggable="true" data-drag="${f.id}">
+        <span class="d-grip">⋮⋮</span><span class="d-num">${i + 1}</span>
+        <span class="d-body"><span class="d-name" title="${esc(f.name)}">${esc(f.name)}</span>
+          <span class="d-meta">${esc(f.folder)} · ${fmt(f.chars)}字${i ? ` · ${startSelect(f)}` : ""}</span></span>
+      </div>`).join("")}</div>`;
+  } else {
+    list = folders().map((g) => `<div class="d-group"><div class="d-group-name">${esc(g)}</div>${FILES.filter((f) => f.folder === g).map((f) => `
+      <label class="d-item${f.on ? "" : " off"}"><input type="checkbox" data-toggle="${f.id}" ${f.on ? "checked" : ""}>
+        <span class="d-body"><span class="d-name" title="${esc(f.name)}">${esc(f.name)}</span>
+          <span class="d-meta">${fmt(f.chars)}字${f.on ? ` · ${startSelect(f)}` : ""}</span></span></label>`).join("")}</div>`).join("");
+  }
+  return `<div class="d">
+    <div class="d-head"><h2>出力するファイル</h2><span class="count">${on.length} / ${FILES.length}</span></div>
+    ${card}
+    ${state.sorting ? "" : `<div class="d-tools"><input class="d-search" placeholder="ファイル名で絞り込む"><div class="d-bulk"><button data-act="all">すべて選択</button><button data-act="none">すべて解除</button></div></div>`}
+    <div class="d-groups">${list}</div>
+  </div>`;
+}
+
+// E: 上段＝出力する順（常に実際の連結順・ドラッグで並べ替え）、下段＝出力しないファイル（フォルダごと）
+// チェックを入れたファイルは、ツリー順で直前にある「出力する」ファイルの後ろに入る。
+function addToOrder(id) {
+  ORDER = ORDER.filter((x) => x !== id);
+  const before = ORDER.filter((x) => FILES[x].on && x < id);
+  const anchor = before.length ? ORDER.indexOf(before.reduce((a, b) => (ORDER.indexOf(b) > ORDER.indexOf(a) ? b : a))) + 1 : 0;
+  ORDER.splice(anchor, 0, id);
+}
+
+function variantE() {
+  const on = ORDER.map((id) => FILES[id]).filter((f) => f.on);
+  const off = FILES.filter((f) => !f.on);
+  const chars = fmt(on.reduce((a, f) => a + f.chars, 0));
+  const output = on.map((f, i) => `
+    <div class="d-item d-sort" draggable="true" data-drag="${f.id}">
+      <span class="d-num">${i + 1}</span>
+      <span class="d-body"><span class="d-name" title="${esc(f.name)}">${esc(f.name)}</span>
+        <span class="d-meta"><span class="e-folder">${esc(f.folder)}</span><span>${fmt(f.chars)}字</span>${i ? startSelect(f) : ""}</span></span>
+      <button class="e-remove" data-remove="${f.id}" title="出力から外す">×</button>
+    </div>`).join("");
+  const pool = [...new Set(off.map((f) => f.folder))].map((g) => `<div class="d-group"><div class="d-group-name">${esc(g)}</div>${off.filter((f) => f.folder === g).map((f) => `
+    <label class="e-pool"><input type="checkbox" data-toggle="${f.id}"><span class="name" title="${esc(f.name)}">${esc(f.name)}</span><span class="chars">${fmt(f.chars)}</span></label>`).join("")}</div>`).join("");
+  return `<div class="d">
+    <div class="d-groups e">
+      <section class="e-sec">
+        <div class="e-head"><h2>出力する順</h2><span class="count">${on.length}ファイル · ${chars}字</span></div>
+        ${custom() ? '<button class="e-link" data-act="tree">ツリー順に並べ直す</button>' : ""}
+        <div class="d-group">${output || '<p class="e-empty">下から選んでください</p>'}</div>
+      </section>
+      <section class="e-sec">
+        <div class="e-head"><h2 class="e-sub">出力しないファイル</h2>${off.length ? '<button class="e-link" data-act="all">すべて追加</button>' : ""}</div>
+        <input class="d-search" placeholder="ファイル名で絞り込む">
+        ${pool}
+      </section>
+    </div>
+  </div>`;
+}
+
+function refSide() {
+  const snaps = [["昨日", [["変更点を画面外から作成する", "18:24 · 15ファイル · 55,391字", true]]], ["10月11日", [["Then 0.6.6 高速化以降", "00:57 · 15ファイル · 54,366字"]]], ["9月21日", [["Then 0.6.6 で同期基盤を作成", "23:44 · 14ファイル · 43,968字"]]], ["8月29日", [["Then v0.6.0に向けてのスナップショット", "09:05 · 10ファイル · 30,422字"]]]];
+  return `<aside class="ref"><div class="ref-label">見本：チェックポイント</div><div class="d">
+    <div class="d-head"><h2>保存点</h2><span class="count">11件</span></div>
+    <div class="d-card"><div class="d-card-row"><span class="d-ring"></span><span><b>現在のプロジェクト</b><small>15ファイル · 55,644字</small></span></div><button class="btn-outline">＋ 今の状態を保存点にする</button></div>
+    <input class="d-search" placeholder="名前・メモで絞り込む">
+    <div class="d-groups">${snaps.map(([d, items]) => `<div class="d-group"><div class="d-group-name">${d}</div>${items.map(([n, m, sel]) => `<div class="d-item${sel ? " sel" : ""}"><span class="dot"></span><span class="d-body"><span class="d-name">${n}</span><span class="d-meta">${m}</span></span></div>`).join("")}</div>`).join("")}</div>
+  </div></aside>`;
+}
+
+function render() {
+  document.documentElement.dataset.theme = state.theme;
+  const side = { A: variantA, B: variantB, C: variantC, D: variantD, E: variantE }[state.variant]();
+  document.getElementById("app").innerHTML = `
+  <header class="topbar">
+    <button class="back">‹ 本文へ戻る</button><h1>書き出し</h1>
+    <div class="seg"><button aria-pressed="true">印刷・文書</button><button aria-pressed="false">投稿用テキスト</button></div>
+    <span class="variant">案
+      <span class="seg">${["A", "B", "C", "D", "E"].map((v) => `<button aria-pressed="${state.variant === v}" data-variant="${v}">${v}</button>`).join("")}</span>
+      <span class="seg">${["light", "dark"].map((t) => `<button aria-pressed="${state.theme === t}" data-theme-btn="${t}">${t === "light" ? "明" : "暗"}</button>`).join("")}</span>
+    </span>
+    <span class="spacer"></span><span class="meta">${FILES.filter((f) => f.on).length}ファイル</span><button class="primary">PDFを書き出す</button>
+  </header>
+  <div class="layout"><aside class="side">${side}</aside>${state.variant >= "D" ? refSide() : ""}<main class="main">プレビュー</main><aside class="right"></aside></div>`;
+}
+
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-variant],[data-theme-btn],[data-btab],[data-act],[data-cycle],[data-remove]");
+  if (!t) return;
+  if (t.dataset.variant) state.variant = t.dataset.variant;
+  if (t.dataset.themeBtn) state.theme = t.dataset.themeBtn;
+  if (t.dataset.btab) state.bTab = t.dataset.btab;
+  const act = t.dataset.act;
+  if (act === "all" || act === "none") FILES.forEach((f) => { f.on = act === "all"; });
+  if (act === "sort") state.sorting = !state.sorting;
+  if (t.dataset.remove) FILES[+t.dataset.remove].on = false;
+  if (act === "tree") ORDER = FILES.map((f) => f.id);
+  if (t.dataset.cycle) { const f = FILES[+t.dataset.cycle]; f.start = { page: "cont", cont: "odd", odd: "page" }[f.start]; }
+  render();
+});
+// 並べ替え：ドラッグで ORDER の位置を入れ替える
+let dragId = null;
+document.addEventListener("dragstart", (e) => {
+  const row = e.target.closest?.("[data-drag]");
+  if (!row) return;
+  dragId = +row.dataset.drag;
+  row.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move";
+});
+document.addEventListener("dragover", (e) => {
+  const row = e.target.closest?.("[data-drag]");
+  if (!row || dragId === null) return;
+  e.preventDefault();
+  document.querySelectorAll(".d-sort.over").forEach((el) => el.classList.remove("over"));
+  row.classList.add("over");
+});
+document.addEventListener("drop", (e) => {
+  const row = e.target.closest?.("[data-drag]");
+  if (!row || dragId === null) return;
+  e.preventDefault();
+  const target = +row.dataset.drag;
+  if (target !== dragId) {
+    ORDER = ORDER.filter((id) => id !== dragId);
+    ORDER.splice(ORDER.indexOf(target), 0, dragId);
+  }
+  dragId = null;
+  render();
+});
+document.addEventListener("dragend", () => { dragId = null; render(); });
+
+document.addEventListener("change", (e) => {
+  const t = e.target;
+  if (t.dataset.toggle) { FILES[+t.dataset.toggle].on = t.checked; if (t.checked) addToOrder(+t.dataset.toggle); }
+  else if (t.dataset.folder) FILES.filter((f) => f.folder === t.dataset.folder).forEach((f) => { f.on = t.checked; });
+  else if (t.dataset.start) FILES[+t.dataset.start].start = t.value;
+  else return;
+  render();
+});
+render();
+</script>
+</body>
+</html>

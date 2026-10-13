@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   useRef,
@@ -12,26 +13,23 @@ import { createPortal } from "react-dom";
 import type {
   DocumentOutlineItem,
   ProjectAst,
-  ProjectAstFile,
   ProjectSearchResult,
 } from "../../editor/ast/types";
 import type {
+  FileProgressFilter,
   FileProgressStatus,
   LibraryContext,
   ManuscriptSnapshot,
   OutlineItem,
   ProjectEntry,
   ProjectFolder,
-  SidebarMode,
 } from "../../types";
 import { fileProgressLabels, fileProgressStatuses } from "../../types";
+import { RightPaneSwitcher, type RightPaneSwitcherItem } from "./RightPaneSwitcher";
 import { logHeadingDnd } from "../../utils/headingDndDiagnostics";
-import { getScaledFixedMenuPosition } from "../../utils/contextMenuPosition";
+import { getScaledFixedMenuPosition, getUiFontScale } from "../../utils/contextMenuPosition";
 import { displayedCharacterCount } from "../../editor/ast/characterCount";
-import {
-  buildFilePreview,
-  buildHeadingPreview,
-} from "../../utils/previewText";
+import { formatSnapshotAge } from "../checkpoints/snapshotAge";
 import {
   buildSidebarMetrics,
   getSidebarFolderCharCount,
@@ -48,8 +46,6 @@ type WorkspaceSidebarProps = {
   activeOutlineIds: ReadonlySet<string>;
   activeOutlineBlockId: string | null;
   projectAst: ProjectAst | null;
-  sidebarMode: SidebarMode;
-  navigatorPreviewLines: number;
   /** 文字数カウントに空白文字を含めるか。false なら空白を除いた文字数を表示する。 */
   countWhitespace: boolean;
   /** 文字数にコードを含めるか。 */
@@ -117,9 +113,12 @@ type WorkspaceSidebarProps = {
   snapshots: ManuscriptSnapshot[];
   isSnapshotSectionCollapsed: boolean;
   onSnapshotSectionCollapsedChange: (collapsed: boolean) => void;
+  /** false ならチェックポイント欄を出さない（設定）。 */
+  showSnapshotSection: boolean;
   onCreateSnapshot: () => void;
-  onRenameSnapshot: (snapshot: ManuscriptSnapshot) => void;
-  onEditSnapshotMemo: (snapshot: ManuscriptSnapshot) => void;
+  /** チェックポイント画面を開く。保存点を渡すとそれを選んだ状態で開く。 */
+  onOpenSnapshot: (snapshot: ManuscriptSnapshot | null) => void;
+  onEditSnapshotDetails: (snapshot: ManuscriptSnapshot) => void;
   onRestoreSnapshot: (snapshot: ManuscriptSnapshot) => void;
   onDeleteSnapshot: (snapshot: ManuscriptSnapshot) => void;
   onCollapse: () => void;
@@ -249,9 +248,10 @@ const PROGRESS_MARKERS: Record<FileProgressStatus, string> = {
   writing: "執",
   revising: "推",
   done: "完",
+  archived: "ア",
 };
 
-/** フォルダドットの優先度。執筆中 > 推敲中 > 未着手 > 完了。 */
+/** フォルダドットの優先度。執筆中 > 推敲中 > 未着手 > 完了。アーカイブは数えない。 */
 const FOLDER_PROGRESS_PRIORITY: readonly FileProgressStatus[] = [
   "writing",
   "revising",
@@ -311,28 +311,56 @@ function getFileProgress(
   return progress[path] ?? "todo";
 }
 
-/** AST のブロック列から編集ソースを行配列として復元する。 */
-function getFileSourceLines(astFile: ProjectAstFile | null | undefined): string[] {
-  const blocks = astFile?.documentAst?.blocks;
-  if (!blocks || blocks.length === 0) return [];
-  return blocks.map((block) => block.source);
+const PROGRESS_FILTER_STORAGE_KEY = "then.sidebar.progressFilter";
+
+function readStoredProgressFilter(): FileProgressFilter {
+  try {
+    const stored = window.localStorage.getItem(PROGRESS_FILTER_STORAGE_KEY);
+    return fileProgressStatuses.includes(stored as FileProgressStatus)
+      ? (stored as FileProgressStatus)
+      : "all";
+  } catch {
+    return "all";
+  }
 }
 
-/** ファイルパスからツリー上のフォルダノードを探す（root も含む）。 */
-function findFolderNode(
+function matchesProgressFilter(status: FileProgressStatus, filter: FileProgressFilter): boolean {
+  return filter === "all" ? status !== "archived" : status === filter;
+}
+
+/**
+ * 絞り込みで隠すツリー項目のパス。フォルダは表示するファイルを含むときだけ出す。
+ * 「すべて」では、ファイルを一つも持たないフォルダは作ったばかりのものとして残す。
+ */
+function collectFilteredOutPaths(
   root: ProjectFolder,
-  path: string,
-): ProjectFolder | ProjectEntry | null {
-  if (root.path === path) return root;
-  const stack: ProjectEntry[] = [...root.children];
-  while (stack.length) {
-    const entry = stack.pop()!;
-    if (entry.kind === "folder") {
-      if (entry.path === path) return entry;
-      stack.push(...entry.children);
+  progress: Record<string, FileProgressStatus>,
+  filter: FileProgressFilter,
+): ReadonlySet<string> {
+  const hidden = new Set<string>();
+  const visit = (entries: ProjectEntry[]): { hasFile: boolean; hasVisible: boolean } => {
+    let hasFile = false;
+    let hasVisible = false;
+    for (const entry of entries) {
+      if (entry.kind === "folder") {
+        const child = visit(entry.children);
+        const isVisible = child.hasVisible || (filter === "all" && !child.hasFile);
+        if (!isVisible) hidden.add(entry.path);
+        hasFile ||= child.hasFile;
+        hasVisible ||= child.hasVisible;
+      } else {
+        hasFile = true;
+        if (matchesProgressFilter(getFileProgress(progress, entry.path), filter)) {
+          hasVisible = true;
+        } else {
+          hidden.add(entry.path);
+        }
+      }
     }
-  }
-  return null;
+    return { hasFile, hasVisible };
+  };
+  visit(root.children);
+  return hidden;
 }
 
 /** 指定パスの親フォルダのパスを返す（root もしくは未発見なら null）。 */
@@ -369,23 +397,31 @@ function collectFilePathsInDisplayOrder(root: ProjectFolder): string[] {
   return paths;
 }
 
-const PROGRESS_DOT_CLASS: Record<FileProgressStatus, string> = {
-  todo: "progressDot-todo",
-  writing: "progressDot-writing",
-  revising: "progressDot-revising",
-  done: "progressDot-done",
-};
-
 type FileProgressControlProps = {
   status: FileProgressStatus;
   onChange: (status: FileProgressStatus) => void;
-  compact?: boolean;
-  /** ツリー行右端の漢字一文字の状態記号として描く。 */
-  marker?: boolean;
 };
 
-function FileProgressControl({ status, onChange, compact, marker }: FileProgressControlProps) {
+/** ツリー行右端の漢字一文字の状態記号。押すと進捗を選ぶメニューを開く。 */
+function FileProgressControl({ status, onChange }: FileProgressControlProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  // 記号の左隣に行の高さで開き、ツリーの下端を越える分だけ上へ寄せる。
+  // スクロールさせずに全項目を見せるため。ホバー表示のサイドバーが閉じないよう、
+  // メニューはサイドバーの外へは出さない。
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    if (!isOpen || !menu) return;
+    const bounds = menu.closest(".sidebarScroll")?.getBoundingClientRect();
+    if (!bounds) return;
+    const rect = menu.getBoundingClientRect();
+    const overflow = Math.min(rect.bottom - bounds.bottom, rect.top - bounds.top);
+    if (overflow > 0) {
+      // 矩形は zoom 後の座標なので、zoom 前の top へ戻す。
+      menu.style.top = `${-overflow / getUiFontScale()}px`;
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -399,14 +435,13 @@ function FileProgressControl({ status, onChange, compact, marker }: FileProgress
       <button
         type="button"
         className={[
-          marker ? "fileProgressMarker" : "fileProgressBadge",
-          marker ? `progressText-${status}` : `fileProgressBadge-${status}`,
-          compact ? "fileProgressBadgeCompact" : "",
-          marker && status === "done" && !showDoneMarker ? "fileProgressMarkerHidden" : "",
+          "fileProgressMarker",
+          `progressText-${status}`,
+          status === "done" && !showDoneMarker ? "fileProgressMarkerHidden" : "",
         ]
           .filter(Boolean)
           .join(" ")}
-        title={marker ? fileProgressLabels[status] : `進捗: ${fileProgressLabels[status]}`}
+        title={fileProgressLabels[status]}
         aria-label={`進捗: ${fileProgressLabels[status]}`}
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => {
@@ -415,17 +450,11 @@ function FileProgressControl({ status, onChange, compact, marker }: FileProgress
           setIsOpen((current) => !current);
         }}
       >
-        {marker ? (
-          <span aria-hidden="true">{PROGRESS_MARKERS[status]}</span>
-        ) : (
-          <>
-            <span className={`progressDot ${PROGRESS_DOT_CLASS[status]}`} aria-hidden="true" />
-            {!compact && <span className="fileProgressLabel">{fileProgressLabels[status]}</span>}
-          </>
-        )}
+        <span aria-hidden="true">{PROGRESS_MARKERS[status]}</span>
       </button>
       {isOpen && (
         <div
+          ref={menuRef}
           className="fileProgressMenu"
           role="menu"
           onPointerDown={(event) => event.stopPropagation()}
@@ -444,7 +473,9 @@ function FileProgressControl({ status, onChange, compact, marker }: FileProgress
                 setIsOpen(false);
               }}
             >
-              <span className={`progressDot ${PROGRESS_DOT_CLASS[option]}`} aria-hidden="true" />
+              <span className={`progressLegendMark progressText-${option}`} aria-hidden="true">
+                {PROGRESS_MARKERS[option]}
+              </span>
               <span>{fileProgressLabels[option]}</span>
             </button>
           ))}
@@ -696,8 +727,6 @@ export function WorkspaceSidebar({
   activeOutlineIds,
   activeOutlineBlockId,
   projectAst,
-  sidebarMode,
-  navigatorPreviewLines,
   countWhitespace,
   countCode,
   showOutlineGuides,
@@ -747,9 +776,10 @@ export function WorkspaceSidebar({
   snapshots,
   isSnapshotSectionCollapsed,
   onSnapshotSectionCollapsedChange,
+  showSnapshotSection,
   onCreateSnapshot,
-  onRenameSnapshot,
-  onEditSnapshotMemo,
+  onOpenSnapshot,
+  onEditSnapshotDetails,
   onRestoreSnapshot,
   onDeleteSnapshot,
   onCollapse,
@@ -782,15 +812,15 @@ export function WorkspaceSidebar({
   >(() => new Set());
   const [isReplaceExpanded, setIsReplaceExpanded] = useState(false);
   const [isShelterListExpanded, setIsShelterListExpanded] = useState(false);
+  const [progressFilter, setProgressFilter] = useState<FileProgressFilter>(
+    readStoredProgressFilter,
+  );
   const [snapshotMenu, setSnapshotMenu] = useState<{
     id: string;
-    placement: "above" | "below";
     x: number;
     y: number;
   } | null>(null);
-  const [navigatorLocation, setNavigatorLocation] = useState<
-    { kind: "folder" | "file"; path: string } | null
-  >(null);
+  const snapshotMenuRef = useRef<HTMLDivElement | null>(null);
   const pointerDragRef = useRef<PointerDragState | null>(null);
   const headingDragRef = useRef<HeadingDragState | null>(null);
   const navigationHeadingSelectionRef = useRef<NavigationHeadingSelection | null>(null);
@@ -808,6 +838,33 @@ export function WorkspaceSidebar({
     [countCode, countWhitespace, projectAst, projectFolder],
   );
   const projectAstFiles = sidebarMetrics.projectAstFiles;
+  const filteredOutPaths = useMemo(
+    () =>
+      projectFolder
+        ? collectFilteredOutPaths(projectFolder, fileProgress, progressFilter)
+        : new Set<string>(),
+    [fileProgress, progressFilter, projectFolder],
+  );
+  const changeProgressFilter = (filter: FileProgressFilter) => {
+    setProgressFilter(filter);
+    try {
+      window.localStorage.setItem(PROGRESS_FILTER_STORAGE_KEY, filter);
+    } catch {
+      // 保存できなくても今回の表示には効く。
+    }
+  };
+  const progressFilterItems: RightPaneSwitcherItem[] = [
+    { id: "all", label: "ファイル", icon: <SidebarIcon name="file" /> },
+    ...fileProgressStatuses.map((status) => ({
+      id: status,
+      label: fileProgressLabels[status],
+      icon: (
+        <span className={`progressFilterMark progressText-${status}`}>
+          {PROGRESS_MARKERS[status]}
+        </span>
+      ),
+    })),
+  ];
 
   useEffect(() => {
     if (!contextMenu && !headingContextMenu) return undefined;
@@ -844,9 +901,18 @@ export function WorkspaceSidebar({
     };
   }, [snapshotMenu]);
 
-  // プロジェクトフォルダが切り替わったらナビゲータをルートに戻す。
+  // 行の高さに揃えて開き、窓の下端を越える分だけ上へ寄せる。高さは中身で変わるので実測する。
+  useLayoutEffect(() => {
+    const menu = snapshotMenuRef.current;
+    if (!snapshotMenu || !menu) return;
+    const scale = getUiFontScale();
+    const margin = 8;
+    const maxTop = window.innerHeight / scale - menu.offsetHeight - margin;
+    menu.style.top = `${Math.max(margin, Math.min(snapshotMenu.y, maxTop))}px`;
+  }, [snapshotMenu]);
+
+  // プロジェクトフォルダが切り替わったら選択を開いているファイルだけに戻す。
   useEffect(() => {
-    setNavigatorLocation(null);
     replaceSelectedFilePaths(currentFilePath ? [currentFilePath] : []);
     setSelectedHeadings(new Map());
     navigationHeadingSelectionRef.current = null;
@@ -974,8 +1040,8 @@ export function WorkspaceSidebar({
       !isFolder && (selectionAtPointerDown.has(entryPath) || isAdditiveSelection);
     const entryPaths =
       shouldDragSelection && projectFolder
-        ? collectFilePathsInDisplayOrder(projectFolder).filter((path) =>
-            dragSelection.has(path),
+        ? collectFilePathsInDisplayOrder(projectFolder).filter(
+            (path) => dragSelection.has(path) && !filteredOutPaths.has(path),
           )
         : [entryPath];
     const sourceParentPaths = projectFolder
@@ -1672,7 +1738,10 @@ export function WorkspaceSidebar({
     const kind = getEntryKind(entry);
     const isRoot = !isProjectEntry(entry);
     const isFolder = kind === "folder";
-    const hasChildren = isFolder && entry.children.length > 0;
+    const visibleChildren = isFolder
+      ? entry.children.filter((child) => !filteredOutPaths.has(child.path))
+      : [];
+    const hasChildren = visibleChildren.length > 0;
     const isFolderExpanded = isFolder && !collapsedFolderPaths.has(entry.path);
     const isCurrentFile = entry.path === currentFilePath;
     const isFocused = entry.path === focusedFolderPath;
@@ -1849,7 +1918,6 @@ export function WorkspaceSidebar({
               </button>
               <span className="treeStatusColumn">
                 <FileProgressControl
-                  marker
                   status={fileStatus ?? "todo"}
                   onChange={(status) => onSetFileProgress(entry.path, status)}
                 />
@@ -1884,7 +1952,7 @@ export function WorkspaceSidebar({
         </div>
         {isFolder && hasChildren && isFolderExpanded && (
           <div className="treeChildren">
-            {entry.children.map((child) => renderEntry(child, depth + 1, entry.path))}
+            {visibleChildren.map((child) => renderEntry(child, depth + 1, entry.path))}
           </div>
         )}
         {!isFolder && hasOutline && isOutlineExpanded && (
@@ -1915,16 +1983,24 @@ export function WorkspaceSidebar({
 
   const projectTotalCharCount = sidebarMetrics.projectTotalCharCount;
 
+  const visibleRootEntries = projectFolder
+    ? projectFolder.children.filter((entry) => !filteredOutPaths.has(entry.path))
+    : [];
+
   const renderOutlineMode = () => (
     <section className="sidebarSection outlineExplorerSection" aria-label="アウトライン">
       <div className="tree outlineTree">
         {projectFolder ? (
-          projectFolder.children.length > 0 ? (
-            projectFolder.children.map((entry) =>
+          visibleRootEntries.length > 0 ? (
+            visibleRootEntries.map((entry) =>
               renderEntry(entry, 0, projectFolder.path),
             )
           ) : (
-            <div className="outlineEmptyState">空のフォルダ</div>
+            <div className="outlineEmptyState">
+              {projectFolder.children.length === 0 || progressFilter === "all"
+                ? "空のフォルダ"
+                : `${fileProgressLabels[progressFilter]}のファイルはありません`}
+            </div>
           )
         ) : (
           <>
@@ -1955,229 +2031,6 @@ export function WorkspaceSidebar({
       </div>
     </section>
   );
-
-  const renderNavigatorMode = () => {
-    if (!projectFolder) {
-      return (
-        <section className="sidebarSection navigatorSection" aria-label="ナビゲータ">
-          <div className="sidebarEmptyState">
-            <span>フォルダ未選択</span>
-            <button type="button" onClick={onOpenProjectFolder}>
-              フォルダを開く
-            </button>
-          </div>
-        </section>
-      );
-    }
-
-    const location =
-      navigatorLocation ?? { kind: "folder" as const, path: projectFolder.path };
-
-    // プレビュー行数（0 = なし）。行数に応じて取得文字数を増やし、
-    // 視覚的なクランプは CSS の line-clamp で行う。
-    const previewLines = navigatorPreviewLines;
-    const showPreview = previewLines > 0;
-    const previewMaxChars = Math.max(previewLines, 1) * 40;
-    const previewStyle = {
-      "--preview-lines": previewLines,
-    } as CSSProperties;
-
-    if (location.kind === "file") {
-      const astFile = projectAstFiles.get(location.path) ?? null;
-      const sourceLines = getFileSourceLines(astFile);
-      const fileName = astFile?.name ?? location.path.split(/[\\/]/).pop() ?? location.path;
-      const outline = astFile?.documentAst?.outline ?? [];
-      const filePreview = showPreview
-        ? buildFilePreview(sourceLines.join("\n"), previewMaxChars)
-        : "";
-      const parentPath = findParentPath(projectFolder, location.path);
-      const status = getFileProgress(fileProgress, location.path);
-
-      const flatHeadings: { item: DocumentOutlineItem; depth: number }[] = [];
-      const flatten = (items: DocumentOutlineItem[], depth: number) => {
-        for (const item of items) {
-          flatHeadings.push({ item, depth });
-          flatten(item.children, depth + 1);
-        }
-      };
-      flatten(outline, 0);
-
-      return (
-        <section className="sidebarSection navigatorSection" aria-label="ナビゲータ">
-          <div className="navigatorHeader">
-            <button
-              className="navigatorBackButton"
-              type="button"
-              title="フォルダへ戻る"
-              onClick={() =>
-                setNavigatorLocation({
-                  kind: "folder",
-                  path: parentPath ?? projectFolder.path,
-                })
-              }
-            >
-              <SidebarIcon name="chevronLeft" className="navigatorBackIcon" />
-              <span>戻る</span>
-            </button>
-            <FileProgressControl
-              status={status}
-              onChange={(next) => onSetFileProgress(location.path, next)}
-            />
-          </div>
-          <div className="navigatorFileDetailHeader">
-            <button
-              className={`navigatorCurrentFile ${
-                location.path === currentFilePath ? "navigatorCurrentFileActive" : ""
-              }`}
-              type="button"
-              title={location.path}
-              onClick={() => onSelectFile(location.path)}
-            >
-              <SidebarIcon name="file" className="treeSvgIcon" />
-              <span className="navigatorFileName">{fileName}</span>
-            </button>
-            {filePreview && (
-              <p className="navigatorFilePreview" style={previewStyle}>
-                {filePreview}
-              </p>
-            )}
-          </div>
-          <div className="navigatorHeadingList" aria-label={`${fileName}の見出し`}>
-            {flatHeadings.length > 0 ? (
-              flatHeadings.map(({ item, depth }) => {
-                const isActive =
-                  location.path === currentFilePath && activeOutlineIds.has(item.id);
-                const preview = showPreview
-                  ? buildHeadingPreview(sourceLines, item.line, previewMaxChars)
-                  : "";
-                return (
-                  <button
-                    key={item.id}
-                    className={`navigatorHeadingItem ${
-                      isActive ? "navigatorHeadingItemActive" : ""
-                    }`}
-                    type="button"
-                    title={item.title}
-                    style={{ paddingLeft: `${12 + depth * 12}px` }}
-                    onClick={() => onJumpProjectOutline(location.path, item)}
-                  >
-                    <span className="navigatorHeadingTitleRow">
-                      <span className="outlineLevelMark">H{item.level}</span>
-                      <span className="navigatorHeadingTitle">{item.title}</span>
-                    </span>
-                    {preview && (
-                      <span className="navigatorHeadingPreview" style={previewStyle}>
-                        {preview}
-                      </span>
-                    )}
-                  </button>
-                );
-              })
-            ) : (
-              <div className="outlineEmptyState">見出しがありません</div>
-            )}
-          </div>
-        </section>
-      );
-    }
-
-    // フォルダ表示。
-    const folderNode = findFolderNode(projectFolder, location.path);
-    const children: ProjectEntry[] =
-      folderNode && "children" in folderNode ? folderNode.children : [];
-    const folders = children.filter((child) => child.kind === "folder");
-    const files = children.filter((child) => child.kind === "file");
-    const isRootFolder = location.path === projectFolder.path;
-    const parentPath = isRootFolder ? null : findParentPath(projectFolder, location.path);
-    const folderName = isRootFolder
-      ? projectFolder.name
-      : folderNode?.name ?? location.path.split(/[\\/]/).pop() ?? location.path;
-
-    return (
-      <section className="sidebarSection navigatorSection" aria-label="ナビゲータ">
-        <div className="navigatorHeader">
-          {!isRootFolder && (
-            <button
-              className="navigatorBackButton"
-              type="button"
-              title="親フォルダへ戻る"
-              onClick={() =>
-                setNavigatorLocation({
-                  kind: "folder",
-                  path: parentPath ?? projectFolder.path,
-                })
-              }
-            >
-              <SidebarIcon name="chevronLeft" className="navigatorBackIcon" />
-              <span>戻る</span>
-            </button>
-          )}
-          <span className="navigatorFolderTitle" title={location.path}>
-            <SidebarIcon name={isRootFolder ? "book" : "folder"} className="treeSvgIcon" />
-            <span>{folderName}</span>
-          </span>
-        </div>
-        <div className="navigatorList">
-          {folders.length === 0 && files.length === 0 && (
-            <div className="outlineEmptyState">空のフォルダ</div>
-          )}
-          {folders.map((folder) => (
-            <button
-              key={folder.path}
-              className="navigatorItem navigatorFolderItem"
-              type="button"
-              title={folder.path}
-              onClick={() => setNavigatorLocation({ kind: "folder", path: folder.path })}
-            >
-              <SidebarIcon name="folder" className="treeSvgIcon" />
-              <span className="navigatorItemName">{folder.name}</span>
-              <SidebarIcon name="chevronRight" className="navigatorItemChevron" />
-            </button>
-          ))}
-          {files.map((file) => {
-            const astFile = projectAstFiles.get(file.path) ?? null;
-            const preview = showPreview
-              ? buildFilePreview(getFileSourceLines(astFile).join("\n"), previewMaxChars)
-              : "";
-            const status = getFileProgress(fileProgress, file.path);
-            return (
-              <div
-                key={file.path}
-                className={`navigatorItem navigatorFileItem ${
-                  file.path === currentFilePath ? "navigatorFileItemActive" : ""
-                }`}
-              >
-                <button
-                  className="navigatorFileButton"
-                  type="button"
-                  title={file.path}
-                  onClick={() => {
-                    onSelectFile(file.path);
-                    setNavigatorLocation({ kind: "file", path: file.path });
-                  }}
-                >
-                  <span className="navigatorFileRow">
-                    <SidebarIcon name="file" className="treeSvgIcon" />
-                    <span className="navigatorItemName">{file.name}</span>
-                  </span>
-                  {preview && (
-                    <span className="navigatorItemPreview" style={previewStyle}>
-                      {preview}
-                    </span>
-                  )}
-                </button>
-                <FileProgressControl
-                  status={status}
-                  onChange={(next) => onSetFileProgress(file.path, next)}
-                  compact
-                />
-              </div>
-            );
-          })}
-        </div>
-      </section>
-    );
-  };
 
   const groupedProjectSearchResults = useMemo(() => {
     const groups: { path: string; name: string; count: number; results: ProjectSearchResult[] }[] = [];
@@ -2213,7 +2066,9 @@ export function WorkspaceSidebar({
             ? "現在の本文に一致がありません"
             : "プロジェクト内に一致がありません";
 
-  const manualSnapshots = snapshots.filter((snapshot) => snapshot.reason === "manual");
+  // サイドバーは最近の数件だけ。全件はチェックポイント画面で見る。
+  const allManualSnapshots = snapshots.filter((snapshot) => snapshot.reason === "manual");
+  const manualSnapshots = allManualSnapshots.slice(0, 5);
   const shelterSnapshots = snapshots.filter(
     (snapshot) => snapshot.reason === "auto-before-restore",
   ).slice(0, 3);
@@ -2230,19 +2085,22 @@ export function WorkspaceSidebar({
 
     return (
       <article className="snapshotItem" key={snapshot.id}>
-        <div
+        <button
           className="snapshotItemBody"
-          title={snapshot.memo ? `${snapshot.label}\n${snapshot.memo}` : snapshot.label}
+          type="button"
+          title={`${snapshot.memo ? `${snapshot.label}\n${snapshot.memo}` : snapshot.label}\nクリックで変更を見る`}
+          onClick={() => onOpenSnapshot(snapshot)}
         >
-          <div className="snapshotItemTitleRow">
+          <span className="snapshotItemTitleRow">
             <strong className="snapshotItemTitle">
               {snapshot.label}
             </strong>
             {snapshot.reason === "auto-before-restore" && (
               <span className="snapshotBadge">退避</span>
             )}
-          </div>
-        </div>
+            <span className="snapshotItemAge">{formatSnapshotAge(snapshot.createdAt)}</span>
+          </span>
+        </button>
         <div className="snapshotItemMenuControl">
           <button
             className="snapshotMoreButton"
@@ -2253,26 +2111,33 @@ export function WorkspaceSidebar({
             aria-haspopup="menu"
             onClick={(event) => {
               event.stopPropagation();
-              const buttonRect = event.currentTarget.getBoundingClientRect();
-              const shouldOpenAbove = window.innerHeight - buttonRect.bottom < 260;
+              // 一覧に被せないよう、サイドバーの右隣に行の高さで開く。
+              // メニューは UI 倍率の zoom 下にあるので、left/top は zoom 前の座標で渡す。
+              const scale = getUiFontScale();
+              const rowRect = event.currentTarget
+                .closest(".snapshotItem")
+                ?.getBoundingClientRect() ?? event.currentTarget.getBoundingClientRect();
+              const sidebarRect = event.currentTarget
+                .closest(".workspaceSidebar")
+                ?.getBoundingClientRect() ?? rowRect;
+              const menuWidth = 248;
+              const left = Math.min(
+                sidebarRect.right / scale + 6,
+                window.innerWidth / scale - menuWidth - 8,
+              );
               setSnapshotMenu((current) =>
                 current?.id === snapshot.id
                   ? null
-                  : {
-                      id: snapshot.id,
-                      placement: shouldOpenAbove ? "above" : "below",
-                      x: buttonRect.right,
-                      y: shouldOpenAbove ? buttonRect.top - 4 : buttonRect.bottom + 4,
-                    },
+                  : { id: snapshot.id, x: left, y: rowRect.top / scale },
               );
             }}
           >
             ･･･
           </button>
-          {isSnapshotMenuOpen && (
+          {isSnapshotMenuOpen && createPortal(
             <div
+              ref={snapshotMenuRef}
               className="snapshotMenu"
-              data-placement={snapshotMenu.placement}
               style={{ left: snapshotMenu.x, top: snapshotMenu.y }}
               role="menu"
               onPointerDown={(event) => event.stopPropagation()}
@@ -2294,28 +2159,26 @@ export function WorkspaceSidebar({
                 </div>
               </div>
               <div className="snapshotMenuDivider" role="presentation" />
-              {snapshot.reason === "manual" && <>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => closeSnapshotMenuAndRun(() => onRenameSnapshot(snapshot))}
-                >
-                  タイトルを編集
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => closeSnapshotMenuAndRun(() => onEditSnapshotMemo(snapshot))}
-                >
-                  メモを編集
-                </button>
-              </>}
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => closeSnapshotMenuAndRun(() => onOpenSnapshot(snapshot))}
+              >
+                変更を見る
+              </button>
+              {snapshot.reason === "manual" && <button
+                type="button"
+                role="menuitem"
+                onClick={() => closeSnapshotMenuAndRun(() => onEditSnapshotDetails(snapshot))}
+              >
+                名前とメモを編集
+              </button>}
               <button
                 type="button"
                 role="menuitem"
                 onClick={() => closeSnapshotMenuAndRun(() => onRestoreSnapshot(snapshot))}
               >
-                復元
+                この時点に戻す
               </button>
               {snapshot.reason === "manual" && <button
                 className="snapshotMenuDanger"
@@ -2325,7 +2188,8 @@ export function WorkspaceSidebar({
               >
                 削除
               </button>}
-            </div>
+            </div>,
+            document.querySelector<HTMLElement>(".appShell") ?? document.body,
           )}
         </div>
       </article>
@@ -2551,8 +2415,8 @@ export function WorkspaceSidebar({
         <button
           className="snapshotCreateButton"
           type="button"
-          aria-label="保存点を作成"
-          title="保存点を作成"
+          aria-label="今の状態を保存点にする（Ctrl+Shift+S）"
+          title="今の状態を保存点にする（Ctrl+Shift+S）"
           disabled={!projectFolder}
           onClick={onCreateSnapshot}
         >
@@ -2569,6 +2433,11 @@ export function WorkspaceSidebar({
                 ) : (
                   <div className="snapshotEmptyState">手動チェックポイントはまだありません</div>
                 )}
+                <button className="snapshotShowAllButton" type="button" onClick={() => onOpenSnapshot(null)}>
+                  {allManualSnapshots.length > manualSnapshots.length
+                    ? `すべて見る（${snapshots.length}件）`
+                    : "チェックポイント画面で見る"}
+                </button>
                 {shelterSnapshots.length > 0 && (
                   <div className="shelterSnapshotGroup">
                     <button
@@ -2609,10 +2478,19 @@ export function WorkspaceSidebar({
       aria-label="ファイルと検索"
     >
       <div className="sidebarHeader">
-        <span className="sidebarHeaderLabel">
-          {isProjectSearchMode ? "検索" : "ファイル"}
-        </span>
-        {!isProjectSearchMode && sidebarMode === "tree" && projectFolder && (
+        {!isProjectSearchMode && projectFolder ? (
+          <RightPaneSwitcher
+            items={progressFilterItems}
+            activeId={progressFilter}
+            menuLabel="表示するファイル"
+            onSelect={(id) => changeProgressFilter(id as FileProgressFilter)}
+          />
+        ) : (
+          <span className="sidebarHeaderLabel">
+            {isProjectSearchMode ? "検索" : "ファイル"}
+          </span>
+        )}
+        {!isProjectSearchMode && projectFolder && (
           <span className="sidebarHeaderUnit" title="各行の数字は字数（単位：字）">
             字数
           </span>
@@ -2642,7 +2520,7 @@ export function WorkspaceSidebar({
         {isProjectSearchMode ? (
           renderProjectSearchMode()
         ) : (
-          sidebarMode === "navigator" ? renderNavigatorMode() : renderOutlineMode()
+          renderOutlineMode()
         )}
         {!isProjectSearchMode && library?.role === "root" && (
           <LibraryProjectList
@@ -2655,7 +2533,13 @@ export function WorkspaceSidebar({
         )}
       </div>
 
-      {!isProjectSearchMode && sidebarMode === "tree" && projectFolder && (
+      {showSnapshotSection && !isProjectSearchMode && projectFolder && library?.role !== "root" && (
+        <div className={`snapshotDock ${isSnapshotSectionCollapsed ? "collapsedSnapshotDock" : ""}`}>
+          {renderSnapshotSection()}
+        </div>
+      )}
+
+      {!isProjectSearchMode && projectFolder && (
         <footer className="fileViewSummary">
           <span className="progressLegend" aria-label="状態記号の凡例">
             {(["writing", "revising", "done", "todo"] as const).map((status) => (

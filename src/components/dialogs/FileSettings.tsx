@@ -4,36 +4,6 @@ import type { SettingsPanelProps } from "./SettingsPanelTypes";
 export function FileSettings({ settings, onSnippetStorageModeChange, onUpdateSettings }: SettingsPanelProps & { onSnippetStorageModeChange: (mode: EditorSettings["snippetStorageMode"]) => void }) {
   return (
     <>
-      <label>
-        <span>ファイル表示方式</span>
-        <select
-          value={settings.sidebarMode}
-          onChange={(event) =>
-            onUpdateSettings(
-              "sidebarMode",
-              event.target.value as EditorSettings["sidebarMode"],
-            )
-          }
-        >
-          <option value="tree">ファイルツリー</option>
-          <option value="navigator">ナビゲータ</option>
-        </select>
-      </label>
-      <label>
-        <span>ナビゲータのプレビュー行数</span>
-        <select
-          value={settings.navigatorPreviewLines}
-          disabled={settings.sidebarMode !== "navigator"}
-          onChange={(event) =>
-            onUpdateSettings("navigatorPreviewLines", Number(event.target.value))
-          }
-        >
-          <option value={0}>なし</option>
-          <option value={1}>1行</option>
-          <option value={2}>2行</option>
-          <option value={3}>3行</option>
-        </select>
-      </label>
       <label className="checkSetting">
         <input
           checked={settings.showOutlineGuides}
@@ -63,6 +33,29 @@ export function FileSettings({ settings, onSnippetStorageModeChange, onUpdateSet
           }
         />
         <span>画面下部にファイルパスを表示</span>
+      </label>
+      <label className="checkSetting descriptiveCheckSetting">
+        <input
+          checked={settings.showCheckpointStatus}
+          type="checkbox"
+          onChange={(event) =>
+            onUpdateSettings("showCheckpointStatus", event.target.checked)
+          }
+        />
+        <span className="checkSettingCopy">
+          <span>画面下部に最後の保存点を表示</span>
+          <small>保存点を作ってからの時間と、増減した字数を出します</small>
+        </span>
+      </label>
+      <label className="checkSetting">
+        <input
+          checked={settings.showCheckpointSection}
+          type="checkbox"
+          onChange={(event) =>
+            onUpdateSettings("showCheckpointSection", event.target.checked)
+          }
+        />
+        <span>サイドバーにチェックポイントを表示</span>
       </label>
       <label className="checkSetting descriptiveCheckSetting">
         <input

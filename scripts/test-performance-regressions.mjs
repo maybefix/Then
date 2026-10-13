@@ -463,11 +463,6 @@ assert.match(
   /upsertProjectAstDocumentAsts\(current, completedBatch\)/,
   "each project indexing batch must be committed in one state update",
 );
-assert.doesNotMatch(
-  appSource.slice(appSource.indexOf("const snapshotConflictPaths"), appSource.indexOf("const frontMatter")),
-  /createDocumentAst/,
-  "checkpoint conflict detection must not rebuild an AST for every snapshot/file pair",
-);
 const textChangeHandlerSource = appSource.slice(
   appSource.indexOf("const handleTextChange"),
   appSource.indexOf("const updateFrontMatter"),

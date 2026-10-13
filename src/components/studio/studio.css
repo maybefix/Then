@@ -1,0 +1,47 @@
+/*
+ * 全画面の作業画面（チェックポイント・書き出し）で共有する部品。
+ * ルートに .stStudio を付け、上部バー・ボタン・セグメント・メニュー・検索欄は
+ * ここの st* クラスを使う。画面ごとの CSS では作り直さない。色はテーマ変数に従う。
+ */
+.stStudio button,
+.stStudio select,
+.stStudio input,
+.stStudio textarea { font-family: inherit; }
+.stStudio button { cursor: pointer; }
+.stStudio button:disabled { cursor: default; opacity: .55; }
+.stStudio :focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+
+/* 上部バー */
+.stTopbar { display: flex; flex: 0 0 auto; align-items: center; gap: 16px; padding: 6px 24px; border-bottom: 1px solid var(--border-subtle); }
+.stTopbar h1 { margin: 0; font-size: 17px; font-weight: 700; white-space: nowrap; }
+.stBack { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px 0 6px; border: 0; border-radius: 8px; background: none; color: var(--text-secondary); font-size: 14px; white-space: nowrap; }
+.stBack:hover { background: var(--control-hover); color: var(--text-primary); }
+
+/* ボタン */
+.stBtnOutline { display: flex; min-height: 44px; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--text-primary); border-radius: 10px; background: var(--bg-panel); color: var(--text-primary); font-size: 14px; font-weight: 700; }
+.stBtnOutline:hover { background: var(--control-hover); }
+.stBtnPrimary { display: flex; min-height: 44px; align-items: center; gap: 8px; padding: 0 20px; border: 0; border-radius: 10px; background: var(--text-primary); color: var(--bg-panel); font-size: 14px; font-weight: 700; white-space: nowrap; }
+.stBtnPrimary.sm { min-height: 40px; padding: 0 16px; border-radius: 8px; font-size: 13px; }
+.stBtnGhost { min-height: 40px; padding: 0 14px; border: 0; border-radius: 8px; background: none; color: var(--text-secondary); font-size: 13px; }
+.stBtnGhost:hover:not(:disabled) { background: var(--control-hover); }
+.stBtnGhost.sm { min-height: 32px; padding: 0 10px; font-size: 12px; }
+.stBtnLine { min-height: 36px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--bg-panel); color: var(--text-primary); font-size: 13px; white-space: nowrap; }
+.stBtnLine:hover:not(:disabled) { background: var(--control-hover); }
+.stBtnIcon { display: flex; width: 44px; height: 44px; align-items: center; justify-content: center; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--bg-panel); color: var(--text-primary); }
+.stBtnIcon:hover { background: var(--control-hover); }
+
+/* メニュー（⋯） */
+.stMenu { position: absolute; z-index: 5; top: 52px; right: 0; display: flex; min-width: 200px; flex-direction: column; padding: 6px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--bg-panel); box-shadow: var(--shadow-popover, 0 10px 30px rgba(0, 0, 0, .1)); }
+.stMenu button { min-height: 40px; padding: 0 12px; border: 0; border-radius: 6px; background: none; color: var(--text-primary); font-size: 14px; text-align: left; white-space: nowrap; }
+.stMenu button:hover:not(:disabled) { background: var(--control-hover); }
+.stMenuSep { height: 1px; margin: 4px 6px; background: var(--border-subtle); }
+
+/* セグメント切り替え */
+.stSeg { display: flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--control-hover); }
+.stSeg button { min-height: 36px; padding: 0 14px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); font-size: 13px; white-space: nowrap; }
+.stSeg button[aria-pressed="true"] { background: var(--bg-panel); box-shadow: 0 1px 2px rgba(0, 0, 0, .08); color: var(--text-primary); font-weight: 700; }
+
+/* 検索欄 */
+.stSearch { position: relative; display: block; }
+.stSearch svg { position: absolute; top: 12px; left: 12px; color: var(--text-muted); }
+.stSearch input { width: 100%; min-height: 40px; padding: 0 10px 0 36px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-panel); color: var(--text-primary); font-size: 13px; }

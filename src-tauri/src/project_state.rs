@@ -175,7 +175,9 @@ fn validate_project_config(config: &ProjectConfig) -> Result<(), String> {
 }
 
 fn validate_file_progress_status(status: &str, allow_todo: bool) -> Result<(), String> {
-    if matches!(status, "writing" | "revising" | "done") || (allow_todo && status == "todo") {
+    if matches!(status, "writing" | "revising" | "done" | "archived")
+        || (allow_todo && status == "todo")
+    {
         Ok(())
     } else {
         Err(format!("unsupported file progress status: {status}"))
@@ -987,6 +989,12 @@ mod tests {
         assert_eq!(
             first.file_progress[&pending.to_string_lossy().to_string()],
             "writing"
+        );
+
+        let archived = set_project_file_progress(&root.0, &ending, "archived").unwrap();
+        assert_eq!(
+            archived.file_progress[&ending.to_string_lossy().to_string()],
+            "archived"
         );
 
         let cleared = set_project_file_progress(&root.0, &ending, "todo").unwrap();

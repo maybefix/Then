@@ -117,6 +117,27 @@ async function auditParagraphFlow({page,evaluate}) {
   const check=async label=>{
     await new Promise(r=>setTimeout(r,180));
     const result=await evaluate('window.__flowCandidate.check()');
+    if(process.argv.includes('--qa-production')) {
+      const production=await evaluate(`(()=>{
+        const root=document.querySelector('.ProseMirror');
+        if(!root.__paragraphFlowQA)throw new Error('QA production flow is not enabled');
+        const {snapshot,stats}=root.__paragraphFlowQA();
+        const vertical=getComputedStyle(root).writingMode==='vertical-rl',bounds=root.getBoundingClientRect();
+        let maxError=0,pageMeasureError=0;
+        for(let i=0;i<root.children.length;i++){
+          const el=root.children[i],rect=el.getBoundingClientRect(),css=getComputedStyle(el);
+          maxError=Math.max(maxError,...['left','right','top','bottom'].map(k=>Math.abs(snapshot.blocks[i][k]-rect[k])));
+          const pitch=parseFloat(css.lineHeight),size=vertical?rect.width:rect.height;
+          const expected={lineCount:Number.isFinite(pitch)&&pitch>0?Math.max(1,Math.round(size/pitch)):0,
+            linePitch:Number.isFinite(pitch)&&pitch>0?pitch:0,gapBefore:parseFloat(vertical?css.marginRight:css.marginTop)||0,
+            blockStart:vertical?bounds.right-rect.right:rect.top-bounds.top};
+          for(const k of Object.keys(expected))pageMeasureError=Math.max(pageMeasureError,Math.abs(snapshot.paragraphs[i][k]-expected[k]));
+        }
+        return {paragraphs:snapshot.elements.length,maxError,pageMeasureError,generation:snapshot.generation,reads:snapshot.reads,stats};
+      })()`);
+      result.production=production;
+      if(production.maxError>1/32 || production.pageMeasureError>1/32)throw new Error(JSON.stringify({label,production}));
+    }
     results.push({label,...result});
     if(process.argv.includes('--progress'))console.log(JSON.stringify({label,reads:result.reads,maxError:result.maxError,fragmentError:result.fragmentError}));
     if(result.findings.length)throw new Error(JSON.stringify({label,...result}));

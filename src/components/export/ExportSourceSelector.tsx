@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import type { LoadedExportSource, ExportStartMode } from "../../export/types";
+import type { ExportMobileTab } from "./ExportTopbar";
 
 const startModeLabels: Record<ExportStartMode, string> = {
   continue: "前の続き",
@@ -10,7 +11,7 @@ const startModeLabels: Record<ExportStartMode, string> = {
 
 export function ExportSourceSelector({ sources, activeTab, showStartMode, updateSources, onOpenSource }: {
   sources: LoadedExportSource[];
-  activeTab: "files" | "settings" | "preview";
+  activeTab: ExportMobileTab;
   showStartMode: boolean;
   updateSources: (updater: (current: LoadedExportSource[]) => LoadedExportSource[]) => void;
   onOpenSource: (path: string) => void;
