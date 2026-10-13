@@ -235,9 +235,6 @@ export const appThemeValues = [
 
 export type AppTheme = (typeof appThemeValues)[number];
 
-/** 左サイドバーのファイル表示方式。 */
-export type SidebarMode = "tree" | "navigator";
-
 /** 本文エディタの書字方向。 */
 export type WritingMode = "vertical-rl" | "horizontal-tb";
 
@@ -259,14 +256,18 @@ export type StartPageFontSource = "ui" | "editor";
 /** 見出し・太字に適用するフォント種別。本文フォントを流用するか個別指定するか。 */
 export type HeadingFontSource = "body" | "custom";
 
-/** ファイルごとの進捗ラベル。デフォルトは "todo"（未着手）。 */
-export type FileProgressStatus = "todo" | "writing" | "revising" | "done";
+/**
+ * ファイルごとの進捗ラベル。デフォルトは "todo"（未着手）。
+ * "archived" はツリーの既定表示から外し、ライブラリの進捗バーにも数えない。
+ */
+export type FileProgressStatus = "todo" | "writing" | "revising" | "done" | "archived";
 
 export const fileProgressStatuses: readonly FileProgressStatus[] = [
   "todo",
   "writing",
   "revising",
   "done",
+  "archived",
 ] as const;
 
 export const fileProgressLabels: Record<FileProgressStatus, string> = {
@@ -274,7 +275,11 @@ export const fileProgressLabels: Record<FileProgressStatus, string> = {
   writing: "執筆中",
   revising: "推敲中",
   done: "完了",
+  archived: "アーカイブ",
 };
+
+/** 左サイドバーのツリーの絞り込み。"all" はアーカイブ以外のすべて。 */
+export type FileProgressFilter = "all" | FileProgressStatus;
 
 export const DEFAULT_FILE_PROGRESS: FileProgressStatus = "todo";
 
@@ -320,7 +325,6 @@ export type EditorSettings = {
   /** コメント行（行頭 // と <!-- -->）を本文中に表示するか。false で畳む。 */
   showComments: boolean;
   snippetStorageMode: "workspace" | "profile";
-  sidebarMode: SidebarMode;
   /** プロジェクト切替メニューでフォルダパスを表示するか。 */
   showWorkspacePaths: boolean;
   /** ステータスバーに現在のファイルパスを表示するか。 */
@@ -337,8 +341,6 @@ export type EditorSettings = {
   sidebarHoverMode: SidebarHoverMode;
   /** Zoneモードでサイドバーに適用する通常時の不透明度。 */
   zoneModeOpacity: number;
-  /** ナビゲータ方式のプレビュー表示行数。0 は「なし」（プレビュー非表示）。 */
-  navigatorPreviewLines: number;
   /** 文字数カウントに空白文字（スペース・タブ・改行など）を含めるか。 */
   countWhitespace: boolean;
   /** 文字数カウントにコード（コードブロック・行内コード）を含めるか。 */
@@ -380,10 +382,6 @@ export type CursorPosition = {
   offset: number;
   length: number;
 };
-
-/** ナビゲータのプレビュー行数として選べる値（0 = なし）。 */
-export const NAVIGATOR_PREVIEW_LINE_CHOICES: readonly number[] = [0, 1, 2, 3] as const;
-export const DEFAULT_NAVIGATOR_PREVIEW_LINES = 2;
 
 /** 本文の文字表示幅（編集領域に対する百分率）の範囲と既定値。 */
 export const EDITOR_MEASURE_PERCENT_MIN = 30;

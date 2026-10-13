@@ -106,9 +106,6 @@
 .appShell[data-theme="index-light"] :is(
   .activeTreeItem,
   .selectedTreeEntry,
-  .navigatorFileItemActive,
-  .navigatorCurrentFileActive,
-  .navigatorHeadingItemActive,
   .activeOutlineSidebarItem,
   .activeOutlineTreeItem,
   .selectedOutlineTreeItem

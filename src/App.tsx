@@ -221,10 +221,8 @@ import { isIdeaBinderCard, isReferenceBinderCard, workStatusLabels } from "./typ
 import {
   fileProgressStatuses,
   DEFAULT_EDITOR_MEASURE_PERCENT,
-  DEFAULT_NAVIGATOR_PREVIEW_LINES,
   EDITOR_MEASURE_PERCENT_MAX,
   EDITOR_MEASURE_PERCENT_MIN,
-  NAVIGATOR_PREVIEW_LINE_CHOICES,
   UI_FONT_SCALE_MIN,
   UI_FONT_SCALE_MAX,
 } from "./types";
@@ -1133,7 +1131,6 @@ const defaultSettings: EditorSettings = {
   colorizeJapaneseQuotes: false,
   showComments: true,
   snippetStorageMode: "workspace",
-  sidebarMode: "tree",
   showWorkspacePaths: true,
   showStatusFilePath: false,
   showDocumentTabs: true,
@@ -1142,7 +1139,6 @@ const defaultSettings: EditorSettings = {
   focusModeUsesNativeFullscreen: false,
   sidebarHoverMode: "none",
   zoneModeOpacity: 0.42,
-  navigatorPreviewLines: DEFAULT_NAVIGATOR_PREVIEW_LINES,
   countWhitespace: true,
   countCode: true,
   showOutlineGuides: true,
@@ -2465,7 +2461,6 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
           : defaultSettings.lineHeight,
       snippetStorageMode:
         settings.snippetStorageMode === "profile" ? "profile" : "workspace",
-      sidebarMode: settings.sidebarMode === "navigator" ? "navigator" : "tree",
       showWorkspacePaths:
         typeof settings.showWorkspacePaths === "boolean"
           ? settings.showWorkspacePaths
@@ -2504,11 +2499,6 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         typeof settings.zoneModeOpacity === "number" && Number.isFinite(settings.zoneModeOpacity)
           ? Math.min(0.85, Math.max(0, settings.zoneModeOpacity))
           : defaultSettings.zoneModeOpacity,
-      navigatorPreviewLines: NAVIGATOR_PREVIEW_LINE_CHOICES.includes(
-        settings.navigatorPreviewLines as number,
-      )
-        ? (settings.navigatorPreviewLines as number)
-        : DEFAULT_NAVIGATOR_PREVIEW_LINES,
       theme: normalizeAppTheme(settings.theme),
       countWhitespace:
         typeof settings.countWhitespace === "boolean"
@@ -13423,8 +13413,6 @@ export default function App() {
                   activeOutlineChain[activeOutlineChain.length - 1]?.blockId ?? null
                 }
                 projectAst={projectAst}
-                sidebarMode={settings.sidebarMode}
-                navigatorPreviewLines={settings.navigatorPreviewLines}
                 countWhitespace={settings.countWhitespace}
                 countCode={settings.countCode}
                 showOutlineGuides={settings.showOutlineGuides}

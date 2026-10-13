@@ -15,14 +15,21 @@ export type RightPaneSwitcherItem = {
 type RightPaneSwitcherProps = {
   items: readonly RightPaneSwitcherItem[];
   activeId: string;
+  /** 読み上げとツールチップで使う、切り替える対象の名前。 */
+  menuLabel?: string;
   onSelect: (id: string) => void;
 };
 
 /**
- * 右サイドバーのヘッダー左端に置く切り替え。上部バーの画面モードと同じ
- * 「アイコン＋機能名」のプルダウン。
+ * サイドバーのヘッダー左端に置く切り替え。上部バーの画面モードと同じ
+ * 「アイコン＋機能名」のプルダウン。右は補助ペイン、左はファイルの絞り込みに使う。
  */
-export function RightPaneSwitcher({ items, activeId, onSelect }: RightPaneSwitcherProps) {
+export function RightPaneSwitcher({
+  items,
+  activeId,
+  menuLabel = "補助ペイン",
+  onSelect,
+}: RightPaneSwitcherProps) {
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -83,8 +90,8 @@ export function RightPaneSwitcher({ items, activeId, onSelect }: RightPaneSwitch
         type="button"
         aria-haspopup="menu"
         aria-expanded={isOpen}
-        aria-label={`補助ペイン：${active.label}`}
-        title="補助ペインを切り替え"
+        aria-label={`${menuLabel}：${active.label}`}
+        title={`${menuLabel}を切り替え`}
         onClick={() => setIsOpen((open) => !open)}
         onKeyDown={(event) => {
           if (event.key === "ArrowUp" || event.key === "ArrowDown") {
@@ -103,7 +110,7 @@ export function RightPaneSwitcher({ items, activeId, onSelect }: RightPaneSwitch
         <div
           className="menuPopover rightPaneSwitcherPopover"
           role="menu"
-          aria-label="補助ペイン"
+          aria-label={menuLabel}
           onKeyDown={handleMenuKeyDown}
         >
           {items.map((item) => (

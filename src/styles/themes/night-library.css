@@ -138,7 +138,7 @@
   background: #e3a1ad;
 }
 
-.appShell[data-theme="night-library-dark"] :is(.activeTreeItem, .navigatorFileItemActive, .activeOutlineTreeItem) {
+.appShell[data-theme="night-library-dark"] :is(.activeTreeItem, .activeOutlineTreeItem) {
   background: rgba(156, 74, 90, 0.26);
   box-shadow: inset 3px 0 #e3a1ad;
 }

@@ -70,7 +70,14 @@ const stats = computeWorkStats(
 assert.equal(stats.signature, signature);
 assert.equal(stats.fileCount, 3);
 assert.equal(stats.charCount, 5 + 5 + 2);
-assert.deepEqual(stats.progress, { todo: 1, writing: 1, revising: 0, done: 1 }, "progress keys match case-insensitively");
+assert.deepEqual(stats.progress, { todo: 1, writing: 1, revising: 0, done: 1, archived: 0 }, "progress keys match case-insensitively");
+const archivedStats = computeWorkStats(
+  { folder, ast },
+  { "01_本文/第一章.txt": "done", "メモ.txt": "archived" },
+  { includeWhitespace: false, includeCode: true },
+);
+assert.equal(archivedStats.fileCount, 3, "archived files still count as files");
+assert.deepEqual(archivedStats.progress, { todo: 1, writing: 0, revising: 0, done: 1, archived: 1 });
 assert.equal(stats.lastModified, 300);
 
 assert.deepEqual(normalizeLibraryWorkStats({ ok: stats, broken: { charCount: "x" } }), { ok: stats });

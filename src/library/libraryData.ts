@@ -74,6 +74,7 @@ export function normalizeLibraryWorkStats(value: unknown): Record<string, WorkSt
         writing: progress.writing ?? 0,
         revising: progress.revising ?? 0,
         done: progress.done ?? 0,
+        archived: progress.archived ?? 0,
       },
       lastModified: typeof raw.lastModified === "number" ? raw.lastModified : null,
     };
@@ -106,13 +107,22 @@ export function computeWorkStats(
   countOptions: CharacterCountOptions,
 ): WorkStats {
   const files = collectFiles(index.folder.children);
-  const progress: Record<FileProgressStatus, number> = { todo: 0, writing: 0, revising: 0, done: 0 };
+  const progress: Record<FileProgressStatus, number> = {
+    todo: 0,
+    writing: 0,
+    revising: 0,
+    done: 0,
+    archived: 0,
+  };
   const progressByPath = new Map(
     Object.entries(fileProgress).map(([path, status]) => [path.toLocaleLowerCase(), status]),
   );
   for (const file of files) {
     const status = progressByPath.get(relativePath(index.folder.path, file.path).toLocaleLowerCase());
-    const key = status === "writing" || status === "revising" || status === "done" ? status : "todo";
+    const key =
+      status === "writing" || status === "revising" || status === "done" || status === "archived"
+        ? status
+        : "todo";
     progress[key] += 1;
   }
   const modified = files.flatMap((file) => (typeof file.modifiedAt === "number" ? [file.modifiedAt] : []));

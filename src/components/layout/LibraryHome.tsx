@@ -19,6 +19,7 @@ type SortKey = "updated" | "name" | "chars";
 type ViewMode = "cards" | "table";
 
 const STATUS_ORDER: WorkStatus[] = ["planning", "writing", "revising", "done", "paused"];
+/** 進捗バーに並べる状態。アーカイブはファイル数には入れるが、バーには出さない。 */
 const PROGRESS_ORDER: FileProgressStatus[] = ["done", "revising", "writing", "todo"];
 const VIEW_STORAGE_KEY = "then.libraryHome.view";
 

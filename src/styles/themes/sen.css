@@ -387,7 +387,7 @@
   color: var(--sen-vermilion);
 }
 
-.appShell[data-theme|="sen"] :is(.statusDot, .progressDot) {
+.appShell[data-theme|="sen"] .statusDot {
   border: 1px solid var(--sen-ink);
   background: var(--sen-paper);
 }
