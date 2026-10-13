@@ -15,7 +15,7 @@
 }
 
 /* UI 表示倍率は周りの部品にだけ掛け、組版プレビュー（iframe）は実寸のまま。 */
-.exStudio :is(.exTopbar, .exTabs, .exSide, .exMainBar, .exNotice, .exSettings, .exDialog) { zoom: var(--ui-font-scale, 1); }
+.exStudio :is(.exTopbar, .exTabs, .exMainBar, .exNotice, .exSettings, .exDialog) { zoom: var(--ui-font-scale, 1); }
 
 .exTopbar { gap: 14px; padding: 6px 16px 6px 20px; }
 .exSpacer { flex: 1; }
@@ -32,33 +32,9 @@
 
 .exLayout { display: flex; min-height: 0; flex: 1; overflow: hidden; }
 
-/* 左：ファイル（チェックポイントの保存点一覧と同じ文法） */
-.exSide { display: flex; min-width: 0; min-height: 0; flex: 0 0 300px; flex-direction: column; gap: 10px; padding: 20px 16px 0; overflow: hidden; border-right: 1px solid var(--border-subtle); background: var(--sidebar-bg); }
-.exSideHead { display: flex; align-items: baseline; justify-content: space-between; padding: 0 4px; }
-.exSideHead h2 { margin: 0; font-size: 15px; }
-.exCount { color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.exBulk { display: flex; gap: 4px; margin-top: -2px; }
-.exFiles { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 2px; margin: 0 -16px; padding: 0 16px 16px; overflow-y: auto; }
-.exNoResults { margin: 0; padding: 8px 10px; color: var(--text-muted); font-size: 13px; }
-.exFile { position: relative; display: flex; align-items: flex-start; gap: 10px; padding: 9px 10px; border-radius: 10px; }
-.exFile:hover { background: var(--control-hover); }
-.exFile.isOn { background: var(--bg-panel); box-shadow: inset 0 0 0 1.5px var(--text-primary); }
-.exFile > input[type="checkbox"] { width: 16px; height: 16px; flex: none; margin: 2px 0 0; accent-color: var(--text-primary); }
-.exFileBody { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 4px; }
-.exFileLabel { display: flex; min-width: 0; align-items: center; gap: 8px; cursor: pointer; }
-.exOrder { display: inline-flex; min-width: 18px; height: 18px; flex: none; align-items: center; justify-content: center; padding: 0 5px; border-radius: 999px; background: var(--text-primary); color: var(--bg-panel); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.exFileName { min-width: 0; overflow: hidden; color: var(--text-secondary); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
-.exFile.isOn .exFileName { color: var(--text-primary); font-weight: 700; }
-.exExt { flex: none; padding: 1px 6px; border-radius: 999px; background: var(--control-hover); color: var(--text-secondary); font-size: 10px; font-weight: 700; }
-.exFileMeta { display: flex; min-height: 28px; align-items: center; gap: 8px; color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.exFolder { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.exStart { display: flex; flex: none; align-items: center; gap: 6px; margin-left: auto; color: var(--text-muted); font-size: 12px; }
-.exStart select { min-height: 28px; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--bg-panel); color: var(--text-primary); font-size: 12px; }
-.exFileTools { position: absolute; top: 6px; right: 6px; display: none; gap: 2px; padding: 2px; border-radius: 8px; background: var(--bg-panel); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
-.exFile:hover .exFileTools,
-.exFile:focus-within .exFileTools { display: flex; }
-.exFileTools button { width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--text-secondary); font-size: 11px; }
-.exFileTools button:hover:not(:disabled) { background: var(--control-hover); color: var(--text-primary); }
+/* 左：ファイル一覧は修正前の ExportSourceSelector（App.css の .export* ）のまま。
+   列の背景と幅だけ右の設定列に合わせる。 */
+.exStudio .exportFilesPanel { width: 300px; background: var(--sidebar-bg); }
 
 /* 中央：プレビュー */
 .exMain { display: flex; min-width: 0; min-height: 0; flex: 1 1 auto; flex-direction: column; background: var(--bg-panel-strong); }
@@ -138,8 +114,8 @@
 /* 狭い幅では 3 段を切り替えで一つずつ見せる。 */
 @media (max-width: 1100px) {
   .exTabs { display: flex; }
-  .exSide, .exMain, .exSettings { display: none; flex: 1 1 auto; border: 0; }
-  :is(.exSide, .exMain, .exSettings).mobileActive { display: flex; }
+  .exMain, .exSettings { display: none; flex: 1 1 auto; border: 0; }
+  :is(.exMain, .exSettings).mobileActive { display: flex; }
   .exStatus { display: none; }
   .exTopbar { flex-wrap: wrap; row-gap: 6px; }
 }

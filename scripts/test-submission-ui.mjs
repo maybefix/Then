@@ -69,7 +69,7 @@ for (const embedded of [false, true]) {
   await click(document.querySelector('[aria-label="下へ移動"]'));
   await click(button("投稿用テキスト"));
   assert.equal(preview(), "第二本文\n\n\n《《重要》》\n");
-  assert.ok(!document.querySelector(".exStart select"));
+  assert.ok(!document.querySelector(".exportSourceMeta select"));
   await select("投稿先", "narou");
   assert.equal(preview(), "第二本文\n\n\n｜重《・》｜要《・》\n");
   await click(button("クリップボードへコピー"));
@@ -96,7 +96,7 @@ for (const embedded of [false, true]) {
   await act(async () => finishSave(null));
   saveMode = "success";
   await click(button("印刷・文書"));
-  assert.ok(document.querySelector(".exStart select"));
+  assert.ok(document.querySelector(".exportSourceMeta select"));
   await click(button("投稿用テキスト"));
   assert.equal(preview(), "第二本文\n\n\n｜重《・》｜要《・》\n");
   await select("なろうの傍点", "plain");
