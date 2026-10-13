@@ -1699,6 +1699,13 @@ html:not([data-window-fullscreen="true"])
   opacity: 0.85;
 }
 
+/* 進捗が付いたファイルは、アイコンだけを進捗色で塗る。名前の文字色は変えない。 */
+.progressDocumentTabKind:is(.progressText-writing, .progressText-revising, .progressText-done) {
+  opacity: 1;
+  stroke: var(--progress-color);
+  fill: color-mix(in srgb, var(--progress-color) 28%, transparent);
+}
+
 /* 未保存の下書きは、輪郭を破線にして通常のファイルと区別する。 */
 .scratchDocumentTabKind {
   stroke-dasharray: 3 2.2;

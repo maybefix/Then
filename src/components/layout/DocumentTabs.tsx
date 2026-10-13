@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import type { DocumentTab } from "../../types";
+import type { DocumentTab, FileProgressStatus } from "../../types";
+import { fileProgressLabels } from "../../types";
 import { getScaledFixedMenuPosition } from "../../utils/contextMenuPosition";
 
 type DocumentTabsProps = {
@@ -9,6 +10,8 @@ type DocumentTabsProps = {
   /** "hover" は編集面の縦幅を空けるため、上端に触れたときだけ重ねて表示する。 */
   displayMode: "always" | "hover";
   activeTabId: string;
+  /** ファイルパスごとの進捗ラベル。タブのファイルアイコンを色分けする。 */
+  fileProgress: Record<string, FileProgressStatus>;
   onActivateTab: (tabId: string) => void;
   onCloseTabs: (tabIds: string[]) => void;
   /** tabId を beforeTabId の直前へ移す。null なら末尾。 */
@@ -62,6 +65,7 @@ export function DocumentTabs({
   openTabs,
   displayMode,
   activeTabId,
+  fileProgress,
   onActivateTab,
   onCloseTabs,
   onMoveTab,
@@ -407,6 +411,7 @@ export function DocumentTabs({
         {visibleTabs.map((tab, index) => {
           const isActive = tab.id === activeTabId;
           const tabStatus = getTabStatusLabel(tab);
+          const progress = tab.path ? fileProgress[tab.path] ?? "todo" : null;
           const isDirty = isDirtyDocumentTab(tab);
           const isDropBefore = dropTarget?.beforeTabId === tab.id;
           const isDropAfter =
@@ -441,7 +446,12 @@ export function DocumentTabs({
                 role="tab"
                 aria-selected={isActive}
                 tabIndex={isActive ? 0 : -1}
-                title={tab.path ?? tab.name}
+                title={
+                  progress
+                    ? `${tab.path}
+進捗: ${fileProgressLabels[progress]}`
+                    : tab.path ?? tab.name
+                }
                 onClick={() => {
                   if (suppressClickRef.current) return;
                   onActivateTab(tab.id);
@@ -468,9 +478,11 @@ export function DocumentTabs({
                 }}
               >
                 <svg
-                  className={`documentTabKind ${
-                    tab.kind === "scratch" ? "scratchDocumentTabKind" : ""
-                  }`}
+                  className={[
+                    "documentTabKind",
+                    tab.kind === "scratch" ? "scratchDocumentTabKind" : "",
+                    progress ? `progressDocumentTabKind progressText-${progress}` : "",
+                  ].filter(Boolean).join(" ")}
                   viewBox="0 0 24 24"
                   aria-hidden="true"
                   focusable="false"

@@ -13268,6 +13268,7 @@ export default function App() {
               openTabs={openTabs}
               displayMode={settings.documentTabsDisplayMode}
               activeTabId={activeTabId}
+              fileProgress={appState.fileProgress}
               onActivateTab={activateDocumentTab}
               onCloseTabs={(tabIds) => void closeDocumentTabs(tabIds)}
               onMoveTab={moveDocumentTab}
