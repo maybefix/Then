@@ -69,7 +69,7 @@ for (const embedded of [false, true]) {
   await click(document.querySelector('[aria-label="下へ移動"]'));
   await click(button("投稿用テキスト"));
   assert.equal(preview(), "第二本文\n\n\n《《重要》》\n");
-  assert.ok(!document.querySelector(".exportSourceMeta select"));
+  assert.ok(!document.querySelector(".exStart select"));
   await select("投稿先", "narou");
   assert.equal(preview(), "第二本文\n\n\n｜重《・》｜要《・》\n");
   await click(button("クリップボードへコピー"));
@@ -96,7 +96,7 @@ for (const embedded of [false, true]) {
   await act(async () => finishSave(null));
   saveMode = "success";
   await click(button("印刷・文書"));
-  assert.ok(document.querySelector(".exportSourceMeta select"));
+  assert.ok(document.querySelector(".exStart select"));
   await click(button("投稿用テキスト"));
   assert.equal(preview(), "第二本文\n\n\n｜重《・》｜要《・》\n");
   await select("なろうの傍点", "plain");
@@ -105,7 +105,7 @@ for (const embedded of [false, true]) {
   assert.equal(preview(), "第二本文\n\n＊　＊　＊\n\n重要\n");
   await select("投稿先", "plain");
   assert.ok(![...document.querySelectorAll("label")].some(el => el.firstChild?.textContent === "なろうの傍点"));
-  for (const tab of ["設定", "プレビュー", "出力対象"]) {
+  for (const tab of ["設定", "プレビュー", "ファイル"]) {
     await click(button(tab));
     assert.equal(document.querySelectorAll(".mobileActive").length, 1);
   }
@@ -126,8 +126,9 @@ const root = createRoot(document.getElementById("root"));
 await act(async () => root.render(React.createElement(LinkedExportScreen, { ...props,
   initialSources: [{ ...sources[0], content: "本文\n［＃未知］" }], sourceError: "失敗.txt: 読めません" })));
 await click(button("投稿用テキスト"));
-assert.ok(document.querySelector(".submissionSummary").textContent.includes("警告2件"));
-await click(document.querySelector(".submissionWarnings button"));
+assert.ok(document.querySelector(".exNotice").textContent.includes("警告が2件"));
+await click(button("内容を見る"));
+await click(document.querySelector(".exNotice .exLinkButton"));
 assert.equal(opened, "0.txt");
 await click(button("クリップボードへコピー"));
 assert.ok(document.querySelector('[role="status"]').textContent.includes("2件の警告"));

@@ -25,18 +25,8 @@
   color: var(--text-primary);
 }
 
-.checkpointStudio button,
-.checkpointStudio select,
-.checkpointStudio input { font-family: inherit; }
-.checkpointStudio button { cursor: pointer; }
-.checkpointStudio button:disabled { cursor: default; opacity: .55; }
-.checkpointStudio :focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
 
-/* ヘッダー */
-.cpTopbar { display: flex; flex: 0 0 auto; align-items: center; gap: 16px; padding: 6px 24px; border-bottom: 1px solid var(--border-subtle); }
-.cpBack { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px 0 6px; border: 0; border-radius: 8px; background: none; color: var(--text-secondary); font-size: 14px; }
-.cpBack:hover { background: var(--control-hover); color: var(--text-primary); }
-.cpTopbar h1 { margin: 0; font-size: 17px; font-weight: 700; }
+/* ヘッダー・ボタン・セグメント・メニュー・検索欄は ../studio/studio.css */
 
 /* サイドバーと詳細はそれぞれ別にスクロールする。画面全体は動かない。 */
 .cpLayout { display: flex; min-height: 0; flex: 1; overflow: hidden; }
@@ -57,21 +47,8 @@
 .cpCreateForm input { min-height: 40px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--bg-panel); color: var(--text-primary); font-size: 14px; }
 .cpRowEnd { display: flex; justify-content: flex-end; gap: 8px; }
 
-.cpBtnOutline { display: flex; min-height: 44px; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--text-primary); border-radius: 10px; background: var(--bg-panel); color: var(--text-primary); font-size: 14px; font-weight: 700; }
-.cpBtnOutline:hover { background: var(--control-hover); }
-.cpBtnPrimary { display: flex; min-height: 44px; align-items: center; gap: 8px; padding: 0 20px; border: 0; border-radius: 10px; background: var(--text-primary); color: var(--bg-panel); font-size: 14px; font-weight: 700; white-space: nowrap; }
-.cpBtnPrimary.sm { min-height: 40px; padding: 0 16px; border-radius: 8px; font-size: 13px; }
-.cpBtnGhost { min-height: 40px; padding: 0 14px; border: 0; border-radius: 8px; background: none; color: var(--text-secondary); font-size: 13px; }
-.cpBtnGhost:hover { background: var(--control-hover); }
-.cpBtnLine { min-height: 36px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--bg-panel); color: var(--text-primary); font-size: 13px; white-space: nowrap; }
-.cpBtnLine:hover { background: var(--control-hover); }
-.cpBtnIcon { display: flex; width: 44px; height: 44px; align-items: center; justify-content: center; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--bg-panel); color: var(--text-primary); }
-.cpBtnIcon:hover { background: var(--control-hover); }
 
 .cpTools { display: flex; flex-direction: column; gap: 6px; }
-.cpSearch { position: relative; display: block; }
-.cpSearch svg { position: absolute; top: 12px; left: 12px; color: var(--text-muted); }
-.cpSearch input { width: 100%; min-height: 40px; padding: 0 10px 0 36px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-panel); color: var(--text-primary); font-size: 13px; }
 .cpAutoToggle { display: flex; min-height: 36px; align-items: center; gap: 8px; padding: 0 4px; color: var(--text-secondary); font-size: 13px; }
 .cpAutoToggle input { width: 16px; height: 16px; margin: 0; accent-color: var(--text-primary); }
 
@@ -111,17 +88,11 @@
 .cpDetailMemo { margin: 4px 0 0; color: var(--text-secondary); font-size: 14px; white-space: pre-wrap; }
 .cpDetailAuto { margin: 4px 0 0; color: var(--cp-auto); font-size: 13px; }
 .cpDetailActions { position: relative; display: flex; align-items: center; gap: 8px; }
-.cpMenu { position: absolute; z-index: 5; top: 52px; right: 0; display: flex; min-width: 200px; flex-direction: column; padding: 6px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--bg-panel); box-shadow: var(--shadow-popover, 0 10px 30px rgba(0, 0, 0, .1)); }
-.cpMenu button { min-height: 40px; padding: 0 12px; border: 0; border-radius: 6px; background: none; color: var(--text-primary); font-size: 14px; text-align: left; }
-.cpMenu button:hover { background: var(--control-hover); }
-.cpMenu .cpDanger { color: var(--danger); }
+.stMenu .cpDanger { color: var(--danger); }
 
 .cpCompareBar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; padding: 12px 14px; border-radius: 12px; background: var(--bg-panel-strong); }
 .cpCompareBar label { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 10px; color: var(--text-secondary); font-size: 13px; }
 .cpCompareBar select { max-width: 100%; min-height: 40px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--bg-panel); color: var(--text-primary); font-size: 14px; }
-.cpSeg { display: flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--control-hover); }
-.cpSeg button { min-height: 36px; padding: 0 14px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); font-size: 13px; }
-.cpSeg button[aria-pressed="true"] { background: var(--bg-panel); box-shadow: 0 1px 2px rgba(0, 0, 0, .08); color: var(--text-primary); font-weight: 700; }
 
 .cpSummary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
 .cpSummary p { margin: 0; font-size: 16px; font-weight: 700; }
@@ -183,8 +154,8 @@
 .cpDialog p { margin: 0; font-size: 14px; line-height: 1.8; }
 .cpDialog .cpSafe { padding: 10px 12px; border-radius: 8px; background: var(--bg-panel-strong); color: var(--text-secondary); font-size: 13px; line-height: 1.7; }
 .cpDialog .cpRowEnd { margin-top: 4px; }
-.cpDialog .cpBtnGhost { min-height: 44px; padding: 0 16px; font-size: 14px; }
-.cpDialog .cpBtnPrimary { padding: 0 22px; }
+.cpDialog .stBtnGhost { min-height: 44px; padding: 0 16px; font-size: 14px; }
+.cpDialog .stBtnPrimary { padding: 0 22px; }
 
 .cpEmptyScreen { align-items: center; justify-content: center; gap: 12px; }
 .cpEmptyScreen h1, .cpEmptyScreen p { margin: 0; }

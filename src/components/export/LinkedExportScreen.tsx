@@ -1,6 +1,9 @@
 import { ExportSourceSelector } from "./ExportSourceSelector";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SubmissionExportPanel } from "./SubmissionExportPanel";
+import { ExportTopbar, type ExportMobileTab } from "./ExportTopbar";
+import "../studio/studio.css";
+import "./exportStudio.css";
 
 // This screen is mounted as the complete contents of a dedicated Tauri window.
 import { exportBlockHtml } from "../../export/linkedDocument";
@@ -119,6 +122,15 @@ const footerContentLabels: Record<ExportLayoutProfile["footer"]["content"], stri
   title: "作品名",
   custom: "任意",
 };
+
+const pageNumberPositionLabels: Record<ExportLayoutProfile["footer"]["pageNumberPosition"], string> = {
+  "bottom-center": "下中央",
+  "top-center": "上中央",
+  outer: "外側",
+  inner: "内側",
+};
+
+const ChevronIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>;
 
 function cloneLayout(layout: ExportLayoutProfile): ExportLayoutProfile {
   return JSON.parse(JSON.stringify(layout)) as ExportLayoutProfile;
@@ -296,10 +308,11 @@ export function LinkedExportScreen({
   const [layout, setLayout] = useState(() => initialLayout(initialSources));
   const [viewState, setViewState] = useState<ExportViewState>(sourceError ? "preview-error" : "no-preview");
   const [previewStale, setPreviewStale] = useState(false);
-  const [activeTab, setActiveTab] = useState<"files" | "settings" | "preview">("files");
+  const [activeTab, setActiveTab] = useState<ExportMobileTab>("files");
   const [openSections, setOpenSections] = useState(() => new Set(["page"]));
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [unavailableImages, setUnavailableImages] = useState<string[]>([]);
+  const [imageListOpen, setImageListOpen] = useState(false);
   const [failure, setFailure] = useState<ExportFailure | null>(sourceError ? {
     kind: "source-read",
     message: "本文ファイルを読み込めませんでした",
@@ -317,6 +330,7 @@ export function LinkedExportScreen({
   const [savedPresets, setSavedPresets] = useState<SavedPreset[]>(readSavedPresets);
   const [presetChoice, setPresetChoice] = useState("");
   const [presetName, setPresetName] = useState("");
+  const [presetFormOpen, setPresetFormOpen] = useState(false);
   const [frontText, setFrontText] = useState({ title: "", subtitle: "", author: "" });
   const [coverImage, setCoverImage] = useState<ExportCoverImage | null>(null);
   const frontLoaded = useRef(false);
@@ -376,6 +390,7 @@ export function LinkedExportScreen({
     frontMatter: { subtitle: frontText.subtitle, author: frontText.author, coverImage },
   }), [coverImage, format, frontText.author, frontText.subtitle, layout, sources, workTitle]);
   const includedCount = sources.filter((source) => source.enabled).length;
+  const includedChars = sources.reduce((sum, source) => sum + (source.enabled ? source.chars ?? source.content.length : 0), 0);
 
   // Keep the current preview on screen and flag it as stale instead of
   // dropping back to the empty state on every tweak.
@@ -591,16 +606,20 @@ export function LinkedExportScreen({
     }
   };
 
-  const renderSectionHeader = (id: string, label: string, summary: string) => (
-    <button type="button" className="exportSettingsSectionHeader" aria-expanded={openSections.has(id)} onClick={() => toggleSection(id)}>
-      <span>{label}</span>
-      <small>{summary}</small>
-      <span className="exportSectionChevron" aria-hidden="true">{openSections.has(id) ? "▾" : "▸"}</span>
-    </button>
-  );
+  const renderCard = (id: string, label: string, summary: string, body: () => ReactNode) => {
+    const open = openSections.has(id);
+    return (
+      <section className="exCard">
+        <button type="button" className="exCardToggle" aria-expanded={open} onClick={() => toggleSection(id)}>
+          <ChevronIcon/><span className="exCardTitle">{label}</span><span className="exCardSum">{summary}</span>
+        </button>
+        {open && <div className="exCardBody">{body()}</div>}
+      </section>
+    );
+  };
 
   const [pageWidth, pageHeight] = resolvePageDimensions(layout);
-  const pageSummary = `${layout.page.size}・余白 ${layout.page.marginTopMm}mm`;
+  const pageSummary = `${layout.page.size === "custom" ? "カスタム" : layout.page.size}・余白 ${layout.page.marginTopMm}mm`;
   const directionLabel = layout.body.writingMode === "horizontal-tb" ? "横書き" : "縦書き";
   const bodySummary = `${directionLabel}・${layout.body.fontFamily.includes("Serif") ? "明朝" : "ゴシック"} ${layout.body.fontSize}${layout.body.fontSizeUnit}・${layout.body.columns}段`;
   const headerHiddenSummary = [
@@ -615,8 +634,8 @@ export function LinkedExportScreen({
     ? `${headerContentLabels[layout.header.content]}${headerHiddenSummary ? `・${headerHiddenSummary}非表示` : ""}`
     : "なし";
   const footerSummary = layout.footer.enabled && layout.footer.content !== "none"
-    ? `${footerContentLabels[layout.footer.content]} ${layout.footer.pageNumberPosition}${footerHiddenSummary ? `・${footerHiddenSummary}非表示` : ""}`
-    : "非表示";
+    ? `${footerContentLabels[layout.footer.content]}・${pageNumberPositionLabels[layout.footer.pageNumberPosition]}${footerHiddenSummary ? `・${footerHiddenSummary}非表示` : ""}`
+    : "なし";
   const frontMatter = layout.frontMatter;
   const frontSummary = [
     frontMatter.cover.enabled
@@ -624,181 +643,97 @@ export function LinkedExportScreen({
       : "",
     frontMatter.toc.enabled ? `目次（${tocDepthLabel(frontMatter.toc.depth)}）` : "",
   ].filter(Boolean).join("・") || "なし";
-  const showWindowHeader = !embedded;
+  const busy = viewState === "pdf-generating";
   const sourceSelector = <ExportSourceSelector sources={sources} activeTab={activeTab}
     showStartMode={purpose === "print"} updateSources={updateSources} onOpenSource={onOpenSource} />;
+  const topbarCommon = {
+    embedded,
+    purpose,
+    onPurpose: setPurpose,
+    purposeLocked: busy,
+    onClose,
+    activeTab,
+    onTab: setActiveTab,
+  };
+  const imageLabel = (url: string) => {
+    const base = job.imageUrlBase;
+    return readableImageUrl(base && url.startsWith(base) ? url.slice(base.length) : url);
+  };
+  const seg = (pressed: boolean, label: string, onClick: () => void) =>
+    <button type="button" aria-pressed={pressed} onClick={onClick}>{label}</button>;
 
   return (
     <div className="exportModalBackdrop" role="presentation">
-      <section
-        className="linkedExportScreen"
-        aria-label={showWindowHeader ? undefined : "エクスポート"}
-        aria-labelledby={showWindowHeader ? "linked-export-title" : undefined}
-      >
-        {showWindowHeader && (
-          <header className="exportModalHeader">
-            <div className="exportHeaderTitle">
-              <h2 id="linked-export-title">エクスポート</h2>
-              <p>本文ファイルを連結して書き出します</p>
-            </div>
-            <button type="button" className="exportCloseButton" onClick={onClose} aria-label="閉じる">×</button>
-          </header>
-        )}
-
-        <div className="exportPurposeSwitch exportPillGroup" role="group" aria-label="出力用途">
-          <button type="button" aria-pressed={purpose === "print"} className={purpose === "print" ? "active" : ""} disabled={viewState === "pdf-generating"} onClick={() => setPurpose("print")}>印刷・文書</button>
-          <button type="button" aria-pressed={purpose === "submission"} className={purpose === "submission" ? "active" : ""} disabled={viewState === "pdf-generating"} onClick={() => setPurpose("submission")}>投稿用テキスト</button>
-        </div>
-        <nav className="exportResponsiveTabs" aria-label="エクスポート画面">
-          {(["files", "settings", "preview"] as const).map((tab) => (
-            <button key={tab} type="button" className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>
-              {tab === "files" ? "出力対象" : tab === "settings" ? "設定" : "プレビュー"}
-            </button>
-          ))}
-        </nav>
-
+      <section className="linkedExportScreen exStudio stStudio" aria-label="書き出し">
         {purpose === "submission" ? <SubmissionExportPanel title={title} sources={sources} sourceError={sourceError}
-          activeTab={activeTab} sourceSelector={sourceSelector} onClose={onClose} onOpenSource={onOpenSource} /> : <>
-        <div className="exportModalBody">
+          activeTab={activeTab} sourceSelector={sourceSelector} topbar={topbarCommon} onOpenSource={onOpenSource} /> : <>
+        <ExportTopbar
+          {...topbarCommon}
+          status={savedLabel || (includedCount > 0 ? `${includedCount}ファイル・${includedChars.toLocaleString()}字` : "ファイルを選んでください")}
+          statusTone={savedLabel ? "ok" : undefined}
+          menu={[
+            { label: "DOCXで書き出す", onSelect: () => void runExport("docx"), disabled: includedCount === 0 || busy },
+            "separator",
+            { label: "今の設定をプリセットに保存…", onSelect: () => setPresetFormOpen(true) },
+          ]}
+          primary={<button type="button" className="stBtnPrimary" onClick={() => void runExport("pdf")} disabled={includedCount === 0 || busy}>PDFを書き出す</button>}
+        />
+        <div className="exLayout">
           {sourceSelector}
 
-          <section className={`exportPreviewPanel ${activeTab === "preview" ? "mobileActive" : ""}`}>
-            <div className="exportPreviewToolbar">
-              <button type="button" className={`exportBtn exportRefreshButton${previewStale && viewState === "preview-ready" ? " stale" : ""}`} onClick={refreshPreview} disabled={includedCount === 0}>↻ プレビュー更新</button>
-              <span className="exportToolbarSpacer" />
-              <span className="exportPreviewEngineTag">Vivliostyle 組版（出力と同じ）</span>
+          <main className={`exMain${activeTab === "preview" ? " mobileActive" : ""}`} aria-label="組版プレビュー">
+            <div className="exMainBar">
+              <span className="exMainTitle">プレビュー</span>
+              <span className="exMainMeta">{layout.name ?? "カスタム"}</span>
+              <span className="exSpacer"/>
+              {previewStale && viewState === "preview-ready" && (
+                <span className="exStale" role="status">設定が変わりました
+                  <button type="button" className="stBtnLine" onClick={refreshPreview} disabled={includedCount === 0}>プレビューを更新</button>
+                </span>
+              )}
             </div>
-            {previewStale && viewState === "preview-ready" && (
-              <div className="exportStaleBanner" role="status">
-                <span>設定が変更されました — 表示中のプレビューは更新前の内容です</span>
-                <button type="button" className="exportBtn" onClick={refreshPreview} disabled={includedCount === 0}>↻ 更新</button>
+            {viewState === "preview-ready" && previewSrc && unavailableImages.length > 0 && (
+              <div className="exNotice" role="status">
+                <div className="exNoticeRow">
+                  <span>画像{unavailableImages.length}件を読み込めません</span>
+                  <button type="button" aria-expanded={imageListOpen} onClick={() => setImageListOpen((open) => !open)}>{imageListOpen ? "閉じる" : "どの画像か見る"}</button>
+                </div>
+                {imageListOpen && <ul>{unavailableImages.map((url) => <li key={url}><code>{imageLabel(url)}</code></li>)}</ul>}
               </div>
             )}
-            <div className="exportPreviewStage">
+            <div className="exStage">
               {viewState === "no-preview" && (
-                <div className="exportEmptyState">
-                  <span>▤</span><strong>まだプレビューがありません</strong>
-                  <p>「プレビュー更新」を押すと、出力対象ファイルを連結して組版プレビューを生成します。</p>
-                  <button type="button" className="exportBtn" onClick={refreshPreview} disabled={includedCount === 0}>↻ プレビュー更新</button>
+                <div className="exEmpty">
+                  <strong>まだプレビューがありません</strong>
+                  <button type="button" className="stBtnPrimary sm" onClick={refreshPreview} disabled={includedCount === 0}>プレビューを表示</button>
                 </div>
               )}
               {viewState === "preview-loading" && (
-                <div className="exportEmptyState"><span className="exportSpinner"/><strong>プレビュー生成中…</strong><p>本文を連結して組版しています</p></div>
-              )}
-              {viewState === "preview-ready" && previewSrc && unavailableImages.length > 0 && (
-                <div className="exportImageNotice" role="status" title={unavailableImages.map(readableImageUrl).join("\n")}>
-                  読み込めない画像が{unavailableImages.length}件あります。該当箇所には画像の説明文を印字します。
-                </div>
+                <div className="exEmpty"><span className="exSpinner"/><strong>組版しています…</strong></div>
               )}
               {viewState === "preview-ready" && previewSrc && (
-                <iframe
-                  key={previewSrc}
-                  className="exportVivliostyleFrame"
-                  src={previewSrc}
-                  title="組版プレビュー"
-                />
+                // ツールバーとロゴは Vivliostyle Viewer のまま表示する（組み込み元の表示を消さない）。
+                <iframe key={previewSrc} className="exViewer" src={previewSrc} title="組版プレビュー"/>
               )}
               {viewState === "preview-error" && failure && (
-                <div className="exportErrorState" role="alert">
-                  <span>!</span><strong>{failure.message}</strong>
-                  <p>本文の連結結果を紙面に流し込む処理でエラーが発生しました。設定と本文記法を確認してください。</p>
-                  <button type="button" className="exportLogToggle" onClick={() => setShowErrorDetail((value) => !value)}>{showErrorDetail ? "▾" : "▸"} 詳細ログを表示</button>
+                <div className="exEmpty isError" role="alert">
+                  <strong>{failure.message}</strong>
+                  <button type="button" className="exLogToggle" aria-expanded={showErrorDetail} onClick={() => setShowErrorDetail((value) => !value)}>{showErrorDetail ? "詳細を隠す" : "詳細を表示"}</button>
                   {showErrorDetail && <pre>[{failure.kind}] {failure.detail}</pre>}
-                  <div>{failure.sourcePath && <button type="button" className="exportBtn" onClick={() => onOpenSource(failure.sourcePath!)}>該当ファイルを開く</button>}<button type="button" className="exportBtn" onClick={refreshPreview}>↻ 再試行</button></div>
+                  <div className="exRowEnd">
+                    {failure.sourcePath && <button type="button" className="stBtnLine" onClick={() => onOpenSource(failure.sourcePath!)}>該当ファイルを開く</button>}
+                    <button type="button" className="stBtnPrimary sm" onClick={refreshPreview}>もう一度試す</button>
+                  </div>
                 </div>
               )}
             </div>
-          </section>
+          </main>
 
-          <aside className={`exportSettingsPanel ${activeTab === "settings" ? "mobileActive" : ""}`}>
-            {renderSectionHeader("page", "ページ設定", pageSummary)}
-            {openSections.has("page") && <div className="exportSettingsContent">
-              <label>ページサイズ<select value={layout.page.size} onChange={(event) => patchLayout((next) => { next.page.size = event.target.value as ExportLayoutProfile["page"]["size"]; return next; })}>{["B6", "A5", "A6", "B5", "A4", "custom"].map((size) => <option key={size} value={size}>{size === "custom" ? "カスタム" : size}</option>)}</select></label>
-              <div className="exportFieldGrid two"><label>幅 (mm)<input type="number" value={pageWidth} disabled={layout.page.size !== "custom"} onChange={(event) => patchLayout((next) => { next.page.widthMm = Number(event.target.value); return next; })}/></label><label>高さ (mm)<input type="number" value={pageHeight} disabled={layout.page.size !== "custom"} onChange={(event) => patchLayout((next) => { next.page.heightMm = Number(event.target.value); return next; })}/></label></div>
-              <span className="exportFieldLabel">余白 (mm)</span>
-              <div className="exportFieldGrid four">
-                {([['天','marginTopMm'],['地','marginBottomMm'],['ノド','marginInnerMm'],['小口','marginOuterMm']] as const).map(([label, key]) => <label key={key}>{label}<input type="number" min="0" value={layout.page[key]} onChange={(event) => patchLayout((next) => { next.page[key] = Number(event.target.value); return next; })}/></label>)}
-              </div><p className="exportHelp">ノド = 綴じ側の余白 ／ 小口 = ページを開く側の余白</p>
-            </div>}
-
-            {renderSectionHeader("body", "本文設定", bodySummary)}
-            {openSections.has("body") && <div className="exportSettingsContent">
-              <span className="exportFieldLabel">本文方向</span>
-              <div className="exportPillGroup">
-                <button type="button" className={layout.body.writingMode === "vertical-rl" ? "active" : ""} onClick={() => patchLayout((next) => { next.body.writingMode = "vertical-rl"; return next; })}>縦書き</button>
-                <button type="button" className={layout.body.writingMode === "horizontal-tb" ? "active" : ""} onClick={() => patchLayout((next) => { next.body.writingMode = "horizontal-tb"; return next; })}>横書き</button>
-              </div>
-              <label>本文フォント<select value={layout.body.fontFamily} onChange={(event) => patchLayout((next) => { next.body.fontFamily = event.target.value as ExportLayoutProfile["body"]["fontFamily"]; return next; })}><option value="Noto Serif CJK JP">源ノ明朝（明朝体）</option><option value="Noto Sans CJK JP">源ノ角ゴシック（ゴシック体）</option></select></label>
-              <div className="exportFieldGrid two"><label>文字サイズ (Q)<input type="number" min="6" step="0.5" value={layout.body.fontSize} onChange={(event) => patchLayout((next) => { next.body.fontSize = Number(event.target.value); next.body.fontSizeUnit = "Q"; return next; })}/></label><label>行間<input type="number" min="1" step="0.05" value={layout.body.lineHeight} onChange={(event) => patchLayout((next) => { next.body.lineHeight = Number(event.target.value); return next; })}/></label></div>
-              <span className="exportFieldLabel">段組</span><div className="exportPillGroup"><button type="button" className={layout.body.columns === 1 ? "active" : ""} onClick={() => patchLayout((next) => { next.body.columns = 1; return next; })}>1段</button><button type="button" className={layout.body.columns === 2 ? "active" : ""} onClick={() => patchLayout((next) => { next.body.columns = 2; return next; })}>2段</button></div>
-              <label>段間 (mm)<input type="number" min="0" value={layout.body.columnGapMm} disabled={layout.body.columns === 1} onChange={(event) => patchLayout((next) => { next.body.columnGapMm = Number(event.target.value); return next; })}/></label>
-              <label className="exportCheckRow"><input type="checkbox" checked={layout.body.figureCaptions !== false} onChange={() => patchLayout((next) => { next.body.figureCaptions = next.body.figureCaptions === false; return next; })}/>図版の説明をキャプションとして印字 <small>（![説明](画像)）</small></label>
-            </div>}
-
-            {renderSectionHeader("header", "ヘッダー", headerSummary)}
-            {openSections.has("header") && <div className="exportSettingsContent">
-              <label>表示内容<select value={layout.header.content} onChange={(event) => patchLayout((next) => { next.header.content = event.target.value as ExportLayoutProfile["header"]["content"]; next.header.enabled = next.header.content !== "none"; return next; })}><option value="none">なし</option><option value="title">作品名</option><option value="chapter">現在の章タイトル</option><option value="file">現在のファイル名</option><option value="custom">任意テキスト</option></select></label>
-              {layout.header.content === "custom" && <label>ヘッダーに表示する文字列<input type="text" placeholder="例: 作品タイトル・章の名前など" value={layout.header.customText ?? ""} onChange={(event) => patchLayout((next) => { next.header.customText = event.target.value; return next; })}/></label>}
-              {([['章扉では非表示','hideOnTitlePage'],['先頭ページでは非表示','hideOnFirstPage'],['奇数・偶数ページで出し分け','differentOddEven']] as const).map(([label, key]) => <label className="exportCheckRow" key={key}><input type="checkbox" checked={layout.header[key]} onChange={() => patchLayout((next) => { next.header[key] = !next.header[key]; return next; })}/>{label}</label>)}
-            </div>}
-
-            {renderSectionHeader("footer", "フッター・ページ番号", footerSummary)}
-            {openSections.has("footer") && <div className="exportSettingsContent">
-              <label className="exportCheckRow"><input type="checkbox" checked={layout.footer.enabled} onChange={() => patchLayout((next) => { next.footer.enabled = !next.footer.enabled; return next; })}/>ページ番号を表示 <small>（ノンブル）</small></label>
-              <label>フッター内容<select value={layout.footer.content} onChange={(event) => patchLayout((next) => { next.footer.content = event.target.value as ExportLayoutProfile["footer"]["content"]; return next; })}><option value="none">なし</option><option value="page-number">ページ番号</option><option value="title">作品名</option><option value="custom">任意テキスト</option></select></label>
-              {layout.footer.content === "custom" && <label>フッターに表示する文字列<input type="text" placeholder="例: 作品タイトル・発行情報など" value={layout.footer.customText ?? ""} onChange={(event) => patchLayout((next) => { next.footer.customText = event.target.value; return next; })}/></label>}
-              <div className="exportFieldGrid two"><label>開始番号<input type="number" min="1" value={layout.footer.startPageNumber} onChange={(event) => patchLayout((next) => { next.footer.startPageNumber = Number(event.target.value); return next; })}/></label><label>位置<select value={layout.footer.pageNumberPosition} onChange={(event) => patchLayout((next) => { next.footer.pageNumberPosition = event.target.value as ExportLayoutProfile["footer"]["pageNumberPosition"]; return next; })}><option value="bottom-center">下中央</option><option value="top-center">上中央</option><option value="outer">外側</option><option value="inner">内側</option></select></label></div>
-              {([['章扉では非表示','hideOnTitlePage'],['先頭ページでは非表示','hideOnFirstPage']] as const).map(([label, key]) => <label className="exportCheckRow" key={key}><input type="checkbox" checked={layout.footer[key]} onChange={() => patchLayout((next) => { next.footer[key] = !next.footer[key]; return next; })}/>{label}</label>)}
-              <p className="exportHelp">外側 = 見開きの左右端 ／ 内側 = 綴じ側</p>
-            </div>}
-
-            {renderSectionHeader("frontmatter", "表紙・目次", frontSummary)}
-            {openSections.has("frontmatter") && <div className="exportSettingsContent">
-              <label>作品名<input type="text" placeholder={title} value={frontText.title} onChange={(event) => patchFrontText({ title: event.target.value })}/></label>
-              <p className="exportHelp">表紙・ヘッダー・ファイル名に使います。空欄ならフォルダ名を使います</p>
-              <label className="exportCheckRow"><input type="checkbox" checked={frontMatter.cover.enabled} onChange={() => patchLayout((next) => { next.frontMatter.cover.enabled = !next.frontMatter.cover.enabled; return next; })}/>表紙を付ける</label>
-              {frontMatter.cover.enabled && <>
-                <div className="exportPillGroup">
-                  <button type="button" className={frontMatter.cover.kind === "text" ? "active" : ""} onClick={() => patchLayout((next) => { next.frontMatter.cover.kind = "text"; return next; })}>文字</button>
-                  <button type="button" className={frontMatter.cover.kind === "image" ? "active" : ""} onClick={() => patchLayout((next) => { next.frontMatter.cover.kind = "image"; return next; })}>画像</button>
-                </div>
-                {frontMatter.cover.kind === "image" && <>
-                  {coverImage && <img className="exportCoverThumb" src={`data:${coverImage.mime};base64,${coverImage.dataBase64}`} alt="表紙画像"/>}
-                  <div className="exportCoverActions">
-                    <button type="button" className="exportBtn" disabled={!projectPath} onClick={() => void chooseCoverImage()}>{coverImage ? "画像を差し替え…" : "画像を選択…"}</button>
-                    {coverImage && <button type="button" className="exportBtn ghost" onClick={() => void removeCoverImage()}>削除</button>}
-                  </div>
-                  <p className="exportHelp">{projectPath
-                    ? "PNG・JPEG。余白なしでページ全面に配置し、はみ出す部分は切り取ります。画像が無いときは文字の表紙になります"
-                    : "画像の表紙は作品フォルダを開いているときに使えます"}</p>
-                  <label className="exportCheckRow"><input type="checkbox" checked={frontMatter.cover.overlayText} onChange={() => patchLayout((next) => { next.frontMatter.cover.overlayText = !next.frontMatter.cover.overlayText; return next; })}/>画像の上にタイトルを重ねる</label>
-                  {frontMatter.cover.overlayText && <div className="exportPillGroup" role="group" aria-label="文字の色">
-                    <button type="button" className={frontMatter.cover.textColor === "light" ? "active" : ""} onClick={() => patchLayout((next) => { next.frontMatter.cover.textColor = "light"; return next; })}>白い文字</button>
-                    <button type="button" className={frontMatter.cover.textColor === "dark" ? "active" : ""} onClick={() => patchLayout((next) => { next.frontMatter.cover.textColor = "dark"; return next; })}>黒い文字</button>
-                  </div>}
-                </>}
-                {(frontMatter.cover.kind === "text" || frontMatter.cover.overlayText) && <>
-                  <label>副題<input type="text" value={frontText.subtitle} onChange={(event) => patchFrontText({ subtitle: event.target.value })}/></label>
-                  <label>著者名<input type="text" value={frontText.author} onChange={(event) => patchFrontText({ author: event.target.value })}/></label>
-                  <div className="exportFieldGrid two">
-                    <label>配置<select value={frontMatter.cover.align} onChange={(event) => patchLayout((next) => { next.frontMatter.cover.align = event.target.value as ExportLayoutProfile["frontMatter"]["cover"]["align"]; return next; })}><option value="center">天地中央</option><option value="upper">やや上寄せ</option></select></label>
-                    <label>タイトル倍率<input type="number" min="1" max="5" step="0.1" value={frontMatter.cover.titleScale} onChange={(event) => patchLayout((next) => { next.frontMatter.cover.titleScale = Number(event.target.value); return next; })}/></label>
-                  </div>
-                </>}
-              </>}
-              <label className="exportCheckRow"><input type="checkbox" checked={frontMatter.toc.enabled} onChange={() => patchLayout((next) => { next.frontMatter.toc.enabled = !next.frontMatter.toc.enabled; return next; })}/>目次を付ける</label>
-              {frontMatter.toc.enabled && <div className="exportFieldGrid two">
-                <label>収録範囲<select value={String(frontMatter.toc.depth)} onChange={(event) => patchLayout((next) => { const value = event.target.value; next.frontMatter.toc.depth = value === "file" ? "file" : Number(value) as 1 | 2; return next; })}>{tocDepthOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-                <label>目次見出し<input type="text" value={frontMatter.toc.title} onChange={(event) => patchLayout((next) => { next.frontMatter.toc.title = event.target.value; return next; })}/></label>
-              </div>}
-              {(frontMatter.cover.enabled || frontMatter.toc.enabled) && <p className="exportHelp">表紙・目次のページにはヘッダー・ページ番号を付けず、本文の1ページ目を開始番号から数えます。DOCXの目次は、Wordで開いたときの「フィールドの更新」でページ番号が入ります</p>}
-            </div>}
-
-            {renderSectionHeader("preset", "プリセット", layout.name ?? "カスタム")}
-            {openSections.has("preset") && <div className="exportSettingsContent">
-              <label>設定を呼び出す
+          <aside className={`exSettings${activeTab === "settings" ? " mobileActive" : ""}`} aria-label="レイアウト設定">
+            <div className="exPreset">
+              <label className="exField">プリセット
                 <select value={presetChoice} onChange={(event) => applyPresetChoice(event.target.value)}>
-                  <option value="">選択して適用...</option>
+                  <option value="">{`${layout.name ?? "カスタム"}（現在の設定）`}</option>
                   <optgroup label="標準プリセット">
                     <option value="builtin:standard">標準・縦書き文庫</option>
                     <option value="builtin:doujin">同人誌 B6・1段</option>
@@ -811,45 +746,137 @@ export function LinkedExportScreen({
                   </optgroup>}
                 </select>
               </label>
-              {presetChoice.startsWith("saved:") && (
-                <button type="button" className="exportBtn exportPresetDelete" onClick={deleteNamedPreset}>
-                  「{presetChoice.slice("saved:".length)}」を削除
-                </button>
+              {presetChoice.startsWith("saved:") && !presetFormOpen && (
+                <div className="exRowEnd"><button type="button" className="stBtnGhost sm exDanger" onClick={deleteNamedPreset}>「{presetChoice.slice("saved:".length)}」を削除</button></div>
               )}
-              <span className="exportFieldLabel">現在の設定を別名で保存</span>
-              <div className="exportPresetSaveRow">
-                <input
-                  type="text"
-                  placeholder="設定名（例: 文庫用）"
-                  maxLength={40}
-                  value={presetName}
-                  onChange={(event) => setPresetName(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.nativeEvent.isComposing) saveNamedPreset();
-                  }}
-                />
-                <button type="button" className="exportBtn" disabled={!presetName.trim()} onClick={saveNamedPreset}>保存</button>
+              {presetFormOpen && (
+                <div className="exPresetForm">
+                  <label className="exField">今の設定に名前を付けて保存
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="例：文庫用"
+                      maxLength={40}
+                      value={presetName}
+                      onChange={(event) => setPresetName(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && !event.nativeEvent.isComposing && presetName.trim()) { saveNamedPreset(); setPresetFormOpen(false); }
+                        if (event.key === "Escape") setPresetFormOpen(false);
+                      }}
+                    />
+                  </label>
+                  <div className="exRowEnd">
+                    <button type="button" className="stBtnGhost" onClick={() => { setPresetFormOpen(false); setPresetName(""); }}>やめる</button>
+                    <button type="button" className="stBtnPrimary sm" disabled={!presetName.trim()} onClick={() => { saveNamedPreset(); setPresetFormOpen(false); }}>{savedPresets.some((item) => item.name === presetName.trim()) ? "上書き保存する" : "保存する"}</button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {renderCard("page", "ページ", pageSummary, () => <>
+              <label className="exField">サイズ<select value={layout.page.size} onChange={(event) => patchLayout((next) => { next.page.size = event.target.value as ExportLayoutProfile["page"]["size"]; return next; })}>{["B6", "A5", "A6", "B5", "A4", "custom"].map((size) => <option key={size} value={size}>{size === "custom" ? "カスタム" : size}</option>)}</select></label>
+              <div className="exGrid two"><label className="exField">幅 mm<input type="number" value={pageWidth} disabled={layout.page.size !== "custom"} onChange={(event) => patchLayout((next) => { next.page.widthMm = Number(event.target.value); return next; })}/></label><label className="exField">高さ mm<input type="number" value={pageHeight} disabled={layout.page.size !== "custom"} onChange={(event) => patchLayout((next) => { next.page.heightMm = Number(event.target.value); return next; })}/></label></div>
+              <div className="exField">余白 mm
+                <div className="exGrid four">
+                  {([['天','marginTopMm'],['地','marginBottomMm'],['ノド','marginInnerMm'],['小口','marginOuterMm']] as const).map(([label, key]) => <label className="exField" key={key}>{label}<input type="number" min="0" value={layout.page[key]} onChange={(event) => patchLayout((next) => { next.page[key] = Number(event.target.value); return next; })}/></label>)}
+                </div>
               </div>
-              {savedPresets.some((item) => item.name === presetName.trim()) && (
-                <p className="exportHelp">同名の設定があるため上書き保存されます</p>
-              )}
-            </div>}
+            </>)}
+
+            {renderCard("body", "本文", bodySummary, () => <>
+              <div className="exField">組み方向
+                <div className="stSeg" role="group" aria-label="組み方向">
+                  {seg(layout.body.writingMode === "vertical-rl", "縦書き", () => patchLayout((next) => { next.body.writingMode = "vertical-rl"; return next; }))}
+                  {seg(layout.body.writingMode === "horizontal-tb", "横書き", () => patchLayout((next) => { next.body.writingMode = "horizontal-tb"; return next; }))}
+                </div>
+              </div>
+              <label className="exField">書体<select value={layout.body.fontFamily} onChange={(event) => patchLayout((next) => { next.body.fontFamily = event.target.value as ExportLayoutProfile["body"]["fontFamily"]; return next; })}><option value="Noto Serif CJK JP">源ノ明朝（明朝体）</option><option value="Noto Sans CJK JP">源ノ角ゴシック（ゴシック体）</option></select></label>
+              <div className="exGrid two"><label className="exField">文字サイズ Q<input type="number" min="6" step="0.5" value={layout.body.fontSize} onChange={(event) => patchLayout((next) => { next.body.fontSize = Number(event.target.value); next.body.fontSizeUnit = "Q"; return next; })}/></label><label className="exField">行間<input type="number" min="1" step="0.05" value={layout.body.lineHeight} onChange={(event) => patchLayout((next) => { next.body.lineHeight = Number(event.target.value); return next; })}/></label></div>
+              <div className="exGrid two">
+                <div className="exField">段組
+                  <div className="stSeg" role="group" aria-label="段組">
+                    {seg(layout.body.columns === 1, "1段", () => patchLayout((next) => { next.body.columns = 1; return next; }))}
+                    {seg(layout.body.columns === 2, "2段", () => patchLayout((next) => { next.body.columns = 2; return next; }))}
+                  </div>
+                </div>
+                <label className="exField">段間 mm<input type="number" min="0" value={layout.body.columnGapMm} disabled={layout.body.columns === 1} onChange={(event) => patchLayout((next) => { next.body.columnGapMm = Number(event.target.value); return next; })}/></label>
+              </div>
+              <label className="exCheck"><input type="checkbox" checked={layout.body.figureCaptions !== false} onChange={() => patchLayout((next) => { next.body.figureCaptions = next.body.figureCaptions === false; return next; })}/>図版の説明をキャプションとして印字</label>
+            </>)}
+
+            {renderCard("header", "ヘッダー", headerSummary, () => <>
+              <label className="exField">表示内容<select value={layout.header.content} onChange={(event) => patchLayout((next) => { next.header.content = event.target.value as ExportLayoutProfile["header"]["content"]; next.header.enabled = next.header.content !== "none"; return next; })}><option value="none">なし</option><option value="title">作品名</option><option value="chapter">現在の章タイトル</option><option value="file">現在のファイル名</option><option value="custom">任意テキスト</option></select></label>
+              {layout.header.content === "custom" && <label className="exField">ヘッダーに表示する文字列<input type="text" placeholder="例：作品タイトル・章の名前など" value={layout.header.customText ?? ""} onChange={(event) => patchLayout((next) => { next.header.customText = event.target.value; return next; })}/></label>}
+              {([['章扉では表示しない','hideOnTitlePage'],['先頭ページでは表示しない','hideOnFirstPage'],['奇数・偶数ページで出し分ける','differentOddEven']] as const).map(([label, key]) => <label className="exCheck" key={key}><input type="checkbox" checked={layout.header[key]} onChange={() => patchLayout((next) => { next.header[key] = !next.header[key]; return next; })}/>{label}</label>)}
+            </>)}
+
+            {renderCard("footer", "フッター・ノンブル", footerSummary, () => <>
+              <label className="exCheck"><input type="checkbox" checked={layout.footer.enabled} onChange={() => patchLayout((next) => { next.footer.enabled = !next.footer.enabled; return next; })}/>フッターを表示する</label>
+              <label className="exField">表示内容<select value={layout.footer.content} onChange={(event) => patchLayout((next) => { next.footer.content = event.target.value as ExportLayoutProfile["footer"]["content"]; return next; })}><option value="none">なし</option><option value="page-number">ページ番号</option><option value="title">作品名</option><option value="custom">任意テキスト</option></select></label>
+              {layout.footer.content === "custom" && <label className="exField">フッターに表示する文字列<input type="text" placeholder="例：作品タイトル・発行情報など" value={layout.footer.customText ?? ""} onChange={(event) => patchLayout((next) => { next.footer.customText = event.target.value; return next; })}/></label>}
+              <div className="exGrid two"><label className="exField">開始番号<input type="number" min="1" value={layout.footer.startPageNumber} onChange={(event) => patchLayout((next) => { next.footer.startPageNumber = Number(event.target.value); return next; })}/></label><label className="exField">位置<select value={layout.footer.pageNumberPosition} onChange={(event) => patchLayout((next) => { next.footer.pageNumberPosition = event.target.value as ExportLayoutProfile["footer"]["pageNumberPosition"]; return next; })}>{Object.entries(pageNumberPositionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
+              {([['章扉では表示しない','hideOnTitlePage'],['先頭ページでは表示しない','hideOnFirstPage']] as const).map(([label, key]) => <label className="exCheck" key={key}><input type="checkbox" checked={layout.footer[key]} onChange={() => patchLayout((next) => { next.footer[key] = !next.footer[key]; return next; })}/>{label}</label>)}
+            </>)}
+
+            {renderCard("frontmatter", "表紙・目次", frontSummary, () => <>
+              <label className="exField">作品名<input type="text" placeholder={title} value={frontText.title} onChange={(event) => patchFrontText({ title: event.target.value })}/></label>
+              <label className="exCheck"><input type="checkbox" checked={frontMatter.cover.enabled} onChange={() => patchLayout((next) => { next.frontMatter.cover.enabled = !next.frontMatter.cover.enabled; return next; })}/>表紙を付ける</label>
+              {frontMatter.cover.enabled && <>
+                <div className="stSeg" role="group" aria-label="表紙の種類">
+                  {seg(frontMatter.cover.kind === "text", "文字", () => patchLayout((next) => { next.frontMatter.cover.kind = "text"; return next; }))}
+                  {seg(frontMatter.cover.kind === "image", "画像", () => patchLayout((next) => { next.frontMatter.cover.kind = "image"; return next; }))}
+                </div>
+                {frontMatter.cover.kind === "image" && <>
+                  {coverImage && <img className="exCoverThumb" src={`data:${coverImage.mime};base64,${coverImage.dataBase64}`} alt="表紙画像"/>}
+                  <div className="exRowStart">
+                    <button type="button" className="stBtnLine" disabled={!projectPath} onClick={() => void chooseCoverImage()}>{coverImage ? "画像を差し替える…" : "画像を選ぶ…"}</button>
+                    {coverImage && <button type="button" className="stBtnGhost" onClick={() => void removeCoverImage()}>外す</button>}
+                  </div>
+                  <label className="exCheck"><input type="checkbox" checked={frontMatter.cover.overlayText} onChange={() => patchLayout((next) => { next.frontMatter.cover.overlayText = !next.frontMatter.cover.overlayText; return next; })}/>画像の上にタイトルを重ねる</label>
+                  {frontMatter.cover.overlayText && <div className="stSeg" role="group" aria-label="文字の色">
+                    {seg(frontMatter.cover.textColor === "light", "白い文字", () => patchLayout((next) => { next.frontMatter.cover.textColor = "light"; return next; }))}
+                    {seg(frontMatter.cover.textColor === "dark", "黒い文字", () => patchLayout((next) => { next.frontMatter.cover.textColor = "dark"; return next; }))}
+                  </div>}
+                </>}
+                {(frontMatter.cover.kind === "text" || frontMatter.cover.overlayText) && <>
+                  <label className="exField">副題<input type="text" value={frontText.subtitle} onChange={(event) => patchFrontText({ subtitle: event.target.value })}/></label>
+                  <label className="exField">著者名<input type="text" value={frontText.author} onChange={(event) => patchFrontText({ author: event.target.value })}/></label>
+                  <div className="exGrid two">
+                    <label className="exField">配置<select value={frontMatter.cover.align} onChange={(event) => patchLayout((next) => { next.frontMatter.cover.align = event.target.value as ExportLayoutProfile["frontMatter"]["cover"]["align"]; return next; })}><option value="center">天地中央</option><option value="upper">やや上寄せ</option></select></label>
+                    <label className="exField">タイトル倍率<input type="number" min="1" max="5" step="0.1" value={frontMatter.cover.titleScale} onChange={(event) => patchLayout((next) => { next.frontMatter.cover.titleScale = Number(event.target.value); return next; })}/></label>
+                  </div>
+                </>}
+              </>}
+              <label className="exCheck"><input type="checkbox" checked={frontMatter.toc.enabled} onChange={() => patchLayout((next) => { next.frontMatter.toc.enabled = !next.frontMatter.toc.enabled; return next; })}/>目次を付ける</label>
+              {frontMatter.toc.enabled && <div className="exGrid two">
+                <label className="exField">収録範囲<select value={String(frontMatter.toc.depth)} onChange={(event) => patchLayout((next) => { const value = event.target.value; next.frontMatter.toc.depth = value === "file" ? "file" : Number(value) as 1 | 2; return next; })}>{tocDepthOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                <label className="exField">目次見出し<input type="text" value={frontMatter.toc.title} onChange={(event) => patchLayout((next) => { next.frontMatter.toc.title = event.target.value; return next; })}/></label>
+              </div>}
+            </>)}
           </aside>
         </div>
-
-        <footer className="exportModalFooter">
-          <span className={`exportSavedLabel${savedLabel ? " saved" : ""}`}>{savedLabel || "レイアウト設定は書き出し時に自動保存されます"}</span>
-          <button type="button" className="exportBtn ghost" onClick={onClose}>キャンセル</button>
-          <button type="button" className="exportBtn" onClick={() => void runExport("docx")} disabled={includedCount === 0}>DOCXを書き出す</button>
-          <button type="button" className="exportBtn primary" onClick={() => void runExport("pdf")} disabled={includedCount === 0}>PDFを書き出す</button>
-        </footer>
         </>}
 
         {viewState === "pdf-generating" && (
-          <div className="exportProgressOverlay"><div><span className="exportSpinner"/><strong>{format.toUpperCase()}生成中…</strong><p>{progress.message}</p><div className="exportProgressBar"><i style={{ width: `${progress.percent}%` }}/></div><div className="exportProgressMeta"><span>{progress.currentPage} / {progress.totalPages} ページ</span><span>{Math.round(progress.percent)}%</span></div></div></div>
+          <div className="exOverlay"><div className="exDialog" role="status">
+            <span className="exSpinner"/>
+            <h3>{format.toUpperCase()}を書き出しています</h3>
+            <p>{progress.message}</p>
+            <div className="exProgress"><i style={{ width: `${progress.percent}%` }}/></div>
+            <div className="exProgressMeta"><span>{progress.currentPage} / {progress.totalPages} ページ</span><span>{Math.round(progress.percent)}%</span></div>
+          </div></div>
         )}
         {viewState === "pdf-complete" && completed && (
-          <div className="exportProgressOverlay"><div className="exportCompleteCard"><span>✓</span><strong>{completed.format.toUpperCase()}を書き出しました</strong><p>全 {completed.pageCount} ページ・{includedCount} ファイルを連結しました。<br/>{completed.result.name}</p><div><button type="button" className="exportBtn" onClick={onClose}>閉じる</button><button type="button" className="exportBtn primary" onClick={() => onOpenResult(completed.result.path)}>保存先を開く</button></div></div></div>
+          <div className="exOverlay"><div className="exDialog" role="status">
+            <h3>{completed.format.toUpperCase()}を書き出しました</h3>
+            <p>{includedCount}ファイル・全{completed.pageCount}ページを連結しました。</p>
+            <p className="exResultName">{completed.result.name}</p>
+            <div className="exRowEnd">
+              <button type="button" className="stBtnGhost" onClick={onClose}>閉じる</button>
+              <button type="button" className="stBtnLine" onClick={() => { setCompleted(null); setViewState(previewSrc ? "preview-ready" : "no-preview"); }}>書き出し画面に戻る</button>
+              <button type="button" className="stBtnPrimary sm" onClick={() => onOpenResult(completed.result.path)}>保存先を開く</button>
+            </div>
+          </div></div>
         )}
       </section>
     </div>

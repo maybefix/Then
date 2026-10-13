@@ -75,7 +75,7 @@ try {
   assert.equal(cards[1].querySelector(".cpFileToggle").getAttribute("aria-expanded"), "false");
   assert.ok(cards[0].querySelector("del") && cards[0].querySelector("ins"), "inline char diff");
   assert.match(cards[0].textContent, /⋯ 1段落 変更なし/);
-  assert.equal(cards[1].querySelector(".cpBtnLine"), null, "a file added after the snapshot has nothing to restore");
+  assert.equal(cards[1].querySelector(".stBtnLine"), null, "a file added after the snapshot has nothing to restore");
   assert.match(text(), /変更のないファイル 1件は省略しています/);
 
   // 左右に並べる
@@ -91,9 +91,9 @@ try {
   await click(container.querySelector(".cpAutoToggle input"));
 
   // ファイル単位の復元: 確認 → 実行 → 完了通知
-  await click(cards[0].querySelector(".cpBtnLine"));
+  await click(cards[0].querySelector(".stBtnLine"));
   assert.match(container.querySelector(".cpDialog").textContent, /「記事.md」だけ戻す/);
-  await click(container.querySelector(".cpDialog .cpBtnPrimary"));
+  await click(container.querySelector(".cpDialog .stBtnPrimary"));
   assert.deepEqual(calls.at(-1), ["file", "s1", filePath("01_記事", "記事.md"), null]);
   assert.equal(container.querySelector(".cpDialog"), null);
   assert.match(container.querySelector("[role=status]").textContent, /「記事.md」を戻しました。直前の状態は「復元前の退避」/);
@@ -106,7 +106,7 @@ try {
 
   // 並び順だけ戻す
   await click(button("並び順だけ戻す"));
-  await click(container.querySelector(".cpDialog .cpBtnPrimary"));
+  await click(container.querySelector(".cpDialog .stBtnPrimary"));
   assert.deepEqual(calls.at(-1), ["order", "s1"]);
 
   // 比較先: ひとつ前の保存点（同じ内容なので変更なし）
@@ -120,7 +120,7 @@ try {
   assert.equal(container.querySelector(".cpCompareBar select").value, "current");
 
   // 絞り込み
-  const search = container.querySelector(".cpSearch input");
+  const search = container.querySelector(".stSearch input");
   const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
   await act(async () => { setter.call(search, "存在しない"); search.dispatchEvent(new window.Event("input", { bubbles: true })); });
   assert.match(text(), /一致する保存点はありません/);

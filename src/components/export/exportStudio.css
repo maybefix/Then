@@ -1,0 +1,149 @@
+/*
+ * 書き出し画面。上部バー・ボタン・セグメント・メニュー・検索欄は ../studio/studio.css を
+ * チェックポイント画面と共有し、ここでは 3 段（ファイル／プレビュー／設定）の配置だけを持つ。
+ * 外枠 .linkedExportScreen と .exportModalBackdrop は、専用ウィンドウ・埋め込み・
+ * PDF 印刷時の切り替えが App.css で掛かっているのでクラス名を残している。
+ */
+.linkedExportScreen.exStudio {
+  --ex-warn-bg: color-mix(in srgb, var(--warning) 14%, var(--bg-panel));
+  --ex-warn-ink: color-mix(in srgb, var(--warning) 55%, var(--text-primary));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+}
+
+/* UI 表示倍率は周りの部品にだけ掛け、組版プレビュー（iframe）は実寸のまま。 */
+.exStudio :is(.exTopbar, .exTabs, .exSide, .exMainBar, .exNotice, .exSettings, .exDialog) { zoom: var(--ui-font-scale, 1); }
+
+.exTopbar { gap: 14px; padding: 6px 16px 6px 20px; }
+.exSpacer { flex: 1; }
+.exStatus { min-width: 0; overflow: hidden; color: var(--text-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.exStatus.ok { color: var(--success, var(--text-secondary)); }
+.exStatus.error { color: var(--danger); }
+.exActions { position: relative; display: flex; flex: none; align-items: center; gap: 8px; }
+.exTopbarLine { min-height: 44px; border-radius: 10px; font-size: 14px; }
+.exActions .stMenu { min-width: 240px; }
+
+/* 狭い幅でだけ出す、3 段の切り替え。 */
+.exTabs { display: none; flex: none; margin: 8px 16px 0; }
+.exTabs button { flex: 1; }
+
+.exLayout { display: flex; min-height: 0; flex: 1; overflow: hidden; }
+
+/* 左：ファイル（チェックポイントの保存点一覧と同じ文法） */
+.exSide { display: flex; min-width: 0; min-height: 0; flex: 0 0 300px; flex-direction: column; gap: 10px; padding: 20px 16px 0; overflow: hidden; border-right: 1px solid var(--border-subtle); background: var(--sidebar-bg); }
+.exSideHead { display: flex; align-items: baseline; justify-content: space-between; padding: 0 4px; }
+.exSideHead h2 { margin: 0; font-size: 15px; }
+.exCount { color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.exBulk { display: flex; gap: 4px; margin-top: -2px; }
+.exFiles { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 2px; margin: 0 -16px; padding: 0 16px 16px; overflow-y: auto; }
+.exNoResults { margin: 0; padding: 8px 10px; color: var(--text-muted); font-size: 13px; }
+.exFile { position: relative; display: flex; align-items: flex-start; gap: 10px; padding: 9px 10px; border-radius: 10px; }
+.exFile:hover { background: var(--control-hover); }
+.exFile.isOn { background: var(--bg-panel); box-shadow: inset 0 0 0 1.5px var(--text-primary); }
+.exFile > input[type="checkbox"] { width: 16px; height: 16px; flex: none; margin: 2px 0 0; accent-color: var(--text-primary); }
+.exFileBody { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 4px; }
+.exFileLabel { display: flex; min-width: 0; align-items: center; gap: 8px; cursor: pointer; }
+.exOrder { display: inline-flex; min-width: 18px; height: 18px; flex: none; align-items: center; justify-content: center; padding: 0 5px; border-radius: 999px; background: var(--text-primary); color: var(--bg-panel); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.exFileName { min-width: 0; overflow: hidden; color: var(--text-secondary); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.exFile.isOn .exFileName { color: var(--text-primary); font-weight: 700; }
+.exExt { flex: none; padding: 1px 6px; border-radius: 999px; background: var(--control-hover); color: var(--text-secondary); font-size: 10px; font-weight: 700; }
+.exFileMeta { display: flex; min-height: 28px; align-items: center; gap: 8px; color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.exFolder { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.exStart { display: flex; flex: none; align-items: center; gap: 6px; margin-left: auto; color: var(--text-muted); font-size: 12px; }
+.exStart select { min-height: 28px; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--bg-panel); color: var(--text-primary); font-size: 12px; }
+.exFileTools { position: absolute; top: 6px; right: 6px; display: none; gap: 2px; padding: 2px; border-radius: 8px; background: var(--bg-panel); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+.exFile:hover .exFileTools,
+.exFile:focus-within .exFileTools { display: flex; }
+.exFileTools button { width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--text-secondary); font-size: 11px; }
+.exFileTools button:hover:not(:disabled) { background: var(--control-hover); color: var(--text-primary); }
+
+/* 中央：プレビュー */
+.exMain { display: flex; min-width: 0; min-height: 0; flex: 1 1 auto; flex-direction: column; background: var(--bg-panel-strong); }
+.exMainBar { display: flex; min-height: 52px; flex: none; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px 16px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-panel); }
+.exMainTitle { font-size: 14px; font-weight: 700; }
+.exMainMeta { color: var(--text-muted); font-size: 12px; }
+.exStale { display: flex; align-items: center; gap: 10px; padding: 3px 3px 3px 12px; border-radius: 10px; background: var(--control-hover); color: var(--text-secondary); font-size: 12px; }
+.exStale .stBtnLine { min-height: 32px; }
+
+.exNotice { flex: none; margin: 12px 16px 0; border-radius: 10px; background: var(--ex-warn-bg); color: var(--ex-warn-ink); font-size: 13px; }
+.exNoticeRow { display: flex; align-items: center; gap: 12px; padding: 6px 6px 6px 14px; }
+.exNoticeRow span { flex: 1; }
+.exNoticeRow button { min-height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--bg-panel); color: var(--ex-warn-ink); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.exNotice ul { max-height: 160px; margin: 0; padding: 0 14px 10px 30px; overflow-y: auto; font-size: 12px; line-height: 1.8; }
+.exNotice code { font-size: 11px; word-break: break-all; }
+.exLinkButton { padding: 0; border: 0; background: none; color: inherit; font-size: inherit; text-decoration: underline; }
+
+.exStage { position: relative; display: flex; min-height: 0; flex: 1; flex-direction: column; margin: 12px 16px 16px; }
+.exViewer { width: 100%; min-height: 0; flex: 1; border: 1px solid var(--border-subtle); border-radius: 10px; background: #fff; }
+.exEmpty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 32px 24px; border: 1px dashed var(--border-strong); border-radius: 12px; color: var(--text-secondary); text-align: center; }
+.exEmpty strong { color: var(--text-primary); font-size: 15px; }
+.exEmpty p { max-width: 420px; margin: 0; font-size: 13px; line-height: 1.7; }
+.exEmpty.isError strong { color: var(--danger); }
+.exEmpty pre { max-width: 100%; max-height: 200px; margin: 0; padding: 10px 12px; overflow: auto; border-radius: 8px; background: var(--bg-panel); color: var(--danger); font-size: 12px; text-align: left; white-space: pre-wrap; }
+.exLogToggle { padding: 0; border: 0; background: none; color: var(--text-secondary); font-size: 12px; text-decoration: underline; }
+.exSpinner { width: 22px; height: 22px; border: 2px solid var(--border-strong); border-top-color: var(--text-primary); border-radius: 50%; animation: ex-spin 800ms linear infinite; }
+@keyframes ex-spin { to { transform: rotate(360deg); } }
+
+/* 右：設定（チェックポイントのファイルカードと同じ開閉カード） */
+.exSettings { display: flex; min-width: 0; min-height: 0; flex: 0 0 340px; flex-direction: column; gap: 10px; padding: 20px 16px 32px; overflow-y: auto; border-left: 1px solid var(--border-subtle); background: var(--sidebar-bg); }
+.exPreset { display: flex; flex-direction: column; gap: 8px; padding: 0 2px 6px; }
+.exPresetForm { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--bg-panel); }
+.exCard { min-width: 0; flex: none; margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--bg-panel); }
+.exCardToggle { display: flex; width: 100%; min-height: 48px; align-items: center; gap: 10px; padding: 0 14px 0 10px; border: 0; background: none; color: var(--text-primary); text-align: left; }
+.exCardToggle svg { flex: none; color: var(--text-muted); transition: transform .15s ease; }
+.exCardToggle[aria-expanded="false"] svg { transform: rotate(-90deg); }
+.exCardTitle { flex: none; font-size: 14px; font-weight: 700; white-space: nowrap; }
+.exCardSum { min-width: 0; margin-left: auto; overflow: hidden; color: var(--text-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.exCardBody { display: flex; flex-direction: column; gap: 12px; padding: 14px; border-top: 1px solid var(--border-subtle); }
+.exCardStatic .exCardBody { border-top: 0; padding-top: 4px; }
+.exCardLegend { float: left; width: 100%; padding: 14px 14px 6px; font-size: 14px; font-weight: 700; }
+.exCardLegend + .exCardBody { clear: both; }
+
+.exField { display: flex; min-width: 0; flex-direction: column; gap: 6px; color: var(--text-secondary); font-size: 12px; }
+.exField > input,
+.exField > select { width: 100%; min-height: 38px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--bg-panel); color: var(--text-primary); font-size: 14px; font-variant-numeric: tabular-nums; }
+.exField > input:disabled { background: var(--bg-panel-strong); color: var(--text-muted); }
+.exField .stSeg { align-self: flex-start; }
+.exCardBody > .stSeg { align-self: flex-start; }
+.exGrid { display: grid; gap: 10px; }
+.exGrid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.exGrid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.exCheck { display: flex; min-height: 28px; align-items: center; gap: 8px; color: var(--text-primary); font-size: 13px; cursor: pointer; }
+.exCheck input { width: 16px; height: 16px; flex: none; margin: 0; accent-color: var(--text-primary); }
+.exFootnote { margin: 4px 2px 0; color: var(--text-muted); font-size: 12px; line-height: 1.7; }
+.exDanger { color: var(--danger); }
+.exRowEnd { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.exRowStart { display: flex; flex-wrap: wrap; gap: 8px; }
+.exCoverThumb { max-width: 120px; max-height: 160px; align-self: flex-start; border: 1px solid var(--border-subtle); border-radius: 6px; object-fit: contain; }
+
+/* 書き出し中・完了（チェックポイントの確認ダイアログと同じ形） */
+.exOverlay { position: absolute; z-index: 40; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--overlay, rgba(20, 20, 18, .38)); }
+.exDialog { display: flex; width: 100%; max-width: 460px; flex-direction: column; gap: 12px; padding: 24px; border-radius: 14px; background: var(--bg-panel); box-shadow: var(--shadow-modal, 0 24px 60px rgba(0, 0, 0, .2)); color: var(--text-primary); }
+.exDialog h3 { margin: 0; font-size: 18px; }
+.exDialog p { margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.7; }
+.exDialog .exResultName { color: var(--text-muted); font-size: 12px; overflow-wrap: anywhere; }
+.exDialog .exRowEnd { margin-top: 6px; }
+.exProgress { height: 6px; overflow: hidden; border-radius: 999px; background: var(--control-hover); }
+.exProgress i { display: block; height: 100%; background: var(--text-primary); transition: width .2s ease; }
+.exProgressMeta { display: flex; justify-content: space-between; color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  .exCardToggle svg, .exProgress i { transition: none; }
+  .exSpinner { animation-duration: 2.4s; }
+}
+
+/* 狭い幅では 3 段を切り替えで一つずつ見せる。 */
+@media (max-width: 1100px) {
+  .exTabs { display: flex; }
+  .exSide, .exMain, .exSettings { display: none; flex: 1 1 auto; border: 0; }
+  :is(.exSide, .exMain, .exSettings).mobileActive { display: flex; }
+  .exStatus { display: none; }
+  .exTopbar { flex-wrap: wrap; row-gap: 6px; }
+}
+@media (max-width: 620px) {
+  .exTopbar { flex-wrap: wrap; padding-inline: 12px; }
+  .exTopbar h1 { display: none; }
+}

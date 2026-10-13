@@ -6,6 +6,7 @@ import { buildComparisonEntries } from "./checkpointComparison";
 import type { ComparisonEntry } from "./checkpointComparison";
 import { buildProjectDiff, diffChars, leadingParagraphs } from "./checkpointDiff";
 import type { FileDiff, OrderChange, ParagraphRow, ProjectDiff, Segment } from "./checkpointDiff";
+import "../studio/studio.css";
 import "./checkpointStudio.css";
 
 export type SnapshotConflictPolicy = "overwrite" | "copy" | "skip";
@@ -148,7 +149,7 @@ function FileBody({ file, view, labels, newSide }: { file: FileDiff; view: ViewM
     </div></div>);
   });
   if (file.rows.length > rows.length) {
-    content.push(<div className="cpMore" key="more"><span>ほかに {file.rows.length - rows.length} 段落の変更があります</span><button type="button" className="cpBtnLine" onClick={() => setShowAll(true)}>すべて表示</button></div>);
+    content.push(<div className="cpMore" key="more"><span>ほかに {file.rows.length - rows.length} 段落の変更があります</span><button type="button" className="stBtnLine" onClick={() => setShowAll(true)}>すべて表示</button></div>);
   }
   if (file.kind === "changed" && !file.rows.length) {
     content.push(<div className="cpAddNote" key="blank">空行だけが変わっています。</div>);
@@ -172,7 +173,7 @@ function FileCard(props: {
         <span className={`cpBadge ${file.kind === "added" ? "add" : ""}`}>{file.relocationLabel ?? KIND_LABEL[file.kind]}</span>
       </button>
       {(file.plus > 0 || file.minus > 0) && <span className="cpStats">{file.plus > 0 && <span className="cpPlus">+{chars(file.plus)}</span>}{file.minus > 0 && <span className="cpMinus">−{chars(file.minus)}</span>}</span>}
-      {restore && <button type="button" className="cpBtnLine" onClick={restore.onClick}>{restore.label}</button>}
+      {restore && <button type="button" className="stBtnLine" onClick={restore.onClick}>{restore.label}</button>}
     </div>
     {open && <FileBody file={file} view={view} labels={labels} newSide={newSide} />}
   </section>;
@@ -184,7 +185,7 @@ function OrderCard({ changes, open, labels, onToggle, onRestore }: { changes: Or
       <button type="button" className="cpFileToggle" aria-expanded={open} onClick={onToggle}>
         {Icon.chevron}<span className="cpFileName">フォルダの並び順</span><span className="cpBadge">並び順</span>
       </button>
-      <button type="button" className="cpBtnLine" onClick={onRestore}>並び順だけ戻す</button>
+      <button type="button" className="stBtnLine" onClick={onRestore}>並び順だけ戻す</button>
     </div>
     {open && changes.map((change) => <div className="cpOrder" key={change.folder}>
       {changes.length > 1 && <span className="cpOrderFolder">{change.folder || "プロジェクト直下"}</span>}
@@ -313,7 +314,7 @@ export function CheckpointStudio(props: Props) {
     } finally { setBusy(false); }
   };
 
-  if (!projectFolder) return <section className="checkpointStudio cpEmptyScreen"><h1>チェックポイント</h1><p>プロジェクトを開くと、保存点を確認・復元できます。</p><button type="button" className="cpBtnPrimary" onClick={onClose}>本文へ戻る</button></section>;
+  if (!projectFolder) return <section className="checkpointStudio stStudio cpEmptyScreen"><h1>チェックポイント</h1><p>プロジェクトを開くと、保存点を確認・復元できます。</p><button type="button" className="stBtnPrimary" onClick={onClose}>本文へ戻る</button></section>;
 
   const currentMeta = currentProjectStats
     ? `${currentProjectStats.fileCount}ファイル · ${chars(currentProjectStats.visibleTextLength)}字`
@@ -339,14 +340,14 @@ export function CheckpointStudio(props: Props) {
             <label htmlFor="cp-snapshot-name">保存点の名前</label>
             <input id="cp-snapshot-name" type="text" autoFocus value={draft} placeholder="例：第2稿に入る前" onChange={(event) => setDraft(event.target.value)} onKeyDown={onDraftKeyDown} />
             <div className="cpRowEnd">
-              <button type="button" className="cpBtnGhost" onClick={() => setCreating(false)}>やめる</button>
-              <button type="button" className="cpBtnPrimary sm" disabled={busy} onClick={() => void saveCreate()}>保存する</button>
+              <button type="button" className="stBtnGhost" onClick={() => setCreating(false)}>やめる</button>
+              <button type="button" className="stBtnPrimary sm" disabled={busy} onClick={() => void saveCreate()}>保存する</button>
             </div>
           </div>
-        : <button type="button" className="cpBtnOutline" onClick={() => { setCreating(true); setDraft(""); }}>{Icon.plus}今の状態を保存点にする</button>}
+        : <button type="button" className="stBtnOutline" onClick={() => { setCreating(true); setDraft(""); }}>{Icon.plus}今の状態を保存点にする</button>}
     </div>
     <div className="cpTools">
-      <label className="cpSearch">{Icon.search}<input type="search" value={query} aria-label="名前・メモで絞り込む" placeholder="名前・メモで絞り込む" onChange={(event) => setQuery(event.target.value)} /></label>
+      <label className="stSearch">{Icon.search}<input type="search" value={query} aria-label="名前・メモで絞り込む" placeholder="名前・メモで絞り込む" onChange={(event) => setQuery(event.target.value)} /></label>
       <label className="cpAutoToggle"><input type="checkbox" checked={showAuto} onChange={(event) => setShowAuto(event.target.checked)} />自動退避も表示（{autoCount}件）</label>
     </div>
     <nav className="cpGroups" aria-label="保存点の一覧">
@@ -415,10 +416,10 @@ export function CheckpointStudio(props: Props) {
           {isShelter(selected) && <p className="cpDetailAuto">復元を実行する直前に、自動で作られた保存点です。</p>}
         </div>
         <div className="cpDetailActions" ref={menuRef}>
-          <button type="button" className="cpBtnPrimary" onClick={() => { setMenuOpen(false); setConfirm({ scope: "all" }); }}>{Icon.restore}この時点に戻す</button>
+          <button type="button" className="stBtnPrimary" onClick={() => { setMenuOpen(false); setConfirm({ scope: "all" }); }}>{Icon.restore}この時点に戻す</button>
           {!isShelter(selected) && <>
-            <button type="button" className="cpBtnIcon" aria-label="その他の操作" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((current) => !current)}>{Icon.more}</button>
-            {menuOpen && <div className="cpMenu" role="menu">
+            <button type="button" className="stBtnIcon" aria-label="その他の操作" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((current) => !current)}>{Icon.more}</button>
+            {menuOpen && <div className="stMenu" role="menu">
               <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onEditDetails(selected); }}>名前とメモを編集</button>
               <button type="button" role="menuitem" className="cpDanger" onClick={() => { setMenuOpen(false); onDelete(selected); }}>この保存点を削除</button>
             </div>}
@@ -431,7 +432,7 @@ export function CheckpointStudio(props: Props) {
             {compareOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </label>
-        <div className="cpSeg" role="group" aria-label="差分の表示方法">
+        <div className="stSeg" role="group" aria-label="差分の表示方法">
           <button type="button" aria-pressed={view === "inline"} onClick={() => setView("inline")}>変わった所だけ</button>
           <button type="button" aria-pressed={view === "side"} onClick={() => setView("side")}>左右に並べる</button>
         </div>
@@ -456,16 +457,16 @@ export function CheckpointStudio(props: Props) {
         <p>{body}</p>
         <p className="cpSafe">今の状態は「{SHELTER_LABEL}」として自動で保存されるので、あとから元に戻せます。</p>
         <div className="cpRowEnd">
-          <button type="button" className="cpBtnGhost" disabled={busy} onClick={() => setConfirm(null)}>キャンセル</button>
-          <button type="button" className="cpBtnPrimary" ref={confirmButtonRef} disabled={busy} onClick={() => void runRestore()}>戻す</button>
+          <button type="button" className="stBtnGhost" disabled={busy} onClick={() => setConfirm(null)}>キャンセル</button>
+          <button type="button" className="stBtnPrimary" ref={confirmButtonRef} disabled={busy} onClick={() => void runRestore()}>戻す</button>
         </div>
       </div>
     </div>;
   }
 
-  return <section className="checkpointStudio" aria-label="チェックポイント">
-    <header className="cpTopbar">
-      <button type="button" className="cpBack" onClick={onClose}>{Icon.back}本文へ戻る</button>
+  return <section className="checkpointStudio stStudio" aria-label="チェックポイント">
+    <header className="stTopbar">
+      <button type="button" className="stBack" onClick={onClose}>{Icon.back}本文へ戻る</button>
       <h1>チェックポイント</h1>
     </header>
     <div className="cpLayout">{sidebar}{main}</div>
