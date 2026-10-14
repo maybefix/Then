@@ -14,3 +14,15 @@ export function withIdeographicSpaceFont(fontFamily: string | undefined): string
   if (!fontFamily) return fontFamily;
   return `${IDEOGRAPHIC_SPACE_FONT_FAMILY}, ${fontFamily}`;
 }
+
+export function quoteCssFontFamily(family: string): string {
+  const escaped = family.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `"${escaped}"`;
+}
+
+/** 引用符で囲んだ単一ファミリーだけを取り出す。複数指定や無引用は null。 */
+export function unquoteSingleCssFontFamily(value: string): string | null {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^"((?:\\.|[^"\\])*)"$/) ?? trimmed.match(/^'((?:\\.|[^'\\])*)'$/);
+  return match ? match[1].replace(/\\(["'\\])/g, "$1").replace(/\\\\/g, "\\") : null;
+}

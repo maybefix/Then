@@ -3010,14 +3010,6 @@ html:not([data-window-fullscreen="true"])
   word-spacing: normal;
 }
 
-.appShell[data-writing-mode="vertical-rl"]
-  .verticalTypewriterEditor
-  .latin-optical-center {
-  /* Rotated Latin in CJK serif fonts sits slightly left of the central baseline.
-     Shift only its inline run across the column; inline advance and justification stay intact. */
-  vertical-align: var(--editor-latin-optical-shift, 0.04em);
-}
-
 .verticalTypewriterEditor .pm-root p.heading:not(.align-start):not(.align-center):not(.align-end),
 .verticalTypewriterEditor .pm-root p.list-line:not(.align-start):not(.align-center):not(.align-end) {
   text-align: start;

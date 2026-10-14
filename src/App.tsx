@@ -17,7 +17,12 @@ import {
   useState,
 } from "react";
 import { manageAsyncRegistration } from "./utils/asyncRegistration";
-import { withIdeographicSpaceFont } from "./utils/fontStack";
+import {
+  quoteCssFontFamily,
+  unquoteSingleCssFontFamily,
+  withIdeographicSpaceFont,
+} from "./utils/fontStack";
+import { useVerticalMetricFontFamily } from "./utils/verticalMetricFonts";
 import {
   isRestorableRightSidebarTab,
   normalizeRightSidebarTab,
@@ -1027,11 +1032,6 @@ function normalizeIdeaThreads(value: unknown): IdeaThread[] {
   return [inbox, ...others];
 }
 
-function quoteCssFontFamily(family: string): string {
-  const escaped = family.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  return `"${escaped}"`;
-}
-
 const hiraginoCssFontFamilyAliases = new Map<string, string[]>([
   ["ヒラギノ角ゴ Pro W3", ["Hiragino Kaku Gothic Pro", "ヒラギノ角ゴ Pro"]],
   ["ヒラギノ角ゴ Pro W6", ["Hiragino Kaku Gothic Pro", "ヒラギノ角ゴ Pro"]],
@@ -1039,12 +1039,6 @@ const hiraginoCssFontFamilyAliases = new Map<string, string[]>([
   ["ヒラギノ明朝 Pro W3", ["Hiragino Mincho Pro", "ヒラギノ明朝 Pro"]],
   ["ヒラギノ明朝 Pro W6", ["Hiragino Mincho Pro", "ヒラギノ明朝 Pro"]],
 ]);
-
-function unquoteSingleCssFontFamily(value: string): string | null {
-  const trimmed = value.trim();
-  const match = trimmed.match(/^"((?:\\.|[^"\\])*)"$/) ?? trimmed.match(/^'((?:\\.|[^'\\])*)'$/);
-  return match ? match[1].replace(/\\(["'\\])/g, "$1").replace(/\\\\/g, "\\") : null;
-}
 
 function resolveCssFontFamilyAlias(family: string): string | null {
   const label = unquoteSingleCssFontFamily(family) ?? family.trim();
@@ -5498,6 +5492,13 @@ export default function App() {
       setEditorViewportSize(size);
     },
     [],
+  );
+
+  const isVerticalWriting = settings.writingMode === "vertical-rl";
+  const editorFontFamily = useVerticalMetricFontFamily(settings.editorFontFamily, isVerticalWriting);
+  const editorHeadingFontFamily = useVerticalMetricFontFamily(
+    settings.headingFontSource === "custom" ? settings.headingFontFamily : settings.editorFontFamily,
+    isVerticalWriting,
   );
 
   /**
@@ -12378,7 +12379,7 @@ export default function App() {
         data-native-window={isTauriRuntime() ? "true" : undefined}
         style={
           {
-            "--editor-font-family": withIdeographicSpaceFont(settings.editorFontFamily),
+            "--editor-font-family": withIdeographicSpaceFont(editorFontFamily),
             "--ui-font-family": settings.uiFontFamily,
             "--plot-font-family":
               settings.plotFontSource === "ui"
@@ -12394,11 +12395,7 @@ export default function App() {
             // 編集領域に対する比率（0〜1）。CSS 側で実寸に乗算する。
             "--editor-measure-h-ratio": settings.editorMeasureHorizontal / 100,
             "--editor-measure-v-ratio": settings.editorMeasureVertical / 100,
-            "--editor-heading-font-family": withIdeographicSpaceFont(
-              settings.headingFontSource === "custom"
-                ? settings.headingFontFamily
-                : settings.editorFontFamily,
-            ),
+            "--editor-heading-font-family": withIdeographicSpaceFont(editorHeadingFontFamily),
             "--typewriter-guide-position": `${settings.typewriterOffset}%`,
             "--zone-sidebar-opacity": settings.zoneModeOpacity,
           } as React.CSSProperties

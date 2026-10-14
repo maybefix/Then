@@ -604,6 +604,7 @@ pub fn run() {
             load_app_state,
             save_app_state,
             get_system_fonts,
+            get_font_faces,
             open_text_file_dialog,
             read_text_file,
             save_text_file_dialog,
@@ -5174,6 +5175,147 @@ fn collect_windows_font_families(
     }
 
     Ok(())
+}
+
+/// One installed face of a font family, as `@font-face` needs it: the names
+/// `local()` can resolve (full names in every locale, then PostScript name)
+/// plus the descriptors the browser uses to pick the face for a run.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FontFaceInfo {
+    local_names: Vec<String>,
+    weight: u32,
+    italic: bool,
+}
+
+/// Lists the real (non-simulated) faces Chromium chooses from for
+/// `font-family: <family>`: the whole DirectWrite family when the name is one
+/// (so "Yu Mincho" bold is its Demibold), otherwise the faces GDI resolves for
+/// a legacy name such as "Yu Mincho Light".
+#[tauri::command]
+fn get_font_faces(family: String) -> Result<Vec<FontFaceInfo>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        collect_windows_font_faces(&family)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = family;
+        Ok(Vec::new())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn collect_windows_font_faces(family: &str) -> Result<Vec<FontFaceInfo>, String> {
+    use windows::core::BOOL;
+    use windows::Win32::Graphics::DirectWrite::{
+        DWriteCreateFactory, IDWriteFactory, IDWriteFont, IDWriteFontCollection,
+        IDWriteLocalizedStrings, DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_SIMULATIONS_NONE,
+        DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_INFORMATIONAL_STRING_FULL_NAME, DWRITE_INFORMATIONAL_STRING_ID,
+        DWRITE_INFORMATIONAL_STRING_POSTSCRIPT_NAME,
+    };
+    use windows::core::PCWSTR;
+    use windows::Win32::Graphics::Gdi::{DEFAULT_CHARSET, LOGFONTW};
+
+    let face_name: Vec<u16> = family.encode_utf16().collect();
+    if face_name.is_empty() || face_name.len() >= 32 {
+        return Ok(Vec::new());
+    }
+
+    let factory: IDWriteFactory = unsafe { DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED) }
+        .map_err(|error| format!("failed to create DirectWrite factory: {error}"))?;
+
+    let read_strings = |font: &IDWriteFont,
+                        id: DWRITE_INFORMATIONAL_STRING_ID,
+                        out: &mut Vec<String>| {
+        let mut strings: Option<IDWriteLocalizedStrings> = None;
+        let mut exists = BOOL::default();
+        if unsafe { font.GetInformationalStrings(id, &mut strings, &mut exists) }.is_err()
+            || !exists.as_bool()
+        {
+            return;
+        }
+        let Some(strings) = strings else { return };
+        for index in 0..unsafe { strings.GetCount() } {
+            let Ok(length) = (unsafe { strings.GetStringLength(index) }) else { continue };
+            let mut buffer = vec![0u16; length as usize + 1];
+            if unsafe { strings.GetString(index, &mut buffer) }.is_ok() {
+                let value = wide_null_terminated_to_string(&buffer);
+                if !value.is_empty() && !out.contains(&value) {
+                    out.push(value);
+                }
+            }
+        }
+    };
+
+    let mut faces: Vec<FontFaceInfo> = Vec::new();
+    let push_face = |faces: &mut Vec<FontFaceInfo>, font: &IDWriteFont| {
+        // A simulated face is the regular outline drawn bolder/slanted; the
+        // browser already makes that choice itself, so only real faces count.
+        if unsafe { font.GetSimulations() } != DWRITE_FONT_SIMULATIONS_NONE
+            || unsafe { font.GetStretch() } != DWRITE_FONT_STRETCH_NORMAL
+        {
+            return;
+        }
+
+        let mut local_names = Vec::new();
+        read_strings(font, DWRITE_INFORMATIONAL_STRING_FULL_NAME, &mut local_names);
+        read_strings(font, DWRITE_INFORMATIONAL_STRING_POSTSCRIPT_NAME, &mut local_names);
+        if local_names.is_empty() || faces.iter().any(|face| face.local_names == local_names) {
+            return;
+        }
+
+        faces.push(FontFaceInfo {
+            local_names,
+            weight: unsafe { font.GetWeight() }.0 as u32,
+            italic: unsafe { font.GetStyle() } != DWRITE_FONT_STYLE_NORMAL,
+        });
+    };
+
+    let mut collection: Option<IDWriteFontCollection> = None;
+    unsafe { factory.GetSystemFontCollection(&mut collection, false) }
+        .map_err(|error| format!("failed to get system font collection: {error}"))?;
+    if let Some(collection) = collection {
+        let mut wide_family = face_name.clone();
+        wide_family.push(0);
+        let mut index = 0;
+        let mut exists = BOOL::default();
+        if unsafe {
+            collection.FindFamilyName(PCWSTR(wide_family.as_ptr()), &mut index, &mut exists)
+        }
+        .is_ok()
+            && exists.as_bool()
+        {
+            if let Ok(dwrite_family) = unsafe { collection.GetFontFamily(index) } {
+                for font_index in 0..unsafe { dwrite_family.GetFontCount() } {
+                    if let Ok(font) = unsafe { dwrite_family.GetFont(font_index) } {
+                        push_face(&mut faces, &font);
+                    }
+                }
+            }
+        }
+    }
+    if !faces.is_empty() {
+        return Ok(faces);
+    }
+
+    let interop = unsafe { factory.GetGdiInterop() }
+        .map_err(|error| format!("failed to get GDI interop: {error}"))?;
+    for (weight, italic) in [(400, false), (700, false), (400, true), (700, true)] {
+        let mut log_font = LOGFONTW::default();
+        log_font.lfCharSet = DEFAULT_CHARSET;
+        log_font.lfWeight = weight;
+        log_font.lfItalic = u8::from(italic);
+        log_font.lfFaceName[..face_name.len()].copy_from_slice(&face_name);
+
+        if let Ok(font) = unsafe { interop.CreateFontFromLOGFONT(&log_font) } {
+            push_face(&mut faces, &font);
+        }
+    }
+
+    Ok(faces)
 }
 
 #[cfg(target_os = "windows")]

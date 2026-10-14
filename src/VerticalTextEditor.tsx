@@ -853,35 +853,6 @@ function pushJapaneseQuoteDecos(
   }
 }
 
-function pushLatinOpticalCenterDecos(
-  out: Decoration[],
-  line: LineNode,
-  contentStart: number,
-): void {
-  const tcyRanges = line.inlineMarkups
-    .filter((markup) => markup.type === "tcy")
-    .map((markup) => ({
-      from: markup.contentRange.offset,
-      to: markup.contentRange.offset + markup.contentRange.length,
-    }));
-  const rotatedLatinRun =
-    /(?:(?![Ａ-Ｚａ-ｚ])(?:\p{Script=Latin}|\p{Mark}|\p{Number}|['’._-]))+/gu;
-
-  for (const match of line.source.matchAll(rotatedLatinRun)) {
-    if (!/\p{Script=Latin}/u.test(match[0])) continue;
-    const from = match.index;
-    const to = from + match[0].length;
-    const insideTcy = tcyRanges.some((range) => from < range.to && to > range.from);
-    if (!insideTcy) {
-      out.push(
-        Decoration.inline(contentStart + from, contentStart + to, {
-          class: "latin-optical-center",
-        }),
-      );
-    }
-  }
-}
-
 function shouldJustifyLine(line: LineNode): boolean {
   if (line.kind !== "paragraph" || line.jitsuki || line.align) return false;
   return Array.from(line.text || line.source).length >= 8;
@@ -1113,7 +1084,6 @@ function pushLineDecos(
   }
   pushKinsokuDecos(out, line, contentStart);
   pushJapaneseQuoteDecos(out, line, contentStart);
-  pushLatinOpticalCenterDecos(out, line, contentStart);
   pushImageDecos(out, line, contentStart);
 
   if (active) return;
