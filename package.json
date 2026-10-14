@@ -28,6 +28,7 @@
     "test:heading-move": "node scripts/test-heading-move.mjs",
     "test:heading-dnd-ui": "node scripts/test-heading-dnd-ui.mjs",
     "test:file-move": "node scripts/test-file-move.mjs",
+    "test:sidebar-file-move": "node scripts/investigate-sidebar-move-lock.mjs --verify",
     "test:breadcrumb": "node scripts/test-breadcrumb-navigation.mjs",
     "test:ui-scale-layout": "node scripts/test-ui-scale-layout.mjs",
     "test:performance": "node scripts/test-performance-regressions.mjs",

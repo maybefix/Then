@@ -2736,14 +2736,26 @@ fn move_project_entry(
     target_path: Option<String>,
     position: Option<String>,
 ) -> Result<MoveProjectEntryResult, String> {
-    let _project_config_guard = lock_project_config()?;
-    move_project_entry_unlocked(
-        root_path,
-        source_path,
-        target_folder_path,
-        target_path,
-        position,
-    )
+    let moved = {
+        let _project_config_guard = lock_project_config()?;
+        move_project_entry_unlocked(
+            root_path.clone(),
+            source_path,
+            target_folder_path,
+            target_path,
+            position,
+        )?
+    };
+    // Tree loading acquires the project config lock (including library metadata).
+    // Finish the move transaction and release its guard before reading the tree.
+    Ok(MoveProjectEntryResult {
+        project_folder: list_project_folder(Path::new(&root_path))?,
+        moved_document: moved.moved_document,
+        old_path: moved.old_path,
+        new_path: moved.new_path,
+        old_parent_path: moved.old_parent_path,
+        new_parent_path: moved.new_parent_path,
+    })
 }
 
 fn move_project_entry_unlocked(
@@ -2752,7 +2764,7 @@ fn move_project_entry_unlocked(
     target_folder_path: String,
     target_path: Option<String>,
     position: Option<String>,
-) -> Result<MoveProjectEntryResult, String> {
+) -> Result<MovedProjectEntry, String> {
     let root = PathBuf::from(root_path);
     let source = PathBuf::from(source_path);
     let target_folder = PathBuf::from(target_folder_path);
@@ -2863,10 +2875,7 @@ fn move_project_entry_unlocked(
     } else {
         None
     };
-    let project_folder = list_project_folder(&root)?;
-
-    Ok(MoveProjectEntryResult {
-        project_folder,
+    Ok(MovedProjectEntry {
         moved_document,
         old_path: source.to_string_lossy().to_string(),
         new_path: next_path.to_string_lossy().to_string(),
@@ -2948,13 +2957,7 @@ fn move_project_entries(
             None,
             None,
         ) {
-            Ok(result) => completed.push(MovedProjectEntry {
-                moved_document: result.moved_document,
-                old_path: result.old_path,
-                new_path: result.new_path,
-                old_parent_path: result.old_parent_path,
-                new_parent_path: result.new_parent_path,
-            }),
+            Ok(result) => completed.push(result),
             Err(move_error) => {
                 let rollback_errors = completed
                     .iter()
@@ -3004,6 +3007,9 @@ fn move_project_entries(
         }
     }
 
+    // Keep the entire batch and any rollback under one lock, but never reload
+    // the tree while holding that lock: the loader must acquire it itself.
+    drop(_project_config_guard);
     Ok(MoveProjectEntriesResult {
         project_folder: list_project_folder(&root)?,
         moves: completed,
@@ -5179,6 +5185,9 @@ fn wide_null_terminated_to_string(value: &[u16]) -> String {
 
     String::from_utf16_lossy(&value[..end]).trim().to_string()
 }
+
+#[cfg(test)]
+mod file_move_diagnostics;
 
 #[cfg(test)]
 mod tests {

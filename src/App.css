@@ -438,12 +438,13 @@ textarea,
   padding: 48px 52px 42px;
   grid-template-columns: minmax(250px, 0.85fr) minmax(360px, 1.25fr);
   gap: 48px;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .startupPortalIntro {
   display: flex;
   min-width: 0;
+  min-height: 0;
   flex-direction: column;
   justify-content: center;
   gap: 20px;
@@ -564,12 +565,14 @@ textarea,
 .startupPortalRecent {
   display: flex;
   min-width: 0;
+  min-height: 0;
   flex-direction: column;
   gap: 16px;
 }
 
 .startupPortalRecentHeader {
   display: flex;
+  flex: 0 0 auto;
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
@@ -595,7 +598,13 @@ textarea,
 
 .startupPortalWorkspaceList {
   display: grid;
+  min-height: 0;
+  flex: 1;
+  align-content: start;
+  grid-auto-rows: max-content;
   gap: 8px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
 }
 
 .startupPortalWorkspace {
@@ -703,6 +712,7 @@ textarea,
 
   .startupPortalMain {
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
     gap: 34px;
     padding: 30px 24px;
   }
@@ -719,6 +729,20 @@ textarea,
   .startupPortalSkipSetting {
     order: 3;
     width: 100%;
+  }
+}
+
+/* 高さが足りない小型ウィンドウでは、一覧の表示領域を残すため左右に並べる。 */
+@media (min-width: 600px) and (max-width: 760px) and (max-height: 700px) {
+  .startupPortalMain {
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.25fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 24px;
+    padding-block: 20px;
+  }
+
+  .startupPortalIntro {
+    justify-content: center;
   }
 }
 
