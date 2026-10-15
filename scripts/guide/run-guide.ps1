@@ -2,6 +2,7 @@ param(
   [string]$Scenario = "scripts/guide/scenario.json",
   [string]$OutputDirectory = "artifacts/guide",
   [string]$AppPath = "",
+  [string]$WorkspaceTemplate = "scripts/demo/sample-workspace",
   [int]$DebugPort = 9224,
   [switch]$KeepAppOpen
 )
@@ -22,14 +23,23 @@ $scenarioPath = (Resolve-Path -LiteralPath (Join-Path $root $Scenario)).Path
 $output = Join-Path $root $OutputDirectory
 New-Item -ItemType Directory -Force -Path $output | Out-Null
 
+$templateWorkspace = (Resolve-Path -LiteralPath (Join-Path $root $WorkspaceTemplate)).Path
+$guideWorkspace = Join-Path $output "workspace"
+if (Test-Path -LiteralPath $guideWorkspace) {
+  Remove-Item -LiteralPath $guideWorkspace -Recurse -Force
+}
+Copy-Item -LiteralPath $templateWorkspace -Destination $guideWorkspace -Recurse
+
 if (Get-Process Then -ErrorAction SilentlyContinue) {
   throw "Then is already running. Close it before generating a guide so the active session is not modified."
 }
 
 $previousWebViewArgs = $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS
 $previousCdpPort = $env:THEN_CDP_PORT
+$previousGuideWorkspace = $env:THEN_GUIDE_WORKSPACE
 $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$DebugPort"
 $env:THEN_CDP_PORT = "$DebugPort"
+$env:THEN_GUIDE_WORKSPACE = $guideWorkspace
 
 $appStatePath = Join-Path $env:APPDATA "local.then\app-state.json"
 $hadAppState = Test-Path -LiteralPath $appStatePath
@@ -68,9 +78,11 @@ finally {
 
   $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = $previousWebViewArgs
   $env:THEN_CDP_PORT = $previousCdpPort
+  $env:THEN_GUIDE_WORKSPACE = $previousGuideWorkspace
   Remove-Item Env:THEN_APP_PID -ErrorAction SilentlyContinue
 }
 
 Write-Host "Guide:       $(Join-Path $output 'guide.md')"
 Write-Host "Steps:       $(Join-Path $output 'steps.json')"
 Write-Host "Screenshots: $(Join-Path $output 'screenshots')"
+Write-Host "Workspace:   $guideWorkspace"
