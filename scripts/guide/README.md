@@ -26,6 +26,13 @@ powershell -ExecutionPolicy Bypass -File scripts/guide/run-guide.ps1 `
   -OutputDirectory artifacts/guide/my-guide
 ```
 
+操作対象のワークスペースを変更する場合は、原本となるフォルダを `-WorkspaceTemplate` で指定します。実行時には原本を出力先の `workspace` へコピーし、Thenはそのコピーを操作します。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/guide/run-guide.ps1 `
+  -WorkspaceTemplate scripts/demo/sample-workspace
+```
+
 ## シナリオ
 
 通常の操作アクションへ `guide` を追加すると、そのアクションが操作ガイドの1工程になります。
@@ -102,4 +109,4 @@ WindowsのネイティブダイアログはCDPの管理範囲外です。`native
 
 `run-guide.ps1` は既に Then が実行中の場合に処理を中止します。また、終了時に `%APPDATA%\local.then\app-state.json` を実行前の内容へ戻します。
 
-操作ガイド専用のサンプルワークスペースを利用する場合は、シナリオ内で `${GUIDE_WORKSPACE}` を参照し、実行時に `THEN_GUIDE_WORKSPACE` を指定できます。
+操作対象のワークスペースも出力先へコピーしてから使用するため、指定した原本を直接編集しません。シナリオ内では `${GUIDE_WORKSPACE}` でコピー先を参照できます。
