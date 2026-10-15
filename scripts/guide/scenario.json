@@ -1,0 +1,39 @@
+{
+  "name": "Then 設定画面の操作",
+  "title": "設定画面を開く",
+  "description": "Thenの設定画面を開き、閉じるまでの操作手順です。",
+  "actions": [
+    { "type": "wait", "ms": 1000 },
+    {
+      "type": "click",
+      "target": { "aria": "設定" },
+      "label": "設定",
+      "guide": {
+        "instruction": "［設定］をクリックします。",
+        "capture": "before"
+      },
+      "afterMs": 700
+    },
+    {
+      "type": "assert",
+      "target": { "aria": "閉じる", "last": true },
+      "label": "設定画面",
+      "guide": {
+        "instruction": "設定画面が表示されたことを確認します。",
+        "capture": "after",
+        "marker": false
+      },
+      "afterMs": 300
+    },
+    {
+      "type": "click",
+      "target": { "aria": "閉じる", "last": true },
+      "label": "閉じる",
+      "guide": {
+        "instruction": "［閉じる］をクリックします。",
+        "capture": "before"
+      },
+      "afterMs": 500
+    }
+  ]
+}
