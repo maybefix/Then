@@ -10,6 +10,7 @@ export type ThemeDefinition = {
 export const themeCatalog: ThemeDefinition[] = [
   { id: "default", label: "Default", description: "白とネイビー", mode: "light" },
   { id: "standard", label: "Standard", description: "白とブラック", mode: "light" },
+  { id: "nagoya-light", label: "Nagoya", description: "淡いグレーと白、控えめな紫", mode: "light" },
   { id: "coral-light", label: "Coral", description: "クリームとコーラル", mode: "light" },
   { id: "minimal-light", label: "Minimal", description: "ミニマルな白とブルー", mode: "light" },
   { id: "worker-light", label: "Worker", description: "Stone系とプロダクトブルー", mode: "light" },

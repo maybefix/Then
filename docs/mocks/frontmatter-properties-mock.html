@@ -1,0 +1,1195 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Properties モック</title>
+<style>
+:root {
+  --ui-font-family: "Yu Gothic UI", "Segoe UI", "Hiragino Sans", sans-serif;
+  --bg-root: #181917;
+  --bg-primary: #20221f;
+  --bg-secondary: #1d1f1c;
+  --bg-tertiary: #282b27;
+  --bg-hover: #353834;
+  --border-subtle: #353934;
+  --border-strong: #4a5048;
+  --text-primary: #f5f6f3;
+  --text-secondary: #c7cbc4;
+  --text-muted: #8e958a;
+  --accent: #5ca7d6;
+  --accent-strong: #8cc9ee;
+  --warning: #d7b65e;
+  --danger: #d97373;
+  --added: rgba(92, 167, 214, 0.16);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  display: flex; flex-direction: column;
+  background: var(--bg-root);
+  color: var(--text-primary);
+  font-family: var(--ui-font-family);
+  font-size: 13px;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* ---- mock controls (not part of the design) ---- */
+.mockBar {
+  display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center;
+  padding: 8px 16px;
+  background: #11120f; border-bottom: 1px dashed #4a5048;
+  font-size: 12px; color: var(--text-muted);
+}
+.mockBar strong { color: var(--warning); font-weight: 600; letter-spacing: .04em; }
+.mockBar .seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 6px; overflow: hidden; }
+.mockBar .seg button {
+  border: 0; background: transparent; padding: 4px 10px; cursor: pointer; color: var(--text-secondary);
+}
+.mockBar .seg button + button { border-left: 1px solid var(--border-strong); }
+.mockBar .seg button[aria-pressed="true"] { background: var(--bg-tertiary); color: var(--text-primary); }
+.mockBar label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+
+/* ---- app frame ---- */
+.frame { display: flex; flex: 1; min-height: 0; }
+.editorPane { flex: 1; min-width: 0; overflow: auto; background: var(--bg-primary); }
+.scroller { min-width: 0; }
+
+/* vertical writing — mirrors .verticalTypewriterScroller / .pm-root */
+.editorPane { position: relative; }
+.editorPane[data-mode="vertical"] {
+  display: flex; flex-direction: column; overflow: hidden; background: #1b1c1f;
+  --card-w: 300px; --card-gap: 44px; --lead: 40px; --tail: 40px;
+}
+.editorPane[data-mode="vertical"][data-place="start"] { --lead: calc(var(--card-w) + var(--card-gap) + 40px); }
+/* typewriter on: one screen of scroll room before and after the text, like pm-root's `padding: 0 100vw` */
+.editorPane[data-mode="vertical"][data-typewriter="true"] { --lead: 100vw; --tail: 100vw; }
+.editorPane[data-mode="vertical"] .scroller {
+  flex: 1; min-height: 0; writing-mode: vertical-rl; overflow-x: auto; overflow-y: hidden;
+  scrollbar-color: var(--border-strong) rgba(255,255,255,.035); scrollbar-width: thin;
+}
+.editorPane[data-mode="vertical"] .surface { position: relative; min-width: 100%; height: 100%; }
+.editorPane[data-mode="vertical"] .body {
+  box-sizing: border-box; width: auto; min-width: max-content; height: 100%; margin: 0;
+  padding: 36px var(--lead) 36px var(--tail);
+  font-size: 18px; line-height: 1.9; color: #e9e4d6; caret-color: #e8b04b;
+}
+.editorPane[data-mode="vertical"] .body h1 { margin: 0 0 0 1.2em; font-size: 24px; }
+.editorPane[data-mode="vertical"] .body p { margin: 0; }
+/* placement A: strip above the vertical text */
+.editorPane[data-mode="vertical"][data-place="top"] .props {
+  flex: 0 0 auto; width: auto; max-height: 46%; margin: 0; padding: 6px 40px 4px;
+  overflow-y: auto; border-bottom: 1px solid var(--border-subtle); background: var(--bg-primary);
+}
+.editorPane[data-mode="vertical"][data-place="top"] .rows { grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); column-gap: 16px; }
+/* placement B: card in the lead space just before the first line. Absolute, so it never moves the text. */
+.editorPane[data-mode="vertical"][data-place="start"] .props {
+  position: absolute; top: 36px; right: calc(var(--lead) - var(--card-gap) - var(--card-w));
+  width: var(--card-w); max-height: calc(100% - 72px); margin: 0; padding: 0 0 0 20px;
+  writing-mode: horizontal-tb; overflow-y: auto; border-left: 1px solid var(--border-subtle);
+}
+.editorPane[data-mode="vertical"][data-place="start"] .props[data-empty="true"] { border-left-color: transparent; }
+.twGuide {
+  position: absolute; z-index: 2; width: 0; display: none; pointer-events: none;
+  border-left: 1px dashed rgba(232, 176, 75, .35);
+}
+.editorPane[data-typewriter="true"] .twGuide { display: block; }
+
+/* placement C: right sidebar pane */
+.sidePane {
+  width: 300px; flex: 0 0 300px; border-left: 1px solid var(--border-subtle);
+  background: var(--bg-secondary); display: flex; flex-direction: column; min-height: 0;
+}
+.sidePane[hidden] { display: none; }
+.sideHead { display: flex; align-items: center; min-height: 38px; padding: 4px 8px; border-bottom: 1px solid var(--border-subtle); }
+.sideSwitch {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px;
+  border: 0; border-radius: 5px; background: transparent; color: var(--text-primary); cursor: pointer;
+}
+.sideSwitch:hover, .sideSwitch[aria-expanded="true"] { background: var(--bg-hover); }
+.sideSwitch .chev2 { color: var(--text-muted); font-size: 10px; }
+.sideBody { flex: 1; overflow: auto; padding: 4px 8px 12px; }
+.sidePane .props { width: auto; margin: 0; }
+.sidePane .props .chev, .sidePane .props .propsLabel, .sidePane .props .count { display: none; }
+.sidePane .props .propsToggle { cursor: default; }
+.sidePane .props .propsToggle:hover { background: transparent; }
+.filePane {
+  width: 380px; flex: 0 0 380px; border-left: 1px solid var(--border-subtle);
+  background: var(--bg-secondary); display: flex; flex-direction: column; min-height: 0;
+}
+.filePane[hidden] { display: none; }
+.filePaneHead {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; color: var(--text-muted); font-size: 11px; border-bottom: 1px solid var(--border-subtle);
+}
+.filePaneBody {
+  flex: 1; overflow: auto; margin: 0; padding: 10px 0;
+  font-family: Consolas, "Yu Gothic", monospace; font-size: 12px; line-height: 1.6;
+}
+.filePaneBody div { padding: 0 12px; white-space: pre-wrap; word-break: break-all; }
+.filePaneBody div.changed { background: var(--added); box-shadow: inset 2px 0 0 var(--accent); }
+.filePaneBody div.fence { color: var(--text-muted); }
+.filePaneBody div.body { color: var(--text-muted); }
+
+/* ---- properties panel ---- */
+.props {
+  container: props / inline-size;
+  width: min(820px, calc(100% - 104px));
+  margin: 34px auto 0;
+  color: var(--text-secondary);
+}
+.propsHead { display: flex; align-items: center; gap: 6px; min-height: 32px; }
+.propsToggle {
+  display: inline-flex; align-items: center; gap: 10px; flex: 1; min-width: 0;
+  padding: 4px 6px; border: 0; border-radius: 5px; background: transparent; cursor: pointer; text-align: left;
+  color: var(--text-secondary);
+}
+.propsToggle:hover { background: var(--bg-hover); color: var(--text-primary); }
+.chev { display: inline-block; width: 10px; transition: transform .12s; color: var(--text-muted); }
+.props[data-open="true"] .chev { transform: rotate(90deg); }
+.count { color: var(--text-muted); font-size: 11px; }
+.errBadge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 7px; border-radius: 999px; font-size: 11px;
+  color: var(--danger); background: rgba(217, 115, 115, .12);
+}
+.iconBtn {
+  display: inline-grid; place-items: center; height: 26px; min-width: 26px; padding: 0 6px;
+  border: 0; border-radius: 5px; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px;
+}
+.iconBtn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
+.iconBtn[aria-pressed="true"] { color: var(--text-primary); background: var(--bg-tertiary); }
+.iconBtn:disabled { opacity: .35; cursor: default; }
+.iconBtn svg { width: 15px; height: 15px; }
+.props[data-empty="true"] .propsHead .hideWhenEmpty { display: none; }
+.props[data-empty="true"] .propsToggle { color: var(--text-muted); }
+
+.propsBody { padding: 4px 0 10px; }
+.rows { display: grid; gap: 1px; }
+.row {
+  position: relative;
+  display: grid; grid-template-columns: 28px 9.5em minmax(0, 1fr) 26px;
+  grid-template-areas: "icon key value del"; align-items: start; column-gap: 4px;
+  border-radius: 5px; padding: 1px 0;
+}
+.row > .typeBtn { grid-area: icon; }
+.row > .keyField { grid-area: key; }
+.row > .valueCell { grid-area: value; min-width: 0; }
+.row > .delBtn, .row > .delSlot { grid-area: del; }
+.row > .confirmBar { grid-column: 2 / -1; }
+/* narrow panel: name on its own line, value underneath */
+@container props (max-width: 420px) {
+  .row { grid-template-columns: 28px minmax(0, 1fr) 26px; grid-template-areas: "icon key del" ". value value"; }
+  .row > .keyField { font-size: 12px; color: var(--text-muted); min-height: 24px; padding-top: 3px; padding-bottom: 1px; }
+  .row > .valueCell { padding-bottom: 4px; }
+}
+.row:hover, .row:focus-within { background: rgba(255,255,255,.025); }
+.typeBtn {
+  display: grid; place-items: center; width: 28px; height: 28px;
+  border: 0; border-radius: 5px; background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.typeBtn:hover, .typeBtn[aria-expanded="true"] { background: var(--bg-hover); color: var(--text-primary); }
+.typeBtn svg { width: 15px; height: 15px; }
+.typeBtn:disabled { cursor: default; }
+.typeBtn:disabled:hover { background: transparent; color: var(--text-muted); }
+.field {
+  display: block; width: 100%; min-height: 28px; padding: 4px 7px; line-height: 18px;
+  border: 1px solid transparent; border-radius: 5px; background: transparent; outline: none;
+  color: var(--text-primary);
+}
+.field:hover { border-color: var(--border-subtle); }
+.field:focus { border-color: var(--border-strong); background: var(--bg-secondary); }
+.keyField { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; }
+textarea.field { resize: none; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
+.field.invalid, .field.invalid:focus { border-color: var(--danger); }
+.field::placeholder { color: #5f665c; }
+input[type="date"].field, input[type="datetime-local"].field { color-scheme: dark; width: auto; max-width: 100%; }
+input[type="number"].field { width: 10em; max-width: 100%; color-scheme: dark; }
+.checkWrap { display: flex; align-items: center; min-height: 28px; padding: 0 7px; gap: 8px; }
+.checkWrap input { width: 15px; height: 15px; accent-color: var(--accent); margin: 0; cursor: pointer; }
+.nullHint { color: #5f665c; font-size: 12px; }
+.delBtn { opacity: 0; }
+.row:hover .delBtn, .row:focus-within .delBtn { opacity: 1; }
+
+.chips {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  min-height: 28px; padding: 2px 3px; border: 1px solid transparent; border-radius: 5px;
+}
+.chips:hover { border-color: var(--border-subtle); }
+.chips:focus-within { border-color: var(--border-strong); background: var(--bg-secondary); }
+.chip {
+  display: inline-flex; max-width: 100%; align-items: center; gap: 2px;
+  padding: 1px 3px 1px 8px; border-radius: 4px; background: var(--bg-tertiary); color: var(--text-primary);
+}
+.chip button { border: 0; background: transparent; color: var(--text-muted); cursor: pointer; padding: 0 3px; border-radius: 3px; }
+.chip button:hover { color: var(--text-primary); background: var(--bg-hover); }
+.chipInput { flex: 1 0 3em; min-width: 3em; width: 3em; border: 0; outline: none; background: transparent; padding: 3px 4px; color: var(--text-primary); }
+.chipInput::placeholder { color: #5f665c; }
+
+.rawValue {
+  display: flex; align-items: flex-start; gap: 8px; min-height: 28px; padding: 4px 7px;
+}
+.rawValue { flex-wrap: wrap; }
+.rawValue pre {
+  flex: 1 1 8em; min-width: 0; margin: 0; color: var(--text-muted);
+  font-family: Consolas, "Yu Gothic", monospace; font-size: 12px; line-height: 1.5; white-space: pre-wrap;
+}
+.linkBtn {
+  flex: 0 0 auto; border: 0; background: transparent; color: var(--accent-strong); cursor: pointer;
+  padding: 0 4px; border-radius: 4px; font-size: 12px;
+}
+.linkBtn:hover { background: var(--bg-hover); }
+
+.addRow { display: flex; gap: 2px; margin-top: 4px; }
+.addBtn {
+  display: inline-flex; align-items: center; gap: 8px; padding: 4px 8px 4px 7px;
+  border: 0; border-radius: 5px; background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.addBtn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.confirmBar {
+  grid-column: 2 / 4; display: flex; gap: 6px; align-items: center; padding: 2px 0 6px 7px;
+}
+.confirmBar button {
+  border: 1px solid var(--border-strong); background: var(--bg-tertiary); color: var(--text-primary);
+  border-radius: 5px; padding: 3px 10px; cursor: pointer; font-size: 12px;
+}
+.confirmBar button.danger { border-color: rgba(217,115,115,.5); color: #f0b3b3; }
+.confirmBar button:hover { background: var(--bg-hover); }
+
+.source {
+  display: block; width: 100%; min-height: 160px; padding: 9px 10px; resize: vertical;
+  border: 1px solid var(--border-subtle); border-radius: 5px; outline: none;
+  background: var(--bg-secondary); color: var(--text-primary);
+  font-family: Consolas, "Yu Gothic", monospace; font-size: 12px; line-height: 1.6; tab-size: 2;
+}
+.source:focus { border-color: var(--border-strong); }
+.source.invalid { border-color: rgba(217,115,115,.6); }
+.errors { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+.errors li { color: var(--danger); font-size: 12px; display: flex; gap: 8px; align-items: baseline; }
+.errors .ln { font-family: Consolas, monospace; color: #b98585; min-width: 42px; }
+.formBlocked { display: grid; gap: 8px; justify-items: start; padding: 4px 6px 8px; }
+
+/* popover menus */
+.menu {
+  position: fixed; z-index: 30; min-width: 170px; padding: 4px;
+  border: 1px solid var(--border-strong); border-radius: 7px; background: #262925;
+  box-shadow: 0 10px 28px rgba(0,0,0,.45);
+}
+.menu button {
+  display: flex; width: 100%; align-items: center; gap: 10px; padding: 6px 9px;
+  border: 0; border-radius: 4px; background: transparent; cursor: pointer; text-align: left; color: var(--text-secondary);
+}
+.menu button:hover, .menu button:focus-visible { background: var(--bg-hover); color: var(--text-primary); outline: none; }
+.menu button[aria-checked="true"] { color: var(--text-primary); }
+.menu button[aria-checked="true"]::after { content: "✓"; margin-left: auto; color: var(--accent-strong); }
+.menu button.danger { color: #e7a0a0; }
+.menu hr { border: 0; border-top: 1px solid var(--border-subtle); margin: 4px 2px; }
+.menu svg { width: 15px; height: 15px; color: var(--text-muted); }
+
+/* suggestion list */
+.suggest {
+  position: fixed; z-index: 30; min-width: 220px; max-height: 240px; overflow: auto; padding: 4px;
+  border: 1px solid var(--border-strong); border-radius: 7px; background: #262925;
+  box-shadow: 0 10px 28px rgba(0,0,0,.45);
+}
+.suggest button {
+  display: grid; grid-template-columns: 18px 1fr auto; gap: 8px; align-items: center; width: 100%;
+  padding: 5px 8px; border: 0; border-radius: 4px; background: transparent; cursor: pointer; text-align: left; color: var(--text-secondary);
+}
+.suggest button[data-active="true"], .suggest button:hover { background: var(--bg-hover); color: var(--text-primary); }
+.suggest svg { width: 14px; height: 14px; color: var(--text-muted); }
+.suggest small { color: var(--text-muted); font-size: 11px; }
+
+/* fake body */
+.body {
+  width: min(820px, calc(100% - 104px));
+  margin: 18px auto 80px; padding-top: 6px;
+  font-family: "Yu Mincho", "Hiragino Mincho ProN", serif; font-size: 17px; line-height: 1.95;
+  color: var(--text-primary); outline: none;
+}
+.body h1 { font-size: 26px; font-weight: 600; margin: 8px 0 20px; line-height: 1.5; }
+.body p { margin: 0 0 1em; }
+.body:focus-visible { box-shadow: none; }
+
+@media (max-width: 900px) {
+  .filePane { display: none; }
+}
+@media (max-width: 640px) {
+  .editorPane:not([data-mode="vertical"]) .props, .editorPane:not([data-mode="vertical"]) .body { width: calc(100% - 32px); }
+}
+</style>
+</head>
+<body>
+
+<div class="mockBar" role="toolbar" aria-label="モック操作">
+  <strong>MOCK</strong>
+  <span class="seg" id="scenarios">
+    <button data-s="article">記事原稿</button>
+    <button data-s="novel">小説原稿（なし）</button>
+    <button data-s="complex">対応外の構造</button>
+    <button data-s="broken">不正なYAML</button>
+  </span>
+  <span class="seg" id="modes">
+    <button data-m="horizontal">横書き</button>
+    <button data-m="vertical">縦書き</button>
+  </span>
+  <span class="seg" id="places">
+    <button data-p="top">上部に置く</button>
+    <button data-p="start">本文の先頭に置く</button>
+    <button data-p="side">サイドバー</button>
+  </span>
+  <label id="twLabel"><input type="checkbox" id="tw" checked> タイプライター</label>
+  <label><input type="checkbox" id="showFile" checked> 保存されるファイル</label>
+</div>
+
+<div class="frame">
+  <main class="editorPane" id="pane" data-mode="horizontal" data-place="top">
+    <div class="scroller" id="scroller">
+      <div class="surface" id="surface">
+        <section class="props" id="props" aria-label="プロパティ"></section>
+        <article class="body" id="body" contenteditable="true" spellcheck="false"></article>
+      </div>
+    </div>
+    <div class="twGuide" id="twGuide"></div>
+  </main>
+  <aside class="sidePane" id="sidePane" hidden>
+    <div class="sideHead">
+      <button class="sideSwitch" id="sideSwitch" type="button" aria-haspopup="menu"><span>プロパティ</span><span class="chev2">▼</span></button>
+    </div>
+    <div class="sideBody" id="sideBody"></div>
+  </aside>
+  <aside class="filePane" id="filePane">
+    <div class="filePaneHead"><span id="fileName">原稿.md</span><span id="fileStat"></span></div>
+    <div class="filePaneBody" id="fileBody"></div>
+  </aside>
+</div>
+
+<script>
+// ------------------------------------------------------------------
+// Icons
+// ------------------------------------------------------------------
+const ICON = {
+  text: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3 4h10M3 8h10M3 12h6"/></svg>',
+  number: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M6 2.5 4.8 13.5M11.2 2.5 10 13.5M2.5 6h11M2 10h11"/></svg>',
+  checkbox: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="2.5"/><path d="m5.2 8.2 2 2 3.8-4.2"/></svg>',
+  date: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="2.5" y="3.5" width="11" height="10" rx="2"/><path d="M2.5 7h11M5.5 2v3M10.5 2v3"/></svg>',
+  datetime: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="5.6"/><path d="M8 4.8V8l2.2 1.6"/></svg>',
+  list: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M6 4h7.5M6 8h7.5M6 12h7.5"/><circle cx="3" cy="4" r=".7" fill="currentColor"/><circle cx="3" cy="8" r=".7" fill="currentColor"/><circle cx="3" cy="12" r=".7" fill="currentColor"/></svg>',
+  raw: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5.5 4.5-3 3.5 3 3.5M10.5 4.5l3 3.5-3 3.5"/></svg>',
+  plus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>',
+  more: '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></svg>',
+  x: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="m4.5 4.5 7 7M11.5 4.5l-7 7"/></svg>',
+};
+const TYPES = [
+  ["text", "テキスト"], ["list", "リスト"], ["number", "数値"],
+  ["checkbox", "チェックボックス"], ["date", "日付"], ["datetime", "日時"],
+];
+const TYPE_LABEL = Object.fromEntries(TYPES);
+
+// Property types remembered across the library (mock of the shared type registry)
+const KNOWN = {
+  slug: "text", date: "date", publish: "checkbox", tags: "list", description: "text",
+  title: "text", status: "text", wordGoal: "number", pov: "text", aliases: "list", updated: "datetime",
+};
+const ARTICLE_PRESET = [
+  ["slug", "text", ""], ["date", "date", null], ["publish", "checkbox", false],
+  ["tags", "list", []], ["description", "text", ""],
+];
+
+// ------------------------------------------------------------------
+// Scenarios
+// ------------------------------------------------------------------
+const NOVEL_BODY = `# 第三章　夜の港
+
+　汽笛が二度鳴って、それきり静かになった。桟橋の灯りは半分ほど消えていて、残った灯りの下だけが白く濡れて見える。
+
+　彼女はコートの襟を立て、手すりに沿ってゆっくり歩いた。約束の時刻はとうに過ぎていたが、引き返す理由も見つからなかった。`;
+const ARTICLE_BODY = `# Thenを作った話
+
+　縦書きで長い原稿を書くためのエディタが欲しくて、Thenを作りはじめた。最初は既存のエディタに拡張を足すつもりだったが、ルビと縦中横を入力しながら崩れずに表示する方法が見つからなかった。
+
+　この記事では、作りはじめた経緯と、縦書きのカーソル移動で苦労したところをまとめる。`;
+
+const SCENARIOS = {
+  article: { name: "Thenを作った話.md", text:
+`---
+# サイト用
+slug: making-then
+date: 2026-10-16
+publish: false
+tags:
+  - 開発
+  - Then
+description: Thenを作ったきっかけと、縦書きエディタで苦労したところ。
+---
+
+${ARTICLE_BODY}` },
+  novel: { name: "第三章.md", text: NOVEL_BODY },
+  complex: { name: "第三章.md", text:
+`---
+status: 推敲中
+wordGoal: 12000
+draft: "true"
+series:
+  name: 夜の港
+  order: 3
+memo: |
+  港の灯りの数を前章と揃える
+  汽笛は二度
+aliases: [夜の港 3, 港]
+---
+
+${NOVEL_BODY}` },
+  broken: { name: "Thenを作った話.md", text:
+`---
+slug: making-then
+date: 2026-10-16
+date: 2026-10-17
+publish true
+tags:
+  - 開発
+---
+
+${ARTICLE_BODY}` },
+};
+
+// ------------------------------------------------------------------
+// Minimal YAML subset parser (mock). Keeps every entry's original lines.
+// ------------------------------------------------------------------
+const RE_KEY = /^([^\s#:][^:]*?):(?:[ \t]+(.*?))?[ \t]*$/;
+
+function unquote(v) {
+  if (/^".*"$/.test(v)) { try { return JSON.parse(v); } catch { return v.slice(1, -1); } }
+  if (/^'.*'$/.test(v)) return v.slice(1, -1).replace(/''/g, "'");
+  return v;
+}
+function inferScalar(v) {
+  if (v === undefined || v === "" || v === "~" || v === "null") return { type: null, value: null };
+  if (/^["']/.test(v)) return { type: "text", value: unquote(v) };
+  if (/^(true|false)$/.test(v)) return { type: "checkbox", value: v === "true" };
+  if (/^-?\d+(\.\d+)?$/.test(v)) return { type: "number", value: v };
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return { type: "date", value: v };
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?$/.test(v)) return { type: "datetime", value: v.replace(" ", "T") };
+  if (/^\[.*\]$/.test(v)) {
+    const inner = v.slice(1, -1).trim();
+    return { type: "list", value: inner ? inner.split(",").map((s) => unquote(s.trim())) : [], flow: true };
+  }
+  return { type: "text", value: v };
+}
+
+function parseFrontMatter(src) {
+  const lines = src === "" ? [] : src.split("\n");
+  const entries = [];
+  const errors = [];
+  const seen = new Map();
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.trim() === "") { entries.push({ kind: "blank", raw: [line] }); i++; continue; }
+    if (/^\s*#/.test(line)) { entries.push({ kind: "comment", raw: [line] }); i++; continue; }
+    const m = RE_KEY.exec(line);
+    if (!m || /^\s/.test(line)) {
+      errors.push({ line: i + 1, msg: `「${line.trim()}」を解釈できません` });
+      entries.push({ kind: "invalid", raw: [line] }); i++; continue;
+    }
+    const key = m[1].trim();
+    const inline = m[2];
+    const raw = [line];
+    let j = i + 1;
+    while (j < lines.length && (/^\s+\S/.test(lines[j]) || (lines[j].trim() === "" && j + 1 < lines.length && /^\s+\S/.test(lines[j + 1])))) {
+      raw.push(lines[j]); j++;
+    }
+    const cont = raw.slice(1);
+    let entry = { kind: "prop", key, raw, line: i + 1 };
+    if (cont.length === 0) {
+      if (inline === "|" || inline === ">") Object.assign(entry, { type: "raw", value: null });
+      else {
+        const s = inferScalar(inline);
+        Object.assign(entry, { type: s.type ?? (KNOWN[key] || "text"), value: s.value, isNull: s.type === null });
+      }
+    } else if (!inline && cont.every((l) => /^\s+-\s+\S/.test(l) && !/^\s+-\s+.*:\s/.test(l))) {
+      Object.assign(entry, { type: "list", value: cont.map((l) => unquote(l.replace(/^\s+-\s+/, "").trim())) });
+    } else {
+      Object.assign(entry, { type: "raw", value: null });
+    }
+    if (seen.has(key)) errors.push({ line: i + 1, msg: `キー「${key}」が${seen.get(key)}行目と重複しています` });
+    else seen.set(key, i + 1);
+    entries.push(entry);
+    i = j;
+  }
+  return { entries, errors };
+}
+
+function needsQuote(s) {
+  return s === "" ? false
+    : /^(true|false|null|~|-?\d+(\.\d+)?|\d{4}-\d{2}-\d{2}.*)$/.test(s)
+      || /^[\s\-?:,\[\]{}#&*!|>'"%@`]/.test(s) || /:\s|\s#|\s$/.test(s);
+}
+const q = (s) => (needsQuote(s) ? JSON.stringify(s) : s);
+
+function serializeEntry(e) {
+  if (e.kind !== "prop") return e.raw;
+  if (e.type === "raw") return e.raw;
+  const k = e.key;
+  if (e.isNull || e.value === null || e.value === undefined) return [`${k}:`];
+  switch (e.type) {
+    case "checkbox": return [`${k}: ${e.value ? "true" : "false"}`];
+    case "number": return [e.value === "" ? `${k}:` : `${k}: ${e.value}`];
+    case "date": case "datetime": return [e.value ? `${k}: ${e.value}` : `${k}:`];
+    case "list":
+      if (!e.value.length) return [`${k}: []`];
+      return [`${k}:`, ...e.value.map((v) => `  - ${q(v)}`)];
+    default: return [e.value === "" ? `${k}:` : `${k}: ${q(e.value)}`];
+  }
+}
+
+// ------------------------------------------------------------------
+// Document state
+// ------------------------------------------------------------------
+const state = {
+  scenario: "article",
+  original: "",
+  hasFM: false,
+  fmText: "",          // last valid-or-draft front matter source
+  body: "",
+  parsed: { entries: [], errors: [] },
+  open: true,
+  view: "form",        // form | source
+  pendingType: null,   // { index, type } awaiting confirmation
+  focusAfter: null,
+};
+
+function splitDoc(text) {
+  const m = /^---\n([\s\S]*?)\n?---\n?/.exec(text);
+  if (!m) return { hasFM: false, fm: "", body: text };
+  return { hasFM: true, fm: m[1], body: text.slice(m[0].length) };
+}
+function composeDoc() {
+  if (!state.hasFM) return state.body;
+  return `---\n${state.fmText}${state.fmText ? "\n" : ""}---\n${state.body}`;
+}
+
+function loadScenario(id) {
+  const sc = SCENARIOS[id];
+  state.scenario = id;
+  state.original = sc.text;
+  const { hasFM, fm, body } = splitDoc(sc.text);
+  state.hasFM = hasFM;
+  state.fmText = fm;
+  state.body = body;
+  state.parsed = parseFrontMatter(fm);
+  state.view = state.parsed.errors.length ? "source" : "form";
+  state.open = hasFM;
+  state.pendingType = null;
+  document.getElementById("fileName").textContent = sc.name;
+  document.querySelectorAll("#scenarios button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.s === id)));
+  renderBody();
+  render();
+}
+
+// Commit form edits: only touched entries are re-serialised, others keep raw lines.
+function commitEntries(entries) {
+  const out = [];
+  for (const e of entries) {
+    if (e.kind === "prop" && e.dirty) { e.raw = serializeEntry(e); e.dirty = false; }
+    out.push(...e.raw);
+  }
+  state.fmText = out.join("\n");
+  state.hasFM = true;
+  state.parsed = parseFrontMatter(state.fmText);
+  renderFile();
+}
+
+// ------------------------------------------------------------------
+// Rendering
+// ------------------------------------------------------------------
+const $props = document.getElementById("props");
+const h = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; };
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function props() { return state.parsed.entries.filter((e) => e.kind === "prop"); }
+
+function render() {
+  const errors = state.parsed.errors;
+  const count = props().length;
+  const empty = !state.hasFM;
+  $props.dataset.open = String(state.open);
+  $props.dataset.empty = String(empty);
+  $props.innerHTML = "";
+
+  const head = h(`<div class="propsHead">
+      <button class="propsToggle" type="button" aria-expanded="${state.open}">
+        <span class="chev" aria-hidden="true">›</span>
+        <span class="propsLabel">プロパティ</span>
+        ${empty ? "" : `<span class="count">${count}</span>`}
+        ${errors.length ? `<span class="errBadge">エラー ${errors.length}</span>` : ""}
+      </button>
+      <button class="iconBtn hideWhenEmpty" type="button" data-act="source" aria-pressed="${state.view === "source"}" title="YAMLソース">${ICON.raw}</button>
+      <button class="iconBtn" type="button" data-act="add" title="プロパティを追加" ${errors.length ? "disabled" : ""}>${ICON.plus}</button>
+      <button class="iconBtn" type="button" data-act="more" title="その他" aria-haspopup="menu">${ICON.more}</button>
+    </div>`);
+  head.querySelector(".propsToggle").onclick = () => { state.open = !state.open; render(); };
+  head.querySelector('[data-act="source"]').onclick = () => { state.view = state.view === "source" ? "form" : "source"; state.open = true; render(); };
+  head.querySelector('[data-act="add"]').onclick = () => startAdd();
+  head.querySelector('[data-act="more"]').onclick = (ev) => openMoreMenu(ev.currentTarget);
+  $props.append(head);
+
+  if (state.open && !empty) {
+    const body = h(`<div class="propsBody"></div>`);
+    if (state.view === "source") body.append(renderSource());
+    else if (errors.length) body.append(renderBlocked());
+    else body.append(renderForm());
+    $props.append(body);
+  }
+  renderFile();
+  requestAnimationFrame(runFits);
+  if (state.focusAfter) { const f = state.focusAfter; state.focusAfter = null; requestAnimationFrame(f); }
+}
+
+function renderErrors(errors) {
+  const ul = h(`<ul class="errors"></ul>`);
+  for (const e of errors) ul.append(h(`<li><span class="ln">${e.line}行目</span><span>${esc(e.msg)}</span></li>`));
+  return ul;
+}
+
+function renderBlocked() {
+  const wrap = h(`<div class="formBlocked"></div>`);
+  wrap.append(renderErrors(state.parsed.errors));
+  const b = h(`<button class="linkBtn" type="button">ソースで修正</button>`);
+  b.onclick = () => { state.view = "source"; render(); focusSource(); };
+  wrap.append(b);
+  return wrap;
+}
+
+function focusSource(line) {
+  state.focusAfter = () => {
+    const ta = $props.querySelector(".source");
+    if (!ta) return;
+    ta.focus();
+    if (line) {
+      const lines = ta.value.split("\n");
+      const start = lines.slice(0, line - 1).join("\n").length + (line > 1 ? 1 : 0);
+      ta.setSelectionRange(start, start + lines[line - 1].length);
+    }
+  };
+  render();
+}
+
+function renderSource() {
+  const wrap = h(`<div></div>`);
+  const ta = h(`<textarea class="source" spellcheck="false"></textarea>`);
+  ta.value = state.fmText;
+  ta.rows = Math.max(6, state.fmText.split("\n").length + 1);
+  if (state.parsed.errors.length) ta.classList.add("invalid");
+  let errBox = renderErrors(state.parsed.errors);
+  ta.addEventListener("input", () => {
+    // Draft is always kept verbatim; parse only reports.
+    state.fmText = ta.value;
+    state.parsed = parseFrontMatter(ta.value);
+    ta.classList.toggle("invalid", state.parsed.errors.length > 0);
+    const n = renderErrors(state.parsed.errors); errBox.replaceWith(n); errBox = n;
+    const badge = $props.querySelector(".errBadge");
+    const toggle = $props.querySelector(".propsToggle");
+    if (badge) badge.remove();
+    if (state.parsed.errors.length) toggle.append(h(`<span class="errBadge">エラー ${state.parsed.errors.length}</span>`));
+    $props.querySelector(".count").textContent = props().length;
+    $props.querySelector('[data-act="add"]').disabled = state.parsed.errors.length > 0;
+    renderFile();
+  });
+  ta.addEventListener("keydown", (ev) => {
+    if (ev.key === "Tab" && !ev.shiftKey) {
+      ev.preventDefault();
+      const s = ta.selectionStart, e2 = ta.selectionEnd;
+      ta.setRangeText("  ", s, e2, "end");
+      ta.dispatchEvent(new Event("input"));
+    }
+    if (ev.key === "Escape") { ev.preventDefault(); focusBody(); }
+  });
+  wrap.append(ta, errBox);
+  return wrap;
+}
+
+let fitQueue = [];
+function runFits() { const q2 = fitQueue; fitQueue = []; q2.forEach((f) => f()); }
+new ResizeObserver(() => $props.querySelectorAll("textarea.field").forEach((t) => { t.style.height = "auto"; t.style.height = t.scrollHeight + 2 + "px"; })).observe(document.getElementById("props"));
+
+function renderForm() {
+  const rows = h(`<div class="rows" role="list"></div>`);
+  const entries = state.parsed.entries;
+  entries.forEach((e, idx) => {
+    if (e.kind !== "prop") return;
+    rows.append(renderRow(e, idx));
+    if (state.pendingType && state.pendingType.index === idx) rows.append(renderConfirm(e, idx));
+  });
+  const add = h(`<div class="addRow"><button class="addBtn" type="button">${ICON.plus.replace("<svg", '<svg width="14" height="14"')}<span>プロパティを追加</span></button></div>`);
+  add.querySelector("button").onclick = () => startAdd();
+  const wrap = h(`<div></div>`);
+  wrap.append(rows, add);
+  return wrap;
+}
+
+function update(idx, patch) {
+  const e = state.parsed.entries[idx];
+  Object.assign(e, patch, { dirty: true });
+  if ("value" in patch) e.isNull = false;
+  commitEntries(state.parsed.entries);
+}
+
+function renderRow(e, idx) {
+  const row = h(`<div class="row" role="listitem" data-idx="${idx}"></div>`);
+  const typeBtn = h(`<button class="typeBtn" type="button" title="${e.type === "raw" ? "フォーム対象外" : TYPE_LABEL[e.type]}" aria-haspopup="menu">${ICON[e.type]}</button>`);
+  if (e.type === "raw") typeBtn.disabled = true;
+  else typeBtn.onclick = () => openTypeMenu(typeBtn, idx);
+
+  const key = h(`<input class="field keyField" spellcheck="false" aria-label="プロパティ名">`);
+  key.value = e.key;
+  key.addEventListener("input", () => {
+    const k = key.value.trim();
+    const dup = props().some((p) => p !== e && p.key === k);
+    key.classList.toggle("invalid", !k || dup);
+    key.title = dup ? "同じ名前のプロパティがあります" : "";
+  });
+  key.addEventListener("change", () => {
+    const k = key.value.trim();
+    if (!k || props().some((p) => p !== e && p.key === k)) { key.value = e.key; key.classList.remove("invalid"); return; }
+    if (k === e.key) return;
+    if (e.type === "raw") { e.raw = [e.raw[0].replace(/^[^:]+:/, `${k}:`), ...e.raw.slice(1)]; e.key = k; commitEntries(state.parsed.entries); }
+    else update(idx, { key: k });
+  });
+  key.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") { ev.preventDefault(); key.dispatchEvent(new Event("change")); row.querySelector(".valueCell input, .valueCell button")?.focus(); }
+    if (ev.key === "Escape") { key.value = e.key; key.blur(); focusBody(); }
+  });
+
+  const cell = h(`<div class="valueCell"></div>`);
+  cell.append(renderValue(e, idx));
+
+  const del = h(`<button class="iconBtn delBtn" type="button" title="削除">${ICON.x}</button>`);
+  del.onclick = () => removeEntry(idx);
+  row.append(typeBtn, key, cell, del);
+  return row;
+}
+
+function bindEsc(input) {
+  input.addEventListener("keydown", (ev) => { if (ev.key === "Escape") { ev.preventDefault(); input.blur(); focusBody(); } });
+}
+
+function renderValue(e, idx) {
+  switch (e.type) {
+    case "raw": {
+      const w = h(`<div class="rawValue"><pre></pre><button class="linkBtn" type="button">ソースで編集</button></div>`);
+      w.querySelector("pre").textContent = e.raw.slice(1).length ? e.raw.slice(1).join("\n") : e.raw[0].replace(/^[^:]+:\s*/, "");
+      w.querySelector("button").onclick = () => { state.view = "source"; focusSource(e.line); };
+      return w;
+    }
+    case "checkbox": {
+      const w = h(`<label class="checkWrap"><input type="checkbox">${e.isNull ? '<span class="nullHint">未設定</span>' : ""}</label>`);
+      const cb = w.querySelector("input");
+      cb.checked = !!e.value;
+      cb.indeterminate = !!e.isNull;
+      cb.onchange = () => { update(idx, { value: cb.checked }); render(); };
+      bindEsc(cb);
+      return w;
+    }
+    case "number": {
+      const inp = h(`<input class="field" type="number" step="any" placeholder="空">`);
+      inp.value = e.isNull ? "" : e.value;
+      inp.onchange = () => update(idx, { value: inp.value, isNull: inp.value === "" });
+      bindEsc(inp);
+      return inp;
+    }
+    case "date": case "datetime": {
+      const inp = h(`<input class="field" type="${e.type === "date" ? "date" : "datetime-local"}">`);
+      inp.value = e.isNull ? "" : e.value;
+      inp.onchange = () => { e.value = inp.value; e.isNull = !inp.value; e.dirty = true; commitEntries(state.parsed.entries); };
+      bindEsc(inp);
+      return inp;
+    }
+    case "list": {
+      const w = h(`<div class="chips"></div>`);
+      const items = e.value || [];
+      items.forEach((v, i) => {
+        const c = h(`<span class="chip"><span></span><button type="button" title="削除">×</button></span>`);
+        c.firstElementChild.textContent = v;
+        c.querySelector("button").onclick = () => {
+          const next = items.slice(); next.splice(i, 1);
+          update(idx, { value: next });
+          state.focusAfter = () => document.querySelector(`.row[data-idx="${idx}"] .chipInput`)?.focus();
+          render();
+        };
+        w.append(c);
+      });
+      const inp = h(`<input class="chipInput" placeholder="${items.length ? "" : "空"}">`);
+      let composing = false;
+      inp.addEventListener("compositionstart", () => (composing = true));
+      inp.addEventListener("compositionend", () => (composing = false));
+      inp.addEventListener("keydown", (ev) => {
+        if (ev.isComposing || composing) return;
+        if (ev.key === "Enter" && inp.value.trim()) {
+          ev.preventDefault();
+          update(idx, { value: [...items, inp.value.trim()] });
+          state.focusAfter = () => document.querySelector(`.row[data-idx="${idx}"] .chipInput`)?.focus();
+          render();
+        } else if (ev.key === "Backspace" && !inp.value && items.length) {
+          update(idx, { value: items.slice(0, -1) });
+          state.focusAfter = () => document.querySelector(`.row[data-idx="${idx}"] .chipInput`)?.focus();
+          render();
+        } else if (ev.key === "Escape") { ev.preventDefault(); inp.blur(); focusBody(); }
+      });
+      inp.addEventListener("blur", () => {
+        if (inp.value.trim()) { update(idx, { value: [...items, inp.value.trim()] }); render(); }
+      });
+      w.addEventListener("click", (ev) => { if (ev.target === w) inp.focus(); });
+      w.append(inp);
+      return w;
+    }
+    default: {
+      const inp = h(`<textarea class="field" rows="1" spellcheck="false" placeholder="空"></textarea>`);
+      inp.value = e.isNull ? "" : e.value;
+      // Wraps instead of truncating; height follows content.
+      const fit = () => { inp.style.height = "auto"; inp.style.height = inp.scrollHeight + 2 + "px"; };
+      inp.addEventListener("input", () => { inp.value = inp.value.replace(/\n/g, ""); fit(); });
+      fitQueue.push(fit);
+      // Commit on change (blur / Enter); IME composition is never interrupted.
+      inp.onchange = () => update(idx, { value: inp.value, isNull: false });
+      inp.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.isComposing) { ev.preventDefault(); inp.blur(); } });
+      bindEsc(inp);
+      return inp;
+    }
+  }
+}
+
+// ---- type change ----
+function convert(e, to) {
+  const v = e.value;
+  if (e.isNull || v === null || v === "" || (Array.isArray(v) && !v.length)) return { ok: true, value: to === "list" ? [] : to === "checkbox" ? false : "", isNull: to !== "list" && to !== "checkbox" };
+  const s = Array.isArray(v) ? null : String(v);
+  switch (to) {
+    case "text": return s !== null ? { ok: true, value: s } : (v.length === 1 ? { ok: true, value: v[0] } : { ok: false });
+    case "list": return { ok: true, value: Array.isArray(v) ? v : [s] };
+    case "number": return s !== null && /^-?\d+(\.\d+)?$/.test(s) ? { ok: true, value: s } : { ok: false };
+    case "checkbox": return s === "true" || s === "false" ? { ok: true, value: s === "true" } : typeof v === "boolean" ? { ok: true, value: v } : { ok: false };
+    case "date": return s !== null && /^\d{4}-\d{2}-\d{2}/.test(s) ? { ok: true, value: s.slice(0, 10) } : { ok: false };
+    case "datetime": return s !== null && /^\d{4}-\d{2}-\d{2}/.test(s) ? { ok: true, value: s.length === 10 ? s + "T00:00" : s } : { ok: false };
+  }
+  return { ok: false };
+}
+function setType(idx, to) {
+  const e = state.parsed.entries[idx];
+  if (to === e.type) return;
+  const c = convert(e, to);
+  if (!c.ok) { state.pendingType = { index: idx, type: to }; render(); return; }
+  state.pendingType = null;
+  update(idx, { type: to, value: c.value });
+  if (c.isNull) e.isNull = true;
+  commitEntries(state.parsed.entries);
+  KNOWN[e.key] = to;
+  render();
+}
+function renderConfirm(e, idx) {
+  const to = state.pendingType.type;
+  const bar = h(`<div class="row"><span></span><div class="confirmBar">
+      <button type="button" class="danger" data-a="ok">値を消して${TYPE_LABEL[to]}にする</button>
+      <button type="button" data-a="cancel">${TYPE_LABEL[e.type]}のままにする</button></div></div>`);
+  bar.querySelector('[data-a="ok"]').onclick = () => {
+    state.pendingType = null;
+    update(idx, { type: to, value: to === "list" ? [] : to === "checkbox" ? false : "" });
+    const en = state.parsed.entries[idx]; if (to !== "list" && to !== "checkbox") { en.isNull = true; en.dirty = true; commitEntries(state.parsed.entries); }
+    render();
+  };
+  bar.querySelector('[data-a="cancel"]').onclick = () => { state.pendingType = null; render(); };
+  return bar;
+}
+
+// ---- add / remove ----
+function startAdd() {
+  if (state.parsed.errors.length) return;
+  if (!state.hasFM) { state.hasFM = true; state.fmText = ""; state.parsed = parseFrontMatter(""); }
+  state.open = true; state.view = "form";
+  render();
+  // provisional row
+  const rows = $props.querySelector(".rows");
+  const row = h(`<div class="row" role="listitem"></div>`);
+  const typeBtn = h(`<button class="typeBtn" type="button" disabled>${ICON.text}</button>`);
+  const key = h(`<input class="field keyField" spellcheck="false" placeholder="名前" aria-label="新しいプロパティ名" autocomplete="off">`);
+  const cell = h(`<div class="valueCell"></div>`);
+  row.append(typeBtn, key, cell, h(`<span class="delSlot"></span>`));
+  rows.append(row);
+  key.focus();
+
+  let active = 0, list = [];
+  let box = null;
+  const close = () => { box?.remove(); box = null; };
+  const existing = new Set(props().map((p) => p.key));
+  const show = () => {
+    const qv = key.value.trim().toLowerCase();
+    list = Object.entries(KNOWN).filter(([k]) => !existing.has(k) && k.toLowerCase().includes(qv)).slice(0, 8);
+    const dup = existing.has(key.value.trim());
+    key.classList.toggle("invalid", dup);
+    key.title = dup ? "同じ名前のプロパティがあります" : "";
+    const t = KNOWN[key.value.trim()] || "text";
+    typeBtn.innerHTML = ICON[t];
+    close();
+    if (!list.length) return;
+    active = Math.min(active, list.length - 1);
+    box = h(`<div class="suggest" role="listbox"></div>`);
+    list.forEach(([k, t2], i) => {
+      const b = h(`<button type="button" data-active="${i === active}">${ICON[t2]}<span>${esc(k)}</span><small>${TYPE_LABEL[t2]}</small></button>`);
+      b.onmousedown = (ev) => { ev.preventDefault(); key.value = k; finish(); };
+      box.append(b);
+    });
+    const r = key.getBoundingClientRect();
+    box.style.left = r.left + "px"; box.style.top = r.bottom + 4 + "px";
+    document.body.append(box);
+  };
+  const finish = () => {
+    close();
+    const k = key.value.trim();
+    if (!k) { row.remove(); return; }
+    if (existing.has(k)) { key.focus(); return; }
+    const t = KNOWN[k] || "text";
+    const e = { kind: "prop", key: k, type: t, value: t === "list" ? [] : t === "checkbox" ? false : null, isNull: t !== "list" && t !== "checkbox", raw: [], dirty: true };
+    state.parsed.entries.push(e);
+    commitEntries(state.parsed.entries);
+    const idx = state.parsed.entries.findIndex((x) => x.kind === "prop" && x.key === k);
+    state.focusAfter = () => {
+      const r2 = $props.querySelector(`.row[data-idx="${idx}"] .valueCell`);
+      r2?.querySelector("input, button")?.focus();
+    };
+    render();
+  };
+  key.addEventListener("input", () => { active = 0; show(); });
+  key.addEventListener("focus", show);
+  key.addEventListener("keydown", (ev) => {
+    if (ev.isComposing) return;
+    if (ev.key === "ArrowDown" && list.length) { ev.preventDefault(); active = (active + 1) % list.length; show(); }
+    else if (ev.key === "ArrowUp" && list.length) { ev.preventDefault(); active = (active - 1 + list.length) % list.length; show(); }
+    else if (ev.key === "Enter" || ev.key === "Tab") {
+      if (!key.value.trim() && ev.key === "Tab") { close(); return; }
+      ev.preventDefault();
+      if (box && list.length && list[active] && key.value.trim() !== list[active][0] && !KNOWN[key.value.trim()]) key.value = list[active][0];
+      finish();
+    } else if (ev.key === "Escape") { ev.preventDefault(); close(); row.remove(); focusBody(); }
+  });
+  key.addEventListener("blur", () => setTimeout(() => { if (document.activeElement !== key && row.isConnected) { close(); if (!key.value.trim()) { row.remove(); maybeDropEmpty(); } else finish(); } }, 0));
+  show();
+}
+function maybeDropEmpty() {
+  if (state.hasFM && state.fmText === "" && !state.original.startsWith("---")) { state.hasFM = false; render(); }
+}
+function removeEntry(idx) {
+  const rowsBefore = [...$props.querySelectorAll(".row[data-idx]")].map((r) => +r.dataset.idx);
+  const pos = rowsBefore.indexOf(idx);
+  state.parsed.entries.splice(idx, 1);
+  // drop a now-orphaned comment directly above? keep it — comments are the user's.
+  commitEntries(state.parsed.entries);
+  state.focusAfter = () => {
+    const rows = $props.querySelectorAll(".row[data-idx] .keyField");
+    (rows[Math.min(pos, rows.length - 1)] || $props.querySelector(".addBtn"))?.focus();
+  };
+  render();
+}
+
+// ---- menus ----
+let openMenu = null;
+function closeMenu() { openMenu?.el.remove(); openMenu?.anchor.setAttribute("aria-expanded", "false"); openMenu = null; }
+function placeMenu(el, anchor) {
+  document.body.append(el);
+  const r = anchor.getBoundingClientRect();
+  const left = Math.min(r.left, innerWidth - el.offsetWidth - 8);
+  el.style.left = Math.max(8, left) + "px"; el.style.top = r.bottom + 4 + "px";
+  anchor.setAttribute("aria-expanded", "true");
+  openMenu = { el, anchor };
+  el.querySelector("button")?.focus();
+  el.addEventListener("keydown", (ev) => {
+    const items = [...el.querySelectorAll("button")];
+    const i = items.indexOf(document.activeElement);
+    if (ev.key === "ArrowDown") { ev.preventDefault(); items[(i + 1) % items.length].focus(); }
+    if (ev.key === "ArrowUp") { ev.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+    if (ev.key === "Escape") { ev.preventDefault(); closeMenu(); anchor.focus(); }
+  });
+}
+function openTypeMenu(anchor, idx) {
+  if (openMenu?.anchor === anchor) return closeMenu();
+  closeMenu();
+  const e = state.parsed.entries[idx];
+  const m = h(`<div class="menu" role="menu"></div>`);
+  for (const [t, label] of TYPES) {
+    const b = h(`<button type="button" role="menuitemradio" aria-checked="${t === e.type}">${ICON[t]}<span>${label}</span></button>`);
+    b.onclick = () => { closeMenu(); setType(idx, t); };
+    m.append(b);
+  }
+  placeMenu(m, anchor);
+}
+function openMoreMenu(anchor) {
+  if (openMenu?.anchor === anchor) return closeMenu();
+  closeMenu();
+  const m = h(`<div class="menu" role="menu"></div>`);
+  const missing = ARTICLE_PRESET.filter(([k]) => !props().some((p) => p.key === k));
+  const preset = h(`<button type="button">${ICON.list}<span>記事用の項目を追加</span></button>`);
+  if (!missing.length || state.parsed.errors.length) preset.disabled = true, preset.style.opacity = .4;
+  preset.onclick = () => { closeMenu(); applyPreset(); };
+  m.append(preset);
+  m.append(h(`<hr>`));
+  const del = h(`<button type="button" class="danger">${ICON.x}<span>フロントマターを削除</span></button>`);
+  if (!state.hasFM) del.disabled = true, del.style.opacity = .4;
+  del.onclick = () => { closeMenu(); state.hasFM = false; state.fmText = ""; state.parsed = parseFrontMatter(""); state.open = false; render(); };
+  m.append(del);
+  placeMenu(m, anchor);
+}
+document.addEventListener("mousedown", (ev) => { if (openMenu && !openMenu.el.contains(ev.target) && ev.target.closest(".typeBtn, [data-act], .sideSwitch") !== openMenu.anchor) closeMenu(); });
+
+function applyPreset() {
+  if (!state.hasFM) { state.hasFM = true; state.fmText = ""; state.parsed = parseFrontMatter(""); }
+  for (const [k, t, v] of ARTICLE_PRESET) {
+    if (props().some((p) => p.key === k)) continue;   // never overwrite
+    state.parsed.entries.push({ kind: "prop", key: k, type: t, value: v, isNull: v === null || v === "", raw: [], dirty: true });
+  }
+  commitEntries(state.parsed.entries);
+  state.open = true; state.view = "form";
+  render();
+}
+
+// ------------------------------------------------------------------
+// Body (stand-in for VerticalTextEditor; never re-rendered by property edits)
+// ------------------------------------------------------------------
+const $body = document.getElementById("body");
+function renderBody() {
+  $body.innerHTML = "";
+  for (const block of state.body.trim().split(/\n\n+/)) {
+    if (block.startsWith("# ")) $body.append(Object.assign(document.createElement("h1"), { textContent: block.slice(2) }));
+    else $body.append(Object.assign(document.createElement("p"), { textContent: block }));
+  }
+}
+// Returning from the properties keeps the view still: caret is restored, no recentering.
+let lastRange = null;
+document.addEventListener("selectionchange", () => {
+  const sel = getSelection();
+  if (sel.rangeCount && $body.contains(sel.anchorNode)) lastRange = sel.getRangeAt(0).cloneRange();
+});
+function focusBody() {
+  closeMenu();
+  $body.focus({ preventScroll: true });
+  if (lastRange) { const sel = getSelection(); sel.removeAllRanges(); sel.addRange(lastRange); }
+}
+
+// ---- typewriter scroll (simplified centerCaretForEditor) ----
+const TW_RATIO = 0.46;
+function typewriterOn() { return $pane.dataset.typewriter === "true"; }
+function rangeRect(range) {
+  const r = range.cloneRange(); r.collapse(true);
+  const rects = r.getClientRects();
+  if (rects.length) return rects[0];
+  const n = r.startContainer.nodeType === 1 ? r.startContainer : r.startContainer.parentElement;
+  return n.getBoundingClientRect();
+}
+function centerOn(rect) {
+  const sr = $scroller.getBoundingClientRect();
+  $scroller.scrollLeft += rect.left + rect.width / 2 - (sr.left + $scroller.clientWidth * TW_RATIO);
+}
+function recenter() {
+  if (!typewriterOn()) return;
+  const sel = getSelection();
+  if (!sel.rangeCount || !$body.contains(sel.anchorNode)) return;
+  centerOn(rangeRect(sel.getRangeAt(0)));
+}
+function startRange() {
+  const n = document.createTreeWalker($body, NodeFilter.SHOW_TEXT).nextNode();
+  if (!n) return null;
+  const r = document.createRange(); r.setStart(n, 0); return r;
+}
+let bodyComposing = false;
+$body.addEventListener("compositionstart", () => (bodyComposing = true));
+$body.addEventListener("compositionend", () => { bodyComposing = false; recenter(); });
+$body.addEventListener("input", () => { if (!bodyComposing) recenter(); });
+$body.addEventListener("keyup", (ev) => { if (/^(Arrow|Home|End|Page)/.test(ev.key)) recenter(); });
+$body.addEventListener("mouseup", () => requestAnimationFrame(recenter));
+$body.addEventListener("keydown", (ev) => { if (ev.key === "Escape") ev.preventDefault(); });
+
+// ------------------------------------------------------------------
+// File preview (what would be written to disk)
+// ------------------------------------------------------------------
+function renderFile() {
+  const out = composeDoc();
+  const origLines = state.original.split("\n");
+  const origSet = new Map();
+  origLines.forEach((l) => origSet.set(l, (origSet.get(l) || 0) + 1));
+  const box = document.getElementById("fileBody");
+  box.innerHTML = "";
+  const lines = out.split("\n");
+  let inFM = state.hasFM, fences = 0;
+  for (const l of lines) {
+    const d = document.createElement("div");
+    d.textContent = l || " ";
+    if (state.hasFM && l === "---" && fences < 2) { d.className = "fence"; fences++; if (fences === 2) inFM = false; }
+    else if (!inFM || !state.hasFM) d.className = "body";
+    const c = origSet.get(l) || 0;
+    if (c > 0) origSet.set(l, c - 1); else d.classList.add("changed");
+    box.append(d);
+  }
+  const changed = box.querySelectorAll(".changed").length;
+  document.getElementById("fileStat").textContent = out === state.original ? "変更なし" : `${changed}行変更`;
+}
+
+// ------------------------------------------------------------------
+document.querySelectorAll("#scenarios button").forEach((b) => (b.onclick = () => loadScenario(b.dataset.s)));
+const $pane = document.getElementById("pane");
+const $scroller = document.getElementById("scroller");
+const $surface = document.getElementById("surface");
+const $side = document.getElementById("sidePane");
+const $tw = document.getElementById("tw");
+const $guide = document.getElementById("twGuide");
+function placeGuide() {
+  $guide.style.left = $scroller.offsetLeft + $scroller.clientWidth * TW_RATIO + "px";
+  $guide.style.top = $scroller.offsetTop + "px";
+  $guide.style.height = $scroller.clientHeight + "px";
+}
+new ResizeObserver(placeGuide).observe($scroller);
+function afterLayout() {
+  if ($pane.dataset.mode !== "vertical") return;
+  placeGuide();
+  if (typewriterOn()) {
+    const r = startRange();
+    if (r) { centerOn(rangeRect(r)); lastRange = r; }
+  } else $scroller.scrollLeft = 0;
+}
+function setLayout(mode, place) {
+  const vertical = mode === "vertical";
+  $pane.dataset.mode = mode; $pane.dataset.place = place;
+  $pane.dataset.typewriter = String(vertical && $tw.checked);
+  $side.hidden = !(vertical && place === "side");
+  if (vertical && place === "top") $pane.insertBefore($props, $scroller);
+  else if (vertical && place === "side") { document.getElementById("sideBody").append($props); if (!state.open) { state.open = true; render(); } }
+  else $surface.insertBefore($props, $body);
+  $tw.disabled = !vertical;
+  document.getElementById("twLabel").style.opacity = vertical ? 1 : .4;
+  document.querySelectorAll("#modes button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.m === mode)));
+  document.querySelectorAll("#places button").forEach((b) => { b.setAttribute("aria-pressed", String(b.dataset.p === place)); b.disabled = mode !== "vertical"; });
+  document.getElementById("places").style.opacity = mode === "vertical" ? 1 : .4;
+  requestAnimationFrame(afterLayout);
+  requestAnimationFrame(() => $props.querySelectorAll("textarea.field").forEach((t) => { t.style.height = "auto"; t.style.height = t.scrollHeight + 2 + "px"; }));
+}
+document.querySelectorAll("#modes button").forEach((b) => (b.onclick = () => setLayout(b.dataset.m, $pane.dataset.place)));
+document.querySelectorAll("#places button").forEach((b) => (b.onclick = () => setLayout($pane.dataset.mode, b.dataset.p)));
+$tw.onchange = () => setLayout($pane.dataset.mode, $pane.dataset.place);
+document.getElementById("sideSwitch").onclick = (ev) => {
+  const a = ev.currentTarget;
+  if (openMenu?.anchor === a) return closeMenu();
+  closeMenu();
+  const m = h(`<div class="menu" role="menu"></div>`);
+  for (const [label, on] of [["アウトライン", false], ["プロパティ", true], ["資料", false]]) {
+    const b = h(`<button type="button" role="menuitemradio" aria-checked="${on}"><span>${label}</span></button>`);
+    b.onclick = () => closeMenu();
+    m.append(b);
+  }
+  placeMenu(m, a);
+};
+setLayout("horizontal", "top");
+document.getElementById("showFile").onchange = (ev) => (document.getElementById("filePane").hidden = !ev.target.checked);
+loadScenario("article");
+const _load = loadScenario;
+document.querySelectorAll("#scenarios button").forEach((b) => (b.onclick = () => { _load(b.dataset.s); if ($pane.dataset.place === "side") { state.open = true; render(); } requestAnimationFrame(afterLayout); }));
+</script>
+</body>
+</html>

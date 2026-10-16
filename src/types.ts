@@ -173,6 +173,7 @@ export const appThemeValues = [
   "dark",
   "default",
   "standard",
+  "nagoya-light",
   "coral-light",
   "minimal-light",
   "minimal-dark",
