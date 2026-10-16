@@ -17,7 +17,7 @@ export type FrontMatterParts = {
   /** Text after the front matter, never starting with the BOM. */
   body: string;
   hasFrontMatter: boolean;
-  /** The file starts with a BOM; composeMarkdown puts it back in front. */
+  /** The file starts with a BOM; replaceFrontMatter and updateMarkdownBody keep it. */
   bom: boolean;
 };
 
@@ -50,27 +50,41 @@ function splitLeadingBom(body: string): { text: string; bom: boolean } {
     : { text: body, bom: false };
 }
 
+function newlineOf(text: string): string {
+  return text.includes("\r\n") ? "\r\n" : "\n";
+}
+
 function emptyFrontMatterFor(body: string): string {
-  const newline = body.includes("\r\n") ? "\r\n" : "\n";
+  const newline = newlineOf(body);
   return `${FRONTMATTER_DELIMITER}${newline}${FRONTMATTER_DELIMITER}${newline}`;
 }
 
-export function composeMarkdown(metadata: string, body: string, bom = false): string {
-  const { text, bom: bodyHasBom } = splitLeadingBom(body);
-  const prefix = bom || bodyHasBom ? BOM : "";
-  const normalizedMetadata = metadata.trimEnd();
-  if (!normalizedMetadata.trim()) {
-    return BODY_STARTS_WITH_DELIMITER.test(text)
-      ? prefix + emptyFrontMatterFor(text) + text
-      : prefix + text;
+/**
+ * Replace the front matter and keep everything else exactly as it was: the BOM,
+ * the body (blank lines at its start included) and the file's line endings.
+ * `metadata` is written as given, so a trailing newline or space typed into the
+ * editor stays. Blank metadata removes the block, unless the body starts with a
+ * "---" rule (see BODY_STARTS_WITH_DELIMITER).
+ */
+export function replaceFrontMatter(markdown: string, metadata: string): string {
+  const parts = parseFrontMatter(markdown);
+  if (metadata === parts.metadata) return markdown;
+
+  const prefix = parts.bom ? BOM : "";
+  const source = parts.bom ? markdown.slice(BOM.length) : markdown;
+  const header = source.slice(0, source.length - parts.body.length);
+  const body = parts.body;
+  if (!metadata.trim()) {
+    return BODY_STARTS_WITH_DELIMITER.test(body)
+      ? prefix + emptyFrontMatterFor(header || body) + body
+      : prefix + body;
   }
 
-  return prefix + [
-    FRONTMATTER_DELIMITER,
-    normalizedMetadata,
-    FRONTMATTER_DELIMITER,
-    text.replace(/^\n+/, ""),
-  ].join("\n");
+  const newline = newlineOf(header || body);
+  // Keep how the old closing "---" ended (a file may end right after it).
+  const closingEnd = parts.hasFrontMatter ? (header.match(/---(\r?\n)?$/)?.[1] ?? "") : newline;
+  const lines = metadata.replace(/\r\n/g, "\n").replace(/\n/g, newline);
+  return `${prefix}${FRONTMATTER_DELIMITER}${newline}${lines}${newline}${FRONTMATTER_DELIMITER}${closingEnd}${body}`;
 }
 
 /**

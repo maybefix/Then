@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import {
-  composeMarkdown,
+  appendFrontMatterProperty,
   parseFrontMatter,
+  replaceFrontMatter,
   updateMarkdownBody,
 } from "../src/utils/frontmatter.ts";
 
@@ -58,18 +59,14 @@ test("未編集の再結合でファイルが変わらない", () => {
 });
 
 test("BOM付きでフロントマターのない原稿にプロパティを足すとBOMは先頭に残る", () => {
-  const parts = parseFrontMatter(`${BOM}本文`);
-  assert.equal(composeMarkdown("a: 1", parts.body, parts.bom), `${BOM}---\na: 1\n---\n本文`);
+  assert.equal(replaceFrontMatter(`${BOM}本文`, "a: 1"), `${BOM}---\na: 1\n---\n本文`);
 });
 
 test("プロパティを全部消してもBOMは残る", () => {
-  const parts = parseFrontMatter(`${BOM}---\na: 1\n---\n本文`);
-  assert.equal(composeMarkdown("", parts.body, parts.bom), `${BOM}本文`);
+  assert.equal(replaceFrontMatter(`${BOM}---\na: 1\n---\n本文`, ""), `${BOM}本文`);
 });
 
 test("BOMを含む古い本文（チェックポイントなど）でもBOMが二重にならない", () => {
-  assert.equal(composeMarkdown("a: 1", `${BOM}本文`), `${BOM}---\na: 1\n---\n本文`);
-  assert.equal(composeMarkdown("", `${BOM}本文`, true), `${BOM}本文`);
   assert.equal(updateMarkdownBody(`${BOM}---\na: 1\n---\n古い`, `${BOM}新しい`), `${BOM}---\na: 1\n---\n新しい`);
 });
 
@@ -109,8 +106,8 @@ test("フロントマターがある原稿は空のフロントマターを足�
 });
 
 test("プロパティを全部消しても、本文が---で始まるなら空のフロントマターを残す", () => {
-  assert.equal(composeMarkdown("", "---\n場面2"), "---\n---\n---\n場面2");
-  assert.equal(composeMarkdown("a: 1", "---\n場面2"), "---\na: 1\n---\n---\n場面2");
+  assert.equal(replaceFrontMatter("---\na: 1\n---\n---\n場面2", ""), "---\n---\n---\n場面2");
+  assert.equal(replaceFrontMatter("---\na: 1\n---\n---\n場面2", "a: 2"), "---\na: 2\n---\n---\n場面2");
 });
 
 test("本文の編集ではフロントマターの原文を1文字も変えない", () => {
@@ -121,6 +118,49 @@ test("本文の編集ではフロントマターの原文を1文字も変えな�
 test("空のフロントマター付きの原稿も未編集なら変わらない", () => {
   for (const source of ["---\n---\n---\n場面", "---\r\n---\r\n---\r\n場面", `${BOM}---\n---\n---\n場面`]) {
     assert.equal(updateMarkdownBody(source, parseFrontMatter(source).body), source, JSON.stringify(source));
+  }
+});
+
+// FM-11: changing properties touches only the front matter
+test("プロパティを変えても本文先頭の空行を消さない", () => {
+  assert.equal(replaceFrontMatter("---\na: 1\n---\n\n\n本文", "a: 2"), "---\na: 2\n---\n\n\n本文");
+});
+
+test("入力したメタデータの末尾の改行・空白をそのまま書く", () => {
+  const saved = replaceFrontMatter("---\na: 1\n---\n本文", "a: 1\n");
+  assert.equal(saved, "---\na: 1\n\n---\n本文");
+  assert.equal(parseFrontMatter(saved).metadata, "a: 1\n");
+  assert.equal(replaceFrontMatter("---\na: 1\n---\n本文", "a: 1  "), "---\na: 1  \n---\n本文");
+});
+
+test("CRLFの原稿ではメタデータもCRLFで書く", () => {
+  assert.equal(
+    replaceFrontMatter("---\r\na: 1\r\n---\r\n本文\r\n", "a: 2\nb: 3"),
+    "---\r\na: 2\r\nb: 3\r\n---\r\n本文\r\n",
+  );
+  assert.equal(replaceFrontMatter("本文\r\n次\r\n", "a: 1"), "---\r\na: 1\r\n---\r\n本文\r\n次\r\n");
+});
+
+test("閉じの---でファイルが終わっていても形を保つ", () => {
+  assert.equal(replaceFrontMatter("---\na: 1\n---", "a: 2"), "---\na: 2\n---");
+});
+
+test("フロントマターのない原稿に追加すると先頭に付く", () => {
+  assert.equal(replaceFrontMatter("本文", "a: 1"), "---\na: 1\n---\n本文");
+  assert.equal(replaceFrontMatter("\n本文", "a: 1"), "---\na: 1\n---\n\n本文");
+});
+
+test("「＋」で追加しても既存の行と本文は変わらない", () => {
+  const source = "---\na: 1\n---\n\n本文";
+  assert.equal(
+    replaceFrontMatter(source, appendFrontMatterProperty(parseFrontMatter(source).metadata)),
+    "---\na: 1\n新規プロパティ: \n---\n\n本文",
+  );
+});
+
+test("メタデータが変わらなければファイルも変わらない", () => {
+  for (const source of ["---\n---\n本文", "---\na: 1\n\n---\n本文", `${BOM}---\r\na: 1\r\n---\r\n本文`]) {
+    assert.equal(replaceFrontMatter(source, parseFrontMatter(source).metadata), source, JSON.stringify(source));
   }
 });
 

@@ -233,8 +233,8 @@ import {
 } from "./types";
 import {
   appendFrontMatterProperty,
-  composeMarkdown,
   parseFrontMatter,
+  replaceFrontMatter,
   updateMarkdownBody,
 } from "./utils/frontmatter";
 import {
@@ -5648,8 +5648,7 @@ export default function App() {
   }, [documentKey]);
 
   const updateFrontMatter = useCallback((metadata: string) => {
-    const parts = parseFrontMatter(markdown);
-    const nextMarkdown = composeMarkdown(metadata, parts.body, parts.bom);
+    const nextMarkdown = replaceFrontMatter(markdown, metadata);
     if (markdown !== nextMarkdown) {
       setActiveMarkdown(nextMarkdown);
     }
@@ -7668,8 +7667,7 @@ export default function App() {
             const currentDocument = await invoke<TextDocument>("read_text_file", {
               path: file.path,
             });
-            const currentParts = parseFrontMatter(currentDocument.content);
-            content = composeMarkdown(currentParts.metadata, file.text, currentParts.bom);
+            content = updateMarkdownBody(currentDocument.content, file.text);
           } catch {
             content = file.text;
           }
