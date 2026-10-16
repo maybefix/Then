@@ -383,6 +383,15 @@ test("プロパティのない原稿にもセットを足せる", async () => {
   unmount();
 });
 
+test("リストの項目を押すと、その値で検索する（FM-28）", () => {
+  const searched = [];
+  const { container, render, unmount } = mount(ARTICLE);
+  render({ onSearchProperty: (key, value) => searched.push([key, value]) });
+  click(row(container, "tags").querySelector(".propertyChipText"));
+  assert.deepEqual(searched, [["tags", "開発"]]);
+  unmount();
+});
+
 let failed = 0;
 for (const [name, fn] of cases) {
   try {

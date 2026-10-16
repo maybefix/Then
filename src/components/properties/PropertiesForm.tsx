@@ -36,6 +36,8 @@ export type PropertiesFormProps = {
   onExit: () => void;
   /** Set by the panel when "+" in its header is pressed. */
   addRequest: number;
+  /** Search the work for a property value (FM-28). */
+  onSearchProperty?: (key: string, value: string) => void;
 };
 
 export const PROPERTY_TYPES: ReadonlyArray<[PropertyType, string]> = [
@@ -111,6 +113,7 @@ export default function PropertiesForm({
   onRememberType,
   onExit,
   addRequest,
+  onSearchProperty,
 }: PropertiesFormProps) {
   const sheet = useMemo(() => readProperties(metadata, typeSettings), [metadata, typeSettings]);
   const [pendingType, setPendingType] = useState<{ key: string; type: PropertyType } | null>(null);
@@ -197,6 +200,7 @@ export default function PropertiesForm({
               }}
               onRemove={() => write(removeProperty(metadata, row.key))}
               onEditSource={() => onViewChange("source")}
+              onSearch={onSearchProperty ? (value) => onSearchProperty(row.key, value) : undefined}
             />
             {pendingType?.key === row.key && (
               <div className="propertyConfirm">
@@ -331,6 +335,7 @@ function PropertyRowView({
   onRename,
   onRemove,
   onEditSource,
+  onSearch,
 }: {
   row: PropertyRow;
   existingKeys: Set<string>;
@@ -339,6 +344,7 @@ function PropertyRowView({
   onRename: (key: string) => void;
   onRemove: () => void;
   onEditSource: () => void;
+  onSearch?: (value: string) => void;
 }) {
   const [keyDraft, setKeyDraft] = useState(row.key);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -419,7 +425,7 @@ function PropertyRowView({
         }}
       />
       <div className="propertyValue">
-        <ValueEditor row={row} onValue={onValue} onEditSource={onEditSource} />
+        <ValueEditor row={row} onValue={onValue} onEditSource={onEditSource} onSearch={onSearch} />
       </div>
       <button type="button" className="propertyRemove" aria-label={`${row.key}を削除`} onClick={onRemove}>
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
@@ -440,10 +446,12 @@ function ValueEditor({
   row,
   onValue,
   onEditSource,
+  onSearch,
 }: {
   row: PropertyRow;
   onValue: (value: PropertyValue) => void;
   onEditSource: () => void;
+  onSearch?: (value: string) => void;
 }) {
   if (row.readOnly) {
     return (
@@ -477,7 +485,7 @@ function ValueEditor({
     case "datetime":
       return <CommitInput type="datetime-local" value={(row.value as string | null) ?? ""} onCommit={(text) => onValue(text || null)} />;
     case "list":
-      return <ListEditor items={(row.value as string[] | null) ?? []} onChange={onValue} />;
+      return <ListEditor items={(row.value as string[] | null) ?? []} onChange={onValue} onSearch={onSearch} />;
     default:
       return <TextValue value={(row.value as string | null) ?? ""} onCommit={(text) => onValue(text === "" ? null : text)} />;
   }
@@ -547,7 +555,15 @@ function TextValue({ value, onCommit }: { value: string; onCommit: (value: strin
   );
 }
 
-function ListEditor({ items, onChange }: { items: string[]; onChange: (items: string[]) => void }) {
+function ListEditor({
+  items,
+  onChange,
+  onSearch,
+}: {
+  items: string[];
+  onChange: (items: string[]) => void;
+  onSearch?: (value: string) => void;
+}) {
   const [draft, setDraft] = useState("");
   const add = () => {
     const text = draft.trim();
@@ -559,7 +575,13 @@ function ListEditor({ items, onChange }: { items: string[]; onChange: (items: st
     <div className="propertyChips">
       {items.map((item, index) => (
         <span className="propertyChip" key={`${index}-${item}`}>
-          <span>{item}</span>
+          {onSearch ? (
+            <button type="button" className="propertyChipText" title={`「${item}」で検索`} onClick={() => onSearch(item)}>
+              {item}
+            </button>
+          ) : (
+            <span>{item}</span>
+          )}
           <button
             type="button"
             aria-label={`${item}を削除`}

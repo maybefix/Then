@@ -189,6 +189,8 @@ export type PropertiesPanelProps = {
   onExit: () => void;
   /** The built-in article set and every template that has properties (FM-25, FM-27). */
   loadPropertySets: () => Promise<PropertySet[]>;
+  /** Search the work for a property value (FM-28). */
+  onSearchProperty?: (key: string, value: string) => void;
 };
 
 /** The right sidebar's properties pane, the same in vertical and horizontal writing. */
@@ -202,6 +204,7 @@ export function PropertiesPanel({
   onRememberType,
   onExit,
   loadPropertySets,
+  onSearchProperty,
 }: PropertiesPanelProps) {
   const [view, setView] = useState<"form" | "source">("form");
   const [addRequest, setAddRequest] = useState(0);
@@ -295,6 +298,7 @@ export function PropertiesPanel({
             onRememberType={onRememberType}
             onExit={onExit}
             addRequest={addRequest}
+            onSearchProperty={onSearchProperty}
           />
         </Suspense>
       )}

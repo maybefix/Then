@@ -48,6 +48,14 @@ import type { PropertyType, PropertyTypeSettings } from "./properties/propertyMo
 import { loadPropertyTypes, savePropertyType } from "./properties/propertyTypeStore";
 import { ARTICLE_PROPERTY_SET, type PropertySet } from "./properties/propertySets";
 import {
+  matchesPropertyConditions,
+  parsePropertyQuery,
+  propertyConditionQuery,
+  propertyFileResults,
+  type PropertyQuery,
+} from "./properties/propertySearch";
+import { usePropertyValueIndex } from "./properties/usePropertyValueIndex";
+import {
   CheckpointStudio,
   type CheckpointCurrentProjectFile,
   type CheckpointCurrentProjectStatus,
@@ -179,6 +187,7 @@ import type {
   DocumentAst,
   DocumentOutlineItem,
   ProjectAst,
+  ProjectSearchOutcome,
   ProjectSearchResult,
 } from "./editor/ast/types";
 import type {
@@ -795,6 +804,14 @@ function debugLog(message: string, data?: unknown): void {
 }
 
 // 右サイドバーの切り替え先。ヘッダー左端のプルダウンに「アイコン＋機能名」で並べる。
+const EMPTY_WORKSPACE_SEARCH: ProjectSearchOutcome = {
+  results: [],
+  total: 0,
+  matchedFileCount: 0,
+  truncated: false,
+  error: null,
+};
+
 const rightSidebarBuiltinTabs: Array<{ id: string; label: string; icon: ReactNode }> = [
   {
     id: "idea",
@@ -4509,19 +4526,32 @@ export default function App() {
     }),
     [projectSearchMatchCase, projectSearchUseRegex, searchIncludeComments],
   );
+  // FM-28: [name:value] conditions narrow the search by property values. A regex
+  // search keeps its brackets as pattern syntax.
+  const propertyQuery = useMemo<PropertyQuery>(
+    () =>
+      projectSearchUseRegex
+        ? { text: projectSearchQuery, conditions: [] }
+        : parsePropertyQuery(projectSearchQuery),
+    [projectSearchQuery, projectSearchUseRegex],
+  );
+  const hasPropertyConditions = propertyQuery.conditions.length > 0;
   const currentFileSearchOutcome = useMemo(
     () =>
-      searchDocumentAstFullText(
-        activeDocumentAst,
-        currentFilePath ?? "",
-        currentFileName,
-        projectSearchQuery,
-        projectSearchOptions,
-      ),
+      hasPropertyConditions
+        ? EMPTY_WORKSPACE_SEARCH
+        : searchDocumentAstFullText(
+            activeDocumentAst,
+            currentFilePath ?? "",
+            currentFileName,
+            projectSearchQuery,
+            projectSearchOptions,
+          ),
     [
       activeDocumentAst,
       currentFileName,
       currentFilePath,
+      hasPropertyConditions,
       projectSearchOptions,
       projectSearchQuery,
     ],
@@ -4544,12 +4574,14 @@ export default function App() {
   }, [editorFind.activeIndex, editorFind.open, editorFindMatches.length]);
   const projectSearchOutcome = useMemo(
     () =>
-      searchProjectAstFullTextWithOptions(
-        projectAst,
-        projectSearchQuery,
-        projectSearchOptions,
-      ),
-    [projectAst, projectSearchOptions, projectSearchQuery],
+      hasPropertyConditions
+        ? EMPTY_WORKSPACE_SEARCH
+        : searchProjectAstFullTextWithOptions(
+            projectAst,
+            projectSearchQuery,
+            projectSearchOptions,
+          ),
+    [hasPropertyConditions, projectAst, projectSearchOptions, projectSearchQuery],
   );
   // ライブラリ全体の検索。開いている範囲は編集中の内容を、ほかの範囲はディスクから読んだ索引を使う。
   const pendingSearchJumpRef = useRef<ProjectSearchResult | null>(null);
@@ -4614,7 +4646,7 @@ export default function App() {
   }, [libraryForSearch, projectFolder, searchScope]);
   const librarySearchOutcome = useMemo(
     () =>
-      searchScope !== "library"
+      searchScope !== "library" || hasPropertyConditions
         ? null
         : searchLibraryScopes(
             [
@@ -4624,14 +4656,95 @@ export default function App() {
             projectSearchQuery,
             projectSearchOptions,
           ),
-    [currentScopeLabel, libraryCorpus, projectAst, projectSearchOptions, projectSearchQuery, searchScope],
+    [
+      currentScopeLabel,
+      hasPropertyConditions,
+      libraryCorpus,
+      projectAst,
+      projectSearchOptions,
+      projectSearchQuery,
+      searchScope,
+    ],
   );
+  // The files a property search looks at, by scope.
+  const propertySearchFiles = useMemo(() => {
+    if (!hasPropertyConditions) return [];
+    if (searchScope === "file") {
+      return currentFilePath ? [{ path: currentFilePath, name: currentFileName }] : [];
+    }
+    const scopes = searchScope === "library"
+      ? [{ label: currentScopeLabel, ast: projectAst }, ...(libraryCorpus?.scopes ?? [])]
+      : [{ label: "", ast: projectAst }];
+    return scopes.flatMap((scope) =>
+      (scope.ast?.files ?? []).map((file) => ({
+        path: file.path,
+        name: scope.label && searchScope === "library" ? `${scope.label} › ${file.name}` : file.name,
+      })),
+    );
+  }, [currentFileName, currentFilePath, currentScopeLabel, hasPropertyConditions, libraryCorpus, projectAst, searchScope]);
+  const propertySearchPaths = useMemo(() => propertySearchFiles.map((file) => file.path), [propertySearchFiles]);
+  const openDocumentTexts = useMemo(() => {
+    const texts = new Map<string, string>();
+    if (!hasPropertyConditions) return texts;
+    for (const tab of openTabs) if (tab.path) texts.set(tab.path, tab.markdown);
+    if (currentFilePath) texts.set(currentFilePath, markdown);
+    return texts;
+  }, [currentFilePath, hasPropertyConditions, markdown, openTabs]);
+  const readFileTextForProperties = useCallback(
+    async (path: string) => (await invoke<TextDocument>("read_text_file", { path })).content,
+    [],
+  );
+  const propertyValueIndex = usePropertyValueIndex({
+    enabled: hasPropertyConditions,
+    paths: propertySearchPaths,
+    openTexts: openDocumentTexts,
+    readText: readFileTextForProperties,
+  });
+  const propertySearchOutcome = useMemo((): ProjectSearchOutcome | null => {
+    if (!hasPropertyConditions) return null;
+    const { conditions, text } = propertyQuery;
+    const { valuesFor } = propertyValueIndex;
+    const matches = (path: string) => matchesPropertyConditions(valuesFor(path) ?? null, conditions);
+    const narrow = (ast: ProjectAst | null) =>
+      ast ? { ...ast, files: ast.files.filter((file) => matches(file.path)) } : ast;
+    if (!text) return propertyFileResults(propertySearchFiles, valuesFor, conditions);
+    if (searchScope === "file") {
+      return currentFilePath && matches(currentFilePath)
+        ? searchDocumentAstFullText(activeDocumentAst, currentFilePath, currentFileName, text, projectSearchOptions)
+        : EMPTY_WORKSPACE_SEARCH;
+    }
+    if (searchScope === "library") {
+      return searchLibraryScopes(
+        [{ label: currentScopeLabel, ast: projectAst }, ...(libraryCorpus?.scopes ?? [])].map((scope) => ({
+          label: scope.label,
+          ast: narrow(scope.ast),
+        })),
+        text,
+        projectSearchOptions,
+      );
+    }
+    return searchProjectAstFullTextWithOptions(narrow(projectAst), text, projectSearchOptions);
+  }, [
+    activeDocumentAst,
+    currentFileName,
+    currentFilePath,
+    currentScopeLabel,
+    hasPropertyConditions,
+    libraryCorpus,
+    projectAst,
+    projectSearchOptions,
+    propertyQuery,
+    propertySearchFiles,
+    propertyValueIndex,
+    searchScope,
+  ]);
   const workspaceSearchOutcome =
-    searchScope === "file"
-      ? currentFileSearchOutcome
-      : searchScope === "library" && librarySearchOutcome
-        ? librarySearchOutcome
-        : projectSearchOutcome;
+    propertySearchOutcome
+      ?? (searchScope === "file"
+        ? currentFileSearchOutcome
+        : searchScope === "library" && librarySearchOutcome
+          ? librarySearchOutcome
+          : projectSearchOutcome);
   const breadcrumbTrail = useMemo(
     () => findPathToEntry(projectFolder, currentFilePath),
     [currentFilePath, projectFolder],
@@ -5717,6 +5830,14 @@ export default function App() {
   const returnFocusFromProperties = useCallback(() => {
     editorInstanceRef.current?.focus();
   }, []);
+  // A list item in the properties pane searches the work for that value (FM-28).
+  const searchByProperty = useCallback((key: string, value: string) => {
+    setProjectSearchQuery(propertyConditionQuery(key, value));
+    setProjectSearchUseRegex(false);
+    setSearchScope((current) => (current === "file" && projectFolder ? "project" : current));
+    setLeftSidebarView("search");
+    setIsLeftSidebarCollapsed(false);
+  }, [projectFolder]);
   // Sets the properties pane can add (FM-27): the built-in article set (FM-25),
   // then every template, of this work or of the profile, that has properties.
   const loadPropertySets = useCallback(async (): Promise<PropertySet[]> => {
@@ -9840,6 +9961,10 @@ export default function App() {
     }
     if (projectSearchQuery.length === 0) {
       showToast("検索語句を入力してください");
+      return;
+    }
+    if (hasPropertyConditions) {
+      showToast("プロパティの条件を含む検索では置換できません");
       return;
     }
     if (projectSearchOutcome.error) {
@@ -14103,6 +14228,7 @@ export default function App() {
                       onRememberType={rememberPropertyType}
                       onExit={returnFocusFromProperties}
                       loadPropertySets={loadPropertySets}
+                      onSearchProperty={searchByProperty}
                     />
                   ) : rightSidebarTab === "proof" ? (
                     <ProofreadPane

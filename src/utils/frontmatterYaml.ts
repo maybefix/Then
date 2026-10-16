@@ -46,6 +46,24 @@ function firstContentLine(lines: string[]): number {
   return index < 0 ? 1 : index + 1;
 }
 
+/**
+ * Plain values of the top-level properties, for property search (FM-28). null
+ * when the YAML is invalid or not a "name: value" mapping.
+ */
+export function readPropertyValues(metadata: string): Record<string, unknown> | null {
+  if (!metadata.trim()) return {};
+  const document = parseDocument(metadata, { prettyErrors: false });
+  if (document.errors.length > 0) return null;
+  if (document.contents === null) return {};
+  if (!isMap(document.contents)) return null;
+  try {
+    const values = document.toJS({ maxAliasCount: 100 }) as unknown;
+    return values && typeof values === "object" && !Array.isArray(values) ? (values as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function analyzeFrontMatter(metadata: string): FrontMatterAnalysis {
   const lines = metadata.split(/\r?\n/);
   const lineCounter = new LineCounter();
