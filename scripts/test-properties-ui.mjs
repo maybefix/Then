@@ -41,6 +41,14 @@ await build({
   external: ["react", "react/jsx-runtime", "yaml"],
 });
 const { PropertiesPanel } = await import(`${pathToFileURL(path.join(dir, "panel.mjs")).href}?${Date.now()}`);
+await build({
+  entryPoints: ["src/properties/propertySets.ts"],
+  outfile: path.join(dir, "sets.mjs"),
+  bundle: true,
+  platform: "node",
+  format: "esm",
+});
+const { ARTICLE_PROPERTY_SET } = await import(`${pathToFileURL(path.join(dir, "sets.mjs")).href}?${Date.now()}`);
 
 const ARTICLE = [
   "# サイト用",
@@ -227,9 +235,11 @@ test("Escapeで本文へ戻る", () => {
   unmount();
 });
 
-// FM-22: Undo/Redo of property edits, through the whole pane.
+// The whole pane (FM-22 undo, FM-27 sets). A template's front matter as a set:
+const CHAPTER_TEMPLATE = { id: "workspace:章.md", name: "章", metadata: "status: 下書き\nwordGoal: 12000\npov:" };
+
 async function mountPanel(initial, documentKey = "doc-a") {
-  const state = { metadata: initial, documentKey };
+  const state = { metadata: initial, documentKey, remembered: [] };
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -240,9 +250,10 @@ async function mountPanel(initial, documentKey = "doc-a") {
         metadata: state.metadata,
         hasFrontMatter: state.metadata !== "",
         typeSettings: {},
-        onRememberType: () => {},
+        onRememberType: (key, type) => state.remembered.push([key, type]),
         onExit: () => {},
         onClear: () => {},
+        loadPropertySets: async () => [ARTICLE_PROPERTY_SET, CHAPTER_TEMPLATE],
         onChangeMetadata: (next) => {
           state.metadata = next;
           render();
@@ -327,6 +338,48 @@ test("履歴は文書ごとに分かれ、タブを戻せば続きから戻せ�
   });
   shortcut(row(container, "a").querySelector(".propertyKey"), "z");
   assert.equal(state.metadata, "a: 1");
+  unmount();
+});
+
+// FM-27 / FM-25: add the missing properties of a set
+async function openSetMenu(container) {
+  await act(async () => {
+    container.querySelector('[aria-label="項目のセットを追加"]').dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+  return [...container.querySelectorAll(".propertiesSetMenu button")];
+}
+
+test("記事用セットで足りない項目だけを足し、型を覚え、Ctrl+Zでまとめて戻す", async () => {
+  const start = "tags:\n  - 開発\npublish: true";
+  const { container, state, unmount } = await mountPanel(start, "doc-set");
+  const items = await openSetMenu(container);
+  assert.deepEqual(items.map((item) => item.textContent), ["記事+3", "章+3"]);
+  click(items[0]);
+  assert.equal(state.metadata, `${start}\nslug:\ndate:\ndescription:`);
+  assert.deepEqual(state.remembered, [["slug", "text"], ["date", "date"], ["description", "text"]]);
+  shortcut(row(container, "publish").querySelector("input[type=checkbox]"), "z");
+  assert.equal(state.metadata, start);
+  unmount();
+});
+
+test("そろっているセットは選べず、テンプレートは値ごと写す", async () => {
+  const full = "slug: a\ndate: 2026-10-16\npublish: false\ntags: []\ndescription: d";
+  const { container, state, unmount } = await mountPanel(full, "doc-set2");
+  const items = await openSetMenu(container);
+  assert.equal(items[0].disabled, true);
+  assert.equal(items[0].textContent, "記事追加済み");
+  click(items[1]);
+  assert.equal(state.metadata, `${full}\nstatus: 下書き\nwordGoal: 12000\npov:`);
+  assert.deepEqual(state.remembered, [["status", "text"], ["wordGoal", "number"]]);
+  unmount();
+});
+
+test("プロパティのない原稿にもセットを足せる", async () => {
+  const { container, state, unmount } = await mountPanel("", "doc-set3");
+  const items = await openSetMenu(container);
+  click(items[0]);
+  assert.equal(state.metadata, "slug:\ndate:\npublish: false\ntags: []\ndescription:");
   unmount();
 });
 

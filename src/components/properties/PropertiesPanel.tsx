@@ -3,6 +3,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { PropertyType, PropertyTypeSettings } from "../../properties/propertyModel";
 import { historyShortcut, PropertiesHistory } from "../../properties/propertiesHistory";
+import type { PropertySet } from "../../properties/propertySets";
 import { countFrontMatterProperties } from "../../utils/frontmatter";
 import type { FrontMatterAnalysis } from "../../utils/frontmatterYaml";
 
@@ -74,6 +75,109 @@ function usePropertiesHistory(documentKey: string, metadata: string, onChangeMet
   };
 }
 
+type SetChoice = { set: PropertySet; missing: number };
+
+/**
+ * FM-27: add the missing properties of a set (the built-in article set or a
+ * template's front matter). Sets that would add nothing are disabled.
+ */
+function PropertySetMenu({
+  metadata,
+  disabled,
+  typeSettings,
+  loadPropertySets,
+  onChangeMetadata,
+  onRememberType,
+}: {
+  metadata: string;
+  disabled: boolean;
+  typeSettings: PropertyTypeSettings;
+  loadPropertySets: () => Promise<PropertySet[]>;
+  onChangeMetadata: (next: string) => void;
+  onRememberType: (key: string, type: PropertyType) => void;
+}) {
+  const [choices, setChoices] = useState<SetChoice[] | "loading" | null>(null);
+  const modelRef = useRef<typeof import("../../properties/propertyModel") | null>(null);
+
+  const open = async () => {
+    if (choices) {
+      setChoices(null);
+      return;
+    }
+    setChoices("loading");
+    try {
+      const [model, sets] = await Promise.all([import("../../properties/propertyModel"), loadPropertySets()]);
+      modelRef.current = model;
+      setChoices(sets.flatMap((set) => {
+        try {
+          return [{ set, missing: model.addMissingProperties(metadata, set, typeSettings).added.length }];
+        } catch {
+          return []; // A template whose front matter is not valid YAML is left out.
+        }
+      }));
+    } catch {
+      setChoices(null);
+    }
+  };
+
+  const apply = (set: PropertySet) => {
+    setChoices(null);
+    const model = modelRef.current;
+    if (!model) return;
+    const result = model.addMissingProperties(metadata, set, typeSettings);
+    if (result.metadata !== metadata) onChangeMetadata(result.metadata);
+    for (const added of result.added) {
+      if (added.type) onRememberType(added.key, added.type);
+    }
+  };
+
+  return (
+    <span
+      className="propertiesSetMenuAnchor"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setChoices(null);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && choices) {
+          event.stopPropagation();
+          setChoices(null);
+        }
+      }}
+    >
+      <button
+        className="propertiesActionButton"
+        type="button"
+        aria-label="項目のセットを追加"
+        title="項目のセットを追加"
+        aria-haspopup="menu"
+        aria-expanded={choices !== null}
+        disabled={disabled}
+        onClick={() => void open()}
+      >
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
+          <path d="M2.5 4h7M2.5 8h7M2.5 12h4.5M12 9.5v5M9.5 12h5" />
+        </svg>
+      </button>
+      {Array.isArray(choices) && (
+        <div className="propertiesSetMenu" role="menu">
+          {choices.map(({ set, missing }) => (
+            <button
+              key={set.id}
+              type="button"
+              role="menuitem"
+              disabled={missing === 0}
+              onClick={() => apply(set)}
+            >
+              <span>{set.name}</span>
+              <small>{missing > 0 ? `+${missing}` : "追加済み"}</small>
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
+  );
+}
+
 export type PropertiesPanelProps = {
   documentKey: string;
   metadata: string;
@@ -83,6 +187,8 @@ export type PropertiesPanelProps = {
   typeSettings: PropertyTypeSettings;
   onRememberType: (key: string, type: PropertyType) => void;
   onExit: () => void;
+  /** The built-in article set and every template that has properties (FM-25, FM-27). */
+  loadPropertySets: () => Promise<PropertySet[]>;
 };
 
 /** The right sidebar's properties pane, the same in vertical and horizontal writing. */
@@ -95,6 +201,7 @@ export function PropertiesPanel({
   typeSettings,
   onRememberType,
   onExit,
+  loadPropertySets,
 }: PropertiesPanelProps) {
   const [view, setView] = useState<"form" | "source">("form");
   const [addRequest, setAddRequest] = useState(0);
@@ -147,6 +254,14 @@ export function PropertiesPanel({
             <path d="m5.5 4.5-3 3.5 3 3.5M10.5 4.5l3 3.5-3 3.5" />
           </svg>
         </button>
+        <PropertySetMenu
+          metadata={metadata}
+          disabled={errors.length > 0}
+          typeSettings={typeSettings}
+          loadPropertySets={loadPropertySets}
+          onChangeMetadata={onChangeMetadata}
+          onRememberType={onRememberType}
+        />
         <button
           className="propertiesActionButton"
           type="button"

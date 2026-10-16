@@ -642,6 +642,7 @@ pub fn run() {
             list_project_markdown_files,
             create_text_file,
             create_text_file_from_template,
+            read_text_template,
             list_text_templates,
             register_text_template,
             delete_text_template,
@@ -2253,6 +2254,17 @@ fn create_text_file_from_template(
     }
     write_text_file(&path, &content)?;
     read_text_document(&path)
+}
+
+/// The text of a template, for adding its properties to an open manuscript.
+#[tauri::command]
+fn read_text_template(
+    app: tauri::AppHandle,
+    root_path: Option<String>,
+    template_id: String,
+) -> Result<String, String> {
+    let template_path = resolve_text_template_path(&app, root_path.as_deref(), &template_id)?;
+    std::fs::read_to_string(&template_path).map_err(|error| format!("failed to read template: {error}"))
 }
 
 #[tauri::command]

@@ -19,7 +19,8 @@ await build({
   external: ["yaml"],
 });
 const {
-  addProperty, formatProperty, readProperties, removeProperty, renameProperty, setPropertyValue,
+  addMissingProperties, addProperty, ARTICLE_PROPERTY_SET, formatProperty, readProperties, removeProperty,
+  renameProperty, setPropertyValue,
 } = await import(`${pathToFileURL(bundle).href}?${Date.now()}`);
 
 const cases = [];
@@ -170,6 +171,51 @@ test("追加は末尾に付け、重複は拒む", () => {
   assert.equal(addProperty("a: 1\n", "b", "checkbox", false), "a: 1\nb: false");
   assert.equal(addProperty("a: 1", "tags", "list", []), "a: 1\ntags: []");
   assert.throws(() => addProperty("a: 1", "a", "text", "x"), /すでにあります/);
+});
+
+// FM-27 / FM-25: add a set's missing properties
+test("記事用セット：空の原稿には5項目を足し、型を覚えさせる", () => {
+  const { metadata, added } = addMissingProperties("", ARTICLE_PROPERTY_SET);
+  assert.equal(metadata, "slug:\ndate:\npublish: false\ntags: []\ndescription:");
+  assert.deepEqual(added, [
+    { key: "slug", type: "text" }, { key: "date", type: "date" }, { key: "publish", type: "checkbox" },
+    { key: "tags", type: "list" }, { key: "description", type: "text" },
+  ]);
+  assert.deepEqual(
+    readProperties(metadata, Object.fromEntries(added.map((a) => [a.key, a.type]))).rows.map((r) => [r.key, r.type]),
+    [["slug", "text"], ["date", "date"], ["publish", "checkbox"], ["tags", "list"], ["description", "text"]],
+  );
+});
+
+test("足りない項目だけを末尾に足し、既存の値と書式は変えない", () => {
+  const source = "# メモ\r\ntags:\r\n  - 開発\r\npublish: true   \r\n";
+  const { metadata, added } = addMissingProperties(source, ARTICLE_PROPERTY_SET);
+  assert.equal(metadata, `${source}slug:\r\ndate:\r\ndescription:`);
+  assert.deepEqual(added.map((a) => a.key), ["slug", "date", "description"]);
+});
+
+test("全部そろっていれば何もしない", () => {
+  const full = "slug: a\ndate: 2026-10-16\npublish: true\ntags: [x]\ndescription: d";
+  assert.deepEqual(addMissingProperties(full, ARTICLE_PROPERTY_SET), { metadata: full, added: [] });
+});
+
+test("テンプレートのセットは値も書式もそのまま写し、空の値の型は決めない", () => {
+  const template = {
+    id: "workspace:章.md",
+    name: "章",
+    metadata: "status: 下書き\nwordGoal: 12000\npov:\nseries:\n  name: 夜の港\ntags:\n  - 本編",
+  };
+  const { metadata, added } = addMissingProperties("status: 推敲中", template);
+  assert.equal(metadata, "status: 推敲中\nwordGoal: 12000\npov:\nseries:\n  name: 夜の港\ntags:\n  - 本編");
+  assert.deepEqual(added, [
+    { key: "wordGoal", type: "number" }, { key: "pov", type: null },
+    { key: "series", type: null }, { key: "tags", type: "list" },
+  ]);
+});
+
+test("原稿かセットのYAMLが壊れていれば書かない", () => {
+  assert.throws(() => addMissingProperties("a: 1\na: 2", ARTICLE_PROPERTY_SET), /エラー/);
+  assert.throws(() => addMissingProperties("a: 1", { id: "x", name: "壊れた", metadata: "a:1\nb: [" }), /壊れた/);
 });
 
 let failed = 0;

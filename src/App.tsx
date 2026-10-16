@@ -46,6 +46,7 @@ import { normalizeAppTheme } from "./themes";
 import { PropertiesPanel } from "./components/properties/PropertiesPanel";
 import type { PropertyType, PropertyTypeSettings } from "./properties/propertyModel";
 import { loadPropertyTypes, savePropertyType } from "./properties/propertyTypeStore";
+import { ARTICLE_PROPERTY_SET, type PropertySet } from "./properties/propertySets";
 import {
   CheckpointStudio,
   type CheckpointCurrentProjectFile,
@@ -5715,6 +5716,28 @@ export default function App() {
   // Escape in the properties: back to the body at the caret it had (FM-16).
   const returnFocusFromProperties = useCallback(() => {
     editorInstanceRef.current?.focus();
+  }, []);
+  // Sets the properties pane can add (FM-27): the built-in article set (FM-25),
+  // then every template, of this work or of the profile, that has properties.
+  const loadPropertySets = useCallback(async (): Promise<PropertySet[]> => {
+    const sets: PropertySet[] = [ARTICLE_PROPERTY_SET];
+    if (!isTauriRuntime()) return sets;
+    const rootPath = propertyTypeScopeRef.current;
+    const templates = await invoke<TextTemplateSummary[]>("list_text_templates", { rootPath }).catch(
+      () => [] as TextTemplateSummary[],
+    );
+    for (const template of templates) {
+      try {
+        const content = await invoke<string>("read_text_template", { rootPath, templateId: template.id });
+        const parts = parseFrontMatter(content);
+        if (parts.hasFrontMatter && parts.metadata.trim()) {
+          sets.push({ id: template.id, name: template.name, metadata: parts.metadata });
+        }
+      } catch {
+        // A template that cannot be read is left out of the menu.
+      }
+    }
+    return sets;
   }, []);
 
   const handleClearFrontMatter = useCallback(async () => {
@@ -14079,6 +14102,7 @@ export default function App() {
                       typeSettings={propertyTypeSettings}
                       onRememberType={rememberPropertyType}
                       onExit={returnFocusFromProperties}
+                      loadPropertySets={loadPropertySets}
                     />
                   ) : rightSidebarTab === "proof" ? (
                     <ProofreadPane

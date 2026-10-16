@@ -4,6 +4,7 @@
 // are shown read-only and left alone (FM-24).
 import { isAlias, isMap, isScalar, isSeq, parseDocument, visit, type Node } from "yaml";
 import { analyzeFrontMatter, type FrontMatterIssue } from "../utils/frontmatterYaml";
+import type { PropertySet } from "./propertySets";
 
 export type PropertyType = "text" | "number" | "checkbox" | "date" | "datetime" | "list";
 
@@ -271,6 +272,49 @@ export function renameProperty(metadata: string, key: string, nextKey: string): 
 
 export function removeProperty(metadata: string, key: string): string {
   return spliceLines(metadata, findRow(readProperties(metadata), key), null);
+}
+
+export { ARTICLE_PROPERTY_SET, type PropertySet } from "./propertySets";
+
+export type AddedProperty = {
+  key: string;
+  /** The type to remember for this name, or null when the set does not say (FM-21). */
+  type: PropertyType | null;
+};
+
+/**
+ * FM-27: add the set's properties the manuscript does not have yet, at the end,
+ * as the set writes them (values and formatting included). Existing properties
+ * and their values are never touched.
+ */
+export function addMissingProperties(
+  metadata: string,
+  set: PropertySet,
+  typeSettings: PropertyTypeSettings = {},
+): { metadata: string; added: AddedProperty[] } {
+  const target = readProperties(metadata, typeSettings);
+  if (target.errors.length > 0) throw new Error("YAMLにエラーがあるため、フォームからは書き込めません");
+  const setTypes = { ...set.types };
+  const source = readProperties(set.metadata, { ...setTypes, ...typeSettings });
+  if (source.errors.length > 0) throw new Error(`「${set.name}」のプロパティにエラーがあります`);
+
+  const existing = new Set(target.rows.map((row) => row.key));
+  const missing = source.rows.filter((row) => !existing.has(row.key));
+  if (missing.length === 0) return { metadata, added: [] };
+
+  const { newline } = splitLines(metadata);
+  const lines = missing.map((row) => row.raw.split(/\r?\n/).join(newline)).join(newline);
+  const next = !metadata.trim()
+    ? lines
+    : /\r?\n$/.test(metadata) ? `${metadata}${lines}` : `${metadata}${newline}${lines}`;
+  return {
+    metadata: next,
+    added: missing.map((row) => ({
+      key: row.key,
+      // An empty value says nothing about its type unless the set names one.
+      type: row.readOnly ? null : setTypes[row.key] ?? (row.value !== null ? row.type : null),
+    })),
+  };
 }
 
 /** Append a property at the end. Existing lines are untouched. */
