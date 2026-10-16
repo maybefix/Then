@@ -64,6 +64,12 @@ const cases: Case[] = [
     mustContain: ["本文その一", "続きの場面"],
   },
   {
+    // FM-26: written before FM-02/05, so there is no empty front matter in front.
+    name: "区切り線から始まる本文（以前のファイル）",
+    file: "---\n\n　本文その一。\n\n---\n\n続きの場面。",
+    mustContain: ["本文その一", "続きの場面"],
+  },
+  {
     name: "区切り線から始まる本文＋プロパティ",
     file: "---\nslug: making-then\n---\n---\n\n　本文その一。\n\n---\n\n続きの場面。",
     mustContain: ["本文その一", "続きの場面"],

@@ -25,7 +25,7 @@ export function parseFrontMatter(markdown: string): FrontMatterParts {
   const bom = markdown.startsWith(BOM);
   const source = bom ? markdown.slice(BOM.length) : markdown;
   const match = source.match(FRONT_MATTER);
-  if (!match) {
+  if (!match || !looksLikeFrontMatter(match[1] ?? "")) {
     return {
       metadata: "",
       body: source,
@@ -40,6 +40,19 @@ export function parseFrontMatter(markdown: string): FrontMatterParts {
     hasFrontMatter: true,
     bom,
   };
+}
+
+/**
+ * FM-26: a "---" block at the top is front matter only when it is empty (blank
+ * lines and comments only) or some line has a YAML ":" (a half-width colon
+ * followed by a space or the line end). Otherwise it is a scene break with prose
+ * under it, as in files written before FM-02/FM-05, and stays body. Broken YAML
+ * still counts as front matter, so it is kept out of exports (FM-07). The
+ * properties pane never writes a block that fails this test.
+ */
+function looksLikeFrontMatter(metadata: string): boolean {
+  const content = metadata.split(/\r?\n/).filter((line) => line.trim() !== "" && !/^\s*#/.test(line));
+  return content.length === 0 || content.some((line) => /:(?:\s|$)/.test(line));
 }
 
 /** Starts with a "---" line but no closing "---" follows, so it is all body. */

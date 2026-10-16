@@ -226,6 +226,45 @@ test("閉じの---がない原稿を見分ける", () => {
   }
 });
 
+// FM-26: a --- block with prose under it is body, not front matter
+test("先頭が---で囲まれた本文（既存ファイル）は本文として読む", () => {
+  const scene = "---\n\n　汽笛が二度鳴った。\n\n---\n\n続きの場面。";
+  assert.deepEqual(parseFrontMatter(scene), { metadata: "", body: scene, hasFrontMatter: false, bom: false });
+  assert.equal(parseFrontMatter(`${BOM}${scene}`).body, scene);
+  // The next save puts an empty front matter in front, so the rule stays body for every tool (FM-05).
+  assert.equal(updateMarkdownBody(scene, scene), `---\n---\n${scene}`);
+});
+
+test("「: 」のあるブロック（壊れたYAMLも）や空・コメントだけのブロックはフロントマター", () => {
+  for (const [source, metadata] of [
+    ["---\nslug making-then\npublish: true\n---\n本文", "slug making-then\npublish: true"],
+    ["---\ntitle: 夜の港\n---\n本文", "title: 夜の港"],
+    ["---\n# メモ\n\nslug: a\n---\n本文", "# メモ\n\nslug: a"],
+    ["---\n# メモだけ\n---\n本文", "# メモだけ"],
+    ["---\n\n---\n本文", ""],
+    ['---\n"quoted key": 1\n---\n本文', '"quoted key": 1'],
+    ["---\r\nslug: a\r\n---\r\n本文", "slug: a"],
+  ]) {
+    const parts = parseFrontMatter(source);
+    assert.equal(parts.hasFrontMatter, true, JSON.stringify(source));
+    assert.equal(parts.metadata, metadata);
+  }
+});
+
+test("半角の「: 」がないブロックは本文（全角「：」・コロンの後に空白なし・一覧・URL）", () => {
+  for (const source of [
+    "---\n場所：港\n---\n本文",
+    "---\na:1\n---\n本文",
+    "---\n- 一覧\n---\n本文",
+    "---\n　字下げの文\n---\n",
+    "---\nhttps://example.com/\n---\n本文",
+  ]) {
+    assert.equal(parseFrontMatter(source).hasFrontMatter, false, JSON.stringify(source));
+    assert.equal(parseFrontMatter(source).body, source);
+    assert.equal(hasUnclosedFrontMatter(source), false, "閉じはあるので書き出し画面の警告は出さない");
+  }
+});
+
 let failed = 0;
 for (const [name, fn] of cases) {
   try {
