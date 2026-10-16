@@ -4121,9 +4121,18 @@ export default function App() {
     },
     [patchActiveTab],
   );
+  // The active document's full text as of the last write, ahead of the re-render.
+  // Body and property edits build on it, so two edits in one frame don't undo each other.
+  const activeMarkdownRef = useRef("");
   const setActiveMarkdown = useCallback(
-    (nextMarkdown: string, editorRevision: number | null = null) => {
-      patchActiveTab((tab) => ({ ...tab, markdown: nextMarkdown, editorRevision }));
+    (nextMarkdown: string, editorRevision: number | null | "keep" = null) => {
+      activeMarkdownRef.current = nextMarkdown;
+      patchActiveTab((tab) => ({
+        ...tab,
+        markdown: nextMarkdown,
+        // "keep": the body did not change, so the editor has nothing to sync.
+        editorRevision: editorRevision === "keep" ? tab.editorRevision : editorRevision,
+      }));
       setAppState((current) =>
         current.markdown === nextMarkdown ? current : { ...current, markdown: nextMarkdown },
       );
@@ -4303,6 +4312,7 @@ export default function App() {
     [appState.collapsedOutlineHeadingKeysByWorkspace, projectFolder],
   );
   const markdown = activeTab?.markdown ?? appState.markdown;
+  activeMarkdownRef.current = markdown;
   const saveStatus = activeTab?.saveStatus ?? "loading";
   const currentFilePath = activeTab?.path ?? null;
   const currentFileName = activeTab?.name ?? scratchFileName;
@@ -5623,8 +5633,9 @@ export default function App() {
       }),
       "document:read",
     );
-    const nextFullText = updateMarkdownBody(markdown, nextText);
-    if (markdown !== nextFullText) {
+    const currentMarkdown = activeMarkdownRef.current;
+    const nextFullText = updateMarkdownBody(currentMarkdown, nextText);
+    if (currentMarkdown !== nextFullText) {
       setActiveMarkdown(nextFullText, editorRevision);
     }
     if (!currentFilePath) {
@@ -5632,7 +5643,6 @@ export default function App() {
     }
   }, [
     currentFilePath,
-    markdown,
     persistPluginAnchors,
     projectFolder,
     setActiveMarkdown,
@@ -5648,14 +5658,15 @@ export default function App() {
   }, [documentKey]);
 
   const updateFrontMatter = useCallback((metadata: string) => {
-    const nextMarkdown = replaceFrontMatter(markdown, metadata);
-    if (markdown !== nextMarkdown) {
-      setActiveMarkdown(nextMarkdown);
+    const currentMarkdown = activeMarkdownRef.current;
+    const nextMarkdown = replaceFrontMatter(currentMarkdown, metadata);
+    if (currentMarkdown !== nextMarkdown) {
+      setActiveMarkdown(nextMarkdown, "keep");
     }
     if (!currentFilePath) {
       setSaveStatus("dirty");
     }
-  }, [currentFilePath, markdown, setActiveMarkdown, setSaveStatus]);
+  }, [currentFilePath, setActiveMarkdown, setSaveStatus]);
 
   const handleFrontMatterChange = useCallback(
     (event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -5665,9 +5676,9 @@ export default function App() {
   );
 
   const handleAddFrontMatterProperty = useCallback(() => {
-    updateFrontMatter(appendFrontMatterProperty(parseFrontMatter(markdown).metadata));
+    updateFrontMatter(appendFrontMatterProperty(parseFrontMatter(activeMarkdownRef.current).metadata));
     setIsMetadataOpen(true);
-  }, [markdown, updateFrontMatter]);
+  }, [updateFrontMatter]);
 
   const handleClearFrontMatter = useCallback(async () => {
     if (!frontMatter.hasFrontMatter) return;
