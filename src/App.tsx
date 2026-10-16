@@ -262,6 +262,7 @@ import {
   exportFontFamilies,
   type LoadedExportSource,
 } from "./export/types";
+import { createLoadedExportSource } from "./export/exportSource";
 import CanvasWindowApp from "./CanvasWindowApp";
 import IntermediateDraftPane from "./components/canvas/IntermediateDraftPane";
 import type { DraftCanvasContext } from "./intermediateDraft";
@@ -8198,20 +8199,7 @@ export default function App() {
           const rawContent = file.path
             ? openTab?.markdown ?? (await invoke<TextDocument>("read_text_file", { path: file.path })).content
             : markdown;
-          const content = parseFrontMatter(rawContent).body;
-          const extension = file.name.match(/\.([^.]+)$/)?.[1]?.toLowerCase() ?? "txt";
-          sources.push({
-            id: file.path || `active-document-${index}`,
-            path: file.path,
-            extension,
-            displayName: file.name,
-            chars: content.replace(/\s/g, "").length,
-            enabled: true,
-            order: index,
-            startMode: index === 0 ? "continue" : "new-page",
-            markupMode: "then-markup",
-            content,
-          });
+          sources.push(createLoadedExportSource(file, rawContent, index));
         } catch (error) {
           readErrors.push(`${file.name}: ${String(error)}`);
         }
