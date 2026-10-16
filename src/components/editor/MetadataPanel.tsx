@@ -1,4 +1,5 @@
 import type { ChangeEvent } from "react";
+import { countFrontMatterProperties } from "../../utils/frontmatter";
 
 type MetadataPanelProps = {
   metadata: string;
@@ -19,9 +20,8 @@ export function MetadataPanel({
   onClear,
   onChange,
 }: MetadataPanelProps) {
-  const metadataCount = metadata.trim()
-    ? `${metadata.split(/\r?\n/).filter(Boolean).length}件`
-    : "空";
+  const propertyCount = countFrontMatterProperties(metadata);
+  const metadataCount = propertyCount > 0 ? `${propertyCount}件` : "空";
 
   return (
     <section className="metadataPanel" aria-label="メタデータ">

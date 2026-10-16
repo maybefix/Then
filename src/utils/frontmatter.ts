@@ -102,6 +102,22 @@ export function updateMarkdownBody(markdown: string, body: string): string {
   return header + text;
 }
 
+// A top-level YAML key: starts at column 0, is not a comment, list item or document
+// marker, and is followed by ":" and a space or the end of the line.
+const TOP_LEVEL_KEY = /^(?:"[^"]*"|'[^']*'|[^\s#\-?:'"][^:]*?|-[^\s:][^:]*?)\s*:(?:\s|$)/;
+
+/**
+ * Number of top-level properties. List items, nested keys and the lines of a
+ * multi-line value are indented under their key and are not counted.
+ */
+export function countFrontMatterProperties(metadata: string): number {
+  let count = 0;
+  for (const line of metadata.split(/\r?\n/)) {
+    if (TOP_LEVEL_KEY.test(line)) count += 1;
+  }
+  return count;
+}
+
 export function appendFrontMatterProperty(metadata: string): string {
   const nextProperty = "新規プロパティ: ";
   return metadata.trimEnd() ? `${metadata.trimEnd()}\n${nextProperty}` : nextProperty;

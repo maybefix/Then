@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   appendFrontMatterProperty,
+  countFrontMatterProperties,
   parseFrontMatter,
   replaceFrontMatter,
   updateMarkdownBody,
@@ -162,6 +163,38 @@ test("メタデータが変わらなければファイルも変わらない", ()
   for (const source of ["---\n---\n本文", "---\na: 1\n\n---\n本文", `${BOM}---\r\na: 1\r\n---\r\n本文`]) {
     assert.equal(replaceFrontMatter(source, parseFrontMatter(source).metadata), source, JSON.stringify(source));
   }
+});
+
+// FM-08: count top-level properties, not lines
+test("件数はトップレベルの項目数で数える", () => {
+  const metadata = [
+    "# サイト用",
+    "slug: making-then",
+    "tags:",
+    "  - 開発",
+    "  - Then",
+    "",
+    "series:",
+    "  name: 夜の港",
+    "  order: 3",
+    "memo: |",
+    "  一行目",
+    "  二行目",
+    "aliases: [夜の港 3, 港]",
+    '"quoted key": 1',
+    "url: https://example.com/a:b",
+    "empty:",
+  ].join("\n");
+  assert.equal(countFrontMatterProperties(metadata), 8);
+});
+
+test("件数：空・コメントだけ・CRLF・「＋」で足した行", () => {
+  assert.equal(countFrontMatterProperties(""), 0);
+  assert.equal(countFrontMatterProperties("# メモ\n\n"), 0);
+  assert.equal(countFrontMatterProperties("a: 1\r\nb:\r\n  - x\r\n"), 2);
+  assert.equal(countFrontMatterProperties(appendFrontMatterProperty("a: 1")), 2);
+  assert.equal(countFrontMatterProperties("- 一覧だけ\n- 二つ目"), 0);
+  assert.equal(countFrontMatterProperties("http://example.com"), 0);
 });
 
 let failed = 0;
