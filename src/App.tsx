@@ -43,7 +43,8 @@ import { ManuscriptTidyModal } from "./components/dialogs/ManuscriptTidyModal";
 import { RightPaneSwitcher, type RightPaneSwitcherItem } from "./components/layout/RightPaneSwitcher";
 import type { ManuscriptTidyLineRange, ManuscriptTidyResult } from "./editor/manuscriptTidy";
 import { normalizeAppTheme } from "./themes";
-import { MetadataPanel } from "./components/editor/MetadataPanel";
+import { PropertiesPanel } from "./components/properties/PropertiesPanel";
+import type { PropertyType } from "./properties/propertyModel";
 import {
   CheckpointStudio,
   type CheckpointCurrentProjectFile,
@@ -232,7 +233,6 @@ import {
   UI_FONT_SCALE_MAX,
 } from "./types";
 import {
-  appendFrontMatterProperty,
   parseFrontMatter,
   replaceFrontMatter,
   updateMarkdownBody,
@@ -836,6 +836,16 @@ const rightSidebarBuiltinTabs: Array<{ id: string; label: string; icon: ReactNod
       <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
         <path d="M8 3h9l3 3v13H8Z" />
         <path d="M4 7v15h12M11 8h6M11 12h6M11 16h4" />
+      </svg>
+    ),
+  },
+  {
+    id: "properties",
+    label: "プロパティ",
+    icon: (
+      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+        <path d="M4 6h3M4 12h3M4 18h3" />
+        <path d="M10 6h10M10 12h10M10 18h6" />
       </svg>
     ),
   },
@@ -3171,7 +3181,6 @@ export default function App() {
   const [isOutlineMenuOpen, setIsOutlineMenuOpen] = useState(false);
   const [appDialog, setAppDialog] = useState<AppDialog | null>(null);
   const [systemFonts, setSystemFonts] = useState<FontOption[]>(fallbackFontOptions);
-  const [isMetadataOpen, setIsMetadataOpen] = useState(false);
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
   const [isRightSidebarWide, setIsRightSidebarWide] = useState(false);
@@ -5668,17 +5677,16 @@ export default function App() {
     }
   }, [currentFilePath, setActiveMarkdown, setSaveStatus]);
 
-  const handleFrontMatterChange = useCallback(
-    (event: ChangeEvent<HTMLTextAreaElement>) => {
-      updateFrontMatter(event.target.value);
-    },
-    [updateFrontMatter],
-  );
-
-  const handleAddFrontMatterProperty = useCallback(() => {
-    updateFrontMatter(appendFrontMatterProperty(parseFrontMatter(activeMarkdownRef.current).metadata));
-    setIsMetadataOpen(true);
-  }, [updateFrontMatter]);
+  // Type chosen per property name (FM-20 ①). Shared by every document; saving it
+  // to the library comes with FM-21.
+  const [propertyTypeSettings, setPropertyTypeSettings] = useState<Record<string, PropertyType>>({});
+  const rememberPropertyType = useCallback((key: string, type: PropertyType) => {
+    setPropertyTypeSettings((current) => (current[key] === type ? current : { ...current, [key]: type }));
+  }, []);
+  // Escape in the properties: back to the body at the caret it had (FM-16).
+  const returnFocusFromProperties = useCallback(() => {
+    editorInstanceRef.current?.focus();
+  }, []);
 
   const handleClearFrontMatter = useCallback(async () => {
     if (!frontMatter.hasFrontMatter) return;
@@ -13605,15 +13613,6 @@ export default function App() {
                       </section>
                     ) : (
                       <>
-                        <MetadataPanel
-                          metadata={frontMatter.metadata}
-                          hasFrontMatter={frontMatter.hasFrontMatter}
-                          isOpen={isMetadataOpen}
-                          onToggle={() => setIsMetadataOpen((current) => !current)}
-                          onAddProperty={handleAddFrontMatterProperty}
-                          onClear={handleClearFrontMatter}
-                          onChange={handleFrontMatterChange}
-                        />
                         {isHydrated && (
                           <VerticalTextEditor
                             key={documentKey}
@@ -14041,6 +14040,17 @@ export default function App() {
                   </div>}
                   {rightSidebarTab === "draft" ? null : activePluginView ? (
                     <div className="pluginViewBody" aria-label={activePluginView.title} />
+                  ) : rightSidebarTab === "properties" ? (
+                    <PropertiesPanel
+                      documentKey={documentKey}
+                      metadata={frontMatter.metadata}
+                      hasFrontMatter={frontMatter.hasFrontMatter}
+                      onChangeMetadata={updateFrontMatter}
+                      onClear={handleClearFrontMatter}
+                      typeSettings={propertyTypeSettings}
+                      onRememberType={rememberPropertyType}
+                      onExit={returnFocusFromProperties}
+                    />
                   ) : rightSidebarTab === "proof" ? (
                     <ProofreadPane
                       text={editorText}
