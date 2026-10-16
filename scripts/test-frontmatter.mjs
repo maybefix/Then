@@ -197,6 +197,24 @@ test("件数：空・コメントだけ・CRLF・「＋」で足した行", () =
   assert.equal(countFrontMatterProperties("http://example.com"), 0);
 });
 
+// FM-09: "＋" never creates a duplicate key
+test("「＋」を続けて押しても名前が重複しない", () => {
+  let metadata = "";
+  for (let i = 0; i < 3; i += 1) metadata = appendFrontMatterProperty(metadata);
+  assert.equal(metadata, "新規プロパティ: \n新規プロパティ2: \n新規プロパティ3: ");
+  assert.equal(countFrontMatterProperties(metadata), 3);
+});
+
+test("「＋」は既存の行を整形しない", () => {
+  assert.equal(appendFrontMatterProperty("a: 1  "), "a: 1  \n新規プロパティ: ");
+  assert.equal(appendFrontMatterProperty("a: 1\n"), "a: 1\n新規プロパティ: ");
+  assert.equal(appendFrontMatterProperty("  \n"), "新規プロパティ: ");
+  assert.equal(
+    appendFrontMatterProperty("新規プロパティ: x\ntags:\n  - 新規プロパティ2"),
+    "新規プロパティ: x\ntags:\n  - 新規プロパティ2\n新規プロパティ2: ",
+  );
+});
+
 let failed = 0;
 for (const [name, fn] of cases) {
   try {

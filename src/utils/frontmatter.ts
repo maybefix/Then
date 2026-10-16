@@ -111,14 +111,31 @@ const TOP_LEVEL_KEY = /^(?:"[^"]*"|'[^']*'|[^\s#\-?:'"][^:]*?|-[^\s:][^:]*?)\s*:
  * multi-line value are indented under their key and are not counted.
  */
 export function countFrontMatterProperties(metadata: string): number {
-  let count = 0;
-  for (const line of metadata.split(/\r?\n/)) {
-    if (TOP_LEVEL_KEY.test(line)) count += 1;
-  }
-  return count;
+  return topLevelKeys(metadata).length;
 }
 
+function topLevelKeys(metadata: string): string[] {
+  const keys: string[] = [];
+  for (const line of metadata.split(/\r?\n/)) {
+    const match = line.match(TOP_LEVEL_KEY);
+    if (!match) continue;
+    keys.push(match[0].replace(/\s*:\s*$/, "").replace(/^(["'])(.*)\1$/, "$2"));
+  }
+  return keys;
+}
+
+const NEW_PROPERTY_NAME = "新規プロパティ";
+
+/**
+ * Add an empty property under a name not used yet (新規プロパティ, 新規プロパティ2, …).
+ * The existing lines are kept as they are.
+ */
 export function appendFrontMatterProperty(metadata: string): string {
-  const nextProperty = "新規プロパティ: ";
-  return metadata.trimEnd() ? `${metadata.trimEnd()}\n${nextProperty}` : nextProperty;
+  const used = new Set(topLevelKeys(metadata));
+  let name = NEW_PROPERTY_NAME;
+  for (let suffix = 2; used.has(name); suffix += 1) name = `${NEW_PROPERTY_NAME}${suffix}`;
+  const nextProperty = `${name}: `;
+
+  if (!metadata.trim()) return nextProperty;
+  return /\r?\n$/.test(metadata) ? `${metadata}${nextProperty}` : `${metadata}\n${nextProperty}`;
 }
