@@ -44,7 +44,8 @@ import { RightPaneSwitcher, type RightPaneSwitcherItem } from "./components/layo
 import type { ManuscriptTidyLineRange, ManuscriptTidyResult } from "./editor/manuscriptTidy";
 import { normalizeAppTheme } from "./themes";
 import { PropertiesPanel } from "./components/properties/PropertiesPanel";
-import type { PropertyType } from "./properties/propertyModel";
+import type { PropertyType, PropertyTypeSettings } from "./properties/propertyModel";
+import { loadPropertyTypes, savePropertyType } from "./properties/propertyTypeStore";
 import {
   CheckpointStudio,
   type CheckpointCurrentProjectFile,
@@ -5677,11 +5678,39 @@ export default function App() {
     }
   }, [currentFilePath, setActiveMarkdown, setSaveStatus]);
 
-  // Type chosen per property name (FM-20 ①). Shared by every document; saving it
-  // to the library comes with FM-21.
-  const [propertyTypeSettings, setPropertyTypeSettings] = useState<Record<string, PropertyType>>({});
+  // Type chosen per property name (FM-20 ①), shared by every work in the open
+  // library and saved in its .then/library.json (FM-21). Outside a library the
+  // types are kept for this session only.
+  const [propertyTypeSettings, setPropertyTypeSettings] = useState<PropertyTypeSettings>({});
+  const propertyTypeScope = projectFolder?.path ?? null;
+  const propertyTypeScopeRef = useRef(propertyTypeScope);
+  propertyTypeScopeRef.current = propertyTypeScope;
+  useEffect(() => {
+    setPropertyTypeSettings({});
+    if (!propertyTypeScope || !isTauriRuntime()) return;
+    let cancelled = false;
+    loadPropertyTypes(propertyTypeScope).then(
+      (saved) => {
+        if (!cancelled) setPropertyTypeSettings(saved);
+      },
+      () => {},
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [propertyTypeScope]);
   const rememberPropertyType = useCallback((key: string, type: PropertyType) => {
     setPropertyTypeSettings((current) => (current[key] === type ? current : { ...current, [key]: type }));
+    const scope = propertyTypeScopeRef.current;
+    if (!scope || !isTauriRuntime()) return;
+    savePropertyType(scope, key, type).then(
+      (saved) => {
+        // A library switched meanwhile has its own types.
+        if (propertyTypeScopeRef.current === scope) setPropertyTypeSettings((current) => ({ ...current, ...saved }));
+      },
+      // Not in a library: the type stays for this session.
+      () => {},
+    );
   }, []);
   // Escape in the properties: back to the body at the caret it had (FM-16).
   const returnFocusFromProperties = useCallback(() => {

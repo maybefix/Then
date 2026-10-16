@@ -594,6 +594,8 @@ pub fn run() {
             transfer_reference_files,
             library_transfer_destinations,
             reorder_library_projects,
+            load_library_property_types,
+            save_library_property_type,
             library_overview,
             save_project_work,
             default_library_parent,
@@ -2012,6 +2014,20 @@ fn reorder_library_projects(
     ordered_names: Vec<String>,
 ) -> Result<Vec<library::LibraryProjectSummary>, String> {
     library::reorder_library_projects(Path::new(&library_path), ordered_names)
+}
+
+#[tauri::command]
+fn load_library_property_types(scope_path: String) -> Result<BTreeMap<String, String>, String> {
+    library::library_property_types(Path::new(&scope_path))
+}
+
+#[tauri::command]
+fn save_library_property_type(
+    scope_path: String,
+    name: String,
+    property_type: String,
+) -> Result<BTreeMap<String, String>, String> {
+    library::set_library_property_type(Path::new(&scope_path), &name, &property_type)
 }
 
 #[tauri::command]
