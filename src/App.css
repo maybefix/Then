@@ -2196,6 +2196,30 @@ html:not([data-window-fullscreen="true"])
   font-size: 11px;
 }
 
+.metadataErrorCount {
+  flex: 0 0 auto;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.metadataErrors {
+  display: grid;
+  gap: 2px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.metadataErrorLine {
+  display: inline-block;
+  min-width: 4em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .metadataActionButton {
   display: inline-grid;
   width: 24px;
@@ -2333,6 +2357,10 @@ html:not([data-window-fullscreen="true"])
 .metadataEditor:focus {
   border-color: rgba(125, 183, 240, 0.58);
   box-shadow: 0 0 0 2px rgba(109, 166, 217, 0.12);
+}
+
+.metadataEditor[aria-invalid="true"] {
+  border-color: var(--danger);
 }
 
 .verticalTypewriterShell {
