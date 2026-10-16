@@ -5647,7 +5647,8 @@ export default function App() {
   }, [documentKey]);
 
   const updateFrontMatter = useCallback((metadata: string) => {
-    const nextMarkdown = composeMarkdown(metadata, parseFrontMatter(markdown).body);
+    const parts = parseFrontMatter(markdown);
+    const nextMarkdown = composeMarkdown(metadata, parts.body, parts.bom);
     if (markdown !== nextMarkdown) {
       setActiveMarkdown(nextMarkdown);
     }
@@ -7666,10 +7667,8 @@ export default function App() {
             const currentDocument = await invoke<TextDocument>("read_text_file", {
               path: file.path,
             });
-            content = composeMarkdown(
-              parseFrontMatter(currentDocument.content).metadata,
-              file.text,
-            );
+            const currentParts = parseFrontMatter(currentDocument.content);
+            content = composeMarkdown(currentParts.metadata, file.text, currentParts.bom);
           } catch {
             content = file.text;
           }
@@ -7893,7 +7892,7 @@ export default function App() {
           }
 
           const content = currentContent !== null
-            ? composeMarkdown(parseFrontMatter(currentContent).metadata, file.text)
+            ? updateMarkdownBody(currentContent, file.text)
             : file.text;
           restoredDocuments.push(await invoke<TextDocument>("save_text_file", { path: targetPath, content }));
         }
