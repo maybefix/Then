@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   appendFrontMatterProperty,
   countFrontMatterProperties,
+  hasUnclosedFrontMatter,
   parseFrontMatter,
   replaceFrontMatter,
   updateMarkdownBody,
@@ -213,6 +214,16 @@ test("「＋」は既存の行を整形しない", () => {
     appendFrontMatterProperty("新規プロパティ: x\ntags:\n  - 新規プロパティ2"),
     "新規プロパティ: x\ntags:\n  - 新規プロパティ2\n新規プロパティ2: ",
   );
+});
+
+// FM-03: a leading --- with no closing --- stays body, and is reported
+test("閉じの---がない原稿を見分ける", () => {
+  assert.equal(hasUnclosedFrontMatter("---\nslug: a\n\n本文"), true);
+  assert.equal(hasUnclosedFrontMatter(`${BOM}---\r\nslug: a\r\n本文`), true);
+  assert.equal(parseFrontMatter("---\nslug: a\n\n本文").hasFrontMatter, false);
+  for (const source of ["---\na: 1\n---\n本文", "---\n---\n---\n場面", "本文\n---\n", "----\n本文", "---"]) {
+    assert.equal(hasUnclosedFrontMatter(source), false, JSON.stringify(source));
+  }
 });
 
 let failed = 0;

@@ -14,6 +14,7 @@ await build({
   format: "esm",
   target: "node20",
   outfile: bundle,
-  external: ["@tauri-apps/api/*"],
+  // yaml is CommonJS-heavy; let Node load it from node_modules instead of bundling it.
+  external: ["@tauri-apps/api/*", "yaml"],
 });
 await import(`${pathToFileURL(bundle).href}?${Date.now()}`);

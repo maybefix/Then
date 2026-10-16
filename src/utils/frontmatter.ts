@@ -42,6 +42,12 @@ export function parseFrontMatter(markdown: string): FrontMatterParts {
   };
 }
 
+/** Starts with a "---" line but no closing "---" follows, so it is all body. */
+export function hasUnclosedFrontMatter(markdown: string): boolean {
+  const source = markdown.startsWith(BOM) ? markdown.slice(BOM.length) : markdown;
+  return /^---\r?\n/.test(source) && !FRONT_MATTER.test(source);
+}
+
 function splitLeadingBom(body: string): { text: string; bom: boolean } {
   // Bodies saved before the BOM was split off (e.g. checkpoint snapshots) may still
   // carry it. It belongs to the file, so it goes in front of the front matter.

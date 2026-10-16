@@ -10680,6 +10680,18 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   font-size: var(--export-font-caption);
 }
 
+.exportSourceWarning {
+  margin: 5px 0 0;
+  padding-left: 25px;
+  color: var(--warning);
+  font-size: var(--export-font-caption);
+  line-height: 1.45;
+}
+
+.exportSourceWarning.unclosed {
+  color: var(--danger);
+}
+
 .exportSourceMeta label {
   display: flex;
   min-width: 0;

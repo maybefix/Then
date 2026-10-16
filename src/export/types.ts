@@ -39,6 +39,12 @@ export type ExportSourceFile = {
   order: number;
   startMode: ExportStartMode;
   markupMode: "then-markup";
+  /**
+   * "unclosed": starts with --- but has no closing ---, so its YAML is exported as
+   * body text (FM-03). "invalid": the front matter is not valid YAML; it is left
+   * out of the export either way.
+   */
+  frontMatterIssue?: "unclosed" | "invalid";
 };
 
 export type LoadedExportSource = ExportSourceFile & {

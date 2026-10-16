@@ -14,11 +14,21 @@ import { DEFAULT_EXPORT_LAYOUT } from "../src/export/types";
 import { buildLinkedVivliostyleHtml } from "../src/export/vivliostyleHtml";
 import { generateVerticalDocx } from "../src/export/wordprocessingMl";
 import { updateMarkdownBody } from "../src/utils/frontmatter";
+import { analyzeFrontMatter } from "../src/utils/frontmatterYaml";
 
 const BOM = String.fromCharCode(0xfeff);
 const YAML_MARKERS = ["slug", "making-then", "publish", "夜の港シリーズ"];
+const countFrontMatterErrors = (metadata: string) => analyzeFrontMatter(metadata).errors.length;
 
-type Case = { name: string; file: string; mustContain: string[] };
+type Case = {
+  name: string;
+  file: string;
+  mustContain: string[];
+  /** The warning the export screen should show for this file (FM-03 / FM-07). */
+  issue?: "unclosed" | "invalid";
+  /** FM-03: without a closing ---, the YAML is body text and is exported. */
+  yamlIsBody?: boolean;
+};
 const cases: Case[] = [
   {
     name: "BOM付き",
@@ -39,6 +49,14 @@ const cases: Case[] = [
     name: "不正なYAML",
     file: "---\nslug making-then\n: : publish\n  - 夜の港シリーズ\n---\n# 見出し\n\n本文その一。",
     mustContain: ["見出し", "本文その一"],
+    issue: "invalid",
+  },
+  {
+    name: "閉じの---がない",
+    file: "---\nslug: making-then\npublish: true\n\n本文その一。",
+    mustContain: ["本文その一", "making-then"],
+    issue: "unclosed",
+    yamlIsBody: true,
   },
   {
     name: "区切り線から始まる本文（Thenで保存した形）",
@@ -63,9 +81,10 @@ globalThis.fetch = async (input) => {
   return new Response(await readFile(path.join(root, "public", "fonts", fileName)), { status: 200 });
 };
 
-function check(caseName: string, format: string, output: string, mustContain: string[]): string[] {
+function check(testCase: Case, format: string, output: string): string[] {
+  const { name: caseName, mustContain } = testCase;
   const problems: string[] = [];
-  for (const marker of YAML_MARKERS) {
+  for (const marker of testCase.yamlIsBody ? [] : YAML_MARKERS) {
     if (output.includes(marker)) problems.push(`${format}: YAMLの「${marker}」が出ている`);
   }
   if (output.includes(BOM)) problems.push(`${format}: BOMが本文に残っている`);
@@ -77,7 +96,15 @@ function check(caseName: string, format: string, output: string, mustContain: st
 
 const failures: string[] = [];
 for (const testCase of cases) {
-  const source = createLoadedExportSource({ path: `C:\\fixture\\${testCase.name}.md`, name: `${testCase.name}.md` }, testCase.file, 0);
+  const source = createLoadedExportSource(
+    { path: `C:\\fixture\\${testCase.name}.md`, name: `${testCase.name}.md` },
+    testCase.file,
+    0,
+    countFrontMatterErrors,
+  );
+  if (source.frontMatterIssue !== testCase.issue) {
+    failures.push(`${testCase.name} / 書き出し画面の警告: ${source.frontMatterIssue ?? "なし"}（期待：${testCase.issue ?? "なし"}）`);
+  }
   const job: ExportJob = {
     format: "pdf",
     title: "書き出し確認",
@@ -88,15 +115,15 @@ for (const testCase of cases) {
   const failuresBefore = failures.length;
 
   const html = buildLinkedVivliostyleHtml(linked, "http://127.0.0.1:1420/");
-  failures.push(...check(testCase.name, "PDF（Vivliostyle）", html, testCase.mustContain));
+  failures.push(...check(testCase, "PDF（Vivliostyle）", html));
 
   const docx = await JSZip.loadAsync(await generateVerticalDocx(linked));
   const documentXml = (await docx.file("word/document.xml")?.async("string")) ?? "";
-  failures.push(...check(testCase.name, "DOCX", documentXml, testCase.mustContain));
+  failures.push(...check(testCase, "DOCX", documentXml));
 
   const submission = serializeSubmission(createSubmissionDocument([source]), { ...DEFAULT_SUBMISSION_OPTIONS, lineEnding: "lf" }).text;
-  failures.push(...check(testCase.name, "投稿用テキスト", submission, testCase.mustContain));
-  if (submission.trimStart().startsWith("---") && !testCase.name.startsWith("区切り線")) {
+  failures.push(...check(testCase, "投稿用テキスト", submission));
+  if (submission.trimStart().startsWith("---") && !testCase.name.startsWith("区切り線") && !testCase.yamlIsBody) {
     failures.push(`${testCase.name} / 投稿用テキスト: 先頭に---が出ている`);
   }
 

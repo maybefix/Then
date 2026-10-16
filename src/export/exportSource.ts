@@ -1,5 +1,8 @@
-import { parseFrontMatter } from "../utils/frontmatter";
+import { hasUnclosedFrontMatter, parseFrontMatter } from "../utils/frontmatter";
 import type { LoadedExportSource } from "./types";
+
+/** Returns how many YAML errors the metadata has (analyzeFrontMatter, loaded lazily). */
+export type FrontMatterErrorCounter = (metadata: string) => number;
 
 /**
  * One manuscript file as the export screen receives it. Every exporter (PDF,
@@ -10,9 +13,16 @@ export function createLoadedExportSource(
   file: { path: string; name: string },
   rawContent: string,
   index: number,
+  countFrontMatterErrors?: FrontMatterErrorCounter,
 ): LoadedExportSource {
-  const content = parseFrontMatter(rawContent).body;
+  const parts = parseFrontMatter(rawContent);
+  const content = parts.body;
   const extension = file.name.match(/\.([^.]+)$/)?.[1]?.toLowerCase() ?? "txt";
+  const frontMatterIssue = hasUnclosedFrontMatter(rawContent)
+    ? "unclosed"
+    : parts.hasFrontMatter && parts.metadata.trim() && countFrontMatterErrors?.(parts.metadata)
+      ? "invalid"
+      : undefined;
   return {
     id: file.path || `active-document-${index}`,
     path: file.path,
@@ -23,6 +33,7 @@ export function createLoadedExportSource(
     order: index,
     startMode: index === 0 ? "continue" : "new-page",
     markupMode: "then-markup",
+    ...(frontMatterIssue ? { frontMatterIssue } : {}),
     content,
   };
 }

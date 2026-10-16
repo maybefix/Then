@@ -8201,6 +8201,12 @@ export default function App() {
         : [{ path: currentFilePath ?? "", name: currentFileName }];
       const sources: LoadedExportSource[] = [];
       const readErrors: string[] = [];
+      // Flags files whose properties are broken YAML; without the parser the list
+      // still opens, just without that warning.
+      const countFrontMatterErrors = await import("./utils/frontmatterYaml").then(
+        ({ analyzeFrontMatter }) => (metadata: string) => analyzeFrontMatter(metadata).errors.length,
+        () => undefined,
+      );
 
       for (const [index, file] of candidates.entries()) {
         try {
@@ -8208,7 +8214,7 @@ export default function App() {
           const rawContent = file.path
             ? openTab?.markdown ?? (await invoke<TextDocument>("read_text_file", { path: file.path })).content
             : markdown;
-          sources.push(createLoadedExportSource(file, rawContent, index));
+          sources.push(createLoadedExportSource(file, rawContent, index, countFrontMatterErrors));
         } catch (error) {
           readErrors.push(`${file.name}: ${String(error)}`);
         }
