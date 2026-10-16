@@ -400,6 +400,7 @@ function PropertyRowView({
       </div>
       <input
         className={`propertyKey${keyInvalid ? " invalid" : ""}`}
+        data-dirty={keyDraft !== row.key}
         value={keyDraft}
         spellCheck={false}
         aria-label="プロパティ名"
@@ -489,6 +490,7 @@ function CommitInput({ type, value, onCommit }: { type: string; value: string; o
   return (
     <input
       className="propertyInput"
+      data-dirty={draft !== value}
       type={type}
       step={type === "number" ? "any" : undefined}
       value={draft}
@@ -526,6 +528,7 @@ function TextValue({ value, onCommit }: { value: string; onCommit: (value: strin
     <textarea
       ref={ref}
       className="propertyInput propertyText"
+      data-dirty={draft !== value}
       rows={1}
       value={draft}
       placeholder="空"
@@ -568,6 +571,7 @@ function ListEditor({ items, onChange }: { items: string[]; onChange: (items: st
       ))}
       <input
         className="propertyChipInput"
+        data-dirty={draft !== ""}
         value={draft}
         placeholder={items.length ? "" : "空"}
         aria-label="項目を追加"
@@ -624,6 +628,7 @@ function AddRow({
       <div className="propertyAddName">
         <input
           className={`propertyKey${duplicate ? " invalid" : ""}`}
+          data-dirty="true"
           autoFocus
           value={name}
           placeholder="名前"

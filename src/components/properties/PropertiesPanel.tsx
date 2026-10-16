@@ -1,7 +1,8 @@
 // Header and frame of the properties editor. The form itself (and the YAML parser
 // it needs) loads lazily, so documents without front matter never pay for it.
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { PropertyType, PropertyTypeSettings } from "../../properties/propertyModel";
+import { historyShortcut, PropertiesHistory } from "../../properties/propertiesHistory";
 import { countFrontMatterProperties } from "../../utils/frontmatter";
 import type { FrontMatterAnalysis } from "../../utils/frontmatterYaml";
 
@@ -38,6 +39,41 @@ function useFrontMatterAnalysis(metadata: string): FrontMatterAnalysis | null {
   }, [metadata, needed, analyzerReady]);
 }
 
+// Kept outside the component so a document's history survives switching panes or tabs.
+const propertiesHistory = new PropertiesHistory();
+
+/**
+ * Records every change of the metadata (form, YAML source, clear-all) and
+ * returns undo/redo that write the recorded text back (FM-22).
+ */
+function usePropertiesHistory(documentKey: string, metadata: string, onChangeMetadata: (next: string) => void) {
+  const previousRef = useRef({ documentKey, metadata });
+  const restoringRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const previous = previousRef.current;
+    previousRef.current = { documentKey, metadata };
+    if (previous.documentKey !== documentKey || previous.metadata === metadata) return;
+    if (restoringRef.current === metadata) {
+      restoringRef.current = null;
+      return;
+    }
+    restoringRef.current = null;
+    propertiesHistory.record(documentKey, previous.metadata);
+  }, [documentKey, metadata]);
+
+  const restore = (target: string | null) => {
+    if (target === null) return false;
+    restoringRef.current = target;
+    onChangeMetadata(target);
+    return true;
+  };
+  return {
+    undo: () => restore(propertiesHistory.undo(documentKey, metadata)),
+    redo: () => restore(propertiesHistory.redo(documentKey, metadata)),
+  };
+}
+
 export type PropertiesPanelProps = {
   documentKey: string;
   metadata: string;
@@ -68,9 +104,24 @@ export function PropertiesPanel({
     ? analysis.properties.length
     : countFrontMatterProperties(metadata);
 
+  const history = usePropertiesHistory(documentKey, metadata, onChangeMetadata);
+
   useEffect(() => {
     setAddRequest(0);
   }, [documentKey]);
+
+  // Property undo/redo while focus is in the pane. A field with unconfirmed typing
+  // (data-dirty) and the YAML source keep the field's own undo.
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.nativeEvent.isComposing) return;
+    const action = historyShortcut(event);
+    if (!action) return;
+    const target = event.target as HTMLElement;
+    if (target.closest(".propertiesSource") || target.dataset.dirty === "true") return;
+    event.preventDefault();
+    if (action === "undo") history.undo();
+    else history.redo();
+  };
 
   const requestAdd = () => {
     setView("form");
@@ -78,7 +129,7 @@ export function PropertiesPanel({
   };
 
   return (
-    <section className="propertiesPanel" aria-label="プロパティ">
+    <section className="propertiesPanel" aria-label="プロパティ" onKeyDown={onKeyDown}>
       <div className="propertiesHeader">
         <span className="propertiesCount">{hasFrontMatter && propertyCount > 0 ? `${propertyCount}件` : "空"}</span>
         {errors.length > 0 && <span className="propertiesErrorCount">エラー {errors.length}</span>}

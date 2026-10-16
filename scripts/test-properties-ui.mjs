@@ -30,6 +30,17 @@ await build({
   external: ["react", "react/jsx-runtime", "yaml"],
 });
 const { default: PropertiesForm } = await import(`${pathToFileURL(path.join(dir, "form.mjs")).href}?${Date.now()}`);
+await build({
+  entryPoints: ["src/components/properties/PropertiesPanel.tsx"],
+  outfile: path.join(dir, "panel.mjs"),
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  jsx: "automatic",
+  loader: { ".css": "empty" },
+  external: ["react", "react/jsx-runtime", "yaml"],
+});
+const { PropertiesPanel } = await import(`${pathToFileURL(path.join(dir, "panel.mjs")).href}?${Date.now()}`);
 
 const ARTICLE = [
   "# サイト用",
@@ -213,6 +224,109 @@ test("Escapeで本文へ戻る", () => {
   const { container, state, unmount } = mount(ARTICLE);
   key(row(container, "slug").querySelector(".propertyKey"), "Escape");
   assert.equal(state.exits, 1);
+  unmount();
+});
+
+// FM-22: Undo/Redo of property edits, through the whole pane.
+async function mountPanel(initial, documentKey = "doc-a") {
+  const state = { metadata: initial, documentKey };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = () =>
+    act(() => {
+      root.render(React.createElement(PropertiesPanel, {
+        documentKey: state.documentKey,
+        metadata: state.metadata,
+        hasFrontMatter: state.metadata !== "",
+        typeSettings: {},
+        onRememberType: () => {},
+        onExit: () => {},
+        onClear: () => {},
+        onChangeMetadata: (next) => {
+          state.metadata = next;
+          render();
+        },
+      }));
+    });
+  render();
+  // The form is lazy-loaded.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+  return { state, container, render, unmount: () => act(() => root.unmount()) };
+}
+
+const shortcut = (element, key, init = {}) => {
+  let event;
+  act(() => {
+    event = new window.KeyboardEvent("keydown", { key, ctrlKey: true, bubbles: true, cancelable: true, ...init });
+    element.dispatchEvent(event);
+  });
+  return event.defaultPrevented;
+};
+
+test("プロパティの変更を Ctrl+Z で戻し、Ctrl+Shift+Z・Ctrl+Y でやり直す", async () => {
+  const { container, state, unmount } = await mountPanel(ARTICLE);
+  const checkbox = row(container, "publish").querySelector("input[type=checkbox]");
+  click(checkbox);
+  const tags = row(container, "tags").querySelector(".propertyChipInput");
+  setValue(tags, "縦書き");
+  key(tags, "Enter");
+  const afterBoth = state.metadata;
+  assert.ok(afterBoth.includes("publish: true") && afterBoth.includes("  - 縦書き"));
+
+  assert.equal(shortcut(checkbox, "z"), true);
+  assert.ok(state.metadata.includes("publish: true") && !state.metadata.includes("縦書き"));
+  shortcut(checkbox, "z");
+  assert.equal(state.metadata, ARTICLE);
+  assert.equal(shortcut(checkbox, "z"), true, "戻す先がなくてもブラウザの既定動作には渡さない");
+  assert.equal(state.metadata, ARTICLE);
+
+  shortcut(checkbox, "z", { shiftKey: true });
+  assert.ok(state.metadata.includes("publish: true") && !state.metadata.includes("縦書き"));
+  shortcut(checkbox, "y");
+  assert.equal(state.metadata, afterBoth);
+  unmount();
+});
+
+test("確定前の入力欄とYAMLソースでは、欄の中のUndoに任せる", async () => {
+  const { container, state, render, unmount } = await mountPanel(ARTICLE);
+  const text = row(container, "description").querySelector("textarea");
+  setValue(text, "打ちかけ");
+  assert.equal(shortcut(text, "z"), false);
+  assert.equal(state.metadata, ARTICLE);
+  click(container.querySelector('[aria-label="YAMLで編集"]'));
+  const source = container.querySelector(".propertiesSourceText");
+  assert.ok(source);
+  assert.equal(shortcut(source, "z"), false);
+  render();
+  unmount();
+});
+
+test("履歴は文書ごとに分かれ、タブを戻せば続きから戻せる", async () => {
+  const { container, state, render, unmount } = await mountPanel("a: 1", "doc-x");
+  setValue(row(container, "a").querySelector("input[type=number]"), "2");
+  key(row(container, "a").querySelector("input[type=number]"), "Enter");
+  assert.equal(state.metadata, "a: 2");
+
+  state.documentKey = "doc-y";
+  state.metadata = "b: 1";
+  render();
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  shortcut(row(container, "b").querySelector(".propertyKey"), "z");
+  assert.equal(state.metadata, "b: 1", "別の文書の履歴は使わない");
+
+  state.documentKey = "doc-x";
+  state.metadata = "a: 2";
+  render();
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  shortcut(row(container, "a").querySelector(".propertyKey"), "z");
+  assert.equal(state.metadata, "a: 1");
   unmount();
 });
 
