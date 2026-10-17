@@ -22,6 +22,7 @@
     "test:markdown-tables": "node scripts/test-markdown-tables.mjs",
     "test:manuscript-tidy": "node scripts/test-manuscript-tidy.mjs",
     "test:frontmatter": "node --experimental-strip-types scripts/test-frontmatter.mjs",
+    "test:save-journal-client": "node scripts/test-save-journal-client.mjs",
     "test:frontmatter-export": "node scripts/test-frontmatter-export.mjs",
     "test:frontmatter-yaml": "node --experimental-strip-types scripts/test-frontmatter-yaml.mjs",
     "test:property-model": "node scripts/test-property-model.mjs",

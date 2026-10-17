@@ -1,60 +1,76 @@
 // Feeds each open document's changes to its recovery journal in the backend
 // (src-tauri/src/save_journal) and routes autosave through it.
 //
-// A change goes out as soon as it is made. While one batch is on its way the
-// next changes wait and leave together, so sending keeps pace with the disk
-// and the editor never waits for it.
+// Every change is a numbered generation and goes out as soon as it is made;
+// while one batch is on its way the next changes wait and leave together, so
+// sending keeps pace with the disk and the editor never waits for it. A save
+// writes the text of the generation fixed when it was requested; changes made
+// meanwhile keep being recorded and are left for the next save.
 import { invoke } from "@tauri-apps/api/core";
 import { computeTextChange } from "../plugins/anchors";
 import type { TextDocument } from "../types";
 
-/** `length`: UTF-16 length of the text the change applies to (a cheap check that both sides agree). */
-type Edit = { seq: number; length: number; from: number; to: number; insert: string };
+type Edit = {
+  gen: number;
+  /** The whole text, replacing whatever the backend holds. */
+  replace: boolean;
+  /** UTF-16 length of the text the change applies to (a cheap check that both sides agree). */
+  length: number;
+  from: number;
+  to: number;
+  insert: string;
+};
 
 type DocumentJournal = {
   path: string;
-  /** Text before the first change; sent once, with the first batch. */
+  /** Text of generation 0; sent with every batch until the backend has it. */
   base: string | null;
   queue: Edit[];
-  recorded: number;
+  /** Latest generation recorded here. */
+  gen: number;
+  /** Latest generation the backend has confirmed. */
   acknowledged: number;
   sending: Promise<void> | null;
-  /** While a save runs, changes made after its text are held back. */
-  holdAfter: number | null;
-  /** A batch failed; the next save sends the whole text instead. */
-  broken: boolean;
-  /** The text after the last recorded change. */
+  /** A batch was lost: the whole text goes out with the next one. */
+  needsResync: boolean;
+  /** The text of generation `gen`. */
   lastText: string;
 };
 
 const journals = new Map<string, DocumentJournal>();
 
+function push(journal: DocumentJournal, edit: Omit<Edit, "gen">) {
+  journal.gen += 1;
+  journal.queue.push({ gen: journal.gen, ...edit });
+}
+
+function pushReplace(journal: DocumentJournal, text: string) {
+  push(journal, { replace: true, length: 0, from: 0, to: 0, insert: text });
+}
+
 function send(key: string, journal: DocumentJournal) {
-  if (journal.sending || journal.broken) return;
-  const limit = journal.holdAfter ?? Infinity;
-  let count = 0;
-  while (count < journal.queue.length && journal.queue[count].seq <= limit) count += 1;
-  if (count === 0) return;
-  const batch = journal.queue.splice(0, count);
-  const last = batch[batch.length - 1].seq;
-  const edits = batch.map(({ length, from, to, insert }) => ({ length, from, to, insert }));
+  if (journal.sending) return;
+  if (journal.needsResync) {
+    journal.needsResync = false;
+    journal.queue.length = 0;
+    pushReplace(journal, journal.lastText);
+  }
+  if (journal.queue.length === 0) return;
+  const edits = journal.queue.splice(0);
+  const last = edits[edits.length - 1].gen;
   journal.sending = invoke<void>("journal_edits", { key, path: journal.path, base: journal.base, edits })
     .then(() => {
       journal.base = null;
-      journal.acknowledged = last;
+      journal.acknowledged = Math.max(journal.acknowledged, last);
     })
     .catch(() => {
-      journal.broken = true;
+      // Retried with the next change or save, not in a loop.
+      journal.needsResync = true;
     })
     .finally(() => {
       journal.sending = null;
-      send(key, journal);
+      if (!journal.needsResync) send(key, journal);
     });
-}
-
-function push(journal: DocumentJournal, length: number, from: number, to: number, insert: string) {
-  journal.recorded += 1;
-  journal.queue.push({ seq: journal.recorded, length, from, to, insert });
 }
 
 /** Record one change of a saved document's full text. */
@@ -65,11 +81,10 @@ export function recordDocumentChange(key: string, path: string, previous: string
       path,
       base: previous,
       queue: [],
-      recorded: 0,
+      gen: 0,
       acknowledged: 0,
       sending: null,
-      holdAfter: null,
-      broken: false,
+      needsResync: false,
       lastText: previous,
     };
     journals.set(key, journal);
@@ -77,48 +92,65 @@ export function recordDocumentChange(key: string, path: string, previous: string
   // A renamed or moved file keeps its tab; the backend follows the new path.
   journal.path = path;
   if (previous !== journal.lastText) {
-    // The tab's text was replaced without passing through here (a reload):
-    // one record replaces the whole text before the change.
-    push(journal, journal.lastText.length, 0, journal.lastText.length, previous);
+    // The tab's text was replaced without passing through here (a reload).
+    pushReplace(journal, previous);
   }
   const change = computeTextChange(previous, next);
-  push(journal, previous.length, change.from, change.to, change.insertedText);
+  push(journal, {
+    replace: false,
+    length: previous.length,
+    from: change.from,
+    to: change.to,
+    insert: change.insertedText,
+  });
   journal.lastText = next;
   send(key, journal);
 }
 
-/** Autosave through the journal: the changes up to `content` are recorded first. */
-export async function saveThroughJournal(key: string, path: string, content: string): Promise<TextDocument> {
+/**
+ * The generation `text` is, fixed when a save is requested (typing may go on
+ * before the save runs). `text` is the tab's current text: if it changed
+ * without passing through here (a reload), it is recorded now.
+ */
+export function journalPositionOf(key: string, text: string): number {
+  const journal = journals.get(key);
+  if (!journal) return 0;
+  if (text !== journal.lastText) {
+    pushReplace(journal, text);
+    journal.lastText = text;
+    send(key, journal);
+  }
+  return journal.gen;
+}
+
+/**
+ * Autosave through the journal: writes `content`, the text of generation
+ * `gen` (from journalPositionOf at request time). Changes after it keep being
+ * recorded meanwhile and stay for the next save.
+ */
+export async function saveThroughJournal(
+  key: string,
+  path: string,
+  content: string,
+  gen?: number | null,
+): Promise<TextDocument> {
   const journal = journals.get(key);
   if (!journal) {
-    return invoke<TextDocument>("journal_save", { key, path, content });
+    return invoke<TextDocument>("journal_save", { key, path, gen: 0, content });
   }
-  const upTo = journal.recorded;
-  journal.holdAfter = upTo;
-  try {
-    while (!journal.broken && journal.acknowledged < upTo) {
-      send(key, journal);
-      await journal.sending;
-    }
-    if (journal.broken) {
-      // The save sends the whole text; the changes it already contains go.
-      journal.queue = journal.queue.filter((edit) => edit.seq > upTo);
-    }
-    const document = await invoke<TextDocument>("journal_save", { key, path, content });
-    // The backend now holds exactly `content`.
-    journal.broken = false;
-    journal.base = null;
-    journal.acknowledged = upTo;
-    if (journal.queue.length === 0 && journal.lastText !== content && journal.recorded === upTo) {
-      journal.lastText = content;
-    }
-    return document;
-  } catch (error) {
-    journal.broken = true;
-    throw error;
-  } finally {
-    journal.holdAfter = null;
+  // Without a position, the text names its own generation only if it is the
+  // current one; otherwise the backend keeps the text itself in its intent.
+  const target = gen ?? journal.gen;
+  while (journal.acknowledged < target) {
     send(key, journal);
+    if (!journal.sending) break;
+    await journal.sending;
+  }
+  try {
+    return await invoke<TextDocument>("journal_save", { key, path, gen: target, content });
+  } catch (error) {
+    if (journal.acknowledged < target) journal.needsResync = true;
+    throw error;
   }
 }
 

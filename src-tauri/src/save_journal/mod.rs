@@ -65,7 +65,13 @@ fn byte_offset(text: &str, units: usize) -> Option<usize> {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EditInput {
+    /// Generation this change produces (the editor numbers them).
+    gen: u64,
+    /// The whole text, replacing whatever the journal holds.
+    #[serde(default)]
+    replace: bool,
     /// UTF-16 length of the text the change applies to.
     length: usize,
     from: usize,
@@ -74,7 +80,7 @@ pub struct EditInput {
 }
 
 /// Record editor changes (UTF-16 offsets into the text before each change).
-/// `base` is the text before the first change; it opens the journal.
+/// `base` is the text before the first change (generation 0); it opens the journal.
 pub fn record_edits(key: &str, path: &str, base: Option<String>, edits: Vec<EditInput>) -> Result<(), String> {
     let mut journals = journals().lock().map_err(|_| "journal lock poisoned")?;
     if !journals.contains_key(key) {
@@ -91,6 +97,16 @@ pub fn record_edits(key: &str, path: &str, base: Option<String>, edits: Vec<Edit
         entry.journal.set_doc(Path::new(path));
     }
     for edit in edits {
+        if edit.replace {
+            if edit.gen <= entry.journal.gen {
+                return Err("replacement does not move forward".into());
+            }
+            entry.journal.replace(&mut entry.fs, edit.gen, edit.insert.as_bytes()).map_err(fs_error)?;
+            continue;
+        }
+        if edit.gen != entry.journal.gen + 1 {
+            return Err("journal is out of step with the editor".into());
+        }
         let text = std::str::from_utf8(&entry.journal.content).map_err(|e| e.to_string())?;
         if text.encode_utf16().count() != edit.length {
             return Err("journal is out of step with the editor".into());
@@ -114,7 +130,9 @@ pub struct Saved {
     pub file_id: Option<String>,
 }
 
-pub fn save(key: &str, path: &str, content: &str) -> Result<Saved, String> {
+/// Save `content`, the text of generation `gen` as fixed when the save was
+/// requested. Changes recorded after it stay in the journal.
+pub fn save(key: &str, path: &str, gen: u64, content: &str) -> Result<Saved, String> {
     let mut journals = journals().lock().map_err(|_| "journal lock poisoned")?;
     if !journals.contains_key(key) {
         let mut fs = RealFs::default();
@@ -125,10 +143,11 @@ pub fn save(key: &str, path: &str, content: &str) -> Result<Saved, String> {
     if entry.journal.doc != Path::new(path) {
         entry.journal.set_doc(Path::new(path));
     }
-    match entry.journal.save(&mut entry.fs, content.as_bytes()) {
+    match entry.journal.save(&mut entry.fs, gen, content.as_bytes()) {
         Ok(_) => Ok(Saved {
             file_id: Some(entry.journal.disk_id().to_string()).filter(|id| !id.is_empty()),
         }),
+        Err(SaveError::Ahead) => Err("保存する世代の記録がまだ届いていません".into()),
         Err(SaveError::External(why)) => Err(format!("ファイルが外部で変更されたため保存しませんでした（{why}）")),
         Err(SaveError::Journal(error)) => Err(format!("復旧用の記録を書けないため保存しませんでした（{}）", fs_error(error))),
         Err(SaveError::Original(error)) => Err(format!("failed to write text file: {}", fs_error(error))),

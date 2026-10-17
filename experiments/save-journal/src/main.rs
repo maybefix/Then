@@ -58,6 +58,9 @@ struct Trace {
     compactions: u64,
     /// A save failed but the manuscript bytes changed anyway.
     touched_on_failure: u64,
+    unvouched: u64,
+    wound_back: u64,
+    older_saves: u64,
 }
 
 /// Edits, background flushes and saves in a seeded order.
@@ -69,20 +72,47 @@ fn scenario<F: Fs>(fs: &mut F, dir: &Path, doc: &Path, seed: u64, steps: usize, 
         if fs.dead() {
             return Some(j);
         }
-        match rng.below(20) {
-            0..=13 => {
+        match rng.below(40) {
+            0..=26 => {
                 let (pos, del, ins) = random_edit(&j.content, &mut rng);
                 let _ = j.edit(fs, pos, del, &ins);
                 tr.hist.push(j.content.clone());
             }
-            14..=15 => {
+            27 => {
+                // The editor and the journal fell out of step: the whole text.
+                let n = 5 + rng.below(40) as usize;
+                let text = random_text(&mut rng, n);
+                let gen = j.gen + 1;
+                let _ = j.replace(fs, gen, &text);
+                tr.hist.push(j.content.clone());
+            }
+            28..=31 => {
                 let _ = j.flush(fs);
             }
             _ => {
+                // The text of a generation fixed when the save was requested:
+                // often the current one, often an earlier one (typing went on).
+                let g = match rng.below(3) {
+                    0 => j.gen,
+                    _ => j.disk_gen + rng.below(j.gen - j.disk_gen + 1),
+                };
+                let mut content = tr.hist[g as usize].clone();
+                if rng.below(25) == 0 {
+                    // A text the journal cannot vouch for.
+                    content.extend_from_slice("（照合外）".as_bytes());
+                    tr.unvouched += 1;
+                }
                 let before = fs.read(doc).ok();
-                let result = j.save(fs, &j.content.clone());
+                let result = j.save(fs, g, &content);
                 if fs.dead() {
                     return Some(j);
+                }
+                // A save never winds the journal back to the saved generation.
+                if j.content != *tr.hist.last().unwrap() {
+                    tr.wound_back += 1;
+                }
+                if g < j.gen && matches!(result, Ok(true)) {
+                    tr.older_saves += 1;
                 }
                 match result {
                     Ok(true) => tr.saves += 1,
@@ -124,6 +154,7 @@ struct Tally {
     continued: u64,
     lost_beyond_required: u64,
     compactions_seen: u64,
+    older_saves: u64,
 }
 
 fn check_run(fs: &mut SimFs, dir: &Path, doc: &Path, tr: &Trace, mode: Mode, label: &str, tally: &mut Tally) {
@@ -181,7 +212,8 @@ fn check_run(fs: &mut SimFs, dir: &Path, doc: &Path, tr: &Trace, mode: Mode, lab
         let Ok(mut j) = Journal::start(fs, dir, doc, None) else {
             return fail(tally, "restart failed".into());
         };
-        if j.save(fs, &r.content).is_err() {
+        let gen = j.gen + 1;
+        if j.replace(fs, gen, &r.content).is_err() || j.save_current(fs).is_err() {
             return fail(tally, "save after recovery failed".into());
         }
         if fs.peek(doc).as_deref() != Some(&r.content[..]) {
@@ -221,6 +253,10 @@ fn cmd_sim(scenarios: u64, steps: usize) {
                     Mode::PowerLoss(k) => fs.power_loss(&mut Rng::new(seed * 7919 + n * 31 + k)),
                     _ => fs.app_crash(),
                 }
+                if tr.wound_back > 0 {
+                    tally.failures.push(format!("seed {seed} op {n}: a save wound the journal back"));
+                }
+                tally.older_saves += tr.older_saves;
                 check_run(&mut fs, dir, doc, &tr, mode, &format!("seed {seed} op {n}"), &mut tally);
             }
         }
@@ -229,6 +265,7 @@ fn cmd_sim(scenarios: u64, steps: usize) {
     println!("  disk state found at recovery: {:?}", tally.classes);
     println!("  runs that recovered from a compacted segment: {}", tally.compactions_seen);
     println!("  runs where Then saved again after recovery: {}", tally.continued);
+    println!("  saves of an earlier generation while later edits stayed: {}", tally.older_saves);
     println!("  crashes before the journal existed: {}", tally.no_journal);
     report(&tally.failures);
 }
@@ -279,12 +316,12 @@ fn cmd_external() {
         let mut fs = sim_setup(&init, doc);
         let mut j = Journal::start(&mut fs, dir, doc, None).unwrap();
         j.edit(&mut fs, init.len(), 0, "一行目。".as_bytes()).unwrap();
-        j.save(&mut fs, &j.content.clone()).unwrap();
+        j.save_current(&mut fs).unwrap();
         let cur = j.content.clone();
         change(&mut fs, doc, tmp, &cur);
         let outside = fs.peek(doc).unwrap();
         j.edit(&mut fs, 0, 0, "★".as_bytes()).unwrap();
-        match j.save(&mut fs, &j.content.clone()) {
+        match j.save_current(&mut fs) {
             Err(SaveError::External(why)) if why == want_err => {}
             other => failures.push(format!("{name}: save returned {other:?}")),
         }
@@ -341,7 +378,7 @@ fn cmd_diskfull(scenarios: u64, steps: usize) {
             // Space comes back: the queued records drain and the next save lands.
             fs.fail_growth_from = None;
             if let Some(mut j) = j {
-                let saved = j.flush(&mut fs).is_ok() && j.save(&mut fs, &j.content.clone()).is_ok();
+                let saved = j.flush(&mut fs).is_ok() && j.save_current(&mut fs).is_ok();
                 if !saved || fs.peek(doc).as_deref() != Some(&j.content[..]) {
                     failures.push(format!("seed {seed} full from op {n}: save after space returned failed"));
                 }
@@ -592,7 +629,7 @@ fn cmd_bench(root: &Path) {
                 let before = fs.stats.clone();
                 std::thread::sleep(idle);
                 let t = Instant::now();
-                j.save(&mut fs, &j.content.clone()).unwrap();
+                j.save_current(&mut fs).unwrap();
                 times.push(t.elapsed().as_secs_f64() * 1e3);
                 written += fs.stats.bytes_written - before.bytes_written;
                 syncs += fs.stats.syncs - before.syncs;

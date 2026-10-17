@@ -1126,9 +1126,9 @@ async fn journal_edits(
 
 /// Autosave of an open document: in place, behind its recovery journal.
 #[tauri::command]
-async fn journal_save(key: String, path: String, content: String) -> Result<TextDocument, String> {
+async fn journal_save(key: String, path: String, gen: u64, content: String) -> Result<TextDocument, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let saved = save_journal::save(&key, &path, &content)?;
+        let saved = save_journal::save(&key, &path, gen, &content)?;
         let name = Path::new(&path)
             .file_name()
             .and_then(|value| value.to_str())

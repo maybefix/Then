@@ -1,5 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
-import { forgetDocumentJournal, recordDocumentChange, saveThroughJournal } from "./editor/saveJournal";
+import {
+  forgetDocumentJournal,
+  journalPositionOf,
+  recordDocumentChange,
+  saveThroughJournal,
+} from "./editor/saveJournal";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
@@ -381,6 +386,8 @@ type QueuedDocumentSave = {
   tabId: string;
   path: string;
   content: string;
+  /** The recorded change `content` is the result of (see saveJournal). */
+  journalPosition?: number | null;
   waiters: Array<{
     resolve: (document: TextDocument) => void;
     reject: (error: unknown) => void;
@@ -4228,6 +4235,7 @@ export default function App() {
               savingRequest.tabId,
               savingRequest.path,
               savingRequest.content,
+              savingRequest.journalPosition,
             );
 
             if (activeTabIdRef.current === savingRequest.tabId) {
@@ -5525,6 +5533,7 @@ export default function App() {
         tabId: activeTabId,
         path: currentFilePath,
         content: markdown,
+        journalPosition: journalPositionOf(activeTabId, markdown),
       }).catch(() => undefined);
     }, 700);
 
