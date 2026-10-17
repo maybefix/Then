@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { forgetDocumentJournal, recordDocumentChange, saveThroughJournal } from "./editor/saveJournal";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
@@ -4154,7 +4155,13 @@ export default function App() {
   const activeMarkdownRef = useRef("");
   const setActiveMarkdown = useCallback(
     (nextMarkdown: string, editorRevision: number | null | "keep" = null) => {
+      const previousMarkdown = activeMarkdownRef.current;
       activeMarkdownRef.current = nextMarkdown;
+      const activeFile = openTabsRef.current.find((tab) => tab.id === activeTabId);
+      if (activeFile?.path && previousMarkdown !== nextMarkdown) {
+        // Every change of a saved document reaches its recovery journal.
+        recordDocumentChange(activeFile.id, activeFile.path, previousMarkdown, nextMarkdown);
+      }
       patchActiveTab((tab) => ({
         ...tab,
         markdown: nextMarkdown,
@@ -4165,7 +4172,7 @@ export default function App() {
         current.markdown === nextMarkdown ? current : { ...current, markdown: nextMarkdown },
       );
     },
-    [patchActiveTab],
+    [activeTabId, patchActiveTab],
   );
   const markActiveTabSaved = useCallback(
     (savedMarkdown: string, name?: string) => {
@@ -4217,10 +4224,11 @@ export default function App() {
           );
 
           try {
-            const document = await invoke<TextDocument>("save_text_file", {
-              path: savingRequest.path,
-              content: savingRequest.content,
-            });
+            const document = await saveThroughJournal(
+              savingRequest.tabId,
+              savingRequest.path,
+              savingRequest.content,
+            );
 
             if (activeTabIdRef.current === savingRequest.tabId) {
               lastSavedMarkdownRef.current = document.content;
@@ -7278,6 +7286,7 @@ export default function App() {
     }
 
     setOpenTabs(remainingTabs.length ? remainingTabs : [fallbackTab]);
+    for (const tab of targets) forgetDocumentJournal(tab.id);
     if (isClosingActiveTab) syncDocumentTabToEditor(fallbackTab);
     showToast(
       targets.length === 1

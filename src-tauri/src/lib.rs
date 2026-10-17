@@ -13,6 +13,7 @@ mod intermediate_draft;
 mod library;
 mod markdown_image;
 mod project_state;
+mod save_journal;
 mod submission_export;
 
 use checkpoint_store::{
@@ -566,6 +567,9 @@ pub fn run() {
             markdown_image::serve_image(&request)
         })
         .setup(|app| {
+            if let Ok(dir) = app.path().app_local_data_dir() {
+                save_journal::init(dir.join("recovery"));
+            }
             // 消しきれなくても起動は止めない。残りは画面で知らせ、再試行できるようにする。
             let purge_failure = purge_deprecated_global_content(app.handle()).err();
             if let Ok(mut slot) = app.state::<DeprecatedContentPurgeState>().0.lock() {
@@ -578,6 +582,7 @@ pub fn run() {
                 let window_for_events = main_window.clone();
                 main_window.on_window_event(move |event| {
                     if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                        save_journal::close_all();
                         let _ = save_main_window_state(&app_handle, &window_for_events);
                         close_linked_child_windows(&app_handle);
                     }
@@ -612,6 +617,9 @@ pub fn run() {
             save_text_file_dialog,
             save_submission_text_dialog,
             save_text_file,
+            journal_edits,
+            journal_save,
+            journal_forget,
             save_export_file_dialog,
             pick_export_path,
             export_front_matter::load_export_front_matter,
@@ -1101,6 +1109,46 @@ fn save_text_file_dialog(
     let path = ensure_text_extension(dialog_path_to_path_buf(path)?);
     write_text_file(&path, &content)?;
     read_text_document(&path).map(Some)
+}
+
+/// Editor changes for an open document's recovery journal (see save_journal).
+#[tauri::command]
+async fn journal_edits(
+    key: String,
+    path: String,
+    base: Option<String>,
+    edits: Vec<save_journal::EditInput>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || save_journal::record_edits(&key, &path, base, edits))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+/// Autosave of an open document: in place, behind its recovery journal.
+#[tauri::command]
+async fn journal_save(key: String, path: String, content: String) -> Result<TextDocument, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let saved = save_journal::save(&key, &path, &content)?;
+        let name = Path::new(&path)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("untitled.txt")
+            .to_string();
+        Ok(TextDocument {
+            content_hash: Some(content_hash(content.as_bytes())),
+            file_id: saved.file_id,
+            path,
+            name,
+            content,
+        })
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+fn journal_forget(key: String, discard: bool) {
+    save_journal::forget(&key, discard);
 }
 
 #[tauri::command]
@@ -3871,7 +3919,9 @@ fn write_text_file(path: &Path, content: &str) -> Result<(), String> {
             .map_err(|error| format!("failed to create parent directory: {error}"))?;
     }
 
-    std::fs::write(path, content).map_err(|error| format!("failed to write text file: {error}"))
+    std::fs::write(path, content).map_err(|error| format!("failed to write text file: {error}"))?;
+    save_journal::note_then_write(path, content.as_bytes());
+    Ok(())
 }
 
 fn list_project_folder(path: &Path) -> Result<ProjectFolder, String> {

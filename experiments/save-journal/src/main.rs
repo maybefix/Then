@@ -6,10 +6,16 @@
 //!   lab real <dir>          crash at every op on the real disk (child processes)
 //!   lab bench <dir>         save cost: current Then / expert scheme / this scheme
 
+// The journal and the real-disk layer are the app's own files, so these
+// tests exercise exactly what Then ships.
+#[path = "../../../src-tauri/src/save_journal/fs.rs"]
 mod fs;
+#[path = "../../../src-tauri/src/save_journal/core.rs"]
 mod journal;
+mod sim;
 
-use fs::{Fs, RealFs, Rng, SimFs};
+use fs::{Fs, RealFs};
+use sim::{Rng, SimFs};
 use journal::{recover, sha, DiskClass, Journal, SaveError};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -57,7 +63,7 @@ struct Trace {
 /// Edits, background flushes and saves in a seeded order.
 fn scenario<F: Fs>(fs: &mut F, dir: &Path, doc: &Path, seed: u64, steps: usize, tr: &mut Trace) -> Option<Journal> {
     let mut rng = Rng::new(seed);
-    let mut j = Journal::start(fs, dir, doc).ok()?;
+    let mut j = Journal::start(fs, dir, doc, None).ok()?;
     tr.started = true;
     for _ in 0..steps {
         if fs.dead() {
@@ -74,7 +80,7 @@ fn scenario<F: Fs>(fs: &mut F, dir: &Path, doc: &Path, seed: u64, steps: usize, 
             }
             _ => {
                 let before = fs.read(doc).ok();
-                let result = j.save(fs);
+                let result = j.save(fs, &j.content.clone());
                 if fs.dead() {
                     return Some(j);
                 }
@@ -172,11 +178,10 @@ fn check_run(fs: &mut SimFs, dir: &Path, doc: &Path, tr: &Trace, mode: Mode, lab
         for name in names {
             let _ = fs.remove(&dir.join(name));
         }
-        let Ok(mut j) = Journal::start(fs, dir, doc) else {
+        let Ok(mut j) = Journal::start(fs, dir, doc, None) else {
             return fail(tally, "restart failed".into());
         };
-        let len = j.content.len();
-        if j.edit(fs, 0, len, &r.content).is_err() || j.save(fs).is_err() {
+        if j.save(fs, &r.content).is_err() {
             return fail(tally, "save after recovery failed".into());
         }
         if fs.peek(doc).as_deref() != Some(&r.content[..]) {
@@ -272,14 +277,14 @@ fn cmd_external() {
     ];
     for (name, change, want_err, want_class) in cases {
         let mut fs = sim_setup(&init, doc);
-        let mut j = Journal::start(&mut fs, dir, doc).unwrap();
+        let mut j = Journal::start(&mut fs, dir, doc, None).unwrap();
         j.edit(&mut fs, init.len(), 0, "一行目。".as_bytes()).unwrap();
-        j.save(&mut fs).unwrap();
+        j.save(&mut fs, &j.content.clone()).unwrap();
         let cur = j.content.clone();
         change(&mut fs, doc, tmp, &cur);
         let outside = fs.peek(doc).unwrap();
         j.edit(&mut fs, 0, 0, "★".as_bytes()).unwrap();
-        match j.save(&mut fs) {
+        match j.save(&mut fs, &j.content.clone()) {
             Err(SaveError::External(why)) if why == want_err => {}
             other => failures.push(format!("{name}: save returned {other:?}")),
         }
@@ -336,7 +341,7 @@ fn cmd_diskfull(scenarios: u64, steps: usize) {
             // Space comes back: the queued records drain and the next save lands.
             fs.fail_growth_from = None;
             if let Some(mut j) = j {
-                let saved = j.flush(&mut fs).is_ok() && j.save(&mut fs).is_ok();
+                let saved = j.flush(&mut fs).is_ok() && j.save(&mut fs, &j.content.clone()).is_ok();
                 if !saved || fs.peek(doc).as_deref() != Some(&j.content[..]) {
                     failures.push(format!("seed {seed} full from op {n}: save after space returned failed"));
                 }
@@ -570,7 +575,7 @@ fn cmd_bench(root: &Path) {
             let doc = run.join("chapter1.md");
             std::fs::write(&doc, &init).unwrap();
             let mut fs = RealFs::default();
-            let mut j = Journal::start(&mut fs, &run.join("recovery"), &doc).unwrap();
+            let mut j = Journal::start(&mut fs, &run.join("recovery"), &doc, None).unwrap();
             let mut times = Vec::new();
             let mut edit_us = Vec::new();
             let mut written = 0u64;
@@ -587,7 +592,7 @@ fn cmd_bench(root: &Path) {
                 let before = fs.stats.clone();
                 std::thread::sleep(idle);
                 let t = Instant::now();
-                j.save(&mut fs).unwrap();
+                j.save(&mut fs, &j.content.clone()).unwrap();
                 times.push(t.elapsed().as_secs_f64() * 1e3);
                 written += fs.stats.bytes_written - before.bytes_written;
                 syncs += fs.stats.syncs - before.syncs;

@@ -15,7 +15,7 @@
 //! The manuscript itself is synced only when its records are about to be
 //! dropped, which happens when the log has grown to the size of the text.
 
-use crate::fs::{Fs, FsError, R};
+use super::fs::{Fs, FsError, R};
 use sha2::{Digest, Sha256};
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
@@ -170,7 +170,11 @@ pub fn decode_log(b: &[u8]) -> (Vec<Rec>, bool) {
 
 pub struct Base {
     pub gen: u64,
+    /// Identity and hash of the manuscript file when this base was taken.
     pub id: String,
+    pub disk_hash: Hash,
+    /// The text Then had at `gen` (equal to the file except in the first
+    /// segment, where Then's text can differ from the file, e.g. unsaved edits).
     pub content: Vec<u8>,
 }
 
@@ -179,6 +183,7 @@ pub fn encode_base(base: &Base) -> Vec<u8> {
     v.extend_from_slice(BASE_MAGIC);
     put_u64(&mut v, base.gen);
     put_bytes(&mut v, base.id.as_bytes());
+    v.extend_from_slice(&base.disk_hash);
     put_u64(&mut v, base.content.len() as u64);
     v.extend_from_slice(&base.content);
     let h = sha(&v);
@@ -200,12 +205,13 @@ pub fn decode_base(b: &[u8]) -> Option<Base> {
     }
     let gen = c.u64()?;
     let id = String::from_utf8(c.bytes()?.to_vec()).ok()?;
+    let disk_hash = c.hash()?;
     let n = c.u64()? as usize;
     let content = c.take(n)?.to_vec();
     if c.i != body.len() {
         return None;
     }
-    Some(Base { gen, id, content })
+    Some(Base { gen, id, disk_hash, content })
 }
 
 pub fn seg_base(dir: &Path, k: u64) -> PathBuf {
@@ -259,16 +265,19 @@ pub struct Journal {
 }
 
 impl Journal {
-    /// Start journaling a document whose on-disk text is the base (gen 0).
-    pub fn start<F: Fs>(fs: &mut F, dir: &Path, doc: &Path) -> R<Journal> {
+    /// Start journaling a document. `text` is what Then shows before the first
+    /// recorded change (the file's own text when None).
+    pub fn start<F: Fs>(fs: &mut F, dir: &Path, doc: &Path, text: Option<Vec<u8>>) -> R<Journal> {
         fs.mkdirs(dir)?;
-        let content = fs.read(doc)?;
+        let disk = fs.read(doc)?;
         let id = fs.file_id(doc)?.unwrap_or_default();
+        let disk_hash = sha(&disk);
+        let content = text.unwrap_or(disk);
         let log = seg_log(dir, 0);
         fs.create_write(&log, &[])?;
         fs.sync(&log)?;
         let base = seg_base(dir, 0);
-        fs.create_write(&base, &encode_base(&Base { gen: 0, id: id.clone(), content: content.clone() }))?;
+        fs.create_write(&base, &encode_base(&Base { gen: 0, id: id.clone(), disk_hash, content: content.clone() }))?;
         fs.sync(&base)?;
         Ok(Journal {
             dir: dir.to_path_buf(),
@@ -282,7 +291,7 @@ impl Journal {
             logged_gen: 0,
             durable_gen: 0,
             disk_gen: 0,
-            disk_hash: sha(&content),
+            disk_hash,
             disk_id: id,
             content,
             stats: JStats::default(),
@@ -332,7 +341,13 @@ impl Journal {
         Ok(())
     }
 
-    pub fn save<F: Fs>(&mut self, fs: &mut F) -> Result<bool, SaveError> {
+    /// Save `content` (Then's current text). If the journal missed a change,
+    /// one record replacing the whole text brings it level first.
+    pub fn save<F: Fs>(&mut self, fs: &mut F, content: &[u8]) -> Result<bool, SaveError> {
+        if self.content != content {
+            let len = self.content.len();
+            self.edit(fs, 0, len, content).map_err(SaveError::Journal)?;
+        }
         let result = self.save_inner(fs);
         // The manuscript is read back through the handle that wrote it; let it
         // go only now, so the reopen after a write never sits in the save path.
@@ -341,12 +356,13 @@ impl Journal {
     }
 
     fn save_inner<F: Fs>(&mut self, fs: &mut F) -> Result<bool, SaveError> {
-        if self.gen == self.disk_gen {
-            return Ok(false);
-        }
         let g = self.gen;
         let snapshot = self.content.clone();
         let planned = sha(&snapshot);
+        if planned == self.disk_hash {
+            self.disk_gen = g;
+            return Ok(false);
+        }
         let mut clock = std::time::Instant::now();
         let mut lap = |stats: &mut JStats, i: usize| {
             stats.phase_ms[i] += clock.elapsed().as_secs_f64() * 1e3;
@@ -419,7 +435,7 @@ impl Journal {
         fs.create_write(&log, &keep)?;
         fs.sync(&log)?;
         let base = seg_base(&self.dir, k);
-        fs.create_write(&base, &encode_base(&Base { gen: g, id: self.disk_id.clone(), content: snapshot.to_vec() }))?;
+        fs.create_write(&base, &encode_base(&Base { gen: g, id: self.disk_id.clone(), disk_hash: sha(snapshot), content: snapshot.to_vec() }))?;
         fs.sync(&base)?;
         let old = self.seg;
         self.seg = k;
@@ -430,6 +446,37 @@ impl Journal {
         let _ = fs.remove(&seg_base(&self.dir, old));
         self.stats.compactions += 1;
         Ok(())
+    }
+
+    /// Then wrote this manuscript through another path (heading move, restore).
+    pub fn note_disk(&mut self, hash: Hash, id: String) {
+        self.disk_hash = hash;
+        self.disk_id = id;
+    }
+
+    pub fn set_doc(&mut self, doc: &Path) {
+        self.doc = doc.to_path_buf();
+    }
+
+    pub fn disk_id(&self) -> &str {
+        &self.disk_id
+    }
+
+    /// Normal close: when everything is on disk, sync the manuscript and drop
+    /// the recovery files. Returns false (and keeps them) when it is not.
+    pub fn close<F: Fs>(&mut self, fs: &mut F) -> R<bool> {
+        if sha(&self.content) != self.disk_hash {
+            return Ok(false);
+        }
+        fs.sync(&self.doc)?;
+        fs.close(&self.doc);
+        let names = fs.list(&self.dir)?;
+        for name in names {
+            let path = self.dir.join(name);
+            fs.close(&path);
+            fs.remove(&path)?;
+        }
+        Ok(true)
     }
 }
 
@@ -504,7 +551,10 @@ pub fn recover<F: Fs>(fs: &mut F, dir: &Path, doc: &Path) -> R<Option<Recovered>
     let mut content = base.content.clone();
     let mut gen = base.gen;
     let mut replay_ok = true;
-    let mut versions = vec![base.content.clone()];
+    let mut versions = Vec::new();
+    if sha(&base.content) == base.disk_hash {
+        versions.push(base.content.clone());
+    }
     let mut last_intent: Option<(Hash, Hash, String)> = None;
     for rec in &recs {
         match rec {
@@ -538,7 +588,7 @@ pub fn recover<F: Fs>(fs: &mut F, dir: &Path, doc: &Path) -> R<Option<Recovered>
 
     let (pre, planned, expected_id) = match last_intent {
         Some((pre, planned, id)) => (pre, Some(planned), id),
-        None => (sha(&base.content), None, base.id.clone()),
+        None => (base.disk_hash, None, base.id.clone()),
     };
     let class = match fs.read(doc) {
         Err(FsError::NotFound) => DiskClass::Missing,
