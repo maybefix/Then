@@ -491,8 +491,20 @@ impl Fs for SimFs {
 
     fn write_at(&mut self, p: &Path, off: u64, data: &[u8]) -> R<()> {
         let key = self.lookup(p)?;
-        let growth = off as usize + data.len() > self.files[&key].cur.len();
-        let crash = self.begin(growth)?;
+        let len = self.files[&key].cur.len();
+        let growth = off as usize + data.len() > len;
+        let crash = match self.begin(growth) {
+            // A full disk still takes the bytes that fit in the file's
+            // existing space before the write fails.
+            Err(FsError::DiskFull) => {
+                let fit = len.saturating_sub(off as usize).min(data.len());
+                if fit > 0 {
+                    self.push(key, Op::Write(off, data[..fit].to_vec()));
+                }
+                return Err(FsError::DiskFull);
+            }
+            other => other?,
+        };
         self.write_op(key, Op::Write(off, data.to_vec()), crash)
     }
 
