@@ -4381,7 +4381,12 @@ export default function App() {
     };
   }, [appMode, projectAst, projectFolder]);
   const frontMatter = useMemo(() => parseFrontMatter(markdown), [markdown]);
-  const editorText = frontMatter.body;
+  // The editor works in LF. A CRLF file keeps CRLF in `markdown` (FM-29), so the
+  // body is handed over in LF to match what the editor reports back.
+  const editorText = useMemo(
+    () => (frontMatter.body.includes("\r") ? frontMatter.body.replace(/\r\n?/g, "\n") : frontMatter.body),
+    [frontMatter.body],
+  );
   activeDocumentSnapshotRef.current = {
     path: currentFilePath,
     name: currentFileName,

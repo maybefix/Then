@@ -265,6 +265,26 @@ test("半角の「: 」がないブロックは本文（全角「：」・コロ
   }
 });
 
+// FM-29: the editor hands back LF; a CRLF file stays CRLF
+test("CRLFだけの原稿は、本文をLFで受け取ってもCRLFで保存する", () => {
+  assert.equal(
+    updateMarkdownBody("---\r\na: 1\r\n---\r\n本文\r\n", "本文\n追記\n"),
+    "---\r\na: 1\r\n---\r\n本文\r\n追記\r\n",
+  );
+  assert.equal(updateMarkdownBody("本文\r\n次\r\n", "本文\n次\n足す"), "本文\r\n次\r\n足す");
+  assert.equal(updateMarkdownBody(`${BOM}本文\r\n`, "本文\n二行目"), `${BOM}本文\r\n二行目`);
+});
+
+test("LFの原稿・混在した原稿・改行のない原稿は本文の改行を変えない", () => {
+  assert.equal(updateMarkdownBody("---\na: 1\n---\n本文\n", "本文\n追記\n"), "---\na: 1\n---\n本文\n追記\n");
+  assert.equal(updateMarkdownBody("---\r\na: 1\r\n---\n本文\n", "本文\n追記"), "---\r\na: 1\r\n---\n本文\n追記");
+  assert.equal(updateMarkdownBody("一行だけ", "一行\n二行"), "一行\n二行");
+});
+
+test("CRLFの原稿で本文の先頭が---になっても、空のフロントマターまでCRLF", () => {
+  assert.equal(updateMarkdownBody("本文\r\n", "---\n場面\n---\n"), "---\r\n---\r\n---\r\n場面\r\n---\r\n");
+});
+
 let failed = 0;
 for (const [name, fn] of cases) {
   try {

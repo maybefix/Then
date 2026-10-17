@@ -110,9 +110,22 @@ export function replaceFrontMatter(markdown: string, metadata: string): string {
  * Replace the body and keep everything before it exactly as it was. Editing the
  * body never creates, removes or reformats front matter.
  */
+/** Every line ends with CRLF (no lone LF). Cheap for LF files: no "\r", no scan. */
+function usesCrlfOnly(text: string): boolean {
+  if (!text.includes("\r\n")) return false;
+  for (let index = text.indexOf("\n"); index !== -1; index = text.indexOf("\n", index + 1)) {
+    if (text[index - 1] !== "\r") return false;
+  }
+  return true;
+}
+
 export function updateMarkdownBody(markdown: string, body: string): string {
   const parts = parseFrontMatter(markdown);
-  const { text, bom: bodyHasBom } = splitLeadingBom(body);
+  const split = splitLeadingBom(body);
+  const bodyHasBom = split.bom;
+  // FM-29: the editor works in LF. A file written entirely in CRLF gets its
+  // body back in CRLF, so saving never leaves the two mixed.
+  const text = usesCrlfOnly(markdown) ? split.text.replace(/\r?\n/g, "\r\n") : split.text;
   let header = markdown.slice(0, markdown.length - parts.body.length);
   if (bodyHasBom && !parts.bom) header = BOM + header;
   if (!parts.hasFrontMatter && BODY_STARTS_WITH_DELIMITER.test(text)) {
