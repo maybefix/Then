@@ -3361,6 +3361,19 @@ html:not([data-window-fullscreen="true"])
   text-justify: auto;
 }
 
+/* タイプライタースクロールがオフなら、先頭・末尾の列を画面中央へ運ぶための
+   スクロール余白は要らない。ふつうの余白だけを残す。 */
+.verticalTypewriterShell[data-typewriter="off"] .verticalTypewriterEditor .pm-root {
+  padding: 0 max(48px, 4vw);
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-typewriter="off"]
+  .verticalTypewriterEditor
+  .pm-root {
+  padding: max(48px, 6vh) 0 max(96px, 20vh);
+}
+
 .appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root[data-empty="true"]::before {
   /* 横書きは .pm-root 自体が幅制御・中央寄せされ段落はずれないため、
      プレースホルダの中央寄せオフセットは不要。 */

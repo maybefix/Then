@@ -4940,6 +4940,7 @@ export function VerticalTextEditor({
       data-highlight-current-line={highlightCurrentLine ? "true" : undefined}
       data-colorize-japanese-quotes={colorizeJapaneseQuotes ? "true" : undefined}
       data-editor-display={editorDisplayMode}
+      data-typewriter={editorDisplayMode === "continuous" && !typewriterScroll ? "off" : undefined}
       data-page-flow={editorDisplayMode === "paged" ? pageFlowDirection : undefined}
     >
       <div ref={scrollerRef} className="verticalTypewriterScroller">
