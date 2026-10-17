@@ -192,4 +192,23 @@ for (const c of cases) {
     }
   }
 }
+// Recovery: where each state's text goes, and a restored text is in this
+// run's journal before the call resolves (so the earlier folder may go).
+const item = (state, path = "C:/novel/a.md") => ({ id: "1x1-k", path, content: "", state });
+for (const state of ["completed", "notStarted", "ownPartial"]) assert.equal(client.recoveryDestination(item(state)), "tab");
+for (const state of ["unknown", "idMismatch"]) assert.equal(client.recoveryDestination(item(state)), "checkpoint");
+assert.equal(client.recoveryDestination(item("missing")), "scratch");
+assert.equal(client.recoveryDestination(item("notStarted", null)), "scratch");
+for (const failRate of [0, 0.5]) {
+  const backend = makeBackend({ failRate });
+  seed = 11;
+  const key = `restore-${failRate}`;
+  try {
+    await client.recordRestoredText(key, "C:/novel/r.md", "ファイルの本文", "復元した本文");
+    assert.equal(backend.journals.get(key).text, "復元した本文", "the restored text is journaled when the call resolves");
+  } catch (error) {
+    assert.ok(failRate > 0, `restore failed: ${error}`);
+  }
+  client.forgetDocumentJournal(key);
+}
 console.log("save journal client tests passed");

@@ -620,6 +620,8 @@ pub fn run() {
             journal_edits,
             journal_save,
             journal_forget,
+            journal_recovery_scan,
+            journal_recovery_discard,
             save_export_file_dialog,
             pick_export_path,
             export_front_matter::load_export_front_matter,
@@ -1149,6 +1151,20 @@ async fn journal_save(key: String, path: String, gen: u64, content: String) -> R
 #[tauri::command]
 fn journal_forget(key: String, discard: bool) {
     save_journal::forget(&key, discard);
+}
+
+/// What runs that ended without closing left in the recovery area (reads only).
+#[tauri::command]
+async fn journal_recovery_scan() -> Result<Vec<save_journal::RecoveryItem>, String> {
+    tauri::async_runtime::spawn_blocking(save_journal::scan_recovery)
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+/// The person has restored or let go of one recovery item.
+#[tauri::command]
+fn journal_recovery_discard(id: String) -> Result<(), String> {
+    save_journal::discard_recovery(&id)
 }
 
 #[tauri::command]

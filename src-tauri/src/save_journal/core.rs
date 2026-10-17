@@ -32,7 +32,9 @@ pub fn sha(bytes: &[u8]) -> Hash {
 }
 
 const REC_MAGIC: &[u8; 4] = b"TLR1";
-const BASE_MAGIC: &[u8; 4] = b"TBS2";
+const BASE_MAGIC: &[u8; 4] = b"TBS3";
+/// Bases before the manuscript path was kept; still read.
+const BASE_MAGIC_V2: &[u8; 4] = b"TBS2";
 
 #[derive(Clone, Debug)]
 pub enum Rec {
@@ -44,14 +46,24 @@ pub enum Rec {
     /// the journal could not vouch for it from its own records.
     Intent { gen: u64, pre_gen: u64, id: String, pre: Hash, planned: Hash, snapshot: Option<Vec<u8>> },
     Done { gen: u64 },
+    /// The manuscript moved to `path` (rename); the base names the older path.
+    Doc { gen: u64, path: String },
 }
 
 impl Rec {
     fn gen(&self) -> u64 {
         match self {
-            Rec::Edit { gen, .. } | Rec::Replace { gen, .. } | Rec::Intent { gen, .. } | Rec::Done { gen } => *gen,
+            Rec::Edit { gen, .. }
+            | Rec::Replace { gen, .. }
+            | Rec::Intent { gen, .. }
+            | Rec::Done { gen }
+            | Rec::Doc { gen, .. } => *gen,
         }
     }
+}
+
+fn path_text(p: &Path) -> String {
+    p.to_string_lossy().into_owned()
 }
 
 fn put_u32(v: &mut Vec<u8>, x: u32) {
@@ -96,6 +108,11 @@ pub fn encode(rec: &Rec) -> Vec<u8> {
             put_bytes(&mut p, text);
             p.extend_from_slice(after);
             (4u8, *gen, p)
+        }
+        Rec::Doc { gen, path } => {
+            let mut p = Vec::with_capacity(path.len() + 4);
+            put_bytes(&mut p, path.as_bytes());
+            (5u8, *gen, p)
         }
     };
     let mut v = Vec::with_capacity(payload.len() + 53);
@@ -174,6 +191,7 @@ fn decode_one(b: &[u8]) -> Option<(Rec, usize)> {
         }
         3 => Rec::Done { gen },
         4 => Rec::Replace { gen, text: p.bytes()?.to_vec(), after: p.hash()? },
+        5 => Rec::Doc { gen, path: String::from_utf8(p.bytes()?.to_vec()).ok()? },
         _ => return None,
     };
     Some((rec, c.i))
@@ -198,6 +216,8 @@ pub fn decode_log(b: &[u8]) -> (Vec<Rec>, bool) {
 
 pub struct Base {
     pub gen: u64,
+    /// The manuscript's path when this base was taken (empty in TBS2 bases).
+    pub doc: String,
     /// Identity and hash of the manuscript file when this base was taken.
     pub id: String,
     pub disk_hash: Hash,
@@ -207,9 +227,10 @@ pub struct Base {
 }
 
 pub fn encode_base(base: &Base) -> Vec<u8> {
-    let mut v = Vec::with_capacity(base.content.len() + 96);
+    let mut v = Vec::with_capacity(base.content.len() + base.doc.len() + 100);
     v.extend_from_slice(BASE_MAGIC);
     put_u64(&mut v, base.gen);
+    put_bytes(&mut v, base.doc.as_bytes());
     put_bytes(&mut v, base.id.as_bytes());
     v.extend_from_slice(&base.disk_hash);
     put_u64(&mut v, base.content.len() as u64);
@@ -228,10 +249,15 @@ pub fn decode_base(b: &[u8]) -> Option<Base> {
         return None;
     }
     let mut c = Cur { b: body, i: 0 };
-    if c.take(4)? != BASE_MAGIC {
+    let magic = c.take(4)?;
+    if magic != BASE_MAGIC && magic != BASE_MAGIC_V2 {
         return None;
     }
     let gen = c.u64()?;
+    let doc = match magic == BASE_MAGIC {
+        true => String::from_utf8(c.bytes()?.to_vec()).ok()?,
+        false => String::new(),
+    };
     let id = String::from_utf8(c.bytes()?.to_vec()).ok()?;
     let disk_hash = c.hash()?;
     let n = c.u64()? as usize;
@@ -239,7 +265,7 @@ pub fn decode_base(b: &[u8]) -> Option<Base> {
     if c.i != body.len() {
         return None;
     }
-    Some(Base { gen, id, disk_hash, content })
+    Some(Base { gen, doc, id, disk_hash, content })
 }
 
 pub fn seg_base(dir: &Path, k: u64) -> PathBuf {
@@ -312,7 +338,10 @@ impl Journal {
         fs.create_write(&log, &[])?;
         fs.sync(&log)?;
         let base = seg_base(dir, 0);
-        fs.create_write(&base, &encode_base(&Base { gen: 0, id: id.clone(), disk_hash, content: content.clone() }))?;
+        fs.create_write(
+            &base,
+            &encode_base(&Base { gen: 0, doc: path_text(doc), id: id.clone(), disk_hash, content: content.clone() }),
+        )?;
         fs.sync(&base)?;
         let mut after = HashMap::new();
         after.insert(0, sha(&content));
@@ -509,7 +538,16 @@ impl Journal {
         fs.create_write(&log, &keep)?;
         fs.sync(&log)?;
         let base = seg_base(&self.dir, k);
-        fs.create_write(&base, &encode_base(&Base { gen: g, id: self.disk_id.clone(), disk_hash: sha(snapshot), content: snapshot.to_vec() }))?;
+        fs.create_write(
+            &base,
+            &encode_base(&Base {
+                gen: g,
+                doc: path_text(&self.doc),
+                id: self.disk_id.clone(),
+                disk_hash: sha(snapshot),
+                content: snapshot.to_vec(),
+            }),
+        )?;
         fs.sync(&base)?;
         let old = self.seg;
         self.seg = k;
@@ -529,8 +567,16 @@ impl Journal {
         self.disk_id = id;
     }
 
-    pub fn set_doc(&mut self, doc: &Path) {
+    /// The manuscript moved (rename); recovery finds it under the new path.
+    /// The path changes even if the record cannot be written yet.
+    pub fn set_doc<F: Fs>(&mut self, fs: &mut F, doc: &Path) -> R<()> {
+        if self.doc == doc {
+            return Ok(());
+        }
+        fs.close(&self.doc);
         self.doc = doc.to_path_buf();
+        self.queue.push_back((self.gen, encode(&Rec::Doc { gen: self.gen, path: path_text(doc) })));
+        self.drain(fs)
     }
 
     pub fn disk_id(&self) -> &str {
@@ -594,8 +640,8 @@ fn is_mix(orig: &[u8], versions: &[Vec<u8>]) -> bool {
     })
 }
 
-/// Reads the recovery area and the manuscript; never writes either.
-pub fn recover<F: Fs>(fs: &mut F, dir: &Path, doc: &Path) -> R<Option<Recovered>> {
+/// The newest segment whose base checks out, with the records of its log.
+fn latest_segment<F: Fs>(fs: &mut F, dir: &Path) -> R<Option<(Base, Vec<Rec>)>> {
     let names = match fs.list(dir) {
         Ok(names) => names,
         Err(FsError::NotFound) => return Ok(None),
@@ -622,6 +668,23 @@ pub fn recover<F: Fs>(fs: &mut F, dir: &Path, doc: &Path) -> R<Option<Recovered>
         Err(e) => return Err(e),
     };
     let (recs, _) = decode_log(&log);
+    Ok(Some((base, recs)))
+}
+
+/// The manuscript the recovery area was recording: the base's path, or the
+/// latest rename after it. None for bases from before the path was kept.
+pub fn recorded_doc<F: Fs>(fs: &mut F, dir: &Path) -> R<Option<PathBuf>> {
+    let Some((base, recs)) = latest_segment(fs, dir)? else { return Ok(None) };
+    let latest = recs.iter().rev().find_map(|rec| match rec {
+        Rec::Doc { path, .. } => Some(path.clone()),
+        _ => None,
+    });
+    Ok(latest.or(Some(base.doc)).filter(|p| !p.is_empty()).map(PathBuf::from))
+}
+
+/// Reads the recovery area and the manuscript; never writes either.
+pub fn recover<F: Fs>(fs: &mut F, dir: &Path, doc: &Path) -> R<Option<Recovered>> {
+    let Some((base, recs)) = latest_segment(fs, dir)? else { return Ok(None) };
 
     // Texts Then may have written: the base when it is the file, every saved
     // snapshot, and the generations named by intents (found during replay).

@@ -212,6 +212,54 @@ export async function saveThroughJournal(
   }
 }
 
+/**
+ * Text a run that ended without closing left for one manuscript (see
+ * scan_recovery in the backend). The manuscript itself was not written.
+ */
+export type RecoveryItem = {
+  id: string;
+  path: string | null;
+  content: string;
+  state: "completed" | "notStarted" | "ownPartial" | "unknown" | "idMismatch" | "missing";
+};
+
+/**
+ * Where a recovered text goes: back into the manuscript's tab as an unsaved
+ * change when the file is as Then left it; into a checkpoint when it changed
+ * outside Then (the file is not touched); into a new unsaved tab when the
+ * file is gone.
+ */
+export function recoveryDestination(item: RecoveryItem): "tab" | "checkpoint" | "scratch" {
+  if (!item.path || item.state === "missing") return "scratch";
+  if (item.state === "unknown" || item.state === "idMismatch") return "checkpoint";
+  return "tab";
+}
+
+export function scanRecovery(): Promise<RecoveryItem[]> {
+  return invoke<RecoveryItem[]>("journal_recovery_scan");
+}
+
+/** The person restored or let go of the item: its recovery folder goes. */
+export function discardRecovery(id: string): Promise<void> {
+  return invoke<void>("journal_recovery_discard", { id });
+}
+
+/**
+ * Record a restored text as the tab's change from `savedText` (the file) and
+ * resolve once the backend has it, so the earlier run's folder can go.
+ */
+export async function recordRestoredText(key: string, path: string, savedText: string, text: string) {
+  recordDocumentChange(key, path, savedText, text);
+  const journal = journals.get(key)!;
+  const target = journal.gen;
+  // A lost batch goes out again as the whole text; a few tries, not a loop.
+  for (let attempt = 0; attempt < 3 && journal.acknowledged < target; attempt += 1) {
+    send(key, journal);
+    while (journal.sending) await journal.sending;
+  }
+  if (journal.acknowledged < target) throw new Error("復旧用の記録を書けませんでした");
+}
+
 /** The tab closed after the person chose what to keep: drop its journal. */
 export function forgetDocumentJournal(key: string) {
   if (!journals.delete(key)) return;

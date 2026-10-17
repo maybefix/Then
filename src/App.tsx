@@ -1,11 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { TextSplice } from "./editor/lineTextUpdate";
 import {
+  discardRecovery,
   forgetDocumentJournal,
   journalPositionOf,
   placeBodyChange,
   recordDocumentChange,
+  recordRestoredText,
+  recoveryDestination,
   saveThroughJournal,
+  scanRecovery,
+  type RecoveryItem,
 } from "./editor/saveJournal";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -7415,6 +7420,8 @@ export default function App() {
       memo: string,
       reason: ManuscriptSnapshot["reason"],
       parentIds: string[] = [],
+      /** Text to take instead of the tab or file at this path (a recovered text). */
+      override?: { path: string; markdown: string },
     ): ManuscriptSnapshot => {
       if (!projectFolder) {
         throw new Error("先にフォルダを開いてください");
@@ -7423,8 +7430,13 @@ export default function App() {
       const openTabsByPath = new Map(
         openTabs
           .filter((tab): tab is DocumentTab & { path: string } => Boolean(tab.path))
-          .map((tab) => [tab.path, tab] as const),
+          .map((tab) => [tab.path, { name: tab.name, markdown: tab.markdown }] as const),
       );
+      if (override) {
+        const file = collectProjectTextFiles(projectFolder).find((item) => isSamePath(item.path, override.path));
+        if (!file) throw new Error(`作品フォルダにない原稿です: ${override.path}`);
+        openTabsByPath.set(file.path, { name: file.name, markdown: override.markdown });
+      }
       const astFilesByPath = new Map(
         projectAst?.rootPath === projectFolder.path
           ? projectAst.files.map((file) => [file.path, file] as const)
@@ -7457,7 +7469,9 @@ export default function App() {
             textLength: documentAst.textLength,
             visibleTextLength: documentAst.visibleTextLength,
             outlineCount:
-              astFilesByPath.get(file.path)?.outlineCount ?? documentAst.outline.length,
+              (override && isSamePath(file.path, override.path)
+                ? undefined
+                : astFilesByPath.get(file.path)?.outlineCount) ?? documentAst.outline.length,
           } satisfies ManuscriptSnapshotFile,
         ];
       });
@@ -12280,6 +12294,116 @@ export default function App() {
       }
     })();
   }, [startupView]);
+
+  // 前回が閉じずに終わったときに残った、保存されていない編集。原稿は自動では書き換えず、
+  // 確かめてもらってから戻す。外部で変わった原稿には触らず、チェックポイントに入れる。
+  const [recoveryItems, setRecoveryItems] = useState<RecoveryItem[]>([]);
+  const didScanRecoveryRef = useRef(false);
+  const recoveryPromptOpenRef = useRef(false);
+  useEffect(() => {
+    if (startupView === "loading" || didScanRecoveryRef.current || !isTauriRuntime()) return;
+    didScanRecoveryRef.current = true;
+    scanRecovery().then(setRecoveryItems, (error) => setLastError(String(error)));
+  }, [startupView]);
+
+  const restoreRecoveredText = async (item: RecoveryItem): Promise<boolean> => {
+    const destination = recoveryDestination(item);
+    const existing = item.path
+      ? openTabsRef.current.find((tab) => tab.path && isSamePath(tab.path, item.path!))
+      : undefined;
+    if (destination === "checkpoint") {
+      if (!projectFolder || !canWritePortableProjectState(projectFolder.path)) return false;
+      if (!(await waitForPortableProjectWrite(projectFolder.path))) return false;
+      const now = new Date();
+      const snapshot = buildManuscriptSnapshot(
+        `${getWorkspaceName(item.path!)} ${now.toLocaleDateString("ja-JP")} ${now.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`,
+        "",
+        "manual",
+        currentWorkspaceSnapshots[0] ? [currentWorkspaceSnapshots[0].id] : [],
+        { path: item.path!, markdown: item.content },
+      );
+      beginPortableProjectMutation(projectFolder.path);
+      const stored = await invoke<CheckpointLoadResult>("create_project_checkpoint", {
+        rootPath: projectFolder.path,
+        snapshot,
+      });
+      if (!applyCheckpointStoreResult(projectFolder.path, stored)) return false;
+      if (stored.warnings.length) {
+        showToast(checkpointWarningMessage(stored.warnings[0]));
+        return false;
+      }
+      showToast("チェックポイントに保存しました", { label: "見る", onClick: () => openCheckpointStudio(snapshot.id) });
+      return true;
+    }
+    if (destination === "scratch" || (existing && isDirtyDocumentTab(existing))) {
+      // 開いている原稿の編集を上書きしないよう、別のタブに出す。
+      const tab = createScratchDocumentTab(item.content, {
+        name: item.path ? getWorkspaceName(item.path) : scratchFileName,
+      });
+      setOpenTabs((current) => insertTabAfter(current, tab, activeTabIdRef.current));
+      syncDocumentTabToEditor(tab);
+      setStartupView("editor");
+      return true;
+    }
+    const document = await invoke<TextDocument>("read_text_file", { path: item.path });
+    const tab: DocumentTab = {
+      ...(existing ?? createFileDocumentTab(document)),
+      fileId: document.fileId ?? null,
+      contentHash: document.contentHash ?? null,
+      markdown: item.content,
+      savedMarkdown: document.content,
+      editorRevision: null,
+      saveStatus: "dirty",
+    };
+    // この実行の記録に入ってから、前回の記録を消す。
+    await recordRestoredText(tab.id, document.path, document.content, item.content);
+    setOpenTabs((current) =>
+      existing
+        ? current.map((candidate) => (candidate.id === tab.id ? tab : candidate))
+        : insertTabAfter(current, tab, activeTabIdRef.current),
+    );
+    syncDocumentTabToEditor(tab);
+    setStartupView("editor");
+    return true;
+  };
+
+  useEffect(() => {
+    if (appDialog || recoveryPromptOpenRef.current || startupView === "loading") return;
+    // チェックポイントに入れるものは、その原稿の作品を開いたときに尋ねる。
+    const item = recoveryItems.find(
+      (candidate) =>
+        recoveryDestination(candidate) !== "checkpoint" ||
+        (projectFolder && candidate.path && isPathInsideFolder(candidate.path, projectFolder.path)),
+    );
+    if (!item) return;
+    recoveryPromptOpenRef.current = true;
+    const primaryLabel = {
+      tab: "未保存の変更として開く",
+      checkpoint: "チェックポイントに保存",
+      scratch: "新しいタブで開く",
+    }[recoveryDestination(item)];
+    void (async () => {
+      try {
+        const choice = await requestChoice({
+          title: "保存されていない編集が残っています",
+          message: item.path ? `「${getWorkspaceName(item.path)}」` : "",
+          detail: item.path ?? undefined,
+          primaryLabel,
+          secondaryLabel: "破棄",
+        });
+        if (choice === null) return;
+        if (choice === "primary" && !(await restoreRecoveredText(item))) return;
+        await discardRecovery(item.id);
+      } catch (error) {
+        setLastError(String(error));
+        showToast(error instanceof Error ? error.message : String(error));
+      } finally {
+        // 閉じただけ・失敗したものは記録が残り、次の起動でまた尋ねる。
+        setRecoveryItems((current) => current.filter((candidate) => candidate.id !== item.id));
+        recoveryPromptOpenRef.current = false;
+      }
+    })();
+  }, [appDialog, projectFolder, recoveryItems, startupView]);
 
   // ライブラリをまだ持っていなければ、起動画面の前にライブラリの準備画面を出す。
   useEffect(() => {
