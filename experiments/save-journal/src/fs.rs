@@ -45,6 +45,8 @@ pub trait Fs {
     fn remove(&mut self, p: &Path) -> R<()>;
     fn rename(&mut self, from: &Path, to: &Path) -> R<()>;
     fn file_id(&mut self, p: &Path) -> R<Option<String>>;
+    /// Let go of a held handle (real disk only).
+    fn close(&mut self, _p: &Path) {}
     /// True once an injected crash has happened (simulated disk only).
     fn dead(&self) -> bool {
         false
@@ -60,17 +62,28 @@ pub struct Stats {
     pub syncs: u64,
 }
 
+/// Keeps a handle per file once it has been written, so a read right after a
+/// write goes through the same handle instead of reopening the file.
 #[derive(Default)]
 pub struct RealFs {
     pub ops: u64,
     pub crash_at: Option<u64>,
     pub stats: Stats,
+    pub(crate) handles: HashMap<std::path::PathBuf, std::fs::File>,
 }
 
 impl RealFs {
     fn tick(&mut self) -> bool {
         self.ops += 1;
         self.crash_at == Some(self.ops)
+    }
+
+    fn handle(&mut self, p: &Path, create: bool) -> R<&mut std::fs::File> {
+        if !self.handles.contains_key(p) {
+            let file = std::fs::OpenOptions::new().read(true).write(true).create(create).open(p)?;
+            self.handles.insert(p.to_path_buf(), file);
+        }
+        Ok(self.handles.get_mut(p).unwrap())
     }
 }
 
@@ -80,7 +93,16 @@ fn die() -> ! {
 
 impl Fs for RealFs {
     fn read(&mut self, p: &Path) -> R<Vec<u8>> {
-        let data = std::fs::read(p)?;
+        use std::io::Read;
+        let data = match self.handles.get_mut(p) {
+            Some(file) => {
+                let mut data = Vec::new();
+                file.seek(SeekFrom::Start(0))?;
+                file.read_to_end(&mut data)?;
+                data
+            }
+            None => std::fs::read(p)?,
+        };
         self.stats.bytes_read += data.len() as u64;
         Ok(data)
     }
@@ -100,7 +122,9 @@ impl Fs for RealFs {
 
     fn create_write(&mut self, p: &Path, data: &[u8]) -> R<()> {
         let crash = self.tick();
-        let mut file = std::fs::File::create(p)?;
+        let file = self.handle(p, true)?;
+        file.set_len(0)?;
+        file.seek(SeekFrom::Start(0))?;
         if crash {
             file.write_all(&data[..data.len() / 2])?;
             die();
@@ -112,7 +136,7 @@ impl Fs for RealFs {
 
     fn write_at(&mut self, p: &Path, off: u64, data: &[u8]) -> R<()> {
         let crash = self.tick();
-        let mut file = std::fs::OpenOptions::new().write(true).open(p)?;
+        let file = self.handle(p, false)?;
         file.seek(SeekFrom::Start(off))?;
         if crash {
             file.write_all(&data[..data.len() / 2])?;
@@ -127,13 +151,14 @@ impl Fs for RealFs {
         if self.tick() {
             die();
         }
-        std::fs::OpenOptions::new().write(true).open(p)?.set_len(len)?;
+        self.handle(p, false)?.set_len(len)?;
         Ok(())
     }
 
     fn append(&mut self, p: &Path, data: &[u8]) -> R<()> {
         let crash = self.tick();
-        let mut file = std::fs::OpenOptions::new().create(true).append(true).open(p)?;
+        let file = self.handle(p, true)?;
+        file.seek(SeekFrom::End(0))?;
         if crash {
             file.write_all(&data[..data.len() / 2])?;
             die();
@@ -147,7 +172,7 @@ impl Fs for RealFs {
         if self.tick() {
             die();
         }
-        std::fs::OpenOptions::new().write(true).open(p)?.sync_all()?;
+        self.handle(p, false)?.sync_all()?;
         self.stats.syncs += 1;
         Ok(())
     }
@@ -156,6 +181,7 @@ impl Fs for RealFs {
         if self.tick() {
             die();
         }
+        self.handles.remove(p);
         std::fs::remove_file(p)?;
         Ok(())
     }
@@ -164,12 +190,18 @@ impl Fs for RealFs {
         if self.tick() {
             die();
         }
+        self.handles.remove(from);
+        self.handles.remove(to);
         std::fs::rename(from, to)?;
         Ok(())
     }
 
     fn file_id(&mut self, p: &Path) -> R<Option<String>> {
         real_file_id(p)
+    }
+
+    fn close(&mut self, p: &Path) {
+        self.handles.remove(p);
     }
 }
 

@@ -470,7 +470,9 @@ fn print_rows(rows: &mut [BenchRow]) {
 }
 
 fn cmd_bench(root: &Path) {
-    let saves = 40;
+    // Autosave runs after 700 ms without input; the bench waits the same before each save.
+    let saves = 20;
+    let idle = std::time::Duration::from_millis(700);
     let edits_per_save = 20;
     let mut rows = Vec::new();
     for size_kb in [100usize, 1000, 3000] {
@@ -501,6 +503,7 @@ fn cmd_bench(root: &Path) {
                 for e in batch {
                     content.splice(e.0..e.0 + e.1, e.2.iter().copied());
                 }
+                std::thread::sleep(idle);
                 let t = Instant::now();
                 std::fs::write(&doc, &content).unwrap();
                 let back = std::fs::read(&doc).unwrap();
@@ -534,6 +537,7 @@ fn cmd_bench(root: &Path) {
                 }
                 fs.sync(&log).unwrap();
                 let stats_before = fs.stats.clone();
+                std::thread::sleep(idle);
                 let t = Instant::now();
                 let cur = fs.read(&doc).unwrap();
                 assert_eq!(sha(&cur), disk_hash);
@@ -550,6 +554,7 @@ fn cmd_bench(root: &Path) {
                 let back = fs.read(&doc).unwrap();
                 disk_hash = sha(&back);
                 times.push(t.elapsed().as_secs_f64() * 1e3);
+                fs.close(&doc);
                 let _ = stats_before;
             }
             // Count only the save path, not the per-edit log.
@@ -580,6 +585,7 @@ fn cmd_bench(root: &Path) {
                 // 700 ms idle save; do it here so the save measures only itself.
                 j.flush(&mut fs).unwrap();
                 let before = fs.stats.clone();
+                std::thread::sleep(idle);
                 let t = Instant::now();
                 j.save(&mut fs).unwrap();
                 times.push(t.elapsed().as_secs_f64() * 1e3);
@@ -588,6 +594,8 @@ fn cmd_bench(root: &Path) {
             }
             assert_eq!(std::fs::read(&doc).unwrap(), j.content);
             println!("journal {size_kb} KB: {} compactions in {saves} saves", j.stats.compactions);
+            let p = j.stats.phase_ms.map(|v| v / saves as f64);
+            println!("  mean ms per save: verify {:.2}, intent+sync {:.2}, write {:.2}, read back {:.2}, done+compaction {:.2}", p[0], p[1], p[2], p[3], p[4]);
             rows.push(BenchRow { scheme: "journal", size_kb, save_ms: times, bytes_per_save: written as f64 / saves as f64, syncs_per_save: syncs as f64 / saves as f64, edit_us });
         }
     }
@@ -600,6 +608,56 @@ fn cmd_bench(root: &Path) {
     }
     let secs = t.elapsed().as_secs_f64() / 20.0;
     println!("sha256: {:.0} MB/s ({:.2} ms per 3 MB text)", big.len() as f64 / secs / 1e6, 3.0 * 1024.0 * 1024.0 / (big.len() as f64 / secs) * 1e3);
+}
+
+/// Where the time of one save goes on this machine.
+fn cmd_probe(root: &Path) {
+    use std::io::Write;
+    let small = vec![b'x'; 100];
+    let big = random_text(&mut Rng::new(3), 1024 * 1024);
+    let reps = 30;
+    let time = |f: &mut dyn FnMut()| {
+        let mut v: Vec<f64> = (0..reps)
+            .map(|_| {
+                let t = Instant::now();
+                f();
+                t.elapsed().as_secs_f64() * 1e3
+            })
+            .collect();
+        percentile(&mut v, 0.5)
+    };
+    let p = root.join("probe.bin");
+    std::fs::write(&p, &big).unwrap();
+    let open_close = time(&mut || {
+        drop(std::fs::OpenOptions::new().write(true).open(&p).unwrap());
+    });
+    let append_small_new_handle = time(&mut || {
+        let mut f = std::fs::OpenOptions::new().append(true).open(&p).unwrap();
+        f.write_all(&small).unwrap();
+    });
+    let mut held = std::fs::OpenOptions::new().append(true).open(&p).unwrap();
+    let append_small_held = time(&mut || held.write_all(&small).unwrap());
+    let fsync_small = time(&mut || {
+        held.write_all(&small).unwrap();
+        held.sync_all().unwrap();
+    });
+    let write_3mb = time(&mut || std::fs::write(&p, &big).unwrap());
+    let write_3mb_fsync = time(&mut || {
+        let mut f = std::fs::File::create(&p).unwrap();
+        f.write_all(&big).unwrap();
+        f.sync_all().unwrap();
+    });
+    let read_3mb = time(&mut || drop(std::fs::read(&p).unwrap()));
+    let hash_3mb = time(&mut || drop(sha(&big)));
+    println!("median of {reps}, 3 MB text (Japanese, UTF-8):");
+    println!("  open + close a file                {open_close:.2} ms");
+    println!("  append 100 B, new handle each time  {append_small_new_handle:.2} ms");
+    println!("  append 100 B, handle kept open      {append_small_held:.3} ms");
+    println!("  append 100 B + fsync               {fsync_small:.2} ms");
+    println!("  write 3 MB (no fsync)              {write_3mb:.2} ms");
+    println!("  write 3 MB + fsync                 {write_3mb_fsync:.2} ms");
+    println!("  read 3 MB                          {read_3mb:.2} ms");
+    println!("  sha256 of 3 MB                     {hash_3mb:.2} ms");
 }
 
 fn main() {
@@ -619,6 +677,7 @@ fn main() {
             arg(4).unwrap().parse().unwrap(),
         ),
         Some("bench") => cmd_bench(Path::new(arg(2).expect("dir"))),
+        Some("probe") => cmd_probe(Path::new(arg(2).expect("dir"))),
         _ => eprintln!("usage: lab sim|external|diskfull|real <dir>|bench <dir>"),
     }
 }

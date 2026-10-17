@@ -232,6 +232,8 @@ pub struct JStats {
     pub compactions: u64,
     pub compaction_failures: u64,
     pub saves: u64,
+    /// verify, intent+sync, write, read back, done+compaction
+    pub phase_ms: [f64; 5],
 }
 
 pub struct Journal {
@@ -331,12 +333,25 @@ impl Journal {
     }
 
     pub fn save<F: Fs>(&mut self, fs: &mut F) -> Result<bool, SaveError> {
+        let result = self.save_inner(fs);
+        // The manuscript is read back through the handle that wrote it; let it
+        // go only now, so the reopen after a write never sits in the save path.
+        fs.close(&self.doc);
+        result
+    }
+
+    fn save_inner<F: Fs>(&mut self, fs: &mut F) -> Result<bool, SaveError> {
         if self.gen == self.disk_gen {
             return Ok(false);
         }
         let g = self.gen;
         let snapshot = self.content.clone();
         let planned = sha(&snapshot);
+        let mut clock = std::time::Instant::now();
+        let mut lap = |stats: &mut JStats, i: usize| {
+            stats.phase_ms[i] += clock.elapsed().as_secs_f64() * 1e3;
+            clock = std::time::Instant::now();
+        };
 
         // 1. The manuscript is still the one Then last saw.
         let current = fs.read(&self.doc).map_err(SaveError::Original)?;
@@ -348,11 +363,13 @@ impl Journal {
             return Err(SaveError::External("content changed"));
         }
 
+        lap(&mut self.stats, 0);
         // 2. Everything up to G is durable before the manuscript is touched.
         let intent = Rec::Intent { gen: g, pre_gen: self.disk_gen, id: id.clone(), pre: self.disk_hash, planned };
         self.queue.push_back((g, encode(&intent)));
         self.flush(fs).map_err(SaveError::Journal)?;
 
+        lap(&mut self.stats, 1);
         // 3. In place. Growing first means a full disk fails before any byte changes.
         let (old_len, new_len) = (current.len(), snapshot.len());
         if new_len > old_len {
@@ -363,6 +380,7 @@ impl Journal {
             fs.set_len(&self.doc, new_len as u64).map_err(SaveError::Original)?;
         }
 
+        lap(&mut self.stats, 2);
         // 4. Read back.
         let back = fs.read(&self.doc).map_err(SaveError::Original)?;
         if sha(&back) != planned {
@@ -373,6 +391,7 @@ impl Journal {
         self.disk_id = id;
         self.stats.saves += 1;
 
+        lap(&mut self.stats, 3);
         // 5. Done (best effort; recovery does not need it).
         self.queue.push_back((g, encode(&Rec::Done { gen: g })));
         let _ = self.drain(fs);
@@ -382,6 +401,7 @@ impl Journal {
         if self.log_since_base >= (snapshot.len() as u64).max(1) && self.compact(fs, g, &snapshot).is_err() {
             self.stats.compaction_failures += 1;
         }
+        lap(&mut self.stats, 4);
         Ok(true)
     }
 
