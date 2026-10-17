@@ -269,14 +269,24 @@ function SourceView({
   onChangeMetadata: (next: string) => void;
   onEscape: (event: ReactKeyboardEvent) => void;
 }) {
-  const [draft, setDraft] = useState(() => sourceDrafts.get(documentKey) ?? metadata);
+  // The draft remembers which document it belongs to. Switching documents shows
+  // that document's own draft (or its YAML) in the same render, so a draft of
+  // one manuscript can never be edited, or written, as another's.
+  const [draftState, setDraftState] = useState(() => ({
+    documentKey,
+    text: sourceDrafts.get(documentKey) ?? metadata,
+  }));
+  const draft = draftState.documentKey === documentKey
+    ? draftState.text
+    : sourceDrafts.get(documentKey) ?? metadata;
+  const setDraft = (text: string) => setDraftState({ documentKey, text });
   const composingRef = useRef(false);
   const errors = useMemo(() => (draft.trim() ? analyzeFrontMatter(draft).errors : []), [draft]);
 
-  // The file changed from elsewhere (form, undo, another window): follow it unless
-  // an invalid draft is being edited here.
+  // Another document, or the file changed from elsewhere (form, undo, another
+  // window): follow it unless an invalid draft of this document is kept.
   useEffect(() => {
-    if (!sourceDrafts.has(documentKey)) setDraft(metadata);
+    setDraftState({ documentKey, text: sourceDrafts.get(documentKey) ?? metadata });
   }, [metadata, documentKey]);
 
   const commit = (text: string) => {
@@ -529,8 +539,21 @@ function TextValue({ value, onCommit }: { value: string; onCommit: (value: strin
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
-    element.style.height = "auto";
-    element.style.height = `${element.scrollHeight + 2}px`;
+    const fit = () => {
+      element.style.height = "auto";
+      element.style.height = `${element.scrollHeight + 2}px`;
+    };
+    fit();
+    // The wrapped height also changes when the pane is resized.
+    if (typeof ResizeObserver === "undefined") return;
+    let lastWidth = element.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (element.clientWidth === lastWidth) return;
+      lastWidth = element.clientWidth;
+      fit();
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
   }, [draft]);
   return (
     <textarea

@@ -220,6 +220,24 @@ test("ソース表示：不正なYAMLはファイルに書かず、下書きと�
   again.unmount();
 });
 
+test("ソース表示のまま別の文書へ切り替えても、前の文書の下書きを出さない", () => {
+  const view = mount("a: 1", { documentKey: "doc-p" });
+  view.state.view = "source";
+  view.render();
+  setValue(view.container.querySelector(".propertiesSourceText"), "a: 1\na: 2");
+  // Same component, another document (as switching tabs does).
+  view.state.metadata = "b: 9";
+  view.render({ documentKey: "doc-q" });
+  assert.equal(view.container.querySelector(".propertiesSourceText").value, "b: 9");
+  setValue(view.container.querySelector(".propertiesSourceText"), "b: 10");
+  assert.equal(view.state.metadata, "b: 10");
+  // Back to the first document: its invalid draft returns, and nothing of it leaked.
+  view.state.metadata = "a: 1";
+  view.render({ documentKey: "doc-p" });
+  assert.equal(view.container.querySelector(".propertiesSourceText").value, "a: 1\na: 2");
+  view.unmount();
+});
+
 test("YAMLが不正ならフォームは書かず、ソースでの修正へ案内する", () => {
   const { container, state, unmount } = mount("a: 1\na: 2");
   assert.equal(container.querySelectorAll(".propertyRow").length, 0);

@@ -73,8 +73,8 @@ assert.match(
 );
 assert.match(
   appSource,
-  /const updateFrontMatter = useCallback\([\s\S]*?replaceFrontMatter\(currentMarkdown, metadata\)[\s\S]*?setActiveMarkdown\(nextMarkdown, "keep"\)/,
-  "a property edit must keep the editor revision so the body editor is not re-synced (FM-13)",
+  /const updateFrontMatter = useCallback\([\s\S]*?replaceFrontMatter\(currentMarkdown, metadata\)[\s\S]*?didMountEditorRef\.current = true;[\s\S]*?setActiveMarkdown\(nextMarkdown, "keep"\)/,
+  "a property edit must reach the autosave and keep the editor revision so the body editor is not re-synced (FM-13)",
 );
 assert.match(
   editorSource,

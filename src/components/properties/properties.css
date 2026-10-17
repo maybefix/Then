@@ -125,7 +125,7 @@
 
 input[type="number"].propertyInput { width: 10em; max-width: 100%; }
 input[type="date"].propertyInput,
-input[type="datetime-local"].propertyInput { width: auto; max-width: 100%; color-scheme: dark; }
+input[type="datetime-local"].propertyInput { width: auto; max-width: 100%; }
 
 .propertyCheck {
   display: flex;

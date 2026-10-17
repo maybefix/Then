@@ -5785,6 +5785,9 @@ export default function App() {
     const currentMarkdown = activeMarkdownRef.current;
     const nextMarkdown = replaceFrontMatter(currentMarkdown, metadata);
     if (currentMarkdown !== nextMarkdown) {
+      // A property edit is an edit of this document: it must reach the autosave
+      // even when the body has not been touched since the document was opened.
+      didMountEditorRef.current = true;
       setActiveMarkdown(nextMarkdown, "keep");
     }
     if (!currentFilePath) {

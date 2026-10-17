@@ -2142,6 +2142,11 @@ html:not([data-window-fullscreen="true"])
 
 .propertiesPanel {
   container: properties / inline-size;
+  /* The sidebar body is a flex row; as a size container the pane has no content
+     width of its own, so it has to be told to take the row's width. */
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
   padding: 4px 10px 12px;
   color: var(--text-secondary);
   font-family: var(--ui-font-family);
