@@ -1,7 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { TextSplice } from "./editor/lineTextUpdate";
 import {
   forgetDocumentJournal,
   journalPositionOf,
+  placeBodyChange,
   recordDocumentChange,
   saveThroughJournal,
 } from "./editor/saveJournal";
@@ -253,6 +255,7 @@ import {
   parseFrontMatter,
   replaceFrontMatter,
   updateMarkdownBody,
+  updateMarkdownBodyDetailed,
 } from "./utils/frontmatter";
 import {
   findContainingFolderPath,
@@ -4161,13 +4164,13 @@ export default function App() {
   // Body and property edits build on it, so two edits in one frame don't undo each other.
   const activeMarkdownRef = useRef("");
   const setActiveMarkdown = useCallback(
-    (nextMarkdown: string, editorRevision: number | null | "keep" = null) => {
+    (nextMarkdown: string, editorRevision: number | null | "keep" = null, change: TextSplice | null = null) => {
       const previousMarkdown = activeMarkdownRef.current;
       activeMarkdownRef.current = nextMarkdown;
       const activeFile = openTabsRef.current.find((tab) => tab.id === activeTabId);
       if (activeFile?.path && previousMarkdown !== nextMarkdown) {
         // Every change of a saved document reaches its recovery journal.
-        recordDocumentChange(activeFile.id, activeFile.path, previousMarkdown, nextMarkdown);
+        recordDocumentChange(activeFile.id, activeFile.path, previousMarkdown, nextMarkdown, change);
       }
       patchActiveTab((tab) => ({
         ...tab,
@@ -5748,7 +5751,7 @@ export default function App() {
     scheduleTypewriterScroll();
   }, [scheduleTypewriterScroll, settings.typewriterScroll]);
 
-  const handleTextChange = useCallback((nextText: string, editorRevision: number) => {
+  const handleTextChange = useCallback((nextText: string, editorRevision: number, change?: TextSplice | null) => {
     didMountEditorRef.current = true;
     const previousPluginDocument = pluginActiveDocumentRef.current;
     const relativePath =
@@ -5780,9 +5783,12 @@ export default function App() {
       "document:read",
     );
     const currentMarkdown = activeMarkdownRef.current;
-    const nextFullText = updateMarkdownBody(currentMarkdown, nextText);
+    const layout = updateMarkdownBodyDetailed(currentMarkdown, nextText);
+    const nextFullText = layout.markdown;
     if (currentMarkdown !== nextFullText) {
-      setActiveMarkdown(nextFullText, editorRevision);
+      // The editor's own splice, placed in the full text, spares the journal a
+      // comparison of the two texts.
+      setActiveMarkdown(nextFullText, editorRevision, placeBodyChange(currentMarkdown, layout, nextText, change));
     }
     if (!currentFilePath) {
       setSaveStatus("dirty");

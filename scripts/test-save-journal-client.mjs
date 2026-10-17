@@ -22,6 +22,7 @@ const bundle = await build({
   format: "esm",
   write: false,
   platform: "neutral",
+  define: { "import.meta.env.DEV": "true" },
   plugins: [{
     name: "fake-tauri",
     setup(b) {

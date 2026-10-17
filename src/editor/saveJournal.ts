@@ -7,8 +7,37 @@
 // writes the text of the generation fixed when it was requested; changes made
 // meanwhile keep being recorded and are left for the next save.
 import { invoke } from "@tauri-apps/api/core";
-import { computeTextChange } from "../plugins/anchors";
 import type { TextDocument } from "../types";
+import type { TextSplice } from "./lineTextUpdate";
+
+const CHUNK = 4096;
+
+/**
+ * The single replacement that turns `previous` into `next`. Compares whole
+ * chunks natively before narrowing to characters, which keeps the scan of a
+ * long manuscript cheap; used only when the editor did not say what changed.
+ */
+export function textChangeBetween(previous: string, next: string): TextSplice {
+  const limit = Math.min(previous.length, next.length);
+  let from = 0;
+  while (from + CHUNK <= limit && previous.slice(from, from + CHUNK) === next.slice(from, from + CHUNK)) from += CHUNK;
+  while (from < limit && previous.charCodeAt(from) === next.charCodeAt(from)) from += 1;
+  let previousEnd = previous.length;
+  let nextEnd = next.length;
+  while (
+    previousEnd - CHUNK >= from &&
+    nextEnd - CHUNK >= from &&
+    previous.slice(previousEnd - CHUNK, previousEnd) === next.slice(nextEnd - CHUNK, nextEnd)
+  ) {
+    previousEnd -= CHUNK;
+    nextEnd -= CHUNK;
+  }
+  while (previousEnd > from && nextEnd > from && previous.charCodeAt(previousEnd - 1) === next.charCodeAt(nextEnd - 1)) {
+    previousEnd -= 1;
+    nextEnd -= 1;
+  }
+  return { from, to: previousEnd, insert: next.slice(from, nextEnd) };
+}
 
 type Edit = {
   gen: number;
@@ -73,8 +102,34 @@ function send(key: string, journal: DocumentJournal) {
     });
 }
 
-/** Record one change of a saved document's full text. */
-export function recordDocumentChange(key: string, path: string, previous: string, next: string) {
+/**
+ * Places the editor's body splice in the full markdown text, or null when the
+ * body does not sit verbatim behind the same header in both texts (CRLF
+ * files, a BOM or front matter added): the caller then compares the texts.
+ */
+export function placeBodyChange(
+  previousMarkdown: string,
+  layout: { bodyStart: number; verbatim: boolean },
+  nextBody: string,
+  change: TextSplice | null | undefined,
+): TextSplice | null {
+  if (!change || !layout.verbatim) return null;
+  const previousBodyLength = nextBody.length - change.insert.length + (change.to - change.from);
+  if (previousMarkdown.length - layout.bodyStart !== previousBodyLength) return null;
+  return { from: layout.bodyStart + change.from, to: layout.bodyStart + change.to, insert: change.insert };
+}
+
+/**
+ * Record one change of a saved document's full text. `change`, when the
+ * caller knows it, is exactly what turned `previous` into `next`.
+ */
+export function recordDocumentChange(
+  key: string,
+  path: string,
+  previous: string,
+  next: string,
+  change: TextSplice | null = null,
+) {
   let journal = journals.get(key);
   if (!journal) {
     journal = {
@@ -95,13 +150,16 @@ export function recordDocumentChange(key: string, path: string, previous: string
     // The tab's text was replaced without passing through here (a reload).
     pushReplace(journal, previous);
   }
-  const change = computeTextChange(previous, next);
+  const splice = change ?? textChangeBetween(previous, next);
+  if (import.meta.env.DEV && change && previous.slice(0, change.from) + change.insert + previous.slice(change.to) !== next) {
+    console.error("[save-journal] the editor's change does not produce the new text", change);
+  }
   push(journal, {
     replace: false,
     length: previous.length,
-    from: change.from,
-    to: change.to,
-    insert: change.insertedText,
+    from: splice.from,
+    to: splice.to,
+    insert: splice.insert,
   });
   journal.lastText = next;
   send(key, journal);
