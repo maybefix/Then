@@ -2,6 +2,11 @@ import { useRef } from "react";
 import type { LoadedExportSource, ExportStartMode } from "../../export/types";
 import type { ExportMobileTab } from "./ExportTopbar";
 
+const frontMatterIssueLabels: Record<NonNullable<LoadedExportSource["frontMatterIssue"]>, string> = {
+  unclosed: "閉じの---がなく、先頭のプロパティも本文として出力されます",
+  invalid: "プロパティのYAMLにエラーがあります",
+};
+
 const startModeLabels: Record<ExportStartMode, string> = {
   continue: "前の続き",
   "new-page": "改ページ",
@@ -102,6 +107,11 @@ export function ExportSourceSelector({ sources, activeTab, showStartMode, update
                       </select>
                     </label>}
                   </div>
+                  {source.frontMatterIssue && (
+                    <p className={`exportSourceWarning ${source.frontMatterIssue}`} role="note">
+                      {frontMatterIssueLabels[source.frontMatterIssue]}
+                    </p>
+                  )}
                 </article>
               ))}
             </div>

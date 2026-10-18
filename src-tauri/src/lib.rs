@@ -13,6 +13,7 @@ mod intermediate_draft;
 mod library;
 mod markdown_image;
 mod project_state;
+mod save_journal;
 mod submission_export;
 
 use checkpoint_store::{
@@ -566,6 +567,9 @@ pub fn run() {
             markdown_image::serve_image(&request)
         })
         .setup(|app| {
+            if let Ok(dir) = app.path().app_local_data_dir() {
+                save_journal::init(dir.join("recovery"));
+            }
             // 消しきれなくても起動は止めない。残りは画面で知らせ、再試行できるようにする。
             let purge_failure = purge_deprecated_global_content(app.handle()).err();
             if let Ok(mut slot) = app.state::<DeprecatedContentPurgeState>().0.lock() {
@@ -578,6 +582,7 @@ pub fn run() {
                 let window_for_events = main_window.clone();
                 main_window.on_window_event(move |event| {
                     if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                        save_journal::close_all();
                         let _ = save_main_window_state(&app_handle, &window_for_events);
                         close_linked_child_windows(&app_handle);
                     }
@@ -594,6 +599,8 @@ pub fn run() {
             transfer_reference_files,
             library_transfer_destinations,
             reorder_library_projects,
+            load_library_property_types,
+            save_library_property_type,
             library_overview,
             save_project_work,
             default_library_parent,
@@ -610,6 +617,11 @@ pub fn run() {
             save_text_file_dialog,
             save_submission_text_dialog,
             save_text_file,
+            journal_edits,
+            journal_save,
+            journal_forget,
+            journal_recovery_scan,
+            journal_recovery_discard,
             save_export_file_dialog,
             pick_export_path,
             export_front_matter::load_export_front_matter,
@@ -640,6 +652,7 @@ pub fn run() {
             list_project_markdown_files,
             create_text_file,
             create_text_file_from_template,
+            read_text_template,
             list_text_templates,
             register_text_template,
             delete_text_template,
@@ -1098,6 +1111,60 @@ fn save_text_file_dialog(
     let path = ensure_text_extension(dialog_path_to_path_buf(path)?);
     write_text_file(&path, &content)?;
     read_text_document(&path).map(Some)
+}
+
+/// Editor changes for an open document's recovery journal (see save_journal).
+#[tauri::command]
+async fn journal_edits(
+    key: String,
+    path: String,
+    base: Option<String>,
+    edits: Vec<save_journal::EditInput>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || save_journal::record_edits(&key, &path, base, edits))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+/// Autosave of an open document: in place, behind its recovery journal.
+#[tauri::command]
+async fn journal_save(key: String, path: String, gen: u64, content: String) -> Result<TextDocument, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let saved = save_journal::save(&key, &path, gen, &content)?;
+        let name = Path::new(&path)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("untitled.txt")
+            .to_string();
+        Ok(TextDocument {
+            content_hash: Some(content_hash(content.as_bytes())),
+            file_id: saved.file_id,
+            path,
+            name,
+            content,
+        })
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+fn journal_forget(key: String, discard: bool) {
+    save_journal::forget(&key, discard);
+}
+
+/// What runs that ended without closing left in the recovery area (reads only).
+#[tauri::command]
+async fn journal_recovery_scan() -> Result<Vec<save_journal::RecoveryItem>, String> {
+    tauri::async_runtime::spawn_blocking(save_journal::scan_recovery)
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+/// The person has restored or let go of one recovery item.
+#[tauri::command]
+fn journal_recovery_discard(id: String) -> Result<(), String> {
+    save_journal::discard_recovery(&id)
 }
 
 #[tauri::command]
@@ -2015,6 +2082,20 @@ fn reorder_library_projects(
 }
 
 #[tauri::command]
+fn load_library_property_types(scope_path: String) -> Result<BTreeMap<String, String>, String> {
+    library::library_property_types(Path::new(&scope_path))
+}
+
+#[tauri::command]
+fn save_library_property_type(
+    scope_path: String,
+    name: String,
+    property_type: String,
+) -> Result<BTreeMap<String, String>, String> {
+    library::set_library_property_type(Path::new(&scope_path), &name, &property_type)
+}
+
+#[tauri::command]
 fn list_stale_library_imports(library_path: String) -> Result<Vec<String>, String> {
     library::list_stale_imports(Path::new(&library_path))
 }
@@ -2237,6 +2318,17 @@ fn create_text_file_from_template(
     }
     write_text_file(&path, &content)?;
     read_text_document(&path)
+}
+
+/// The text of a template, for adding its properties to an open manuscript.
+#[tauri::command]
+fn read_text_template(
+    app: tauri::AppHandle,
+    root_path: Option<String>,
+    template_id: String,
+) -> Result<String, String> {
+    let template_path = resolve_text_template_path(&app, root_path.as_deref(), &template_id)?;
+    std::fs::read_to_string(&template_path).map_err(|error| format!("failed to read template: {error}"))
 }
 
 #[tauri::command]
@@ -3843,7 +3935,9 @@ fn write_text_file(path: &Path, content: &str) -> Result<(), String> {
             .map_err(|error| format!("failed to create parent directory: {error}"))?;
     }
 
-    std::fs::write(path, content).map_err(|error| format!("failed to write text file: {error}"))
+    std::fs::write(path, content).map_err(|error| format!("failed to write text file: {error}"))?;
+    save_journal::note_then_write(path, content.as_bytes());
+    Ok(())
 }
 
 fn list_project_folder(path: &Path) -> Result<ProjectFolder, String> {

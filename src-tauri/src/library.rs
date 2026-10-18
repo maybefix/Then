@@ -31,7 +31,14 @@ struct LibraryConfig {
     /// named here follow, sorted by name.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     project_order: Vec<String>,
+    /// Property name -> the type the properties form uses for it, shared by every
+    /// work in the library. Only picks the input; values are never converted.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    property_types: BTreeMap<String, String>,
 }
+
+const PROPERTY_TYPES: [&str; 6] = ["text", "list", "number", "checkbox", "date", "datetime"];
+const MAX_PROPERTY_NAME_BYTES: usize = 200;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -184,6 +191,41 @@ pub(super) fn reorder_library_projects(
     config.project_order = order;
     write_library_config(library, &config)?;
     library_projects(library)
+}
+
+/// The property types saved for the library `scope` belongs to. Empty outside a
+/// library; unknown type names (from a newer version) are left out.
+pub(super) fn library_property_types(scope: &Path) -> Result<BTreeMap<String, String>, String> {
+    let Some(library) = library_of_scope(scope) else {
+        return Ok(BTreeMap::new());
+    };
+    Ok(read_library_config(&library)?
+        .property_types
+        .into_iter()
+        .filter(|(_, property_type)| PROPERTY_TYPES.contains(&property_type.as_str()))
+        .collect())
+}
+
+/// Remembers the type chosen for a property name in the library `scope` belongs to.
+pub(super) fn set_library_property_type(
+    scope: &Path,
+    name: &str,
+    property_type: &str,
+) -> Result<BTreeMap<String, String>, String> {
+    if !PROPERTY_TYPES.contains(&property_type) {
+        return Err(format!("unknown property type: {property_type}"));
+    }
+    if name.trim().is_empty() || name.len() > MAX_PROPERTY_NAME_BYTES {
+        return Err("invalid property name".to_string());
+    }
+    let library = library_of_scope(scope)
+        .ok_or_else(|| "ライブラリまたはライブラリ内の作品ではありません".to_string())?;
+    let mut config = read_library_config(&library)?;
+    if config.property_types.get(name).map(String::as_str) != Some(property_type) {
+        config.property_types.insert(name.to_string(), property_type.to_string());
+        write_library_config(&library, &config)?;
+    }
+    library_property_types(&library)
 }
 
 /// The library an opened folder belongs to, if any. `misplaced_projects` is
@@ -382,6 +424,7 @@ pub(super) fn create_library(folder: &Path, name: &str) -> Result<LibraryContext
         id: format!("lib-{}", now_millis()),
         name: if name.is_empty() { folder_name(folder) } else { name.to_string() },
         project_order: Vec::new(),
+        property_types: BTreeMap::new(),
     };
     write_library_config(folder, &config)?;
     library_context_for(folder, Vec::new())?.ok_or_else(|| "library could not be opened".to_string())
@@ -707,6 +750,50 @@ mod tests {
         assert_eq!(chapter.kind, "folder");
         assert_eq!(chapter.project_path.as_deref(), Some(work.as_str()));
         assert!(library_context_for(&library.join("資料"), Vec::new()).unwrap().is_none());
+    }
+
+    #[test]
+    fn remembers_property_types_for_the_whole_library() {
+        let dir = TestDirectory::new("property-types");
+        let library = dir.0.join("lib");
+        std::fs::create_dir_all(&library).unwrap();
+        create_library(&library, "作品集").unwrap();
+        let work_a = create_library_project(&library, "作品A").unwrap();
+        let work_b = create_library_project(&library, "作品B").unwrap();
+        reorder_library_projects(&library, vec!["作品B".into(), "作品A".into()]).unwrap();
+
+        assert!(library_property_types(Path::new(&work_a)).unwrap().is_empty());
+        set_library_property_type(Path::new(&work_a), "date", "date").unwrap();
+        set_library_property_type(&library, "publish", "checkbox").unwrap();
+
+        // Shared by every work and the root; the project order is untouched.
+        let from_b = library_property_types(Path::new(&work_b)).unwrap();
+        assert_eq!(from_b.get("date").map(String::as_str), Some("date"));
+        assert_eq!(from_b.get("publish").map(String::as_str), Some("checkbox"));
+        let names: Vec<String> = library_projects(&library).unwrap().into_iter().map(|p| p.name).collect();
+        assert_eq!(names, vec!["作品B".to_string(), "作品A".to_string()]);
+
+        assert!(set_library_property_type(&library, "date", "colour").is_err());
+        assert!(set_library_property_type(&library, " ", "text").is_err());
+        let outside = dir.0.join("単独");
+        std::fs::create_dir_all(&outside).unwrap();
+        assert!(library_property_types(&outside).unwrap().is_empty());
+        assert!(set_library_property_type(&outside, "date", "date").is_err());
+    }
+
+    #[test]
+    fn reads_library_json_without_property_types_and_skips_unknown_types() {
+        let dir = TestDirectory::new("property-types-old");
+        let library = dir.0.join("lib");
+        write(
+            &library_config_path(&library),
+            r#"{"schemaVersion":1,"id":"lib-1","name":"作品集","propertyTypes":{"a":"text","b":"rating"}}"#,
+        );
+        let types = library_property_types(&library).unwrap();
+        assert_eq!(types.len(), 1);
+        assert_eq!(types.get("a").map(String::as_str), Some("text"));
+        write(&library_config_path(&library), r#"{"schemaVersion":1,"id":"lib-1","name":"作品集"}"#);
+        assert!(library_property_types(&library).unwrap().is_empty());
     }
 
     #[test]

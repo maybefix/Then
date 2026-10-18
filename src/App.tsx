@@ -1,4 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { TextSplice } from "./editor/lineTextUpdate";
+import {
+  discardRecovery,
+  forgetDocumentJournal,
+  journalPositionOf,
+  placeBodyChange,
+  recordDocumentChange,
+  recordRestoredText,
+  recoveryDestination,
+  saveThroughJournal,
+  scanRecovery,
+  type RecoveryItem,
+} from "./editor/saveJournal";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
@@ -43,7 +56,18 @@ import { ManuscriptTidyModal } from "./components/dialogs/ManuscriptTidyModal";
 import { RightPaneSwitcher, type RightPaneSwitcherItem } from "./components/layout/RightPaneSwitcher";
 import type { ManuscriptTidyLineRange, ManuscriptTidyResult } from "./editor/manuscriptTidy";
 import { normalizeAppTheme } from "./themes";
-import { MetadataPanel } from "./components/editor/MetadataPanel";
+import { PropertiesPanel } from "./components/properties/PropertiesPanel";
+import type { PropertyType, PropertyTypeSettings } from "./properties/propertyModel";
+import { loadPropertyTypes, savePropertyType } from "./properties/propertyTypeStore";
+import { ARTICLE_PROPERTY_SET, type PropertySet } from "./properties/propertySets";
+import {
+  matchesPropertyConditions,
+  parsePropertyQuery,
+  propertyConditionQuery,
+  propertyFileResults,
+  type PropertyQuery,
+} from "./properties/propertySearch";
+import { usePropertyValueIndex } from "./properties/usePropertyValueIndex";
 import {
   CheckpointStudio,
   type CheckpointCurrentProjectFile,
@@ -176,6 +200,7 @@ import type {
   DocumentAst,
   DocumentOutlineItem,
   ProjectAst,
+  ProjectSearchOutcome,
   ProjectSearchResult,
 } from "./editor/ast/types";
 import type {
@@ -232,10 +257,10 @@ import {
   UI_FONT_SCALE_MAX,
 } from "./types";
 import {
-  appendFrontMatterProperty,
-  composeMarkdown,
   parseFrontMatter,
+  replaceFrontMatter,
   updateMarkdownBody,
+  updateMarkdownBodyDetailed,
 } from "./utils/frontmatter";
 import {
   findContainingFolderPath,
@@ -262,6 +287,7 @@ import {
   exportFontFamilies,
   type LoadedExportSource,
 } from "./export/types";
+import { createLoadedExportSource } from "./export/exportSource";
 import CanvasWindowApp from "./CanvasWindowApp";
 import IntermediateDraftPane from "./components/canvas/IntermediateDraftPane";
 import type { DraftCanvasContext } from "./intermediateDraft";
@@ -368,6 +394,8 @@ type QueuedDocumentSave = {
   tabId: string;
   path: string;
   content: string;
+  /** The recorded change `content` is the result of (see saveJournal). */
+  journalPosition?: number | null;
   waiters: Array<{
     resolve: (document: TextDocument) => void;
     reject: (error: unknown) => void;
@@ -792,6 +820,14 @@ function debugLog(message: string, data?: unknown): void {
 }
 
 // 右サイドバーの切り替え先。ヘッダー左端のプルダウンに「アイコン＋機能名」で並べる。
+const EMPTY_WORKSPACE_SEARCH: ProjectSearchOutcome = {
+  results: [],
+  total: 0,
+  matchedFileCount: 0,
+  truncated: false,
+  error: null,
+};
+
 const rightSidebarBuiltinTabs: Array<{ id: string; label: string; icon: ReactNode }> = [
   {
     id: "idea",
@@ -835,6 +871,16 @@ const rightSidebarBuiltinTabs: Array<{ id: string; label: string; icon: ReactNod
       <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
         <path d="M8 3h9l3 3v13H8Z" />
         <path d="M4 7v15h12M11 8h6M11 12h6M11 16h4" />
+      </svg>
+    ),
+  },
+  {
+    id: "properties",
+    label: "プロパティ",
+    icon: (
+      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+        <path d="M4 6h3M4 12h3M4 18h3" />
+        <path d="M10 6h10M10 12h10M10 18h6" />
       </svg>
     ),
   },
@@ -3170,7 +3216,6 @@ export default function App() {
   const [isOutlineMenuOpen, setIsOutlineMenuOpen] = useState(false);
   const [appDialog, setAppDialog] = useState<AppDialog | null>(null);
   const [systemFonts, setSystemFonts] = useState<FontOption[]>(fallbackFontOptions);
-  const [isMetadataOpen, setIsMetadataOpen] = useState(false);
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
   const [isRightSidebarWide, setIsRightSidebarWide] = useState(false);
@@ -4120,14 +4165,29 @@ export default function App() {
     },
     [patchActiveTab],
   );
+  // The active document's full text as of the last write, ahead of the re-render.
+  // Body and property edits build on it, so two edits in one frame don't undo each other.
+  const activeMarkdownRef = useRef("");
   const setActiveMarkdown = useCallback(
-    (nextMarkdown: string, editorRevision: number | null = null) => {
-      patchActiveTab((tab) => ({ ...tab, markdown: nextMarkdown, editorRevision }));
+    (nextMarkdown: string, editorRevision: number | null | "keep" = null, change: TextSplice | null = null) => {
+      const previousMarkdown = activeMarkdownRef.current;
+      activeMarkdownRef.current = nextMarkdown;
+      const activeFile = openTabsRef.current.find((tab) => tab.id === activeTabId);
+      if (activeFile?.path && previousMarkdown !== nextMarkdown) {
+        // Every change of a saved document reaches its recovery journal.
+        recordDocumentChange(activeFile.id, activeFile.path, previousMarkdown, nextMarkdown, change);
+      }
+      patchActiveTab((tab) => ({
+        ...tab,
+        markdown: nextMarkdown,
+        // "keep": the body did not change, so the editor has nothing to sync.
+        editorRevision: editorRevision === "keep" ? tab.editorRevision : editorRevision,
+      }));
       setAppState((current) =>
         current.markdown === nextMarkdown ? current : { ...current, markdown: nextMarkdown },
       );
     },
-    [patchActiveTab],
+    [activeTabId, patchActiveTab],
   );
   const markActiveTabSaved = useCallback(
     (savedMarkdown: string, name?: string) => {
@@ -4179,10 +4239,12 @@ export default function App() {
           );
 
           try {
-            const document = await invoke<TextDocument>("save_text_file", {
-              path: savingRequest.path,
-              content: savingRequest.content,
-            });
+            const document = await saveThroughJournal(
+              savingRequest.tabId,
+              savingRequest.path,
+              savingRequest.content,
+              savingRequest.journalPosition,
+            );
 
             if (activeTabIdRef.current === savingRequest.tabId) {
               lastSavedMarkdownRef.current = document.content;
@@ -4302,6 +4364,7 @@ export default function App() {
     [appState.collapsedOutlineHeadingKeysByWorkspace, projectFolder],
   );
   const markdown = activeTab?.markdown ?? appState.markdown;
+  activeMarkdownRef.current = markdown;
   const saveStatus = activeTab?.saveStatus ?? "loading";
   const currentFilePath = activeTab?.path ?? null;
   const currentFileName = activeTab?.name ?? scratchFileName;
@@ -4342,7 +4405,12 @@ export default function App() {
     };
   }, [appMode, projectAst, projectFolder]);
   const frontMatter = useMemo(() => parseFrontMatter(markdown), [markdown]);
-  const editorText = frontMatter.body;
+  // The editor works in LF. A CRLF file keeps CRLF in `markdown` (FM-29), so the
+  // body is handed over in LF to match what the editor reports back.
+  const editorText = useMemo(
+    () => (frontMatter.body.includes("\r") ? frontMatter.body.replace(/\r\n?/g, "\n") : frontMatter.body),
+    [frontMatter.body],
+  );
   activeDocumentSnapshotRef.current = {
     path: currentFilePath,
     name: currentFileName,
@@ -4487,19 +4555,32 @@ export default function App() {
     }),
     [projectSearchMatchCase, projectSearchUseRegex, searchIncludeComments],
   );
+  // FM-28: [name:value] conditions narrow the search by property values. A regex
+  // search keeps its brackets as pattern syntax.
+  const propertyQuery = useMemo<PropertyQuery>(
+    () =>
+      projectSearchUseRegex
+        ? { text: projectSearchQuery, conditions: [] }
+        : parsePropertyQuery(projectSearchQuery),
+    [projectSearchQuery, projectSearchUseRegex],
+  );
+  const hasPropertyConditions = propertyQuery.conditions.length > 0;
   const currentFileSearchOutcome = useMemo(
     () =>
-      searchDocumentAstFullText(
-        activeDocumentAst,
-        currentFilePath ?? "",
-        currentFileName,
-        projectSearchQuery,
-        projectSearchOptions,
-      ),
+      hasPropertyConditions
+        ? EMPTY_WORKSPACE_SEARCH
+        : searchDocumentAstFullText(
+            activeDocumentAst,
+            currentFilePath ?? "",
+            currentFileName,
+            projectSearchQuery,
+            projectSearchOptions,
+          ),
     [
       activeDocumentAst,
       currentFileName,
       currentFilePath,
+      hasPropertyConditions,
       projectSearchOptions,
       projectSearchQuery,
     ],
@@ -4522,12 +4603,14 @@ export default function App() {
   }, [editorFind.activeIndex, editorFind.open, editorFindMatches.length]);
   const projectSearchOutcome = useMemo(
     () =>
-      searchProjectAstFullTextWithOptions(
-        projectAst,
-        projectSearchQuery,
-        projectSearchOptions,
-      ),
-    [projectAst, projectSearchOptions, projectSearchQuery],
+      hasPropertyConditions
+        ? EMPTY_WORKSPACE_SEARCH
+        : searchProjectAstFullTextWithOptions(
+            projectAst,
+            projectSearchQuery,
+            projectSearchOptions,
+          ),
+    [hasPropertyConditions, projectAst, projectSearchOptions, projectSearchQuery],
   );
   // ライブラリ全体の検索。開いている範囲は編集中の内容を、ほかの範囲はディスクから読んだ索引を使う。
   const pendingSearchJumpRef = useRef<ProjectSearchResult | null>(null);
@@ -4592,7 +4675,7 @@ export default function App() {
   }, [libraryForSearch, projectFolder, searchScope]);
   const librarySearchOutcome = useMemo(
     () =>
-      searchScope !== "library"
+      searchScope !== "library" || hasPropertyConditions
         ? null
         : searchLibraryScopes(
             [
@@ -4602,14 +4685,95 @@ export default function App() {
             projectSearchQuery,
             projectSearchOptions,
           ),
-    [currentScopeLabel, libraryCorpus, projectAst, projectSearchOptions, projectSearchQuery, searchScope],
+    [
+      currentScopeLabel,
+      hasPropertyConditions,
+      libraryCorpus,
+      projectAst,
+      projectSearchOptions,
+      projectSearchQuery,
+      searchScope,
+    ],
   );
+  // The files a property search looks at, by scope.
+  const propertySearchFiles = useMemo(() => {
+    if (!hasPropertyConditions) return [];
+    if (searchScope === "file") {
+      return currentFilePath ? [{ path: currentFilePath, name: currentFileName }] : [];
+    }
+    const scopes = searchScope === "library"
+      ? [{ label: currentScopeLabel, ast: projectAst }, ...(libraryCorpus?.scopes ?? [])]
+      : [{ label: "", ast: projectAst }];
+    return scopes.flatMap((scope) =>
+      (scope.ast?.files ?? []).map((file) => ({
+        path: file.path,
+        name: scope.label && searchScope === "library" ? `${scope.label} › ${file.name}` : file.name,
+      })),
+    );
+  }, [currentFileName, currentFilePath, currentScopeLabel, hasPropertyConditions, libraryCorpus, projectAst, searchScope]);
+  const propertySearchPaths = useMemo(() => propertySearchFiles.map((file) => file.path), [propertySearchFiles]);
+  const openDocumentTexts = useMemo(() => {
+    const texts = new Map<string, string>();
+    if (!hasPropertyConditions) return texts;
+    for (const tab of openTabs) if (tab.path) texts.set(tab.path, tab.markdown);
+    if (currentFilePath) texts.set(currentFilePath, markdown);
+    return texts;
+  }, [currentFilePath, hasPropertyConditions, markdown, openTabs]);
+  const readFileTextForProperties = useCallback(
+    async (path: string) => (await invoke<TextDocument>("read_text_file", { path })).content,
+    [],
+  );
+  const propertyValueIndex = usePropertyValueIndex({
+    enabled: hasPropertyConditions,
+    paths: propertySearchPaths,
+    openTexts: openDocumentTexts,
+    readText: readFileTextForProperties,
+  });
+  const propertySearchOutcome = useMemo((): ProjectSearchOutcome | null => {
+    if (!hasPropertyConditions) return null;
+    const { conditions, text } = propertyQuery;
+    const { valuesFor } = propertyValueIndex;
+    const matches = (path: string) => matchesPropertyConditions(valuesFor(path) ?? null, conditions);
+    const narrow = (ast: ProjectAst | null) =>
+      ast ? { ...ast, files: ast.files.filter((file) => matches(file.path)) } : ast;
+    if (!text) return propertyFileResults(propertySearchFiles, valuesFor, conditions);
+    if (searchScope === "file") {
+      return currentFilePath && matches(currentFilePath)
+        ? searchDocumentAstFullText(activeDocumentAst, currentFilePath, currentFileName, text, projectSearchOptions)
+        : EMPTY_WORKSPACE_SEARCH;
+    }
+    if (searchScope === "library") {
+      return searchLibraryScopes(
+        [{ label: currentScopeLabel, ast: projectAst }, ...(libraryCorpus?.scopes ?? [])].map((scope) => ({
+          label: scope.label,
+          ast: narrow(scope.ast),
+        })),
+        text,
+        projectSearchOptions,
+      );
+    }
+    return searchProjectAstFullTextWithOptions(narrow(projectAst), text, projectSearchOptions);
+  }, [
+    activeDocumentAst,
+    currentFileName,
+    currentFilePath,
+    currentScopeLabel,
+    hasPropertyConditions,
+    libraryCorpus,
+    projectAst,
+    projectSearchOptions,
+    propertyQuery,
+    propertySearchFiles,
+    propertyValueIndex,
+    searchScope,
+  ]);
   const workspaceSearchOutcome =
-    searchScope === "file"
-      ? currentFileSearchOutcome
-      : searchScope === "library" && librarySearchOutcome
-        ? librarySearchOutcome
-        : projectSearchOutcome;
+    propertySearchOutcome
+      ?? (searchScope === "file"
+        ? currentFileSearchOutcome
+        : searchScope === "library" && librarySearchOutcome
+          ? librarySearchOutcome
+          : projectSearchOutcome);
   const breadcrumbTrail = useMemo(
     () => findPathToEntry(projectFolder, currentFilePath),
     [currentFilePath, projectFolder],
@@ -5377,6 +5541,7 @@ export default function App() {
         tabId: activeTabId,
         path: currentFilePath,
         content: markdown,
+        journalPosition: journalPositionOf(activeTabId, markdown),
       }).catch(() => undefined);
     }, 700);
 
@@ -5591,7 +5756,7 @@ export default function App() {
     scheduleTypewriterScroll();
   }, [scheduleTypewriterScroll, settings.typewriterScroll]);
 
-  const handleTextChange = useCallback((nextText: string, editorRevision: number) => {
+  const handleTextChange = useCallback((nextText: string, editorRevision: number, change?: TextSplice | null) => {
     didMountEditorRef.current = true;
     const previousPluginDocument = pluginActiveDocumentRef.current;
     const relativePath =
@@ -5622,16 +5787,19 @@ export default function App() {
       }),
       "document:read",
     );
-    const nextFullText = updateMarkdownBody(markdown, nextText);
-    if (markdown !== nextFullText) {
-      setActiveMarkdown(nextFullText, editorRevision);
+    const currentMarkdown = activeMarkdownRef.current;
+    const layout = updateMarkdownBodyDetailed(currentMarkdown, nextText);
+    const nextFullText = layout.markdown;
+    if (currentMarkdown !== nextFullText) {
+      // The editor's own splice, placed in the full text, spares the journal a
+      // comparison of the two texts.
+      setActiveMarkdown(nextFullText, editorRevision, placeBodyChange(currentMarkdown, layout, nextText, change));
     }
     if (!currentFilePath) {
       setSaveStatus("dirty");
     }
   }, [
     currentFilePath,
-    markdown,
     persistPluginAnchors,
     projectFolder,
     setActiveMarkdown,
@@ -5647,26 +5815,87 @@ export default function App() {
   }, [documentKey]);
 
   const updateFrontMatter = useCallback((metadata: string) => {
-    const nextMarkdown = composeMarkdown(metadata, parseFrontMatter(markdown).body);
-    if (markdown !== nextMarkdown) {
-      setActiveMarkdown(nextMarkdown);
+    const currentMarkdown = activeMarkdownRef.current;
+    const nextMarkdown = replaceFrontMatter(currentMarkdown, metadata);
+    if (currentMarkdown !== nextMarkdown) {
+      // A property edit is an edit of this document: it must reach the autosave
+      // even when the body has not been touched since the document was opened.
+      didMountEditorRef.current = true;
+      setActiveMarkdown(nextMarkdown, "keep");
     }
     if (!currentFilePath) {
       setSaveStatus("dirty");
     }
-  }, [currentFilePath, markdown, setActiveMarkdown, setSaveStatus]);
+  }, [currentFilePath, setActiveMarkdown, setSaveStatus]);
 
-  const handleFrontMatterChange = useCallback(
-    (event: ChangeEvent<HTMLTextAreaElement>) => {
-      updateFrontMatter(event.target.value);
-    },
-    [updateFrontMatter],
-  );
-
-  const handleAddFrontMatterProperty = useCallback(() => {
-    updateFrontMatter(appendFrontMatterProperty(parseFrontMatter(markdown).metadata));
-    setIsMetadataOpen(true);
-  }, [markdown, updateFrontMatter]);
+  // Type chosen per property name (FM-20 ①), shared by every work in the open
+  // library and saved in its .then/library.json (FM-21). Outside a library the
+  // types are kept for this session only.
+  const [propertyTypeSettings, setPropertyTypeSettings] = useState<PropertyTypeSettings>({});
+  const propertyTypeScope = projectFolder?.path ?? null;
+  const propertyTypeScopeRef = useRef(propertyTypeScope);
+  propertyTypeScopeRef.current = propertyTypeScope;
+  useEffect(() => {
+    setPropertyTypeSettings({});
+    if (!propertyTypeScope || !isTauriRuntime()) return;
+    let cancelled = false;
+    loadPropertyTypes(propertyTypeScope).then(
+      (saved) => {
+        if (!cancelled) setPropertyTypeSettings(saved);
+      },
+      () => {},
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [propertyTypeScope]);
+  const rememberPropertyType = useCallback((key: string, type: PropertyType) => {
+    setPropertyTypeSettings((current) => (current[key] === type ? current : { ...current, [key]: type }));
+    const scope = propertyTypeScopeRef.current;
+    if (!scope || !isTauriRuntime()) return;
+    savePropertyType(scope, key, type).then(
+      (saved) => {
+        // A library switched meanwhile has its own types.
+        if (propertyTypeScopeRef.current === scope) setPropertyTypeSettings((current) => ({ ...current, ...saved }));
+      },
+      // Not in a library: the type stays for this session.
+      () => {},
+    );
+  }, []);
+  // Escape in the properties: back to the body at the caret it had (FM-16).
+  const returnFocusFromProperties = useCallback(() => {
+    editorInstanceRef.current?.focus();
+  }, []);
+  // A list item in the properties pane searches the work for that value (FM-28).
+  const searchByProperty = useCallback((key: string, value: string) => {
+    setProjectSearchQuery(propertyConditionQuery(key, value));
+    setProjectSearchUseRegex(false);
+    setSearchScope((current) => (current === "file" && projectFolder ? "project" : current));
+    setLeftSidebarView("search");
+    setIsLeftSidebarCollapsed(false);
+  }, [projectFolder]);
+  // Sets the properties pane can add (FM-27): the built-in article set (FM-25),
+  // then every template, of this work or of the profile, that has properties.
+  const loadPropertySets = useCallback(async (): Promise<PropertySet[]> => {
+    const sets: PropertySet[] = [ARTICLE_PROPERTY_SET];
+    if (!isTauriRuntime()) return sets;
+    const rootPath = propertyTypeScopeRef.current;
+    const templates = await invoke<TextTemplateSummary[]>("list_text_templates", { rootPath }).catch(
+      () => [] as TextTemplateSummary[],
+    );
+    for (const template of templates) {
+      try {
+        const content = await invoke<string>("read_text_template", { rootPath, templateId: template.id });
+        const parts = parseFrontMatter(content);
+        if (parts.hasFrontMatter && parts.metadata.trim()) {
+          sets.push({ id: template.id, name: template.name, metadata: parts.metadata });
+        }
+      } catch {
+        // A template that cannot be read is left out of the menu.
+      }
+    }
+    return sets;
+  }, []);
 
   const handleClearFrontMatter = useCallback(async () => {
     if (!frontMatter.hasFrontMatter) return;
@@ -7077,6 +7306,7 @@ export default function App() {
     }
 
     setOpenTabs(remainingTabs.length ? remainingTabs : [fallbackTab]);
+    for (const tab of targets) forgetDocumentJournal(tab.id);
     if (isClosingActiveTab) syncDocumentTabToEditor(fallbackTab);
     showToast(
       targets.length === 1
@@ -7190,6 +7420,8 @@ export default function App() {
       memo: string,
       reason: ManuscriptSnapshot["reason"],
       parentIds: string[] = [],
+      /** Text to take instead of the tab or file at this path (a recovered text). */
+      override?: { path: string; markdown: string },
     ): ManuscriptSnapshot => {
       if (!projectFolder) {
         throw new Error("先にフォルダを開いてください");
@@ -7198,8 +7430,13 @@ export default function App() {
       const openTabsByPath = new Map(
         openTabs
           .filter((tab): tab is DocumentTab & { path: string } => Boolean(tab.path))
-          .map((tab) => [tab.path, tab] as const),
+          .map((tab) => [tab.path, { name: tab.name, markdown: tab.markdown }] as const),
       );
+      if (override) {
+        const file = collectProjectTextFiles(projectFolder).find((item) => isSamePath(item.path, override.path));
+        if (!file) throw new Error(`作品フォルダにない原稿です: ${override.path}`);
+        openTabsByPath.set(file.path, { name: file.name, markdown: override.markdown });
+      }
       const astFilesByPath = new Map(
         projectAst?.rootPath === projectFolder.path
           ? projectAst.files.map((file) => [file.path, file] as const)
@@ -7232,7 +7469,9 @@ export default function App() {
             textLength: documentAst.textLength,
             visibleTextLength: documentAst.visibleTextLength,
             outlineCount:
-              astFilesByPath.get(file.path)?.outlineCount ?? documentAst.outline.length,
+              (override && isSamePath(file.path, override.path)
+                ? undefined
+                : astFilesByPath.get(file.path)?.outlineCount) ?? documentAst.outline.length,
           } satisfies ManuscriptSnapshotFile,
         ];
       });
@@ -7666,10 +7905,7 @@ export default function App() {
             const currentDocument = await invoke<TextDocument>("read_text_file", {
               path: file.path,
             });
-            content = composeMarkdown(
-              parseFrontMatter(currentDocument.content).metadata,
-              file.text,
-            );
+            content = updateMarkdownBody(currentDocument.content, file.text);
           } catch {
             content = file.text;
           }
@@ -7893,7 +8129,7 @@ export default function App() {
           }
 
           const content = currentContent !== null
-            ? composeMarkdown(parseFrontMatter(currentContent).metadata, file.text)
+            ? updateMarkdownBody(currentContent, file.text)
             : file.text;
           restoredDocuments.push(await invoke<TextDocument>("save_text_file", { path: targetPath, content }));
         }
@@ -8192,6 +8428,12 @@ export default function App() {
         : [{ path: currentFilePath ?? "", name: currentFileName }];
       const sources: LoadedExportSource[] = [];
       const readErrors: string[] = [];
+      // Flags files whose properties are broken YAML; without the parser the list
+      // still opens, just without that warning.
+      const countFrontMatterErrors = await import("./utils/frontmatterYaml").then(
+        ({ analyzeFrontMatter }) => (metadata: string) => analyzeFrontMatter(metadata).errors.length,
+        () => undefined,
+      );
 
       for (const [index, file] of candidates.entries()) {
         try {
@@ -8199,20 +8441,7 @@ export default function App() {
           const rawContent = file.path
             ? openTab?.markdown ?? (await invoke<TextDocument>("read_text_file", { path: file.path })).content
             : markdown;
-          const content = parseFrontMatter(rawContent).body;
-          const extension = file.name.match(/\.([^.]+)$/)?.[1]?.toLowerCase() ?? "txt";
-          sources.push({
-            id: file.path || `active-document-${index}`,
-            path: file.path,
-            extension,
-            displayName: file.name,
-            chars: content.replace(/\s/g, "").length,
-            enabled: true,
-            order: index,
-            startMode: index === 0 ? "continue" : "new-page",
-            markupMode: "then-markup",
-            content,
-          });
+          sources.push(createLoadedExportSource(file, rawContent, index, countFrontMatterErrors));
         } catch (error) {
           readErrors.push(`${file.name}: ${String(error)}`);
         }
@@ -9778,6 +10007,10 @@ export default function App() {
     }
     if (projectSearchQuery.length === 0) {
       showToast("検索語句を入力してください");
+      return;
+    }
+    if (hasPropertyConditions) {
+      showToast("プロパティの条件を含む検索では置換できません");
       return;
     }
     if (projectSearchOutcome.error) {
@@ -12062,6 +12295,116 @@ export default function App() {
     })();
   }, [startupView]);
 
+  // 前回が閉じずに終わったときに残った、保存されていない編集。原稿は自動では書き換えず、
+  // 確かめてもらってから戻す。外部で変わった原稿には触らず、チェックポイントに入れる。
+  const [recoveryItems, setRecoveryItems] = useState<RecoveryItem[]>([]);
+  const didScanRecoveryRef = useRef(false);
+  const recoveryPromptOpenRef = useRef(false);
+  useEffect(() => {
+    if (startupView === "loading" || didScanRecoveryRef.current || !isTauriRuntime()) return;
+    didScanRecoveryRef.current = true;
+    scanRecovery().then(setRecoveryItems, (error) => setLastError(String(error)));
+  }, [startupView]);
+
+  const restoreRecoveredText = async (item: RecoveryItem): Promise<boolean> => {
+    const destination = recoveryDestination(item);
+    const existing = item.path
+      ? openTabsRef.current.find((tab) => tab.path && isSamePath(tab.path, item.path!))
+      : undefined;
+    if (destination === "checkpoint") {
+      if (!projectFolder || !canWritePortableProjectState(projectFolder.path)) return false;
+      if (!(await waitForPortableProjectWrite(projectFolder.path))) return false;
+      const now = new Date();
+      const snapshot = buildManuscriptSnapshot(
+        `${getWorkspaceName(item.path!)} ${now.toLocaleDateString("ja-JP")} ${now.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`,
+        "",
+        "manual",
+        currentWorkspaceSnapshots[0] ? [currentWorkspaceSnapshots[0].id] : [],
+        { path: item.path!, markdown: item.content },
+      );
+      beginPortableProjectMutation(projectFolder.path);
+      const stored = await invoke<CheckpointLoadResult>("create_project_checkpoint", {
+        rootPath: projectFolder.path,
+        snapshot,
+      });
+      if (!applyCheckpointStoreResult(projectFolder.path, stored)) return false;
+      if (stored.warnings.length) {
+        showToast(checkpointWarningMessage(stored.warnings[0]));
+        return false;
+      }
+      showToast("チェックポイントに保存しました", { label: "見る", onClick: () => openCheckpointStudio(snapshot.id) });
+      return true;
+    }
+    if (destination === "scratch" || (existing && isDirtyDocumentTab(existing))) {
+      // 開いている原稿の編集を上書きしないよう、別のタブに出す。
+      const tab = createScratchDocumentTab(item.content, {
+        name: item.path ? getWorkspaceName(item.path) : scratchFileName,
+      });
+      setOpenTabs((current) => insertTabAfter(current, tab, activeTabIdRef.current));
+      syncDocumentTabToEditor(tab);
+      setStartupView("editor");
+      return true;
+    }
+    const document = await invoke<TextDocument>("read_text_file", { path: item.path });
+    const tab: DocumentTab = {
+      ...(existing ?? createFileDocumentTab(document)),
+      fileId: document.fileId ?? null,
+      contentHash: document.contentHash ?? null,
+      markdown: item.content,
+      savedMarkdown: document.content,
+      editorRevision: null,
+      saveStatus: "dirty",
+    };
+    // この実行の記録に入ってから、前回の記録を消す。
+    await recordRestoredText(tab.id, document.path, document.content, item.content);
+    setOpenTabs((current) =>
+      existing
+        ? current.map((candidate) => (candidate.id === tab.id ? tab : candidate))
+        : insertTabAfter(current, tab, activeTabIdRef.current),
+    );
+    syncDocumentTabToEditor(tab);
+    setStartupView("editor");
+    return true;
+  };
+
+  useEffect(() => {
+    if (appDialog || recoveryPromptOpenRef.current || startupView === "loading") return;
+    // チェックポイントに入れるものは、その原稿の作品を開いたときに尋ねる。
+    const item = recoveryItems.find(
+      (candidate) =>
+        recoveryDestination(candidate) !== "checkpoint" ||
+        (projectFolder && candidate.path && isPathInsideFolder(candidate.path, projectFolder.path)),
+    );
+    if (!item) return;
+    recoveryPromptOpenRef.current = true;
+    const primaryLabel = {
+      tab: "未保存の変更として開く",
+      checkpoint: "チェックポイントに保存",
+      scratch: "新しいタブで開く",
+    }[recoveryDestination(item)];
+    void (async () => {
+      try {
+        const choice = await requestChoice({
+          title: "保存されていない編集が残っています",
+          message: item.path ? `「${getWorkspaceName(item.path)}」` : "",
+          detail: item.path ?? undefined,
+          primaryLabel,
+          secondaryLabel: "破棄",
+        });
+        if (choice === null) return;
+        if (choice === "primary" && !(await restoreRecoveredText(item))) return;
+        await discardRecovery(item.id);
+      } catch (error) {
+        setLastError(String(error));
+        showToast(error instanceof Error ? error.message : String(error));
+      } finally {
+        // 閉じただけ・失敗したものは記録が残り、次の起動でまた尋ねる。
+        setRecoveryItems((current) => current.filter((candidate) => candidate.id !== item.id));
+        recoveryPromptOpenRef.current = false;
+      }
+    })();
+  }, [appDialog, projectFolder, recoveryItems, startupView]);
+
   // ライブラリをまだ持っていなければ、起動画面の前にライブラリの準備画面を出す。
   useEffect(() => {
     if (startupView !== "portal" || hasKnownLibrary || isLibrarySetupDismissed) return;
@@ -13603,15 +13946,6 @@ export default function App() {
                       </section>
                     ) : (
                       <>
-                        <MetadataPanel
-                          metadata={frontMatter.metadata}
-                          hasFrontMatter={frontMatter.hasFrontMatter}
-                          isOpen={isMetadataOpen}
-                          onToggle={() => setIsMetadataOpen((current) => !current)}
-                          onAddProperty={handleAddFrontMatterProperty}
-                          onClear={handleClearFrontMatter}
-                          onChange={handleFrontMatterChange}
-                        />
                         {isHydrated && (
                           <VerticalTextEditor
                             key={documentKey}
@@ -14039,6 +14373,19 @@ export default function App() {
                   </div>}
                   {rightSidebarTab === "draft" ? null : activePluginView ? (
                     <div className="pluginViewBody" aria-label={activePluginView.title} />
+                  ) : rightSidebarTab === "properties" ? (
+                    <PropertiesPanel
+                      documentKey={documentKey}
+                      metadata={frontMatter.metadata}
+                      hasFrontMatter={frontMatter.hasFrontMatter}
+                      onChangeMetadata={updateFrontMatter}
+                      onClear={handleClearFrontMatter}
+                      typeSettings={propertyTypeSettings}
+                      onRememberType={rememberPropertyType}
+                      onExit={returnFocusFromProperties}
+                      loadPropertySets={loadPropertySets}
+                      onSearchProperty={searchByProperty}
+                    />
                   ) : rightSidebarTab === "proof" ? (
                     <ProofreadPane
                       text={editorText}

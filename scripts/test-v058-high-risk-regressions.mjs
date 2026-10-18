@@ -68,8 +68,13 @@ assert.doesNotMatch(
 );
 assert.match(
   appSource,
-  /const handleTextChange = useCallback\([\s\S]*?didMountEditorRef\.current = true;[\s\S]*?const nextFullText = updateMarkdownBody\(markdown, nextText\);/,
+  /const handleTextChange = useCallback\([\s\S]*?didMountEditorRef\.current = true;[\s\S]*?const layout = updateMarkdownBodyDetailed\(currentMarkdown, nextText\);\s*const nextFullText = layout\.markdown;/,
   "the first editor update must immediately enter the markdown update path",
+);
+assert.match(
+  appSource,
+  /const updateFrontMatter = useCallback\([\s\S]*?replaceFrontMatter\(currentMarkdown, metadata\)[\s\S]*?didMountEditorRef\.current = true;[\s\S]*?setActiveMarkdown\(nextMarkdown, "keep"\)/,
+  "a property edit must reach the autosave and keep the editor revision so the body editor is not re-synced (FM-13)",
 );
 assert.match(
   editorSource,

@@ -37,12 +37,29 @@ export function updateTextFromLineDiff(
   nextLines: readonly SourceLine[],
   diff: DocumentLineDiff,
 ): string {
+  return updateTextFromLineDiffWithChange(previousText, oldLines, nextLines, diff).text;
+}
+
+/** One replacement in a text: `insert` takes the place of [from, to). */
+export type TextSplice = { from: number; to: number; insert: string };
+
+/**
+ * updateTextFromLineDiff, also returning the splice it made, so callers can
+ * pass the change on without comparing the two texts. Null when the text was
+ * rebuilt from its lines or did not change.
+ */
+export function updateTextFromLineDiffWithChange(
+  previousText: string,
+  oldLines: readonly SourceLine[],
+  nextLines: readonly SourceLine[],
+  diff: DocumentLineDiff,
+): { text: string; change: TextSplice | null } {
   if (!hasValidDiff(oldLines, nextLines, diff)) {
-    return materializeText(nextLines);
+    return { text: materializeText(nextLines), change: null };
   }
 
   if (diff.from === diff.toOld && diff.from === diff.toNew) {
-    return previousText;
+    return { text: previousText, change: null };
   }
 
   let start = 0;
@@ -74,5 +91,8 @@ export function updateTextFromLineDiff(
     start -= 1;
   }
 
-  return `${previousText.slice(0, start)}${replacement}${previousText.slice(end)}`;
+  return {
+    text: `${previousText.slice(0, start)}${replacement}${previousText.slice(end)}`,
+    change: { from: start, to: end, insert: replacement },
+  };
 }

@@ -381,12 +381,12 @@ assert.match(
 );
 assert.match(
   editorSource,
-  /const text = updateTextFromLineDiff\(/,
+  /const updated = updateTextFromLineDiffWithChange\(/,
   "the AST plugin must update its text from the changed line window",
 );
 assert.match(
   editorSource,
-  /astKey\.getState\(currentEditor\.state\)\?\.text\s*\?\?\s*docToText/,
+  /const astState = astKey\.getState\(currentEditor\.state\);\s*const next = astState\?\.text\s*\?\?\s*docToText/,
   "onUpdate must reuse the text already maintained by the AST plugin",
 );
 assert.doesNotMatch(

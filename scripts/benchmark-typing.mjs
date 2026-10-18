@@ -193,6 +193,7 @@ function installProjectMock({ chars, manuscriptSource, manuscriptText = null, se
   const arrays = /^(list_|load_project_snippets|load_project_plot_cards|load_project_proofread)/;
   let callbackId = 1;
   window.__benchUnknownCommands = new Set();
+  window.__benchCommandCounts = {};
   window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener() {} };
   window.__TAURI_INTERNALS__ = {
     metadata: { currentWindow: { label: "main" }, currentWebview: { windowLabel: "main", label: "main" } },
@@ -206,6 +207,9 @@ function installProjectMock({ chars, manuscriptSource, manuscriptText = null, se
       if (responses[command]) return structuredClone(responses[command](args ?? {}));
       if (arrays.test(command)) return [];
       window.__benchUnknownCommands.add(command);
+      window.__benchCommandCounts[command] = (window.__benchCommandCounts[command] ?? 0) + 1;
+      // Tauri hands invoke arguments over as JSON; pay that cost on the page as the app would.
+      JSON.stringify(args ?? {});
       return null;
     },
   };
@@ -492,6 +496,8 @@ try {
     })()`);
   }
   if ((flag("qa-production") || flag("expect-clean")) && pageErrors.length) throw new Error(pageErrors.join("\n"));
+  // Which unmocked commands the run reached (e.g. that the recovery journal was fed).
+  if (PROJECT) summary.commands = await evaluate("({ ...(window.__benchCommandCounts ?? {}) })");
   const runtime = await page.send("Browser.getVersion");
   const result = { label, at: AT, project: PROJECT, requestedChars: CHARS, runtime, ...summary };
   if (option("output", null)) await writeFile(option("output"), JSON.stringify(result, null, 2) + "\n");

@@ -21,6 +21,15 @@
     "dev:local": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "test:markdown-tables": "node scripts/test-markdown-tables.mjs",
     "test:manuscript-tidy": "node scripts/test-manuscript-tidy.mjs",
+    "test:frontmatter": "node --experimental-strip-types scripts/test-frontmatter.mjs",
+    "test:save-journal-client": "node scripts/test-save-journal-client.mjs",
+    "test:save-journal-splice": "node scripts/test-save-journal-splice.mjs",
+    "test:frontmatter-export": "node scripts/test-frontmatter-export.mjs",
+    "test:frontmatter-yaml": "node --experimental-strip-types scripts/test-frontmatter-yaml.mjs",
+    "test:property-model": "node scripts/test-property-model.mjs",
+    "test:properties-ui": "node scripts/test-properties-ui.mjs",
+    "test:property-type-store": "node scripts/test-property-type-store.mjs",
+    "test:property-search": "node scripts/test-property-search.mjs",
     "test:markdown-table-ime": "node scripts/test-markdown-table-ime.mjs",
     "test:table-navigation": "node scripts/test-table-navigation.mjs",
     "build": "tsc && vite build",
@@ -94,7 +103,8 @@
     "jszip": "^3.10.1",
     "pdfjs-dist": "^6.4.299",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0",

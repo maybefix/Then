@@ -41,7 +41,7 @@ import {
 } from "./editor/selectionMetrics";
 import { blockHasRole, classifyLines, parseLineNode } from "./editor/ast/documentAst";
 import type { InlineMarker, InlineMarkup, LayoutAlign, LineNode } from "./editor/ast/types";
-import { updateTextFromLineDiff } from "./editor/lineTextUpdate";
+import { type TextSplice, updateTextFromLineDiffWithChange } from "./editor/lineTextUpdate";
 import { findJapaneseQuoteRanges } from "./editor/japaneseQuoteRanges";
 import { markdownTableRows, type TableRow } from "./editor/markdownTables";
 import { tableCaretTarget, tableCellCaret } from "./editor/tableNavigation";
@@ -119,7 +119,11 @@ type VerticalTextEditorProps = {
     size: { width: number; height: number; verticalPadding: number } | null,
   ) => void;
   onReady: (editor: TextEditorHandle | null) => void;
-  onTextChange: (text: string, editorRevision: number) => void;
+  /**
+   * `change`, when given, is exactly what turned the previous text into
+   * `text` (so the caller need not compare the two).
+   */
+  onTextChange: (text: string, editorRevision: number, change?: TextSplice | null) => void;
   onSelectionChange: () => void;
   onPageMetricsChange?: (metrics: { current: number; total: number } | null) => void;
 };
@@ -128,6 +132,8 @@ type AstPluginState = {
   lines: LineNode[];
   documentIndex: DocumentIndex | null;
   text: string;
+  /** The splice of the last text change and the text it was applied to. */
+  change: (TextSplice & { base: string }) | null;
   decoSet: DecorationSet;
   /** Rows of Markdown tables by line index (empty for most manuscripts). */
   tableRows: Map<number, TableRow>;
@@ -1803,6 +1809,7 @@ function makeAstState(state: EditorState): AstPluginState {
     lines,
     documentIndex: import.meta.env.DEV ? createDocumentIndexFromLines(texts) : null,
     text: texts.join("\n"),
+    change: null,
     activeIndex,
     visibleCenter: activeIndex,
     fullDecorations: false,
@@ -1838,19 +1845,20 @@ function updateEditorTextWithShadow(
   oldLines: readonly LineNode[],
   newLines: readonly LineNode[],
   diff: DocumentLineDiff,
-): string {
-  const text = updateTextFromLineDiff(previousText, oldLines, newLines, diff);
-  if (!import.meta.env.DEV) return text;
+): { text: string; change: TextSplice | null } {
+  const updated = updateTextFromLineDiffWithChange(previousText, oldLines, newLines, diff);
+  if (!import.meta.env.DEV) return updated;
 
+  const { text } = updated;
   const rebuilt = newLines.map((line) => line.source).join("\n");
-  if (text === rebuilt) return text;
+  if (text === rebuilt) return updated;
 
   console.error("[editor-text-shadow] incremental text diverged; using full materialization", {
     diff,
     text,
     rebuilt,
   });
-  return rebuilt;
+  return { text: rebuilt, change: null };
 }
 
 /**
@@ -1956,7 +1964,8 @@ function applyAst(
   const { lines, rolesChangedOutside } = incrementalLines(value.lines, newState.doc, diff);
   const tables = nextTableRows(value, lines, diff, rolesChangedOutside);
   const documentIndex = updateDocumentIndexWithShadow(value.documentIndex, lines, diff);
-  const text = updateEditorTextWithShadow(value.text, value.lines, lines, diff);
+  const { text, change: splice } = updateEditorTextWithShadow(value.text, value.lines, lines, diff);
+  const change = splice ? { ...splice, base: value.text } : null;
   const activeIndex = activeLineIndex(newState);
 
   if (tr.getMeta("composition") !== undefined) {
@@ -1965,6 +1974,7 @@ function applyAst(
       lines,
       documentIndex,
       text,
+      change,
       activeIndex,
       visibleCenter,
       fullDecorations,
@@ -1987,6 +1997,7 @@ function applyAst(
     lines,
     documentIndex,
     text,
+    change,
     activeIndex,
     visibleCenter,
     fullDecorations,
@@ -4448,11 +4459,17 @@ export function VerticalTextEditor({
       },
       onUpdate: ({ editor: currentEditor }) => {
         cancelInitialAdjustment();
-        const next = astKey.getState(currentEditor.state)?.text ?? docToText(currentEditor.state.doc);
+        const astState = astKey.getState(currentEditor.state);
+        const next = astState?.text ?? docToText(currentEditor.state.doc);
+        // The AST's splice describes this update only if it was applied to
+        // the text the caller saw last (one transaction since then).
+        const change = astState?.change && astState.change.base === textRef.current && astState.text === next
+          ? { from: astState.change.from, to: astState.change.to, insert: astState.change.insert }
+          : null;
         updateEmptyAttribute(currentEditor, next);
         textRef.current = next;
         const nextRevision = ++localRevisionRef.current;
-        onTextChangeRef.current(next, nextRevision);
+        onTextChangeRef.current(next, nextRevision, change);
         onSelectionChangeRef.current();
         if (!isEditorComposing(currentEditor, composingRef)) {
           requestCenterCaret(false, "update");
@@ -4940,6 +4957,7 @@ export function VerticalTextEditor({
       data-highlight-current-line={highlightCurrentLine ? "true" : undefined}
       data-colorize-japanese-quotes={colorizeJapaneseQuotes ? "true" : undefined}
       data-editor-display={editorDisplayMode}
+      data-typewriter={editorDisplayMode === "continuous" && !typewriterScroll ? "off" : undefined}
       data-page-flow={editorDisplayMode === "paged" ? pageFlowDirection : undefined}
     >
       <div ref={scrollerRef} className="verticalTypewriterScroller">

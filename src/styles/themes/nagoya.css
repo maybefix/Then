@@ -1,0 +1,122 @@
+/* Nagoya: neutral writing surfaces from the supplied reference, with violet
+   reserved for links and focus. Keep the workspace flat and quietly divided. */
+.appShell[data-theme="nagoya-light"] {
+  color-scheme: light;
+  --bg-root: #e3e5e5;
+  --bg-primary: #fafafa;
+  --bg-secondary: #eceeee;
+  --bg-tertiary: #dfe1e3;
+  --bg-panel: #fafafa;
+  --bg-panel-strong: #eceeee;
+  --border-subtle: #d5d7d8;
+  --border-strong: #b8bbbf;
+  --text-primary: #292b2d;
+  --text-secondary: #515559;
+  --text-muted: #60656a;
+  --text-faint: #8b9095;
+  --accent: #744ba4;
+  --accent-strong: #603b8c;
+  --on-accent: #fff;
+  --primary-hover: #202224;
+  --primary-pressed: #17191b;
+  --focus-ring: #744ba4;
+  --success: #32724f;
+  --warning: #946120;
+  --danger: #b34438;
+  --control-hover: rgba(41, 43, 45, 0.06);
+  --accent-soft: rgba(116, 75, 164, 0.1);
+  --accent-border: rgba(116, 75, 164, 0.48);
+  --danger-soft: rgba(179, 68, 56, 0.1);
+  --selection-bg: #dcdce2;
+  --selection-text: #292b2d;
+  --action-gradient: #303234;
+  --action-text: #fff;
+  --editor-heading-color: #292b2d;
+  --editor-bg: #fafafa;
+  --card-bg: #fff;
+  --card-hover: #f1f2f2;
+  --topbar-bg: #e3e5e5;
+  --sidebar-bg: #eceeee;
+  --canvas-bg: #e3e5e5;
+  --card-float-shadow: none;
+  --radius-control: 4px;
+  --radius-card: 4px;
+  --radius-button: 4px;
+  --shadow-popover: 0 10px 28px rgba(41, 43, 45, 0.12);
+  --shadow-modal: 0 18px 48px rgba(41, 43, 45, 0.16);
+  --silkdown-code-bg: #eceeee;
+  --silkdown-link-color: #744ba4;
+}
+
+.appShell[data-theme="nagoya-light"] .editorColumn {
+  background: var(--editor-bg);
+}
+
+/* Continue the rail's gray surface through the file/search content. */
+.appShell[data-theme="nagoya-light"]
+  .workspaceSidebar:not(.referenceWorkspaceSidebar)
+  :is(.sidebarScroll, .sidebarFooter) {
+  background: var(--sidebar-bg);
+}
+
+.appShell[data-theme="nagoya-light"] :is(
+  .activeTreeItem,
+  .selectedTreeEntry,
+  .activeOutlineSidebarItem,
+  .activeOutlineTreeItem,
+  .selectedOutlineTreeItem,
+  .activeWorkspaceActivityButton
+) {
+  background: var(--selection-bg);
+  color: var(--selection-text);
+  box-shadow: none;
+}
+
+.appShell[data-theme="nagoya-light"] :is(
+  .themePickerButton,
+  .modalActions button,
+  .newTabActions button,
+  .addButton,
+  .ideaAdd
+) {
+  border-color: transparent;
+  background: var(--action-gradient);
+  color: var(--action-text);
+}
+
+.appShell[data-theme="nagoya-light"] :is(
+  .themePickerButton,
+  .modalActions button,
+  .newTabActions button,
+  .addButton,
+  .ideaAdd
+):hover:not(:disabled) {
+  background: var(--primary-hover);
+  color: var(--action-text);
+}
+
+.appShell[data-theme="nagoya-light"] :is(
+  .themePickerButton,
+  .modalActions button,
+  .newTabActions button,
+  .addButton,
+  .ideaAdd
+):active:not(:disabled) {
+  background: var(--primary-pressed);
+}
+
+.appShell[data-theme="nagoya-light"] :is(button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* The composer already shows focus on its enclosing box. */
+.appShell[data-theme="nagoya-light"] .ideaCaptureBox textarea:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.themePreview-nagoya-light { border-color: #b8bbbf; background: #fafafa; }
+.themePreview-nagoya-light::before { background: #e3e5e5; }
+.themePreview-nagoya-light i { background: #292b2d; }
+.themePreview-nagoya-light b { background: #744ba4; }
