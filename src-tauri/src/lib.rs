@@ -15,6 +15,7 @@ mod library;
 mod markdown_image;
 mod project_state;
 mod save_journal;
+mod single_instance;
 mod submission_export;
 
 use checkpoint_store::{
@@ -553,6 +554,12 @@ fn disable_webview_native_ui(_webview: &tauri::WebviewWindow) {}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    // A second launch brings the running Then forward instead of opening a
+    // second one on the same manuscripts.
+    let Some(instance) = single_instance::claim(&context.config().identifier) else {
+        return;
+    };
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(ExportWindowState::default())
@@ -567,7 +574,15 @@ pub fn run() {
         .register_uri_scheme_protocol(markdown_image::IMAGE_SCHEME, |_context, request| {
             markdown_image::serve_image(&request)
         })
-        .setup(|app| {
+        .setup(move |app| {
+            let app_for_activation = app.handle().clone();
+            instance.listen(move || {
+                if let Some(window) = app_for_activation.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            });
             if let Ok(dir) = app.path().app_local_data_dir() {
                 save_journal::init(dir.join("recovery"));
             }
@@ -711,7 +726,7 @@ pub fn run() {
             load_plugin_anchors,
             save_plugin_anchors
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }
 
