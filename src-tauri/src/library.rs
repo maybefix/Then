@@ -165,10 +165,7 @@ fn write_library_config(root: &Path, config: &LibraryConfig) -> Result<(), Strin
         .map_err(|error| format!("failed to create .then folder: {error}"))?;
     let content = serde_json::to_string_pretty(config)
         .map_err(|error| format!("failed to serialize library.json: {error}"))?;
-    let temporary = path.with_extension("json.tmp");
-    std::fs::write(&temporary, content)
-        .map_err(|error| format!("failed to write library.json: {error}"))?;
-    std::fs::rename(&temporary, &path)
+    super::atomic_file::write_replacing(&path, content)
         .map_err(|error| format!("failed to save library.json: {error}"))
 }
 

@@ -7,6 +7,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
+mod atomic_file;
 mod checkpoint_store;
 mod export_front_matter;
 mod intermediate_draft;
@@ -1014,7 +1015,7 @@ fn save_plugin_project_data(
     }
     let content = serde_json::to_string_pretty(&data)
         .map_err(|error| format!("failed to serialize plugin project data: {error}"))?;
-    std::fs::write(path, content)
+    atomic_file::write_replacing(&path, content)
         .map_err(|error| format!("failed to save plugin project data: {error}"))
 }
 
@@ -1046,7 +1047,7 @@ fn save_plugin_anchors(root_path: String, store: serde_json::Value) -> Result<()
     }
     let content = serde_json::to_string_pretty(&store)
         .map_err(|error| format!("failed to serialize plugin anchors: {error}"))?;
-    std::fs::write(path, content).map_err(|error| format!("failed to save plugin anchors: {error}"))
+    atomic_file::write_replacing(&path, content).map_err(|error| format!("failed to save plugin anchors: {error}"))
 }
 
 #[tauri::command]
@@ -1420,7 +1421,7 @@ fn save_export_file_dialog(
     let data = base64::engine::general_purpose::STANDARD
         .decode(data_base64)
         .map_err(|error| format!("エクスポートデータを復号できませんでした: {error}"))?;
-    std::fs::write(&path, data)
+    atomic_file::write_replacing(&path, data)
         .map_err(|error| format!("{} を保存できませんでした: {error}", path.display()))?;
     Ok(Some(export_result(&path)))
 }
@@ -4265,25 +4266,18 @@ fn save_reference_layout_file(root: &Path, layout: &ReferenceLayoutConfig) -> Re
 
     let content = serde_json::to_string_pretty(layout)
         .map_err(|error| format!("failed to serialize reference layout: {error}"))?;
-    let tmp_path = path.with_extension("json.tmp");
     let bak_path = path.with_extension("json.bak");
-
-    std::fs::write(&tmp_path, content)
-        .map_err(|error| format!("failed to write temporary reference layout: {error}"))?;
-    let tmp_content = std::fs::read_to_string(&tmp_path)
-        .map_err(|error| format!("failed to verify temporary reference layout: {error}"))?;
-    let _: ReferenceLayoutConfig = serde_json::from_str(&tmp_content)
-        .map_err(|error| format!("temporary reference layout is invalid: {error}"))?;
+    let _: ReferenceLayoutConfig = serde_json::from_str(&content)
+        .map_err(|error| format!("reference layout is invalid: {error}"))?;
 
     if path.exists() {
         std::fs::copy(&path, &bak_path)
             .map_err(|error| format!("failed to back up reference layout: {error}"))?;
-        std::fs::remove_file(&path)
-            .map_err(|error| format!("failed to replace old reference layout: {error}"))?;
     }
 
-    std::fs::rename(&tmp_path, &path)
-        .map_err(|error| format!("failed to promote reference layout: {error}"))
+    // One rename replaces the old layout; there is no moment without a file.
+    atomic_file::write_replacing(&path, content)
+        .map_err(|error| format!("failed to save reference layout: {error}"))
 }
 
 fn canvas_boards_dir(
@@ -4412,7 +4406,7 @@ fn write_canvas_board_order(dir: &Path, board_ids: &[String]) -> Result<(), Stri
         .map_err(|error| format!("failed to create canvas board directory: {error}"))?;
     let content = serde_json::to_string_pretty(board_ids)
         .map_err(|error| format!("failed to serialize canvas board order: {error}"))?;
-    std::fs::write(canvas_board_order_path(dir), content)
+    atomic_file::write_replacing(&canvas_board_order_path(dir), content)
         .map_err(|error| format!("failed to save canvas board order: {error}"))
 }
 
@@ -4544,7 +4538,7 @@ fn write_canvas_board_file(path: &Path, board: &serde_json::Value) -> Result<(),
         .map_err(|error| format!("failed to create canvas board directory: {error}"))?;
     let content = serde_json::to_string_pretty(board)
         .map_err(|error| format!("failed to serialize canvas board: {error}"))?;
-    std::fs::write(path, content).map_err(|error| format!("failed to write canvas board: {error}"))
+    atomic_file::write_replacing(path, content).map_err(|error| format!("failed to write canvas board: {error}"))
 }
 
 fn purge_global_reference_nodes(board: &mut serde_json::Value) -> bool {
@@ -5163,7 +5157,7 @@ fn save_main_window_state(
     };
     let content = serde_json::to_string_pretty(&state)
         .map_err(|error| format!("failed to serialize main window state: {error}"))?;
-    std::fs::write(main_window_state_path(app)?, content)
+    atomic_file::write_replacing(&main_window_state_path(app)?, content)
         .map_err(|error| format!("failed to write main window state: {error}"))
 }
 
@@ -5189,7 +5183,7 @@ fn save_app_state(app: tauri::AppHandle, state: serde_json::Value) -> Result<(),
     let content = serde_json::to_string_pretty(&state)
         .map_err(|error| format!("failed to serialize app state: {error}"))?;
 
-    std::fs::write(&path, content).map_err(|error| format!("failed to write app state: {error}"))
+    atomic_file::write_replacing(&path, content).map_err(|error| format!("failed to write app state: {error}"))
 }
 
 #[tauri::command]
