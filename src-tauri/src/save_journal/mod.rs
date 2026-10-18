@@ -25,7 +25,8 @@ struct Entry {
 struct Area {
     root: PathBuf,
     run: String,
-    _lock: Option<std::fs::File>,
+    /// Held while this run lives; let go and removed when it closes normally.
+    lock: Mutex<Option<std::fs::File>>,
 }
 
 static AREA: OnceLock<Area> = OnceLock::new();
@@ -59,7 +60,17 @@ pub fn init(recovery_root: PathBuf) {
     let run = format!("{}x{started:x}", std::process::id());
     let _ = std::fs::create_dir_all(&recovery_root);
     let lock = open_exclusive(&lock_path(&recovery_root, &run)).ok();
-    let _ = AREA.set(Area { root: recovery_root, run, _lock: lock });
+    let _ = AREA.set(Area { root: recovery_root, run, lock: Mutex::new(lock) });
+}
+
+/// A normal close: this run leaves no lock behind.
+fn release_run_lock() {
+    let Ok(area) = area() else { return };
+    let held = area.lock.lock().ok().and_then(|mut lock| lock.take());
+    if held.is_some() {
+        drop(held);
+        let _ = std::fs::remove_file(lock_path(&area.root, &area.run));
+    }
 }
 
 fn area() -> Result<&'static Area, String> {
@@ -267,6 +278,14 @@ fn scan_in(root: &Path, own_run: &str) -> Result<Vec<RecoveryItem>, String> {
     let mut items = Vec::new();
     for entry in entries.flatten() {
         if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            // A lock left by an earlier run that kept no folder: run_alive
+            // removes it once nobody holds it.
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if let Some(run) = name.strip_suffix(".lock") {
+                if run != own_run {
+                    alive.entry(run.to_string()).or_insert_with(|| run_alive(root, run));
+                }
+            }
             continue;
         }
         let id = entry.file_name().to_string_lossy().into_owned();
@@ -337,6 +356,7 @@ pub fn close_all() {
     for key in keys {
         forget(&key, false);
     }
+    release_run_lock();
 }
 
 #[cfg(test)]
@@ -468,5 +488,25 @@ mod tests {
         assert_eq!(byte_offset(text, 4), Some(8));
         assert_eq!(byte_offset(text, 5), Some(9));
         assert_eq!(byte_offset(text, 6), None);
+    }
+
+    #[test]
+    fn scan_removes_locks_nobody_holds_even_without_a_folder() {
+        let root = TempRoot::new("stale-locks");
+        // Two earlier runs closed without a journal folder; one is still running.
+        std::fs::write(lock_path(&root.0, "111x1"), b"").unwrap();
+        std::fs::write(lock_path(&root.0, "222x2"), b"").unwrap();
+        let held = open_exclusive(&lock_path(&root.0, "333x3")).unwrap();
+        let own = open_exclusive(&lock_path(&root.0, ME)).unwrap();
+
+        let items = scan_in(&root.0, ME).unwrap();
+
+        assert!(items.is_empty());
+        assert!(!lock_path(&root.0, "111x1").exists());
+        assert!(!lock_path(&root.0, "222x2").exists());
+        assert!(lock_path(&root.0, "333x3").exists(), "a running instance keeps its lock");
+        assert!(lock_path(&root.0, ME).exists(), "this run keeps its own lock");
+        drop(held);
+        drop(own);
     }
 }
