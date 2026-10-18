@@ -14,11 +14,11 @@ const [app, css, controls, portal, packageJson, packageLock, tauriConfig, cargoT
     readFile("src-tauri/Cargo.toml", "utf8"),
   ]);
 
-assert.equal(packageJson.version, "0.6.6");
-assert.equal(packageLock.version, "0.6.6");
-assert.equal(packageLock.packages[""].version, "0.6.6");
-assert.equal(tauriConfig.version, "0.6.6");
-assert.match(cargoToml, /^version = "0\.6\.6"$/m);
+assert.equal(packageJson.version, "0.6.7");
+assert.equal(packageLock.version, "0.6.7");
+assert.equal(packageLock.packages[""].version, "0.6.7");
+assert.equal(tauriConfig.version, "0.6.7");
+assert.match(cargoToml, /^version = "0\.6\.7"$/m);
 
 const mainWindow = tauriConfig.app.windows[0];
 assert.equal(mainWindow.decorations, false, "the Windows-native titlebar must be disabled");
