@@ -1017,7 +1017,7 @@ fn load_plugin_project_data(
         .map_err(|error| format!("failed to parse plugin project data: {error}"))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_plugin_project_data(
     root_path: String,
     plugin_id: String,
@@ -1053,7 +1053,7 @@ fn load_plugin_anchors(root_path: String) -> Result<Option<serde_json::Value>, S
     Ok(Some(value))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_plugin_anchors(root_path: String, store: serde_json::Value) -> Result<(), String> {
     let path = plugin_anchors_path(&root_path)?;
     if let Some(parent) = path.parent() {
@@ -1083,7 +1083,7 @@ fn save_markdown_file_dialog(
     save_text_file_dialog(app, content)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_markdown_file(path: String, content: String) -> Result<MarkdownDocument, String> {
     save_text_file(path, content)
 }
@@ -1183,7 +1183,7 @@ fn journal_recovery_discard(id: String) -> Result<(), String> {
     save_journal::discard_recovery(&id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_text_file(path: String, content: String) -> Result<TextDocument, String> {
     let path = PathBuf::from(path);
     write_text_file(&path, &content)?;
@@ -1810,7 +1810,7 @@ async fn export_pdf(
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_heading_move(
     documents: Vec<HeadingDocumentWrite>,
 ) -> Result<HeadingMoveDocuments, String> {
@@ -2080,7 +2080,7 @@ fn library_overview(library_path: String) -> Result<Vec<library::LibraryProjectO
     library::library_overview(Path::new(&library_path))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_project_work(
     project_path: String,
     status: String,
@@ -2102,7 +2102,7 @@ fn load_library_property_types(scope_path: String) -> Result<BTreeMap<String, St
     library::library_property_types(Path::new(&scope_path))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_library_property_type(
     scope_path: String,
     name: String,
@@ -3191,7 +3191,7 @@ fn load_project_snippets(root_path: String) -> Result<Vec<IdeaThreadConfig>, Str
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_project_snippets(root_path: String, snippets: Vec<IdeaThreadConfig>) -> Result<(), String> {
     let root = PathBuf::from(root_path);
     if !root.is_dir() {
@@ -3217,7 +3217,7 @@ fn load_project_plot_cards(root_path: String) -> Result<Vec<PlotCardConfig>, Str
     Ok(load_project_config(&root)?.plot_cards)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_project_plot_cards(
     root_path: String,
     plot_cards: Vec<PlotCardConfig>,
@@ -3244,7 +3244,7 @@ fn load_project_proofread_terms(root_path: String) -> Result<Vec<ProofreadTermCo
     Ok(load_project_config(&root)?.proofread_terms)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_project_proofread_terms(
     root_path: String,
     proofread_terms: Vec<ProofreadTermConfig>,
@@ -3312,7 +3312,7 @@ fn load_project_proofread_ignored(
     Ok(load_project_config(&root)?.proofread_ignored)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_project_proofread_ignored(
     root_path: String,
     proofread_ignored: BTreeMap<String, Vec<String>>,
@@ -3432,7 +3432,7 @@ fn load_reference_layout(root_path: String) -> Result<ReferenceLayoutConfig, Str
     Ok(layout)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_reference_layout(root_path: String, mut layout: ReferenceLayoutConfig) -> Result<(), String> {
     let root = PathBuf::from(root_path);
     if !root.is_dir() {
@@ -3534,7 +3534,7 @@ fn load_canvas_board(
     Ok(board)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_canvas_board(
     app: tauri::AppHandle,
     scope: String,
@@ -3836,7 +3836,7 @@ fn read_reference_text(
         .map_err(|error| format!("failed to read reference text: {error}"))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_reference_text(
     app: tauri::AppHandle,
     root_path: Option<String>,
@@ -5192,7 +5192,7 @@ fn load_app_state(app: tauri::AppHandle) -> Result<Option<serde_json::Value>, St
     Ok(Some(state))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_app_state(app: tauri::AppHandle, state: serde_json::Value) -> Result<(), String> {
     let path = app_state_path(&app)?;
     let content = serde_json::to_string_pretty(&state)

@@ -6,8 +6,18 @@
 //! Not for manuscripts: a replaced file is a new file (a new identity, links
 //! broken), which save_journal avoids by writing manuscripts in place.
 
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
+
+/// Save commands run off the main thread, so two of them can reach the same
+/// file at once; one write per file at a time keeps them from interleaving.
+fn file_lock(path: &Path) -> Arc<Mutex<()>> {
+    static LOCKS: OnceLock<Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>> = OnceLock::new();
+    let mut locks = LOCKS.get_or_init(|| Mutex::new(HashMap::new())).lock().unwrap_or_else(|e| e.into_inner());
+    locks.entry(path.to_path_buf()).or_default().clone()
+}
 
 fn temporary_path(path: &Path) -> PathBuf {
     let name = path.file_name().and_then(|value| value.to_str()).unwrap_or("file");
@@ -20,6 +30,8 @@ fn temporary_path(path: &Path) -> PathBuf {
 
 /// Writes `content` to `path`, replacing any file there all at once.
 pub fn write_replacing(path: &Path, content: impl AsRef<[u8]>) -> std::io::Result<()> {
+    let lock = file_lock(path);
+    let _one_at_a_time = lock.lock().unwrap_or_else(|e| e.into_inner());
     let temporary = temporary_path(path);
     let result = (|| {
         let mut file = std::fs::File::create(&temporary)?;
