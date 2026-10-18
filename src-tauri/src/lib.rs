@@ -7,6 +7,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
+mod atomic_file;
 mod checkpoint_store;
 mod export_front_matter;
 mod intermediate_draft;
@@ -14,6 +15,7 @@ mod library;
 mod markdown_image;
 mod project_state;
 mod save_journal;
+mod single_instance;
 mod submission_export;
 
 use checkpoint_store::{
@@ -552,6 +554,12 @@ fn disable_webview_native_ui(_webview: &tauri::WebviewWindow) {}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    // A second launch brings the running Then forward instead of opening a
+    // second one on the same manuscripts.
+    let Some(instance) = single_instance::claim(&context.config().identifier) else {
+        return;
+    };
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(ExportWindowState::default())
@@ -566,7 +574,15 @@ pub fn run() {
         .register_uri_scheme_protocol(markdown_image::IMAGE_SCHEME, |_context, request| {
             markdown_image::serve_image(&request)
         })
-        .setup(|app| {
+        .setup(move |app| {
+            let app_for_activation = app.handle().clone();
+            instance.listen(move || {
+                if let Some(window) = app_for_activation.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            });
             if let Ok(dir) = app.path().app_local_data_dir() {
                 save_journal::init(dir.join("recovery"));
             }
@@ -710,7 +726,7 @@ pub fn run() {
             load_plugin_anchors,
             save_plugin_anchors
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }
 
@@ -1001,7 +1017,7 @@ fn load_plugin_project_data(
         .map_err(|error| format!("failed to parse plugin project data: {error}"))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_plugin_project_data(
     root_path: String,
     plugin_id: String,
@@ -1014,7 +1030,7 @@ fn save_plugin_project_data(
     }
     let content = serde_json::to_string_pretty(&data)
         .map_err(|error| format!("failed to serialize plugin project data: {error}"))?;
-    std::fs::write(path, content)
+    atomic_file::write_replacing(&path, content)
         .map_err(|error| format!("failed to save plugin project data: {error}"))
 }
 
@@ -1037,7 +1053,7 @@ fn load_plugin_anchors(root_path: String) -> Result<Option<serde_json::Value>, S
     Ok(Some(value))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_plugin_anchors(root_path: String, store: serde_json::Value) -> Result<(), String> {
     let path = plugin_anchors_path(&root_path)?;
     if let Some(parent) = path.parent() {
@@ -1046,7 +1062,7 @@ fn save_plugin_anchors(root_path: String, store: serde_json::Value) -> Result<()
     }
     let content = serde_json::to_string_pretty(&store)
         .map_err(|error| format!("failed to serialize plugin anchors: {error}"))?;
-    std::fs::write(path, content).map_err(|error| format!("failed to save plugin anchors: {error}"))
+    atomic_file::write_replacing(&path, content).map_err(|error| format!("failed to save plugin anchors: {error}"))
 }
 
 #[tauri::command]
@@ -1067,7 +1083,7 @@ fn save_markdown_file_dialog(
     save_text_file_dialog(app, content)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_markdown_file(path: String, content: String) -> Result<MarkdownDocument, String> {
     save_text_file(path, content)
 }
@@ -1167,7 +1183,7 @@ fn journal_recovery_discard(id: String) -> Result<(), String> {
     save_journal::discard_recovery(&id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_text_file(path: String, content: String) -> Result<TextDocument, String> {
     let path = PathBuf::from(path);
     write_text_file(&path, &content)?;
@@ -1420,7 +1436,7 @@ fn save_export_file_dialog(
     let data = base64::engine::general_purpose::STANDARD
         .decode(data_base64)
         .map_err(|error| format!("エクスポートデータを復号できませんでした: {error}"))?;
-    std::fs::write(&path, data)
+    atomic_file::write_replacing(&path, data)
         .map_err(|error| format!("{} を保存できませんでした: {error}", path.display()))?;
     Ok(Some(export_result(&path)))
 }
@@ -1794,7 +1810,7 @@ async fn export_pdf(
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_heading_move(
     documents: Vec<HeadingDocumentWrite>,
 ) -> Result<HeadingMoveDocuments, String> {
@@ -2064,7 +2080,7 @@ fn library_overview(library_path: String) -> Result<Vec<library::LibraryProjectO
     library::library_overview(Path::new(&library_path))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_project_work(
     project_path: String,
     status: String,
@@ -2086,7 +2102,7 @@ fn load_library_property_types(scope_path: String) -> Result<BTreeMap<String, St
     library::library_property_types(Path::new(&scope_path))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_library_property_type(
     scope_path: String,
     name: String,
@@ -3175,7 +3191,7 @@ fn load_project_snippets(root_path: String) -> Result<Vec<IdeaThreadConfig>, Str
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_project_snippets(root_path: String, snippets: Vec<IdeaThreadConfig>) -> Result<(), String> {
     let root = PathBuf::from(root_path);
     if !root.is_dir() {
@@ -3201,7 +3217,7 @@ fn load_project_plot_cards(root_path: String) -> Result<Vec<PlotCardConfig>, Str
     Ok(load_project_config(&root)?.plot_cards)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_project_plot_cards(
     root_path: String,
     plot_cards: Vec<PlotCardConfig>,
@@ -3228,7 +3244,7 @@ fn load_project_proofread_terms(root_path: String) -> Result<Vec<ProofreadTermCo
     Ok(load_project_config(&root)?.proofread_terms)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_project_proofread_terms(
     root_path: String,
     proofread_terms: Vec<ProofreadTermConfig>,
@@ -3296,7 +3312,7 @@ fn load_project_proofread_ignored(
     Ok(load_project_config(&root)?.proofread_ignored)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_project_proofread_ignored(
     root_path: String,
     proofread_ignored: BTreeMap<String, Vec<String>>,
@@ -3416,7 +3432,7 @@ fn load_reference_layout(root_path: String) -> Result<ReferenceLayoutConfig, Str
     Ok(layout)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_reference_layout(root_path: String, mut layout: ReferenceLayoutConfig) -> Result<(), String> {
     let root = PathBuf::from(root_path);
     if !root.is_dir() {
@@ -3518,7 +3534,7 @@ fn load_canvas_board(
     Ok(board)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_canvas_board(
     app: tauri::AppHandle,
     scope: String,
@@ -3820,7 +3836,7 @@ fn read_reference_text(
         .map_err(|error| format!("failed to read reference text: {error}"))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_reference_text(
     app: tauri::AppHandle,
     root_path: Option<String>,
@@ -4265,25 +4281,18 @@ fn save_reference_layout_file(root: &Path, layout: &ReferenceLayoutConfig) -> Re
 
     let content = serde_json::to_string_pretty(layout)
         .map_err(|error| format!("failed to serialize reference layout: {error}"))?;
-    let tmp_path = path.with_extension("json.tmp");
     let bak_path = path.with_extension("json.bak");
-
-    std::fs::write(&tmp_path, content)
-        .map_err(|error| format!("failed to write temporary reference layout: {error}"))?;
-    let tmp_content = std::fs::read_to_string(&tmp_path)
-        .map_err(|error| format!("failed to verify temporary reference layout: {error}"))?;
-    let _: ReferenceLayoutConfig = serde_json::from_str(&tmp_content)
-        .map_err(|error| format!("temporary reference layout is invalid: {error}"))?;
+    let _: ReferenceLayoutConfig = serde_json::from_str(&content)
+        .map_err(|error| format!("reference layout is invalid: {error}"))?;
 
     if path.exists() {
         std::fs::copy(&path, &bak_path)
             .map_err(|error| format!("failed to back up reference layout: {error}"))?;
-        std::fs::remove_file(&path)
-            .map_err(|error| format!("failed to replace old reference layout: {error}"))?;
     }
 
-    std::fs::rename(&tmp_path, &path)
-        .map_err(|error| format!("failed to promote reference layout: {error}"))
+    // One rename replaces the old layout; there is no moment without a file.
+    atomic_file::write_replacing(&path, content)
+        .map_err(|error| format!("failed to save reference layout: {error}"))
 }
 
 fn canvas_boards_dir(
@@ -4412,7 +4421,7 @@ fn write_canvas_board_order(dir: &Path, board_ids: &[String]) -> Result<(), Stri
         .map_err(|error| format!("failed to create canvas board directory: {error}"))?;
     let content = serde_json::to_string_pretty(board_ids)
         .map_err(|error| format!("failed to serialize canvas board order: {error}"))?;
-    std::fs::write(canvas_board_order_path(dir), content)
+    atomic_file::write_replacing(&canvas_board_order_path(dir), content)
         .map_err(|error| format!("failed to save canvas board order: {error}"))
 }
 
@@ -4544,7 +4553,7 @@ fn write_canvas_board_file(path: &Path, board: &serde_json::Value) -> Result<(),
         .map_err(|error| format!("failed to create canvas board directory: {error}"))?;
     let content = serde_json::to_string_pretty(board)
         .map_err(|error| format!("failed to serialize canvas board: {error}"))?;
-    std::fs::write(path, content).map_err(|error| format!("failed to write canvas board: {error}"))
+    atomic_file::write_replacing(path, content).map_err(|error| format!("failed to write canvas board: {error}"))
 }
 
 fn purge_global_reference_nodes(board: &mut serde_json::Value) -> bool {
@@ -5163,7 +5172,7 @@ fn save_main_window_state(
     };
     let content = serde_json::to_string_pretty(&state)
         .map_err(|error| format!("failed to serialize main window state: {error}"))?;
-    std::fs::write(main_window_state_path(app)?, content)
+    atomic_file::write_replacing(&main_window_state_path(app)?, content)
         .map_err(|error| format!("failed to write main window state: {error}"))
 }
 
@@ -5183,13 +5192,13 @@ fn load_app_state(app: tauri::AppHandle) -> Result<Option<serde_json::Value>, St
     Ok(Some(state))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_app_state(app: tauri::AppHandle, state: serde_json::Value) -> Result<(), String> {
     let path = app_state_path(&app)?;
     let content = serde_json::to_string_pretty(&state)
         .map_err(|error| format!("failed to serialize app state: {error}"))?;
 
-    std::fs::write(&path, content).map_err(|error| format!("failed to write app state: {error}"))
+    atomic_file::write_replacing(&path, content).map_err(|error| format!("failed to write app state: {error}"))
 }
 
 #[tauri::command]
