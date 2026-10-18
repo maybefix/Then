@@ -13,11 +13,11 @@ const [app, ideaPane, css, userManual, packageJson, packageLock, tauriConfig, ca
     readFile("src-tauri/Cargo.toml", "utf8"),
   ]);
 
-assert.equal(packageJson.version, "0.6.6");
-assert.equal(packageLock.version, "0.6.6");
-assert.equal(packageLock.packages[""].version, "0.6.6");
-assert.equal(tauriConfig.version, "0.6.6");
-assert.match(cargoToml, /^version = "0\.6\.6"$/m);
+assert.equal(packageJson.version, "0.6.7");
+assert.equal(packageLock.version, "0.6.7");
+assert.equal(packageLock.packages[""].version, "0.6.7");
+assert.equal(tauriConfig.version, "0.6.7");
+assert.match(cargoToml, /^version = "0\.6\.7"$/m);
 
 for (const removedUi of [
   "未使用",
@@ -75,7 +75,7 @@ assert.match(app, /showToast\("並び順を変更しました", \{\s*label: "元
 assert.match(css, /\.toast\.hasAction\s*\{[^}]*pointer-events:\s*auto;/s);
 assert.match(css, /\.referenceContextMenu \.dangerMenuItem\s*\{[^}]*var\(--danger\)/s);
 
-assert.match(userManual, /> 対象バージョン: 0\.6\.6/);
+assert.match(userManual, /> 対象バージョン: 0\.6\.7/);
 assert.doesNotMatch(userManual, /「すべて」「未使用」「スター」/);
 
 console.log("PASS v0.6.6 Idea UI: focused actions, consistent Inbox order, confirmations, undo");
