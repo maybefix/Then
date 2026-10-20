@@ -213,6 +213,7 @@ import type {
   DeleteProjectEntryResult,
   DocumentTab,
   EditorSettings,
+  ManuscriptProgress,
   FileProgressStatus,
   FlatOutlineItem,
   FontOption,
@@ -248,8 +249,10 @@ import type {
   WorkspaceRecord,
 } from "./types";
 import { isIdeaBinderCard, isReferenceBinderCard, workStatusLabels } from "./types";
+import { normalizeManuscriptSettings } from "./editor/manuscriptLayout";
 import {
   fileProgressStatuses,
+  DEFAULT_MANUSCRIPT_SETTINGS,
   DEFAULT_EDITOR_MEASURE_PERCENT,
   EDITOR_MEASURE_PERCENT_MAX,
   EDITOR_MEASURE_PERCENT_MIN,
@@ -1156,6 +1159,7 @@ const defaultSettings: EditorSettings = {
   writingMode: "vertical-rl",
   editorDisplayMode: "continuous",
   pageFlowDirection: "horizontal-rtl",
+  manuscript: DEFAULT_MANUSCRIPT_SETTINGS,
   canvasDefaultWritingMode: "horizontal-tb",
   canvasDefaultFontSource: "ui",
   plotFontSource: "editor",
@@ -2600,6 +2604,7 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         settings.editorDisplayMode === "paged" ? "paged" : "continuous",
       pageFlowDirection:
         settings.pageFlowDirection === "vertical" ? "vertical" : "horizontal-rtl",
+      manuscript: normalizeManuscriptSettings(settings.manuscript),
       canvasDefaultWritingMode:
         settings.canvasDefaultWritingMode === "horizontal-tb" ||
         settings.canvasDefaultWritingMode === "vertical-rl"
@@ -3176,6 +3181,8 @@ export default function App() {
     current: number;
     total: number;
   } | null>(null);
+  const [editorManuscriptProgress, setEditorManuscriptProgress] =
+    useState<ManuscriptProgress | null>(null);
   const [editorContextMenu, setEditorContextMenu] =
     useState<EditorContextMenuState | null>(null);
   const [notationModal, setNotationModal] = useState<NotationModalState | null>(null);
@@ -13971,7 +13978,12 @@ export default function App() {
                               settings.lineHeight,
                               settings.editorMeasureHorizontal,
                               settings.editorMeasureVertical,
+                              settings.manuscript.layoutMode,
+                              settings.manuscript.charactersPerLine,
+                              settings.manuscript.linesPerPage,
                             ].join("|")}
+                            manuscript={settings.manuscript}
+                            onManuscriptProgressChange={setEditorManuscriptProgress}
                             initialSelectionOffset={initialSelectionOffset}
                             initialViewportState={activeTab?.viewportState ?? null}
                             onViewportSizeChange={handleEditorViewportSizeChange}
@@ -14240,6 +14252,7 @@ export default function App() {
                 charCount={charCount}
                 selectionCharCount={selectionCharCount}
                 pageMetrics={editorPageMetrics}
+                manuscriptProgress={settings.manuscript.layoutMode === "manuscript" ? editorManuscriptProgress : null}
                 checkpoint={settings.showCheckpointStatus && projectFolder ? {
                   latest: latestManualSnapshot && {
                     label: latestManualSnapshot.label,

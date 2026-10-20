@@ -242,6 +242,44 @@ export type WritingMode = "vertical-rl" | "horizontal-tb";
 /** 本文を従来の連続領域で表示するか、ページ枠付きで表示するか。 */
 export type EditorDisplayMode = "continuous" | "paged";
 
+/** 原稿用紙の字詰め・行数で組むか。表示方式（EditorDisplayMode）とは独立。 */
+export type ManuscriptLayoutMode = "normal" | "manuscript";
+
+/** 原稿用紙モードの組版指定。本文ファイルには書き込まず、エディタ設定として保存する。 */
+export type ManuscriptSettings = {
+  layoutMode: ManuscriptLayoutMode;
+  /** 1行の字数（字詰め）。 */
+  charactersPerLine: number;
+  /** 1ページ（1枚）の行数。 */
+  linesPerPage: number;
+  showGrid: boolean;
+  showPageBoundaries: boolean;
+};
+
+export const MANUSCRIPT_CHARACTERS_MIN = 5;
+export const MANUSCRIPT_CHARACTERS_MAX = 80;
+export const MANUSCRIPT_LINES_MIN = 5;
+export const MANUSCRIPT_LINES_MAX = 80;
+
+export const DEFAULT_MANUSCRIPT_SETTINGS: ManuscriptSettings = {
+  layoutMode: "normal",
+  charactersPerLine: 20,
+  linesPerPage: 20,
+  showGrid: true,
+  showPageBoundaries: true,
+};
+
+/** 実際の組版結果から数えた原稿用紙の進み具合。 */
+export type ManuscriptProgress = {
+  /** 書き終えたページ（枚）数。 */
+  fullPages: number;
+  /** 書きかけのページ番号（1始まり）。ちょうど埋まったときは次のページ。 */
+  currentPage: number;
+  /** 書きかけのページで使った行数。 */
+  usedLinesOnCurrentPage: number;
+  linesPerPage: number;
+};
+
 /** ページ表示時の送り方向。横送りは日本語の本に合わせて右から左へ進む。 */
 export type PageFlowDirection = "horizontal-rtl" | "vertical";
 
@@ -313,6 +351,8 @@ export type EditorSettings = {
   writingMode: WritingMode;
   editorDisplayMode: EditorDisplayMode;
   pageFlowDirection: PageFlowDirection;
+  /** 原稿用紙の字詰め・行数。continuous / paged のどちらとも組み合わせられる。 */
+  manuscript: ManuscriptSettings;
   typewriterScroll: boolean;
   showTypewriterGuide: boolean;
   typewriterOffset: number;

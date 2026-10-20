@@ -3478,6 +3478,295 @@ html:not([data-window-fullscreen="true"])
   overflow-clip-margin: 0;
 }
 
+/*
+ * 原稿用紙モード。表示方式（連続・ページ）とは独立に、字詰めと行送りだけを
+ * 変える。通常和文は1字＝1ic で送り、行の割り・禁則・ルビ・縦中横は既存の
+ * ブラウザ組版のまま使う。セル基準を崩す字間（letter-spacing・両端揃え・
+ * 約物の詰め・和欧間の自動空き）はここで打ち消す。
+ *
+ * 版面は字数×1ic に 1px だけ余裕を持たせる。欧文ランの補正量は Canvas の
+ * 計測から出すので、DOM の送り幅とわずかに食い違うことがある。その端数で
+ * 満行の最後の1字が次の行へ送られないようにするための余裕で、1字分には
+ * 遠く足りないので字数は変わらない。
+ */
+.verticalTypewriterShell[data-manuscript="true"] {
+  --ms-line-color: color-mix(in srgb, var(--accent) 20%, transparent);
+  --ms-boundary-color: color-mix(in srgb, var(--accent) 62%, transparent);
+}
+
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .pm-root {
+  --ms-measure: calc(var(--ms-chars, 20) * 1ic + 1px);
+  letter-spacing: 0;
+  font-kerning: none;
+  text-spacing-trim: space-all;
+  text-autospace: no-autospace;
+}
+
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .pm-root p {
+  inline-size: var(--ms-measure);
+  min-inline-size: 0;
+  max-inline-size: none;
+  text-align: start;
+  text-align-last: auto;
+  text-spacing-trim: space-all;
+}
+
+/* 地付き・右寄せは行末へ寄せても整数セルに乗る。 */
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .pm-root p.jitsuki,
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .pm-root p.align-end {
+  text-align: end;
+}
+
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .pm-root p.align-center {
+  text-align: center;
+}
+
+/* 原稿用紙では見出しも1行1行送り。大きな字や別の行送りはグリッドを崩す。 */
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .pm-root p.heading {
+  font-size: 1em;
+  line-height: inherit;
+}
+
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .ks-punct-trim {
+  text-spacing-trim: space-all;
+}
+
+/*
+ * ルビは升目の脇（行間）へ書く。ブラウザのルビ組版では注記が行間に収まらない
+ * と行そのものが太り（行間1.82でも1行あたり約0.1行）、以降の行がすべて
+ * 升目からずれる。注記を親文字に対する絶対配置にして行の寸法から外し、
+ * 親文字は1字1升のまま、長いルビは親文字の中央から前後へはみ出させる。
+ */
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .ruby-base {
+  display: inline;
+  position: relative;
+}
+
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .ruby-base::after {
+  display: block;
+  position: absolute;
+  inset-block-end: 100%;
+  inset-inline: -10em;
+  line-height: 1;
+  text-align: center;
+}
+
+/* 縦中横は1セルに収める。前後の空きを足すと後続の字がセルからずれる。 */
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .tcy {
+  margin-inline: 0;
+  padding-inline: 0;
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-manuscript="true"]
+  .verticalTypewriterEditor
+  .pm-root {
+  width: var(--ms-measure);
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-manuscript="true"]
+  .verticalTypewriterEditor
+  .pm-root
+  p {
+  inline-size: auto;
+}
+
+/*
+ * 罫線は本文rootの背景に描く。セル要素は作らず、選択・IME・キャレット・
+ * 検索には関わらない。スクロールにも追従するのでJSの処理はない。
+ * 字の送り（1ic ごとの線）と、行送り（1lh）の中央に1ic幅の升目を置く線の
+ * 2枚を重ねる。どちらも版面と同じ寸法で、段落と同じく中央に置く。
+ */
+.verticalTypewriterShell[data-manuscript="true"][data-manuscript-grid="true"]
+  .verticalTypewriterEditor
+  .pm-root {
+  --ms-cell-gap: calc((1lh - 1ic) / 2);
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      var(--ms-line-color) 0 1px,
+      transparent 1px 1ic
+    ),
+    repeating-linear-gradient(
+      to left,
+      transparent 0 var(--ms-cell-gap),
+      var(--ms-line-color) var(--ms-cell-gap) calc(var(--ms-cell-gap) + 1px),
+      transparent calc(var(--ms-cell-gap) + 1px) calc(1lh - var(--ms-cell-gap) - 1px),
+      var(--ms-line-color) calc(1lh - var(--ms-cell-gap) - 1px) calc(1lh - var(--ms-cell-gap)),
+      transparent calc(1lh - var(--ms-cell-gap)) 1lh
+    );
+  background-size: 100% var(--ms-measure);
+  /* 版面が表示領域より長いと段落は先頭寄せになる（auto マージンが 0）。
+     罫線も中央ではなく先頭へ寄せる。 */
+  background-position: right max(0px, 50%);
+  background-repeat: no-repeat;
+  background-origin: content-box;
+  background-clip: content-box;
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-manuscript="true"][data-manuscript-grid="true"]
+  .verticalTypewriterEditor
+  .pm-root {
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      var(--ms-line-color) 0 1px,
+      transparent 1px 1ic
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 var(--ms-cell-gap),
+      var(--ms-line-color) var(--ms-cell-gap) calc(var(--ms-cell-gap) + 1px),
+      transparent calc(var(--ms-cell-gap) + 1px) calc(1lh - var(--ms-cell-gap) - 1px),
+      var(--ms-line-color) calc(1lh - var(--ms-cell-gap) - 1px) calc(1lh - var(--ms-cell-gap)),
+      transparent calc(1lh - var(--ms-cell-gap)) 1lh
+    );
+  background-size: var(--ms-measure) 100%;
+  background-position: left top, left top;
+}
+
+/*
+ * ページ表示では罫線を用紙（.pagedEditorSheet）の版面に描く。本文の背景だと
+ * 書きかけの最終ページで、まだ行のない部分に升目が出ない。用紙は本文の外の
+ * 飾りの要素なので、選択・IMEには関わらない。ic と lh を本文と同じにするため、
+ * 用紙の字の指定を本文に揃える。
+ */
+.verticalTypewriterShell[data-manuscript="true"][data-editor-display="paged"]
+  .verticalTypewriterEditor
+  .pm-root {
+  background-image: none;
+}
+
+.verticalTypewriterShell[data-manuscript="true"][data-manuscript-grid="true"][data-editor-display="paged"]
+  .pagedEditorSheet {
+  --ms-cell-gap: calc((1lh - 1ic) / 2);
+  font-family: var(--editor-font-family);
+  font-size: var(--editor-font-size);
+  line-height: var(--editor-line-height);
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      var(--ms-line-color) 0 1px,
+      transparent 1px 1ic
+    ),
+    repeating-linear-gradient(
+      to left,
+      transparent 0 var(--ms-cell-gap),
+      var(--ms-line-color) var(--ms-cell-gap) calc(var(--ms-cell-gap) + 1px),
+      transparent calc(var(--ms-cell-gap) + 1px) calc(1lh - var(--ms-cell-gap) - 1px),
+      var(--ms-line-color) calc(1lh - var(--ms-cell-gap) - 1px) calc(1lh - var(--ms-cell-gap)),
+      transparent calc(1lh - var(--ms-cell-gap)) 1lh
+    );
+  background-size: var(--paged-content-width) var(--paged-content-height);
+  background-position:
+    right var(--paged-padding-x) top var(--paged-padding-y),
+    right var(--paged-padding-x) top var(--paged-padding-y);
+  background-repeat: no-repeat;
+  /* 本文は用紙の外形から余白ぶん内側に置かれる。枠線の内側を起点にすると1pxずれる。 */
+  background-origin: border-box;
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-manuscript="true"][data-manuscript-grid="true"][data-editor-display="paged"]
+  .pagedEditorSheet {
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      var(--ms-line-color) 0 1px,
+      transparent 1px 1ic
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 var(--ms-cell-gap),
+      var(--ms-line-color) var(--ms-cell-gap) calc(var(--ms-cell-gap) + 1px),
+      transparent calc(var(--ms-cell-gap) + 1px) calc(1lh - var(--ms-cell-gap) - 1px),
+      var(--ms-line-color) calc(1lh - var(--ms-cell-gap) - 1px) calc(1lh - var(--ms-cell-gap)),
+      transparent calc(1lh - var(--ms-cell-gap)) 1lh
+    );
+  background-position:
+    left var(--paged-padding-x) top var(--paged-padding-y),
+    left var(--paged-padding-x) top var(--paged-padding-y);
+}
+
+/* 字数は固定なので、版面が表示領域より長い窓では行の方向にもスクロールさせる。 */
+.verticalTypewriterShell[data-manuscript="true"][data-editor-display="continuous"]
+  .verticalTypewriterScroller {
+  overflow-y: auto;
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-manuscript="true"][data-editor-display="continuous"]
+  .verticalTypewriterScroller {
+  overflow-x: auto;
+}
+
+/* ページ表示の用紙も字数×行数で決まるので、窓より大きければ送りと直交する
+   方向へスクロールさせる。 */
+.verticalTypewriterShell[data-manuscript="true"][data-editor-display="paged"][data-page-flow="horizontal-rtl"]
+  .verticalTypewriterScroller {
+  overflow-y: auto;
+}
+
+.verticalTypewriterShell[data-manuscript="true"][data-editor-display="paged"][data-page-flow="vertical"]
+  .verticalTypewriterScroller {
+  overflow-x: auto;
+}
+
+.manuscriptPageBoundaryLayer {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  contain: layout style paint;
+  direction: ltr;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  writing-mode: horizontal-tb;
+}
+
+.manuscriptPageBoundary {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+.manuscriptPageBoundary[data-axis="vertical"] {
+  width: 0;
+  border-left: 1px dashed var(--ms-boundary-color);
+}
+
+.manuscriptPageBoundary[data-axis="horizontal"] {
+  height: 0;
+  border-top: 1px dashed var(--ms-boundary-color);
+}
+
+.manuscriptPageBoundaryLabel {
+  position: absolute;
+  color: var(--ms-boundary-color);
+  font-family: var(--ui-font-family);
+  font-size: 10px;
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.manuscriptPageBoundary[data-axis="vertical"] .manuscriptPageBoundaryLabel {
+  top: calc(100% + 6px);
+  left: 0;
+  transform: translateX(-50%);
+  writing-mode: vertical-rl;
+}
+
+.manuscriptPageBoundary[data-axis="horizontal"] .manuscriptPageBoundaryLabel {
+  top: 0;
+  left: calc(100% + 8px);
+  transform: translateY(-50%);
+}
+
 .asideLine {
   color: var(--text-muted);
   font-style: italic;
@@ -6625,7 +6914,7 @@ body {
 
 /* プラグインのビューは iframe をワークスペースの手前に重ねているため、開いたメニューが
    隠れてしまう。メニューを開いている間だけ iframe を引っ込める。 */
-.appShell:has(.rightPaneSwitcherButton[aria-expanded="true"])
+.appShell[data-pane-menu-open="true"]
   .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost) {
   visibility: hidden;
 }

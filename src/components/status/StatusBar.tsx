@@ -1,4 +1,5 @@
-import type { SaveStatus } from "../../types";
+import { formatManuscriptSheets } from "../../editor/manuscriptLayout";
+import type { ManuscriptProgress, SaveStatus } from "../../types";
 import { CheckpointStatus, type CheckpointStatusInfo } from "./CheckpointStatus";
 
 type StatusBarProps = {
@@ -9,6 +10,8 @@ type StatusBarProps = {
   charCount: number;
   selectionCharCount: number | null;
   pageMetrics: { current: number; total: number } | null;
+  /** 原稿用紙モードのときだけ渡す。 */
+  manuscriptProgress?: ManuscriptProgress | null;
   /** null なら出さない（設定で非表示、またはプロジェクト未選択）。 */
   checkpoint: CheckpointStatusInfo | null;
   pluginItems: Array<{
@@ -37,6 +40,7 @@ export function StatusBar({
   charCount,
   selectionCharCount,
   pageMetrics,
+  manuscriptProgress = null,
   checkpoint,
   pluginItems,
   onPluginItemClick,
@@ -54,6 +58,14 @@ export function StatusBar({
       {pageMetrics && (
         <span className="statusPages">
           {pageMetrics.current} / {pageMetrics.total}ページ
+        </span>
+      )}
+      {manuscriptProgress && (
+        <span
+          className="statusManuscript"
+          title={`${manuscriptProgress.fullPages}枚と${manuscriptProgress.usedLinesOnCurrentPage}行（1枚${manuscriptProgress.linesPerPage}行）`}
+        >
+          原稿用紙 {formatManuscriptSheets(manuscriptProgress)}枚
         </span>
       )}
       {checkpoint && <CheckpointStatus {...checkpoint} />}

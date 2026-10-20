@@ -1,7 +1,7 @@
 {
   "name": "then",
   "private": true,
-  "version": "0.6.7",
+  "version": "0.7.0",
   "type": "module",
   "scripts": {
     "test:code-blocks": "node scripts/test-code-blocks.mjs",
@@ -57,6 +57,8 @@
     "test:v061-plugins": "node scripts/test-v061-plugin-platform.mjs",
     "test:document-tabs": "node scripts/test-document-tabs.mjs",
     "test:workspace-tabs": "node --experimental-strip-types scripts/test-workspace-document-tabs.mjs",
+    "test:v070-manuscript": "node scripts/test-v070-manuscript.mjs",
+    "test:v070-manuscript-browser": "node scripts/test-v070-manuscript-browser.mjs",
     "test:page-breaks": "node scripts/test-page-breaks.mjs",
     "test:proofread": "node scripts/test-proofread-rules.mjs",
     "test:proofread-ui": "node scripts/test-proofread-ui.mjs",
@@ -69,6 +71,7 @@
     "benchmark:submission": "node scripts/benchmark-submission.mjs",
     "benchmark:typing": "node scripts/benchmark-typing.mjs",
     "benchmark:typewriter": "node scripts/benchmark-typing.mjs --project --typewriter --at middle",
+    "benchmark:manuscript": "node scripts/benchmark-manuscript-ab.mjs",
     "test:typewriter": "node scripts/test-typewriter-scroll.mjs && node scripts/test-editor-overlays.mjs && node scripts/test-indexed-decorations.mjs && node scripts/test-typewriter-ime-refresh.mjs",
     "test:decoration-mapping": "node scripts/test-editor-optimization-audit.mjs && node scripts/test-decoration-mapping-exhaustive.mjs && node scripts/test-editor-range-replacement.mjs",
     "test:visual-line-index": "node scripts/test-visual-line-index.mjs",

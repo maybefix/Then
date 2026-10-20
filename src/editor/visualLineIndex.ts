@@ -35,6 +35,13 @@ export class VisualLineIndex<Key> {
     }
   }
 
+  /** True when the paragraph's cached shapes are still valid without reading its rect. */
+  isCurrent(index: number, version: number, revision: number, mode: VisualWritingMode, unnumbered: boolean): boolean {
+    const entry = this.entries[index];
+    return Boolean(entry && entry.version === version && entry.revision === revision &&
+      entry.mode === mode && entry.unnumbered === unnumbered);
+  }
+
   measure(
     index: number,
     block: VisualRect,
@@ -75,10 +82,51 @@ export class VisualLineIndex<Key> {
     return true;
   }
 
+  /**
+   * Records a line count measured elsewhere (a hidden copy of the paragraph
+   * laid out as it would be with its decorations) instead of the paragraph's
+   * own DOM. No line shapes are kept, so the paragraph draws no bands; it is
+   * only counted. Used for undecorated paragraphs outside the viewport.
+   */
+  assignCount(index: number, count: number, version: number, revision: number, mode: VisualWritingMode, unnumbered: boolean): void {
+    const previous = this.entries[index];
+    const next = unnumbered ? 0 : count;
+    this.entries[index] = {
+      key: this.keys[index], version, revision, mode, width: -1, height: -1, unnumbered, bands: [],
+      bounds: { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity }, count: next,
+    };
+    const delta = next - (previous?.count ?? 0);
+    if (delta) for (let i = index + 1; i < this.counts.length; i += i & -i) this.counts[i] += delta;
+  }
+
+  /** The paragraph's counted lines, or null before it is measured. */
+  countAt(index: number): number | null {
+    return this.entries[index]?.count ?? null;
+  }
+
+  /**
+   * Replaces the paragraph's counted lines while keeping its measured shapes
+   * (e.g. the caret's paragraph, drawn as it is but counted as it will be).
+   */
+  setCount(index: number, count: number): void {
+    const entry = this.entries[index];
+    if (!entry) return;
+    const next = entry.unnumbered ? 0 : count;
+    const delta = next - entry.count;
+    if (!delta) return;
+    entry.count = next;
+    for (let i = index + 1; i < this.counts.length; i += i & -i) this.counts[i] += delta;
+  }
+
   private firstNumber(index: number): number {
     let count = 1;
     for (let i = index; i > 0; i -= i & -i) count += this.counts[i];
     return count;
+  }
+
+  /** Numbered lines across every paragraph (prefix sum of the whole index). */
+  totalCount(): number {
+    return this.firstNumber(this.keys.length) - 1;
   }
 
   /** Uses the union of actual line bands, including overflow outside the block. */

@@ -3,6 +3,7 @@
 //
 //   npm run dev   (in another terminal)
 //   node scripts/fuzz-editor-decorations.mjs [--url http://localhost:3000/] [--steps 800] [--seed 7]
+//        [--settings '{"showLineNumbers":true}']
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
@@ -77,7 +78,9 @@ try {
   await send("Emulation.setDeviceMetricsOverride", { width: 1400, height: 900, deviceScaleFactor: 1, mobile: false });
   await send("Page.navigate", { url });
   await sleep(4000);
-  await evaluate("localStorage.clear(); location.reload(); 1");
+  // --settings '{"showLineNumbers":true}' starts with these editor settings.
+  const settings = option("settings", null);
+  await evaluate(`localStorage.clear(); ${settings ? `localStorage.setItem("then.app-state.v1", JSON.stringify({ settings: ${settings} }));` : ""} location.reload(); 1`);
   await sleep(6000);
   const opened = await evaluate(`(async () => {
     const button = [...document.querySelectorAll("button")].find((b) => b.textContent.includes("新しい原稿"));

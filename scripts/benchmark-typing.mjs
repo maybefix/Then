@@ -5,6 +5,7 @@
 //        [--project] [--scroll] [--css "<extra css>"]
 //        [--typewriter --scenario typing|selection|ime --at middle]
 //        [--writing-mode vertical-rl|horizontal-tb] [--line-numbers] [--highlight-line] [--line-breaks]
+//        [--manuscript [--manuscript-chars 20] [--manuscript-lines 20]] [--measure-vertical 30]  (with --project --typewriter)
 //
 // Builds the app (unless --dist/--no-build), serves it, opens a blank
 // manuscript, pastes a deterministic manuscript and types one character at a
@@ -189,6 +190,9 @@ function installProjectMock({ chars, manuscriptSource, manuscriptText = null, se
     "plugin:window|is_maximized": () => false,
     "plugin:window|is_fullscreen": () => false,
     "plugin:event|listen": () => callbackId++,
+    get_font_faces: () => [],
+    journal_recovery_scan: () => [],
+    load_library_property_types: () => ({}),
   };
   const arrays = /^(list_|load_project_snippets|load_project_plot_cards|load_project_proofread)/;
   let callbackId = 1;
@@ -313,6 +317,7 @@ async function pageBenchmark({ chars, samples, warmup, at, project }) {
 }
 
 let exitCode = 0;
+let summary_manuscriptSettleMs = null;
 try {
   await json(`http://127.0.0.1:${debugPort}/json/version`);
   let target;
@@ -345,6 +350,16 @@ try {
         writingMode: option("writing-mode", "vertical-rl"),
         showLineNumbers: flag("line-numbers"), highlightCurrentLine: flag("highlight-line"),
         showLineBreakMarks: flag("line-breaks"),
+        // 縦書きの1列の長さ（編集領域に対する%）。原稿用紙と同じ行長で比べるときに使う。
+        ...(option("measure-vertical", null) ? { editorMeasureVertical: Number(option("measure-vertical", null)) } : {}),
+        // 原稿用紙モード（--manuscript, 既定 20字×20行）。
+        ...(flag("manuscript") ? { manuscript: {
+          layoutMode: "manuscript",
+          charactersPerLine: Number(option("manuscript-chars", 20)),
+          linesPerPage: Number(option("manuscript-lines", 20)),
+          showGrid: true,
+          showPageBoundaries: true,
+        } } : {}),
       } : {} })})`,
     });
   }
@@ -415,6 +430,15 @@ try {
     // Exclude initial font loading/viewport restoration from the input run.
     await evaluate("document.fonts.ready.then(() => new Promise(resolve => setTimeout(resolve, 1000)))");
   }
+  if (flag("manuscript")) {
+    // Manuscript mode settles every paragraph's line count once after opening
+    // (idle time); measure typing after that, as a writer would.
+    summary_manuscriptSettleMs = await evaluate(`(async () => {
+      const start = performance.now();
+      while (!document.querySelector(".statusManuscript") && performance.now() - start < 60000) await new Promise(r => setTimeout(r, 100));
+      return Math.round(performance.now() - start);
+    })()`);
+  }
   // Main-thread time per keystroke. Unlike the latencies it does not jump by a
   // frame when work lands either side of a frame boundary.
   await page.send("Performance.enable", { timeDomain: "threadTicks" });
@@ -473,6 +497,19 @@ try {
     style: perKey("RecalcStyleDuration"),
     layout: perKey("LayoutDuration"),
   };
+  // Elements inside the editor: full-document decorations (line numbers,
+  // manuscript mode) multiply them, and per-frame paint work grows with them.
+  if (summary_manuscriptSettleMs !== null) summary.manuscriptSettleMs = summary_manuscriptSettleMs;
+  summary.editorElements = await evaluate("document.querySelector('.ProseMirror').getElementsByTagName('*').length");
+  if (flag("manuscript")) summary.manuscriptStatus = await evaluate("document.querySelector('.statusManuscript')?.getAttribute('title') ?? null");
+  if (flag("element-classes")) summary.editorElementClasses = await evaluate(`(() => {
+    const counts = {};
+    for (const el of document.querySelector('.ProseMirror').getElementsByTagName('*')) {
+      const key = el.tagName.toLowerCase() + '.' + [...el.classList].sort().join('.');
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return Object.fromEntries(Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 25));
+  })()`);
   if (flag("verify-overlays")) summary.overlayChecks = await validateTypewriterOverlays({ page, evaluate });
   if (flag("verify-controls")) summary.manualChecks = await validateTypewriterManualControls({ evaluate });
   if (flag("scroll")) {
