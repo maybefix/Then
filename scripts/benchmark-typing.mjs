@@ -443,6 +443,28 @@ try {
   }
   // Main-thread time per keystroke. Unlike the latencies it does not jump by a
   // frame when work lands either side of a frame boundary.
+  // --layers: list the composited layers (diagnosing commit/layerize cost).
+  if (flag("layers")) {
+    let layers = null;
+    const previous = page.onEvent;
+    page.onEvent = (message) => { if (message.method === "LayerTree.layerTreeDidChange" && message.params.layers) layers = message.params.layers; previous?.(message); };
+    await page.send("DOM.enable");
+    await page.send("LayerTree.enable");
+    await evaluate("new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+    await evaluate("document.execCommand('insertText', false, 'あ'), new Promise((resolve) => setTimeout(resolve, 500))");
+    const summary = [];
+    for (const layer of layers ?? []) {
+      let node = "";
+      if (layer.backendNodeId) {
+        try {
+          const { node: described } = await page.send("DOM.describeNode", { backendNodeId: layer.backendNodeId });
+          node = `${described.nodeName}${described.attributes ? "." + (described.attributes[described.attributes.indexOf("class") + 1] ?? "") : ""}`;
+        } catch {}
+      }
+      summary.push({ node: node.slice(0, 80), w: Math.round(layer.width), h: Math.round(layer.height), drawsContent: layer.drawsContent, paints: layer.paintCount });
+    }
+    console.log(JSON.stringify({ count: summary.length, layers: summary.sort((a, b) => b.w * b.h - a.w * a.h).slice(0, 40) }, null, 1));
+  }
   // --jumps N: click N outline headings (alternating ends of the manuscript)
   // instead of typing, and record how long the main thread is blocked.
   if (flag("jumps")) {

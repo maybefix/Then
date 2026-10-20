@@ -197,6 +197,8 @@
 
 .appShell[data-theme="newsroom-light"] .verticalTypewriterScroller {
   z-index: 1;
+  /* The guide sits behind the editor here; keep the scroller see-through. */
+  background: none;
 }
 
 .appShell[data-theme="newsroom-light"] .verticalTypewriterGuide {
@@ -367,6 +369,8 @@
 
 .appShell[data-theme="newsroom-dark"] .verticalTypewriterScroller {
   z-index: 1;
+  /* The guide sits behind the editor here; keep the scroller see-through. */
+  background: none;
 }
 
 .appShell[data-theme="newsroom-dark"] .verticalTypewriterGuide {

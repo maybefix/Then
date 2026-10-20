@@ -2389,6 +2389,22 @@ html:not([data-window-fullscreen="true"])
   cursor: text;
 }
 
+/*
+ * 連続表示のスクロール領域は独立した合成レイヤーにする。画面倍率100%では、
+ * Chromium は背景が不透明でないスクロール領域を合成せず、タイプライター
+ * スクロールの毎フレーム本文を描き直してページ全体のレイヤー分けをやり直す
+ * （10万字で1打鍵あたり約10ms）。背景を不透明にして本文と一緒にスクロール
+ * させる（local）と、合成したままサブピクセルの文字描画も保てる。
+ */
+.verticalTypewriterShell:not([data-editor-display="paged"]) .verticalTypewriterScroller {
+  /* シェルと同じ背景（ダークテーマの暗さの重ねも含む）。カード型のテーマは
+     シェルが透明なので、透明のまま。 */
+  background-color: inherit;
+  background-image: inherit;
+  background-attachment: local;
+  will-change: scroll-position;
+}
+
 .verticalTypewriterScroller::-webkit-scrollbar {
   display: block;
   width: 10px;
