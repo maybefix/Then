@@ -2,6 +2,9 @@ import {
   DEFAULT_MANUSCRIPT_SETTINGS,
   MANUSCRIPT_CHARACTERS_MAX,
   MANUSCRIPT_CHARACTERS_MIN,
+  MANUSCRIPT_FONT_SIZE_MAX,
+  MANUSCRIPT_FONT_SIZE_MIN,
+  MANUSCRIPT_FONT_SIZE_OFFSET,
   MANUSCRIPT_LINES_MAX,
   MANUSCRIPT_LINES_MIN,
   type ManuscriptProgress,
@@ -21,7 +24,11 @@ function clampInteger(value: unknown, min: number, max: number, fallback: number
   return Math.min(max, Math.max(min, Math.round(value)));
 }
 
-export function normalizeManuscriptSettings(value: unknown): ManuscriptSettings {
+/**
+ * 保存値を正規化する。原稿用紙の文字サイズがまだないとき（0.7.0 の最初の
+ * 版で保存した設定など）は、通常の文字サイズ＋6 を使う。
+ */
+export function normalizeManuscriptSettings(value: unknown, bodyFontSize?: number): ManuscriptSettings {
   const source = (value && typeof value === "object" ? value : {}) as Partial<ManuscriptSettings>;
   const defaults = DEFAULT_MANUSCRIPT_SETTINGS;
   return {
@@ -35,6 +42,12 @@ export function normalizeManuscriptSettings(value: unknown): ManuscriptSettings 
     showGrid: typeof source.showGrid === "boolean" ? source.showGrid : defaults.showGrid,
     showPageBoundaries:
       typeof source.showPageBoundaries === "boolean" ? source.showPageBoundaries : defaults.showPageBoundaries,
+    fontSize: clampInteger(
+      source.fontSize, MANUSCRIPT_FONT_SIZE_MIN, MANUSCRIPT_FONT_SIZE_MAX,
+      typeof bodyFontSize === "number" && Number.isFinite(bodyFontSize)
+        ? Math.min(MANUSCRIPT_FONT_SIZE_MAX, Math.max(MANUSCRIPT_FONT_SIZE_MIN, Math.round(bodyFontSize + MANUSCRIPT_FONT_SIZE_OFFSET)))
+        : defaults.fontSize,
+    ),
   };
 }
 

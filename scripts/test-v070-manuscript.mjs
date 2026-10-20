@@ -23,11 +23,18 @@ const {
 
 // 設定の正規化：既定は使用しない・20字×20行、範囲外は丸める、壊れた値は既定へ。
 assert.deepEqual(normalizeManuscriptSettings(undefined), {
-  layoutMode: "normal", charactersPerLine: 20, linesPerPage: 20, showGrid: true, showPageBoundaries: true,
+  layoutMode: "normal", charactersPerLine: 20, linesPerPage: 20, showGrid: true, showPageBoundaries: true, fontSize: 21,
 });
 assert.deepEqual(normalizeManuscriptSettings({ layoutMode: "manuscript", charactersPerLine: 40, linesPerPage: 30, showGrid: false }), {
-  layoutMode: "manuscript", charactersPerLine: 40, linesPerPage: 30, showGrid: false, showPageBoundaries: true,
+  layoutMode: "manuscript", charactersPerLine: 40, linesPerPage: 30, showGrid: false, showPageBoundaries: true, fontSize: 21,
 });
+// 原稿用紙の文字サイズ：未保存なら通常の文字サイズ＋6、範囲は12〜40。
+assert.equal(normalizeManuscriptSettings({}, 15).fontSize, 21);
+assert.equal(normalizeManuscriptSettings({}, 24).fontSize, 30);
+assert.equal(normalizeManuscriptSettings({}, 36).fontSize, 40);
+assert.equal(normalizeManuscriptSettings({ fontSize: 28 }, 15).fontSize, 28, "保存した値は通常の文字サイズに左右されない");
+assert.equal(normalizeManuscriptSettings({ fontSize: 99 }).fontSize, 40);
+assert.equal(normalizeManuscriptSettings({ fontSize: 3 }).fontSize, 12);
 assert.equal(normalizeManuscriptSettings({ charactersPerLine: 1 }).charactersPerLine, 5);
 assert.equal(normalizeManuscriptSettings({ charactersPerLine: 999 }).charactersPerLine, 80);
 assert.equal(normalizeManuscriptSettings({ linesPerPage: 20.6 }).linesPerPage, 21);

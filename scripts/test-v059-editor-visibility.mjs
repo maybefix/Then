@@ -429,7 +429,7 @@ assert.match(
 );
 assert.match(
   editorSource,
-  /contentRange\.getClientRects\(\)/,
+  /fragmentRange\.getClientRects\(\)/,
   "visual lines must come from browser-rendered Range rectangles",
 );
 assert.doesNotMatch(

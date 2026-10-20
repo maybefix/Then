@@ -254,12 +254,21 @@ export type ManuscriptSettings = {
   linesPerPage: number;
   showGrid: boolean;
   showPageBoundaries: boolean;
+  /**
+   * 原稿用紙で使う文字サイズ（px）。升目は通常の本文より大きく見たいことが
+   * 多いので、通常の文字サイズとは別に持ち、原稿用紙のあいだだけ使う。
+   */
+  fontSize: number;
 };
 
 export const MANUSCRIPT_CHARACTERS_MIN = 5;
 export const MANUSCRIPT_CHARACTERS_MAX = 80;
 export const MANUSCRIPT_LINES_MIN = 5;
 export const MANUSCRIPT_LINES_MAX = 80;
+export const MANUSCRIPT_FONT_SIZE_MIN = 12;
+export const MANUSCRIPT_FONT_SIZE_MAX = 40;
+/** 原稿用紙の文字サイズを決めていないときに、通常の文字サイズへ足す量。 */
+export const MANUSCRIPT_FONT_SIZE_OFFSET = 6;
 
 export const DEFAULT_MANUSCRIPT_SETTINGS: ManuscriptSettings = {
   layoutMode: "normal",
@@ -267,6 +276,7 @@ export const DEFAULT_MANUSCRIPT_SETTINGS: ManuscriptSettings = {
   linesPerPage: 20,
   showGrid: true,
   showPageBoundaries: true,
+  fontSize: 21,
 };
 
 /** 実際の組版結果から数えた原稿用紙の進み具合。 */

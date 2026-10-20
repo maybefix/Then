@@ -2605,7 +2605,7 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         settings.editorDisplayMode === "paged" ? "paged" : "continuous",
       pageFlowDirection:
         settings.pageFlowDirection === "vertical" ? "vertical" : "horizontal-rtl",
-      manuscript: normalizeManuscriptSettings(settings.manuscript),
+      manuscript: normalizeManuscriptSettings(settings.manuscript, settings.fontSize),
       canvasDefaultWritingMode:
         settings.canvasDefaultWritingMode === "horizontal-tb" ||
         settings.canvasDefaultWritingMode === "vertical-rl"
@@ -13992,6 +13992,7 @@ export default function App() {
                               settings.manuscript.layoutMode,
                               settings.manuscript.charactersPerLine,
                               settings.manuscript.linesPerPage,
+                              settings.manuscript.fontSize,
                             ].join("|")}
                             manuscript={settings.manuscript}
                             onManuscriptProgressChange={setEditorManuscriptProgress}

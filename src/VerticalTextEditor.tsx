@@ -5645,7 +5645,10 @@ export function VerticalTextEditor({
       data-page-flow={editorDisplayMode === "paged" ? pageFlowDirection : undefined}
       data-manuscript={manuscriptActive ? "true" : undefined}
       data-manuscript-grid={manuscriptActive && manuscript.showGrid ? "true" : undefined}
-      style={manuscriptActive ? ({ "--ms-chars": manuscript.charactersPerLine } as CSSProperties) : undefined}
+      style={manuscriptActive ? ({
+        "--ms-chars": manuscript.charactersPerLine,
+        "--ms-font-size": `${manuscript.fontSize}px`,
+      } as CSSProperties) : undefined}
     >
       <div ref={scrollerRef} className="verticalTypewriterScroller">
         <div

@@ -209,6 +209,7 @@ try {
   check("縦書き continuous 20×20", () => {
     assert.equal(report.mode, "vertical-rl");
     assert.equal(report.display, "continuous");
+    assert.equal(report.fontSize, 21, "原稿用紙の文字サイズ（未設定なら通常の15px＋6）で組む");
     assertLayout(report, 20, 20, "縦 20×20");
     assert.ok(report.grid, "罫線がない");
     const c = report.checks;
@@ -377,13 +378,14 @@ try {
   await evaluate(`__ms.setSelect("原稿用紙", "normal").then(() => 1)`);
   await sleep(500);
   const textNormal = await editorText();
-  const normalState = await evaluate(`({ status: __ms.status(), grid: getComputedStyle(__ms.pm()).backgroundImage, boundaries: document.querySelectorAll(".manuscriptPageBoundary").length, latin: __ms.pm().querySelectorAll(".ms-latin-end").length })`);
+  const normalState = await evaluate(`({ status: __ms.status(), grid: getComputedStyle(__ms.pm()).backgroundImage, boundaries: document.querySelectorAll(".manuscriptPageBoundary").length, latin: __ms.pm().querySelectorAll(".ms-latin-end").length, fontSize: Number.parseFloat(getComputedStyle(__ms.pm()).fontSize) })`);
   check("原稿用紙OFFで本文不変・表示が戻る", () => {
     assert.equal(textNormal, textManuscript);
     assert.equal(normalState.status, null);
     assert.equal(normalState.grid, "none");
     assert.equal(normalState.boundaries, 0);
     assert.equal(normalState.latin, 0);
+    assert.equal(normalState.fontSize, 15, "原稿用紙を外すと通常の文字サイズに戻る");
   });
   await evaluate(`__ms.setSelect("原稿用紙", "manuscript").then(() => 1)`);
 

@@ -3490,6 +3490,8 @@ html:not([data-window-fullscreen="true"])
  * 遠く足りないので字数は変わらない。
  */
 .verticalTypewriterShell[data-manuscript="true"] {
+  /* 原稿用紙のあいだは、原稿用紙用の文字サイズで組む。 */
+  --editor-font-size: var(--ms-font-size, 21px);
   --ms-line-color: color-mix(in srgb, var(--accent) 20%, transparent);
   --ms-boundary-color: color-mix(in srgb, var(--accent) 62%, transparent);
 }

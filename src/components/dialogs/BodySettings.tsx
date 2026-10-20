@@ -4,6 +4,8 @@ import {
   EDITOR_MEASURE_PERCENT_MIN,
   MANUSCRIPT_CHARACTERS_MAX,
   MANUSCRIPT_CHARACTERS_MIN,
+  MANUSCRIPT_FONT_SIZE_MAX,
+  MANUSCRIPT_FONT_SIZE_MIN,
   MANUSCRIPT_LINES_MAX,
   MANUSCRIPT_LINES_MIN,
 } from "../../types";
@@ -181,13 +183,25 @@ export function BodySettings({ settings, systemFonts, editorMeasureLimit, onUpda
       <div className="modalFormGrid">
         <label>
           <span>文字サイズ</span>
-          <BoundedNumberInput
-            min={12}
-            max={24}
-            step={1}
-            value={settings.fontSize}
-            onChange={(value) => onUpdateSettings("fontSize", value)}
-          />
+          {manuscriptOn ? (
+            <BoundedNumberInput
+              key="manuscript-font-size"
+              min={MANUSCRIPT_FONT_SIZE_MIN}
+              max={MANUSCRIPT_FONT_SIZE_MAX}
+              step={1}
+              value={manuscript.fontSize}
+              onChange={(value) => updateManuscript("fontSize", Math.round(value))}
+            />
+          ) : (
+            <BoundedNumberInput
+              key="body-font-size"
+              min={12}
+              max={24}
+              step={1}
+              value={settings.fontSize}
+              onChange={(value) => onUpdateSettings("fontSize", value)}
+            />
+          )}
         </label>
         <label>
           <span>行間</span>
