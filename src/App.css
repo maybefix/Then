@@ -3580,6 +3580,32 @@ html:not([data-window-fullscreen="true"])
   background-repeat: repeat-x;
 }
 
+/*
+ * 句読点・閉じ括弧のぶら下げ（pushManuscriptHangingDecos）。ランを字数分
+ * 手前から組んで描く位置だけ戻し、後ろに同じ幅の空白を置く。空白は字の大きさ
+ * 0 で、幅は単語間隔だけで作る（::after の 1ic は字の大きさ 0 で 0 になるので、
+ * 段落で 1ic を長さにした --ms-cell を使う）。行末ではこの空白がぶら下がる。
+ */
+@property --ms-cell { syntax: "<length>"; inherits: true; initial-value: 0px; }
+
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .pm-root p {
+  --ms-cell: 1ic;
+}
+
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .ms-hang {
+  position: relative;
+  inset-inline-start: calc(var(--hang-cells, 1) * var(--ms-cell));
+  margin-inline-start: calc(var(--hang-cells, 1) * var(--ms-cell) * -1);
+}
+
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .ms-hang::after {
+  content: " ";
+  font-size: 0;
+  letter-spacing: 0;
+  word-spacing: calc(var(--hang-cells, 1) * var(--ms-cell));
+  white-space: pre-wrap;
+}
+
 /* 縦中横は1セルに収める。前後の空きを足すと後続の字がセルからずれる。 */
 .verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .tcy {
   margin-inline: 0;

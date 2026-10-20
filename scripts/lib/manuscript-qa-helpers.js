@@ -31,6 +31,10 @@
       "　《《傍点》》のあとの行。[ごま(em,goma)]と[てん(em,dot)]も試す。",
       "　`code`の行内コードと[12(tcy)]の縦中横、**太字**の行。",
       "　記法の行のあとも升目に乗っているかを見るための段落です。",
+      // 句読点・閉じ括弧のぶら下げ（MS-30）：21字目の約物は欄外へ。
+      "あいうえおかきくけこさしすせそたちつてと。なにぬねの",
+      "あいうえおかきくけこさしすせそたちつてと。」なにぬ",
+      "あいう、えお。かきくけこさしすせそたちつてとなにぬねのはひふへほ",
     );
     return lines.join("\n");
   };
@@ -75,9 +79,13 @@
     const paragraph = root.children[index];
     const chars = characters(paragraph);
     const lines = [...new Set(chars.map((c) => c.line))];
+    const box = paragraph.getBoundingClientRect();
+    const cells = Math.floor(((getComputedStyle(root).writingMode !== "horizontal-tb" ? box.height : box.width) - 1) / ic + 0.01);
     return {
       lines: lines.length,
       first: chars.filter((c) => c.line === lines[0]).map((c) => c.ch).join(""),
+      // 版面の字数より後ろ（欄外）に描かれた字。
+      hangs: chars.filter((c) => c.offset > (cells - 0.5) * ic).map((c) => c.ch).join(""),
       misaligned: chars
         .filter((c) => /[぀-ヿ一-鿿]/.test(c.ch) && Math.abs(c.offset / ic - Math.round(c.offset / ic)) > 0.05)
         .map((c) => `${c.ch}@${c.offset.toFixed(2)}`),

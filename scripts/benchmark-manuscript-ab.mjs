@@ -28,6 +28,7 @@ const common = ["--project", "--typewriter", "--no-build", "--samples", option("
 const only = option("only", null)?.split(",");
 const configs = [
   ...(baseDist ? [{ label: "base", args: ["--dist", baseDist] }] : []),
+  ...(baseDist ? [{ label: "base-manuscript", args: ["--dist", baseDist, "--manuscript"] }] : []),
   { label: "normal", args: ["--dist", dist] },
   { label: "manuscript", args: ["--dist", dist, "--manuscript"] },
   { label: "line-numbers", args: ["--dist", dist, "--line-numbers"] },

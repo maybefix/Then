@@ -224,8 +224,12 @@ try {
     assert.equal(c[46].lines, 2, "ルビの行が太らない（2行ちょうど）");
     assert.equal(c[48].lines, 1, "句読点が20字目なら1行に収まる");
     assert.equal(c[48].first, "あいうえおかきくけこさしすせそたちつて。");
-    assert.equal(c[49].first, "あいうえおかきくけこさしすせそたちつ", "閉じ括弧が行頭に来ないよう追い出す");
+    assert.equal(c[49].first, "あいうえおかきくけこさしすせそたちつ「て」", "21字目の閉じ括弧は欄外へぶら下げる");
     assert.equal(c[50].first, "あいうえおかきくけこさしすせそたちつて", "開き括弧を行末に残さない");
+    assert.equal(c[55].first, "あいうえおかきくけこさしすせそたちつてと。", "21字目の句点は欄外へぶら下げる");
+    assert.equal(c[56].first, "あいうえおかきくけこさしすせそたちつてと。」", "続く約物はまとめてぶら下げる");
+    assert.equal(c[57].first, "あいう、えお。かきくけこさしすせそたちつ", "行の途中の句読点は1字1セル");
+    assert.equal(c[55].hangs, "。", "ぶら下げた句点は升目の外");
   });
   check("ページ境界（20行ごと）", () => {
     assert.ok(report.boundaryPositions.length > 0, "見えている範囲に境界がない");
@@ -281,6 +285,40 @@ try {
   await sleep(200);
   after = await editorText();
   check("Redo", () => assert.notEqual(after, before));
+
+  // ぶら下げた約物の前後でキャレットが重ならない（約物の送りを0にしない）。
+  // 段落内の文字オフセットにキャレットを置き、DOMの選択範囲の位置をセル単位で返す。
+  const caretCell = (index, offset) => evaluate(`(async () => {
+    const ed = __ms.pm().editor; let pos = 1;
+    for (let i = 0; i < ${index}; i += 1) pos += ed.state.doc.child(i).nodeSize;
+    ed.commands.setTextSelection(pos + ${offset}); ed.view.focus(); await __ms.frames(2);
+    const p = __ms.pm().children[${index}]; const box = p.getBoundingClientRect();
+    const ic = Number.parseFloat(getComputedStyle(p).fontSize);
+    const r = getSelection().getRangeAt(0).getBoundingClientRect();
+    const vertical = getComputedStyle(p).writingMode !== "horizontal-tb";
+    return { cell: +(((vertical ? r.top - box.top : r.left - box.left)) / ic).toFixed(2),
+      line: Math.round((vertical ? box.right - r.right : r.top - box.top) / Number.parseFloat(getComputedStyle(p).lineHeight)) };
+  })()`);
+  const hangCarets = [await caretCell(55, 20), await caretCell(55, 21), await caretCell(57, 3), await caretCell(57, 4)];
+  check("ぶら下げた約物の前後のキャレット位置", () => {
+    assert.deepEqual(hangCarets.map((c) => Math.round(c.cell)), [20, 21, 3, 4], JSON.stringify(hangCarets));
+    assert.deepEqual(hangCarets.map((c) => c.line), [0, 0, 0, 0], JSON.stringify(hangCarets));
+  });
+  // 約物の直後で変換すると、変換中の字が約物の装飾の中に入ることがある。字が重ならず、
+  // 後続の字と同じくセルの境目から始まること。
+  await caretCell(57, 4);
+  await page.send("Input.imeSetComposition", { text: "かな", selectionStart: 2, selectionEnd: 2 });
+  await sleep(150);
+  const composingCells = await evaluate(`(() => {
+    const p = __ms.pm().children[57]; const box = p.getBoundingClientRect();
+    const ic = Number.parseFloat(getComputedStyle(p).fontSize);
+    return __ms.characters(p).slice(3, 8).map((c) => c.ch + Math.round(c.offset / ic * 100) / 100).join(" ");
+  })()`);
+  await page.send("Input.insertText", { text: "かな" });
+  await sleep(300);
+  check("約物の直後の変換中の字", () => assert.equal(composingCells, "、3 か4 な5 え6 お7"));
+  await key("z", "KeyZ", 90, 2);
+  await sleep(200);
 
   // IME変換と候補の切り替え（CDP Input.imeSetComposition は実際の composition イベントを起こす）
   await caretAtEnd(3);

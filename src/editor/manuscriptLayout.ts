@@ -94,6 +94,31 @@ export function findLatinRuns(text: string): LatinRun[] {
   return runs;
 }
 
+/**
+ * 行末でぶら下げる約物：句読点と閉じ括弧。続けて並ぶもの（「。」」など）は
+ * まとめて1つのランにする（行末でまとめて欄外へ出す）。
+ */
+const HANGING_RUN = /[、。，．」』）〕］｝〉》】〙〗〟｣]+/g;
+/**
+ * ぶら下げの装飾は約物の後ろに空白を置くので、そこが改行できる位置になる。
+ * 約物の直後で改行してはいけない字（リーダー・ダッシュ）が続くときは装飾せず、
+ * これまでどおり追い出しに任せる。
+ */
+const NO_BREAK_AFTER_HANGING = /^[…‥—―]/;
+
+export type HangingRun = { from: number; to: number; cells: number };
+
+export function findHangingRuns(text: string): HangingRun[] {
+  const runs: HangingRun[] = [];
+  HANGING_RUN.lastIndex = 0;
+  for (let match = HANGING_RUN.exec(text); match; match = HANGING_RUN.exec(text)) {
+    const to = match.index + match[0].length;
+    if (NO_BREAK_AFTER_HANGING.test(text.slice(to, to + 1))) continue;
+    runs.push({ from: match.index, to, cells: match[0].length });
+  }
+  return runs;
+}
+
 /** 欧文の字形がセルの外へはみ出してよい量（セル幅に対する比）。 */
 export const LATIN_OVERHANG = 0.1;
 

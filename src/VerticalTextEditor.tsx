@@ -6,6 +6,7 @@ import { VisualLineIndex } from "./editor/visualLineIndex";
 import { ParagraphFlow } from "./editor/paragraphFlow";
 import {
   endsManuscriptPage,
+  findHangingRuns,
   findLatinRuns,
   latinRunAdjustment,
   LatinRunMetrics,
@@ -978,7 +979,10 @@ function pushLineDecos(
   pushBreakableDecos(out, line, contentStart);
   pushJapaneseQuoteDecos(out, line, contentStart);
   pushImageDecos(out, line, contentStart);
-  if (latin) pushManuscriptLatinDecos(out, line, contentStart, latin, active);
+  if (latin) {
+    pushManuscriptLatinDecos(out, line, contentStart, latin, active);
+    pushManuscriptHangingDecos(out, line, contentStart, active);
+  }
 
   if (active) return;
 
@@ -1039,6 +1043,59 @@ function pushManuscriptLatinDecos(
   }
 }
 
+/** 中の約物を1字1セルで組まない記法（縦中横・行内コード・画像・ルビの親文字）。 */
+const HANGING_EXCLUDED_MARKUPS = new Set<InlineMarkup["type"]>(["tcy", "code", "image", "ruby"]);
+
+/**
+ * 原稿用紙モードで、句読点・閉じ括弧を行末の欄外へぶら下げる装飾（MS-30）。
+ *
+ * Chromium は hanging-punctuation を持たないので、約物のランを「1ランの字数分
+ * 手前へ戻した位置から組み、描く位置だけ同じ字数分ずらし戻す」要素で包み、
+ * 後ろに同じ幅の空白（::after）を足す。
+ * - 行の途中：戻した分を空白が埋めるので、約物は本来のセルに描かれ、後続も
+ *   セルの境目から始まる。
+ * - 行末：約物の送りは版面の内側で終わるので次の行へ追い出されず、後ろの空白は
+ *   行末の空白としてぶら下がる（pre-wrap）。約物は欄外のセルに描かれる。
+ * 戻しを約物より前（margin-inline-start）に置くのは、組版が要素の送りを
+ * 足していく途中で版面の幅を超えたところで追い出しを決めるため。約物の後ろで
+ * 戻しても追い出しは防げない。描く位置は相対配置でずらすので、キャレットの
+ * 位置（約物の前後）も描かれた字と一致する。本文の文字列は変えない。
+ */
+function pushManuscriptHangingDecos(
+  out: Decoration[],
+  line: LineNode,
+  contentStart: number,
+  active: boolean,
+): void {
+  if (!line.source) return;
+  const runs = findHangingRuns(line.source);
+  if (!runs.length) return;
+  const protectedRanges: Array<{ from: number; to: number }> = [];
+  for (const markup of line.inlineMarkups) {
+    const from = markup.fullRange.offset;
+    const to = from + markup.fullRange.length;
+    if (HANGING_EXCLUDED_MARKUPS.has(markup.type)) {
+      protectedRanges.push({ from, to });
+      continue;
+    }
+    // 整形した行では記号が隠れるので、記号にかかるランは字数とセル数が合わない。
+    if (active) continue;
+    const contentFrom = markup.contentRange.offset;
+    const contentTo = contentFrom + markup.contentRange.length;
+    if (contentFrom > from) protectedRanges.push({ from, to: contentFrom });
+    if (to > contentTo) protectedRanges.push({ from: contentTo, to });
+  }
+  if (!active && line.marker) protectedRanges.push({ from: 0, to: line.marker.length });
+  for (const run of runs) {
+    if (overlapsProtectedRange(run.from, run.to, protectedRanges)) continue;
+    out.push(
+      Decoration.inline(contentStart + run.from, contentStart + run.to, run.cells > 1
+        ? { class: "ms-hang", style: `--hang-cells: ${run.cells}` }
+        : { class: "ms-hang" }),
+    );
+  }
+}
+
 /**
  * 装飾窓の外の行に付ける、行の割りに効く装飾だけ。行番号・原稿用紙の枚数は
  * 全行の実際の組版から数えるので、窓の外も記法は整形済み（記号を隠す・ルビ・
@@ -1059,7 +1116,10 @@ function pushLayoutOnlyLineDecos(
     const markupRanges = listMarker ? [...inlineMarkupRanges(line), listMarker] : inlineMarkupRanges(line);
     pushBreakableTokenDecos(out, contentStart, findBreakableTokens(line.source, markupRanges));
   }
-  if (latin) pushManuscriptLatinDecos(out, line, contentStart, latin, false);
+  if (latin) {
+    pushManuscriptLatinDecos(out, line, contentStart, latin, false);
+    pushManuscriptHangingDecos(out, line, contentStart, false);
+  }
   if (line.marker) {
     out.push(Decoration.inline(contentStart, contentStart + line.marker.length, { class: "mk-hidden" }));
   }

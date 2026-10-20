@@ -16,6 +16,7 @@ const {
   manuscriptProgress,
   formatManuscriptSheets,
   findLatinRuns,
+  findHangingRuns,
   latinRunAdjustment,
   LATIN_OVERHANG,
   LatinRunMetrics,
@@ -76,6 +77,13 @@ assert.deepEqual(runs("あ b い"), [" b "], "和文に挟まれた空白は前�
 assert.deepEqual(runs("全角ＡＢＣと「括弧」。"), [], "全角英字と和文約物は1字1セルのまま");
 assert.deepEqual(runs("あ い"), [" "], "単独の半角空白も1ラン");
 assert.deepEqual(findLatinRuns("これはABCです")[0], { from: 3, to: 6, text: "ABC" });
+
+// ぶら下げる約物のラン（MS-30）：句読点・閉じ括弧を続けて1ラン、開き括弧や疑問符は含めない。
+assert.deepEqual(findHangingRuns("あ。い、う"), [{ from: 1, to: 2, cells: 1 }, { from: 3, to: 4, cells: 1 }]);
+assert.deepEqual(findHangingRuns("「はい。」と"), [{ from: 3, to: 5, cells: 2 }]);
+assert.deepEqual(findHangingRuns("え？「あ"), []);
+// 直後で改行してはいけない字（リーダー）が続く約物はぶら下げない（空白で改行位置ができるため）。
+assert.deepEqual(findHangingRuns("そう。……"), []);
 
 // セル割り当て：ceil（ただし LATIN_OVERHANG までのはみ出しは少ないセル数に収める）。
 assert.equal(LATIN_OVERHANG, 0.1);
