@@ -28,6 +28,9 @@
       "あいうえおかきくけこさしすせそたちつ「て」",
       "あいうえおかきくけこさしすせそたちつて「と」",
       "# 見出しの行です",
+      "　《《傍点》》のあとの行。[ごま(em,goma)]と[てん(em,dot)]も試す。",
+      "　`code`の行内コードと[12(tcy)]の縦中横、**太字**の行。",
+      "　記法の行のあとも升目に乗っているかを見るための段落です。",
     );
     return lines.join("\n");
   };
@@ -94,6 +97,23 @@
     return sum;
   };
 
+  // Paragraphs whose block size is not a whole number of line pitches: a
+  // decoration made one of their lines thicker, so every later line drifts off
+  // the grid.
+  const offGrid = () => {
+    const root = pm();
+    const pitch = Number.parseFloat(getComputedStyle(root).lineHeight);
+    const vertical = getComputedStyle(root).writingMode !== "horizontal-tb";
+    const out = [];
+    [...root.children].forEach((p, index) => {
+      if (getComputedStyle(p).display === "none") return;
+      const size = vertical ? p.getBoundingClientRect().width : p.getBoundingClientRect().height;
+      const lines = size / pitch;
+      if (Math.abs(lines - Math.round(lines)) > 0.02) out.push({ index, lines: +lines.toFixed(3), text: p.textContent.slice(0, 20) });
+    });
+    return out;
+  };
+
   const status = () => {
     const el = document.querySelector(".statusManuscript");
     return el ? { text: el.textContent.trim(), title: el.getAttribute("title") } : null;
@@ -136,5 +156,5 @@
     await closeSettings();
   };
 
-  window.__ms = { sleep, frames, pm, sampleText, paste, characters, check, laidOutLines, status, setSelect, setNumber, setCheck };
+  window.__ms = { sleep, frames, pm, sampleText, paste, characters, check, laidOutLines, offGrid, status, setSelect, setNumber, setCheck };
 })();

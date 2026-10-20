@@ -3523,6 +3523,15 @@ html:not([data-window-fullscreen="true"])
   text-align: center;
 }
 
+/*
+ * 行の高さは段落の行送りだけで決める。行内コードや別フォントの太字のように
+ * フォントが変わる部分は、文字の上下の位置がずれて行を押し広げ、以降の行が
+ * 升目からずれる。装飾の要素は行の高さの計算に加えない（字はそのまま描かれる）。
+ */
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .pm-root p span {
+  line-height: 0;
+}
+
 /* 原稿用紙では見出しも1行1行送り。大きな字や別の行送りはグリッドを崩す。 */
 .verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .pm-root p.heading {
   font-size: 1em;
@@ -3560,6 +3569,35 @@ html:not([data-window-fullscreen="true"])
   text-align-last: center;
   vertical-align: baseline;
   white-space: nowrap;
+}
+
+/*
+ * 傍点も升目の脇へ描く。ブラウザの圏点（text-emphasis）は行間に収まらないと
+ * 行を太らせ（1行あたり約0.08行）、以降の行が升目からずれる。圏点をやめ、
+ * 行の外側に足した余白（行内要素の上下の余白は行の太さに影響しない）へ、
+ * 1字（1ic）ごとに点を背景として描く。
+ */
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor :is(.em-goma, .em-auto, .em-dot) {
+  text-emphasis: none;
+  -webkit-text-emphasis: none;
+  padding-block-start: 0.45em;
+  background-image: radial-gradient(circle at 50% 50%, var(--accent) 0.1em, transparent 0.12em);
+  background-size: 0.45em 1ic;
+  background-position: right top;
+  background-repeat: repeat-y;
+  background-origin: padding-box;
+  background-clip: padding-box;
+  -webkit-box-decoration-break: slice;
+  box-decoration-break: slice;
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-manuscript="true"]
+  .verticalTypewriterEditor
+  :is(.em-goma, .em-auto, .em-dot) {
+  background-size: 1ic 0.45em;
+  background-position: left top;
+  background-repeat: repeat-x;
 }
 
 /* 縦中横は1セルに収める。前後の空きを足すと後続の字がセルからずれる。 */

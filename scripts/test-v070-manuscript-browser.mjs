@@ -167,7 +167,7 @@ try {
     return {
       mode: getComputedStyle(root).writingMode,
       display: document.querySelector(".verticalTypewriterShell").dataset.editorDisplay,
-      lines: __ms.laidOutLines(), status: __ms.status(), checks, boundaries,
+      lines: __ms.laidOutLines(), status: __ms.status(), checks, boundaries, offGrid: __ms.offGrid(),
       grid: getComputedStyle(root).backgroundImage !== "none",
       sheetGrid: document.querySelector(".pagedEditorSheet") ? getComputedStyle(document.querySelector(".pagedEditorSheet")).backgroundImage !== "none" : null,
       sheets: document.querySelectorAll(".pagedEditorSheet").length,
@@ -197,6 +197,7 @@ try {
   })()`);
 
   const assertLayout = (report, chars, linesPerPage, label) => {
+    assert.deepEqual(report.offGrid, [], `${label}: 行が太って以降の行が升目からずれる段落がある`);
     const misaligned = Object.entries(report.checks).filter(([, c]) => c.misaligned.length);
     assert.deepEqual(misaligned, [], `${label}: 通常和文がセルの基準位置からずれている`);
     assert.ok(Math.abs(report.pInline - (chars * report.fontSize + 1)) < 0.5, `${label}: 版面の字詰めが ${chars}字×1ic でない (${report.pInline})`);
