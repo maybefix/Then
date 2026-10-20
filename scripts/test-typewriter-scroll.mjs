@@ -39,6 +39,22 @@ assert.ok(smooth.positions[0] < 14, "The first frame must not jump a whole line"
 assert.equal(smooth.measurements, 2, "Measure geometry at start and settlement, not on every frame");
 assert.equal(smooth.settled, 1);
 
+// Requested from inside an animation frame, the first step happens at once
+// and moves by a frame's worth rather than a single pixel.
+const inFrame = harness();
+inFrame.animator.request(true);
+assert.equal(inFrame.positions.length, 1, "A request made inside a frame must not wait for the next one");
+assert.ok(inFrame.positions[0] >= 5 && inFrame.positions[0] < 14, `first step moves a frame's worth (${inFrame.positions[0]})`);
+inFrame.finish();
+assert.equal(inFrame.position, 28);
+
+// Catching up after a new column must not trail the caret for long.
+const quick = harness();
+quick.animator.request();
+let elapsed = 0;
+while (quick.position !== 28 && elapsed < 1000) { quick.step(); elapsed += 16; }
+assert.ok(elapsed <= 160, `the scroll reaches the caret within ~10 frames (${elapsed} ms)`);
+
 const retarget = harness();
 retarget.animator.request(); retarget.step();
 retarget.target(56); retarget.animator.request();

@@ -17,6 +17,8 @@ function installProbe() {
   let offset = view.state.selection.$head.parentOffset;
   for (let i = 0; i < view.state.selection.$head.index(0); i++) offset += view.state.doc.child(i).content.size + 1;
   const frames = [];
+  // When each input happened, to measure how long the scroll takes to follow it.
+  const inputs = [];
   const calls = { ranges: 0, elements: 0, hitTests: 0, geometryMs: 0 };
   const originals = [Range.prototype.getClientRects, Element.prototype.getBoundingClientRect, document.elementFromPoint];
   const wrap = (fn, key) => function (...args) {
@@ -37,6 +39,7 @@ function installProbe() {
   frameId = requestAnimationFrame(tick);
   window.__typewriterProbe = {
     step(scenario) {
+      inputs.push(performance.now());
       if (scenario === "typing") {
         // Exercise ProseMirror's Enter keymap. execCommand('insertParagraph')
         // instead invokes Chromium's HTML editing/normalization machinery.
@@ -55,7 +58,7 @@ function installProbe() {
     async run(scenario, samples) {
       for (let i = 0; i < samples; i++) {
         this.step(scenario);
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, this.interval ?? 100));
       }
     },
     finish(scenario, samples, compositionText) {
@@ -69,6 +72,26 @@ function installProbe() {
       };
       const gaps = frames.slice(1).map((frame, i) => frame.time - frames[i].time);
       const movements = frames.slice(1).map((frame, i) => Math.abs(frame.position - frames[i].position)).filter(value => value > 0.25);
+      // Follow: from each input, the first frame that moved and the last frame
+      // that moved before the next input (the scroll has caught up there).
+      const startDelays = [];
+      const settleTimes = [];
+      inputs.forEach((at, i) => {
+        const until = inputs[i + 1] ?? Infinity;
+        let previous = frames.findLast((frame) => frame.time <= at)?.position;
+        let first = null;
+        let last = null;
+        for (const frame of frames) {
+          if (frame.time <= at || frame.time > until) continue;
+          if (previous !== undefined && Math.abs(frame.position - previous) > 0.25) {
+            if (first === null) first = frame.time - at;
+            last = frame.time - at;
+          }
+          previous = frame.position;
+        }
+        if (first !== null) startDelays.push(first);
+        if (last !== null) settleTimes.push(last);
+      });
       const head = view.state.selection.head;
       let caret;
       if (!view.state.selection.$head.parent.content.size) {
@@ -113,6 +136,11 @@ function installProbe() {
         movingFrames: movements.length,
         movement: { p50: percentile(movements, .5), p95: percentile(movements, .95), max: percentile(movements, 1) },
         alignmentError: +Math.abs(delta).toFixed(2),
+        follow: {
+          moved: settleTimes.length,
+          startDelay: { p50: percentile(startDelays, .5), p95: percentile(startDelays, .95) },
+          settle: { p50: percentile(settleTimes, .5), p95: percentile(settleTimes, .95), max: percentile(settleTimes, 1) },
+        },
         geometry: { ...calls, geometryMs: +calls.geometryMs.toFixed(2) },
         textMatches: actual === expected, actualLength: actual.length, expectedLength: expected.length,
         selectionUnchangedByScroll, undoRestores, redoRestores, undoSteps,
@@ -122,9 +150,10 @@ function installProbe() {
   return true;
 }
 
-export async function runTypewriterBenchmark({ page, evaluate, samples, scenario }) {
+export async function runTypewriterBenchmark({ page, evaluate, samples, scenario, interval = 100 }) {
   assert.ok(["typing", "selection", "ime"].includes(scenario));
   await evaluate(`(${installProbe})()`);
+  await evaluate(`window.__typewriterProbe.interval = ${Number(interval)}; 1`);
   const compositionText = "日本語の変換を確定する。";
   if (scenario === "ime") {
     for (let i = 0; i < samples; i++) {

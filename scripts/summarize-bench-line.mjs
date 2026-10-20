@@ -8,5 +8,5 @@ process.stdin.on("data", (chunk) => (input += chunk)).on("end", () => {
     return;
   }
   const r = JSON.parse(line);
-  console.log(`${(process.argv[2] ?? r.label).padEnd(24)} task ${r.cpuPerKey.task} script ${r.cpuPerKey.script} style ${r.cpuPerKey.style} layout ${r.cpuPerKey.layout} frameGap p95 ${r.frameGap?.p95} >25ms ${r.framesOver25ms}${r.editorElements ? ` elements ${r.editorElements}` : ""}`);
+  console.log(`${(process.argv[2] ?? r.label).padEnd(24)} task ${r.cpuPerKey.task} script ${r.cpuPerKey.script} style ${r.cpuPerKey.style} layout ${r.cpuPerKey.layout} frameGap p95 ${r.frameGap?.p95} >25ms ${r.framesOver25ms}${r.editorElements ? ` elements ${r.editorElements}` : ""}${r.follow ? ` follow start p50 ${r.follow.startDelay.p50} settle p50 ${r.follow.settle.p50} p95 ${r.follow.settle.p95} (moved ${r.follow.moved})` : ""}`);
 });

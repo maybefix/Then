@@ -509,7 +509,7 @@ try {
   const before = await metrics();
   if (flag("profile") && flag("typewriter")) await page.send("Profiler.start");
   const summary = flag("typewriter")
-    ? await runTypewriterBenchmark({ page, evaluate, samples: SAMPLES, scenario: option("scenario", "typing") })
+    ? await runTypewriterBenchmark({ page, evaluate, samples: SAMPLES, scenario: option("scenario", "typing"), interval: Number(option("input-interval", 100)) })
     : await evaluate("window.__benchType()");
   const after = await metrics();
   if (flag("profile") && flag("typewriter")) {

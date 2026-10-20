@@ -4030,7 +4030,7 @@ export function VerticalTextEditor({
       centerInstant = false;
       centerWaitFrames = 1;
     };
-    const startCenterAnimation = () => centerAnimation.request();
+    const startCenterAnimation = (inFrame = false) => centerAnimation.request(inFrame);
 
     startCenterAnimationRef.current = startCenterAnimation;
     stopCenterAnimationRef.current = stopCenterAnimation;
@@ -4335,7 +4335,8 @@ export function VerticalTextEditor({
                 writingModeRef.current,
               );
             } else {
-              startCenterAnimation();
+              // Already inside the frame after the caret moved: start now.
+              startCenterAnimation(true);
             }
           } else {
             centerQueued = false;
