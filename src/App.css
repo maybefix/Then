@@ -3534,21 +3534,30 @@ html:not([data-window-fullscreen="true"])
 /*
  * ルビは升目の脇（行間）へ書く。ブラウザのルビ組版では注記が行間に収まらない
  * と行そのものが太り（行間1.82でも1行あたり約0.1行）、以降の行がすべて
- * 升目からずれる。注記を親文字に対する絶対配置にして行の寸法から外し、
- * 親文字は1字1升のまま、長いルビは親文字の中央から前後へはみ出させる。
+ * 升目からずれる。注記を「高さ0・幅は親文字の字数分」のインラインブロックに
+ * して負の余白で親文字に重ね（送りの合計は0）、相対配置で行の外側へ寄せる。
+ * 親文字は1字1升のまま、長いルビは親文字の中央から前後へはみ出す。
+ * 絶対配置（行内要素を基準にした配置）は使わない。段落を差し替えるたびの
+ * ブラウザの処理が重く、10万字で見出しの移動が1秒近く止まった。
+ * 注記の字は 0.5em なので、親文字の 1ic は注記側の 2ic にあたる。
  */
 .verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .ruby-base {
   display: inline;
-  position: relative;
+  white-space: nowrap;
 }
 
 .verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .ruby-base::after {
-  display: block;
-  position: absolute;
-  inset-block-end: 100%;
-  inset-inline: -10em;
-  line-height: 1;
+  display: inline-block;
+  position: relative;
+  inset-block-start: -1.5em;
+  inline-size: calc(var(--ruby-cells, 1) * 2ic);
+  block-size: 0;
+  margin-inline-start: calc(var(--ruby-cells, 1) * -2ic);
+  line-height: 0;
   text-align: center;
+  text-align-last: center;
+  vertical-align: baseline;
+  white-space: nowrap;
 }
 
 /* 縦中横は1セルに収める。前後の空きを足すと後続の字がセルからずれる。 */
@@ -3714,6 +3723,7 @@ html:not([data-window-fullscreen="true"])
   overflow-x: auto;
 }
 
+/* 本文と一緒にスクロールする枠の左上を原点に、境界を置く（大きさ0・はみ出し可）。 */
 .manuscriptPageBoundaryLayer {
   position: absolute;
   z-index: 1;
@@ -3721,9 +3731,9 @@ html:not([data-window-fullscreen="true"])
   left: 0;
   width: 0;
   height: 0;
-  contain: layout style paint;
+  contain: layout style;
   direction: ltr;
-  overflow: hidden;
+  overflow: visible;
   pointer-events: none;
   user-select: none;
   writing-mode: horizontal-tb;

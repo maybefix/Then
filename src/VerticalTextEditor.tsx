@@ -955,7 +955,7 @@ function pushInlineDecos(markup: InlineMarkup, contentStart: number, out: Decora
           Decoration.inline(
             contentStart + item.range.offset,
             contentStart + item.range.offset + item.range.length,
-            { class: "ruby-base", "data-rt": item.reading },
+            { class: "ruby-base", "data-rt": item.reading, style: `--ruby-cells: ${item.range.length}` },
           ),
         );
       }
@@ -964,6 +964,8 @@ function pushInlineDecos(markup: InlineMarkup, contentStart: number, out: Decora
         Decoration.inline(contentStart + contentOffset, contentStart + contentEnd, {
           class: "ruby-base",
           "data-rt": reading,
+          // 原稿用紙ではルビを親文字の字数分の幅で升目の脇に置く（App.css）。
+          style: `--ruby-cells: ${contentEnd - contentOffset}`,
         }),
       );
     }
@@ -1303,6 +1305,27 @@ function buildManuscriptProbeParagraph(
   }
   if (!text.length) paragraph.appendChild(document.createElement("br"));
   return paragraph;
+}
+
+// Classes ProseMirror toggles for focus/selection display, and the inline
+// declarations that only place the paged root on the current page.
+const ROOT_DISPLAY_CLASSES = new Set(["ProseMirror-focused", "ProseMirror-hideselection"]);
+const ROOT_POSITION_PROPERTIES = new Set(["--paged-root-top", "--paged-root-right", "--paged-root-left"]);
+
+/** Whether a class/style change on the editor root can change how paragraphs are laid out. */
+function rootTypesettingChanged(record: MutationRecord): boolean {
+  const element = record.target as Element;
+  const now = element.getAttribute(record.attributeName!) ?? "";
+  const before = record.oldValue ?? "";
+  if (record.attributeName === "class") {
+    const tokens = (value: string) => value.split(/\s+/).filter((token) => token && !ROOT_DISPLAY_CLASSES.has(token)).sort().join(" ");
+    return tokens(before) !== tokens(now);
+  }
+  const declarations = (value: string) => value.split(";")
+    .map((part) => part.trim())
+    .filter((part) => part && !ROOT_POSITION_PROPERTIES.has(part.slice(0, part.indexOf(":")).trim()))
+    .sort().join(";");
+  return declarations(before) !== declarations(now);
 }
 
 /** 窓の中の行に現れる未計測の欧文ランを、1回のレイアウトでまとめて測る。 */
@@ -3869,6 +3892,8 @@ export function VerticalTextEditor({
     let manuscriptProbeHandle: number | null = null;
     let manuscriptProbeHost: HTMLElement | null = null;
     const manuscriptProbeKey = (line: LineNode) => `${line.kind}|${line.source}`;
+    // QA: how often counts are measured in the hidden copy and the cache is reset.
+    const manuscriptProbeStats = { batches: 0, paragraphs: 0, resets: 0 };
     // DOM の段落がどの姿で組まれているか。final は装飾窓の中でキャレットの
     // ない、最終的な姿（その行数をキャッシュに入れる）。
     const manuscriptParagraphState = (element: Element): "final" | "raw" | "active" | null => {
@@ -3902,19 +3927,28 @@ export function VerticalTextEditor({
       if (state !== "raw" && state !== "active") return undefined;
       return manuscriptProbeCounts.get(manuscriptProbeKey(line));
     };
+    // One Range for every paragraph measurement. A Range stays registered with
+    // the document until it is garbage-collected, and every DOM removal walks all
+    // registered Ranges: a fresh Range per paragraph (thousands after the first
+    // full measurement) made ProseMirror's paragraph replacements (heading jumps,
+    // the decoration window moving while typing) take hundreds of ms.
+    const fragmentRange = document.createRange();
     const measureVisualBlock = (
       index: number, element: Element, rect: VisualRect, version: number, mode: WritingMode, unnumbered: boolean,
     ) => {
       visualLineIndex.measure(index, rect, version, visualLayoutRevision, mode, unnumbered, () => {
-        const contentRange = document.createRange();
-        contentRange.selectNodeContents(element);
+        fragmentRange.selectNodeContents(element);
         // Fragments are read now; express them in the same coordinates as rect.
         const actual = element.getBoundingClientRect();
         const dx = rect.left - actual.left;
         const dy = rect.top - actual.top;
-        return Array.from(contentRange.getClientRects(), fragment => ({
+        const fragments = Array.from(fragmentRange.getClientRects(), fragment => ({
           left: fragment.left + dx, right: fragment.right + dx, top: fragment.top + dy, bottom: fragment.bottom + dy,
         }));
+        // Do not keep the paragraph's nodes inside a live range between measurements.
+        fragmentRange.setStart(document.documentElement, 0);
+        fragmentRange.collapse(true);
+        return fragments;
       });
     };
     let visualIndexElements: Element[] = [];
@@ -4404,6 +4438,7 @@ export function VerticalTextEditor({
           manuscriptProbeCondition = condition;
           manuscriptProbeCounts.clear();
           manuscriptProbeQueue.clear();
+          manuscriptProbeStats.resets++;
         }
         visualIndexElements.forEach((element, index) => {
           const version = flow?.versions[index] ?? blockVersions.get(element) ?? 0;
@@ -4596,8 +4631,14 @@ export function VerticalTextEditor({
       // ページ境界。本文には余白も要素も足さず、見えている行のうち
       // linesPerPage の倍数の行の後ろへ線を引く。連続表示だけで出す
       // （ページ表示ではページそのものが境界になる）。
+      // 境界の層は本文と一緒にスクロールする枠（.verticalTypewriterEditor）の
+      // 中にあり、座標も枠に対する位置で置く。スクロールしても書き換えない。
+      // 画面に重ねた層へ描くと、タイプライタースクロールの毎フレーム位置を
+      // 書き換えることになり、1キーあたり十数msかかっていた。
       const boundaryFragment = document.createDocumentFragment();
-      if (manuscriptOn && manuscriptSettings.showPageBoundaries && !pagedLayout && boundaryLayer) {
+      const boundaryHost = editorHostRef.current;
+      if (manuscriptOn && manuscriptSettings.showPageBoundaries && !pagedLayout && boundaryLayer && boundaryHost) {
+        const hostRect = boundaryHost.getBoundingClientRect();
         const pitch = lineHeightPx(currentEditor.view.dom);
         const vertical = !isHorizontalWriting(mode);
         for (const band of bands) {
@@ -4610,16 +4651,12 @@ export function VerticalTextEditor({
           boundary.dataset.manuscriptPage = String(page);
           boundary.dataset.axis = vertical ? "vertical" : "horizontal";
           if (vertical) {
-            const x = band.centerX - pitch / 2 + dx - scrollerRect.left;
-            if (x < -pitch || x > scrollerRect.width + pitch) continue;
-            boundary.style.left = `${snapScrollValue(x)}px`;
-            boundary.style.top = `${snapScrollValue(blockRect.top + dy - scrollerRect.top)}px`;
+            boundary.style.left = `${snapScrollValue(band.centerX - pitch / 2 + dx - hostRect.left)}px`;
+            boundary.style.top = `${snapScrollValue(blockRect.top + dy - hostRect.top)}px`;
             boundary.style.height = `${snapScrollValue(blockRect.bottom - blockRect.top)}px`;
           } else {
-            const y = band.centerY + pitch / 2 + dy - scrollerRect.top;
-            if (y < -pitch || y > scrollerRect.height + pitch) continue;
-            boundary.style.top = `${snapScrollValue(y)}px`;
-            boundary.style.left = `${snapScrollValue(blockRect.left + dx - scrollerRect.left)}px`;
+            boundary.style.top = `${snapScrollValue(band.centerY + pitch / 2 + dy - hostRect.top)}px`;
+            boundary.style.left = `${snapScrollValue(blockRect.left + dx - hostRect.left)}px`;
             boundary.style.width = `${snapScrollValue(blockRect.right - blockRect.left)}px`;
           }
           const label = document.createElement("span");
@@ -4673,13 +4710,7 @@ export function VerticalTextEditor({
       layer.style.height = `${snapScrollValue(scrollerRect.height)}px`;
       clipLayerToTextBlock(layer, scrollerRect);
       syncOverlayElements(layer, fragment);
-      if (boundaryLayer) {
-        boundaryLayer.style.left = layer.style.left;
-        boundaryLayer.style.top = layer.style.top;
-        boundaryLayer.style.width = layer.style.width;
-        boundaryLayer.style.height = layer.style.height;
-        syncOverlayElements(boundaryLayer, boundaryFragment);
-      }
+      if (boundaryLayer) syncOverlayElements(boundaryLayer, boundaryFragment);
     };
 
     // 隠し要素は本文の外（シェル直下）に置き、本文と同じ CSS が当たるよう
@@ -4728,6 +4759,8 @@ export function VerticalTextEditor({
         if (batch.length >= 200 || (deadline ? deadline.timeRemaining() < 2 : performance.now() - started > 6)) break;
       }
       if (!batch.length) return;
+      manuscriptProbeStats.batches++;
+      manuscriptProbeStats.paragraphs += batch.length;
       root.replaceChildren(...batch.map((item) => item.paragraph));
       const vertical = !isHorizontalWriting(writingModeRef.current);
       const pitch = lineHeightPx(root);
@@ -5156,7 +5189,12 @@ export function VerticalTextEditor({
         if (record.target === editor.view.dom) {
           if (record.type === "childList") visualIndexStructureDirty = true;
           if (record.type === "attributes" && (record.attributeName === "style" || record.attributeName === "class")) {
-            if (!paragraphFlowRef.current) visualLayoutRevision += 1;
+            // A new revision discards every paragraph's cached line shapes and
+            // (manuscript mode) line counts, i.e. re-measures the whole text.
+            // Focus classes and the paged root's position do not change how
+            // paragraphs are typeset; on a 100k-char manuscript treating them
+            // as a relayout froze heading jumps and page turns for seconds.
+            if (!paragraphFlowRef.current && rootTypesettingChanged(record)) visualLayoutRevision += 1;
             centerAnimation.invalidate();
             if (record.attributeName === "style") requestCenterCaret(false, "resize");
           }
@@ -5186,6 +5224,8 @@ export function VerticalTextEditor({
       requestLineBreakMarks();
     };
     invalidateTextLayoutRef.current = invalidateTextLayout;
+    (editor.view.dom as HTMLElement & { __manuscriptProbeQA?: () => unknown }).__manuscriptProbeQA =
+      () => ({ ...manuscriptProbeStats, cached: manuscriptProbeCounts.size, queued: manuscriptProbeQueue.size, revision: visualLayoutRevision });
     if (import.meta.env.VITE_QA_PAGE_DIAGNOSTICS === "1") {
       const root = editor.view.dom as HTMLElement & { __pageBreaksQA?: () => unknown; __pageBreaksHistoryQA?: unknown[] };
       root.__pageBreaksQA = () => ({ breaks: pageBreaksRef.current, signature: pageBreaksSignatureRef.current, history: root.__pageBreaksHistoryQA ?? [] });
@@ -5649,7 +5689,9 @@ export function VerticalTextEditor({
                 <span>{index + 1}</span>
               </div>
             ))}
-          <div ref={editorHostRef} className="verticalTypewriterEditor" />
+          <div ref={editorHostRef} className="verticalTypewriterEditor">
+            <div ref={manuscriptBoundaryLayerRef} className="manuscriptPageBoundaryLayer" aria-hidden="true" />
+          </div>
         </div>
       </div>
       <div
@@ -5657,7 +5699,6 @@ export function VerticalTextEditor({
         className="visibleLineNumberLayer"
         aria-hidden="true"
       />
-      <div ref={manuscriptBoundaryLayerRef} className="manuscriptPageBoundaryLayer" aria-hidden="true" />
       <div ref={lineBreakLayerRef} className="visibleLineBreakLayer" aria-hidden="true" />
       <ImageHoverPreview hostRef={editorHostRef} documentPath={documentPath} />
       {editorDisplayMode === "continuous" && typewriterScroll && showTypewriterGuide && (

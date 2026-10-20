@@ -174,6 +174,23 @@ try {
       statusPages: document.querySelector(".statusPages")?.textContent ?? null,
       pInline: (() => { const p = root.children[0].getBoundingClientRect(); return getComputedStyle(root).writingMode === "horizontal-tb" ? p.width : p.height; })(),
       fontSize: Number.parseFloat(getComputedStyle(root).fontSize),
+      // 境界線より流れの先頭側にある行の数（各段落の行を行送りから求める）。
+      boundaryPositions: [...document.querySelectorAll(".manuscriptPageBoundary")].map((b) => {
+        const vertical = getComputedStyle(root).writingMode !== "horizontal-tb";
+        const pitch = Number.parseFloat(getComputedStyle(root).lineHeight);
+        const r = b.getBoundingClientRect();
+        const at = vertical ? r.left : r.top;
+        let before = 0;
+        for (const p of root.children) {
+          const pr = p.getBoundingClientRect();
+          const n = Math.round((vertical ? pr.width : pr.height) / pitch);
+          for (let k = 0; k < n; k += 1) {
+            const center = vertical ? pr.right - (k + 0.5) * pitch : pr.top + (k + 0.5) * pitch;
+            if (vertical ? center > at : center < at) before += 1;
+          }
+        }
+        return { page: Number(b.dataset.manuscriptPage), before };
+      }),
       blankLines: (() => { const p = root.children[4]; const pitch = Number.parseFloat(getComputedStyle(root).lineHeight);
         return Math.round((getComputedStyle(root).writingMode === "horizontal-tb" ? p.getBoundingClientRect().height : p.getBoundingClientRect().width) / pitch); })(),
     };
@@ -209,7 +226,9 @@ try {
     assert.equal(c[50].first, "あいうえおかきくけこさしすせそたちつて", "開き括弧を行末に残さない");
   });
   check("ページ境界（20行ごと）", () => {
+    assert.ok(report.boundaryPositions.length > 0, "見えている範囲に境界がない");
     for (const page of report.boundaries) assert.ok(page >= 1 && page < Math.ceil(report.lines / 20));
+    for (const { page, before } of report.boundaryPositions) assert.equal(before, page * 20, `${page}ページ目の境界が ${page * 20} 行の後ろにない`);
   });
   const bodyHasNoBoundaries = await evaluate(`!__ms.pm().querySelector(".manuscriptPageBoundary, .manuscriptPageBoundaryLabel")`);
   check("本文へページ区切り要素を入れない", () => assert.ok(bodyHasNoBoundaries));

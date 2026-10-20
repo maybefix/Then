@@ -5,7 +5,7 @@
 //        [--project] [--scroll] [--css "<extra css>"]
 //        [--typewriter --scenario typing|selection|ime --at middle]
 //        [--writing-mode vertical-rl|horizontal-tb] [--line-numbers] [--highlight-line] [--line-breaks]
-//        [--manuscript [--manuscript-chars 20] [--manuscript-lines 20]] [--measure-vertical 30] [--zone both]  (with --project --typewriter)
+//        [--manuscript [--manuscript-chars 20] [--manuscript-lines 20]] [--measure-vertical 30] [--zone both] [--jumps 10]  (with --project --typewriter)
 //
 // Builds the app (unless --dist/--no-build), serves it, opens a blank
 // manuscript, pastes a deterministic manuscript and types one character at a
@@ -443,6 +443,56 @@ try {
   }
   // Main-thread time per keystroke. Unlike the latencies it does not jump by a
   // frame when work lands either side of a frame boundary.
+  // --jumps N: click N outline headings (alternating ends of the manuscript)
+  // instead of typing, and record how long the main thread is blocked.
+  if (flag("jumps")) {
+    await page.send("Performance.enable", { timeDomain: "threadTicks" });
+    const jumpMetrics = async () => Object.fromEntries((await page.send("Performance.getMetrics")).metrics.map((m) => [m.name, m.value]));
+    const jumpBefore = await jumpMetrics();
+    if (flag("profile")) { await page.send("Profiler.enable"); await page.send("Profiler.setSamplingInterval", { interval: 100 }); await page.send("Profiler.start"); }
+    const jumps = await evaluate(`(async () => {
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const items = [...document.querySelectorAll(".outlineTreeItem[data-outline-file-path]")]
+        .filter((item) => item.dataset.outlineFilePath.endsWith("第一部.md"));
+      if (items.length < 4) return { error: "outline items: " + items.length };
+      const order = [];
+      for (let i = 0; i < ${Number(option("jumps", 10))}; i += 1) order.push(i % 2 ? items[Math.floor(items.length / 2) - (i % 5)] : items[items.length - 1 - (i % 7)]);
+      const results = [];
+      const probeBefore = document.querySelector(".ProseMirror").__manuscriptProbeQA?.() ?? null;
+      for (const item of order) {
+        const tasks = [];
+        const observer = new PerformanceObserver((list) => tasks.push(...list.getEntries().map((e) => e.duration)));
+        observer.observe({ type: "longtask" });
+        const start = performance.now();
+        item.click();
+        const firstFrame = await new Promise((resolve) => requestAnimationFrame(() => resolve(performance.now() - start)));
+        await sleep(1500);
+        observer.disconnect();
+        results.push({ firstFrame, longTasks: tasks.length, blocked: tasks.reduce((a, b) => a + b, 0), max: Math.max(0, ...tasks) });
+      }
+      const pick = (key) => results.map((r) => r[key]).sort((a, b) => a - b);
+      const median = (key) => +pick(key)[Math.floor(results.length / 2)].toFixed(1);
+      const max = (key) => +pick(key)[results.length - 1].toFixed(1);
+      return { jumps: results.length, firstFrame: { p50: median("firstFrame"), max: max("firstFrame") },
+        blocked: { p50: median("blocked"), max: max("blocked") }, longestTask: { p50: median("max"), max: max("max") },
+        manuscriptStatus: document.querySelector(".statusManuscript")?.getAttribute("title") ?? null,
+        probeBefore, probe: document.querySelector(".ProseMirror").__manuscriptProbeQA?.() ?? null,
+        perJump: results.map((r) => Math.round(r.blocked)) };
+    })()`);
+    const jumpAfter = await jumpMetrics();
+    if (flag("profile")) {
+      const { profile } = await page.send("Profiler.stop");
+      if (option("profile-file", null)) await writeFile(option("profile-file"), JSON.stringify(profile));
+    }
+    jumps.cpuPerJump = {
+      task: +(((jumpAfter.TaskDuration - jumpBefore.TaskDuration) * 1000) / (jumps.jumps || 1)).toFixed(1),
+      script: +(((jumpAfter.ScriptDuration - jumpBefore.ScriptDuration) * 1000) / (jumps.jumps || 1)).toFixed(1),
+      style: +(((jumpAfter.RecalcStyleDuration - jumpBefore.RecalcStyleDuration) * 1000) / (jumps.jumps || 1)).toFixed(1),
+      layout: +(((jumpAfter.LayoutDuration - jumpBefore.LayoutDuration) * 1000) / (jumps.jumps || 1)).toFixed(1),
+    };
+    console.log(JSON.stringify({ label, scenario: "jumps", ...jumps }));
+    page.close();
+  } else {
   await page.send("Performance.enable", { timeDomain: "threadTicks" });
   const metrics = async () => Object.fromEntries((await page.send("Performance.getMetrics")).metrics.map((m) => [m.name, m.value]));
   const traceEvents = [];
@@ -596,6 +646,7 @@ try {
     console.log("\n-- app code, inclusive per keystroke --\n" + top(appCode, 50).join("\n"));
   }
   page.close();
+  }
 } catch (error) {
   console.error(error);
   exitCode = 1;
