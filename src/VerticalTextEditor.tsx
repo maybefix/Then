@@ -493,23 +493,6 @@ function decorationRange(
   return merged;
 }
 
-const KINSOKU_LINE_HEAD_FORBIDDEN = new Set(
-  Array.from(
-    "、。，．・：；？！!?‼⁇⁈⁉" +
-      "）〕］｝〉》」』】〗〙〛’”" +
-      "ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶ々ゝゞヽヾ〻〃ー",
-  ),
-);
-const KINSOKU_LINE_END_FORBIDDEN = new Set(Array.from("（〔［｛〈《「『【〖〘〚‘“"));
-const KINSOKU_PUNCTUATION = new Set(
-  Array.from(
-    "、。，．・：；？！!?‼⁇⁈⁉" +
-      "（〔［｛〈《「『【〖〘〚‘“" +
-      "）〕］｝〉》」』】〗〙〛’”",
-  ),
-);
-const KINSOKU_DIGIT = /^[0-9０-９]$/;
-
 type CharacterRange = {
   ch: string;
   from: number;
@@ -706,41 +689,6 @@ function pushBreakableTokenDecos(
   }
 }
 
-function pushParagraphIndentAnchor(
-  out: Decoration[],
-  line: LineNode,
-  contentStart: number,
-  chars: CharacterRange[],
-  markupRanges: Array<{ from: number; to: number }>,
-): void {
-  if (line.kind !== "paragraph") return;
-
-  let indentLength = 0;
-  while (indentLength < chars.length && chars[indentLength].ch === "　") indentLength += 1;
-  if (indentLength < 1 || indentLength > 2 || indentLength >= chars.length) return;
-
-  const to = chars[indentLength].to;
-  if (overlapsProtectedRange(0, to, markupRanges)) return;
-
-  out.push(
-    Decoration.inline(contentStart, contentStart + to, {
-      class: "ks-indent-anchor",
-    }),
-  );
-}
-
-function pushKinsokuRange(
-  out: Decoration[],
-  contentStart: number,
-  from: number,
-  to: number,
-  className: string,
-  protectedRanges: Array<{ from: number; to: number }>,
-): void {
-  if (to <= from || overlapsProtectedRange(from, to, protectedRanges)) return;
-  out.push(Decoration.inline(contentStart + from, contentStart + to, { class: className }));
-}
-
 const LIST_MARKER = /^\s*(?:[-*+]|\d+[.)])\s+/;
 
 /**
@@ -754,123 +702,23 @@ function listMarkerRange(line: LineNode): { from: number; to: number } | null {
   return match ? { from: 0, to: match[0].length } : null;
 }
 
-function pushKinsokuDecos(out: Decoration[], line: LineNode, contentStart: number): void {
+/**
+ * Break opportunities inside long unbreakable runs (URLs, paths, hashes, long
+ * numbers, leaders). Kinsoku itself is left to the browser's line-break: strict:
+ * the per-character kinsoku spans this used to add (keep pairs together, ban
+ * line-head/line-end characters) changed no line into a rule violation when
+ * removed (scripts/experiment-kinsoku-equivalence.mjs, ~6,500 paragraphs), but
+ * made up most of a decorated paragraph's elements and forced the IME preedit
+ * into nowrap spans.
+ */
+function pushBreakableDecos(out: Decoration[], line: LineNode, contentStart: number): void {
   if (!line.source) return;
-
   // マーカーは固定幅の箱（list-marker）に入れるので、他の装飾で分割させない。
   const listMarker = listMarkerRange(line);
   const markupRanges = listMarker
     ? [...inlineMarkupRanges(line), listMarker]
     : inlineMarkupRanges(line);
-  const breakableTokens = findBreakableTokens(line.source, markupRanges);
-  const protectedRanges = [
-    ...markupRanges,
-    ...breakableTokens.map((token) => ({ from: token.from, to: token.to })),
-  ];
-  const chars = characterRanges(line.source);
-  if (chars.length === 0) return;
-
-  pushBreakableTokenDecos(out, contentStart, breakableTokens);
-  pushParagraphIndentAnchor(out, line, contentStart, chars, markupRanges);
-
-  for (let i = 0; i < chars.length; i += 1) {
-    const ch = chars[i].ch;
-
-    if (ch === "…" || ch === "‥" || ch === "―") {
-      let end = i + 1;
-      while (end < chars.length && chars[end].ch === ch) end += 1;
-      if (end - i === 2) {
-        pushKinsokuRange(
-          out,
-          contentStart,
-          chars[i].from,
-          chars[end - 1].to,
-          "ks-keep-short",
-          protectedRanges,
-        );
-      }
-      i = end - 1;
-      continue;
-    }
-
-    if ((ch === "〳" || ch === "〴") && i + 1 < chars.length && chars[i + 1].ch === "〵") {
-      pushKinsokuRange(
-        out,
-        contentStart,
-        chars[i].from,
-        chars[i + 1].to,
-        "ks-keep-short",
-        protectedRanges,
-      );
-      i += 1;
-      continue;
-    }
-
-    if (KINSOKU_DIGIT.test(ch)) {
-      let end = i + 1;
-      while (end < chars.length && KINSOKU_DIGIT.test(chars[end].ch)) end += 1;
-      if (end - i >= 2 && end - i <= 4) {
-        pushKinsokuRange(
-          out,
-          contentStart,
-          chars[i].from,
-          chars[end - 1].to,
-          "ks-keep-short",
-          protectedRanges,
-        );
-      }
-      i = end - 1;
-    }
-  }
-
-  for (let i = 1; i < chars.length; i += 1) {
-    if (!KINSOKU_LINE_HEAD_FORBIDDEN.has(chars[i].ch)) continue;
-
-    let end = i + 1;
-    while (end < chars.length && KINSOKU_LINE_HEAD_FORBIDDEN.has(chars[end].ch)) end += 1;
-    const protectedEnd = Math.min(end, i + 2);
-    pushKinsokuRange(
-      out,
-      contentStart,
-      chars[i - 1].from,
-      chars[protectedEnd - 1].to,
-      "ks-line-head-ban",
-      protectedRanges,
-    );
-    i = end - 1;
-  }
-
-  for (let i = 0; i < chars.length - 1; i += 1) {
-    if (!KINSOKU_LINE_END_FORBIDDEN.has(chars[i].ch)) continue;
-
-    pushKinsokuRange(
-      out,
-      contentStart,
-      chars[i].from,
-      chars[i + 1].to,
-      "ks-line-end-ban",
-      protectedRanges,
-    );
-  }
-
-  for (let i = 0; i < chars.length; i += 1) {
-    const prev = i > 0 ? chars[i - 1].ch : "";
-    const next = i + 1 < chars.length ? chars[i + 1].ch : "";
-    const boundary = i === 0 || i === chars.length - 1;
-    if (
-      KINSOKU_PUNCTUATION.has(chars[i].ch) &&
-      (KINSOKU_PUNCTUATION.has(prev) || KINSOKU_PUNCTUATION.has(next) || boundary)
-    ) {
-      pushKinsokuRange(
-        out,
-        contentStart,
-        chars[i].from,
-        chars[i].to,
-        "ks-punct-trim",
-        protectedRanges,
-      );
-    }
-  }
+  pushBreakableTokenDecos(out, contentStart, findBreakableTokens(line.source, markupRanges));
 }
 
 function pushJapaneseQuoteDecos(
@@ -1127,7 +975,7 @@ function pushLineDecos(
     pushLayoutOnlyLineDecos(out, line, contentStart, listMarker, latin);
     return;
   }
-  pushKinsokuDecos(out, line, contentStart);
+  pushBreakableDecos(out, line, contentStart);
   pushJapaneseQuoteDecos(out, line, contentStart);
   pushImageDecos(out, line, contentStart);
   if (latin) pushManuscriptLatinDecos(out, line, contentStart, latin, active);
@@ -3871,7 +3719,6 @@ export function VerticalTextEditor({
     let compositionFrame: number | null = null;
     let compositionSettleFrame: number | null = null;
     let compositionRevealFrame: number | null = null;
-    let imeLayoutTarget: HTMLElement | null = null;
     let pagedReflowFrame: number | null = null;
     let pagedReflowGeneration = 0;
     let initialAdjustmentFrame: number | null = null;
@@ -4937,40 +4784,6 @@ export function VerticalTextEditor({
     renderVisualLinesRef.current = renderVisualLines;
     requestVisualLinesRef.current = requestVisualLines;
 
-    const clearImeLayoutTarget = () => {
-      imeLayoutTarget?.removeAttribute("data-ime-layout-target");
-      imeLayoutTarget = null;
-    };
-
-    const prepareImeLayoutTarget = () => {
-      if (composingRef.current) return;
-      const selection = window.getSelection();
-      const anchor = selection?.isCollapsed ? selection.anchorNode : null;
-      const anchorElement =
-        anchor instanceof Element ? anchor : anchor?.parentElement ?? null;
-      const candidate = anchorElement?.closest<HTMLElement>(
-        ".ks-line-head-ban, .ks-line-end-ban, .ks-keep-short",
-      );
-      const next = candidate && host.contains(candidate) ? candidate : null;
-      if (next === imeLayoutTarget) return;
-
-      clearImeLayoutTarget();
-      imeLayoutTarget = next;
-      if (!imeLayoutTarget) return;
-
-      // IME開始後にnowrapを外すと、CSS multicolの再分割より先にWindows側が
-      // 古いキャレット位置を候補ウィンドウへ記憶することがある。選択位置が
-      // 決まった段階で対象spanだけを先に折り返し可能にし、本文全体の再組版や
-      // DOM選択の操作をせずに候補位置とページ割りを一致させる。
-      imeLayoutTarget.setAttribute("data-ime-layout-target", "true");
-      // style/layoutを変換開始前に確定させる。読み取りだけなので選択・Undo・本文は
-      // 変更しない。
-      imeLayoutTarget.getBoundingClientRect();
-      if (editorDisplayModeRef.current === "paged") {
-        syncPageMetricsRef.current?.();
-      }
-    };
-
     // 改行・削除・IME確定の後は、ページ割りを取り直してからキャレットの
     // ページへ移る。総ページ数が増えるとReactのページ面の追加が1フレーム
     // 遅れ、その間は新しいページへスクロールできず手前へ丸められる。そこで
@@ -5097,7 +4910,6 @@ export function VerticalTextEditor({
         if (editorDisplayModeRef.current !== "paged") requestLineBreakMarks();
       },
       onSelectionUpdate: () => {
-        prepareImeLayoutTarget();
         onSelectionChangeRef.current();
         // ドラッグ範囲選択中は寄せない（pointerup でまとめて判定する）。
         // キーボードでの選択（Shift+矢印など）はドラッグ外なので従来どおり追従する。
@@ -5323,7 +5135,6 @@ export function VerticalTextEditor({
       imeReplacePrepared = false;
       cancelInitialAdjustment();
       stopCenterAnimation();
-      prepareImeLayoutTarget();
       composingRef.current = true;
       // 変換中はスクロールスナップを止める。ブラウザがキャレットを見せるために
       // 動かしたスクロールを、スナップがページ境界へ引き戻してしまうため。
@@ -5406,7 +5217,6 @@ export function VerticalTextEditor({
     const handleCompositionEnd = () => {
       composingRef.current = false;
       shellRef.current?.removeAttribute("data-composing");
-      clearImeLayoutTarget();
       // 確定すれば本文は段へ収まる。連続写像をやめてキャレットのページへ吸着
       // し直す。ただしIMEは変換の区切りごとに compositionend → compositionstart
       // を続けて投げてくるので、1フレーム待って本当に変換が終わったかを見る。
@@ -5586,7 +5396,6 @@ export function VerticalTextEditor({
       if (compositionFrame !== null) cancelAnimationFrame(compositionFrame);
       if (compositionSettleFrame !== null) cancelAnimationFrame(compositionSettleFrame);
       if (compositionRevealFrame !== null) cancelAnimationFrame(compositionRevealFrame);
-      clearImeLayoutTarget();
       pagedReflowGeneration += 1;
       if (pagedReflowFrame !== null) cancelAnimationFrame(pagedReflowFrame);
       pagedScrollSettleGenerationRef.current += 1;

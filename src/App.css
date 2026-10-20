@@ -3060,42 +3060,10 @@ html:not([data-window-fullscreen="true"])
   text-align-last: auto;
 }
 
-.verticalTypewriterEditor .ks-keep-short,
-.verticalTypewriterEditor .ks-line-head-ban,
-.verticalTypewriterEditor .ks-line-end-ban {
-  line-break: strict;
-  overflow-wrap: normal;
-  white-space: nowrap;
-  word-break: normal;
-}
-
-/* 禁則の span にキャレットがあると、IMEの前編集全体がnowrapの中へ入る。
-   選択確定時に入力対象のspanだけを折り返し可能にしておく。compositionstart後に
-   本文中の全spanを一斉変更すると、CSS multicolが全ページを再分割し、Windowsが
-   記憶した変換候補位置だけ旧ページに残るため、対象を局所化・事前化する。 */
-.verticalTypewriterEditor .ks-line-head-ban[data-ime-layout-target="true"],
-.verticalTypewriterEditor .ks-line-end-ban[data-ime-layout-target="true"],
-.verticalTypewriterEditor .ks-keep-short[data-ime-layout-target="true"] {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
 .verticalTypewriterEditor .ks-breakable-token {
   overflow-wrap: anywhere;
   white-space: normal;
   word-break: normal;
-}
-
-.verticalTypewriterEditor .ks-indent-anchor {
-  display: inline-block;
-  line-break: strict;
-  overflow-wrap: normal;
-  white-space: nowrap;
-  word-break: normal;
-}
-
-.verticalTypewriterEditor .ks-punct-trim {
-  text-spacing-trim: trim-start;
 }
 
 .verticalTypewriterEditor .mk-hidden {
@@ -3552,10 +3520,6 @@ html:not([data-window-fullscreen="true"])
 .verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .pm-root p.heading {
   font-size: 1em;
   line-height: inherit;
-}
-
-.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .ks-punct-trim {
-  text-spacing-trim: space-all;
 }
 
 /*

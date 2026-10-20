@@ -141,12 +141,6 @@ assert.match(
 
 assert.match(
   editorSource,
-  /onSelectionUpdate: \(\) => \{[\s\S]*?prepareImeLayoutTarget\(\)/,
-  "the selected kinsoku span must release nowrap before composition starts",
-);
-
-assert.match(
-  editorSource,
   /const handleCompositionEnd = \(\) => \{[\s\S]*?compositionSettleFrame = requestAnimationFrame\([\s\S]*?if \(composingRef\.current\) return;[\s\S]*?scrollToPage\(/,
   "the page must be re-snapped one frame after composition really ends (IME sends end/start between segments)",
 );
@@ -157,16 +151,18 @@ assert.match(
   "the composition tracking frame must be cancelled on unmount",
 );
 
-assert.match(
-  appCss,
-  /\.ks-line-head-ban\[data-ime-layout-target="true"\][\s\S]*?white-space:\s*pre-wrap/,
-  "only the selected kinsoku span must drop nowrap, or global reflow can stale the native IME position",
+// Kinsoku is the browser's line-break: strict; there are no nowrap kinsoku
+// spans for the IME preedit to land in, so nothing has to be released (and no
+// page reflowed) when a composition starts.
+assert.doesNotMatch(
+  appCss + editorSource,
+  /ks-line-head-ban|ks-line-end-ban|ks-keep-short|data-ime-layout-target/,
+  "no nowrap kinsoku spans may hold the IME preedit",
 );
-
 assert.doesNotMatch(
   appCss,
-  /\[data-composing="true"\][\s\S]*?\.ks-line-head-ban[\s\S]*?white-space:\s*pre-wrap/,
-  "composition must not release every kinsoku span and reflow all pages",
+  /\[data-composing="true"\][^{]*\{[^}]*white-space/,
+  "composition must not change how text wraps",
 );
 
 assert.match(
