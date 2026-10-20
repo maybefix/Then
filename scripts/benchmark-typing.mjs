@@ -478,7 +478,9 @@ try {
         .filter((item) => item.dataset.outlineFilePath.endsWith("第一部.md"));
       if (items.length < 4) return { error: "outline items: " + items.length };
       const order = [];
-      for (let i = 0; i < ${Number(option("jumps", 10))}; i += 1) order.push(i % 2 ? items[Math.floor(items.length / 2) - (i % 5)] : items[items.length - 1 - (i % 7)]);
+      // Alternate between the far end and the middle of the outline.
+      const at = (index) => items[Math.max(0, Math.min(items.length - 1, index))];
+      for (let i = 0; i < ${Number(option("jumps", 10))}; i += 1) order.push(i % 2 ? at(Math.floor(items.length / 2) - (i % 3)) : at(items.length - 1 - (i % 3)));
       const results = [];
       const probeBefore = document.querySelector(".ProseMirror").__manuscriptProbeQA?.() ?? null;
       for (const item of order) {
