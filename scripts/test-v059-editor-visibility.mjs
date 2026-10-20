@@ -543,7 +543,7 @@ assert.match(
 );
 assert.match(
   foundationsCss,
-  /data-zone-right="true"\]:has\(\.workspace\[data-app-mode="write"\]\)[\s\S]*?\.pluginRuntimeDetachedHost:not\(\.pluginModalRuntimeHost\)[\s\S]*?opacity:\s*0/,
+  /data-zone-right="true"\]\[data-shell-app-mode="write"\][\s\S]*?\.pluginRuntimeDetachedHost:not\(\.pluginModalRuntimeHost\)[\s\S]*?opacity:\s*0/,
   "Zone hiding must apply only to a plugin docked beside the editor, never to a full plugin screen",
 );
 assert.doesNotMatch(
@@ -553,12 +553,12 @@ assert.doesNotMatch(
 );
 assert.match(
   foundationsCss,
-  /:has\(\.zoneRightSidebarHoverTarget:hover\)[\s\S]*?\.activePluginRuntimeFrame[\s\S]*?pointer-events:\s*auto/,
+  /\[data-zone-right-active="true"\][\s\S]*?\.activePluginRuntimeFrame[\s\S]*?pointer-events:\s*auto/,
   "revealing the Zone sidebar must restore interaction with its active plugin frame",
 );
 assert.match(
   foundationsCss,
-  /:has\(\.pluginRuntimeDetachedHost:not\(\.pluginModalRuntimeHost\):hover\)[\s\S]*?> \.rightSidebar[\s\S]*?transform:\s*translateX\(0\)/,
+  /\[data-zone-plugin-hover="true"\][\s\S]*?> \.rightSidebar[\s\S]*?transform:\s*translateX\(0\)/,
   "moving from the sidebar into its detached plugin frame must keep the sidebar revealed",
 );
 assert.doesNotMatch(
@@ -566,5 +566,16 @@ assert.doesNotMatch(
   /:has\(\.pluginRuntimeDetachedHost:hover\)\s*\r?\n\s*\.workspace\[data-app-mode="write"\]\s*\r?\n\s*> \.rightSidebar\s*\{/,
   "a full-window plugin modal must not reveal the right sidebar merely because the modal is hovered",
 );
+
+// The hover/focus state behind those rules is tracked in script, not with
+// .appShell:has(...): a :has() whose subject is the app root made every
+// insertion into the manuscript invalidate styles across the whole app.
+const zoneHoverSource = await readFile("src/utils/zoneRightHover.ts", "utf8");
+assert.doesNotMatch((foundationsCss + appCss).replace(/\/\*[\s\S]*?\*\//g, ""), /\.appShell[^{,]*:has\(/, "no :has() may take the app root as its subject");
+assert.match(zoneHoverSource, /\.zoneRightSidebarHoverTarget, \.rightSidebar, \.pluginRuntimeDetachedHost:not\(\.pluginModalRuntimeHost\)/,
+  "the edge target, the sidebar and a docked (not modal) plugin frame reveal the sidebar");
+assert.match(zoneHoverSource, /closest\("\.rightSidebar"\)/, "focus inside the sidebar keeps it revealed");
+assert.match(appSource, /trackZoneRightHover\(shell\)/);
+assert.match(appSource, /data-shell-app-mode=\{appMode\}/);
 
 console.log("v0.5.9 editor visibility tests passed");

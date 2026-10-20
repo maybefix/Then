@@ -250,6 +250,7 @@ import type {
 } from "./types";
 import { isIdeaBinderCard, isReferenceBinderCard, workStatusLabels } from "./types";
 import { normalizeManuscriptSettings } from "./editor/manuscriptLayout";
+import { trackZoneRightHover } from "./utils/zoneRightHover";
 import {
   fileProgressStatuses,
   DEFAULT_MANUSCRIPT_SETTINGS,
@@ -3233,6 +3234,7 @@ export default function App() {
    * 起動へ切り替わる。
    */
   const [appMode, setAppMode] = useState<AppMode>("write");
+  const appShellRef = useRef<HTMLElement | null>(null);
   // サイドバー・ステータスバー・通知から、特定の保存点を選んだ状態でチェックポイント画面を開く。
   const [checkpointFocusRequest, setCheckpointFocusRequest] = useState<{ id: string; nonce: number } | null>(null);
   const openCheckpointStudio = useCallback((snapshotId?: string) => {
@@ -4296,6 +4298,13 @@ export default function App() {
   }, []);
 
   const { snippets, settings } = appState;
+  const zoneRightEnabled = settings.sidebarHoverMode === "both" || settings.sidebarHoverMode === "right";
+  // Zoneモードの右ペインの表示判定は .appShell の属性で行う（zoneRightHover.ts）。
+  useEffect(() => {
+    const shell = appShellRef.current;
+    if (!shell || !zoneRightEnabled) return undefined;
+    return trackZoneRightHover(shell);
+  }, [zoneRightEnabled]);
   useEffect(() => {
     if (!isTauriRuntime()) return;
 
@@ -12711,7 +12720,9 @@ export default function App() {
 
   return (
       <main
+        ref={appShellRef}
         className="appShell"
+        data-shell-app-mode={appMode}
         data-theme={settings.theme}
         data-writing-mode={settings.writingMode}
         data-zone-mode={settings.sidebarHoverMode !== "none" ? "true" : undefined}

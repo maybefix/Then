@@ -5,7 +5,7 @@
 //        [--project] [--scroll] [--css "<extra css>"]
 //        [--typewriter --scenario typing|selection|ime --at middle]
 //        [--writing-mode vertical-rl|horizontal-tb] [--line-numbers] [--highlight-line] [--line-breaks]
-//        [--manuscript [--manuscript-chars 20] [--manuscript-lines 20]] [--measure-vertical 30]  (with --project --typewriter)
+//        [--manuscript [--manuscript-chars 20] [--manuscript-lines 20]] [--measure-vertical 30] [--zone both]  (with --project --typewriter)
 //
 // Builds the app (unless --dist/--no-build), serves it, opens a blank
 // manuscript, pastes a deterministic manuscript and types one character at a
@@ -350,6 +350,8 @@ try {
         writingMode: option("writing-mode", "vertical-rl"),
         showLineNumbers: flag("line-numbers"), highlightCurrentLine: flag("highlight-line"),
         showLineBreakMarks: flag("line-breaks"),
+        // サイドペインのホバー表示（Zoneモード、--zone both|left|right）。
+        ...(option("zone", null) ? { sidebarHoverMode: option("zone", null) } : {}),
         // 縦書きの1列の長さ（編集領域に対する%）。原稿用紙と同じ行長で比べるときに使う。
         ...(option("measure-vertical", null) ? { editorMeasureVertical: Number(option("measure-vertical", null)) } : {}),
         // 原稿用紙モード（--manuscript, 既定 20字×20行）。
