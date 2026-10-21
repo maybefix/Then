@@ -3815,7 +3815,10 @@ export function VerticalTextEditor({
       const state = manuscriptParagraphState(element);
       if (!state) return;
       const key = manuscriptProbeKey(line);
-      if (state === "final") {
+      // 記法のない段落は、キャレットがあっても最終的な姿と同じ装飾で組まれる
+      // （pushLineDecos が active で省くのは記号隠しと記法の装飾だけ）。
+      // 本文の段落をそのまま測った行数を使い、入力のたびに隠し要素で組み直さない。
+      if (state === "final" || (state === "active" && !line.marker && !line.inlineMarkups.length)) {
         const count = visualLineIndex.countAt(index);
         if (count !== null) manuscriptProbeCounts.set(key, count);
         return;
