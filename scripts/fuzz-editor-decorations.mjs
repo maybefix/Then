@@ -5,7 +5,8 @@
 //   node scripts/fuzz-editor-decorations.mjs [--url http://localhost:3000/] [--steps 800] [--seed 7]
 //        [--settings '{"showLineNumbers":true}']
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
+import { guardBrowser, stopBrowser } from "./lib/stop-browser.mjs";
 import os from "node:os";
 import path from "node:path";
 
@@ -29,6 +30,7 @@ const browser = spawn(edgePath, [
   "--headless=new", `--remote-debugging-port=${debugPort}`, `--user-data-dir=${profileDir}`,
   "--no-first-run", "--disable-extensions", "about:blank",
 ], { stdio: "ignore" });
+guardBrowser(browser, profileDir);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function json(target, init) {
@@ -192,9 +194,7 @@ try {
   console.error(error);
   exitCode = 1;
 } finally {
-  browser.kill();
-  await sleep(500);
-  try { rmSync(profileDir, { recursive: true, force: true }); } catch {}
+  await stopBrowser(browser, profileDir);
 }
 const shadow = problems.filter((problem) => /shadow|exception|Error/i.test(problem));
 if (shadow.length) {

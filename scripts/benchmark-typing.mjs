@@ -18,7 +18,7 @@
 // --profile adds a CPU profile summarised by entry point and self time.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync } from "node:fs";
-import { stopBrowser } from "./lib/stop-browser.mjs";
+import { guardBrowser, stopBrowser } from "./lib/stop-browser.mjs";
 import { readFile, writeFile } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
@@ -87,6 +87,7 @@ const browser = flag("webview-exe") ? spawn(option("webview-exe"), [], {
   "--no-first-run", "--disable-extensions", "--disable-background-timer-throttling",
   "--disable-renderer-backgrounding", "--disable-backgrounding-occluded-windows", "about:blank",
 ], { stdio: "ignore" });
+guardBrowser(browser, profileDir);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function json(url, init) {

@@ -13,7 +13,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync } from "node:fs";
-import { stopBrowser } from "./lib/stop-browser.mjs";
+import { guardBrowser, stopBrowser } from "./lib/stop-browser.mjs";
 import { readFile } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
@@ -69,6 +69,7 @@ const browser = spawn(edgePath, [
   "--no-first-run", "--disable-extensions", "--disable-background-timer-throttling",
   "--disable-renderer-backgrounding", "--disable-backgrounding-occluded-windows", "about:blank",
 ], { stdio: "ignore" });
+guardBrowser(browser, profileDir);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function json(url, init) {

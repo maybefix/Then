@@ -6,6 +6,7 @@
 //   node scripts/experiment-kinsoku-equivalence.mjs [--dist <dir>] [--paragraphs 600] [--seed 1]
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync } from "node:fs";
+import { guardBrowser, stopBrowser } from "./lib/stop-browser.mjs";
 import { readFile } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
@@ -43,8 +44,9 @@ const edgePath = process.env.EDGE_PATH ?? [
   "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
 ].find((candidate) => existsSync(candidate));
 const debugPort = 9950 + Math.floor(Math.random() * 40);
-const browser = spawn(edgePath, ["--headless=new", `--remote-debugging-port=${debugPort}`,
-  `--user-data-dir=${mkdtempSync(path.join(os.tmpdir(), "then-kinsoku-"))}`, "--no-first-run", "--disable-extensions", "about:blank"], { stdio: "ignore" });
+const profileDir = mkdtempSync(path.join(os.tmpdir(), "then-kinsoku-"));
+const browser = guardBrowser(spawn(edgePath, ["--headless=new", `--remote-debugging-port=${debugPort}`,
+  `--user-data-dir=${profileDir}`, "--no-first-run", "--disable-extensions", "about:blank"], { stdio: "ignore" }), profileDir);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function json(url, init) {
   for (let i = 0; i < 50; i++) { try { return await fetch(url, init).then((r) => r.json()); } catch { await sleep(200); } }
@@ -210,7 +212,7 @@ try {
   console.error(error);
   exitCode = 1;
 } finally {
-  browser.kill();
+  await stopBrowser(browser, profileDir);
   server.close();
   process.exit(exitCode);
 }
