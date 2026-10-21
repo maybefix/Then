@@ -2209,7 +2209,9 @@ const LayoutAstExtension = Extension.create({
               if (!isTableRowAt(view.state, view.state.selection.head)) return;
               frame = requestAnimationFrame(() => {
                 frame = null;
-                if (view.composing || !view.hasFocus() || !view.state.selection.empty) return;
+                // TSF入力中は本文がDOMフォーカスを持たない（nativeImeActive）。
+                const focused = view.hasFocus() || view.dom.classList.contains("nativeImeActive");
+                if (view.composing || !focused || !view.state.selection.empty) return;
                 if (!isTableRowAt(view.state, view.state.selection.head)) return;
                 const offset = textOffsetFromPmPos(view.state.doc, view.state.selection.head);
                 const cell = tableCellCaret(docToText(view.state.doc), offset,

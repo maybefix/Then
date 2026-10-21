@@ -578,6 +578,17 @@ try {
       return { active: Boolean(document.querySelector('.ProseMirror.nativeImeActive')), domFocus: document.activeElement?.classList.contains('ProseMirror') ?? false, hasFocus: document.hasFocus() };
     })()`);
   }
+  // --probe-js <file>：準備が済んだ画面で任意の式を評価し、結果だけを出して終える（不具合の再現用）。
+  if (option("probe-js", null)) {
+    const result = await evaluate(await readFile(option("probe-js", null), "utf8"));
+    console.log(JSON.stringify({ nativeTsf: summary_nativeTsf, probe: result }, null, 1));
+    if (option("probe-screenshot", null)) {
+      await sleep(300);
+      const shot = await page.send("Page.captureScreenshot", { format: "png" });
+      await writeFile(option("probe-screenshot", null), Buffer.from(shot.data, "base64"));
+    }
+    throw Object.assign(new Error("probe finished"), { probeFinished: true });
+  }
   const before = await metrics();
   if (flag("profile") && flag("typewriter")) await page.send("Profiler.start");
   const summary = flag("typewriter")
@@ -631,7 +642,17 @@ try {
   // Elements inside the editor: full-document decorations (line numbers,
   // manuscript mode) multiply them, and per-frame paint work grows with them.
   if (summary_manuscriptSettleMs !== null) summary.manuscriptSettleMs = summary_manuscriptSettleMs;
-  if (summary_nativeTsf) summary.nativeTsf = { ...summary_nativeTsf, ...await evaluate(`({ probeBefore: window.__benchProbeBefore, probeAfter: document.querySelector(".ProseMirror").__manuscriptProbeQA?.(), rootChanges: window.__benchRootChanges.slice(0, 12), rootChangeCount: window.__benchRootChanges.length })`) };
+  if (summary_nativeTsf) summary.nativeTsf = { ...summary_nativeTsf, ...await evaluate(`({ probeBefore: window.__benchProbeBefore, probeAfter: document.querySelector(".ProseMirror").__manuscriptProbeQA?.(), rootChanges: window.__benchRootChanges.slice(0, 12), rootChangeCount: window.__benchRootChanges.length, focusSink: (() => {
+      // 受け皿にDOMフォーカスがある状態で、本文内へ選択を置くと本文へフォーカスが戻るか。
+      const root = document.querySelector(".ProseMirror"); const sink = document.getElementById("benchFocusSink");
+      if (!sink) return null;
+      sink.focus({ preventScroll: true });
+      const text = root.querySelector("p")?.firstChild; const before = document.activeElement === sink;
+      if (text) document.getSelection().setBaseAndExtent(text, 0, text, 0);
+      const refocusedRoot = document.activeElement === root;
+      sink.focus({ preventScroll: true });
+      return { before, refocusedRoot, status: [...document.querySelectorAll("*")].find(e => !e.children.length && /^TSF/.test(e.textContent ?? ""))?.textContent };
+    })() })`) };
   summary.editorElements = await evaluate("document.querySelector('.ProseMirror').getElementsByTagName('*').length");
   if (flag("manuscript")) summary.manuscriptStatus = await evaluate("document.querySelector('.statusManuscript')?.getAttribute('title') ?? null");
   if (flag("element-classes")) summary.editorElementClasses = await evaluate(`(() => {
@@ -736,8 +757,10 @@ try {
   page.close();
   }
 } catch (error) {
-  console.error(error);
-  exitCode = 1;
+  if (!error?.probeFinished) {
+    console.error(error);
+    exitCode = 1;
+  }
 } finally {
   server.close();
   await stopBrowser(browser, profileDir);

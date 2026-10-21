@@ -98,11 +98,74 @@ export function installNativeImeExperiment(editor: Editor, shell: HTMLElement, c
     const count = connection ? `・キー ${connection.keysSeen} / IME ${connection.keysConsumed} / 編集 ${connection.edits}` : "";
     status.textContent = `${active ? "TSF入力" : focusRequested ? "TSF接続中" : "TSF待機"}：現在段落 ${paragraph()?.text.length ?? 0}字${composing ? "・変換中" : ""}${count}`;
   };
+  // TSFが入力を受けている間は、本文からDOMフォーカスを外して本文の外の編集不可の
+  // 要素に置く。フォーカスのある contenteditable があると、Chromium は編集のたびに
+  // IME向けの入力状態を作り直し、編集ホスト（本文全体）の全文を走査する（10万字で
+  // 1回約10ms・1編集に2回）。キーは TSF の子ウィンドウが受けるので、本文の
+  // フォーカスは要らない。PM はフォーカスがないとDOMの選択を書かないので、
+  // 範囲選択はここで書き写す（本文へ選択を置いてもフォーカスは移らない）。
+  const focusSink = document.createElement("div");
+  focusSink.className = "nativeImeFocusSink"; focusSink.tabIndex = -1;
+  focusSink.setAttribute("aria-hidden", "true");
+  document.body.append(focusSink);
+  let pointerSelecting = false;
+  const domFocusReleased = () => enabled && active && document.activeElement !== root;
+  // フォーカスを外すと PM は selectionchange を読まなくなるので、外す前にブラウザが
+  // 置いた選択（クリック・ドラッグ）を自分で取り込む。
+  const takeDomSelection = () => {
+    const selection = document.getSelection();
+    if (!selection?.anchorNode || !selection.focusNode ||
+      !root.contains(selection.anchorNode) || !root.contains(selection.focusNode)) return;
+    const anchor = editor.view.posAtDOM(selection.anchorNode, selection.anchorOffset);
+    const head = editor.view.posAtDOM(selection.focusNode, selection.focusOffset);
+    const current = editor.state.selection;
+    if (current.anchor === anchor && current.head === head) return;
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, anchor, head)));
+  };
+  // DOMフォーカスは、呼ばれた順序ではなくTSFの状態だけから決める。
+  // - TSFが入力を受けている（active）間は受け皿。本文にあると全文走査が起きる。
+  //   クリック・ドラッグ中は本文に置いたまま、mouseup の後に移す。
+  // - 受けていない間は本文。受け皿に残すとキーが吸われて何も入力されない。
+  // 状態が変わる所（接続・切断・本文のfocus・mouseup・トランザクション）から毎回呼ぶので、
+  // どこかで取りこぼしても次の呼び出しで揃う。
+  // DOMの選択を取り込むのはクリック・ドラッグの後だけ。view.focus()・ジャンプでは
+  // PM の状態が正しく、DOM 側は古い選択や本文先頭のキャレットのことがある。
+  const reconcileFocus = (fromPointer = false) => {
+    if (!enabled || disposed) return;
+    if (!active) {
+      if (document.activeElement === focusSink) editor.view.focus();
+      return;
+    }
+    if (pointerSelecting || document.activeElement !== root) return;
+    if (fromPointer) takeDomSelection();
+    focusSink.focus({ preventScroll: true });
+    mirrorSelection();
+  };
+  // QA: TSFの状態とDOMフォーカスの対応（active なら sink、そうでなければ sink 以外）。
+  (root as HTMLElement & { nativeImeFocusState?: () => unknown }).nativeImeFocusState = () => ({
+    enabled, active, pointerSelecting,
+    focus: document.activeElement === root ? "editor" : document.activeElement === focusSink ? "sink" : "other",
+  });
+  const mirrorSelection = () => {
+    if (!domFocusReleased()) return;
+    const dom = document.getSelection();
+    if (!dom) return;
+    const { anchor, head, empty } = editor.state.selection;
+    if (empty) {
+      // キャレットは試験用の層が描く。残った範囲選択の色だけ消す。
+      if (dom.rangeCount && !dom.isCollapsed && root.contains(dom.anchorNode)) dom.removeAllRanges();
+      return;
+    }
+    const a = editor.view.domAtPos(anchor, 1), h = editor.view.domAtPos(head, -1);
+    if (dom.anchorNode === a.node && dom.anchorOffset === a.offset && dom.focusNode === h.node && dom.focusOffset === h.offset) return;
+    dom.setBaseAndExtent(a.node, a.offset, h.node, h.offset);
+  };
   const setActive = (value: boolean) => {
     active = value;
     root.classList.toggle("nativeImeActive", value);
     caret.hidden = !value || !editor.state.selection.empty;
     renderStatus();
+    queueMicrotask(() => reconcileFocus());
   };
 
   editor.registerPlugin(new Plugin<DecorationSet>({
@@ -130,6 +193,10 @@ export function installNativeImeExperiment(editor: Editor, shell: HTMLElement, c
     session = crypto.randomUUID(); serial = 0;
     pendingFocus = false; focusRequested = false;
     active = false; caret.hidden = true; root.classList.remove("nativeImeActive");
+    // 解除の要求（IPC）を待つ前に、同じ同期処理の中で本文へフォーカスを返す。要求が
+    // 失敗・遅延しても、受け皿にフォーカスが残ってキーが吸われることはない。
+    // Windows のフォーカスが WebView に戻った時点で、本文が標準入力を受ける。
+    if (!disposed && document.activeElement === focusSink) editor.view.focus();
     if (!disposed) clearComposition();
     await command("native_ime_release", { session: endingSession });
   };
@@ -154,7 +221,11 @@ export function installNativeImeExperiment(editor: Editor, shell: HTMLElement, c
     const p = paragraph();
     if (!p) {
       status.textContent = "複数段落選択：標準入力";
-      if (active || focusRequested) await release();
+      // 解除で本文へフォーカスが戻り、本文の focus がTSFの再接続を予約する。
+      // 選択が1段落に戻ると再接続され、active になった時点で受け皿へ移る。
+      if (active || focusRequested) {
+        try { await release(); } catch (error) { if (!disposed) fail(error); }
+      }
       return;
     }
     if (!active && !pendingFocus && !focusRequested) return;
@@ -206,6 +277,8 @@ export function installNativeImeExperiment(editor: Editor, shell: HTMLElement, c
       epoch++;
       if (composing) { void release().then(() => schedule(true)).catch(fail); return; }
     }
+    if (tr.selectionSet || tr.docChanged) mirrorSelection();
+    queueMicrotask(() => reconcileFocus());
     schedule();
   };
   const insert = (value: string) => {
@@ -338,7 +411,22 @@ export function installNativeImeExperiment(editor: Editor, shell: HTMLElement, c
   const pointerUp = (event: PointerEvent) => {
     if (enabled && root.contains(event.target as Node)) schedule(true);
   };
-  const focus = () => { if (enabled) schedule(true); };
+  // クリック・ドラッグ中は本文がフォーカスを持ったまま選択を作る。PM が mouseup で
+  // 選択を確定した後（PM の mouseup は document、こちらは window で後に走る）に外す。
+  const pointerDown = (event: PointerEvent) => {
+    if (enabled && event.button === 0 && root.contains(event.target as Node)) pointerSelecting = true;
+  };
+  const mouseUp = () => {
+    if (!pointerSelecting) return;
+    pointerSelecting = false;
+    queueMicrotask(() => reconcileFocus(true));
+  };
+  // view.focus()・見出しジャンプなどで本文へ戻ったフォーカスは、そのタスクで PM が
+  // 選択を書き終えた直後に外す。
+  const focus = () => { if (enabled) { schedule(true); queueMicrotask(() => reconcileFocus()); } };
+  // ウィンドウへ戻ったとき Windows のフォーカスが WebView 側へ戻ると、TSF は切れた
+  // まま本文が標準入力で受ける（全文走査あり）。TSF の子ウィンドウを要求し直す。
+  const windowFocus = () => { if (enabled && !active) schedule(true); };
   const layout = () => schedule();
   const observer = new ResizeObserver(layout); observer.observe(root);
   const modeObserver = new MutationObserver(layout);
@@ -348,6 +436,8 @@ export function installNativeImeExperiment(editor: Editor, shell: HTMLElement, c
   const turnImeOn = () => { void command("native_ime_control", { session, action: "open" }).catch(fail); };
   openIme.addEventListener("click", turnImeOn);
   root.addEventListener("focus", focus); root.addEventListener("pointerup", pointerUp);
+  root.addEventListener("pointerdown", pointerDown, { capture: true }); window.addEventListener("mouseup", mouseUp);
+  window.addEventListener("focus", windowFocus);
   scroller.addEventListener("scroll", layout, { passive: true });
   window.addEventListener("resize", layout); document.fonts?.addEventListener("loadingdone", layout);
   editor.on("transaction", transaction);
@@ -356,12 +446,14 @@ export function installNativeImeExperiment(editor: Editor, shell: HTMLElement, c
     if (frame) cancelAnimationFrame(frame);
     unlisten?.(); observer.disconnect(); modeObserver.disconnect();
     toggle.removeEventListener("click", toggleMode); root.removeEventListener("focus", focus); root.removeEventListener("pointerup", pointerUp);
+    root.removeEventListener("pointerdown", pointerDown, { capture: true }); window.removeEventListener("mouseup", mouseUp);
+    window.removeEventListener("focus", windowFocus);
     openIme.removeEventListener("click", turnImeOn);
     inspectButton.removeEventListener("click", inspect);
     delete (root as HTMLElement & { nativeImeDiagnostics?: () => Promise<unknown> }).nativeImeDiagnostics;
     scroller.removeEventListener("scroll", layout); window.removeEventListener("resize", layout);
     document.fonts?.removeEventListener("loadingdone", layout); editor.off("transaction", transaction);
-    root.classList.remove("nativeImeActive"); panel.remove(); caret.remove();
+    root.classList.remove("nativeImeActive"); panel.remove(); caret.remove(); focusSink.remove();
     void command("native_ime_release", { session }).catch(console.error);
     editor.unregisterPlugin(compositionKey);
   };

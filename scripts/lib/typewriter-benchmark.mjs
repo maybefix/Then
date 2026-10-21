@@ -47,10 +47,16 @@ function installProbe() {
         root.dispatchEvent(event);
         if (!event.defaultPrevented) throw new Error("Enter keymap did not handle the input");
       }
-      else if (scenario === "native" || scenario === "native-focused") {
+      else if (scenario.startsWith("native")) {
         // TSF経路の再現：本文にフォーカスを置かずPMへ直接挿入し、次のフレームで
         // nativeIme.ts の sync() と同じ現在段落の文字ごとの矩形計測を行う。
         if (scenario === "native" && document.activeElement === root) root.blur();
+        // native-sink：本文の外の編集不可の要素へDOMフォーカスを置く（TSF入力中の想定）。
+        if (scenario === "native-sink") {
+          let sink = document.getElementById("benchFocusSink");
+          if (!sink) { sink = Object.assign(document.createElement("div"), { id: "benchFocusSink", tabIndex: -1 }); document.body.append(sink); }
+          if (document.activeElement !== sink) sink.focus({ preventScroll: true });
+        }
         const t0 = performance.now();
         view.dispatch(view.state.tr.insertText("あ"));
         const dispatchMs = performance.now() - t0;
@@ -175,7 +181,7 @@ function installProbe() {
 }
 
 export async function runTypewriterBenchmark({ page, evaluate, samples, scenario, interval = 100 }) {
-  assert.ok(["typing", "selection", "ime", "native", "native-focused"].includes(scenario));
+  assert.ok(["typing", "selection", "ime", "native", "native-focused", "native-sink"].includes(scenario));
   await evaluate(`(${installProbe})()`);
   await evaluate(`window.__typewriterProbe.interval = ${Number(interval)}; 1`);
   const compositionText = "日本語の変換を確定する。";

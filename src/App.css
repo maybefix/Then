@@ -15449,4 +15449,15 @@ html:not([data-window-fullscreen="true"])
   animation: nativeImeBlink 1s step-end infinite;
 }
 .nativeImeCaret[hidden] { display: none; }
+/* TSF入力中に本文の代わりにDOMフォーカスを置く要素。見えず、場所も取らない。 */
+.nativeImeFocusSink {
+  position: fixed;
+  inset: 0 auto auto 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  outline: none;
+  pointer-events: none;
+}
 @keyframes nativeImeBlink { 50% { opacity: 0; } }
