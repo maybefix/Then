@@ -13,6 +13,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync } from "node:fs";
+import { stopBrowser } from "./lib/stop-browser.mjs";
 import { readFile } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
@@ -57,9 +58,10 @@ const edgePath = process.env.EDGE_PATH ?? [
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
 ].find((candidate) => existsSync(candidate));
 if (!edgePath) throw new Error("Edge or Chrome was not found; set EDGE_PATH.");
+const profileDir = mkdtempSync(path.join(os.tmpdir(), "then-ms-qa-"));
 const debugPort = 9800 + Math.floor(Math.random() * 150);
 const browser = spawn(edgePath, [
-  "--headless=new", `--remote-debugging-port=${debugPort}`, `--user-data-dir=${mkdtempSync(path.join(os.tmpdir(), "then-ms-qa-"))}`,
+  "--headless=new", `--remote-debugging-port=${debugPort}`, `--user-data-dir=${profileDir}`,
   "--no-first-run", "--disable-extensions", "--disable-background-timer-throttling",
   "--disable-renderer-backgrounding", "--disable-backgrounding-occluded-windows", "about:blank",
 ], { stdio: "ignore" });
@@ -168,6 +170,7 @@ try {
       mode: getComputedStyle(root).writingMode,
       display: document.querySelector(".verticalTypewriterShell").dataset.editorDisplay,
       lines: __ms.laidOutLines(), status: __ms.status(), checks, boundaries, offGrid: __ms.offGrid(),
+      hangHtml: root.children[49]?.outerHTML.slice(-600),
       grid: getComputedStyle(root).backgroundImage !== "none",
       sheetGrid: document.querySelector(".pagedEditorSheet") ? getComputedStyle(document.querySelector(".pagedEditorSheet")).backgroundImage !== "none" : null,
       sheets: document.querySelectorAll(".pagedEditorSheet").length,
@@ -224,7 +227,7 @@ try {
     assert.equal(c[46].lines, 2, "ルビの行が太らない（2行ちょうど）");
     assert.equal(c[48].lines, 1, "句読点が20字目なら1行に収まる");
     assert.equal(c[48].first, "あいうえおかきくけこさしすせそたちつて。");
-    assert.equal(c[49].first, "あいうえおかきくけこさしすせそたちつ「て」", "21字目の閉じ括弧は欄外へぶら下げる");
+    assert.equal(c[49].first, "あいうえおかきくけこさしすせそたちつ「て」", `21字目の閉じ括弧は欄外へぶら下げる ${report.hangHtml}`);
     assert.equal(c[50].first, "あいうえおかきくけこさしすせそたちつて", "開き括弧を行末に残さない");
     assert.equal(c[55].first, "あいうえおかきくけこさしすせそたちつてと。", "21字目の句点は欄外へぶら下げる");
     assert.equal(c[56].first, "あいうえおかきくけこさしすせそたちつてと。」", "続く約物はまとめてぶら下げる");
@@ -482,6 +485,8 @@ try {
   console.error(error);
   process.exitCode = 1;
 } finally {
-  browser.kill();
   server.close();
+  await stopBrowser(browser, profileDir);
+  // 失敗時は CDP の接続が残ってイベントループが終わらないので、明示的に終える。
+  process.exit(process.exitCode ?? 0);
 }

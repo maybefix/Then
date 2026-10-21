@@ -17,7 +17,8 @@
 //   settled  input → first frame after both counts updated
 // --profile adds a CPU profile summarised by entry point and self time.
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
+import { stopBrowser } from "./lib/stop-browser.mjs";
 import { readFile, writeFile } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
@@ -530,12 +531,41 @@ try {
       traceConfig: { includedCategories: ["devtools.timeline", "disabled-by-default-devtools.timeline", "disabled-by-default-devtools.timeline.invalidationTracking", "blink", "v8.execute"] },
     });
   }
+  // Which paragraphs the editor re-renders per keystroke (elements removed
+  // under each top-level paragraph), to tell a window shift from the edited
+  // paragraph being rebuilt.
+  if (flag("count-redraws")) await evaluate(`(() => {
+    const root = document.querySelector(".ProseMirror");
+    const stats = window.__redraws = { removed: 0, paragraphs: new Map(), classes: new Map() };
+    new MutationObserver((records) => {
+      for (const record of records) {
+        let p = record.target; while (p && p.parentElement !== root) p = p.parentElement;
+        const index = p ? Array.prototype.indexOf.call(root.children, p) : -1;
+        for (const node of record.removedNodes) {
+          if (node.nodeType !== 1) continue;
+          const count = 1 + node.querySelectorAll("*").length;
+          stats.removed += count;
+          const key = node.parentElement === null && record.target === root ? "paragraph" : index;
+          stats.paragraphs.set(key, (stats.paragraphs.get(key) ?? 0) + count);
+          for (const el of [node, ...node.querySelectorAll("*")]) stats.classes.set(el.className || el.nodeName, (stats.classes.get(el.className || el.nodeName) ?? 0) + 1);
+        }
+      }
+    }).observe(root, { childList: true, subtree: true });
+    return true;
+  })()`);
   const before = await metrics();
   if (flag("profile") && flag("typewriter")) await page.send("Profiler.start");
   const summary = flag("typewriter")
     ? await runTypewriterBenchmark({ page, evaluate, samples: SAMPLES, scenario: option("scenario", "typing"), interval: Number(option("input-interval", 100)) })
     : await evaluate("window.__benchType()");
   const after = await metrics();
+  if (flag("count-redraws")) {
+    console.log("-- redraws per keystroke --\n" + await evaluate(`(() => {
+      const s = window.__redraws, n = ${SAMPLES};
+      const top = (map) => [...map].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => k + ":" + (v / n).toFixed(1)).join("  ");
+      return "removed elements " + (s.removed / n).toFixed(1) + "\\nby paragraph " + top(s.paragraphs) + "\\nparagraphs touched " + s.paragraphs.size + "\\nby class " + top(s.classes);
+    })()`));
+  }
   if (flag("profile") && flag("typewriter")) {
     const { profile } = await page.send("Profiler.stop");
     if (option("profile-file", null)) await writeFile(option("profile-file"), JSON.stringify(profile));
@@ -675,9 +705,7 @@ try {
   console.error(error);
   exitCode = 1;
 } finally {
-  browser.kill();
   server.close();
-  await sleep(500);
-  try { rmSync(profileDir, { recursive: true, force: true }); } catch {}
+  await stopBrowser(browser, profileDir);
 }
 process.exit(exitCode);
