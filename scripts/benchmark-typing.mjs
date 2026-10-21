@@ -319,6 +319,7 @@ async function pageBenchmark({ chars, samples, warmup, at, project }) {
 
 let exitCode = 0;
 let summary_manuscriptSettleMs = null;
+let summary_nativeTsf = null;
 try {
   await json(`http://127.0.0.1:${debugPort}/json/version`);
   let target;
@@ -528,7 +529,7 @@ try {
       if (message.method === "Tracing.tracingComplete") traceDone?.();
     };
     await page.send("Tracing.start", {
-      traceConfig: { includedCategories: ["devtools.timeline", "disabled-by-default-devtools.timeline", "disabled-by-default-devtools.timeline.invalidationTracking", "blink", "v8.execute"] },
+      traceConfig: { includedCategories: ["renderer", "input", "devtools.timeline", "disabled-by-default-devtools.timeline", "disabled-by-default-devtools.timeline.invalidationTracking", "blink", "v8.execute"] },
     });
   }
   // Which paragraphs the editor re-renders per keystroke (elements removed
@@ -553,6 +554,30 @@ try {
     }).observe(root, { childList: true, subtree: true });
     return true;
   })()`);
+  // A body edit must not remount unchanged sidebar headings just because their
+  // source line numbers moved. Include duplicate heading titles in fixtures.
+  if (flag("verify-outline-reuse")) await evaluate(`(() => {
+    const nodes = [...document.querySelectorAll('.outlineTreeItem')];
+    if (!nodes.length) throw new Error('Outline reuse check needs a project with visible headings');
+    window.__benchOutlineNodes = nodes.map(node => ({ node, title: node.querySelector('.outlineItemTitle')?.textContent }));
+    return true;
+  })()`);
+  // 限定版EXEでTSF入力へ切り替え、Windowsの入力フォーカスを実際に子ウィンドウへ移す。
+  if (flag("native-tsf")) {
+    summary_nativeTsf = await evaluate(`(async () => {
+      const toggle = [...document.querySelectorAll('button')].find(b => b.textContent.startsWith('入力：'));
+      if (!toggle) throw new Error('TSF toggle is missing (needs the limited build)');
+      if (toggle.getAttribute('aria-pressed') !== 'true') toggle.click();
+      for (let i = 0; i < 50 && !document.querySelector('.ProseMirror.nativeImeActive'); i++) await new Promise(r => setTimeout(r, 100));
+      const root = document.querySelector('.ProseMirror');
+      // 入力中に本文rootのclass/styleが何に変わったか（行数キャッシュを捨てる条件）を記録する。
+      window.__benchRootChanges = [];
+      new MutationObserver(records => { for (const r of records) window.__benchRootChanges.push(r.attributeName + ': ' + r.oldValue + ' -> ' + root.getAttribute(r.attributeName)); })
+        .observe(root, { attributes: true, attributeOldValue: true, attributeFilter: ['class', 'style'] });
+      window.__benchProbeBefore = root.__manuscriptProbeQA?.();
+      return { active: Boolean(document.querySelector('.ProseMirror.nativeImeActive')), domFocus: document.activeElement?.classList.contains('ProseMirror') ?? false, hasFocus: document.hasFocus() };
+    })()`);
+  }
   const before = await metrics();
   if (flag("profile") && flag("typewriter")) await page.send("Profiler.start");
   const summary = flag("typewriter")
@@ -606,6 +631,7 @@ try {
   // Elements inside the editor: full-document decorations (line numbers,
   // manuscript mode) multiply them, and per-frame paint work grows with them.
   if (summary_manuscriptSettleMs !== null) summary.manuscriptSettleMs = summary_manuscriptSettleMs;
+  if (summary_nativeTsf) summary.nativeTsf = { ...summary_nativeTsf, ...await evaluate(`({ probeBefore: window.__benchProbeBefore, probeAfter: document.querySelector(".ProseMirror").__manuscriptProbeQA?.(), rootChanges: window.__benchRootChanges.slice(0, 12), rootChangeCount: window.__benchRootChanges.length })`) };
   summary.editorElements = await evaluate("document.querySelector('.ProseMirror').getElementsByTagName('*').length");
   if (flag("manuscript")) summary.manuscriptStatus = await evaluate("document.querySelector('.statusManuscript')?.getAttribute('title') ?? null");
   if (flag("element-classes")) summary.editorElementClasses = await evaluate(`(() => {
@@ -618,6 +644,14 @@ try {
   })()`);
   if (flag("verify-overlays")) summary.overlayChecks = await validateTypewriterOverlays({ page, evaluate });
   if (flag("verify-controls")) summary.manualChecks = await validateTypewriterManualControls({ evaluate });
+  if (flag("verify-outline-reuse")) {
+    summary.outlineReuse = await evaluate(`(() => {
+      const saved = window.__benchOutlineNodes;
+      const retained = saved.filter(({ node, title }) => node.isConnected && node.querySelector('.outlineItemTitle')?.textContent === title).length;
+      if (retained !== saved.length) throw new Error('Unchanged headings remounted: '+(saved.length-retained));
+      return { checked: saved.length, retained };
+    })()`);
+  }
   if (flag("scroll")) {
     // Scroll through the manuscript a viewport at a time and record frame gaps.
     summary.scroll = await evaluate(`(async () => {

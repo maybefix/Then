@@ -3020,6 +3020,13 @@ html:not([data-window-fullscreen="true"])
   writing-mode: horizontal-tb;
 }
 
+.visibleLineNumberContent {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+
 .visibleLineNumber {
   position: absolute;
   color: var(--text-faint);
@@ -15416,3 +15423,30 @@ html:not([data-window-fullscreen="true"])
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+.nativeImeExperiment {
+  position: absolute;
+  z-index: 30;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border: 1px solid var(--border-subtle, #aaa);
+  border-radius: 6px;
+  background: var(--bg-panel, #fff);
+  color: var(--text-primary, #222);
+  font: 12px/1.4 sans-serif;
+  writing-mode: horizontal-tb;
+}
+.nativeImeExperiment button { font: inherit; cursor: pointer; }
+.nativeImeComposition { text-decoration: underline; text-underline-offset: 0.15em; }
+.nativeImeCaret {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  background: currentColor;
+  animation: nativeImeBlink 1s step-end infinite;
+}
+.nativeImeCaret[hidden] { display: none; }
+@keyframes nativeImeBlink { 50% { opacity: 0; } }

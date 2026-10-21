@@ -13,6 +13,8 @@ mod export_front_matter;
 mod intermediate_draft;
 mod library;
 mod markdown_image;
+mod native_ime;
+mod native_clipboard;
 mod project_state;
 mod save_journal;
 mod single_instance;
@@ -597,6 +599,9 @@ pub fn run() {
                 let app_handle = app.handle().clone();
                 let window_for_events = main_window.clone();
                 main_window.on_window_event(move |event| {
+                    if matches!(event, tauri::WindowEvent::Moved(_) | tauri::WindowEvent::ScaleFactorChanged { .. }) {
+                        native_ime::notify_layout(&window_for_events);
+                    }
                     if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
                         save_journal::close_all();
                         let _ = save_main_window_state(&app_handle, &window_for_events);
@@ -607,6 +612,11 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            native_ime::native_ime_sync,
+            native_ime::native_ime_release,
+            native_ime::native_ime_control,
+            native_clipboard::native_clipboard_read,
+            native_clipboard::native_clipboard_write,
             deprecated_content_purge_failure,
             retry_deprecated_content_purge,
             inspect_workspace_folder,

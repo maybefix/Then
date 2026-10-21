@@ -1,7 +1,9 @@
 import { Editor, Extension, type JSONContent } from "@tiptap/core";
 import { findTextChange, mapTextOffsetThroughChange } from "./editor/textOffsetMapping";
 import { createTypewriterScroller } from "./editor/typewriterScroller";
+import { installNativeImeExperiment } from "./editor/nativeIme";
 import { syncOverlayElements } from "./editor/overlayElements";
+import { scrollOverlayTranslation, type ScrollOverlaySnapshot } from "./editor/scrollOverlay";
 import { VisualLineIndex } from "./editor/visualLineIndex";
 import { ParagraphFlow } from "./editor/paragraphFlow";
 import {
@@ -1218,7 +1220,9 @@ function buildManuscriptProbeParagraph(
 
 // Classes ProseMirror toggles for focus/selection display, and the inline
 // declarations that only place the paged root on the current page.
-const ROOT_DISPLAY_CLASSES = new Set(["ProseMirror-focused", "ProseMirror-hideselection"]);
+// nativeImeActive はTSF入力の接続中の印で、フォーカスの出入りのたびに付け外しされる。
+// 組版の変化として扱うと、原稿用紙では全段落の行数を測り直す（10万字で約1,500段落）。
+const ROOT_DISPLAY_CLASSES = new Set(["ProseMirror-focused", "ProseMirror-hideselection", "nativeImeActive"]);
 const ROOT_POSITION_PROPERTIES = new Set(["--paged-root-top", "--paged-root-right", "--paged-root-left"]);
 
 /** Whether a class/style change on the editor root can change how paragraphs are laid out. */
@@ -2781,6 +2785,7 @@ export function VerticalTextEditor({
   const editorHostRef = useRef<HTMLDivElement | null>(null);
   const lineBreakLayerRef = useRef<HTMLDivElement | null>(null);
   const visualLineLayerRef = useRef<HTMLDivElement | null>(null);
+  const visualLineContentRef = useRef<HTMLDivElement | null>(null);
   const tiptapRef = useRef<Editor | null>(null);
   const textRef = useRef(text);
   // マウント時に一度だけ参照する復元位置。以後プロップが変化しても再適用しない。
@@ -3028,13 +3033,17 @@ export function VerticalTextEditor({
     if (host.scrollTop !== 0) host.scrollTop = 0;
     if (host.scrollLeft !== 0) host.scrollLeft = 0;
 
-    // 本文は版面の外へも伸びているので、描画は版面で切る。ブロック方向の
-    // 終端は、このページが実際に占める分だけにする。
+    // 本文は版面の外へも伸びているので、ブロック方向はこのページが実際に
+    // 占める分だけに切る。原稿用紙の行末では閉じ括弧・句読点が欄外へ
+    // ぶら下がるので、インライン終端だけは用紙の余白まで描く。前後ページを
+    // 隠す切り抜きと行頭側は変えず、本文・キャレットの位置も動かさない。
+    const inlineEndClip = manuscriptSettings.layoutMode === "manuscript"
+      ? 0 : verticalWriting ? paddingY : paddingX;
     host.style.setProperty(
       "--paged-clip",
       verticalWriting
-        ? `inset(${paddingY}px ${paddingX}px ${paddingY}px ${width - paddingX - visibleExtent}px)`
-        : `inset(${paddingY}px ${paddingX}px ${height - paddingY - visibleExtent}px ${paddingX}px)`,
+        ? `inset(${paddingY}px ${paddingX}px ${inlineEndClip}px ${width - paddingX - visibleExtent}px)`
+        : `inset(${paddingY}px ${inlineEndClip}px ${height - paddingY - visibleExtent}px ${paddingX}px)`,
     );
 
     // 表示するページを出す。transform ではなくレイアウト上の位置で動かす。
@@ -3874,7 +3883,7 @@ export function VerticalTextEditor({
       version: number; revision: number; width: number; height: number;
       rect: { left: number; right: number; top: number; bottom: number };
     }>();
-    let visualLayoutCache: {
+    type VisualLayoutCache = {
       doc: PMNode;
       decorations: DecorationSet | undefined;
       mode: WritingMode;
@@ -3883,6 +3892,16 @@ export function VerticalTextEditor({
       /** 段落の矩形（この layout の座標系）。読んだ段落だけが入る疎な配列。 */
       blockRects: Array<VisualRect | undefined>;
       flowGeneration?: number;
+    };
+    let visualLayoutCache: VisualLayoutCache | null = null;
+    let visualOverlayCache: {
+      layout: VisualLayoutCache;
+      selection: EditorState["selection"];
+      settings: string;
+      parentLeft: number;
+      parentTop: number;
+      pixelRatio: number;
+      snapshot: ScrollOverlaySnapshot;
     } | null = null;
     const candidateViewport = initialViewportRef.current;
     const validatedInitialViewport =
@@ -3918,7 +3937,8 @@ export function VerticalTextEditor({
       cancelFrame: (frame) => cancelAnimationFrame(frame),
       now: () => performance.now(),
       enabled: () => typewriterScrollRef.current && Boolean(tiptapRef.current) &&
-        !pointerDraggingRef.current && !isEditorComposing(tiptapRef.current, composingRef),
+        !pointerDraggingRef.current && (!isEditorComposing(tiptapRef.current, composingRef) ||
+          Boolean(tiptapRef.current?.view.dom.classList.contains("nativeImeActive"))),
       pixelSize: () => 1 / (window.devicePixelRatio || 1),
       read: () => scrollAxis(writingModeRef.current).get(scroller),
       write: (value) => scrollAxis(writingModeRef.current).set(scroller, value),
@@ -4213,7 +4233,8 @@ export function VerticalTextEditor({
     const requestCenterCaret = (instant: boolean, eventType: string) => {
       const editor = tiptapRef.current;
       if (initialAdjustmentAllowed && initialViewportToRestore) return;
-      if (!typewriterScrollRef.current || !editor || isEditorComposing(editor, composingRef)) return;
+      if (!typewriterScrollRef.current || !editor ||
+        (isEditorComposing(editor, composingRef) && !editor.view.dom.classList.contains("nativeImeActive"))) return;
 
       centerInstant = centerInstant || instant;
       centerWaitFrames = Math.max(centerWaitFrames, centerDelayFrames(eventType));
@@ -4299,8 +4320,9 @@ export function VerticalTextEditor({
       visualLineQueued = false;
       visualLineFrame = null;
       const layer = visualLineLayerRef.current;
+      const content = visualLineContentRef.current;
       const currentEditor = tiptapRef.current;
-      if (!layer) return;
+      if (!layer || !content) return;
 
       const manuscriptSettings = manuscriptRef.current;
       const manuscriptOn = manuscriptSettings.layoutMode === "manuscript";
@@ -4315,9 +4337,11 @@ export function VerticalTextEditor({
       if (layerUpdate === "preserve") return;
 
       if (layerUpdate === "clear" || !currentEditor) {
-        if (layer.childNodes.length) layer.replaceChildren();
+        if (content.childNodes.length) content.replaceChildren();
         if (boundaryLayer?.childNodes.length) boundaryLayer.replaceChildren();
         visualLayoutCache = null;
+        visualOverlayCache = null;
+        content.style.transform = "";
         return;
       }
 
@@ -4331,6 +4355,26 @@ export function VerticalTextEditor({
       const decorations = astKey.getState(currentEditor.state)?.decoSet;
       const activeBlockIndex = activeLineIndex(currentEditor.state);
       let layout = visualLayoutCache;
+      const pixelRatio = window.devicePixelRatio || 1;
+      const overlaySettings = `${showLineNumbersRef.current}|${highlightCurrentLineRef.current}|${manuscriptOn}|${manuscriptSettings.linesPerPage}|${manuscriptSettings.showPageBoundaries}|${manuscriptCountGenerationRef.current}`;
+      if (!pagedLayout && layout && visualOverlayCache?.layout === layout &&
+        visualOverlayCache.selection === currentEditor.state.selection &&
+        visualOverlayCache.settings === overlaySettings &&
+        visualOverlayCache.parentLeft === (layerParentRect?.left ?? 0) &&
+        visualOverlayCache.parentTop === (layerParentRect?.top ?? 0) &&
+        visualOverlayCache.pixelRatio === pixelRatio &&
+        layout.doc === currentEditor.state.doc && layout.decorations === decorations &&
+        layout.mode === mode && layout.revision === visualLayoutRevision && layout.flowGeneration === flow?.generation) {
+        const translation = scrollOverlayTranslation(visualOverlayCache.snapshot, rootRect, scrollerRect, pixelRatio);
+        if (translation) {
+          // Text and labels have not changed. Move their existing painted layer
+          // together instead of rewriting every label and measuring the caret
+          // on each frame of typewriter/manual scrolling.
+          const transform = `translate(${translation.x}px, ${translation.y}px)`;
+          if (content.style.transform !== transform) content.style.transform = transform;
+          return;
+        }
+      }
       if (!layout || layout.doc !== currentEditor.state.doc ||
         layout.decorations !== decorations || layout.mode !== mode ||
         layout.revision !== visualLayoutRevision ||
@@ -4395,6 +4439,17 @@ export function VerticalTextEditor({
         left: scrollerRect.left - dx, right: scrollerRect.right - dx,
         top: scrollerRect.top - dy, bottom: scrollerRect.bottom - dy,
       };
+      const vertical = !isHorizontalWriting(mode);
+      const overscan = pagedLayout ? 0 : Math.min(
+        vertical ? scrollerRect.width : scrollerRect.height,
+        Math.max(64, lineHeightPx(currentEditor.view.dom) * 2),
+      );
+      const coverage = {
+        left: scrollerRect.left - (vertical ? overscan : 0), right: scrollerRect.right + (vertical ? overscan : 0),
+        top: scrollerRect.top - (vertical ? 0 : overscan), bottom: scrollerRect.bottom + (vertical ? 0 : overscan),
+      };
+      const bandViewport = { left: coverage.left - dx, right: coverage.right - dx,
+        top: coverage.top - dy, bottom: coverage.bottom - dy };
       // Rects read now are in today's coordinates; store them in the layout's.
       const rectAt = (index: number): VisualRect | undefined => {
         const cached = blockRects[index];
@@ -4419,17 +4474,17 @@ export function VerticalTextEditor({
       };
       // Paragraphs are stacked in the block direction, so the ones near the
       // viewport are found by binary search instead of reading every rect.
-      // The window is widened by a viewport on each side for line bands that
-      // overflow their paragraph (ruby, overhanging punctuation).
-      const vertical = !isHorizontalWriting(mode);
+      // Keep a few extra lines prepared for scrolling and glyph overhang.
+      // Paged layouts retain their wider search for fragmented/overflowing bands.
       const blockSpan = vertical ? viewport.right - viewport.left : viewport.bottom - viewport.top;
+      const lookupOverscan = pagedLayout ? blockSpan : overscan;
       const near = (rect: VisualRect) => vertical
-        ? rect.right >= viewport.left - blockSpan && rect.left <= viewport.right + blockSpan
-        : rect.bottom >= viewport.top - blockSpan && rect.top <= viewport.bottom + blockSpan;
+        ? rect.right >= viewport.left - lookupOverscan && rect.left <= viewport.right + lookupOverscan
+        : rect.bottom >= viewport.top - lookupOverscan && rect.top <= viewport.bottom + lookupOverscan;
       // Has the paragraph's block end not yet reached the window's start?
       const before = (rect: VisualRect) => vertical
-        ? rect.left > viewport.right + blockSpan
-        : rect.bottom < viewport.top - blockSpan;
+        ? rect.left > viewport.right + lookupOverscan
+        : rect.bottom < viewport.top - lookupOverscan;
       const hidden = (rect: VisualRect) => rect.right - rect.left === 0 && rect.bottom - rect.top === 0;
       const count = visualIndexElements.length;
       let low = 0;
@@ -4455,7 +4510,7 @@ export function VerticalTextEditor({
         if (!rect) break;
         if (hidden(rect)) continue;
         if (!near(rect)) break;
-        if ((needsActiveBand && i === activeBlockIndex) || visualLineIndex.intersects(i, rect, viewport)) {
+        if ((needsActiveBand && i === activeBlockIndex) || visualLineIndex.intersects(i, rect, bandViewport)) {
           pushBands(i);
           if (i === activeBlockIndex) activeIncluded = true;
         }
@@ -4587,10 +4642,10 @@ export function VerticalTextEditor({
       if (showLineNumbersRef.current) {
         for (const band of bands) {
           if (
-            band.right + dx < scrollerRect.left ||
-            band.left + dx > scrollerRect.right ||
-            band.bottom + dy < scrollerRect.top ||
-            band.top + dy > scrollerRect.bottom
+            band.right + dx < coverage.left ||
+            band.left + dx > coverage.right ||
+            band.bottom + dy < coverage.top ||
+            band.top + dy > coverage.bottom
           ) {
             continue;
           }
@@ -4626,8 +4681,22 @@ export function VerticalTextEditor({
       layer.style.width = `${snapScrollValue(scrollerRect.width)}px`;
       layer.style.height = `${snapScrollValue(scrollerRect.height)}px`;
       clipLayerToTextBlock(layer, scrollerRect);
-      syncOverlayElements(layer, fragment);
+      content.style.transform = "";
+      syncOverlayElements(content, fragment);
       if (boundaryLayer) syncOverlayElements(boundaryLayer, boundaryFragment);
+      visualOverlayCache = pagedLayout || overscan < 48 ? null : {
+        layout, selection: currentEditor.state.selection, settings: overlaySettings,
+        parentLeft: layerParentRect?.left ?? 0, parentTop: layerParentRect?.top ?? 0,
+        pixelRatio,
+        // Retain half the overscan as a guard for label/glyph overhang at the
+        // edge. Rebuild before the viewport can reach the prepared labels' end.
+        snapshot: { root: rootRect, viewport: scrollerRect, coverage: {
+          left: scrollerRect.left - (vertical ? overscan / 2 : 0),
+          right: scrollerRect.right + (vertical ? overscan / 2 : 0),
+          top: scrollerRect.top - (vertical ? 0 : overscan / 2),
+          bottom: scrollerRect.bottom + (vertical ? 0 : overscan / 2),
+        } },
+      };
     };
 
     // 隠し要素は本文の外（シェル直下）に置き、本文と同じ CSS が当たるよう
@@ -5442,9 +5511,18 @@ export function VerticalTextEditor({
       requestLineBreakMarks();
     });
 
+    const uninstallNativeIme = installNativeImeExperiment(editor, shellRef.current!, {
+      start: handleCompositionStart,
+      update: () => {
+        requestPagedSelectionAfterReflow(editor);
+        requestCenterCaret(false, "native-composition");
+      },
+      end: handleCompositionEnd,
+    });
     onReady(handle);
 
     return () => {
+      uninstallNativeIme();
       scroller.removeEventListener("wheel", handleWheel);
       scroller.removeEventListener("mousedown", handleMouseDown);
       editor.view.dom.removeEventListener("pointerdown", handlePointerDown, { capture: true });
@@ -5510,7 +5588,10 @@ export function VerticalTextEditor({
       if (applyManuscriptLatinRef.current === applyManuscriptLatin) applyManuscriptLatinRef.current = null;
       latinMetricsRef.current?.dispose();
       latinMetricsRef.current = null;
-      if (visualLineLayerRef.current) visualLineLayerRef.current.textContent = "";
+      if (visualLineContentRef.current) {
+        visualLineContentRef.current.textContent = "";
+        visualLineContentRef.current.style.transform = "";
+      }
       editor.destroy();
       if (tiptapRef.current === editor) tiptapRef.current = null;
       onReady(null);
@@ -5585,7 +5666,9 @@ export function VerticalTextEditor({
         ref={visualLineLayerRef}
         className="visibleLineNumberLayer"
         aria-hidden="true"
-      />
+      >
+        <div ref={visualLineContentRef} className="visibleLineNumberContent" />
+      </div>
       <div ref={lineBreakLayerRef} className="visibleLineBreakLayer" aria-hidden="true" />
       <ImageHoverPreview hostRef={editorHostRef} documentPath={documentPath} />
       {editorDisplayMode === "continuous" && typewriterScroll && showTypewriterGuide && (

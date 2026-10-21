@@ -47,6 +47,7 @@ import {
   type BreadcrumbLayout,
 } from "./utils/breadcrumbLayout";
 import { VerticalTextEditor, type TextEditorHandle } from "./VerticalTextEditor";
+import { createManuscriptProgressStore } from "./editor/manuscriptProgressStore";
 import { AppDialogModal } from "./components/dialogs/AppDialogModal";
 import { CommandPalette, type PaletteCommand } from "./components/dialogs/CommandPalette";
 import { PluginManagerModal } from "./components/dialogs/PluginManagerModal";
@@ -213,7 +214,6 @@ import type {
   DeleteProjectEntryResult,
   DocumentTab,
   EditorSettings,
-  ManuscriptProgress,
   FileProgressStatus,
   FlatOutlineItem,
   FontOption,
@@ -3182,8 +3182,7 @@ export default function App() {
     current: number;
     total: number;
   } | null>(null);
-  const [editorManuscriptProgress, setEditorManuscriptProgress] =
-    useState<ManuscriptProgress | null>(null);
+  const [editorManuscriptProgress] = useState(createManuscriptProgressStore);
   const [editorContextMenu, setEditorContextMenu] =
     useState<EditorContextMenuState | null>(null);
   const [notationModal, setNotationModal] = useState<NotationModalState | null>(null);
@@ -5042,16 +5041,18 @@ export default function App() {
     setCollapsedWorkspaceFolderPaths(collapsed);
   }, [projectFolder]);
 
-  useEffect(() => {
-    if (!projectFolder || !currentFilePath) return;
-    if (!findProjectEntry(projectFolder.children, currentFilePath)) return;
-
-    setProjectAst((current) =>
-      current && current.rootPath === projectFolder.path
-        ? upsertProjectAstDocumentAst(current, activeDocumentAst)
-        : current,
-    );
-  }, [activeDocumentAst, currentFilePath, projectFolder]);
+  // Synchronize this component's derived state before its children commit.
+  // An effect committed stale project counts first, then updated them in a
+  // second commit. That extra layout also invalidated Chromium's text-input
+  // cache for the long focused manuscript. AST identity makes this converge
+  // after one retry; indexing and other-file updates still use setProjectAst.
+  if (
+    projectFolder && currentFilePath && projectAst?.rootPath === projectFolder.path &&
+    findProjectEntry(projectFolder.children, currentFilePath) &&
+    projectAst.files.find((file) => file.path === currentFilePath)?.documentAst !== activeDocumentAst
+  ) {
+    setProjectAst(upsertProjectAstDocumentAst(projectAst, activeDocumentAst));
+  }
 
   useEffect(() => {
     if (!isHydrated || !isTauriRuntime() || !projectFolder) return;
@@ -13995,7 +13996,7 @@ export default function App() {
                               settings.manuscript.fontSize,
                             ].join("|")}
                             manuscript={settings.manuscript}
-                            onManuscriptProgressChange={setEditorManuscriptProgress}
+                            onManuscriptProgressChange={editorManuscriptProgress.setSnapshot}
                             initialSelectionOffset={initialSelectionOffset}
                             initialViewportState={activeTab?.viewportState ?? null}
                             onViewportSizeChange={handleEditorViewportSizeChange}

@@ -402,6 +402,12 @@ try {
     let truthTotal = 0; for (const n of truth.values()) truthTotal += n;
     await __ms.sleep(500);
     const visitTotals = [...new Set(totals)];
+    // TSF入力の接続中の印（nativeImeActive）はフォーカスの出入りで付け外しされる。
+    // 組版は変わらないので、行数のキャッシュを捨てて全段落を測り直してはいけない。
+    const probeBeforeToggle = root.__manuscriptProbeQA();
+    for (const on of [true, false, true, false]) { root.classList.toggle("nativeImeActive", on); await __ms.frames(3); }
+    await __ms.sleep(300);
+    const probeAfterToggle = root.__manuscriptProbeQA();
     // ページ表示：用紙数は最終的な行数から割り付け、未訪問のページがあっても変わらない。
     await __ms.setSelect("編集表示", "paged");
     await __ms.sleep(1500);
@@ -413,7 +419,7 @@ try {
     await __ms.setSelect("編集表示", "continuous");
     await __ms.sleep(800);
     return { corrected, seen: [...seen], truthTotal, covered: truth.size, paragraphs: root.childElementCount, decoratedElements,
-      visitTotals, afterScroll: total(), sheetCounts };
+      visitTotals, afterScroll: total(), sheetCounts, probeBeforeToggle, probeAfterToggle };
   })()`);
   check("枚数補正：装飾窓の外の記法段落も整形後の行数で数える", () => {
     assert.equal(probeCheck.covered, probeCheck.paragraphs, "正解側で全段落を測れていない");
@@ -422,6 +428,11 @@ try {
     assert.deepEqual(probeCheck.seen, [probeCheck.corrected], `枚数が途中の値を経て変わった: ${probeCheck.seen}`);
     assert.deepEqual(probeCheck.visitTotals, [probeCheck.corrected], `キャレット・装飾窓の移動で枚数が変わった: ${probeCheck.visitTotals}`);
     assert.equal(probeCheck.afterScroll, probeCheck.corrected, "装飾窓を動かすと枚数が変わる");
+  });
+  check("TSF入力の切り替えで行数を測り直さない", () => {
+    const { probeBeforeToggle: before, probeAfterToggle: after } = probeCheck;
+    assert.equal(after.resets, before.resets, `行数キャッシュが捨てられた: ${JSON.stringify({ before, after })}`);
+    assert.equal(after.paragraphs, before.paragraphs, `隠し要素で測り直した: ${JSON.stringify({ before, after })}`);
   });
   check("ページ表示：用紙数は未訪問ページの有無で変わらない", () => {
     const expected = Math.ceil(probeCheck.corrected / 20);
@@ -490,6 +501,55 @@ try {
     assertLayout(report, 40, 30, "縦 paged 40×30");
     assert.equal(report.sheets, Math.ceil(report.lines / 30));
   });
+
+  // A Range can report a glyph outside its ancestor's clip even though none of
+  // its ink is painted. Check the page clip as well as the typeset positions.
+  for (const mode of ["vertical-rl", "horizontal-tb"]) {
+    const hangingClip = await evaluate(`(async () => {
+      await __ms.setNumber("1行の字数", 20);
+      await __ms.setNumber("1ページの行数", 20);
+      await __ms.setSelect("本文方向", ${JSON.stringify(mode)});
+      const ed = __ms.pm().editor;
+      const lines = ["あ".repeat(20) + "」", "「" + "い".repeat(19) + "」", "う".repeat(20) + "。」』",
+        ...Array.from({ length: 20 }, () => "え".repeat(20))];
+      ed.commands.setContent({ type: "doc", content: lines.map(text => ({
+        type: "paragraph", content: [{ type: "text", text }],
+      })) });
+      ed.commands.setTextSelection(1);
+      await __ms.sleep(1000); await __ms.frames(4);
+      const root = __ms.pm(), host = root.parentElement, hostRect = host.getBoundingClientRect();
+      const inset = getComputedStyle(host).clipPath.match(/inset\\(([^)]+)\\)/)[1].split(" ").map(parseFloat);
+      const top = inset[0], right = inset[1] ?? top, bottom = inset[2] ?? top, left = inset[3] ?? right;
+      const clip = { top: hostRect.top + top, right: hostRect.right - right,
+        bottom: hostRect.bottom - bottom, left: hostRect.left + left };
+      const rects = [];
+      const range = document.createRange();
+      for (const p of [...root.children].slice(0, 3)) {
+        const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+        let node;
+        while (node = walker.nextNode()) for (let i = 0; i < node.length; i++) {
+          if (!"。」』".includes(node.data[i])) continue;
+          range.setStart(node, i); range.setEnd(node, i + 1);
+          rects.push(...[...range.getClientRects()].map(r => ({
+            top: r.top, right: r.right, bottom: r.bottom, left: r.left,
+          })));
+        }
+      }
+      const next = root.children[20].getBoundingClientRect();
+      return { clip, rects, next: { top: next.top, right: next.right },
+        textMatches: ed.state.doc.textBetween(0, ed.state.doc.content.size, "\\n") === lines.join("\\n") };
+    })()`);
+    check(`${mode} ページ表示でぶら下げ括弧を切らず、次ページは隠す`, () => {
+      assert.equal(hangingClip.textMatches, true);
+      assert.ok(hangingClip.rects.length >= 5);
+      for (const rect of hangingClip.rects) {
+        if (mode === "vertical-rl") assert.ok(rect.bottom <= hangingClip.clip.bottom + 0.5, JSON.stringify(hangingClip));
+        else assert.ok(rect.right <= hangingClip.clip.right + 0.5, JSON.stringify(hangingClip));
+      }
+      if (mode === "vertical-rl") assert.ok(hangingClip.next.right <= hangingClip.clip.left + 0.5);
+      else assert.ok(hangingClip.next.top >= hangingClip.clip.bottom - 0.5);
+    });
+  }
 
   assert.deepEqual(pageErrors, [], `page errors:\n${pageErrors.join("\n")}`);
   for (const name of passed) console.log(`ok - ${name}`);
