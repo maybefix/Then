@@ -3796,7 +3796,8 @@ export function VerticalTextEditor({
     // キーは段落の種類と本文、測ったときのレイアウト条件で無効にする。
     const manuscriptProbeCounts = new Map<string, number>();
     let manuscriptProbeCondition = "";
-    const manuscriptProbeQueue = new Map<string, number>();
+    // 同じ本文の段落はいくつあっても1回測り、待っている段落すべてに入れる。
+    const manuscriptProbeQueue = new Map<string, Set<number>>();
     let manuscriptProbeHandle: number | null = null;
     let manuscriptProbeHost: HTMLElement | null = null;
     const manuscriptProbeKey = (line: LineNode) => `${line.kind}|${line.source}`;
@@ -3826,7 +3827,11 @@ export function VerticalTextEditor({
       }
       const cached = manuscriptProbeCounts.get(key);
       if (cached !== undefined) visualLineIndex.setCount(index, cached);
-      else manuscriptProbeQueue.set(key, index);
+      else {
+        const waiting = manuscriptProbeQueue.get(key);
+        if (waiting) waiting.add(index);
+        else manuscriptProbeQueue.set(key, new Set([index]));
+      }
     };
     manuscriptFinalCountRef.current = (index: number) => {
       if (manuscriptRef.current.layoutMode !== "manuscript") return undefined;
@@ -4656,18 +4661,21 @@ export function VerticalTextEditor({
       const root = manuscriptProbeRoot();
       if (!ast || !root) return;
       const { doc } = editor.state;
-      const batch: Array<{ key: string; index: number; paragraph: HTMLParagraphElement }> = [];
+      const batch: Array<{ key: string; indices: number[]; paragraph: HTMLParagraphElement }> = [];
       const started = performance.now();
       // 未計測の欧文ランは1回のレイアウトでまとめて測る。
       if (ast.latin) {
-        const ranges = [...manuscriptProbeQueue.values()].map((index) => ({ from: index, to: index + 1 }));
+        const ranges = [...manuscriptProbeQueue.values()].flatMap((indices) => [...indices].map((index) => ({ from: index, to: index + 1 })));
         prepareManuscriptLatin(ast.lines, ranges, ast.latin);
       }
-      for (const [key, index] of manuscriptProbeQueue) {
+      for (const [key, waiting] of manuscriptProbeQueue) {
         manuscriptProbeQueue.delete(key);
-        const line = ast.lines[index];
-        if (index >= doc.childCount || !line || manuscriptProbeKey(line) !== key) continue;
-        batch.push({ key, index, paragraph: buildManuscriptProbeParagraph(ast.lines, index, doc.child(index), ast.latin) });
+        const indices = [...waiting].filter((index) => {
+          const line = ast.lines[index];
+          return index < doc.childCount && line !== undefined && manuscriptProbeKey(line) === key;
+        });
+        if (!indices.length) continue;
+        batch.push({ key, indices, paragraph: buildManuscriptProbeParagraph(ast.lines, indices[0], doc.child(indices[0]), ast.latin) });
         if (batch.length >= 200 || (deadline ? deadline.timeRemaining() < 2 : performance.now() - started > 6)) break;
       }
       if (!batch.length) return;
@@ -4687,10 +4695,12 @@ export function VerticalTextEditor({
       const children = editor.view.dom.children;
       batch.forEach((item, i) => {
         manuscriptProbeCounts.set(item.key, counts[i]);
-        const element = children[item.index];
-        const state = element ? manuscriptParagraphState(element) : null;
-        if ((state === "raw" || state === "active") && visualIndexElements[item.index] === element) {
-          visualLineIndex.setCount(item.index, counts[i]);
+        for (const index of item.indices) {
+          const element = children[index];
+          const state = element ? manuscriptParagraphState(element) : null;
+          if ((state === "raw" || state === "active") && visualIndexElements[index] === element) {
+            visualLineIndex.setCount(index, counts[i]);
+          }
         }
       });
       manuscriptCountGenerationRef.current += 1;
