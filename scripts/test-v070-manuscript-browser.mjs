@@ -25,6 +25,10 @@ const option = (name, fallback) => {
   return index >= 0 ? args[index + 1] : fallback;
 };
 const flag = (name) => args.includes(`--${name}`);
+// 利用者の環境に合わせて組む：--editor-font "BIZ UD明朝 Medium" --manuscript-font-size 24
+const EDITOR_FONT = option("editor-font", null);
+const MANUSCRIPT_FONT_SIZE = option("manuscript-font-size", null) === null ? null : Number(option("manuscript-font-size", null));
+// 利用者の環境に合わせて組む：--editor-font "BIZ UD明朝 Medium" --manuscript-font-size 24
 
 let dist = option("dist", null);
 if (!dist) {
@@ -131,7 +135,9 @@ try {
     localStorage.clear();
     localStorage.setItem("then.app-state.v1", JSON.stringify({ settings: {
       writingMode: "vertical-rl", editorDisplayMode: "continuous", typewriterScroll: true,
-      manuscript: { layoutMode: "manuscript", charactersPerLine: 20, linesPerPage: 20, showGrid: true, showPageBoundaries: true },
+      manuscript: { layoutMode: "manuscript", charactersPerLine: 20, linesPerPage: 20, showGrid: true, showPageBoundaries: true,
+        ...(${MANUSCRIPT_FONT_SIZE ?? "null"} === null ? {} : { fontSize: ${MANUSCRIPT_FONT_SIZE ?? "null"} }) },
+      ...(${JSON.stringify(EDITOR_FONT)} === null ? {} : { editorFontFamily: ${JSON.stringify(JSON.stringify(EDITOR_FONT ?? ""))} }),
     } }));
     location.reload();
     return 1;
@@ -202,6 +208,8 @@ try {
   const assertLayout = (report, chars, linesPerPage, label) => {
     assert.deepEqual(report.offGrid, [], `${label}: 行が太って以降の行が升目からずれる段落がある`);
     const misaligned = Object.entries(report.checks).filter(([, c]) => c.misaligned.length);
+    const gaps = Object.entries(report.checks).filter(([, c]) => c.gaps.length).map(([index, c]) => `${index}: ${c.gaps.join(" ")}`);
+    assert.deepEqual(gaps, [], `${label}: 字の間に1セルを超える空きがある`);
     assert.deepEqual(misaligned, [], `${label}: 通常和文がセルの基準位置からずれている`);
     assert.ok(Math.abs(report.pInline - (chars * report.fontSize + 1)) < 0.5, `${label}: 版面の字詰めが ${chars}字×1ic でない (${report.pInline})`);
     const full = Math.floor(report.lines / linesPerPage);
@@ -213,7 +221,7 @@ try {
   check("縦書き continuous 20×20", () => {
     assert.equal(report.mode, "vertical-rl");
     assert.equal(report.display, "continuous");
-    assert.equal(report.fontSize, 21, "原稿用紙の文字サイズ（未設定なら通常の15px＋6）で組む");
+    assert.equal(report.fontSize, MANUSCRIPT_FONT_SIZE ?? 21, "原稿用紙の文字サイズ（未設定なら通常の15px＋6）で組む");
     assertLayout(report, 20, 20, "縦 20×20");
     assert.ok(report.grid, "罫線がない");
     const c = report.checks;

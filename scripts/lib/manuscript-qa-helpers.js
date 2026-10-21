@@ -89,6 +89,14 @@
       misaligned: chars
         .filter((c) => /[぀-ヿ一-鿿]/.test(c.ch) && Math.abs(c.offset / ic - Math.round(c.offset / ic)) > 0.05)
         .map((c) => `${c.ch}@${c.offset.toFixed(2)}`),
+      // 同じ行で、前の字から1セルより大きく空いて始まる字（約物の後ろに空白が
+      // 残るなど）。セルの境目に揃っていても1セル丸ごと空けば misaligned には出ない。
+      gaps: chars
+        .filter((c, i) => i > 0 && chars[i - 1].line === c.line && c.offset - chars[i - 1].offset > 1.5 * ic)
+        .map((c) => {
+          const i = chars.indexOf(c);
+          return `${chars[i - 1].ch}${c.ch}@${((c.offset - chars[i - 1].offset) / ic).toFixed(2)}ic`;
+        }),
     };
   };
 

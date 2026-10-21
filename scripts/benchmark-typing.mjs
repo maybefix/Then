@@ -409,7 +409,7 @@ try {
         if(input.checked!==checked)input.click();
         await new Promise(resolve=>setTimeout(resolve,50));
       }
-      for(const [text,value] of [['本文方向',${JSON.stringify(option("writing-mode","vertical-rl"))}],['編集表示','continuous']]){
+      for(const [text,value] of [['本文方向',${JSON.stringify(option("writing-mode","vertical-rl"))}],['編集表示','continuous'],...(${flag("manuscript")}?[['原稿用紙','manuscript']]:[])]){
         const select=[...document.querySelectorAll('.settingsModal label')].find(l=>l.textContent.includes(text)&&l.querySelector('select'))?.querySelector('select');
         if(!select)throw new Error('Native QA select missing: '+text);
         select.value=value;select.dispatchEvent(new Event('change',{bubbles:true}));
