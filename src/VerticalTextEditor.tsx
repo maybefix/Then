@@ -1116,10 +1116,11 @@ function pushLayoutOnlyLineDecos(
     const markupRanges = listMarker ? [...inlineMarkupRanges(line), listMarker] : inlineMarkupRanges(line);
     pushBreakableTokenDecos(out, contentStart, findBreakableTokens(line.source, markupRanges));
   }
-  if (latin) {
-    pushManuscriptLatinDecos(out, line, contentStart, latin, false);
-    pushManuscriptHangingDecos(out, line, contentStart, false);
-  }
+  // 約物のぶら下げは付けない。句読点ごとに要素が増え、10万字では変換中の
+  // 1回の更新が倍（約50ms→100ms）に重くなった。原稿用紙の行数はこの段落を
+  // 未整形（raw）として隠し要素の最終的な姿（ぶら下げ込み）で数えるので、
+  // 窓の外の組みが1行ずれても枚数・行番号は変わらない。
+  if (latin) pushManuscriptLatinDecos(out, line, contentStart, latin, false);
   if (line.marker) {
     out.push(Decoration.inline(contentStart, contentStart + line.marker.length, { class: "mk-hidden" }));
   }

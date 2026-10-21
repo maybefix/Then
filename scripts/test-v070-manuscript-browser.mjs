@@ -135,6 +135,8 @@ try {
     localStorage.clear();
     localStorage.setItem("then.app-state.v1", JSON.stringify({ settings: {
       writingMode: "vertical-rl", editorDisplayMode: "continuous", typewriterScroll: true,
+      // --line-numbers：窓の外の段落にも割り付け用の装飾が付く（全文装飾）。
+      showLineNumbers: ${flag("line-numbers")},
       manuscript: { layoutMode: "manuscript", charactersPerLine: 20, linesPerPage: 20, showGrid: true, showPageBoundaries: true,
         ...(${MANUSCRIPT_FONT_SIZE ?? "null"} === null ? {} : { fontSize: ${MANUSCRIPT_FONT_SIZE ?? "null"} }) },
       ...(${JSON.stringify(EDITOR_FONT)} === null ? {} : { editorFontFamily: ${JSON.stringify(JSON.stringify(EDITOR_FONT ?? ""))} }),
@@ -410,7 +412,7 @@ try {
   })()`);
   check("枚数補正：装飾窓の外の記法段落も整形後の行数で数える", () => {
     assert.equal(probeCheck.covered, probeCheck.paragraphs, "正解側で全段落を測れていない");
-    assert.ok(probeCheck.decoratedElements < probeCheck.paragraphs, "原稿用紙だけで全文装飾になっている");
+    if (!flag("line-numbers")) assert.ok(probeCheck.decoratedElements < probeCheck.paragraphs, "原稿用紙だけで全文装飾になっている");
     assert.equal(probeCheck.corrected, probeCheck.truthTotal, `補正後の行数 ${probeCheck.corrected} と実測 ${probeCheck.truthTotal} が違う`);
     assert.deepEqual(probeCheck.seen, [probeCheck.corrected], `枚数が途中の値を経て変わった: ${probeCheck.seen}`);
     assert.deepEqual(probeCheck.visitTotals, [probeCheck.corrected], `キャレット・装飾窓の移動で枚数が変わった: ${probeCheck.visitTotals}`);
