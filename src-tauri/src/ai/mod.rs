@@ -14,4 +14,5 @@
 
 pub mod conversation;
 pub mod fixture;
+pub mod markdown;
 pub mod prompt;

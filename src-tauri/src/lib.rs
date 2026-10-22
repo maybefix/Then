@@ -11,6 +11,7 @@ mod ai;
 mod atomic_file;
 mod checkpoint_store;
 mod export_front_matter;
+mod external_url;
 mod intermediate_draft;
 mod library;
 mod markdown_image;
@@ -613,6 +614,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            external_url::open_external_url,
             native_ime::native_ime_sync,
             native_ime::native_ime_release,
             native_ime::native_ime_control,
