@@ -55,6 +55,7 @@ import { SettingsModal } from "./components/dialogs/SettingsModal";
 import { ThemePickerModal } from "./components/dialogs/ThemePickerModal";
 import { ManuscriptTidyModal } from "./components/dialogs/ManuscriptTidyModal";
 import { RightPaneSwitcher, type RightPaneSwitcherItem } from "./components/layout/RightPaneSwitcher";
+import { AiPane } from "./components/ai/AiPane";
 import type { ManuscriptTidyLineRange, ManuscriptTidyResult } from "./editor/manuscriptTidy";
 import { normalizeAppTheme } from "./themes";
 import { PropertiesPanel } from "./components/properties/PropertiesPanel";
@@ -875,6 +876,16 @@ const rightSidebarBuiltinTabs: Array<{ id: string; label: string; icon: ReactNod
       <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
         <path d="M8 3h9l3 3v13H8Z" />
         <path d="M4 7v15h12M11 8h6M11 12h6M11 16h4" />
+      </svg>
+    ),
+  },
+  {
+    id: "ai",
+    label: "AI",
+    icon: (
+      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+        <path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5h-7l-4.5 3.5v-3.5H5A1.5 1.5 0 0 1 3.5 15V7A1.5 1.5 0 0 1 5 5.5Z" />
+        <path d="M12 8.2v4.6M9.7 10.5h4.6" />
       </svg>
     ),
   },
@@ -14459,6 +14470,21 @@ export default function App() {
                           disabledChecks: checkIds,
                         })
                       }
+                    />
+                  ) : rightSidebarTab === "ai" ? (
+                    <AiPane
+                      rootPath={projectFolder?.path ?? null}
+                      threads={snippets}
+                      onReferenceSaved={(threadId, file) => {
+                        setReferenceCandidates((current) =>
+                          mergeReferenceFiles([file], current).sort((left, right) =>
+                            left.sourcePath.localeCompare(right.sourcePath),
+                          ),
+                        );
+                        addReferencesToIdeaThread(threadId, [file]);
+                        showToast(`「${file.name}」を資料に保存しました`);
+                      }}
+                      onOpenReference={(file) => openReferenceCard(file.sourcePath, file, { switchToReferenceTab: false })}
                     />
                   ) : rightSidebarTab === "plot" ? (
                     <PlotPane

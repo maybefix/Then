@@ -14,6 +14,7 @@
 //! | `[fixture:no-search]` | web research asked for, no search ran |
 //! | `[fixture:search-failed]` | `SendError::SearchFailed` |
 //! | `[fixture:unsafe]` | an answer with a script link and a remote image |
+//! | `[fixture:slow]` | the answer comes after 3 seconds, to try stopping |
 
 use super::conversation::{check, Answer, Citation, Ending, Mode, Request, SendError, Usage};
 
@@ -25,6 +26,9 @@ fn has(request: &Request, marker: &str) -> bool {
 
 pub fn send(request: &Request) -> Result<Answer, SendError> {
     check(request)?;
+    if has(request, "slow") {
+        std::thread::sleep(std::time::Duration::from_secs(3));
+    }
     for (marker, error) in [
         ("auth", SendError::Auth),
         ("rate", SendError::RateLimited),

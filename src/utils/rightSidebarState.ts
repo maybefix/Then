@@ -1,4 +1,4 @@
-export const restorableRightSidebarTabs = ["idea", "plot", "proof", "draft", "properties"] as const;
+export const restorableRightSidebarTabs = ["idea", "plot", "proof", "draft", "ai", "properties"] as const;
 
 export type RestorableRightSidebarTab = (typeof restorableRightSidebarTabs)[number];
 

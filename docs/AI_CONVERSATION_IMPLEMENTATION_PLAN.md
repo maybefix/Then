@@ -2,7 +2,7 @@
 
 作成日: 2026-10-16（バインダーのAI調査として作成）  
 改訂日: 2026-10-22（右ペインの会話画面へ方針変更）  
-状態: 実装前の設計・作業手順。本文の新規機能は未実装。  
+状態: 工程0〜2を実装済み（`feat/ai-conversation`）。実際の接続先は未接続で、開発版とQA用ビルド（`THEN_AI_FIXTURE=1`）では固定応答の接続先だけを使える。  
 対象: Windows版Then  
 課題管理: [AI調査課題表](https://claude.ai/artifact/23k1n9c8PYxRt63r9SiEDG)（以下、`AI-nn` は同表の課題番号）
 
@@ -128,7 +128,7 @@ AIへ渡す指示文（日本語で答える、出典の示し方、Thenが表�
 | --- | --- | --- |
 | 会話の一覧 | `<project>/.then/ai/index.json` | 会話ID、名前、更新日時、接続先、モデル |
 | 会話の往復 | `<project>/.then/ai/conversations/<会話ID>.json` | 会話ごとに1ファイル。往復の追記で他の会話を書き換えない |
-| 資料に保存した回答 | `<project>/.then/references/imports/ai-<会話ID>-<往復ID>.md` | 既存の資料列挙・表示・編集の対象にする |
+| 資料に保存した回答 | `<project>/.then/references/imports/AI_<会話の名前>_<番号>.md` | 既存の資料列挙・表示・編集の対象にする。資料カードの見出しに出るため、IDではなく会話の名前を使う。同じ名前があれば番号を足す |
 | 資料の所属と順序 | 既存の `.then/references/layout.json` | 既存の参照追加・保存経路を使う |
 | 接続先・モデル・既定モード | 端末ローカルのアプリ設定 | キーを含めない |
 | APIキー | Windows資格情報マネージャー | 作品・アプリ設定JSON・localStorageへ保存しない |

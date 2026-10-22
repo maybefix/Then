@@ -8,11 +8,13 @@
 //! `fixture` answers without a network or a key, so the rest can be built and
 //! tested before any real provider is wired in.
 
-// Commands come with the conversation pane (step 2 of the plan); until then
-// the limits and the prompt version have no caller, tests included.
+// The output and search limits and the instruction text wait for the first
+// real provider (step 4 of the plan).
 #![allow(dead_code)]
 
+pub mod commands;
 pub mod conversation;
 pub mod fixture;
 pub mod markdown;
 pub mod prompt;
+pub mod store;

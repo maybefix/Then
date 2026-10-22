@@ -1,0 +1,61 @@
+.aiPane {
+  display: flex; width: 100%; min-width: 0; height: 100%; min-height: 0; flex: 1 1 auto;
+  flex-direction: column; gap: 10px; padding: 12px 14px 14px; overflow: hidden;
+  color: var(--text-primary); font-size: 12px;
+}
+.aiPane button, .aiPane select, .aiPane input {
+  min-width: 0; height: 30px; border: 0.5px solid var(--border-subtle); border-radius: 6px;
+  background: var(--bg-panel-strong); color: var(--text-primary); font: inherit;
+}
+.aiPane button { flex: 0 0 auto; padding: 0 10px; cursor: pointer; white-space: nowrap; transition: background-color 120ms ease, border-color 120ms ease; }
+.aiPane button:hover:not(:disabled) { border-color: var(--border-strong, var(--border-subtle)); background: var(--bg-hover, var(--bg-tertiary)); }
+.aiPane button:disabled { cursor: default; opacity: 0.38; }
+.aiPane button:focus-visible, .aiPane select:focus-visible, .aiPane input:focus-visible, .aiPane textarea:focus-visible {
+  outline: none; border-color: var(--accent-border, var(--accent)); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.aiPane select { padding: 0 24px 0 8px; }
+.aiPane input { padding: 0 8px; }
+
+.aiConversationBar, .aiRenameForm, .aiTurnActions, .aiComposerActions { display: flex; align-items: center; gap: 6px; }
+.aiConversationBar select, .aiRenameForm input { flex: 1 1 auto; width: 80px; }
+.aiPane .aiDanger { border-color: color-mix(in srgb, var(--danger, #c0392b) 45%, transparent); color: var(--danger, #c0392b); }
+
+.aiTurns {
+  min-height: 0; flex: 1 1 auto; margin: 0; padding: 0 2px; overflow: auto;
+  overscroll-behavior: contain; list-style: none;
+}
+.aiTurn { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.aiQuestion {
+  align-self: flex-end; max-width: 92%; padding: 8px 10px; border-radius: 10px;
+  background: color-mix(in srgb, var(--accent-soft) 70%, var(--bg-panel)); line-height: 1.65;
+  overflow-wrap: anywhere; white-space: pre-wrap;
+}
+.aiAnswer {
+  padding: 8px 10px; border: 0.5px solid var(--border-subtle); border-radius: 10px;
+  background: var(--bg-secondary, var(--bg-panel)); line-height: 1.7; overflow-wrap: anywhere;
+}
+.aiAnswer .referenceMarkdown { font-size: 12px; }
+.aiCitations { margin: 8px 0 0; padding: 6px 0 0 18px; border-top: 0.5px solid var(--border-subtle); font-size: 11px; }
+.aiCitations .referenceMarkdown p { margin: 0; }
+.aiStatus { margin: 0; color: var(--text-secondary); font-size: 11px; }
+.aiStatus.aiFailed { color: var(--danger, #c0392b); }
+.aiTurnActions:empty { display: none; }
+.aiTurnActions select { flex: 1 1 auto; width: 80px; }
+
+.aiError {
+  display: flex; align-items: center; gap: 8px; margin: 0; padding: 6px 8px; border-radius: 6px;
+  background: color-mix(in srgb, var(--danger, #c0392b) 10%, var(--bg-panel)); color: var(--danger, #c0392b); font-size: 11px;
+}
+.aiError span, .aiError { overflow-wrap: anywhere; }
+.aiPane .aiError button { height: 24px; margin-left: auto; }
+
+.aiComposer { display: flex; flex-direction: column; gap: 6px; }
+.aiComposer textarea {
+  width: 100%; min-height: 72px; max-height: 40vh; padding: 8px 10px; resize: vertical;
+  border: 0.5px solid var(--border-subtle); border-radius: 8px; background: var(--bg-panel-strong);
+  color: var(--text-primary); font: inherit; line-height: 1.6;
+}
+.aiComposerActions select { flex: 1 1 auto; width: 80px; }
+.aiPane .aiPrimary { min-width: 64px; border: 0; background: var(--accent); color: var(--on-accent, #fff); font-weight: 650; }
+.aiPane .aiPrimary:hover:not(:disabled) { border-color: transparent; background: var(--accent-strong); }
+.aiEmpty { margin: 0; padding: 10px 2px; color: var(--text-secondary); font-size: 11px; }

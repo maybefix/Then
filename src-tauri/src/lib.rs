@@ -615,6 +615,14 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             external_url::open_external_url,
+            ai::commands::ai_providers,
+            ai::commands::ai_list_conversations,
+            ai::commands::ai_load_conversation,
+            ai::commands::ai_rename_conversation,
+            ai::commands::ai_delete_conversation,
+            ai::commands::ai_stop_turn,
+            ai::commands::ai_send,
+            ai::commands::ai_save_answer_as_reference,
             native_ime::native_ime_sync,
             native_ime::native_ime_release,
             native_ime::native_ime_control,
