@@ -56,6 +56,7 @@ import { ThemePickerModal } from "./components/dialogs/ThemePickerModal";
 import { ManuscriptTidyModal } from "./components/dialogs/ManuscriptTidyModal";
 import { RightPaneSwitcher, type RightPaneSwitcherItem } from "./components/layout/RightPaneSwitcher";
 import { AiPane } from "./components/ai/AiPane";
+import { DEFAULT_AI_SETTINGS, normalizeAiSettings } from "./ai/settings";
 import type { ManuscriptTidyLineRange, ManuscriptTidyResult } from "./editor/manuscriptTidy";
 import { normalizeAppTheme } from "./themes";
 import { PropertiesPanel } from "./components/properties/PropertiesPanel";
@@ -1204,6 +1205,7 @@ const defaultSettings: EditorSettings = {
   canvasOpensInWindow: false,
   exportOpensInWindow: false,
   proofread: { ...DEFAULT_PROOFREAD_OPTIONS, disabledRules: [] },
+  ai: DEFAULT_AI_SETTINGS,
 };
 
 const fallbackFontFamilies = [
@@ -2653,6 +2655,7 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
           ? settings.exportOpensInWindow
           : defaultSettings.exportOpensInWindow,
       proofread: normalizeProofreadSettings(settings.proofread),
+      ai: normalizeAiSettings(settings.ai),
     },
     rightSidebarTab: normalizeRightSidebarTab(value?.rightSidebarTab),
     lastWorkspacePath:
@@ -14474,6 +14477,7 @@ export default function App() {
                   ) : rightSidebarTab === "ai" ? (
                     <AiPane
                       rootPath={projectFolder?.path ?? null}
+                      settings={settings.ai}
                       threads={snippets}
                       onReferenceSaved={(threadId, file) => {
                         setReferenceCandidates((current) =>

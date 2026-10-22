@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReferenceFileInfo } from "../types";
+import { AI_PROVIDERS_CHANGED, type AiSettings } from "./settings";
 import type { AiConversation, AiConversationSummary, AiMode, AiProviderInfo, AiTurn } from "./types";
 
 /**
@@ -9,7 +10,7 @@ import type { AiConversation, AiConversationSummary, AiMode, AiProviderInfo, AiT
  * work changes the generation moves on, a send in flight is stopped, and any
  * reply that arrives for the earlier work is not applied (AI-16).
  */
-export function useAiConversations(rootPath: string | null) {
+export function useAiConversations(rootPath: string | null, settings: AiSettings) {
   const [providers, setProviders] = useState<AiProviderInfo[]>([]);
   const [summaries, setSummaries] = useState<AiConversationSummary[]>([]);
   const [conversation, setConversation] = useState<AiConversation | null>(null);
@@ -29,8 +30,16 @@ export function useAiConversations(rootPath: string | null) {
   }, []);
 
   useEffect(() => {
-    invoke<AiProviderInfo[]>("ai_providers").then(setProviders, (reason) => setError(String(reason)));
+    const load = () =>
+      invoke<AiProviderInfo[]>("ai_providers").then(setProviders, (reason) => setError(String(reason)));
+    void load();
+    window.addEventListener(AI_PROVIDERS_CHANGED, load);
+    return () => window.removeEventListener(AI_PROVIDERS_CHANGED, load);
   }, []);
+
+  const ready = providers.filter((item) => item.available);
+  /** What a new conversation starts with: the chosen provider if it is ready, else the first ready one. */
+  const defaultProvider = ready.find((item) => item.id === settings.provider) ?? ready[0] ?? null;
 
   useEffect(() => {
     const previous = current.current;
@@ -91,14 +100,20 @@ export function useAiConversations(rootPath: string | null) {
     async (input: string, mode: AiMode): Promise<boolean> => {
       const root = current.current.rootPath;
       if (!root || current.current.sendingTurnId) return false;
+      // A conversation keeps its provider; if its key was removed, the send
+      // is kept as a failed turn that can be resent once the key is back.
       const provider = conversation
         ? providers.find((item) => item.id === conversation.provider)
-        : providers[0];
+        : defaultProvider;
       if (!provider) {
         setError("使える接続先がありません");
         return false;
       }
-      const model = conversation?.model ?? provider.models[0];
+      const model = conversation?.model ?? (settings.models[provider.id] || provider.models[0]);
+      if (!model) {
+        setError("モデルが設定されていません");
+        return false;
+      }
       const conversationId = conversation?.id ?? crypto.randomUUID();
       const turnId = crypto.randomUUID();
       const gen = generation.current;
@@ -132,7 +147,7 @@ export function useAiConversations(rootPath: string | null) {
       }
       return true;
     },
-    [conversation, providers, refreshList],
+    [conversation, defaultProvider, providers, refreshList, settings.models],
   );
 
   const stop = useCallback(() => {
@@ -200,6 +215,7 @@ export function useAiConversations(rootPath: string | null) {
 
   return {
     providers,
+    defaultProvider,
     summaries,
     conversation,
     sendingTurnId,

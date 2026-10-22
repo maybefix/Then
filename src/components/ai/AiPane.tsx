@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { sendErrorMessage, type AiMode, type AiTurn } from "../../ai/types";
 import { useAiConversations } from "../../ai/useAiConversations";
+import type { AiSettings } from "../../ai/settings";
 import type { IdeaThread, ReferenceFileInfo } from "../../types";
 import { MarkdownLite } from "../markdown/MarkdownLite";
 import "./aiPane.css";
 
 type AiPaneProps = {
   rootPath: string | null;
+  settings: AiSettings;
   threads: IdeaThread[];
   /** The answer was saved as a reference file; add it to `threadId`. */
   onReferenceSaved: (threadId: string, file: ReferenceFileInfo) => void;
@@ -15,10 +17,10 @@ type AiPaneProps = {
 
 const threadLabel = (thread: IdeaThread) => thread.title || (thread.kind === "inbox" ? "インボックス" : "無題のスレッド");
 
-export function AiPane({ rootPath, threads, onReferenceSaved, onOpenReference }: AiPaneProps) {
-  const ai = useAiConversations(rootPath);
+export function AiPane({ rootPath, settings, threads, onReferenceSaved, onOpenReference }: AiPaneProps) {
+  const ai = useAiConversations(rootPath, settings);
   const [draft, setDraft] = useState("");
-  const [mode, setMode] = useState<AiMode>("consult");
+  const [mode, setMode] = useState<AiMode>(settings.defaultMode);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [savingTurnId, setSavingTurnId] = useState<string | null>(null);
@@ -26,8 +28,9 @@ export function AiPane({ rootPath, threads, onReferenceSaved, onOpenReference }:
   const turnsRef = useRef<HTMLOListElement>(null);
 
   const conversation = ai.conversation;
-  const providerId = conversation?.provider ?? ai.providers[0]?.id;
-  const provider = ai.providers.find((item) => item.id === providerId);
+  const provider = conversation
+    ? ai.providers.find((item) => item.id === conversation.provider)
+    : ai.defaultProvider ?? undefined;
   const canResearch = Boolean(provider?.webResearch);
   const sending = ai.sendingTurnId !== null;
   const lastTurn = conversation?.turns[conversation.turns.length - 1];

@@ -2,7 +2,7 @@
 
 作成日: 2026-10-16（バインダーのAI調査として作成）  
 改訂日: 2026-10-22（右ペインの会話画面へ方針変更）  
-状態: 工程0〜2を実装済み（`feat/ai-conversation`）。実際の接続先は未接続で、開発版とQA用ビルド（`THEN_AI_FIXTURE=1`）では固定応答の接続先だけを使える。  
+状態: 工程0〜3を実装済み（`feat/ai-conversation`）。実際の接続先は未接続で、開発版とQA用ビルド（`THEN_AI_FIXTURE=1`）では固定応答の接続先だけを使える。  
 対象: Windows版Then  
 課題管理: [AI調査課題表](https://claude.ai/artifact/23k1n9c8PYxRt63r9SiEDG)（以下、`AI-nn` は同表の課題番号）
 
@@ -222,10 +222,10 @@ Gemini API追加規約（2026-03-23発効、2026-10-22確認）では、Google�
 | --- | --- |
 | キーの保管 | Windows資格情報マネージャー。`CRED_TYPE_GENERIC`、`CRED_PERSIST_LOCAL_MACHINE`（他のPCへローミングしない）、名前は `Then/ai/<接続先>`。`windows` crateに `Win32_Security_Credentials` を足す（AI-07） |
 | キーの参照 | フロントへ返すのは設定済みかどうかだけ。保存済みキーを読むコマンドは作らない |
-| 設定操作 | 保存、差し替え、削除、接続テスト。接続テストはボタン名で送信を伴うと分かるようにする |
+| 設定操作 | 保存、差し替え、削除、接続テスト。接続テストはボタン名で送信を伴うと分かるようにする。接続テストは実際の接続先と一緒に工程4で足す |
 | 通信部品 | `reqwest`＋`native-tls`。接続先が本物かの確認はWindowsの仕組みを使う。中継サーバーは環境変数だけ（AI-06） |
 | クラウド通信 | 公式HTTPSエンドポイントをRust側で固定し、キーは送信直前に付ける。別ホストへのリダイレクトは追わない |
-| 呼び出せる窓 | 会話・キーのコマンドは `build.rs` のAppManifestで本体ウィンドウ（main）に限る。プラグインのiframeへは公開しない（AI-08） |
+| 呼び出せる窓 | 会話・キーのコマンドは、各コマンドの中で呼び出し元の窓が本体（main）かを確かめ、それ以外は断る。プラグインのiframeへは公開しない（AI-08）。`build.rs` のAppManifestは、置くとThenの全コマンドが許可一覧の対象になるため使わない |
 | ログ・エラー | 認証ヘッダー、キーを含むURL、送受信の全文を通常ログへ出さない。APIの応答本文をそのまま画面へ返さない |
 | 上限 | 入力（往復込み）40,000文字、出力16,000トークン（思考も数えるため。確認表2.2）、応答2MiB、クラウド180秒、ローカル300秒、検索は最大5回から。実装時に調整する |
 
@@ -261,7 +261,6 @@ Gemini API追加規約（2026-03-23発効、2026-10-22確認）では、Google�
 | `src/ideaReferenceModel.ts` | 資料に保存したときの参照追加に既存処理を使う |
 | 新設 `src-tauri/src/ai/` | `credentials`、`store`、`runner`、`providers`、`markdown` 程度に分ける |
 | `src-tauri/src/lib.rs` | コマンド登録だけ。処理は `ai/` に置く |
-| `src-tauri/build.rs` | AppManifestで会話・キーのコマンドをmainに限る |
 | `src-tauri/Cargo.toml` | `reqwest`（native-tls）と `windows` の資格情報featureを足す |
 | `scripts/` とRustテスト | 状態、接続変換、資格情報、保存、選択範囲の振る舞いを確かめる |
 

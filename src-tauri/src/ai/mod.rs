@@ -14,7 +14,9 @@
 
 pub mod commands;
 pub mod conversation;
+pub mod credentials;
 pub mod fixture;
+pub mod http;
 pub mod markdown;
 pub mod prompt;
 pub mod store;

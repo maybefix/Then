@@ -125,14 +125,22 @@ pub struct Answer {
 #[serde(rename_all = "camelCase", tag = "code")]
 pub enum SendError {
     EmptyInput,
+    /// A model id with characters that could change where the request goes.
+    BadModel,
     InputTooLong { chars: usize, limit: usize },
     SearchUnsupported,
     KeyMissing,
     Auth,
     RateLimited,
     Network,
+    Timeout,
     ModelUnsupported,
     SearchFailed,
+    /// The provider refused the request (an HTTP status other than the above).
+    Rejected { status: u16 },
+    /// The provider failed on its side.
+    ServerError { status: u16 },
+    ResponseTooLarge,
     BadResponse,
 }
 
@@ -145,10 +153,23 @@ pub fn input_chars(request: &Request) -> usize {
     history + request.input.chars().count()
 }
 
+/// Model ids go into request bodies and, for Gemini, the URL path: letters,
+/// digits and . _ - : / only (Ollama names look like `llama3.2:3b`).
+pub fn model_ok(model: &str) -> bool {
+    !model.is_empty()
+        && model.len() <= 120
+        && !model.starts_with('/')
+        && !model.contains("..")
+        && model.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | ':' | '/'))
+}
+
 /// The checks every send passes before a connector sees it.
 pub fn check(request: &Request) -> Result<(), SendError> {
     if request.input.trim().is_empty() {
         return Err(SendError::EmptyInput);
+    }
+    if !model_ok(&request.model) {
+        return Err(SendError::BadModel);
     }
     let chars = input_chars(request);
     if chars > INPUT_CHAR_LIMIT {
@@ -189,6 +210,19 @@ mod tests {
         // Exactly at the limit still goes.
         let r = request(Provider::Fixture, Mode::Consult, "続き", vec![turn(&long[..long.len() - 6], "")]);
         assert_eq!(check(&r), Ok(()));
+    }
+
+    #[test]
+    fn model_ids_that_could_change_the_request_are_refused() {
+        for ok in ["gemini-3.8-flash", "gpt-6-luna", "claude-sonnet-5-5", "llama3.2:3b", "user/model:tag"] {
+            assert!(model_ok(ok), "{ok}");
+        }
+        for bad in ["", "a b", "x?key=1", "../v1", "/abs", "a#b", "モデル", &"m".repeat(121)] {
+            assert!(!model_ok(bad), "{bad}");
+        }
+        let mut r = request(Provider::Fixture, Mode::Consult, "q", vec![]);
+        r.model = "x?key=1".into();
+        assert_eq!(check(&r), Err(SendError::BadModel));
     }
 
     #[test]
