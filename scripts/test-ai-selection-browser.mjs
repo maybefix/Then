@@ -182,8 +182,53 @@ try {
     return null;
   })()`);
 
+  /** What is selected now: on screen (DOM) and in the editor (ProseMirror). */
+  const selectionState = () => evaluate(`(() => {
+    const ed = document.querySelector(".ProseMirror").editor;
+    const { from, to } = ed.state.selection;
+    return { dom: getSelection().toString(), from, to, pm: ed.state.doc.textBetween(from, to, "\\n") };
+  })()`);
+  let lastDrag = null;
+
+  /** Scrolls the editor sideways so the midpoint of `chars` sits in the middle of the viewport. */
+  const reveal = async (...chars) => {
+    const rects = [];
+    for (const char of chars) rects.push(await rectOf(char));
+    const xs = rects.flatMap((r) => [r.left, r.right]);
+    if (xs.every((x) => x >= 0 && x <= 2400)) return;
+    const mid = (Math.min(...xs) + Math.max(...xs)) / 2;
+    await evaluate(`(() => {
+      let el = document.querySelector(".ProseMirror");
+      while (el && !(el.scrollWidth > el.clientWidth + 10 && /auto|scroll/.test(getComputedStyle(el).overflowX))) el = el.parentElement;
+      (el ?? document.scrollingElement).scrollLeft += ${mid} - innerWidth / 2;
+      return 1;
+    })()`);
+    await sleep(400);
+  };
+
+  /**
+   * Selects the source text from the first character of `from` through the last of `to`, by
+   * editor position. Lines with notation change width when the caret enters them (hidden
+   * markup is shown), so a mouse drag measured beforehand would land on other characters.
+   * Paragraphs map one to one onto source lines: position = offset + line index + 1.
+   */
+  const selectSource = async (fromText, toText) => {
+    const start = SOURCE.indexOf(fromText);
+    const end = SOURCE.indexOf(toText) + toText.length;
+    const pos = (offset) => offset + SOURCE.slice(0, offset).split("\n").length;
+    await evaluate(`(() => {
+      const ed = document.querySelector(".ProseMirror").editor;
+      ed.commands.setTextSelection({ from: ${pos(start)}, to: ${pos(end)} });
+      ed.view.focus();
+      return 1;
+    })()`);
+    await sleep(300);
+    lastDrag = { select: [fromText, toText], after: await selectionState() };
+  };
+
   /** Drags from the leading edge of `from` to the trailing edge of `to` (vertical-rl: top to bottom of the glyph). */
   const drag = async (from, to) => {
+    await reveal(from, to);
     const a = await rectOf(from);
     const b = await rectOf(to);
     assert.ok(a && b, `characters ${from} ${to} must be on screen`);
@@ -194,13 +239,21 @@ try {
     for (let i = 1; i <= 8; i += 1) await mouse("mouseMoved", ax + ((bx - ax) * i) / 8, ay + ((by - ay) * i) / 8);
     await mouse("mouseReleased", bx, by);
     await sleep(300);
+    lastDrag = { press: [Math.round(ax), Math.round(ay)], release: [Math.round(bx), Math.round(by)], after: await selectionState() };
   };
 
   /** Right-clicks on `char`, then presses コピー if it is enabled. Returns what was copied (null if コピー was disabled). */
   const rightClickCopy = async (char) => {
+    await reveal(char);
     const r = await rectOf(char);
     const x = (r.left + r.right) / 2, y = (r.top + r.bottom) / 2;
     await evaluate("window.__copied = []; 1");
+    const hit = await evaluate(`(() => {
+      const el = document.elementFromPoint(${x}, ${y});
+      const chain = [];
+      for (let e = el; e && chain.length < 5; e = e.parentElement) chain.push(e.tagName + (e.className && typeof e.className === "string" ? "." + e.className.split(" ").filter(Boolean).slice(0, 2).join(".") : ""));
+      return { at: [Math.round(${x}), Math.round(${y})], viewport: [innerWidth, innerHeight], chain, inShell: Boolean(el?.closest(".verticalTypewriterShell")) };
+    })()`);
     await mouse("mouseMoved", x, y);
     await mouse("mousePressed", x, y, "right");
     await mouse("mouseReleased", x, y, "right");
@@ -217,7 +270,7 @@ try {
     await page.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
     await page.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
     await sleep(200);
-    return { ...state, copied };
+    return { ...state, copied, diag: { drag: lastDrag, hit, afterRightClick: await selectionState() } };
   };
 
   const record = (layout, name, expected, got) => {
@@ -231,14 +284,14 @@ try {
     await drag("乙", "丙");
     record(layout, "段落の中", between("乙", "丙"), await rightClickCopy("一"));
 
-    await drag("甲", "丁");
+    await selectSource("甲", "丁");
     record(layout, "見出し・段落・ルビ・傍点・縦中横をまたぐ（記法は原文のまま）", between("甲", "丁"), await rightClickCopy("本"));
 
-    await drag("丁", "戊");
+    await selectSource("丁", "戊");
     record(layout, "コメント行と \\// の行をまたぐ（コメントも含む）", between("丁", "戊"), await rightClickCopy("メ"));
 
-    await drag("戊", "庚");
-    record(layout, "表をまたぐ", between("戊", "庚"), await rightClickCopy("段"));
+    await selectSource("戊", "庚");
+    record(layout, "表をまたぐ", between("戊", "庚"), await rightClickCopy("己"));
 
     await drag("辛", "壬");
     record(layout, layout === "manuscript" ? "ページ境界と行末のぶら下げをまたぐ" : "長い範囲", between("辛", "壬"), await rightClickCopy("辛"));
@@ -254,10 +307,11 @@ try {
     record(layout, "TSF入力中（フォーカスは受け皿）", between("乙", "丙"), await rightClickCopy("一"));
     await evaluate(`(() => { document.querySelector(".ProseMirror").classList.remove("nativeImeActive"); document.querySelector(".qaFocusSink")?.remove(); return 1; })()`);
 
-    // 選択の外を右クリック：何が渡るかを記録する（判断の材料）。
+    // 選択の外を右クリックすると、選択はその位置へ移って外れ、コピー（とAIに渡す）は押せない。
     await drag("乙", "丙");
     const outside = await rightClickCopy("庚");
-    results.push({ layout, name: "選択の外を右クリック（記録）", ok: true, expected: "（記録のみ）", got: outside });
+    results.push({ layout, name: "選択の外を右クリックすると、選択が外れてコピーは押せない",
+      ok: Boolean(outside.menu && outside.disabled && outside.copied === null), expected: "（コピーが押せない）", got: outside });
   }
 
   page.close();
@@ -266,7 +320,9 @@ try {
   await stopBrowser(browser, profileDir);
 }
 
+const diagnose = args.includes("--diagnose");
 for (const r of results) {
+  if (diagnose || !r.ok) console.log(`      記録: ${JSON.stringify(r.got.diag ?? null)}`);
   const shown = r.got.copied === null ? (r.got.disabled ? "（コピーが押せない）" : "（メニューなし）") : JSON.stringify(r.got.copied);
   console.log(`${r.ok ? "OK  " : "NG  "}[${r.layout}] ${r.name}${r.ok && !r.name.includes("記録") ? "" : `\n      取れたもの: ${shown}${r.ok ? "" : `\n      期待: ${JSON.stringify(r.expected)}`}`}`);
 }
