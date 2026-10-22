@@ -17,7 +17,7 @@
 | 出典の表示条件 | ― | 本文中の出典を「見えて、クリックできる」ように出す | 利用者に見せるときは出典を含める。加工して見せる場合は法務と相談のうえ適切に出す | ― |
 | 往復を続けるとき送り返すもの | 思考やツールを使ったときは、モデルが返した部分を手を加えずに返す | 推論モデルの出力項目（`store: false` で使う場合） | 検索結果の `encrypted_content`、出典の `encrypted_index`、思考ブロックを手を加えずに返す。欠けたり変わったりすると400 | 文章だけ |
 | 長い応答 | `:streamGenerateContent?alt=sse` | `stream: true` | 出力の多い依頼はストリーミングを推奨。検索中に `stop_reason: "pause_turn"` で一時停止することがあり、そのまま送り返して続ける | `stream: true` |
-| 途中で切れた印 | `finishReason`（値は工程4で確かめる） | `status: "incomplete"` | `stop_reason: "max_tokens"` | `finish_reason: "length"` |
+| 途中で切れた印 | `finishReason: "MAX_TOKENS"`（資料による。実APIでは未観測） | `status: "incomplete"` | `stop_reason: "max_tokens"` | `finish_reason: "length"` |
 | 拒否の印 | `promptFeedback.blockReason` ほか（工程4で確かめる） | 工程5で確かめる | `stop_reason: "refusal"` と `stop_details` | ― |
 | 検索の失敗 | ― | `web_search_call` の `status` | HTTP 200 のまま、`web_search_tool_result` の `content` がエラー（`max_uses_exceeded`、`too_many_requests`、`unavailable` など） | ― |
 | 利用量 | `usageMetadata`（`promptTokenCount`、`candidatesTokenCount`、`thoughtsTokenCount`） | `usage` | `usage`（`input_tokens`、`output_tokens`、`server_tool_use.web_search_requests`） | `usage`（`stream_options.include_usage` で受け取る） |
@@ -49,11 +49,18 @@ Claudeには、拒否したときに別のモデルで自動的にやり直す�
 
 Geminiの文章生成の案内ページは、新しいInteractions APIを中心に書かれている。`generateContent` も現役のAPIとして資料にあり、廃止の告知はない。会話を毎回Then側から組み立てる設計には、往復を `contents` に並べるだけの `generateContent` のほうが合う。Interactions APIは、サーバー側に状態を持たない `store: false` でも使えるので、工程4で問題が出たら切り替えを考える。
 
-## 3. 確かめきれなかった点
+## 3. 実APIで確かめたこと
+
+| 日付 | 接続先 | 確かめたこと |
+| --- | --- | --- |
+| 2026-10-22 | Gemini（`gemini-3.5-flash-lite`） | `x-goog-api-key` ヘッダーで認証できる。2往復目が1往復目を踏まえて答える（Geminiが返した `content` を送り返す形で）。`finishReason: "STOP"` で通常の回答になる。`usageMetadata` から入力・出力トークンを記録できる |
+
+## 4. 確かめきれなかった点
 
 | 点 | いつ確かめるか |
 | --- | --- |
-| Geminiの `finishReason` と拒否の値、思考の設定項目 | 工程4（固定応答で形を作り、実APIで確かめる） |
+| Geminiの `MAX_TOKENS` と拒否（`SAFETY` など、`promptFeedback.blockReason`）の実際の応答 | 2026-10-22の実API確認では通常の終了（`STOP`）だけを観測した。資料の値で実装済み。実際に起きたら確認表を直す |
+| Geminiの思考の設定項目 | 初期版は指定しない（モデルの既定のまま）。思考のトークンは出力上限に数える |
 | OpenAIの料金、拒否の印、`store: false` で送り返す項目 | 工程5 |
 | Claudeの検索を、`max_uses` が効く基本版（`web_search_20250305`）にするか、結果を絞り込む新版（`web_search_20260209` 以降）にするか | 工程5。新版は内部でコード実行を使い、応答の形が増える |
 | Ollamaの `usage` の中身 | 工程5 |

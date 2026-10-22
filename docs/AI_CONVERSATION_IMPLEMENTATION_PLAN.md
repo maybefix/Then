@@ -2,7 +2,7 @@
 
 作成日: 2026-10-16（バインダーのAI調査として作成）  
 改訂日: 2026-10-22（右ペインの会話画面へ方針変更）  
-状態: 工程0〜3を実装済み（`feat/ai-conversation`）。実際の接続先は未接続で、開発版とQA用ビルド（`THEN_AI_FIXTURE=1`）では固定応答の接続先だけを使える。  
+状態: 工程0〜4を実装済み（`feat/ai-conversation`）。実際の接続先はGeminiの相談だけ（2026-10-22に実APIで確認）。開発版とQA用ビルド（`THEN_AI_FIXTURE=1`）では固定応答の接続先も使える。  
 対象: Windows版Then  
 課題管理: [AI調査課題表](https://claude.ai/artifact/23k1n9c8PYxRt63r9SiEDG)（以下、`AI-nn` は同表の課題番号）
 
