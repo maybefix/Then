@@ -7,6 +7,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
+mod ai;
 mod atomic_file;
 mod checkpoint_store;
 mod export_front_matter;

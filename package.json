@@ -6,6 +6,7 @@
   "scripts": {
     "experiment:native-ime": "node scripts/run-native-ime-experiment.mjs",
     "build:native-ime-limited": "node scripts/build-native-ime-limited.mjs",
+    "test:ai": "cargo test --manifest-path src-tauri/Cargo.toml --lib ai::",
     "test:native-ime": "node scripts/test-native-ime.mjs && node scripts/test-native-ime-integration.mjs",
     "test:code-blocks": "node scripts/test-code-blocks.mjs",
     "test:comment-out": "node scripts/test-comment-out.mjs",
