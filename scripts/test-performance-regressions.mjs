@@ -445,7 +445,7 @@ assert.match(
 );
 assert.match(
   appSource,
-  /upsertProjectAstDocumentAst\(current, activeDocumentAst\)/,
+  /upsertProjectAstDocumentAst\((?:current|projectAst), activeDocumentAst\)/,
   "active editor updates must pass the existing AST to the project index",
 );
 assert.match(

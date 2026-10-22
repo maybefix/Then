@@ -5,6 +5,7 @@
 //        [--project] [--scroll] [--css "<extra css>"]
 //        [--typewriter --scenario typing|selection|ime --at middle]
 //        [--writing-mode vertical-rl|horizontal-tb] [--line-numbers] [--highlight-line] [--line-breaks]
+//        [--manuscript [--manuscript-chars 20] [--manuscript-lines 20]] [--measure-vertical 30] [--zone both] [--jumps 10]  (with --project --typewriter)
 //
 // Builds the app (unless --dist/--no-build), serves it, opens a blank
 // manuscript, pastes a deterministic manuscript and types one character at a
@@ -16,7 +17,8 @@
 //   settled  input → first frame after both counts updated
 // --profile adds a CPU profile summarised by entry point and self time.
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
+import { guardBrowser, stopBrowser } from "./lib/stop-browser.mjs";
 import { readFile, writeFile } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
@@ -85,6 +87,7 @@ const browser = flag("webview-exe") ? spawn(option("webview-exe"), [], {
   "--no-first-run", "--disable-extensions", "--disable-background-timer-throttling",
   "--disable-renderer-backgrounding", "--disable-backgrounding-occluded-windows", "about:blank",
 ], { stdio: "ignore" });
+guardBrowser(browser, profileDir);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function json(url, init) {
@@ -189,6 +192,9 @@ function installProjectMock({ chars, manuscriptSource, manuscriptText = null, se
     "plugin:window|is_maximized": () => false,
     "plugin:window|is_fullscreen": () => false,
     "plugin:event|listen": () => callbackId++,
+    get_font_faces: () => [],
+    journal_recovery_scan: () => [],
+    load_library_property_types: () => ({}),
   };
   const arrays = /^(list_|load_project_snippets|load_project_plot_cards|load_project_proofread)/;
   let callbackId = 1;
@@ -313,6 +319,8 @@ async function pageBenchmark({ chars, samples, warmup, at, project }) {
 }
 
 let exitCode = 0;
+let summary_manuscriptSettleMs = null;
+let summary_nativeTsf = null;
 try {
   await json(`http://127.0.0.1:${debugPort}/json/version`);
   let target;
@@ -345,6 +353,18 @@ try {
         writingMode: option("writing-mode", "vertical-rl"),
         showLineNumbers: flag("line-numbers"), highlightCurrentLine: flag("highlight-line"),
         showLineBreakMarks: flag("line-breaks"),
+        // サイドペインのホバー表示（Zoneモード、--zone both|left|right）。
+        ...(option("zone", null) ? { sidebarHoverMode: option("zone", null) } : {}),
+        // 縦書きの1列の長さ（編集領域に対する%）。原稿用紙と同じ行長で比べるときに使う。
+        ...(option("measure-vertical", null) ? { editorMeasureVertical: Number(option("measure-vertical", null)) } : {}),
+        // 原稿用紙モード（--manuscript, 既定 20字×20行）。
+        ...(flag("manuscript") ? { manuscript: {
+          layoutMode: "manuscript",
+          charactersPerLine: Number(option("manuscript-chars", 20)),
+          linesPerPage: Number(option("manuscript-lines", 20)),
+          showGrid: true,
+          showPageBoundaries: true,
+        } } : {}),
       } : {} })})`,
     });
   }
@@ -391,7 +411,7 @@ try {
         if(input.checked!==checked)input.click();
         await new Promise(resolve=>setTimeout(resolve,50));
       }
-      for(const [text,value] of [['本文方向',${JSON.stringify(option("writing-mode","vertical-rl"))}],['編集表示','continuous']]){
+      for(const [text,value] of [['本文方向',${JSON.stringify(option("writing-mode","vertical-rl"))}],['編集表示','continuous'],...(${flag("manuscript")}?[['原稿用紙','manuscript']]:[])]){
         const select=[...document.querySelectorAll('.settingsModal label')].find(l=>l.textContent.includes(text)&&l.querySelector('select'))?.querySelector('select');
         if(!select)throw new Error('Native QA select missing: '+text);
         select.value=value;select.dispatchEvent(new Event('change',{bubbles:true}));
@@ -415,8 +435,91 @@ try {
     // Exclude initial font loading/viewport restoration from the input run.
     await evaluate("document.fonts.ready.then(() => new Promise(resolve => setTimeout(resolve, 1000)))");
   }
+  if (flag("manuscript")) {
+    // Manuscript mode settles every paragraph's line count once after opening
+    // (idle time); measure typing after that, as a writer would.
+    summary_manuscriptSettleMs = await evaluate(`(async () => {
+      const start = performance.now();
+      while (!document.querySelector(".statusManuscript") && performance.now() - start < 60000) await new Promise(r => setTimeout(r, 100));
+      return Math.round(performance.now() - start);
+    })()`);
+  }
   // Main-thread time per keystroke. Unlike the latencies it does not jump by a
   // frame when work lands either side of a frame boundary.
+  // --layers: list the composited layers (diagnosing commit/layerize cost).
+  if (flag("layers")) {
+    let layers = null;
+    const previous = page.onEvent;
+    page.onEvent = (message) => { if (message.method === "LayerTree.layerTreeDidChange" && message.params.layers) layers = message.params.layers; previous?.(message); };
+    await page.send("DOM.enable");
+    await page.send("LayerTree.enable");
+    await evaluate("new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+    await evaluate("document.execCommand('insertText', false, 'あ'), new Promise((resolve) => setTimeout(resolve, 500))");
+    const summary = [];
+    for (const layer of layers ?? []) {
+      let node = "";
+      if (layer.backendNodeId) {
+        try {
+          const { node: described } = await page.send("DOM.describeNode", { backendNodeId: layer.backendNodeId });
+          node = `${described.nodeName}${described.attributes ? "." + (described.attributes[described.attributes.indexOf("class") + 1] ?? "") : ""}`;
+        } catch {}
+      }
+      summary.push({ node: node.slice(0, 80), w: Math.round(layer.width), h: Math.round(layer.height), drawsContent: layer.drawsContent, paints: layer.paintCount });
+    }
+    console.log(JSON.stringify({ count: summary.length, layers: summary.sort((a, b) => b.w * b.h - a.w * a.h).slice(0, 40) }, null, 1));
+  }
+  // --jumps N: click N outline headings (alternating ends of the manuscript)
+  // instead of typing, and record how long the main thread is blocked.
+  if (flag("jumps")) {
+    await page.send("Performance.enable", { timeDomain: "threadTicks" });
+    const jumpMetrics = async () => Object.fromEntries((await page.send("Performance.getMetrics")).metrics.map((m) => [m.name, m.value]));
+    const jumpBefore = await jumpMetrics();
+    if (flag("profile")) { await page.send("Profiler.enable"); await page.send("Profiler.setSamplingInterval", { interval: 100 }); await page.send("Profiler.start"); }
+    const jumps = await evaluate(`(async () => {
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const items = [...document.querySelectorAll(".outlineTreeItem[data-outline-file-path]")]
+        .filter((item) => item.dataset.outlineFilePath.endsWith("第一部.md"));
+      if (items.length < 4) return { error: "outline items: " + items.length };
+      const order = [];
+      // Alternate between the far end and the middle of the outline.
+      const at = (index) => items[Math.max(0, Math.min(items.length - 1, index))];
+      for (let i = 0; i < ${Number(option("jumps", 10))}; i += 1) order.push(i % 2 ? at(Math.floor(items.length / 2) - (i % 3)) : at(items.length - 1 - (i % 3)));
+      const results = [];
+      const probeBefore = document.querySelector(".ProseMirror").__manuscriptProbeQA?.() ?? null;
+      for (const item of order) {
+        const tasks = [];
+        const observer = new PerformanceObserver((list) => tasks.push(...list.getEntries().map((e) => e.duration)));
+        observer.observe({ type: "longtask" });
+        const start = performance.now();
+        item.click();
+        const firstFrame = await new Promise((resolve) => requestAnimationFrame(() => resolve(performance.now() - start)));
+        await sleep(1500);
+        observer.disconnect();
+        results.push({ firstFrame, longTasks: tasks.length, blocked: tasks.reduce((a, b) => a + b, 0), max: Math.max(0, ...tasks) });
+      }
+      const pick = (key) => results.map((r) => r[key]).sort((a, b) => a - b);
+      const median = (key) => +pick(key)[Math.floor(results.length / 2)].toFixed(1);
+      const max = (key) => +pick(key)[results.length - 1].toFixed(1);
+      return { jumps: results.length, firstFrame: { p50: median("firstFrame"), max: max("firstFrame") },
+        blocked: { p50: median("blocked"), max: max("blocked") }, longestTask: { p50: median("max"), max: max("max") },
+        manuscriptStatus: document.querySelector(".statusManuscript")?.getAttribute("title") ?? null,
+        probeBefore, probe: document.querySelector(".ProseMirror").__manuscriptProbeQA?.() ?? null,
+        perJump: results.map((r) => Math.round(r.blocked)) };
+    })()`);
+    const jumpAfter = await jumpMetrics();
+    if (flag("profile")) {
+      const { profile } = await page.send("Profiler.stop");
+      if (option("profile-file", null)) await writeFile(option("profile-file"), JSON.stringify(profile));
+    }
+    jumps.cpuPerJump = {
+      task: +(((jumpAfter.TaskDuration - jumpBefore.TaskDuration) * 1000) / (jumps.jumps || 1)).toFixed(1),
+      script: +(((jumpAfter.ScriptDuration - jumpBefore.ScriptDuration) * 1000) / (jumps.jumps || 1)).toFixed(1),
+      style: +(((jumpAfter.RecalcStyleDuration - jumpBefore.RecalcStyleDuration) * 1000) / (jumps.jumps || 1)).toFixed(1),
+      layout: +(((jumpAfter.LayoutDuration - jumpBefore.LayoutDuration) * 1000) / (jumps.jumps || 1)).toFixed(1),
+    };
+    console.log(JSON.stringify({ label, scenario: "jumps", ...jumps }));
+    page.close();
+  } else {
   await page.send("Performance.enable", { timeDomain: "threadTicks" });
   const metrics = async () => Object.fromEntries((await page.send("Performance.getMetrics")).metrics.map((m) => [m.name, m.value]));
   const traceEvents = [];
@@ -427,15 +530,79 @@ try {
       if (message.method === "Tracing.tracingComplete") traceDone?.();
     };
     await page.send("Tracing.start", {
-      traceConfig: { includedCategories: ["devtools.timeline", "disabled-by-default-devtools.timeline", "disabled-by-default-devtools.timeline.invalidationTracking", "blink", "v8.execute"] },
+      traceConfig: { includedCategories: ["renderer", "input", "devtools.timeline", "disabled-by-default-devtools.timeline", "disabled-by-default-devtools.timeline.invalidationTracking", "blink", "v8.execute"] },
     });
+  }
+  // Which paragraphs the editor re-renders per keystroke (elements removed
+  // under each top-level paragraph), to tell a window shift from the edited
+  // paragraph being rebuilt.
+  if (flag("count-redraws")) await evaluate(`(() => {
+    const root = document.querySelector(".ProseMirror");
+    const stats = window.__redraws = { removed: 0, paragraphs: new Map(), classes: new Map() };
+    new MutationObserver((records) => {
+      for (const record of records) {
+        let p = record.target; while (p && p.parentElement !== root) p = p.parentElement;
+        const index = p ? Array.prototype.indexOf.call(root.children, p) : -1;
+        for (const node of record.removedNodes) {
+          if (node.nodeType !== 1) continue;
+          const count = 1 + node.querySelectorAll("*").length;
+          stats.removed += count;
+          const key = node.parentElement === null && record.target === root ? "paragraph" : index;
+          stats.paragraphs.set(key, (stats.paragraphs.get(key) ?? 0) + count);
+          for (const el of [node, ...node.querySelectorAll("*")]) stats.classes.set(el.className || el.nodeName, (stats.classes.get(el.className || el.nodeName) ?? 0) + 1);
+        }
+      }
+    }).observe(root, { childList: true, subtree: true });
+    return true;
+  })()`);
+  // A body edit must not remount unchanged sidebar headings just because their
+  // source line numbers moved. Include duplicate heading titles in fixtures.
+  if (flag("verify-outline-reuse")) await evaluate(`(() => {
+    const nodes = [...document.querySelectorAll('.outlineTreeItem')];
+    if (!nodes.length) throw new Error('Outline reuse check needs a project with visible headings');
+    window.__benchOutlineNodes = nodes.map(node => ({ node, title: node.querySelector('.outlineItemTitle')?.textContent }));
+    return true;
+  })()`);
+  // 限定版EXEでTSF入力へ切り替え、Windowsの入力フォーカスを実際に子ウィンドウへ移す。
+  if (flag("native-tsf")) {
+    summary_nativeTsf = await evaluate(`(async () => {
+      const toggle = [...document.querySelectorAll('button')].find(b => b.textContent.startsWith('入力：'));
+      if (!toggle) throw new Error('TSF toggle is missing (needs the limited build)');
+      if (toggle.getAttribute('aria-pressed') !== 'true') toggle.click();
+      for (let i = 0; i < 50 && !document.querySelector('.ProseMirror.nativeImeActive'); i++) await new Promise(r => setTimeout(r, 100));
+      const root = document.querySelector('.ProseMirror');
+      // 入力中に本文rootのclass/styleが何に変わったか（行数キャッシュを捨てる条件）を記録する。
+      window.__benchRootChanges = [];
+      new MutationObserver(records => { for (const r of records) window.__benchRootChanges.push(r.attributeName + ': ' + r.oldValue + ' -> ' + root.getAttribute(r.attributeName)); })
+        .observe(root, { attributes: true, attributeOldValue: true, attributeFilter: ['class', 'style'] });
+      window.__benchProbeBefore = root.__manuscriptProbeQA?.();
+      return { active: Boolean(document.querySelector('.ProseMirror.nativeImeActive')), domFocus: document.activeElement?.classList.contains('ProseMirror') ?? false, hasFocus: document.hasFocus() };
+    })()`);
+  }
+  // --probe-js <file>：準備が済んだ画面で任意の式を評価し、結果だけを出して終える（不具合の再現用）。
+  if (option("probe-js", null)) {
+    const result = await evaluate(await readFile(option("probe-js", null), "utf8"));
+    console.log(JSON.stringify({ nativeTsf: summary_nativeTsf, probe: result }, null, 1));
+    if (option("probe-screenshot", null)) {
+      await sleep(300);
+      const shot = await page.send("Page.captureScreenshot", { format: "png" });
+      await writeFile(option("probe-screenshot", null), Buffer.from(shot.data, "base64"));
+    }
+    throw Object.assign(new Error("probe finished"), { probeFinished: true });
   }
   const before = await metrics();
   if (flag("profile") && flag("typewriter")) await page.send("Profiler.start");
   const summary = flag("typewriter")
-    ? await runTypewriterBenchmark({ page, evaluate, samples: SAMPLES, scenario: option("scenario", "typing") })
+    ? await runTypewriterBenchmark({ page, evaluate, samples: SAMPLES, scenario: option("scenario", "typing"), interval: Number(option("input-interval", 100)) })
     : await evaluate("window.__benchType()");
   const after = await metrics();
+  if (flag("count-redraws")) {
+    console.log("-- redraws per keystroke --\n" + await evaluate(`(() => {
+      const s = window.__redraws, n = ${SAMPLES};
+      const top = (map) => [...map].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => k + ":" + (v / n).toFixed(1)).join("  ");
+      return "removed elements " + (s.removed / n).toFixed(1) + "\\nby paragraph " + top(s.paragraphs) + "\\nparagraphs touched " + s.paragraphs.size + "\\nby class " + top(s.classes);
+    })()`));
+  }
   if (flag("profile") && flag("typewriter")) {
     const { profile } = await page.send("Profiler.stop");
     if (option("profile-file", null)) await writeFile(option("profile-file"), JSON.stringify(profile));
@@ -473,8 +640,40 @@ try {
     style: perKey("RecalcStyleDuration"),
     layout: perKey("LayoutDuration"),
   };
+  // Elements inside the editor: full-document decorations (line numbers,
+  // manuscript mode) multiply them, and per-frame paint work grows with them.
+  if (summary_manuscriptSettleMs !== null) summary.manuscriptSettleMs = summary_manuscriptSettleMs;
+  if (summary_nativeTsf) summary.nativeTsf = { ...summary_nativeTsf, ...await evaluate(`({ probeBefore: window.__benchProbeBefore, probeAfter: document.querySelector(".ProseMirror").__manuscriptProbeQA?.(), rootChanges: window.__benchRootChanges.slice(0, 12), rootChangeCount: window.__benchRootChanges.length, focusSink: (() => {
+      // 受け皿にDOMフォーカスがある状態で、本文内へ選択を置くと本文へフォーカスが戻るか。
+      const root = document.querySelector(".ProseMirror"); const sink = document.getElementById("benchFocusSink");
+      if (!sink) return null;
+      sink.focus({ preventScroll: true });
+      const text = root.querySelector("p")?.firstChild; const before = document.activeElement === sink;
+      if (text) document.getSelection().setBaseAndExtent(text, 0, text, 0);
+      const refocusedRoot = document.activeElement === root;
+      sink.focus({ preventScroll: true });
+      return { before, refocusedRoot, status: [...document.querySelectorAll("*")].find(e => !e.children.length && /^TSF/.test(e.textContent ?? ""))?.textContent };
+    })() })`) };
+  summary.editorElements = await evaluate("document.querySelector('.ProseMirror').getElementsByTagName('*').length");
+  if (flag("manuscript")) summary.manuscriptStatus = await evaluate("document.querySelector('.statusManuscript')?.getAttribute('title') ?? null");
+  if (flag("element-classes")) summary.editorElementClasses = await evaluate(`(() => {
+    const counts = {};
+    for (const el of document.querySelector('.ProseMirror').getElementsByTagName('*')) {
+      const key = el.tagName.toLowerCase() + '.' + [...el.classList].sort().join('.');
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return Object.fromEntries(Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 25));
+  })()`);
   if (flag("verify-overlays")) summary.overlayChecks = await validateTypewriterOverlays({ page, evaluate });
   if (flag("verify-controls")) summary.manualChecks = await validateTypewriterManualControls({ evaluate });
+  if (flag("verify-outline-reuse")) {
+    summary.outlineReuse = await evaluate(`(() => {
+      const saved = window.__benchOutlineNodes;
+      const retained = saved.filter(({ node, title }) => node.isConnected && node.querySelector('.outlineItemTitle')?.textContent === title).length;
+      if (retained !== saved.length) throw new Error('Unchanged headings remounted: '+(saved.length-retained));
+      return { checked: saved.length, retained };
+    })()`);
+  }
   if (flag("scroll")) {
     // Scroll through the manuscript a viewport at a time and record frame gaps.
     summary.scroll = await evaluate(`(async () => {
@@ -557,13 +756,14 @@ try {
     console.log("\n-- app code, inclusive per keystroke --\n" + top(appCode, 50).join("\n"));
   }
   page.close();
+  }
 } catch (error) {
-  console.error(error);
-  exitCode = 1;
+  if (!error?.probeFinished) {
+    console.error(error);
+    exitCode = 1;
+  }
 } finally {
-  browser.kill();
   server.close();
-  await sleep(500);
-  try { rmSync(profileDir, { recursive: true, force: true }); } catch {}
+  await stopBrowser(browser, profileDir);
 }
 process.exit(exitCode);

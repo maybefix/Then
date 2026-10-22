@@ -5,7 +5,9 @@ export function syncOverlayElements(layer: HTMLElement, fragment: DocumentFragme
     ? "active"
     : element.classList.contains("visibleLineNumber")
       ? `number:${(element as HTMLElement).dataset.visualLineNumber}`
-      : `break:${(element as HTMLElement).dataset.blockIndex}`;
+      : element.classList.contains("manuscriptPageBoundary")
+        ? `page:${(element as HTMLElement).dataset.manuscriptPage}`
+        : `break:${(element as HTMLElement).dataset.blockIndex}`;
   const wanted = Array.from(fragment.children);
   const keys = new Set(wanted.map(key));
   const previous = new Map<string, Element>();

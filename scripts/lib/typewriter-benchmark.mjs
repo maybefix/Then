@@ -17,6 +17,8 @@ function installProbe() {
   let offset = view.state.selection.$head.parentOffset;
   for (let i = 0; i < view.state.selection.$head.index(0); i++) offset += view.state.doc.child(i).content.size + 1;
   const frames = [];
+  // When each input happened, to measure how long the scroll takes to follow it.
+  const inputs = [];
   const calls = { ranges: 0, elements: 0, hitTests: 0, geometryMs: 0 };
   const originals = [Range.prototype.getClientRects, Element.prototype.getBoundingClientRect, document.elementFromPoint];
   const wrap = (fn, key) => function (...args) {
@@ -37,12 +39,41 @@ function installProbe() {
   frameId = requestAnimationFrame(tick);
   window.__typewriterProbe = {
     step(scenario) {
+      inputs.push(performance.now());
       if (scenario === "typing") {
         // Exercise ProseMirror's Enter keymap. execCommand('insertParagraph')
         // instead invokes Chromium's HTML editing/normalization machinery.
         const event = new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true });
         root.dispatchEvent(event);
         if (!event.defaultPrevented) throw new Error("Enter keymap did not handle the input");
+      }
+      else if (scenario.startsWith("native")) {
+        // TSF経路の再現：本文にフォーカスを置かずPMへ直接挿入し、次のフレームで
+        // nativeIme.ts の sync() と同じ現在段落の文字ごとの矩形計測を行う。
+        if (scenario === "native" && document.activeElement === root) root.blur();
+        // native-sink：本文の外の編集不可の要素へDOMフォーカスを置く（TSF入力中の想定）。
+        if (scenario === "native-sink") {
+          let sink = document.getElementById("benchFocusSink");
+          if (!sink) { sink = Object.assign(document.createElement("div"), { id: "benchFocusSink", tabIndex: -1 }); document.body.append(sink); }
+          if (document.activeElement !== sink) sink.focus({ preventScroll: true });
+        }
+        const t0 = performance.now();
+        view.dispatch(view.state.tr.insertText("あ"));
+        const dispatchMs = performance.now() - t0;
+        requestAnimationFrame(() => {
+          const t1 = performance.now();
+          const { $head } = view.state.selection;
+          const start = $head.start(), text = $head.parent.textContent;
+          const first = document.createRange(); const p0 = view.domAtPos(view.state.selection.head, 1);
+          first.setStart(p0.node, p0.offset); first.collapse(true); first.getBoundingClientRect();
+          const layoutMs = performance.now() - t1;
+          for (let i = 0; i < text.length; i++) {
+            const a = view.domAtPos(start + i, 1), b = view.domAtPos(start + i + 1, -1);
+            const range = document.createRange(); range.setStart(a.node, a.offset); range.setEnd(b.node, b.offset);
+            range.getBoundingClientRect();
+          }
+          (this.native ??= []).push({ dispatchMs, layoutMs, measureMs: performance.now() - t1, chars: text.length });
+        });
       }
       else {
         const doc = view.state.doc;
@@ -55,7 +86,7 @@ function installProbe() {
     async run(scenario, samples) {
       for (let i = 0; i < samples; i++) {
         this.step(scenario);
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, this.interval ?? 100));
       }
     },
     finish(scenario, samples, compositionText) {
@@ -69,6 +100,26 @@ function installProbe() {
       };
       const gaps = frames.slice(1).map((frame, i) => frame.time - frames[i].time);
       const movements = frames.slice(1).map((frame, i) => Math.abs(frame.position - frames[i].position)).filter(value => value > 0.25);
+      // Follow: from each input, the first frame that moved and the last frame
+      // that moved before the next input (the scroll has caught up there).
+      const startDelays = [];
+      const settleTimes = [];
+      inputs.forEach((at, i) => {
+        const until = inputs[i + 1] ?? Infinity;
+        let previous = frames.findLast((frame) => frame.time <= at)?.position;
+        let first = null;
+        let last = null;
+        for (const frame of frames) {
+          if (frame.time <= at || frame.time > until) continue;
+          if (previous !== undefined && Math.abs(frame.position - previous) > 0.25) {
+            if (first === null) first = frame.time - at;
+            last = frame.time - at;
+          }
+          previous = frame.position;
+        }
+        if (first !== null) startDelays.push(first);
+        if (last !== null) settleTimes.push(last);
+      });
       const head = view.state.selection.head;
       let caret;
       if (!view.state.selection.$head.parent.content.size) {
@@ -91,7 +142,7 @@ function installProbe() {
         ? (caret.left + caret.right) / 2 - (rect.left + rect.width * .46)
         : (caret.top + caret.bottom) / 2 - (rect.top + rect.height * .46);
       const expected = scenario === "selection" ? before
-        : before.slice(0, offset) + (scenario === "ime" ? compositionText.repeat(samples) : "\n".repeat(samples)) + before.slice(offset);
+        : before.slice(0, offset) + (scenario === "ime" ? compositionText.repeat(samples) : scenario.startsWith("native") ? "あ".repeat(samples) : "\n".repeat(samples)) + before.slice(offset);
       const actual = text();
       const settledSelection = { from: view.state.selection.from, to: view.state.selection.to };
       const selectionUnchangedByScroll = JSON.stringify(settledSelection) === JSON.stringify(this.selectionAfterInput);
@@ -113,18 +164,26 @@ function installProbe() {
         movingFrames: movements.length,
         movement: { p50: percentile(movements, .5), p95: percentile(movements, .95), max: percentile(movements, 1) },
         alignmentError: +Math.abs(delta).toFixed(2),
+        follow: {
+          moved: settleTimes.length,
+          startDelay: { p50: percentile(startDelays, .5), p95: percentile(startDelays, .95) },
+          settle: { p50: percentile(settleTimes, .5), p95: percentile(settleTimes, .95), max: percentile(settleTimes, 1) },
+        },
         geometry: { ...calls, geometryMs: +calls.geometryMs.toFixed(2) },
         textMatches: actual === expected, actualLength: actual.length, expectedLength: expected.length,
         selectionUnchangedByScroll, undoRestores, redoRestores, undoSteps,
+        ...(this.native ? { native: Object.fromEntries(["dispatchMs", "layoutMs", "measureMs"].map(key => [key,
+          { p50: percentile(this.native.map(n => n[key]), .5), p95: percentile(this.native.map(n => n[key]), .95) }])) } : {}),
       };
     },
   };
   return true;
 }
 
-export async function runTypewriterBenchmark({ page, evaluate, samples, scenario }) {
-  assert.ok(["typing", "selection", "ime"].includes(scenario));
+export async function runTypewriterBenchmark({ page, evaluate, samples, scenario, interval = 100 }) {
+  assert.ok(["typing", "selection", "ime", "native", "native-focused", "native-sink"].includes(scenario));
   await evaluate(`(${installProbe})()`);
+  await evaluate(`window.__typewriterProbe.interval = ${Number(interval)}; 1`);
   const compositionText = "日本語の変換を確定する。";
   if (scenario === "ime") {
     for (let i = 0; i < samples; i++) {
@@ -166,18 +225,20 @@ export async function validateTypewriterOverlays({ page, evaluate }) {
       });
       const bands = window.__freshVisualBands(blocks, vertical ? 'vertical-rl' : 'horizontal-tb');
       const numbers = [...document.querySelectorAll('.visibleLineNumber')];
+      const content = document.querySelector('.visibleLineNumberContent');
+      const translation = new DOMMatrixReadOnly(content ? getComputedStyle(content).transform : undefined);
       let error = 0;
       for (const number of numbers) {
         const band = bands.find(b => b.number === Number(number.dataset.visualLineNumber));
         if (!band) return {ok:false,reason:'unknown line number'};
         const expected = vertical ? band.centerX-bounds.left : band.centerY-bounds.top;
-        error = Math.max(error, Math.abs(parseFloat(vertical ? number.style.left : number.style.top)-expected));
+        error = Math.max(error, Math.abs(parseFloat(vertical ? number.style.left : number.style.top)+(vertical ? translation.e : translation.f)-expected));
       }
       const highlight = document.querySelector('.activeVisualLineHighlight');
       if (highlight) {
         const band = bands.find(b => b.number === Number(highlight.dataset.visualLineNumber) && b.blockIndex === root.editor.state.selection.$head.index(0));
         if (!band) return {ok:false,reason:'unknown active line',actualNumber:highlight.dataset.visualLineNumber,activeBlock:root.editor.state.selection.$head.index(0),fresh:bands.filter(b=>b.blockIndex===root.editor.state.selection.$head.index(0)),numberError:error};
-        error = Math.max(error,Math.abs(parseFloat(highlight.style.left)-(band.left-bounds.left)),Math.abs(parseFloat(highlight.style.top)-(band.top-bounds.top)));
+        error = Math.max(error,Math.abs(parseFloat(highlight.style.left)+translation.e-(band.left-bounds.left)),Math.abs(parseFloat(highlight.style.top)+translation.f-(band.top-bounds.top)));
       }
       return {ok:error<=1,numbers:numbers.length,highlight:Boolean(highlight),maxError:+error.toFixed(3)};
     })()`);

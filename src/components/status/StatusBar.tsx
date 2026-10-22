@@ -1,3 +1,6 @@
+import { useSyncExternalStore } from "react";
+import { formatManuscriptSheets } from "../../editor/manuscriptLayout";
+import type { ManuscriptProgressStore } from "../../editor/manuscriptProgressStore";
 import type { SaveStatus } from "../../types";
 import { CheckpointStatus, type CheckpointStatusInfo } from "./CheckpointStatus";
 
@@ -9,6 +12,8 @@ type StatusBarProps = {
   charCount: number;
   selectionCharCount: number | null;
   pageMetrics: { current: number; total: number } | null;
+  /** 原稿用紙モードのときだけ渡す。 */
+  manuscriptProgress?: ManuscriptProgressStore | null;
   /** null なら出さない（設定で非表示、またはプロジェクト未選択）。 */
   checkpoint: CheckpointStatusInfo | null;
   pluginItems: Array<{
@@ -29,6 +34,19 @@ const statusLabels: Record<SaveStatus, string> = {
   error: "保存失敗",
 };
 
+function ManuscriptStatus({ store }: { store: ManuscriptProgressStore }) {
+  const manuscriptProgress = useSyncExternalStore(store.subscribe, store.getSnapshot);
+  if (!manuscriptProgress) return null;
+  return (
+    <span
+      className="statusManuscript"
+      title={`${manuscriptProgress.fullPages}枚と${manuscriptProgress.usedLinesOnCurrentPage}行（1枚${manuscriptProgress.linesPerPage}行）`}
+    >
+      原稿用紙 {formatManuscriptSheets(manuscriptProgress)}枚
+    </span>
+  );
+}
+
 export function StatusBar({
   saveStatus,
   currentFilePath,
@@ -37,6 +55,7 @@ export function StatusBar({
   charCount,
   selectionCharCount,
   pageMetrics,
+  manuscriptProgress = null,
   checkpoint,
   pluginItems,
   onPluginItemClick,
@@ -56,6 +75,7 @@ export function StatusBar({
           {pageMetrics.current} / {pageMetrics.total}ページ
         </span>
       )}
+      {manuscriptProgress && <ManuscriptStatus store={manuscriptProgress} />}
       {checkpoint && <CheckpointStatus {...checkpoint} />}
       {pluginItems.length > 0 && (
         <span className="pluginStatusBarItems" aria-label="プラグインの状態">

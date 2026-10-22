@@ -7,7 +7,8 @@
 // IME trace (src/editor/imeTrace.ts) this check reads. With --url, use a dev
 // server already started that way instead.
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
+import { guardBrowser, stopBrowser } from "./lib/stop-browser.mjs";
 import os from "node:os";
 import path from "node:path";
 
@@ -40,6 +41,7 @@ const browser = spawn(edgePath, [
   "--headless=new", `--remote-debugging-port=${debugPort}`, `--user-data-dir=${profileDir}`,
   "--no-first-run", "--disable-extensions", "about:blank",
 ], { stdio: "ignore" });
+guardBrowser(browser, profileDir);
 async function json(target, init) {
   for (let attempt = 0; attempt < 50; attempt++) {
     try { return await fetch(target, init).then((response) => response.json()); } catch { await sleep(200); }
@@ -195,9 +197,7 @@ try {
   console.error(error);
   exitCode = 1;
 } finally {
-  browser.kill();
+  await stopBrowser(browser, profileDir);
   server?.kill();
-  await sleep(500);
-  try { rmSync(profileDir, { recursive: true, force: true }); } catch {}
 }
 process.exit(exitCode);

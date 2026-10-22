@@ -35,6 +35,18 @@ export function RightPaneSwitcher({
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const active = items.find((item) => item.id === activeId) ?? items[0];
 
+  // メニューを開いている間はプラグインの iframe を引っ込める（App.css）。以前は
+  // .appShell:has(.rightPaneSwitcherButton[aria-expanded="true"]) で判定していたが、
+  // ふだん一致しない :has() は評価のたびに画面全体をたどり、本文の全要素が
+  // :has の影響範囲に入る。すると本文へ要素が挿入されるたびに画面全体の
+  // スタイル無効化が走り、全文装飾（行番号・原稿用紙）の入力が数十ms重くなった。
+  useEffect(() => {
+    if (!isOpen) return;
+    const shell = rootRef.current?.closest(".appShell");
+    shell?.setAttribute("data-pane-menu-open", "true");
+    return () => shell?.removeAttribute("data-pane-menu-open");
+  }, [isOpen]);
+
   useEffect(() => {
     if (!isOpen) return;
     // 開いたら現在のペインにフォーカスし、矢印キーでそのまま選べるようにする。

@@ -1,9 +1,21 @@
 import { Editor, Extension, type JSONContent } from "@tiptap/core";
 import { findTextChange, mapTextOffsetThroughChange } from "./editor/textOffsetMapping";
 import { createTypewriterScroller } from "./editor/typewriterScroller";
+import { installNativeImeExperiment } from "./editor/nativeIme";
 import { syncOverlayElements } from "./editor/overlayElements";
+import { scrollOverlayTranslation, type ScrollOverlaySnapshot } from "./editor/scrollOverlay";
 import { VisualLineIndex } from "./editor/visualLineIndex";
 import { ParagraphFlow } from "./editor/paragraphFlow";
+import {
+  endsManuscriptPage,
+  findHangingRuns,
+  findLatinRuns,
+  latinRunAdjustment,
+  LatinRunMetrics,
+  manuscriptProgress,
+  type RunFontKey,
+} from "./editor/manuscriptLayout";
+import { DEFAULT_MANUSCRIPT_SETTINGS } from "./types";
 import { indexRootDecorations } from "./editor/indexedDecorations";
 import { spliceRootDecorations } from "./editor/spliceRootDecorations";
 import Document from "@tiptap/extension-document";
@@ -26,7 +38,7 @@ import {
   DecorationSet,
   type EditorView,
 } from "@tiptap/pm/view";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ImageHoverPreview } from "./components/editor/ImageHoverPreview";
 import {
   areDocumentIndexesEquivalent,
@@ -59,6 +71,8 @@ import {
 } from "./editor/pageBreaks";
 import type {
   EditorDisplayMode,
+  ManuscriptProgress,
+  ManuscriptSettings,
   PageFlowDirection,
   TextEditorViewportState,
   WritingMode,
@@ -126,6 +140,10 @@ type VerticalTextEditorProps = {
   onTextChange: (text: string, editorRevision: number, change?: TextSplice | null) => void;
   onSelectionChange: () => void;
   onPageMetricsChange?: (metrics: { current: number; total: number } | null) => void;
+  /** 原稿用紙の字詰め・行数。layoutMode が "normal" なら通常の組版。 */
+  manuscript?: ManuscriptSettings;
+  /** 原稿用紙モードの進み具合。モードを外すと null。 */
+  onManuscriptProgressChange?: (progress: ManuscriptProgress | null) => void;
 };
 
 type AstPluginState = {
@@ -148,6 +166,17 @@ type AstPluginState = {
   fullDecorations: boolean;
   /** コメント行を畳むか（キャレットのあるコメントのまとまりは除く）。 */
   commentsHidden: boolean;
+  /** 原稿用紙モードの欧文ラン揃え。null なら付けない。 */
+  latin: ManuscriptLatinContext | null;
+};
+
+type ManuscriptFontKey = RunFontKey;
+
+/** 欧文ランの幅計測に使うフォント条件。フォント設定が変わると作り直す。 */
+type ManuscriptLatinContext = {
+  metrics: LatinRunMetrics;
+  body: ManuscriptFontKey;
+  heading: ManuscriptFontKey;
 };
 
 type DecorationWindow = {
@@ -166,6 +195,8 @@ type AstMeta = {
   rebuild?: boolean;
   fullDecorations?: boolean;
   commentsHidden?: boolean;
+  /** 欧文ラン揃えの切替。キーがあれば値（null を含む）へ置き換える。 */
+  latin?: ManuscriptLatinContext | null;
 };
 
 type EditorViewWithInput = EditorView & {
@@ -465,23 +496,6 @@ function decorationRange(
   return merged;
 }
 
-const KINSOKU_LINE_HEAD_FORBIDDEN = new Set(
-  Array.from(
-    "、。，．・：；？！!?‼⁇⁈⁉" +
-      "）〕］｝〉》」』】〗〙〛’”" +
-      "ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶ々ゝゞヽヾ〻〃ー",
-  ),
-);
-const KINSOKU_LINE_END_FORBIDDEN = new Set(Array.from("（〔［｛〈《「『【〖〘〚‘“"));
-const KINSOKU_PUNCTUATION = new Set(
-  Array.from(
-    "、。，．・：；？！!?‼⁇⁈⁉" +
-      "（〔［｛〈《「『【〖〘〚‘“" +
-      "）〕］｝〉》」』】〗〙〛’”",
-  ),
-);
-const KINSOKU_DIGIT = /^[0-9０-９]$/;
-
 type CharacterRange = {
   ch: string;
   from: number;
@@ -678,41 +692,6 @@ function pushBreakableTokenDecos(
   }
 }
 
-function pushParagraphIndentAnchor(
-  out: Decoration[],
-  line: LineNode,
-  contentStart: number,
-  chars: CharacterRange[],
-  markupRanges: Array<{ from: number; to: number }>,
-): void {
-  if (line.kind !== "paragraph") return;
-
-  let indentLength = 0;
-  while (indentLength < chars.length && chars[indentLength].ch === "　") indentLength += 1;
-  if (indentLength < 1 || indentLength > 2 || indentLength >= chars.length) return;
-
-  const to = chars[indentLength].to;
-  if (overlapsProtectedRange(0, to, markupRanges)) return;
-
-  out.push(
-    Decoration.inline(contentStart, contentStart + to, {
-      class: "ks-indent-anchor",
-    }),
-  );
-}
-
-function pushKinsokuRange(
-  out: Decoration[],
-  contentStart: number,
-  from: number,
-  to: number,
-  className: string,
-  protectedRanges: Array<{ from: number; to: number }>,
-): void {
-  if (to <= from || overlapsProtectedRange(from, to, protectedRanges)) return;
-  out.push(Decoration.inline(contentStart + from, contentStart + to, { class: className }));
-}
-
 const LIST_MARKER = /^\s*(?:[-*+]|\d+[.)])\s+/;
 
 /**
@@ -726,123 +705,23 @@ function listMarkerRange(line: LineNode): { from: number; to: number } | null {
   return match ? { from: 0, to: match[0].length } : null;
 }
 
-function pushKinsokuDecos(out: Decoration[], line: LineNode, contentStart: number): void {
+/**
+ * Break opportunities inside long unbreakable runs (URLs, paths, hashes, long
+ * numbers, leaders). Kinsoku itself is left to the browser's line-break: strict:
+ * the per-character kinsoku spans this used to add (keep pairs together, ban
+ * line-head/line-end characters) changed no line into a rule violation when
+ * removed (scripts/experiment-kinsoku-equivalence.mjs, ~6,500 paragraphs), but
+ * made up most of a decorated paragraph's elements and forced the IME preedit
+ * into nowrap spans.
+ */
+function pushBreakableDecos(out: Decoration[], line: LineNode, contentStart: number): void {
   if (!line.source) return;
-
   // マーカーは固定幅の箱（list-marker）に入れるので、他の装飾で分割させない。
   const listMarker = listMarkerRange(line);
   const markupRanges = listMarker
     ? [...inlineMarkupRanges(line), listMarker]
     : inlineMarkupRanges(line);
-  const breakableTokens = findBreakableTokens(line.source, markupRanges);
-  const protectedRanges = [
-    ...markupRanges,
-    ...breakableTokens.map((token) => ({ from: token.from, to: token.to })),
-  ];
-  const chars = characterRanges(line.source);
-  if (chars.length === 0) return;
-
-  pushBreakableTokenDecos(out, contentStart, breakableTokens);
-  pushParagraphIndentAnchor(out, line, contentStart, chars, markupRanges);
-
-  for (let i = 0; i < chars.length; i += 1) {
-    const ch = chars[i].ch;
-
-    if (ch === "…" || ch === "‥" || ch === "―") {
-      let end = i + 1;
-      while (end < chars.length && chars[end].ch === ch) end += 1;
-      if (end - i === 2) {
-        pushKinsokuRange(
-          out,
-          contentStart,
-          chars[i].from,
-          chars[end - 1].to,
-          "ks-keep-short",
-          protectedRanges,
-        );
-      }
-      i = end - 1;
-      continue;
-    }
-
-    if ((ch === "〳" || ch === "〴") && i + 1 < chars.length && chars[i + 1].ch === "〵") {
-      pushKinsokuRange(
-        out,
-        contentStart,
-        chars[i].from,
-        chars[i + 1].to,
-        "ks-keep-short",
-        protectedRanges,
-      );
-      i += 1;
-      continue;
-    }
-
-    if (KINSOKU_DIGIT.test(ch)) {
-      let end = i + 1;
-      while (end < chars.length && KINSOKU_DIGIT.test(chars[end].ch)) end += 1;
-      if (end - i >= 2 && end - i <= 4) {
-        pushKinsokuRange(
-          out,
-          contentStart,
-          chars[i].from,
-          chars[end - 1].to,
-          "ks-keep-short",
-          protectedRanges,
-        );
-      }
-      i = end - 1;
-    }
-  }
-
-  for (let i = 1; i < chars.length; i += 1) {
-    if (!KINSOKU_LINE_HEAD_FORBIDDEN.has(chars[i].ch)) continue;
-
-    let end = i + 1;
-    while (end < chars.length && KINSOKU_LINE_HEAD_FORBIDDEN.has(chars[end].ch)) end += 1;
-    const protectedEnd = Math.min(end, i + 2);
-    pushKinsokuRange(
-      out,
-      contentStart,
-      chars[i - 1].from,
-      chars[protectedEnd - 1].to,
-      "ks-line-head-ban",
-      protectedRanges,
-    );
-    i = end - 1;
-  }
-
-  for (let i = 0; i < chars.length - 1; i += 1) {
-    if (!KINSOKU_LINE_END_FORBIDDEN.has(chars[i].ch)) continue;
-
-    pushKinsokuRange(
-      out,
-      contentStart,
-      chars[i].from,
-      chars[i + 1].to,
-      "ks-line-end-ban",
-      protectedRanges,
-    );
-  }
-
-  for (let i = 0; i < chars.length; i += 1) {
-    const prev = i > 0 ? chars[i - 1].ch : "";
-    const next = i + 1 < chars.length ? chars[i + 1].ch : "";
-    const boundary = i === 0 || i === chars.length - 1;
-    if (
-      KINSOKU_PUNCTUATION.has(chars[i].ch) &&
-      (KINSOKU_PUNCTUATION.has(prev) || KINSOKU_PUNCTUATION.has(next) || boundary)
-    ) {
-      pushKinsokuRange(
-        out,
-        contentStart,
-        chars[i].from,
-        chars[i].to,
-        "ks-punct-trim",
-        protectedRanges,
-      );
-    }
-  }
+  pushBreakableTokenDecos(out, contentStart, findBreakableTokens(line.source, markupRanges));
 }
 
 function pushJapaneseQuoteDecos(
@@ -927,7 +806,7 @@ function pushInlineDecos(markup: InlineMarkup, contentStart: number, out: Decora
           Decoration.inline(
             contentStart + item.range.offset,
             contentStart + item.range.offset + item.range.length,
-            { class: "ruby-base", "data-rt": item.reading },
+            { class: "ruby-base", "data-rt": item.reading, style: `--ruby-cells: ${item.range.length}` },
           ),
         );
       }
@@ -936,6 +815,8 @@ function pushInlineDecos(markup: InlineMarkup, contentStart: number, out: Decora
         Decoration.inline(contentStart + contentOffset, contentStart + contentEnd, {
           class: "ruby-base",
           "data-rt": reading,
+          // 原稿用紙ではルビを親文字の字数分の幅で升目の脇に置く（App.css）。
+          style: `--ruby-cells: ${contentEnd - contentOffset}`,
         }),
       );
     }
@@ -1058,6 +939,8 @@ function pushLineDecos(
   nodeStart: number,
   node: PMNode,
   active: boolean,
+  latin: ManuscriptLatinContext | null,
+  layoutOnly = false,
 ): void {
   const line = lines[index];
   if (!line || line.kind === "comment" || line.kind === "code") return;
@@ -1072,6 +955,9 @@ function pushLineDecos(
   if (active) classes.push("active-line");
 
   const attrs: Record<string, string> = { class: classes.join(" ") };
+  // 行番号の全文装飾で窓の外に付く、割り付け用だけの装飾（原稿用紙の行数は
+  // これを最終的な行数とみなさない）。
+  if (layoutOnly) attrs["data-deco"] = "layout";
   const listMarker = listMarkerRange(line);
   if (line.kind === "list") attrs["data-level"] = String(line.level);
   // マーカーの箱は1文字1chで取る。記号・数字・空白はどれも1ch以内に収まるので、
@@ -1088,9 +974,17 @@ function pushLineDecos(
       }),
     );
   }
-  pushKinsokuDecos(out, line, contentStart);
+  if (layoutOnly) {
+    pushLayoutOnlyLineDecos(out, line, contentStart, listMarker, latin);
+    return;
+  }
+  pushBreakableDecos(out, line, contentStart);
   pushJapaneseQuoteDecos(out, line, contentStart);
   pushImageDecos(out, line, contentStart);
+  if (latin) {
+    pushManuscriptLatinDecos(out, line, contentStart, latin, active);
+    pushManuscriptHangingDecos(out, line, contentStart, active);
+  }
 
   if (active) return;
 
@@ -1105,6 +999,266 @@ function pushLineDecos(
   for (const markup of line.inlineMarkups) {
     pushInlineDecos(markup, contentStart, out);
   }
+}
+
+/**
+ * 原稿用紙モードで、欧文ランを整数セルへ揃えるための装飾。
+ *
+ * ランの自然幅は隠し要素で測ってキャッシュし（LatinRunMetrics）、整数セルとの
+ * 差をランの最後の1字の margin-inline-end で補う（わずかに超えるだけなら負で
+ * 詰める）。最後の1字だけに付けるのは、他の装飾の境目がラン内にあっても
+ * 調整が二重に付かないようにするため。
+ * 後続の和文はこれでセルの境目から始まる。装飾は行単位で作られるので、
+ * 入力のたびに計り直すのは変更した行の新しいランだけになる。
+ */
+function pushManuscriptLatinDecos(
+  out: Decoration[],
+  line: LineNode,
+  contentStart: number,
+  latin: ManuscriptLatinContext,
+  active: boolean,
+): void {
+  if (!line.source) return;
+  const runs = findLatinRuns(line.source);
+  if (!runs.length) return;
+  // キャレットのある行は記法を生のまま見せるので、記号も欧文として揃える。
+  // それ以外の行では記法は整形済み（隠す・ルビ・縦中横）で、揃えの対象外。
+  const markupRanges = active ? [] : inlineMarkupRanges(line);
+  if (!active && line.marker) markupRanges.push({ from: 0, to: line.marker.length });
+  const protectedRanges = [
+    ...markupRanges,
+    ...findBreakableTokens(line.source, markupRanges).map((token) => ({ from: token.from, to: token.to })),
+  ];
+  const font = line.kind === "heading" ? latin.heading : latin.body;
+  const icEm = latin.metrics.icEm(font);
+  for (const run of runs) {
+    if (overlapsProtectedRange(run.from, run.to, protectedRanges)) continue;
+    const { adjustEm } = latinRunAdjustment(latin.metrics.widthEm({ ...font, text: run.text }), icEm);
+    if (Math.abs(adjustEm) < 0.001) continue;
+    const lastLength = run.text.codePointAt(run.text.length - 1)! > 0xffff ? 2 : 1;
+    out.push(
+      Decoration.inline(contentStart + run.to - lastLength, contentStart + run.to, {
+        class: "ms-latin-end",
+        style: `margin-inline-end: ${adjustEm.toFixed(4)}em`,
+      }),
+    );
+  }
+}
+
+/** 中の約物を1字1セルで組まない記法（縦中横・行内コード・画像・ルビの親文字）。 */
+const HANGING_EXCLUDED_MARKUPS = new Set<InlineMarkup["type"]>(["tcy", "code", "image", "ruby"]);
+
+/**
+ * 原稿用紙モードで、句読点・閉じ括弧を行末の欄外へぶら下げる装飾（MS-30）。
+ *
+ * Chromium は hanging-punctuation を持たないので、約物のランを「1ランの字数分
+ * 手前へ戻した位置から組み、描く位置だけ同じ字数分ずらし戻す」要素で包み、
+ * 後ろに同じ幅の空白（::after）を足す。
+ * - 行の途中：戻した分を空白が埋めるので、約物は本来のセルに描かれ、後続も
+ *   セルの境目から始まる。
+ * - 行末：約物の送りは版面の内側で終わるので次の行へ追い出されず、後ろの空白は
+ *   行末の空白としてぶら下がる（pre-wrap）。約物は欄外のセルに描かれる。
+ * 戻しを約物より前（margin-inline-start）に置くのは、組版が要素の送りを
+ * 足していく途中で版面の幅を超えたところで追い出しを決めるため。約物の後ろで
+ * 戻しても追い出しは防げない。描く位置は相対配置でずらすので、キャレットの
+ * 位置（約物の前後）も描かれた字と一致する。本文の文字列は変えない。
+ */
+function pushManuscriptHangingDecos(
+  out: Decoration[],
+  line: LineNode,
+  contentStart: number,
+  active: boolean,
+): void {
+  if (!line.source) return;
+  const runs = findHangingRuns(line.source);
+  if (!runs.length) return;
+  const protectedRanges: Array<{ from: number; to: number }> = [];
+  for (const markup of line.inlineMarkups) {
+    const from = markup.fullRange.offset;
+    const to = from + markup.fullRange.length;
+    if (HANGING_EXCLUDED_MARKUPS.has(markup.type)) {
+      protectedRanges.push({ from, to });
+      continue;
+    }
+    // 整形した行では記号が隠れるので、記号にかかるランは字数とセル数が合わない。
+    if (active) continue;
+    const contentFrom = markup.contentRange.offset;
+    const contentTo = contentFrom + markup.contentRange.length;
+    if (contentFrom > from) protectedRanges.push({ from, to: contentFrom });
+    if (to > contentTo) protectedRanges.push({ from: contentTo, to });
+  }
+  if (!active && line.marker) protectedRanges.push({ from: 0, to: line.marker.length });
+  for (const run of runs) {
+    if (overlapsProtectedRange(run.from, run.to, protectedRanges)) continue;
+    out.push(
+      Decoration.inline(contentStart + run.from, contentStart + run.to, run.cells > 1
+        ? { class: "ms-hang", style: `--hang-cells: ${run.cells}` }
+        : { class: "ms-hang" }),
+    );
+  }
+}
+
+/**
+ * 装飾窓の外の行に付ける、行の割りに効く装飾だけ。行番号・原稿用紙の枚数は
+ * 全行の実際の組版から数えるので、窓の外も記法は整形済み（記号を隠す・ルビ・
+ * 縦中横）の姿で組む必要がある。一方で色分けや禁則の補助 span は画面に出ない
+ * 行では要らず（禁則は line-break: strict が同じ規則を持つ）、全行に付けると
+ * 本文の要素が数倍になる。要素数に比例して描画系の処理（PrePaint・Commit）が
+ * 1キーごとに重くなり、10万字で1キー数十msかかった。窓の中へ入った行は
+ * 通常どおりすべての装飾に戻る。
+ */
+function pushLayoutOnlyLineDecos(
+  out: Decoration[],
+  line: LineNode,
+  contentStart: number,
+  listMarker: { from: number; to: number } | null,
+  latin: ManuscriptLatinContext | null,
+): void {
+  if (line.source) {
+    const markupRanges = listMarker ? [...inlineMarkupRanges(line), listMarker] : inlineMarkupRanges(line);
+    pushBreakableTokenDecos(out, contentStart, findBreakableTokens(line.source, markupRanges));
+  }
+  // 約物のぶら下げは付けない。句読点ごとに要素が増え、10万字では変換中の
+  // 1回の更新が倍（約50ms→100ms）に重くなった。原稿用紙の行数はこの段落を
+  // 未整形（raw）として隠し要素の最終的な姿（ぶら下げ込み）で数えるので、
+  // 窓の外の組みが1行ずれても枚数・行番号は変わらない。
+  if (latin) pushManuscriptLatinDecos(out, line, contentStart, latin, false);
+  if (line.marker) {
+    out.push(Decoration.inline(contentStart, contentStart + line.marker.length, { class: "mk-hidden" }));
+  }
+  for (const markup of line.inlineMarkups) pushInlineDecos(markup, contentStart, out);
+}
+
+/**
+ * 原稿用紙の行数を段落単位の「最終的な行数」キャッシュで数える段落か。
+ * 最終的な行数とは、キャレットのない状態で装飾（記号隠し・ルビ・禁則・欧文
+ * ラン揃え）が付いたときの行数。装飾窓の外の段落は装飾なしで、キャレット行は
+ * 記法を生のまま組むので、DOM の行数をそのまま使うと、窓の位置やキャレットの
+ * 位置で枚数が変わってしまう。空行・コメント・コード・表は装飾の有無で行数が
+ * 変わらない（構造の装飾は原稿全体に付く）ので DOM のまま数える。
+ */
+function manuscriptCountIsCached(line: LineNode | undefined): line is LineNode {
+  if (!line || !line.source) return false;
+  return line.kind === "paragraph" || line.kind === "heading" || line.kind === "list";
+}
+
+type DecorationShape = {
+  from: number;
+  to: number;
+  type: { attrs?: Record<string, string>; toDOM?: unknown; spec?: { side?: number } };
+};
+
+/** ProseMirror と同じく、同じ範囲に重なる装飾の属性を1つの要素へまとめる。 */
+function mergeDecorationAttrs(target: Record<string, string>, attrs: Record<string, string>): void {
+  for (const [name, value] of Object.entries(attrs)) {
+    if (name === "class") target.class = target.class ? `${target.class} ${value}` : value;
+    else if (name === "style") target.style = target.style ? `${target.style};${value}` : value;
+    else if (name !== "nodeName") target[name] = value;
+  }
+}
+
+/**
+ * 段落を、装飾窓の中にあるときと同じ装飾付きの姿で組み立てる（DOMは本文の
+ * 外の隠し要素に置く）。装飾は pushLineDecos をそのまま使うので、記号隠し・
+ * ルビ・禁則・欧文ラン揃えが窓の中と一致し、行数も一致する。
+ */
+function buildManuscriptProbeParagraph(
+  lines: LineNode[],
+  index: number,
+  node: PMNode,
+  latin: ManuscriptLatinContext | null,
+): HTMLParagraphElement {
+  const decorations: Decoration[] = [];
+  // nodeStart = -1 なので、本文側の位置（0始まりの文字オフセット）がそのまま得られる。
+  pushLineDecos(decorations, lines, index, -1, node, false, latin);
+  const paragraph = document.createElement("p");
+  const text = node.textContent;
+  const inline: DecorationShape[] = [];
+  const widgets: DecorationShape[] = [];
+  for (const decoration of decorations as unknown as DecorationShape[]) {
+    if (typeof decoration.type.toDOM === "function") widgets.push(decoration);
+    else if (decoration.from < 0) {
+      const attrs: Record<string, string> = {};
+      mergeDecorationAttrs(attrs, decoration.type.attrs ?? {});
+      for (const [name, value] of Object.entries(attrs)) paragraph.setAttribute(name, value);
+    } else if (decoration.to > decoration.from) inline.push(decoration);
+  }
+  const cuts = new Set<number>([0, text.length]);
+  for (const decoration of inline) { cuts.add(decoration.from); cuts.add(decoration.to); }
+  for (const widget of widgets) cuts.add(widget.from);
+  const points = [...cuts].filter((cut) => cut >= 0 && cut <= text.length).sort((a, b) => a - b);
+  for (let i = 0; i < points.length; i += 1) {
+    const at = points[i];
+    for (const widget of widgets) {
+      if (widget.from !== at) continue;
+      try {
+        const dom = (widget.type.toDOM as () => Node)();
+        if (dom instanceof Node) paragraph.appendChild(dom);
+      } catch {
+        // Widgets that need a live view (none of the line decorations do) are skipped.
+      }
+    }
+    const next = points[i + 1];
+    if (next === undefined || next <= at) continue;
+    const attrs: Record<string, string> = {};
+    for (const decoration of inline) {
+      if (decoration.from <= at && decoration.to >= next) mergeDecorationAttrs(attrs, decoration.type.attrs ?? {});
+    }
+    const piece = document.createTextNode(text.slice(at, next));
+    if (Object.keys(attrs).length) {
+      const span = document.createElement("span");
+      for (const [name, value] of Object.entries(attrs)) span.setAttribute(name, value);
+      span.appendChild(piece);
+      paragraph.appendChild(span);
+    } else {
+      paragraph.appendChild(piece);
+    }
+  }
+  if (!text.length) paragraph.appendChild(document.createElement("br"));
+  return paragraph;
+}
+
+// Classes ProseMirror toggles for focus/selection display, and the inline
+// declarations that only place the paged root on the current page.
+// nativeImeActive はTSF入力の接続中の印で、フォーカスの出入りのたびに付け外しされる。
+// 組版の変化として扱うと、原稿用紙では全段落の行数を測り直す（10万字で約1,500段落）。
+const ROOT_DISPLAY_CLASSES = new Set(["ProseMirror-focused", "ProseMirror-hideselection", "nativeImeActive"]);
+const ROOT_POSITION_PROPERTIES = new Set(["--paged-root-top", "--paged-root-right", "--paged-root-left"]);
+
+/** Whether a class/style change on the editor root can change how paragraphs are laid out. */
+function rootTypesettingChanged(record: MutationRecord): boolean {
+  const element = record.target as Element;
+  const now = element.getAttribute(record.attributeName!) ?? "";
+  const before = record.oldValue ?? "";
+  if (record.attributeName === "class") {
+    const tokens = (value: string) => value.split(/\s+/).filter((token) => token && !ROOT_DISPLAY_CLASSES.has(token)).sort().join(" ");
+    return tokens(before) !== tokens(now);
+  }
+  const declarations = (value: string) => value.split(";")
+    .map((part) => part.trim())
+    .filter((part) => part && !ROOT_POSITION_PROPERTIES.has(part.slice(0, part.indexOf(":")).trim()))
+    .sort().join(";");
+  return declarations(before) !== declarations(now);
+}
+
+/** 窓の中の行に現れる未計測の欧文ランを、1回のレイアウトでまとめて測る。 */
+function prepareManuscriptLatin(
+  lines: LineNode[],
+  ranges: DecorationRangeList,
+  latin: ManuscriptLatinContext,
+): void {
+  const body = new Set<string>();
+  const heading = new Set<string>();
+  for (const range of ranges) {
+    for (let i = range.from; i < Math.min(lines.length, range.to); i += 1) {
+      const line = lines[i];
+      if (!line.source || line.kind === "comment" || line.kind === "code") continue;
+      const target = line.kind === "heading" ? heading : body;
+      for (const run of findLatinRuns(line.source)) target.add(run.text);
+    }
+  }
+  if (body.size) latin.metrics.prepare(latin.body, body);
+  if (heading.size) latin.metrics.prepare(latin.heading, heading);
 }
 
 /** Put the DOM caret inside an empty cell's own editable span. */
@@ -1558,15 +1712,16 @@ function handleFoldedCommentJoin(view: EditorView, event: KeyboardEvent): boolea
 
 type DecorationRangeList = Array<{ from: number; to: number }>;
 
+/**
+ * Lines that get every decoration. With fullDecorations the rest of the
+ * document still gets the layout-affecting ones (pushLayoutOnlyLineDecos).
+ */
 function windowRanges(
   lineCount: number,
   activeIndex: number,
   visibleCenter: number,
-  fullDecorations: boolean,
 ): DecorationRangeList {
-  return fullDecorations
-    ? [{ from: 0, to: lineCount }]
-    : decorationRange(activeIndex, lineCount, visibleCenter);
+  return decorationRange(activeIndex, lineCount, visibleCenter);
 }
 
 function inRanges(ranges: DecorationRangeList, index: number): boolean {
@@ -1581,6 +1736,7 @@ function buildWindowDecos(
   visibleCenter: number,
   fullDecorations: boolean,
   commentsHidden: boolean,
+  latin: ManuscriptLatinContext | null,
 ): DecorationSet {
   const out: Decoration[] = [];
   const count = Math.min(doc.childCount, lines.length);
@@ -1593,7 +1749,16 @@ function buildWindowDecos(
     const row = tableRows.get(index);
     if (row) pushTableRowDecos(out, node, start, row, index === activeIndex);
   });
-  const ranges = windowRanges(count, activeIndex, visibleCenter, fullDecorations);
+  const ranges = windowRanges(count, activeIndex, visibleCenter);
+  if (latin) prepareManuscriptLatin(lines, fullDecorations ? [{ from: 0, to: count }] : ranges, latin);
+
+  if (fullDecorations) {
+    doc.forEach((node, nodeStart, i) => {
+      if (i >= count || tableRows.has(i)) return;
+      pushLineDecos(out, lines, i, nodeStart, node, i === activeIndex, latin, !inRanges(ranges, i));
+    });
+    return DecorationSet.create(doc, out);
+  }
 
   for (const range of ranges) {
     let nodeStart = pmStartAtIndex(doc, range.from);
@@ -1601,7 +1766,7 @@ function buildWindowDecos(
 
     for (let i = range.from; i < Math.min(count, range.to); i += 1) {
       const node = doc.child(i);
-      if (!tableRows.has(i)) pushLineDecos(out, lines, i, nodeStart, node, i === activeIndex);
+      if (!tableRows.has(i)) pushLineDecos(out, lines, i, nodeStart, node, i === activeIndex, latin);
       nodeStart += node.nodeSize;
     }
   }
@@ -1641,6 +1806,7 @@ function patchWindowDecos(
   tableRows: Map<number, TableRow>,
   activeIndex: number,
   visibleCenter: number,
+  latin: ManuscriptLatinContext | null,
 ): DecorationSet | null {
   if (lines.length !== doc.childCount) return null;
   const isStructure = (line: LineNode | undefined) => line?.kind === "comment" || line?.kind === "code";
@@ -1667,13 +1833,8 @@ function patchWindowDecos(
     !diff || index < diff.from ? index : index >= diff.toOld ? index + delta : -1;
   const newToOld = (index: number) =>
     !diff || index < diff.from ? index : index >= diff.toNew ? index - delta : -1;
-  const oldRanges = windowRanges(
-    previous.lines.length,
-    decorated.activeIndex,
-    decorated.visibleCenter,
-    previous.fullDecorations,
-  );
-  const newRanges = windowRanges(lines.length, activeIndex, visibleCenter, previous.fullDecorations);
+  const oldRanges = windowRanges(previous.lines.length, decorated.activeIndex, decorated.visibleCenter);
+  const newRanges = windowRanges(lines.length, activeIndex, visibleCenter);
 
   const dirty = new Set<number>();
   // The lines either side too: joining or splitting rewrites their node
@@ -1710,7 +1871,8 @@ function patchWindowDecos(
     removed.push(...set.find(start + 1, start + node.nodeSize - 1));
     const row = tableRows.get(index);
     if (row) pushTableRowDecos(added, node, start, row, index === activeIndex);
-    else if (inRanges(newRanges, index)) pushLineDecos(added, lines, index, start, node, index === activeIndex);
+    else if (inRanges(newRanges, index)) pushLineDecos(added, lines, index, start, node, index === activeIndex, latin);
+    else if (previous.fullDecorations) pushLineDecos(added, lines, index, start, node, false, latin, true);
   });
   if (removed.length) set = set.remove(removed);
   if (added.length) set = set.add(doc, added);
@@ -1739,18 +1901,20 @@ function windowDecosWithShadow(
   fullDecorations: boolean,
   commentsHidden: boolean,
   forceRebuild: boolean,
+  latin: ManuscriptLatinContext | null,
 ): DecorationSet {
   const rebuild = () =>
-    buildWindowDecos(doc, lines, tableRows, activeIndex, visibleCenter, fullDecorations, commentsHidden);
+    buildWindowDecos(doc, lines, tableRows, activeIndex, visibleCenter, fullDecorations, commentsHidden, latin);
   if (
     forceRebuild ||
     previous.decoWindow.rebuild ||
+    latin !== previous.latin ||
     fullDecorations !== previous.fullDecorations ||
     commentsHidden !== previous.commentsHidden
   ) {
     return rebuild();
   }
-  const patched = patchWindowDecos(previous, doc, mapping, diff, lines, tableRows, activeIndex, visibleCenter);
+  const patched = patchWindowDecos(previous, doc, mapping, diff, lines, tableRows, activeIndex, visibleCenter, latin);
   if (!patched) return rebuild();
   if (!import.meta.env.DEV) return patched;
 
@@ -1816,7 +1980,8 @@ function makeAstState(state: EditorState): AstPluginState {
     commentsHidden: false,
     tableRows,
     decoWindow: { activeIndex, visibleCenter: activeIndex, stale: null, rebuild: false },
-    decoSet: buildWindowDecos(state.doc, lines, tableRows, activeIndex, activeIndex, false, false),
+    latin: null,
+    decoSet: buildWindowDecos(state.doc, lines, tableRows, activeIndex, activeIndex, false, false, null),
   };
 }
 
@@ -1918,6 +2083,7 @@ function applyAst(
     typeof meta?.commentsHidden === "boolean"
       ? meta.commentsHidden
       : value.commentsHidden;
+  const latin = meta && "latin" in meta ? meta.latin ?? null : value.latin;
 
   if (typeof meta?.visibleCenter === "number") {
     visibleCenter = Math.max(0, Math.min(newState.doc.childCount - 1, meta.visibleCenter));
@@ -1931,7 +2097,8 @@ function applyAst(
       activeIndex === value.activeIndex &&
       visibleCenter === value.visibleCenter &&
       fullDecorations === value.fullDecorations &&
-      commentsHidden === value.commentsHidden
+      commentsHidden === value.commentsHidden &&
+      latin === value.latin
     ) {
       return value;
     }
@@ -1942,6 +2109,7 @@ function applyAst(
       visibleCenter,
       fullDecorations,
       commentsHidden,
+      latin,
       decoWindow: { activeIndex, visibleCenter, stale: null, rebuild: false },
       decoSet: windowDecosWithShadow(
         value,
@@ -1955,6 +2123,7 @@ function applyAst(
         fullDecorations,
         commentsHidden,
         meta?.rebuild === true,
+        latin,
       ),
     };
   }
@@ -1979,6 +2148,7 @@ function applyAst(
       visibleCenter,
       fullDecorations,
       commentsHidden,
+      latin,
       tableRows: tables.rows,
       decoWindow: {
         ...value.decoWindow,
@@ -2002,6 +2172,7 @@ function applyAst(
     visibleCenter,
     fullDecorations,
     commentsHidden,
+    latin,
     tableRows: tables.rows,
     decoWindow: { activeIndex, visibleCenter, stale: null, rebuild: false },
     decoSet: windowDecosWithShadow(
@@ -2016,6 +2187,7 @@ function applyAst(
       fullDecorations,
       commentsHidden,
       meta?.rebuild === true || rolesChangedOutside || tables.changed,
+      latin,
     ),
   };
 }
@@ -2037,7 +2209,9 @@ const LayoutAstExtension = Extension.create({
               if (!isTableRowAt(view.state, view.state.selection.head)) return;
               frame = requestAnimationFrame(() => {
                 frame = null;
-                if (view.composing || !view.hasFocus() || !view.state.selection.empty) return;
+                // TSF入力中は本文がDOMフォーカスを持たない（nativeImeActive）。
+                const focused = view.hasFocus() || view.dom.classList.contains("nativeImeActive");
+                if (view.composing || !focused || !view.state.selection.empty) return;
                 if (!isTableRowAt(view.state, view.state.selection.head)) return;
                 const offset = textOffsetFromPmPos(view.state.doc, view.state.selection.head);
                 const cell = tableCellCaret(docToText(view.state.doc), offset,
@@ -2604,6 +2778,8 @@ export function VerticalTextEditor({
   onTextChange,
   onSelectionChange,
   onPageMetricsChange,
+  manuscript = DEFAULT_MANUSCRIPT_SETTINGS,
+  onManuscriptProgressChange,
 }: VerticalTextEditorProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
@@ -2611,6 +2787,7 @@ export function VerticalTextEditor({
   const editorHostRef = useRef<HTMLDivElement | null>(null);
   const lineBreakLayerRef = useRef<HTMLDivElement | null>(null);
   const visualLineLayerRef = useRef<HTMLDivElement | null>(null);
+  const visualLineContentRef = useRef<HTMLDivElement | null>(null);
   const tiptapRef = useRef<Editor | null>(null);
   const textRef = useRef(text);
   // マウント時に一度だけ参照する復元位置。以後プロップが変化しても再適用しない。
@@ -2642,6 +2819,18 @@ export function VerticalTextEditor({
   const showLineNumbersRef = useRef(showLineNumbers);
   const showCommentsRef = useRef(showComments);
   const highlightCurrentLineRef = useRef(highlightCurrentLine);
+  const manuscriptActive = manuscript.layoutMode === "manuscript";
+  const manuscriptRef = useRef(manuscript);
+  manuscriptRef.current = manuscript;
+  const onManuscriptProgressChangeRef = useRef(onManuscriptProgressChange);
+  onManuscriptProgressChangeRef.current = onManuscriptProgressChange;
+  const manuscriptProgressRef = useRef<ManuscriptProgress | null>(null);
+  const manuscriptBoundaryLayerRef = useRef<HTMLDivElement | null>(null);
+  const latinMetricsRef = useRef<LatinRunMetrics | null>(null);
+  // 原稿用紙：段落の最終的な行数（ページ表示のページ割りでも使う）と、その更新世代。
+  const manuscriptFinalCountRef = useRef<((index: number) => number | undefined) | null>(null);
+  const manuscriptCountGenerationRef = useRef(0);
+  const applyManuscriptLatinRef = useRef<(() => void) | null>(null);
   const renderLineBreakMarksRef = useRef<(() => void) | null>(null);
   const requestLineBreakMarksRef = useRef<(() => void) | null>(null);
   const renderVisualLinesRef = useRef<(() => void) | null>(null);
@@ -2697,14 +2886,34 @@ export function VerticalTextEditor({
     const viewportWidth = Math.max(1, scroller.clientWidth);
     const viewportHeight = Math.max(1, scroller.clientHeight);
     const outerMargin = viewportWidth >= 480 && viewportHeight >= 360 ? 20 : 0;
-    const width = Math.max(1, viewportWidth - outerMargin * 2);
-    const height = Math.max(1, viewportHeight - outerMargin * 2);
+    let width = Math.max(1, viewportWidth - outerMargin * 2);
+    let height = Math.max(1, viewportHeight - outerMargin * 2);
     const verticalWriting = writingModeRef.current === "vertical-rl";
     const gap = 28;
-    const paddingX = Math.max(28, Math.min(72, Math.round(width * 0.08)));
-    const paddingY = Math.max(28, Math.min(64, Math.round(height * 0.08)));
-    const contentWidth = Math.max(1, width - paddingX * 2);
-    const contentHeight = Math.max(1, height - paddingY * 2);
+    let paddingX = Math.max(28, Math.min(72, Math.round(width * 0.08)));
+    let paddingY = Math.max(28, Math.min(64, Math.round(height * 0.08)));
+    let contentWidth = Math.max(1, width - paddingX * 2);
+    let contentHeight = Math.max(1, height - paddingY * 2);
+    // 原稿用紙では版面を窓ではなく字数×行数で決める。インライン方向は
+    // 字数×1ic（＋CSSと同じ1pxの余裕）、ブロック方向は行数×行送り。
+    // ページ割りはこのブロック寸法でそのまま行数どおりに切れる。用紙は
+    // 従来どおり窓いっぱいに取り（1画面1ページのまま）、版面を中央に置く。
+    // 版面が窓に収まらないときだけ用紙を広げる。
+    const manuscriptSettings = manuscriptRef.current;
+    if (manuscriptSettings.layoutMode === "manuscript") {
+      const latin = tiptapRef.current ? astKey.getState(tiptapRef.current.state)?.latin : null;
+      const icPx = latin
+        ? latin.metrics.icEm(latin.body) * latin.body.fontSize
+        : Number.parseFloat(getComputedStyle(root).fontSize) || 16;
+      const measure = manuscriptSettings.charactersPerLine * icPx + 1;
+      const block = manuscriptSettings.linesPerPage * lineHeightPx(root);
+      contentWidth = verticalWriting ? block : measure;
+      contentHeight = verticalWriting ? measure : block;
+      width = Math.max(width, contentWidth + paddingX * 2);
+      height = Math.max(height, contentHeight + paddingY * 2);
+      paddingX = (width - contentWidth) / 2;
+      paddingY = (height - contentHeight) / 2;
+    }
     const nextLayout: PageLayout = {
       width,
       height,
@@ -2765,10 +2974,20 @@ export function VerticalTextEditor({
       Math.round(pageBlockSize),
       verticalWriting ? "v" : "h",
       flow?.generation ?? "legacy",
+      manuscriptSettings.layoutMode === "manuscript" ? manuscriptCountGenerationRef.current : "-",
     ].join(":");
     if (breaksSignature !== pageBreaksSignatureRef.current) {
       pageBreaksSignatureRef.current = breaksSignature;
-      const paragraphs = flow?.paragraphs ?? measureParagraphs(root, writingModeRef.current);
+      let paragraphs = flow?.paragraphs ?? measureParagraphs(root, writingModeRef.current);
+      // 原稿用紙では、装飾窓の外やキャレット行の段落も最終的な行数で割り付ける。
+      // 未訪問のページの有無でページ数が変わらないようにするため。
+      const finalCount = manuscriptSettings.layoutMode === "manuscript" ? manuscriptFinalCountRef.current : null;
+      if (finalCount) {
+        paragraphs = paragraphs.map((paragraph, index) => {
+          const count = paragraph.lineCount > 0 ? finalCount(index) : undefined;
+          return count === undefined ? paragraph : { ...paragraph, lineCount: count };
+        });
+      }
       pageBreaksRef.current = computePageBreaks(
         pageBlockSize,
         paragraphs,
@@ -2816,13 +3035,17 @@ export function VerticalTextEditor({
     if (host.scrollTop !== 0) host.scrollTop = 0;
     if (host.scrollLeft !== 0) host.scrollLeft = 0;
 
-    // 本文は版面の外へも伸びているので、描画は版面で切る。ブロック方向の
-    // 終端は、このページが実際に占める分だけにする。
+    // 本文は版面の外へも伸びているので、ブロック方向はこのページが実際に
+    // 占める分だけに切る。原稿用紙の行末では閉じ括弧・句読点が欄外へ
+    // ぶら下がるので、インライン終端だけは用紙の余白まで描く。前後ページを
+    // 隠す切り抜きと行頭側は変えず、本文・キャレットの位置も動かさない。
+    const inlineEndClip = manuscriptSettings.layoutMode === "manuscript"
+      ? 0 : verticalWriting ? paddingY : paddingX;
     host.style.setProperty(
       "--paged-clip",
       verticalWriting
-        ? `inset(${paddingY}px ${paddingX}px ${paddingY}px ${width - paddingX - visibleExtent}px)`
-        : `inset(${paddingY}px ${paddingX}px ${height - paddingY - visibleExtent}px ${paddingX}px)`,
+        ? `inset(${paddingY}px ${paddingX}px ${inlineEndClip}px ${width - paddingX - visibleExtent}px)`
+        : `inset(${paddingY}px ${inlineEndClip}px ${height - paddingY - visibleExtent}px ${paddingX}px)`,
     );
 
     // 表示するページを出す。transform ではなくレイアウト上の位置で動かす。
@@ -3236,28 +3459,51 @@ export function VerticalTextEditor({
     requestVisualLinesRef.current?.();
   }, [showComments]);
 
+  // 行番号は全行の実際の組版から番号を振るので、装飾窓の外の段落も記法を
+  // 整形した姿で組んでおく（pushLayoutOnlyLineDecos）。原稿用紙の枚数は全文
+  // 装飾を要求しない。窓の外で記法を含む段落だけ、隠し要素で整形後の行数を
+  // 測って補正する（manuscriptProbe）。
   useEffect(() => {
     showLineNumbersRef.current = showLineNumbers;
+    const fullDecorations = showLineNumbers;
     const editor = tiptapRef.current;
     if (editor) {
       const state = astKey.getState(editor.state);
-      if (state?.fullDecorations !== showLineNumbers) {
+      if (state?.fullDecorations !== fullDecorations) {
         editor.view.dispatch(
           editor.state.tr
             .setMeta(astKey, {
               rebuild: true,
-              fullDecorations: showLineNumbers,
+              fullDecorations,
             } satisfies AstMeta)
             .setMeta("addToHistory", false),
         );
       }
     }
-    if (showLineNumbers) {
+    if (fullDecorations || manuscriptActive) {
       requestVisualLinesRef.current?.();
     } else {
       renderVisualLinesRef.current?.();
     }
-  }, [showLineNumbers]);
+  }, [showLineNumbers, manuscriptActive]);
+
+  // 欧文ラン揃えはフォント条件を変えたときだけ作り直す。字数・行数の変更では
+  // 送り幅（em）が変わらないので計り直さない。
+  useEffect(() => {
+    applyManuscriptLatinRef.current?.();
+  }, [manuscriptActive, textLayoutSignature, writingMode]);
+
+  // 字数・行数の変更は textLayoutSignature に含まれ、レイアウトの測り直しと
+  // ページ表示の再分割はそちらで起きる。ここではモードを外したときの通知だけ。
+  useEffect(() => {
+    if (manuscriptActive) return;
+    manuscriptProgressRef.current = null;
+    onManuscriptProgressChangeRef.current?.(null);
+  }, [manuscriptActive]);
+
+  useEffect(() => {
+    requestVisualLinesRef.current?.();
+  }, [manuscript.linesPerPage, manuscript.showPageBoundaries]);
 
   useEffect(() => {
     highlightCurrentLineRef.current = highlightCurrentLine;
@@ -3545,7 +3791,6 @@ export function VerticalTextEditor({
     let compositionFrame: number | null = null;
     let compositionSettleFrame: number | null = null;
     let compositionRevealFrame: number | null = null;
-    let imeLayoutTarget: HTMLElement | null = null;
     let pagedReflowFrame: number | null = null;
     let pagedReflowGeneration = 0;
     let initialAdjustmentFrame: number | null = null;
@@ -3558,6 +3803,81 @@ export function VerticalTextEditor({
     let visualLayoutRevision = 0;
     const blockVersions = new WeakMap<Element, number>();
     const visualLineIndex = new VisualLineIndex<Element>();
+    // 原稿用紙の枚数補正。装飾窓の外で記法を含む段落の、整形後の行数。
+    // キーは段落の種類と本文、測ったときのレイアウト条件で無効にする。
+    const manuscriptProbeCounts = new Map<string, number>();
+    let manuscriptProbeCondition = "";
+    // 同じ本文の段落はいくつあっても1回測り、待っている段落すべてに入れる。
+    const manuscriptProbeQueue = new Map<string, Set<number>>();
+    let manuscriptProbeHandle: number | null = null;
+    let manuscriptProbeHost: HTMLElement | null = null;
+    const manuscriptProbeKey = (line: LineNode) => `${line.kind}|${line.source}`;
+    // QA: how often counts are measured in the hidden copy and the cache is reset.
+    const manuscriptProbeStats = { batches: 0, paragraphs: 0, resets: 0 };
+    // DOM の段落がどの姿で組まれているか。final は装飾窓の中でキャレットの
+    // ない、最終的な姿（その行数をキャッシュに入れる）。
+    const manuscriptParagraphState = (element: Element): "final" | "raw" | "active" | null => {
+      const classes = element.classList;
+      if (classes.length === 0 || element.getAttribute("data-deco") === "layout") return "raw";
+      if (classes.contains("active-line")) return "active";
+      return classes.contains("pm-line") ? "final" : null;
+    };
+    // 段落の行数を最終的な行数に揃える。キャッシュがなければ隠し要素で測る
+    // 予約をし、測り終えるまで枚数の表示は更新しない。
+    const applyManuscriptFinalCount = (index: number, element: Element, line: LineNode) => {
+      const state = manuscriptParagraphState(element);
+      if (!state) return;
+      const key = manuscriptProbeKey(line);
+      // 記法のない段落は、キャレットがあっても最終的な姿と同じ装飾で組まれる
+      // （pushLineDecos が active で省くのは記号隠しと記法の装飾だけ）。
+      // 本文の段落をそのまま測った行数を使い、入力のたびに隠し要素で組み直さない。
+      if (state === "final" || (state === "active" && !line.marker && !line.inlineMarkups.length)) {
+        const count = visualLineIndex.countAt(index);
+        if (count !== null) manuscriptProbeCounts.set(key, count);
+        return;
+      }
+      const cached = manuscriptProbeCounts.get(key);
+      if (cached !== undefined) visualLineIndex.setCount(index, cached);
+      else {
+        const waiting = manuscriptProbeQueue.get(key);
+        if (waiting) waiting.add(index);
+        else manuscriptProbeQueue.set(key, new Set([index]));
+      }
+    };
+    manuscriptFinalCountRef.current = (index: number) => {
+      if (manuscriptRef.current.layoutMode !== "manuscript") return undefined;
+      const editor = tiptapRef.current;
+      const element = editor?.view.dom.children[index];
+      const line = editor ? astKey.getState(editor.state)?.lines[index] : undefined;
+      if (!element || !manuscriptCountIsCached(line)) return undefined;
+      const state = manuscriptParagraphState(element);
+      if (state !== "raw" && state !== "active") return undefined;
+      return manuscriptProbeCounts.get(manuscriptProbeKey(line));
+    };
+    // One Range for every paragraph measurement. A Range stays registered with
+    // the document until it is garbage-collected, and every DOM removal walks all
+    // registered Ranges: a fresh Range per paragraph (thousands after the first
+    // full measurement) made ProseMirror's paragraph replacements (heading jumps,
+    // the decoration window moving while typing) take hundreds of ms.
+    const fragmentRange = document.createRange();
+    const measureVisualBlock = (
+      index: number, element: Element, rect: VisualRect, version: number, mode: WritingMode, unnumbered: boolean,
+    ) => {
+      visualLineIndex.measure(index, rect, version, visualLayoutRevision, mode, unnumbered, () => {
+        fragmentRange.selectNodeContents(element);
+        // Fragments are read now; express them in the same coordinates as rect.
+        const actual = element.getBoundingClientRect();
+        const dx = rect.left - actual.left;
+        const dy = rect.top - actual.top;
+        const fragments = Array.from(fragmentRange.getClientRects(), fragment => ({
+          left: fragment.left + dx, right: fragment.right + dx, top: fragment.top + dy, bottom: fragment.bottom + dy,
+        }));
+        // Do not keep the paragraph's nodes inside a live range between measurements.
+        fragmentRange.setStart(document.documentElement, 0);
+        fragmentRange.collapse(true);
+        return fragments;
+      });
+    };
     let visualIndexElements: Element[] = [];
     let visualIndexStructureDirty = true;
     let observedVisualState: EditorState | null = null;
@@ -3565,14 +3885,25 @@ export function VerticalTextEditor({
       version: number; revision: number; width: number; height: number;
       rect: { left: number; right: number; top: number; bottom: number };
     }>();
-    let visualLayoutCache: {
+    type VisualLayoutCache = {
       doc: PMNode;
       decorations: DecorationSet | undefined;
       mode: WritingMode;
       revision: number;
       root: DOMRect;
-      blockRects: VisualRect[];
+      /** 段落の矩形（この layout の座標系）。読んだ段落だけが入る疎な配列。 */
+      blockRects: Array<VisualRect | undefined>;
       flowGeneration?: number;
+    };
+    let visualLayoutCache: VisualLayoutCache | null = null;
+    let visualOverlayCache: {
+      layout: VisualLayoutCache;
+      selection: EditorState["selection"];
+      settings: string;
+      parentLeft: number;
+      parentTop: number;
+      pixelRatio: number;
+      snapshot: ScrollOverlaySnapshot;
     } | null = null;
     const candidateViewport = initialViewportRef.current;
     const validatedInitialViewport =
@@ -3608,7 +3939,8 @@ export function VerticalTextEditor({
       cancelFrame: (frame) => cancelAnimationFrame(frame),
       now: () => performance.now(),
       enabled: () => typewriterScrollRef.current && Boolean(tiptapRef.current) &&
-        !pointerDraggingRef.current && !isEditorComposing(tiptapRef.current, composingRef),
+        !pointerDraggingRef.current && (!isEditorComposing(tiptapRef.current, composingRef) ||
+          Boolean(tiptapRef.current?.view.dom.classList.contains("nativeImeActive"))),
       pixelSize: () => 1 / (window.devicePixelRatio || 1),
       read: () => scrollAxis(writingModeRef.current).get(scroller),
       write: (value) => scrollAxis(writingModeRef.current).set(scroller, value),
@@ -3636,7 +3968,7 @@ export function VerticalTextEditor({
       centerInstant = false;
       centerWaitFrames = 1;
     };
-    const startCenterAnimation = () => centerAnimation.request();
+    const startCenterAnimation = (inFrame = false) => centerAnimation.request(inFrame);
 
     startCenterAnimationRef.current = startCenterAnimation;
     stopCenterAnimationRef.current = stopCenterAnimation;
@@ -3903,7 +4235,8 @@ export function VerticalTextEditor({
     const requestCenterCaret = (instant: boolean, eventType: string) => {
       const editor = tiptapRef.current;
       if (initialAdjustmentAllowed && initialViewportToRestore) return;
-      if (!typewriterScrollRef.current || !editor || isEditorComposing(editor, composingRef)) return;
+      if (!typewriterScrollRef.current || !editor ||
+        (isEditorComposing(editor, composingRef) && !editor.view.dom.classList.contains("nativeImeActive"))) return;
 
       centerInstant = centerInstant || instant;
       centerWaitFrames = Math.max(centerWaitFrames, centerDelayFrames(eventType));
@@ -3941,7 +4274,8 @@ export function VerticalTextEditor({
                 writingModeRef.current,
               );
             } else {
-              startCenterAnimation();
+              // Already inside the frame after the caret moved: start now.
+              startCenterAnimation(true);
             }
           } else {
             centerQueued = false;
@@ -3988,11 +4322,15 @@ export function VerticalTextEditor({
       visualLineQueued = false;
       visualLineFrame = null;
       const layer = visualLineLayerRef.current;
+      const content = visualLineContentRef.current;
       const currentEditor = tiptapRef.current;
-      if (!layer) return;
+      if (!layer || !content) return;
 
+      const manuscriptSettings = manuscriptRef.current;
+      const manuscriptOn = manuscriptSettings.layoutMode === "manuscript";
+      const boundaryLayer = manuscriptBoundaryLayerRef.current;
       const layerUpdate = resolveVisualLineLayerUpdate(
-        showLineNumbersRef.current,
+        showLineNumbersRef.current || manuscriptOn,
         highlightCurrentLineRef.current,
         Boolean(currentEditor),
         Boolean(currentEditor && isEditorComposing(currentEditor, composingRef)),
@@ -4001,8 +4339,11 @@ export function VerticalTextEditor({
       if (layerUpdate === "preserve") return;
 
       if (layerUpdate === "clear" || !currentEditor) {
-        if (layer.childNodes.length) layer.replaceChildren();
+        if (content.childNodes.length) content.replaceChildren();
+        if (boundaryLayer?.childNodes.length) boundaryLayer.replaceChildren();
         visualLayoutCache = null;
+        visualOverlayCache = null;
+        content.style.transform = "";
         return;
       }
 
@@ -4016,6 +4357,26 @@ export function VerticalTextEditor({
       const decorations = astKey.getState(currentEditor.state)?.decoSet;
       const activeBlockIndex = activeLineIndex(currentEditor.state);
       let layout = visualLayoutCache;
+      const pixelRatio = window.devicePixelRatio || 1;
+      const overlaySettings = `${showLineNumbersRef.current}|${highlightCurrentLineRef.current}|${manuscriptOn}|${manuscriptSettings.linesPerPage}|${manuscriptSettings.showPageBoundaries}|${manuscriptCountGenerationRef.current}`;
+      if (!pagedLayout && layout && visualOverlayCache?.layout === layout &&
+        visualOverlayCache.selection === currentEditor.state.selection &&
+        visualOverlayCache.settings === overlaySettings &&
+        visualOverlayCache.parentLeft === (layerParentRect?.left ?? 0) &&
+        visualOverlayCache.parentTop === (layerParentRect?.top ?? 0) &&
+        visualOverlayCache.pixelRatio === pixelRatio &&
+        layout.doc === currentEditor.state.doc && layout.decorations === decorations &&
+        layout.mode === mode && layout.revision === visualLayoutRevision && layout.flowGeneration === flow?.generation) {
+        const translation = scrollOverlayTranslation(visualOverlayCache.snapshot, rootRect, scrollerRect, pixelRatio);
+        if (translation) {
+          // Text and labels have not changed. Move their existing painted layer
+          // together instead of rewriting every label and measuring the caret
+          // on each frame of typewriter/manual scrolling.
+          const transform = `translate(${translation.x}px, ${translation.y}px)`;
+          if (content.style.transform !== transform) content.style.transform = transform;
+          return;
+        }
+      }
       if (!layout || layout.doc !== currentEditor.state.doc ||
         layout.decorations !== decorations || layout.mode !== mode ||
         layout.revision !== visualLayoutRevision ||
@@ -4026,21 +4387,43 @@ export function VerticalTextEditor({
           visualLineIndex.reset(visualIndexElements);
           visualIndexStructureDirty = false;
         }
-        // Re-read bounds: an earlier paragraph can move every subsequent one.
-        // Only changed paragraph shapes are regrouped; keep them paragraph-local.
-        const blockRects: VisualRect[] = visualIndexElements.map((element, index) => {
-          const rect = flow?.blocks[index] ?? element.getBoundingClientRect();
+        // Only paragraphs whose DOM changed (or every paragraph after a layout
+        // revision) are measured; their shapes are paragraph-local, so an
+        // earlier paragraph moving them needs no re-read. Reading every
+        // paragraph's rect here cost ~10 ms per keystroke on a 100k-char
+        // manuscript (line numbers / manuscript mode). Visible paragraphs are
+        // read below and re-checked against their cached size.
+        const blockRects: Array<VisualRect | undefined> = new Array(visualIndexElements.length);
+        // 原稿用紙：段落は最終的な行数（manuscriptCountIsCached）で数える。
+        const probeLines = manuscriptOn ? astKey.getState(currentEditor.state)?.lines : undefined;
+        const condition = `${visualLayoutRevision}|${mode}|${manuscriptSettings.charactersPerLine}`;
+        if (probeLines && condition !== manuscriptProbeCondition) {
+          manuscriptProbeCondition = condition;
+          manuscriptProbeCounts.clear();
+          manuscriptProbeQueue.clear();
+          manuscriptProbeStats.resets++;
+        }
+        visualIndexElements.forEach((element, index) => {
           const version = flow?.versions[index] ?? blockVersions.get(element) ?? 0;
-          visualLineIndex.measure(index, rect, version, visualLayoutRevision, mode,
-            element.classList.contains("pm-comment"), () => {
-              const contentRange = document.createRange();
-              contentRange.selectNodeContents(element);
-              return Array.from(contentRange.getClientRects(), fragment => ({
-                left: fragment.left, right: fragment.right, top: fragment.top, bottom: fragment.bottom,
-              }));
-            });
-          return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+          const unnumbered = element.classList.contains("pm-comment");
+          const current = visualLineIndex.isCurrent(index, version, visualLayoutRevision, mode, unnumbered);
+          if (current) return;
+          const probeLine = probeLines?.[index];
+          const cached = manuscriptCountIsCached(probeLine) ? probeLine : undefined;
+          // Undecorated paragraphs with a known final count are not read at all.
+          if (cached && manuscriptParagraphState(element) === "raw") {
+            const count = manuscriptProbeCounts.get(manuscriptProbeKey(cached));
+            if (count !== undefined) {
+              visualLineIndex.assignCount(index, count, version, visualLayoutRevision, mode, unnumbered);
+              return;
+            }
+          }
+          const rect = flow?.blocks[index] ?? element.getBoundingClientRect();
+          blockRects[index] = { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+          measureVisualBlock(index, element, blockRects[index]!, version, mode, unnumbered);
+          if (cached) applyManuscriptFinalCount(index, element, cached);
         });
+        if (manuscriptProbeQueue.size) scheduleManuscriptProbe();
         layout = {
           doc: currentEditor.state.doc, decorations, mode, revision: visualLayoutRevision,
           root: rootRect, blockRects,
@@ -4058,16 +4441,87 @@ export function VerticalTextEditor({
         left: scrollerRect.left - dx, right: scrollerRect.right - dx,
         top: scrollerRect.top - dy, bottom: scrollerRect.bottom - dy,
       };
+      const vertical = !isHorizontalWriting(mode);
+      const overscan = pagedLayout ? 0 : Math.min(
+        vertical ? scrollerRect.width : scrollerRect.height,
+        Math.max(64, lineHeightPx(currentEditor.view.dom) * 2),
+      );
+      const coverage = {
+        left: scrollerRect.left - (vertical ? overscan : 0), right: scrollerRect.right + (vertical ? overscan : 0),
+        top: scrollerRect.top - (vertical ? 0 : overscan), bottom: scrollerRect.bottom + (vertical ? 0 : overscan),
+      };
+      const bandViewport = { left: coverage.left - dx, right: coverage.right - dx,
+        top: coverage.top - dy, bottom: coverage.bottom - dy };
+      // Rects read now are in today's coordinates; store them in the layout's.
+      const rectAt = (index: number): VisualRect | undefined => {
+        const cached = blockRects[index];
+        if (cached) return cached;
+        const element = visualIndexElements[index];
+        if (!element) return undefined;
+        const rect = flow?.blocks[index] ?? element.getBoundingClientRect();
+        const translated = { left: rect.left - dx, right: rect.right - dx, top: rect.top - dy, bottom: rect.bottom - dy };
+        blockRects[index] = translated;
+        // A visible paragraph whose size changed without a DOM mutation (late
+        // font metrics) is re-measured here; measure() skips unchanged shapes.
+        const version = flow?.versions[index] ?? blockVersions.get(element) ?? 0;
+        measureVisualBlock(index, element, translated, version, mode, element.classList.contains("pm-comment"));
+        const probeLine = manuscriptOn ? astKey.getState(currentEditor.state)?.lines[index] : undefined;
+        if (manuscriptCountIsCached(probeLine)) applyManuscriptFinalCount(index, element, probeLine);
+        return translated;
+      };
       const bands: VisualLineBand[] = [];
-      for (let i = 0; i < blockRects.length; i += 1) {
-        if (i === activeBlockIndex || visualLineIndex.intersects(i, blockRects[i], viewport)) {
-          bands.push(...visualLineIndex.bandsAt(i, blockRects[i]));
+      const pushBands = (index: number) => {
+        const rect = rectAt(index);
+        if (rect) bands.push(...visualLineIndex.bandsAt(index, rect));
+      };
+      // Paragraphs are stacked in the block direction, so the ones near the
+      // viewport are found by binary search instead of reading every rect.
+      // Keep a few extra lines prepared for scrolling and glyph overhang.
+      // Paged layouts retain their wider search for fragmented/overflowing bands.
+      const blockSpan = vertical ? viewport.right - viewport.left : viewport.bottom - viewport.top;
+      const lookupOverscan = pagedLayout ? blockSpan : overscan;
+      const near = (rect: VisualRect) => vertical
+        ? rect.right >= viewport.left - lookupOverscan && rect.left <= viewport.right + lookupOverscan
+        : rect.bottom >= viewport.top - lookupOverscan && rect.top <= viewport.bottom + lookupOverscan;
+      // Has the paragraph's block end not yet reached the window's start?
+      const before = (rect: VisualRect) => vertical
+        ? rect.left > viewport.right + lookupOverscan
+        : rect.bottom < viewport.top - lookupOverscan;
+      const hidden = (rect: VisualRect) => rect.right - rect.left === 0 && rect.bottom - rect.top === 0;
+      const count = visualIndexElements.length;
+      let low = 0;
+      let high = count;
+      while (low < high) {
+        const middle = (low + high) >> 1;
+        // display:none paragraphs (folded comments) report an empty rect at the
+        // origin; probe the next painted one instead.
+        let probe = middle;
+        let rect = rectAt(probe);
+        while (rect && hidden(rect) && probe + 1 < high) rect = rectAt(++probe);
+        if (!rect || hidden(rect)) { high = middle; continue; }
+        if (before(rect)) low = probe + 1;
+        else high = middle;
+      }
+      // The caret's line is only needed to highlight it or its number. With
+      // manuscript mode alone (page boundaries) the caret measurements below
+      // would be three extra forced coordinate reads per frame.
+      const needsActiveBand = showLineNumbersRef.current || highlightCurrentLineRef.current;
+      let activeIncluded = false;
+      for (let i = low; i < count; i += 1) {
+        const rect = rectAt(i);
+        if (!rect) break;
+        if (hidden(rect)) continue;
+        if (!near(rect)) break;
+        if ((needsActiveBand && i === activeBlockIndex) || visualLineIndex.intersects(i, rect, bandViewport)) {
+          pushBands(i);
+          if (i === activeBlockIndex) activeIncluded = true;
         }
       }
+      if (needsActiveBand && !activeIncluded && activeBlockIndex >= 0 && activeBlockIndex < count) pushBands(activeBlockIndex);
       let caretX = 0;
       let caretY = 0;
       let affinityPoint: { x: number; y: number } | null = null;
-      try {
+      if (needsActiveBand) try {
         const { selection } = currentEditor.state;
         const caretRect = currentEditor.view.coordsAtPos(selection.head);
         caretX = (caretRect.left + caretRect.right) / 2;
@@ -4108,11 +4562,11 @@ export function VerticalTextEditor({
           }
         }
       } catch {
-        const activeRect = blockRects[activeBlockIndex];
+        const activeRect = rectAt(activeBlockIndex);
         caretX = activeRect ? (activeRect.left + activeRect.right) / 2 : 0;
         caretY = activeRect ? (activeRect.top + activeRect.bottom) / 2 : 0;
       }
-      const activeBand = findClosestVisualLineBand(
+      const activeBand = needsActiveBand && findClosestVisualLineBand(
         bands,
         activeBlockIndex,
         caretX - dx,
@@ -4132,18 +4586,73 @@ export function VerticalTextEditor({
         fragment.appendChild(highlight);
       }
 
+      // 原稿用紙の枚数は物理行の総数から出す。総数は段落ごとの行数の
+      // 先頭和（Fenwick木）なので、全文を数え直さない。
+      const totalLines = visualLineIndex.totalCount();
+      // 最終的な行数がまだ分からない段落があれば、途中の値は出さない。
+      const manuscriptPending = manuscriptProbeQueue.size > 0 || manuscriptProbeHandle !== null;
+      if (manuscriptOn && !manuscriptPending) {
+        const progress = manuscriptProgress(totalLines, manuscriptSettings.linesPerPage);
+        const previous = manuscriptProgressRef.current;
+        if (!previous || previous.fullPages !== progress.fullPages ||
+          previous.usedLinesOnCurrentPage !== progress.usedLinesOnCurrentPage ||
+          previous.linesPerPage !== progress.linesPerPage) {
+          manuscriptProgressRef.current = progress;
+          onManuscriptProgressChangeRef.current?.(progress);
+        }
+      }
+
+      // ページ境界。本文には余白も要素も足さず、見えている行のうち
+      // linesPerPage の倍数の行の後ろへ線を引く。連続表示だけで出す
+      // （ページ表示ではページそのものが境界になる）。
+      // 境界の層は本文と一緒にスクロールする枠（.verticalTypewriterEditor）の
+      // 中にあり、座標も枠に対する位置で置く。スクロールしても書き換えない。
+      // 画面に重ねた層へ描くと、タイプライタースクロールの毎フレーム位置を
+      // 書き換えることになり、1キーあたり十数msかかっていた。
+      const boundaryFragment = document.createDocumentFragment();
+      const boundaryHost = editorHostRef.current;
+      if (manuscriptOn && manuscriptSettings.showPageBoundaries && !pagedLayout && boundaryLayer && boundaryHost) {
+        const hostRect = boundaryHost.getBoundingClientRect();
+        const pitch = lineHeightPx(currentEditor.view.dom);
+        const vertical = !isHorizontalWriting(mode);
+        for (const band of bands) {
+          if (!endsManuscriptPage(band.number, manuscriptSettings.linesPerPage, totalLines)) continue;
+          const blockRect = rectAt(band.blockIndex);
+          if (!blockRect) continue;
+          const page = band.number / manuscriptSettings.linesPerPage;
+          const boundary = document.createElement("div");
+          boundary.className = "manuscriptPageBoundary";
+          boundary.dataset.manuscriptPage = String(page);
+          boundary.dataset.axis = vertical ? "vertical" : "horizontal";
+          if (vertical) {
+            boundary.style.left = `${snapScrollValue(band.centerX - pitch / 2 + dx - hostRect.left)}px`;
+            boundary.style.top = `${snapScrollValue(blockRect.top + dy - hostRect.top)}px`;
+            boundary.style.height = `${snapScrollValue(blockRect.bottom - blockRect.top)}px`;
+          } else {
+            boundary.style.top = `${snapScrollValue(band.centerY + pitch / 2 + dy - hostRect.top)}px`;
+            boundary.style.left = `${snapScrollValue(blockRect.left + dx - hostRect.left)}px`;
+            boundary.style.width = `${snapScrollValue(blockRect.right - blockRect.left)}px`;
+          }
+          const label = document.createElement("span");
+          label.className = "manuscriptPageBoundaryLabel";
+          label.textContent = `${page}ページ終了 / ${page + 1}ページ開始`;
+          boundary.appendChild(label);
+          boundaryFragment.appendChild(boundary);
+        }
+      }
+
       if (showLineNumbersRef.current) {
         for (const band of bands) {
           if (
-            band.right + dx < scrollerRect.left ||
-            band.left + dx > scrollerRect.right ||
-            band.bottom + dy < scrollerRect.top ||
-            band.top + dy > scrollerRect.bottom
+            band.right + dx < coverage.left ||
+            band.left + dx > coverage.right ||
+            band.bottom + dy < coverage.top ||
+            band.top + dy > coverage.bottom
           ) {
             continue;
           }
 
-          const blockRect = blockRects[band.blockIndex];
+          const blockRect = rectAt(band.blockIndex);
           if (!blockRect || band.number === 0) continue;
           const number = document.createElement("span");
           number.className = `visibleLineNumber${
@@ -4174,7 +4683,108 @@ export function VerticalTextEditor({
       layer.style.width = `${snapScrollValue(scrollerRect.width)}px`;
       layer.style.height = `${snapScrollValue(scrollerRect.height)}px`;
       clipLayerToTextBlock(layer, scrollerRect);
-      syncOverlayElements(layer, fragment);
+      content.style.transform = "";
+      syncOverlayElements(content, fragment);
+      if (boundaryLayer) syncOverlayElements(boundaryLayer, boundaryFragment);
+      visualOverlayCache = pagedLayout || overscan < 48 ? null : {
+        layout, selection: currentEditor.state.selection, settings: overlaySettings,
+        parentLeft: layerParentRect?.left ?? 0, parentTop: layerParentRect?.top ?? 0,
+        pixelRatio,
+        // Retain half the overscan as a guard for label/glyph overhang at the
+        // edge. Rebuild before the viewport can reach the prepared labels' end.
+        snapshot: { root: rootRect, viewport: scrollerRect, coverage: {
+          left: scrollerRect.left - (vertical ? overscan / 2 : 0),
+          right: scrollerRect.right + (vertical ? overscan / 2 : 0),
+          top: scrollerRect.top - (vertical ? 0 : overscan / 2),
+          bottom: scrollerRect.bottom + (vertical ? 0 : overscan / 2),
+        } },
+      };
+    };
+
+    // 隠し要素は本文の外（シェル直下）に置き、本文と同じ CSS が当たるよう
+    // .verticalTypewriterEditor > .pm-root の形にする。版面の字詰めは
+    // --ms-measure で決まり、窓の寸法には依存しない。
+    const manuscriptProbeRoot = (): HTMLElement | null => {
+      const shell = shellRef.current;
+      if (!shell) return null;
+      if (!manuscriptProbeHost?.isConnected) {
+        manuscriptProbeHost = document.createElement("div");
+        manuscriptProbeHost.className = "verticalTypewriterEditor manuscriptLineProbe";
+        manuscriptProbeHost.setAttribute("aria-hidden", "true");
+        manuscriptProbeHost.style.cssText = "position:absolute;inset:0;width:auto;height:auto;min-width:0;" +
+          "visibility:hidden;pointer-events:none;overflow:hidden;contain:strict;z-index:-1;transform:none;clip-path:none;";
+        const root = document.createElement("div");
+        root.className = "pm-root";
+        root.style.cssText = "position:absolute;top:0;left:0;right:auto;margin:0;padding:0;min-width:0;min-height:0;" +
+          "max-width:none;max-height:none;width:auto;height:auto;inline-size:var(--ms-measure);block-size:auto;";
+        manuscriptProbeHost.appendChild(root);
+        shell.appendChild(manuscriptProbeHost);
+      }
+      return manuscriptProbeHost.firstElementChild as HTMLElement;
+    };
+
+    const runManuscriptProbe = (deadline?: IdleDeadline) => {
+      manuscriptProbeHandle = null;
+      const editor = tiptapRef.current;
+      if (!editor || manuscriptRef.current.layoutMode !== "manuscript" || !manuscriptProbeQueue.size) return;
+      if (isEditorComposing(editor, composingRef)) { scheduleManuscriptProbe(); return; }
+      const ast = astKey.getState(editor.state);
+      const root = manuscriptProbeRoot();
+      if (!ast || !root) return;
+      const { doc } = editor.state;
+      const batch: Array<{ key: string; indices: number[]; paragraph: HTMLParagraphElement }> = [];
+      const started = performance.now();
+      // 未計測の欧文ランは1回のレイアウトでまとめて測る。
+      if (ast.latin) {
+        const ranges = [...manuscriptProbeQueue.values()].flatMap((indices) => [...indices].map((index) => ({ from: index, to: index + 1 })));
+        prepareManuscriptLatin(ast.lines, ranges, ast.latin);
+      }
+      for (const [key, waiting] of manuscriptProbeQueue) {
+        manuscriptProbeQueue.delete(key);
+        const indices = [...waiting].filter((index) => {
+          const line = ast.lines[index];
+          return index < doc.childCount && line !== undefined && manuscriptProbeKey(line) === key;
+        });
+        if (!indices.length) continue;
+        batch.push({ key, indices, paragraph: buildManuscriptProbeParagraph(ast.lines, indices[0], doc.child(indices[0]), ast.latin) });
+        if (batch.length >= 200 || (deadline ? deadline.timeRemaining() < 2 : performance.now() - started > 6)) break;
+      }
+      if (!batch.length) return;
+      manuscriptProbeStats.batches++;
+      manuscriptProbeStats.paragraphs += batch.length;
+      root.replaceChildren(...batch.map((item) => item.paragraph));
+      const vertical = !isHorizontalWriting(writingModeRef.current);
+      const pitch = lineHeightPx(root);
+      const counts = batch.map((item) => {
+        const rect = item.paragraph.getBoundingClientRect();
+        const size = vertical ? rect.width : rect.height;
+        return pitch > 0 ? Math.max(1, Math.round(size / pitch)) : 1;
+      });
+      root.replaceChildren();
+      // Apply each result to its own paragraph only; the rest of the index is
+      // untouched (no pass over every paragraph per keystroke).
+      const children = editor.view.dom.children;
+      batch.forEach((item, i) => {
+        manuscriptProbeCounts.set(item.key, counts[i]);
+        for (const index of item.indices) {
+          const element = children[index];
+          const state = element ? manuscriptParagraphState(element) : null;
+          if ((state === "raw" || state === "active") && visualIndexElements[index] === element) {
+            visualLineIndex.setCount(index, counts[i]);
+          }
+        }
+      });
+      manuscriptCountGenerationRef.current += 1;
+      requestVisualLines();
+      if (manuscriptProbeQueue.size) scheduleManuscriptProbe();
+      else if (editorDisplayModeRef.current === "paged") requestAnimationFrame(() => syncPageMetricsRef.current?.());
+    };
+
+    const scheduleManuscriptProbe = () => {
+      if (manuscriptProbeHandle !== null) return;
+      manuscriptProbeHandle = typeof requestIdleCallback === "function"
+        ? requestIdleCallback(runManuscriptProbe, { timeout: 1000 })
+        : window.setTimeout(() => runManuscriptProbe(), 50);
     };
 
     const requestVisualLines = () => {
@@ -4319,40 +4929,6 @@ export function VerticalTextEditor({
     renderVisualLinesRef.current = renderVisualLines;
     requestVisualLinesRef.current = requestVisualLines;
 
-    const clearImeLayoutTarget = () => {
-      imeLayoutTarget?.removeAttribute("data-ime-layout-target");
-      imeLayoutTarget = null;
-    };
-
-    const prepareImeLayoutTarget = () => {
-      if (composingRef.current) return;
-      const selection = window.getSelection();
-      const anchor = selection?.isCollapsed ? selection.anchorNode : null;
-      const anchorElement =
-        anchor instanceof Element ? anchor : anchor?.parentElement ?? null;
-      const candidate = anchorElement?.closest<HTMLElement>(
-        ".ks-line-head-ban, .ks-line-end-ban, .ks-keep-short",
-      );
-      const next = candidate && host.contains(candidate) ? candidate : null;
-      if (next === imeLayoutTarget) return;
-
-      clearImeLayoutTarget();
-      imeLayoutTarget = next;
-      if (!imeLayoutTarget) return;
-
-      // IME開始後にnowrapを外すと、CSS multicolの再分割より先にWindows側が
-      // 古いキャレット位置を候補ウィンドウへ記憶することがある。選択位置が
-      // 決まった段階で対象spanだけを先に折り返し可能にし、本文全体の再組版や
-      // DOM選択の操作をせずに候補位置とページ割りを一致させる。
-      imeLayoutTarget.setAttribute("data-ime-layout-target", "true");
-      // style/layoutを変換開始前に確定させる。読み取りだけなので選択・Undo・本文は
-      // 変更しない。
-      imeLayoutTarget.getBoundingClientRect();
-      if (editorDisplayModeRef.current === "paged") {
-        syncPageMetricsRef.current?.();
-      }
-    };
-
     // 改行・削除・IME確定の後は、ページ割りを取り直してからキャレットの
     // ページへ移る。総ページ数が増えるとReactのページ面の追加が1フレーム
     // 遅れ、その間は新しいページへスクロールできず手前へ丸められる。そこで
@@ -4479,7 +5055,6 @@ export function VerticalTextEditor({
         if (editorDisplayModeRef.current !== "paged") requestLineBreakMarks();
       },
       onSelectionUpdate: () => {
-        prepareImeLayoutTarget();
         onSelectionChangeRef.current();
         // ドラッグ範囲選択中は寄せない（pointerup でまとめて判定する）。
         // キーボードでの選択（Shift+矢印など）はドラッグ外なので従来どおり追従する。
@@ -4508,6 +5083,56 @@ export function VerticalTextEditor({
     }
     updateEmptyAttribute(editor);
 
+    // 欧文ランの計測条件。本文rootの実際の computed style から取るので、
+    // フォント設定・見出しフォントの指定がそのまま反映される。
+    const applyManuscriptLatin = () => {
+      const current = tiptapRef.current;
+      if (!current) return;
+      const active = manuscriptRef.current.layoutMode === "manuscript";
+      let latin: ManuscriptLatinContext | null = null;
+      if (active) {
+        const style = getComputedStyle(current.view.dom);
+        const headingFamily = style.getPropertyValue("--editor-heading-font-family").trim() || style.fontFamily;
+        const metrics = latinMetricsRef.current ??= new LatinRunMetrics(shellRef.current);
+        const common = {
+          fontSize: Number.parseFloat(style.fontSize) || 16,
+          fontStyle: style.fontStyle,
+          writingMode: style.writingMode === "horizontal-tb" ? "horizontal-tb" as const : "vertical-rl" as const,
+        };
+        latin = {
+          metrics,
+          body: { ...common, fontFamily: style.fontFamily, fontWeight: style.fontWeight },
+          heading: { ...common, fontFamily: headingFamily, fontWeight: "600" },
+        };
+        const previous = astKey.getState(current.state)?.latin;
+        const same = (a: ManuscriptFontKey, b: ManuscriptFontKey) =>
+          a.fontFamily === b.fontFamily && a.fontSize === b.fontSize && a.fontWeight === b.fontWeight &&
+          a.fontStyle === b.fontStyle && a.writingMode === b.writingMode;
+        if (previous && same(previous.body, latin.body) && same(previous.heading, latin.heading)) return;
+      } else if (!astKey.getState(current.state)?.latin) {
+        return;
+      }
+      current.view.dispatch(
+        current.state.tr.setMeta(astKey, { latin } satisfies AstMeta).setMeta("addToHistory", false),
+      );
+    };
+    applyManuscriptLatinRef.current = applyManuscriptLatin;
+    applyManuscriptLatin();
+    // Web フォントの読み込みが終わると送り幅が変わる。段落のDOMは変わらないので
+    // 行の形のキャッシュは自分では気づけない。測り直しを指示し、欧文ランの
+    // 古い幅も捨てる。
+    const handleFontsLoaded = () => {
+      invalidateTextLayoutRef.current?.();
+      const current = tiptapRef.current;
+      if (!current || !astKey.getState(current.state)?.latin) return;
+      latinMetricsRef.current?.clear();
+      const latin = astKey.getState(current.state)!.latin!;
+      current.view.dispatch(
+        current.state.tr.setMeta(astKey, { latin: { ...latin } } satisfies AstMeta).setMeta("addToHistory", false),
+      );
+    };
+    document.fonts?.addEventListener("loadingdone", handleFontsLoaded);
+
     // Retain geometry for unchanged paragraphs, including when inserting a
     // newline shifts every subsequent paragraph. Only DOM changes/reflow can
     // invalidate the fragments inside a paragraph; scrolling just translates it.
@@ -4522,7 +5147,12 @@ export function VerticalTextEditor({
         if (record.target === editor.view.dom) {
           if (record.type === "childList") visualIndexStructureDirty = true;
           if (record.type === "attributes" && (record.attributeName === "style" || record.attributeName === "class")) {
-            if (!paragraphFlowRef.current) visualLayoutRevision += 1;
+            // A new revision discards every paragraph's cached line shapes and
+            // (manuscript mode) line counts, i.e. re-measures the whole text.
+            // Focus classes and the paged root's position do not change how
+            // paragraphs are typeset; on a 100k-char manuscript treating them
+            // as a relayout froze heading jumps and page turns for seconds.
+            if (!paragraphFlowRef.current && rootTypesettingChanged(record)) visualLayoutRevision += 1;
             centerAnimation.invalidate();
             if (record.attributeName === "style") requestCenterCaret(false, "resize");
           }
@@ -4552,6 +5182,8 @@ export function VerticalTextEditor({
       requestLineBreakMarks();
     };
     invalidateTextLayoutRef.current = invalidateTextLayout;
+    (editor.view.dom as HTMLElement & { __manuscriptProbeQA?: () => unknown }).__manuscriptProbeQA =
+      () => ({ ...manuscriptProbeStats, cached: manuscriptProbeCounts.size, queued: manuscriptProbeQueue.size, revision: visualLayoutRevision });
     if (import.meta.env.VITE_QA_PAGE_DIAGNOSTICS === "1") {
       const root = editor.view.dom as HTMLElement & { __pageBreaksQA?: () => unknown; __pageBreaksHistoryQA?: unknown[] };
       root.__pageBreaksQA = () => ({ breaks: pageBreaksRef.current, signature: pageBreaksSignatureRef.current, history: root.__pageBreaksHistoryQA ?? [] });
@@ -4648,7 +5280,6 @@ export function VerticalTextEditor({
       imeReplacePrepared = false;
       cancelInitialAdjustment();
       stopCenterAnimation();
-      prepareImeLayoutTarget();
       composingRef.current = true;
       // 変換中はスクロールスナップを止める。ブラウザがキャレットを見せるために
       // 動かしたスクロールを、スナップがページ境界へ引き戻してしまうため。
@@ -4731,7 +5362,6 @@ export function VerticalTextEditor({
     const handleCompositionEnd = () => {
       composingRef.current = false;
       shellRef.current?.removeAttribute("data-composing");
-      clearImeLayoutTarget();
       // 確定すれば本文は段へ収まる。連続写像をやめてキャレットのページへ吸着
       // し直す。ただしIMEは変換の区切りごとに compositionend → compositionstart
       // を続けて投げてくるので、1フレーム待って本当に変換が終わったかを見る。
@@ -4883,9 +5513,18 @@ export function VerticalTextEditor({
       requestLineBreakMarks();
     });
 
+    const uninstallNativeIme = installNativeImeExperiment(editor, shellRef.current!, {
+      start: handleCompositionStart,
+      update: () => {
+        requestPagedSelectionAfterReflow(editor);
+        requestCenterCaret(false, "native-composition");
+      },
+      end: handleCompositionEnd,
+    });
     onReady(handle);
 
     return () => {
+      uninstallNativeIme();
       scroller.removeEventListener("wheel", handleWheel);
       scroller.removeEventListener("mousedown", handleMouseDown);
       editor.view.dom.removeEventListener("pointerdown", handlePointerDown, { capture: true });
@@ -4911,7 +5550,6 @@ export function VerticalTextEditor({
       if (compositionFrame !== null) cancelAnimationFrame(compositionFrame);
       if (compositionSettleFrame !== null) cancelAnimationFrame(compositionSettleFrame);
       if (compositionRevealFrame !== null) cancelAnimationFrame(compositionRevealFrame);
-      clearImeLayoutTarget();
       pagedReflowGeneration += 1;
       if (pagedReflowFrame !== null) cancelAnimationFrame(pagedReflowFrame);
       pagedScrollSettleGenerationRef.current += 1;
@@ -4942,7 +5580,20 @@ export function VerticalTextEditor({
         cancelInitialAdjustmentRef.current = null;
       }
       if (lineBreakLayerRef.current) lineBreakLayerRef.current.textContent = "";
-      if (visualLineLayerRef.current) visualLineLayerRef.current.textContent = "";
+      if (manuscriptBoundaryLayerRef.current) manuscriptBoundaryLayerRef.current.textContent = "";
+      if (manuscriptProbeHandle !== null) {
+        if (typeof cancelIdleCallback === "function") cancelIdleCallback(manuscriptProbeHandle);
+        clearTimeout(manuscriptProbeHandle);
+      }
+      manuscriptProbeHost?.remove();
+      document.fonts?.removeEventListener("loadingdone", handleFontsLoaded);
+      if (applyManuscriptLatinRef.current === applyManuscriptLatin) applyManuscriptLatinRef.current = null;
+      latinMetricsRef.current?.dispose();
+      latinMetricsRef.current = null;
+      if (visualLineContentRef.current) {
+        visualLineContentRef.current.textContent = "";
+        visualLineContentRef.current.style.transform = "";
+      }
       editor.destroy();
       if (tiptapRef.current === editor) tiptapRef.current = null;
       onReady(null);
@@ -4959,6 +5610,12 @@ export function VerticalTextEditor({
       data-editor-display={editorDisplayMode}
       data-typewriter={editorDisplayMode === "continuous" && !typewriterScroll ? "off" : undefined}
       data-page-flow={editorDisplayMode === "paged" ? pageFlowDirection : undefined}
+      data-manuscript={manuscriptActive ? "true" : undefined}
+      data-manuscript-grid={manuscriptActive && manuscript.showGrid ? "true" : undefined}
+      style={manuscriptActive ? ({
+        "--ms-chars": manuscript.charactersPerLine,
+        "--ms-font-size": `${manuscript.fontSize}px`,
+      } as CSSProperties) : undefined}
     >
       <div ref={scrollerRef} className="verticalTypewriterScroller">
         <div
@@ -5002,14 +5659,18 @@ export function VerticalTextEditor({
                 <span>{index + 1}</span>
               </div>
             ))}
-          <div ref={editorHostRef} className="verticalTypewriterEditor" />
+          <div ref={editorHostRef} className="verticalTypewriterEditor">
+            <div ref={manuscriptBoundaryLayerRef} className="manuscriptPageBoundaryLayer" aria-hidden="true" />
+          </div>
         </div>
       </div>
       <div
         ref={visualLineLayerRef}
         className="visibleLineNumberLayer"
         aria-hidden="true"
-      />
+      >
+        <div ref={visualLineContentRef} className="visibleLineNumberContent" />
+      </div>
       <div ref={lineBreakLayerRef} className="visibleLineBreakLayer" aria-hidden="true" />
       <ImageHoverPreview hostRef={editorHostRef} documentPath={documentPath} />
       {editorDisplayMode === "continuous" && typewriterScroll && showTypewriterGuide && (

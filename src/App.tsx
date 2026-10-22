@@ -47,6 +47,7 @@ import {
   type BreadcrumbLayout,
 } from "./utils/breadcrumbLayout";
 import { VerticalTextEditor, type TextEditorHandle } from "./VerticalTextEditor";
+import { createManuscriptProgressStore } from "./editor/manuscriptProgressStore";
 import { AppDialogModal } from "./components/dialogs/AppDialogModal";
 import { CommandPalette, type PaletteCommand } from "./components/dialogs/CommandPalette";
 import { PluginManagerModal } from "./components/dialogs/PluginManagerModal";
@@ -248,8 +249,11 @@ import type {
   WorkspaceRecord,
 } from "./types";
 import { isIdeaBinderCard, isReferenceBinderCard, workStatusLabels } from "./types";
+import { normalizeManuscriptSettings } from "./editor/manuscriptLayout";
+import { trackZoneRightHover } from "./utils/zoneRightHover";
 import {
   fileProgressStatuses,
+  DEFAULT_MANUSCRIPT_SETTINGS,
   DEFAULT_EDITOR_MEASURE_PERCENT,
   EDITOR_MEASURE_PERCENT_MAX,
   EDITOR_MEASURE_PERCENT_MIN,
@@ -1156,6 +1160,7 @@ const defaultSettings: EditorSettings = {
   writingMode: "vertical-rl",
   editorDisplayMode: "continuous",
   pageFlowDirection: "horizontal-rtl",
+  manuscript: DEFAULT_MANUSCRIPT_SETTINGS,
   canvasDefaultWritingMode: "horizontal-tb",
   canvasDefaultFontSource: "ui",
   plotFontSource: "editor",
@@ -2600,6 +2605,7 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
         settings.editorDisplayMode === "paged" ? "paged" : "continuous",
       pageFlowDirection:
         settings.pageFlowDirection === "vertical" ? "vertical" : "horizontal-rtl",
+      manuscript: normalizeManuscriptSettings(settings.manuscript, settings.fontSize),
       canvasDefaultWritingMode:
         settings.canvasDefaultWritingMode === "horizontal-tb" ||
         settings.canvasDefaultWritingMode === "vertical-rl"
@@ -3176,6 +3182,7 @@ export default function App() {
     current: number;
     total: number;
   } | null>(null);
+  const [editorManuscriptProgress] = useState(createManuscriptProgressStore);
   const [editorContextMenu, setEditorContextMenu] =
     useState<EditorContextMenuState | null>(null);
   const [notationModal, setNotationModal] = useState<NotationModalState | null>(null);
@@ -3226,6 +3233,7 @@ export default function App() {
    * 起動へ切り替わる。
    */
   const [appMode, setAppMode] = useState<AppMode>("write");
+  const appShellRef = useRef<HTMLElement | null>(null);
   // サイドバー・ステータスバー・通知から、特定の保存点を選んだ状態でチェックポイント画面を開く。
   const [checkpointFocusRequest, setCheckpointFocusRequest] = useState<{ id: string; nonce: number } | null>(null);
   const openCheckpointStudio = useCallback((snapshotId?: string) => {
@@ -4289,6 +4297,13 @@ export default function App() {
   }, []);
 
   const { snippets, settings } = appState;
+  const zoneRightEnabled = settings.sidebarHoverMode === "both" || settings.sidebarHoverMode === "right";
+  // Zoneモードの右ペインの表示判定は .appShell の属性で行う（zoneRightHover.ts）。
+  useEffect(() => {
+    const shell = appShellRef.current;
+    if (!shell || !zoneRightEnabled) return undefined;
+    return trackZoneRightHover(shell);
+  }, [zoneRightEnabled]);
   useEffect(() => {
     if (!isTauriRuntime()) return;
 
@@ -5026,16 +5041,18 @@ export default function App() {
     setCollapsedWorkspaceFolderPaths(collapsed);
   }, [projectFolder]);
 
-  useEffect(() => {
-    if (!projectFolder || !currentFilePath) return;
-    if (!findProjectEntry(projectFolder.children, currentFilePath)) return;
-
-    setProjectAst((current) =>
-      current && current.rootPath === projectFolder.path
-        ? upsertProjectAstDocumentAst(current, activeDocumentAst)
-        : current,
-    );
-  }, [activeDocumentAst, currentFilePath, projectFolder]);
+  // Synchronize this component's derived state before its children commit.
+  // An effect committed stale project counts first, then updated them in a
+  // second commit. That extra layout also invalidated Chromium's text-input
+  // cache for the long focused manuscript. AST identity makes this converge
+  // after one retry; indexing and other-file updates still use setProjectAst.
+  if (
+    projectFolder && currentFilePath && projectAst?.rootPath === projectFolder.path &&
+    findProjectEntry(projectFolder.children, currentFilePath) &&
+    projectAst.files.find((file) => file.path === currentFilePath)?.documentAst !== activeDocumentAst
+  ) {
+    setProjectAst(upsertProjectAstDocumentAst(projectAst, activeDocumentAst));
+  }
 
   useEffect(() => {
     if (!isHydrated || !isTauriRuntime() || !projectFolder) return;
@@ -12704,7 +12721,9 @@ export default function App() {
 
   return (
       <main
+        ref={appShellRef}
         className="appShell"
+        data-shell-app-mode={appMode}
         data-theme={settings.theme}
         data-writing-mode={settings.writingMode}
         data-zone-mode={settings.sidebarHoverMode !== "none" ? "true" : undefined}
@@ -13971,7 +13990,13 @@ export default function App() {
                               settings.lineHeight,
                               settings.editorMeasureHorizontal,
                               settings.editorMeasureVertical,
+                              settings.manuscript.layoutMode,
+                              settings.manuscript.charactersPerLine,
+                              settings.manuscript.linesPerPage,
+                              settings.manuscript.fontSize,
                             ].join("|")}
+                            manuscript={settings.manuscript}
+                            onManuscriptProgressChange={editorManuscriptProgress.setSnapshot}
                             initialSelectionOffset={initialSelectionOffset}
                             initialViewportState={activeTab?.viewportState ?? null}
                             onViewportSizeChange={handleEditorViewportSizeChange}
@@ -14240,6 +14265,7 @@ export default function App() {
                 charCount={charCount}
                 selectionCharCount={selectionCharCount}
                 pageMetrics={editorPageMetrics}
+                manuscriptProgress={settings.manuscript.layoutMode === "manuscript" ? editorManuscriptProgress : null}
                 checkpoint={settings.showCheckpointStatus && projectFolder ? {
                   latest: latestManualSnapshot && {
                     label: latestManualSnapshot.label,

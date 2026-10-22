@@ -10,6 +10,15 @@ type Options = {
   onSettled: () => void;
 };
 
+/** How quickly the scroll closes in on the caret (exponential time constant).
+ * 55 ms took ~165 ms to catch up after each new column on a long manuscript,
+ * which read as the caret dragging the view behind it. */
+const FOLLOW_TIME_CONSTANT_MS = 30;
+/** After this, the animation jumps to the target instead of easing further. */
+const FOLLOW_DEADLINE_MS = 250;
+/** One frame at 60 Hz: the first step of an animation advances by this much. */
+const NOMINAL_FRAME_MS = 1000 / 60;
+
 /** Retarget one animation instead of restarting it on every input. Geometry is
  * read when the caret/layout changes and at settlement, never on every frame. */
 export function createTypewriterScroller(options: Options) {
@@ -54,7 +63,7 @@ export function createTypewriterScroller(options: Options) {
     const dt = Math.min(64, Math.max(0, now - lastTime));
     lastTime = now;
     const final = Math.abs(delta) <= pixel || now >= deadline;
-    const move = Math.sign(delta) * Math.min(Math.abs(delta), Math.max(Math.abs(delta) * (1 - Math.exp(-dt / 55)), pixel));
+    const move = Math.sign(delta) * Math.min(Math.abs(delta), Math.max(Math.abs(delta) * (1 - Math.exp(-dt / FOLLOW_TIME_CONSTANT_MS)), pixel));
     options.write(snap(final ? target : current + move));
     // Browser scroll limits may clamp a target. Always terminate, including
     // at document edges, instead of scheduling an unreachable target forever.
@@ -62,12 +71,23 @@ export function createTypewriterScroller(options: Options) {
     frame = options.requestFrame(step);
   };
   return {
-    request() {
+    /**
+     * Start following the caret. `inFrame` means the caller already runs in an
+     * animation frame (after the caret moved), so the first step happens now
+     * instead of one frame later.
+     */
+    request(inFrame = false) {
       dirty = true;
-      deadline = options.now() + 400;
+      deadline = options.now() + FOLLOW_DEADLINE_MS;
       if (frame !== null) return;
-      lastTime = options.now();
-      frame = options.requestFrame(step);
+      if (inFrame) {
+        // Step now, by one frame's worth rather than the ~0 ms since "now".
+        lastTime = options.now() - NOMINAL_FRAME_MS;
+        step(options.now());
+      } else {
+        lastTime = options.now();
+        frame = options.requestFrame(step);
+      }
     },
     invalidate() { dirty = true; },
     stop,

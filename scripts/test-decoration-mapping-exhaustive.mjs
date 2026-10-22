@@ -53,7 +53,12 @@ for (const full of [false, true]) for (const oldDoc of documents) {
 const longDoc = docOf(Array.from({ length: 2400 }, (_, i) => `段落${i} **太字**`));
 let state = EditorState.create({ schema, doc: longDoc });
 let ast = makeAstState(state);
-[state, ast] = apply(state, ast, state.tr.setMeta(astKey, { fullDecorations: true }));
+// The caret sits in the edited paragraph, so the decoration window (every
+// decoration) stays put; lines outside it carry only the layout-affecting
+// ones and must not be touched by the edit either.
+let caret = 1;
+for (let i = 0; i < 1200; i++) caret += longDoc.child(i).nodeSize;
+[state, ast] = apply(state, ast, state.tr.setSelection(TextSelection.create(state.doc, caret)).setMeta(astKey, { fullDecorations: true, visibleCenter: 1200 }));
 // The extracted bundle loads the CommonJS library; spy on the actual set's
 // constructor, rather than the separate ESM entry point used by this script.
 const SetClass = ast.decoSet.constructor;
@@ -66,6 +71,7 @@ const texts = ast.lines.map(l => l.source);
 const previousSignature = decorationSignature(ast.decoSet);
 texts[1200] += "追記";
 const tr = state.tr.replaceWith(0, state.doc.content.size, docOf(texts).content);
+tr.setSelection(TextSelection.create(tr.doc, caret));
 const next = state.apply(tr);
 let updated;
 try { updated = applyAst(tr, ast, state, next); }

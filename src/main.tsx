@@ -5,6 +5,7 @@ import App from "./App";
 import CanvasWindowApp from "./CanvasWindowApp";
 import ExportWindowApp from "./ExportWindowApp";
 import PagedOpenQaApp from "./PagedOpenQaApp";
+import NativeImeQaApp from "./NativeImeQaApp";
 import "./App.css";
 import "./styles/themes/index.css";
 
@@ -59,12 +60,15 @@ function detectCanvasWindow(): boolean {
 const isExportWindow = detectExportWindow();
 const isCanvasWindow = detectCanvasWindow();
 const isPagedOpenQa = new URLSearchParams(window.location.search).get("view") === "paged-open-qa";
+const isNativeImeQa = new URLSearchParams(window.location.search).get("view") === "native-ime-qa";
 
 installWebviewNativeShortcutGuards();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    {isPagedOpenQa ? (
+    {isNativeImeQa ? (
+      <NativeImeQaApp />
+    ) : isPagedOpenQa ? (
       <PagedOpenQaApp />
     ) : isCanvasWindow ? (
       <CanvasWindowApp />

@@ -142,7 +142,12 @@ assert.match(
   "reference cards must stay hidden on Canvas, full plugin screens, Export, and Checkpoint",
 );
 assert.match(appCssSource, /\.topbar\s*\{[^}]*z-index:\s*6/, "topbar popovers must remain above reference cards");
-assert.match(appCssSource, /\.toast\s*\{[^}]*z-index:\s*7/, "notifications must remain above reference cards");
+// The toast was raised above the Plot manager modal (z-index 10) so its undo
+// stays clickable there; only its order relative to the cards matters here.
+{
+  const zIndexOf = (selector) => Number(appCssSource.match(new RegExp(`${selector}\\s*\\{[^}]*z-index:\\s*(\\d+)`))?.[1]);
+  assert.ok(zIndexOf("\\.toast") > zIndexOf("\\.referenceLayer"), "notifications must remain above reference cards");
+}
 assert.match(appCssSource, /\.modalBackdrop\s*\{[^}]*z-index:\s*10/, "native dialogs must remain above reference cards");
 assert.doesNotMatch(appSource, /pluginScreenRightSidebar/, "a full plugin screen must never resize the right sidebar");
 assert.match(appCssSource, /\.pluginScreenPane\s*\{[^}]*position:\s*absolute[^}]*inset:\s*0[^}]*overflow:\s*hidden/, "full plugin screens need an independent overlay that cannot resize the editor workspace");

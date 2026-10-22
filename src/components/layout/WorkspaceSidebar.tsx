@@ -1537,8 +1537,15 @@ export function WorkspaceSidebar({
     treeDepth: number,
     headingDepth = 0,
   ): JSX.Element[] => {
+    const occurrences = new Map<string, number>();
     return items.map((item) => {
       const itemKey = outlineHeadingKey(filePath, item);
+      // Lines shift when body text gains a newline. That changes item.id (used
+      // by navigation/collapse state), but must not recreate untouched headings.
+      // Equal heading sources share blockId, so disambiguate them per sibling list.
+      const occurrence = occurrences.get(item.blockId) ?? 0;
+      occurrences.set(item.blockId, occurrence + 1);
+      const domKey = `${filePath ?? "scratch"}:${item.blockId}:${occurrence}`;
       const hasChildren = item.children.length > 0;
       const isCollapsed =
         hasChildren &&
@@ -1573,7 +1580,7 @@ export function WorkspaceSidebar({
       return (
         <div
           className="outlineTreeNode"
-          key={itemKey}
+          key={domKey}
           style={
             {
               "--outline-item-indent": `${outlineIndent}px`,

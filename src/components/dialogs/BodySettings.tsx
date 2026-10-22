@@ -1,5 +1,14 @@
-import type { EditorSettings } from "../../types";
-import { EDITOR_MEASURE_PERCENT_MAX, EDITOR_MEASURE_PERCENT_MIN } from "../../types";
+import type { EditorSettings, ManuscriptSettings } from "../../types";
+import {
+  EDITOR_MEASURE_PERCENT_MAX,
+  EDITOR_MEASURE_PERCENT_MIN,
+  MANUSCRIPT_CHARACTERS_MAX,
+  MANUSCRIPT_CHARACTERS_MIN,
+  MANUSCRIPT_FONT_SIZE_MAX,
+  MANUSCRIPT_FONT_SIZE_MIN,
+  MANUSCRIPT_LINES_MAX,
+  MANUSCRIPT_LINES_MIN,
+} from "../../types";
 import { BoundedNumberInput } from "./BoundedNumberInput";
 import { SettingsFontSelect } from "./SettingsFontSelect";
 import type { FontSettingsPanelProps } from "./SettingsPanelTypes";
@@ -15,6 +24,10 @@ export function BodySettings({ settings, systemFonts, editorMeasureLimit, onUpda
   const editorMeasurePx = editorMeasureLimit === null
     ? null
     : Math.round((editorMeasureLimit * editorMeasureValue) / 100);
+  const manuscript = settings.manuscript;
+  const manuscriptOn = manuscript.layoutMode === "manuscript";
+  const updateManuscript = <Key extends keyof ManuscriptSettings>(key: Key, value: ManuscriptSettings[Key]) =>
+    onUpdateSettings("manuscript", { ...manuscript, [key]: value });
   return (
     <>
       <label>
@@ -112,16 +125,83 @@ export function BodySettings({ settings, systemFonts, editorMeasureLimit, onUpda
           </select>
         </label>
       )}
+      <label>
+        <span>原稿用紙</span>
+        <select
+          value={manuscript.layoutMode}
+          onChange={(event) =>
+            updateManuscript("layoutMode", event.target.value as ManuscriptSettings["layoutMode"])
+          }
+        >
+          <option value="normal">使用しない</option>
+          <option value="manuscript">使用する</option>
+        </select>
+      </label>
+      {manuscriptOn && (
+        <>
+          <div className="modalFormGrid">
+            <label>
+              <span>1行の字数</span>
+              <BoundedNumberInput
+                min={MANUSCRIPT_CHARACTERS_MIN}
+                max={MANUSCRIPT_CHARACTERS_MAX}
+                step={1}
+                value={manuscript.charactersPerLine}
+                onChange={(value) => updateManuscript("charactersPerLine", Math.round(value))}
+              />
+            </label>
+            <label>
+              <span>1ページの行数</span>
+              <BoundedNumberInput
+                min={MANUSCRIPT_LINES_MIN}
+                max={MANUSCRIPT_LINES_MAX}
+                step={1}
+                value={manuscript.linesPerPage}
+                onChange={(value) => updateManuscript("linesPerPage", Math.round(value))}
+              />
+            </label>
+          </div>
+          <label className="checkSetting">
+            <input
+              checked={manuscript.showGrid}
+              type="checkbox"
+              onChange={(event) => updateManuscript("showGrid", event.target.checked)}
+            />
+            <span>罫線を表示</span>
+          </label>
+          <label className="checkSetting">
+            <input
+              checked={manuscript.showPageBoundaries}
+              disabled={settings.editorDisplayMode === "paged"}
+              type="checkbox"
+              onChange={(event) => updateManuscript("showPageBoundaries", event.target.checked)}
+            />
+            <span>ページ境界を表示</span>
+          </label>
+        </>
+      )}
       <div className="modalFormGrid">
         <label>
           <span>文字サイズ</span>
-          <BoundedNumberInput
-            min={12}
-            max={24}
-            step={1}
-            value={settings.fontSize}
-            onChange={(value) => onUpdateSettings("fontSize", value)}
-          />
+          {manuscriptOn ? (
+            <BoundedNumberInput
+              key="manuscript-font-size"
+              min={MANUSCRIPT_FONT_SIZE_MIN}
+              max={MANUSCRIPT_FONT_SIZE_MAX}
+              step={1}
+              value={manuscript.fontSize}
+              onChange={(value) => updateManuscript("fontSize", Math.round(value))}
+            />
+          ) : (
+            <BoundedNumberInput
+              key="body-font-size"
+              min={12}
+              max={24}
+              step={1}
+              value={settings.fontSize}
+              onChange={(value) => onUpdateSettings("fontSize", value)}
+            />
+          )}
         </label>
         <label>
           <span>行間</span>
@@ -141,6 +221,7 @@ export function BodySettings({ settings, systemFonts, editorMeasureLimit, onUpda
           {editorMeasurePx !== null && `（${editorMeasurePx}px）`}
         </span>
         <input
+          disabled={manuscriptOn}
           min={EDITOR_MEASURE_PERCENT_MIN}
           max={EDITOR_MEASURE_PERCENT_MAX}
           step="1"

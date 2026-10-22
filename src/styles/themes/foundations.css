@@ -170,41 +170,35 @@
 /* The plugin iframe is intentionally detached from the sidebar so it can also
    become a full-window modal. While the Zone sidebar is parked off-screen,
    keep that detached iframe non-interactive; otherwise its transparent frame
-   covers the real edge hover target. */
-.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"])
+   covers the real edge hover target.
+   Hover/focus state comes from attributes that trackZoneRightHover()
+   (src/utils/zoneRightHover.ts) writes on .appShell. These rules used
+   .appShell:has(...) before, which made every insertion into the manuscript
+   invalidate styles across the whole app (10ms+ per keystroke on 100k chars). */
+.appShell[data-zone-mode="true"][data-zone-right="true"][data-shell-app-mode="write"]
   .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost) {
   opacity: 0;
   pointer-events: none;
 }
 
-.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"])
+.appShell[data-zone-mode="true"][data-zone-right="true"][data-shell-app-mode="write"]
   .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost)
   .pluginRuntimeFrame {
   pointer-events: none;
 }
 
-.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"]):has(.zoneRightSidebarHoverTarget:hover)
-  .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost),
-.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"]):has(.rightSidebar:is(:hover, :focus-within))
-  .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost),
-.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"]):has(.pluginRuntimeDetachedHost:hover)
+.appShell[data-zone-mode="true"][data-zone-right="true"][data-shell-app-mode="write"][data-zone-right-active="true"]
   .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost) {
   opacity: 1;
 }
 
-.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"]):has(.zoneRightSidebarHoverTarget:hover)
-  .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost)
-  .activePluginRuntimeFrame,
-.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"]):has(.rightSidebar:is(:hover, :focus-within))
-  .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost)
-  .activePluginRuntimeFrame,
-.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.workspace[data-app-mode="write"]):has(.pluginRuntimeDetachedHost:hover)
+.appShell[data-zone-mode="true"][data-zone-right="true"][data-shell-app-mode="write"][data-zone-right-active="true"]
   .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost)
   .activePluginRuntimeFrame {
   pointer-events: auto;
 }
 
-.appShell[data-zone-mode="true"][data-zone-right="true"]:has(.pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost):hover)
+.appShell[data-zone-mode="true"][data-zone-right="true"][data-zone-plugin-hover="true"]
   .workspace[data-app-mode="write"]
   > .rightSidebar {
   box-shadow: -18px 0 36px rgba(0, 0, 0, 0.32);
