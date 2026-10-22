@@ -23,7 +23,23 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com",
+        "style-src": "'self' 'unsafe-inline' https://cdnjs.cloudflare.com",
+        "img-src": "'self' data: blob: http: https: http://then-image.localhost http://then-cover.localhost",
+        "font-src": "'self' data: https://cdnjs.cloudflare.com",
+        "media-src": "'self' data: blob:",
+        "connect-src": "'self' ipc: http://ipc.localhost data: blob: http://then-image.localhost http://then-cover.localhost",
+        "worker-src": "'self' blob:",
+        "frame-src": "'self' data: blob:",
+        "child-src": "'self' blob:",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'none'"
+      },
+      "devCsp": null,
+      "dangerousDisableAssetCspModification": ["script-src", "style-src"]
     }
   },
   "bundle": {
