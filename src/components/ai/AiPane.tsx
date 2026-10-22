@@ -13,11 +13,14 @@ type AiPaneProps = {
   /** The answer was saved as a reference file; add it to `threadId`. */
   onReferenceSaved: (threadId: string, file: ReferenceFileInfo) => void;
   onOpenReference: (file: ReferenceFileInfo) => void;
+  /** Text handed over from the manuscript, the quick Idea popup or an Idea; added to the composer, not sent. */
+  insertRequest?: { text: string; nonce: number } | null;
+  onInsertConsumed?: (nonce: number) => void;
 };
 
 const threadLabel = (thread: IdeaThread) => thread.title || (thread.kind === "inbox" ? "インボックス" : "無題のスレッド");
 
-export function AiPane({ rootPath, settings, threads, onReferenceSaved, onOpenReference }: AiPaneProps) {
+export function AiPane({ rootPath, settings, threads, onReferenceSaved, onOpenReference, insertRequest, onInsertConsumed }: AiPaneProps) {
   const ai = useAiConversations(rootPath, settings);
   const [draft, setDraft] = useState("");
   const [mode, setMode] = useState<AiMode>(settings.defaultMode);
@@ -26,6 +29,7 @@ export function AiPane({ rootPath, settings, threads, onReferenceSaved, onOpenRe
   const [savingTurnId, setSavingTurnId] = useState<string | null>(null);
   const [saveThreadId, setSaveThreadId] = useState<string>("");
   const turnsRef = useRef<HTMLOListElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
 
   const conversation = ai.conversation;
   const provider = conversation
@@ -52,6 +56,21 @@ export function AiPane({ rootPath, settings, threads, onReferenceSaved, onOpenRe
     const list = turnsRef.current;
     if (list) list.scrollTop = list.scrollHeight;
   }, [turnCount, lastTurn?.status]);
+
+  // Handed-over text goes after whatever is already being written, then the
+  // caret waits at its end. Nothing is sent until the user presses send.
+  useEffect(() => {
+    if (!insertRequest || !rootPath) return;
+    setDraft((current) => (current.trim() ? `${current.replace(/\s+$/, "")}\n\n${insertRequest.text}` : insertRequest.text));
+    onInsertConsumed?.(insertRequest.nonce);
+    requestAnimationFrame(() => {
+      const box = composerRef.current;
+      if (!box) return;
+      box.focus();
+      box.setSelectionRange(box.value.length, box.value.length);
+      box.scrollTop = box.scrollHeight;
+    });
+  }, [insertRequest, rootPath, onInsertConsumed]);
 
   if (!rootPath) {
     return <section className="aiPane" aria-label="AI"><p className="aiEmpty">作品を開いてください</p></section>;
@@ -192,6 +211,7 @@ export function AiPane({ rootPath, settings, threads, onReferenceSaved, onOpenRe
         }}
       >
         <textarea
+          ref={composerRef}
           aria-label="AIへの質問"
           value={draft}
           rows={4}

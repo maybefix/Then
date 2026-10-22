@@ -2,7 +2,7 @@
 
 作成日: 2026-10-16（バインダーのAI調査として作成）  
 改訂日: 2026-10-22（右ペインの会話画面へ方針変更）  
-状態: 工程0〜4と、工程5のOpenAIを実装済み（`feat/ai-conversation`）。ClaudeとローカルLLMは次の版に回した（2026-10-23。このPCにローカルLLMがなく、ClaudeはAPIの残高が要るため）。実際の接続先は、Geminiの相談と、OpenAI（APIキー）の相談・Web検索付き調査（いずれも実APIで確認済み）。開発版とQA用ビルド（`THEN_AI_FIXTURE=1`）では固定応答の接続先も使える。  
+状態: 工程0〜4、工程5のOpenAI、工程6（本文の「AIに渡す」、ポップアップとIdeaの「AIに聞く」、選択範囲のテスト）を実装済み（`feat/ai-conversation`）。ClaudeとローカルLLMは次の版に回した（2026-10-23。このPCにローカルLLMがなく、ClaudeはAPIの残高が要るため）。実際の接続先は、Geminiの相談と、OpenAI（APIキー）の相談・Web検索付き調査（いずれも実APIで確認済み）。開発版とQA用ビルド（`THEN_AI_FIXTURE=1`）では固定応答の接続先も使える。  
 対象: Windows版Then  
 課題管理: [AI調査課題表](https://claude.ai/artifact/23k1n9c8PYxRt63r9SiEDG)（以下、`AI-nn` は同表の課題番号）
 

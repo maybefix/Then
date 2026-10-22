@@ -345,7 +345,7 @@ type ToastAction = {
   label: string;
   onClick: () => void;
 };
-const EDITOR_CONTEXT_MENU_HEIGHT = 292;
+const EDITOR_CONTEXT_MENU_HEIGHT = 322;
 const defaultReferenceLayout: ReferenceLayout = {
   version: 3,
   name: "default",
@@ -3266,6 +3266,12 @@ export default function App() {
     sourceError?: string;
   } | null>(null);
   const [rightSidebarTab, setRightSidebarTabState] = useState<string>("plot");
+  const [aiInsertRequest, setAiInsertRequest] = useState<{ text: string; nonce: number } | null>(null);
+  const consumeAiInsertRequest = useCallback(
+    (nonce: number) => setAiInsertRequest((current) => (current?.nonce === nonce ? null : current)),
+    [],
+  );
+
   const setRightSidebarTab = useCallback((tab: string) => {
     setRightSidebarTabState(tab);
     if (!isRestorableRightSidebarTab(tab)) return;
@@ -8627,6 +8633,15 @@ export default function App() {
     setIsWorkspaceSwitcherOpen(false);
     setEditorContextMenu(null);
     window.requestAnimationFrame(() => editorInstanceRef.current?.focus());
+  };
+
+  /** Shows the AI pane with `text` added to its composer. Nothing is sent (AI-26, AI-27). */
+  const handTextToAi = (text: string) => {
+    if (!text.trim()) return;
+    setIsEditorFocusMode(false);
+    setRightSidebarTab("ai");
+    setIsRightSidebarCollapsed(false);
+    setAiInsertRequest({ text, nonce: Date.now() });
   };
 
   const leaveEditorFocusMode = () => {
@@ -14171,6 +14186,17 @@ export default function App() {
                         >
                           貼り付け
                         </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={editorContextMenu.from === editorContextMenu.to}
+                          onClick={() => {
+                            handTextToAi(editorContextMenu.text);
+                            closeEditorContextMenu();
+                          }}
+                        >
+                          AIに渡す
+                        </button>
                       </div>
                       <div className="contextMenuDivider" role="separator" />
                       {pluginSelectionCommands.length > 0 && editorContextMenu.from !== editorContextMenu.to && (
@@ -14489,6 +14515,8 @@ export default function App() {
                         showToast(`「${file.name}」を資料に保存しました`);
                       }}
                       onOpenReference={(file) => openReferenceCard(file.sourcePath, file, { switchToReferenceTab: false })}
+                      insertRequest={aiInsertRequest}
+                      onInsertConsumed={consumeAiInsertRequest}
                     />
                   ) : rightSidebarTab === "plot" ? (
                     <PlotPane
@@ -14532,6 +14560,7 @@ export default function App() {
                       onMoveFragmentToNewThread={(threadId, fragmentId) =>
                         void moveFragmentToNewThread(threadId, fragmentId)
                       }
+                      onAskAi={handTextToAi}
                       onFragmentDragStart={handleFragmentDragStart}
                       onFragmentDragEnd={handleFragmentDragEnd}
                       onAddReference={(threadId) => void handleAddReference("project", threadId)}
@@ -14804,6 +14833,7 @@ export default function App() {
             <QuickIdeaModal
               threads={snippets}
               onCapture={captureFragment}
+              onAskAi={handTextToAi}
               onClose={() => setIsQuickIdeaModalOpen(false)}
             />
           )}
