@@ -54,6 +54,7 @@ Geminiの文章生成の案内ページは、新しいInteractions APIを中心�
 | 日付 | 接続先 | 確かめたこと |
 | --- | --- | --- |
 | 2026-10-22 | Gemini（`gemini-3.5-flash-lite`） | `x-goog-api-key` ヘッダーで認証できる。2往復目が1往復目を踏まえて答える（Geminiが返した `content` を送り返す形で）。`finishReason: "STOP"` で通常の回答になる。`usageMetadata` から入力・出力トークンを記録できる |
+| 2026-10-23 | OpenAI（`gpt-6-luna`、APIキー） | `Authorization: Bearer` で認証できる。APIの残高がないと 429 で「残高または利用上限」に分類される（料金も利用履歴も残らない）。`store: false` のまま、前の `output` を丸ごと送り返して2往復目が通り、前を踏まえて答える。`web_search` で実際に検索し（`web_search_call` が `completed`）、`url_citation` が付く。OpenAIは出典を本文の中に `([サイト名](URL))` のリンクとして自分で書き込み、`start_index`〜`end_index` はちょうどそのリンクを指す。位置は文字（コードポイント）で数えた値と一致した（本文は基本多言語面の文字だけだったため、UTF-16との違いは見分けられていない）。Thenは既にリンクの箇所に〔番号〕を足さないので、出典は本文中のリンクと下の一覧で示される |
 
 ## 4. 確かめきれなかった点
 
@@ -61,6 +62,6 @@ Geminiの文章生成の案内ページは、新しいInteractions APIを中心�
 | --- | --- |
 | Geminiの `MAX_TOKENS` と拒否（`SAFETY` など、`promptFeedback.blockReason`）の実際の応答 | 2026-10-22の実API確認では通常の終了（`STOP`）だけを観測した。資料の値で実装済み。実際に起きたら確認表を直す |
 | Geminiの思考の設定項目 | 初期版は指定しない（モデルの既定のまま）。思考のトークンは出力上限に数える |
-| OpenAIの料金、拒否の印、`store: false` で送り返す項目 | 工程5 |
+| OpenAIの料金と、拒否（`content_filter`・`refusal`）の実際の応答 | 2026-10-23の確認では起きなかった。資料の値で実装済み |
 | Claudeの検索を、`max_uses` が効く基本版（`web_search_20250305`）にするか、結果を絞り込む新版（`web_search_20260209` 以降）にするか | 工程5。新版は内部でコード実行を使い、応答の形が増える |
 | Ollamaの `usage` の中身 | 工程5 |
