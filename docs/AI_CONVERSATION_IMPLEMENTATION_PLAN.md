@@ -2,7 +2,7 @@
 
 作成日: 2026-10-16（バインダーのAI調査として作成）  
 改訂日: 2026-10-22（右ペインの会話画面へ方針変更）  
-状態: 工程0〜4、工程5のOpenAI、工程6（本文の「AIに渡す」、ポップアップとIdeaの「AIに聞く」、選択範囲のテスト）を実装済み。工程7はCSP、操作マニュアル、全体の確認まで済み、リリースノートが残る（`feat/ai-conversation`）。ClaudeとローカルLLMは次の版に回した（2026-10-23。このPCにローカルLLMがなく、ClaudeはAPIの残高が要るため）。実際の接続先は、Geminiの相談と、OpenAI（APIキー）の相談・Web検索付き調査（いずれも実APIで確認済み）。開発版とQA用ビルド（`THEN_AI_FIXTURE=1`）では固定応答の接続先も使える。  
+状態: 工程0〜4、工程5のOpenAI、工程6（本文の「AIに渡す」、ポップアップとIdeaの「AIに聞く」、選択範囲のテスト）を実装済み。工程7（CSP、操作マニュアル、全体の確認、リリースノート）も済み（`feat/ai-conversation`）。ClaudeとローカルLLMは次の版に回した（2026-10-23。このPCにローカルLLMがなく、ClaudeはAPIの残高が要るため）。実際の接続先は、Geminiの相談と、OpenAI（APIキー）の相談・Web検索付き調査（いずれも実APIで確認済み）。開発版とQA用ビルド（`THEN_AI_FIXTURE=1`）では固定応答の接続先も使える。  
 対象: Windows版Then  
 課題管理: [AI調査課題表](https://claude.ai/artifact/23k1n9c8PYxRt63r9SiEDG)（以下、`AI-nn` は同表の課題番号）
 
@@ -348,7 +348,7 @@ Gemini API追加規約（2026-03-23発効、2026-10-22確認）では、Google�
   - PDFの書き出し。保存ダイアログは手で押した。できたPDFに画像が2つ入る
   - 書き出しとキャンバスを別ウィンドウで開き、プレビューを組み、キャンバスを描く
 - 関連テスト（build、test:ai、test:markdown-links、test:binder、test:v066-idea、test:project-portability、test:ai-selection、cargo check）はすべて通過した。
-- 5のリリースノートはまだ書いていない。
+- 5は `docs/RELEASE_NOTES_NEXT.md` に「AIとの会話」と「画面からの外部への通信を制限」を足した。書いたのは、GeminiとOpenAIの相談、OpenAIのWeb検索付き調査、AIに渡す／AIに聞く、資料に保存、停止・再送など、実装済みの能力だけ。ローカルLLM、Claude、GeminiのWeb検索付き調査は「この版にはない」と書いた。
 
 ## 9. 検証
 
