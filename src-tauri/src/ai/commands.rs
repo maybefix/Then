@@ -70,12 +70,13 @@ fn implemented(provider: Provider) -> bool {
     }
 }
 
+/// Only providers Then can send to are listed, so the settings never offer a
+/// key field for one that does nothing. Claude and a local LLM are held back
+/// for a later version (decided 2026-10-23).
 fn providers() -> Vec<ProviderInfo> {
-    let mut list = vec![Provider::Gemini, Provider::OpenAi, Provider::Claude, Provider::Local];
-    if fixture_enabled() {
-        list.push(Provider::Fixture);
-    }
-    list.into_iter()
+    [Provider::Gemini, Provider::OpenAi, Provider::Claude, Provider::Local, Provider::Fixture]
+        .into_iter()
+        .filter(|id| implemented(*id))
         .map(|id| {
             let needs_key = credentials::target(id).is_some();
             let key_saved = needs_key && credentials::is_stored(id);
@@ -505,6 +506,14 @@ mod tests {
             fixture::MODEL.into(),
             Mode::Consult,
         ))
+    }
+
+    #[test]
+    fn claude_and_a_local_llm_are_not_offered_in_this_version() {
+        assert!(implemented(Provider::Gemini));
+        assert!(implemented(Provider::OpenAi));
+        assert!(!implemented(Provider::Claude));
+        assert!(!implemented(Provider::Local));
     }
 
     #[test]
