@@ -13,6 +13,7 @@ export type AiSendError =
   | { code: "keyMissing" }
   | { code: "auth" }
   | { code: "rateLimited" }
+  | { code: "quotaExceeded" }
   | { code: "network" }
   | { code: "timeout" }
   | { code: "modelUnsupported" }
@@ -88,6 +89,8 @@ export function sendErrorMessage(error: AiSendError): string {
       return "APIキーが認証されませんでした";
     case "rateLimited":
       return "利用の上限に達しました。時間をおいてください";
+    case "quotaExceeded":
+      return "残高または利用上限に達しました。接続先の管理画面で確かめてください";
     case "network":
       return "接続できませんでした";
     case "timeout":

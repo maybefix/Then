@@ -12,6 +12,7 @@
 // real provider (step 4 of the plan).
 #![allow(dead_code)]
 
+pub mod citations;
 pub mod commands;
 pub mod conversation;
 pub mod credentials;
@@ -19,5 +20,6 @@ pub mod fixture;
 pub mod gemini;
 pub mod http;
 pub mod markdown;
+pub mod openai;
 pub mod prompt;
 pub mod store;

@@ -132,6 +132,8 @@ pub enum SendError {
     KeyMissing,
     Auth,
     RateLimited,
+    /// Out of credit, or a spending limit was reached: waiting does not help.
+    QuotaExceeded,
     Network,
     Timeout,
     ModelUnsupported,

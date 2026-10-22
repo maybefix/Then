@@ -13,7 +13,7 @@
 
 use super::conversation::{check, Mode, Provider, Request, SendError, Turn};
 use super::store::{self, Conversation, StoredTurn, Summary, TurnStatus};
-use super::{credentials, fixture, gemini, markdown, prompt};
+use super::{citations, credentials, fixture, gemini, markdown, openai, prompt};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -64,9 +64,9 @@ fn recommended_models(provider: Provider) -> Vec<&'static str> {
 /// connectors land (steps 4 and 5 of the plan).
 fn implemented(provider: Provider) -> bool {
     match provider {
-        Provider::Gemini => true,
+        Provider::Gemini | Provider::OpenAi => true,
         Provider::Fixture => fixture_enabled(),
-        Provider::OpenAi | Provider::Claude | Provider::Local => false,
+        Provider::Claude | Provider::Local => false,
     }
 }
 
@@ -280,6 +280,11 @@ pub(crate) async fn send(
     in_flight().lock().unwrap_or_else(|e| e.into_inner()).remove(&key);
     let result = result
         .map(|mut answer| {
+            if !answer.citations.is_empty() {
+                let numbered = citations::number_inline(&answer.text, &answer.citations);
+                answer.text = numbered.text;
+                answer.citations = numbered.citations;
+            }
             let tidied = markdown::tidy_answer(&answer.text);
             if tidied != answer.text {
                 // Positions were counted in the untidied text.
@@ -308,6 +313,7 @@ async fn send_to_provider(request: Request) -> Result<super::conversation::Answe
                 .unwrap_or(Err(SendError::BadResponse))
         }
         Provider::Gemini => gemini::send(&request).await,
+        Provider::OpenAi => openai::send(&request).await,
         _ => Err(SendError::KeyMissing),
     }
 }
@@ -318,6 +324,7 @@ pub(crate) async fn ai_test_connection(window: tauri::Window, provider: Provider
     main_only(&window).map_err(|_| SendError::Rejected { status: 403 })?;
     match provider {
         Provider::Gemini => gemini::test_connection(&model).await,
+        Provider::OpenAi => openai::test_connection(&model).await,
         _ => Err(SendError::KeyMissing),
     }
 }
@@ -561,6 +568,30 @@ mod tests {
         assert!(text.contains("- 保存日時: 2026/10/22 15:00"));
         assert!(text.contains("- 接続先: 固定応答 / fixture"));
         assert!(text.contains("相談（Webは検索していない）"));
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_researched_answer_carries_numbered_links_to_its_sources() {
+        let root = work("cite");
+        let c = tauri::async_runtime::block_on(super::send(
+            root.to_string_lossy().into(),
+            "c1".into(),
+            "t1".into(),
+            "調べて".into(),
+            Provider::Fixture,
+            fixture::MODEL.into(),
+            Mode::WebResearch,
+        ))
+        .unwrap();
+        let turn = &c.turns[0];
+        assert!(turn.answer.as_ref().unwrap().contains("出典の例です。[〔1〕](https://example.com/)"), "{:?}", turn.answer);
+        assert_eq!(turn.citations.len(), 1);
+        assert_eq!(turn.searched, Some(true));
+        let saved = save_answer_as_reference(root.to_string_lossy().into(), "c1".into(), "t1".into(), String::new()).unwrap();
+        let text = std::fs::read_to_string(root.join(&saved.source_path)).unwrap();
+        assert!(text.contains("## 出典\n\n1. [Example Domain](https://example.com/)"));
+        assert!(text.contains("Web検索付き調査\n") || text.contains("- 種類: Web検索付き調査"));
         std::fs::remove_dir_all(&root).unwrap();
     }
 
