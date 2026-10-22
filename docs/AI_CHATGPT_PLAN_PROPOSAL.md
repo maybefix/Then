@@ -1,7 +1,7 @@
 # ChatGPTプランでOpenAIを使う案（Sign in with ChatGPT）
 
 作成日: 2026-10-22  
-状態: 変更案。実装していない。決めていただく点は「5. 決めていただくこと」  
+状態: **不採用（2026-10-23）**。配布する機能にするにはオープンソースのライセンスを付けるのが確実だが、同梱しているVivliostyle（AGPL-3.0）が絡むため見送った。OpenAIはAPIの残高を入れ、APIキーの方式で使う。Thenのライセンスの扱いが変わったら見直す。以下は調べた時点の記録として残す  
 課題管理: [AI調査課題表](https://claude.ai/artifact/23k1n9c8PYxRt63r9SiEDG) AI-33  
 関係する文書: [AI会話 実装範囲と手順書](AI_CONVERSATION_IMPLEMENTATION_PLAN.md)・[AI接続先の確認表](AI_PROVIDER_CHECKS.md)
 
