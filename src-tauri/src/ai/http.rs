@@ -108,6 +108,19 @@ pub async fn post_json(
     headers: &[(&str, String)],
     body: &serde_json::Value,
 ) -> Result<serde_json::Value, SendError> {
+    post_json_classified(reach, url, headers, body, |_, _| None).await
+}
+
+/// Like `post_json`, but a connector may sort an unsuccessful reply itself
+/// (`refine` sees the status and the error body; the body never leaves the
+/// connector). Returning `None` falls back to `classify_status`.
+pub async fn post_json_classified(
+    reach: Reach,
+    url: &str,
+    headers: &[(&str, String)],
+    body: &serde_json::Value,
+    refine: impl Fn(u16, &serde_json::Value) -> Option<SendError>,
+) -> Result<serde_json::Value, SendError> {
     if !allowed(url, reach) {
         return Err(SendError::BadResponse);
     }
@@ -120,7 +133,8 @@ pub async fn post_json(
     let status = response.status().as_u16();
     let bytes = read_limited(&mut response).await?;
     if !(200..300).contains(&status) {
-        return Err(classify_status(status));
+        let error_body = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+        return Err(refine(status, &error_body).unwrap_or_else(|| classify_status(status)));
     }
     serde_json::from_slice(&bytes).map_err(|_| SendError::BadResponse)
 }

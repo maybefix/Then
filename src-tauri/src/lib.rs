@@ -618,6 +618,7 @@ pub fn run() {
             ai::commands::ai_providers,
             ai::commands::ai_store_key,
             ai::commands::ai_delete_key,
+            ai::commands::ai_test_connection,
             ai::commands::ai_list_conversations,
             ai::commands::ai_load_conversation,
             ai::commands::ai_rename_conversation,

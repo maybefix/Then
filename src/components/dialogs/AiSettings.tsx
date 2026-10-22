@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
 import { AI_PROVIDERS_CHANGED } from "../../ai/settings";
-import type { AiMode, AiProvider, AiProviderInfo } from "../../ai/types";
+import { sendErrorMessage, type AiMode, type AiProvider, type AiProviderInfo, type AiSendError } from "../../ai/types";
 import type { SettingsPanelProps } from "./SettingsPanelTypes";
 import "./aiSettings.css";
 
@@ -68,6 +68,9 @@ export function AiSettings({ settings, onUpdateSettings }: SettingsPanelProps) {
           <fieldset key={provider.id} className="aiProviderSettings">
             <legend>{provider.label}</legend>
             {provider.needsKey && <KeyField provider={provider} onChanged={keysChanged} />}
+            {provider.available && provider.id !== "local" && (
+              <ConnectionTest provider={provider.id} model={ai.models[provider.id] || provider.models[0] || ""} />
+            )}
             {provider.id === "local" && (
               <label>
                 <span>アドレス</span>
@@ -154,6 +157,30 @@ function KeyField({ provider, onChanged }: { provider: AiProviderInfo; onChanged
         )}
       </form>
       {message && <span className="aiKeyMessage" role="status">{message}</span>}
+    </div>
+  );
+}
+
+function ConnectionTest({ provider, model }: { provider: AiProvider; model: string }) {
+  const [state, setState] = useState<{ busy: boolean; message: string | null }>({ busy: false, message: null });
+  const run = async () => {
+    setState({ busy: true, message: null });
+    try {
+      await invoke("ai_test_connection", { provider, model });
+      setState({ busy: false, message: `${model}に接続できました` });
+    } catch (reason) {
+      const error = reason as AiSendError | string;
+      setState({ busy: false, message: typeof error === "string" ? error : sendErrorMessage(error) });
+    }
+  };
+  return (
+    <div className="aiKeyField">
+      <div className="aiKeyRow">
+        <button type="button" disabled={state.busy || !model} onClick={() => void run()}>
+          {state.busy ? "確認中…" : "接続テスト（1回送信）"}
+        </button>
+      </div>
+      {state.message && <span className="aiKeyMessage" role="status">{state.message}</span>}
     </div>
   );
 }

@@ -13,7 +13,7 @@
 
 use super::conversation::{check, Mode, Provider, Request, SendError, Turn};
 use super::store::{self, Conversation, StoredTurn, Summary, TurnStatus};
-use super::{credentials, fixture, markdown, prompt};
+use super::{credentials, fixture, gemini, markdown, prompt};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -63,7 +63,11 @@ fn recommended_models(provider: Provider) -> Vec<&'static str> {
 /// Whether Then can send to `provider` yet. Real providers join as their
 /// connectors land (steps 4 and 5 of the plan).
 fn implemented(provider: Provider) -> bool {
-    matches!(provider, Provider::Fixture) && fixture_enabled()
+    match provider {
+        Provider::Gemini => true,
+        Provider::Fixture => fixture_enabled(),
+        Provider::OpenAi | Provider::Claude | Provider::Local => false,
+    }
 }
 
 fn providers() -> Vec<ProviderInfo> {
@@ -303,6 +307,17 @@ async fn send_to_provider(request: Request) -> Result<super::conversation::Answe
                 .await
                 .unwrap_or(Err(SendError::BadResponse))
         }
+        Provider::Gemini => gemini::send(&request).await,
+        _ => Err(SendError::KeyMissing),
+    }
+}
+
+/// Sends one short request with the saved key and `model`. Billed like any send.
+#[tauri::command]
+pub(crate) async fn ai_test_connection(window: tauri::Window, provider: Provider, model: String) -> Result<(), SendError> {
+    main_only(&window).map_err(|_| SendError::Rejected { status: 403 })?;
+    match provider {
+        Provider::Gemini => gemini::test_connection(&model).await,
         _ => Err(SendError::KeyMissing),
     }
 }
