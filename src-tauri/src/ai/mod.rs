@@ -8,8 +8,9 @@
 //! `fixture` answers without a network or a key, so the rest can be built and
 //! tested before any real provider is wired in.
 
-// Commands come with the conversation pane (step 2 of the plan).
-#![cfg_attr(not(test), allow(dead_code))]
+// Commands come with the conversation pane (step 2 of the plan); until then
+// the limits and the prompt version have no caller, tests included.
+#![allow(dead_code)]
 
 pub mod conversation;
 pub mod fixture;
