@@ -14,8 +14,8 @@ App.tsx の部品の外に置かれている、本文の文字列を書き換え
 | 4 | 影響範囲 | 済み |
 | 5 | 案 | 済み |
 | 6 | 人の確認（確認1） | 済み |
-| 7 | 実施 | |
-| 8 | 自動テスト | |
+| 7 | 実施 | 済み |
+| 8 | 自動テスト | 済み |
 | 9 | 実機確認 | |
 | 10 | 完了（確認2） | |
 
@@ -249,7 +249,51 @@ Idea の分離（5章）と同じ線引きにする。
 
 ## 工程7: 実施
 
+| コミット | 中身 | App.tsx |
+|---|---|---|
+| `4c7597d` | 型 `LayoutDirection`・`EditorSelectionSnapshot` と選択範囲の書き換え（13の関数と `SelectionEdit`）を `src/editor/selectionEdits.ts`（311行）へ | 14,347 → 14,049行 |
+| `3817c32` | 型 `EditorFindMatch` と検索・置換の3つの関数を `src/search/editorFindReplace.ts`（122行）へ | → 13,931行 |
+| `723aeb8` | 型 `AppIconName` と `AppIcon` を `src/components/layout/AppIcon.tsx`（223行）へ | → 13,708行 |
+| `21b63aa` | 回帰テスト `scripts/test-editor-text-edits.mjs` と `package.json` の `test:editor-text-edits` | — |
+
+元と同じであることの確かめ方: 3回とも `move-lines.mjs`（行番号と先頭・末尾の行を確かめて移す）で移し、`verify-move.mjs` で突き合わせた。3回とも lost は0で、App.tsx に足した行は import だけ。移した先で変えたのは、行の先頭に `export` を付けたことだけ。
+
+違う点:
+
+- App.tsx の import から、使わなくなった `classifyLines`・`parseInlines`・`findCommentLineRanges`（`./editor/ast/documentAst`）と `replaceTextSearchMatches`（`./search/textSearch`）を外した。`./search/textSearch` の import は `import type { TextSearchOptions }` の1行になった。
+- 移した先のファイルは、それぞれ必要な import を先頭に持つ。
+
+各コミットのたびに、`npx tsc --noEmit` と、App.tsx の文字列を読むテスト17本（`test:v058-bundle` を除く。build が要るため）を動かし、すべて通った。
+
 ## 工程8: 自動テスト
+
+### 足した回帰テスト
+
+`npm run test:editor-text-edits`。esbuild で3つの新しいファイルを束ね、2章の表の操作ごとに、具体的な本文で結果（`from`・`to`・`insert`・`cursorPos`、置換後の本文と件数、一致の位置と行・列）を確かめる。コード・コメントの行、行内のコード、前付け、正規表現の誤り、500件の打ち切り、2章5の癖 1〜6 を含む。アイコンは、型に並べた名前のすべてで `<svg>` が描かれ、どれも違う絵であること、知らない名前では何も描かないことを確かめる（`react-dom/server` で描いて比べる）。
+
+期待値が移す前の挙動と同じこと: チェックポイント `557e42b` の App.tsx から移す範囲をそのまま切り出し、同じテストをそれに向けて動かして、すべて通った。アイコンは、24の名前のすべてで、移す前と後の `AppIcon` が描く SVG が1文字も違わなかった。
+
+効くことの確かめ（わざと不具合を入れて、戻した）:
+
+| 入れた不具合 | 結果 |
+|---|---|
+| `rangesTouch` で、カーソルが記法の終わりに接しているときを外す（`<=` → `<`） | 落ちた |
+| `collectEditorFindMatches` の打ち切りを1件遅らせる（`>=` → `>`） | 落ちた |
+| `AppIcon` の `write` の絵の線を1本変える | 落ちない。このテストは絵の中身までは固定しない。今回の引っ越しで絵が変わっていないことは、上の前後の突き合わせで確かめた |
+| `AppIcon` の `write` を描かないようにする（`case "write"` の名前を変える） | 落ちた |
+
+### 前後の比較
+
+「後」は `21b63aa` で動かした。build は成功、いちばん大きい JS は 683,432 → 683,438 バイト（+6）。
+
+| 区分 | 本数 | テスト |
+|---|---|---|
+| 前後とも成功 | 63 | 「前」で成功した63本すべて |
+| 前後とも失敗 | 4 | `test:ai-selection`（一式の中でだけ止まる）、`test:canvas-save`、`test:v058-bundle`、`test:v0511-themes`。理由は前後で同じ（工程4の 4-4） |
+| 後だけ | 1 | `test:editor-text-edits`（成功） |
+| 新しい失敗 | 0 | — |
+
+`test:ai-selection` は「後」でも一式の中で10分の打ち切りになったので、単独で2回動かし、2回とも成功した。残ったプロセスは、一式の後も単独のテストの後も0。
 
 ## 工程9: 実機確認
 
