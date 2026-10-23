@@ -2,7 +2,7 @@
 
 `docs/EDITOR_TEXT_EDITS_SEPARATION_PLAN.md`（以下「分離の手順書」）の工程2の5に記録した癖と、この調査で新しく見つけた癖を直す。対象は、本文の上の検索バー（Ctrl+F）、Ctrl+I、右クリックの「記法をクリア」と「文章方向」。保存形式、Rust、画面の部品と文言は変えない。
 
-- ブランチ: `fix/editor-text-quirks`（`refactor/editor-text-edits` から切った。そちらは main へまだ取り込んでいない）
+- ブランチ: `fix/editor-text-quirks`（`refactor/editor-text-edits` から切った。どちらも PR #11 で main へ取り込んだ）
 - 戻し先: タグ `checkpoint/before-editor-text-quirks`（コミット `0f5371e`。中身は `refactor/editor-text-edits` の `60df331` と同じ）
 - 行番号は `0f5371e` の時点のもの。
 
@@ -220,7 +220,7 @@
 
 ## 工程10: 完了
 
-癖1・3・6・7・8を直した。ブランチ `fix/editor-text-quirks` は、`refactor/editor-text-edits` の上にある。どちらも main へはまだ取り込んでいない。
+癖1・3・6・7・8を直した。ブランチ `fix/editor-text-quirks` は、`refactor/editor-text-edits` の上にある。どちらも PR #11 で main へ取り込んだ。
 
 ### 変わったもの
 

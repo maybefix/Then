@@ -346,7 +346,7 @@ Idea の分離（5章）と同じ線引きにする。
 
 ## 工程10: 完了
 
-選択範囲の書き換えと検索・置換、AppIcon の分離を完了とする。ブランチ `refactor/editor-text-edits` は main へはまだ取り込んでいない。
+選択範囲の書き換えと検索・置換、AppIcon の分離を完了とする。ブランチ `refactor/editor-text-edits` は、`fix/editor-text-quirks` と一緒に PR #11 で main へ取り込んだ。
 
 ### 変わったもの
 
