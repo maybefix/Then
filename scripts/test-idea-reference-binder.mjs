@@ -65,7 +65,8 @@ assert.doesNotMatch(canvasApp, /canvasScopeSwitch|すべての作品で使える
 assert.match(app, /onDragOverCapture=\{blockIdeaDropOnEditor\}/);
 assert.match(app, /onDropCapture=\{blockIdeaDropOnEditor\}/);
 assert.doesNotMatch(app, /event\.dataTransfer\.setData\("text\/plain", fragment\.body\)/);
-assert.doesNotMatch(ideaActions, /event\.dataTransfer\.setData\("text\/plain", fragment\.body\)/);
+// Canvas は本文からカードを作るので本文も渡す。本文エディタへは上の blockIdeaDropOnEditor で落とさせない。
+assert.match(ideaActions, /event\.dataTransfer\.setData\("text\/plain", fragment\.body\)/);
 
 assert.match(layer, /function IdeaBinderCardBody/);
 assert.doesNotMatch(layer, /onToggleIdeaUsed/);

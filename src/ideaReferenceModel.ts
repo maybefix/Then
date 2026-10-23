@@ -1,14 +1,14 @@
-import {
-  isIdeaBinderCard,
-  isReferenceBinderCard,
-  type EditorSettings,
-  type IdeaFragmentLink,
-  type IdeaReferenceLink,
-  type IdeaThread,
-  type IdeaThreadItemLink,
-  type IdeaThreadLayout,
-  type ReferenceFileInfo,
-  type ReferenceLayout,
+import type {
+  BinderCardState,
+  EditorSettings,
+  IdeaBinderCardState,
+  IdeaFragmentLink,
+  IdeaReferenceLink,
+  IdeaThread,
+  IdeaThreadItemLink,
+  IdeaThreadLayout,
+  ReferenceFileInfo,
+  ReferenceLayout,
 } from "./types";
 
 export const normalizeIdeaReferencePath = (sourcePath: string): string =>
@@ -187,15 +187,17 @@ export function alignIdeaLayoutToMode<T extends Pick<ReferenceLayout, "cards" | 
   if (!layout.ideaThreadsMode) return { ...layout, ideaThreadsMode: mode };
   if (layout.ideaThreadsMode === mode) return layout;
   const restored = layout.otherIdea?.mode === mode ? layout.otherIdea : null;
+  const isIdeaCard = (card: BinderCardState): card is IdeaBinderCardState =>
+    card.sourceType === "idea";
   return {
     ...layout,
     ideaThreadsMode: mode,
     ideaThreads: restored?.ideaThreads ?? [],
-    cards: [...layout.cards.filter(isReferenceBinderCard), ...(restored?.cards ?? [])],
+    cards: [...layout.cards.filter((card) => !isIdeaCard(card)), ...(restored?.cards ?? [])],
     otherIdea: {
       mode: layout.ideaThreadsMode,
       ideaThreads: layout.ideaThreads,
-      cards: layout.cards.filter(isIdeaBinderCard),
+      cards: layout.cards.filter(isIdeaCard),
     },
   };
 }
