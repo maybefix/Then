@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [app, types, rustLib, projectState, checkpointStore, plan, legacyStateText] = await Promise.all([
+const [app, projectEntryActions, types, rustLib, projectState, checkpointStore, plan, legacyStateText] = await Promise.all([
   readFile("src/App.tsx", "utf8"),
+  readFile("src/projectEntryActions.ts", "utf8"),
   readFile("src/types.ts", "utf8"),
   readFile("src-tauri/src/lib.rs", "utf8"),
   readFile("src-tauri/src/project_state.rs", "utf8"),
@@ -96,21 +97,21 @@ assert.ok(
 );
 
 const renameFlow = section(
-  app,
+  projectEntryActions,
   "const handleRenameProjectEntry = async",
   "const handleDeleteProjectEntry = async",
 );
 assert.match(renameFlow, /fileProgress: retargetRecord\(current\.fileProgress\)/);
 
 const singleMoveFlow = section(
-  app,
+  projectEntryActions,
   "const handleMoveProjectEntryToFolder = async",
   "const handleMoveProjectEntriesToFolder = async",
 );
 assert.match(singleMoveFlow, /fileProgress: retargetRecord\(current\.fileProgress\)/);
 
 const multiMoveFlow = section(
-  app,
+  projectEntryActions,
   "const handleMoveProjectEntriesToFolder = async",
   "const saveProjectEntryOrder = async",
 );
