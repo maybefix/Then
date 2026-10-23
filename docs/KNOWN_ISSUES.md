@@ -1,5 +1,26 @@
 # 不具合の記録
 
+## 2026-10-23: 検索バー（Ctrl+F）が前後の空白を無視し、İ などがあると一致と置換の位置がずれる
+
+- **確認された対象と挙動:** 選択範囲の書き換えと検索・置換の分離で、移す前のコードを切り出して確かめた（`docs/EDITOR_TEXT_EDITS_SEPARATION_PLAN.md` の工程2の5）。検索語の前後の空白を削ってから探すので、` 東京` で `東京` に一致し、「すべて」で空白が残った。本文と検索語を小文字にしてから位置を数えるので、小文字にすると長さが変わる文字（`İ` など）が前にあると位置がずれ、`İab` の `a` を置換すると `b` が置き換わった。検索サイドバーは、どちらも起きない。
+- **修正:** 検索バーの一致（`collectEditorFindMatches`）と「すべて」（`replaceLiteralMatches`、`src/search/editorFindReplace.ts`）が、検索サイドバーと同じ `compileTextSearchPattern`／`replaceTextSearchMatches`（文字どおり・大文字小文字を区別しない）を使う。`src/App.tsx` の「すべて」の入口と件数の表示も、空白を削らずに空かどうかを見る。空白だけの検索語では空白に一致する（検索サイドバーと同じ）。
+- **確認:** `test:editor-text-edits` と QA 用アプリ（`docs/EDITOR_TEXT_QUIRKS_FIX_PLAN.md` の工程9）。
+- **状態:** 修正済み（`fix/editor-text-quirks`）。
+
+## 2026-10-23: 《《傍点》》 の中で Ctrl+I を押すと、圏点が二重になる
+
+- **確認された対象と挙動:** 同じ分離の工程2の5と工程9。`《《傍点》》` の「傍点」を選んで Ctrl+I を押すと、外れずに `《《[傍点(em,goma)]》》` になった。
+- **修正:** `toggleEmphasisSelection`（`src/editor/selectionEdits.ts`）が、外側の `《《`・`》》` と、選んだ文字そのものの `《《…》》` も外す（Ctrl+B と同じ形）。
+- **確認:** `test:editor-text-edits` と QA 用アプリ。
+- **状態:** 修正済み（`fix/editor-text-quirks`）。
+
+## 2026-10-23: 記法のクリアと文章方向が、旧来の地付き（行頭の >> と［＃地付き］）を扱わない
+
+- **確認された対象と挙動:** 検索バーと記法の癖の修正の調査で、構文ガイド（`docs/THEN_SYNTAX_GUIDE.md` の「旧来の地付き」）と見比べて見つけた。右クリックの「記法をクリア」は、`>> 著者名` と `［＃地付き］著者名` のどちらでも「クリアできる記法がありません」になった。「文章方向」は `［＃地付き］` を外さずに `[(al:…)]` を付けたので、読み込みでは地付きが勝ち、「文章方向を反映しました」と出ても表示が変わらなかった。
+- **修正:** `clearNotationInLine` と `stripDirectionMarkers`（`src/editor/selectionEdits.ts`）が、読み込み（`cleanLineTextForAst`）と同じく、行頭の `［＃地付き］` と `>>`（後ろの空白も）を行の指示として外す。
+- **確認:** `test:editor-text-edits` と QA 用アプリ（クリアの後と文章方向の後で、行の表示が地付きでなくなることも見た）。
+- **状態:** 修正済み（`fix/editor-text-quirks`）。
+
 ## 2026-10-23: 「Ideaの管理単位」を切り替えると、作品ごとの並び順と資料リンクの所属が崩れる
 
 - **確認された対象と挙動:** Idea 分離の調査中にコードを読んで見つけた。実機ではまだ確かめていない。設定の「Ideaの管理単位」（`snippetStorageMode`）は選んだ時点で切り替わり、確認も通知もない（`src/components/dialogs/FileSettings.tsx`）。右サイドバーの Idea は、作品ごとの組（`.then/project.json` の `ideaThreads`）と全作品共通の組（アプリ状態の `profileSnippets`）の間で丸ごと入れ替わる。断片そのものはどちらの保存先にも残る。
