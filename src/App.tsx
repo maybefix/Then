@@ -102,15 +102,25 @@ import {
 import { WindowControls } from "./components/layout/WindowControls";
 import { StartupPortal } from "./components/startup/StartupPortal";
 import {
-  classifyLines,
   createDocumentAst,
   findActiveOutlineChain,
   findCommentLineRanges,
   flattenOutline,
   hash16,
-  parseInlines,
   updateDocumentAst,
 } from "./editor/ast/documentAst";
+import {
+  applyDirectionToSelection,
+  applyHeadingToSelection,
+  canWrapInlineSelection,
+  clearNotationFromSelection,
+  normalizeSelectionRange,
+  sanitizeNotationArgument,
+  toggleBoldSelection,
+  toggleEmphasisSelection,
+  type EditorSelectionSnapshot,
+  type LayoutDirection,
+} from "./editor/selectionEdits";
 import {
   extractHeadingSection,
   moveHeadingSections,
@@ -360,20 +370,12 @@ const NORMAL_REFERENCE_Z_LIMIT = PINNED_REFERENCE_Z_BASE - 1;
 const MAX_RECENT_REFERENCES = 30;
 const PROJECT_AST_INDEX_BATCH_SIZE = 12;
 
-type LayoutDirection = "start" | "center" | "end";
-
 type WorkspaceSearchScope = "file" | "project" | "library";
 
 type BreadcrumbOverflowItem =
   | { kind: "folder" | "file"; name: string; path: string }
   | { kind: "outline"; item: DocumentOutlineItem }
   | { kind: "scratch"; name: string };
-
-type EditorSelectionSnapshot = {
-  from: number;
-  to: number;
-  text: string;
-};
 
 type EditorContextMenuState = EditorSelectionSnapshot & {
   x: number;
@@ -1862,308 +1864,6 @@ function nextReferenceZIndex(cards: BinderCardState[], pinned: boolean): number 
   return pinned
     ? Math.max(PINNED_REFERENCE_Z_BASE, maxZ + 1)
     : Math.min(NORMAL_REFERENCE_Z_LIMIT, maxZ + 1);
-}
-
-function normalizeSelectionRange(
-  selection: { from: number; to: number },
-  text: string,
-): EditorSelectionSnapshot {
-  const from = Math.max(0, Math.min(text.length, Math.min(selection.from, selection.to)));
-  const to = Math.max(from, Math.min(text.length, Math.max(selection.from, selection.to)));
-
-  return {
-    from,
-    to,
-    text: text.slice(from, to),
-  };
-}
-
-function sanitizeNotationArgument(value: string): string {
-  return value.replace(/[\r\n\])]/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function canWrapInlineSelection(selection: EditorSelectionSnapshot): boolean {
-  return selection.from < selection.to && !selection.text.includes("\n");
-}
-
-function stripDirectionMarkers(line: string): string {
-  return line.replace(/\[\(al:(?:start|center|end)\)\]/g, "").replace(/^>>\s*/, "");
-}
-
-function applyDirectionToLine(line: string, direction: LayoutDirection): string {
-  const cleaned = stripDirectionMarkers(line);
-  return `${cleaned}[(al:${direction})]`;
-}
-
-function applyDirectionToSelection(
-  text: string,
-  selection: EditorSelectionSnapshot,
-  direction: LayoutDirection,
-): { from: number; to: number; insert: string; cursorPos: number } {
-  const rangeStart = selection.from;
-  const rangeEnd = selection.to > selection.from ? selection.to : selection.from;
-  const start = text.lastIndexOf("\n", Math.max(0, rangeStart - 1)) + 1;
-  const normalizedEnd = rangeEnd > rangeStart && text[rangeEnd - 1] === "\n"
-    ? rangeEnd - 1
-    : rangeEnd;
-  const nextBreak = text.indexOf("\n", normalizedEnd);
-  const end = nextBreak === -1 ? text.length : nextBreak;
-  const insert = text
-    .slice(start, end)
-    .split("\n")
-    .map((line) => applyDirectionToLine(line, direction))
-    .join("\n");
-
-  return {
-    from: start,
-    to: end,
-    insert,
-    cursorPos: start + insert.length,
-  };
-}
-
-function rangesTouch(
-  selectionFrom: number,
-  selectionTo: number,
-  markupFrom: number,
-  markupTo: number,
-): boolean {
-  if (selectionFrom === selectionTo) {
-    return markupFrom <= selectionFrom && selectionFrom <= markupTo;
-  }
-
-  return markupFrom < selectionTo && markupTo > selectionFrom;
-}
-
-function pushClearReplacement(
-  replacements: Array<{ from: number; to: number; insert: string }>,
-  from: number,
-  to: number,
-  insert: string,
-): void {
-  if (to <= from) return;
-  if (replacements.some((item) => from < item.to && to > item.from)) return;
-  replacements.push({ from, to, insert });
-}
-
-function clearNotationInLine(
-  line: string,
-  selectionFrom: number,
-  selectionTo: number,
-): { text: string; changed: boolean } {
-  const replacements: Array<{ from: number; to: number; insert: string }> = [];
-  let match: RegExpExecArray | null;
-
-  const layout = /\[([^\[\]\n]*?)\s*\((rb|em|tcy)(?:,([^)]*))?\)\]/g;
-  while ((match = layout.exec(line))) {
-    const full = match[0];
-    const from = match.index;
-    const to = from + full.length;
-    if (rangesTouch(selectionFrom, selectionTo, from, to)) {
-      pushClearReplacement(replacements, from, to, match[1].replace(/\s+$/, ""));
-    }
-  }
-
-  const pipeRuby = /｜([^《》｜]+)《([^《》]+)》/g;
-  while ((match = pipeRuby.exec(line))) {
-    const from = match.index;
-    const to = from + match[0].length;
-    if (rangesTouch(selectionFrom, selectionTo, from, to)) {
-      pushClearReplacement(replacements, from, to, match[1]);
-    }
-  }
-
-  const kanjiRuby = /([一-龠々〆ヶ]+)《([^《》]+)》/g;
-  while ((match = kanjiRuby.exec(line))) {
-    const from = match.index;
-    const to = from + match[0].length;
-    if (rangesTouch(selectionFrom, selectionTo, from, to)) {
-      pushClearReplacement(replacements, from, to, match[1]);
-    }
-  }
-
-  const emphasis = /《《([^《》]+)》》/g;
-  while ((match = emphasis.exec(line))) {
-    const from = match.index;
-    const to = from + match[0].length;
-    if (rangesTouch(selectionFrom, selectionTo, from, to)) {
-      pushClearReplacement(replacements, from, to, match[1]);
-    }
-  }
-
-  const bold = /\*\*([^*]+)\*\*/g;
-  while ((match = bold.exec(line))) {
-    const from = match.index;
-    const to = from + match[0].length;
-    if (rangesTouch(selectionFrom, selectionTo, from, to)) {
-      pushClearReplacement(replacements, from, to, match[1]);
-    }
-  }
-
-  const align = /\[\(al:(?:start|center|end)\)\]/g;
-  while ((match = align.exec(line))) {
-    pushClearReplacement(replacements, match.index, match.index + match[0].length, "");
-  }
-
-  // Notation-like text inside inline code is literal and stays as typed.
-  const codeSpans = parseInlines(line).filter((markup) => markup.type === "code");
-  const outsideCode = replacements.filter(
-    (replacement) =>
-      !codeSpans.some(
-        (span) =>
-          replacement.from < span.fullRange.offset + span.fullRange.length &&
-          span.fullRange.offset < replacement.to,
-      ),
-  );
-  if (outsideCode.length === 0) {
-    return { text: line, changed: false };
-  }
-
-  outsideCode.sort((left, right) => right.from - left.from);
-  let next = line;
-  for (const replacement of outsideCode) {
-    next = `${next.slice(0, replacement.from)}${replacement.insert}${next.slice(replacement.to)}`;
-  }
-
-  return { text: next, changed: true };
-}
-
-function clearNotationFromSelection(
-  text: string,
-  selection: EditorSelectionSnapshot,
-): { from: number; to: number; insert: string; cursorPos: number; changed: boolean } {
-  const rangeStart = selection.from;
-  const rangeEnd = selection.to > selection.from ? selection.to : selection.from;
-  const start = text.lastIndexOf("\n", Math.max(0, rangeStart - 1)) + 1;
-  const normalizedEnd = rangeEnd > rangeStart && text[rangeEnd - 1] === "\n"
-    ? rangeEnd - 1
-    : rangeEnd;
-  const nextBreak = text.indexOf("\n", normalizedEnd);
-  const end = nextBreak === -1 ? text.length : nextBreak;
-  const lines = text.slice(start, end).split("\n");
-  // Roles depend on the whole document (a fence may open far above the selection).
-  const firstLine = text.slice(0, start).split("\n").length - 1;
-  const roles = classifyLines(text.split("\n"));
-  let offset = start;
-  let changed = false;
-
-  const insert = lines
-    .map((line, index) => {
-      const lineStart = offset;
-      const lineEnd = lineStart + line.length;
-      offset = lineEnd + 1;
-      // Code and comment lines are literal; nothing in them is notation.
-      if (roles[firstLine + index]) return line;
-      const localFrom = Math.max(0, Math.min(line.length, selection.from - lineStart));
-      const localTo = selection.from === selection.to
-        ? localFrom
-        : Math.max(0, Math.min(line.length, selection.to - lineStart));
-      const result = clearNotationInLine(line, localFrom, localTo);
-      changed = changed || result.changed;
-      return result.text;
-    })
-    .join("\n");
-
-  return {
-    from: start,
-    to: end,
-    insert,
-    cursorPos: Math.min(start + insert.length, selection.from),
-    changed,
-  };
-}
-
-type SelectionEdit = {
-  from: number;
-  to: number;
-  insert: string;
-  cursorPos: number;
-};
-
-/** Ctrl+B 用。選択範囲を `**…**` で囲む／外すトグル。複数行は対象外。 */
-function toggleBoldSelection(
-  text: string,
-  selection: EditorSelectionSnapshot,
-): SelectionEdit | null {
-  const { from, to } = selection;
-  if (from === to) {
-    return { from, to, insert: "****", cursorPos: from + 2 };
-  }
-
-  const inner = text.slice(from, to);
-  if (inner.includes("\n")) return null;
-
-  if (text.slice(from - 2, from) === "**" && text.slice(to, to + 2) === "**") {
-    return { from: from - 2, to: to + 2, insert: inner, cursorPos: from - 2 + inner.length };
-  }
-
-  if (inner.length >= 4 && inner.startsWith("**") && inner.endsWith("**")) {
-    const stripped = inner.slice(2, -2);
-    return { from, to, insert: stripped, cursorPos: from + stripped.length };
-  }
-
-  const insert = `**${inner}**`;
-  return { from, to, insert, cursorPos: from + insert.length };
-}
-
-/** Ctrl+I 用。選択範囲に圏点 `[…(em,goma)]` を付ける／外すトグル。複数行は対象外。 */
-function toggleEmphasisSelection(
-  text: string,
-  selection: EditorSelectionSnapshot,
-): SelectionEdit | null {
-  const { from, to } = selection;
-  if (from >= to) return null;
-
-  const inner = text.slice(from, to);
-  if (inner.includes("\n")) return null;
-
-  const enclosed = text.slice(to).match(/^\(em[^)]*\)\]/);
-  if (text[from - 1] === "[" && enclosed) {
-    return {
-      from: from - 1,
-      to: to + enclosed[0].length,
-      insert: inner,
-      cursorPos: from - 1 + inner.length,
-    };
-  }
-
-  const selfMatch = inner.match(/^\[(.+)\(em[^)]*\)\]$/);
-  if (selfMatch) {
-    return { from, to, insert: selfMatch[1], cursorPos: from + selfMatch[1].length };
-  }
-
-  const insert = `[${inner}(em,goma)]`;
-  return { from, to, insert, cursorPos: from + insert.length };
-}
-
-/**
- * Ctrl+数字 用。選択範囲を含む各行の見出しレベルを設定する。
- * `level` が 0 の場合は見出しマーカーを除去する。
- */
-function applyHeadingToSelection(
-  text: string,
-  selection: EditorSelectionSnapshot,
-  level: number,
-): SelectionEdit {
-  const rangeStart = selection.from;
-  const rangeEnd = selection.to > selection.from ? selection.to : selection.from;
-  const start = text.lastIndexOf("\n", Math.max(0, rangeStart - 1)) + 1;
-  const normalizedEnd =
-    rangeEnd > rangeStart && text[rangeEnd - 1] === "\n" ? rangeEnd - 1 : rangeEnd;
-  const nextBreak = text.indexOf("\n", normalizedEnd);
-  const end = nextBreak === -1 ? text.length : nextBreak;
-
-  const insert = text
-    .slice(start, end)
-    .split("\n")
-    .map((line) => {
-      const body = line.replace(/^#{1,6}[ \t]*/, "");
-      if (level <= 0) return body;
-      return `${"#".repeat(Math.min(6, level))} ${body}`;
-    })
-    .join("\n");
-
-  return { from: start, to: end, insert, cursorPos: start + insert.length };
 }
 
 function replaceLiteralMatches(
