@@ -93,10 +93,42 @@ const lastToast = (app) => app.toasts.at(-1);
   assert.equal(t.editor.text, "[大事(em,goma)]な話");
   assert.deepEqual(t.app.toasts, ["圏点を反映しました"]);
 
-  // 癖1: 右クリックの「圏点」は、すでに圏点の付いた範囲にも外側へ足す（Ctrl+I は外す）。
+  // すでに圏点の付いた範囲では、Ctrl+I と同じく外す（直す前は二重になった。docs/MENU_EMPHASIS_FIX_PLAN.md）。
   const marked = t.snapshot(0, "[大事(em,goma)]".length);
   assert.equal(t.notation().applyInlineNotation(marked, "emphasis"), true);
-  assert.equal(t.editor.text, "[[大事(em,goma)](em,goma)]な話");
+  assert.equal(t.editor.text, "大事な話");
+  assert.deepEqual(t.editor.selection, { from: 2, to: 2 }, "cursor after the unmarked text");
+  assert.deepEqual(t.app.toasts, ["圏点を反映しました", "圏点を解除しました"]);
+  assert.equal(t.editor.focused, 2);
+
+  // 中身だけを選んでも外れる。もう一度押すと付く。
+  t.notation().applyInlineNotation(t.snapshot(0, 2), "emphasis");
+  assert.equal(t.editor.text, "[大事(em,goma)]な話");
+  t.notation().applyInlineNotation(t.snapshot(1, 3), "emphasis");
+  assert.equal(t.editor.text, "大事な話");
+  assert.equal(lastToast(t.app), "圏点を解除しました");
+
+  // 《《傍点》》 も、中身か全体を選べば外れる。
+  const aozora = setup("《《傍点》》を", 2, 4);
+  aozora.notation().applyInlineNotation(aozora.snapshot(), "emphasis");
+  assert.equal(aozora.editor.text, "傍点を");
+  assert.deepEqual(aozora.app.toasts, ["圏点を解除しました"]);
+  const whole = setup("《《傍点》》を", 0, 6);
+  whole.notation().applyInlineNotation(whole.snapshot(), "emphasis");
+  assert.equal(whole.editor.text, "傍点を");
+}
+{
+  // 縦中横も、すでに付いた範囲では外す。
+  const t = setup("[12(tcy)]年", 0, 9);
+  assert.equal(t.notation().applyInlineNotation(t.snapshot(), "tcy"), true);
+  assert.equal(t.editor.text, "12年");
+  assert.deepEqual(t.editor.selection, { from: 2, to: 2 });
+  assert.deepEqual(t.app.toasts, ["縦中横を解除しました"]);
+  t.notation().applyInlineNotation(t.snapshot(0, 2), "tcy");
+  assert.equal(t.editor.text, "[12(tcy)]年");
+  t.notation().applyInlineNotation(t.snapshot(1, 3), "tcy");
+  assert.equal(t.editor.text, "12年");
+  assert.deepEqual(t.app.toasts, ["縦中横を解除しました", "縦中横を反映しました", "縦中横を解除しました"]);
 }
 {
   // 複数行・空の選択は断る。本文はそのまま。
@@ -148,6 +180,24 @@ const lastToast = (app) => app.toasts.at(-1);
   assert.equal(t.app.notationModal, null, "the dialog closes after applying");
   assert.deepEqual(t.app.toasts, ["ルビを反映しました"]);
   assert.equal(t.editor.focused, 1);
+}
+{
+  // すでに付いたルビでは、書き方はそのままで読みを置き換える。
+  for (const [text, from, to, expected] of [
+    ["[東京(rb,とうきょう)]へ", 1, 3, "[東京(rb,ひがし)]へ"],
+    ["[東京(rb,とうきょう)]へ", 0, 14, "[東京(rb,ひがし)]へ"],
+    ["｜東京《とうきょう》へ", 1, 3, "｜東京《ひがし》へ"],
+    ["東京《とうきょう》へ", 0, 2, "東京《ひがし》へ"],
+  ]) {
+    const t = setup(text, from, to);
+    t.notation().openRubyNotationModal(t.snapshot());
+    t.app.notationModal = { ...t.app.notationModal, reading: "ひがし" };
+    t.notation().submitRubyNotation({ preventDefault() {} });
+    assert.equal(t.editor.text, expected, `ruby on ${text} ${from}-${to}`);
+    assert.equal(t.editor.selection.from, expected.length - 1, "cursor after the ruby");
+    assert.equal(t.app.notationModal, null);
+    assert.deepEqual(t.app.toasts, ["ルビを反映しました"]);
+  }
 }
 {
   // 1行の中の選択でなければ開かない。メニューは閉じる。

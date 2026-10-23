@@ -124,6 +124,41 @@ assert.deepEqual(m.toggleEmphasisSelection("《《傍点》》", select("《《�
 assert.deepEqual(m.toggleEmphasisSelection("前《《傍点》》後", select("前《《傍点》》後", 3, 5)), { from: 1, to: 7, insert: "傍点", cursorPos: 3 });
 assert.equal(m.toggleEmphasisSelection("a\nb", select("a\nb", 0, 3)), null);
 
+// 縦中横の付け外し（右クリックの「縦中横」。docs/MENU_EMPHASIS_FIX_PLAN.md）
+assert.deepEqual(m.toggleTcySelection("12", select("12", 0, 2)), { from: 0, to: 2, insert: "[12(tcy)]", cursorPos: 9 });
+assert.deepEqual(m.toggleTcySelection("[12(tcy)]", select("[12(tcy)]", 1, 3)), { from: 0, to: 9, insert: "12", cursorPos: 2 });
+assert.deepEqual(m.toggleTcySelection("[12(tcy)]", select("[12(tcy)]", 0, 9)), { from: 0, to: 9, insert: "12", cursorPos: 2 });
+assert.deepEqual(m.toggleTcySelection("年[12(tcy)]", select("年[12(tcy)]", 2, 4)), { from: 1, to: 10, insert: "12", cursorPos: 3 });
+// 2つ並んだ縦中横の全体は、1つと見ずに外側へ付ける。圏点の中身は縦中横として外さない。
+assert.deepEqual(m.toggleTcySelection("[a(tcy)][b(tcy)]", select("[a(tcy)][b(tcy)]", 0, 16)), { from: 0, to: 16, insert: "[[a(tcy)][b(tcy)](tcy)]", cursorPos: 23 });
+assert.deepEqual(m.toggleTcySelection("[12(em,goma)]", select("[12(em,goma)]", 1, 3)), { from: 1, to: 3, insert: "[12(tcy)]", cursorPos: 10 });
+assert.equal(m.toggleTcySelection("a\nb", select("a\nb", 0, 3)), null);
+assert.equal(m.toggleTcySelection("ab", select("ab", 1)), null);
+
+// ルビ: すでに付いたルビに当たれば、書き方はそのままで読みだけを置き換える。
+{
+  const then = "[東京(rb,とうきょう)]へ";
+  assert.deepEqual(m.applyRubyToSelection("東京", select("東京", 0, 2), "とうきょう"), { from: 0, to: 2, insert: "[東京(rb,とうきょう)]", cursorPos: 14 });
+  assert.deepEqual(m.applyRubyToSelection(then, select(then, 1, 3), "ひがし"), { from: 0, to: 14, insert: "[東京(rb,ひがし)]", cursorPos: 12 });
+  assert.deepEqual(m.applyRubyToSelection(then, select(then, 0, 14), "ひがし"), { from: 0, to: 14, insert: "[東京(rb,ひがし)]", cursorPos: 12 });
+
+  const bar = "｜東京《とうきょう》へ";
+  assert.deepEqual(m.applyRubyToSelection(bar, select(bar, 1, 3), "ひがし"), { from: 0, to: 10, insert: "｜東京《ひがし》", cursorPos: 8 });
+  assert.deepEqual(m.applyRubyToSelection(bar, select(bar, 0, 10), "ひがし"), { from: 0, to: 10, insert: "｜東京《ひがし》", cursorPos: 8 });
+  // 青空文庫風では、読みの 《 》 も空白にする。
+  assert.deepEqual(m.applyRubyToSelection(bar, select(bar, 1, 3), "ひ《が》し"), { from: 0, to: 10, insert: "｜東京《ひ が し》", cursorPos: 10 });
+
+  const kanji = "東京《とうきょう》へ";
+  assert.deepEqual(m.applyRubyToSelection(kanji, select(kanji, 0, 2), "ひがし"), { from: 0, to: 9, insert: "東京《ひがし》", cursorPos: 7 });
+  assert.deepEqual(m.applyRubyToSelection(kanji, select(kanji, 0, 9), "ひがし"), { from: 0, to: 9, insert: "東京《ひがし》", cursorPos: 7 });
+  // ルビの付く語の一部だけ（前に漢字が続く）なら、置き換えずに外側へ付ける。
+  const part = "大東京《とうきょう》";
+  assert.deepEqual(m.applyRubyToSelection(part, select(part, 1, 3), "ひがし"), { from: 1, to: 3, insert: "[東京(rb,ひがし)]", cursorPos: 13 });
+  // 圏点の 《《…》》 はルビではない。
+  const emphasis = "《《東京》》";
+  assert.deepEqual(m.applyRubyToSelection(emphasis, select(emphasis, 2, 4), "ひがし"), { from: 2, to: 4, insert: "[東京(rb,ひがし)]", cursorPos: 14 });
+}
+
 // Ctrl+数字
 assert.deepEqual(m.applyHeadingToSelection("## 見出し\n本文", select("## 見出し\n本文", 0), 1), {
   from: 0,
