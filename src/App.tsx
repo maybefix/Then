@@ -102,15 +102,24 @@ import {
 import { WindowControls } from "./components/layout/WindowControls";
 import { StartupPortal } from "./components/startup/StartupPortal";
 import {
-  classifyLines,
   createDocumentAst,
   findActiveOutlineChain,
-  findCommentLineRanges,
   flattenOutline,
   hash16,
-  parseInlines,
   updateDocumentAst,
 } from "./editor/ast/documentAst";
+import {
+  applyDirectionToSelection,
+  applyHeadingToSelection,
+  canWrapInlineSelection,
+  clearNotationFromSelection,
+  normalizeSelectionRange,
+  sanitizeNotationArgument,
+  toggleBoldSelection,
+  toggleEmphasisSelection,
+  type EditorSelectionSnapshot,
+  type LayoutDirection,
+} from "./editor/selectionEdits";
 import {
   extractHeadingSection,
   moveHeadingSections,
@@ -146,10 +155,13 @@ import {
   upsertProjectAstDocumentAst,
   upsertProjectAstDocumentAsts,
 } from "./editor/ast/projectAst";
+import type { TextSearchOptions } from "./search/textSearch";
 import {
-  replaceTextSearchMatches,
-  type TextSearchOptions,
-} from "./search/textSearch";
+  collectEditorFindMatches,
+  replaceLiteralMatches,
+  replaceMarkdownBodyMatches,
+  type EditorFindMatch,
+} from "./search/editorFindReplace";
 import {
   PlotPane,
   PlotPaneHeaderActions,
@@ -306,6 +318,7 @@ import {
   type ThenPluginRuntimeHostHandle,
 } from "./plugins/PluginRuntimeHost";
 import { PluginIcon } from "./components/plugins/PluginIcon";
+import { AppIcon } from "./components/layout/AppIcon";
 import {
   computeTextChange,
   createThenPluginAnchor,
@@ -360,8 +373,6 @@ const NORMAL_REFERENCE_Z_LIMIT = PINNED_REFERENCE_Z_BASE - 1;
 const MAX_RECENT_REFERENCES = 30;
 const PROJECT_AST_INDEX_BATCH_SIZE = 12;
 
-type LayoutDirection = "start" | "center" | "end";
-
 type WorkspaceSearchScope = "file" | "project" | "library";
 
 type BreadcrumbOverflowItem =
@@ -369,24 +380,9 @@ type BreadcrumbOverflowItem =
   | { kind: "outline"; item: DocumentOutlineItem }
   | { kind: "scratch"; name: string };
 
-type EditorSelectionSnapshot = {
-  from: number;
-  to: number;
-  text: string;
-};
-
 type EditorContextMenuState = EditorSelectionSnapshot & {
   x: number;
   y: number;
-};
-
-type EditorFindMatch = {
-  id: string;
-  from: number;
-  to: number;
-  line: number;
-  column: number;
-  excerpt: string;
 };
 
 type EditorFindState = {
@@ -590,230 +586,6 @@ const directionOptions: Array<{
   { value: "center", label: "中央", description: "対象行の文末に中央揃え指示を付けます" },
   { value: "end", label: "行末", description: "対象行の文末に行末揃え指示を付けます" },
 ];
-
-type AppIconName =
-  | "book"
-  | "canvas"
-  | "checkpointAdd"
-  | "chevronDown"
-  | "export"
-  | "file"
-  | "files"
-  | "folder"
-  | "folderPlus"
-  | "fullscreen"
-  | "fullscreenExit"
-  | "history"
-  | "horizontal"
-  | "menu"
-  | "openExternal"
-  | "panelLeft"
-  | "panelRight"
-  | "plus"
-  | "reference"
-  | "search"
-  | "settings"
-  | "theme"
-  | "vertical"
-  | "write";
-
-function AppIcon({ name, className = "" }: { name: AppIconName; className?: string }) {
-  const common = {
-    className,
-    viewBox: "0 0 24 24",
-    "aria-hidden": true,
-    focusable: false,
-  };
-
-  switch (name) {
-    case "book":
-      return (
-        <svg {...common}>
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-        </svg>
-      );
-    case "canvas":
-      return (
-        <svg {...common}>
-          <rect x="4" y="5" width="7" height="6" rx="1.5" />
-          <rect x="13" y="13" width="7" height="6" rx="1.5" />
-          <path d="M11 8h3.5A2.5 2.5 0 0 1 17 10.5V13" />
-          <path d="M13 16H9.5A2.5 2.5 0 0 1 7 13.5V11" />
-        </svg>
-      );
-    case "chevronDown":
-      return (
-        <svg {...common}>
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      );
-    case "export":
-      return (
-        <svg {...common}>
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-          <path d="M7 10l5 5 5-5" />
-          <path d="M12 15V3" />
-        </svg>
-      );
-    case "file":
-      return (
-        <svg {...common}>
-          <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z" />
-          <path d="M14 2v6h6" />
-        </svg>
-      );
-    case "files":
-      return (
-        <svg {...common}>
-          <path d="M14 2H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7z" />
-          <path d="M14 2v6h5" />
-          <path d="M9 22h9a3 3 0 0 0 3-3V9" />
-        </svg>
-      );
-    case "folder":
-      return (
-        <svg {...common}>
-          <path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" />
-        </svg>
-      );
-    case "folderPlus":
-      return (
-        <svg {...common}>
-          <path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" />
-          <path d="M12 10v6M9 13h6" />
-        </svg>
-      );
-    case "fullscreen":
-      return (
-        <svg {...common}>
-          <path d="M8 3H3v5" />
-          <path d="M16 3h5v5" />
-          <path d="M21 16v5h-5" />
-          <path d="M8 21H3v-5" />
-        </svg>
-      );
-    case "fullscreenExit":
-      return (
-        <svg {...common}>
-          <path d="M3 9h6V3" />
-          <path d="M21 9h-6V3" />
-          <path d="M15 21v-6h6" />
-          <path d="M9 21v-6H3" />
-        </svg>
-      );
-    case "history":
-      return (
-        <svg {...common}>
-          <path d="M3.5 12a8.5 8.5 0 1 0 2.5-6" />
-          <path d="M3.5 4.5v4h4" />
-          <path d="M12 7v5l3.5 2" />
-        </svg>
-      );
-    case "checkpointAdd":
-      return (
-        <svg {...common}>
-          <path d="M6.5 3.5h11v17l-5.5-4-5.5 4z" />
-          <path d="M12 7.5v5M9.5 10h5" />
-        </svg>
-      );
-    case "horizontal":
-      return (
-        <svg {...common}>
-          <path d="M4 7h16" />
-          <path d="M4 12h16" />
-          <path d="M4 17h10" />
-        </svg>
-      );
-    case "menu":
-      return (
-        <svg {...common}>
-          <path d="M4 6h16" />
-          <path d="M4 12h16" />
-          <path d="M4 18h16" />
-        </svg>
-      );
-    case "openExternal":
-      return (
-        <svg {...common}>
-          <path d="M14 4h6v6" />
-          <path d="M20 4 11 13" />
-          <path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" />
-        </svg>
-      );
-    case "panelLeft":
-      return (
-        <svg {...common}>
-          <rect x="3" y="3" width="18" height="18" rx="2" />
-          <path d="M9 3v18" />
-        </svg>
-      );
-    case "panelRight":
-      return (
-        <svg {...common}>
-          <rect x="3" y="3" width="18" height="18" rx="2" />
-          <path d="M15 3v18" />
-        </svg>
-      );
-    case "plus":
-      return (
-        <svg {...common}>
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-      );
-    case "reference":
-      return (
-        <svg {...common}>
-          <path d="M7 3.5h7l3 3V20a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 6 20V5A1.5 1.5 0 0 1 7.5 3.5Z" />
-          <path d="M14 3.5V7h3.5" />
-          <path d="M9 11h6" />
-          <path d="M9 14h6" />
-          <path d="M9 17h4" />
-        </svg>
-      );
-    case "search":
-      return (
-        <svg {...common}>
-          <circle cx="10.5" cy="10.5" r="7.25" />
-          <path d="m16 16 5 5" />
-        </svg>
-      );
-    case "settings":
-      return (
-        <svg {...common}>
-          <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
-          <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.04.04a2 2 0 1 1-2.83 2.83l-.04-.04a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.06A1.7 1.7 0 0 0 8.97 19.4a1.7 1.7 0 0 0-1.88.34l-.04.04a2 2 0 1 1-2.83-2.83l.04-.04A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.06A1.7 1.7 0 0 0 4.6 8.97a1.7 1.7 0 0 0-.34-1.88l-.04-.04a2 2 0 1 1 2.83-2.83l.04.04A1.7 1.7 0 0 0 8.97 4.6 1.7 1.7 0 0 0 10 3.06V3a2 2 0 1 1 4 0v.06a1.7 1.7 0 0 0 1.03 1.54 1.7 1.7 0 0 0 1.88-.34l.04-.04a2 2 0 1 1 2.83 2.83l-.04.04a1.7 1.7 0 0 0-.34 1.88A1.7 1.7 0 0 0 20.94 10H21a2 2 0 1 1 0 4h-.06A1.7 1.7 0 0 0 19.4 15z" />
-        </svg>
-      );
-    case "theme":
-      return (
-        <svg {...common}>
-          <circle cx="13.5" cy="6.5" r="2.5" />
-          <circle cx="7.5" cy="10.5" r="2.5" />
-          <circle cx="16.5" cy="14.5" r="2.5" />
-          <path d="M12 22a9 9 0 1 1 8.8-10.9 2.4 2.4 0 0 1-2.35 2.9H17a2 2 0 0 0 0 4h.35A2.4 2.4 0 0 1 19.7 21 9.1 9.1 0 0 1 12 22z" />
-        </svg>
-      );
-    case "vertical":
-      return (
-        <svg {...common}>
-          <path d="M7 4v16" />
-          <path d="M12 4v16" />
-          <path d="M17 4v10" />
-        </svg>
-      );
-    case "write":
-      return (
-        <svg {...common}>
-          <path d="M6 3h9l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
-          <path d="M15 3v5h4" />
-          <path d="M8 12h8M8 16h6" />
-        </svg>
-      );
-    default:
-      return null;
-  }
-}
 
 function debugLog(message: string, data?: unknown): void {
   if (!import.meta.env.DEV) return;
@@ -1862,417 +1634,6 @@ function nextReferenceZIndex(cards: BinderCardState[], pinned: boolean): number 
   return pinned
     ? Math.max(PINNED_REFERENCE_Z_BASE, maxZ + 1)
     : Math.min(NORMAL_REFERENCE_Z_LIMIT, maxZ + 1);
-}
-
-function normalizeSelectionRange(
-  selection: { from: number; to: number },
-  text: string,
-): EditorSelectionSnapshot {
-  const from = Math.max(0, Math.min(text.length, Math.min(selection.from, selection.to)));
-  const to = Math.max(from, Math.min(text.length, Math.max(selection.from, selection.to)));
-
-  return {
-    from,
-    to,
-    text: text.slice(from, to),
-  };
-}
-
-function sanitizeNotationArgument(value: string): string {
-  return value.replace(/[\r\n\])]/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function canWrapInlineSelection(selection: EditorSelectionSnapshot): boolean {
-  return selection.from < selection.to && !selection.text.includes("\n");
-}
-
-function stripDirectionMarkers(line: string): string {
-  return line.replace(/\[\(al:(?:start|center|end)\)\]/g, "").replace(/^>>\s*/, "");
-}
-
-function applyDirectionToLine(line: string, direction: LayoutDirection): string {
-  const cleaned = stripDirectionMarkers(line);
-  return `${cleaned}[(al:${direction})]`;
-}
-
-function applyDirectionToSelection(
-  text: string,
-  selection: EditorSelectionSnapshot,
-  direction: LayoutDirection,
-): { from: number; to: number; insert: string; cursorPos: number } {
-  const rangeStart = selection.from;
-  const rangeEnd = selection.to > selection.from ? selection.to : selection.from;
-  const start = text.lastIndexOf("\n", Math.max(0, rangeStart - 1)) + 1;
-  const normalizedEnd = rangeEnd > rangeStart && text[rangeEnd - 1] === "\n"
-    ? rangeEnd - 1
-    : rangeEnd;
-  const nextBreak = text.indexOf("\n", normalizedEnd);
-  const end = nextBreak === -1 ? text.length : nextBreak;
-  const insert = text
-    .slice(start, end)
-    .split("\n")
-    .map((line) => applyDirectionToLine(line, direction))
-    .join("\n");
-
-  return {
-    from: start,
-    to: end,
-    insert,
-    cursorPos: start + insert.length,
-  };
-}
-
-function rangesTouch(
-  selectionFrom: number,
-  selectionTo: number,
-  markupFrom: number,
-  markupTo: number,
-): boolean {
-  if (selectionFrom === selectionTo) {
-    return markupFrom <= selectionFrom && selectionFrom <= markupTo;
-  }
-
-  return markupFrom < selectionTo && markupTo > selectionFrom;
-}
-
-function pushClearReplacement(
-  replacements: Array<{ from: number; to: number; insert: string }>,
-  from: number,
-  to: number,
-  insert: string,
-): void {
-  if (to <= from) return;
-  if (replacements.some((item) => from < item.to && to > item.from)) return;
-  replacements.push({ from, to, insert });
-}
-
-function clearNotationInLine(
-  line: string,
-  selectionFrom: number,
-  selectionTo: number,
-): { text: string; changed: boolean } {
-  const replacements: Array<{ from: number; to: number; insert: string }> = [];
-  let match: RegExpExecArray | null;
-
-  const layout = /\[([^\[\]\n]*?)\s*\((rb|em|tcy)(?:,([^)]*))?\)\]/g;
-  while ((match = layout.exec(line))) {
-    const full = match[0];
-    const from = match.index;
-    const to = from + full.length;
-    if (rangesTouch(selectionFrom, selectionTo, from, to)) {
-      pushClearReplacement(replacements, from, to, match[1].replace(/\s+$/, ""));
-    }
-  }
-
-  const pipeRuby = /｜([^《》｜]+)《([^《》]+)》/g;
-  while ((match = pipeRuby.exec(line))) {
-    const from = match.index;
-    const to = from + match[0].length;
-    if (rangesTouch(selectionFrom, selectionTo, from, to)) {
-      pushClearReplacement(replacements, from, to, match[1]);
-    }
-  }
-
-  const kanjiRuby = /([一-龠々〆ヶ]+)《([^《》]+)》/g;
-  while ((match = kanjiRuby.exec(line))) {
-    const from = match.index;
-    const to = from + match[0].length;
-    if (rangesTouch(selectionFrom, selectionTo, from, to)) {
-      pushClearReplacement(replacements, from, to, match[1]);
-    }
-  }
-
-  const emphasis = /《《([^《》]+)》》/g;
-  while ((match = emphasis.exec(line))) {
-    const from = match.index;
-    const to = from + match[0].length;
-    if (rangesTouch(selectionFrom, selectionTo, from, to)) {
-      pushClearReplacement(replacements, from, to, match[1]);
-    }
-  }
-
-  const bold = /\*\*([^*]+)\*\*/g;
-  while ((match = bold.exec(line))) {
-    const from = match.index;
-    const to = from + match[0].length;
-    if (rangesTouch(selectionFrom, selectionTo, from, to)) {
-      pushClearReplacement(replacements, from, to, match[1]);
-    }
-  }
-
-  const align = /\[\(al:(?:start|center|end)\)\]/g;
-  while ((match = align.exec(line))) {
-    pushClearReplacement(replacements, match.index, match.index + match[0].length, "");
-  }
-
-  // Notation-like text inside inline code is literal and stays as typed.
-  const codeSpans = parseInlines(line).filter((markup) => markup.type === "code");
-  const outsideCode = replacements.filter(
-    (replacement) =>
-      !codeSpans.some(
-        (span) =>
-          replacement.from < span.fullRange.offset + span.fullRange.length &&
-          span.fullRange.offset < replacement.to,
-      ),
-  );
-  if (outsideCode.length === 0) {
-    return { text: line, changed: false };
-  }
-
-  outsideCode.sort((left, right) => right.from - left.from);
-  let next = line;
-  for (const replacement of outsideCode) {
-    next = `${next.slice(0, replacement.from)}${replacement.insert}${next.slice(replacement.to)}`;
-  }
-
-  return { text: next, changed: true };
-}
-
-function clearNotationFromSelection(
-  text: string,
-  selection: EditorSelectionSnapshot,
-): { from: number; to: number; insert: string; cursorPos: number; changed: boolean } {
-  const rangeStart = selection.from;
-  const rangeEnd = selection.to > selection.from ? selection.to : selection.from;
-  const start = text.lastIndexOf("\n", Math.max(0, rangeStart - 1)) + 1;
-  const normalizedEnd = rangeEnd > rangeStart && text[rangeEnd - 1] === "\n"
-    ? rangeEnd - 1
-    : rangeEnd;
-  const nextBreak = text.indexOf("\n", normalizedEnd);
-  const end = nextBreak === -1 ? text.length : nextBreak;
-  const lines = text.slice(start, end).split("\n");
-  // Roles depend on the whole document (a fence may open far above the selection).
-  const firstLine = text.slice(0, start).split("\n").length - 1;
-  const roles = classifyLines(text.split("\n"));
-  let offset = start;
-  let changed = false;
-
-  const insert = lines
-    .map((line, index) => {
-      const lineStart = offset;
-      const lineEnd = lineStart + line.length;
-      offset = lineEnd + 1;
-      // Code and comment lines are literal; nothing in them is notation.
-      if (roles[firstLine + index]) return line;
-      const localFrom = Math.max(0, Math.min(line.length, selection.from - lineStart));
-      const localTo = selection.from === selection.to
-        ? localFrom
-        : Math.max(0, Math.min(line.length, selection.to - lineStart));
-      const result = clearNotationInLine(line, localFrom, localTo);
-      changed = changed || result.changed;
-      return result.text;
-    })
-    .join("\n");
-
-  return {
-    from: start,
-    to: end,
-    insert,
-    cursorPos: Math.min(start + insert.length, selection.from),
-    changed,
-  };
-}
-
-type SelectionEdit = {
-  from: number;
-  to: number;
-  insert: string;
-  cursorPos: number;
-};
-
-/** Ctrl+B 用。選択範囲を `**…**` で囲む／外すトグル。複数行は対象外。 */
-function toggleBoldSelection(
-  text: string,
-  selection: EditorSelectionSnapshot,
-): SelectionEdit | null {
-  const { from, to } = selection;
-  if (from === to) {
-    return { from, to, insert: "****", cursorPos: from + 2 };
-  }
-
-  const inner = text.slice(from, to);
-  if (inner.includes("\n")) return null;
-
-  if (text.slice(from - 2, from) === "**" && text.slice(to, to + 2) === "**") {
-    return { from: from - 2, to: to + 2, insert: inner, cursorPos: from - 2 + inner.length };
-  }
-
-  if (inner.length >= 4 && inner.startsWith("**") && inner.endsWith("**")) {
-    const stripped = inner.slice(2, -2);
-    return { from, to, insert: stripped, cursorPos: from + stripped.length };
-  }
-
-  const insert = `**${inner}**`;
-  return { from, to, insert, cursorPos: from + insert.length };
-}
-
-/** Ctrl+I 用。選択範囲に圏点 `[…(em,goma)]` を付ける／外すトグル。複数行は対象外。 */
-function toggleEmphasisSelection(
-  text: string,
-  selection: EditorSelectionSnapshot,
-): SelectionEdit | null {
-  const { from, to } = selection;
-  if (from >= to) return null;
-
-  const inner = text.slice(from, to);
-  if (inner.includes("\n")) return null;
-
-  const enclosed = text.slice(to).match(/^\(em[^)]*\)\]/);
-  if (text[from - 1] === "[" && enclosed) {
-    return {
-      from: from - 1,
-      to: to + enclosed[0].length,
-      insert: inner,
-      cursorPos: from - 1 + inner.length,
-    };
-  }
-
-  const selfMatch = inner.match(/^\[(.+)\(em[^)]*\)\]$/);
-  if (selfMatch) {
-    return { from, to, insert: selfMatch[1], cursorPos: from + selfMatch[1].length };
-  }
-
-  const insert = `[${inner}(em,goma)]`;
-  return { from, to, insert, cursorPos: from + insert.length };
-}
-
-/**
- * Ctrl+数字 用。選択範囲を含む各行の見出しレベルを設定する。
- * `level` が 0 の場合は見出しマーカーを除去する。
- */
-function applyHeadingToSelection(
-  text: string,
-  selection: EditorSelectionSnapshot,
-  level: number,
-): SelectionEdit {
-  const rangeStart = selection.from;
-  const rangeEnd = selection.to > selection.from ? selection.to : selection.from;
-  const start = text.lastIndexOf("\n", Math.max(0, rangeStart - 1)) + 1;
-  const normalizedEnd =
-    rangeEnd > rangeStart && text[rangeEnd - 1] === "\n" ? rangeEnd - 1 : rangeEnd;
-  const nextBreak = text.indexOf("\n", normalizedEnd);
-  const end = nextBreak === -1 ? text.length : nextBreak;
-
-  const insert = text
-    .slice(start, end)
-    .split("\n")
-    .map((line) => {
-      const body = line.replace(/^#{1,6}[ \t]*/, "");
-      if (level <= 0) return body;
-      return `${"#".repeat(Math.min(6, level))} ${body}`;
-    })
-    .join("\n");
-
-  return { from: start, to: end, insert, cursorPos: start + insert.length };
-}
-
-function replaceLiteralMatches(
-  text: string,
-  rawQuery: string,
-  replacement: string,
-  includeComments: boolean,
-): { text: string; count: number } {
-  const query = rawQuery.trim();
-  if (!query) return { text, count: 0 };
-
-  if (!includeComments) {
-    const comments = findCommentLineRanges(text);
-    if (comments.length > 0) {
-      // コメント行の間の区間ごとに置換し、コメント行はそのまま残す。
-      const chunks: string[] = [];
-      let count = 0;
-      let cursor = 0;
-      for (const range of [...comments, { from: text.length, to: text.length }]) {
-        const segment = replaceLiteralMatches(text.slice(cursor, range.from), rawQuery, replacement, true);
-        chunks.push(segment.text, text.slice(range.from, range.to));
-        count += segment.count;
-        cursor = range.to;
-      }
-      return { text: count > 0 ? chunks.join("") : text, count };
-    }
-  }
-
-  const haystack = text.toLocaleLowerCase();
-  const needle = query.toLocaleLowerCase();
-  const chunks: string[] = [];
-  let from = 0;
-  let count = 0;
-
-  while (from <= text.length) {
-    const index = haystack.indexOf(needle, from);
-    if (index < 0) break;
-    chunks.push(text.slice(from, index), replacement);
-    from = index + query.length;
-    count += 1;
-  }
-
-  if (count === 0) return { text, count: 0 };
-  chunks.push(text.slice(from));
-  return { text: chunks.join(""), count };
-}
-
-function replaceMarkdownBodyMatches(
-  markdown: string,
-  query: string,
-  replacement: string,
-  options: TextSearchOptions,
-): { markdown: string; count: number; error: string | null } {
-  const frontMatter = parseFrontMatter(markdown);
-  const result = replaceTextSearchMatches(
-    frontMatter.body,
-    query,
-    replacement,
-    options,
-    options.includeComments ? [] : findCommentLineRanges(frontMatter.body),
-  );
-  if (result.count === 0) return { markdown, count: 0, error: result.error };
-  return {
-    markdown: updateMarkdownBody(markdown, result.text),
-    count: result.count,
-    error: null,
-  };
-}
-
-function collectEditorFindMatches(
-  documentAst: DocumentAst,
-  rawQuery: string,
-  includeComments: boolean,
-  maxResults = 500,
-): EditorFindMatch[] {
-  const query = rawQuery.trim();
-  if (!query) return [];
-
-  const normalizedQuery = query.toLocaleLowerCase();
-  const matches: EditorFindMatch[] = [];
-
-  for (const block of documentAst.blocks) {
-    if (!includeComments && block.kind === "comment") continue;
-    const source = block.source;
-    const normalizedSource = source.toLocaleLowerCase();
-    let from = 0;
-    let matchIndex = 0;
-
-    while (from <= normalizedSource.length) {
-      const index = normalizedSource.indexOf(normalizedQuery, from);
-      if (index < 0) break;
-
-      const absoluteFrom = block.from + index;
-      matches.push({
-        id: `editor-find:${block.lineIndex}:${index}:${matchIndex}:${normalizedQuery}`,
-        from: absoluteFrom,
-        to: absoluteFrom + query.length,
-        line: block.lineIndex + 1,
-        column: index + 1,
-        excerpt: source,
-      });
-
-      if (matches.length >= maxResults) return matches;
-      from = index + Math.max(1, normalizedQuery.length);
-      matchIndex += 1;
-    }
-  }
-
-  return matches;
 }
 
 function normalizeCollapsedPathListsByWorkspace(
@@ -6444,7 +5805,7 @@ export default function App() {
 
   const replaceAllEditorFindMatches = () => {
     const editor = editorInstanceRef.current;
-    if (!editor || !editorFind.query.trim()) return;
+    if (!editor || editorFind.query.length === 0) return;
     const currentText = editor.getValue();
     const result = replaceLiteralMatches(
       currentText,
@@ -13525,7 +12886,7 @@ export default function App() {
                                 onKeyDown={handleEditorFindKeyDown}
                               />
                               <span className="editorFindCount">
-                                {editorFind.query.trim()
+                                {editorFind.query.length > 0
                                   ? editorFindMatches.length
                                     ? `${activeEditorFindIndex + 1}/${editorFindMatches.length}`
                                     : "0/0"
