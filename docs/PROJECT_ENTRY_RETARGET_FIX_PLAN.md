@@ -15,7 +15,7 @@
 | 5 | 案 | 済み |
 | 6 | 人の確認（確認1） | 済み |
 | 7 | 実施 | 済み |
-| 8 | 自動テスト | |
+| 8 | 自動テスト | 済み |
 | 9 | 実機確認 | |
 | 10 | 完了（確認2） | |
 
@@ -171,7 +171,16 @@
 2. 名前の変更で古い記録を閉じない → 「the record kept under the tab’s old name is closed」で落ちた。
 3. 資料ボードの読み込みの依存を木に戻す → 「the reference board loads when the project changes」で落ちた。
 
-前後の比較は、一式が終わってから書く。
+### 前後の比較
+
+| | 前（`98057ca`。PR #15 の「後」の一式をそのまま使った） | 後（`ccd8c2a`） |
+|---|---|---|
+| build | 通った | 通った |
+| メインの JS | 688,782 バイト | 688,578 バイト（-0.2 kB） |
+| テストの本数 | 70 | 70 |
+| 両方で通った | 66 | 66（期待を書き換えた `test:project-entry-actions` と `test:project-portability` を含む） |
+| 両方で失敗 | 4（`test:ai-selection`、`test:canvas-save`、`test:v058-bundle`、`test:v0511-themes`。理由は前後で同じ） | 同じ |
+| 新しい失敗 | — | なし |
 
 ## 工程9: 実機確認
 
