@@ -4670,6 +4670,27 @@ html:not([data-window-fullscreen="true"])
   font-size: 15px;
 }
 
+.quickIdeaModal .quickIdeaAskAi {
+  height: 42px;
+  margin-left: auto;
+  padding: 0 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 21px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.quickIdeaModal .quickIdeaAskAi:hover:not(:disabled) {
+  background: var(--bg-hover, var(--bg-tertiary));
+}
+
+.quickIdeaModal .quickIdeaAskAi:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
 .settingsModal .modalForm {
   min-height: 0;
   overflow-y: auto;

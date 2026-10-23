@@ -55,6 +55,8 @@ import { SettingsModal } from "./components/dialogs/SettingsModal";
 import { ThemePickerModal } from "./components/dialogs/ThemePickerModal";
 import { ManuscriptTidyModal } from "./components/dialogs/ManuscriptTidyModal";
 import { RightPaneSwitcher, type RightPaneSwitcherItem } from "./components/layout/RightPaneSwitcher";
+import { AiPane } from "./components/ai/AiPane";
+import { DEFAULT_AI_SETTINGS, normalizeAiSettings } from "./ai/settings";
 import type { ManuscriptTidyLineRange, ManuscriptTidyResult } from "./editor/manuscriptTidy";
 import { normalizeAppTheme } from "./themes";
 import { PropertiesPanel } from "./components/properties/PropertiesPanel";
@@ -343,7 +345,7 @@ type ToastAction = {
   label: string;
   onClick: () => void;
 };
-const EDITOR_CONTEXT_MENU_HEIGHT = 292;
+const EDITOR_CONTEXT_MENU_HEIGHT = 322;
 const defaultReferenceLayout: ReferenceLayout = {
   version: 3,
   name: "default",
@@ -879,6 +881,16 @@ const rightSidebarBuiltinTabs: Array<{ id: string; label: string; icon: ReactNod
     ),
   },
   {
+    id: "ai",
+    label: "AI",
+    icon: (
+      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+        <path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5h-7l-4.5 3.5v-3.5H5A1.5 1.5 0 0 1 3.5 15V7A1.5 1.5 0 0 1 5 5.5Z" />
+        <path d="M12 8.2v4.6M9.7 10.5h4.6" />
+      </svg>
+    ),
+  },
+  {
     id: "properties",
     label: "プロパティ",
     icon: (
@@ -1193,6 +1205,7 @@ const defaultSettings: EditorSettings = {
   canvasOpensInWindow: false,
   exportOpensInWindow: false,
   proofread: { ...DEFAULT_PROOFREAD_OPTIONS, disabledRules: [] },
+  ai: DEFAULT_AI_SETTINGS,
 };
 
 const fallbackFontFamilies = [
@@ -2642,6 +2655,7 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
           ? settings.exportOpensInWindow
           : defaultSettings.exportOpensInWindow,
       proofread: normalizeProofreadSettings(settings.proofread),
+      ai: normalizeAiSettings(settings.ai),
     },
     rightSidebarTab: normalizeRightSidebarTab(value?.rightSidebarTab),
     lastWorkspacePath:
@@ -3252,6 +3266,12 @@ export default function App() {
     sourceError?: string;
   } | null>(null);
   const [rightSidebarTab, setRightSidebarTabState] = useState<string>("plot");
+  const [aiInsertRequest, setAiInsertRequest] = useState<{ text: string; nonce: number } | null>(null);
+  const consumeAiInsertRequest = useCallback(
+    (nonce: number) => setAiInsertRequest((current) => (current?.nonce === nonce ? null : current)),
+    [],
+  );
+
   const setRightSidebarTab = useCallback((tab: string) => {
     setRightSidebarTabState(tab);
     if (!isRestorableRightSidebarTab(tab)) return;
@@ -8613,6 +8633,15 @@ export default function App() {
     setIsWorkspaceSwitcherOpen(false);
     setEditorContextMenu(null);
     window.requestAnimationFrame(() => editorInstanceRef.current?.focus());
+  };
+
+  /** Shows the AI pane with `text` added to its composer. Nothing is sent (AI-26, AI-27). */
+  const handTextToAi = (text: string) => {
+    if (!text.trim()) return;
+    setIsEditorFocusMode(false);
+    setRightSidebarTab("ai");
+    setIsRightSidebarCollapsed(false);
+    setAiInsertRequest({ text, nonce: Date.now() });
   };
 
   const leaveEditorFocusMode = () => {
@@ -14157,6 +14186,17 @@ export default function App() {
                         >
                           貼り付け
                         </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={editorContextMenu.from === editorContextMenu.to}
+                          onClick={() => {
+                            handTextToAi(editorContextMenu.text);
+                            closeEditorContextMenu();
+                          }}
+                        >
+                          AIに渡す
+                        </button>
                       </div>
                       <div className="contextMenuDivider" role="separator" />
                       {pluginSelectionCommands.length > 0 && editorContextMenu.from !== editorContextMenu.to && (
@@ -14460,6 +14500,24 @@ export default function App() {
                         })
                       }
                     />
+                  ) : rightSidebarTab === "ai" ? (
+                    <AiPane
+                      rootPath={projectFolder?.path ?? null}
+                      settings={settings.ai}
+                      threads={snippets}
+                      onReferenceSaved={(threadId, file) => {
+                        setReferenceCandidates((current) =>
+                          mergeReferenceFiles([file], current).sort((left, right) =>
+                            left.sourcePath.localeCompare(right.sourcePath),
+                          ),
+                        );
+                        addReferencesToIdeaThread(threadId, [file]);
+                        showToast(`「${file.name}」を資料に保存しました`);
+                      }}
+                      onOpenReference={(file) => openReferenceCard(file.sourcePath, file, { switchToReferenceTab: false })}
+                      insertRequest={aiInsertRequest}
+                      onInsertConsumed={consumeAiInsertRequest}
+                    />
                   ) : rightSidebarTab === "plot" ? (
                     <PlotPane
                       cards={plotCards}
@@ -14502,6 +14560,7 @@ export default function App() {
                       onMoveFragmentToNewThread={(threadId, fragmentId) =>
                         void moveFragmentToNewThread(threadId, fragmentId)
                       }
+                      onAskAi={handTextToAi}
                       onFragmentDragStart={handleFragmentDragStart}
                       onFragmentDragEnd={handleFragmentDragEnd}
                       onAddReference={(threadId) => void handleAddReference("project", threadId)}
@@ -14774,6 +14833,7 @@ export default function App() {
             <QuickIdeaModal
               threads={snippets}
               onCapture={captureFragment}
+              onAskAi={handTextToAi}
               onClose={() => setIsQuickIdeaModalOpen(false)}
             />
           )}

@@ -5,6 +5,8 @@ import type { IdeaThread } from "../../types";
 type QuickIdeaModalProps = {
   threads: IdeaThread[];
   onCapture: (body: string, destId: string) => void;
+  /** Opens the AI pane with this text in its composer. */
+  onAskAi?: (text: string) => void;
   onClose: () => void;
 };
 
@@ -17,7 +19,7 @@ function SendIcon() {
   );
 }
 
-export function QuickIdeaModal({ threads, onCapture, onClose }: QuickIdeaModalProps) {
+export function QuickIdeaModal({ threads, onCapture, onAskAi, onClose }: QuickIdeaModalProps) {
   const inbox = useMemo(() => threads.find((thread) => thread.kind === "inbox"), [threads]);
   const inboxId = inbox?.id ?? threads[0]?.id ?? "";
   const [destId, setDestId] = useState(inboxId);
@@ -90,6 +92,19 @@ export function QuickIdeaModal({ threads, onCapture, onClose }: QuickIdeaModalPr
                 </option>
               ))}
             </select>
+            {onAskAi && (
+              <button
+                className="quickIdeaAskAi"
+                type="button"
+                disabled={!text.trim()}
+                onClick={() => {
+                  onAskAi(text.trim());
+                  onClose();
+                }}
+              >
+                AIに聞く
+              </button>
+            )}
             <button
               className="ideaPrimaryBtn quickIdeaSubmit"
               type="button"

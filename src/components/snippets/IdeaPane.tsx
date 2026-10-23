@@ -39,6 +39,8 @@ type IdeaPaneProps = {
   onDeleteFragment: (threadId: string, fragmentId: string) => void;
   onMoveFragment: (fromThreadId: string, fragmentId: string, toThreadId: string) => void;
   onMoveFragmentToNewThread: (fromThreadId: string, fragmentId: string) => void;
+  /** Opens the AI pane with this Idea's text in its composer. */
+  onAskAi?: (text: string) => void;
   onFragmentDragStart: (event: DragEvent<HTMLElement>, threadId: string, fragmentId: string) => void;
   onFragmentDragEnd: () => void;
   onAddReference: (threadId: string) => void;
@@ -161,6 +163,7 @@ export function IdeaPane(props: IdeaPaneProps) {
     onToggleStar, onDeleteThread, onAddFragment, onUpdateFragment,
     onOpenFragmentCard, onDeleteFragment, onMoveFragment,
     onMoveFragmentToNewThread,
+    onAskAi,
     onFragmentDragStart, onFragmentDragEnd, onAddReference,
     onCreateReference, onOpenReference, onMoveReference, onRemoveReference,
     onMoveReferenceToNewThread,
@@ -381,6 +384,7 @@ export function IdeaPane(props: IdeaPaneProps) {
                 )}
                 {fragmentMenu?.id === fragment.id && fragmentMenu.kind === "more" && (
                   <div className={`referenceContextMenu ideaReferenceMenu ideaFragmentMenu ${fragmentMenu.up ? "opensUp" : ""}`} role="menu" aria-label="その他の操作">
+                    {onAskAi && <button type="button" role="menuitem" onClick={() => { setFragmentMenu(null); onAskAi(fragment.body); }}>AIに聞く</button>}
                     {transfer && <button type="button" role="menuitem" onClick={() => { setFragmentMenu(null); transfer.onFragment(thread.id, fragment.id); }}>{transfer.label}</button>}
                     <button type="button" role="menuitem" className="dangerMenuItem" onClick={() => { setFragmentMenu(null); onDeleteFragment(thread.id, fragment.id); }}>削除</button>
                   </div>

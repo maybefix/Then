@@ -7,9 +7,11 @@ use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
+mod ai;
 mod atomic_file;
 mod checkpoint_store;
 mod export_front_matter;
+mod external_url;
 mod intermediate_draft;
 mod library;
 mod markdown_image;
@@ -612,6 +614,18 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            external_url::open_external_url,
+            ai::commands::ai_providers,
+            ai::commands::ai_store_key,
+            ai::commands::ai_delete_key,
+            ai::commands::ai_test_connection,
+            ai::commands::ai_list_conversations,
+            ai::commands::ai_load_conversation,
+            ai::commands::ai_rename_conversation,
+            ai::commands::ai_delete_conversation,
+            ai::commands::ai_stop_turn,
+            ai::commands::ai_send,
+            ai::commands::ai_save_answer_as_reference,
             native_ime::native_ime_sync,
             native_ime::native_ime_release,
             native_ime::native_ime_control,
