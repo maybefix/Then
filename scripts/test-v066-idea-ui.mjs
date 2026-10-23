@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [app, ideaPane, css, userManual, packageJson, packageLock, tauriConfig, cargoToml] =
+const [app, ideaActions, ideaPane, css, userManual, packageJson, packageLock, tauriConfig, cargoToml] =
   await Promise.all([
     readFile("src/App.tsx", "utf8"),
+    readFile("src/ideaThreadActions.ts", "utf8"),
     readFile("src/components/snippets/IdeaPane.tsx", "utf8"),
     readFile("src/App.css", "utf8"),
     readFile("docs/USER_MANUAL.md", "utf8"),
@@ -59,18 +60,18 @@ assert.match(
 );
 
 assert.match(
-  app,
+  ideaActions,
   /const captureFragment[\s\S]*?fragments: \[fragment, \.\.\.thread\.fragments\][\s\S]*?items: \[makeIdeaItem\(fragment\.id\), \.\.\.layout\.items\]/,
   "quick capture must put new Ideas at the top of every thread",
 );
 assert.match(
-  app,
+  ideaActions,
   /const addFragment[\s\S]*?fragments: \[fragment, \.\.\.thread\.fragments\][\s\S]*?items: \[makeIdeaItem\(fragment\.id\), \.\.\.layout\.items\]/,
   "thread detail additions must use the same newest-first order as quick capture",
 );
-assert.match(app, /title: "断片を削除"/);
-assert.match(app, /showToast\("断片を削除しました", \{\s*label: "元に戻す"/);
-assert.match(app, /showToast\(`「\$\{toThread\.title\}」へ移動しました`, \{\s*label: "元に戻す"/);
+assert.match(ideaActions, /title: "断片を削除"/);
+assert.match(ideaActions, /showToast\("断片を削除しました", \{\s*label: "元に戻す"/);
+assert.match(ideaActions, /showToast\(`「\$\{toThread\.title\}」へ移動しました`, \{\s*label: "元に戻す"/);
 assert.match(app, /showToast\("並び順を変更しました", \{\s*label: "元に戻す"/);
 assert.match(css, /\.toast\.hasAction\s*\{[^}]*pointer-events:\s*auto;/s);
 assert.match(css, /\.referenceContextMenu \.dangerMenuItem\s*\{[^}]*var\(--danger\)/s);

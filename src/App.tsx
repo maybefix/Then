@@ -160,7 +160,6 @@ import {
   createCanvasEdge,
   createCanvasGroupNode,
   createCanvasTextNode,
-  createIdeaOriginRef,
   normalizeCanvasDocument,
   type CanvasBoardSummary,
   type CanvasCopyToIdeaRequest,
@@ -184,11 +183,15 @@ import { OpenCardsPane } from "./components/binder/OpenCardsPane";
 import {
   countIdeaReferenceLinks,
   ideaThreadItemKey,
-  makeIdeaItem,
   makeReferenceLink,
   normalizedReferenceKey,
   reconcileIdeaThreadLayouts,
 } from "./ideaReferenceModel";
+import {
+  defaultIdeaThreads,
+  normalizeIdeaThreads,
+} from "./ideaThreadModel";
+import { createIdeaThreadActions } from "./ideaThreadActions";
 import ProofreadPane from "./components/proofread/ProofreadPane";
 import { PROOFREAD_RULES } from "./proofread/rules";
 import { DEFAULT_PROOFREAD_OPTIONS } from "./proofread/types";
@@ -219,11 +222,9 @@ import type {
   FileProgressStatus,
   FlatOutlineItem,
   FontOption,
-  IdeaFragment,
   IdeaOriginRef,
   IdeaReferenceLink,
   IdeaThread,
-  IdeaThreadItemLink,
   IdeaThreadLayout,
   ManuscriptSnapshot,
   ManuscriptSnapshotFile,
@@ -243,7 +244,6 @@ import type {
   ReferenceLayout,
   ReferenceScope,
   SaveStatus,
-  Snippet,
   TextDocument,
   TextTemplateSummary,
   WorkspaceAlert,
@@ -331,7 +331,6 @@ import {
   exportPdfWithVivliostyle,
 } from "./export/exportHostActions";
 
-const SNIPPET_DRAG_MIME = "application/x-brew-snippet-id";
 const BREADCRUMB_ENTRY_DRAG_MIME = "application/x-brew-project-entry-path";
 const STORAGE_KEY = "then.app-state.v1";
 const LEGACY_STORAGE_KEY = "brew.app-state.v1";
@@ -356,7 +355,6 @@ const defaultReferenceLayout: ReferenceLayout = {
 const PINNED_REFERENCE_Z_BASE = 10000;
 const NORMAL_REFERENCE_Z_LIMIT = PINNED_REFERENCE_Z_BASE - 1;
 const MAX_RECENT_REFERENCES = 30;
-const CANVAS_NEW_THREAD_TARGET = "__new__";
 const PROJECT_AST_INDEX_BATCH_SIZE = 12;
 
 type LayoutDirection = "start" | "center" | "end";
@@ -919,69 +917,6 @@ const initialMarkdown = `# ${documentData.title}
 > 「また始まったか」
 `;
 
-const INBOX_THREAD_ID = "idea-inbox";
-const sampleIdeaThreadIds = new Set(["idea-sample-scene", "idea-sample-foreshadow"]);
-const sampleIdeaFragmentBodies = new Set([
-  "主人公が改札の前で一瞬立ち止まる描写を入れる。",
-  "風呂のシーンはテンポよく、1分で終わらせる緊張感を持たせたい。",
-  "夜明けの光が、山の稜線を白く縁どり始めた頃。",
-  "主人公は決断する。しかしその足は、一歩踏み出すことを躊躇っていた。",
-  "「お前には、まだ知らないことがある」老人は静かに言った。",
-]);
-
-let ideaIdCounter = 0;
-
-function nextIdeaId(prefix: string): string {
-  ideaIdCounter += 1;
-  return `${prefix}-${Date.now().toString(36)}-${ideaIdCounter}`;
-}
-
-function normalizeIdeaOriginRef(value: unknown): IdeaOriginRef | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const origin = value as Partial<IdeaOriginRef>;
-  if (origin.source !== "canvas") return undefined;
-  if (typeof origin.sourceId !== "string" || typeof origin.sourceBoardId !== "string") {
-    return undefined;
-  }
-  if (origin.sourceBoardScope === "global") return undefined;
-  return {
-    source: "canvas",
-    sourceId: origin.sourceId,
-    sourceBoardId: origin.sourceBoardId,
-    sourceBoardScope: "project",
-    copiedAt: typeof origin.copiedAt === "number" ? origin.copiedAt : Date.now(),
-  };
-}
-
-function makeIdeaFragment(
-  body: string,
-  used = false,
-  originRef?: IdeaOriginRef,
-): IdeaFragment {
-  const now = Date.now();
-  return {
-    id: nextIdeaId("frag"),
-    body,
-    used,
-    createdAt: now,
-    updatedAt: now,
-    originRef,
-  };
-}
-
-function makeInboxThread(fragments: IdeaFragment[] = []): IdeaThread {
-  const now = Date.now();
-  return {
-    id: INBOX_THREAD_ID,
-    kind: "inbox",
-    title: "インボックス",
-    starred: false,
-    createdAt: now,
-    updatedAt: now,
-    fragments,
-  };
-}
-
 const defaultPlotCards: PlotCard[] = [
   {
     id: "plot-1",
@@ -1011,88 +946,6 @@ const defaultPlotCards: PlotCard[] = [
     managerCollapsed: false,
   },
 ];
-
-function defaultIdeaThreads(): IdeaThread[] {
-  return [makeInboxThread()];
-}
-
-/** 値を {@link IdeaThread}[] へ正規化する。旧フラット Snippet[] からの移行も担う。 */
-function normalizeIdeaThreads(value: unknown): IdeaThread[] {
-  if (!Array.isArray(value) || value.length === 0) {
-    return [makeInboxThread()];
-  }
-
-  const looksLegacy = value.some(
-    (entry) =>
-      entry &&
-      typeof entry === "object" &&
-      "text" in (entry as Record<string, unknown>) &&
-      !("fragments" in (entry as Record<string, unknown>)),
-  );
-
-  let threads: IdeaThread[];
-  if (looksLegacy) {
-    const fragments = (value as Snippet[])
-      .map((snippet) =>
-        makeIdeaFragment(
-          typeof snippet?.text === "string" && snippet.text.trim()
-            ? snippet.text
-            : String(snippet?.title ?? "").trim(),
-        ),
-      )
-      .filter((fragment) => fragment.body.trim().length > 0);
-    threads = [makeInboxThread(fragments)];
-  } else {
-    threads = (value as Array<Partial<IdeaThread>>)
-      .filter((thread) => thread && typeof thread === "object")
-      .map((thread) => {
-        const now = Date.now();
-        const fragments = Array.isArray(thread.fragments)
-          ? thread.fragments
-              .filter((fragment) => fragment && typeof fragment.body === "string")
-              .map((fragment) => ({
-                id: typeof fragment.id === "string" ? fragment.id : nextIdeaId("frag"),
-                body: fragment.body,
-                used: Boolean(fragment.used),
-                createdAt:
-                  typeof fragment.createdAt === "number" ? fragment.createdAt : now,
-                updatedAt:
-                  typeof fragment.updatedAt === "number" ? fragment.updatedAt : now,
-                originRef: normalizeIdeaOriginRef(
-                  (fragment as Partial<IdeaFragment>).originRef,
-                ),
-              }))
-          : [];
-        return {
-          id: typeof thread.id === "string" ? thread.id : nextIdeaId("thread"),
-          kind: thread.kind === "inbox" ? "inbox" : "thread",
-          title: typeof thread.title === "string" ? thread.title : "スレッド",
-          starred: Boolean(thread.starred),
-          createdAt: typeof thread.createdAt === "number" ? thread.createdAt : now,
-          updatedAt: typeof thread.updatedAt === "number" ? thread.updatedAt : now,
-          fragments,
-        } satisfies IdeaThread;
-      });
-  }
-
-  threads = threads
-    .filter((thread) => !sampleIdeaThreadIds.has(thread.id))
-    .map((thread) => ({
-      ...thread,
-      fragments: thread.fragments.filter(
-        (fragment) => !sampleIdeaFragmentBodies.has(fragment.body.trim()),
-      ),
-    }));
-
-  // インボックスを必ず1つ、先頭に置く。
-  const inboxes = threads.filter((thread) => thread.kind === "inbox");
-  const others = threads.filter((thread) => thread.kind !== "inbox");
-  const inbox =
-    inboxes.length > 0
-      ? { ...inboxes[0], id: INBOX_THREAD_ID, fragments: inboxes.flatMap((t) => t.fragments) }
-      : makeInboxThread();
-  return [inbox, ...others];
-}
 
 const hiraginoCssFontFamilyAliases = new Map<string, string[]>([
   ["ヒラギノ角ゴ Pro W3", ["Hiragino Kaku Gothic Pro", "ヒラギノ角ゴ Pro"]],
@@ -11397,10 +11250,6 @@ export default function App() {
     setIsOutlineMenuOpen(false);
   };
 
-  const isSnippetDragEvent = (event: DragEvent<HTMLElement>) => {
-    return Array.from(event.dataTransfer.types).includes(SNIPPET_DRAG_MIME);
-  };
-
   const getEditorView = () => {
     return editorInstanceRef.current;
   };
@@ -11423,106 +11272,6 @@ export default function App() {
     view.replaceRange(insertFrom, insertTo, insertedText, cursorPos);
     view.focus();
     return true;
-  };
-
-  const handleFragmentDragStart = (
-    event: DragEvent<HTMLElement>,
-    threadId: string,
-    fragmentId: string,
-  ) => {
-    const thread = snippets.find((item) => item.id === threadId);
-    const fragment = thread?.fragments.find((item) => item.id === fragmentId);
-    if (!fragment) return;
-    setDraggingId(fragmentId);
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData(SNIPPET_DRAG_MIME, fragmentId);
-  };
-
-  const handleFragmentDragEnd = () => {
-    setDraggingId(null);
-  };
-
-  const blockIdeaDropOnEditor = (event: DragEvent<HTMLDivElement>) => {
-    if (!isSnippetDragEvent(event)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.dropEffect = "none";
-  };
-
-  const updateIdeaThreads = (updater: (threads: IdeaThread[]) => IdeaThread[]) => {
-    setAppState((current) => {
-      const nextThreads = updater(current.snippets);
-      return {
-        ...current,
-        snippets: nextThreads,
-        profileSnippets:
-          current.settings.snippetStorageMode === "profile"
-            ? nextThreads
-            : current.profileSnippets,
-      };
-    });
-  };
-
-  /** スレッドを id で見つけて差し替える（updatedAt を更新）。 */
-  const patchThread = (threadId: string, patch: (thread: IdeaThread) => IdeaThread) => {
-    updateIdeaThreads((threads) =>
-      threads.map((thread) =>
-        thread.id === threadId ? { ...patch(thread), updatedAt: Date.now() } : thread,
-      ),
-    );
-  };
-
-  const captureFragment = (body: string, destId: string) => {
-    const text = body.trim();
-    if (!text) return;
-    const dest = snippets.find((thread) => thread.id === destId) ?? snippets[0];
-    if (!dest) return;
-    const fragment = makeIdeaFragment(text);
-    // 追加した Idea は、どのスレッドでも先頭（新しい順）に入れる。
-    patchThread(dest.id, (thread) => ({ ...thread, fragments: [fragment, ...thread.fragments] }));
-    setReferenceLayout((current) => ({
-      ...current,
-      ideaThreads: current.ideaThreads.map((layout) =>
-        layout.threadId === dest.id
-          ? {
-              ...layout,
-              items: [makeIdeaItem(fragment.id), ...layout.items],
-            }
-          : layout,
-      ),
-    }));
-    showToast(`「${dest.title}」に追加しました`);
-  };
-
-  const addFragment = (threadId: string, body: string) => {
-    const text = body.trim();
-    if (!text) return;
-    const fragment = makeIdeaFragment(text);
-    patchThread(threadId, (thread) => ({ ...thread, fragments: [fragment, ...thread.fragments] }));
-    setReferenceLayout((current) => ({
-      ...current,
-      ideaThreads: current.ideaThreads.map((layout) =>
-        layout.threadId === threadId
-          ? {
-              ...layout,
-              items: [makeIdeaItem(fragment.id), ...layout.items],
-            }
-          : layout,
-      ),
-    }));
-  };
-
-  const updateFragmentBody = (threadId: string, fragmentId: string, body: string) => {
-    const text = body.trim();
-    if (!text) return;
-    patchThread(threadId, (thread) => ({
-      ...thread,
-      fragments: thread.fragments.map((fragment) =>
-        fragment.id === fragmentId
-          ? { ...fragment, body: text, updatedAt: Date.now() }
-          : fragment,
-      ),
-    }));
   };
 
   const markFragmentUsed = (threadId: string, fragmentId: string, used: boolean) => {
@@ -11596,144 +11345,6 @@ export default function App() {
     });
   };
 
-  const deleteFragment = async (threadId: string, fragmentId: string) => {
-    const thread = snippets.find((item) => item.id === threadId);
-    const fragmentIndex = thread?.fragments.findIndex((item) => item.id === fragmentId) ?? -1;
-    const fragment = fragmentIndex >= 0 ? thread?.fragments[fragmentIndex] : null;
-    if (!thread || !fragment) return;
-
-    const preview = fragment.body.length > 36 ? `${fragment.body.slice(0, 36)}…` : fragment.body;
-    const shouldDelete = await requestConfirm({
-      title: "断片を削除",
-      message: `「${preview}」を削除しますか？`,
-      confirmLabel: "削除",
-      danger: true,
-    });
-    if (!shouldDelete) return;
-
-    patchThread(threadId, (thread) => ({
-      ...thread,
-      fragments: thread.fragments.filter((fragment) => fragment.id !== fragmentId),
-    }));
-    showToast("断片を削除しました", {
-      label: "元に戻す",
-      onClick: () => {
-        patchThread(threadId, (current) => {
-          if (current.fragments.some((item) => item.id === fragmentId)) return current;
-          const fragments = [...current.fragments];
-          fragments.splice(Math.min(fragmentIndex, fragments.length), 0, fragment);
-          return { ...current, fragments };
-        });
-        showToast("削除を元に戻しました");
-      },
-    });
-  };
-
-  const moveFragment = (fromThreadId: string, fragmentId: string, toThreadId: string) => {
-    if (fromThreadId === toThreadId) return;
-    const fromThread = snippets.find((thread) => thread.id === fromThreadId);
-    const fragment = fromThread?.fragments.find((item) => item.id === fragmentId);
-    const fromIndex = fromThread?.fragments.findIndex((item) => item.id === fragmentId) ?? -1;
-    const toThread = snippets.find((thread) => thread.id === toThreadId);
-    if (!fragment || !toThread || fromIndex < 0) return;
-
-    // 表示順はレイアウト側の並びで決まる。断片の配列だけを動かすと、整合処理が
-    // 移動先の末尾に足してしまうので、レイアウトも同時に動かす。
-    const isMovedItem = (item: IdeaThreadItemLink) =>
-      item.sourceType === "idea" && item.fragmentId === fragmentId;
-    const fromLayoutIndex = referenceLayout.ideaThreads
-      .find((layout) => layout.threadId === fromThreadId)
-      ?.items.findIndex(isMovedItem) ?? -1;
-
-    const now = Date.now();
-    setReferenceLayout((current) => ({
-      ...current,
-      ideaThreads: current.ideaThreads.map((layout) => {
-        if (layout.threadId === fromThreadId) {
-          return { ...layout, items: layout.items.filter((item) => !isMovedItem(item)) };
-        }
-        if (layout.threadId === toThreadId) {
-          // 移動先でも、追加と同じく先頭に入れる。
-          return {
-            ...layout,
-            items: [makeIdeaItem(fragmentId), ...layout.items.filter((item) => !isMovedItem(item))],
-          };
-        }
-        return layout;
-      }),
-    }));
-    updateIdeaThreads((threads) =>
-      threads.map((thread) => {
-        if (thread.id === fromThreadId) {
-          return {
-            ...thread,
-            fragments: thread.fragments.filter((item) => item.id !== fragmentId),
-            updatedAt: now,
-          };
-        }
-        if (thread.id === toThreadId) {
-          const movedFragment = { ...fragment, updatedAt: now };
-          return {
-            ...thread,
-            fragments: [movedFragment, ...thread.fragments],
-            updatedAt: now,
-          };
-        }
-        return thread;
-      }),
-    );
-    showToast(`「${toThread.title}」へ移動しました`, {
-      label: "元に戻す",
-      onClick: () => {
-        const undoAt = Date.now();
-        updateIdeaThreads((threads) => {
-          const destination = threads.find((thread) => thread.id === toThreadId);
-          const currentFragment = destination?.fragments.find((item) => item.id === fragmentId);
-          if (!currentFragment) return threads;
-
-          return threads.map((thread) => {
-            if (thread.id === toThreadId) {
-              return {
-                ...thread,
-                fragments: thread.fragments.filter((item) => item.id !== fragmentId),
-                updatedAt: undoAt,
-              };
-            }
-            if (thread.id === fromThreadId) {
-              const fragments = [...thread.fragments];
-              fragments.splice(
-                Math.min(fromIndex, fragments.length),
-                0,
-                { ...currentFragment, updatedAt: undoAt },
-              );
-              return { ...thread, fragments, updatedAt: undoAt };
-            }
-            return thread;
-          });
-        });
-        setReferenceLayout((current) => ({
-          ...current,
-          ideaThreads: current.ideaThreads.map((layout) => {
-            if (layout.threadId === toThreadId) {
-              return { ...layout, items: layout.items.filter((item) => !isMovedItem(item)) };
-            }
-            if (layout.threadId === fromThreadId) {
-              const items = layout.items.filter((item) => !isMovedItem(item));
-              items.splice(
-                fromLayoutIndex >= 0 ? Math.min(fromLayoutIndex, items.length) : items.length,
-                0,
-                makeIdeaItem(fragmentId),
-              );
-              return { ...layout, items };
-            }
-            return layout;
-          }),
-        }));
-        showToast("移動を元に戻しました");
-      },
-    });
-  };
-
   const reorderFragment = (
     threadId: string,
     fragmentId: string,
@@ -11775,27 +11386,6 @@ export default function App() {
     });
   };
 
-  const createIdeaThread = (initialTitle = "新しいスレッド"): string => {
-    const id = nextIdeaId("thread");
-    const now = Date.now();
-    updateIdeaThreads((threads) => {
-      const thread: IdeaThread = {
-        id,
-        kind: "thread",
-        title: initialTitle.trim() || "新しいスレッド",
-        starred: false,
-        createdAt: now,
-        updatedAt: now,
-        fragments: [],
-      };
-      const inboxIndex = threads.findIndex((item) => item.kind === "inbox");
-      const next = [...threads];
-      next.splice(inboxIndex >= 0 ? inboxIndex + 1 : 0, 0, thread);
-      return next;
-    });
-    return id;
-  };
-
   const requestNewIdeaThreadName = async (): Promise<string | null> => {
     const value = await new Promise<string | null>((resolve) => {
       setAppDialog({
@@ -11813,151 +11403,38 @@ export default function App() {
     return title || null;
   };
 
-  const moveFragmentToNewThread = async (fromThreadId: string, fragmentId: string) => {
-    const source = snippets.find((thread) => thread.id === fromThreadId);
-    const fragment = source?.fragments.find((item) => item.id === fragmentId);
-    if (!source || !fragment) return;
-    const title = await requestNewIdeaThreadName();
-    if (!title) return;
-    const now = Date.now();
-    const newThreadId = nextIdeaId("thread");
-    const newThread: IdeaThread = {
-      id: newThreadId,
-      kind: "thread",
-      title,
-      starred: false,
-      createdAt: now,
-      updatedAt: now,
-      fragments: [{ ...fragment, updatedAt: now }],
-    };
-    updateIdeaThreads((threads) => {
-      const withoutFragment = threads.map((thread) =>
-        thread.id === fromThreadId
-          ? {
-              ...thread,
-              fragments: thread.fragments.filter((item) => item.id !== fragmentId),
-              updatedAt: now,
-            }
-          : thread,
-      );
-      const inboxIndex = withoutFragment.findIndex((thread) => thread.kind === "inbox");
-      const next = [...withoutFragment];
-      next.splice(inboxIndex >= 0 ? inboxIndex + 1 : 0, 0, newThread);
-      return next;
-    });
-    setReferenceLayout((current) => {
-      const layouts = reconcileIdeaThreadLayouts(current.ideaThreads, snippets);
-      return {
-        ...current,
-        version: 3,
-        ideaThreads: [
-          ...layouts.map((layout) =>
-            layout.threadId === fromThreadId
-              ? {
-                  ...layout,
-                  items: layout.items.filter(
-                    (item) => item.sourceType !== "idea" || item.fragmentId !== fragmentId,
-                  ),
-                }
-              : layout,
-          ),
-          { threadId: newThreadId, items: [makeIdeaItem(fragmentId)] },
-        ],
-      };
-    });
-    showToast(`新規スレッド「${title}」へ移動しました`);
-  };
-
-  const moveReferenceToNewThread = async (
-    fromThreadId: string,
-    linkId: string,
-    copy: boolean,
-  ) => {
-    const sourceLayout = referenceLayout.ideaThreads.find(
-      (layout) => layout.threadId === fromThreadId,
-    );
-    const sourceLink = sourceLayout?.items.find(
-      (item): item is IdeaReferenceLink => item.sourceType === "reference" && item.id === linkId,
-    );
-    if (!sourceLink) return;
-    const title = await requestNewIdeaThreadName();
-    if (!title) return;
-    const now = Date.now();
-    const newThreadId = nextIdeaId("thread");
-    const newThread: IdeaThread = {
-      id: newThreadId,
-      kind: "thread",
-      title,
-      starred: false,
-      createdAt: now,
-      updatedAt: now,
-      fragments: [],
-    };
-    updateIdeaThreads((threads) => {
-      const inboxIndex = threads.findIndex((thread) => thread.kind === "inbox");
-      const next = [...threads];
-      next.splice(inboxIndex >= 0 ? inboxIndex + 1 : 0, 0, newThread);
-      return next;
-    });
-    setReferenceLayout((current) => {
-      const layouts = reconcileIdeaThreadLayouts(current.ideaThreads, snippets);
-      return {
-        ...current,
-        version: 3,
-        ideaThreads: [
-          ...layouts.map((layout) =>
-            layout.threadId === fromThreadId && !copy
-              ? {
-                  ...layout,
-                  items: layout.items.filter(
-                    (item) => item.sourceType !== "reference" || item.id !== linkId,
-                  ),
-                }
-              : layout,
-          ),
-          { threadId: newThreadId, items: [makeReferenceLink(sourceLink.sourcePath)] },
-        ],
-      };
-    });
-    showToast(`新規スレッド「${title}」へ${copy ? "追加" : "移動"}しました`);
-  };
-
-  const renameIdeaThread = (threadId: string, title: string) => {
-    patchThread(threadId, (thread) =>
-      thread.kind === "inbox" ? thread : { ...thread, title },
-    );
-  };
-
-  const toggleThreadStar = (threadId: string) => {
-    patchThread(threadId, (thread) => ({ ...thread, starred: !thread.starred }));
-  };
-
-  const deleteIdeaThread = async (threadId: string) => {
-    const thread = snippets.find((item) => item.id === threadId);
-    const threadIndex = snippets.findIndex((item) => item.id === threadId);
-    if (!thread || thread.kind === "inbox") return;
-    const shouldDelete = await requestConfirm({
-      title: "スレッドを削除",
-      message: `「${thread.title}」を削除しますか？`,
-      detail: `断片 ${thread.fragments.length} 件もまとめて削除されます。`,
-      confirmLabel: "削除",
-      danger: true,
-    });
-    if (!shouldDelete) return;
-    updateIdeaThreads((threads) => threads.filter((item) => item.id !== threadId));
-    showToast("スレッドを削除しました", {
-      label: "元に戻す",
-      onClick: () => {
-        updateIdeaThreads((threads) => {
-          if (threads.some((item) => item.id === threadId)) return threads;
-          const next = [...threads];
-          next.splice(Math.min(Math.max(threadIndex, 0), next.length), 0, thread);
-          return next;
-        });
-        showToast("スレッドの削除を元に戻しました");
-      },
-    });
-  };
+  const {
+    updateIdeaThreads,
+    patchThread,
+    handleFragmentDragStart,
+    handleFragmentDragEnd,
+    blockIdeaDropOnEditor,
+    captureFragment,
+    addFragment,
+    updateFragmentBody,
+    deleteFragment,
+    moveFragment,
+    createIdeaThread,
+    moveFragmentToNewThread,
+    moveReferenceToNewThread,
+    renameIdeaThread,
+    toggleThreadStar,
+    deleteIdeaThread,
+    receiveCanvasCopyToIdea,
+    receiveCanvasFocusIdea,
+  } = createIdeaThreadActions({
+    snippets,
+    referenceLayout,
+    setAppState,
+    setReferenceLayout,
+    setDraggingId,
+    setIdeaFocusRequest,
+    setRightSidebarTab,
+    setIsRightSidebarCollapsed,
+    showToast,
+    requestConfirm,
+    requestNewIdeaThreadName,
+  });
 
   const insertFragmentToEditor = (threadId: string, fragmentId: string) => {
     const thread = snippets.find((item) => item.id === threadId);
@@ -12117,84 +11594,13 @@ export default function App() {
     let unlistenFocus: (() => void) | null = null;
 
     void listen<CanvasCopyToIdeaRequest>("then-canvas-copy-to-idea", (event) => {
-      const request = event.payload;
-      const items = request.items
-        .map((item) => ({ ...item, text: item.text }))
-        .filter((item) => item.text.trim().length > 0);
-      if (items.length === 0) return;
-
-      const copiedAt = Date.now();
-      const newThreadId =
-        request.targetThreadId === CANVAS_NEW_THREAD_TARGET ? nextIdeaId("thread") : null;
-      updateIdeaThreads((threads) => {
-        if (newThreadId) {
-          const now = Date.now();
-          const thread: IdeaThread = {
-            id: newThreadId,
-            kind: "thread",
-            title: request.threadTitle?.trim() || request.boardName || "Canvas から",
-            starred: false,
-            createdAt: now,
-            updatedAt: now,
-            fragments: items.map((item) =>
-              makeIdeaFragment(
-                item.text,
-                false,
-                createIdeaOriginRef(request.boardScope, request.boardId, item.nodeId, copiedAt),
-              ),
-            ),
-          };
-          const inboxIndex = threads.findIndex((item) => item.kind === "inbox");
-          const next = [...threads];
-          next.splice(inboxIndex >= 0 ? inboxIndex + 1 : 0, 0, thread);
-          return next;
-        }
-
-        const fallback = threads.find((thread) => thread.kind === "inbox") ?? threads[0];
-        const targetId = threads.some((thread) => thread.id === request.targetThreadId)
-          ? request.targetThreadId
-          : fallback?.id;
-        if (!targetId) return threads;
-        return threads.map((thread) =>
-          thread.id === targetId
-            ? {
-                ...thread,
-                fragments: [
-                  ...thread.fragments,
-                  ...items.map((item) =>
-                    makeIdeaFragment(
-                      item.text,
-                      false,
-                      createIdeaOriginRef(
-                        request.boardScope,
-                        request.boardId,
-                        item.nodeId,
-                        copiedAt,
-                      ),
-                    ),
-                  ),
-                ],
-                updatedAt: copiedAt,
-              }
-            : thread,
-        );
-      });
-      setRightSidebarTab("idea");
-      setIsRightSidebarCollapsed(false);
-      if (newThreadId) setIdeaFocusRequest({ threadId: newThreadId, nonce: copiedAt });
-      showToast(`${items.length} 件を Idea へ取り込みました`);
+      receiveCanvasCopyToIdea(event.payload);
     }).then((unlisten) => {
       unlistenCopy = unlisten;
     });
 
     void listen<CanvasFocusIdeaRequest>("then-canvas-focus-idea", (event) => {
-      setRightSidebarTab("idea");
-      setIsRightSidebarCollapsed(false);
-      setIdeaFocusRequest({
-        threadId: event.payload.threadId,
-        fragmentId: event.payload.fragmentId,
-        nonce: Date.now(),
-      });
+      receiveCanvasFocusIdea(event.payload);
     }).then((unlisten) => {
       unlistenFocus = unlisten;
     });
