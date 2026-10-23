@@ -14,7 +14,7 @@ App.tsx の部品の中にある、コマンドパレット（Ctrl+P で開く�
 | 3 | 依存関係 | 済み |
 | 4 | 影響範囲 | 済み |
 | 5 | 案 | 済み |
-| 6 | 人の確認（確認1） | 確認待ち |
+| 6 | 人の確認（確認1） | 済み |
 | 7 | 実施 | |
 | 8 | 自動テスト | |
 | 9 | 実機確認 | |
@@ -195,14 +195,17 @@ App.tsx の部品の中にある、コマンドパレット（Ctrl+P で開く�
 前回までと違うのは、App に残す呼び出しの形。前回までは、元の場所で `create<Feature>Actions({ ... })` を1回呼んで関数を取り出した。今回は渡す値の多くが後ろで宣言されているので、元の場所に `buildPaletteCommands` という名前の小さな関数を残し、その中で `createPaletteCommands({ ... })` を呼ぶ。
 
 ```ts
-  const buildPaletteCommands = (): PaletteCommand[] =>
-    createPaletteCommands({
+  const buildPaletteCommands = (): PaletteCommand[] => {
+    return createPaletteCommands({
       commandPaletteSelectionRef,
       getCurrentEditorSelection,
       editorInstanceRef,
       // …（27個）
     });
+  };
 ```
+
+（元の関数の1行目と最後の行はそのまま残り、中身だけが入れ替わる。）
 
 こうすると、値を読むのは今と同じく「JSX が `buildPaletteCommands()` を呼んだとき」になる。JSX は変えない。
 
@@ -253,6 +256,11 @@ App.tsx の部品の中にある、コマンドパレット（Ctrl+P で開く�
 - やらないこと: 工程2の5の癖を直すこと、パレットを開く閉じる処理を移すこと、ほかの候補（チェックポイント、見出しの移動・切り出し、プラグインの要求）。
 
 ## 工程6: 人の確認
+
+2026-10-24 に決まったこと。
+
+1. App に残す呼び出しの形: (a) 元の場所に小さな `buildPaletteCommands` を残し、その中で `createPaletteCommands({ ... })` を呼ぶ。
+2. 工程2の5の癖: (a) 今回は触らない。手順書に残し、実機で確かめる。
 
 ## 工程7: 実施
 
