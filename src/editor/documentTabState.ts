@@ -79,3 +79,11 @@ export function isDirtyDocumentTab(tab: DocumentTab): boolean {
     tab.markdown !== tab.savedMarkdown
   );
 }
+
+/** 閉じたタブを開き直すときのための記録。保存先のあるファイルタブだけを残す。 */
+export type ClosedDocumentTab = {
+  workspacePath: string | null;
+  path: string;
+  index: number;
+  viewportState: DocumentTab["viewportState"];
+};

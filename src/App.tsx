@@ -130,6 +130,7 @@ import {
   isDirtyDocumentTab,
   reconcileSavedDocumentTabs,
   scratchFileName,
+  type ClosedDocumentTab,
 } from "./editor/documentTabState";
 import { createMarkdownTable, tableAtOffset, tableAlignmentEdit } from "./editor/markdownTables";
 import { mapTextOffsetThroughChange } from "./editor/textOffsetMapping";
@@ -812,14 +813,6 @@ function insertTabAfter(tabs: DocumentTab[], nextTab: DocumentTab, anchorTabId: 
   if (anchorIndex < 0) return [...visible, nextTab];
   return [...visible.slice(0, anchorIndex + 1), nextTab, ...visible.slice(anchorIndex + 1)];
 }
-
-/** 閉じたタブを開き直すときのための記録。保存先のあるファイルタブだけを残す。 */
-type ClosedDocumentTab = {
-  workspacePath: string | null;
-  path: string;
-  index: number;
-  viewportState: DocumentTab["viewportState"];
-};
 
 const CLOSED_DOCUMENT_TAB_LIMIT = 10;
 
@@ -9203,6 +9196,8 @@ export default function App() {
     refreshProjectFolder,
     loadDocumentIntoEditor,
     replaceActiveTab,
+    setProjectProofreadIgnored,
+    setClosedDocumentTabs,
   });
 
   const handleHeadingMove = async (

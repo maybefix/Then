@@ -3,7 +3,11 @@ import type { Dispatch, DragEvent, MutableRefObject, SetStateAction } from "reac
 import { replacePlotReferencePath } from "./components/plot/plotCardUtils";
 import { createProjectAstSkeleton, removeProjectAstPaths } from "./editor/ast/projectAst";
 import type { ProjectAst } from "./editor/ast/types";
-import { createScratchDocumentTab, isDirtyDocumentTab } from "./editor/documentTabState";
+import {
+  createScratchDocumentTab,
+  isDirtyDocumentTab,
+  type ClosedDocumentTab,
+} from "./editor/documentTabState";
 import { closeDocumentJournal, forgetDocumentJournal } from "./editor/saveJournal";
 import type { ThenPluginAnchor } from "./plugins/types";
 import {
@@ -11,6 +15,7 @@ import {
   referenceFilePointsInside,
   retargetReferenceCard,
   retargetReferenceFileInfo,
+  retargetReferenceSourcePath,
 } from "./referencePathModel";
 import type {
   AppState,
@@ -64,6 +69,18 @@ type MoveProjectEntriesResult = {
 };
 
 type PathChange = { oldPath: string; newPath: string };
+
+/**
+ * サイドバーの見出しの開閉の記録の名前（`<ファイル>:<見出しの id>`。見出しの id も `<ファイル>:` で
+ * 始まる）を、ファイルの場所とその後ろに分ける。形が違えば null。
+ */
+function splitOutlineHeadingKey(key: string): { path: string; rest: string } | null {
+  for (let at = key.indexOf(":"); at >= 0; at = key.indexOf(":", at + 1)) {
+    const path = key.slice(0, at);
+    if (key.startsWith(`${path}:`, at + 1)) return { path, rest: key.slice(at + 1 + path.length) };
+  }
+  return null;
+}
 
 type ToastAction = {
   label: string;
@@ -127,6 +144,8 @@ export type ProjectEntryActionDeps = {
   refreshProjectFolder: (folderPath: string) => Promise<ProjectFolder | null>;
   loadDocumentIntoEditor: (document: TextDocument, options?: { replaceActive?: boolean }) => void;
   replaceActiveTab: (nextTab: DocumentTab) => void;
+  setProjectProofreadIgnored: Dispatch<SetStateAction<Record<string, string[]>>>;
+  setClosedDocumentTabs: Dispatch<SetStateAction<ClosedDocumentTab[]>>;
 };
 
 /**
@@ -176,6 +195,8 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     refreshProjectFolder,
     loadDocumentIntoEditor,
     replaceActiveTab,
+    setProjectProofreadIgnored,
+    setClosedDocumentTabs,
   } = deps;
 
   /**
@@ -220,6 +241,13 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
         ),
       );
+      setProjectProofreadIgnored((current) => {
+        const next: Record<string, string[]> = {};
+        for (const [key, value] of Object.entries(current)) {
+          next[retargetReferenceSourcePath(key, oldReferencePath, newReferencePath) ?? key] = value;
+        }
+        return next;
+      });
     }
 
     setAppState((current) => {
@@ -230,6 +258,20 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
         }
         return next;
       };
+      // サイドバーの開閉は作品ごとに持つ。この作品の分だけを付け替える。
+      const retargetWorkspaceList = (
+        byWorkspace: Record<string, string[]>,
+        retargetItem: (item: string) => string | null,
+      ): Record<string, string[]> => {
+        const list = byWorkspace[rootPath];
+        if (!list) return byWorkspace;
+        return { ...byWorkspace, [rootPath]: list.map((item) => retargetItem(item) ?? item) };
+      };
+      const retargetHeadingKey = (key: string) => {
+        const parts = splitOutlineHeadingKey(key);
+        const nextPath = parts ? retargetPath(parts.path) : null;
+        return parts && nextPath ? `${nextPath}:${nextPath}${parts.rest}` : null;
+      };
       return {
         ...current,
         fileProgress: retargetRecord(current.fileProgress),
@@ -237,7 +279,23 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
         lastFilePath: current.lastFilePath
           ? retargetPath(current.lastFilePath) ?? current.lastFilePath
           : current.lastFilePath,
+        collapsedFolderPathsByWorkspace: retargetWorkspaceList(
+          current.collapsedFolderPathsByWorkspace,
+          retargetPath,
+        ),
+        collapsedOutlinePathsByWorkspace: retargetWorkspaceList(
+          current.collapsedOutlinePathsByWorkspace,
+          retargetPath,
+        ),
+        collapsedOutlineHeadingKeysByWorkspace: retargetWorkspaceList(
+          current.collapsedOutlineHeadingKeysByWorkspace,
+          retargetHeadingKey,
+        ),
       };
+    });
+    setClosedDocumentTabs((current) => {
+      if (!current.some((record) => retargetPath(record.path))) return current;
+      return current.map((record) => ({ ...record, path: retargetPath(record.path) ?? record.path }));
     });
     setCollapsedWorkspaceFolderPaths((current) => {
       if (![...current].some((path) => retargetPath(path))) return current;
@@ -276,6 +334,15 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
       setReferenceCandidates((current) =>
         current.filter((file) => !referenceFilePointsInside(file, removedReferencePath)),
       );
+      setProjectProofreadIgnored((current) => {
+        const next: Record<string, string[]> = {};
+        for (const [key, value] of Object.entries(current)) {
+          if (retargetReferenceSourcePath(key, removedReferencePath, removedReferencePath) === null) {
+            next[key] = value;
+          }
+        }
+        return next;
+      });
     }
 
     setAppState((current) => {
@@ -291,6 +358,20 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           delete nextFileProgress[path];
         }
       }
+      const removeFromWorkspaceList = (
+        byWorkspace: Record<string, string[]>,
+        pathOf: (item: string) => string | null,
+      ): Record<string, string[]> => {
+        const list = byWorkspace[rootPath];
+        if (!list) return byWorkspace;
+        return {
+          ...byWorkspace,
+          [rootPath]: list.filter((item) => {
+            const path = pathOf(item);
+            return !path || !isPathSameOrInside(path, removedPath);
+          }),
+        };
+      };
       return {
         ...current,
         cursorPositions: nextCursorPositions,
@@ -299,11 +380,27 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           current.lastFilePath && isPathSameOrInside(current.lastFilePath, removedPath)
             ? null
             : current.lastFilePath,
+        collapsedFolderPathsByWorkspace: removeFromWorkspaceList(
+          current.collapsedFolderPathsByWorkspace,
+          (path) => path,
+        ),
+        collapsedOutlinePathsByWorkspace: removeFromWorkspaceList(
+          current.collapsedOutlinePathsByWorkspace,
+          (path) => path,
+        ),
+        collapsedOutlineHeadingKeysByWorkspace: removeFromWorkspaceList(
+          current.collapsedOutlineHeadingKeysByWorkspace,
+          (key) => splitOutlineHeadingKey(key)?.path ?? null,
+        ),
       };
     });
     setCollapsedWorkspaceFolderPaths((current) => {
       if (![...current].some((path) => isPathSameOrInside(path, removedPath))) return current;
       return new Set([...current].filter((path) => !isPathSameOrInside(path, removedPath)));
+    });
+    setClosedDocumentTabs((current) => {
+      if (!current.some((record) => isPathSameOrInside(record.path, removedPath))) return current;
+      return current.filter((record) => !isPathSameOrInside(record.path, removedPath));
     });
   };
 
