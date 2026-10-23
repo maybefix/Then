@@ -14,8 +14,8 @@ App.tsx の部品の中にある、記法を本文に入れる操作の関数（
 | 4 | 影響範囲 | 済み |
 | 5 | 案 | 済み |
 | 6 | 人の確認（確認1） | 済み |
-| 7 | 実施 | |
-| 8 | 自動テスト | |
+| 7 | 実施 | 済み |
+| 8 | 自動テスト | 済み |
 | 9 | 実機確認 | |
 | 10 | 完了（確認2） | |
 
@@ -193,7 +193,7 @@ JSX は変えない。呼ぶ名前（`applyInlineNotation`、`openRubyNotationMo
 
 ### 4-4. 今の自動テストの状態
 
-「前」の一式を `72b6efb` で動かしている（工程8に結果を書く）。
+「前」の一式（`72b6efb`）: 68本のうち64本が成功。元から失敗の4本は `test:ai-selection`（一式の中でだけ10分で止まる）、`test:canvas-save`（`./utils/fontStack` を読み込めない）、`test:v058-bundle`（メインのバンドルが 500 kB の上限を超えている。683,311 バイト）、`test:v0511-themes`（朱墨のプロットの枠）。
 
 ## 工程5: 案
 
@@ -301,7 +301,46 @@ App で使わなくなる import（`sanitizeNotationArgument`、`applyDirectionT
 
 ## 工程7: 実施
 
+| コミット | 中身 |
+|---|---|
+| `2126cf9` | 記法の11の関数と `NotationModalState`・`customNotationSpecs` を `src/editor/editorNotationActions.ts` へ移した。App で使わなくなった import 7つ（`sanitizeNotationArgument`・`applyDirectionToSelection`・`clearNotationFromSelection`・`toggleBoldSelection`・`toggleEmphasisSelection`・`applyHeadingToSelection`・`toggleLineComments`）を消した |
+| `0e0799a` | `readClipboardText` と、コピー・切り取り・貼り付けの3つの関数を `src/editor/editorClipboardActions.ts` へ移した |
+| `dd5465d` | 回帰テスト `scripts/test-editor-notation-actions.mjs`（`npm run test:editor-notation-actions`） |
+
+行数: App.tsx は 13,708行 → 13,459行（249行減）。`editorNotationActions.ts` は253行、`editorClipboardActions.ts` は82行。
+
+元と同じであることの確かめ方: `move-lines.mjs` で、行番号と先頭・末尾の行の中身を確かめてから移し、`verify-move.mjs` で突き合わせた。記法は「消えた188行、lost 0、足した24行」、クリップボードは「消えた57行、lost 0、足した7行」。足した行は、どちらも import と `create…Actions({ … })` の呼び出しだけ。型検査（`npx tsc --noEmit`）は各コミットで通った。改行は3つのファイルとも CRLF のまま。
+
+手順書の案と違う点:
+
+- `applyDirectionNotation` は、App の中では移した `chooseDirectionNotation` からしか呼ばれないので、App の取り出し（`const { … } = createEditorNotationActions(…)`）には入れなかった。`createEditorNotationActions` は11の関数をすべて返す。
+- 呼び出しの位置: 記法は最初の塊の位置（`clearSelectionNotation` などがあった所）、クリップボードは `copyEditorSelection` があった所。`symbol-uses.mjs --call-site` で、取り出した名前を呼び出しより前で使う所がない（使う所はすべて、クリック・キー・パレットの中）ことを確かめた。
+
 ## 工程8: 自動テスト
+
+### 足した回帰テスト
+
+`scripts/test-editor-notation-actions.mjs`（`npm run test:editor-notation-actions`）。esbuild で2つの新しいファイルを束ね、エディタの取っ手とクリップボードの代わりに入れ物を渡して、操作のたびに最新の値で `create…Actions` を作り直す。
+
+- 記法: 2章2の表の操作をすべて、成功・断られる場合・エディタが無い場合で動かし、本文・カーソル・フォーカス・通知・ダイアログの値・メニューを閉じた回数を確かめる。ルビの読みの整え方、古い控えを今の本文に収め直すこと、パレットの控えを使うこと、ダイアログの種類が違うときに何もしないことも見る。
+- 癖: 1（右クリックの「圏点」は二重になり、Ctrl+I は外す）、3（Ctrl+B などは成功しても通知を出さない）、4（文章方向で `>>` が外れる）を、今の振る舞いとして確かめる。
+- クリップボード: コピー・切り取り・貼り付けの成功、空の選択、クリップボードの失敗、Clipboard API が無い場合、空のクリップボード。切り取りは、クリップボードへ書けなければ本文を消さないこと。
+
+移した行は元と1行も違わない（工程7の lost 0）ので、このテストの期待値は、移す前の App.tsx の関数でも同じになる。
+
+効くことの確かめ: 圏点の書き方を `em,goma` から `em,sesame` に変える不具合と、切り取った後のカーソルを選択の末尾に置く不具合を、1つずつ入れて動かし、どちらも落ちることを見て `git checkout` で戻した。
+
+### 前後の比較
+
+| | 「前」 `72b6efb` | 「後」 `dd5465d` |
+|---|---|---|
+| build | 成功 | 成功 |
+| メインのバンドル | 683,311 バイト | 684,314 バイト（1.0 kB 増。まとめて返す関数名が縮まないため） |
+| 成功 | 64本 | 64本（同じ顔ぶれ）＋足した `test:editor-notation-actions` |
+| 失敗 | 4本 | 同じ4本。理由も同じ |
+| 残ったプロセス | 0 | 0 |
+
+`test:ai-selection` は一式の中では前後とも10分で止まった。右クリックの「コピー」を実際のブラウザで動かすテストなので、「後」で単独で2回動かし、2回とも成功した（「選択の外を右クリックすると、選択が外れてコピーは押せない」まで）。残ったプロセスは0。
 
 ## 工程9: 実機確認
 
