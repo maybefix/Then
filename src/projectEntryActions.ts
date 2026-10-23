@@ -4,6 +4,7 @@ import { replacePlotReferencePath } from "./components/plot/plotCardUtils";
 import { createProjectAstSkeleton, removeProjectAstPaths } from "./editor/ast/projectAst";
 import type { ProjectAst } from "./editor/ast/types";
 import { createScratchDocumentTab, isDirtyDocumentTab } from "./editor/documentTabState";
+import { closeDocumentJournal, forgetDocumentJournal } from "./editor/saveJournal";
 import type { ThenPluginAnchor } from "./plugins/types";
 import {
   referenceCardPointsInside,
@@ -248,6 +249,14 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     });
   };
 
+  /** 名前が替わるタブの、古い名前の書きかけの記録を閉じる。保存し終えていれば消え、済んでいない分があれば残る。 */
+  const closeRenamedTabJournals = (retargetPath: (path: string) => string | null) => {
+    for (const tab of openTabs) {
+      const nextPath = tab.path ? retargetPath(tab.path) : null;
+      if (nextPath && `file:${nextPath}` !== tab.id) closeDocumentJournal(tab.id);
+    }
+  };
+
   /** 削除したパスを、retargetPathOwners と同じ置き場所から取り除く。プロットの本文のリンクは、利用者の文章なので残す。 */
   const removePathOwners = (rootPath: string, removedPath: string) => {
     const deletedAnchorRoot = toProjectRelativePath(rootPath, removedPath)
@@ -434,6 +443,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           };
         }),
       );
+      closeRenamedTabJournals((path) => retargetFilesystemPath(path, entry.path, document.path));
 
       if (activeNewPath) {
         setAppState((current) => ({
@@ -552,6 +562,9 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
       setOpenTabs((current) =>
         current.filter((tab) => !tab.path || !isPathSameOrInside(tab.path, entry.path)),
       );
+      for (const tab of openTabs) {
+        if (tab.path && isPathSameOrInside(tab.path, entry.path)) forgetDocumentJournal(tab.id);
+      }
       if (activeWasDeleted) {
         const nextFile = refreshed ? findFirstTextFile(refreshed.children) : null;
         if (nextFile) {
@@ -670,6 +683,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           };
         }),
       );
+      closeRenamedTabJournals((path) => retargetFilesystemPath(path, result.oldPath, result.newPath));
       if (activeNewPath) {
         setActiveTabId(nextActiveTabId);
         setAppState((current) => ({
@@ -808,6 +822,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           };
         }),
       );
+      closeRenamedTabJournals(retargetMovedPath);
       if (activeNewPath) {
         const activeMovedDocument = movedDocumentByPath.get(activeNewPath);
         setActiveTabId(`file:${activeNewPath}`);

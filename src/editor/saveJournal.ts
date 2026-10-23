@@ -265,3 +265,12 @@ export function forgetDocumentJournal(key: string) {
   if (!journals.delete(key)) return;
   void invoke("journal_forget", { key, discard: true }).catch(() => undefined);
 }
+
+/**
+ * The tab took a new key (its file was renamed or moved): close the journal
+ * kept under the old one. The backend keeps it only if part of it was not saved.
+ */
+export function closeDocumentJournal(key: string) {
+  if (!journals.delete(key)) return;
+  void invoke("journal_forget", { key, discard: false }).catch(() => undefined);
+}
