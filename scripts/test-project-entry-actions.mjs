@@ -73,6 +73,10 @@ const referenceFile = (sourcePath) => ({
   size: 1,
   imported: false,
 });
+// 見出しの開閉の記録の名前。サイドバーは `<ファイル>:<見出しの id>` で覚え、見出しの id も
+// `<ファイル>:<行>:<階層>:<見出しの文字のハッシュ>` なので、ファイルの場所が2回入る。
+const headingKey = (path) => `${path}:${path}:3:1:abcd1234`;
+const closedTab = (path) => ({ workspacePath: ROOT, path, index: 0, viewportState: null });
 
 // 第一章\a.txt（開いている、未保存）、第一章\b.txt、c.txt の作品。
 function defaultWorld() {
@@ -101,6 +105,10 @@ function setup(world = defaultWorld(), { tauri = true } = {}) {
       lastFilePath: p("第一章", "a.txt"),
       fileProgress: { [p("第一章", "a.txt")]: "writing", [p("c.txt")]: "done" },
       cursorPositions: { [p("第一章", "a.txt")]: { offset: 1, length: 0 }, [p("c.txt")]: { offset: 2, length: 0 } },
+      // サイドバーのフォルダの開閉、ファイルの見出しの一覧の開閉、見出しごとの開閉（作品ごと）。
+      collapsedFolderPathsByWorkspace: { [ROOT]: [p("第一章")] },
+      collapsedOutlinePathsByWorkspace: { [ROOT]: [p("第一章", "a.txt"), p("c.txt")] },
+      collapsedOutlineHeadingKeysByWorkspace: { [ROOT]: [headingKey(p("第一章", "a.txt")), headingKey(p("c.txt"))] },
     },
     plotCards: [{ id: "plot", kind: "section", num: "001", title: "", body: "@[[第一章/a.txt]] と @[[c.txt]]", expanded: false, managerCollapsed: false }],
     referenceLayout: {
@@ -108,6 +116,9 @@ function setup(world = defaultWorld(), { tauri = true } = {}) {
       recent: [referenceFile("第一章/a.txt")],
     },
     referenceCandidates: [referenceFile("第一章/a.txt"), referenceFile("c.txt")],
+    // 校正で「無視」にした指摘（作品からの相対パスごと）と、閉じたタブを開き直すための記録。
+    proofreadIgnored: { "第一章/a.txt": ["ignore-a"], "c.txt": ["ignore-c"] },
+    closedDocumentTabs: [closedTab(p("第一章", "a.txt")), closedTab(p("c.txt"))],
     projectAst: null,
     focusedFolderPath: p("第一章"),
     activeBreadcrumbPath: null,
@@ -226,6 +237,8 @@ function setup(world = defaultWorld(), { tauri = true } = {}) {
       },
       loadDocumentIntoEditor: (document, options) => app.loaded.push({ document, options }),
       replaceActiveTab: (nextTab) => app.replaced.push(nextTab),
+      setProjectProofreadIgnored: setter("proofreadIgnored"),
+      setClosedDocumentTabs: setter("closedDocumentTabs"),
     });
   };
   return { app, refs, actions };
@@ -285,6 +298,14 @@ const forgotten = (app) => app.journal.filter((entry) => entry.command === "jour
   assert.equal(refs.projectAstBuildIdRef.current, 1);
   assert.equal(app.projectAst, null);
   assert.equal(app.saveStatus, "saved");
+  assert.deepEqual(app.appState.collapsedOutlinePathsByWorkspace[ROOT], [newPath, p("c.txt")]);
+  assert.deepEqual(
+    app.appState.collapsedOutlineHeadingKeysByWorkspace[ROOT],
+    [headingKey(newPath), headingKey(p("c.txt"))],
+    "both copies of the file path in a heading key follow the rename",
+  );
+  assert.deepEqual(app.proofreadIgnored, { "第一章/a2.txt": ["ignore-a"], "c.txt": ["ignore-c"] });
+  assert.deepEqual(app.closedDocumentTabs.map((record) => record.path), [newPath, p("c.txt")]);
   assert.deepEqual(
     forgotten(app),
     [{ key: `file:${oldPath}`, discard: false }],
@@ -312,6 +333,14 @@ const forgotten = (app) => app.journal.filter((entry) => entry.command === "jour
   assert.equal(app.plotCards[0].body, "@[[第1章/a.txt]] と @[[c.txt]]");
   assert.equal(app.focusedFolderPath, p("第1章"));
   assert.deepEqual([...app.collapsedWorkspaceFolderPaths], [p("第1章")]);
+  assert.deepEqual(app.appState.collapsedFolderPathsByWorkspace[ROOT], [p("第1章")], "a closed folder stays closed under its new name");
+  assert.deepEqual(app.appState.collapsedOutlinePathsByWorkspace[ROOT], [p("第1章", "a.txt"), p("c.txt")]);
+  assert.deepEqual(
+    app.appState.collapsedOutlineHeadingKeysByWorkspace[ROOT],
+    [headingKey(p("第1章", "a.txt")), headingKey(p("c.txt"))],
+  );
+  assert.deepEqual(app.proofreadIgnored, { "第1章/a.txt": ["ignore-a"], "c.txt": ["ignore-c"] });
+  assert.deepEqual(app.closedDocumentTabs.map((record) => record.path), [p("第1章", "a.txt"), p("c.txt")]);
   assert.deepEqual(forgotten(app), [{ key: `file:${p("第一章", "a.txt")}`, discard: false }]);
   assert.deepEqual(app.toasts, ["「第一章」をリネームしました"]);
 }
@@ -376,6 +405,10 @@ const forgotten = (app) => app.journal.filter((entry) => entry.command === "jour
   assert.deepEqual(app.referenceLayout.recent, []);
   assert.deepEqual(app.referenceCandidates.map((item) => item.sourcePath), ["c.txt"]);
   assert.equal(app.plotCards[0].body, "@[[第一章/a.txt]] と @[[c.txt]]");
+  assert.deepEqual(app.appState.collapsedOutlinePathsByWorkspace[ROOT], [p("c.txt")]);
+  assert.deepEqual(app.appState.collapsedOutlineHeadingKeysByWorkspace[ROOT], [headingKey(p("c.txt"))]);
+  assert.deepEqual(app.proofreadIgnored, { "c.txt": ["ignore-c"] });
+  assert.deepEqual(app.closedDocumentTabs.map((record) => record.path), [p("c.txt")]);
   assert.deepEqual(
     forgotten(app),
     [{ key: `file:${deleted}`, discard: true }],
@@ -407,6 +440,7 @@ const forgotten = (app) => app.journal.filter((entry) => entry.command === "jour
   assert.equal(app.appState.markdown, "");
   assert.equal(app.appState.lastFilePath, null);
   assert.deepEqual([...app.collapsedWorkspaceFolderPaths], [], "a deleted folder leaves the closed-folder record");
+  assert.deepEqual(app.appState.collapsedFolderPathsByWorkspace[ROOT], [], "a deleted folder leaves the sidebar's closed-folder record");
   assert.deepEqual(app.referenceLayout.cards.map((card) => card.sourcePath), ["c.txt"]);
   assert.deepEqual(app.referenceLayout.recent, []);
   assert.deepEqual(forgotten(app), [{ key: `file:${p("第一章", "a.txt")}`, discard: true }]);
@@ -474,6 +508,9 @@ const forgotten = (app) => app.journal.filter((entry) => entry.command === "jour
   assert.equal(app.focusedFolderPath, ROOT, "a moved file selects its new folder");
   assert.equal(app.projectFolder, movedFolder);
   assert.equal(app.saveStatus, "saved");
+  assert.deepEqual(app.appState.collapsedOutlinePathsByWorkspace[ROOT], [newPath, p("c.txt")]);
+  assert.deepEqual(app.proofreadIgnored, { "a.txt": ["ignore-a"], "c.txt": ["ignore-c"] });
+  assert.deepEqual(app.closedDocumentTabs.map((record) => record.path), [newPath, p("c.txt")]);
   assert.deepEqual(forgotten(app), [{ key: `file:${oldPath}`, discard: false }]);
   assert.deepEqual(app.toasts, ["「a.txt」を移動しました"]);
 }
@@ -538,6 +575,8 @@ const forgotten = (app) => app.journal.filter((entry) => entry.command === "jour
   assert.equal(app.plotCards[0].body, "@[[a.txt]] と @[[c.txt]]");
   assert.equal(app.focusedFolderPath, ROOT);
   assert.equal(app.projectFolder, movedFolder);
+  assert.deepEqual(app.appState.collapsedOutlineHeadingKeysByWorkspace[ROOT], [headingKey(p("a.txt")), headingKey(p("c.txt"))]);
+  assert.deepEqual(app.proofreadIgnored, { "a.txt": ["ignore-a"], "c.txt": ["ignore-c"] });
   assert.deepEqual(forgotten(app), [{ key: `file:${a}`, discard: false }]);
   assert.deepEqual(app.toasts, ["2件のファイルを移動しました"]);
 }
