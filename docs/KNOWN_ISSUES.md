@@ -3,8 +3,10 @@
 ## 2026-10-24: 名前の変更・移動・削除で、サイドバーの開閉・校正の「無視」・閉じたタブの記録が古いパスのまま残る
 
 - **確認された対象と挙動:** ファイル操作のパスの付け替えの修正の実機確認（`docs/PROJECT_ENTRY_RETARGET_FIX_PLAN.md` の工程9）。サイドバーで閉じたフォルダの名前を変えると、フォルダが開いた状態に戻り、保存される開閉の記録（`appState.collapsedFolderPathsByWorkspace`）に古いパスが残った。
-- **原因（コードから）:** パスを覚えている置き場所の一覧（`retargetPathOwners`・`removePathOwners`、`src/projectEntryActions.ts`）に、次の値が入っていない。サイドバーのフォルダの開閉（確かめた）、ファイルのアウトラインの開閉（`collapsedOutlinePathsByWorkspace`）、見出しの開閉（`collapsedOutlineHeadingKeysByWorkspace`）、校正で「無視」にした指摘（作品の `proofreadIgnored`。相対パスごと）、閉じたタブを開き直すための記録。後の4つは見込み。
-- **状態:** 未修正。
+- **原因（コードから）:** パスを覚えている置き場所の一覧（`retargetPathOwners`・`removePathOwners`、`src/projectEntryActions.ts`）に、次の値が入っていない。サイドバーのフォルダの開閉（確かめた）、ファイルのアウトラインの開閉（`collapsedOutlinePathsByWorkspace`）、見出しの開閉（`collapsedOutlineHeadingKeysByWorkspace`）、校正で「無視」にした指摘（作品の `proofreadIgnored`。相対パスごと）、閉じたタブを開き直すための記録。
+- **修正:** 上の5つを `retargetPathOwners`・`removePathOwners` に足した。名前の変更・移動では新しい場所に書き換え、削除では取り除く。見出しの開閉の記録の名前（`<ファイル>:<ファイル>:<行>:…`）は、ファイルの場所が2か所とも書き換わる。校正の「無視」は、作品からの相対パスで、資料と同じ規則（`retargetReferenceSourcePath`）で書き換える。
+- **確認:** `test:project-entry-actions` と QA 用アプリ（`docs/PROJECT_ENTRY_RETARGET_FIX_PLAN.md` の工程9の追加）。閉じたフォルダ・見出しの一覧・見出しの名前を変えても閉じたまま、保存される記録も新しいパスになった。校正の「無視」は `.then/project.json` で新しいパスになった。閉じたタブは、名前を変えたあとも開き直せた。フォルダを消すと、これらの記録から取り除かれた。
+- **状態:** 修正済み（`fix/project-entry-retarget`）。
 
 ## 2026-10-24: 名前の変更・移動のあと、資料ボードの資料カードと最近の資料が古いパスに戻る
 
