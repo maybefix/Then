@@ -305,6 +305,91 @@ export function toggleEmphasisSelection(
 }
 
 /**
+ * 右クリックの「縦中横」用。圏点（toggleEmphasisSelection）と同じく、縦中横の中身か全体を
+ * 選んでいれば外し、そうでなければ付ける。複数行は対象外。
+ */
+export function toggleTcySelection(
+  text: string,
+  selection: EditorSelectionSnapshot,
+): SelectionEdit | null {
+  const { from, to } = selection;
+  if (from >= to) return null;
+
+  const inner = text.slice(from, to);
+  if (inner.includes("\n")) return null;
+
+  const enclosed = text.slice(to).match(/^\(tcy[^)]*\)\]/);
+  if (text[from - 1] === "[" && enclosed && !/[[\]]/.test(inner)) {
+    return {
+      from: from - 1,
+      to: to + enclosed[0].length,
+      insert: inner,
+      cursorPos: from - 1 + inner.length,
+    };
+  }
+
+  // 中身に [ ] を含むものは当てはめない（[a(tcy)][b(tcy)] を1つと見ないため）。
+  const selfMatch = inner.match(/^\[([^[\]]+)\(tcy[^)]*\)\]$/);
+  if (selfMatch) {
+    return { from, to, insert: selfMatch[1], cursorPos: from + selfMatch[1].length };
+  }
+
+  const insert = `[${inner}(tcy)]`;
+  return { from, to, insert, cursorPos: from + insert.length };
+}
+
+// 青空文庫形式で、《 の前に続けて書くとルビの付く文字（documentAst の読み込みと同じ）。
+const RUBY_BASE_CHARS = /^[一-龠々〆ヶ]+$/;
+
+/**
+ * ルビのダイアログの「反映」用。すでに付いたルビ（[本文(rb,…)]、｜本文《…》、漢字《…》）の
+ * 中身か全体を選んでいれば、書き方はそのままで読みだけを置き換える。そうでなければ付ける。
+ * reading は sanitizeNotationArgument で整えたもの。
+ */
+export function applyRubyToSelection(
+  text: string,
+  selection: EditorSelectionSnapshot,
+  reading: string,
+): SelectionEdit {
+  const { from, to } = selection;
+  const inner = text.slice(from, to);
+  const before = text[from - 1] ?? "";
+  const thenRuby = (base: string, start: number, end: number): SelectionEdit => {
+    const insert = `[${base}(rb,${reading})]`;
+    return { from: start, to: end, insert, cursorPos: start + insert.length };
+  };
+  // 読みの中の 《 》 は、ルビの終わりをずらすので空白にする。
+  const aozoraReading = reading.replace(/[《》]/g, " ").replace(/\s+/g, " ").trim();
+  const aozoraRuby = (prefix: string, base: string, start: number, end: number): SelectionEdit => {
+    const insert = `${prefix}${base}《${aozoraReading}》`;
+    return { from: start, to: end, insert, cursorPos: start + insert.length };
+  };
+
+  const enclosed = text.slice(to).match(/^\(rb,[^)]*\)\]/);
+  if (before === "[" && enclosed && !/[[\]]/.test(inner)) {
+    return thenRuby(inner, from - 1, to + enclosed[0].length);
+  }
+  const selfThen = inner.match(/^\[([^[\]]+)\(rb,[^)]*\)\]$/);
+  if (selfThen) return thenRuby(selfThen[1], from, to);
+
+  // 《《…》》 は圏点なので、《 のすぐ後ろが 《 でないものだけをルビと見る。
+  const rubyMark = text.slice(to).match(/^《[^《》]+》/);
+  if (rubyMark && !/[《》｜]/.test(inner)) {
+    if (before === "｜") return aozoraRuby("｜", inner, from - 1, to + rubyMark[0].length);
+    // ルビの付く語の一部だけ（前に漢字が続く）を選んでいるときは、置き換えない。
+    if (RUBY_BASE_CHARS.test(inner) && !RUBY_BASE_CHARS.test(before)) {
+      return aozoraRuby("", inner, from, to + rubyMark[0].length);
+    }
+  }
+  const selfBar = inner.match(/^｜([^《》｜]+)《[^《》]+》$/);
+  if (selfBar) return aozoraRuby("｜", selfBar[1], from, to);
+  const selfKanji = inner.match(/^([一-龠々〆ヶ]+)《[^《》]+》$/);
+  if (selfKanji && !RUBY_BASE_CHARS.test(before)) return aozoraRuby("", selfKanji[1], from, to);
+
+  return thenRuby(inner, from, to);
+}
+
+/**
  * Ctrl+数字 用。選択範囲を含む各行の見出しレベルを設定する。
  * `level` が 0 の場合は見出しマーカーを除去する。
  */

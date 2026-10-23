@@ -4,12 +4,14 @@ import { toggleLineComments } from "./lineComments";
 import {
   applyDirectionToSelection,
   applyHeadingToSelection,
+  applyRubyToSelection,
   canWrapInlineSelection,
   clearNotationFromSelection,
   normalizeSelectionRange,
   sanitizeNotationArgument,
   toggleBoldSelection,
   toggleEmphasisSelection,
+  toggleTcySelection,
   type EditorSelectionSnapshot,
   type LayoutDirection,
 } from "./selectionEdits";
@@ -74,7 +76,8 @@ export function createEditorNotationActions(deps: EditorNotationActionDeps) {
     const editor = editorInstanceRef.current;
     if (!editor) return false;
 
-    const currentSelection = normalizeSelectionRange(selection, editor.getValue());
+    const text = editor.getValue();
+    const currentSelection = normalizeSelectionRange(selection, text);
     if (!canWrapInlineSelection(currentSelection)) {
       showToast("単一行の範囲を選択してください");
       return false;
@@ -88,18 +91,21 @@ export function createEditorNotationActions(deps: EditorNotationActionDeps) {
       return false;
     }
 
-    const method =
-      notation === "ruby" ? `rb,${arg}` : notation === "emphasis" ? "em,goma" : "tcy";
-    const insert = `[${currentSelection.text}(${method})]`;
+    // すでに付いた記法に当たれば、圏点と縦中横は外し、ルビは読みを置き換える。
+    const edit =
+      notation === "ruby"
+        ? applyRubyToSelection(text, currentSelection, arg)
+        : notation === "emphasis"
+          ? toggleEmphasisSelection(text, currentSelection)
+          : toggleTcySelection(text, currentSelection);
+    if (!edit) return false;
+    // 外したときだけ、書き換えた後の文字が元より短くなる（ルビの読みの置き換えは除く）。
+    const removed = notation !== "ruby" && edit.insert.length < edit.to - edit.from;
 
-    editor.replaceRange(
-      currentSelection.from,
-      currentSelection.to,
-      insert,
-      currentSelection.from + insert.length,
-    );
+    editor.replaceRange(edit.from, edit.to, edit.insert, edit.cursorPos);
     editor.focus();
-    showToast(`${customNotationSpecs.find((item) => item.id === notation)?.label}を反映しました`);
+    const label = customNotationSpecs.find((item) => item.id === notation)?.label;
+    showToast(`${label}を${removed ? "解除" : "反映"}しました`);
     return true;
   };
 
