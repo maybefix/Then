@@ -135,6 +135,27 @@ assert.deepEqual(m.toggleTcySelection("[12(em,goma)]", select("[12(em,goma)]", 1
 assert.equal(m.toggleTcySelection("a\nb", select("a\nb", 0, 3)), null);
 assert.equal(m.toggleTcySelection("ab", select("ab", 1)), null);
 
+// 付いたルビの見つけ方（ルビのダイアログの読みの欄と、読みの置き換えで使う。docs/RUBY_DIALOG_READING_PLAN.md）
+{
+  const find = (text, from, to) => m.findRubyAtSelection(text, select(text, from, to));
+  const then = "[東京(rb,とうきょう)]へ";
+  assert.deepEqual(find(then, 1, 3), { from: 0, to: 14, form: "then", base: "東京", reading: "とうきょう" });
+  assert.deepEqual(find(then, 0, 14), { from: 0, to: 14, form: "then", base: "東京", reading: "とうきょう" });
+  const mono = "[東京(rb,とう きょう)]";
+  assert.deepEqual(find(mono, 1, 3), { from: 0, to: 15, form: "then", base: "東京", reading: "とう きょう" });
+  const bar = "｜東京《とうきょう》へ";
+  assert.deepEqual(find(bar, 1, 3), { from: 0, to: 10, form: "bar", base: "東京", reading: "とうきょう" });
+  assert.deepEqual(find(bar, 0, 10), { from: 0, to: 10, form: "bar", base: "東京", reading: "とうきょう" });
+  const kanji = "東京《とうきょう》へ";
+  assert.deepEqual(find(kanji, 0, 2), { from: 0, to: 9, form: "kanji", base: "東京", reading: "とうきょう" });
+  assert.deepEqual(find(kanji, 0, 9), { from: 0, to: 9, form: "kanji", base: "東京", reading: "とうきょう" });
+  // ルビの付く語の一部、圏点の 《《…》》、圏点の [ ]、記法のない語は当たらない。
+  assert.equal(find("大東京《だいとうきょう》", 1, 3), null);
+  assert.equal(find("《《東京》》", 2, 4), null);
+  assert.equal(find("[大事(em,goma)]", 1, 3), null);
+  assert.equal(find("東京へ", 0, 2), null);
+}
+
 // ルビ: すでに付いたルビに当たれば、書き方はそのままで読みだけを置き換える。
 {
   const then = "[東京(rb,とうきょう)]へ";

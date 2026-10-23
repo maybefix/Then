@@ -182,6 +182,33 @@ const lastToast = (app) => app.toasts.at(-1);
   assert.equal(t.editor.focused, 1);
 }
 {
+  // すでに付いたルビで開くと、今の読みを入れて開く。そのまま「反映」しても本文は変わらない。
+  for (const [text, from, to, reading] of [
+    ["[東京(rb,とう きょう)]へ", 1, 3, "とう きょう"],
+    ["[東京(rb,とう きょう)]へ", 0, 15, "とう きょう"],
+    ["｜京都《きょうと》へ", 0, 9, "きょうと"],
+    ["大阪《おおさか》へ", 0, 2, "おおさか"],
+  ]) {
+    const t = setup(text, from, to);
+    const selection = t.snapshot();
+    t.notation().openRubyNotationModal(selection);
+    assert.deepEqual(t.app.notationModal, { type: "ruby", selection, reading, error: "" }, `open on ${text} ${from}-${to}`);
+    t.notation().submitRubyNotation({ preventDefault() {} });
+    assert.equal(t.editor.text, text);
+    assert.deepEqual(t.app.toasts, ["ルビを反映しました"]);
+  }
+  // 語の一部・記法のない語では、今と同じく空で開く。
+  for (const [text, from, to] of [["大東京《だいとうきょう》", 1, 3], ["東京へ", 0, 2]]) {
+    const t = setup(text, from, to);
+    t.notation().openRubyNotationModal(t.snapshot());
+    assert.equal(t.app.notationModal?.reading, "");
+  }
+  // エディタが無くても、空で開く。
+  const none = setup("[東京(rb,とうきょう)]", 1, 3, { editor: false });
+  none.notation().openRubyNotationModal({ from: 1, to: 3, text: "東京" });
+  assert.equal(none.app.notationModal?.reading, "");
+}
+{
   // すでに付いたルビでは、書き方はそのままで読みを置き換える。
   for (const [text, from, to, expected] of [
     ["[東京(rb,とうきょう)]へ", 1, 3, "[東京(rb,ひがし)]へ"],
