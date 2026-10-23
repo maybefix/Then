@@ -57,6 +57,8 @@ type MoveProjectEntriesResult = {
   moves: MovedProjectEntry[];
 };
 
+type PathChange = { oldPath: string; newPath: string };
+
 type ToastAction = {
   label: string;
   onClick: () => void;
@@ -170,6 +172,77 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     replaceActiveTab,
   } = deps;
 
+  /**
+   * パスを覚えている置き場所を、名前の変更・移動に合わせて付け替える。タブと選んでいるフォルダは、
+   * 操作ごとに扱いが違うので、それぞれの操作が書く。置き場所を足したら、removePathOwners にも足す。
+   */
+  const retargetPathOwners = (rootPath: string, changes: PathChange[]) => {
+    const retargetPath = (path: string): string | null => {
+      let nextPath = path;
+      let changed = false;
+      for (const change of changes) {
+        const candidate = retargetFilesystemPath(nextPath, change.oldPath, change.newPath);
+        if (!candidate) continue;
+        nextPath = candidate;
+        changed = true;
+      }
+      return changed ? nextPath : null;
+    };
+
+    for (const change of changes) {
+      retargetPluginAnchors(change.oldPath, change.newPath);
+      const oldReferencePath = toProjectRelativePath(rootPath, change.oldPath);
+      const newReferencePath = toProjectRelativePath(rootPath, change.newPath);
+      if (!oldReferencePath || !newReferencePath) continue;
+      setPlotCards((current) =>
+        current.map((card) => ({
+          ...card,
+          body: replacePlotReferencePath(card.body, oldReferencePath, newReferencePath),
+        })),
+      );
+      setReferenceLayout((current) => ({
+        ...current,
+        cards: current.cards.map((card) =>
+          retargetReferenceCard(card, oldReferencePath, newReferencePath),
+        ),
+        recent: current.recent.map((file) =>
+          retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
+        ),
+      }));
+      setReferenceCandidates((current) =>
+        current.map((file) =>
+          retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
+        ),
+      );
+    }
+
+    setAppState((current) => {
+      const retargetRecord = <T,>(record: Record<string, T>): Record<string, T> => {
+        const next: Record<string, T> = {};
+        for (const [path, value] of Object.entries(record)) {
+          next[retargetPath(path) ?? path] = value;
+        }
+        return next;
+      };
+      return {
+        ...current,
+        fileProgress: retargetRecord(current.fileProgress),
+        cursorPositions: retargetRecord(current.cursorPositions),
+        lastFilePath: current.lastFilePath
+          ? retargetPath(current.lastFilePath) ?? current.lastFilePath
+          : current.lastFilePath,
+      };
+    });
+    setCollapsedWorkspaceFolderPaths((current) => {
+      if (![...current].some((path) => retargetPath(path))) return current;
+      const next = new Set<string>();
+      for (const path of current) {
+        next.add(retargetPath(path) ?? path);
+      }
+      return next;
+    });
+  };
+
   const handleCreateProjectFile = async (folderPath = activeBreadcrumbPath) => {
     if (!projectFolder) {
       showToast("先にフォルダを開いてください");
@@ -271,31 +344,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
         path: entry.path,
         name,
       });
-      const oldReferencePath = toProjectRelativePath(projectFolder.path, entry.path);
-      const newReferencePath = toProjectRelativePath(projectFolder.path, document.path);
-      retargetPluginAnchors(entry.path, document.path);
-      if (oldReferencePath && newReferencePath) {
-        setPlotCards((current) =>
-          current.map((card) => ({
-            ...card,
-            body: replacePlotReferencePath(card.body, oldReferencePath, newReferencePath),
-          })),
-        );
-        setReferenceLayout((current) => ({
-          ...current,
-          cards: current.cards.map((card) =>
-            retargetReferenceCard(card, oldReferencePath, newReferencePath),
-          ),
-          recent: current.recent.map((file) =>
-            retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
-          ),
-        }));
-        setReferenceCandidates((current) =>
-          current.map((file) =>
-            retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
-          ),
-        );
-      }
+      retargetPathOwners(projectFolder.path, [{ oldPath: entry.path, newPath: document.path }]);
       const parentFolderPath =
         findContainingFolderPath(projectFolder, entry.path) ?? projectFolder.path;
       await refreshProjectFolder(parentFolderPath);
@@ -341,43 +390,11 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
         if (!isFolderEntry && isSamePath(activeNewPath, document.path)) {
           lastSavedMarkdownRef.current = document.content;
         }
-      } else {
-        setAppState((current) => ({
-          ...current,
-          lastFilePath: current.lastFilePath
-            ? retargetFilesystemPath(current.lastFilePath, entry.path, document.path) ??
-              current.lastFilePath
-            : current.lastFilePath,
-        }));
       }
-
-      setAppState((current) => {
-        const retargetRecord = <T,>(record: Record<string, T>): Record<string, T> => {
-          const next: Record<string, T> = {};
-          for (const [path, value] of Object.entries(record)) {
-            next[retargetFilesystemPath(path, entry.path, document.path) ?? path] = value;
-          }
-          return next;
-        };
-        return {
-          ...current,
-          fileProgress: retargetRecord(current.fileProgress),
-          cursorPositions: retargetRecord(current.cursorPositions),
-        };
-      });
 
       setFocusedFolderPath((current) =>
         current ? retargetFilesystemPath(current, entry.path, document.path) ?? current : current,
       );
-      if (isFolderEntry) {
-        setCollapsedWorkspaceFolderPaths((current) => {
-          const next = new Set<string>();
-          for (const path of current) {
-            next.add(retargetFilesystemPath(path, entry.path, document.path) ?? path);
-          }
-          return next;
-        });
-      }
       projectAstBuildIdRef.current += 1;
       setProjectAst(null);
       setSaveStatus(
@@ -597,31 +614,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
         targetPath: targetPath ?? null,
         position: position ?? null,
       });
-      const oldReferencePath = toProjectRelativePath(projectFolder.path, result.oldPath);
-      const newReferencePath = toProjectRelativePath(projectFolder.path, result.newPath);
-      retargetPluginAnchors(result.oldPath, result.newPath);
-      if (oldReferencePath && newReferencePath) {
-        setPlotCards((current) =>
-          current.map((card) => ({
-            ...card,
-            body: replacePlotReferencePath(card.body, oldReferencePath, newReferencePath),
-          })),
-        );
-        setReferenceLayout((current) => ({
-          ...current,
-          cards: current.cards.map((card) =>
-            retargetReferenceCard(card, oldReferencePath, newReferencePath),
-          ),
-          recent: current.recent.map((file) =>
-            retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
-          ),
-        }));
-        setReferenceCandidates((current) =>
-          current.map((file) =>
-            retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
-          ),
-        );
-      }
+      retargetPathOwners(projectFolder.path, [{ oldPath: result.oldPath, newPath: result.newPath }]);
 
       const activeNewPath = currentFilePath
         ? retargetFilesystemPath(currentFilePath, result.oldPath, result.newPath)
@@ -662,36 +655,9 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           result.movedDocument?.content ?? activeTab?.savedMarkdown ?? lastSavedMarkdownRef.current;
       }
 
-      setAppState((current) => {
-        const retargetRecord = <T,>(record: Record<string, T>): Record<string, T> => {
-          const next: Record<string, T> = {};
-          for (const [path, value] of Object.entries(record)) {
-            next[retargetFilesystemPath(path, result.oldPath, result.newPath) ?? path] = value;
-          }
-          return next;
-        };
-        return {
-          ...current,
-          fileProgress: retargetRecord(current.fileProgress),
-          cursorPositions: retargetRecord(current.cursorPositions),
-          lastFilePath: current.lastFilePath
-            ? retargetFilesystemPath(current.lastFilePath, result.oldPath, result.newPath) ??
-              current.lastFilePath
-            : current.lastFilePath,
-        };
-      });
       setFocusedFolderPath(
         sourceEntry.kind === "folder" ? result.newPath : result.newParentPath,
       );
-      if (sourceEntry.kind === "folder") {
-        setCollapsedWorkspaceFolderPaths((current) => {
-          const next = new Set<string>();
-          for (const path of current) {
-            next.add(retargetFilesystemPath(path, result.oldPath, result.newPath) ?? path);
-          }
-          return next;
-        });
-      }
       projectAstBuildIdRef.current += 1;
       setProjectAst(null);
       setProjectFolder(result.projectFolder);
@@ -780,42 +746,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
         return changed ? nextPath : null;
       };
 
-      for (const moved of result.moves) {
-        retargetPluginAnchors(moved.oldPath, moved.newPath);
-        const oldReferencePath = toProjectRelativePath(
-          projectFolder.path,
-          moved.oldPath,
-        );
-        const newReferencePath = toProjectRelativePath(
-          projectFolder.path,
-          moved.newPath,
-        );
-        if (!oldReferencePath || !newReferencePath) continue;
-        setPlotCards((current) =>
-          current.map((card) => ({
-            ...card,
-            body: replacePlotReferencePath(
-              card.body,
-              oldReferencePath,
-              newReferencePath,
-            ),
-          })),
-        );
-        setReferenceLayout((current) => ({
-          ...current,
-          cards: current.cards.map((card) =>
-            retargetReferenceCard(card, oldReferencePath, newReferencePath),
-          ),
-          recent: current.recent.map((file) =>
-            retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
-          ),
-        }));
-        setReferenceCandidates((current) =>
-          current.map((file) =>
-            retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
-          ),
-        );
-      }
+      retargetPathOwners(projectFolder.path, result.moves);
 
       const movedDocumentByPath = new Map(
         result.moves.flatMap((moved) =>
@@ -858,34 +789,11 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           activeMovedDocument?.content ??
           activeTab?.savedMarkdown ??
           lastSavedMarkdownRef.current;
-      }
-
-      setAppState((current) => {
-        const retargetRecord = <T,>(record: Record<string, T>): Record<string, T> => {
-          const next: Record<string, T> = {};
-          for (const [path, value] of Object.entries(record)) {
-            next[retargetMovedPath(path) ?? path] = value;
-          }
-          return next;
-        };
-        const activeMovedDocument = activeNewPath
-          ? movedDocumentByPath.get(activeNewPath)
-          : null;
-        return {
+        setAppState((current) => ({
           ...current,
-          ...(activeNewPath
-            ? {
-                markdown: activeMovedDocument?.content ?? current.markdown,
-                lastFilePath: activeNewPath,
-              }
-            : {}),
-          fileProgress: retargetRecord(current.fileProgress),
-          cursorPositions: retargetRecord(current.cursorPositions),
-          lastFilePath: current.lastFilePath
-            ? retargetMovedPath(current.lastFilePath) ?? current.lastFilePath
-            : current.lastFilePath,
-        };
-      });
+          markdown: activeMovedDocument?.content ?? current.markdown,
+        }));
+      }
       setFocusedFolderPath(targetFolderPath);
       projectAstBuildIdRef.current += 1;
       setProjectAst(null);
