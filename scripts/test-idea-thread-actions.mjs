@@ -335,6 +335,87 @@ function assertConsistent(state, label) {
   assert.equal(lastToast().message, "スレッドの削除を元に戻しました");
 }
 
+// 削除を元に戻すと、表示順（並び順）と資料ボードの Idea カードも元に戻る。
+// App の effect（整合処理と、消えた断片のカードを外す処理）を、操作のたびに走らせて確かめる。
+{
+  const ref = (id, sourcePath) => ({ id, sourceType: "reference", sourcePath, createdAt: 1 });
+  const idea = (fragmentId) => ({ sourceType: "idea", fragmentId });
+  const card = (id, threadId, fragmentId) => ({
+    id, sourceType: "idea", threadId, fragmentId, x: 0, y: 0, width: 320, height: 300, zIndex: 1,
+    collapsed: false, pinned: false,
+  });
+  const setup = () => {
+    const harness = createHarness({
+      layouts: [
+        { threadId: "idea-inbox", items: [idea("i1")] },
+        { threadId: "t1", items: [idea("c"), ref("r1", "資料/一.md"), idea("a"), idea("b")] },
+        { threadId: "t2", items: [idea("d")] },
+      ],
+    });
+    harness.state.layout.cards = [card("k-a", "t1", "a"), card("k-d", "t2", "d")];
+    return harness;
+  };
+  const runAppEffects = (state) => {
+    state.layout = { ...state.layout, ideaThreads: reconcileIdeaThreadLayouts(state.layout.ideaThreads, state.app.snippets) };
+    const live = new Set(state.app.snippets.flatMap((entry) => entry.fragments.map((fragment) => `${entry.id}:${fragment.id}`)));
+    state.layout = {
+      ...state.layout,
+      cards: state.layout.cards.filter((entry) => entry.sourceType !== "idea" || live.has(`${entry.threadId}:${entry.fragmentId}`)),
+    };
+  };
+  const cardIds = (state) => state.layout.cards.map((entry) => entry.id).sort();
+
+  // 断片: 資料と混ぜた並び順の途中にあった断片が、末尾ではなく元の位置に戻る。
+  {
+    const { state, actions, lastToast } = setup();
+    await actions().deleteFragment("t1", "a");
+    runAppEffects(state);
+    assert.deepEqual(ideaOrder(state, "t1"), ["c", "ref:資料/一.md", "b"]);
+    assert.deepEqual(cardIds(state), ["k-d"]);
+    lastToast().action.onClick();
+    runAppEffects(state);
+    assert.deepEqual(ideaOrder(state, "t1"), ["c", "ref:資料/一.md", "a", "b"], "undo restores the display position");
+    assert.deepEqual(cardIds(state), ["k-a", "k-d"], "undo restores the Idea card");
+    assertConsistent(state, "delete fragment undo");
+  }
+
+  // スレッド: 受信箱へ移った資料リンクがスレッドへ戻り、並び順とカードも戻る。
+  {
+    const { state, actions, lastToast } = setup();
+    await actions().deleteIdeaThread("t1");
+    runAppEffects(state);
+    assert.deepEqual(ideaOrder(state, "idea-inbox"), ["i1", "ref:資料/一.md"]);
+    assert.deepEqual(cardIds(state), ["k-d"]);
+    lastToast().action.onClick();
+    runAppEffects(state);
+    assert.deepEqual(ideaOrder(state, "t1"), ["c", "ref:資料/一.md", "a", "b"], "undo restores the thread order and its references");
+    assert.deepEqual(ideaOrder(state, "idea-inbox"), ["i1"], "undo takes the reference back out of the inbox");
+    assert.deepEqual(cardIds(state), ["k-a", "k-d"], "undo restores the Idea cards");
+    assertConsistent(state, "delete thread undo");
+  }
+
+  // スレッド: 削除のあとで受信箱から外した資料リンクは、元に戻しても戻さない。
+  {
+    const { state, actions, lastToast } = setup();
+    await actions().deleteIdeaThread("t1");
+    runAppEffects(state);
+    state.layout = {
+      ...state.layout,
+      ideaThreads: state.layout.ideaThreads.map((layout) =>
+        layout.threadId === "idea-inbox"
+          ? { ...layout, items: layout.items.filter((item) => item.sourceType !== "reference") }
+          : layout.threadId === "t2"
+            ? { ...layout, items: [ref("r9", "資料/一.md"), ...layout.items] }
+            : layout,
+      ),
+    };
+    lastToast().action.onClick();
+    runAppEffects(state);
+    assert.deepEqual(ideaOrder(state, "t1"), ["c", "a", "b"]);
+    assert.deepEqual(ideaOrder(state, "t2"), ["ref:資料/一.md", "d"]);
+  }
+}
+
 // 資料リンクを新規スレッドへ移す・追加する。
 {
   const threads = [
