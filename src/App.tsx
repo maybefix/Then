@@ -119,6 +119,7 @@ import {
   customNotationSpecs,
   type NotationModalState,
 } from "./editor/editorNotationActions";
+import { createEditorClipboardActions } from "./editor/editorClipboardActions";
 import {
   extractHeadingSection,
   moveHeadingSections,
@@ -5439,13 +5440,6 @@ export default function App() {
     await navigator.clipboard.writeText(text);
   };
 
-  const readClipboardText = async () => {
-    if (!navigator.clipboard?.readText) {
-      throw new Error("Clipboard read is not available");
-    }
-    return navigator.clipboard.readText();
-  };
-
   const handleEditorContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement | null;
     if (!target?.closest(".verticalTypewriterShell")) return;
@@ -5476,62 +5470,12 @@ export default function App() {
     });
   };
 
-  const copyEditorSelection = async (selection: EditorSelectionSnapshot | null) => {
-    if (!selection || selection.from === selection.to) {
-      showToast("コピーする範囲を選択してください");
-      return;
-    }
-
-    try {
-      await writeClipboardText(selection.text);
-      showToast("コピーしました");
-    } catch {
-      showToast("クリップボードへコピーできませんでした");
-    } finally {
-      closeEditorContextMenu();
-    }
-  };
-
-  const cutEditorSelection = async (selection: EditorSelectionSnapshot | null) => {
-    const editor = editorInstanceRef.current;
-    if (!editor || !selection || selection.from === selection.to) {
-      showToast("切り取る範囲を選択してください");
-      return;
-    }
-
-    try {
-      await writeClipboardText(selection.text);
-      editor.replaceRange(selection.from, selection.to, "", selection.from);
-      editor.focus();
-      showToast("切り取りました");
-    } catch {
-      showToast("クリップボードへ切り取れませんでした");
-    } finally {
-      closeEditorContextMenu();
-    }
-  };
-
-  const pasteIntoEditorSelection = async (selection: EditorSelectionSnapshot | null) => {
-    const editor = editorInstanceRef.current;
-    if (!editor || !selection) return;
-
-    try {
-      const pastedText = await readClipboardText();
-      if (!pastedText) return;
-      editor.replaceRange(
-        selection.from,
-        selection.to,
-        pastedText,
-        selection.from + pastedText.length,
-      );
-      editor.focus();
-      showToast("貼り付けました");
-    } catch {
-      showToast("クリップボードから貼り付けできませんでした");
-    } finally {
-      closeEditorContextMenu();
-    }
-  };
+  const { copyEditorSelection, cutEditorSelection, pasteIntoEditorSelection } = createEditorClipboardActions({
+    editorInstanceRef,
+    writeClipboardText,
+    showToast,
+    closeEditorContextMenu,
+  });
 
   const {
     applyInlineNotation,
