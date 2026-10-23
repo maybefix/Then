@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { build } from "esbuild";
 
 // App.tsx から移した、作品のファイルとフォルダの操作（新規・名前の変更・削除・移動・並べ替え）を、
 // 実際に動かして確かめる（docs/PROJECT_ENTRY_ACTIONS_SEPARATION_PLAN.md）。
-// Rust の命令（invoke）と App の値・道具は入れ物で代える。
+// Rust の命令（invoke）と App の値・道具は入れ物で代える。保存ジャーナルは同じ束の中のものを使い、
+// 書きかけの記録の片付けを確かめる（docs/PROJECT_ENTRY_RETARGET_FIX_PLAN.md）。
 const bundled = await build({
   stdin: {
-    contents: 'export * from "./src/projectEntryActions.ts";',
+    contents: 'export * from "./src/projectEntryActions.ts"; export { recordDocumentChange } from "./src/editor/saveJournal.ts";',
     resolveDir: process.cwd(),
     loader: "ts",
   },
@@ -14,6 +16,7 @@ const bundled = await build({
   format: "esm",
   platform: "neutral",
   write: false,
+  define: { "import.meta.env.DEV": "false" },
   plugins: [
     {
       name: "invoke-stub",
@@ -27,7 +30,7 @@ const bundled = await build({
     },
   ],
 });
-const { createProjectEntryActions } = await import(
+const { createProjectEntryActions, recordDocumentChange } = await import(
   `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`
 );
 
@@ -127,6 +130,7 @@ function setup(world = defaultWorld(), { tauri = true } = {}) {
     persistedAnchors: null,
     refreshedFolder: null,
     commands: {},
+    journal: [],
   };
   const refs = {
     activeTabIdRef: { current: app.activeTabId },
@@ -146,6 +150,10 @@ function setup(world = defaultWorld(), { tauri = true } = {}) {
     app[key] = typeof next === "function" ? next(app[key]) : next;
   };
   globalThis.__projectEntryInvoke = async (command, args) => {
+    if (command.startsWith("journal_")) {
+      app.journal.push({ command, ...args });
+      return undefined;
+    }
     app.log.push({ command, args, pathChanging: refs.projectEntryPathChangeInProgressRef.current });
     const handler = app.commands[command];
     if (!handler) throw new Error(`unexpected invoke ${command}`);
@@ -222,12 +230,17 @@ function setup(world = defaultWorld(), { tauri = true } = {}) {
 }
 
 const commandsOf = (app) => app.log.map((entry) => entry.command);
+// 書きかけの記録（保存ジャーナル）を、タブの名前で作っておく。本文を1度書き換えたのと同じ。
+const recordEdit = (path) => recordDocumentChange(`file:${path}`, path, "前", "後");
+const forgotten = (app) => app.journal.filter((entry) => entry.command === "journal_forget").map(({ key, discard }) => ({ key, discard }));
 
 // ---- 名前の変更（ファイル） ----
 {
   const { app, refs, actions } = setup();
   const oldPath = p("第一章", "a.txt");
   const newPath = p("第一章", "a2.txt");
+  recordEdit(oldPath);
+  recordEdit(p("c.txt"));
   app.inputAnswers.push("a2.txt");
   app.commands.rename_project_entry = () => ({ path: newPath, name: "a2.txt", content: "A2", fileId: "f1", contentHash: "h2" });
   await actions().handleRenameProjectEntry(file(oldPath));
@@ -269,12 +282,18 @@ const commandsOf = (app) => app.log.map((entry) => entry.command);
   assert.equal(refs.projectAstBuildIdRef.current, 1);
   assert.equal(app.projectAst, null);
   assert.equal(app.saveStatus, "saved");
+  assert.deepEqual(
+    forgotten(app),
+    [{ key: `file:${oldPath}`, discard: false }],
+    "the record kept under the tab's old name is closed (kept only if something was not saved)",
+  );
   assert.deepEqual(app.toasts, ["「a.txt」をリネームしました"]);
 }
 
 // ---- 名前の変更（フォルダ） ----
 {
   const { app, actions } = setup();
+  recordEdit(p("第一章", "a.txt"));
   app.inputAnswers.push("第1章");
   app.commands.rename_project_entry = () => ({ path: p("第1章"), name: "第1章", content: "" });
   await actions().handleRenameProjectEntry(folder(p("第一章"), []));
@@ -290,6 +309,7 @@ const commandsOf = (app) => app.log.map((entry) => entry.command);
   assert.equal(app.plotCards[0].body, "@[[第1章/a.txt]] と @[[c.txt]]");
   assert.equal(app.focusedFolderPath, p("第1章"));
   assert.deepEqual([...app.collapsedWorkspaceFolderPaths], [p("第1章")]);
+  assert.deepEqual(forgotten(app), [{ key: `file:${p("第一章", "a.txt")}`, discard: false }]);
   assert.deepEqual(app.toasts, ["「第一章」をリネームしました"]);
 }
 
@@ -318,6 +338,7 @@ const commandsOf = (app) => app.log.map((entry) => entry.command);
 {
   const { app, refs, actions } = setup();
   const deleted = p("第一章", "a.txt");
+  recordEdit(deleted);
   app.commands.plan_delete_project_entry = () => ({ rootKind: "file", textFileCount: 1, nonTextFileCount: 0, folderCount: 0, warnings: [] });
   app.commands.delete_project_entry_to_trash = () => ({ deletedPaths: [deleted], fallbackUsed: "none" });
   app.commands.read_text_file = ({ path }) => ({ path, name: "b.txt", content: "B" });
@@ -346,15 +367,24 @@ const commandsOf = (app) => app.log.map((entry) => entry.command);
   assert.equal(app.appState.lastFilePath, null);
   assert.deepEqual(app.log[3].args, { path: p("第一章", "b.txt") });
   assert.deepEqual(app.loaded, [{ document: { path: p("第一章", "b.txt"), name: "b.txt", content: "B" }, options: { replaceActive: true } }]);
-  // 今の挙動の癖（工程2の5の1）: 削除は資料カード・最近の資料・プロットのリンクを片付けない。
-  assert.deepEqual(app.referenceLayout.cards.map((card) => card.sourcePath), ["第一章/a.txt", "c.txt"]);
+  // 消したファイルを指す資料カード・最近の資料・資料の候補は外し、プロットの本文（利用者の文章）は残す
+  // （docs/PROJECT_ENTRY_RETARGET_FIX_PLAN.md の確認1）。
+  assert.deepEqual(app.referenceLayout.cards.map((card) => card.sourcePath), ["c.txt"]);
+  assert.deepEqual(app.referenceLayout.recent, []);
+  assert.deepEqual(app.referenceCandidates.map((item) => item.sourcePath), ["c.txt"]);
   assert.equal(app.plotCards[0].body, "@[[第一章/a.txt]] と @[[c.txt]]");
+  assert.deepEqual(
+    forgotten(app),
+    [{ key: `file:${deleted}`, discard: true }],
+    "the deleted tab's record is dropped, as the confirmation said its unsaved text would be",
+  );
   assert.deepEqual(app.toasts, ["「a.txt」をゴミ箱へ移動しました"]);
 }
 
 // ---- 削除（フォルダ、最後のファイルまで消える、Then の Trash） ----
 {
   const { app, refs, actions } = setup();
+  recordEdit(p("第一章", "a.txt"));
   app.commands.plan_delete_project_entry = () => ({ rootKind: "folder", textFileCount: 2, nonTextFileCount: 1, folderCount: 2, warnings: ["a", "b", "c"] });
   app.commands.delete_project_entry_to_trash = () => ({ deletedPaths: [p("第一章")], fallbackUsed: "appTrash" });
   app.refreshedFolder = projectFolder([]);
@@ -373,6 +403,10 @@ const commandsOf = (app) => app.log.map((entry) => entry.command);
   assert.match(app.replaced[0].documentKey, /^workspace-empty-\d+$/);
   assert.equal(app.appState.markdown, "");
   assert.equal(app.appState.lastFilePath, null);
+  assert.deepEqual([...app.collapsedWorkspaceFolderPaths], [], "a deleted folder leaves the closed-folder record");
+  assert.deepEqual(app.referenceLayout.cards.map((card) => card.sourcePath), ["c.txt"]);
+  assert.deepEqual(app.referenceLayout.recent, []);
+  assert.deepEqual(forgotten(app), [{ key: `file:${p("第一章", "a.txt")}`, discard: true }]);
   assert.deepEqual(app.toasts, ["「第一章」をThenのTrashへ移動しました"]);
 }
 
@@ -406,6 +440,7 @@ const commandsOf = (app) => app.log.map((entry) => entry.command);
   const oldPath = p("第一章", "a.txt");
   const newPath = p("a.txt");
   const movedFolder = projectFolder([folder(p("第一章"), [file(p("第一章", "b.txt"))]), file(newPath), file(p("c.txt"))]);
+  recordEdit(oldPath);
   app.commands.move_project_entry = () => ({
     projectFolder: movedFolder,
     movedDocument: { path: newPath, name: "a.txt", content: "A2", fileId: "f1", contentHash: "h3" },
@@ -435,6 +470,7 @@ const commandsOf = (app) => app.log.map((entry) => entry.command);
   assert.equal(app.focusedFolderPath, ROOT, "a moved file selects its new folder");
   assert.equal(app.projectFolder, movedFolder);
   assert.equal(app.saveStatus, "saved");
+  assert.deepEqual(forgotten(app), [{ key: `file:${oldPath}`, discard: false }]);
   assert.deepEqual(app.toasts, ["「a.txt」を移動しました"]);
 }
 
@@ -475,6 +511,7 @@ const commandsOf = (app) => app.log.map((entry) => entry.command);
   const a = p("第一章", "a.txt");
   const b = p("第一章", "b.txt");
   const movedFolder = projectFolder([folder(p("第一章"), []), file(p("a.txt")), file(p("b.txt")), file(p("c.txt"))]);
+  recordEdit(a);
   app.commands.move_project_entries = () => ({
     projectFolder: movedFolder,
     moves: [
@@ -496,6 +533,7 @@ const commandsOf = (app) => app.log.map((entry) => entry.command);
   assert.equal(app.plotCards[0].body, "@[[a.txt]] と @[[c.txt]]");
   assert.equal(app.focusedFolderPath, ROOT);
   assert.equal(app.projectFolder, movedFolder);
+  assert.deepEqual(forgotten(app), [{ key: `file:${a}`, discard: false }]);
   assert.deepEqual(app.toasts, ["2件のファイルを移動しました"]);
 }
 {
@@ -627,6 +665,28 @@ const reorderWorld = () => {
   assert.equal(app.lastError, "Error: order failed");
   assert.equal(app.saveStatus, "error");
   assert.deepEqual(app.toasts, []);
+}
+
+// ---- 資料ボードの読み込み（App に残る useEffect。文字で確かめ、動くことは実機で確かめる） ----
+// 名前の変更・移動・並べ替え・新規・削除で作品のフォルダの木が替わっても、資料ボードはディスクから
+// 読み直さない（保存を待っている付け替えを上書きしないため）。読み直すのは資料の候補だけ。
+{
+  const appSource = await readFile("src/App.tsx", "utf8");
+  const effectDeps = (marker) => {
+    const at = appSource.indexOf(marker);
+    assert.notEqual(at, -1, `missing ${marker}`);
+    return appSource.slice(at).match(/\n {2}\}, (\[[^\]]*\])\);/)[1];
+  };
+  assert.equal(
+    effectDeps("loadReferenceLayout(rootPath),"),
+    "[isHydrated, projectFolder?.path]",
+    "the reference board loads when the project changes, not when its file tree does",
+  );
+  assert.equal(
+    effectDeps("const candidates = await listReferenceCandidates(rootPath);"),
+    "[isHydrated, projectFolder]",
+    "the reference candidates follow the file tree",
+  );
 }
 
 console.log("project entry actions: ok");
