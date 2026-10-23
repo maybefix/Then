@@ -31,7 +31,11 @@ export function canWrapInlineSelection(selection: EditorSelectionSnapshot): bool
 }
 
 function stripDirectionMarkers(line: string): string {
-  return line.replace(/\[\(al:(?:start|center|end)\)\]/g, "").replace(/^>>\s*/, "");
+  // 読み込み（documentAst の cleanLineTextForAst）と同じく、旧来の地付きも外す。
+  return line
+    .replace(/\[\(al:(?:start|center|end)\)\]/g, "")
+    .replace(/^［＃地付き］/, "")
+    .replace(/^>>\s*/, "");
 }
 
 function applyDirectionToLine(line: string, direction: LayoutDirection): string {
@@ -147,6 +151,12 @@ function clearNotationInLine(
   const align = /\[\(al:(?:start|center|end)\)\]/g;
   while ((match = align.exec(line))) {
     pushClearReplacement(replacements, match.index, match.index + match[0].length, "");
+  }
+
+  // 旧来の地付き（行頭の ［＃地付き］ と >>）も、[(al:…)] と同じく行の指示として外す。
+  const legacyJitsuki = /^(?:［＃地付き］|>>\s*)/.exec(line);
+  if (legacyJitsuki) {
+    pushClearReplacement(replacements, 0, legacyJitsuki[0].length, "");
   }
 
   // Notation-like text inside inline code is literal and stays as typed.
