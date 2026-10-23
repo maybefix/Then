@@ -87,8 +87,11 @@ export function createIdeaThreadActions(deps: IdeaThreadActionDeps) {
     const fragment = thread?.fragments.find((item) => item.id === fragmentId);
     if (!fragment) return;
     setDraggingId(fragmentId);
-    event.dataTransfer.effectAllowed = "move";
+    // スレッド内の並べ替えは移動、Canvas へのドロップはコピーとして受け取られる。
+    // Canvas は本文の文字列からカードを作るので、Canvas の側面パネルと同じく本文も渡す。
+    event.dataTransfer.effectAllowed = "copyMove";
     event.dataTransfer.setData(SNIPPET_DRAG_MIME, fragmentId);
+    event.dataTransfer.setData("text/plain", fragment.body);
   };
 
   const handleFragmentDragEnd = () => {
