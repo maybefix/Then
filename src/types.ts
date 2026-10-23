@@ -154,6 +154,16 @@ export type ReferenceLayout = {
   recent: ReferenceFileInfo[];
   /** version 3 で追加。旧データは読み込み時に fragments から補完する。 */
   ideaThreads: IdeaThreadLayout[];
+  /** ideaThreads と Idea カードがどちらの「Ideaの管理単位」のものか。無いときは今の管理単位として読む。 */
+  ideaThreadsMode?: EditorSettings["snippetStorageMode"];
+  /** 表示していない側の管理単位の並び順と Idea カード。切り替えて戻したときに元へ戻す。 */
+  otherIdea?: OtherIdeaLayout;
+};
+
+export type OtherIdeaLayout = {
+  mode: EditorSettings["snippetStorageMode"];
+  ideaThreads: IdeaThreadLayout[];
+  cards: IdeaBinderCardState[];
 };
 
 export type ReferenceFileInfo = {
