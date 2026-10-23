@@ -1,5 +1,12 @@
 # 不具合の記録
 
+## 2026-10-24: 右クリックの「圏点」「縦中横」「ルビ」を、すでに付いた範囲で押すと二重になる
+
+- **確認された対象と挙動:** 記法の操作の関数の分離（`docs/EDITOR_NOTATION_ACTIONS_SEPARATION_PLAN.md` の2章5の癖1と工程9）と、修正の調査（`docs/MENU_EMPHASIS_FIX_PLAN.md` の工程1）。`[傍点(em,goma)]` を選んで右クリックの「圏点」を押すと `[[傍点(em,goma)](em,goma)]` になった（Ctrl+I では外れる）。`《《傍点》》` の中身では `《《[傍点(em,goma)]》》` になった。縦中横は `[[十二(tcy)](tcy)]`、ルビは `[[東京(rb,とうきょう)](rb,ひがし)]` になった。コマンドパレットの「縦中横」「ルビ…」も同じだった。
+- **修正:** `applyInlineNotation`（`src/editor/editorNotationActions.ts`）が、圏点は Ctrl+I と同じ `toggleEmphasisSelection`、縦中横は新しい `toggleTcySelection`、ルビは新しい `applyRubyToSelection`（どちらも `src/editor/selectionEdits.ts`）で書き換える。圏点と縦中横は、中身か全体を選んでいれば外し、通知は「圏点を解除しました」「縦中横を解除しました」。ルビは、`[本文(rb,…)]`・`｜本文《…》`・`漢字《…》` の中身か全体を選んでいれば、書き方はそのままで読みを置き換える。
+- **確認:** `test:editor-text-edits`、`test:editor-notation-actions` と QA 用アプリ（`docs/MENU_EMPHASIS_FIX_PLAN.md` の工程9）。
+- **状態:** 修正済み（`fix/menu-emphasis-toggle`）。
+
 ## 2026-10-23: 検索バー（Ctrl+F）が前後の空白を無視し、İ などがあると一致と置換の位置がずれる
 
 - **確認された対象と挙動:** 選択範囲の書き換えと検索・置換の分離で、移す前のコードを切り出して確かめた（`docs/EDITOR_TEXT_EDITS_SEPARATION_PLAN.md` の工程2の5）。検索語の前後の空白を削ってから探すので、` 東京` で `東京` に一致し、「すべて」で空白が残った。本文と検索語を小文字にしてから位置を数えるので、小文字にすると長さが変わる文字（`İ` など）が前にあると位置がずれ、`İab` の `a` を置換すると `b` が置き換わった。検索サイドバーは、どちらも起きない。
