@@ -516,9 +516,15 @@ function assertConsistent(state, label) {
   assert.equal(typeof state.focusRequest.nonce, "number");
 }
 
-// ドラッグ: 断片の ID だけを渡し、本文の文字列は渡さない。Idea は本文へ落とせない。
+// ドラッグ: 断片の ID と本文を渡す（Canvas は本文からカードを作り、Canvas への
+// ドロップはコピー、スレッド内の並べ替えは移動）。Idea は本文へ落とせない。
 {
-  const { state, actions } = createHarness();
+  const { state, actions } = createHarness({
+    threads: [
+      thread("idea-inbox", "inbox", "インボックス", []),
+      thread("t1", "thread", "場面", [frag("a", "改札の前で立ち止まる")]),
+    ],
+  });
   const data = new Map();
   const dragStart = {
     dataTransfer: {
@@ -528,8 +534,11 @@ function assertConsistent(state, label) {
   };
   actions().handleFragmentDragStart(dragStart, "t1", "a");
   assert.equal(state.draggingId, "a");
-  assert.equal(dragStart.dataTransfer.effectAllowed, "move");
-  assert.deepEqual([...data], [["application/x-brew-snippet-id", "a"]]);
+  assert.equal(dragStart.dataTransfer.effectAllowed, "copyMove");
+  assert.deepEqual([...data], [
+    ["application/x-brew-snippet-id", "a"],
+    ["text/plain", "改札の前で立ち止まる"],
+  ]);
   actions().handleFragmentDragEnd();
   assert.equal(state.draggingId, null);
 
