@@ -7,6 +7,7 @@ import {
   applyRubyToSelection,
   canWrapInlineSelection,
   clearNotationFromSelection,
+  findRubyAtSelection,
   normalizeSelectionRange,
   sanitizeNotationArgument,
   toggleBoldSelection,
@@ -218,7 +219,11 @@ export function createEditorNotationActions(deps: EditorNotationActionDeps) {
       closeEditorContextMenu();
       return;
     }
-    setNotationModal({ type: "ruby", selection, reading: "", error: "" });
+    // すでに付いたルビなら、今の読みを入れて開く。
+    const editor = editorInstanceRef.current;
+    const text = editor?.getValue() ?? "";
+    const ruby = editor ? findRubyAtSelection(text, normalizeSelectionRange(selection, text)) : null;
+    setNotationModal({ type: "ruby", selection, reading: ruby?.reading ?? "", error: "" });
     closeEditorContextMenu();
   };
 
