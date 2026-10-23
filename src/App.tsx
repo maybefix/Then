@@ -5805,7 +5805,7 @@ export default function App() {
 
   const replaceAllEditorFindMatches = () => {
     const editor = editorInstanceRef.current;
-    if (!editor || !editorFind.query.trim()) return;
+    if (!editor || editorFind.query.length === 0) return;
     const currentText = editor.getValue();
     const result = replaceLiteralMatches(
       currentText,
@@ -12886,7 +12886,7 @@ export default function App() {
                                 onKeyDown={handleEditorFindKeyDown}
                               />
                               <span className="editorFindCount">
-                                {editorFind.query.trim()
+                                {editorFind.query.length > 0
                                   ? editorFindMatches.length
                                     ? `${activeEditorFindIndex + 1}/${editorFindMatches.length}`
                                     : "0/0"

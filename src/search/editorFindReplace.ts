@@ -1,7 +1,7 @@
 import { findCommentLineRanges } from "../editor/ast/documentAst";
 import type { DocumentAst } from "../editor/ast/types";
 import { parseFrontMatter, updateMarkdownBody } from "../utils/frontmatter";
-import { replaceTextSearchMatches, type TextSearchOptions } from "./textSearch";
+import { compileTextSearchPattern, replaceTextSearchMatches, type TextSearchOptions } from "./textSearch";
 
 export type EditorFindMatch = {
   id: string;
@@ -12,49 +12,23 @@ export type EditorFindMatch = {
   excerpt: string;
 };
 
+/** 検索バーの探し方。検索サイドバーの既定（文字どおり・大文字小文字を区別しない）と同じ。 */
+const EDITOR_FIND_OPTIONS: TextSearchOptions = { useRegex: false, matchCase: false };
+
 export function replaceLiteralMatches(
   text: string,
-  rawQuery: string,
+  query: string,
   replacement: string,
   includeComments: boolean,
 ): { text: string; count: number } {
-  const query = rawQuery.trim();
-  if (!query) return { text, count: 0 };
-
-  if (!includeComments) {
-    const comments = findCommentLineRanges(text);
-    if (comments.length > 0) {
-      // コメント行の間の区間ごとに置換し、コメント行はそのまま残す。
-      const chunks: string[] = [];
-      let count = 0;
-      let cursor = 0;
-      for (const range of [...comments, { from: text.length, to: text.length }]) {
-        const segment = replaceLiteralMatches(text.slice(cursor, range.from), rawQuery, replacement, true);
-        chunks.push(segment.text, text.slice(range.from, range.to));
-        count += segment.count;
-        cursor = range.to;
-      }
-      return { text: count > 0 ? chunks.join("") : text, count };
-    }
-  }
-
-  const haystack = text.toLocaleLowerCase();
-  const needle = query.toLocaleLowerCase();
-  const chunks: string[] = [];
-  let from = 0;
-  let count = 0;
-
-  while (from <= text.length) {
-    const index = haystack.indexOf(needle, from);
-    if (index < 0) break;
-    chunks.push(text.slice(from, index), replacement);
-    from = index + query.length;
-    count += 1;
-  }
-
-  if (count === 0) return { text, count: 0 };
-  chunks.push(text.slice(from));
-  return { text: chunks.join(""), count };
+  const result = replaceTextSearchMatches(
+    text,
+    query,
+    replacement,
+    EDITOR_FIND_OPTIONS,
+    includeComments ? [] : findCommentLineRanges(text),
+  );
+  return { text: result.text, count: result.count };
 }
 
 export function replaceMarkdownBodyMatches(
@@ -81,12 +55,12 @@ export function replaceMarkdownBodyMatches(
 
 export function collectEditorFindMatches(
   documentAst: DocumentAst,
-  rawQuery: string,
+  query: string,
   includeComments: boolean,
   maxResults = 500,
 ): EditorFindMatch[] {
-  const query = rawQuery.trim();
-  if (!query) return [];
+  const { pattern } = compileTextSearchPattern(query, EDITOR_FIND_OPTIONS);
+  if (!pattern) return [];
 
   const normalizedQuery = query.toLocaleLowerCase();
   const matches: EditorFindMatch[] = [];
@@ -94,26 +68,22 @@ export function collectEditorFindMatches(
   for (const block of documentAst.blocks) {
     if (!includeComments && block.kind === "comment") continue;
     const source = block.source;
-    const normalizedSource = source.toLocaleLowerCase();
-    let from = 0;
     let matchIndex = 0;
 
-    while (from <= normalizedSource.length) {
-      const index = normalizedSource.indexOf(normalizedQuery, from);
-      if (index < 0) break;
-
+    // 位置は元の本文の上で数える（小文字にすると長さが変わる文字があっても、ずれない）。
+    for (const match of source.matchAll(pattern)) {
+      const index = match.index ?? 0;
       const absoluteFrom = block.from + index;
       matches.push({
         id: `editor-find:${block.lineIndex}:${index}:${matchIndex}:${normalizedQuery}`,
         from: absoluteFrom,
-        to: absoluteFrom + query.length,
+        to: absoluteFrom + match[0].length,
         line: block.lineIndex + 1,
         column: index + 1,
         excerpt: source,
       });
 
       if (matches.length >= maxResults) return matches;
-      from = index + Math.max(1, normalizedQuery.length);
       matchIndex += 1;
     }
   }
