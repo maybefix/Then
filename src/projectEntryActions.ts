@@ -5,7 +5,12 @@ import { createProjectAstSkeleton, removeProjectAstPaths } from "./editor/ast/pr
 import type { ProjectAst } from "./editor/ast/types";
 import { createScratchDocumentTab, isDirtyDocumentTab } from "./editor/documentTabState";
 import type { ThenPluginAnchor } from "./plugins/types";
-import { retargetReferenceCard, retargetReferenceFileInfo } from "./referencePathModel";
+import {
+  referenceCardPointsInside,
+  referenceFilePointsInside,
+  retargetReferenceCard,
+  retargetReferenceFileInfo,
+} from "./referencePathModel";
 import type {
   AppState,
   BreadcrumbDropTarget,
@@ -243,6 +248,57 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     });
   };
 
+  /** 削除したパスを、retargetPathOwners と同じ置き場所から取り除く。プロットの本文のリンクは、利用者の文章なので残す。 */
+  const removePathOwners = (rootPath: string, removedPath: string) => {
+    const deletedAnchorRoot = toProjectRelativePath(rootPath, removedPath)
+      .replace(/[\\/]+/g, "/")
+      .toLocaleLowerCase();
+    persistPluginAnchors(pluginAnchorsRef.current.filter((anchor) => {
+      const documentPath = anchor.documentPath.replace(/[\\/]+/g, "/").toLocaleLowerCase();
+      return documentPath !== deletedAnchorRoot && !documentPath.startsWith(`${deletedAnchorRoot}/`);
+    }));
+
+    const removedReferencePath = toProjectRelativePath(rootPath, removedPath);
+    if (removedReferencePath) {
+      setReferenceLayout((current) => ({
+        ...current,
+        cards: current.cards.filter((card) => !referenceCardPointsInside(card, removedReferencePath)),
+        recent: current.recent.filter((file) => !referenceFilePointsInside(file, removedReferencePath)),
+      }));
+      setReferenceCandidates((current) =>
+        current.filter((file) => !referenceFilePointsInside(file, removedReferencePath)),
+      );
+    }
+
+    setAppState((current) => {
+      const nextCursorPositions = { ...current.cursorPositions };
+      const nextFileProgress = { ...current.fileProgress };
+      for (const path of Object.keys(nextCursorPositions)) {
+        if (isPathSameOrInside(path, removedPath)) {
+          delete nextCursorPositions[path];
+        }
+      }
+      for (const path of Object.keys(nextFileProgress)) {
+        if (isPathSameOrInside(path, removedPath)) {
+          delete nextFileProgress[path];
+        }
+      }
+      return {
+        ...current,
+        cursorPositions: nextCursorPositions,
+        fileProgress: nextFileProgress,
+        lastFilePath:
+          current.lastFilePath && isPathSameOrInside(current.lastFilePath, removedPath)
+            ? null
+            : current.lastFilePath,
+      };
+    });
+    setCollapsedWorkspaceFolderPaths((current) => {
+      if (![...current].some((path) => isPathSameOrInside(path, removedPath))) return current;
+      return new Set([...current].filter((path) => !isPathSameOrInside(path, removedPath)));
+    });
+  };
+
   const handleCreateProjectFile = async (folderPath = activeBreadcrumbPath) => {
     if (!projectFolder) {
       showToast("先にフォルダを開いてください");
@@ -462,13 +518,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
         rootPath: projectFolder.path,
         path: entry.path,
       });
-      const deletedAnchorRoot = toProjectRelativePath(projectFolder.path, entry.path)
-        .replace(/[\\/]+/g, "/")
-        .toLocaleLowerCase();
-      persistPluginAnchors(pluginAnchorsRef.current.filter((anchor) => {
-        const documentPath = anchor.documentPath.replace(/[\\/]+/g, "/").toLocaleLowerCase();
-        return documentPath !== deletedAnchorRoot && !documentPath.startsWith(`${deletedAnchorRoot}/`);
-      }));
+      removePathOwners(projectFolder.path, entry.path);
       projectAstBuildIdRef.current += 1;
       setProjectAst((current) =>
         current ? removeProjectAstPaths(current, result.deletedPaths) : current,
@@ -502,30 +552,6 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
       setOpenTabs((current) =>
         current.filter((tab) => !tab.path || !isPathSameOrInside(tab.path, entry.path)),
       );
-      setAppState((current) => {
-        const nextCursorPositions = { ...current.cursorPositions };
-        const nextFileProgress = { ...current.fileProgress };
-        for (const path of Object.keys(nextCursorPositions)) {
-          if (isPathSameOrInside(path, entry.path)) {
-            delete nextCursorPositions[path];
-          }
-        }
-        for (const path of Object.keys(nextFileProgress)) {
-          if (isPathSameOrInside(path, entry.path)) {
-            delete nextFileProgress[path];
-          }
-        }
-        return {
-          ...current,
-          cursorPositions: nextCursorPositions,
-          fileProgress: nextFileProgress,
-          lastFilePath:
-            current.lastFilePath && isPathSameOrInside(current.lastFilePath, entry.path)
-              ? null
-              : current.lastFilePath,
-        };
-      });
-
       if (activeWasDeleted) {
         const nextFile = refreshed ? findFirstTextFile(refreshed.children) : null;
         if (nextFile) {

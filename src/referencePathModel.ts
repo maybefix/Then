@@ -67,3 +67,15 @@ export function retargetReferenceCard(
     kind: referenceKindFromPath(sourcePath),
   };
 }
+
+/** 削除した `removedPath`（作品からの相対パス）か、その中のファイルを指す資料か。 */
+export function referenceFilePointsInside(file: ReferenceFileInfo, removedPath: string): boolean {
+  if (file.scope !== "project") return false;
+  return retargetReferenceSourcePath(file.sourcePath, removedPath, removedPath) !== null;
+}
+
+export function referenceCardPointsInside(card: BinderCardState, removedPath: string): boolean {
+  if (!isReferenceBinderCard(card)) return false;
+  if (card.scope !== "project") return false;
+  return retargetReferenceSourcePath(card.sourcePath, removedPath, removedPath) !== null;
+}
