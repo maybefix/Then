@@ -249,13 +249,12 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     });
   };
 
-  /** 名前が替わるタブの、古い名前の書きかけの記録を閉じる。保存し終えていれば消え、済んでいない分があれば残る。 */
-  const closeRenamedTabJournals = (retargetPath: (path: string) => string | null) => {
-    for (const tab of openTabs) {
-      const nextPath = tab.path ? retargetPath(tab.path) : null;
-      if (nextPath && `file:${nextPath}` !== tab.id) closeDocumentJournal(tab.id);
-    }
-  };
+  /**
+   * 名前の変わるタブの書きかけの記録を、ファイルがまだ元の場所にあるうちに閉じる（Rust は閉じるときに
+   * 元のファイルを確かめる）。保存し終えていれば消え、済んでいない分があれば残る。
+   */
+  const closeTabJournals = (tabs: DocumentTab[]) =>
+    Promise.all(tabs.map((tab) => closeDocumentJournal(tab.id)));
 
   /** 削除したパスを、retargetPathOwners と同じ置き場所から取り除く。プロットの本文のリンクは、利用者の文章なので残す。 */
   const removePathOwners = (rootPath: string, removedPath: string) => {
@@ -405,6 +404,8 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           ),
       );
 
+      await closeTabJournals(affectedTabs);
+
       const document = await invoke<TextDocument>("rename_project_entry", {
         path: entry.path,
         name,
@@ -443,7 +444,6 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           };
         }),
       );
-      closeRenamedTabJournals((path) => retargetFilesystemPath(path, entry.path, document.path));
 
       if (activeNewPath) {
         setAppState((current) => ({
@@ -646,6 +646,8 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           ),
       );
 
+      await closeTabJournals(affectedTabs);
+
       const result = await invoke<MoveProjectEntryResult>("move_project_entry", {
         rootPath: projectFolder.path,
         sourcePath,
@@ -683,7 +685,6 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           };
         }),
       );
-      closeRenamedTabJournals((path) => retargetFilesystemPath(path, result.oldPath, result.newPath));
       if (activeNewPath) {
         setActiveTabId(nextActiveTabId);
         setAppState((current) => ({
@@ -765,6 +766,8 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           ),
       );
 
+      await closeTabJournals(openTabs.filter((tab) => Boolean(tab.path && movingPathSet.has(tab.path))));
+
       const result = await invoke<MoveProjectEntriesResult>("move_project_entries", {
         rootPath: projectFolder.path,
         sourcePaths: movingPaths,
@@ -822,7 +825,6 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           };
         }),
       );
-      closeRenamedTabJournals(retargetMovedPath);
       if (activeNewPath) {
         const activeMovedDocument = movedDocumentByPath.get(activeNewPath);
         setActiveTabId(`file:${activeNewPath}`);
