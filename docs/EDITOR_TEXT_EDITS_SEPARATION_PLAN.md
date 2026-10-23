@@ -13,7 +13,7 @@ App.tsx の部品の外に置かれている、本文の文字列を書き換え
 | 3 | 依存関係 | 済み |
 | 4 | 影響範囲 | 済み |
 | 5 | 案 | 済み |
-| 6 | 人の確認（確認1） | 待ち |
+| 6 | 人の確認（確認1） | 済み |
 | 7 | 実施 | |
 | 8 | 自動テスト | |
 | 9 | 実機確認 | |
@@ -202,6 +202,7 @@ Idea の分離（5章）と同じ線引きにする。
 |---|---|
 | `src/editor/selectionEdits.ts` | 型 `LayoutDirection`、`EditorSelectionSnapshot`、`SelectionEdit`、1867〜2167行の13の関数。App が使う8つ（`normalizeSelectionRange`、`sanitizeNotationArgument`、`canWrapInlineSelection`、`applyDirectionToSelection`、`clearNotationFromSelection`、`toggleBoldSelection`、`toggleEmphasisSelection`、`applyHeadingToSelection`）と3つの型を書き出す |
 | `src/search/editorFindReplace.ts` | 型 `EditorFindMatch`、2169〜2276行の3つの関数。全部書き出す |
+| `src/components/layout/AppIcon.tsx`（工程6で足した） | 型 `AppIconName` と部品 `AppIcon`（594〜816行、223行）。ほかの名前を何も使わない、アイコンの絵を返すだけの部品。App の JSX の32か所は、そのまま `<AppIcon name=… />` で呼ぶ |
 
 置き場所は、本文の文字列を扱う既存の部品（`src/editor/lineComments.ts`、`src/editor/markdownTables.ts`）と、検索の部品（`src/search/textSearch.ts`）に並べた。
 
@@ -240,6 +241,11 @@ Idea の分離（5章）と同じ線引きにする。
 - 次の候補（今回は手を付けない）: 資料（Reference）の正規化と並べ方（1555〜1866行。`normalizeReferenceLayout` は読み込みの経路なので重さ「高」）、チェックポイントの正規化（1341〜1528行。`test:checkpoint` が関数名を目印に読む）、作品ごとの保存の読み書き（2618〜2933行。`test:project-portability` が関数名を目印に読む）、記法のダイアログと右クリックメニューの操作の関数（`createEditorNotationActions` の形）。
 
 ## 工程6: 人の確認
+
+2026-10-23 に決まったこと。
+
+1. 範囲: 案B。選択範囲の書き換えと検索・置換の2つに、`AppIcon` の移動を足す。`AppIcon` は別のコミットにする。
+2. 実機確認: 案A。2章の表の操作を1回ずつと、5章の癖のうち画面で見えるもの（1・4・5・6）。`AppIcon` を足したので、アイコンが前と同じに出ることも見る（メニュー・ツールバー・左右の切り替え）。
 
 ## 工程7: 実施
 
