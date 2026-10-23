@@ -21,7 +21,7 @@ const {
   nextIdeaId,
   normalizeIdeaThreads,
 } = await import(moduleUrl);
-const { reconcileIdeaThreadLayouts } = await import(
+const { alignIdeaLayoutToMode, reconcileIdeaThreadLayouts } = await import(
   `data:text/javascript;base64,${Buffer.from((await build({
     entryPoints: ["src/ideaReferenceModel.ts"],
     bundle: true,
@@ -448,6 +448,55 @@ function assertConsistent(state, label) {
   assert.deepEqual(ideaOrder(copied.state, copiedId), ["ref:.then/references/imports/map.png"]);
   assert.deepEqual(ideaOrder(copied.state, "t1"), ["a", "ref:.then/references/imports/map.png"]);
   assert.equal(copied.lastToast().message, "新規スレッド「地図」へ追加しました");
+}
+
+// 管理単位を切り替えると、表示していた側の並び順と資料ボードの Idea カードを預け、
+// 切り替え先の側で預けていたものを出す。戻すと元どおりになる。
+{
+  const idea = (fragmentId) => ({ sourceType: "idea", fragmentId });
+  const ref = (id, sourcePath) => ({ id, sourceType: "reference", sourcePath, createdAt: 1 });
+  const ideaCard = { id: "k-a", sourceType: "idea", threadId: "t1", fragmentId: "a", x: 0, y: 0, width: 320, height: 300, zIndex: 2, collapsed: false, pinned: false };
+  const refCard = { id: "k-r", sourceType: "reference", scope: "project", sourcePath: "資料/一.md", kind: "markdown", x: 0, y: 0, width: 320, height: 300, zIndex: 1, collapsed: false, pinned: false };
+  const workspaceThreads = [
+    { threadId: "idea-inbox", items: [idea("i1"), ref("r2", "資料/二.md")] },
+    { threadId: "t1", items: [idea("c"), ref("r1", "資料/一.md"), idea("a")] },
+  ];
+  const base = { version: 3, name: "default", recent: [], cards: [refCard, ideaCard], ideaThreads: workspaceThreads };
+
+  // 古いファイル（どちらの管理単位か書いていない）は、今の管理単位の並び順として読む。
+  const legacy = alignIdeaLayoutToMode(base, "profile");
+  assert.equal(legacy.ideaThreadsMode, "profile");
+  assert.deepEqual(legacy.ideaThreads, workspaceThreads);
+  assert.deepEqual(legacy.cards, [refCard, ideaCard]);
+  assert.equal(legacy.otherIdea, undefined);
+
+  // 同じ管理単位なら何もしない。
+  const tagged = alignIdeaLayoutToMode(base, "workspace");
+  assert.equal(alignIdeaLayoutToMode(tagged, "workspace"), tagged);
+
+  // 共有へ: 作品ごとの側を預け、共有の側は空から始める。資料のカードは残す。
+  const toProfile = alignIdeaLayoutToMode(tagged, "profile");
+  assert.equal(toProfile.ideaThreadsMode, "profile");
+  assert.deepEqual(toProfile.ideaThreads, []);
+  assert.deepEqual(toProfile.cards, [refCard]);
+  assert.deepEqual(toProfile.otherIdea, { mode: "workspace", ideaThreads: workspaceThreads, cards: [ideaCard] });
+
+  // 共有の側で並べた結果も、戻すときに預ける。
+  const profileThreads = [{ threadId: "idea-inbox", items: [idea("p1")] }];
+  const profileCard = { ...ideaCard, id: "k-p", threadId: "idea-inbox", fragmentId: "p1" };
+  const usedInProfile = { ...toProfile, ideaThreads: profileThreads, cards: [refCard, profileCard] };
+  const back = alignIdeaLayoutToMode(usedInProfile, "workspace");
+  assert.equal(back.ideaThreadsMode, "workspace");
+  assert.deepEqual(back.ideaThreads, workspaceThreads, "switching back restores the order and the reference links");
+  assert.deepEqual(back.cards, [refCard, ideaCard], "switching back restores the Idea cards");
+  assert.deepEqual(back.otherIdea, { mode: "profile", ideaThreads: profileThreads, cards: [profileCard] });
+
+  // 整合処理を通しても、戻した並び順は崩れない。
+  const threads = [
+    thread("idea-inbox", "inbox", "インボックス", [frag("i1")]),
+    thread("t1", "thread", "場面", [frag("a"), frag("c")]),
+  ];
+  assert.deepEqual(reconcileIdeaThreadLayouts(back.ideaThreads, threads), workspaceThreads);
 }
 
 // 管理単位が「共有」のときだけ、共有の Idea も同じ値にする。
