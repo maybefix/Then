@@ -341,9 +341,59 @@ export function toggleTcySelection(
 // 青空文庫形式で、《 の前に続けて書くとルビの付く文字（documentAst の読み込みと同じ）。
 const RUBY_BASE_CHARS = /^[一-龠々〆ヶ]+$/;
 
+export type RubyAtSelection = {
+  /** ルビの記法全体の範囲。 */
+  from: number;
+  to: number;
+  /** then: [本文(rb,読み)]、bar: ｜本文《読み》、kanji: 漢字《読み》 */
+  form: "then" | "bar" | "kanji";
+  base: string;
+  reading: string;
+};
+
 /**
- * ルビのダイアログの「反映」用。すでに付いたルビ（[本文(rb,…)]、｜本文《…》、漢字《…》）の
- * 中身か全体を選んでいれば、書き方はそのままで読みだけを置き換える。そうでなければ付ける。
+ * すでに付いたルビ（[本文(rb,…)]、｜本文《…》、漢字《…》）の中身か全体を選んでいれば、
+ * そのルビを返す。ルビのダイアログの読みの欄と、読みの置き換え（applyRubyToSelection）で使う。
+ */
+export function findRubyAtSelection(
+  text: string,
+  selection: EditorSelectionSnapshot,
+): RubyAtSelection | null {
+  const { from, to } = selection;
+  const inner = text.slice(from, to);
+  const before = text[from - 1] ?? "";
+
+  const enclosed = text.slice(to).match(/^\(rb,([^)]*)\)\]/);
+  if (before === "[" && enclosed && !/[[\]]/.test(inner)) {
+    return { from: from - 1, to: to + enclosed[0].length, form: "then", base: inner, reading: enclosed[1] };
+  }
+  const selfThen = inner.match(/^\[([^[\]]+)\(rb,([^)]*)\)\]$/);
+  if (selfThen) return { from, to, form: "then", base: selfThen[1], reading: selfThen[2] };
+
+  // 《《…》》 は圏点なので、《 のすぐ後ろが 《 でないものだけをルビと見る。
+  const rubyMark = text.slice(to).match(/^《([^《》]+)》/);
+  if (rubyMark && !/[《》｜]/.test(inner)) {
+    if (before === "｜") {
+      return { from: from - 1, to: to + rubyMark[0].length, form: "bar", base: inner, reading: rubyMark[1] };
+    }
+    // ルビの付く語の一部だけ（前に漢字が続く）を選んでいるときは、当たらない。
+    if (RUBY_BASE_CHARS.test(inner) && !RUBY_BASE_CHARS.test(before)) {
+      return { from, to: to + rubyMark[0].length, form: "kanji", base: inner, reading: rubyMark[1] };
+    }
+  }
+  const selfBar = inner.match(/^｜([^《》｜]+)《([^《》]+)》$/);
+  if (selfBar) return { from, to, form: "bar", base: selfBar[1], reading: selfBar[2] };
+  const selfKanji = inner.match(/^([一-龠々〆ヶ]+)《([^《》]+)》$/);
+  if (selfKanji && !RUBY_BASE_CHARS.test(before)) {
+    return { from, to, form: "kanji", base: selfKanji[1], reading: selfKanji[2] };
+  }
+
+  return null;
+}
+
+/**
+ * ルビのダイアログの「反映」用。すでに付いたルビ（findRubyAtSelection）に当たれば、
+ * 書き方はそのままで読みだけを置き換える。そうでなければ付ける。
  * reading は sanitizeNotationArgument で整えたもの。
  */
 export function applyRubyToSelection(
@@ -351,42 +401,17 @@ export function applyRubyToSelection(
   selection: EditorSelectionSnapshot,
   reading: string,
 ): SelectionEdit {
-  const { from, to } = selection;
-  const inner = text.slice(from, to);
-  const before = text[from - 1] ?? "";
-  const thenRuby = (base: string, start: number, end: number): SelectionEdit => {
-    const insert = `[${base}(rb,${reading})]`;
-    return { from: start, to: end, insert, cursorPos: start + insert.length };
-  };
-  // 読みの中の 《 》 は、ルビの終わりをずらすので空白にする。
-  const aozoraReading = reading.replace(/[《》]/g, " ").replace(/\s+/g, " ").trim();
-  const aozoraRuby = (prefix: string, base: string, start: number, end: number): SelectionEdit => {
-    const insert = `${prefix}${base}《${aozoraReading}》`;
-    return { from: start, to: end, insert, cursorPos: start + insert.length };
-  };
-
-  const enclosed = text.slice(to).match(/^\(rb,[^)]*\)\]/);
-  if (before === "[" && enclosed && !/[[\]]/.test(inner)) {
-    return thenRuby(inner, from - 1, to + enclosed[0].length);
+  const found = findRubyAtSelection(text, selection);
+  const from = found?.from ?? selection.from;
+  const to = found?.to ?? selection.to;
+  const base = found?.base ?? text.slice(selection.from, selection.to);
+  let insert = `[${base}(rb,${reading})]`;
+  if (found && found.form !== "then") {
+    // 読みの中の 《 》 は、ルビの終わりをずらすので空白にする。
+    const aozoraReading = reading.replace(/[《》]/g, " ").replace(/\s+/g, " ").trim();
+    insert = `${found.form === "bar" ? "｜" : ""}${base}《${aozoraReading}》`;
   }
-  const selfThen = inner.match(/^\[([^[\]]+)\(rb,[^)]*\)\]$/);
-  if (selfThen) return thenRuby(selfThen[1], from, to);
-
-  // 《《…》》 は圏点なので、《 のすぐ後ろが 《 でないものだけをルビと見る。
-  const rubyMark = text.slice(to).match(/^《[^《》]+》/);
-  if (rubyMark && !/[《》｜]/.test(inner)) {
-    if (before === "｜") return aozoraRuby("｜", inner, from - 1, to + rubyMark[0].length);
-    // ルビの付く語の一部だけ（前に漢字が続く）を選んでいるときは、置き換えない。
-    if (RUBY_BASE_CHARS.test(inner) && !RUBY_BASE_CHARS.test(before)) {
-      return aozoraRuby("", inner, from, to + rubyMark[0].length);
-    }
-  }
-  const selfBar = inner.match(/^｜([^《》｜]+)《[^《》]+》$/);
-  if (selfBar) return aozoraRuby("｜", selfBar[1], from, to);
-  const selfKanji = inner.match(/^([一-龠々〆ヶ]+)《[^《》]+》$/);
-  if (selfKanji && !RUBY_BASE_CHARS.test(before)) return aozoraRuby("", selfKanji[1], from, to);
-
-  return thenRuby(inner, from, to);
+  return { from, to, insert, cursorPos: from + insert.length };
 }
 
 /**

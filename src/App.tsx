@@ -13322,6 +13322,7 @@ export default function App() {
                         autoFocus
                         value={notationModal.reading}
                         placeholder="読みを入力"
+                        onFocus={(event) => event.target.select()}
                         onChange={(event) =>
                           setNotationModal((current) =>
                             current?.type === "ruby"
