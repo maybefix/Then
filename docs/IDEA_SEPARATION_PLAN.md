@@ -741,7 +741,7 @@ const {
 - `18e9c67` のコードから、ふだんの Then と別の識別子（`local.then.qa.ideasplit1023`）で QA 用のアプリを build した（`npx tauri build --config`、配布物は作らない）。ふだんの Then と設定・ライブラリを共有しない。
 - 一時ライブラリ（作品A・作品B）を scratchpad に作り、作品A に Idea のスレッド2つと Canvas のボード（カード2枚。1枚は作品A の断片を出どころに持つ）を、作品B に別の Idea を入れた。
 - WebView2 のデバッグポートから画面を操作した（クリック、文字入力、Enter、Ctrl+Alt+I、マウス操作）。結果は画面と、作品フォルダのファイル（`.then/project.json`、`.then/reference-layouts/default.json`）の両方で確かめた。
-- 起動は2回（1回目で操作、2回目で再起動後の復元と管理単位の切り替え）。どちらも終わったあと、QA の Then・WebView2・操作用の node が残っていないことを確かめ、QA アプリのデータフォルダ（`%APPDATA%\local.then.qa.ideasplit1023`、`%LOCALAPPDATA%\local.then.qa.ideasplit1023`）と一時ライブラリを消した。
+- 起動は2回（1回目で操作、2回目で再起動後の復元と管理単位の切り替え）。どちらも終わったあと、QA の Then・WebView2・操作用の node が残っていないことを確かめ、QA アプリのデータフォルダ（`%APPDATA%local.then.qa.ideasplit1023`、`%LOCALAPPDATA%local.then.qa.ideasplit1023`）と一時ライブラリを消した。
 
 ### 結果
 
