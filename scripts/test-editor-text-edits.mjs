@@ -65,6 +65,13 @@ assert.deepEqual(m.applyDirectionToSelection(">> 見出し", select(">> 見出�
     cursorPos: 27,
   });
 }
+// 旧来の地付き ［＃地付き］ も外してから付け直す（docs/EDITOR_TEXT_QUIRKS_FIX_PLAN.md の癖8）。
+assert.deepEqual(m.applyDirectionToSelection("［＃地付き］著者名", select("［＃地付き］著者名", 7), "center"), {
+  from: 0,
+  to: 9,
+  insert: "著者名[(al:center)]",
+  cursorPos: 16,
+});
 
 // 記法のクリア
 const clear = (text, from, to = from) => m.clearNotationFromSelection(text, select(text, from, to));
@@ -90,6 +97,11 @@ assert.equal(clear("`**x**` と **y**", 0, 15).insert, "`**x**` と y");
 assert.equal(clear("```\n**x**\n```\n**y**", 0, 19).insert, "```\n**x**\n```\ny");
 assert.equal(clear("// **x**\n**y**", 0, 14).insert, "// **x**\ny");
 assert.equal(clear("ただの文", 0).changed, false);
+// 旧来の地付き（行頭の >> と ［＃地付き］）も、[(al:…)] と同じく行ごと外す（癖7）。
+assert.deepEqual(clear(">> 著者名", 4), { from: 0, to: 6, insert: "著者名", cursorPos: 3, changed: true });
+assert.deepEqual(clear("［＃地付き］著者名", 7), { from: 0, to: 9, insert: "著者名", cursorPos: 3, changed: true });
+assert.equal(clear("本文 >> 途中", 0).changed, false); // 行頭でなければ地付きではない
+assert.equal(clear("```\n>> x\n```", 4).changed, false);
 
 // Ctrl+B
 assert.deepEqual(m.toggleBoldSelection("abc", select("abc", 1)), { from: 1, to: 1, insert: "****", cursorPos: 3 });
@@ -106,13 +118,10 @@ assert.deepEqual(m.toggleEmphasisSelection("傍点", select("傍点", 0, 2)), { 
   assert.deepEqual(m.toggleEmphasisSelection(text, select(text, 1, 3)), { from: 0, to: 13, insert: "傍点", cursorPos: 2 });
   assert.deepEqual(m.toggleEmphasisSelection(text, select(text, 0, 13)), { from: 0, to: 13, insert: "傍点", cursorPos: 2 });
 }
-// 《《傍点》》 は外れず、圏点が二重になる（癖6）。
-assert.deepEqual(m.toggleEmphasisSelection("《《傍点》》", select("《《傍点》》", 2, 4)), {
-  from: 2,
-  to: 4,
-  insert: "[傍点(em,goma)]",
-  cursorPos: 15,
-});
+// 青空文庫形式の 《《傍点》》 も、中身か全体を選んで押すと外れる（癖6）。
+assert.deepEqual(m.toggleEmphasisSelection("《《傍点》》", select("《《傍点》》", 2, 4)), { from: 0, to: 6, insert: "傍点", cursorPos: 2 });
+assert.deepEqual(m.toggleEmphasisSelection("《《傍点》》", select("《《傍点》》", 0, 6)), { from: 0, to: 6, insert: "傍点", cursorPos: 2 });
+assert.deepEqual(m.toggleEmphasisSelection("前《《傍点》》後", select("前《《傍点》》後", 3, 5)), { from: 1, to: 7, insert: "傍点", cursorPos: 3 });
 assert.equal(m.toggleEmphasisSelection("a\nb", select("a\nb", 0, 3)), null);
 
 // Ctrl+数字
@@ -125,15 +134,18 @@ assert.deepEqual(m.applyHeadingToSelection("## 見出し\n本文", select("## �
 assert.deepEqual(m.applyHeadingToSelection("# a\n## b", select("# a\n## b", 0, 8), 0), { from: 0, to: 8, insert: "a\nb", cursorPos: 3 });
 assert.equal(m.applyHeadingToSelection("a", select("a", 0), 9).insert, "###### a");
 
-// 検索バーの「すべて置換」: 大文字小文字を区別しない。検索語の前後の空白は無視する（癖1）。
-assert.deepEqual(m.replaceLiteralMatches("東京と 東京", " 東京", "X", true), { text: "Xと X", count: 2 });
+// 検索バーの「すべて置換」: 大文字小文字を区別しない。検索語の前後の空白も検索語の一部（癖1。検索サイドバーと同じ）。
+assert.deepEqual(m.replaceLiteralMatches("東京と 東京", " 東京", "X", true), { text: "東京とX", count: 1 });
+assert.deepEqual(m.replaceLiteralMatches("a b", " ", "_", true), { text: "a_b", count: 1 });
 assert.deepEqual(m.replaceLiteralMatches("Abc abc", "ABC", "x", true), { text: "x x", count: 2 });
 assert.deepEqual(m.replaceLiteralMatches("abc", "  ", "x", true), { text: "abc", count: 0 });
+assert.deepEqual(m.replaceLiteralMatches("abc", "", "x", true), { text: "abc", count: 0 });
+assert.deepEqual(m.replaceLiteralMatches("a.c abc", ".", "$&$1", true), { text: "a$&$1c abc", count: 1 }); // 書いたとおりに入れる
 assert.deepEqual(m.replaceLiteralMatches("abc", "z", "x", true), { text: "abc", count: 0 });
 assert.deepEqual(m.replaceLiteralMatches("東京\n// 東京\n東京", "東京", "X", false), { text: "X\n// 東京\nX", count: 2 });
 assert.deepEqual(m.replaceLiteralMatches("東京\n// 東京\n東京", "東京", "X", true), { text: "X\n// X\nX", count: 3 });
-// 小文字にすると長くなる文字が前にあると、置換する位置がずれる（癖3）。
-assert.deepEqual(m.replaceLiteralMatches("İab", "a", "X", true), { text: "İaX", count: 1 });
+// 小文字にすると長くなる文字が前にあっても、置換する位置はずれない（癖3）。
+assert.deepEqual(m.replaceLiteralMatches("İab", "a", "X", true), { text: "İXb", count: 1 });
 
 // 検索サイドバーの置換: 前付けは置換しない。
 {
@@ -160,14 +172,17 @@ assert.deepEqual(m.replaceLiteralMatches("İab", "a", "X", true), { text: "İaX"
 
 // 検索バーの一致
 {
-  const matches = m.collectEditorFindMatches(ast("東京と 東京"), " 東京", true);
-  assert.deepEqual(
-    matches.map(({ id, from, to, line, column, excerpt }) => ({ id, from, to, line, column, excerpt })),
-    [
-      { id: "editor-find:0:0:0:東京", from: 0, to: 2, line: 1, column: 1, excerpt: "東京と 東京" },
-      { id: "editor-find:0:4:1:東京", from: 4, to: 6, line: 1, column: 5, excerpt: "東京と 東京" },
-    ],
-  );
+  const pick = (list) => list.map(({ id, from, to, line, column, excerpt }) => ({ id, from, to, line, column, excerpt }));
+  assert.deepEqual(pick(m.collectEditorFindMatches(ast("東京と 東京"), "東京", true)), [
+    { id: "editor-find:0:0:0:東京", from: 0, to: 2, line: 1, column: 1, excerpt: "東京と 東京" },
+    { id: "editor-find:0:4:1:東京", from: 4, to: 6, line: 1, column: 5, excerpt: "東京と 東京" },
+  ]);
+  // 前後の空白も検索語の一部（癖1）。
+  assert.deepEqual(pick(m.collectEditorFindMatches(ast("東京と 東京"), " 東京", true)), [
+    { id: "editor-find:0:3:0: 東京", from: 3, to: 6, line: 1, column: 4, excerpt: "東京と 東京" },
+  ]);
+  // 小文字にすると長くなる文字が前にあっても、位置はずれない（癖3）。
+  assert.deepEqual(m.collectEditorFindMatches(ast("İab"), "A", true).map((match) => [match.from, match.to]), [[1, 2]]);
   const second = m.collectEditorFindMatches(ast("前\nabc ABC"), "abc", true);
   assert.deepEqual(second.map((match) => [match.from, match.line, match.column]), [[2, 2, 1], [6, 2, 5]]);
 }
