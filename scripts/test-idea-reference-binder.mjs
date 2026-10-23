@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import ts from "typescript";
 
-const [types, model, app, binderPane, ideaPane, openCards, canvasApp, layer, css, rust] = await Promise.all([
+const [types, model, app, ideaActions, binderPane, ideaPane, openCards, canvasApp, layer, css, rust] = await Promise.all([
   readFile("src/types.ts", "utf8"),
   readFile("src/ideaReferenceModel.ts", "utf8"),
   readFile("src/App.tsx", "utf8"),
+  readFile("src/ideaThreadActions.ts", "utf8"),
   readFile("src/components/binder/BinderPane.tsx", "utf8"),
   readFile("src/components/snippets/IdeaPane.tsx", "utf8"),
   readFile("src/components/binder/OpenCardsPane.tsx", "utf8"),
@@ -64,6 +65,7 @@ assert.doesNotMatch(canvasApp, /canvasScopeSwitch|すべての作品で使える
 assert.match(app, /onDragOverCapture=\{blockIdeaDropOnEditor\}/);
 assert.match(app, /onDropCapture=\{blockIdeaDropOnEditor\}/);
 assert.doesNotMatch(app, /event\.dataTransfer\.setData\("text\/plain", fragment\.body\)/);
+assert.doesNotMatch(ideaActions, /event\.dataTransfer\.setData\("text\/plain", fragment\.body\)/);
 
 assert.match(layer, /function IdeaBinderCardBody/);
 assert.doesNotMatch(layer, /onToggleIdeaUsed/);
