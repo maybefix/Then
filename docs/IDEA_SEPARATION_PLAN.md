@@ -797,7 +797,7 @@ QA 用の build は `src-tauri/target/release/Then.exe` に出る。今そこに
 
 ## 工程10: 完了
 
-Idea の分離を完了とする。ブランチ `refactor/idea-separation` は main へはまだ取り込んでいない。
+Idea の分離を完了とする。ブランチ `refactor/idea-separation` は PR #9 で main へ取り込んだ。
 
 ### 変わったもの
 
