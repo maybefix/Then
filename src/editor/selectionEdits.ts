@@ -276,6 +276,20 @@ export function toggleEmphasisSelection(
     return { from, to, insert: selfMatch[1], cursorPos: from + selfMatch[1].length };
   }
 
+  // 青空文庫形式の圏点 《《…》》 も、中身か全体を選んでいれば外す。
+  if (
+    !/[《》]/.test(inner) &&
+    text.slice(from - 2, from) === "《《" &&
+    text.slice(to, to + 2) === "》》"
+  ) {
+    return { from: from - 2, to: to + 2, insert: inner, cursorPos: from - 2 + inner.length };
+  }
+
+  const aozoraMatch = inner.match(/^《《([^《》]+)》》$/);
+  if (aozoraMatch) {
+    return { from, to, insert: aozoraMatch[1], cursorPos: from + aozoraMatch[1].length };
+  }
+
   const insert = `[${inner}(em,goma)]`;
   return { from, to, insert, cursorPos: from + insert.length };
 }
