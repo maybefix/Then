@@ -1,5 +1,12 @@
 # 不具合の記録
 
+## 2026-10-24: すでにルビの付いた範囲でルビのダイアログを開いても、読みの欄が空で開く
+
+- **確認された対象と挙動:** 右クリックの記法の修正（`docs/MENU_EMPHASIS_FIX_PLAN.md`）で、付いたルビに「反映」すると読みを置き換えるようにしたあと、残りの作業として記録した。右クリックの「ルビ...」とコマンドパレットの「ルビ…」は、いつも読みの欄が空で開いた。
+- **修正:** `openRubyNotationModal`（`src/editor/editorNotationActions.ts`）が本文を読み、`findRubyAtSelection`（`src/editor/selectionEdits.ts`。`applyRubyToSelection` から見つける部分を切り出した）で付いたルビに当たれば、今の読みを入れて開く。読みの欄（`src/App.tsx`）は、フォーカスしたときに文字を全部選ぶ。
+- **確認:** `test:editor-text-edits`、`test:editor-notation-actions` と QA 用アプリ（`docs/RUBY_DIALOG_READING_PLAN.md` の工程9）。
+- **状態:** 修正済み（`fix/ruby-dialog-reading`）。
+
 ## 2026-10-24: 右クリックの「圏点」「縦中横」「ルビ」を、すでに付いた範囲で押すと二重になる
 
 - **確認された対象と挙動:** 記法の操作の関数の分離（`docs/EDITOR_NOTATION_ACTIONS_SEPARATION_PLAN.md` の2章5の癖1と工程9）と、修正の調査（`docs/MENU_EMPHASIS_FIX_PLAN.md` の工程1）。`[傍点(em,goma)]` を選んで右クリックの「圏点」を押すと `[[傍点(em,goma)](em,goma)]` になった（Ctrl+I では外れる）。`《《傍点》》` の中身では `《《[傍点(em,goma)]》》` になった。縦中横は `[[十二(tcy)](tcy)]`、ルビは `[[東京(rb,とうきょう)](rb,ひがし)]` になった。コマンドパレットの「縦中横」「ルビ…」も同じだった。
