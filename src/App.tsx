@@ -125,7 +125,12 @@ import {
   moveHeadingSections,
   type HeadingDropPosition,
 } from "./editor/ast/headingMove";
-import { reconcileSavedDocumentTabs } from "./editor/documentTabState";
+import {
+  createScratchDocumentTab,
+  isDirtyDocumentTab,
+  reconcileSavedDocumentTabs,
+  scratchFileName,
+} from "./editor/documentTabState";
 import { createMarkdownTable, tableAtOffset, tableAlignmentEdit } from "./editor/markdownTables";
 import { mapTextOffsetThroughChange } from "./editor/textOffsetMapping";
 import { recordImportedProject } from "./utils/library";
@@ -204,6 +209,12 @@ import {
   normalizeIdeaThreads,
 } from "./ideaThreadModel";
 import { createIdeaThreadActions } from "./ideaThreadActions";
+import {
+  referenceKindFromPath,
+  referenceNameFromPath,
+  retargetReferenceCard,
+  retargetReferenceFileInfo,
+} from "./referencePathModel";
 import ProofreadPane from "./components/proofread/ProofreadPane";
 import { PROOFREAD_RULES } from "./proofread/rules";
 import { DEFAULT_PROOFREAD_OPTIONS } from "./proofread/types";
@@ -293,7 +304,9 @@ import {
   getVisibleWorkspaceFolderTreeRows,
   getWorkspaceName,
   isPathSameOrInside,
+  isSamePath,
   retargetFilesystemPath,
+  toProjectRelativePath,
   movePathInOrder,
   movePathToDropPosition,
   movePathsToDropPosition,
@@ -349,7 +362,6 @@ import {
 const BREADCRUMB_ENTRY_DRAG_MIME = "application/x-brew-project-entry-path";
 const STORAGE_KEY = "then.app-state.v1";
 const LEGACY_STORAGE_KEY = "brew.app-state.v1";
-const scratchFileName = "無題.txt";
 const newTabName = "新しいタブ";
 const scratchWorkspaceName = "一時ファイル";
 const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
@@ -810,30 +822,6 @@ const fallbackFontFamilies = [
 
 const fallbackFontOptions = createFontOptions(fallbackFontFamilies);
 
-function createScratchDocumentTab(
-  markdown = "",
-  options: Partial<
-    Pick<DocumentTab, "id" | "documentKey" | "name" | "saveStatus" | "savedMarkdown">
-  > = {},
-): DocumentTab {
-  const id = options.id ?? `scratch-${Date.now()}`;
-  return {
-    id,
-    kind: "scratch",
-    path: null,
-    fileId: null,
-    contentHash: null,
-    name: options.name ?? scratchFileName,
-    markdown,
-    savedMarkdown: options.savedMarkdown ?? "",
-    editorRevision: null,
-    saveStatus: options.saveStatus ?? "dirty",
-    documentKey: options.documentKey ?? id,
-    activeOutlineLine: null,
-    viewportState: null,
-  };
-}
-
 /** 文書を一つも開いていない状態を表すタブ。タブ帯には出ない。 */
 function createEmptyDocumentTab(): DocumentTab {
   const id = `empty-${Date.now()}`;
@@ -918,10 +906,6 @@ function pluginViewIcon(value: unknown): ThenPluginIcon | undefined {
   return { paths: paths as string[] };
 }
 
-function isSamePath(left: string, right: string): boolean {
-  return normalizePathForCompare(left) === normalizePathForCompare(right);
-}
-
 function isPathInsideFolder(path: string, folderPath: string): boolean {
   const normalizedPath = normalizePathForCompare(path);
   const normalizedFolder = normalizePathForCompare(folderPath);
@@ -929,15 +913,6 @@ function isPathInsideFolder(path: string, folderPath: string): boolean {
     normalizedPath !== normalizedFolder &&
     normalizedPath.startsWith(`${normalizedFolder}\\`)
   );
-}
-
-function toProjectRelativePath(rootPath: string, path: string): string {
-  const normalizedRoot = rootPath.replace(/[\\/]+/g, "/").replace(/\/+$/, "");
-  const normalizedPath = path.replace(/[\\/]+/g, "/");
-  if (normalizedPath.toLocaleLowerCase().startsWith(`${normalizedRoot.toLocaleLowerCase()}/`)) {
-    return normalizedPath.slice(normalizedRoot.length + 1);
-  }
-  return normalizedPath;
 }
 
 function createFileDocumentTab(document: TextDocument): DocumentTab {
@@ -1007,14 +982,6 @@ async function loadWorkspaceDocumentTabs(
     ),
     missingNames,
   };
-}
-
-function isDirtyDocumentTab(tab: DocumentTab): boolean {
-  return (
-    tab.saveStatus === "dirty" ||
-    tab.saveStatus === "error" ||
-    tab.markdown !== tab.savedMarkdown
-  );
 }
 
 function createDefaultState(): AppState {
@@ -1284,21 +1251,6 @@ function normalizePlotCards(value: unknown): PlotCard[] {
     });
 }
 
-function referenceKindFromPath(path: string): ReferenceKind {
-  const extension = path.split(".").pop()?.toLocaleLowerCase();
-  if (extension === "txt") return "text";
-  if (extension === "md") return "markdown";
-  if (extension === "png" || extension === "jpg" || extension === "jpeg" || extension === "webp") {
-    return "image";
-  }
-  if (extension === "pdf") return "pdf";
-  return "unknown";
-}
-
-function referenceNameFromPath(sourcePath: string): string {
-  return sourcePath.split(/[\\/]/).filter(Boolean).pop() ?? sourcePath;
-}
-
 function normalizeReferenceScope(scope: unknown): ReferenceScope {
   return scope === "global" ? "global" : "project";
 }
@@ -1375,54 +1327,6 @@ function upsertRecentReferences(
   files: ReferenceFileInfo[],
 ): ReferenceLayout {
   return files.reduce((current, file) => upsertRecentReference(current, file), layout);
-}
-
-function retargetReferenceSourcePath(
-  sourcePath: string,
-  oldSourcePath: string,
-  newSourcePath: string,
-): string | null {
-  const normalizedSourcePath = sourcePath.replace(/\\/g, "/");
-  const normalizedOldPath = oldSourcePath.replace(/\\/g, "/");
-  const normalizedNewPath = newSourcePath.replace(/\\/g, "/");
-  if (!normalizedOldPath || !normalizedNewPath) return null;
-  if (normalizedSourcePath === normalizedOldPath) return normalizedNewPath;
-  if (normalizedSourcePath.startsWith(`${normalizedOldPath}/`)) {
-    return `${normalizedNewPath}${normalizedSourcePath.slice(normalizedOldPath.length)}`;
-  }
-  return null;
-}
-
-function retargetReferenceFileInfo(
-  file: ReferenceFileInfo,
-  oldSourcePath: string,
-  newSourcePath: string,
-): ReferenceFileInfo {
-  if (file.scope !== "project") return file;
-  const sourcePath = retargetReferenceSourcePath(file.sourcePath, oldSourcePath, newSourcePath);
-  if (!sourcePath) return file;
-  return {
-    ...file,
-    sourcePath,
-    name: referenceNameFromPath(sourcePath),
-    kind: referenceKindFromPath(sourcePath),
-  };
-}
-
-function retargetReferenceCard(
-  card: BinderCardState,
-  oldSourcePath: string,
-  newSourcePath: string,
-): BinderCardState {
-  if (!isReferenceBinderCard(card)) return card;
-  if (card.scope !== "project") return card;
-  const sourcePath = retargetReferenceSourcePath(card.sourcePath, oldSourcePath, newSourcePath);
-  if (!sourcePath) return card;
-  return {
-    ...card,
-    sourcePath,
-    kind: referenceKindFromPath(sourcePath),
-  };
 }
 
 function referenceInitialSize(kind: ReferenceKind): Pick<ReferenceCardState, "width" | "height"> {

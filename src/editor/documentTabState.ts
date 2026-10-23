@@ -45,3 +45,37 @@ export function reconcileSavedDocumentTabs(
     activeSavedMarkdown,
   };
 }
+
+export const scratchFileName = "無題.txt";
+
+export function createScratchDocumentTab(
+  markdown = "",
+  options: Partial<
+    Pick<DocumentTab, "id" | "documentKey" | "name" | "saveStatus" | "savedMarkdown">
+  > = {},
+): DocumentTab {
+  const id = options.id ?? `scratch-${Date.now()}`;
+  return {
+    id,
+    kind: "scratch",
+    path: null,
+    fileId: null,
+    contentHash: null,
+    name: options.name ?? scratchFileName,
+    markdown,
+    savedMarkdown: options.savedMarkdown ?? "",
+    editorRevision: null,
+    saveStatus: options.saveStatus ?? "dirty",
+    documentKey: options.documentKey ?? id,
+    activeOutlineLine: null,
+    viewportState: null,
+  };
+}
+
+export function isDirtyDocumentTab(tab: DocumentTab): boolean {
+  return (
+    tab.saveStatus === "dirty" ||
+    tab.saveStatus === "error" ||
+    tab.markdown !== tab.savedMarkdown
+  );
+}

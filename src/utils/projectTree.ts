@@ -332,3 +332,16 @@ export function retargetFilesystemPath(path: string, oldPath: string, newPath: s
   const suffix = stablePath.slice(stableOldPath.length);
   return `${newPath.replace(/[\\/]+$/, "")}${suffix}`;
 }
+
+export function isSamePath(left: string, right: string): boolean {
+  return normalizePathForCompare(left) === normalizePathForCompare(right);
+}
+
+export function toProjectRelativePath(rootPath: string, path: string): string {
+  const normalizedRoot = rootPath.replace(/[\\/]+/g, "/").replace(/\/+$/, "");
+  const normalizedPath = path.replace(/[\\/]+/g, "/");
+  if (normalizedPath.toLocaleLowerCase().startsWith(`${normalizedRoot.toLocaleLowerCase()}/`)) {
+    return normalizedPath.slice(normalizedRoot.length + 1);
+  }
+  return normalizedPath;
+}
