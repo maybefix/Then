@@ -44,6 +44,7 @@ assert.ok(resolved, "context anchoring must reconnect after an edit made while T
 assert.equal(externallyEdited.slice(resolved.from, resolved.to), original.selectedText);
 
 const appSource = await readFile("src/App.tsx", "utf8");
+const paletteSource = await readFile("src/paletteCommands.ts", "utf8");
 const appCssSource = await readFile("src/App.css", "utf8");
 const pluginManagerSource = await readFile("src/components/dialogs/PluginManagerModal.tsx", "utf8");
 const runtimeSource = await readFile("src/plugins/PluginRuntimeHost.tsx", "utf8");
@@ -184,8 +185,8 @@ assert.match(
 );
 assert.match(rustSource, /app_data_dir\(\)[\s\S]*?\.join\("plugins"\)/, "plugin binaries must be installed globally");
 assert.match(rustSource, /fn uninstall_plugin\([\s\S]*?remove_dir_all/, "installed plugins must have a removal path");
-assert.match(appSource, /id: "plugin-manage"[\s\S]*?setIsPluginManagerOpen\(true\)/, "the command palette must expose one plugin manager entry");
-assert.doesNotMatch(appSource, /plugin-uninstall:/, "the command palette must not grow one removal command per plugin");
+assert.match(paletteSource, /id: "plugin-manage"[\s\S]*?setIsPluginManagerOpen\(true\)/, "the command palette must expose one plugin manager entry");
+assert.doesNotMatch(paletteSource, /plugin-uninstall:/, "the command palette must not grow one removal command per plugin");
 assert.match(pluginManagerSource, /plugins\.map[\s\S]*?onUninstall\(plugin\)/, "the plugin manager must expose removal for every installed plugin");
 assert.ok(manifestSchema.required.includes("icon"), "new plugin manifests must require an icon");
 assert.ok(manifestSchema.properties.permissions.items.enum.includes("statusbar"));
