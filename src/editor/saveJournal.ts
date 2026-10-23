@@ -265,3 +265,13 @@ export function forgetDocumentJournal(key: string) {
   if (!journals.delete(key)) return;
   void invoke("journal_forget", { key, discard: true }).catch(() => undefined);
 }
+
+/**
+ * The tab's file is about to be renamed or moved, and the tab will take a new
+ * key: close its journal while the file is still where it was (closing checks
+ * the file). The backend keeps it only if part of it was not saved.
+ */
+export async function closeDocumentJournal(key: string): Promise<void> {
+  if (!journals.delete(key)) return;
+  await invoke("journal_forget", { key, discard: false }).catch(() => undefined);
+}

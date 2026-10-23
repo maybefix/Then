@@ -20,7 +20,8 @@ export function referenceNameFromPath(sourcePath: string): string {
   return sourcePath.split(/[\\/]/).filter(Boolean).pop() ?? sourcePath;
 }
 
-function retargetReferenceSourcePath(
+/** 作品からの相対パス（`/` 区切り）を、名前の変更・移動に合わせて書き換える。外れていれば null。 */
+export function retargetReferenceSourcePath(
   sourcePath: string,
   oldSourcePath: string,
   newSourcePath: string,
@@ -66,4 +67,16 @@ export function retargetReferenceCard(
     sourcePath,
     kind: referenceKindFromPath(sourcePath),
   };
+}
+
+/** 削除した `removedPath`（作品からの相対パス）か、その中のファイルを指す資料か。 */
+export function referenceFilePointsInside(file: ReferenceFileInfo, removedPath: string): boolean {
+  if (file.scope !== "project") return false;
+  return retargetReferenceSourcePath(file.sourcePath, removedPath, removedPath) !== null;
+}
+
+export function referenceCardPointsInside(card: BinderCardState, removedPath: string): boolean {
+  if (!isReferenceBinderCard(card)) return false;
+  if (card.scope !== "project") return false;
+  return retargetReferenceSourcePath(card.sourcePath, removedPath, removedPath) !== null;
 }

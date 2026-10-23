@@ -3,9 +3,20 @@ import type { Dispatch, DragEvent, MutableRefObject, SetStateAction } from "reac
 import { replacePlotReferencePath } from "./components/plot/plotCardUtils";
 import { createProjectAstSkeleton, removeProjectAstPaths } from "./editor/ast/projectAst";
 import type { ProjectAst } from "./editor/ast/types";
-import { createScratchDocumentTab, isDirtyDocumentTab } from "./editor/documentTabState";
+import {
+  createScratchDocumentTab,
+  isDirtyDocumentTab,
+  type ClosedDocumentTab,
+} from "./editor/documentTabState";
+import { closeDocumentJournal, forgetDocumentJournal } from "./editor/saveJournal";
 import type { ThenPluginAnchor } from "./plugins/types";
-import { retargetReferenceCard, retargetReferenceFileInfo } from "./referencePathModel";
+import {
+  referenceCardPointsInside,
+  referenceFilePointsInside,
+  retargetReferenceCard,
+  retargetReferenceFileInfo,
+  retargetReferenceSourcePath,
+} from "./referencePathModel";
 import type {
   AppState,
   BreadcrumbDropTarget,
@@ -56,6 +67,20 @@ type MoveProjectEntriesResult = {
   projectFolder: ProjectFolder;
   moves: MovedProjectEntry[];
 };
+
+type PathChange = { oldPath: string; newPath: string };
+
+/**
+ * サイドバーの見出しの開閉の記録の名前（`<ファイル>:<見出しの id>`。見出しの id も `<ファイル>:` で
+ * 始まる）を、ファイルの場所とその後ろに分ける。形が違えば null。
+ */
+function splitOutlineHeadingKey(key: string): { path: string; rest: string } | null {
+  for (let at = key.indexOf(":"); at >= 0; at = key.indexOf(":", at + 1)) {
+    const path = key.slice(0, at);
+    if (key.startsWith(`${path}:`, at + 1)) return { path, rest: key.slice(at + 1 + path.length) };
+  }
+  return null;
+}
 
 type ToastAction = {
   label: string;
@@ -119,6 +144,8 @@ export type ProjectEntryActionDeps = {
   refreshProjectFolder: (folderPath: string) => Promise<ProjectFolder | null>;
   loadDocumentIntoEditor: (document: TextDocument, options?: { replaceActive?: boolean }) => void;
   replaceActiveTab: (nextTab: DocumentTab) => void;
+  setProjectProofreadIgnored: Dispatch<SetStateAction<Record<string, string[]>>>;
+  setClosedDocumentTabs: Dispatch<SetStateAction<ClosedDocumentTab[]>>;
 };
 
 /**
@@ -168,7 +195,214 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     refreshProjectFolder,
     loadDocumentIntoEditor,
     replaceActiveTab,
+    setProjectProofreadIgnored,
+    setClosedDocumentTabs,
   } = deps;
+
+  /**
+   * パスを覚えている置き場所を、名前の変更・移動に合わせて付け替える。タブと選んでいるフォルダは、
+   * 操作ごとに扱いが違うので、それぞれの操作が書く。置き場所を足したら、removePathOwners にも足す。
+   */
+  const retargetPathOwners = (rootPath: string, changes: PathChange[]) => {
+    const retargetPath = (path: string): string | null => {
+      let nextPath = path;
+      let changed = false;
+      for (const change of changes) {
+        const candidate = retargetFilesystemPath(nextPath, change.oldPath, change.newPath);
+        if (!candidate) continue;
+        nextPath = candidate;
+        changed = true;
+      }
+      return changed ? nextPath : null;
+    };
+
+    for (const change of changes) {
+      retargetPluginAnchors(change.oldPath, change.newPath);
+      const oldReferencePath = toProjectRelativePath(rootPath, change.oldPath);
+      const newReferencePath = toProjectRelativePath(rootPath, change.newPath);
+      if (!oldReferencePath || !newReferencePath) continue;
+      setPlotCards((current) =>
+        current.map((card) => ({
+          ...card,
+          body: replacePlotReferencePath(card.body, oldReferencePath, newReferencePath),
+        })),
+      );
+      setReferenceLayout((current) => ({
+        ...current,
+        cards: current.cards.map((card) =>
+          retargetReferenceCard(card, oldReferencePath, newReferencePath),
+        ),
+        recent: current.recent.map((file) =>
+          retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
+        ),
+      }));
+      setReferenceCandidates((current) =>
+        current.map((file) =>
+          retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
+        ),
+      );
+      setProjectProofreadIgnored((current) => {
+        const next: Record<string, string[]> = {};
+        for (const [key, value] of Object.entries(current)) {
+          next[retargetReferenceSourcePath(key, oldReferencePath, newReferencePath) ?? key] = value;
+        }
+        return next;
+      });
+    }
+
+    setAppState((current) => {
+      const retargetRecord = <T,>(record: Record<string, T>): Record<string, T> => {
+        const next: Record<string, T> = {};
+        for (const [path, value] of Object.entries(record)) {
+          next[retargetPath(path) ?? path] = value;
+        }
+        return next;
+      };
+      // サイドバーの開閉は作品ごとに持つ。この作品の分だけを付け替える。
+      const retargetWorkspaceList = (
+        byWorkspace: Record<string, string[]>,
+        retargetItem: (item: string) => string | null,
+      ): Record<string, string[]> => {
+        const list = byWorkspace[rootPath];
+        if (!list) return byWorkspace;
+        return { ...byWorkspace, [rootPath]: list.map((item) => retargetItem(item) ?? item) };
+      };
+      const retargetHeadingKey = (key: string) => {
+        const parts = splitOutlineHeadingKey(key);
+        const nextPath = parts ? retargetPath(parts.path) : null;
+        return parts && nextPath ? `${nextPath}:${nextPath}${parts.rest}` : null;
+      };
+      return {
+        ...current,
+        fileProgress: retargetRecord(current.fileProgress),
+        cursorPositions: retargetRecord(current.cursorPositions),
+        lastFilePath: current.lastFilePath
+          ? retargetPath(current.lastFilePath) ?? current.lastFilePath
+          : current.lastFilePath,
+        collapsedFolderPathsByWorkspace: retargetWorkspaceList(
+          current.collapsedFolderPathsByWorkspace,
+          retargetPath,
+        ),
+        collapsedOutlinePathsByWorkspace: retargetWorkspaceList(
+          current.collapsedOutlinePathsByWorkspace,
+          retargetPath,
+        ),
+        collapsedOutlineHeadingKeysByWorkspace: retargetWorkspaceList(
+          current.collapsedOutlineHeadingKeysByWorkspace,
+          retargetHeadingKey,
+        ),
+      };
+    });
+    setClosedDocumentTabs((current) => {
+      if (!current.some((record) => retargetPath(record.path))) return current;
+      return current.map((record) => ({ ...record, path: retargetPath(record.path) ?? record.path }));
+    });
+    setCollapsedWorkspaceFolderPaths((current) => {
+      if (![...current].some((path) => retargetPath(path))) return current;
+      const next = new Set<string>();
+      for (const path of current) {
+        next.add(retargetPath(path) ?? path);
+      }
+      return next;
+    });
+  };
+
+  /**
+   * 名前の変わるタブの書きかけの記録を、ファイルがまだ元の場所にあるうちに閉じる（Rust は閉じるときに
+   * 元のファイルを確かめる）。保存し終えていれば消え、済んでいない分があれば残る。
+   */
+  const closeTabJournals = (tabs: DocumentTab[]) =>
+    Promise.all(tabs.map((tab) => closeDocumentJournal(tab.id)));
+
+  /** 削除したパスを、retargetPathOwners と同じ置き場所から取り除く。プロットの本文のリンクは、利用者の文章なので残す。 */
+  const removePathOwners = (rootPath: string, removedPath: string) => {
+    const deletedAnchorRoot = toProjectRelativePath(rootPath, removedPath)
+      .replace(/[\\/]+/g, "/")
+      .toLocaleLowerCase();
+    persistPluginAnchors(pluginAnchorsRef.current.filter((anchor) => {
+      const documentPath = anchor.documentPath.replace(/[\\/]+/g, "/").toLocaleLowerCase();
+      return documentPath !== deletedAnchorRoot && !documentPath.startsWith(`${deletedAnchorRoot}/`);
+    }));
+
+    const removedReferencePath = toProjectRelativePath(rootPath, removedPath);
+    if (removedReferencePath) {
+      setReferenceLayout((current) => ({
+        ...current,
+        cards: current.cards.filter((card) => !referenceCardPointsInside(card, removedReferencePath)),
+        recent: current.recent.filter((file) => !referenceFilePointsInside(file, removedReferencePath)),
+      }));
+      setReferenceCandidates((current) =>
+        current.filter((file) => !referenceFilePointsInside(file, removedReferencePath)),
+      );
+      setProjectProofreadIgnored((current) => {
+        const next: Record<string, string[]> = {};
+        for (const [key, value] of Object.entries(current)) {
+          if (retargetReferenceSourcePath(key, removedReferencePath, removedReferencePath) === null) {
+            next[key] = value;
+          }
+        }
+        return next;
+      });
+    }
+
+    setAppState((current) => {
+      const nextCursorPositions = { ...current.cursorPositions };
+      const nextFileProgress = { ...current.fileProgress };
+      for (const path of Object.keys(nextCursorPositions)) {
+        if (isPathSameOrInside(path, removedPath)) {
+          delete nextCursorPositions[path];
+        }
+      }
+      for (const path of Object.keys(nextFileProgress)) {
+        if (isPathSameOrInside(path, removedPath)) {
+          delete nextFileProgress[path];
+        }
+      }
+      const removeFromWorkspaceList = (
+        byWorkspace: Record<string, string[]>,
+        pathOf: (item: string) => string | null,
+      ): Record<string, string[]> => {
+        const list = byWorkspace[rootPath];
+        if (!list) return byWorkspace;
+        return {
+          ...byWorkspace,
+          [rootPath]: list.filter((item) => {
+            const path = pathOf(item);
+            return !path || !isPathSameOrInside(path, removedPath);
+          }),
+        };
+      };
+      return {
+        ...current,
+        cursorPositions: nextCursorPositions,
+        fileProgress: nextFileProgress,
+        lastFilePath:
+          current.lastFilePath && isPathSameOrInside(current.lastFilePath, removedPath)
+            ? null
+            : current.lastFilePath,
+        collapsedFolderPathsByWorkspace: removeFromWorkspaceList(
+          current.collapsedFolderPathsByWorkspace,
+          (path) => path,
+        ),
+        collapsedOutlinePathsByWorkspace: removeFromWorkspaceList(
+          current.collapsedOutlinePathsByWorkspace,
+          (path) => path,
+        ),
+        collapsedOutlineHeadingKeysByWorkspace: removeFromWorkspaceList(
+          current.collapsedOutlineHeadingKeysByWorkspace,
+          (key) => splitOutlineHeadingKey(key)?.path ?? null,
+        ),
+      };
+    });
+    setCollapsedWorkspaceFolderPaths((current) => {
+      if (![...current].some((path) => isPathSameOrInside(path, removedPath))) return current;
+      return new Set([...current].filter((path) => !isPathSameOrInside(path, removedPath)));
+    });
+    setClosedDocumentTabs((current) => {
+      if (!current.some((record) => isPathSameOrInside(record.path, removedPath))) return current;
+      return current.filter((record) => !isPathSameOrInside(record.path, removedPath));
+    });
+  };
 
   const handleCreateProjectFile = async (folderPath = activeBreadcrumbPath) => {
     if (!projectFolder) {
@@ -267,35 +501,13 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           ),
       );
 
+      await closeTabJournals(affectedTabs);
+
       const document = await invoke<TextDocument>("rename_project_entry", {
         path: entry.path,
         name,
       });
-      const oldReferencePath = toProjectRelativePath(projectFolder.path, entry.path);
-      const newReferencePath = toProjectRelativePath(projectFolder.path, document.path);
-      retargetPluginAnchors(entry.path, document.path);
-      if (oldReferencePath && newReferencePath) {
-        setPlotCards((current) =>
-          current.map((card) => ({
-            ...card,
-            body: replacePlotReferencePath(card.body, oldReferencePath, newReferencePath),
-          })),
-        );
-        setReferenceLayout((current) => ({
-          ...current,
-          cards: current.cards.map((card) =>
-            retargetReferenceCard(card, oldReferencePath, newReferencePath),
-          ),
-          recent: current.recent.map((file) =>
-            retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
-          ),
-        }));
-        setReferenceCandidates((current) =>
-          current.map((file) =>
-            retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
-          ),
-        );
-      }
+      retargetPathOwners(projectFolder.path, [{ oldPath: entry.path, newPath: document.path }]);
       const parentFolderPath =
         findContainingFolderPath(projectFolder, entry.path) ?? projectFolder.path;
       await refreshProjectFolder(parentFolderPath);
@@ -341,43 +553,11 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
         if (!isFolderEntry && isSamePath(activeNewPath, document.path)) {
           lastSavedMarkdownRef.current = document.content;
         }
-      } else {
-        setAppState((current) => ({
-          ...current,
-          lastFilePath: current.lastFilePath
-            ? retargetFilesystemPath(current.lastFilePath, entry.path, document.path) ??
-              current.lastFilePath
-            : current.lastFilePath,
-        }));
       }
-
-      setAppState((current) => {
-        const retargetRecord = <T,>(record: Record<string, T>): Record<string, T> => {
-          const next: Record<string, T> = {};
-          for (const [path, value] of Object.entries(record)) {
-            next[retargetFilesystemPath(path, entry.path, document.path) ?? path] = value;
-          }
-          return next;
-        };
-        return {
-          ...current,
-          fileProgress: retargetRecord(current.fileProgress),
-          cursorPositions: retargetRecord(current.cursorPositions),
-        };
-      });
 
       setFocusedFolderPath((current) =>
         current ? retargetFilesystemPath(current, entry.path, document.path) ?? current : current,
       );
-      if (isFolderEntry) {
-        setCollapsedWorkspaceFolderPaths((current) => {
-          const next = new Set<string>();
-          for (const path of current) {
-            next.add(retargetFilesystemPath(path, entry.path, document.path) ?? path);
-          }
-          return next;
-        });
-      }
       projectAstBuildIdRef.current += 1;
       setProjectAst(null);
       setSaveStatus(
@@ -445,13 +625,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
         rootPath: projectFolder.path,
         path: entry.path,
       });
-      const deletedAnchorRoot = toProjectRelativePath(projectFolder.path, entry.path)
-        .replace(/[\\/]+/g, "/")
-        .toLocaleLowerCase();
-      persistPluginAnchors(pluginAnchorsRef.current.filter((anchor) => {
-        const documentPath = anchor.documentPath.replace(/[\\/]+/g, "/").toLocaleLowerCase();
-        return documentPath !== deletedAnchorRoot && !documentPath.startsWith(`${deletedAnchorRoot}/`);
-      }));
+      removePathOwners(projectFolder.path, entry.path);
       projectAstBuildIdRef.current += 1;
       setProjectAst((current) =>
         current ? removeProjectAstPaths(current, result.deletedPaths) : current,
@@ -485,30 +659,9 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
       setOpenTabs((current) =>
         current.filter((tab) => !tab.path || !isPathSameOrInside(tab.path, entry.path)),
       );
-      setAppState((current) => {
-        const nextCursorPositions = { ...current.cursorPositions };
-        const nextFileProgress = { ...current.fileProgress };
-        for (const path of Object.keys(nextCursorPositions)) {
-          if (isPathSameOrInside(path, entry.path)) {
-            delete nextCursorPositions[path];
-          }
-        }
-        for (const path of Object.keys(nextFileProgress)) {
-          if (isPathSameOrInside(path, entry.path)) {
-            delete nextFileProgress[path];
-          }
-        }
-        return {
-          ...current,
-          cursorPositions: nextCursorPositions,
-          fileProgress: nextFileProgress,
-          lastFilePath:
-            current.lastFilePath && isPathSameOrInside(current.lastFilePath, entry.path)
-              ? null
-              : current.lastFilePath,
-        };
-      });
-
+      for (const tab of openTabs) {
+        if (tab.path && isPathSameOrInside(tab.path, entry.path)) forgetDocumentJournal(tab.id);
+      }
       if (activeWasDeleted) {
         const nextFile = refreshed ? findFirstTextFile(refreshed.children) : null;
         if (nextFile) {
@@ -590,6 +743,8 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           ),
       );
 
+      await closeTabJournals(affectedTabs);
+
       const result = await invoke<MoveProjectEntryResult>("move_project_entry", {
         rootPath: projectFolder.path,
         sourcePath,
@@ -597,31 +752,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
         targetPath: targetPath ?? null,
         position: position ?? null,
       });
-      const oldReferencePath = toProjectRelativePath(projectFolder.path, result.oldPath);
-      const newReferencePath = toProjectRelativePath(projectFolder.path, result.newPath);
-      retargetPluginAnchors(result.oldPath, result.newPath);
-      if (oldReferencePath && newReferencePath) {
-        setPlotCards((current) =>
-          current.map((card) => ({
-            ...card,
-            body: replacePlotReferencePath(card.body, oldReferencePath, newReferencePath),
-          })),
-        );
-        setReferenceLayout((current) => ({
-          ...current,
-          cards: current.cards.map((card) =>
-            retargetReferenceCard(card, oldReferencePath, newReferencePath),
-          ),
-          recent: current.recent.map((file) =>
-            retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
-          ),
-        }));
-        setReferenceCandidates((current) =>
-          current.map((file) =>
-            retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
-          ),
-        );
-      }
+      retargetPathOwners(projectFolder.path, [{ oldPath: result.oldPath, newPath: result.newPath }]);
 
       const activeNewPath = currentFilePath
         ? retargetFilesystemPath(currentFilePath, result.oldPath, result.newPath)
@@ -662,36 +793,9 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           result.movedDocument?.content ?? activeTab?.savedMarkdown ?? lastSavedMarkdownRef.current;
       }
 
-      setAppState((current) => {
-        const retargetRecord = <T,>(record: Record<string, T>): Record<string, T> => {
-          const next: Record<string, T> = {};
-          for (const [path, value] of Object.entries(record)) {
-            next[retargetFilesystemPath(path, result.oldPath, result.newPath) ?? path] = value;
-          }
-          return next;
-        };
-        return {
-          ...current,
-          fileProgress: retargetRecord(current.fileProgress),
-          cursorPositions: retargetRecord(current.cursorPositions),
-          lastFilePath: current.lastFilePath
-            ? retargetFilesystemPath(current.lastFilePath, result.oldPath, result.newPath) ??
-              current.lastFilePath
-            : current.lastFilePath,
-        };
-      });
       setFocusedFolderPath(
         sourceEntry.kind === "folder" ? result.newPath : result.newParentPath,
       );
-      if (sourceEntry.kind === "folder") {
-        setCollapsedWorkspaceFolderPaths((current) => {
-          const next = new Set<string>();
-          for (const path of current) {
-            next.add(retargetFilesystemPath(path, result.oldPath, result.newPath) ?? path);
-          }
-          return next;
-        });
-      }
       projectAstBuildIdRef.current += 1;
       setProjectAst(null);
       setProjectFolder(result.projectFolder);
@@ -759,6 +863,8 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           ),
       );
 
+      await closeTabJournals(openTabs.filter((tab) => Boolean(tab.path && movingPathSet.has(tab.path))));
+
       const result = await invoke<MoveProjectEntriesResult>("move_project_entries", {
         rootPath: projectFolder.path,
         sourcePaths: movingPaths,
@@ -780,42 +886,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
         return changed ? nextPath : null;
       };
 
-      for (const moved of result.moves) {
-        retargetPluginAnchors(moved.oldPath, moved.newPath);
-        const oldReferencePath = toProjectRelativePath(
-          projectFolder.path,
-          moved.oldPath,
-        );
-        const newReferencePath = toProjectRelativePath(
-          projectFolder.path,
-          moved.newPath,
-        );
-        if (!oldReferencePath || !newReferencePath) continue;
-        setPlotCards((current) =>
-          current.map((card) => ({
-            ...card,
-            body: replacePlotReferencePath(
-              card.body,
-              oldReferencePath,
-              newReferencePath,
-            ),
-          })),
-        );
-        setReferenceLayout((current) => ({
-          ...current,
-          cards: current.cards.map((card) =>
-            retargetReferenceCard(card, oldReferencePath, newReferencePath),
-          ),
-          recent: current.recent.map((file) =>
-            retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
-          ),
-        }));
-        setReferenceCandidates((current) =>
-          current.map((file) =>
-            retargetReferenceFileInfo(file, oldReferencePath, newReferencePath),
-          ),
-        );
-      }
+      retargetPathOwners(projectFolder.path, result.moves);
 
       const movedDocumentByPath = new Map(
         result.moves.flatMap((moved) =>
@@ -858,34 +929,11 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           activeMovedDocument?.content ??
           activeTab?.savedMarkdown ??
           lastSavedMarkdownRef.current;
-      }
-
-      setAppState((current) => {
-        const retargetRecord = <T,>(record: Record<string, T>): Record<string, T> => {
-          const next: Record<string, T> = {};
-          for (const [path, value] of Object.entries(record)) {
-            next[retargetMovedPath(path) ?? path] = value;
-          }
-          return next;
-        };
-        const activeMovedDocument = activeNewPath
-          ? movedDocumentByPath.get(activeNewPath)
-          : null;
-        return {
+        setAppState((current) => ({
           ...current,
-          ...(activeNewPath
-            ? {
-                markdown: activeMovedDocument?.content ?? current.markdown,
-                lastFilePath: activeNewPath,
-              }
-            : {}),
-          fileProgress: retargetRecord(current.fileProgress),
-          cursorPositions: retargetRecord(current.cursorPositions),
-          lastFilePath: current.lastFilePath
-            ? retargetMovedPath(current.lastFilePath) ?? current.lastFilePath
-            : current.lastFilePath,
-        };
-      });
+          markdown: activeMovedDocument?.content ?? current.markdown,
+        }));
+      }
       setFocusedFolderPath(targetFolderPath);
       projectAstBuildIdRef.current += 1;
       setProjectAst(null);
