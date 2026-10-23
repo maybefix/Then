@@ -4022,11 +4022,13 @@ export default function App() {
     setProjectAst((current) => createProjectAstSkeleton(projectFolder, current));
   }, [projectFolder]);
 
+  // Only this window writes the board file, so it is read when the project changes. A new file tree
+  // within the project (rename, move, new, delete) must not replace edits still waiting to be saved.
   useEffect(() => {
-    if (!isHydrated || !projectFolder) return;
+    const rootPath = projectFolder?.path ?? null;
+    if (!isHydrated || !rootPath) return;
 
     let isCancelled = false;
-    const rootPath = projectFolder.path;
     referenceLayoutLoadedRootRef.current = null;
 
     const loadReferences = async () => {
@@ -4058,6 +4060,30 @@ export default function App() {
     };
 
     void loadReferences();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isHydrated, projectFolder?.path]);
+
+  // The reference candidates are the project's files, so they follow the file tree.
+  useEffect(() => {
+    if (!isHydrated || !projectFolder) return;
+    const rootPath = projectFolder.path;
+    // Until the board has loaded, the load above lists them.
+    if (referenceLayoutLoadedRootRef.current !== rootPath) return;
+
+    let isCancelled = false;
+    const refreshCandidates = async () => {
+      try {
+        const candidates = await listReferenceCandidates(rootPath);
+        if (!isCancelled) setReferenceCandidates(candidates);
+      } catch (error) {
+        if (!isCancelled) setLastError(String(error));
+      }
+    };
+
+    void refreshCandidates();
 
     return () => {
       isCancelled = true;
