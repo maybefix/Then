@@ -13,7 +13,7 @@
 | 4 | 分離した場合の影響範囲 | 済み（この文書の「工程4」） |
 | 5 | 分離案 | 済み（この文書の「工程5」） |
 | 6 | 人間側の確認 | 済み（2026-10-23。分離案どおり、使われていない処理は案A） |
-| 7 | 分離の実施 | 未着手 |
+| 7 | 分離の実施 | 済み（この文書の「工程7」） |
 | 8 | 自動テスト | 未着手 |
 | 9 | 実機確認 | 未着手 |
 | 10 | 完了 | 未着手 |
@@ -671,3 +671,24 @@ const {
 - App.tsx から約600行が出ていく（`ideaThreadModel.ts` へ約140行、`ideaThreadActions.ts` へ約500行。呼び出しのために App 側に約40行増える）。14,874行が約14,300行になる。
 - 変更が App の値の扱いに及ばないので、データの保存先、読み込み、作品切替の流れは変わらない。
 - 今回やらないこと: C-3・C-7・`openIdeaBinderCard` の分離（Reference とカードの層を分けるときに）、使われていない処理の削除（5-6）、ドラッグ用の文字列を1か所にまとめること、既知の問題の修正（`docs/KNOWN_ISSUES.md` の 2026-10-23、工程2の 5）。
+
+---
+
+## 工程7: 分離の実施
+
+分離案（工程5）のとおりに行った。中身は変えず、移すだけにした。
+
+| コミット | 内容 |
+|---|---|
+| `63507e4` | 純粋な処理を `src/ideaThreadModel.ts` へ移す（143行） |
+| `8a6bf21` | 操作の処理を `src/ideaThreadActions.ts` へ移す。Canvas の受け取りは、登録を App に残して中身だけを移す。テスト2本の読むファイルを直す |
+
+- `src/App.tsx`: 14,874行 → 14,280行（594行減）
+- 移したコードが元と同じであることは、App.tsx から消えた行と新しいファイルの行を突き合わせて確かめた。違うのは次の点だけ。
+  - `export` を付けた（`ideaThreadModel.ts` の4つの関数）
+  - Canvas の受け取りの中身を関数にしたので、`event.payload` が引数の `request` になり、字下げが2文字浅くなった
+  - App.tsx で使わなくなった読み込み（`IdeaFragment`、`Snippet`、`makeIdeaFragment`、`nextIdeaId`、`createIdeaOriginRef`、`makeIdeaItem`、`IdeaThreadItemLink`）を消した
+- 型検査（`tsc --noEmit`）と `npm run build` は成功。
+- テストの直し方は 5-7 のとおり。`test:v066-idea` の5か所の確認を `ideaThreadActions.ts` を読むように変え、`test:binder` には「本文の文字列をドラッグのデータに入れない」確認を `ideaThreadActions.ts` にも足した。確かめる中身（正規表現）は変えていない。
+- 分離後に動かした Idea 関連テスト（`test:binder`、`test:v066-idea`、`test:project-portability`、`test:library`、`test-idea-composer-state`、`test:v065-shell`）は全部成功。
+- 本体の JavaScript の大きさ: 分離前 679,306 バイト → 分離後 680,854 バイト（1,548 バイト増）。操作の関数をまとめて返す形にしたため、関数名が圧縮で縮まらなくなった分と見られる。`test:v058-bundle` は、分離前から 500 kB の上限を超えていて失敗している（4-4）。
