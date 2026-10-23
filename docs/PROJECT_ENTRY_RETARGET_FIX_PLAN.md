@@ -159,7 +159,7 @@
 | `590d713` | 癖2。`src/editor/saveJournal.ts` に `closeDocumentJournal`（`journal_forget` を `discard: false` で呼ぶ）を足した。名前の変更・移動は、名前が替わるタブの古い記録を閉じる。削除は、消したタブの記録を `forgetDocumentJournal` で捨てる |
 | `ccd8c2a` | 癖1。App.tsx の資料ボードの読み込みの useEffect の依存を `[isHydrated, projectFolder?.path]` にし、資料の候補を読み直す useEffect（`[isHydrated, projectFolder]`）を分けた。候補の読み直しは、資料ボードを読み終えた後だけ走る（読み込みの途中は、読み込みが候補も読む） |
 
-- 行数: `src/projectEntryActions.ts` は 1,027 → 1,087行（付け替えの重なりが消えた分と、取り除く関数・記録を閉じる関数を足した分）。
+- 行数: `src/projectEntryActions.ts` は 1,027 → 976行。3か所の付け替え（約120行ずつ）を1つにした分が減り、取り除く関数と記録を閉じる関数を足した。
 - 型検査は、コミットごとに通った。
 - 気をつける点（見込み）: 作品を開いた直後、資料ボードを読み終える前に木が替わると、その木の更新では候補を読み直さない（読み込みが始まった時点の一覧になる）。次に木が替わったときに読み直される。
 
