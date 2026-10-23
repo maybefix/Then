@@ -14283,18 +14283,6 @@ export default function App() {
             />
           )}
 
-          {appDialog && (
-            <AppDialogModal
-              dialog={appDialog}
-              onClose={closeAppDialog}
-              onSubmit={submitAppDialog}
-              onValueChange={updateAppDialogValue}
-              onFieldValueChange={updateAppDialogFieldValue}
-              onChoice={chooseAppDialog}
-              onOption={chooseAppDialogOption}
-            />
-          )}
-
           {isCommandPaletteOpen && (
             <CommandPalette
               commands={buildPaletteCommands()}
@@ -14338,6 +14326,18 @@ export default function App() {
                 }
               }}
               onSelect={(theme) => updateSettings("theme", theme)}
+            />
+          )}
+          {/* 確認と入力のダイアログは、設定などのモーダルから開くこともあるので、いちばん上に置く。 */}
+          {appDialog && (
+            <AppDialogModal
+              dialog={appDialog}
+              onClose={closeAppDialog}
+              onSubmit={submitAppDialog}
+              onValueChange={updateAppDialogValue}
+              onFieldValueChange={updateAppDialogFieldValue}
+              onChoice={chooseAppDialog}
+              onOption={chooseAppDialogOption}
             />
           )}
           </section>
