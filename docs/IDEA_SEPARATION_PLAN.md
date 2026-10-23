@@ -11,8 +11,8 @@
 | 2 | 仕組みの説明 | 済み |
 | 3 | 依存関係の書き出し | 済み（この文書の「工程3」） |
 | 4 | 分離した場合の影響範囲 | 済み（この文書の「工程4」） |
-| 5 | 分離案 | 未着手 |
-| 6 | 人間側の確認 | 未着手 |
+| 5 | 分離案 | 済み（この文書の「工程5」） |
+| 6 | 人間側の確認 | 済み（2026-10-23。分離案どおり、使われていない処理は案A） |
 | 7 | 分離の実施 | 未着手 |
 | 8 | 自動テスト | 未着手 |
 | 9 | 実機確認 | 未着手 |
@@ -529,3 +529,145 @@ Idea は「スレッド」という束で整理する。
 - 重さが「低」〜「中」で、外へ出すと見通しがよくなるのは、**React に依存しない処理（A）と、操作の処理（C-1〜C-3、C-4）**。
 - Canvas を開く処理（C-5）と、移動・コピーの道具（C-7 の共有部分）は Idea 専用ではないので、Idea 側へ移すと逆に結び目が増える。
 - 使われていない処理（C-9）を消すかどうかは、挙動に影響しない。テストを1か所直すかどうかの判断になる。
+
+---
+
+## 工程5: 分離案
+
+コードはまだ変えていない。工程6で確認してから工程7に入る。
+
+### 5-1. 方針
+
+1. **値（state）は全部 App に残す。** `appState.snippets`、`referenceLayout`、`snippetWorkspacePath`、`isQuickIdeaModalOpen`、`ideaFocusRequest`、`draggingId` は、今の場所で今のまま持つ。保存（D-3、D-4）と作品を開く経路（E）も App に残す。工程4で「高」とした、データが消える危険を避けるため。
+2. **移すのは「引っ越し」だけ。書き換えない。** 処理の中身、文言、条件、順番はそのまま写す。違うのは、App の中の値を直接見ていたところを、引数として受け取るようにする点だけ。新しい共通の部品は作らない（たとえば、5か所にある「インボックスの後ろに入れる」書き方もまとめない）。
+3. **新しいファイルには React の仕組みを持ち込まない。** `useState`・`useEffect`・`useCallback` は新しいファイルで使わない。自動で走る処理（D）の実行順も、React が値を覚える順番も、今と変わらないようにするため。
+
+### 5-2. 純粋な処理として別ファイルへ移すもの → `src/ideaThreadModel.ts`（新規）
+
+React にも Tauri にも依存しない、データを作る・整えるだけの処理。今の App.tsx の外側の階層（部品の外）にあるものを、そのまま移す。置き場所は、すでにある `src/ideaReferenceModel.ts` と並べる。
+
+| 移すもの | 今の場所 |
+|---|---|
+| `INBOX_THREAD_ID` | 922 |
+| `sampleIdeaThreadIds`、`sampleIdeaFragmentBodies` | 923〜930 |
+| `ideaIdCounter`、`nextIdeaId` | 932〜937 |
+| `normalizeIdeaOriginRef` | 939〜954 |
+| `makeIdeaFragment` | 956〜970 |
+| `makeInboxThread` | 972〜983 |
+| `defaultIdeaThreads` | 1015〜1017 |
+| `normalizeIdeaThreads` | 1019〜1094 |
+
+- App.tsx からは `import` して使う。ID の連番（`ideaIdCounter`）はこのファイルにだけ置き、App 側には残さない（2つあると同じ ID ができうる）。
+- 外から呼べるようになるので、工程8で「読み込み時の正規化」を実際に動かすテストを書ける。
+
+### 5-3. Idea 専用のファイルへ移すもの → `src/ideaThreadActions.ts`（新規）
+
+Idea の操作の処理（工程3の C-1、C-2、C-4 の中身）。`createIdeaThreadActions(deps)` という関数を1つ置き、操作の関数をまとめて返す。App は、今これらの処理が書いてある場所（11400 付近）でこの関数を呼び、返ってきた関数を**今と同じ名前**で取り出す。JSX（画面への受け渡し）は1文字も変えない。
+
+```ts
+// App.tsx（イメージ）
+const {
+  updateIdeaThreads, patchThread, captureFragment, addFragment, ...
+} = createIdeaThreadActions({ snippets, referenceIdeaThreads: referenceLayout.ideaThreads, setAppState, ... });
+```
+
+**移す処理**
+
+| 処理 | 今の場所 | 工程3 |
+|---|---|---|
+| `SNIPPET_DRAG_MIME`、`isSnippetDragEvent`、`blockIdeaDropOnEditor` | 334、11400、11445 | C-2 |
+| `handleFragmentDragStart`、`handleFragmentDragEnd` | 11428〜11443 | C-2 |
+| `updateIdeaThreads`、`patchThread` | 11452〜11473 | 共通の道具 |
+| `captureFragment`、`addFragment`、`updateFragmentBody` | 11475〜11526 | C-2 |
+| `deleteFragment`、`moveFragment` | 11599〜11735 | C-2 |
+| `createIdeaThread` | 11778〜11797 | C-1 |
+| `moveFragmentToNewThread`、`moveReferenceToNewThread` | 11816〜11923 | C-2、C-3 |
+| `renameIdeaThread`、`toggleThreadStar`、`deleteIdeaThread` | 11925〜11960 | C-1 |
+| `CANVAS_NEW_THREAD_TARGET` と、Canvas から届いた「Idea へ送る」「元Idea」を受け取った**後の**処理 | 359、12119〜12197 の中身 | C-4 |
+
+**受け取るもの（deps）**: 今、App の中の値を直接見ているもの。毎回の描画で、その時点の値を渡す（今の書き方と同じ意味になる）。
+
+| 受け取るもの | 使う処理 |
+|---|---|
+| `snippets`（その描画の時点の Idea） | 本文を探す処理全般 |
+| `referenceIdeaThreads`（`referenceLayout.ideaThreads`） | `moveFragment`、`moveReferenceToNewThread` |
+| `setAppState`、`setReferenceLayout` | 書き換え全般 |
+| `setDraggingId` | ドラッグ |
+| `showToast`、`requestConfirm` | 通知、確認ダイアログ |
+| `requestNewIdeaThreadName` | 新規スレッドへの移動（関数は App に残して渡す。理由は 5-4） |
+| `setRightSidebarTab`、`setIsRightSidebarCollapsed`、`setIdeaFocusRequest` | Canvas からの受け取り |
+
+`showToast` の「元に戻す」ボタンの型（`ToastAction`）は App.tsx の中にしかないので、新しいファイルでは同じ形を書く。`types.ts` は変えない。
+
+**Canvas からの受け取り（C-4）の分け方**: 知らせの受け取りの登録（`listen(...)` と解除）は、App の今の `useEffect`（12113）に残す。プロットの受け取りも同じ場所にあり、最初に1回だけ登録する作りもそのまま。中で行っていた「Idea を足す」「スレッドを開く」処理だけを、`ideaThreadActions.ts` の関数として呼ぶ。今も、最初の描画のときの関数を使い続ける作りなので、意味は変わらない。
+
+### 5-4. App.tsx に残すもの
+
+| 残すもの | 理由 |
+|---|---|
+| 値（B の全部）と、作品を開く経路（E）、保存と自動で走る処理（D-1〜D-6） | 5-1 の方針1。データ消失を避ける |
+| `loadWorkspaceSnippets` / `saveWorkspaceSnippets` | Tauri を呼ぶ。プロットや校正辞書の読み書きと同じ並びに置いてあり、一緒に読む |
+| `normalizeState`・`createDefaultState` の Idea 部分 | アプリ状態全体の処理の一部。中で `ideaThreadModel.ts` の関数を呼ぶだけになる |
+| `isIdeaCardRecord`、`normalizeReferenceLayout` | 資料レイアウトの読み込みの一部 |
+| C-3 の `addReferencesToIdeaThread`、`moveIdeaReference`、`removeIdeaReference`、`reorderIdeaThreadItem` | 資料の処理の並び（3614 付近）にあり、資料の追加・削除から呼ばれる。`useCallback` の依存の指定ごと写すのは、Reference を分けるときにまとめて行うほうが安全 |
+| `handleAddReference`、`handleCreateReference`、`handleDeleteImportedReference` | 資料の処理 |
+| `openIdeaBinderCard` | 本文の上に浮かぶカードの処理。本文エディタの位置と、資料カード用の部品（`nextReferenceZIndex`、`clampReferenceCardToStage`）を使う。カードの層を分けるときに一緒に扱う |
+| `requestNewIdeaThreadName` | App の入力ダイアログの仕組みの一部。テスト（`test:binder`）も App.tsx の中の文言 `title: "新規スレッドに追加"` を確かめている |
+| `openIdeaCanvasBoard`、Canvas への最新一覧の送信（C-5） | Canvas を開く処理で、Idea 以外の入口からも呼ばれる |
+| `handTextToAi` | AI の処理 |
+| C-7 の別の作品への移動・コピー | 移動・コピーの道具をプロットや資料と共有している。ほかの作品のファイルへ直接書くので、今回は動かさない。中で `ideaThreadActions.ts` から受け取った `updateIdeaThreads`・`patchThread` を使う |
+| C-8 の `handleSnippetStorageModeChange` | アプリ状態ファイルを読み直す処理。テスト（`test:project-portability`）の目印でもある |
+| C-9 の使われていない処理と、それに巻き込まれた処理（`insertParagraph`、`markFragmentUsed`、Canvas ボード用の6関数など） | 5-6 の判断待ち。今回は**触らない**（移しも消しもしない）。中で使っている `patchThread` は、`ideaThreadActions.ts` から受け取ったものに変わるだけ |
+| `getEditorView` | Idea の処理の並びにあるが、見出しへの移動（11393）でも使っている |
+| JSX の全部 | 画面への受け渡しは、取り出した関数を今と同じ名前で渡すので変わらない |
+
+### 5-5. UI 側（画面部品）へ移すもの
+
+**今回はなし。**
+
+- 画面部品（`IdeaPane`、`QuickIdeaModal`、`BinderPane` など）は、すでに App.tsx の外にある。App に残っているのはデータを変える処理で、画面の部品に持たせると、受け取る props の形が変わる。今回は props の形を変えない。
+- 将来の候補として次がある。どれも props か画面の構造が変わるので、今回はやらない。
+  - `draggingId`（ドラッグ中の断片）を `IdeaPane` の中だけで持つ。
+  - 右サイドバーのヘッダーにある「Idea Board を開く」ボタン（14385）を Idea 側の部品に入れる。
+  - `BinderPane` の28個の props を、ひとまとめにして渡す。
+
+### 5-6. 決めてほしいこと: 使われていない処理（C-9）
+
+| 案 | 中身 | よい点 | 気になる点 |
+|---|---|---|---|
+| **A. 今回は触らない（推す）** | App.tsx に残したまま。使っている `patchThread` の出どころだけ変わる | 今回の変更が「引っ越しだけ」になり、差分を見比べやすい | App.tsx に約300行の使われていないコードが残る |
+| B. 分離のあと、別のコミットで消す | 7つの処理と、それにしか使われていない関数・読み込みを消す | App.tsx がさらに約300行減る | `test:v066-idea` は、使われていない `reorderFragment` の中の「並び順を変更しました」と「元に戻す」を確かめている。**今の画面の並べ替え（`reorderIdeaThreadItem`）には「元に戻す」がない**ので、このテストの行を消すと「並べ替えに元に戻すがない」ことを認めることになる。仕様の判断が要る |
+
+**決定（工程6）: A。** A を推すのは、B には仕様の判断（並べ替えに「元に戻す」を付けるかどうか）がついてくるため。分離が終わってから別に決めるほうがよい。
+
+### 5-7. テストの直し方
+
+移した処理の文言は変えないので、テストは「どのファイルを読むか」だけを直す。確かめる中身（正規表現）はそのまま。
+
+| テスト | 直すこと |
+|---|---|
+| `test:binder` | `moveFragmentToNewThread`・`moveReferenceToNewThread` は App.tsx の JSX に名前が残るので、そのまま通る。`setData("text/plain", fragment.body)` が**ない**ことの確認は、`ideaThreadActions.ts` にも行う（ドラッグの処理がそちらへ移るため） |
+| `test:v066-idea` | `captureFragment`・`addFragment`・「断片を削除」・「断片を削除しました」・移動の通知の確認を、`ideaThreadActions.ts` を読むように直す。「並び順を変更しました」は 5-6 が A なら App.tsx のまま |
+| `test:project-portability` | 目印の2つ（`handleSnippetStorageModeChange`、`openIdeaCanvasBoard`）は App に残るので、変えない |
+| `test:v058-bundle` | `lazy(` を使わないので変えない |
+
+**足すテスト**（工程8）: `scripts/test-idea-thread-actions.mjs` を新しく作り、`package.json` に登録する。
+
+1. `ideaThreadModel.ts` の正規化: 古い付箋データの移行、サンプルの除去、インボックスを1つにまとめて先頭に置く、空のときにインボックスだけを用意する。
+2. `ideaThreadActions.ts` の操作: 偽の `setAppState`・`setReferenceLayout` を渡し、追加・移動・新規スレッドへの移動・削除・元に戻す・Canvas からの取り込みで、Idea 本体と並び順が同じ順番になること、通知と確認の文言が今と同じであること。
+3. 作品切替のときの保存の目印: 経路（E）は App に残すので、この確認は工程9の実機確認で行う。自動テストで確かめられるのは、今と同じく文字列だけ。
+
+### 5-8. 進め方とコミットの分け方
+
+1. `ideaThreadModel.ts` へ移す → `npm run build`、Idea 関連テストを動かす → コミット
+2. `ideaThreadActions.ts` へ移し、Canvas の受け取りの中身を差し替える → `npm run build`、テストを直して動かす → コミット
+3. 回帰テスト（5-7 の足すテスト）を書く → コミット
+4. 工程8（全体のテスト）、工程9（実機確認）
+
+1つ移すたびに build とテストを動かす。失敗したら、そのコミットだけを戻せる。
+
+### 5-9. 見込み
+
+- App.tsx から約600行が出ていく（`ideaThreadModel.ts` へ約140行、`ideaThreadActions.ts` へ約500行。呼び出しのために App 側に約40行増える）。14,874行が約14,300行になる。
+- 変更が App の値の扱いに及ばないので、データの保存先、読み込み、作品切替の流れは変わらない。
+- 今回やらないこと: C-3・C-7・`openIdeaBinderCard` の分離（Reference とカードの層を分けるときに）、使われていない処理の削除（5-6）、ドラッグ用の文字列を1か所にまとめること、既知の問題の修正（`docs/KNOWN_ISSUES.md` の 2026-10-23、工程2の 5）。
