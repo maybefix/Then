@@ -11,11 +11,11 @@ App.tsx の部品の中にある、作品のファイルとフォルダを操作
 | 1 | 調査 | 済み |
 | 2 | 仕組みの説明 | 済み |
 | 3 | 依存関係 | 済み |
-| 4 | 影響範囲 | 済み（4-4 は「前」の一式の結果待ち） |
+| 4 | 影響範囲 | 済み |
 | 5 | 案 | 済み |
 | 6 | 人の確認（確認1） | 済み |
-| 7 | 実施 | |
-| 8 | 自動テスト | |
+| 7 | 実施 | 済み |
+| 8 | 自動テスト | 済み |
 | 9 | 実機確認 | |
 | 10 | 完了（確認2） | |
 
@@ -201,7 +201,7 @@ Rust の命令: `list_text_templates`（App に残る `loadTextTemplates` の中
 
 ### 4-4. 今の自動テストの状態
 
-「前」の一式の結果を待っている。終わったらここに書く。前の分離までの記録では、`test:canvas-save`、`test:v058-bundle`、`test:v0511-themes` が元から失敗し、`test:ai-selection` は一式の中でだけ止まる。
+「前」の一式（main `1f16bb1`、69本）で失敗したのは5本。`test:ai-selection`（一式の中でだけ止まる）、`test:canvas-save`（`./utils/fontStack` を解決できない）、`test:v058-bundle`（メインの JS が 500 kB を超える。686,088 バイト）、`test:v0511-themes`（朱墨のプロットの枠線）、`test:v070-manuscript-browser`（10分で打ち切り）。最後の1本は前の分離までの記録になく、「後」では通った（工程8）。
 
 ## 工程5: 案
 
@@ -286,7 +286,48 @@ Rust の命令: `list_text_templates`（App に残る `loadTextTemplates` の中
 
 ## 工程7: 実施
 
+| コミット | 中身 |
+|---|---|
+| `1238e04` | 部品の外の小さな関数を移した。`isSamePath`・`toProjectRelativePath` を `src/utils/projectTree.ts`、`scratchFileName`・`createScratchDocumentTab`・`isDirtyDocumentTab` を `src/editor/documentTabState.ts`、資料のパスの関数5つを新しい `src/referencePathModel.ts` へ。App は import に替えた |
+| `038a8a3` | 13の操作の関数と、そこでだけ使う型3つと定数1つを `src/projectEntryActions.ts` の `createProjectEntryActions(deps)` へ移した。App で使わなくなった import 13個を消した。`test:project-portability` の3つの範囲を、移した先から読むようにした |
+| `98057ca` | 回帰テスト `test:project-entry-actions` を足した（工程8） |
+
+- 行数: App.tsx は 13,460 → 12,550行（910行減）。`src/projectEntryActions.ts` は 1,027行（deps の型が約70行）。`src/referencePathModel.ts` は 72行。
+- 元と同じであることの確かめ方: `verify-move.mjs`。1つめは lost 1（書き換えた `documentTabState` の import の1行だけ）、2つめは lost 0。足した行は import と、元の `handleCreateProjectFolder` の位置に置いた `createProjectEntryActions({ ... })` の呼び出しだけ。
+- 元と違う点: 移した先で `isTauriRuntime` を1行で持つ（ほかの4つのファイルと同じ書き方）。`isPathInsideFolder` は `utils/projectTree` の同じものを import する（App.tsx のものは残した）。`handleMoveProjectEntryToFolder` と `saveProjectEntryOrder` は、App の JSX から呼ばれないので外へ返さない。
+- 型検査（`npx tsc --noEmit`）、build、関係するテスト（`test:project-portability`・`test:checkpoint`・`test:document-tabs`・`test:workspace-tabs`・`test:binder`・`test:idea-actions`・`test:editor-notation-actions`・`test:breadcrumb`）は、コミットごとに通った。
+
 ## 工程8: 自動テスト
+
+### 足した回帰テスト
+
+`scripts/test-project-entry-actions.mjs`（`test:project-entry-actions`）。esbuild で `src/projectEntryActions.ts` を束ね、`@tauri-apps/api/core` の `invoke` を入れ物に差し替える。App の値の代わりの入れ物を用意し、操作のたびに今の値で `createProjectEntryActions` を作り直す。確かめていること:
+
+- 名前の変更（ファイル・フォルダ）: 未保存のタブを先に保存すること、Rust に渡す引数、札が Rust を呼ぶあいだだけ立つこと、タブ・最後に開いたファイル・本文・進み具合・カーソルの位置・プロットのリンク・資料カード・最近の資料・資料の候補・プラグインのアンカー・選んでいるフォルダ・閉じたフォルダの付け替え、通知。同じ名前・断ったときは何もしないこと。失敗したときの誤りの文と、札が下りること。
+- 削除: 確認の文（件数・未保存のタブ・注意）、断ったら消さないこと、取り除き、開いていたファイルを消したら最初のファイルを開くこと、ファイルがなくなれば空のタブ、Then の Trash の通知、Tauri の外での通知。今の癖（工程2の5の1）として、資料カードとプロットのリンクが残ることも書いた。
+- 1件の移動（ファイル・フォルダ）と複数の移動: 断る条件、付け替え、選ばれるフォルダ、移した先にあるものは除くこと、1件なら1件の移動へ回ること。
+- 新規ファイル（テンプレートなし・あり）、新規フォルダ、フォルダを開いていないとき。
+- 並べ替え: 上下（端では保存しない）、パンくずのドラッグ（別のフォルダへの持ち込みは受けない、上半分なら前・下半分なら後ろ）、サイドバーの並べ替え、失敗したとき。
+
+効くことの確かめ: 移した処理にわざと不具合を3つ入れ、どれもテストが落ちることを見て `git checkout` で戻した。
+1. 名前の変更で `fileProgress` を付け替えない → 進み具合の比較で落ちた。
+2. 削除でタブを取り除かない → タブの一覧の比較で落ちた。
+3. 1件の移動で札を立てない → 「Rust を呼ぶあいだ札が立つ」で落ちた。
+
+### 前後の比較
+
+| | 前（`1f16bb1`） | 後（`98057ca`） |
+|---|---|---|
+| build | 通った | 通った |
+| メインの JS | 686,088 バイト | 688,782 バイト（+2.7 kB。関数をまとめて返すので、名前が圧縮で縮まない） |
+| テストの本数 | 69 | 70（`test:project-entry-actions` を足した） |
+| 両方で通った | 64 | 64 |
+| 両方で失敗 | 4（`test:ai-selection`、`test:canvas-save`、`test:v058-bundle`、`test:v0511-themes`。理由は前後で同じ） | 同じ |
+| 前だけ失敗 | `test:v070-manuscript-browser`（10分で打ち切り） | 通った |
+| 新しい失敗 | — | なし |
+
+`test:v070-manuscript-browser` は、今回変えたファイルを読まない（原稿のページ送りをブラウザで確かめるテスト）。「前」の一式でだけ止まったと見ている。
+
 
 ## 工程9: 実機確認
 
