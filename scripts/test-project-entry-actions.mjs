@@ -131,6 +131,7 @@ function setup(world = defaultWorld(), { tauri = true } = {}) {
     refreshedFolder: null,
     commands: {},
     journal: [],
+    sequence: [],
   };
   const refs = {
     activeTabIdRef: { current: app.activeTabId },
@@ -150,6 +151,7 @@ function setup(world = defaultWorld(), { tauri = true } = {}) {
     app[key] = typeof next === "function" ? next(app[key]) : next;
   };
   globalThis.__projectEntryInvoke = async (command, args) => {
+    app.sequence.push(command);
     if (command.startsWith("journal_")) {
       app.journal.push({ command, ...args });
       return undefined;
@@ -250,6 +252,7 @@ const forgotten = (app) => app.journal.filter((entry) => entry.command === "jour
   assert.deepEqual(commandsOf(app), ["(save)", "rename_project_entry", "(refresh)"], "dirty tabs are saved before the rename");
   assert.deepEqual(app.log[0].args, { tabId: `file:${oldPath}`, path: oldPath, content: "A2" });
   assert.deepEqual(app.log[1].args, { path: oldPath, name: "a2.txt" });
+  assert.ok(app.sequence.indexOf("journal_forget") < app.sequence.indexOf("rename_project_entry"), "the old record is closed while the file is still where it was (closing checks the file)");
   assert.equal(app.log[1].pathChanging, true, "autosave is held while the path changes");
   assert.equal(refs.projectEntryPathChangeInProgressRef.current, false);
   assert.equal(app.log[2].args, p("第一章"));
@@ -453,6 +456,7 @@ const forgotten = (app) => app.journal.filter((entry) => entry.command === "jour
 
   assert.deepEqual(commandsOf(app), ["(save)", "move_project_entry"]);
   assert.deepEqual(app.log[1].args, { rootPath: ROOT, sourcePath: oldPath, targetFolderPath: ROOT, targetPath: p("c.txt"), position: "before" });
+  assert.ok(app.sequence.indexOf("journal_forget") < app.sequence.indexOf("move_project_entry"), "the old record is closed while the file is still where it was (closing checks the file)");
   assert.equal(app.log[1].pathChanging, true);
   assert.equal(refs.projectEntryPathChangeInProgressRef.current, false);
   assert.equal(app.openTabs[0].id, `file:${newPath}`);
@@ -523,6 +527,7 @@ const forgotten = (app) => app.journal.filter((entry) => entry.command === "jour
 
   assert.deepEqual(commandsOf(app), ["(save)", "move_project_entries"]);
   assert.deepEqual(app.log[1].args, { rootPath: ROOT, sourcePaths: [a, b], targetFolderPath: ROOT }, "files already in the target are skipped");
+  assert.ok(app.sequence.indexOf("journal_forget") < app.sequence.indexOf("move_project_entries"), "the old record is closed while the file is still where it was (closing checks the file)");
   assert.equal(app.log[1].pathChanging, true);
   assert.equal(refs.projectEntryPathChangeInProgressRef.current, false);
   assert.equal(app.openTabs[0].path, p("a.txt"));
