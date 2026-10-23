@@ -109,17 +109,16 @@ import {
   updateDocumentAst,
 } from "./editor/ast/documentAst";
 import {
-  applyDirectionToSelection,
-  applyHeadingToSelection,
   canWrapInlineSelection,
-  clearNotationFromSelection,
   normalizeSelectionRange,
-  sanitizeNotationArgument,
-  toggleBoldSelection,
-  toggleEmphasisSelection,
   type EditorSelectionSnapshot,
   type LayoutDirection,
 } from "./editor/selectionEdits";
+import {
+  createEditorNotationActions,
+  customNotationSpecs,
+  type NotationModalState,
+} from "./editor/editorNotationActions";
 import {
   extractHeadingSection,
   moveHeadingSections,
@@ -127,7 +126,6 @@ import {
 } from "./editor/ast/headingMove";
 import { reconcileSavedDocumentTabs } from "./editor/documentTabState";
 import { createMarkdownTable, tableAtOffset, tableAlignmentEdit } from "./editor/markdownTables";
-import { toggleLineComments } from "./editor/lineComments";
 import { mapTextOffsetThroughChange } from "./editor/textOffsetMapping";
 import { recordImportedProject } from "./utils/library";
 import {
@@ -537,45 +535,6 @@ function checkpointWarningMessage(warning: string): string {
   }
   return `チェックポイントの警告: ${warning}`;
 }
-
-type NotationModalState =
-  | {
-      type: "ruby";
-      selection: EditorSelectionSnapshot;
-      reading: string;
-      error: string;
-    }
-  | {
-      type: "direction";
-      selection: EditorSelectionSnapshot;
-    };
-
-const customNotationSpecs = [
-  {
-    id: "ruby",
-    label: "ルビ",
-    syntax: "[本文(rb,ルビ)]",
-    description: "選択範囲に読みを付けます",
-  },
-  {
-    id: "tcy",
-    label: "縦中横",
-    syntax: "[本文(tcy)]",
-    description: "選択範囲を縦書き中の横組みにします",
-  },
-  {
-    id: "emphasis",
-    label: "圏点",
-    syntax: "[本文(em,goma)]",
-    description: "選択範囲に圏点を付けます",
-  },
-  {
-    id: "direction",
-    label: "文章方向",
-    syntax: "[(al:start|center|end)]",
-    description: "右クリック位置または選択範囲を含む行の文末に配置指示を付けます",
-  },
-] as const;
 
 const directionOptions: Array<{
   value: LayoutDirection;
@@ -5574,90 +5533,24 @@ export default function App() {
     }
   };
 
-  const applyInlineNotation = (
-    selection: EditorSelectionSnapshot,
-    notation: "ruby" | "tcy" | "emphasis",
-    argument = "",
-  ) => {
-    const editor = editorInstanceRef.current;
-    if (!editor) return false;
-
-    const currentSelection = normalizeSelectionRange(selection, editor.getValue());
-    if (!canWrapInlineSelection(currentSelection)) {
-      showToast("単一行の範囲を選択してください");
-      return false;
-    }
-
-    const arg = sanitizeNotationArgument(argument);
-    if (notation === "ruby" && !arg) {
-      setNotationModal((current) =>
-        current?.type === "ruby" ? { ...current, error: "ルビを入力してください" } : current,
-      );
-      return false;
-    }
-
-    const method =
-      notation === "ruby" ? `rb,${arg}` : notation === "emphasis" ? "em,goma" : "tcy";
-    const insert = `[${currentSelection.text}(${method})]`;
-
-    editor.replaceRange(
-      currentSelection.from,
-      currentSelection.to,
-      insert,
-      currentSelection.from + insert.length,
-    );
-    editor.focus();
-    showToast(`${customNotationSpecs.find((item) => item.id === notation)?.label}を反映しました`);
-    return true;
-  };
-
-  const applyDirectionNotation = (
-    selection: EditorSelectionSnapshot,
-    direction: LayoutDirection,
-  ) => {
-    const editor = editorInstanceRef.current;
-    if (!editor) return false;
-
-    const currentText = editor.getValue();
-    const currentSelection = normalizeSelectionRange(selection, currentText);
-    const replacement = applyDirectionToSelection(currentText, currentSelection, direction);
-
-    editor.replaceRange(
-      replacement.from,
-      replacement.to,
-      replacement.insert,
-      replacement.cursorPos,
-    );
-    editor.focus();
-    showToast("文章方向を反映しました");
-    return true;
-  };
-
-  const clearSelectionNotation = (selection: EditorSelectionSnapshot | null) => {
-    const editor = editorInstanceRef.current;
-    if (!editor || !selection) return false;
-
-    const currentText = editor.getValue();
-    const currentSelection = normalizeSelectionRange(selection, currentText);
-    const replacement = clearNotationFromSelection(currentText, currentSelection);
-
-    if (!replacement.changed) {
-      showToast("クリアできる記法がありません");
-      closeEditorContextMenu();
-      return false;
-    }
-
-    editor.replaceRange(
-      replacement.from,
-      replacement.to,
-      replacement.insert,
-      replacement.cursorPos,
-    );
-    editor.focus();
-    showToast("記法をクリアしました");
-    closeEditorContextMenu();
-    return true;
-  };
+  const {
+    applyInlineNotation,
+    clearSelectionNotation,
+    applyBoldShortcut,
+    applyEmphasisShortcut,
+    applyHeadingShortcut,
+    applyLineCommentToggle,
+    openRubyNotationModal,
+    openDirectionNotationModal,
+    submitRubyNotation,
+    chooseDirectionNotation,
+  } = createEditorNotationActions({
+    editorInstanceRef,
+    notationModal,
+    setNotationModal,
+    showToast,
+    closeEditorContextMenu,
+  });
 
   // --- キーボードショートカット / コマンドパレット用の編集アクション ---
   // いずれも現在のエディタ選択をその場で読み取って適用する。
@@ -5680,61 +5573,6 @@ export default function App() {
     } else {
       target.focus({ preventScroll: true });
     }
-  };
-
-  const applyBoldShortcut = (selectionOverride?: EditorSelectionSnapshot) => {
-    const editor = editorInstanceRef.current;
-    if (!editor) return;
-    const text = editor.getValue();
-    const selection = normalizeSelectionRange(selectionOverride ?? editor.getSelection(), text);
-    const edit = toggleBoldSelection(text, selection);
-    if (!edit) {
-      showToast("太字にする単一行の範囲を選択してください");
-      return;
-    }
-    editor.replaceRange(edit.from, edit.to, edit.insert, edit.cursorPos);
-    editor.focus();
-  };
-
-  const applyEmphasisShortcut = (selectionOverride?: EditorSelectionSnapshot) => {
-    const editor = editorInstanceRef.current;
-    if (!editor) return;
-    const text = editor.getValue();
-    const selection = normalizeSelectionRange(selectionOverride ?? editor.getSelection(), text);
-    const edit = toggleEmphasisSelection(text, selection);
-    if (!edit) {
-      showToast("圏点を付ける単一行の範囲を選択してください");
-      return;
-    }
-    editor.replaceRange(edit.from, edit.to, edit.insert, edit.cursorPos);
-    editor.focus();
-  };
-
-  const applyHeadingShortcut = (level: number, selectionOverride?: EditorSelectionSnapshot) => {
-    const editor = editorInstanceRef.current;
-    if (!editor) return;
-    const text = editor.getValue();
-    const selection = normalizeSelectionRange(selectionOverride ?? editor.getSelection(), text);
-    const edit = applyHeadingToSelection(text, selection, level);
-    editor.replaceRange(edit.from, edit.to, edit.insert, edit.cursorPos);
-    editor.focus();
-    showToast(level <= 0 ? "見出しを解除しました" : `見出し${level}を設定しました`);
-  };
-
-  const applyLineCommentToggle = (selectionOverride?: EditorSelectionSnapshot) => {
-    const editor = editorInstanceRef.current;
-    if (!editor) return;
-    const text = editor.getValue();
-    const selection = normalizeSelectionRange(selectionOverride ?? editor.getSelection(), text);
-    const edit = toggleLineComments(text, selection.from, selection.to);
-    if (!edit) return;
-    if ("blocked" in edit) {
-      showToast("コード内ではコメントにできません（ブロック全体を選ぶとまとめてコメントにできます）");
-      return;
-    }
-    editor.replaceRange(edit.from, edit.to, edit.insert, edit.selectionTo);
-    if (edit.selectionFrom !== edit.selectionTo) editor.selectRange(edit.selectionFrom, edit.selectionTo);
-    editor.focus();
   };
 
   const toggleShowComments = () => {
@@ -5977,22 +5815,6 @@ export default function App() {
     return () => window.removeEventListener("keydown", listener, { capture: true });
   }, []);
 
-  const openRubyNotationModal = (selection: EditorSelectionSnapshot | null) => {
-    if (!selection || !canWrapInlineSelection(selection)) {
-      showToast("ルビを付ける単一行の範囲を選択してください");
-      closeEditorContextMenu();
-      return;
-    }
-    setNotationModal({ type: "ruby", selection, reading: "", error: "" });
-    closeEditorContextMenu();
-  };
-
-  const openDirectionNotationModal = (selection: EditorSelectionSnapshot | null) => {
-    if (!selection) return;
-    setNotationModal({ type: "direction", selection });
-    closeEditorContextMenu();
-  };
-
   const openManuscriptTidy = (selection: EditorSelectionSnapshot | null) => {
     const editor = editorInstanceRef.current;
     closeEditorContextMenu();
@@ -6026,21 +5848,6 @@ export default function App() {
       result.spaced > 0 ? `空き${result.spaced}か所` : "",
     ].filter(Boolean);
     showToast(`原稿を整えました（${parts.join("・")}）`);
-  };
-
-  const submitRubyNotation = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (notationModal?.type !== "ruby") return;
-    if (applyInlineNotation(notationModal.selection, "ruby", notationModal.reading)) {
-      setNotationModal(null);
-    }
-  };
-
-  const chooseDirectionNotation = (direction: LayoutDirection) => {
-    if (notationModal?.type !== "direction") return;
-    if (applyDirectionNotation(notationModal.selection, direction)) {
-      setNotationModal(null);
-    }
   };
 
   const buildPaletteCommands = (): PaletteCommand[] => {
