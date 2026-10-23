@@ -96,26 +96,34 @@ assert.ok(
   "partial restore must persist its shelter before changing project files",
 );
 
+// 名前の変更・移動は、パスを覚えている置き場所を retargetPathOwners でまとめて付け替える（進み具合を含む）。
+const pathOwners = section(
+  projectEntryActions,
+  "const retargetPathOwners = (",
+  "const handleCreateProjectFile = async",
+);
+assert.match(pathOwners, /fileProgress: retargetRecord\(current\.fileProgress\)/);
+
 const renameFlow = section(
   projectEntryActions,
   "const handleRenameProjectEntry = async",
   "const handleDeleteProjectEntry = async",
 );
-assert.match(renameFlow, /fileProgress: retargetRecord\(current\.fileProgress\)/);
+assert.match(renameFlow, /retargetPathOwners\(/);
 
 const singleMoveFlow = section(
   projectEntryActions,
   "const handleMoveProjectEntryToFolder = async",
   "const handleMoveProjectEntriesToFolder = async",
 );
-assert.match(singleMoveFlow, /fileProgress: retargetRecord\(current\.fileProgress\)/);
+assert.match(singleMoveFlow, /retargetPathOwners\(/);
 
 const multiMoveFlow = section(
   projectEntryActions,
   "const handleMoveProjectEntriesToFolder = async",
   "const saveProjectEntryOrder = async",
 );
-assert.match(multiMoveFlow, /fileProgress: retargetRecord\(current\.fileProgress\)/);
+assert.match(multiMoveFlow, /retargetPathOwners\(/);
 
 assert.match(projectState, /schema_version: u32/);
 assert.match(projectState, /revision: u64/);
