@@ -7,15 +7,18 @@ import {
 import {
   makeIdeaItem,
   makeReferenceLink,
+  normalizedReferenceKey,
   reconcileIdeaThreadLayouts,
 } from "./ideaReferenceModel";
 import { makeIdeaFragment, nextIdeaId } from "./ideaThreadModel";
-import type {
-  AppState,
-  IdeaReferenceLink,
-  IdeaThread,
-  IdeaThreadItemLink,
-  ReferenceLayout,
+import {
+  isIdeaBinderCard,
+  type AppState,
+  type BinderCardState,
+  type IdeaReferenceLink,
+  type IdeaThread,
+  type IdeaThreadItemLink,
+  type ReferenceLayout,
 } from "./types";
 
 const SNIPPET_DRAG_MIME = "application/x-brew-snippet-id";
@@ -113,6 +116,13 @@ export function createIdeaThreadActions(deps: IdeaThreadActionDeps) {
     });
   };
 
+  /** 削除で外れた資料ボードの Idea カードを、まだ無いものだけ戻す。 */
+  const restoreCards = (layout: ReferenceLayout, cards: BinderCardState[]): ReferenceLayout => {
+    const present = new Set(layout.cards.map((card) => card.id));
+    const missing = cards.filter((card) => !present.has(card.id));
+    return missing.length ? { ...layout, cards: [...layout.cards, ...missing] } : layout;
+  };
+
   /** スレッドを id で見つけて差し替える（updatedAt を更新）。 */
   const patchThread = (threadId: string, patch: (thread: IdeaThread) => IdeaThread) => {
     updateIdeaThreads((threads) =>
@@ -190,6 +200,17 @@ export function createIdeaThreadActions(deps: IdeaThreadActionDeps) {
     });
     if (!shouldDelete) return;
 
+    // 表示順は並び順で決まり、資料ボードの Idea カードは断片が消えると外れる。
+    // 元に戻すときに両方を戻せるよう、削除の時点の位置とカードを覚えておく。
+    const isDeletedItem = (item: IdeaThreadItemLink) =>
+      item.sourceType === "idea" && item.fragmentId === fragmentId;
+    const layoutIndex = referenceLayout.ideaThreads
+      .find((layout) => layout.threadId === threadId)
+      ?.items.findIndex(isDeletedItem) ?? -1;
+    const deletedCards = referenceLayout.cards.filter(
+      (card) => isIdeaBinderCard(card) && card.threadId === threadId && card.fragmentId === fragmentId,
+    );
+
     patchThread(threadId, (thread) => ({
       ...thread,
       fragments: thread.fragments.filter((fragment) => fragment.id !== fragmentId),
@@ -203,6 +224,19 @@ export function createIdeaThreadActions(deps: IdeaThreadActionDeps) {
           fragments.splice(Math.min(fragmentIndex, fragments.length), 0, fragment);
           return { ...current, fragments };
         });
+        setReferenceLayout((current) => ({
+          ...restoreCards(current, deletedCards),
+          ideaThreads: current.ideaThreads.map((layout) => {
+            if (layout.threadId !== threadId || layout.items.some(isDeletedItem)) return layout;
+            const items = [...layout.items];
+            items.splice(
+              layoutIndex >= 0 ? Math.min(layoutIndex, items.length) : items.length,
+              0,
+              makeIdeaItem(fragmentId),
+            );
+            return { ...layout, items };
+          }),
+        }));
         showToast("削除を元に戻しました");
       },
     });
@@ -465,6 +499,13 @@ export function createIdeaThreadActions(deps: IdeaThreadActionDeps) {
       danger: true,
     });
     if (!shouldDelete) return;
+    // 削除すると、整合処理がこのスレッドの並び順を捨てて資料リンクを受信箱へ移し
+    // （ID はそのまま）、資料ボードの Idea カードも外れる。元に戻すために覚えておく。
+    const deletedLayout = referenceLayout.ideaThreads.find((layout) => layout.threadId === threadId);
+    const deletedCards = referenceLayout.cards.filter(
+      (card) => isIdeaBinderCard(card) && card.threadId === threadId,
+    );
+    const inboxId = snippets.find((item) => item.kind === "inbox")?.id ?? snippets[0]?.id;
     updateIdeaThreads((threads) => threads.filter((item) => item.id !== threadId));
     showToast("スレッドを削除しました", {
       label: "元に戻す",
@@ -475,6 +516,47 @@ export function createIdeaThreadActions(deps: IdeaThreadActionDeps) {
           next.splice(Math.min(Math.max(threadIndex, 0), next.length), 0, thread);
           return next;
         });
+        if (deletedLayout) {
+          setReferenceLayout((current) => {
+            const inboxLinkIds = new Set(
+              current.ideaThreads
+                .find((layout) => layout.threadId === inboxId)
+                ?.items.filter((item) => item.sourceType === "reference")
+                .map((item) => (item as IdeaReferenceLink).id) ?? [],
+            );
+            const linkedPaths = new Set(
+              current.ideaThreads
+                .filter((layout) => layout.threadId !== threadId)
+                .flatMap((layout) => layout.items)
+                .filter((item): item is IdeaReferenceLink => item.sourceType === "reference")
+                .map((item) => normalizedReferenceKey(item.sourcePath)),
+            );
+            // 受信箱にまだある資料リンクと、どこにも置かれていない資料リンクだけを戻す。
+            // そのあいだに利用者が別の場所へ動かしたものは、そのままにする。
+            const restoredLinkIds = new Set<string>();
+            const items = deletedLayout.items.filter((item) => {
+              if (item.sourceType === "idea") return true;
+              if (!inboxLinkIds.has(item.id) && linkedPaths.has(normalizedReferenceKey(item.sourcePath))) {
+                return false;
+              }
+              restoredLinkIds.add(item.id);
+              return true;
+            });
+            const ideaThreads = current.ideaThreads
+              .filter((layout) => layout.threadId !== threadId)
+              .map((layout) =>
+                layout.threadId === inboxId
+                  ? {
+                      ...layout,
+                      items: layout.items.filter(
+                        (item) => item.sourceType !== "reference" || !restoredLinkIds.has(item.id),
+                      ),
+                    }
+                  : layout,
+              );
+            return { ...restoreCards(current, deletedCards), ideaThreads: [...ideaThreads, { threadId, items }] };
+          });
+        }
         showToast("スレッドの削除を元に戻しました");
       },
     });
