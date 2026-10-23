@@ -1,10 +1,14 @@
 import type {
+  BinderCardState,
+  EditorSettings,
+  IdeaBinderCardState,
   IdeaFragmentLink,
   IdeaReferenceLink,
   IdeaThread,
   IdeaThreadItemLink,
   IdeaThreadLayout,
   ReferenceFileInfo,
+  ReferenceLayout,
 } from "./types";
 
 export const normalizeIdeaReferencePath = (sourcePath: string): string =>
@@ -168,6 +172,34 @@ export function reconcileIdeaThreadLayouts(
   });
 
   return layouts;
+}
+
+/**
+ * 並び順と資料ボードの Idea カードを、指定した「Ideaの管理単位」の側に合わせる。
+ * スレッドの ID は管理単位ごとに別（受信箱だけは同じ ID）なので、違う側のまま整合処理に
+ * かけると並び順が崩れる。違う側なら、表示していた側を預け、預けていた側を出す。
+ * どちらの側か書いていない古いデータは、指定した側のものとして読む。
+ */
+export function alignIdeaLayoutToMode<T extends Pick<ReferenceLayout, "cards" | "ideaThreads" | "ideaThreadsMode" | "otherIdea">>(
+  layout: T,
+  mode: EditorSettings["snippetStorageMode"],
+): T {
+  if (!layout.ideaThreadsMode) return { ...layout, ideaThreadsMode: mode };
+  if (layout.ideaThreadsMode === mode) return layout;
+  const restored = layout.otherIdea?.mode === mode ? layout.otherIdea : null;
+  const isIdeaCard = (card: BinderCardState): card is IdeaBinderCardState =>
+    card.sourceType === "idea";
+  return {
+    ...layout,
+    ideaThreadsMode: mode,
+    ideaThreads: restored?.ideaThreads ?? [],
+    cards: [...layout.cards.filter((card) => !isIdeaCard(card)), ...(restored?.cards ?? [])],
+    otherIdea: {
+      mode: layout.ideaThreadsMode,
+      ideaThreads: layout.ideaThreads,
+      cards: layout.cards.filter(isIdeaCard),
+    },
+  };
 }
 
 export function countIdeaReferenceLinks(

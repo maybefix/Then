@@ -473,6 +473,12 @@ struct ReferenceLayoutConfig {
     recent: Vec<ReferenceFileInfo>,
     #[serde(default, rename = "ideaThreads")]
     idea_threads: Vec<IdeaThreadLayoutConfig>,
+    // ideaThreads がどちらの「Ideaの管理単位」のものかと、表示していない側の並び順と
+    // Idea カード。中身は画面側で扱うので、ここでは落とさずに読み書きするだけにする。
+    #[serde(default, rename = "ideaThreadsMode", skip_serializing_if = "Option::is_none")]
+    idea_threads_mode: Option<String>,
+    #[serde(default, rename = "otherIdea", skip_serializing_if = "Option::is_none")]
+    other_idea: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -4284,6 +4290,8 @@ fn default_reference_layout() -> ReferenceLayoutConfig {
         cards: Vec::new(),
         recent: Vec::new(),
         idea_threads: Vec::new(),
+        idea_threads_mode: None,
+        other_idea: None,
     }
 }
 
@@ -5562,6 +5570,35 @@ mod tests {
     }
 
     #[test]
+    fn idea_layout_mode_fields_survive_load_and_save() {
+        let other_idea = serde_json::json!({
+            "mode": "workspace",
+            "ideaThreads": [{ "threadId": "t1", "items": [{ "sourceType": "idea", "fragmentId": "a" }] }],
+            "cards": [{ "id": "k", "sourceType": "idea", "threadId": "t1", "fragmentId": "a" }]
+        });
+        let content = serde_json::json!({
+            "version": 3,
+            "name": "default",
+            "ideaThreads": [],
+            "ideaThreadsMode": "profile",
+            "otherIdea": other_idea
+        });
+        let layout: ReferenceLayoutConfig =
+            serde_json::from_value(content).expect("parse layout with mode fields");
+        let saved = serde_json::to_value(&layout).expect("serialize layout");
+        assert_eq!(saved["ideaThreadsMode"], "profile");
+        assert_eq!(saved["otherIdea"], other_idea);
+
+        // 欄のない古いファイルも読め、保存しても欄は増えない。
+        let legacy: ReferenceLayoutConfig =
+            serde_json::from_str(r#"{ "version": 3, "name": "default", "ideaThreads": [] }"#)
+                .expect("parse legacy layout");
+        let saved = serde_json::to_value(&legacy).expect("serialize legacy layout");
+        assert!(saved.get("ideaThreadsMode").is_none());
+        assert!(saved.get("otherIdea").is_none());
+    }
+
+    #[test]
     fn global_reference_nodes_and_connected_edges_are_purged_from_project_canvas() {
         let mut board = serde_json::json!({
             "nodes": [
@@ -5620,6 +5657,8 @@ mod tests {
             cards: vec![card("global", "global"), card("project", "project")],
             recent: vec![file("global"), file("project")],
             idea_threads: Vec::new(),
+            idea_threads_mode: None,
+            other_idea: None,
         };
 
         assert!(purge_global_reference_layout(&mut layout));

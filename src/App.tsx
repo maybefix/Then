@@ -181,6 +181,7 @@ import { ReferenceLayer } from "./components/references/ReferenceLayer";
 import { BinderPane } from "./components/binder/BinderPane";
 import { OpenCardsPane } from "./components/binder/OpenCardsPane";
 import {
+  alignIdeaLayoutToMode,
   countIdeaReferenceLinks,
   ideaThreadItemKey,
   makeReferenceLink,
@@ -243,6 +244,8 @@ import type {
   ReferenceKind,
   ReferenceLayout,
   ReferenceScope,
+  IdeaBinderCardState,
+  OtherIdeaLayout,
   SaveStatus,
   TextDocument,
   TextTemplateSummary,
@@ -1740,15 +1743,47 @@ function normalizeReferenceLayout(
   const raw = value as Partial<ReferenceLayout> | null;
   const cards: unknown[] = Array.isArray(raw?.cards) ? raw.cards : [];
   const recent: unknown[] = Array.isArray(raw?.recent) ? raw.recent : [];
-  const ideaThreads = Array.isArray(raw?.ideaThreads)
-    ? raw.ideaThreads.filter(
-        (layout): layout is IdeaThreadLayout =>
-          Boolean(layout) &&
-          typeof layout === "object" &&
-          typeof (layout as IdeaThreadLayout).threadId === "string" &&
-          Array.isArray((layout as IdeaThreadLayout).items),
-      )
-    : [];
+  const toIdeaThreadLayouts = (value: unknown): IdeaThreadLayout[] =>
+    Array.isArray(value)
+      ? value.filter(
+          (layout): layout is IdeaThreadLayout =>
+            Boolean(layout) &&
+            typeof layout === "object" &&
+            typeof (layout as IdeaThreadLayout).threadId === "string" &&
+            Array.isArray((layout as IdeaThreadLayout).items),
+        )
+      : [];
+  const toIdeaCard = (card: unknown, index: number): IdeaBinderCardState => {
+    if (!isIdeaCardRecord(card)) throw new Error("unreachable Idea card");
+    return {
+      id: card.id,
+      sourceType: "idea",
+      threadId: card.threadId,
+      fragmentId: card.fragmentId,
+      x: typeof card.x === "number" ? card.x : 72 + index * 32,
+      y: typeof card.y === "number" ? card.y : 96 + index * 32,
+      width: typeof card.width === "number" ? card.width : 320,
+      height: typeof card.height === "number" ? card.height : 300,
+      zIndex: typeof card.zIndex === "number" ? card.zIndex : index + 1,
+      collapsed: Boolean(card.collapsed),
+      pinned: Boolean(card.pinned),
+    };
+  };
+  const ideaThreads = toIdeaThreadLayouts(raw?.ideaThreads);
+  const isStorageMode = (mode: unknown): mode is EditorSettings["snippetStorageMode"] =>
+    mode === "workspace" || mode === "profile";
+  const ideaThreadsMode = isStorageMode(raw?.ideaThreadsMode) ? raw.ideaThreadsMode : undefined;
+  const rawOther = raw?.otherIdea as Partial<OtherIdeaLayout> | undefined;
+  const otherIdea: OtherIdeaLayout | undefined =
+    ideaThreadsMode && rawOther && isStorageMode(rawOther.mode) && rawOther.mode !== ideaThreadsMode
+      ? {
+          mode: rawOther.mode,
+          ideaThreads: toIdeaThreadLayouts(rawOther.ideaThreads),
+          cards: (Array.isArray(rawOther.cards) ? (rawOther.cards as unknown[]) : [])
+            .filter(isIdeaCardRecord)
+            .map(toIdeaCard),
+        }
+      : undefined;
   const normalizedCards = cards
     .filter(
       (card) =>
@@ -1758,19 +1793,7 @@ function normalizeReferenceLayout(
     .map((card, index): BinderCardState => {
       if (isIdeaCardRecord(card)) {
         return clampReferenceCardToStage(
-          {
-            id: card.id,
-            sourceType: "idea",
-            threadId: card.threadId,
-            fragmentId: card.fragmentId,
-            x: typeof card.x === "number" ? card.x : 72 + index * 32,
-            y: typeof card.y === "number" ? card.y : 96 + index * 32,
-            width: typeof card.width === "number" ? card.width : 320,
-            height: typeof card.height === "number" ? card.height : 300,
-            zIndex: typeof card.zIndex === "number" ? card.zIndex : index + 1,
-            collapsed: Boolean(card.collapsed),
-            pinned: Boolean(card.pinned),
-          },
+          toIdeaCard(card, index),
           stageSize.width,
           stageSize.height,
         );
@@ -1827,6 +1850,8 @@ function normalizeReferenceLayout(
       .slice(0, MAX_RECENT_REFERENCES),
     cards: normalizedCards,
     ideaThreads,
+    ...(ideaThreadsMode ? { ideaThreadsMode } : {}),
+    ...(otherIdea ? { otherIdea } : {}),
   };
 }
 
@@ -2909,6 +2934,8 @@ export default function App() {
   const saveTimerRef = useRef<number | null>(null);
   const referenceSaveTimerRef = useRef<number | null>(null);
   const referenceLayoutLoadedRootRef = useRef<string | null>(null);
+  // 並び順を読み込んだ時点の「Ideaの管理単位」に合わせるため、最新の値を持っておく。
+  const snippetStorageModeRef = useRef<EditorSettings["snippetStorageMode"]>("workspace");
   const workspaceFolderTreeRootRef = useRef<string | null>(null);
   const activeTabIdRef = useRef("initial-document-tab");
   const documentSaveQueuesRef = useRef<Map<string, DocumentSaveQueue>>(new Map());
@@ -4170,6 +4197,7 @@ export default function App() {
   }, []);
 
   const { snippets, settings } = appState;
+  snippetStorageModeRef.current = settings.snippetStorageMode;
   const zoneRightEnabled = settings.sidebarHoverMode === "both" || settings.sidebarHoverMode === "right";
   // Zoneモードの右ペインの表示判定は .appShell の属性で行う（zoneRightHover.ts）。
   useEffect(() => {
@@ -4813,10 +4841,13 @@ export default function App() {
           listReferenceCandidates(rootPath),
         ]);
         if (isCancelled) return;
-        const normalizedLayout = normalizeReferenceLayout(layout, {
-          width: rect?.width ?? 1200,
-          height: rect?.height ?? 800,
-        });
+        const normalizedLayout = alignIdeaLayoutToMode(
+          normalizeReferenceLayout(layout, {
+            width: rect?.width ?? 1200,
+            height: rect?.height ?? 800,
+          }),
+          snippetStorageModeRef.current,
+        );
         setReferenceLayout(normalizedLayout);
         setReferenceCandidates(candidates);
         referenceLayoutLoadedRootRef.current = rootPath;
@@ -9181,9 +9212,11 @@ export default function App() {
             ? { ...item, fragmentId: fragmentIds.get(item.fragmentId) ?? item.fragmentId }
             : { ...item, id: crypto.randomUUID() },
         );
+        // 移す先は作品ごとの Idea なので、相手の並び順も作品ごとの側に合わせてから足す。
+        const workspaceLayout = alignIdeaLayoutToMode(targetLayout, "workspace");
         await saveReferenceLayout(options.target, {
-          ...targetLayout,
-          ideaThreads: [...targetLayout.ideaThreads, { threadId: copiedThread.id, items }],
+          ...workspaceLayout,
+          ideaThreads: [...workspaceLayout.ideaThreads, { threadId: copiedThread.id, items }],
         });
       }
       if (options.move) updateIdeaThreads((threads) => threads.filter((item) => item.id !== threadId));
@@ -12010,13 +12043,46 @@ export default function App() {
   const handleSnippetStorageModeChange = async (
     mode: EditorSettings["snippetStorageMode"],
   ) => {
+    if (mode === settings.snippetStorageMode) return;
+    const confirmed = await requestConfirm({
+      title: "Ideaの管理単位を切り替え",
+      message:
+        mode === "profile"
+          ? "右サイドバーの Idea を、全作品で共有する Idea に切り替えますか？"
+          : "右サイドバーの Idea を、作品ごとの Idea に切り替えますか？",
+      confirmLabel: mode === "profile" ? "共有の Idea に切り替える" : "作品ごとの Idea に切り替える",
+    });
+    if (!confirmed) return;
+
+    // 作品の Idea は0.7秒遅れて保存する。切り替えるとその保存が取り消されるので、先に書き終える。
+    if (
+      projectFolder
+      && settings.snippetStorageMode === "workspace"
+      && snippetWorkspacePath === projectFolder.path
+    ) {
+      try {
+        await saveWorkspaceSnippets(projectFolder.path, snippets);
+      } catch (error) {
+        setLastError(String(error));
+        showToast("Idea を保存できなかったため、管理単位を切り替えませんでした");
+        return;
+      }
+    }
+
     updateSettings("snippetStorageMode", mode);
     if (!projectFolder) return;
+    // 並び順と Idea カードを切り替え先の側に合わせる。Idea の組を入れ替えるのと同じ描画で
+    // 合わせないと、整合処理が今の並び順を新しい組に合わせて崩してしまう。
+    const alignReferenceLayout = () => {
+      if (referenceLayoutLoadedRootRef.current !== projectFolder.path) return;
+      setReferenceLayout((current) => alignIdeaLayoutToMode(current, mode));
+    };
 
     if (mode === "workspace") {
       try {
         const workspaceSnippets = await loadWorkspaceSnippets(projectFolder.path);
         setSnippetWorkspacePath(projectFolder.path);
+        alignReferenceLayout();
         setAppState((current) => ({ ...current, snippets: workspaceSnippets }));
       } catch (error) {
         setLastError(String(error));
@@ -12030,6 +12096,7 @@ export default function App() {
         : JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "null"),
     );
     setSnippetWorkspacePath(null);
+    alignReferenceLayout();
     setAppState((current) => ({ ...current, snippets: profileState.profileSnippets }));
   };
 
@@ -14216,18 +14283,6 @@ export default function App() {
             />
           )}
 
-          {appDialog && (
-            <AppDialogModal
-              dialog={appDialog}
-              onClose={closeAppDialog}
-              onSubmit={submitAppDialog}
-              onValueChange={updateAppDialogValue}
-              onFieldValueChange={updateAppDialogFieldValue}
-              onChoice={chooseAppDialog}
-              onOption={chooseAppDialogOption}
-            />
-          )}
-
           {isCommandPaletteOpen && (
             <CommandPalette
               commands={buildPaletteCommands()}
@@ -14271,6 +14326,18 @@ export default function App() {
                 }
               }}
               onSelect={(theme) => updateSettings("theme", theme)}
+            />
+          )}
+          {/* 確認と入力のダイアログは、設定などのモーダルから開くこともあるので、いちばん上に置く。 */}
+          {appDialog && (
+            <AppDialogModal
+              dialog={appDialog}
+              onClose={closeAppDialog}
+              onSubmit={submitAppDialog}
+              onValueChange={updateAppDialogValue}
+              onFieldValueChange={updateAppDialogFieldValue}
+              onChoice={chooseAppDialog}
+              onOption={chooseAppDialogOption}
             />
           )}
           </section>

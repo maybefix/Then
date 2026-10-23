@@ -21,7 +21,7 @@ const {
   nextIdeaId,
   normalizeIdeaThreads,
 } = await import(moduleUrl);
-const { reconcileIdeaThreadLayouts } = await import(
+const { alignIdeaLayoutToMode, reconcileIdeaThreadLayouts } = await import(
   `data:text/javascript;base64,${Buffer.from((await build({
     entryPoints: ["src/ideaReferenceModel.ts"],
     bundle: true,
@@ -335,6 +335,87 @@ function assertConsistent(state, label) {
   assert.equal(lastToast().message, "スレッドの削除を元に戻しました");
 }
 
+// 削除を元に戻すと、表示順（並び順）と資料ボードの Idea カードも元に戻る。
+// App の effect（整合処理と、消えた断片のカードを外す処理）を、操作のたびに走らせて確かめる。
+{
+  const ref = (id, sourcePath) => ({ id, sourceType: "reference", sourcePath, createdAt: 1 });
+  const idea = (fragmentId) => ({ sourceType: "idea", fragmentId });
+  const card = (id, threadId, fragmentId) => ({
+    id, sourceType: "idea", threadId, fragmentId, x: 0, y: 0, width: 320, height: 300, zIndex: 1,
+    collapsed: false, pinned: false,
+  });
+  const setup = () => {
+    const harness = createHarness({
+      layouts: [
+        { threadId: "idea-inbox", items: [idea("i1")] },
+        { threadId: "t1", items: [idea("c"), ref("r1", "資料/一.md"), idea("a"), idea("b")] },
+        { threadId: "t2", items: [idea("d")] },
+      ],
+    });
+    harness.state.layout.cards = [card("k-a", "t1", "a"), card("k-d", "t2", "d")];
+    return harness;
+  };
+  const runAppEffects = (state) => {
+    state.layout = { ...state.layout, ideaThreads: reconcileIdeaThreadLayouts(state.layout.ideaThreads, state.app.snippets) };
+    const live = new Set(state.app.snippets.flatMap((entry) => entry.fragments.map((fragment) => `${entry.id}:${fragment.id}`)));
+    state.layout = {
+      ...state.layout,
+      cards: state.layout.cards.filter((entry) => entry.sourceType !== "idea" || live.has(`${entry.threadId}:${entry.fragmentId}`)),
+    };
+  };
+  const cardIds = (state) => state.layout.cards.map((entry) => entry.id).sort();
+
+  // 断片: 資料と混ぜた並び順の途中にあった断片が、末尾ではなく元の位置に戻る。
+  {
+    const { state, actions, lastToast } = setup();
+    await actions().deleteFragment("t1", "a");
+    runAppEffects(state);
+    assert.deepEqual(ideaOrder(state, "t1"), ["c", "ref:資料/一.md", "b"]);
+    assert.deepEqual(cardIds(state), ["k-d"]);
+    lastToast().action.onClick();
+    runAppEffects(state);
+    assert.deepEqual(ideaOrder(state, "t1"), ["c", "ref:資料/一.md", "a", "b"], "undo restores the display position");
+    assert.deepEqual(cardIds(state), ["k-a", "k-d"], "undo restores the Idea card");
+    assertConsistent(state, "delete fragment undo");
+  }
+
+  // スレッド: 受信箱へ移った資料リンクがスレッドへ戻り、並び順とカードも戻る。
+  {
+    const { state, actions, lastToast } = setup();
+    await actions().deleteIdeaThread("t1");
+    runAppEffects(state);
+    assert.deepEqual(ideaOrder(state, "idea-inbox"), ["i1", "ref:資料/一.md"]);
+    assert.deepEqual(cardIds(state), ["k-d"]);
+    lastToast().action.onClick();
+    runAppEffects(state);
+    assert.deepEqual(ideaOrder(state, "t1"), ["c", "ref:資料/一.md", "a", "b"], "undo restores the thread order and its references");
+    assert.deepEqual(ideaOrder(state, "idea-inbox"), ["i1"], "undo takes the reference back out of the inbox");
+    assert.deepEqual(cardIds(state), ["k-a", "k-d"], "undo restores the Idea cards");
+    assertConsistent(state, "delete thread undo");
+  }
+
+  // スレッド: 削除のあとで受信箱から外した資料リンクは、元に戻しても戻さない。
+  {
+    const { state, actions, lastToast } = setup();
+    await actions().deleteIdeaThread("t1");
+    runAppEffects(state);
+    state.layout = {
+      ...state.layout,
+      ideaThreads: state.layout.ideaThreads.map((layout) =>
+        layout.threadId === "idea-inbox"
+          ? { ...layout, items: layout.items.filter((item) => item.sourceType !== "reference") }
+          : layout.threadId === "t2"
+            ? { ...layout, items: [ref("r9", "資料/一.md"), ...layout.items] }
+            : layout,
+      ),
+    };
+    lastToast().action.onClick();
+    runAppEffects(state);
+    assert.deepEqual(ideaOrder(state, "t1"), ["c", "a", "b"]);
+    assert.deepEqual(ideaOrder(state, "t2"), ["ref:資料/一.md", "d"]);
+  }
+}
+
 // 資料リンクを新規スレッドへ移す・追加する。
 {
   const threads = [
@@ -367,6 +448,55 @@ function assertConsistent(state, label) {
   assert.deepEqual(ideaOrder(copied.state, copiedId), ["ref:.then/references/imports/map.png"]);
   assert.deepEqual(ideaOrder(copied.state, "t1"), ["a", "ref:.then/references/imports/map.png"]);
   assert.equal(copied.lastToast().message, "新規スレッド「地図」へ追加しました");
+}
+
+// 管理単位を切り替えると、表示していた側の並び順と資料ボードの Idea カードを預け、
+// 切り替え先の側で預けていたものを出す。戻すと元どおりになる。
+{
+  const idea = (fragmentId) => ({ sourceType: "idea", fragmentId });
+  const ref = (id, sourcePath) => ({ id, sourceType: "reference", sourcePath, createdAt: 1 });
+  const ideaCard = { id: "k-a", sourceType: "idea", threadId: "t1", fragmentId: "a", x: 0, y: 0, width: 320, height: 300, zIndex: 2, collapsed: false, pinned: false };
+  const refCard = { id: "k-r", sourceType: "reference", scope: "project", sourcePath: "資料/一.md", kind: "markdown", x: 0, y: 0, width: 320, height: 300, zIndex: 1, collapsed: false, pinned: false };
+  const workspaceThreads = [
+    { threadId: "idea-inbox", items: [idea("i1"), ref("r2", "資料/二.md")] },
+    { threadId: "t1", items: [idea("c"), ref("r1", "資料/一.md"), idea("a")] },
+  ];
+  const base = { version: 3, name: "default", recent: [], cards: [refCard, ideaCard], ideaThreads: workspaceThreads };
+
+  // 古いファイル（どちらの管理単位か書いていない）は、今の管理単位の並び順として読む。
+  const legacy = alignIdeaLayoutToMode(base, "profile");
+  assert.equal(legacy.ideaThreadsMode, "profile");
+  assert.deepEqual(legacy.ideaThreads, workspaceThreads);
+  assert.deepEqual(legacy.cards, [refCard, ideaCard]);
+  assert.equal(legacy.otherIdea, undefined);
+
+  // 同じ管理単位なら何もしない。
+  const tagged = alignIdeaLayoutToMode(base, "workspace");
+  assert.equal(alignIdeaLayoutToMode(tagged, "workspace"), tagged);
+
+  // 共有へ: 作品ごとの側を預け、共有の側は空から始める。資料のカードは残す。
+  const toProfile = alignIdeaLayoutToMode(tagged, "profile");
+  assert.equal(toProfile.ideaThreadsMode, "profile");
+  assert.deepEqual(toProfile.ideaThreads, []);
+  assert.deepEqual(toProfile.cards, [refCard]);
+  assert.deepEqual(toProfile.otherIdea, { mode: "workspace", ideaThreads: workspaceThreads, cards: [ideaCard] });
+
+  // 共有の側で並べた結果も、戻すときに預ける。
+  const profileThreads = [{ threadId: "idea-inbox", items: [idea("p1")] }];
+  const profileCard = { ...ideaCard, id: "k-p", threadId: "idea-inbox", fragmentId: "p1" };
+  const usedInProfile = { ...toProfile, ideaThreads: profileThreads, cards: [refCard, profileCard] };
+  const back = alignIdeaLayoutToMode(usedInProfile, "workspace");
+  assert.equal(back.ideaThreadsMode, "workspace");
+  assert.deepEqual(back.ideaThreads, workspaceThreads, "switching back restores the order and the reference links");
+  assert.deepEqual(back.cards, [refCard, ideaCard], "switching back restores the Idea cards");
+  assert.deepEqual(back.otherIdea, { mode: "profile", ideaThreads: profileThreads, cards: [profileCard] });
+
+  // 整合処理を通しても、戻した並び順は崩れない。
+  const threads = [
+    thread("idea-inbox", "inbox", "インボックス", [frag("i1")]),
+    thread("t1", "thread", "場面", [frag("a"), frag("c")]),
+  ];
+  assert.deepEqual(reconcileIdeaThreadLayouts(back.ideaThreads, threads), workspaceThreads);
 }
 
 // 管理単位が「共有」のときだけ、共有の Idea も同じ値にする。
@@ -435,9 +565,15 @@ function assertConsistent(state, label) {
   assert.equal(typeof state.focusRequest.nonce, "number");
 }
 
-// ドラッグ: 断片の ID だけを渡し、本文の文字列は渡さない。Idea は本文へ落とせない。
+// ドラッグ: 断片の ID と本文を渡す（Canvas は本文からカードを作り、Canvas への
+// ドロップはコピー、スレッド内の並べ替えは移動）。Idea は本文へ落とせない。
 {
-  const { state, actions } = createHarness();
+  const { state, actions } = createHarness({
+    threads: [
+      thread("idea-inbox", "inbox", "インボックス", []),
+      thread("t1", "thread", "場面", [frag("a", "改札の前で立ち止まる")]),
+    ],
+  });
   const data = new Map();
   const dragStart = {
     dataTransfer: {
@@ -447,8 +583,11 @@ function assertConsistent(state, label) {
   };
   actions().handleFragmentDragStart(dragStart, "t1", "a");
   assert.equal(state.draggingId, "a");
-  assert.equal(dragStart.dataTransfer.effectAllowed, "move");
-  assert.deepEqual([...data], [["application/x-brew-snippet-id", "a"]]);
+  assert.equal(dragStart.dataTransfer.effectAllowed, "copyMove");
+  assert.deepEqual([...data], [
+    ["application/x-brew-snippet-id", "a"],
+    ["text/plain", "改札の前で立ち止まる"],
+  ]);
   actions().handleFragmentDragEnd();
   assert.equal(state.draggingId, null);
 
