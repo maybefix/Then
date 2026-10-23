@@ -14,7 +14,7 @@
 | 4 | 影響範囲 | 済み |
 | 5 | 案 | 済み |
 | 6 | 人の確認（確認1） | 済み |
-| 7 | 実施 | |
+| 7 | 実施 | 済み |
 | 8 | 自動テスト | |
 | 9 | 実機確認 | |
 | 10 | 完了（確認2） | |
@@ -151,7 +151,27 @@
 
 ## 工程7: 実施
 
+| コミット | 中身 |
+|---|---|
+| `c6a01f6` | 先に失敗するテスト。`test:project-entry-actions` に、書きかけの記録の片付け（6か所）、削除で外すもの（資料カード・最近の資料・資料の候補・閉じたフォルダ）、資料ボードの読み込みの依存（App.tsx の文字）の確認を足した。削除の「今の挙動の癖」の資料カードの行を、確認1の期待に書き換えた。足した14個の確認は、すべて直す前のコードで落ちることを確かめた（落ちても止まらない写しを scratchpad で動かした） |
+| `f8289cc` | 名前の変更・1件の移動・複数の移動の付け替えを `retargetPathOwners` にまとめた。付け替えの結果は変えていない（元からの確認は全部通った）。`test:project-portability` は、各操作の中に `fileProgress` の付け替えの文字があるかを見ていたので、共通の関数がそれを持つことと、3つの操作が共通の関数を呼ぶことを見る形に変えた（手順書の 4-3 で挙げていなかった） |
+| `3edbeb3` | 癖3。削除が `removePathOwners` で、資料カード・最近の資料・資料の候補・閉じたフォルダの記録からも外す。プロットの本文のリンクは残す。資料の判定（`referenceCardPointsInside`・`referenceFilePointsInside`）は `src/referencePathModel.ts` に足し、付け替えと同じ規則（`retargetReferenceSourcePath`）で見る |
+| `590d713` | 癖2。`src/editor/saveJournal.ts` に `closeDocumentJournal`（`journal_forget` を `discard: false` で呼ぶ）を足した。名前の変更・移動は、名前が替わるタブの古い記録を閉じる。削除は、消したタブの記録を `forgetDocumentJournal` で捨てる |
+| `ccd8c2a` | 癖1。App.tsx の資料ボードの読み込みの useEffect の依存を `[isHydrated, projectFolder?.path]` にし、資料の候補を読み直す useEffect（`[isHydrated, projectFolder]`）を分けた。候補の読み直しは、資料ボードを読み終えた後だけ走る（読み込みの途中は、読み込みが候補も読む） |
+
+- 行数: `src/projectEntryActions.ts` は 1,027 → 1,087行（付け替えの重なりが消えた分と、取り除く関数・記録を閉じる関数を足した分）。
+- 型検査は、コミットごとに通った。
+- 気をつける点（見込み）: 作品を開いた直後、資料ボードを読み終える前に木が替わると、その木の更新では候補を読み直さない（読み込みが始まった時点の一覧になる）。次に木が替わったときに読み直される。
+
 ## 工程8: 自動テスト
+
+効くことの確かめ: 直した処理にわざと不具合を3つ入れ、どれもテストが落ちることを見て `git checkout` で戻した。
+
+1. 削除で資料カードを外さない → 「削除（開いているファイル）」の資料カードの確認で落ちた。
+2. 名前の変更で古い記録を閉じない → 「the record kept under the tab’s old name is closed」で落ちた。
+3. 資料ボードの読み込みの依存を木に戻す → 「the reference board loads when the project changes」で落ちた。
+
+前後の比較は、一式が終わってから書く。
 
 ## 工程9: 実機確認
 
