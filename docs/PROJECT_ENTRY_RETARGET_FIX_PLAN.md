@@ -185,6 +185,8 @@
 | 両方で失敗 | 4（`test:ai-selection`、`test:canvas-save`、`test:v058-bundle`、`test:v0511-themes`。理由は前後で同じ） | 同じ |
 | 新しい失敗 | — | なし |
 
+一覧の抜けを直したあと（`5159eb6`）にも一式を動かした。両方で通ったもの65、元から失敗している4本は同じ、メインの JS は 689,835 バイト。`test:heading-dnd-ui` が「Ctrl+click must select multiple headings」で落ちた。このテストはサイドバーの部品だけを読み込み、`702d8d1` からの変更（`src/App.tsx`・`src/editor/documentTabState.ts`・`src/projectEntryActions.ts`・`src/referencePathModel.ts`）はどれも読まない。一式の直後に単独で2回動かすと2回とも落ちたが、そのあと `src` を `702d8d1` に戻しても、今のコードに戻しても通り、今のコードで続けて3回動かしても通った（合わせて4回）。Ctrl を押したクリックを2回すばやく送る確かめが、時間の具合で揺れると見ている（見込み）。
+
 ## 工程9: 実機確認
 
 `702d8d1` を識別子 `local.then.qa.retarget1024` で build した QA 用アプリを、PR #15 のときと同じ一時ライブラリで動かした。作品Aに `第一章/a.txt`・`第一章/b.txt`・`c.txt` を置き、プロット・資料カード2枚・最近の資料からリンクした。`ipc.localhost` への要求をページの中で記録して、Rust への呼び出しも見た。
@@ -239,6 +241,7 @@
 | `src/projectEntryActions.ts` | 付け替えを `retargetPathOwners` に、取り除きを `removePathOwners` にまとめた。削除が資料カード・最近の資料・資料の候補・パンくずの閉じたフォルダからも外す。名前の変更・移動の前に古い記録を閉じ、削除で記録を捨てる。1,027 → 1075行 |
 | `src/referencePathModel.ts` | 削除したパスを指す資料かを見る `referenceCardPointsInside`・`referenceFilePointsInside` |
 | `src/editor/saveJournal.ts` | `closeDocumentJournal`（閉じ終わるのを待てる） |
+| `src/editor/documentTabState.ts` | 閉じたタブの記録の型 `ClosedDocumentTab` を App.tsx から移した |
 | `src/App.tsx` | 資料ボードは作品が変わったときだけ読み込み、木の更新では資料の候補だけを読み直す |
 | `scripts/test-project-entry-actions.mjs`、`scripts/test-project-portability-baseline.mjs` | 工程7・8 |
 
@@ -250,4 +253,4 @@ Rust・保存形式・文言は変えていない。
 |---|---|---|
 | 作品を開いた直後の候補 | 資料ボードを読み終える前に木が替わると、その更新では候補を読み直さない（見込み） | 工程7 |
 | 書いている途中の名前の変更 | 古い記録を閉じてから名前が変わるまでに書いた分は、古い名前の新しい記録に入る。ふつうは自動保存で保存されるが、その前に強制終了すると、もう無いパスの書きかけとして出る（見込み） | 工程5-2 |
-| 元から失敗しているテスト | `test:ai-selection`（一式の中でだけ止まる）、`test:canvas-save`、`test:v058-bundle`、`test:v0511-themes` | 工程8 |
+| 元から失敗しているテスト | `test:ai-selection`（一式の中でだけ止まる）、`test:canvas-save`、`test:v058-bundle`、`test:v0511-themes`。`test:heading-dnd-ui` は一式の直後にだけ落ちることがある | 工程8 |
