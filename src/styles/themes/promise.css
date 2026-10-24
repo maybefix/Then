@@ -38,6 +38,10 @@
   --topbar-text-secondary: #f3fff8;
   --topbar-text-muted: #d8f2e2;
   --topbar-text-faint: #aee0c2;
+  --topbar-control-hover: color-mix(in srgb, var(--topbar-text-primary) 12%, transparent);
+  /* 帯の右端は明るい緑なので、ウィンドウ操作ボタンは本文の濃い色にする。 */
+  --window-controls-color: var(--text-secondary);
+  --window-controls-hover-color: var(--text-primary);
   --radius-control: 14px;
   --radius-card: 20px;
   --radius-button: 999px;
@@ -85,6 +89,10 @@
   --topbar-text-secondary: #e4f8eb;
   --topbar-text-muted: #bfeaca;
   --topbar-text-faint: #87c99c;
+  --topbar-control-hover: color-mix(in srgb, var(--topbar-text-primary) 12%, transparent);
+  /* 帯の右端は明るいミント色なので、ウィンドウ操作ボタンはテーマの一番濃い緑にする。 */
+  --window-controls-color: var(--bg-root);
+  --window-controls-hover-color: var(--bg-root);
   --sidebar-bg: linear-gradient(180deg, #0b1d14 0%, #07150f 100%);
   --canvas-bg: #05100b;
   --card-float-shadow: 0 6px 18px rgba(0, 0, 0, 0.34);

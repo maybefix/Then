@@ -890,7 +890,17 @@ html:not([data-window-fullscreen="true"])
   display: flex;
   width: var(--window-controls-width);
   height: 36px;
-  color: var(--text-secondary);
+  /*
+   * ボタンは上部の帯に重なるので、帯の文字色に合わせる。帯の右端の色が帯の文字色と
+   * 合わないテーマ（Promise）は、テーマ側で --window-controls-color を決める。
+   */
+  color: var(--window-controls-color, var(--topbar-text-secondary, var(--text-secondary)));
+}
+
+/* 起動中とライブラリの準備は、帯がなく、ふつうの背景がボタンの下に来る。 */
+.appShell:has(> .startupPortalLoading, > .librarySetup) > .windowControls {
+  --window-controls-color: var(--text-secondary);
+  --window-controls-hover-color: var(--text-primary);
 }
 
 .windowControls[data-fullscreen="true"] {
@@ -911,13 +921,14 @@ html:not([data-window-fullscreen="true"])
   cursor: default;
 }
 
+/* ホバーの背景はボタンの文字色を薄く混ぜて作る。暗い帯では明るく、明るい帯では暗くなる。 */
 .windowControlButton:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-primary);
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  color: var(--window-controls-hover-color, var(--topbar-text-primary, var(--text-primary)));
 }
 
 .windowControlButton:active {
-  background: rgba(255, 255, 255, 0.13);
+  background: color-mix(in srgb, currentColor 16%, transparent);
 }
 
 .windowControlButton:focus-visible {

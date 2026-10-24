@@ -30,6 +30,7 @@
   --topbar-text-secondary: #fff6f6;
   --topbar-text-muted: #f6d9dc;
   --topbar-text-faint: #dfa9af;
+  --topbar-control-hover: color-mix(in srgb, var(--topbar-text-primary) 12%, transparent);
   --radius-control: 4px;
   --radius-card: 8px;
   --radius-button: 4px;

@@ -74,6 +74,12 @@ await writeFile(htmlPath, `<!doctype html><html><head><meta charset="utf-8">
 </head><body style="margin:0"><main class="appShell"></main>
 <script>
 const parse = (text) => {
+  // color-mix() の結果は color(srgb 0〜1 の値 / 透明度) で返る。
+  const srgb = /color\\(srgb ([^)]+)\\)/.exec(text);
+  if (srgb) {
+    const [r, g, b, a = 1] = srgb[1].split(/[\\s/]+/).filter(Boolean).map(Number);
+    return { r: r * 255, g: g * 255, b: b * 255, a };
+  }
   const match = /rgba?\\(([^)]+)\\)/.exec(text);
   if (!match) return null;
   const [r, g, b, a = 1] = match[1].split(/[\\s,/]+/).filter(Boolean).map(Number);

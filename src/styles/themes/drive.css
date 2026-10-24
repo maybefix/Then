@@ -30,6 +30,7 @@
   --topbar-text-secondary: #e4e4e4;
   --topbar-text-muted: #bdbdbd;
   --topbar-text-faint: #8a8a8a;
+  --topbar-control-hover: color-mix(in srgb, var(--topbar-text-primary) 12%, transparent);
 }
 
 .appShell[data-theme="drive-dark"] {
