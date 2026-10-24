@@ -48,6 +48,7 @@ import {
   retargetFilesystemPath,
   toProjectRelativePath,
 } from "./utils/projectTree";
+import { withSourceTextExtension } from "./utils/textFileName";
 
 const BREADCRUMB_ENTRY_DRAG_MIME = "application/x-brew-project-entry-path";
 const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
@@ -468,13 +469,16 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
   const handleRenameProjectEntry = async (entry: ProjectFolder | ProjectEntry) => {
     if (!projectFolder) return;
     const isFolderEntry = !("kind" in entry) || entry.kind === "folder";
-    const name = await requestInput({
+    const enteredName = await requestInput({
       title: "名前を変更",
       label: isFolderEntry ? "フォルダ名" : "テキストファイル名",
       initialValue: entry.name,
       confirmLabel: "変更",
     });
-    if (!name || name.trim() === entry.name) return;
+    if (!enteredName) return;
+    // ファイルは、拡張子を書かなければ元の拡張子のまま（今と同じ名前になれば何もしない）。
+    const name = isFolderEntry ? enteredName : withSourceTextExtension(enteredName, entry.name);
+    if (name.trim() === entry.name) return;
 
     projectEntryPathChangeInProgressRef.current = true;
     setSaveStatus("loading");

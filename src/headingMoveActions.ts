@@ -13,6 +13,7 @@ import type { AppState, DocumentTab, EditorSettings, ProjectFolder, TextDocument
 import { parseFrontMatter } from "./utils/frontmatter";
 import { logHeadingDnd } from "./utils/headingDndDiagnostics";
 import { getParentPath } from "./utils/projectTree";
+import { sourceTextExtension, withSourceTextExtension } from "./utils/textFileName";
 import type { TextEditorHandle } from "./VerticalTextEditor";
 
 type ToastAction = {
@@ -28,17 +29,6 @@ type HeadingExtractDocuments = {
   sourceDocument: TextDocument;
   extractedDocument: TextDocument;
 };
-
-function sourceTextExtension(sourcePath: string): string {
-  return sourcePath.match(/(\.(?:md|txt))$/i)?.[1] ?? ".txt";
-}
-
-// 入れた名前に拡張子がなければ、元のファイルの拡張子を足す（Rust に任せると .txt になる）。
-function headingFileNameWithExtension(fileName: string, sourcePath: string): string {
-  const trimmed = fileName.trim();
-  if (!trimmed || /\.(?:md|txt)$/i.test(trimmed)) return trimmed || fileName;
-  return `${trimmed}${sourceTextExtension(sourcePath)}`;
-}
 
 function suggestedHeadingFileName(title: string, sourcePath: string): string {
   const extension = sourceTextExtension(sourcePath);
@@ -338,7 +328,7 @@ export function createHeadingMoveActions(deps: HeadingMoveActionDeps) {
 
       const saved = await invoke<HeadingExtractDocuments>("extract_heading_to_file", {
         sourcePath: source.path,
-        fileName: headingFileNameWithExtension(fileName, source.path),
+        fileName: withSourceTextExtension(fileName, source.path),
         sourceContent: extraction.sourceMarkdown,
         extractedContent: extraction.extractedMarkdown,
       });
