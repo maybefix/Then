@@ -8782,7 +8782,6 @@ export default function App() {
     retargetPluginAnchors,
     didMountEditorRef,
     lastSavedMarkdownRef,
-    setSaveStatus,
     setLastError,
     showToast,
     requestInput,
