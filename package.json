@@ -9,6 +9,7 @@
     "test:ai": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- ai:: external_url::",
     "test:markdown-links": "node scripts/test-markdown-links.mjs",
     "test:ai-selection": "node scripts/test-ai-selection-browser.mjs",
+    "test:ai-pane-layout": "node scripts/test-ai-pane-layout.mjs",
     "test:native-ime": "node scripts/test-native-ime.mjs && node scripts/test-native-ime-integration.mjs",
     "test:code-blocks": "node scripts/test-code-blocks.mjs",
     "test:comment-out": "node scripts/test-comment-out.mjs",
