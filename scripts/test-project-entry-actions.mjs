@@ -353,6 +353,38 @@ const forgotten = (app) => app.journal.filter((entry) => entry.command === "jour
   await actions().handleRenameProjectEntry(file(p("第一章", "a.txt")));
   assert.deepEqual(app.log, [], "the same name or a cancelled dialog changes nothing");
 }
+
+// ---- 名前の変更: 拡張子を書かなければ、元のファイルの拡張子を足して渡す（Rust に任せると .txt になる） ----
+for (const [oldName, answer, expected] of [
+  ["一章.md", "序章", "序章.md"],
+  ["一章.md", "  序章  ", "序章.md"],
+  ["メモ.txt", "覚え書き", "覚え書き.txt"],
+  ["一章.MD", "序章", "序章.MD"],
+  ["一章.md", "序章.txt", "序章.txt"],
+  ["一章.md", "版1.2", "版1.2.md"],
+]) {
+  const { app, actions } = setup();
+  app.inputAnswers.push(answer);
+  app.commands.rename_project_entry = (args) => ({ path: p(args.name), name: args.name, content: "" });
+  await actions().handleRenameProjectEntry(file(p(oldName)));
+  const call = app.log.find((entry) => entry.command === "rename_project_entry");
+  assert.equal(call?.args.name, expected, `${oldName} renamed with ${JSON.stringify(answer)}`);
+}
+// 拡張子を書かずに今と同じ名前を入れたときは、同じ名前として何もしない。
+{
+  const { app, actions } = setup();
+  app.inputAnswers.push("一章");
+  await actions().handleRenameProjectEntry(file(p("一章.md")));
+  assert.deepEqual(app.log, [], "the same name without its extension changes nothing");
+}
+// フォルダの名前には足さない。
+{
+  const { app, actions } = setup();
+  app.inputAnswers.push("第1章");
+  app.commands.rename_project_entry = () => ({ path: p("第1章"), name: "第1章", content: "" });
+  await actions().handleRenameProjectEntry(folder(p("第一章"), []));
+  assert.equal(app.log.find((entry) => entry.command === "rename_project_entry")?.args.name, "第1章");
+}
 {
   const { app, refs, actions } = setup();
   app.inputAnswers.push("x.txt");
