@@ -28,7 +28,6 @@ import type {
   ProjectFolder,
   ReferenceFileInfo,
   ReferenceLayout,
-  SaveStatus,
   TextDocument,
   TextTemplateSummary,
 } from "./types";
@@ -48,6 +47,7 @@ import {
   retargetFilesystemPath,
   toProjectRelativePath,
 } from "./utils/projectTree";
+import { withSourceTextExtension } from "./utils/textFileName";
 
 const BREADCRUMB_ENTRY_DRAG_MIME = "application/x-brew-project-entry-path";
 const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
@@ -118,7 +118,6 @@ export type ProjectEntryActionDeps = {
   retargetPluginAnchors: (oldAbsolutePath: string, newAbsolutePath: string) => void;
   didMountEditorRef: MutableRefObject<boolean>;
   lastSavedMarkdownRef: MutableRefObject<string>;
-  setSaveStatus: (nextStatus: SaveStatus) => void;
   setLastError: Dispatch<SetStateAction<string>>;
   showToast: (message: string, action?: ToastAction | null) => void;
   requestInput: (options: {
@@ -184,7 +183,6 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     retargetPluginAnchors,
     didMountEditorRef,
     lastSavedMarkdownRef,
-    setSaveStatus,
     setLastError,
     showToast,
     requestInput,
@@ -431,7 +429,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
       showToast(`「${document.name}」を作成しました`);
     } catch (error) {
       setLastError(String(error));
-      setSaveStatus("error");
+      showToast("ファイルを作成できませんでした");
     }
   };
 
@@ -450,34 +448,34 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     });
     if (!name) return;
 
-    setSaveStatus("loading");
     try {
       await invoke<ProjectFolder>("create_project_folder", {
         folderPath: targetFolderPath,
         name,
       });
       await refreshProjectFolder(targetFolderPath);
-      setSaveStatus(currentFilePath ? "saved" : "dirty");
       showToast(`「${name.trim()}」を作成しました`);
     } catch (error) {
       setLastError(String(error));
-      setSaveStatus("error");
+      showToast("フォルダを作成できませんでした");
     }
   };
 
   const handleRenameProjectEntry = async (entry: ProjectFolder | ProjectEntry) => {
     if (!projectFolder) return;
     const isFolderEntry = !("kind" in entry) || entry.kind === "folder";
-    const name = await requestInput({
+    const enteredName = await requestInput({
       title: "名前を変更",
       label: isFolderEntry ? "フォルダ名" : "テキストファイル名",
       initialValue: entry.name,
       confirmLabel: "変更",
     });
-    if (!name || name.trim() === entry.name) return;
+    if (!enteredName) return;
+    // ファイルは、拡張子を書かなければ元の拡張子のまま（今と同じ名前になれば何もしない）。
+    const name = isFolderEntry ? enteredName : withSourceTextExtension(enteredName, entry.name);
+    if (name.trim() === entry.name) return;
 
     projectEntryPathChangeInProgressRef.current = true;
-    setSaveStatus("loading");
     try {
       const affectedTabs = openTabs.filter((tab) => {
         if (!tab.path) return false;
@@ -485,10 +483,6 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           ? isSamePath(tab.path, entry.path) || isPathInsideFolder(tab.path, entry.path)
           : isSamePath(tab.path, entry.path);
       });
-      const activeWasDirty = activeTab ? isDirtyDocumentTab(activeTab) : false;
-      const activeWillBeRetargeted = currentFilePath
-        ? Boolean(retargetFilesystemPath(currentFilePath, entry.path, entry.path))
-        : false;
       await Promise.all(
         affectedTabs
           .filter(isDirtyDocumentTab)
@@ -560,17 +554,10 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
       );
       projectAstBuildIdRef.current += 1;
       setProjectAst(null);
-      setSaveStatus(
-        currentFilePath
-          ? activeWillBeRetargeted || !activeWasDirty
-            ? "saved"
-            : "dirty"
-          : "dirty",
-      );
       showToast(`「${entry.name}」をリネームしました`);
     } catch (error) {
       setLastError(String(error));
-      setSaveStatus("error");
+      showToast("名前を変更できませんでした");
     } finally {
       projectEntryPathChangeInProgressRef.current = false;
     }
@@ -619,7 +606,6 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     });
     if (!shouldDelete) return;
 
-    setSaveStatus("loading");
     try {
       const result = await invoke<DeleteProjectEntryResult>("delete_project_entry_to_trash", {
         rootPath: projectFolder.path,
@@ -685,8 +671,6 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           }));
           setLastError("");
         }
-      } else {
-        setSaveStatus(currentFilePath ? "saved" : "dirty");
       }
       showToast(
         result.fallbackUsed === "appTrash"
@@ -695,7 +679,6 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
       );
     } catch (error) {
       setLastError(String(error));
-      setSaveStatus("error");
       showToast("削除できませんでした");
     }
   };
@@ -723,7 +706,6 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     }
 
     projectEntryPathChangeInProgressRef.current = true;
-    setSaveStatus("loading");
     try {
       const affectedTabs = openTabs.filter((tab) => {
         if (!tab.path) return false;
@@ -800,11 +782,10 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
       setProjectAst(null);
       setProjectFolder(result.projectFolder);
       setLastError("");
-      setSaveStatus(activeNewPath || currentFilePath ? "saved" : "dirty");
       showToast(`「${sourceEntry.name}」を移動しました`);
     } catch (error) {
       setLastError(String(error));
-      setSaveStatus("error");
+      showToast("移動できませんでした");
     } finally {
       projectEntryPathChangeInProgressRef.current = false;
     }
@@ -844,7 +825,6 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     if (movingPaths.length === 0) return;
 
     projectEntryPathChangeInProgressRef.current = true;
-    setSaveStatus("loading");
     try {
       const movingPathSet = new Set(movingPaths);
       await Promise.all(
@@ -939,11 +919,9 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
       setProjectAst(null);
       setProjectFolder(result.projectFolder);
       setLastError("");
-      setSaveStatus(activeNewPath || currentFilePath ? "saved" : "dirty");
       showToast(`${result.moves.length}件のファイルを移動しました`);
     } catch (error) {
       setLastError(String(error));
-      setSaveStatus("error");
       showToast("選択したファイルを移動できませんでした");
     } finally {
       projectEntryPathChangeInProgressRef.current = false;
@@ -965,7 +943,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
       showToast("並び順を保存しました");
     } catch (error) {
       setLastError(String(error));
-      setSaveStatus("error");
+      showToast("並び順を保存できませんでした");
     }
   };
 

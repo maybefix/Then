@@ -11,3 +11,11 @@ export function isRestorableRightSidebarTab(
 export function normalizeRightSidebarTab(value: unknown): RestorableRightSidebarTab {
   return isRestorableRightSidebarTab(value) ? value : "plot";
 }
+
+export function normalizeRightSidebarCollapsed(value: unknown): boolean {
+  return value === true;
+}
+
+export function normalizeRightSidebarWide(value: unknown): boolean {
+  return value === true;
+}

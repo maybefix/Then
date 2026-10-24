@@ -527,6 +527,10 @@ export type AppState = {
   settings: EditorSettings;
   /** 最後に表示していた、次回起動時にも復元可能な右サイドバーのタブ。 */
   rightSidebarTab: RestorableRightSidebarTab;
+  /** 右サイドバーを畳んでいたか。次回起動時に復元する。 */
+  rightSidebarCollapsed: boolean;
+  /** 右サイドバーの幅を広げていたか（ペイン幅を拡張）。次回起動時に復元する。 */
+  rightSidebarWide: boolean;
   /** 最後に表示していた左サイドバーのビュー。次回起動時に復元する。 */
   leftSidebarView: LeftSidebarView;
   /** 左サイドバーを畳んでいたか。次回起動時に復元する。 */
