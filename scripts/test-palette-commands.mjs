@@ -134,10 +134,9 @@ const rows = (commands) => commands.map((command) => [command.id, command.label,
     ["bold", "太字", "Ctrl+B", undefined],
     ["emphasis", "圏点（傍点）", "Ctrl+I", undefined],
     ["checkpoint-create", "今の状態を保存点にする", "Ctrl+Shift+S", undefined],
-    ["checkpoint-open", "チェックポイントを開く", "Checkpoint", undefined],
+    ["checkpoint-open", "チェックポイントを開く", "チェックポイント", undefined],
     ["idea-quick-capture", "Idea にメモを追加…", "Ctrl+Alt+I", undefined],
     ["idea-board-open", "Idea Board を開く", "Ctrl+Alt+B", undefined],
-    ["idea-board-project", "Project Canvas を開く", "Canvas", undefined],
     ["ruby", "ルビ…", "[本文(rb,ルビ)]", undefined],
     ["tcy", "縦中横", "[本文(tcy)]", undefined],
     ["heading-1", "見出し1", "Ctrl+1", undefined],
@@ -150,10 +149,9 @@ const rows = (commands) => commands.map((command) => [command.id, command.label,
     ["direction", "文章方向…", "[(al:start|center|end)]", undefined],
     ["clear-notation", "記法をクリア", undefined, undefined],
     ["manuscript-tidy", "原稿を整える…", "字下げ・！？の後の空き", undefined],
-    ["workspace-open", "別のプロジェクトを開く...", "Workspace", undefined],
-    ["workspace-open-C:\\Novel", "プロジェクトを開く: Novel", "Workspace", undefined],
-    ["workspace-open-D:\\Essay", "プロジェクトを開く: Essay", "Workspace", undefined],
-    ["plugin-manage", "プラグインを管理…", "2 installed", undefined],
+    ["workspace-open", "別のプロジェクトを開く...", "プロジェクト", undefined],
+    ["workspace-open-D:\\Essay", "プロジェクトを開く: Essay", "プロジェクト", undefined],
+    ["plugin-manage", "プラグインを管理…", "2個を導入済み", undefined],
     ["plugin:word-count:count", "文字数を数える", "Ctrl+Alt+W", undefined],
     ["plugin:outline:export", "書き出す", "outline", undefined],
   ]);
@@ -164,9 +162,17 @@ const rows = (commands) => commands.map((command) => [command.id, command.label,
   const { commands } = setup({ showComments: true, showWorkspacePaths: true });
   const byId = Object.fromEntries(commands.map((command) => [command.id, command]));
   assert.equal(byId["comments-visibility"].label, "コメントを非表示にする");
-  assert.equal(byId["workspace-open"].hint, "Workspace", "the generic open entry keeps its hint");
-  assert.equal(byId["workspace-open-C:\\Novel"].hint, "C:\\Novel");
+  assert.equal(byId["workspace-open"].hint, "プロジェクト", "the generic open entry keeps its hint");
   assert.equal(byId["workspace-open-D:\\Essay"].hint, "D:\\Essay");
+}
+
+// 今開いている作品は「プロジェクトを開く」に出さない（パンくずのメニューと同じく、パスが同じものを今の作品とみなす）
+{
+  const workspaceIds = (options) =>
+    setup(options).commands.map((command) => command.id).filter((id) => id.startsWith("workspace-open-"));
+  assert.deepEqual(workspaceIds(), ["workspace-open-D:\\Essay"]);
+  assert.deepEqual(workspaceIds({ projectFolder: { path: "D:\\Essay", name: "Essay", children: [] } }), ["workspace-open-C:\\Novel"]);
+  assert.deepEqual(workspaceIds({ projectFolder: null }), ["workspace-open-C:\\Novel", "workspace-open-D:\\Essay"]);
 }
 
 // 使えない理由の出し分け
@@ -177,18 +183,32 @@ const rows = (commands) => commands.map((command) => [command.id, command.label,
   const noWrap = "単一行の範囲を選択してください";
   const tableOnly = { "table-align-start": noTable, "table-align-center": noTable, "table-align-end": noTable };
 
+  // 本文を使う項目は、本文がなければ全部「本文を開いてください」で使えなくする
+  const noEditor = "本文を開いてください";
   assert.deepEqual(
     disabled({ editor: null }),
     {
-      "table-insert": "本文を開いてください",
-      ...tableOnly,
-      "line-comment-toggle": "本文を開いてください",
-      emphasis: noWrap,
-      ruby: noWrap,
-      tcy: noWrap,
-      "manuscript-tidy": "エディタを開いてください",
+      "table-insert": noEditor,
+      "table-align-start": noEditor,
+      "table-align-center": noEditor,
+      "table-align-end": noEditor,
+      "line-comment-toggle": noEditor,
+      bold: noEditor,
+      emphasis: noEditor,
+      ruby: noEditor,
+      tcy: noEditor,
+      "heading-1": noEditor,
+      "heading-2": noEditor,
+      "heading-3": noEditor,
+      "heading-4": noEditor,
+      "heading-5": noEditor,
+      "heading-6": noEditor,
+      "heading-clear": noEditor,
+      direction: noEditor,
+      "clear-notation": noEditor,
+      "manuscript-tidy": noEditor,
     },
-    "without an editor only these entries are disabled; bold and headings stay enabled",
+    "without an editor every entry that edits the text is disabled with the same reason",
   );
 
   const project = "プロジェクトを開いてください";
@@ -197,7 +217,6 @@ const rows = (commands) => commands.map((command) => [command.id, command.label,
     "checkpoint-create": project,
     "checkpoint-open": project,
     "idea-board-open": project,
-    "idea-board-project": project,
   });
 
   const multiLine = makeEditor("一行目の本文\n二行目", 2, 9);
@@ -271,7 +290,7 @@ const rows = (commands) => commands.map((command) => [command.id, command.label,
   assert.deepEqual(await run("checkpoint-open"), [["openCheckpointStudio"]]);
   assert.deepEqual(await run("idea-quick-capture"), [["setIsQuickIdeaModalOpen", true]]);
   assert.deepEqual(await run("idea-board-open"), [["openIdeaCanvasBoard", "project"]]);
-  assert.deepEqual(await run("idea-board-project"), [["openIdeaCanvasBoard", "project"]]);
+  assert.equal(setup().commands.some((command) => command.id === "idea-board-project"), false, "only one entry opens the Project Canvas");
   assert.deepEqual(await run("workspace-open"), [["openWorkspace"]]);
   assert.deepEqual(await run("workspace-open-D:\\Essay"), [["openWorkspace", "D:\\Essay"]]);
   assert.deepEqual(await run("plugin-manage"), [["setIsPluginManagerOpen", true]]);
