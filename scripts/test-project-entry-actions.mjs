@@ -210,7 +210,11 @@ function setup(world = defaultWorld(), { tauri = true } = {}) {
       retargetPluginAnchors: (oldPath, newPath) => app.anchorRetargets.push([oldPath, newPath]),
       didMountEditorRef: refs.didMountEditorRef,
       lastSavedMarkdownRef: refs.lastSavedMarkdownRef,
-      setSaveStatus: setter("saveStatus"),
+      // 保存の印は今のタブの状態。ファイルの操作が書いたら、書いた値を順に記録する。
+      setSaveStatus: (status) => {
+        app.saveStatus = status;
+        (app.saveStatusCalls ??= []).push(status);
+      },
       setLastError: setter("lastError"),
       showToast: (message) => app.toasts.push(message),
       requestInput: async (options) => {
@@ -245,6 +249,9 @@ function setup(world = defaultWorld(), { tauri = true } = {}) {
 }
 
 const commandsOf = (app) => app.log.map((entry) => entry.command);
+// ファイルの操作は、今のタブの保存の印に触らない（印を書くのは保存の処理だけ）。
+const assertSaveMarkUntouched = (app, label) =>
+  assert.deepEqual(app.saveStatusCalls ?? [], [], `${label}: the save mark of the open tab is left to the save itself`);
 // 書きかけの記録（保存ジャーナル）を、タブの名前で作っておく。本文を1度書き換えたのと同じ。
 const recordEdit = (path) => recordDocumentChange(`file:${path}`, path, "前", "後");
 const forgotten = (app) => app.journal.filter((entry) => entry.command === "journal_forget").map(({ key, discard }) => ({ key, discard }));
@@ -297,7 +304,7 @@ const forgotten = (app) => app.journal.filter((entry) => entry.command === "jour
   assert.deepEqual([...app.collapsedWorkspaceFolderPaths], [p("第一章")], "a file rename leaves folders alone");
   assert.equal(refs.projectAstBuildIdRef.current, 1);
   assert.equal(app.projectAst, null);
-  assert.equal(app.saveStatus, "saved");
+  assertSaveMarkUntouched(app, "rename");
   assert.deepEqual(app.appState.collapsedOutlinePathsByWorkspace[ROOT], [newPath, p("c.txt")]);
   assert.deepEqual(
     app.appState.collapsedOutlineHeadingKeysByWorkspace[ROOT],
@@ -393,9 +400,10 @@ for (const [oldName, answer, expected] of [
   };
   await actions().handleRenameProjectEntry(file(p("c.txt")));
   assert.equal(app.lastError, "Error: rename failed");
-  assert.equal(app.saveStatus, "error");
+  // 名前の変更の失敗は保存の失敗ではないので、今のタブの印に触らず（未保存として数えられない）、通知で知らせる。
+  assertSaveMarkUntouched(app, "rename failure");
   assert.equal(refs.projectEntryPathChangeInProgressRef.current, false, "the hold is released after a failure");
-  assert.deepEqual(app.toasts, []);
+  assert.deepEqual(app.toasts, ["名前を変更できませんでした"]);
 }
 
 // ---- 削除（開いているファイル） ----
@@ -539,7 +547,7 @@ for (const [oldName, answer, expected] of [
   assert.deepEqual(app.anchorRetargets, [[oldPath, newPath]]);
   assert.equal(app.focusedFolderPath, ROOT, "a moved file selects its new folder");
   assert.equal(app.projectFolder, movedFolder);
-  assert.equal(app.saveStatus, "saved");
+  assertSaveMarkUntouched(app, "move");
   assert.deepEqual(app.appState.collapsedOutlinePathsByWorkspace[ROOT], [newPath, p("c.txt")]);
   assert.deepEqual(app.proofreadIgnored, { "a.txt": ["ignore-a"], "c.txt": ["ignore-c"] });
   assert.deepEqual(app.closedDocumentTabs.map((record) => record.path), [newPath, p("c.txt")]);
@@ -626,7 +634,18 @@ for (const [oldName, answer, expected] of [
   await actions().handleMoveProjectEntriesToFolder([p("c.txt"), p("c.txt")], p("第一章"));
   assert.deepEqual(commandsOf(app), ["move_project_entry"], "one source goes through the single move");
   assert.equal(app.lastError, "Error: move failed");
-  assert.equal(app.saveStatus, "error");
+  assertSaveMarkUntouched(app, "move failure");
+  assert.deepEqual(app.toasts, ["移動できませんでした"]);
+}
+{
+  const { app, actions } = setup();
+  app.commands.move_project_entries = () => {
+    throw new Error("moves failed");
+  };
+  await actions().handleMoveProjectEntriesToFolder([p("c.txt"), p("第一章", "b.txt")], p("第二部"));
+  assert.equal(app.lastError, "Error: moves failed");
+  assertSaveMarkUntouched(app, "multiple move failure");
+  assert.deepEqual(app.toasts, ["選択したファイルを移動できませんでした"]);
 }
 
 // ---- 新規ファイル・新規フォルダ ----
@@ -655,8 +674,31 @@ for (const [oldName, answer, expected] of [
   await actions().handleCreateProjectFolder(p("第一章"));
   assert.equal(app.inputs[0].initialValue, "新規フォルダ");
   assert.deepEqual(app.log[0].args, { folderPath: p("第一章"), name: "第二章" });
-  assert.equal(app.saveStatus, "saved");
+  assertSaveMarkUntouched(app, "create folder");
   assert.deepEqual(app.toasts, ["「第二章」を作成しました"]);
+}
+// 作成の失敗も、印に触らず通知で知らせる。
+{
+  const { app, actions } = setup();
+  app.inputAnswers.push("第二章");
+  app.commands.create_project_folder = () => {
+    throw new Error("folder failed");
+  };
+  await actions().handleCreateProjectFolder(p("第一章"));
+  assert.equal(app.lastError, "Error: folder failed");
+  assertSaveMarkUntouched(app, "create folder failure");
+  assert.deepEqual(app.toasts, ["フォルダを作成できませんでした"]);
+}
+{
+  const { app, actions } = setup();
+  app.createFileAnswer = { fileName: "新しい章.txt", templateId: null };
+  app.commands.create_text_file = () => {
+    throw new Error("file failed");
+  };
+  await actions().handleCreateProjectFile();
+  assert.equal(app.lastError, "Error: file failed");
+  assertSaveMarkUntouched(app, "create file failure");
+  assert.deepEqual(app.toasts, ["ファイルを作成できませんでした"]);
 }
 {
   const { app, actions } = setup({ ...defaultWorld(), projectFolder: null });
@@ -739,8 +781,8 @@ const reorderWorld = () => {
   };
   await actions().handleSidebarEntryReorder(p("第一章"), [p("第一章", "b.txt")], p("第一章", "a.txt"), "before");
   assert.equal(app.lastError, "Error: order failed");
-  assert.equal(app.saveStatus, "error");
-  assert.deepEqual(app.toasts, []);
+  assertSaveMarkUntouched(app, "reorder failure");
+  assert.deepEqual(app.toasts, ["並び順を保存できませんでした"]);
 }
 
 // ---- 資料ボードの読み込み（App に残る useEffect。文字で確かめ、動くことは実機で確かめる） ----
