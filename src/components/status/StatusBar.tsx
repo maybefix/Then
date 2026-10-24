@@ -34,6 +34,55 @@ const statusLabels: Record<SaveStatus, string> = {
   error: "保存失敗",
 };
 
+// 保存済みはチェック、まだ保存されていない間はサイクル、失敗は「!」。色は CSS の status-* で決める。
+const saveIconShapes: Record<SaveStatus, "check" | "cycle" | "alert"> = {
+  loading: "cycle",
+  saved: "check",
+  dirty: "cycle",
+  saving: "cycle",
+  error: "alert",
+};
+
+const saveIconPaths = {
+  check: <path d="M5 12l5 5 9-10" />,
+  cycle: (
+    <>
+      <path d="M20 12a8 8 0 0 0-13.66-5.66" />
+      <path d="M6.34 2.34v4h4" />
+      <path d="M4 12a8 8 0 0 0 13.66 5.66" />
+      <path d="M17.66 21.66v-4h-4" />
+    </>
+  ),
+  alert: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7.5v5" />
+      <path d="M12 16.5h.01" />
+    </>
+  ),
+};
+
+function SaveStatusIcon({ status }: { status: SaveStatus }) {
+  const shape = saveIconShapes[status];
+  return (
+    <svg
+      className="statusSaveIcon"
+      data-shape={shape}
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {saveIconPaths[shape]}
+    </svg>
+  );
+}
+
 function ManuscriptStatus({ store }: { store: ManuscriptProgressStore }) {
   const manuscriptProgress = useSyncExternalStore(store.subscribe, store.getSnapshot);
   if (!manuscriptProgress) return null;
@@ -62,14 +111,14 @@ export function StatusBar({
 }: StatusBarProps) {
   return (
     <footer className={`statusbar status-${saveStatus}`}>
-      <span className="statusDot" aria-hidden="true" />
+      <SaveStatusIcon status={saveStatus} />
       <span>{statusLabels[saveStatus]}</span>
       {showFilePath && (
         <span className="statusPath" title={currentFilePath ?? "保存先未指定"}>
           {currentFilePath ?? "保存先未指定"}
         </span>
       )}
-      {lastError && <span className="statusError">{lastError}</span>}
+      {lastError && <span className="statusError" title={lastError}>{lastError}</span>}
       {pageMetrics && (
         <span className="statusPages">
           {pageMetrics.current} / {pageMetrics.total}ページ

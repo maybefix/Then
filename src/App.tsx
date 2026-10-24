@@ -215,6 +215,7 @@ import {
 } from "./proofread/terms";
 import { QuickIdeaModal } from "./components/snippets/QuickIdeaModal";
 import { StatusBar } from "./components/status/StatusBar";
+import { useCheckpointStatusInfo } from "./components/status/useCheckpointStatusInfo";
 import type {
   DocumentAst,
   DocumentOutlineItem,
@@ -3378,16 +3379,15 @@ export default function App() {
       .filter((snapshot) => isSamePath(snapshot.workspacePath, projectFolder.path))
       .sort((left, right) => right.createdAt - left.createdAt);
   }, [appState.snapshots, projectFolder]);
-  // ステータスバーの「保存点 2時間前 · +1,240字」。合計の引き算だけで、差分計算はしない。
-  const latestManualSnapshot = useMemo(
-    () => currentWorkspaceSnapshots.find((snapshot) => snapshot.reason === "manual") ?? null,
-    [currentWorkspaceSnapshots],
-  );
-  const statusProjectVisibleTextLength = useMemo(() => {
-    if (!settings.showCheckpointStatus || !projectAst || !projectFolder || projectAst.rootPath !== projectFolder.path) return null;
-    if (projectAst.files.some((file) => file.status !== "indexed")) return null;
-    return projectAst.files.reduce((sum, file) => sum + file.visibleTextLength, 0);
-  }, [projectAst, projectFolder, settings.showCheckpointStatus]);
+  const checkpointStatus = useCheckpointStatusInfo({
+    settings,
+    currentWorkspaceSnapshots,
+    projectAst,
+    projectFolder,
+    openCheckpointStudio,
+    // 宣言がこの後ろにあるので、押されたときに読む。
+    handleQuickCreateManuscriptSnapshot: () => handleQuickCreateManuscriptSnapshot(),
+  });
   // チェックポイント画面の「現在のプロジェクト」。字数は保存点と同じ表示文字数で数える。
   // 画面を開いているときだけ数え、入力中の経路には載せない。
   const checkpointProjectStats = useMemo(() => {
@@ -11728,16 +11728,7 @@ export default function App() {
                 selectionCharCount={selectionCharCount}
                 pageMetrics={editorPageMetrics}
                 manuscriptProgress={settings.manuscript.layoutMode === "manuscript" ? editorManuscriptProgress : null}
-                checkpoint={settings.showCheckpointStatus && projectFolder ? {
-                  latest: latestManualSnapshot && {
-                    label: latestManualSnapshot.label,
-                    createdAt: latestManualSnapshot.createdAt,
-                    visibleTextLength: latestManualSnapshot.totalVisibleTextLength,
-                  },
-                  currentVisibleTextLength: statusProjectVisibleTextLength,
-                  onOpen: () => openCheckpointStudio(latestManualSnapshot?.id),
-                  onCreate: () => void handleQuickCreateManuscriptSnapshot(),
-                } : null}
+                checkpoint={checkpointStatus}
                 pluginItems={pluginStatusItems}
                 onPluginItemClick={(pluginId, commandId) =>
                   pluginRuntimeHostRef.current?.executeCommand(pluginId, commandId)

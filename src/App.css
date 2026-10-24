@@ -3885,21 +3885,25 @@ html:not([data-window-fullscreen="true"])
   font-size: 12px;
 }
 
-.statusDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--success);
+/* 項目は折り返さない。文字の幅より縮まなくなり、狭いときは min-width: 0 のファイルの場所とエラーの文だけが省略される。 */
+.statusbar > * {
+  white-space: nowrap;
 }
 
-.status-dirty .statusDot,
-.status-saving .statusDot,
-.status-loading .statusDot {
-  background: var(--warning);
+/* SVG は文字と違って nowrap では幅が守られず、ほかの欄に押されて潰れるので、縮めない。 */
+.statusSaveIcon {
+  flex-shrink: 0;
+  color: var(--success);
 }
 
-.status-error .statusDot {
-  background: var(--danger);
+.status-dirty .statusSaveIcon,
+.status-saving .statusSaveIcon,
+.status-loading .statusSaveIcon {
+  color: var(--warning);
+}
+
+.status-error .statusSaveIcon {
+  color: var(--danger);
 }
 
 .statusRight {
