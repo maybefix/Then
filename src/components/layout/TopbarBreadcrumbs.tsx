@@ -154,7 +154,7 @@ export function TopbarBreadcrumbs(props: TopbarBreadcrumbsProps) {
                 name={isRoot ? "book" : isFile ? "file" : "folder"}
                 className="workspaceFolderTreeIcon"
               />
-              <span>{entry.name}</span>
+              <span>{isRoot ? scopeDisplayName(folder) : entry.name}</span>
             </button>
           </div>
         </div>

@@ -7576,7 +7576,7 @@ export default function App() {
         : `「${scopeDisplayName(folderToOpen)}」を開きました`;
       const restoreSummary = [
         projectFolder && !isSamePath(projectFolder.path, folderToOpen.path)
-          ? `「${projectFolder.name}」のタブを記憶`
+          ? `「${scopeDisplayName(projectFolder)}」のタブを記憶`
           : "",
         tabRestore.movedCount ? `移動したタブ ${tabRestore.movedCount}件を追跡` : "",
         tabRestore.missingNames.length
