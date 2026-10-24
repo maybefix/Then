@@ -91,29 +91,35 @@ export function createPaletteCommands(deps: PaletteCommandDeps): PaletteCommand[
   const selection = commandPaletteSelectionRef.current ?? getCurrentEditorSelection();
   const editor = editorInstanceRef.current;
   const table = editor && selection ? tableAtOffset(editor.getValue(), selection.from) : null;
-  const tableDisabled = table ? undefined : "表のセルにカーソルを置いてください";
+  // 本文を使う項目は、本文がなければ同じ理由で使えなくする。
+  const editorDisabled = editor ? undefined : "本文を開いてください";
+  const tableDisabled = editorDisabled ?? (table ? undefined : "表のセルにカーソルを置いてください");
   const canWrap = selection ? canWrapInlineSelection(selection) : false;
-  const wrapDisabled = canWrap ? undefined : "単一行の範囲を選択してください";
+  const wrapDisabled = editorDisabled ?? (canWrap ? undefined : "単一行の範囲を選択してください");
 
   const headingCommands: PaletteCommand[] = [1, 2, 3, 4, 5, 6].map((level) => ({
     id: `heading-${level}`,
     label: `見出し${level}`,
     hint: `Ctrl+${level}`,
+    disabledReason: editorDisabled,
     run: () => applyHeadingShortcut(level, selection ?? undefined),
   }));
   const workspaceCommands: PaletteCommand[] = [
     {
       id: "workspace-open",
       label: "別のプロジェクトを開く...",
-      hint: "Workspace",
+      hint: "プロジェクト",
       run: () => void openWorkspace(),
     },
-    ...appState.recentWorkspaces.map((workspace) => ({
-      id: `workspace-open-${workspace.path}`,
-      label: `プロジェクトを開く: ${workspace.name}`,
-      hint: settings.showWorkspacePaths ? workspace.path : "Workspace",
-      run: () => void openWorkspace(workspace.path),
-    })),
+    // 今開いている作品は出さない（パンくずのメニューと同じく、パスが同じものを今の作品とみなす）。
+    ...appState.recentWorkspaces
+      .filter((workspace) => workspace.path !== projectFolder?.path)
+      .map((workspace) => ({
+        id: `workspace-open-${workspace.path}`,
+        label: `プロジェクトを開く: ${workspace.name}`,
+        hint: settings.showWorkspacePaths ? workspace.path : "プロジェクト",
+        run: () => void openWorkspace(workspace.path),
+      })),
   ];
 
   return [
@@ -121,7 +127,7 @@ export function createPaletteCommands(deps: PaletteCommandDeps): PaletteCommand[
       id: "table-insert",
       label: "表を挿入…",
       hint: "行数・列数を指定",
-      disabledReason: editor ? undefined : "本文を開いてください",
+      disabledReason: editorDisabled,
       run: () => void (async () => {
         if (!editor || !selection) return;
         const originalText = editor.getValue();
@@ -168,7 +174,7 @@ export function createPaletteCommands(deps: PaletteCommandDeps): PaletteCommand[
       id: "line-comment-toggle",
       label: "行をコメントにする／戻す",
       hint: "Ctrl+/",
-      disabledReason: editor ? undefined : "本文を開いてください",
+      disabledReason: editorDisabled,
       run: () => applyLineCommentToggle(selection ?? undefined),
     },
     {
@@ -181,6 +187,7 @@ export function createPaletteCommands(deps: PaletteCommandDeps): PaletteCommand[
       id: "bold",
       label: "太字",
       hint: "Ctrl+B",
+      disabledReason: editorDisabled,
       run: () => applyBoldShortcut(selection ?? undefined),
     },
     {
@@ -200,7 +207,7 @@ export function createPaletteCommands(deps: PaletteCommandDeps): PaletteCommand[
     {
       id: "checkpoint-open",
       label: "チェックポイントを開く",
-      hint: "Checkpoint",
+      hint: "チェックポイント",
       disabledReason: projectFolder ? undefined : "プロジェクトを開いてください",
       run: () => openCheckpointStudio(),
     },
@@ -214,13 +221,6 @@ export function createPaletteCommands(deps: PaletteCommandDeps): PaletteCommand[
       id: "idea-board-open",
       label: "Idea Board を開く",
       hint: "Ctrl+Alt+B",
-      disabledReason: projectFolder ? undefined : "プロジェクトを開いてください",
-      run: () => void openIdeaCanvasBoard("project"),
-    },
-    {
-      id: "idea-board-project",
-      label: "Project Canvas を開く",
-      hint: "Canvas",
       disabledReason: projectFolder ? undefined : "プロジェクトを開いてください",
       run: () => void openIdeaCanvasBoard("project"),
     },
@@ -245,31 +245,34 @@ export function createPaletteCommands(deps: PaletteCommandDeps): PaletteCommand[
       id: "heading-clear",
       label: "見出しを解除",
       hint: "Ctrl+0",
+      disabledReason: editorDisabled,
       run: () => applyHeadingShortcut(0, selection ?? undefined),
     },
     {
       id: "direction",
       label: "文章方向…",
       hint: customNotationSpecs[3].syntax,
+      disabledReason: editorDisabled,
       run: () => openDirectionNotationModal(selection),
     },
     {
       id: "clear-notation",
       label: "記法をクリア",
+      disabledReason: editorDisabled,
       run: () => clearSelectionNotation(selection),
     },
     {
       id: "manuscript-tidy",
       label: "原稿を整える…",
       hint: "字下げ・！？の後の空き",
-      disabledReason: editor ? undefined : "エディタを開いてください",
+      disabledReason: editorDisabled,
       run: () => openManuscriptTidy(selection),
     },
     ...workspaceCommands,
     {
       id: "plugin-manage",
       label: "プラグインを管理…",
-      hint: `${loadedPlugins.length} installed`,
+      hint: `${loadedPlugins.length}個を導入済み`,
       run: () => setIsPluginManagerOpen(true),
     },
     ...pluginCommands.map((command) => ({
