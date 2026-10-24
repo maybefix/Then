@@ -4620,6 +4620,7 @@ export default function App() {
         setBreadcrumbBrowsePath(null);
         setIsBreadcrumbOverflowOpen(false);
         setIsWorkspaceSwitcherOpen(false);
+        setOpenOutlineMenuId(null);
       }
       if (!editorContextMenuRef.current?.contains(target)) {
         setEditorContextMenu(null);
@@ -4635,6 +4636,7 @@ export default function App() {
       setBreadcrumbBrowsePath(null);
       setIsBreadcrumbOverflowOpen(false);
       setIsWorkspaceSwitcherOpen(false);
+      setOpenOutlineMenuId(null);
       setEditorContextMenu(null);
       setNotationModal(null);
       setIsQuickIdeaModalOpen(false);
