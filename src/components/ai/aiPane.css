@@ -40,7 +40,8 @@
 .aiStatus { margin: 0; color: var(--text-secondary); font-size: 11px; }
 .aiStatus.aiFailed { color: var(--danger, #c0392b); }
 .aiTurnActions:empty { display: none; }
-.aiTurnActions select { flex: 1 1 auto; width: 80px; }
+form.aiTurnActions { flex-wrap: wrap; justify-content: flex-end; }
+.aiTurnActions select { flex: 1 1 100%; }
 
 .aiError {
   display: flex; align-items: center; gap: 8px; margin: 0; padding: 6px 8px; border-radius: 6px;

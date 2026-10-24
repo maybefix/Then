@@ -29,9 +29,11 @@ function staticRuntimeImports(source, fileName) {
 
 const mainSource = await readFile("src/main.tsx", "utf8");
 const appSource = await readFile("src/App.tsx", "utf8");
+const rightSidebarSource = await readFile("src/components/layout/RightSidebar.tsx", "utf8");
 const binderSource = await readFile("src/components/binder/BinderPane.tsx", "utf8");
 const mainImports = staticRuntimeImports(mainSource, "src/main.tsx");
 const appImports = staticRuntimeImports(appSource, "src/App.tsx");
+const rightSidebarImports = staticRuntimeImports(rightSidebarSource, "src/components/layout/RightSidebar.tsx");
 const binderImports = staticRuntimeImports(binderSource, "src/components/binder/BinderPane.tsx");
 
 for (const modulePath of ["./App", "./CanvasWindowApp", "./ExportWindowApp"]) {
@@ -48,12 +50,20 @@ for (const modulePath of [
   "./components/export/LinkedExportScreen",
   "./components/checkpoints/CheckpointStudio",
   "./components/binder/OpenCardsPane",
-  "./components/binder/BinderPane",
+  "./components/layout/RightSidebar",
 ]) {
   assert.equal(
     appImports.has(modulePath),
     true,
     `${modulePath} must remain eagerly available when the main screen starts`,
+  );
+}
+
+for (const modulePath of ["../binder/BinderPane"]) {
+  assert.equal(
+    rightSidebarImports.has(modulePath),
+    true,
+    `${modulePath} must remain eagerly available through the right sidebar`,
   );
 }
 
@@ -67,6 +77,7 @@ for (const modulePath of ["../snippets/IdeaPane"]) {
 
 assert.doesNotMatch(mainSource, /\blazy\(/, "root screens must not wait for a first-use import");
 assert.doesNotMatch(appSource, /\blazy\(/, "feature screens must not wait for a first-use import");
+assert.doesNotMatch(rightSidebarSource, /\blazy\(/, "right sidebar panes must not wait for a first-use import");
 assert.doesNotMatch(binderSource, /\blazy\(/, "binder screens must not wait for a first-use import");
 
 const viteSource = await readFile("vite.config.ts", "utf8");

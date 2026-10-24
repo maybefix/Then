@@ -44,6 +44,7 @@ assert.ok(resolved, "context anchoring must reconnect after an edit made while T
 assert.equal(externallyEdited.slice(resolved.from, resolved.to), original.selectedText);
 
 const appSource = await readFile("src/App.tsx", "utf8");
+const rightSidebarSource = await readFile("src/components/layout/RightSidebar.tsx", "utf8");
 const paletteSource = await readFile("src/paletteCommands.ts", "utf8");
 const appCssSource = await readFile("src/App.css", "utf8");
 const pluginManagerSource = await readFile("src/components/dialogs/PluginManagerModal.tsx", "utf8");
@@ -101,17 +102,20 @@ assert.match(
 assert.match(runtimeSource, /addEventListener\("transitioncancel"/, "interrupted Zone transitions must stop host position tracking");
 assert.match(runtimeSource, /"--then-background": "--sidebar-bg"/, "plugin frames must receive Then theme tokens");
 assert.match(runtimeSource, /sendEvent\(runtime\.plugin\.manifest\.id, "theme\.change", theme\)/, "theme changes must be sent into every plugin frame");
-const rightSidebarStart = appSource.search(/<aside\r?\n\s+className=\{`rightSidebar/);
-const rightSidebarEnd = appSource.indexOf("</aside>", rightSidebarStart);
-const sidebarRuntimeAnchorPosition = appSource.indexOf("ref={setSidebarPluginRuntimeAnchor}", rightSidebarStart);
+const rightSidebarAsideStart = rightSidebarSource.search(/<aside\r?\n\s+className=\{`rightSidebar/);
+const rightSidebarAsideEnd = rightSidebarSource.indexOf("</aside>", rightSidebarAsideStart);
+const sidebarRuntimeAnchorPosition = rightSidebarSource.indexOf("ref={setSidebarPluginRuntimeAnchor}", rightSidebarAsideStart);
+const rightSidebarStart = appSource.indexOf("<RightSidebar");
+const rightSidebarEnd = appSource.indexOf("/>", rightSidebarStart);
 const screenPanePosition = appSource.indexOf('className="pluginScreenPane"');
 const screenRuntimeAnchorPosition = appSource.indexOf("ref={setScreenPluginRuntimeAnchor}", screenPanePosition);
 const runtimeHostPosition = appSource.indexOf("<ThenPluginRuntimeHost", rightSidebarStart);
 const referenceLayerPosition = appSource.indexOf("<ReferenceLayer", rightSidebarStart);
 assert.ok(
   rightSidebarStart >= 0 &&
-    sidebarRuntimeAnchorPosition > rightSidebarStart &&
-    sidebarRuntimeAnchorPosition < rightSidebarEnd &&
+    rightSidebarAsideStart >= 0 &&
+    sidebarRuntimeAnchorPosition > rightSidebarAsideStart &&
+    sidebarRuntimeAnchorPosition < rightSidebarAsideEnd &&
     screenPanePosition >= 0 &&
     screenRuntimeAnchorPosition > screenPanePosition &&
     screenRuntimeAnchorPosition < rightSidebarStart &&
