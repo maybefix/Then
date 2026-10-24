@@ -35,6 +35,7 @@ export type ProjectSearchActionDeps = {
   pendingSearchJumpRef: MutableRefObject<ProjectSearchResult | null>;
   editorInstanceRef: MutableRefObject<TextEditorHandle | null>;
   lastSavedMarkdownRef: MutableRefObject<string>;
+  didMountEditorRef: MutableRefObject<boolean>;
   setAppState: Dispatch<SetStateAction<AppState>>;
   setProjectAst: Dispatch<SetStateAction<ProjectAst | null>>;
   setActiveMarkdown: (nextMarkdown: string) => void;
@@ -74,6 +75,7 @@ export function createProjectSearchActions(deps: ProjectSearchActionDeps) {
     pendingSearchJumpRef,
     editorInstanceRef,
     lastSavedMarkdownRef,
+    didMountEditorRef,
     setAppState,
     setProjectAst,
     setActiveMarkdown,
@@ -138,6 +140,9 @@ export function createProjectSearchActions(deps: ProjectSearchActionDeps) {
       return;
     }
 
+    // A replace is an edit of this document: it must reach the autosave even when
+    // the body has not been touched since the document was opened.
+    didMountEditorRef.current = true;
     setActiveMarkdown(result.markdown);
     setSaveStatus("dirty");
     showToast(`${result.count}件をファイル内で置換しました`);

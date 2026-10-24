@@ -8619,6 +8619,7 @@ export default function App() {
     pendingSearchJumpRef,
     editorInstanceRef,
     lastSavedMarkdownRef,
+    didMountEditorRef,
     setAppState,
     setProjectAst,
     setActiveMarkdown,
