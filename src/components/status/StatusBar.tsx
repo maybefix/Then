@@ -118,7 +118,7 @@ export function StatusBar({
           {currentFilePath ?? "保存先未指定"}
         </span>
       )}
-      {lastError && <span className="statusError">{lastError}</span>}
+      {lastError && <span className="statusError" title={lastError}>{lastError}</span>}
       {pageMetrics && (
         <span className="statusPages">
           {pageMetrics.current} / {pageMetrics.total}ページ
