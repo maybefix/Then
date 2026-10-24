@@ -39,9 +39,9 @@
   --topbar-text-muted: #d8f2e2;
   --topbar-text-faint: #aee0c2;
   --topbar-control-hover: color-mix(in srgb, var(--topbar-text-primary) 12%, transparent);
-  /* 帯の右端は明るい緑なので、ウィンドウ操作ボタンは本文の濃い色にする。 */
-  --window-controls-color: var(--text-secondary);
-  --window-controls-hover-color: var(--text-primary);
+  /* 帯の右端は明るい緑なので、右端に置くもの（ウィンドウ操作ボタン、起動画面の版の表示）は本文の濃い色にする。 */
+  --topbar-end-text: var(--text-secondary);
+  --topbar-end-text-hover: var(--text-primary);
   --radius-control: 14px;
   --radius-card: 20px;
   --radius-button: 999px;
@@ -90,9 +90,9 @@
   --topbar-text-muted: #bfeaca;
   --topbar-text-faint: #87c99c;
   --topbar-control-hover: color-mix(in srgb, var(--topbar-text-primary) 12%, transparent);
-  /* 帯の右端は明るいミント色なので、ウィンドウ操作ボタンはテーマの一番濃い緑にする。 */
-  --window-controls-color: var(--bg-root);
-  --window-controls-hover-color: var(--bg-root);
+  /* 帯の右端は明るいミント色なので、右端に置くものはテーマの一番濃い緑にする。 */
+  --topbar-end-text: var(--bg-root);
+  --topbar-end-text-hover: var(--bg-root);
   --sidebar-bg: linear-gradient(180deg, #0b1d14 0%, #07150f 100%);
   --canvas-bg: #05100b;
   --card-float-shadow: 0 6px 18px rgba(0, 0, 0, 0.34);
@@ -120,3 +120,8 @@
 .themePreview-promise-dark i { background: #f4fff7; }
 
 .themePreview-promise-dark b { background: linear-gradient(135deg, #48c176, #b4f0c3); }
+
+/* 起動画面の下部の帯は、チェックの文のあたりで緑が明るくなるので、帯の一番明るい文字色にする。 */
+.appShell[data-theme="promise-light"] .startupPortalSkipSetting {
+  color: var(--topbar-text-primary);
+}

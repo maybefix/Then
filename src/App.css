@@ -415,15 +415,17 @@ textarea,
   color: inherit;
 }
 
+/* 起動画面の上下の帯は --topbar-bg で塗るので、その上の文字も帯の文字色にする。 */
 .startupPortalMenuIcon {
   display: grid;
   width: 24px;
   height: 24px;
   place-items: center;
-  color: var(--text-muted);
+  color: var(--topbar-text-muted, var(--text-muted));
 }
 
 .startupPortalWordmark {
+  color: var(--topbar-text-primary, var(--text-primary));
   font-family: Georgia, "Yu Mincho", serif;
   font-size: 17px;
   font-weight: 600;
@@ -692,7 +694,7 @@ textarea,
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: var(--text-secondary);
+  color: var(--topbar-text-secondary, var(--text-secondary));
   font-size: 12px;
 }
 
@@ -700,8 +702,9 @@ textarea,
   accent-color: var(--accent);
 }
 
+/* 版の表示は帯の右端に置く。 */
 .startupPortalVersion {
-  color: var(--text-muted);
+  color: var(--topbar-end-text, var(--topbar-text-muted, var(--text-muted)));
   font-size: 11px;
 }
 
@@ -892,9 +895,9 @@ html:not([data-window-fullscreen="true"])
   height: 36px;
   /*
    * ボタンは上部の帯に重なるので、帯の文字色に合わせる。帯の右端の色が帯の文字色と
-   * 合わないテーマ（Promise）は、テーマ側で --window-controls-color を決める。
+   * 合わないテーマ（グラデーションの帯）は、テーマ側で --topbar-end-text を決める。
    */
-  color: var(--window-controls-color, var(--topbar-text-secondary, var(--text-secondary)));
+  color: var(--window-controls-color, var(--topbar-end-text, var(--topbar-text-secondary, var(--text-secondary))));
 }
 
 /*
@@ -927,7 +930,7 @@ html:not([data-window-fullscreen="true"])
 /* ホバーの背景はボタンの文字色を薄く混ぜて作る。暗い帯では明るく、明るい帯では暗くなる。 */
 .windowControlButton:hover {
   background: color-mix(in srgb, currentColor 10%, transparent);
-  color: var(--window-controls-hover-color, var(--topbar-text-primary, var(--text-primary)));
+  color: var(--window-controls-hover-color, var(--topbar-end-text-hover, var(--topbar-text-primary, var(--text-primary))));
 }
 
 .windowControlButton:active {

@@ -66,6 +66,8 @@
   --card-bg: #291318;
   --card-hover: #371a20;
   --topbar-bg: var(--brand-gradient);
+  /* 帯の右端はグラデーションの明るい側なので、右端に置くものは一番明るい文字色にする。 */
+  --topbar-end-text: var(--text-primary);
   --sidebar-bg: #241014;
   --radius-control: 4px;
   --radius-card: 8px;
