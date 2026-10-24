@@ -38,7 +38,8 @@ const MIN_ICON_CONTRAST = 3;
 // （Coral、1.10）より少し下に置く。
 const MIN_HOVER_CONTRAST = 1.09;
 
-const controls = `<div class="windowControls" role="group">
+// overPage: App がボタンの下が帯でない画面で付ける印（data-over-page）。
+const controls = (overPage = false) => `<div class="windowControls"${overPage ? ' data-over-page="true"' : ""} role="group">
   <button class="windowControlButton" data-button="minimize"><svg viewBox="0 0 12 12"><path d="M1.5 6.5h9" /></svg></button>
   <button class="windowControlButton" data-button="maximize"><svg viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9" /></svg></button>
   <button class="windowControlButton windowCloseButton" data-button="close"><svg viewBox="0 0 12 12"><path d="m2 2 8 8M10 2 2 10" /></svg></button>
@@ -52,18 +53,18 @@ const topbar = `<section class="appFrame" data-app-mode="write"><header class="t
   </div>
 </header></section>`;
 const scenes = {
-  editor: { view: "editor", body: `${controls}${topbar}` },
+  editor: { view: "editor", body: `${controls()}${topbar}` },
   portal: {
     view: "portal",
-    body: `${controls}<section class="startupPortal"><header class="startupPortalHeader"><span class="startupPortalWordmark">Then</span></header></section>`,
+    body: `${controls()}<section class="startupPortal"><header class="startupPortalHeader"><span class="startupPortalWordmark">Then</span></header></section>`,
   },
   loading: {
     view: "loading",
-    body: `${controls}<div class="startupPortalLoading" role="status">Then を読み込んでいます…</div>`,
+    body: `${controls(true)}<div class="startupPortalLoading" role="status">Then を読み込んでいます…</div>`,
   },
   librarySetup: {
     view: "editor",
-    body: `${controls}<section class="librarySetup"><div class="librarySetupPanel">ライブラリの準備</div></section>${topbar}`,
+    body: `${controls(true)}<section class="librarySetup"><div class="librarySetupPanel">ライブラリの準備</div></section>${topbar}`,
   },
 };
 

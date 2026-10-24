@@ -39,7 +39,11 @@ function WindowControlIcon({ name }: { name: "minimize" | "maximize" | "restore"
   }
 }
 
-export function WindowControls() {
+/**
+ * overPage: ボタンの下が上部の帯ではなく、ふつうの背景のとき（起動中、ライブラリの準備）。
+ * ボタンの色を帯の文字色から本文の文字色に戻す。
+ */
+export function WindowControls({ overPage = false }: { overPage?: boolean }) {
   const native = isTauriRuntime();
   const [isMaximized, setIsMaximized] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -90,6 +94,7 @@ export function WindowControls() {
     <div
       className="windowControls"
       data-fullscreen={isFullscreen ? "true" : undefined}
+      data-over-page={overPage ? "true" : undefined}
       data-tauri-drag-region="false"
       role="group"
       aria-label="ウィンドウ操作"

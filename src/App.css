@@ -897,8 +897,11 @@ html:not([data-window-fullscreen="true"])
   color: var(--window-controls-color, var(--topbar-text-secondary, var(--text-secondary)));
 }
 
-/* 起動中とライブラリの準備は、帯がなく、ふつうの背景がボタンの下に来る。 */
-.appShell:has(> .startupPortalLoading, > .librarySetup) > .windowControls {
+/*
+ * 起動中とライブラリの準備は、帯がなく、ふつうの背景がボタンの下に来る。App が印を付ける
+ * （.appShell:has() は原稿への挿入のたびにアプリ全体の style を計算し直させるので使わない）。
+ */
+.windowControls[data-over-page="true"] {
   --window-controls-color: var(--text-secondary);
   --window-controls-hover-color: var(--text-primary);
 }

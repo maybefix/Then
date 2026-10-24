@@ -9726,7 +9726,7 @@ export default function App() {
           buildAppShellStyle(settings, editorFontFamily, editorHeadingFontFamily)
         }
       >
-        <WindowControls />
+        <WindowControls overPage={startupView === "loading" || Boolean(librarySetupRequest)} />
         {librarySetupRequest && (
           <LibrarySetup
             key={librarySetupRequest.id}
