@@ -74,6 +74,6 @@ assert.match(appCss, /\.activeDocumentTabItem \{[\s\S]*?border-bottom-color: var
 assert.match(manualSource, /タブはパンくずの下に横並びで表示されます/);
 assert.match(manualSource, /「タブを表示」で、タブバーの表示／非表示を切り替えられます/);
 assert.match(manualSource, /本文位置はプロジェクトごとに記憶されます/);
-assert.match(appSource, /「\$\{projectFolder\.name\}」のタブを記憶/);
+assert.match(appSource, /「\$\{scopeDisplayName\(projectFolder\)\}」のタブを記憶/);
 
 console.log("document tab UI tests passed");

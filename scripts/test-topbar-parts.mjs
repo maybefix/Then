@@ -528,7 +528,8 @@ const expectExercised = (label, names) => {
     expectDeferred("作品から自分のライブラリへ", [{ name: "openWorkspace", args: ["C:/lib"] }]);
 
     // ライブラリそのものを開いているときは、今のライブラリに「現在」の印を付け、押しても閉じるだけにする。
-    const libraryRoot = { path: "C:/lib", name: "QAライブラリ", children: [projectFolder], library: { name: "QAライブラリ", role: "root" } };
+    // フォルダ名（lib）とライブラリ名（QAライブラリ）が違うときも、ライブラリ名を出す。
+    const libraryRoot = { path: "C:/lib", name: "lib", children: [projectFolder], library: { name: "QAライブラリ", role: "root" } };
     const inLibrary = render({
       projectFolder: libraryRoot,
       breadcrumbTrail: [libraryRoot],
@@ -538,6 +539,12 @@ const expectExercised = (label, names) => {
     });
     const inLibraryPopover = byClass(inLibrary, "workspaceSwitcherPopover");
     assert.equal(textOf(byClass(inLibraryPopover, "workspaceSwitcherTitle")), "QAライブラリ");
+    const libraryTreeRoot = findOne(
+      inLibraryPopover,
+      (element) => hasClass(element, "workspaceFolderTreeButton") && element.props.title === "C:/lib",
+      "library tree root",
+    );
+    assert.equal(textOf(libraryTreeRoot), "QAライブラリ", "the tree root of a library shows the library name");
     const inLibraryRows = findAll(inLibraryPopover, (element) => hasClass(element, "workspaceRecordButton"));
     const currentLibrary = inLibraryRows.find((element) => element.key === "C:/lib");
     const otherLibrary = inLibraryRows.find((element) => element.key === "C:/別館");
