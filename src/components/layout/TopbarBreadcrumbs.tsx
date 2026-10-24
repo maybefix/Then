@@ -22,7 +22,7 @@ import {
   isSamePath,
   scopeDisplayName,
 } from "../../utils/projectTree";
-import { AppIcon } from "./AppIcon";
+import { AppIcon, type AppIconName } from "./AppIcon";
 
 type BreadcrumbOverflowItem =
   | { kind: "folder" | "file"; name: string; path: string }
@@ -226,6 +226,93 @@ export function TopbarBreadcrumbs(props: TopbarBreadcrumbsProps) {
     </div>
   );
 
+  // 作品の切り替えメニューの行（最近の作品とライブラリ）。開いているフォルダと同じパスの行は「現在」。
+  const renderWorkspaceRecord = (
+    record: WorkspaceRecord,
+    icon: AppIconName,
+    scope: ProjectFolder | null,
+  ) => {
+    const isActive = record.path === scope?.path;
+    return (
+      <button
+        key={record.path}
+        className={isActive ? "workspaceRecordButton activeMenuItem" : "workspaceRecordButton"}
+        type="button"
+        role="menuitem"
+        onClick={() =>
+          closeBreadcrumbMenuAndRun(() =>
+            isActive ? undefined : void openWorkspace(record.path),
+          )
+        }
+      >
+        <AppIcon name={icon} className="menuSvgIcon" />
+        <span className="workspaceRecordText">
+          <span className="workspaceRecordName">{record.name}</span>
+          {settings.showWorkspacePaths && (
+            <span className="workspaceRecordPath">{record.path}</span>
+          )}
+        </span>
+        {isActive && <span className="workspaceRecordBadge">現在</span>}
+      </button>
+    );
+  };
+
+  // 作品の切り替えメニュー。作品を開いていないとき（一時ファイル）は scope が null。
+  const renderWorkspaceSwitcher = (scope: ProjectFolder | null) => (
+    <div className="menuPopover workspaceSwitcherPopover" role="menu">
+      <div className="workspaceSwitcherHeader">
+        <span className="workspaceSwitcherTitle">
+          {scope ? scopeDisplayName(scope) : scratchWorkspaceName}
+        </span>
+        {scope && settings.showWorkspacePaths && (
+          <span className="workspaceSwitcherPath">{scope.path}</span>
+        )}
+      </div>
+      <label className="workspaceSwitcherSearch">
+        <span aria-hidden="true">⌕</span>
+        <input
+          value={workspaceSwitcherQuery}
+          onChange={(event) => setWorkspaceSwitcherQuery(event.target.value)}
+          placeholder="プロジェクトを検索"
+          type="search"
+        />
+      </label>
+      {scope && (
+        <>
+          <span className="workspaceSwitcherSectionLabel">現在のプロジェクト</span>
+          <div className="workspaceFolderTree">{renderWorkspaceFolderTree(scope)}</div>
+          <div className="menuDivider" role="separator" />
+        </>
+      )}
+      <span className="workspaceSwitcherSectionLabel">最近開いたプロジェクト</span>
+      <div className="workspaceSwitcherList">
+        {visibleRecentWorkspaces.length ? (
+          visibleRecentWorkspaces.map((workspace) => renderWorkspaceRecord(workspace, "folder", scope))
+        ) : (
+          <span className="emptyMenuMessage">一致するプロジェクトがありません</span>
+        )}
+      </div>
+      {visibleKnownLibraries.length > 0 && (
+        <>
+          <div className="menuDivider" role="separator" />
+          <span className="workspaceSwitcherSectionLabel">ライブラリ</span>
+          <div className="workspaceSwitcherList">
+            {visibleKnownLibraries.map((library) => renderWorkspaceRecord(library, "book", scope))}
+          </div>
+        </>
+      )}
+      <div className="menuDivider" role="separator" />
+      <button
+        type="button"
+        role="menuitem"
+        onClick={() => closeBreadcrumbMenuAndRun(() => void openWorkspace())}
+      >
+        <AppIcon name="folder" className="menuSvgIcon" />
+        <span>別のフォルダを開く...</span>
+      </button>
+    </div>
+  );
+
   return (
     <nav
       className="breadcrumbs"
@@ -329,91 +416,7 @@ export function TopbarBreadcrumbs(props: TopbarBreadcrumbsProps) {
                     )}
                     <span>{index === 0 ? scopeDisplayName(projectFolder) : crumb.name}</span>
                   </button>
-                  {index === 0 && isWorkspaceSwitcherOpen && (
-                    <div className="menuPopover workspaceSwitcherPopover" role="menu">
-                      <div className="workspaceSwitcherHeader">
-                        <span className="workspaceSwitcherTitle">{scopeDisplayName(projectFolder)}</span>
-                        {settings.showWorkspacePaths && (
-                          <span className="workspaceSwitcherPath">{projectFolder.path}</span>
-                        )}
-                      </div>
-                      <label className="workspaceSwitcherSearch">
-                        <span aria-hidden="true">⌕</span>
-                        <input
-                          value={workspaceSwitcherQuery}
-                          onChange={(event) =>
-                            setWorkspaceSwitcherQuery(event.target.value)
-                          }
-                          placeholder="プロジェクトを検索"
-                          type="search"
-                        />
-                      </label>
-                      <span className="workspaceSwitcherSectionLabel">
-                        現在のプロジェクト
-                      </span>
-                      <div className="workspaceFolderTree">
-                        {renderWorkspaceFolderTree(projectFolder)}
-                      </div>
-                      <div className="menuDivider" role="separator" />
-                      <span className="workspaceSwitcherSectionLabel">
-                        最近開いたプロジェクト
-                      </span>
-                      <div className="workspaceSwitcherList">
-                        {visibleRecentWorkspaces.length ? (
-                          visibleRecentWorkspaces.map((workspace) => {
-                            const isActive = workspace.path === projectFolder.path;
-                            return (
-                              <button
-                                key={workspace.path}
-                                className={
-                                  isActive
-                                    ? "workspaceRecordButton activeMenuItem"
-                                    : "workspaceRecordButton"
-                                }
-                                type="button"
-                                role="menuitem"
-                                onClick={() =>
-                                  closeBreadcrumbMenuAndRun(() =>
-                                    isActive ? undefined : void openWorkspace(workspace.path),
-                                  )
-                                }
-                              >
-                                <AppIcon name="folder" className="menuSvgIcon" />
-                                <span className="workspaceRecordText">
-                                  <span className="workspaceRecordName">
-                                    {workspace.name}
-                                  </span>
-                                  {settings.showWorkspacePaths && (
-                                    <span className="workspaceRecordPath">
-                                      {workspace.path}
-                                    </span>
-                                  )}
-                                </span>
-                                {isActive && (
-                                  <span className="workspaceRecordBadge">現在</span>
-                                )}
-                              </button>
-                            );
-                          })
-                        ) : (
-                          <span className="emptyMenuMessage">
-                            一致するプロジェクトがありません
-                          </span>
-                        )}
-                      </div>
-                      <div className="menuDivider" role="separator" />
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() =>
-                          closeBreadcrumbMenuAndRun(() => void openWorkspace())
-                        }
-                      >
-                        <AppIcon name="folder" className="menuSvgIcon" />
-                        <span>別のフォルダを開く...</span>
-                      </button>
-                    </div>
-                  )}
+                  {index === 0 && isWorkspaceSwitcherOpen && renderWorkspaceSwitcher(projectFolder)}
                   {index !== 0 && activeBreadcrumbPath === crumb.path && (
                     <div className="menuPopover breadcrumbPopover" role="menu">
                       {breadcrumbNavigation?.parentPath && (
@@ -624,88 +627,7 @@ export function TopbarBreadcrumbs(props: TopbarBreadcrumbsProps) {
             <AppIcon name="book" className="workspaceSwitcherBookIcon" />
             <span>{scratchWorkspaceName}</span>
           </button>
-          {isWorkspaceSwitcherOpen && (
-            <div className="menuPopover workspaceSwitcherPopover" role="menu">
-              <div className="workspaceSwitcherHeader">
-                <span className="workspaceSwitcherTitle">{scratchWorkspaceName}</span>
-              </div>
-              <label className="workspaceSwitcherSearch">
-                <span aria-hidden="true">⌕</span>
-                <input
-                  value={workspaceSwitcherQuery}
-                  onChange={(event) => setWorkspaceSwitcherQuery(event.target.value)}
-                  placeholder="プロジェクトを検索"
-                  type="search"
-                />
-              </label>
-              <span className="workspaceSwitcherSectionLabel">
-                最近開いたプロジェクト
-              </span>
-              <div className="workspaceSwitcherList">
-                {visibleRecentWorkspaces.length ? (
-                  visibleRecentWorkspaces.map((workspace) => (
-                    <button
-                      key={workspace.path}
-                      className="workspaceRecordButton"
-                      type="button"
-                      role="menuitem"
-                      onClick={() =>
-                        closeBreadcrumbMenuAndRun(() => void openWorkspace(workspace.path))
-                      }
-                    >
-                      <AppIcon name="folder" className="menuSvgIcon" />
-                      <span className="workspaceRecordText">
-                        <span className="workspaceRecordName">{workspace.name}</span>
-                        {settings.showWorkspacePaths && (
-                          <span className="workspaceRecordPath">{workspace.path}</span>
-                        )}
-                      </span>
-                    </button>
-                  ))
-                ) : (
-                  <span className="emptyMenuMessage">
-                    一致するプロジェクトがありません
-                  </span>
-                )}
-              </div>
-              {visibleKnownLibraries.length > 0 && (
-                <>
-                  <div className="menuDivider" role="separator" />
-                  <span className="workspaceSwitcherSectionLabel">ライブラリ</span>
-                  <div className="workspaceSwitcherList">
-                    {visibleKnownLibraries.map((library) => (
-                      <button
-                        key={library.path}
-                        className="workspaceRecordButton"
-                        type="button"
-                        role="menuitem"
-                        onClick={() =>
-                          closeBreadcrumbMenuAndRun(() => void openWorkspace(library.path))
-                        }
-                      >
-                        <AppIcon name="book" className="menuSvgIcon" />
-                        <span className="workspaceRecordText">
-                          <span className="workspaceRecordName">{library.name}</span>
-                          {settings.showWorkspacePaths && (
-                            <span className="workspaceRecordPath">{library.path}</span>
-                          )}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-              <div className="menuDivider" role="separator" />
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => closeBreadcrumbMenuAndRun(() => void openWorkspace())}
-              >
-                <AppIcon name="folder" className="menuSvgIcon" />
-                <span>別のフォルダを開く...</span>
-              </button>
-            </div>
-          )}
+          {isWorkspaceSwitcherOpen && renderWorkspaceSwitcher(null)}
         </div>
       )}
       {!projectFolder && (
