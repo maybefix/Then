@@ -3890,7 +3890,9 @@ html:not([data-window-fullscreen="true"])
   white-space: nowrap;
 }
 
+/* SVG は文字と違って nowrap では幅が守られず、ほかの欄に押されて潰れるので、縮めない。 */
 .statusSaveIcon {
+  flex-shrink: 0;
   color: var(--success);
 }
 
