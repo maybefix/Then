@@ -3885,21 +3885,19 @@ html:not([data-window-fullscreen="true"])
   font-size: 12px;
 }
 
-.statusDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--success);
+.statusSaveIcon {
+  flex: 0 0 auto;
+  color: var(--success);
 }
 
-.status-dirty .statusDot,
-.status-saving .statusDot,
-.status-loading .statusDot {
-  background: var(--warning);
+.status-dirty .statusSaveIcon,
+.status-saving .statusSaveIcon,
+.status-loading .statusSaveIcon {
+  color: var(--warning);
 }
 
-.status-error .statusDot {
-  background: var(--danger);
+.status-error .statusSaveIcon {
+  color: var(--danger);
 }
 
 .statusRight {

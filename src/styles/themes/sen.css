@@ -387,9 +387,8 @@
   color: var(--sen-vermilion);
 }
 
-.appShell[data-theme|="sen"] .statusDot {
-  border: 1px solid var(--sen-ink);
-  background: var(--sen-paper);
+.appShell[data-theme|="sen"] .statusSaveIcon {
+  color: var(--sen-ink);
 }
 
 .appShell[data-theme|="sen"] :is(
@@ -397,9 +396,8 @@
   .status-saving,
   .status-loading,
   .status-error
-) .statusDot {
-  border-color: var(--sen-vermilion);
-  background: var(--sen-vermilion);
+) .statusSaveIcon {
+  color: var(--sen-vermilion);
 }
 
 .appShell[data-theme|="sen"] .fileTreeOutlineChildren .outlineLevelMark {
