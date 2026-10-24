@@ -12,6 +12,7 @@
     "test:ai-pane-layout": "node scripts/test-ai-pane-layout.mjs",
     "test:right-sidebar": "node scripts/test-right-sidebar.mjs",
     "test:left-sidebar": "node scripts/test-left-sidebar.mjs",
+    "test:topbar-parts": "node scripts/test-topbar-parts.mjs",
     "test:workspace-tree-actions": "node scripts/test-workspace-tree-actions.mjs",
     "test:project-search-actions": "node scripts/test-project-search-actions.mjs",
     "test:heading-move-actions": "node scripts/test-heading-move-actions.mjs",
