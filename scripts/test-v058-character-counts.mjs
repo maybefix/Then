@@ -73,8 +73,9 @@ assert.match(
   /const charCount = displayedCharacterCount\(activeDocumentAst, \{\s*includeWhitespace: settings\.countWhitespace,\s*includeCode: settings\.countCode,\s*\}\);/,
   "the status bar must consume Document AST aggregate metrics",
 );
+const leftSidebarSource = await readFile("src/components/layout/LeftSidebar.tsx", "utf8");
 assert.match(
-  appSource,
+  leftSidebarSource,
   /currentFileCharCount=\{charCount\}/,
   "the sidebar active file count must reuse the same aggregate",
 );
