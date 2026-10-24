@@ -270,6 +270,38 @@ assert.deepEqual(s.saveStatuses, ["error"]);
 assert.deepEqual(s.replacing, [true, false]);
 assert.deepEqual(s.toasts, []);
 
+// 途中のファイルで保存に失敗しても、それまでに保存したファイルは、タブと今の本文へ反映する。
+// 反映しないと、置換済みのファイルを開いているタブが古い本文のまま残り、次の保存で置換が元に戻る。
+reset({ failSavePath: `${ROOT}/章/c.md` });
+await actions().handleReplaceInProject();
+assert.equal(s.disk[`${ROOT}/a.md`], "# A\n照合済がある。編集中\n");
+assert.equal(s.disk[`${ROOT}/b.md`], "# B\n照合済と照合済。追記\n");
+assert.equal(s.disk[`${ROOT}/章/c.md`], "# C\n照合語。\n");
+assert.deepEqual(
+  s.openTabs.map((item) => [item.name, item.markdown, item.savedMarkdown, item.saveStatus, item.editorRevision]),
+  [
+    ["a.md", "# A\n照合済がある。編集中\n", "# A\n照合済がある。編集中\n", "saved", null],
+    ["b.md", "# B\n照合済と照合済。追記\n", "# B\n照合済と照合済。追記\n", "saved", null],
+    ["other.md", "# 他\n照合語\n", "# 他\n照合語\n", "saved", 7],
+  ],
+  "tabs of files saved before the failure show what is on disk",
+);
+assert.equal(s.lastSavedMarkdownRef.current, "# A\n照合済がある。編集中\n", "the open file's saved text is what was written");
+assert.deepEqual(s.appState, { markdown: "# A\n照合済がある。編集中\n", lastFilePath: `${ROOT}/a.md`, other: "keep" });
+assert.deepEqual(s.projectAst.files.map((item) => item.path).sort(), [`${ROOT}/a.md`, `${ROOT}/b.md`]);
+assert.deepEqual(s.lastErrors, ["", `Error: disk full: ${ROOT}/章/c.md`]);
+assert.equal(s.saveStatuses.at(-1), "error");
+assert.deepEqual(s.replacing, [true, false]);
+assert.deepEqual(s.toasts, []);
+
+// 最初のファイルで失敗したときは、反映するものがないので、タブと今の本文に触らない。
+reset({ failSavePath: `${ROOT}/a.md` });
+const tabsBefore = structuredClone(s.openTabs);
+await actions().handleReplaceInProject();
+assert.deepEqual(s.openTabs, tabsBefore);
+assert.equal(s.lastSavedMarkdownRef.current, "# A\n照合語がある。\n");
+assert.deepEqual(s.saveStatuses, ["error"]);
+
 // --- 今のファイルの中の置換 ---
 reset({ projectSearchQuery: "" });
 actions().handleReplaceInCurrentFile();
