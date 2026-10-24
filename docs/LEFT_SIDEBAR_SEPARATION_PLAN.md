@@ -189,7 +189,13 @@ Rust の命令 `read_text_file`、`save_text_file`、`save_heading_move`、`extr
 
 ### 4-4. 今の自動テストの状態
 
-「前」の一式を `5e5ca0e` で動かしている（結果はここに書き足す）。
+「前」の一式を `5e5ca0e` で動かした（2026-10-24）。build は成功、いちばん大きい JavaScript は 695,771 バイト、76本のうち73本が通り、3本が失敗した。失敗の3本は、右サイドバーの分離のときと同じ、今回とは関係のない元からの失敗。
+
+| テスト | 失敗の理由 |
+|---|---|
+| `test:canvas-save` | テストがモジュールを読み込むときに `./utils/fontStack` を解決できない |
+| `test:v058-bundle` | いちばん大きい JavaScript が Vite の 500 kB の警告の上限を超えている |
+| `test:v0511-themes` | 朱墨のテーマで、プロットの面に枠線が残っている |
 
 ## 工程5: 案
 
@@ -286,3 +292,57 @@ Rust の命令 `read_text_file`、`save_text_file`、`save_heading_move`、`extr
    - 先に段階3の分離を終え、分離の突き合わせ（2）をその時点で済ませる。直した後の動きは突き合わせの対象にしない。
    - 直す前に、癖が本当に起きることを、移した後のファイルを動かすテストで確かめる（今は見込み）。そのテストを「今は失敗する」形で書いてから直す（`then-safe-change` の不具合の修正の手順）。
    - どう直すか（失敗したときに、それまでに保存したファイルをタブへ反映するか、全部を元へ戻すか）は、癖を確かめた後に案を出して決めてもらう。
+
+## 工程7: 実施
+
+### 段階1＋2（PR 1）
+
+| コミット | 内容 |
+|---|---|
+| `9c69897` | 左の枠の JSX（11100〜11317行）と `isProjectSearchMode`（2152行）を `src/components/layout/LeftSidebar.tsx` へ移す。verify-move: lost 0。App に足したのは import と `<LeftSidebar {...{ … }} />` の呼び出しだけ（App の値を76個渡す）。App で使わなくなった `OpenCardsPane` と `WorkspaceSidebar` の import を消し、`SidebarHeadingSelection` は型だけの import にした。`test:binder`・`test:v061-plugins`・`test:v058-bundle` の読み先を変えた |
+| `3eaa89f` | つなぎを確かめる `test:left-sidebar` |
+| `e15a754` | ツリーの開閉の操作3つ（9866〜9930行。段階1の後の行番号）を `src/workspaceTreeActions.ts` の `createWorkspaceTreeActions({ projectFolder, setAppState })` へ移す。verify-move: lost 0。返ってきた関数を使うのは呼び出しより後の JSX だけ（`symbol-uses.mjs --call-site`） |
+| `b0ce519` | 開閉の記録を確かめる `test:workspace-tree-actions` |
+| `e400415` | `test:v058-counts` の読み先を変える（工程8の「前後の比較」を参照） |
+
+- App.tsx は 12,074行 → 11,818行（−256行）。`LeftSidebar.tsx` は 363行（うち props の型と受け取りが約120行）、`workspaceTreeActions.ts` は 88行。
+- DOM は変わらない（部品は要素を足さない）。CSS は変えていない。
+- 移した JSX の字下げは、元の App.tsx の不揃いのまま（`WorkspaceSidebar` の props の一部だけ深い）。中身を1文字も変えないため、整えていない。
+- いちばん大きい JavaScript は 695,771 → 699,779 バイト（+4.0 kB）。props を名前で受け取るので、名前が圧縮で縮まない分が増えた。`test:v058-bundle` は元から上限を超えていて失敗する。
+
+## 工程8: 自動テスト
+
+### 足した回帰テスト
+
+- `test:left-sidebar`（`scripts/test-left-sidebar.mjs`）: `LeftSidebar` はフックを使わないので、関数として呼んで、返ってきた要素の木をたどる。`WorkspaceSidebar` と `OpenCardsPane` は、受け取った props を見るだけの代わりの部品に差し替える。App の値は名前ごとに違う目印（真偽値も文字列の目印）にし、App の関数は呼ばれた名前と引数を記録する入れ物にする。確かめること:
+  - `WorkspaceSidebar` に渡す props が、確かめる表と過不足なく一致すること（値34個、関数38個）。
+  - 値の props が、決めた App の値のとおりに届くこと（いま見出しのある行の `blockId`、索引の読み込み中、検索中かどうかの出し分けを含む）。
+  - 関数の props を見本の引数で呼ぶと、決めた App の関数が、決めた引数で1回だけ呼ばれること（全38個。チェックポイント欄の開閉は `updateSettings("checkpointSectionCollapsed", …)`、保存点を開くのは `openCheckpointStudio(snapshot.id)`、畳むのは `setIsLeftSidebarCollapsed(true)`）。
+  - 左端のボタンの並びと `aria-pressed`、押すと畳みを解いてビューを替えること、新規フォルダが「選んだフォルダ → 作品のフォルダ → フォルダを開く」の順に行き先を選ぶこと。
+  - 畳んだとき、ほかの画面（Canvas・出力・チェックポイント）、プラグイン画面、集中モードでの隠し方（`modeHiddenPane`・`aria-hidden`・`inert`）。
+  - 開いているカードのビューで、`OpenCardsPane` へ渡す値と4つの関数、頭の「左サイドバーを畳む」。
+- `test:workspace-tree-actions`（`scripts/test-workspace-tree-actions.mjs`）: 3種類の開閉それぞれで、今の作品の一覧に足し・外しすること、同じものは1つだけ残ること、ほかの作品の一覧とほかの種類の一覧に触らないこと、作品がないときは何も書かないこと。
+
+効くことの確かめ（わざと不具合を入れて落ちるのを見て、`git checkout -- <file>` で戻した）:
+
+| テスト | 入れた不具合 | 落ちた所 |
+|---|---|---|
+| `test:left-sidebar` | `onRenameEntry` に `handleDeleteProjectEntry` をつなぐ | `WorkspaceSidebar.onRenameEntry must call handleRenameProjectEntry once` |
+| `test:left-sidebar` | `onMoveEntry` で `targetPath` と `position` を入れ替える | `WorkspaceSidebar.onMoveEntry must call handleMoveProjectEntriesToFolder once` |
+| `test:workspace-tree-actions` | アウトラインの開閉で、フォルダの一覧を読む | `handleOutlineCollapsedChange keeps one entry per key, in order` |
+| `test:workspace-tree-actions` | 見出しの開閉で、作品がないときの早期の戻りを外す | `handleOutlineHeadingCollapsedChange does nothing without an open work` |
+
+### 前後の比較（段階1＋2）
+
+「後」の一式を `b0ce519` で動かした。build は成功、78本（足した2本を含む）。
+
+| 分類 | テスト | 結果 |
+|---|---|---|
+| 両方で通る | 72本 | 同じ |
+| 両方で失敗（元から） | `test:canvas-save`、`test:v058-bundle`、`test:v0511-themes` | 同じ理由（`test:v058-bundle` は大きさが 699,779 バイトになっただけ） |
+| 後だけ | `test:left-sidebar`、`test:workspace-tree-actions` | 通る |
+| 新しい失敗 | `test:v058-counts` | 下記のとおり直した |
+
+- `test:v058-counts` は、App.tsx の中に `currentFileCharCount={charCount}` があることを確かめていた。調査の `text-deps.mjs` で、移す JSX の props の名前の一部しか調べなかったため見落とした。読み先を `LeftSidebar.tsx` に変え（`e400415`）、正規表現は変えていない。単独で通ることを確かめた。
+- 見落としがほかにないかを、移した JSX の props の名前すべてと、左の枠の class 名で `text-deps.mjs` にかけ直した。残りの一致はどれも App に残っているコードを確かめるもので、移したことで意味が変わるもの（App.tsx に「ないこと」を確かめて、移したので素通りになるもの）はなかった。
+- 作業の途中で、確かめのコマンドに誤って `git checkout <タグ> --` を混ぜ、一時的にチェックポイントのタグ（`ff26a09`）へ切り替わった。コミットはすべてブランチにあり、未コミットの変更（`test:v058-counts` の読み先）も失われていない。すぐにブランチへ戻し、`git stash` の一覧（利用者の前からの stash を含む）が変わっていないことを確かめた。
