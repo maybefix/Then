@@ -266,7 +266,7 @@ assert.equal(s.invokes.filter((call) => call.command === "save_text_file").lengt
 reset({ failSavePath: `${ROOT}/b.md` });
 await actions().handleReplaceInProject();
 assert.deepEqual(s.lastErrors, ["", `Error: disk full: ${ROOT}/b.md`]);
-assert.deepEqual(s.saveStatuses, ["error"]);
+assert.equal(s.saveStatuses.at(-1), "error");
 assert.deepEqual(s.replacing, [true, false]);
 assert.deepEqual(s.toasts, []);
 

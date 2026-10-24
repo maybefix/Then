@@ -176,9 +176,40 @@ export function createProjectSearchActions(deps: ProjectSearchActionDeps) {
 
     setIsProjectReplacing(true);
     setLastError("");
+    const savedDocuments: TextDocument[] = [];
+    // 保存したファイルを、開いているタブと今の本文へ反映する。途中で失敗したときも、
+    // それまでに保存した分は反映する（古い本文のタブが残ると、次の保存で置換が元に戻る）。
+    const applySavedDocuments = () => {
+      const savedByPath = new Map(savedDocuments.map((document) => [document.path, document]));
+      setOpenTabs((current) =>
+        current.map((tab) => {
+          if (!tab.path) return tab;
+          const document = savedByPath.get(tab.path);
+          if (!document) return tab;
+          return {
+            ...tab,
+            markdown: document.content,
+            savedMarkdown: document.content,
+            editorRevision: null,
+            name: document.name,
+            saveStatus: "saved",
+          };
+        }),
+      );
+
+      const activeSavedDocument = currentFilePath ? savedByPath.get(currentFilePath) : null;
+      if (activeSavedDocument) {
+        lastSavedMarkdownRef.current = activeSavedDocument.content;
+        setAppState((current) => ({
+          ...current,
+          markdown: activeSavedDocument.content,
+          lastFilePath: activeSavedDocument.path,
+        }));
+        setSaveStatus("saved");
+      }
+    };
     try {
       const files = collectProjectTextFiles(projectFolder);
-      const savedDocuments: TextDocument[] = [];
       let totalCount = 0;
 
       for (const file of files) {
@@ -219,36 +250,10 @@ export function createProjectSearchActions(deps: ProjectSearchActionDeps) {
         return;
       }
 
-      const savedByPath = new Map(savedDocuments.map((document) => [document.path, document]));
-      setOpenTabs((current) =>
-        current.map((tab) => {
-          if (!tab.path) return tab;
-          const document = savedByPath.get(tab.path);
-          if (!document) return tab;
-          return {
-            ...tab,
-            markdown: document.content,
-            savedMarkdown: document.content,
-            editorRevision: null,
-            name: document.name,
-            saveStatus: "saved",
-          };
-        }),
-      );
-
-      const activeSavedDocument = currentFilePath ? savedByPath.get(currentFilePath) : null;
-      if (activeSavedDocument) {
-        lastSavedMarkdownRef.current = activeSavedDocument.content;
-        setAppState((current) => ({
-          ...current,
-          markdown: activeSavedDocument.content,
-          lastFilePath: activeSavedDocument.path,
-        }));
-        setSaveStatus("saved");
-      }
-
+      applySavedDocuments();
       showToast(`${totalCount}件をプロジェクト全体で置換しました`);
     } catch (error) {
+      if (savedDocuments.length) applySavedDocuments();
       setLastError(String(error));
       setSaveStatus("error");
     } finally {
