@@ -300,6 +300,8 @@
 .appShell[data-theme] .topbar .iconButton:hover,
 .appShell[data-theme] .topbar .breadcrumbFolderButton:hover,
 .appShell[data-theme] .topbar .breadcrumbFolderButton[aria-expanded="true"] {
+  /* 帯が暗いライトテーマは、明るい面のための --control-hover では見えないので、帯用の色を決める。 */
+  background: var(--topbar-control-hover, var(--control-hover));
   color: var(--topbar-text-primary);
 }
 

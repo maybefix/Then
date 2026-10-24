@@ -24,7 +24,8 @@ const mainWindow = tauriConfig.app.windows[0];
 assert.equal(mainWindow.decorations, false, "the Windows-native titlebar must be disabled");
 assert.equal(mainWindow.shadow, true, "the frameless window must retain its native shadow");
 
-assert.match(app, /<WindowControls \/>/);
+// ボタンの下が帯でない画面（起動中、ライブラリの準備）を App が渡す。
+assert.match(app, /<WindowControls overPage=\{startupView === "loading" \|\| Boolean\(librarySetupRequest\)\} \/>/);
 assert.match(app, /className="topbar" data-tauri-drag-region="deep"/);
 assert.match(portal, /className="startupPortalHeader" data-tauri-drag-region="deep"/);
 assert.match(controls, /appWindow\.minimize\(\)/);

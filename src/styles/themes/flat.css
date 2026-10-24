@@ -88,6 +88,8 @@
   --topbar-text-secondary: #dde4ec;
   --topbar-text-muted: #b6c2cf;
   --topbar-text-faint: #828f9c;
+  /* 帯の右端はグラデーションの明るい側なので、右端に置くものは帯の一番明るい文字色にする。 */
+  --topbar-end-text: var(--topbar-text-primary);
   --sidebar-bg: linear-gradient(180deg, #181f27 0%, #11161c 100%);
   --canvas-bg: #0a0e12;
   --card-float-shadow: 0 6px 18px rgba(0, 0, 0, 0.38);
