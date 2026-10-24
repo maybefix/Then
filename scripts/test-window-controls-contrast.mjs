@@ -37,6 +37,9 @@ const MIN_ICON_CONTRAST = 3;
 // ホバーの背景が見えるとみなす差。白い帯のテーマで、帯のボタンのホバーがいちばん薄いもの
 // （Coral、1.10）より少し下に置く。
 const MIN_HOVER_CONTRAST = 1.09;
+// 起動画面の帯の上の部品。文字は WCAG 1.4.3 の 4.5。控えめな色で描く部品（メニューのアイコン、
+// 版の表示）は、白い帯のテーマでも 4.5 を下回るもの（Bronze の版 4.3 など）があるので 3。
+const PORTAL_PART_CONTRAST = { menu: 3, wordmark: 4.5, settings: 4.5, skip: 4.5, version: 3 };
 
 // overPage: App がボタンの下が帯でない画面で付ける印（data-over-page）。
 const controls = (overPage = false) => `<div class="windowControls"${overPage ? ' data-over-page="true"' : ""} role="group">
@@ -56,7 +59,18 @@ const scenes = {
   editor: { view: "editor", body: `${controls()}${topbar}` },
   portal: {
     view: "portal",
-    body: `${controls()}<section class="startupPortal"><header class="startupPortalHeader"><span class="startupPortalWordmark">Then</span></header></section>`,
+    body: `${controls()}<section class="startupPortal">
+  <header class="startupPortalHeader">
+    <span class="startupPortalMenuIcon" data-portal-part="menu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg></span>
+    <span class="startupPortalWordmark" data-portal-part="wordmark">Then</span>
+  </header>
+  <div class="startupPortalMain"></div>
+  <footer class="startupPortalFooter">
+    <button class="startupPortalSettingsButton" type="button" data-portal-part="settings">設定</button>
+    <label class="startupPortalSkipSetting"><input type="checkbox" /><span data-portal-part="skip">次回から前回のライブラリ・作品を直接開く</span></label>
+    <span class="startupPortalVersion" data-portal-part="version">Then 0.7.0</span>
+  </footer>
+</section>`,
   },
   loading: {
     view: "loading",
@@ -256,6 +270,17 @@ try {
         await moveMouse(640, 700);
       }
 
+      if (sceneName === "portal") {
+        // 起動画面の上下の帯は、作品の画面の帯と同じ色で塗るので、その上の文字も帯の文字色で読めること。
+        // 「設定」は自分の背景（--bg-panel）を持つボタン。
+        for (const [part, minimum] of Object.entries(PORTAL_PART_CONTRAST)) {
+          const seen = await read(`[data-portal-part="${part}"]`);
+          const partContrast = contrast(seen.color, seen.surface);
+          if (partContrast < minimum) {
+            fail(`${where}: portal ${part} contrast ${round(partContrast)} (${seen.rawColor} on ${JSON.stringify(seen.surface)})`);
+          }
+        }
+      }
       if (sceneName !== "editor") continue;
       // 帯のほかのボタン。ホバーをわざと出さないテーマ（--control-hover が transparent）は除く。
       if ((await evaluate("__controlHover()")) === "transparent") continue;
