@@ -41,6 +41,11 @@ import {
   normalizeRightSidebarTab,
 } from "./utils/rightSidebarState";
 import {
+  normalizeLeftSidebarCollapsed,
+  normalizeLeftSidebarView,
+  type LeftSidebarView,
+} from "./utils/leftSidebarState";
+import {
   getBreadcrumbLayout,
   isBreadcrumbTrailItemVisible,
   isOutlineBreadcrumbItemVisible,
@@ -863,6 +868,8 @@ function createDefaultState(): AppState {
     profileSnippets: threads,
     settings: defaultSettings,
     rightSidebarTab: "plot",
+    leftSidebarView: "files",
+    leftSidebarCollapsed: false,
     lastWorkspacePath: null,
     lastFilePath: null,
     recentWorkspaces: [],
@@ -1601,6 +1608,8 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
       ai: normalizeAiSettings(settings.ai),
     },
     rightSidebarTab: normalizeRightSidebarTab(value?.rightSidebarTab),
+    leftSidebarView: normalizeLeftSidebarView(value?.leftSidebarView),
+    leftSidebarCollapsed: normalizeLeftSidebarCollapsed(value?.leftSidebarCollapsed),
     lastWorkspacePath:
       typeof value?.lastWorkspacePath === "string" ? value.lastWorkspacePath : null,
     lastFilePath: typeof value?.lastFilePath === "string" ? value.lastFilePath : null,
@@ -2117,8 +2126,7 @@ export default function App() {
   const [projectSearchMatchCase, setProjectSearchMatchCase] = useState(false);
   const [projectReplaceValue, setProjectReplaceValue] = useState("");
   const [isProjectReplacing, setIsProjectReplacing] = useState(false);
-  const [leftSidebarView, setLeftSidebarView] =
-    useState<"files" | "search" | "reference">("files");
+  const [leftSidebarView, setLeftSidebarViewState] = useState<LeftSidebarView>("files");
   const [editorFind, setEditorFind] = useState<EditorFindState>({
     open: false,
     query: "",
@@ -2181,7 +2189,7 @@ export default function App() {
   const [isOutlineMenuOpen, setIsOutlineMenuOpen] = useState(false);
   const [appDialog, setAppDialog] = useState<AppDialog | null>(null);
   const [systemFonts, setSystemFonts] = useState<FontOption[]>(fallbackFontOptions);
-  const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
+  const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsedState] = useState(false);
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
   const [isRightSidebarWide, setIsRightSidebarWide] = useState(false);
   const [isEditorFocusMode, setIsEditorFocusMode] = useState(false);
@@ -2221,6 +2229,19 @@ export default function App() {
     if (!isRestorableRightSidebarTab(tab)) return;
     setAppState((current) =>
       current.rightSidebarTab === tab ? current : { ...current, rightSidebarTab: tab },
+    );
+  }, []);
+  // 左サイドバーのビューと畳みも、右サイドバーのタブと同じく画面とアプリの状態の両方へ書き、次回起動時に戻す。
+  const setLeftSidebarView = useCallback((view: LeftSidebarView) => {
+    setLeftSidebarViewState(view);
+    setAppState((current) =>
+      current.leftSidebarView === view ? current : { ...current, leftSidebarView: view },
+    );
+  }, []);
+  const setIsLeftSidebarCollapsed = useCallback((collapsed: boolean) => {
+    setIsLeftSidebarCollapsedState(collapsed);
+    setAppState((current) =>
+      current.leftSidebarCollapsed === collapsed ? current : { ...current, leftSidebarCollapsed: collapsed },
     );
   }, []);
   const [draftCanvasContext, setDraftCanvasContext] = useState<DraftCanvasContext | null>(null);
@@ -4281,6 +4302,8 @@ export default function App() {
       .then(async (state) => {
         if (isCancelled) return;
         setRightSidebarTabState(state.rightSidebarTab);
+        setLeftSidebarViewState(state.leftSidebarView);
+        setIsLeftSidebarCollapsedState(state.leftSidebarCollapsed);
 
         if (
           isTauriRuntime() &&
