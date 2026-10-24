@@ -159,7 +159,6 @@ import type { TextSearchOptions } from "./search/textSearch";
 import {
   collectEditorFindMatches,
   replaceLiteralMatches,
-  replaceMarkdownBodyMatches,
   type EditorFindMatch,
 } from "./search/editorFindReplace";
 import {
@@ -204,6 +203,7 @@ import {
 } from "./referencePathModel";
 import { createProjectEntryActions } from "./projectEntryActions";
 import { createWorkspaceTreeActions } from "./workspaceTreeActions";
+import { createProjectSearchActions } from "./projectSearchActions";
 import { PROOFREAD_RULES } from "./proofread/rules";
 import { DEFAULT_PROOFREAD_OPTIONS } from "./proofread/types";
 import {
@@ -8600,183 +8600,40 @@ export default function App() {
     showToast(insert ? `「${insert}」に置き換えました` : "該当箇所を削除しました");
   };
 
-  const handleProjectSearchResultOpen = async (result: ProjectSearchResult) => {
-    // ライブラリ全体の検索で別の範囲の結果を選んだら、その範囲へ切り替えてから開く。
-    if (result.path && projectFolder && !findProjectEntry(projectFolder.children, result.path)) {
-      const library = projectFolder.library;
-      const scopePath = library
-        ? [...library.projects.map((project) => project.path), library.path].find((path) =>
-            isPathSameOrInside(result.path, path),
-          )
-        : null;
-      if (!scopePath) return;
-      pendingSearchJumpRef.current = result;
-      if (!(await openWorkspace(scopePath))) pendingSearchJumpRef.current = null;
-      return;
-    }
-    if (result.path && result.path !== currentFilePath) {
-      await handleProjectFileSelect(result.path);
-    }
-    if (result.absoluteFrom !== undefined && result.absoluteTo !== undefined) {
-      window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => {
-          editorInstanceRef.current?.selectRange(result.absoluteFrom!, result.absoluteTo!);
-          editorInstanceRef.current?.focus();
-        });
-      });
-    } else {
-      jumpToEditorLine(result.line);
-    }
-  };
+  const {
+    handleProjectSearchResultOpen,
+    handleReplaceInCurrentFile,
+    handleReplaceInProject,
+    handleProjectOutlineJump,
+  } = createProjectSearchActions({
+    projectFolder,
+    currentFilePath,
+    openTabs,
+    setOpenTabs,
+    markdown,
+    projectSearchQuery,
+    projectReplaceValue,
+    projectSearchOptions,
+    hasPropertyConditions,
+    projectSearchOutcome,
+    pendingSearchJumpRef,
+    editorInstanceRef,
+    lastSavedMarkdownRef,
+    setAppState,
+    setProjectAst,
+    setActiveMarkdown,
+    setSaveStatus,
+    setIsProjectReplacing,
+    setLastError,
+    setFocusedFolderPath,
+    showToast,
+    requestConfirm,
+    openWorkspace,
+    handleProjectFileSelect,
+    jumpToEditorLine,
+  });
 
   searchResultOpenRef.current = handleProjectSearchResultOpen;
-
-  const handleReplaceInCurrentFile = () => {
-    if (projectSearchQuery.length === 0) {
-      showToast("検索語句を入力してください");
-      return;
-    }
-
-    const result = replaceMarkdownBodyMatches(
-      markdown,
-      projectSearchQuery,
-      projectReplaceValue,
-      projectSearchOptions,
-    );
-    if (result.error) {
-      showToast("正規表現に誤りがあります");
-      return;
-    }
-    if (result.count === 0) {
-      showToast("置換できる一致がありません");
-      return;
-    }
-
-    setActiveMarkdown(result.markdown);
-    setSaveStatus("dirty");
-    showToast(`${result.count}件をファイル内で置換しました`);
-  };
-
-  const handleReplaceInProject = async () => {
-    if (!projectFolder) {
-      showToast("先にフォルダを開いてください");
-      return;
-    }
-    if (!isTauriRuntime()) {
-      showToast("プロジェクト置換はTauri版で利用できます");
-      return;
-    }
-    if (projectSearchQuery.length === 0) {
-      showToast("検索語句を入力してください");
-      return;
-    }
-    if (hasPropertyConditions) {
-      showToast("プロパティの条件を含む検索では置換できません");
-      return;
-    }
-    if (projectSearchOutcome.error) {
-      showToast("正規表現に誤りがあります");
-      return;
-    }
-
-    const shouldReplace = await requestConfirm({
-      title: "プロジェクト全体を置換",
-      message: `${projectSearchOutcome.matchedFileCount}ファイルの${projectSearchOutcome.total}件を置換します。`,
-      detail: `検索: ${projectSearchQuery} / 置換: ${projectReplaceValue || "空文字"}\n開いているフォルダ内の本文を保存しながら置換します。`,
-      confirmLabel: "置換",
-      danger: true,
-    });
-    if (!shouldReplace) return;
-
-    setIsProjectReplacing(true);
-    setLastError("");
-    try {
-      const files = collectProjectTextFiles(projectFolder);
-      const savedDocuments: TextDocument[] = [];
-      let totalCount = 0;
-
-      for (const file of files) {
-        const openTab = openTabs.find((tab) => tab.path === file.path);
-        const sourceMarkdown =
-          openTab?.path === currentFilePath
-            ? markdown
-            : openTab?.markdown ??
-              (await invoke<TextDocument>("read_text_file", { path: file.path })).content;
-        const result = replaceMarkdownBodyMatches(
-          sourceMarkdown,
-          projectSearchQuery,
-          projectReplaceValue,
-          projectSearchOptions,
-        );
-        if (result.error) throw new Error(result.error);
-        if (result.count === 0) continue;
-
-        const document = await invoke<TextDocument>("save_text_file", {
-          path: file.path,
-          content: result.markdown,
-        });
-        savedDocuments.push(document);
-        totalCount += result.count;
-        setProjectAst((current) =>
-          current && current.rootPath === projectFolder.path
-            ? upsertProjectAstDocument(current, {
-                path: document.path,
-                name: document.name,
-                text: parseFrontMatter(document.content).body,
-              })
-            : current,
-        );
-      }
-
-      if (!savedDocuments.length) {
-        showToast("置換できる一致がありません");
-        return;
-      }
-
-      const savedByPath = new Map(savedDocuments.map((document) => [document.path, document]));
-      setOpenTabs((current) =>
-        current.map((tab) => {
-          if (!tab.path) return tab;
-          const document = savedByPath.get(tab.path);
-          if (!document) return tab;
-          return {
-            ...tab,
-            markdown: document.content,
-            savedMarkdown: document.content,
-            editorRevision: null,
-            name: document.name,
-            saveStatus: "saved",
-          };
-        }),
-      );
-
-      const activeSavedDocument = currentFilePath ? savedByPath.get(currentFilePath) : null;
-      if (activeSavedDocument) {
-        lastSavedMarkdownRef.current = activeSavedDocument.content;
-        setAppState((current) => ({
-          ...current,
-          markdown: activeSavedDocument.content,
-          lastFilePath: activeSavedDocument.path,
-        }));
-        setSaveStatus("saved");
-      }
-
-      showToast(`${totalCount}件をプロジェクト全体で置換しました`);
-    } catch (error) {
-      setLastError(String(error));
-      setSaveStatus("error");
-    } finally {
-      setIsProjectReplacing(false);
-    }
-  };
-
-  const handleProjectOutlineJump = async (path: string, item: DocumentOutlineItem) => {
-    if (path !== currentFilePath) {
-      await handleProjectFileSelect(path);
-    }
-    jumpToEditorLine(item.line);
-    setFocusedFolderPath(null);
-  };
 
   const closeFileMenuAndRun = (action: () => void | Promise<void>) => {
     setIsFileMenuOpen(false);
