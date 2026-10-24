@@ -109,7 +109,27 @@
 
 ## 工程7: 実施
 
+| コミット | 内容 |
+|---|---|
+| `2cc1aa3` | `referenceKey`・`referenceFileKey`・`mergeReferenceFiles` を `src/referenceFileKeys.ts` へ移す（verify-move: lost 0、App に足したのは import 1行） |
+| `8e0982c` | 右サイドバーの JSX・組み込みのタブの一覧・切り替えの項目の組み立てを `src/components/layout/RightSidebar.tsx` へ移す（verify-move: lost 0。App に足したのは import と `<RightSidebar {...{ … }} />` の呼び出しだけ）。App で使わなくなった import（各ペインの部品など）を消す。テストの読み先を変える |
+| `c9f9670` | 保存先のスレッド名が欄に収まる期待のテスト `test:ai-pane-layout`（この時点では失敗） |
+| `aa936d3` | 修正（案A）。`aiPane.css` で、保存先の行（`form.aiTurnActions`）を折り返す並びにし、select を横幅いっぱい（`flex: 1 1 100%`）にする |
+| `29943a1` | `test:ai-pane-layout` に、2つのボタンが select の下に1行で並び右に寄ることの確認を足す |
+| `73c83bd` | 右サイドバーの部品を描画するテスト `test:right-sidebar` |
+
+- App.tsx は 12409行 → 12083行。`RightSidebar.tsx` は 480行（うち props の型と受け取りが約120行）。
+- 移した JSX は1文字も変えていない。違う点は、`isTauriRuntime` を部品のファイルにも1行で書いたこと、App の中だけの型3つを写したこと、`transferMenuLabel` の型を `string | null` で受けること（App は2つの文言のどちらかか null を渡す）。
+- DOM は変わらない（部品は要素を足さない。`zoneRightSidebarHoverTarget` と `aside` は今までどおり隣り合う）。
+
 ## 工程8: 自動テスト
+
+### 足したテスト
+- `test:ai-pane-layout`（ヘッドレス Edge）: 本物の `AiPane` を、Tauri の呼び出しをページの中で受けて組み、会話を開いて「資料に保存」を押し、「Then開発ログについて」を選ぶ。右サイドバー 300px・文字の幅が広いフォント・それに UI 表示サイズ 1.25・広げた 480px の4つで、名前が欄に収まること、行があふれないこと、ボタンが切れず select の下に1行で並んで右に寄ること、回答の下のボタンの行が1行のままであることを確かめる。
+  - 直す前の値: 名前に使える幅が 63px（ふつう）、33px（幅の広いフォント）、25px（それに 1.25 倍。利用者の画面写真と同じく、ほぼ見えない）。直した後は 233〜413px。
+  - 効くことの確かめ: (1) select を元の縮む指定に戻す → 「名前が収まる」で落ちた。(2) ボタンも横幅いっぱいにする → 最初は通ってしまったので、「2つのボタンが1行に並ぶ」確認を足し（`29943a1`）、落ちることを確かめた。(3) 折り返しをやめる → 「名前が収まる」で落ちた。
+- `test:right-sidebar`（サーバー描画）: `RightSidebar` を実際に描画し、タブ（プロット・バインダー・AI・校正・プロパティ・下書き・プラグイン）ごとに、その中身だけが出ること、タブごとの頭のボタン、畳む・集中モード・プラグイン画面で `aria-hidden` と `inert` が付くこと、広げたときの表示、下書きを一度開いたら隠して残すこと、プラグインの置き場所の表示を確かめる。
+  - 効くことの確かめ: (1) AI のタブの条件を壊す → 「ai: its pane is shown」で落ちた。(2) 畳んだときの `aria-hidden` の条件を消す → 「collapsed: hidden and inert」で落ちた。
 
 ## 工程9: 実機確認
 
