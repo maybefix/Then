@@ -124,8 +124,16 @@
   .activeOutlineSidebarItem,
   .activeOutlineTreeItem,
   .selectedOutlineTreeItem
-) :is(.treeChevron, .treeItemCharCount, .outlineLevelMark) {
+) :is(.treeChevron, .treeItemCharCount, .outlineLevelMark, .fileProgressMarker, .treeEntryMoreButton) {
   color: #dff5fa;
+}
+
+/*
+ * ファイル名は進み具合の色（未着手は控えめな色、執筆中は青など）を持つが、濃い水色の行の上では沈む。
+ * 選んだ行では行の白い文字にする。進み具合は印の文字（未・執・推・完）で分かる。
+ */
+.appShell[data-theme="workbench-light"] .leftWorkspaceCluster :is(.activeTreeItem, .selectedTreeEntry) .treeItemName {
+  color: inherit;
 }
 
 .appShell[data-theme="workbench-light"] .activeWorkspaceActivityButton {
