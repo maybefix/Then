@@ -44,6 +44,7 @@ const bar = (props) => renderToStaticMarkup(createElement(StatusBar, {
 const cases = {
   narrowError: { width: 296, html: bar({ saveStatus: "error", lastError: longError }) },
   narrowPath: { width: 296, html: bar({ saveStatus: "saved", showFilePath: true, currentFilePath: "C:/Users/someone/Documents/とても長い作品の名前/第一章/本文.txt", pageMetrics: { current: 12, total: 340 } }) },
+  narrowPathError: { width: 296, html: bar({ saveStatus: "error", lastError: longError, showFilePath: true, currentFilePath: "C:/Users/someone/Documents/作品A/本文.txt" }) },
   wideError: { width: 1200, html: bar({ saveStatus: "error", lastError: longError }) },
 };
 await writeFile(htmlPath, `<!doctype html><html><head><meta charset="utf-8">
@@ -116,6 +117,8 @@ try {
       assert.ok(item.height <= lineHeight, `${name}: "${item.text}" stays on one line (height ${item.height})`);
       assert.ok(item.right <= footerRight + 0.5, `${name}: "${item.text}" stays inside the bar`);
     }
+    const icon = items.find((item) => item.cls === "statusSaveIcon");
+    assert.equal(Math.round(icon.width), 12, `${name}: the save icon keeps its size (${icon.width}px)`);
     assert.ok(overflow <= 0, `${name}: the bar does not overflow (${overflow}px)`);
     const fixed = items.filter((item) => !/statusError|statusPath/.test(item.cls) && item.text);
     for (const item of fixed) assert.ok(item.scrollWidth <= Math.ceil(item.width) + 0.5, `${name}: "${item.text}" is not cut`);
