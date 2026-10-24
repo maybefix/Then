@@ -73,4 +73,29 @@ for (const alignment of ["start", "center", "end"]) {
 const headerEdit = tableAlignmentEdit(sample, sample.indexOf("名前"), "center");
 assert.equal(headerEdit.cursorPos, sample.indexOf("名前"));
 assert.equal(tableAlignmentEdit(sample, 0, "center"), null);
+
+// 選んだ列の区切りの文字だけを書き換え、ほかの列・空白・`-` の数は残す
+const applyAlignment = (text, offset, alignment) => {
+  const edit = tableAlignmentEdit(text, offset, alignment);
+  return { edit, next: text.slice(0, edit.from) + edit.insert + text.slice(edit.to) };
+};
+const plain = "|名前|年|\n|---|---|\n|太郎|20|";
+assert.equal(applyAlignment(plain, plain.indexOf("20"), "center").next.split("\n")[1], "|---|:---:|", "unaligned columns stay unaligned");
+assert.equal(applyAlignment(plain, plain.indexOf("20"), "start").next.split("\n")[1], "|---|:---|");
+assert.equal(applyAlignment(plain, plain.indexOf("太郎"), "end").next.split("\n")[1], "|---:|---|");
+assert.equal(applyAlignment(sample, secondColumn, "center").next.split("\n")[2], "| :--- | :---: |", "padding spaces stay");
+assert.equal(applyAlignment(sample, sample.indexOf("りんご"), "end").next.split("\n")[2], "| ---: | ---: |");
+const long = "| a | b |\n|:-----:|------|\n| c | d |";
+assert.equal(applyAlignment(long, long.indexOf("d"), "end").next.split("\n")[1], "|:-----:|------:|", "the dash count stays");
+assert.equal(applyAlignment(long, long.indexOf("c"), "start").next.split("\n")[1], "|:-----|------|");
+const bare = "a | b\n--- | :---:\nc | d";
+assert.equal(applyAlignment(bare, bare.indexOf("c"), "end").next.split("\n")[1], "---: | :---:", "rules without outer pipes keep their shape");
+// 区切りの行の中にカーソルがあるとき
+const ruleLine = plain.indexOf("|---|---|");
+const inMarker = applyAlignment(plain, ruleLine + 6, "center");
+assert.equal(inMarker.next.split("\n")[1], "|---|:---:|");
+assert.equal(inMarker.edit.cursorPos, ruleLine + 5, "a caret inside the rewritten marker moves to its start");
+const afterMarker = applyAlignment(plain, ruleLine + 4, "center");
+assert.equal(afterMarker.next.split("\n")[1], "|:---:|---|");
+assert.equal(afterMarker.next.slice(afterMarker.edit.cursorPos, afterMarker.edit.cursorPos + 5), "|---|", "a caret after the marker keeps its place");
 console.log("Table creation, column alignment and caret restoration passed.");

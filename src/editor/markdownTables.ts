@@ -48,13 +48,15 @@ export function tableAlignmentEdit(text: string, offset: number, alignment: "sta
   const ruleIndex = table.header + 1;
   const rule = table.rows.get(ruleIndex)!;
   if (table.column >= rule.cells.length) return null;
-  const markers = Array.from({ length: rule.cells.length }, (_, column) => {
-    const align = column === table.column ? alignment : rule.alignments[column];
-    return align === "center" ? ":---:" : align === "end" ? "---:" : ":---";
-  });
-  const insert = `| ${markers.join(" | ")} |`;
-  const from = table.startAt(ruleIndex);
-  const to = from + table.sources[ruleIndex].length;
+  // 選んだ列の区切りの文字だけを書き換え、ほかの列・空白・`-` の数は残す。
+  const source = table.sources[ruleIndex];
+  const cell = rule.cells[table.column];
+  const raw = source.slice(cell.from, cell.to);
+  const marker = raw.trim();
+  const dashes = marker.replace(/:/g, "");
+  const insert = alignment === "center" ? `:${dashes}:` : alignment === "end" ? `${dashes}:` : `:${dashes}`;
+  const from = table.startAt(ruleIndex) + cell.from + (raw.length - raw.trimStart().length);
+  const to = from + marker.length;
   return { from, to, insert, cursorPos: offset >= to ? offset + insert.length - (to - from) : offset > from ? from : offset };
 }
 
