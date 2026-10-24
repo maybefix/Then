@@ -101,6 +101,8 @@ const reset = (overrides = {}) => {
     pendingSearchJumpRef: { current: null },
     editorCalls: [],
     lastSavedMarkdownRef: { current: "# A\n照合語がある。\n" },
+    // 文書を開いた直後は、エディタが変更を知らせるまで自動保存が閉じている。
+    didMountEditorRef: { current: false },
     appState: { markdown: "# A\n照合語がある。編集中\n", lastFilePath: `${ROOT}/a.md`, other: "keep" },
     projectAst: { rootPath: ROOT, files: [] },
     activeMarkdowns: [],
@@ -153,6 +155,7 @@ const actions = () =>
       },
     },
     lastSavedMarkdownRef: s.lastSavedMarkdownRef,
+    didMountEditorRef: s.didMountEditorRef,
     setAppState: (update) => { s.appState = typeof update === "function" ? update(s.appState) : update; },
     setProjectAst: (update) => { s.projectAst = typeof update === "function" ? update(s.projectAst) : update; },
     setActiveMarkdown: (next) => s.activeMarkdowns.push(next),
@@ -317,6 +320,7 @@ reset({ projectSearchQuery: "存在しない語" });
 actions().handleReplaceInCurrentFile();
 assert.deepEqual(s.toasts, ["置換できる一致がありません"]);
 assert.deepEqual(s.saveStatuses, []);
+assert.equal(s.didMountEditorRef.current, false, "a replace that changes nothing leaves the autosave closed");
 
 reset();
 actions().handleReplaceInCurrentFile();
@@ -324,6 +328,9 @@ assert.deepEqual(s.activeMarkdowns, ["# A\n照合済がある。編集中\n"], "
 assert.deepEqual(s.saveStatuses, ["dirty"]);
 assert.deepEqual(s.toasts, ["1件をファイル内で置換しました"]);
 assert.equal(s.invokes.length, 0, "the in-file replace writes nothing itself");
+// 置換は今の文書の編集なので、本文に触れる前でも自動保存へ届くようにする（プロパティの編集と同じ）。
+// 届かないと、次に編集するまでファイルへ書かれず、作品を切り替えるときに「破棄」で失われる。
+assert.equal(s.didMountEditorRef.current, true, "the in-file replace opens the autosave for the open document");
 
 // --- 検索の結果を開く ---
 // 同じ作品の別のファイル。位置があれば2フレーム後に選ぶ。
