@@ -25,6 +25,7 @@
     "test:v063-draft": "node scripts/test-v063-intermediate-draft.mjs",
     "test:v064-canvas": "node scripts/test-v064-canvas-weje.mjs",
     "test:v065-shell": "node scripts/test-v065-native-shell.mjs",
+    "test:window-controls": "node scripts/test-window-controls-contrast.mjs",
     "test:v066-idea": "node scripts/test-v066-idea-ui.mjs",
     "test:binder": "node scripts/test-idea-reference-binder.mjs",
     "test:idea-actions": "node scripts/test-idea-thread-actions.mjs",
