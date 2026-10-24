@@ -70,7 +70,9 @@ const over = (top, bottom) => ({
 // linear-gradient(<角度>deg, <色> <位置>%, ...) の、要素の中の (x, y) の色。
 const sampleGradient = (image, box, x, y) => {
   const angle = (Number((/(-?[\\d.]+)deg/.exec(image) ?? [0, 180])[1]) * Math.PI) / 180;
-  const stops = [...image.matchAll(/(rgba?\\([^)]+\\))\\s*([\\d.]+)%/g)].map((m) => ({ color: parse(m[1]), at: Number(m[2]) / 100 }));
+  // 位置（%）を書かない色は、等間隔に並べる。
+  const found = [...image.matchAll(/(rgba?\\([^)]+\\))(?:\\s*([\\d.]+)%)?/g)];
+  const stops = found.map((m, index) => ({ color: parse(m[1]), at: m[2] === undefined ? index / Math.max(found.length - 1, 1) : Number(m[2]) / 100 }));
   if (!image.startsWith("linear-gradient") || stops.length < 2) throw new Error("unsupported background: " + image);
   const length = Math.abs(box.width * Math.sin(angle)) + Math.abs(box.height * Math.cos(angle));
   const t = 0.5 + ((x - box.left - box.width / 2) * Math.sin(angle) - (y - box.top - box.height / 2) * Math.cos(angle)) / length;

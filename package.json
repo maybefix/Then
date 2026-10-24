@@ -27,6 +27,7 @@
     "test:v065-shell": "node scripts/test-v065-native-shell.mjs",
     "test:window-controls": "node scripts/test-window-controls-contrast.mjs",
     "test:app-shell-style": "node scripts/test-app-shell-style.mjs",
+    "test:tree-row-contrast": "node scripts/test-tree-row-contrast.mjs",
     "test:v066-idea": "node scripts/test-v066-idea-ui.mjs",
     "test:binder": "node scripts/test-idea-reference-binder.mjs",
     "test:idea-actions": "node scripts/test-idea-thread-actions.mjs",
