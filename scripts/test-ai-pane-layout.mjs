@@ -165,11 +165,12 @@ try {
       const textBox = select.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
       const buttons = [...form.querySelectorAll("button")].map((button) => {
         const box = button.getBoundingClientRect();
-        return { text: button.textContent, right: box.right, left: box.left, width: box.width, scrollWidth: button.scrollWidth };
+        return { text: button.textContent, top: box.top, right: box.right, left: box.left, width: box.width, scrollWidth: button.scrollWidth };
       });
+      const selectBox = select.getBoundingClientRect();
       const formBox = form.getBoundingClientRect();
       result[host.dataset.case] = {
-        label, textBox, textWidth: canvas.measureText(label).width, selectHeight: select.getBoundingClientRect().height,
+        label, textBox, textWidth: canvas.measureText(label).width, selectHeight: selectBox.height, selectBottom: selectBox.bottom,
         answerRowHeight: answerRow.height, formRight: formBox.right, formLeft: formBox.left,
         formOverflow: form.scrollWidth - form.clientWidth, buttons,
       };
@@ -189,7 +190,12 @@ try {
     for (const button of item.buttons) {
       assert.ok(button.left >= item.formLeft - 0.5 && button.right <= item.formRight + 0.5, `${name}: "${button.text}" stays inside the row`);
       assert.ok(button.scrollWidth <= Math.ceil(button.width) + 0.5, `${name}: "${button.text}" is not cut`);
+      assert.ok(button.top >= item.selectBottom, `${name}: "${button.text}" sits below the save-target box`);
     }
+    // 「このスレッドに保存」「やめる」は、2行目に並んで右に寄る。
+    const [save, cancel] = item.buttons;
+    assert.ok(Math.abs(save.top - cancel.top) < 0.5 && save.right <= cancel.left, `${name}: the two buttons share one row`);
+    assert.ok(Math.abs(cancel.right - item.formRight) < 0.5, `${name}: the buttons are aligned to the right`);
     // 「資料に保存」などのボタンの行は、ボタン1つの高さのまま（1行）。
     assert.ok(item.answerRowHeight <= item.selectHeight + 0.5, `${name}: the answer's button row stays one line (${item.answerRowHeight}px)`);
   }
