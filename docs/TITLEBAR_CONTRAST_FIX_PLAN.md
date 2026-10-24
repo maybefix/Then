@@ -13,8 +13,8 @@
 | 4 | 影響範囲 | 済 |
 | 5 | 案 | 済 |
 | 6 | 人の確認（確認1） | 済 |
-| 7 | 実施 | |
-| 8 | 自動テスト | |
+| 7 | 実施 | 済 |
+| 8 | 自動テスト | 済 |
 | 9 | 実機確認 | |
 | 10 | 完了（確認2） | |
 
@@ -177,7 +177,7 @@ Promise の2つは、黒に近い色なら 5.8〜10.9 になる。
    - **a. 一緒に直す（推す）**: 帯の中のボタン（ファイルメニュー、パンくずのフォルダ、右のアイコン）のホバーの背景を `--topbar-control-hover` で決め、ないときは今の `--control-hover` を使う。暗い帯のライトテーマ8つ（Workbench・Drive・Precious・Hands・Air・Passion・Tech・Promise）だけ、帯の文字色を薄く混ぜた色を決める。ほかのテーマは変わらない。変数は帯の中のメニュー（ポップアップ）には使わないので、メニューのホバーは変わらない
    - b. 今回はウィンドウ操作ボタンだけ直し、これは記録して別の作業にする
 3. **App.tsx からの分離**
-   - **a. `main.appShell` の style（CSS 変数を13個作る約22行、9725〜9746行）を `src/appShellStyle.ts` の純粋な関数へ移す（推す）**: テーマと一緒に画面の外枠に効く値で、今回の範囲に近い。React に依存せず、テストで実際に動かして確かめられる。`data-*` の属性は JSX に残す（`test:v059-visibility` が文字列で読む）
+   - **a. `main.appShell` の style（CSS 変数を12個作る約22行（数え直して12個）、9725〜9746行）を `src/appShellStyle.ts` の純粋な関数へ移す（推す）**: テーマと一緒に画面の外枠に効く値で、今回の範囲に近い。React に依存せず、テストで実際に動かして確かめられる。`data-*` の属性は JSX に残す（`test:v059-visibility` が文字列で読む）
    - b. 上部の帯の JSX（9820〜10606行、約790行。受け渡す値が約70個）を部品に分ける。App.tsx は大きく減るが、新しい props の形を作ることになり、影響が広い。**別のセッションの候補として出す**
    - c. 今回は分離しない
 
@@ -211,3 +211,56 @@ Promise の2つは、黒に近い色なら 5.8〜10.9 になる。
 - 2-a: 帯のほかのボタンのホバーも一緒に直す。
 - 3-a: `main.appShell` の style を `src/appShellStyle.ts` へ移す。
 - 3-b（上部の帯の部品化）は、必ず記録し、この修正が終わったときに提案する。
+
+### 実施の途中で決まったこと（2026-10-25）
+
+帯のない画面（起動中、ライブラリの準備）でボタンを本文の色に戻すのに、はじめ `.appShell:has(> .startupPortalLoading, > .librarySetup)` を使ったところ、`test:v059-visibility` が落ちた。`.appShell` を主語にした `:has()` は、原稿への挿入のたびにアプリ全体の style を計算し直させるので使わない、という決まり（`d73e4b1`）。利用者に聞いて、**App からボタンに渡す** 形にした。App が `<WindowControls overPage={startupView === "loading" || Boolean(librarySetupRequest)} />` を渡し、ボタンの要素にだけ `data-over-page="true"` を付ける。style の計算し直しはボタンの中だけで済む。`test:v065-shell` の `<WindowControls />` の確認を、この形に変えた（了承済み）。
+
+## 工程7: 実施
+
+| コミット | 中身 |
+|---|---|
+| `ec4ea72` | 失敗するテスト `test:window-controls` を足す（今のコードで343件の不合格） |
+| `728f545` | ボタンの色を帯の文字色にし、ホバーを文字色を混ぜた色にする。Promise の色、帯のボタンのホバー（`--topbar-control-hover`） |
+| `2371eb5` | `main.appShell` の style を `src/appShellStyle.ts` の `buildAppShellStyle` へ移す。`test:app-shell-style` を足す |
+| `052557f` | 帯のない画面の印を `:has()` から `overPage` に変える |
+
+変えたもの:
+
+- `src/App.css`: `.windowControls` の色を `var(--window-controls-color, var(--topbar-text-secondary, var(--text-secondary)))`、ホバーを `--window-controls-hover-color`（既定は `--topbar-text-primary`）にする。ホバーと押したときの背景を `color-mix(in srgb, currentColor 10%／16%, transparent)` にする。`.windowControls[data-over-page="true"]` で本文の色に戻す。閉じるのホバー（赤と白）は変えない。
+- `src/styles/themes/foundations.css`: 帯のボタンのホバーとメニューを開いたときの背景を `var(--topbar-control-hover, var(--control-hover))` にする。
+- 帯が暗いライトテーマ7つ（air・drive・hands・passion・precious・tech・workbench）と Promise の2つ: `--topbar-control-hover: color-mix(in srgb, var(--topbar-text-primary) 12%, transparent)`。Promise ダークは確認1の8つには入れていなかったが、テストで帯のボタンのホバーが見えない（1.00）と分かったので、同じ原因として入れた。
+- `src/styles/themes/promise.css`: ライトは `--window-controls-color: var(--text-secondary)`（今と同じ色）、ダークは `var(--bg-root)`（テーマの一番濃い緑）。
+- `src/components/layout/WindowControls.tsx`: `overPage` を受け取り、`data-over-page` を付ける。
+- `src/App.tsx`: `overPage` を渡す。appShell の style を `buildAppShellStyle(settings, editorFontFamily, editorHeadingFontFamily)` で作る。使わなくなった `withIdeographicSpaceFont` の import を外す。11,414行 → 11,393行。
+- `src/appShellStyle.ts`（新しい、34行）。
+
+元と同じであることの確かめ方（分離）: `move-lines.mjs` で行番号と先頭・末尾の行を確かめて移し、`verify-move.mjs` で突き合わせた。lost は import の `withIdeographicSpaceFont,` の1行だけ（App で使わなくなった）、added は import と呼び出しの2行だけ。
+
+## 工程8: 自動テスト
+
+### 足したテスト
+
+- `test:window-controls`（`scripts/test-window-controls-contrast.mjs`）: ヘッドレス Edge で、`App.css` と全テーマの CSS を読み込み、作品の帯・起動画面の帯・起動中・ライブラリの準備の4つの画面を、62のテーマで組む。ボタンの色とボタンの下の色のコントラストが3以上、最小化・最大化のホバーの背景が下の色と見分けられる（1.09以上。白い帯のテーマで、帯のボタンのホバーがいちばん薄い Coral が1.10）、ホバー中のアイコンも3以上、閉じるのホバーが赤と白であること。作品の帯では、帯のボタン4つのホバーの背景も確かめる（`--control-hover` が `transparent` のテーマ、つまりホバーをわざと出さない Shuboku は除く）。ホバーは CDP のマウスの移動で、本物の `:hover` を起こして読む。グラデーションの帯は、ボタンの中心の位置の色を計算する。
+- `test:app-shell-style`（`scripts/test-app-shell-style.mjs`）: `buildAppShellStyle` を esbuild で読み込んで動かし、12個の変数の名前と順番、値を確かめる。本文と見出しは引数（縦書きのために選び直した名前）を、プロットと起動画面は設定のフォント名を使うこと。
+
+### テストが効くことの確かめ方
+
+わざと不具合を入れて落ちることを見てから、`git checkout` で戻した。
+
+| 入れた不具合 | 結果 |
+|---|---|
+| ボタンの色を `var(--window-controls-color, var(--text-secondary))` に戻す ＋ Promise ダークの `--window-controls-color` を消す | `test:window-controls` が42件で落ちた（Workbench・Tech・Precious・Passion・Hands・Air のライトと Promise ダークの、作品と起動画面の帯） |
+| `--zone-sidebar-opacity` を消す | `test:app-shell-style` が変数の一覧で落ちた |
+| 本文のフォントを引数ではなく `settings.editorFontFamily` から作る | `test:app-shell-style` が「the body uses the re-resolved family」で落ちた |
+
+### 前後の比較（`b802749` → `052557f`）
+
+| | 本数 |
+|---|---|
+| 前後とも通る | 77 |
+| 前後とも落ちる（元から。理由も同じ） | 3（`test:canvas-save`、`test:v058-bundle`、`test:v0511-themes`） |
+| 後だけにある（通る） | 2（`test:window-controls`、`test:app-shell-style`） |
+| 新しく落ちた | 0 |
+
+最大の JS は 702,931 → 703,030 バイト（+99）。残ったプロセスは0。
