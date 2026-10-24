@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const appSource = await readFile("src/App.tsx", "utf8");
+const paletteSource = await readFile("src/paletteCommands.ts", "utf8");
 
 assert.match(
   appSource,
@@ -19,7 +20,7 @@ for (const commandPath of [
   /clearSelectionNotation\(selection\)/,
 ]) {
   assert.match(
-    appSource,
+    paletteSource,
     commandPath,
     `palette command must use the selection captured on open: ${commandPath}`,
   );
