@@ -506,6 +506,48 @@ const expectExercised = (label, names) => {
     assert.equal(findAll(noPaths, (element) => hasClass(element, "workspaceRecordPath")).length, 0);
     const noRecents = render({ isWorkspaceSwitcherOpen: true, visibleRecentWorkspaces: [] });
     assert.equal(textOf(byClass(noRecents, "emptyMenuMessage")), "一致するプロジェクトがありません");
+
+    // 作品を開いているときも、ライブラリの一覧を出す（作品のないときと同じく、最近の作品の後ろ）。
+    const libraries = [
+      { path: "C:/lib", name: "QAライブラリ", lastOpenedAt: 2, library: { name: "QAライブラリ", role: "root" } },
+      { path: "C:/別館", name: "別館", lastOpenedAt: 1, library: { name: "別館", role: "root" } },
+    ];
+    const withLibraries = render({ isWorkspaceSwitcherOpen: true, visibleKnownLibraries: libraries });
+    const libraryPopover = byClass(withLibraries, "workspaceSwitcherPopover");
+    assert.deepEqual(
+      findAll(libraryPopover, (element) => hasClass(element, "workspaceSwitcherSectionLabel")).map(textOf),
+      ["現在のプロジェクト", "最近開いたプロジェクト", "ライブラリ"],
+    );
+    const libraryRows = findAll(libraryPopover, (element) => hasClass(element, "workspaceRecordButton"));
+    assert.deepEqual(libraryRows.map((element) => element.key), [root, "C:/lib/作品B", "C:/lib", "C:/別館"]);
+    assert.equal(findOne(libraryRows[3], (element) => element.type === AppIcon, "library icon").props.name, "book");
+    assert.equal(libraryRows[2].props.className, "workspaceRecordButton", "the library holding the open work is not the open folder");
+    expectCalls("作品からライブラリへ", () => libraryRows[3].props.onClick(), [{ name: "closeBreadcrumbMenuAndRun", args: ["<fn>"] }]);
+    expectDeferred("作品からライブラリへ", [{ name: "openWorkspace", args: ["C:/別館"] }]);
+    expectCalls("作品から自分のライブラリへ", () => libraryRows[2].props.onClick(), [{ name: "closeBreadcrumbMenuAndRun", args: ["<fn>"] }]);
+    expectDeferred("作品から自分のライブラリへ", [{ name: "openWorkspace", args: ["C:/lib"] }]);
+
+    // ライブラリそのものを開いているときは、今のライブラリに「現在」の印を付け、押しても閉じるだけにする。
+    const libraryRoot = { path: "C:/lib", name: "QAライブラリ", children: [projectFolder], library: { name: "QAライブラリ", role: "root" } };
+    const inLibrary = render({
+      projectFolder: libraryRoot,
+      breadcrumbTrail: [libraryRoot],
+      currentFilePath: null,
+      isWorkspaceSwitcherOpen: true,
+      visibleKnownLibraries: libraries,
+    });
+    const inLibraryPopover = byClass(inLibrary, "workspaceSwitcherPopover");
+    assert.equal(textOf(byClass(inLibraryPopover, "workspaceSwitcherTitle")), "QAライブラリ");
+    const inLibraryRows = findAll(inLibraryPopover, (element) => hasClass(element, "workspaceRecordButton"));
+    const currentLibrary = inLibraryRows.find((element) => element.key === "C:/lib");
+    const otherLibrary = inLibraryRows.find((element) => element.key === "C:/別館");
+    assert.equal(currentLibrary.props.className, "workspaceRecordButton activeMenuItem");
+    assert.equal(textOf(byClass(currentLibrary, "workspaceRecordBadge")), "現在");
+    assert.equal(otherLibrary.props.className, "workspaceRecordButton");
+    expectCalls("今のライブラリ", () => currentLibrary.props.onClick(), [{ name: "closeBreadcrumbMenuAndRun", args: ["<fn>"] }]);
+    expectDeferred("今のライブラリ", []);
+    expectCalls("ほかのライブラリ", () => otherLibrary.props.onClick(), [{ name: "closeBreadcrumbMenuAndRun", args: ["<fn>"] }]);
+    expectDeferred("ほかのライブラリ", [{ name: "openWorkspace", args: ["C:/別館"] }]);
   }
 
   // フォルダのパンくずとメニュー

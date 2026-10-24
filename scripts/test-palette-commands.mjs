@@ -61,6 +61,7 @@ function setup({
   showWorkspacePaths = false,
   answer = async () => ({ columns: "2", rows: "1" }),
   pluginHost = true,
+  workspaces = recentWorkspaces,
 } = {}) {
   const log = [];
   const record = (name) => (...args) => {
@@ -75,7 +76,7 @@ function setup({
       log.push(["openWorkspace", ...args]);
       return true;
     },
-    appState: { recentWorkspaces },
+    appState: { recentWorkspaces: workspaces },
     settings: { showComments, showWorkspacePaths },
     requestMultiInput: async (request) => {
       log.push(["requestMultiInput", request]);
@@ -173,6 +174,22 @@ const rows = (commands) => commands.map((command) => [command.id, command.label,
   assert.deepEqual(workspaceIds(), ["workspace-open-D:\\Essay"]);
   assert.deepEqual(workspaceIds({ projectFolder: { path: "D:\\Essay", name: "Essay", children: [] } }), ["workspace-open-C:\\Novel"]);
   assert.deepEqual(workspaceIds({ projectFolder: null }), ["workspace-open-C:\\Novel", "workspace-open-D:\\Essay"]);
+}
+
+// ライブラリそのものの記録は「ライブラリを開く」と出す（作品と「別のプロジェクトを開く...」は変えない）
+{
+  const library = { path: "E:/書庫", name: "書庫", library: { name: "書庫", role: "root" } };
+  const project = { path: "E:/書庫/作品A", name: "作品A", library: { name: "書庫", role: "project" } };
+  const commandsOf = (options) => Object.fromEntries(
+    setup({ workspaces: [...recentWorkspaces, library, project], ...options }).commands.map((command) => [command.id, command]),
+  );
+  const byId = commandsOf();
+  assert.equal(byId["workspace-open-E:/書庫"].label, "ライブラリを開く: 書庫");
+  assert.equal(byId["workspace-open-E:/書庫"].hint, "ライブラリ");
+  assert.equal(byId["workspace-open-E:/書庫/作品A"].label, "プロジェクトを開く: 作品A");
+  assert.equal(byId["workspace-open-E:/書庫/作品A"].hint, "プロジェクト");
+  assert.equal(byId["workspace-open"].label, "別のプロジェクトを開く...");
+  assert.equal(commandsOf({ showWorkspacePaths: true })["workspace-open-E:/書庫"].hint, "E:/書庫");
 }
 
 // 使えない理由の出し分け
