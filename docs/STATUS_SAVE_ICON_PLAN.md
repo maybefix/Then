@@ -12,8 +12,8 @@
 | 3 | 依存関係 | 済み |
 | 4 | 影響範囲 | 済み（4-4 は「前」の一式の結果待ち） |
 | 5 | 案 | 済み |
-| 6 | 人の確認（確認1） | 待ち |
-| 7 | 実施 | |
+| 6 | 人の確認（確認1） | 済み |
+| 7 | 実施 | 済み |
 | 8 | 自動テスト | |
 | 9 | 実機確認 | |
 | 10 | 完了（確認2） | |
@@ -146,3 +146,25 @@ App.tsx から移す計算（3493〜3502行）が使うもの:
 
 - タブの保存表示、アプリの別窓（`CanvasWindowApp.tsx`）の「保存済み」は変えない。
 - 文言は変えない。
+
+## 工程6: 人の確認
+
+2026-10-24 に決まったこと。
+
+- 保存失敗の印は、赤の「!」（丸の中の感嘆符）にする。
+- 保存点の表示の計算は、案 A のとおりフック `useCheckpointStatusInfo` へ移す。
+
+## 工程7: 実施
+
+| コミット | 内容 |
+|---|---|
+| `6ae4809` | test: 印の形と、保存点の表示の値の期待（今は失敗する。フックのファイルがまだないので、読み込みで止まる） |
+| `3b7c0ef` | feat: 印を SVG に。`StatusBar.tsx` に `SaveStatusIcon` を置き、`App.css` と `sen.css` の `.statusDot` の塗りを `.statusSaveIcon` の線の色に |
+| `aa418bc` | refactor: 保存点の表示の値を `src/components/status/useCheckpointStatusInfo.ts` へ移す |
+| `0195e2a` | test: `test:status-bar` を一式に登録。束ねた結果を `.tmp/` に書き出して react を解決させる |
+
+- App.tsx は 12410 行から 12401 行になった（移したのは 20 行。足したのは import 1 行、呼び出し 9 行、JSX 1 行）。
+- 元と同じであることは、`move-lines.mjs` で移し、`verify-move.mjs` で突き合わせて確かめた。lost は2行で、どちらも意図して書き換えた行（`checkpoint={settings.showCheckpointStatus && projectFolder ? {` → `return settings.showCheckpointStatus && projectFolder ? {`、`} : null}` → `} : null;`）。
+- フックは、元の2つの `useMemo` があった位置で呼ぶので、App の中で React が値を覚える順番は変わらない。受け渡しの値の組み立ては、元は JSX の中で、今はフックの中で、どちらも描画のたびに作る。同じ描画の中の値を使うので、中身は同じ。
+- `handleQuickCreateManuscriptSnapshot` は、フックの呼び出し位置（3494 行）より後ろ（6358 行）で宣言される。そのまま渡すと「作られる前に読む」ことになるので、`() => handleQuickCreateManuscriptSnapshot()` で包み、押されたときに読むようにした。元も押されたときに読んでいたので、意味は同じ。
+- 印の形とクラス名（`statusDot` → `statusSaveIcon`）のほかに、違う点はない。
