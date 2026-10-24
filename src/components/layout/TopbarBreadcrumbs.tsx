@@ -71,8 +71,8 @@ export type TopbarBreadcrumbsProps = {
   currentFileName: string;
   outlineItems: DocumentOutlineItem[];
   activeOutlineChain: DocumentOutlineItem[];
-  isOutlineMenuOpen: boolean;
-  setIsOutlineMenuOpen: Dispatch<SetStateAction<boolean>>;
+  openOutlineMenuId: string | null;
+  setOpenOutlineMenuId: Dispatch<SetStateAction<string | null>>;
   outlineQuery: string;
   setOutlineQuery: Dispatch<SetStateAction<string>>;
   filteredOutlineItems: FlatOutlineItem[];
@@ -99,7 +99,7 @@ export function TopbarBreadcrumbs(props: TopbarBreadcrumbsProps) {
     handleBreadcrumbFolderSelect, handleMoveProjectEntry, handleRenameProjectEntry,
     handleDeleteProjectEntry, handleCreateProjectFile, handleCreateProjectFolder,
     visibleKnownLibraries, currentFileName, outlineItems, activeOutlineChain,
-    isOutlineMenuOpen, setIsOutlineMenuOpen, outlineQuery, setOutlineQuery,
+    openOutlineMenuId, setOpenOutlineMenuId, outlineQuery, setOutlineQuery,
     filteredOutlineItems, jumpToOutlineItem, collapsedWorkspaceFolderPaths, focusedFolderPath,
     toggleWorkspaceFolderCollapse, handleWorkspaceFolderTreeSelect, isBreadcrumbOverflowOpen,
     setIsBreadcrumbOverflowOpen, scratchWorkspaceName,
@@ -173,7 +173,7 @@ export function TopbarBreadcrumbs(props: TopbarBreadcrumbsProps) {
           setActiveBreadcrumbPath(null);
           setBreadcrumbBrowsePath(null);
           setIsWorkspaceSwitcherOpen(false);
-          setIsOutlineMenuOpen(false);
+          setOpenOutlineMenuId(null);
           setIsBreadcrumbOverflowOpen((isOpen) => !isOpen);
         }}
       >
@@ -740,12 +740,14 @@ export function TopbarBreadcrumbs(props: TopbarBreadcrumbsProps) {
                   className="breadcrumbFolderButton outlineCrumbButton"
                   type="button"
                   aria-label={`${item.title} のアウトライン`}
-                  aria-expanded={isOutlineMenuOpen}
-                  onClick={() => setIsOutlineMenuOpen((isOpen) => !isOpen)}
+                  aria-expanded={openOutlineMenuId === item.id}
+                  onClick={() =>
+                    setOpenOutlineMenuId((openId) => (openId === item.id ? null : item.id))
+                  }
                 >
                   <span>{item.title}</span>
                 </button>
-                {isOutlineMenuOpen && index === activeOutlineChain.length - 1 && (
+                {openOutlineMenuId === item.id && (
                   <div className="menuPopover outlinePopover" role="menu">
                     <label className="outlineSearch">
                       <span aria-hidden="true">⌕</span>

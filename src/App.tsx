@@ -2191,7 +2191,7 @@ export default function App() {
   const [isLibrarySetupDismissed, setIsLibrarySetupDismissed] = useState(false);
   const [collapsedWorkspaceFolderPaths, setCollapsedWorkspaceFolderPaths] =
     useState<ReadonlySet<string>>(() => new Set());
-  const [isOutlineMenuOpen, setIsOutlineMenuOpen] = useState(false);
+  const [openOutlineMenuId, setOpenOutlineMenuId] = useState<string | null>(null);
   const [appDialog, setAppDialog] = useState<AppDialog | null>(null);
   const [systemFonts, setSystemFonts] = useState<FontOption[]>(fallbackFontOptions);
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsedState] = useState(false);
@@ -4725,7 +4725,7 @@ export default function App() {
       setBreadcrumbBrowsePath(null);
       setIsBreadcrumbOverflowOpen(false);
       setIsWorkspaceSwitcherOpen(false);
-      setIsOutlineMenuOpen(false);
+      setOpenOutlineMenuId(null);
       event.preventDefault();
       return;
     }
@@ -5246,7 +5246,7 @@ export default function App() {
     setActiveBreadcrumbPath(null);
     setBreadcrumbBrowsePath(null);
     setIsWorkspaceSwitcherOpen(false);
-    setIsOutlineMenuOpen(false);
+    setOpenOutlineMenuId(null);
 
     const currentText = editor.getValue();
     let snapshot = normalizeSelectionRange(editor.getSelection(), currentText);
@@ -8820,7 +8820,7 @@ export default function App() {
     if (!view) return;
 
     view.jumpToLine(item.line);
-    setIsOutlineMenuOpen(false);
+    setOpenOutlineMenuId(null);
   };
 
   const getEditorView = () => {
@@ -9710,7 +9710,7 @@ export default function App() {
                 handleBreadcrumbFolderSelect, handleMoveProjectEntry, handleRenameProjectEntry,
                 handleDeleteProjectEntry, handleCreateProjectFile, handleCreateProjectFolder,
                 visibleKnownLibraries, currentFileName, outlineItems, activeOutlineChain,
-                isOutlineMenuOpen, setIsOutlineMenuOpen, outlineQuery, setOutlineQuery,
+                openOutlineMenuId, setOpenOutlineMenuId, outlineQuery, setOutlineQuery,
                 filteredOutlineItems, jumpToOutlineItem, collapsedWorkspaceFolderPaths, focusedFolderPath,
                 toggleWorkspaceFolderCollapse, handleWorkspaceFolderTreeSelect, isBreadcrumbOverflowOpen,
                 setIsBreadcrumbOverflowOpen, scratchWorkspaceName,
