@@ -45,6 +45,7 @@ assert.equal(externallyEdited.slice(resolved.from, resolved.to), original.select
 
 const appSource = await readFile("src/App.tsx", "utf8");
 const rightSidebarSource = await readFile("src/components/layout/RightSidebar.tsx", "utf8");
+const leftSidebarSource = await readFile("src/components/layout/LeftSidebar.tsx", "utf8");
 const paletteSource = await readFile("src/paletteCommands.ts", "utf8");
 const appCssSource = await readFile("src/App.css", "utf8");
 const pluginManagerSource = await readFile("src/components/dialogs/PluginManagerModal.tsx", "utf8");
@@ -157,12 +158,12 @@ assert.match(appCssSource, /\.modalBackdrop\s*\{[^}]*z-index:\s*10/, "native dia
 assert.doesNotMatch(appSource, /pluginScreenRightSidebar/, "a full plugin screen must never resize the right sidebar");
 assert.match(appCssSource, /\.pluginScreenPane\s*\{[^}]*position:\s*absolute[^}]*inset:\s*0[^}]*overflow:\s*hidden/, "full plugin screens need an independent overlay that cannot resize the editor workspace");
 assert.match(
-  appSource,
+  leftSidebarSource,
   /className=\{`leftWorkspaceCluster \$\{[\s\S]*?appMode !== "write" && appMode !== "plugin"/,
   "the editor workspace must remain laid out behind a plugin screen",
 );
 assert.match(
-  appSource,
+  leftSidebarSource,
   /aria-hidden=\{isEditorFocusMode \|\| appMode === "plugin"\}[\s\S]*?inert/,
   "the preserved editor chrome must not remain interactive behind a plugin screen",
 );

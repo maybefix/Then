@@ -56,6 +56,7 @@ import { SettingsModal } from "./components/dialogs/SettingsModal";
 import { ThemePickerModal } from "./components/dialogs/ThemePickerModal";
 import { ManuscriptTidyModal } from "./components/dialogs/ManuscriptTidyModal";
 import { RightSidebar } from "./components/layout/RightSidebar";
+import { LeftSidebar } from "./components/layout/LeftSidebar";
 import { DEFAULT_AI_SETTINGS, normalizeAiSettings } from "./ai/settings";
 import type { ManuscriptTidyLineRange, ManuscriptTidyResult } from "./editor/manuscriptTidy";
 import { normalizeAppTheme } from "./themes";
@@ -77,10 +78,7 @@ import {
   type SnapshotRelocation,
   type SnapshotConflictPolicy,
 } from "./components/checkpoints/CheckpointStudio";
-import {
-  WorkspaceSidebar,
-  type SidebarHeadingSelection,
-} from "./components/layout/WorkspaceSidebar";
+import type { SidebarHeadingSelection } from "./components/layout/WorkspaceSidebar";
 import { DocumentTabs } from "./components/layout/DocumentTabs";
 import { ScopeStartPage } from "./components/layout/ScopeStartPage";
 import { LibraryHome, type LibraryHomeItem } from "./components/layout/LibraryHome";
@@ -187,7 +185,6 @@ import {
   renumberPlotCards,
 } from "./components/plot/plotCardUtils";
 import { ReferenceLayer } from "./components/references/ReferenceLayer";
-import { OpenCardsPane } from "./components/binder/OpenCardsPane";
 import {
   alignIdeaLayoutToMode,
   countIdeaReferenceLinks,
@@ -206,6 +203,7 @@ import {
   referenceNameFromPath,
 } from "./referencePathModel";
 import { createProjectEntryActions } from "./projectEntryActions";
+import { createWorkspaceTreeActions } from "./workspaceTreeActions";
 import { PROOFREAD_RULES } from "./proofread/rules";
 import { DEFAULT_PROOFREAD_OPTIONS } from "./proofread/types";
 import {
@@ -2149,7 +2147,6 @@ export default function App() {
   const [isProjectReplacing, setIsProjectReplacing] = useState(false);
   const [leftSidebarView, setLeftSidebarView] =
     useState<"files" | "search" | "reference">("files");
-  const isProjectSearchMode = leftSidebarView === "search";
   const [editorFind, setEditorFind] = useState<EditorFindState>({
     open: false,
     query: "",
@@ -9867,71 +9864,11 @@ export default function App() {
     setWorkspaceAlert(null);
   };
 
-  const handleFolderCollapsedChange = (path: string, collapsed: boolean) => {
-    if (!projectFolder) return;
-    const workspacePath = projectFolder.path;
-    setAppState((current) => {
-      const currentPaths = new Set(
-        current.collapsedFolderPathsByWorkspace[workspacePath] ?? [],
-      );
-      if (collapsed) {
-        currentPaths.add(path);
-      } else {
-        currentPaths.delete(path);
-      }
-      return {
-        ...current,
-        collapsedFolderPathsByWorkspace: {
-          ...current.collapsedFolderPathsByWorkspace,
-          [workspacePath]: Array.from(currentPaths),
-        },
-      };
-    });
-  };
-
-  const handleOutlineCollapsedChange = (path: string, collapsed: boolean) => {
-    if (!projectFolder) return;
-    const workspacePath = projectFolder.path;
-    setAppState((current) => {
-      const currentPaths = new Set(
-        current.collapsedOutlinePathsByWorkspace[workspacePath] ?? [],
-      );
-      if (collapsed) {
-        currentPaths.add(path);
-      } else {
-        currentPaths.delete(path);
-      }
-      return {
-        ...current,
-        collapsedOutlinePathsByWorkspace: {
-          ...current.collapsedOutlinePathsByWorkspace,
-          [workspacePath]: Array.from(currentPaths),
-        },
-      };
-    });
-  };
-
-  const handleOutlineHeadingCollapsedChange = (key: string, collapsed: boolean) => {
-    if (!projectFolder) return;
-    const workspacePath = projectFolder.path;
-    setAppState((current) => {
-      const currentKeys = new Set(
-        current.collapsedOutlineHeadingKeysByWorkspace[workspacePath] ?? [],
-      );
-      if (collapsed) {
-        currentKeys.add(key);
-      } else {
-        currentKeys.delete(key);
-      }
-      return {
-        ...current,
-        collapsedOutlineHeadingKeysByWorkspace: {
-          ...current.collapsedOutlineHeadingKeysByWorkspace,
-          [workspacePath]: Array.from(currentKeys),
-        },
-      };
-    });
-  };
+  const {
+    handleFolderCollapsedChange,
+    handleOutlineCollapsedChange,
+    handleOutlineHeadingCollapsedChange,
+  } = createWorkspaceTreeActions({ projectFolder, setAppState });
 
   const handleSetFileProgress = (path: string, status: FileProgressStatus) => {
     if (!projectFolder) return;
@@ -11097,224 +11034,31 @@ export default function App() {
             ref={workspaceRef}
             data-app-mode={appMode}
           >
-            <div
-              className={`leftWorkspaceCluster ${
-                appMode !== "write" && appMode !== "plugin" ? "modeHiddenPane" : ""
-              }`}
-              data-sidebar-collapsed={isLeftSidebarCollapsed}
-              aria-hidden={isEditorFocusMode || appMode === "plugin"}
-              {...(isEditorFocusMode || appMode === "plugin" ? { inert: "" } : {})}
-            >
-                <nav className="workspaceActivityBar" aria-label="左サイドバー操作">
-                  <button
-                    className={`workspaceActivityButton ${
-                      leftSidebarView === "files" && !isLeftSidebarCollapsed
-                        ? "activeWorkspaceActivityButton"
-                        : ""
-                    }`}
-                    type="button"
-                    aria-label="ファイルツリー"
-                    title="ファイルツリー"
-                    aria-pressed={leftSidebarView === "files" && !isLeftSidebarCollapsed}
-                    onClick={() => {
-                      setIsLeftSidebarCollapsed(false);
-                      setLeftSidebarView("files");
-                    }}
-                  >
-                    <AppIcon name="files" className="workspaceActivityIcon" />
-                  </button>
-                  <button
-                    className={`workspaceActivityButton ${
-                      leftSidebarView === "search" && !isLeftSidebarCollapsed
-                        ? "activeWorkspaceActivityButton"
-                        : ""
-                    }`}
-                    type="button"
-                    aria-label="プロジェクト検索"
-                    title="プロジェクト検索"
-                    aria-pressed={leftSidebarView === "search" && !isLeftSidebarCollapsed}
-                    onClick={() => {
-                      setIsLeftSidebarCollapsed(false);
-                      setLeftSidebarView("search");
-                    }}
-                  >
-                    <AppIcon name="search" className="workspaceActivityIcon" />
-                  </button>
-                  <button
-                    className={`workspaceActivityButton ${
-                      leftSidebarView === "reference" && !isLeftSidebarCollapsed
-                        ? "activeWorkspaceActivityButton"
-                        : ""
-                    }`}
-                    type="button"
-                    aria-label="開いているカード"
-                    title="開いているカード"
-                    aria-pressed={leftSidebarView === "reference" && !isLeftSidebarCollapsed}
-                    onClick={() => {
-                      setIsLeftSidebarCollapsed(false);
-                      setLeftSidebarView("reference");
-                    }}
-                  >
-                    <AppIcon name="reference" className="workspaceActivityIcon" />
-                  </button>
-                  <button
-                    className="workspaceActivityButton"
-                    type="button"
-                    aria-label="新規ファイル"
-                    title="新規ファイル"
-                    onClick={handleNewDocument}
-                  >
-                    <AppIcon name="plus" className="workspaceActivityIcon" />
-                  </button>
-                  <button
-                    className="workspaceActivityButton"
-                    type="button"
-                    aria-label="新規フォルダ"
-                    title="新規フォルダ"
-                    onClick={() =>
-                      projectFolder
-                        ? void handleCreateProjectFolder(focusedFolderPath ?? projectFolder.path)
-                        : handleOpenProjectFolder()
-                    }
-                  >
-                    <AppIcon name="folderPlus" className="workspaceActivityIcon" />
-                  </button>
-                </nav>
-                {leftSidebarView === "reference" ? (
-                  <aside
-                    className="workspaceSidebar referenceWorkspaceSidebar"
-                    aria-label="開いているカード"
-                  >
-                    <div className="sidebarHeader">
-                      <span className="sidebarHeaderLabel">開いているカード</span>
-                      <div className="sidebarHeaderActions">
-                        <button
-                          className="sidebarIconButton"
-                          type="button"
-                          aria-label="左サイドバーを畳む"
-                          title="左サイドバーを畳む"
-                          onClick={() => setIsLeftSidebarCollapsed(true)}
-                        >
-                          <AppIcon name="panelLeft" className="sidebarButtonSvg" />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="leftReferenceSidebarBody">
-                      <OpenCardsPane
-                        cards={referenceLayout.cards}
-                        threads={snippets}
-                        candidates={sortedReferenceCandidates}
-                        onFocusCard={focusReferenceCard}
-                        onCloseCard={closeReferenceCard}
-                        onPinCard={pinReferenceCard}
-                        onCollapseCard={collapseReferenceCard}
-                      />
-                    </div>
-                  </aside>
-                ) : (
-                <WorkspaceSidebar
-                projectFolder={projectFolder}
-                currentFilePath={currentFilePath}
-                currentFileName={currentFileName}
-                currentFileCharCount={charCount}
-                focusedFolderPath={focusedFolderPath}
-                activeDocumentOutline={outlineItems}
-                activeOutlineIds={activeOutlineIds}
-                activeOutlineBlockId={
-                  activeOutlineChain[activeOutlineChain.length - 1]?.blockId ?? null
-                }
-                projectAst={projectAst}
-                countWhitespace={settings.countWhitespace}
-                countCode={settings.countCode}
-                showOutlineGuides={settings.showOutlineGuides}
-                fileProgress={appState.fileProgress}
-                onSetFileProgress={handleSetFileProgress}
-                collapsedFolderPaths={collapsedTreeFolderPaths}
-                onFolderCollapsedChange={handleFolderCollapsedChange}
-                collapsedOutlinePaths={collapsedTreeOutlinePaths}
-                onOutlineCollapsedChange={handleOutlineCollapsedChange}
-                collapsedOutlineHeadingKeys={collapsedTreeOutlineHeadingKeys}
-                onOutlineHeadingCollapsedChange={handleOutlineHeadingCollapsedChange}
-                projectSearchQuery={projectSearchQuery}
-                projectSearchResults={workspaceSearchOutcome.results}
-                projectSearchTotal={workspaceSearchOutcome.total}
-                projectSearchMatchedFileCount={workspaceSearchOutcome.matchedFileCount}
-                projectSearchTruncated={workspaceSearchOutcome.truncated}
-                projectSearchError={workspaceSearchOutcome.error}
-                projectSearchUseRegex={projectSearchUseRegex}
-                projectSearchMatchCase={projectSearchMatchCase}
-                projectSearchIncludeComments={searchIncludeComments}
-                searchScope={searchScope}
-                projectReplaceValue={projectReplaceValue}
-                isProjectReplacing={isProjectReplacing}
-                isProjectSearchMode={isProjectSearchMode}
-                onJumpOutline={jumpToOutlineItem}
-                onJumpProjectOutline={(path, item) => void handleProjectOutlineJump(path, item)}
-                onMoveHeadings={(
-                  sources,
-                  targetPath,
-                  targetLine,
-                  targetBlockId,
-                  position,
-                ) =>
-                  void handleHeadingMove(
-                    sources,
-                    targetPath,
-                    targetLine,
-                    targetBlockId,
-                    position,
-                  )
-                }
-                onExtractHeading={(source) => void handleHeadingExtract(source)}
-                onProjectSearchQueryChange={setProjectSearchQuery}
-                onProjectSearchUseRegexChange={setProjectSearchUseRegex}
-                onProjectSearchMatchCaseChange={setProjectSearchMatchCase}
-                onProjectSearchIncludeCommentsChange={setSearchIncludeComments}
-                onSearchScopeChange={setSearchScope}
-                onProjectReplaceValueChange={setProjectReplaceValue}
-                onOpenProjectSearchResult={(result) => void handleProjectSearchResultOpen(result)}
-                onReplaceInCurrentFile={handleReplaceInCurrentFile}
-                onReplaceInProject={() => void handleReplaceInProject()}
-                onOpenProjectFolder={handleOpenProjectFolder}
-                onCreateFile={(folderPath) => void handleCreateProjectFile(folderPath)}
-                onCreateFolder={(folderPath) => void handleCreateProjectFolder(folderPath)}
-                onSelectFile={(path) => void handleProjectFileSelect(path)}
-                onSelectFolder={(path) => void handleProjectFolderSelect(path)}
-                onRenameEntry={(entry) => void handleRenameProjectEntry(entry)}
-                onDeleteEntry={(entry) => void handleDeleteProjectEntry(entry)}
-                onMoveEntry={(sourcePaths, targetFolderPath, targetPath, position) =>
-                  void handleMoveProjectEntriesToFolder(
-                    sourcePaths,
-                    targetFolderPath,
-                    targetPath,
-                    position,
-                  )
-                }
-                onReorderEntry={(folderPath, draggedPaths, targetPath, position) =>
-                  void handleSidebarEntryReorder(folderPath, draggedPaths, targetPath, position)
-                }
-                snapshots={currentWorkspaceSnapshots}
-                isSnapshotSectionCollapsed={settings.checkpointSectionCollapsed}
-                onSnapshotSectionCollapsedChange={(collapsed) =>
-                  updateSettings("checkpointSectionCollapsed", collapsed)
-                }
-                showSnapshotSection={settings.showCheckpointSection}
-                onCreateSnapshot={() => void handleQuickCreateManuscriptSnapshot()}
-                onOpenSnapshot={(snapshot) => openCheckpointStudio(snapshot?.id)}
-                onEditSnapshotDetails={(snapshot) => void handleEditManuscriptSnapshotDetails(snapshot)}
-                onRestoreSnapshot={(snapshot) => void handleRestoreManuscriptSnapshot(snapshot)}
-                onDeleteSnapshot={(snapshot) => void handleDeleteManuscriptSnapshot(snapshot)}
-                    onCollapse={() => setIsLeftSidebarCollapsed(true)}
-                    library={libraryContext}
-                    onEnterLibraryRoot={enterLibraryRoot}
-                    onEnterProject={enterProject}
-                    onCreateLibraryProject={() => void handleCreateLibraryProject()}
-                    onImportProject={() => void handleImportProjectIntoLibrary()}
-                    onReorderLibraryProjects={(paths) => void reorderLibraryProjects(paths)}
-                    isLibrarySearchLoading={Boolean(libraryCorpus?.isLoading)}
-                />
-                )}
-            </div>
+            <LeftSidebar
+              {...{
+                appMode, isLeftSidebarCollapsed, isEditorFocusMode, leftSidebarView, setIsLeftSidebarCollapsed,
+                setLeftSidebarView, handleNewDocument, projectFolder, handleCreateProjectFolder,
+                focusedFolderPath, handleOpenProjectFolder, referenceLayout, snippets,
+                sortedReferenceCandidates, focusReferenceCard, closeReferenceCard, pinReferenceCard,
+                collapseReferenceCard, currentFilePath, currentFileName, charCount, outlineItems,
+                activeOutlineIds, activeOutlineChain, projectAst, settings, appState, handleSetFileProgress,
+                collapsedTreeFolderPaths, handleFolderCollapsedChange, collapsedTreeOutlinePaths,
+                handleOutlineCollapsedChange, collapsedTreeOutlineHeadingKeys,
+                handleOutlineHeadingCollapsedChange, projectSearchQuery, workspaceSearchOutcome,
+                projectSearchUseRegex, projectSearchMatchCase, searchIncludeComments, searchScope,
+                projectReplaceValue, isProjectReplacing, jumpToOutlineItem, handleProjectOutlineJump,
+                handleHeadingMove, handleHeadingExtract, setProjectSearchQuery, setProjectSearchUseRegex,
+                setProjectSearchMatchCase, setSearchIncludeComments, setSearchScope, setProjectReplaceValue,
+                handleProjectSearchResultOpen, handleReplaceInCurrentFile, handleReplaceInProject,
+                handleCreateProjectFile, handleProjectFileSelect, handleProjectFolderSelect,
+                handleRenameProjectEntry, handleDeleteProjectEntry, handleMoveProjectEntriesToFolder,
+                handleSidebarEntryReorder, currentWorkspaceSnapshots, updateSettings,
+                handleQuickCreateManuscriptSnapshot, openCheckpointStudio, handleEditManuscriptSnapshotDetails,
+                handleRestoreManuscriptSnapshot, handleDeleteManuscriptSnapshot, libraryContext,
+                enterLibraryRoot, enterProject, handleCreateLibraryProject, handleImportProjectIntoLibrary,
+                reorderLibraryProjects, libraryCorpus
+              }}
+            />
             <div className={`editorColumn ${
               appMode !== "write" && appMode !== "plugin" ? "modeHiddenPane" : ""
             }`}

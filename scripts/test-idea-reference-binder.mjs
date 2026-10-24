@@ -8,6 +8,7 @@ const [types, model, app, ideaActions, binderPane, ideaPane, openCards, canvasAp
   Promise.all([
     readFile("src/App.tsx", "utf8"),
     readFile("src/components/layout/RightSidebar.tsx", "utf8"),
+    readFile("src/components/layout/LeftSidebar.tsx", "utf8"),
   ]).then((parts) => parts.join("\n")),
   readFile("src/ideaThreadActions.ts", "utf8"),
   readFile("src/components/binder/BinderPane.tsx", "utf8"),
