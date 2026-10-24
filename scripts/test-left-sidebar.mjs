@@ -4,10 +4,12 @@
 // 値は名前ごとに違う目印にし、関数は呼ばれた名前と引数を記録する入れ物にして、
 // 取り違え（たとえば「名前の変更」に削除の関数をつなぐこと）を、どの組でも見つけられるようにする。
 import assert from "node:assert/strict";
-import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import ts from "typescript";
 
 const stubPanes = {
   name: "stub-panes",
@@ -373,6 +375,37 @@ const expectCalls = (label, action, expected) => {
   ]) {
     expectCall(`OpenCardsPane.${key}`, () => pane.props[key](...args), name, args);
   }
+}
+
+// --- ビューと畳みの保存と復元（再起動しても戻る。右サイドバーのタブと同じく、アプリ全体で1つ） ---
+{
+  const statePath = "src/utils/leftSidebarState.ts";
+  assert.ok(existsSync(statePath), "the left sidebar view and collapse are read back through leftSidebarState.ts");
+  const stateCode = ts.transpileModule(await readFile(statePath, "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const state = await import(`data:text/javascript;base64,${Buffer.from(stateCode).toString("base64")}`);
+  for (const view of ["files", "search", "reference"]) assert.equal(state.normalizeLeftSidebarView(view), view);
+  // 古い状態（項目なし）と知らない値は、ファイルツリー・開いた状態として読む。
+  for (const value of [undefined, null, "", "plugin:x", 1]) {
+    assert.equal(state.normalizeLeftSidebarView(value), "files", `view ${JSON.stringify(value)}`);
+  }
+  assert.equal(state.normalizeLeftSidebarCollapsed(true), true);
+  for (const value of [undefined, null, false, "true", 1]) {
+    assert.equal(state.normalizeLeftSidebarCollapsed(value), false, `collapsed ${JSON.stringify(value)}`);
+  }
+
+  // App が、読み込み・起動時の復元・変えたときの保存をつないでいること（App は大きく node で組めないので、ソースで見る）。
+  const app = await readFile("src/App.tsx", "utf8");
+  assert.match(app, /leftSidebarView: normalizeLeftSidebarView\(value\?\.leftSidebarView\)/);
+  assert.match(app, /leftSidebarCollapsed: normalizeLeftSidebarCollapsed\(value\?\.leftSidebarCollapsed\)/);
+  assert.match(app, /setLeftSidebarViewState\(state\.leftSidebarView\)/);
+  assert.match(app, /setIsLeftSidebarCollapsedState\(state\.leftSidebarCollapsed\)/);
+  assert.match(app, /current\.leftSidebarView === view/);
+  assert.match(app, /current\.leftSidebarCollapsed === collapsed/);
+  // 画面の値を直接書くのは、保存もする関数と起動時の復元の2か所だけ（ほかの変更は全部、保存する関数を通る）。
+  assert.equal(app.match(/setLeftSidebarViewState\(/g)?.length, 2, "only the saving setter and the restore set the view");
+  assert.equal(app.match(/setIsLeftSidebarCollapsedState\(/g)?.length, 2, "only the saving setter and the restore set the collapse");
 }
 
 console.log("left sidebar tests passed");

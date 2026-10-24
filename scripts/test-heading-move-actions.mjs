@@ -313,6 +313,24 @@ for (const [title, sourcePath, expected] of [
   assert.equal(s.inputs[0]?.initialValue, expected, `suggested name for ${JSON.stringify(title)}`);
 }
 
+// 入れた名前に拡張子（.md・.txt）がなければ、元のファイルの拡張子を足して渡す（Rust に任せると .txt になる）。
+// 拡張子を書いたときは、そのまま渡す。空白だけの名前は足さずに渡す（Rust が名前なしとして断る）。
+for (const [answer, sourcePath, expected] of [
+  ["切り出し", A, "切り出し.md"],
+  ["  切り出し  ", A, "切り出し.md"],
+  ["切り出し", `${ROOT}/メモ.txt`, "切り出し.txt"],
+  ["切り出し", `${ROOT}/x.MD`, "切り出し.MD"],
+  ["切り出し.txt", A, "切り出し.txt"],
+  ["切り出し.MD", `${ROOT}/メモ.txt`, "切り出し.MD"],
+  ["版1.2", A, "版1.2.md"],
+  ["   ", A, "   "],
+]) {
+  reset({ inputAnswer: answer, disk: { [sourcePath]: "# 見出し\n本文\n" }, openTabs: [], currentFilePath: null });
+  await actions().handleHeadingExtract({ ...heading(sourcePath, 1, "見出し"), path: sourcePath });
+  const call = s.invokes.find((item) => item.command === "extract_heading_to_file");
+  assert.equal(call?.args.fileName, expected, `file name for ${JSON.stringify(answer)} from ${sourcePath}`);
+}
+
 // 子階層も含めて切り出す（今のファイルから）。
 reset();
 await actions().handleHeadingExtract(heading(A, 1, "A"));

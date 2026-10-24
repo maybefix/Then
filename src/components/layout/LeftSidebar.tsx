@@ -7,6 +7,7 @@ import type {
   ProjectSearchResult,
 } from "../../editor/ast/types";
 import type { createProjectEntryActions } from "../../projectEntryActions";
+import type { LeftSidebarView } from "../../utils/leftSidebarState";
 import type {
   AppState,
   EditorSettings,
@@ -27,8 +28,6 @@ type AppMode = "write" | "canvas" | "export" | "checkpoint" | "plugin";
 
 type WorkspaceSearchScope = "file" | "project" | "library";
 
-type LeftSidebarView = "files" | "search" | "reference";
-
 type ProjectEntryActions = ReturnType<typeof createProjectEntryActions>;
 
 export type LeftSidebarProps = {
@@ -36,8 +35,8 @@ export type LeftSidebarProps = {
   isLeftSidebarCollapsed: boolean;
   isEditorFocusMode: boolean;
   leftSidebarView: LeftSidebarView;
-  setIsLeftSidebarCollapsed: Dispatch<SetStateAction<boolean>>;
-  setLeftSidebarView: Dispatch<SetStateAction<LeftSidebarView>>;
+  setIsLeftSidebarCollapsed: (collapsed: boolean) => void;
+  setLeftSidebarView: (view: LeftSidebarView) => void;
   handleNewDocument: () => Promise<void>;
   projectFolder: ProjectFolder | null;
   handleCreateProjectFolder: ProjectEntryActions["handleCreateProjectFolder"];

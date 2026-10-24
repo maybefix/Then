@@ -2,6 +2,7 @@ import type { AiSettings } from "./ai/settings";
 import type { ExportFontFamily } from "./export/types";
 import type { ProofreadOptions } from "./proofread/types";
 import type { ProofreadTerm } from "./proofread/terms";
+import type { LeftSidebarView } from "./utils/leftSidebarState";
 import type { RestorableRightSidebarTab } from "./utils/rightSidebarState";
 
 export type {
@@ -526,6 +527,10 @@ export type AppState = {
   settings: EditorSettings;
   /** 最後に表示していた、次回起動時にも復元可能な右サイドバーのタブ。 */
   rightSidebarTab: RestorableRightSidebarTab;
+  /** 最後に表示していた左サイドバーのビュー。次回起動時に復元する。 */
+  leftSidebarView: LeftSidebarView;
+  /** 左サイドバーを畳んでいたか。次回起動時に復元する。 */
+  leftSidebarCollapsed: boolean;
   lastWorkspacePath: string | null;
   lastFilePath: string | null;
   recentWorkspaces: WorkspaceRecord[];

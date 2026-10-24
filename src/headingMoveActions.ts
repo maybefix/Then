@@ -29,9 +29,19 @@ type HeadingExtractDocuments = {
   extractedDocument: TextDocument;
 };
 
+function sourceTextExtension(sourcePath: string): string {
+  return sourcePath.match(/(\.(?:md|txt))$/i)?.[1] ?? ".txt";
+}
+
+// 入れた名前に拡張子がなければ、元のファイルの拡張子を足す（Rust に任せると .txt になる）。
+function headingFileNameWithExtension(fileName: string, sourcePath: string): string {
+  const trimmed = fileName.trim();
+  if (!trimmed || /\.(?:md|txt)$/i.test(trimmed)) return trimmed || fileName;
+  return `${trimmed}${sourceTextExtension(sourcePath)}`;
+}
+
 function suggestedHeadingFileName(title: string, sourcePath: string): string {
-  const extensionMatch = sourcePath.match(/(\.(?:md|txt))$/i);
-  const extension = extensionMatch?.[1] ?? ".txt";
+  const extension = sourceTextExtension(sourcePath);
   const sanitized =
     title
       .replace(/[\\/:*?"<>|]/g, " ")
@@ -328,7 +338,7 @@ export function createHeadingMoveActions(deps: HeadingMoveActionDeps) {
 
       const saved = await invoke<HeadingExtractDocuments>("extract_heading_to_file", {
         sourcePath: source.path,
-        fileName,
+        fileName: headingFileNameWithExtension(fileName, source.path),
         sourceContent: extraction.sourceMarkdown,
         extractedContent: extraction.extractedMarkdown,
       });
