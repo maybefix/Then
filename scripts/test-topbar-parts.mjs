@@ -3,10 +3,10 @@
 // 値は名前ごとに違う目印にし、関数は呼ばれた名前と引数を記録する入れ物にして、
 // 取り違え（たとえば「名前の変更」に削除の関数をつなぐこと）を、どの組でも見つけられるようにする。
 import assert from "node:assert/strict";
-import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { build } from "esbuild";
+import { build, transform } from "esbuild";
 
 const tmpDir = path.join(process.cwd(), ".tmp");
 await mkdir(tmpDir, { recursive: true });
@@ -337,7 +337,7 @@ const expectExercised = (label, names) => {
     "handleBreadcrumbEntryDragStart", "handleBreadcrumbEntryDragOver", "handleBreadcrumbEntryDrop",
     "handleBreadcrumbEntryDragEnd", "handleProjectFileSelect", "handleBreadcrumbFolderSelect",
     "handleMoveProjectEntry", "handleRenameProjectEntry", "handleDeleteProjectEntry", "handleCreateProjectFile",
-    "handleCreateProjectFolder", "setIsOutlineMenuOpen", "setOutlineQuery", "jumpToOutlineItem",
+    "handleCreateProjectFolder", "setOpenOutlineMenuId", "setOutlineQuery", "jumpToOutlineItem",
     "toggleWorkspaceFolderCollapse", "handleWorkspaceFolderTreeSelect", "setIsBreadcrumbOverflowOpen",
   ];
   const spies = spiesOf(functionNames);
@@ -378,7 +378,7 @@ const expectExercised = (label, names) => {
     currentFileName: mark("currentFileName"),
     outlineItems: [],
     activeOutlineChain: [],
-    isOutlineMenuOpen: false,
+    openOutlineMenuId: null,
     outlineQuery: mark("outlineQuery"),
     filteredOutlineItems: [],
     collapsedWorkspaceFolderPaths: new Set(),
@@ -695,15 +695,41 @@ const expectExercised = (label, names) => {
     const crumbs = findAll(tree, (element) => hasClass(element, "outlineBreadcrumbSegment"));
     assert.deepEqual(crumbs.map((element) => element.key), ["h-1", "h-2"]);
     assert.deepEqual(crumbs.map((element) => textOf(element)), ["第一章", "›場面一"]);
-    const outlineButton = button(tree, "場面一 のアウトライン");
-    assert.equal(outlineButton.props["aria-expanded"], false);
-    expectCalls("見出しのパンくず", () => outlineButton.props.onClick(), [{ name: "setIsOutlineMenuOpen", args: ["<fn>"] }]);
-    expectToggle("見出しのパンくず");
+    assert.deepEqual(
+      ["第一章 のアウトライン", "場面一 のアウトライン"].map((label) => button(tree, label).props["aria-expanded"]),
+      [false, false],
+    );
+    assert.equal(findAll(tree, (element) => hasClass(element, "outlinePopover")).length, 0);
+    // 押した見出しを開き、開いている見出しをもう一度押すと閉じる。
+    expectCalls("見出しのパンくず（場面一）", () => button(tree, "場面一 のアウトライン").props.onClick(), [
+      { name: "setOpenOutlineMenuId", args: ["<fn>"] },
+    ]);
+    assert.equal(lastFunctionArg(null), "h-2", "a closed menu opens under the clicked heading");
+    assert.equal(lastFunctionArg("h-1"), "h-2", "a menu open under another heading moves to the clicked heading");
+    assert.equal(lastFunctionArg("h-2"), null, "the open heading closes its menu");
+    expectCalls("見出しのパンくず（第一章）", () => button(tree, "第一章 のアウトライン").props.onClick(), [
+      { name: "setOpenOutlineMenuId", args: ["<fn>"] },
+    ]);
+    assert.equal(lastFunctionArg(null), "h-1");
     assert.equal(findAll(render({ ...outline, currentFilePath: null }), (element) => hasClass(element, "outlineSeparator")).length, 0);
     assert.equal(findAll(render({ ...outline, outlineItems: [] }), (element) => hasClass(element, "outlineSeparator")).length, 0);
 
-    const open = render({ ...outline, isOutlineMenuOpen: true });
-    assert.equal(button(open, "第一章 のアウトライン").props["aria-expanded"], true);
+    // メニューは、押した見出しの下に開く。
+    for (const [openId, index] of [["h-1", 0], ["h-2", 1]]) {
+      const openTree = render({ ...outline, openOutlineMenuId: openId });
+      const openCrumbs = findAll(openTree, (element) => hasClass(element, "outlineBreadcrumbSegment"));
+      const openPopovers = findAll(openTree, (element) => hasClass(element, "outlinePopover"));
+      assert.equal(openPopovers.length, 1, `one outline menu for ${openId}`);
+      assert.ok(elementsOf(openCrumbs[index]).includes(openPopovers[0]), `the outline menu opens under ${openId}`);
+      assert.deepEqual(
+        ["第一章 のアウトライン", "場面一 のアウトライン"].map((label) => button(openTree, label).props["aria-expanded"]),
+        [index === 0, index === 1],
+      );
+    }
+    assert.equal(findAll(render({ ...outline, openOutlineMenuId: "h-gone" }), (element) => hasClass(element, "outlinePopover")).length, 0,
+      "a heading that left the chain has no menu");
+
+    const open = render({ ...outline, openOutlineMenuId: "h-2" });
     const popovers = findAll(open, (element) => hasClass(element, "outlinePopover"));
     assert.equal(popovers.length, 1);
     const search = findOne(popovers[0], (element) => element.type === "input", "outline search");
@@ -749,7 +775,7 @@ const expectExercised = (label, names) => {
       { name: "setActiveBreadcrumbPath", args: [null] },
       { name: "setBreadcrumbBrowsePath", args: [null] },
       { name: "setIsWorkspaceSwitcherOpen", args: [false] },
-      { name: "setIsOutlineMenuOpen", args: [false] },
+      { name: "setOpenOutlineMenuId", args: [null] },
       { name: "setIsBreadcrumbOverflowOpen", args: ["<fn>"] },
     ]);
     expectToggle("「…」");
@@ -782,6 +808,55 @@ const expectExercised = (label, names) => {
     });
   }
   expectExercised("TopbarBreadcrumbs", functionNames);
+}
+
+// --- App が帯のメニューを、帯の外のクリックと Escape で閉じる ---
+// この処理は App の useEffect の中に残っているので、App.tsx からその部分を切り出して動かす。
+// ref は「その要素の中か」だけを答える入れ物にし、state を書く関数は記録する入れ物にする。
+{
+  const app = await readFile("src/App.tsx", "utf8");
+  const start = app.indexOf("    const handlePointerDown = (event: MouseEvent) => {");
+  const end = app.indexOf('    window.addEventListener("pointerdown", handlePointerDown);', start);
+  assert.ok(start >= 0 && end > start, "App must keep the menu dismiss handlers");
+  const body = app.slice(start, end);
+  const names = [...new Set(body.match(/\b(?:set[A-Z]\w*|\w+Ref)\b/g))];
+  const { code } = await transform(
+    `export default ({ ${names.join(", ")} }) => {\n${body}\nreturn { handlePointerDown, handleKeyDown };\n};`,
+    { loader: "ts" },
+  );
+  const { default: createHandlers } = await import(`data:text/javascript,${encodeURIComponent(code)}`);
+  globalThis.Node ??= class Node {};
+  const targetIn = (owner) => Object.assign(new globalThis.Node(), { owner });
+  const deps = Object.fromEntries(names.map((name) => [
+    name,
+    name.endsWith("Ref") ? { current: { contains: (target) => target.owner === name } } : spy(name),
+  ]));
+  const { handlePointerDown, handleKeyDown } = createHandlers(deps);
+  const closesOutline = () => calls.some((call) => call.name === "setOpenOutlineMenuId" && call.args[0] === null);
+  const closes = (name) => calls.some((call) => call.name === name && call.args[0] === false);
+
+  calls.length = 0;
+  handlePointerDown({ target: targetIn("breadcrumbMenuRef") });
+  assert.equal(closesOutline(), false, "a click inside the breadcrumbs must keep the outline menu open");
+  assert.equal(closes("setIsWorkspaceSwitcherOpen"), false, "a click inside the breadcrumbs keeps its menus");
+  assert.equal(closes("setIsFileMenuOpen"), true, "a click outside the file menu closes it");
+
+  calls.length = 0;
+  handlePointerDown({ target: targetIn("editor") });
+  assert.equal(closes("setIsFileMenuOpen"), true);
+  assert.equal(closes("setIsModeMenuOpen"), true);
+  assert.equal(closes("setIsWorkspaceSwitcherOpen"), true);
+  assert.equal(closesOutline(), true, "a click outside the breadcrumbs must close the outline menu");
+
+  calls.length = 0;
+  handleKeyDown({ key: "Escape" });
+  assert.equal(closes("setIsFileMenuOpen"), true);
+  assert.equal(closes("setIsWorkspaceSwitcherOpen"), true);
+  assert.equal(closesOutline(), true, "Escape must close the outline menu wherever the focus is");
+
+  calls.length = 0;
+  handleKeyDown({ key: "a" });
+  assert.deepEqual(calls, [], "other keys close nothing");
 }
 
 console.log("topbar parts tests passed");
