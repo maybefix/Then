@@ -38,7 +38,9 @@ import {
 import { useVerticalMetricFontFamily } from "./utils/verticalMetricFonts";
 import {
   isRestorableRightSidebarTab,
+  normalizeRightSidebarCollapsed,
   normalizeRightSidebarTab,
+  normalizeRightSidebarWide,
 } from "./utils/rightSidebarState";
 import {
   normalizeLeftSidebarCollapsed,
@@ -868,6 +870,8 @@ function createDefaultState(): AppState {
     profileSnippets: threads,
     settings: defaultSettings,
     rightSidebarTab: "plot",
+    rightSidebarCollapsed: false,
+    rightSidebarWide: false,
     leftSidebarView: "files",
     leftSidebarCollapsed: false,
     lastWorkspacePath: null,
@@ -1608,6 +1612,8 @@ function normalizeState(value: Partial<AppState> | null | undefined): AppState {
       ai: normalizeAiSettings(settings.ai),
     },
     rightSidebarTab: normalizeRightSidebarTab(value?.rightSidebarTab),
+    rightSidebarCollapsed: normalizeRightSidebarCollapsed(value?.rightSidebarCollapsed),
+    rightSidebarWide: normalizeRightSidebarWide(value?.rightSidebarWide),
     leftSidebarView: normalizeLeftSidebarView(value?.leftSidebarView),
     leftSidebarCollapsed: normalizeLeftSidebarCollapsed(value?.leftSidebarCollapsed),
     lastWorkspacePath:
@@ -2190,8 +2196,8 @@ export default function App() {
   const [appDialog, setAppDialog] = useState<AppDialog | null>(null);
   const [systemFonts, setSystemFonts] = useState<FontOption[]>(fallbackFontOptions);
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsedState] = useState(false);
-  const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
-  const [isRightSidebarWide, setIsRightSidebarWide] = useState(false);
+  const [isRightSidebarCollapsed, setIsRightSidebarCollapsedState] = useState(false);
+  const [isRightSidebarWide, setIsRightSidebarWideState] = useState(false);
   const [isEditorFocusMode, setIsEditorFocusMode] = useState(false);
   /**
    * メイン画面のモード。write=本文（左右サイドバー）、canvas=キャンバス（右のみ）、
@@ -2229,6 +2235,19 @@ export default function App() {
     if (!isRestorableRightSidebarTab(tab)) return;
     setAppState((current) =>
       current.rightSidebarTab === tab ? current : { ...current, rightSidebarTab: tab },
+    );
+  }, []);
+  // 右サイドバーの畳みと幅も、タブと同じく画面とアプリの状態の両方へ書き、次回起動時に戻す。
+  const setIsRightSidebarCollapsed = useCallback((collapsed: boolean) => {
+    setIsRightSidebarCollapsedState(collapsed);
+    setAppState((current) =>
+      current.rightSidebarCollapsed === collapsed ? current : { ...current, rightSidebarCollapsed: collapsed },
+    );
+  }, []);
+  const setIsRightSidebarWide = useCallback((wide: boolean) => {
+    setIsRightSidebarWideState(wide);
+    setAppState((current) =>
+      current.rightSidebarWide === wide ? current : { ...current, rightSidebarWide: wide },
     );
   }, []);
   // 左サイドバーのビューと畳みも、右サイドバーのタブと同じく画面とアプリの状態の両方へ書き、次回起動時に戻す。
@@ -4302,6 +4321,8 @@ export default function App() {
       .then(async (state) => {
         if (isCancelled) return;
         setRightSidebarTabState(state.rightSidebarTab);
+        setIsRightSidebarCollapsedState(state.rightSidebarCollapsed);
+        setIsRightSidebarWideState(state.rightSidebarWide);
         setLeftSidebarViewState(state.leftSidebarView);
         setIsLeftSidebarCollapsedState(state.leftSidebarCollapsed);
 

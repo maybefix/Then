@@ -119,8 +119,8 @@ export type RightSidebarProps = {
   addPlotChapter: () => void;
   setIsPlotManagerOpen: Dispatch<SetStateAction<boolean>>;
   openIdeaCanvasBoard: (scope?: CanvasScope, boardId?: string, selectNodeId?: string) => Promise<void>;
-  setIsRightSidebarWide: Dispatch<SetStateAction<boolean>>;
-  setIsRightSidebarCollapsed: Dispatch<SetStateAction<boolean>>;
+  setIsRightSidebarWide: (wide: boolean) => void;
+  setIsRightSidebarCollapsed: (collapsed: boolean) => void;
   setSidebarPluginRuntimeAnchor: Dispatch<SetStateAction<HTMLDivElement | null>>;
   isDockedPluginRuntimeVisible: boolean;
   hasOpenedDraft: boolean;
@@ -282,7 +282,7 @@ export function RightSidebar(props: RightSidebarProps) {
               type="button"
               aria-label={isRightSidebarWide ? "ペイン幅を戻す" : "ペイン幅を拡張"}
               title={isRightSidebarWide ? "ペイン幅を戻す" : "ペイン幅を拡張"}
-              onClick={() => setIsRightSidebarWide((isWide) => !isWide)}
+              onClick={() => setIsRightSidebarWide(!isRightSidebarWide)}
             >
               <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
                 <polyline points={isRightSidebarWide ? "9 18 15 12 9 6" : "15 18 9 12 15 6"} />

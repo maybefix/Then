@@ -43,7 +43,7 @@ export type IdeaThreadActionDeps = {
   setDraggingId: Dispatch<SetStateAction<string | null>>;
   setIdeaFocusRequest: Dispatch<SetStateAction<IdeaFocusRequest | null>>;
   setRightSidebarTab: (tab: string) => void;
-  setIsRightSidebarCollapsed: Dispatch<SetStateAction<boolean>>;
+  setIsRightSidebarCollapsed: (collapsed: boolean) => void;
   showToast: (message: string, action?: ToastAction | null) => void;
   requestConfirm: (options: {
     title: string;
