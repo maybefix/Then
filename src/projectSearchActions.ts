@@ -213,11 +213,14 @@ export function createProjectSearchActions(deps: ProjectSearchActionDeps) {
         setSaveStatus("saved");
       }
     };
+    // 失敗したときに、今のファイルの失敗かを見分けるため、処理中のファイルを覚えておく。
+    let processingPath: string | null = null;
     try {
       const files = collectProjectTextFiles(projectFolder);
       let totalCount = 0;
 
       for (const file of files) {
+        processingPath = file.path;
         const openTab = openTabs.find((tab) => tab.path === file.path);
         const sourceMarkdown =
           openTab?.path === currentFilePath
@@ -260,7 +263,13 @@ export function createProjectSearchActions(deps: ProjectSearchActionDeps) {
     } catch (error) {
       if (savedDocuments.length) applySavedDocuments();
       setLastError(String(error));
-      setSaveStatus("error");
+      // 保存の印は今のファイルの状態なので、今のファイルで失敗したときだけ「保存失敗」にする。
+      if (processingPath && processingPath === currentFilePath) setSaveStatus("error");
+      showToast(
+        savedDocuments.length
+          ? `置換の途中で失敗しました（${savedDocuments.length}ファイルは置換済み）`
+          : "置換に失敗しました",
+      );
     } finally {
       setIsProjectReplacing(false);
     }
