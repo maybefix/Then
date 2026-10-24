@@ -5,7 +5,10 @@ import ts from "typescript";
 const [types, model, app, ideaActions, binderPane, ideaPane, openCards, canvasApp, layer, css, rust] = await Promise.all([
   readFile("src/types.ts", "utf8"),
   readFile("src/ideaReferenceModel.ts", "utf8"),
-  readFile("src/App.tsx", "utf8"),
+  Promise.all([
+    readFile("src/App.tsx", "utf8"),
+    readFile("src/components/layout/RightSidebar.tsx", "utf8"),
+  ]).then((parts) => parts.join("\n")),
   readFile("src/ideaThreadActions.ts", "utf8"),
   readFile("src/components/binder/BinderPane.tsx", "utf8"),
   readFile("src/components/snippets/IdeaPane.tsx", "utf8"),
