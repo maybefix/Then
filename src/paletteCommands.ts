@@ -114,12 +114,16 @@ export function createPaletteCommands(deps: PaletteCommandDeps): PaletteCommand[
     // 今開いている作品は出さない（パンくずのメニューと同じく、パスが同じものを今の作品とみなす）。
     ...appState.recentWorkspaces
       .filter((workspace) => workspace.path !== projectFolder?.path)
-      .map((workspace) => ({
-        id: `workspace-open-${workspace.path}`,
-        label: `プロジェクトを開く: ${workspace.name}`,
-        hint: settings.showWorkspacePaths ? workspace.path : "プロジェクト",
-        run: () => void openWorkspace(workspace.path),
-      })),
+      .map((workspace) => {
+        // ライブラリそのもの（role: "root"）は、作品と分けて「ライブラリを開く」と出す。
+        const kind = workspace.library?.role === "root" ? "ライブラリ" : "プロジェクト";
+        return {
+          id: `workspace-open-${workspace.path}`,
+          label: `${kind}を開く: ${workspace.name}`,
+          hint: settings.showWorkspacePaths ? workspace.path : kind,
+          run: () => void openWorkspace(workspace.path),
+        };
+      }),
   ];
 
   return [
