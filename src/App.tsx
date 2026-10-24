@@ -104,6 +104,7 @@ import {
 } from "./components/startup/LibrarySetup";
 import { WindowControls } from "./components/layout/WindowControls";
 import { TopbarActions } from "./components/layout/TopbarActions";
+import { TopbarFileMenu } from "./components/layout/TopbarFileMenu";
 import { StartupPortal } from "./components/startup/StartupPortal";
 import {
   createDocumentAst,
@@ -9799,84 +9800,14 @@ export default function App() {
             }
           >
           <header className="topbar" data-tauri-drag-region="deep">
-            <div
-              className="fileMenu"
-              ref={fileMenuRef}
-              aria-hidden={isEditorFocusMode}
-              {...(isEditorFocusMode ? { inert: "" } : {})}
-            >
-              <button
-                className="menuButton"
-                type="button"
-                aria-label="ファイルメニュー"
-                aria-expanded={isFileMenuOpen}
-                onClick={() => setIsFileMenuOpen((isOpen) => !isOpen)}
-              >
-                <AppIcon name="menu" className="topbarSvgIcon" />
-              </button>
-              {isFileMenuOpen && (
-                <div className="menuPopover fileMenuPopover" role="menu">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => closeFileMenuAndRun(handleNewDocument)}
-                  >
-                    新規ファイル
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => closeFileMenuAndRun(handleOpenTextFile)}
-                  >
-                    ファイルを開く
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => closeFileMenuAndRun(saveCurrentDocument)}
-                  >
-                    保存
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => closeFileMenuAndRun(handleSaveAs)}
-                  >
-                    別名で保存
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => closeFileMenuAndRun(handleRegisterCurrentFileAsTemplate)}
-                  >
-                    このファイルをテンプレートとして登録…
-                  </button>
-                  <div className="menuDivider" role="separator" />
-                  <button
-                    type="button"
-                    role="menuitem"
-                    disabled={appMode !== "write"}
-                    onClick={() => closeFileMenuAndRun(() => openManuscriptTidy(getCurrentEditorSelection()))}
-                  >
-                    原稿を整える…
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => closeFileMenuAndRun(handleOpenLinkedExport)}
-                  >
-                    エクスポート…
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => closeFileMenuAndRun(handleOpenProjectFolder)}
-                  >
-                    フォルダを開く
-                  </button>
-                </div>
-              )}
-            </div>
+            <TopbarFileMenu
+              {...{
+                fileMenuRef, isEditorFocusMode, isFileMenuOpen, setIsFileMenuOpen, closeFileMenuAndRun,
+                handleNewDocument, handleOpenTextFile, saveCurrentDocument, handleSaveAs,
+                handleRegisterCurrentFileAsTemplate, appMode, openManuscriptTidy, getCurrentEditorSelection,
+                handleOpenLinkedExport, handleOpenProjectFolder,
+              }}
+            />
             {isLeftSidebarCollapsed && appMode === "write" && (
               <button
                 className="iconButton"
