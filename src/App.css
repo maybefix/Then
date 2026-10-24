@@ -5432,12 +5432,13 @@ body {
   flex: none;
 }
 
+/* ライブラリ名は上部の帯の中にあるので、帯の文字色にする。 */
 .breadcrumbLibraryButton span {
-  color: var(--text-muted);
+  color: var(--topbar-text-muted, var(--text-muted));
 }
 
 .breadcrumbLibraryButton:hover span {
-  color: var(--text-primary);
+  color: var(--topbar-text-primary, var(--text-primary));
 }
 
 .libraryBackButton {
@@ -13340,7 +13341,11 @@ body.thenPdfExporting .exportWindowRoot > .exportModalBackdrop {
   width: 12px;
   height: 12px;
   stroke-width: 2;
-  color: var(--text-muted);
+  /*
+   * ボタンの地は半透明なので、帯が暗いテーマでは灰色になり、控えめな色では沈む。
+   * ボタンの文字と同じ色にする。
+   */
+  color: inherit;
 }
 
 .modeMenuPopover {
