@@ -3885,9 +3885,8 @@ html:not([data-window-fullscreen="true"])
   font-size: 12px;
 }
 
-/* 縮めてよいのは、末尾を省略できるファイルの場所とエラーの文だけ。ほかは1行のまま幅を保つ。 */
+/* 項目は折り返さない。文字の幅より縮まなくなり、狭いときは min-width: 0 のファイルの場所とエラーの文だけが省略される。 */
 .statusbar > * {
-  flex-shrink: 0;
   white-space: nowrap;
 }
 
@@ -3926,7 +3925,6 @@ html:not([data-window-fullscreen="true"])
 }
 
 .statusPath {
-  flex-shrink: 1;
   min-width: 0;
   max-width: 42vw;
   overflow: hidden;
@@ -3935,7 +3933,6 @@ html:not([data-window-fullscreen="true"])
 }
 
 .statusError {
-  flex-shrink: 1;
   min-width: 0;
   max-width: 34vw;
   overflow: hidden;
