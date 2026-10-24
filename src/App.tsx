@@ -320,6 +320,7 @@ import {
 } from "./plugins/PluginRuntimeHost";
 import { PluginIcon } from "./components/plugins/PluginIcon";
 import { AppIcon } from "./components/layout/AppIcon";
+import { mergeReferenceFiles, referenceFileKey, referenceKey } from "./referenceFileKeys";
 import {
   computeTextChange,
   createThenPluginAnchor,
@@ -1219,14 +1220,6 @@ function normalizeReferenceScope(scope: unknown): ReferenceScope {
   return scope === "global" ? "global" : "project";
 }
 
-function referenceKey(sourcePath: string, scope: ReferenceScope = "project"): string {
-  return `${scope}:${sourcePath.replace(/[\\]+/g, "/").toLocaleLowerCase()}`;
-}
-
-function referenceFileKey(file: Pick<ReferenceFileInfo, "sourcePath" | "scope">): string {
-  return referenceKey(file.sourcePath, file.scope);
-}
-
 function referenceCardKey(card: Pick<ReferenceCardState, "sourcePath" | "scope">): string {
   return referenceKey(card.sourcePath, card.scope);
 }
@@ -1259,17 +1252,6 @@ function makeReferenceFileInfo(
     size: 0,
     imported: sourcePath.replace(/[\\]+/g, "/").startsWith(".then/references/imports/"),
   };
-}
-
-function mergeReferenceFiles(...groups: ReferenceFileInfo[][]): ReferenceFileInfo[] {
-  const merged = new Map<string, ReferenceFileInfo>();
-    for (const group of groups) {
-    for (const file of group) {
-      const key = referenceFileKey(file);
-      if (!merged.has(key)) merged.set(key, file);
-    }
-  }
-  return [...merged.values()];
 }
 
 function upsertRecentReference(
