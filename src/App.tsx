@@ -203,6 +203,7 @@ import {
   referenceNameFromPath,
 } from "./referencePathModel";
 import { createProjectEntryActions } from "./projectEntryActions";
+import { createWorkspaceTreeActions } from "./workspaceTreeActions";
 import { PROOFREAD_RULES } from "./proofread/rules";
 import { DEFAULT_PROOFREAD_OPTIONS } from "./proofread/types";
 import {
@@ -9863,71 +9864,11 @@ export default function App() {
     setWorkspaceAlert(null);
   };
 
-  const handleFolderCollapsedChange = (path: string, collapsed: boolean) => {
-    if (!projectFolder) return;
-    const workspacePath = projectFolder.path;
-    setAppState((current) => {
-      const currentPaths = new Set(
-        current.collapsedFolderPathsByWorkspace[workspacePath] ?? [],
-      );
-      if (collapsed) {
-        currentPaths.add(path);
-      } else {
-        currentPaths.delete(path);
-      }
-      return {
-        ...current,
-        collapsedFolderPathsByWorkspace: {
-          ...current.collapsedFolderPathsByWorkspace,
-          [workspacePath]: Array.from(currentPaths),
-        },
-      };
-    });
-  };
-
-  const handleOutlineCollapsedChange = (path: string, collapsed: boolean) => {
-    if (!projectFolder) return;
-    const workspacePath = projectFolder.path;
-    setAppState((current) => {
-      const currentPaths = new Set(
-        current.collapsedOutlinePathsByWorkspace[workspacePath] ?? [],
-      );
-      if (collapsed) {
-        currentPaths.add(path);
-      } else {
-        currentPaths.delete(path);
-      }
-      return {
-        ...current,
-        collapsedOutlinePathsByWorkspace: {
-          ...current.collapsedOutlinePathsByWorkspace,
-          [workspacePath]: Array.from(currentPaths),
-        },
-      };
-    });
-  };
-
-  const handleOutlineHeadingCollapsedChange = (key: string, collapsed: boolean) => {
-    if (!projectFolder) return;
-    const workspacePath = projectFolder.path;
-    setAppState((current) => {
-      const currentKeys = new Set(
-        current.collapsedOutlineHeadingKeysByWorkspace[workspacePath] ?? [],
-      );
-      if (collapsed) {
-        currentKeys.add(key);
-      } else {
-        currentKeys.delete(key);
-      }
-      return {
-        ...current,
-        collapsedOutlineHeadingKeysByWorkspace: {
-          ...current.collapsedOutlineHeadingKeysByWorkspace,
-          [workspacePath]: Array.from(currentKeys),
-        },
-      };
-    });
-  };
+  const {
+    handleFolderCollapsedChange,
+    handleOutlineCollapsedChange,
+    handleOutlineHeadingCollapsedChange,
+  } = createWorkspaceTreeActions({ projectFolder, setAppState });
 
   const handleSetFileProgress = (path: string, status: FileProgressStatus) => {
     if (!projectFolder) return;
