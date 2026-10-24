@@ -40,6 +40,12 @@ const MIN_HOVER_CONTRAST = 1.09;
 // 起動画面の帯の上の部品。文字は WCAG 1.4.3 の 4.5。控えめな色で描く部品（メニューのアイコン、
 // 版の表示）は、白い帯のテーマでも 4.5 を下回るもの（Bronze の版 4.3 など）があるので 3。
 const PORTAL_PART_CONTRAST = { menu: 3, wordmark: 4.5, settings: 4.5, skip: 4.5, version: 3 };
+// 作品の帯の中の部品。ライブラリ名・作品名・アイコン・「∨」は控えめな色なので 3、画面モードの文字は 4.5。
+// 区切りの「›」はテーマが控えめな色（--text-faint）で描き、白い帯のテーマでも 2.09（Flat）〜2.75（Default）
+// なので 2.0（直さないと決めた。docs/KNOWN_ISSUES.md）。
+const TOPBAR_PART_CONTRAST = { library: 3, separator: 2, work: 3, icon: 3, mode: 4.5, chevron: 3 };
+// 直さないと決めたもの（docs/KNOWN_ISSUES.md）: Promise は帯の右側が明るい緑になり、右側のアイコンが 3 を下回る。
+const TOPBAR_KNOWN_LOW = { "promise-light": ["icon"], "promise-dark": ["icon"] };
 
 // overPage: App がボタンの下が帯でない画面で付ける印（data-over-page）。
 const controls = (overPage = false) => `<div class="windowControls"${overPage ? ' data-over-page="true"' : ""} role="group">
@@ -49,10 +55,17 @@ const controls = (overPage = false) => `<div class="windowControls"${overPage ? 
 </div>`;
 const topbar = `<section class="appFrame" data-app-mode="write"><header class="topbar">
   <div class="fileMenu"><button class="menuButton" data-topbar-button="file">ファイル</button></div>
-  <nav class="breadcrumbs" style="flex: 1 1 auto"><button class="breadcrumbFolderButton workspaceSwitcherButton" data-topbar-button="crumb">作品</button></nav>
+  <nav class="breadcrumbs" style="flex: 1 1 auto">
+    <div class="breadcrumbSegment breadcrumbLibrarySegment">
+      <button class="breadcrumbFolderButton breadcrumbLibraryButton"><span data-topbar-part="library">QAライブラリ</span></button>
+      <span class="crumbSeparator" data-topbar-part="separator">›</span>
+    </div>
+    <button class="breadcrumbFolderButton workspaceSwitcherButton" data-topbar-button="crumb"><span data-topbar-part="work">作品</span></button>
+  </nav>
   <div class="topbarActions">
-    <button class="iconButton" data-topbar-button="focus">◎</button>
-    <button class="iconButton" data-topbar-button="theme">◎</button>
+    <button class="iconButton" data-topbar-button="focus"><svg class="topbarSvgIcon" data-topbar-part="icon" viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" /></svg></button>
+    <button class="iconButton" data-topbar-button="theme"><svg class="topbarSvgIcon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /></svg></button>
+    <div class="modeMenu"><button class="modeMenuButton" type="button"><span class="modeMenuButtonLabel" data-topbar-part="mode">本文</span><svg class="modeMenuChevron" data-topbar-part="chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></svg></button></div>
   </div>
 </header></section>`;
 const scenes = {
@@ -282,6 +295,15 @@ try {
         }
       }
       if (sceneName !== "editor") continue;
+      // 帯の中の文字とアイコン。
+      for (const [part, minimum] of Object.entries(TOPBAR_PART_CONTRAST)) {
+        if (TOPBAR_KNOWN_LOW[theme]?.includes(part)) continue;
+        const seen = await read(`[data-topbar-part="${part}"]`);
+        const partContrast = contrast(seen.color, seen.surface);
+        if (partContrast < minimum) {
+          fail(`${where}: topbar ${part} contrast ${round(partContrast)} (${seen.rawColor} on ${JSON.stringify(seen.surface)})`);
+        }
+      }
       // 帯のほかのボタン。ホバーをわざと出さないテーマ（--control-hover が transparent）は除く。
       if ((await evaluate("__controlHover()")) === "transparent") continue;
       for (const button of ["file", "crumb", "focus", "theme"]) {
