@@ -67,6 +67,7 @@
     "test:v060-editor-position": "node scripts/test-v060-editor-position-memory.mjs",
     "test:v061-plugins": "node scripts/test-v061-plugin-platform.mjs",
     "test:document-tabs": "node scripts/test-document-tabs.mjs",
+    "test:status-bar": "node scripts/test-status-bar.mjs",
     "test:workspace-tabs": "node --experimental-strip-types scripts/test-workspace-document-tabs.mjs",
     "test:v070-manuscript": "node scripts/test-v070-manuscript.mjs",
     "test:v070-manuscript-browser": "node scripts/test-v070-manuscript-browser.mjs",

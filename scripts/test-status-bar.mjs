@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { JSDOM } from "jsdom";
 
@@ -16,7 +19,10 @@ const bundled = await build({
   external: ["react", "react-dom", "react/jsx-runtime"],
   write: false,
 });
-const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`;
+// react を node_modules から解決させるため、リポジトリの中に書き出して読む。
+const compiledPath = join(process.cwd(), ".tmp", `status-bar-test-${process.pid}.mjs`);
+await mkdir(join(process.cwd(), ".tmp"), { recursive: true });
+await writeFile(compiledPath, bundled.outputFiles[0].text);
 
 const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
 globalThis.window = dom.window;
@@ -26,7 +32,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const React = await import("react");
 const { createRoot } = await import("react-dom/client");
-const { StatusBar, useCheckpointStatusInfo } = await import(moduleUrl);
+const { StatusBar, useCheckpointStatusInfo } = await import(pathToFileURL(compiledPath).href).finally(() => unlink(compiledPath));
 const { act, createElement } = React;
 const root = createRoot(document.getElementById("root"));
 
