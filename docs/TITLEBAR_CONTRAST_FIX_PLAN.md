@@ -216,6 +216,22 @@ Promise の2つは、黒に近い色なら 5.8〜10.9 になる。
 
 帯のない画面（起動中、ライブラリの準備）でボタンを本文の色に戻すのに、はじめ `.appShell:has(> .startupPortalLoading, > .librarySetup)` を使ったところ、`test:v059-visibility` が落ちた。`.appShell` を主語にした `:has()` は、原稿への挿入のたびにアプリ全体の style を計算し直させるので使わない、という決まり（`d73e4b1`）。利用者に聞いて、**App からボタンに渡す** 形にした。App が `<WindowControls overPage={startupView === "loading" || Boolean(librarySetupRequest)} />` を渡し、ボタンの要素にだけ `data-over-page="true"` を付ける。style の計算し直しはボタンの中だけで済む。`test:v065-shell` の `<WindowControls />` の確認を、この形に変えた（了承済み）。
 
+### 実機確認の途中で見つかったこと: 起動画面の帯の文字（2026-10-25）
+
+QA 用アプリの起動画面（Workbench）を見た利用者が、下部の帯の「次回から前回のライブラリ・作品を直接開く」が見にくいと気づいた。測ると、起動画面の上下の帯は `--topbar-bg`（暗い色）で塗るのに、その上の文字が本文の色のままだった。ボタンと同じ原因。
+
+| 部品（Workbench） | 直す前 |
+|---|---|
+| 上部のロゴ「Then」（`--text-primary`） | 1.02 |
+| 上部のメニューのアイコン（`--text-muted`） | 2.56 |
+| 下部のチェックの文（`--text-secondary`） | 2.06 |
+| 下部の版の表示「Then 0.7.0」（`--text-muted`） | 2.56 |
+
+決まったこと:
+
+- 上下とも一緒に直す。ロゴは `--topbar-text-primary`、アイコンと版の表示は `--topbar-text-muted`、チェックの文は `--topbar-text-secondary`。下部の「設定」は自分の背景（`--bg-panel`）を持つボタンなので、本文の色のまま。
+- グラデーションの帯のテーマ（Promise ライト・ダーク、Flat ダーク、Passion ダーク）では、下部の右端が明るくなり、版の表示が 1.49〜2.53 だった。**帯の右端に置くものの色を `--topbar-end-text`（ホバーは `--topbar-end-text-hover`）にまとめ、テーマで決める。** ウィンドウ操作ボタンの Promise の指定（`--window-controls-color`）もこの変数に寄せた。Promise は濃い色（ライトは本文の色、ダークは一番濃い緑）、Flat ダークは帯の一番明るい文字色、Passion ダークは本文の一番明るい色。Promise ライトのチェックの文（4.48）は、帯の一番明るい文字色（白）にした。
+
 ## 工程7: 実施
 
 | コミット | 中身 |
@@ -224,6 +240,8 @@ Promise の2つは、黒に近い色なら 5.8〜10.9 になる。
 | `728f545` | ボタンの色を帯の文字色にし、ホバーを文字色を混ぜた色にする。Promise の色、帯のボタンのホバー（`--topbar-control-hover`） |
 | `2371eb5` | `main.appShell` の style を `src/appShellStyle.ts` の `buildAppShellStyle` へ移す。`test:app-shell-style` を足す |
 | `052557f` | 帯のない画面の印を `:has()` から `overPage` に変える |
+| `1cbf5ee` | 起動画面の上下の帯の文字のテストを足す（今のコードで31件の不合格） |
+| `e87e986` | 起動画面の上下の帯の文字を帯の文字色にする。`--topbar-end-text` を足す |
 
 変えたもの:
 
@@ -241,7 +259,7 @@ Promise の2つは、黒に近い色なら 5.8〜10.9 になる。
 
 ### 足したテスト
 
-- `test:window-controls`（`scripts/test-window-controls-contrast.mjs`）: ヘッドレス Edge で、`App.css` と全テーマの CSS を読み込み、作品の帯・起動画面の帯・起動中・ライブラリの準備の4つの画面を、62のテーマで組む。ボタンの色とボタンの下の色のコントラストが3以上、最小化・最大化のホバーの背景が下の色と見分けられる（1.09以上。白い帯のテーマで、帯のボタンのホバーがいちばん薄い Coral が1.10）、ホバー中のアイコンも3以上、閉じるのホバーが赤と白であること。作品の帯では、帯のボタン4つのホバーの背景も確かめる（`--control-hover` が `transparent` のテーマ、つまりホバーをわざと出さない Shuboku は除く）。ホバーは CDP のマウスの移動で、本物の `:hover` を起こして読む。グラデーションの帯は、ボタンの中心の位置の色を計算する。
+- `test:window-controls`（`scripts/test-window-controls-contrast.mjs`）: ヘッドレス Edge で、`App.css` と全テーマの CSS を読み込み、作品の帯・起動画面の帯・起動中・ライブラリの準備の4つの画面を、62のテーマで組む。ボタンの色とボタンの下の色のコントラストが3以上、最小化・最大化のホバーの背景が下の色と見分けられる（1.09以上。白い帯のテーマで、帯のボタンのホバーがいちばん薄い Coral が1.10）、ホバー中のアイコンも3以上、閉じるのホバーが赤と白であること。起動画面では、上下の帯の部品（ロゴ・チェックの文・設定は4.5以上、メニューのアイコン・版の表示は3以上）も確かめる。作品の帯では、帯のボタン4つのホバーの背景も確かめる（`--control-hover` が `transparent` のテーマ、つまりホバーをわざと出さない Shuboku は除く）。ホバーは CDP のマウスの移動で、本物の `:hover` を起こして読む。グラデーションの帯は、ボタンの中心の位置の色を計算する。
 - `test:app-shell-style`（`scripts/test-app-shell-style.mjs`）: `buildAppShellStyle` を esbuild で読み込んで動かし、12個の変数の名前と順番、値を確かめる。本文と見出しは引数（縦書きのために選び直した名前）を、プロットと起動画面は設定のフォント名を使うこと。
 
 ### テストが効くことの確かめ方
@@ -253,6 +271,7 @@ Promise の2つは、黒に近い色なら 5.8〜10.9 になる。
 | ボタンの色を `var(--window-controls-color, var(--text-secondary))` に戻す ＋ Promise ダークの `--window-controls-color` を消す | `test:window-controls` が42件で落ちた（Workbench・Tech・Precious・Passion・Hands・Air のライトと Promise ダークの、作品と起動画面の帯） |
 | `--zone-sidebar-opacity` を消す | `test:app-shell-style` が変数の一覧で落ちた |
 | 本文のフォントを引数ではなく `settings.editorFontFamily` から作る | `test:app-shell-style` が「the body uses the re-resolved family」で落ちた |
+| 起動画面のロゴの色の指定を消す ＋ Passion ダークの `--topbar-end-text` を消す | `test:window-controls` が9件で落ちた（帯が暗い・グラデーションのライトテーマ8つのロゴ、Passion ダークの版の表示） |
 
 ### 前後の比較（`b802749` → `052557f`）
 
