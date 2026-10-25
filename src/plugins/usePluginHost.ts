@@ -45,6 +45,8 @@ export function usePluginHost({
   const pluginAnchorSaveRootRef = useRef<string | null>(null);
   const pluginAnchorsRef = useRef<ThenPluginAnchor[]>([]);
   const pluginAnchorMutationVersionRef = useRef(0);
+  // アンカーのファイルを読めなかった作品。読めなかったファイルを上書きしないよう、この作品では保存しない。
+  const pluginAnchorUnreadableRootRef = useRef<string | null>(null);
   const pluginCommandsRef = useRef<ThenPluginCommand[]>([]);
   const pluginStorageQueuesRef = useRef<Map<string, Promise<void>>>(new Map());
   const pluginActiveDocumentRef = useRef<{ path: string | null; text: string }>({
@@ -162,6 +164,7 @@ export function usePluginHost({
       pluginAnchorSaveTimerRef.current = null;
       pluginAnchorSaveRootRef.current = null;
     }
+    pluginAnchorUnreadableRootRef.current = null;
     const rootPath = projectFolder?.path;
     if (!rootPath || !isTauriRuntime()) {
       setPluginAnchors([]);
@@ -173,11 +176,19 @@ export function usePluginHost({
     let cancelled = false;
     invoke<ThenPluginAnchorStore | null>("load_plugin_anchors", { rootPath })
       .then((store) => {
-        if (cancelled || pluginAnchorMutationVersionRef.current !== loadVersion) return;
-        setPluginAnchors(store?.version === 1 && Array.isArray(store.anchors) ? store.anchors : []);
+        if (cancelled) return;
+        if (store && !(store.version === 1 && Array.isArray(store.anchors))) {
+          pluginAnchorUnreadableRootRef.current = rootPath;
+          setLastError("アンカーの読み込みに失敗しました: 対応していない形式です");
+          return;
+        }
+        if (pluginAnchorMutationVersionRef.current !== loadVersion) return;
+        setPluginAnchors(store?.anchors ?? []);
       })
       .catch((error) => {
-        if (!cancelled) setLastError(`アンカーの読み込みに失敗しました: ${String(error)}`);
+        if (cancelled) return;
+        pluginAnchorUnreadableRootRef.current = rootPath;
+        setLastError(`アンカーの読み込みに失敗しました: ${String(error)}`);
       });
     return () => {
       cancelled = true;
@@ -188,8 +199,10 @@ export function usePluginHost({
         window.clearTimeout(pluginAnchorSaveTimerRef.current);
         pluginAnchorSaveTimerRef.current = null;
         pluginAnchorSaveRootRef.current = null;
-        const store: ThenPluginAnchorStore = { version: 1, anchors: pluginAnchorsRef.current };
-        void invoke("save_plugin_anchors", { rootPath, store });
+        if (pluginAnchorUnreadableRootRef.current !== rootPath) {
+          const store: ThenPluginAnchorStore = { version: 1, anchors: pluginAnchorsRef.current };
+          void invoke("save_plugin_anchors", { rootPath, store });
+        }
       }
     };
   }, [projectFolder?.path]);
@@ -206,6 +219,7 @@ export function usePluginHost({
     pluginAnchorSaveTimerRef.current = window.setTimeout(() => {
       pluginAnchorSaveTimerRef.current = null;
       pluginAnchorSaveRootRef.current = null;
+      if (pluginAnchorUnreadableRootRef.current === rootPath) return;
       const store: ThenPluginAnchorStore = { version: 1, anchors: pluginAnchorsRef.current };
       invoke("save_plugin_anchors", { rootPath, store }).catch((error) => {
         setLastError(`アンカーの保存に失敗しました: ${String(error)}`);
