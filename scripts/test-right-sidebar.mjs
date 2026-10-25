@@ -142,7 +142,11 @@ assert.doesNotMatch(render(), /visiblePluginRuntimeAnchor/, "no plugin: the runt
   }
 
   // App が、読み込み・起動時の復元・変えたときの保存をつないでいること（App は大きく node で組めないので、ソースで見る）。
-  const app = await readFile("src/App.tsx", "utf8");
+  // 保存状態の正規化（normalizeState）は storedStateModel.ts へ移した。
+  const app = [
+    await readFile("src/App.tsx", "utf8"),
+    await readFile("src/storedStateModel.ts", "utf8"),
+  ].join("\n");
   assert.match(app, /rightSidebarCollapsed: normalizeRightSidebarCollapsed\(value\?\.rightSidebarCollapsed\)/);
   assert.match(app, /rightSidebarWide: normalizeRightSidebarWide\(value\?\.rightSidebarWide\)/);
   assert.match(app, /setIsRightSidebarCollapsedState\(state\.rightSidebarCollapsed\)/);
