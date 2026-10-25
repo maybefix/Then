@@ -708,4 +708,42 @@ function mountHost({ projectFolder = novel() } = {}) {
   view.unmount();
 }
 
+// 癖1: アンカーのファイルが読めない作品（壊れている・version が 1 でない）では、アンカーを保存しない。
+// 読めなかったファイルを、空から始めた一覧で上書きしないため（docs/PLUGIN_HOST_SEPARATION_PLAN.md 工程2の5）。
+for (const [label, load, message] of [
+  ["broken", () => { throw new Error("failed to parse plugin anchors"); }, "アンカーの読み込みに失敗しました: Error: failed to parse plugin anchors"],
+  ["version", () => ({ version: 2, anchors: [] }), "アンカーの読み込みに失敗しました: 対応していない形式です"],
+  ["anchors", () => ({ version: 1, anchors: "x" }), "アンカーの読み込みに失敗しました: 対応していない形式です"],
+]) {
+  resetWindow();
+  const saves = [];
+  createRust({
+    list_installed_plugins: () => ({ plugins: [], errors: [] }),
+    load_plugin_anchors: ({ rootPath }) => (rootPath === ROOT ? load() : null),
+    save_plugin_anchors: ({ rootPath }) => {
+      saves.push(rootPath);
+    },
+  });
+  const view = mountHost();
+  view.render();
+  await settle();
+  view.render();
+  assert.deepEqual(view.app.errors, [message], `${label}: the failure must be shown`);
+  view.host.persistPluginAnchors([anchor("a", "c.txt", 0, 1)]);
+  view.render();
+  assert.deepEqual(view.host.pluginAnchorsRef.current.map((item) => item.id), ["a"], `${label}: anchors still work in memory`);
+  flushTimers();
+  assert.deepEqual(saves, [], `${label}: an unreadable anchor file must not be overwritten`);
+  view.host.persistPluginAnchors([anchor("b", "c.txt", 0, 1)]);
+  view.app.projectFolder = other();
+  view.render();
+  await settle();
+  assert.deepEqual(saves, [], `${label}: switching works must not overwrite it either`);
+  view.host.persistPluginAnchors([anchor("o", "x.txt", 0, 1)]);
+  view.render();
+  flushTimers();
+  assert.deepEqual(saves, [OTHER], `${label}: a readable work must still save`);
+  view.unmount();
+}
+
 console.log("plugin host: ok");
