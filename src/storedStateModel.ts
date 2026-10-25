@@ -443,10 +443,32 @@ export function clampReferenceCardToStage<T extends BinderCardState>(
   };
 }
 
-export function normalizeReferenceLayout(
-  value: unknown,
-  stageSize: { width: number; height: number } = { width: 1200, height: 800 },
-): ReferenceLayout {
+/**
+ * Fits the shown cards into the stage. The reader does not know the stage, so this runs once the
+ * stage has been measured. A layout whose cards already fit comes back as the same object.
+ */
+export function fitReferenceLayoutToStage<T extends Pick<ReferenceLayout, "cards">>(
+  layout: T,
+  stageSize: { width: number; height: number },
+): T {
+  let changed = false;
+  const cards = layout.cards.map((card) => {
+    const fitted = clampReferenceCardToStage(card, stageSize.width, stageSize.height);
+    if (
+      fitted.x === card.x &&
+      fitted.y === card.y &&
+      fitted.width === card.width &&
+      fitted.height === card.height
+    ) {
+      return card;
+    }
+    changed = true;
+    return fitted;
+  });
+  return changed ? { ...layout, cards } : layout;
+}
+
+export function normalizeReferenceLayout(value: unknown): ReferenceLayout {
   const raw = value as Partial<ReferenceLayout> | null;
   const cards: unknown[] = Array.isArray(raw?.cards) ? raw.cards : [];
   const recent: unknown[] = Array.isArray(raw?.recent) ? raw.recent : [];
@@ -499,11 +521,7 @@ export function normalizeReferenceLayout(
     )
     .map((card, index): BinderCardState => {
       if (isIdeaCardRecord(card)) {
-        return clampReferenceCardToStage(
-          toIdeaCard(card, index),
-          stageSize.width,
-          stageSize.height,
-        );
+        return toIdeaCard(card, index);
       }
       if (!isReferenceCardRecord(card)) throw new Error("unreachable binder card");
       const kind =
@@ -515,28 +533,24 @@ export function normalizeReferenceLayout(
           ? card.kind
           : referenceKindFromPath(card.sourcePath);
       const size = referenceInitialSize(kind);
-      return clampReferenceCardToStage(
-        {
-          id: card.id,
-          sourceType: "reference",
-          scope: normalizeReferenceScope(card.scope),
-          sourcePath: card.sourcePath,
-          kind,
-          x: typeof card.x === "number" ? card.x : 72 + index * 32,
-          y: typeof card.y === "number" ? card.y : 96 + index * 32,
-          width: typeof card.width === "number" ? card.width : size.width,
-          height: typeof card.height === "number" ? card.height : size.height,
-          zIndex: typeof card.zIndex === "number" ? card.zIndex : index + 1,
-          collapsed: Boolean(card.collapsed),
-          pinned: Boolean(card.pinned),
-          scrollTop: typeof card.scrollTop === "number" ? card.scrollTop : undefined,
-          zoom: typeof card.zoom === "number" ? card.zoom : undefined,
-          page: typeof card.page === "number" ? card.page : undefined,
-          editing: false,
-        },
-        stageSize.width,
-        stageSize.height,
-      );
+      return {
+        id: card.id,
+        sourceType: "reference",
+        scope: normalizeReferenceScope(card.scope),
+        sourcePath: card.sourcePath,
+        kind,
+        x: typeof card.x === "number" ? card.x : 72 + index * 32,
+        y: typeof card.y === "number" ? card.y : 96 + index * 32,
+        width: typeof card.width === "number" ? card.width : size.width,
+        height: typeof card.height === "number" ? card.height : size.height,
+        zIndex: typeof card.zIndex === "number" ? card.zIndex : index + 1,
+        collapsed: Boolean(card.collapsed),
+        pinned: Boolean(card.pinned),
+        scrollTop: typeof card.scrollTop === "number" ? card.scrollTop : undefined,
+        zoom: typeof card.zoom === "number" ? card.zoom : undefined,
+        page: typeof card.page === "number" ? card.page : undefined,
+        editing: false,
+      };
     });
   const normalizedRecent = recent
     .filter((file): file is ReferenceFileInfo => isReferenceFileInfo(file) && file.scope !== "global")

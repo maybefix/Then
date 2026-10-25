@@ -189,6 +189,7 @@ import {
   WHITESPACE_PATTERN,
   clampReferenceCardToStage,
   createDefaultState,
+  fitReferenceLayoutToStage,
   initialMarkdown,
   makeReferenceFileInfo,
   normalizeFileProgress,
@@ -1117,6 +1118,8 @@ export default function App() {
   const saveTimerRef = useRef<number | null>(null);
   const referenceSaveTimerRef = useRef<number | null>(null);
   const referenceLayoutLoadedRootRef = useRef<string | null>(null);
+  // 読み込んだままのレイアウト。これと同じあいだは保存しない。
+  const referenceLayoutOnDiskRef = useRef<ReferenceLayout | null>(null);
   // 並び順を読み込んだ時点の「Ideaの管理単位」に合わせるため、最新の値を持っておく。
   const snippetStorageModeRef = useRef<EditorSettings["snippetStorageMode"]>("workspace");
   const workspaceFolderTreeRootRef = useRef<string | null>(null);
@@ -1443,6 +1446,8 @@ export default function App() {
   } | null>(null);
   const [referenceLayout, setReferenceLayout] =
     useState<ReferenceLayout>(() => defaultReferenceLayout);
+  // 資料のカードを本文の枠へまだ収めていない作品（枠を測れるようになるまで待つ）。
+  const [referenceLayoutFitRoot, setReferenceLayoutFitRoot] = useState<string | null>(null);
   const [referenceCandidates, setReferenceCandidates] = useState<ReferenceFileInfo[]>([]);
 
   pluginCommandsRef.current = pluginCommands;
@@ -3009,6 +3014,7 @@ export default function App() {
       setProjectSearchQuery("");
       setSearchScope("file");
       referenceLayoutLoadedRootRef.current = null;
+      setReferenceLayoutFitRoot(null);
       setReferenceLayout(defaultReferenceLayout);
       setReferenceCandidates([]);
       return;
@@ -3028,22 +3034,17 @@ export default function App() {
 
     const loadReferences = async () => {
       try {
-        const rect = editorShellRef.current?.getBoundingClientRect();
         const [layout, candidates] = await Promise.all([
           loadReferenceLayout(rootPath),
           listReferenceCandidates(rootPath),
         ]);
         if (isCancelled) return;
-        const normalizedLayout = alignIdeaLayoutToMode(
-          normalizeReferenceLayout(layout, {
-            width: rect?.width ?? 1200,
-            height: rect?.height ?? 800,
-          }),
-          snippetStorageModeRef.current,
-        );
+        const normalizedLayout = alignIdeaLayoutToMode(layout, snippetStorageModeRef.current);
+        referenceLayoutOnDiskRef.current = normalizedLayout;
         setReferenceLayout(normalizedLayout);
         setReferenceCandidates(candidates);
         referenceLayoutLoadedRootRef.current = rootPath;
+        setReferenceLayoutFitRoot(rootPath);
       } catch (error) {
         if (isCancelled) return;
         setReferenceLayout(defaultReferenceLayout);
@@ -3060,6 +3061,34 @@ export default function App() {
       isCancelled = true;
     };
   }, [isHydrated, projectFolder?.path]);
+
+  // The cards are fitted into the editor frame once it can be measured. While the startup screen
+  // is up there is no frame yet (it is drawn with the editor view, hence startupView), and in the
+  // canvas mode it is hidden (0×0), so fitting waits.
+  useEffect(() => {
+    const rootPath = referenceLayoutFitRoot;
+    const editorShell = editorShellRef.current;
+    if (!rootPath || !editorShell) return;
+
+    const fit = () => {
+      const rect = editorShell.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return false;
+      setReferenceLayoutFitRoot(null);
+      if (referenceLayoutLoadedRootRef.current === rootPath) {
+        setReferenceLayout((current) =>
+          fitReferenceLayoutToStage(current, { width: rect.width, height: rect.height }),
+        );
+      }
+      return true;
+    };
+
+    if (fit()) return;
+    const observer = new ResizeObserver(() => {
+      if (fit()) observer.disconnect();
+    });
+    observer.observe(editorShell);
+    return () => observer.disconnect();
+  }, [referenceLayoutFitRoot, startupView]);
 
   // The reference candidates are the project's files, so they follow the file tree.
   useEffect(() => {
@@ -3088,6 +3117,8 @@ export default function App() {
   useEffect(() => {
     const rootPath = projectFolder?.path ?? null;
     if (!isHydrated || !rootPath || referenceLayoutLoadedRootRef.current !== rootPath) return;
+    // Opening a project does not rewrite its file (and its .bak) while nothing has changed.
+    if (referenceLayout === referenceLayoutOnDiskRef.current) return;
 
     if (referenceSaveTimerRef.current) {
       window.clearTimeout(referenceSaveTimerRef.current);
