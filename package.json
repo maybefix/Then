@@ -33,6 +33,7 @@
     "test:binder": "node scripts/test-idea-reference-binder.mjs",
     "test:idea-actions": "node scripts/test-idea-thread-actions.mjs",
     "test:app-dialog": "node scripts/test-app-dialog.mjs",
+    "test:plugin-host": "node scripts/test-plugin-host.mjs",
     "test:project-entry-actions": "node scripts/test-project-entry-actions.mjs",
     "test:palette-commands": "node scripts/test-palette-commands.mjs",
     "test:stored-state-model": "node scripts/test-stored-state-model.mjs",
