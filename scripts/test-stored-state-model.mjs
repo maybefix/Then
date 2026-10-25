@@ -26,6 +26,7 @@ const {
   UI_FONT_SCALE_MIN,
   clampReferenceCardToStage,
   createDefaultState,
+  fitReferenceLayoutToStage,
   initialMarkdown,
   normalizeFileProgress,
   normalizePathForCompare,
@@ -321,7 +322,6 @@ Date.now = () => 1_700_000_000_000;
       ideaThreadsMode: "workspace",
       otherIdea: { mode: "profile", ideaThreads: [], cards: [{ id: "i2", sourceType: "idea", threadId: "u", fragmentId: "g" }] },
     },
-    { width: 800, height: 600 },
   );
   assert.equal(layout.name, "default");
   assert.deepEqual(layout.cards.map((card) => card.id), ["r1", "i1"], "global and broken cards are dropped");
@@ -329,10 +329,32 @@ Date.now = () => 1_700_000_000_000;
   assert.equal(reference.kind, "image", "kind comes from the extension when not stored");
   assert.equal(reference.scope, "project");
   assert.equal(reference.editing, false);
+  // 読み込みでは画面の大きさが分からないので、収めない（docs/REFERENCE_LAYOUT_STARTUP_FIT_PLAN.md）。
   assert.deepEqual(
     { x: reference.x, y: reference.y, width: reference.width, height: reference.height },
+    { x: 5000, y: -20, width: 9000, height: 50 },
+    "loading keeps the stored positions instead of fitting them to a guessed stage",
+  );
+  const fitted = fitReferenceLayoutToStage(layout, { width: 800, height: 600 });
+  const [fittedReference, fittedIdea] = fitted.cards;
+  assert.deepEqual(
+    { x: fittedReference.x, y: fittedReference.y, width: fittedReference.width, height: fittedReference.height },
     { x: 12, y: 0, width: 776, height: 140 },
     "cards are clamped into the stage",
+  );
+  assert.equal(fittedIdea, idea, "a card already inside the stage is kept as it is");
+  assert.equal(fitted.otherIdea, layout.otherIdea, "the hidden Idea cards are fitted when they are shown");
+  assert.equal(fitted.recent, layout.recent);
+  assert.equal(
+    fitReferenceLayoutToStage(fitted, { width: 800, height: 600 }),
+    fitted,
+    "fitting a layout that already fits returns the same layout, so it is not saved again",
+  );
+  assert.deepEqual(
+    normalizeReferenceLayout({ cards: [{ id: "far", sourcePath: "a.md", x: 1100, y: 700, width: 320, height: 300 }] })
+      .cards.map((card) => [card.x, card.y]),
+    [[1100, 700]],
+    "there is no hidden 1200×800 stage",
   );
   assert.deepEqual(
     idea,
