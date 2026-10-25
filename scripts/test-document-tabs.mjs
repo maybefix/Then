@@ -3,7 +3,11 @@ import { readFile } from "node:fs/promises";
 
 const [appSource, appCss, settingsSource, tabsSource, typesSource, manualSource] =
   await Promise.all([
-    readFile("src/App.tsx", "utf8"),
+    // 保存した設定の正規化は storedStateModel.ts へ移した（docs/APP_STATE_NORMALIZE_SEPARATION_PLAN.md）。
+    Promise.all([
+      readFile("src/App.tsx", "utf8"),
+      readFile("src/storedStateModel.ts", "utf8"),
+    ]).then((sources) => sources.join("\n")),
     readFile("src/App.css", "utf8"),
     readFile("src/components/dialogs/FileSettings.tsx", "utf8"),
     readFile("src/components/layout/DocumentTabs.tsx", "utf8"),

@@ -396,7 +396,11 @@ const expectCalls = (label, action, expected) => {
   }
 
   // App が、読み込み・起動時の復元・変えたときの保存をつないでいること（App は大きく node で組めないので、ソースで見る）。
-  const app = await readFile("src/App.tsx", "utf8");
+  // 保存状態の正規化（normalizeState）は storedStateModel.ts へ移した。
+  const app = [
+    await readFile("src/App.tsx", "utf8"),
+    await readFile("src/storedStateModel.ts", "utf8"),
+  ].join("\n");
   assert.match(app, /leftSidebarView: normalizeLeftSidebarView\(value\?\.leftSidebarView\)/);
   assert.match(app, /leftSidebarCollapsed: normalizeLeftSidebarCollapsed\(value\?\.leftSidebarCollapsed\)/);
   assert.match(app, /setLeftSidebarViewState\(state\.leftSidebarView\)/);

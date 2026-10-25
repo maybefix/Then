@@ -273,7 +273,11 @@ assert.deepEqual(
 );
 
 const [appSource, editorSource, settingsSource, appCss, foundationsCss] = await Promise.all([
-  readFile("src/App.tsx", "utf8"),
+  // 既定の設定（defaultSettings）は storedStateModel.ts へ移した。
+  Promise.all([
+    readFile("src/App.tsx", "utf8"),
+    readFile("src/storedStateModel.ts", "utf8"),
+  ]).then((sources) => sources.join("\n")),
   readFile("src/VerticalTextEditor.tsx", "utf8"),
   Promise.all([
     readFile("src/components/dialogs/AppearanceSettings.tsx", "utf8"),

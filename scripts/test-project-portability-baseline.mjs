@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const [app, projectEntryActions, types, rustLib, projectState, checkpointStore, plan, legacyStateText] = await Promise.all([
-  readFile("src/App.tsx", "utf8"),
+  // 保存状態の正規化（normalizeState）は storedStateModel.ts へ移した。
+  Promise.all([
+    readFile("src/App.tsx", "utf8"),
+    readFile("src/storedStateModel.ts", "utf8"),
+  ]).then((sources) => sources.join("\n")),
   readFile("src/projectEntryActions.ts", "utf8"),
   readFile("src/types.ts", "utf8"),
   readFile("src-tauri/src/lib.rs", "utf8"),

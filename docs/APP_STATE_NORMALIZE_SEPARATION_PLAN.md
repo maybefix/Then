@@ -1,6 +1,6 @@
 # 保存状態の正規化 分離の手順書
 
-App.tsx の部品の外にある「保存状態（`then.app-state.v1`、Tauri では `load_app_state` / `save_app_state`）を読み込んだときに、形と値を整える関数」を、新しいファイル `src/appStateModel.ts` へ移す。仕様・保存形式・UI・文言・Rust は変えない。移すのは React を使わない純粋な関数と定数だけで、読み込み・保存の処理（`loadStoredState` / `saveStoredState`）と、それを呼ぶ App の中の処理は動かさない。
+App.tsx の部品の外にある「保存状態（`then.app-state.v1`、Tauri では `load_app_state` / `save_app_state`）を読み込んだときに、形と値を整える関数」と、作品のファイル（プロット・資料のレイアウト・校正の無視リスト）を読み込んだときに整える関数を、新しいファイル `src/storedStateModel.ts` へ移す（作品のファイルの分は確認1で範囲に加えた）。仕様・保存形式・UI・文言・Rust は変えない。移すのは React を使わない純粋な関数と定数だけで、読み込み・保存の処理（`loadStoredState` / `saveStoredState`）と、それを呼ぶ App の中の処理は動かさない。
 
 - ブランチ: `refactor/app-state-normalize`
 - 戻し先: タグ `checkpoint/before-app-state-normalize`（コミット `f3f4cc5`。中身は main `6bf3946` と同じ）
@@ -13,7 +13,7 @@ App.tsx の部品の外にある「保存状態（`then.app-state.v1`、Tauri �
 | 3 | 依存関係 | 済 |
 | 4 | 影響範囲 | 済 |
 | 5 | 案 | 済 |
-| 6 | 人の確認（確認1） | 待ち |
+| 6 | 人の確認（確認1） | 済（2026-10-25） |
 | 7 | 実施 | |
 | 8 | 自動テスト | |
 | 9 | 実機確認 | |
@@ -34,13 +34,18 @@ App.tsx の部品の外にある「保存状態（`then.app-state.v1`、Tauri �
 | チェックポイント | 959–1094 | `snapshotId`、`MAX_AUTO_SHELTER_SNAPSHOTS`、`trimAutoShelterSnapshots`、`normalizeSnapshots` |
 | 本体 | 1353–1646 | `normalizeCollapsedPathListsByWorkspace`、`knownProofreadRuleIds` / `knownProofreadCheckIds`、`normalizeProofreadSettings`、`normalizeState` |
 | 進み具合・カーソル | 1648–1695 | `normalizeFileProgressMigrationVersions`、`normalizeCursorPositions`、`normalizeFileProgress` |
+| 資料の最近の数（確認1で追加） | 362 | `MAX_RECENT_REFERENCES` |
+| プロット（確認1で追加） | 1097–1125 | `normalizePlotCards`、`normalizeReferenceScope` |
+| 資料の情報（確認1で追加） | 1131–1159 | `isReferenceFileInfo`、`makeReferenceFileInfo` |
+| 資料のレイアウト（確認1で追加） | 1182–1342 | `referenceInitialSize`、`isReferenceCardRecord`、`isIdeaCardRecord`、`clampReferenceCardToStage`、`normalizeReferenceLayout` |
+| 校正の無視リスト（確認1で追加） | 1764–1778 | `ProofreadIgnoredByPath`、`normalizeProofreadIgnored` |
 
 気づいた点:
 
 - 使われていない関数はない（`symbol-uses.mjs` で全部 2 回以上）。
-- 移したあとも App が使い続けるもの: `normalizeState`（1700, 1706, 9575）、`createDefaultState`（2074）、`initialMarkdown`（2064, 2083, 2086）、`normalizeFileProgress`（1823, 9505）、`normalizeSnapshots`（1894）、`snapshotId`（6158）、`normalizePathForCompare`（32 か所）、`toCssFontFamilyValue`（638 の `createFontOptions`）、`WHITESPACE_PATTERN`（901 の `countDisplayCharacters`）。この 9 つを export し、App で import する。
+- 移したあとも App が使い続けるもの: `normalizeState`（1700, 1706, 9575）、`createDefaultState`（2074）、`initialMarkdown`（2064, 2083, 2086）、`normalizeFileProgress`（1823, 9505）、`normalizeSnapshots`（1894）、`snapshotId`（6158）、`normalizePathForCompare`（32 か所）、`toCssFontFamilyValue`（638 の `createFontOptions`）、`WHITESPACE_PATTERN`（901 の `countDisplayCharacters`）。この 9 つを export し、App で import する。確認1で加えた分では、`normalizePlotCards`（1742）、`normalizeReferenceLayout`（1927, 3932）、`makeReferenceFileInfo`（2522）、`referenceInitialSize`（2545）、`clampReferenceCardToStage`（2550, 8902）、`MAX_RECENT_REFERENCES`（1171 の `upsertRecentReference`）、`normalizeProofreadIgnored`（1787）、`ProofreadIgnoredByPath`（1782, 1792, 2116）の 8 つも App が使い続ける。合わせて 17 を export する。
+- 資料の手伝いのうち、正規化が使わない `referenceCardKey`、`upsertRecentReference(s)`、`nextReferenceZIndex` とその定数は App に残す。`referenceKindFromPath` と `referenceNameFromPath` は移す関数しか使わなくなるので、App の import から外れる。
 - 2210–2211 の `snapshotId` は `openCheckpointStudio` の引数名で、関数とは別物。触らない。
-- 同じ名前の「正規化」でも、作品のファイルを読むときのもの（`normalizePlotCards` 1097、`normalizeReferenceLayout` 1225 とその手伝いの関数、`normalizeProofreadIgnored` 1767）は保存状態とは別の流れなので、今回は移さない（5-3）。
 
 ## 工程2: 仕組みの説明
 
@@ -102,7 +107,7 @@ App.tsx の部品の外にある「保存状態（`then.app-state.v1`、Tauri �
 ## 工程4: 影響範囲
 
 ### 4-1. 変更対象になるファイル
-- 必ず変わる: `src/App.tsx`（約 520 行減り、import が増える）、`src/appStateModel.ts`（新規）、H の 5 つのテスト（読むファイルを足すだけ）、`package.json`（回帰テストの登録）、`scripts/test-app-state-model.mjs`（新規）
+- 必ず変わる: `src/App.tsx`（約 520 行減り、import が増える）、`src/storedStateModel.ts`（新規）、H の 5 つのテスト（読むファイルを足すだけ）、`package.json`（回帰テストの登録）、`scripts/test-app-state-model.mjs`（新規）
 - 変えない: ほかのソース、Rust、CSS、保存形式
 
 ### 4-2. まとまりごとの影響
@@ -130,12 +135,13 @@ App.tsx の部品の外にある「保存状態（`then.app-state.v1`、Tauri �
 `references/separation.md` の線引きのとおり。中身・文言・条件・順番は1文字も変えず、場所だけ移す。違うのは、App が使い続ける 9 つに `export` を付けることと、App 側の import の行だけ。
 
 ### 5-2. 移すもの
-工程1の表の全部を、今と同じ順で `src/appStateModel.ts` へ。
+工程1の表の全部を、今と同じ順で `src/storedStateModel.ts` へ。
 
 ### 5-3. 残すもの
 - `loadStoredState` / `saveStoredState`、`STORAGE_KEY` / `LEGACY_STORAGE_KEY`、`isTauriRuntime`（保存と読み込みそのもの）
 - `createFontOptions`、`fallbackFontFamilies`、`fallbackFontOptions`、`loadSystemFonts`（フォントの一覧で、保存状態ではない）
-- 作品のファイルの正規化: `normalizePlotCards`、`normalizeReferenceLayout` とその手伝いの関数（`makeReferenceFileInfo` など、App の資料の操作も使う）、`normalizeProofreadIgnored`。資料（Reference）やプロットを分けるときに、その機能と一緒に移すほうがまとまりがよい。
+- 資料の手伝いのうち正規化が使わないもの: `referenceCardKey`、`upsertRecentReference(s)`、`nextReferenceZIndex`、`PINNED_REFERENCE_Z_BASE` / `NORMAL_REFERENCE_Z_LIMIT`、`defaultReferenceLayout`、`defaultPlotCards`
+- 作品のファイルを読み書きする処理: `loadWorkspacePlotCards`、`loadReferenceLayout`、`loadWorkspaceProofreadIgnored` など（Rust の命令を呼ぶ）
 - `countDisplayCharacters`、`selectedSnapshotFolderTree`、`restoreSnapshotTreeOrder` などチェックポイントの復元の手伝い（test:checkpoint が App の文字列から切り出している）
 
 ### 決めてほしいこと
@@ -147,7 +153,7 @@ App.tsx の部品の外にある「保存状態（`then.app-state.v1`、Tauri �
    - 分離のあと、同じブランチで別のコミットとして 2-5 の 1（改行の印を真偽値で確かめる）だけ直す。2 と 3 は保存の中身が変わるので触らない。
 
 ### テストの直し方と足すテスト
-- H の 5 つのテストは、正規表現を変えず、読む中身に `src/appStateModel.ts` を足す。
+- H の 5 つのテストは、正規表現を変えず、読む中身に `src/storedStateModel.ts` を足す。
 - `scripts/test-app-state-model.mjs` を足す（`test:app-state-model`）。esbuild で新しいファイルを束ねて読み込み、実際に動かす:
   - 空・`null`・壊れた値から、`AppState` の全項目がそろう
   - 古い `zoneMode: true` が `sidebarHoverMode: "both"` になる
@@ -164,10 +170,15 @@ App.tsx の部品の外にある「保存状態（`then.app-state.v1`、Tauri �
 3. 「後」の一式と前後の比較、QA 用アプリでの実機確認 → 手順書を更新してコミット
 
 ### 見込みと、今回やらないこと
-- 見込み: App.tsx は約 10,537 行から約 10,030 行へ。
-- やらないこと: 作品のファイルの正規化の移動、`loadStoredState` などの読み書きの移動、癖の修正（確認1で決めない限り）、似た関数のまとめ。
+- 見込み: App.tsx は 10,538 行から 9,687 行へ（`move-lines.mjs --dry-run` の数。858 行を 13 の塊で移す）。新しいファイルは 924 行。
+- やらないこと: `loadStoredState` などの読み書きの移動、癖の 2 と 3 の修正、似た関数のまとめ。
 
 ## 工程6: 人の確認
+
+2026-10-25 に決まったこと:
+
+1. 移す範囲: 保存状態の正規化に加えて、作品のファイルの正規化（プロット・資料のレイアウトとその手伝い・校正の無視リスト）も移す。
+2. 見つけた癖: 1（改行の印の設定を確かめていない）だけ、分離のあと同じブランチの別のコミットで直す。2 と 3 は保存の中身が変わるので触らない。
 
 ## 工程7: 実施
 
