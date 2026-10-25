@@ -255,4 +255,40 @@ const submit = () => {
   assert.equal(render().appDialog, null);
 }
 
+// ---- 重なったとき（後から来たダイアログは、今のダイアログが閉じるまで待つ） ----
+// 起動時の「保存されていない編集」と「古い共通データを削除できませんでした」が同じ起動で出ると、
+// 後のほうが前のほうを置き換え、前のほうの処理が答えをもらえずに止まっていた。
+{
+  reset();
+  const first = render().requestChoice({ title: "保存されていない編集が残っています", message: "", primaryLabel: "開く", secondaryLabel: "破棄" });
+  const second = render().requestChoice({ title: "古い共通データを削除できませんでした", message: "", primaryLabel: "再試行", secondaryLabel: "あとで" });
+  assert.equal(render().appDialog.title, "保存されていない編集が残っています", "a later dialog waits instead of replacing the open one");
+  render().chooseAppDialog("secondary");
+  assert.equal(await answerOf(first), "secondary", "the first dialog still gets its answer");
+  assert.equal(render().appDialog?.title, "古い共通データを削除できませんでした", "the waiting dialog shows once the first closes");
+  assert.equal(await answerOf(second), "pending");
+  render().closeAppDialog();
+  assert.equal(await answerOf(second), null);
+  assert.equal(render().appDialog, null);
+}
+{
+  reset();
+  const name = render().requestInput({ title: "t", label: "作品名", initialValue: "", confirmLabel: "ok" });
+  const confirm = render().requestConfirm({ title: "c", message: "m", confirmLabel: "ok" });
+  const option = render().requestOption({ title: "o", message: "m", options: [{ id: "a", label: "A" }] });
+  submit();
+  assert.equal(render().appDialog.type, "input", "an error keeps the open dialog in front");
+  assert.equal(render().appDialog.error, "名前を入力してください");
+  render().updateAppDialogValue("x");
+  submit();
+  assert.equal(await answerOf(name), "x");
+  assert.equal(render().appDialog.type, "confirm");
+  render().closeAppDialog();
+  assert.equal(await answerOf(confirm), false);
+  assert.equal(render().appDialog.type, "options");
+  render().chooseAppDialogOption("a");
+  assert.equal(await answerOf(option), "a");
+  assert.equal(render().appDialog, null);
+}
+
 console.log("app dialog: ok");
