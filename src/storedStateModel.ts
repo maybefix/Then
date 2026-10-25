@@ -755,6 +755,10 @@ export function normalizeState(value: Partial<AppState> | null | undefined): App
         typeof settings.showTypewriterGuide === "boolean"
           ? settings.showTypewriterGuide
           : defaultSettings.showTypewriterGuide,
+      showLineBreakMarks:
+        typeof settings.showLineBreakMarks === "boolean"
+          ? settings.showLineBreakMarks
+          : defaultSettings.showLineBreakMarks,
       showLineNumbers:
         typeof settings.showLineNumbers === "boolean"
           ? settings.showLineNumbers
