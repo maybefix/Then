@@ -12,6 +12,15 @@
   unicode-range: U+3000;
 }
 
+/* Then のロゴから作った欧文の表示用書体（英数字と . , : - / & だけ）。起動画面の文字ロゴに使う。 */
+@font-face {
+  font-family: "Then Serif";
+  src: url("./assets/brand/ThenSerif-Oblique.woff") format("woff");
+  font-weight: 400;
+  font-style: oblique;
+  font-display: block;
+}
+
 :root {
   color: #f0f2ef;
   background: #181917;
@@ -426,10 +435,13 @@ textarea,
 
 .startupPortalWordmark {
   color: var(--topbar-text-primary, var(--text-primary));
-  font-family: Georgia, "Yu Mincho", serif;
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-family: "Then Serif", Georgia, serif;
+  font-size: 24px;
+  font-style: oblique;
+  font-weight: 400;
+  font-kerning: normal;
+  font-synthesis: none;
+  line-height: 1;
 }
 
 .startupPortalMain {
@@ -453,16 +465,9 @@ textarea,
 }
 
 .startupPortalMark {
-  display: grid;
+  display: block;
   width: 58px;
   height: 58px;
-  place-items: center;
-  border-radius: 16px;
-  background: var(--accent);
-  color: var(--on-accent, #fff);
-  font-family: Georgia, serif;
-  font-size: 30px;
-  font-weight: 600;
 }
 
 .startupPortalIntro h1,
