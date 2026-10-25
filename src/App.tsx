@@ -1298,6 +1298,7 @@ export default function App() {
   const [openOutlineMenuId, setOpenOutlineMenuId] = useState<string | null>(null);
   const {
     appDialog,
+    appDialogKey,
     requestInput,
     requestMultiInput,
     requestCreateFile,
@@ -8483,6 +8484,7 @@ export default function App() {
           {appDialog && (
             <div className="portalDialogLayer">
               <AppDialogModal
+                key={appDialogKey}
                 dialog={appDialog}
                 onClose={closeAppDialog}
                 onSubmit={submitAppDialog}
@@ -9366,6 +9368,7 @@ export default function App() {
           {/* 確認と入力のダイアログは、設定などのモーダルから開くこともあるので、いちばん上に置く。 */}
           {appDialog && (
             <AppDialogModal
+              key={appDialogKey}
               dialog={appDialog}
               onClose={closeAppDialog}
               onSubmit={submitAppDialog}

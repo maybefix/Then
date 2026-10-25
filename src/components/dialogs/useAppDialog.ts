@@ -1,10 +1,32 @@
 import { type FormEvent, useState } from "react";
 import type { AppDialog, TextTemplateSummary } from "../../types";
 
-// アプリ内ダイアログ（入力・確認・二択・選択肢・新規ファイル）。今出ているダイアログを1つ持ち、
-// request* は答えを Promise で返す。画面（AppDialogModal）からの操作で答えを渡して閉じる。
+let nextAppDialogId = 1;
+
+// アプリ内ダイアログ（入力・確認・二択・選択肢・新規ファイル）。今出ているダイアログと、その後ろで
+// 待つダイアログを持ち、request* は答えを Promise で返す。画面（AppDialogModal）からの操作で
+// 答えを渡して閉じる。
 export function useAppDialog() {
-  const [appDialog, setAppDialog] = useState<AppDialog | null>(null);
+  // 出ているダイアログが先頭。後から来たものは、先頭が閉じるまで後ろで待つ。
+  // id は画面部品の key にして、次のダイアログを出すときに部品を作り直す（最初のフォーカスを置き直す）。
+  const [appDialogs, setAppDialogs] = useState<{ id: number; dialog: AppDialog }[]>([]);
+  const appDialog = appDialogs[0]?.dialog ?? null;
+  const appDialogKey = appDialogs[0]?.id;
+
+  const openAppDialog = (dialog: AppDialog) => {
+    const id = nextAppDialogId++;
+    setAppDialogs((current) => [...current, { id, dialog }]);
+  };
+
+  // 先頭のダイアログを書き換える。null を返すと閉じて、次に待っているものを出す。
+  const updateCurrentAppDialog = (update: (current: AppDialog | null) => AppDialog | null) => {
+    setAppDialogs((current) => {
+      const [head, ...waiting] = current;
+      const next = update(head?.dialog ?? null);
+      if (next === (head?.dialog ?? null)) return current;
+      return next && head ? [{ id: head.id, dialog: next }, ...waiting] : waiting;
+    });
+  };
 
   const requestInput = ({
     title,
@@ -22,7 +44,7 @@ export function useAppDialog() {
     optional?: boolean;
   }) =>
     new Promise<string | null>((resolve) => {
-      setAppDialog({
+      openAppDialog({
         type: "input",
         title,
         label,
@@ -53,7 +75,7 @@ export function useAppDialog() {
     confirmLabel: string;
   }) =>
     new Promise<Record<string, string> | null>((resolve) => {
-      setAppDialog({
+      openAppDialog({
         type: "multiInput",
         title,
         fields: fields.map((field) => ({
@@ -73,7 +95,7 @@ export function useAppDialog() {
 
   const requestCreateFile = (templates: TextTemplateSummary[]) =>
     new Promise<{ fileName: string; templateId: string | null } | null>((resolve) => {
-      setAppDialog({
+      openAppDialog({
         type: "createFile",
         title: "新規ファイルを作成",
         fileName: "新規ノート",
@@ -100,7 +122,7 @@ export function useAppDialog() {
     danger?: boolean;
   }) =>
     new Promise<boolean>((resolve) => {
-      setAppDialog({
+      openAppDialog({
         type: "confirm",
         title,
         message,
@@ -125,7 +147,7 @@ export function useAppDialog() {
     secondaryLabel: string;
   }) =>
     new Promise<"primary" | "secondary" | null>((resolve) => {
-      setAppDialog({
+      openAppDialog({
         type: "choice",
         title,
         message,
@@ -137,7 +159,7 @@ export function useAppDialog() {
     });
 
   const closeAppDialog = () => {
-    setAppDialog((current) => {
+    updateCurrentAppDialog((current) => {
       if (!current) return null;
       if (current.type === "input") {
         current.resolve(null);
@@ -156,7 +178,7 @@ export function useAppDialog() {
 
   const submitAppDialog = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setAppDialog((current) => {
+    updateCurrentAppDialog((current) => {
       if (!current) return null;
       if (current.type === "confirm") {
         current.resolve(true);
@@ -201,13 +223,13 @@ export function useAppDialog() {
   };
 
   const updateAppDialogValue = (value: string) => {
-    setAppDialog((current) =>
+    updateCurrentAppDialog((current) =>
       current?.type === "input" ? { ...current, value, error: "" } : current,
     );
   };
 
   const updateAppDialogFieldValue = (fieldId: string, value: string) => {
-    setAppDialog((current) => {
+    updateCurrentAppDialog((current) => {
       if (current?.type === "createFile") {
         if (fieldId === "fileName") return { ...current, fileName: value, error: "" };
         if (fieldId === "extension") {
@@ -242,11 +264,11 @@ export function useAppDialog() {
     options: { id: string; label: string; description?: string }[];
   }) =>
     new Promise<string | null>((resolve) => {
-      setAppDialog({ type: "options", title, message, detail, options, resolve });
+      openAppDialog({ type: "options", title, message, detail, options, resolve });
     });
 
   const chooseAppDialogOption = (id: string) => {
-    setAppDialog((current) => {
+    updateCurrentAppDialog((current) => {
       if (current?.type !== "options") return current;
       current.resolve(id);
       return null;
@@ -254,7 +276,7 @@ export function useAppDialog() {
   };
 
   const chooseAppDialog = (value: "primary" | "secondary") => {
-    setAppDialog((current) => {
+    updateCurrentAppDialog((current) => {
       if (current?.type !== "choice") return current;
       current.resolve(value);
       return null;
@@ -263,6 +285,7 @@ export function useAppDialog() {
 
   return {
     appDialog,
+    appDialogKey,
     requestInput,
     requestMultiInput,
     requestCreateFile,

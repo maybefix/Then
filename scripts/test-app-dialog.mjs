@@ -276,19 +276,24 @@ const submit = () => {
   const name = render().requestInput({ title: "t", label: "作品名", initialValue: "", confirmLabel: "ok" });
   const confirm = render().requestConfirm({ title: "c", message: "m", confirmLabel: "ok" });
   const option = render().requestOption({ title: "o", message: "m", options: [{ id: "a", label: "A" }] });
+  const firstKey = render().appDialogKey;
+  assert.notEqual(firstKey, undefined);
   submit();
   assert.equal(render().appDialog.type, "input", "an error keeps the open dialog in front");
   assert.equal(render().appDialog.error, "名前を入力してください");
   render().updateAppDialogValue("x");
+  assert.equal(render().appDialogKey, firstKey, "editing keeps the modal mounted");
   submit();
   assert.equal(await answerOf(name), "x");
   assert.equal(render().appDialog.type, "confirm");
+  assert.notEqual(render().appDialogKey, firstKey, "the next dialog remounts the modal so its first focus is set again");
   render().closeAppDialog();
   assert.equal(await answerOf(confirm), false);
   assert.equal(render().appDialog.type, "options");
   render().chooseAppDialogOption("a");
   assert.equal(await answerOf(option), "a");
   assert.equal(render().appDialog, null);
+  assert.equal(render().appDialogKey, undefined);
 }
 
 console.log("app dialog: ok");
