@@ -1,4 +1,5 @@
 import packageMetadata from "../../../package.json";
+import thenLogoUrl from "../../assets/brand/then-logo.svg";
 import type { WorkspaceAlert, WorkspaceRecord } from "../../types";
 
 type StartupPortalProps = {
@@ -129,9 +130,7 @@ export function StartupPortal({
 
       <div className="startupPortalMain">
         <section className="startupPortalIntro">
-          <div className="startupPortalMark" aria-hidden="true">
-            T
-          </div>
+          <img className="startupPortalMark" src={thenLogoUrl} alt="" aria-hidden="true" draggable={false} />
           <h1>執筆するライブラリか作品を選んでください。</h1>
           {workspaceAlert && (
             <div className="startupPortalAlert" role="alert">
