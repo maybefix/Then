@@ -34,6 +34,7 @@
     "test:idea-actions": "node scripts/test-idea-thread-actions.mjs",
     "test:project-entry-actions": "node scripts/test-project-entry-actions.mjs",
     "test:palette-commands": "node scripts/test-palette-commands.mjs",
+    "test:stored-state-model": "node scripts/test-stored-state-model.mjs",
     "test:command-palette": "node scripts/test-command-palette.mjs",
     "test:editor-text-edits": "node scripts/test-editor-text-edits.mjs",
     "test:editor-notation-actions": "node scripts/test-editor-notation-actions.mjs",
