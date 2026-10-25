@@ -133,6 +133,16 @@ Date.now = () => 1_700_000_000_000;
   assert.equal(choices.showComments, defaults.showComments, "non-boolean switches fall back");
 }
 
+{
+  // 改行の印の切り替えだけ、保存された値を確かめずに通していた（APP_STATE_NORMALIZE_SEPARATION_PLAN.md 2-5 の 1）。
+  const read = (value) => normalizeState({ settings: { showLineBreakMarks: value } }).settings.showLineBreakMarks;
+  assert.equal(read(true), true);
+  assert.equal(read(false), false);
+  for (const broken of ["yes", 1, null, {}]) {
+    assert.equal(read(broken), createDefaultState().settings.showLineBreakMarks, `showLineBreakMarks ${JSON.stringify(broken)} falls back`);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // フォント名: ヒラギノの別名の読み替えと、引用符の付け方
 // ---------------------------------------------------------------------------
