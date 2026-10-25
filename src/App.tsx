@@ -1119,6 +1119,8 @@ export default function App() {
   const saveTimerRef = useRef<number | null>(null);
   const referenceSaveTimerRef = useRef<number | null>(null);
   const referenceLayoutLoadedRootRef = useRef<string | null>(null);
+  // 読み込んだままのレイアウト。これと同じあいだは保存しない。
+  const referenceLayoutOnDiskRef = useRef<ReferenceLayout | null>(null);
   // 並び順を読み込んだ時点の「Ideaの管理単位」に合わせるため、最新の値を持っておく。
   const snippetStorageModeRef = useRef<EditorSettings["snippetStorageMode"]>("workspace");
   const workspaceFolderTreeRootRef = useRef<string | null>(null);
@@ -3037,6 +3039,7 @@ export default function App() {
         ]);
         if (isCancelled) return;
         const normalizedLayout = alignIdeaLayoutToMode(layout, snippetStorageModeRef.current);
+        referenceLayoutOnDiskRef.current = normalizedLayout;
         setReferenceLayout(normalizedLayout);
         setReferenceCandidates(candidates);
         referenceLayoutLoadedRootRef.current = rootPath;
@@ -3113,6 +3116,8 @@ export default function App() {
   useEffect(() => {
     const rootPath = projectFolder?.path ?? null;
     if (!isHydrated || !rootPath || referenceLayoutLoadedRootRef.current !== rootPath) return;
+    // Opening a project does not rewrite its file (and its .bak) while nothing has changed.
+    if (referenceLayout === referenceLayoutOnDiskRef.current) return;
 
     if (referenceSaveTimerRef.current) {
       window.clearTimeout(referenceSaveTimerRef.current);
