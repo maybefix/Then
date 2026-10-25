@@ -12,11 +12,11 @@
 | 3 | 依存関係 | 済み |
 | 4 | 影響範囲 | 済み |
 | 5 | 案 | 済み |
-| 6 | 人の確認（確認1） | 待ち |
-| 7 | 実施 | |
-| 8 | 自動テスト | |
-| 9 | 実機確認 | |
-| 10 | 完了（確認2） | |
+| 6 | 人の確認（確認1） | 済み（2026-10-26） |
+| 7 | 実施 | 済み |
+| 8 | 自動テスト | 済み |
+| 9 | 実機確認 | 済み |
+| 10 | 完了（確認2） | 確認待ち |
 
 ## 工程1: 調査の結果
 
@@ -180,7 +180,7 @@ App に残る、プラグインへの「送り出し」側（今回は動かさ�
 | 登録が消えたときの戻し方 | なし |
 
 ### 4-4. 今の自動テストの状態
-（「前」の一式の結果をここに書く。実行中）
+「前」の一式（`a931e22`）: build は成功、86 本のうち 3 本が元から失敗（`test:canvas-save`、`test:v058-bundle`、`test:v0511-themes`）。今回とは関係ない。
 
 ## 工程5: 案
 
@@ -238,10 +238,120 @@ App に残る、プラグインへの「送り出し」側（今回は動かさ�
 
 ## 工程6: 人の確認
 
+2026-10-26 に決まったこと。
+1. 分け方: フック＋操作の2つ（5-1 のとおり）。
+2. 癖1: このブランチで、分離の後に直す。
+3. 癖2: 記録だけにする。
+
 ## 工程7: 実施
+
+| コミット | 内容 |
+|---|---|
+| `9e06de1` | `refactor:` 部品の外の関数4つを `src/plugins/pluginHostModel.ts` へ |
+| `d0b9986` | `refactor:` ref 9・state 11・派生の値と表示の effect・読み込みとアンカーの保存を `src/plugins/usePluginHost.ts` へ。`test:v061-plugins` の2行の読み先をフックに |
+| `8cd27c3` | `refactor:` 受け口と導入・削除を `src/plugins/pluginHostActions.ts` へ。`test:v061-plugins` の16行の読み先を受け口のファイルに |
+| `1e019ba` | `test:` `test:plugin-host` |
+| `53916e6` | `test:` 癖1（今は落ちる） |
+| `de22947` | `fix:` 癖1 |
+
+- App.tsx は 9416 行から 8831 行へ（585 行減）。新しいファイルは、純粋な処理 49 行、フック 286 行（癖1の修正を含む）、受け口 495 行。
+- 元と同じであることの確かめ方: 3つの `refactor:` のコミットごとに `move-lines.mjs` で移し、`verify-move.mjs` で突き合わせた。どれも lost 0。added は import の行、`usePluginHost(...)` と `createPluginHostActions(...)` の呼び出しの行、新しいファイルの枠（import、引数の型、`return`）だけ。
+- 元と違う点:
+  - フックの呼び出しは、元の 1391 行（派生の値）の位置。ref と state はそこへ寄せた（どれも 1391 行より前では使われていない）。effect は D-1〜7 の順のままで、ほかの effect との前後も変わらない。
+  - `isTauriRuntime` は、ほかの分けたファイルと同じく、新しいファイルの中にも1行で書いた。
+  - App で使わなくなった import（型 9 つ、`createThenPluginAnchor`、`resolveThenPluginAnchor`、`isValidThenPluginKeybinding`、`ThenPluginRuntimeHostHandle`）を消した。`ThenPluginIcon` は1つ目のコミットから使われていなかったので、2つ目で消した。
+- 癖1の直し方（`de22947`）: アンカーのファイルが読めない（`load_plugin_anchors` が失敗する、または `version` が 1 でない・`anchors` が配列でない）作品を `pluginAnchorUnreadableRootRef` で覚え、その作品では 0.18 秒後の保存も、作品を切り替えるときの保存もしない。形が違うときは「アンカーの読み込みに失敗しました: 対応していない形式です」を出す。作品を開き直すたびに覚えた値を消して、読み直す。
+- 実施の途中で見つけた癖（工程2の5に足す）:
+  4. **`anchors.delete` は、消せたときも false を返す**（自動テストで確かめた）。`persistPluginAnchors` が ref を先に新しい一覧へ書き換えるため、比べる2つの数がいつも同じになる。SDK の型は `Promise<boolean>` だが、答えを使っているプラグイン（`docs/plugin-example`）はない。分離では直さず、今の答え（false）をテストで固定した。
 
 ## 工程8: 自動テスト
 
+### 足した回帰テスト `test:plugin-host`（`scripts/test-plugin-host.mjs`）
+esbuild で `pluginHostActions.ts` と `usePluginHost.ts` を束ね、`invoke` とタイマーを入れ物に差し替えて動かす。`react` は、描画の順に useState・useRef・useCallback・useEffect を覚える小さな入れ物にした。値が変わるたびにフックを呼び直し、effect を書いた順に流す（後片付けが先）。
+- 受け口: 読み込まれていないプラグインと権限のない頼みを断ること、コマンド（置き換え・ショートカットとメニューの確かめ）、横の欄と画面（icon の確かめ・`views.open` の行き先）、モーダル（開いても `setAppMode` を呼ばない・閉じる・取り消す）、状態表示の 160 文字、選択範囲、カーソルの移動（別の文書を開いてから範囲を選ぶ・見つからない文書）、アンカー（作る・つなぎ直して保存・見せる・消す・作品の外の文書）、プラグインのデータ（書き込みが1つずつ・読むときは書き込みを待つ）、導入と削除（確認の文言・断ったとき・失敗したとき）。
+- フック: 起動時の読み込みとエラー表示、読み込み直しで登録を空にすること、登録が消えたときの戻し方と Esc、アンカーの遅延保存、作品の切り替え（待っている保存は前の作品へ。新しい作品へは書かない）、読み込み中の書き換えを読み込んだ値で上書きしないこと、名前の変更での付け替え、`workspace.change`。
+- 癖1: 壊れた・`version` が違う・`anchors` が配列でない、の3つで、エラーを出し、画面の中ではアンカーが動き、保存も切り替え時の保存もしないこと。読める作品では保存すること。
+
+### 効くことの確かめ
+コミットしてから、移した処理にわざと不具合を2つ入れ、落ちることを見て `git checkout` で戻した。
+| 入れた不具合 | 落ちた確認 |
+|---|---|
+| 受け口の権限の確かめを外す（`pluginHostActions.ts`） | 「権限がありません: commands」で断ること（Missing expected rejection） |
+| 作品を切り替えるときの、前の作品への保存を消す（`usePluginHost.ts`） | 「a pending save must go to the previous work when switching」 |
+
+癖1のテストは、直す前のコミット `53916e6` で「broken: an unreadable anchor file must not be overwritten」で落ち、`de22947` で通った。
+
+### 前後の比較
+| | 前（`a931e22`） | 後（`de22947`） |
+|---|---|---|
+| build | 成功 | 成功 |
+| いちばん大きい JS | 706,891 バイト | 710,265 バイト（+3.4 kB） |
+| テスト | 86 本、失敗 3 | 87 本、失敗 3 |
+
+- 両方で通った: 83 本（`test:v061-plugins`、`test:project-entry-actions` を含む）。
+- 両方で失敗（元からの失敗。理由も前後で同じ）: `test:canvas-save`（`./utils/fontStack` を解決できない）、`test:v058-bundle`（いちばん大きい JS が 500 kB を超えている）、`test:v0511-themes`（朱墨のプロットの枠）。
+- 後だけ: `test:plugin-host`（通った）。
+- 新しい失敗: なし。
+- バンドルが増えたのは、受け口の関数をまとめて返すと関数名が圧縮で縮まなくなるため（Idea の分離と同じ）。
+
 ## 工程9: 実機確認
 
+### やり方
+識別子 `local.then.qa.pluginhost1026` で build した QA 用アプリを、scratchpad の一時ライブラリ（作品A: `本文.txt`・`第二章.txt`、作品B: `本文.txt` と壊れた `.then/anchors.json`）で動かした。導入のダイアログは OS のものなので、QA 用プラグイン2つ（全部の権限を持つ `qa.host`、`statusbar` と `commands` だけの `qa.limited`）を、QA アプリのプラグインの置き場所（`%APPDATA%\local.then.qa.pluginhost1026\plugins`）へ直接置いた。`qa.host` は、頼みごとのコマンドを状態表示のボタンとして登録し、答えを状態表示の欄に書く。画面は WebView2 のデバッグポートから操作した。
+
+### 確認した項目と結果
+| 確認したこと | 結果 |
+|---|---|
+| 起動時の読み込み | 2つのプラグインが読み込まれ、状態表示にボタンと「QA待機」が出た。エラーの表示はなし |
+| `editor.getSelection` | 「追跡」を選んで押すと `sel:追跡@本文.txt` |
+| `anchors.create` と保存 | `anc:5-7 追跡`。1.5 秒後の `.then/anchors.json` に、同じ文書・範囲・文字のアンカーが1つ |
+| 本文の書き換えにアンカーが追いかける（App に残した送り出し側） | 先頭に「前置き。」を足すと、ファイルのアンカーが 9-11 になり、`anchors.resolve` も `res:9-11 追跡` |
+| `editor.moveCursor` で別の文書へ | `mv:true`。`第二章.txt` が開き、「章の」が選ばれた |
+| `anchors.reveal` | `rev:true`。`本文.txt` に戻り、「追跡」が選ばれた |
+| 横の欄 `views.open` | 書くモードのまま右の欄が開き、見出しが「QA横」 |
+| 画面 `views.open` | 画面のモードになり、「QA画面」の枠が出た |
+| モーダル `views.openModal` と Esc | 画面は「QA画面」のまま、モーダルの枠が出た。Esc で閉じ、画面はそのまま |
+| `storage.set`／`get` | `st:{"n":7} 二`。`.then/plugin-data/qa.host/storage.json` に `k` と `k2` |
+| 権限のない頼み | `qa.limited` が横の欄を登録しようとすると「Error: 権限がありません: views」 |
+| ショートカット（Ctrl+Alt+Q） | 「末尾」を選んで押すと `sel:末尾@本文.txt` |
+| 右クリックのメニュー | 選択範囲で開くと「QA sel」が出て、押すと `sel:範囲@本文.txt` |
+| コマンドパレット → 管理画面 | 「プラグインを管理…2個を導入済み」から開き、2つが並んだ |
+| 再読み込み | 登録がいったん空になり、プラグインが登録し直した（出力の欄が「QA待機」に戻った） |
+| 削除の確認と、断ったとき | 「「QA Limited」v0.1.0 をThenから削除しますか？」と注意の文。キャンセルでは何も消えない |
+| 削除 | 「プラグイン「QA Limited」を削除しました」。置き場所のフォルダが消え、状態表示の「lim」もなくなった |
+| 作品の切り替え（作品A → 作品B） | 作品A の `anchors.json` は切り替えの前後でハッシュが同じ。`workspace.change` は作品B の名前で届いた（`ev:ws2 作品B`） |
+| 癖1の修正 | 作品B を開くと「アンカーの読み込みに失敗しました: failed to parse plugin anchors: key must be a string at line 1 column 3」。アンカーを作り（`anc:4-6 本文`）本文を書き換えても、壊れたファイルの中身はそのまま。作品A のファイルも変わらない |
+| 名前の変更での付け替え | 作品A の `本文.txt` を「改題」にすると、アンカーの文書が `改題.txt` に変わった |
+| 再起動 | 削除した QA Limited は出ず、QA Host だけが読み込まれた。本文と名前の変更が残り、先頭に文字を足すとアンカーが 4-6 から 9-11 へ追いかけた（読み込めている） |
+
+### 今の挙動の癖を実機で確かめた結果
+- 癖1: 上の表のとおり、直した後の挙動を確かめた。
+- 癖4: `anchors.delete` は `del:false` を返し、`anchors.json` からは消えて `anchors: []` になった。
+- 癖2: 確かめていない（0.18 秒以内に閉じる操作を作れない。記録だけ）。
+- 癖3: 確かめていない（開発のときだけの違い）。
+
+### 確かめられなかったこと
+- 導入（「プラグインを追加…」）: OS のフォルダ選択のダイアログを操作できない。確認の文言、断ったとき、失敗したとき、導入後の読み込み直しと通知は `test:plugin-host` で確かめた。
+- 途中で1回、管理画面を閉じるつもりで、同じ「閉じる」のラベルを持つウィンドウの閉じるボタンを押し、アプリが終わった。QA のプロセスは残らず、同じ識別子で起動し直して続けた。
+- 名前の変更のダイアログで、`q.mjs key Enter` では確定しなかった。`text: "\r"` を付けて CDP で送ると確定したので、アプリの癖ではなく、`q.mjs` の Enter の送り方の違い。
+
+### 片付け
+`qa-cleanup.mjs` で、QA アプリのアプリ状態（`%APPDATA%`・`%LOCALAPPDATA%` の `local.then.qa.pluginhost1026`）と一時ライブラリを消した。残りは QA の Then 0、QA の WebView2 0、テストの Edge 0、テストの node 0、`%TEMP%` のテストのプロファイル 0。`git status` に意図しない変更（`src-tauri/Cargo.toml` の改行など）はない。`src-tauri/target/release/Then.exe` は QA 用の build で上書きされている。
+
 ## 工程10: 完了
+
+### 変わったもの
+- App.tsx から、プラグインの受け口（`handlePluginRequest`）、読み込み（`reloadInstalledPlugins`）、導入と削除、アンカーの保存を、`src/plugins/usePluginHost.ts`・`src/plugins/pluginHostActions.ts`・`src/plugins/pluginHostModel.ts` へ移した。App.tsx は 585 行減った。
+- 癖1（読めないアンカーのファイルを上書きして消す）を直した。
+
+### 確かめたこと
+- 移したコードが元と同じこと（verify-move、lost 0）。
+- 自動テスト: 新しい失敗なし。`test:plugin-host` を足し、わざと入れた不具合2つで落ちることを確かめた。
+- 実機: 工程9の表のとおり。
+
+### 残っている別の作業
+| 作業 | 理由 |
+|---|---|
+| 癖4（`anchors.delete` が消せたときも false を返す） | 分離の途中で見つけた。直すなら、`persistPluginAnchors` を呼ぶ前の数と比べる。答えが変わるので、利用者の判断が要る |
+| 癖2（閉じる直前のアンカーの書き換えが保存されない） | 確認1で記録だけにした。閉じるときの書き出しの仕組みが要る |
+| プラグインへの送り出し側（本文・選択範囲の知らせ、ショートカット、JSX）の分離 | 今回の範囲の外。エディタの処理と結び付いている |
