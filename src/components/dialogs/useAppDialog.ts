@@ -263,7 +263,6 @@ export function useAppDialog() {
 
   return {
     appDialog,
-    setAppDialog,
     requestInput,
     requestMultiInput,
     requestCreateFile,

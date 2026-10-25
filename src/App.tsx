@@ -1298,7 +1298,6 @@ export default function App() {
   const [openOutlineMenuId, setOpenOutlineMenuId] = useState<string | null>(null);
   const {
     appDialog,
-    setAppDialog,
     requestInput,
     requestMultiInput,
     requestCreateFile,
@@ -1785,17 +1784,12 @@ export default function App() {
       return;
     }
 
-    const name = await new Promise<string | null>((resolve) => {
-      setAppDialog({
-        type: "input",
-        title: "資料を新規作成",
-        label: "ファイル名（.txt / .md）",
-        value: "新しい資料.md",
-        confirmLabel: "作成",
-        placeholder: "例: 世界観メモ.md",
-        error: "",
-        resolve,
-      });
+    const name = await requestInput({
+      title: "資料を新規作成",
+      label: "ファイル名（.txt / .md）",
+      initialValue: "新しい資料.md",
+      confirmLabel: "作成",
+      placeholder: "例: 世界観メモ.md",
     });
     if (!name) return;
 
@@ -1827,20 +1821,16 @@ export default function App() {
       if (scope === "project" && !projectFolder) return;
       const fileName = sourcePath.split(/[\\/]/).filter(Boolean).pop() ?? sourcePath;
       const referenceCount = countIdeaReferenceLinks(referenceLayout.ideaThreads, sourcePath);
-      const confirmed = await new Promise<boolean>((resolve) => {
-        setAppDialog({
-          type: "confirm",
-          title: "資料ファイルを削除",
-          message: referenceCount > 0
-            ? `この資料は${referenceCount}個のIdeaスレッドから参照されています。`
-            : `「${fileName}」をこのプロジェクトから削除しますか？`,
-          detail: referenceCount > 0
-            ? "資料ファイルと、すべてのスレッドからの参照を削除します。"
-            : "取り込んだ資料ファイルを削除します。この操作は元に戻せません。",
-          confirmLabel: "削除する",
-          danger: true,
-          resolve,
-        });
+      const confirmed = await requestConfirm({
+        title: "資料ファイルを削除",
+        message: referenceCount > 0
+          ? `この資料は${referenceCount}個のIdeaスレッドから参照されています。`
+          : `「${fileName}」をこのプロジェクトから削除しますか？`,
+        detail: referenceCount > 0
+          ? "資料ファイルと、すべてのスレッドからの参照を削除します。"
+          : "取り込んだ資料ファイルを削除します。この操作は元に戻せません。",
+        confirmLabel: "削除する",
+        danger: true,
       });
       if (!confirmed) return;
 
@@ -1927,20 +1917,16 @@ export default function App() {
       const fileExists = referenceCandidates.some(
         (file) => normalizedReferenceKey(file.sourcePath) === normalizedReferenceKey(link.sourcePath),
       );
-      const confirmed = await new Promise<boolean>((resolve) => {
-        setAppDialog({
-          type: "confirm",
-          title: fileExists ? "資料を削除" : "見つからない資料の参照を削除",
-          message: fileExists
-            ? "この資料はほかのスレッドから参照されていません。"
-            : "資料ファイルが見つかりません。この参照を削除しますか？",
-          detail: fileExists
-            ? "このプロジェクトからの削除になりますが、よろしいですか？"
-            : undefined,
-          confirmLabel: fileExists ? "削除する" : "参照を削除",
-          danger: true,
-          resolve,
-        });
+      const confirmed = await requestConfirm({
+        title: fileExists ? "資料を削除" : "見つからない資料の参照を削除",
+        message: fileExists
+          ? "この資料はほかのスレッドから参照されていません。"
+          : "資料ファイルが見つかりません。この参照を削除しますか？",
+        detail: fileExists
+          ? "このプロジェクトからの削除になりますが、よろしいですか？"
+          : undefined,
+        confirmLabel: fileExists ? "削除する" : "参照を削除",
+        danger: true,
       });
       if (!confirmed || !projectFolder) return;
       try {
@@ -7826,17 +7812,12 @@ export default function App() {
   };
 
   const requestNewIdeaThreadName = async (): Promise<string | null> => {
-    const value = await new Promise<string | null>((resolve) => {
-      setAppDialog({
-        type: "input",
-        title: "新規スレッドに追加",
-        label: "スレッド名",
-        value: "",
-        placeholder: "新しいスレッド名",
-        confirmLabel: "作成",
-        error: "",
-        resolve,
-      });
+    const value = await requestInput({
+      title: "新規スレッドに追加",
+      label: "スレッド名",
+      initialValue: "",
+      placeholder: "新しいスレッド名",
+      confirmLabel: "作成",
     });
     const title = value?.trim() ?? "";
     return title || null;
