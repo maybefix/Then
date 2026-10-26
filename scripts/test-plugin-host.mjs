@@ -383,9 +383,9 @@ function setupActions({ plugins = [plugin("p", ALL)], projectFolder = novel(), c
   await assert.rejects(request("anchors.resolve", { anchorId: "missing" }), /アンカーが見つかりません/);
   await assert.rejects(request("anchors.delete", { anchorId: created.id }, "other"), /プラグインが読み込まれていません/);
 
-  // 癖4: persistPluginAnchors が ref を先に書き換えるので、消せたときも false を返す（工程2の5）。
+  // 癖4: 消せたときだけ true を返す（docs/PLUGIN_HOST_SEPARATION_PLAN.md 工程7）。
   assert.equal(await request("anchors.delete", { anchorId: "missing" }), false);
-  assert.equal(await request("anchors.delete", { anchorId: created.id }), false);
+  assert.equal(await request("anchors.delete", { anchorId: created.id }), true, "deleting an existing anchor must answer true");
   assert.deepEqual(pluginAnchorsRef.current, []);
 }
 {
