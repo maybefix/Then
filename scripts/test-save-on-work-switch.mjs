@@ -120,7 +120,14 @@ function installMock({ library, workA, workB }) {
       if (saves[command]) {
         const value = Object.entries(args).find(([key]) => key !== "rootPath")?.[1];
         window.__saves.push({ command, root: args.rootPath, body: JSON.stringify(value), at: Math.round(performance.now()) });
-        works[args.rootPath][saves[command]] = structuredClone(value);
+        const stored = structuredClone(value);
+        // Rust は並び順の項目を serde_json::Value のまま書くので、項目のキーが名前の順に並び替わる。
+        if (command === "save_reference_layout") {
+          for (const layout of stored.ideaThreads ?? []) {
+            layout.items = layout.items.map((item) => Object.fromEntries(Object.entries(item).sort(([a], [b]) => (a < b ? -1 : 1))));
+          }
+        }
+        works[args.rootPath][saves[command]] = stored;
         return null;
       }
       if (loads[command]) return structuredClone(works[args.rootPath][loads[command]]);
@@ -326,6 +333,8 @@ try {
   // Idea の並び順（資料ボードのファイル）も、作品Aへ書かれる。
   assert.ok(to(savesAfterIdea, WORK_A, "save_reference_layout").some((save) => save.body.includes(newFragment.id)), "切り替える直前に書いた Idea の並び順を、作品Aの資料ボードのファイルへ保存する");
   assert.ok(bodiesBackInA.includes(NEW_IDEA), `作品Aへ戻ると、切り替える直前に書いた Idea がある（${bodiesBackInA}）`);
+  // 開き直しただけでは、資料ボードのファイル（と .bak）を書き直さない。保存した並び順は、キーの順だけが違って読まれる。
+  assert.deepEqual(to(savesAfterPlot, WORK_A, "save_reference_layout").map((save) => save.body), [], "作品Aを開き直しただけで、資料ボードのファイルを書き直さない");
 
   // 切り替える直前のプロットは、作品Bへ書かれる。
   assert.ok(to(savesAfterPlot, WORK_B, "save_project_plot_cards").some((save) => parse(save).length === 2), "切り替える直前に足したプロットのカードを、作品Aへ切り替えるときに作品Bへ保存する");
