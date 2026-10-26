@@ -3324,13 +3324,11 @@ export default function App() {
     if (!isHydrated || !projectFolder) return;
     if (plotWorkspacePath !== projectFolder.path) return;
 
-    const timer = window.setTimeout(() => {
+    return schedulePendingSave("workspace-plot", 700, () =>
       saveWorkspacePlotCards(projectFolder.path, plotCards).catch(() => {
         setLastError("ワークスペースのプロット保存に失敗しました");
-      });
-    }, 700);
-
-    return () => window.clearTimeout(timer);
+      }),
+    );
   }, [isHydrated, plotCards, plotWorkspacePath, projectFolder]);
 
   useEffect(() => {
