@@ -3294,7 +3294,8 @@ export default function App() {
     const offset = editorSelectionHead;
     const length = editorText.length;
 
-    const timer = window.setTimeout(() => {
+    // 閉じる前に書くときも、アプリ状態へ入れる。アプリ状態の保存は、描画し直した後に載る。
+    return schedulePendingSave("cursor-position", 600, () => {
       setAppState((current) => {
         const previous = current.cursorPositions[path];
         if (previous && previous.offset === offset && previous.length === length) {
@@ -3305,9 +3306,7 @@ export default function App() {
           cursorPositions: { ...current.cursorPositions, [path]: { offset, length } },
         };
       });
-    }, 600);
-
-    return () => window.clearTimeout(timer);
+    });
   }, [currentFilePath, editorSelectionHead, editorText, isHydrated]);
 
   useEffect(() => {
