@@ -3335,26 +3335,22 @@ export default function App() {
     if (!isHydrated || !projectFolder) return;
     if (proofreadTermsWorkspacePath !== projectFolder.path) return;
 
-    const timer = window.setTimeout(() => {
+    return schedulePendingSave("workspace-proofread-terms", 700, () =>
       saveWorkspaceProofreadTerms(projectFolder.path, projectProofreadTerms).catch(() => {
         setLastError("ワークスペースの校正辞書の保存に失敗しました");
-      });
-    }, 700);
-
-    return () => window.clearTimeout(timer);
+      }),
+    );
   }, [isHydrated, projectFolder, projectProofreadTerms, proofreadTermsWorkspacePath]);
 
   useEffect(() => {
     if (!isHydrated || !projectFolder) return;
     if (proofreadTermsWorkspacePath !== projectFolder.path) return;
 
-    const timer = window.setTimeout(() => {
+    return schedulePendingSave("workspace-proofread-ignored", 700, () =>
       saveWorkspaceProofreadIgnored(projectFolder.path, projectProofreadIgnored).catch(() => {
         setLastError("無視した指摘の保存に失敗しました");
-      });
-    }, 700);
-
-    return () => window.clearTimeout(timer);
+      }),
+    );
   }, [isHydrated, projectFolder, projectProofreadIgnored, proofreadTermsWorkspacePath]);
 
   useEffect(() => {
