@@ -1,6 +1,7 @@
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ProjectFolder } from "../types";
+import { clearPendingSave, setPendingSave } from "../pendingSaves";
 import { toProjectRelativePath } from "../utils/projectTree";
 import type { ThenPluginRuntimeHostHandle } from "./PluginRuntimeHost";
 import type {
@@ -15,6 +16,9 @@ import type {
 } from "./types";
 
 const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
+
+// 待っている遅延保存の一覧（pendingSaves）での名前。
+const PLUGIN_ANCHORS_PENDING_SAVE = "plugin-anchors";
 
 type PluginHostDeps = {
   projectFolder: ProjectFolder | null;
@@ -163,6 +167,7 @@ export function usePluginHost({
       window.clearTimeout(pluginAnchorSaveTimerRef.current);
       pluginAnchorSaveTimerRef.current = null;
       pluginAnchorSaveRootRef.current = null;
+      clearPendingSave(PLUGIN_ANCHORS_PENDING_SAVE);
     }
     pluginAnchorUnreadableRootRef.current = null;
     const rootPath = projectFolder?.path;
@@ -199,6 +204,7 @@ export function usePluginHost({
         window.clearTimeout(pluginAnchorSaveTimerRef.current);
         pluginAnchorSaveTimerRef.current = null;
         pluginAnchorSaveRootRef.current = null;
+        clearPendingSave(PLUGIN_ANCHORS_PENDING_SAVE);
         if (pluginAnchorUnreadableRootRef.current !== rootPath) {
           const store: ThenPluginAnchorStore = { version: 1, anchors: pluginAnchorsRef.current };
           void invoke("save_plugin_anchors", { rootPath, store });
@@ -216,16 +222,26 @@ export function usePluginHost({
     if (pluginAnchorSaveTimerRef.current !== null) {
       window.clearTimeout(pluginAnchorSaveTimerRef.current);
     }
-    pluginAnchorSaveTimerRef.current = window.setTimeout(() => {
+    const saveAnchors = () => {
       pluginAnchorSaveTimerRef.current = null;
       pluginAnchorSaveRootRef.current = null;
+      clearPendingSave(PLUGIN_ANCHORS_PENDING_SAVE, saveAnchorsNow);
       if (pluginAnchorUnreadableRootRef.current === rootPath) return;
       const store: ThenPluginAnchorStore = { version: 1, anchors: pluginAnchorsRef.current };
-      invoke("save_plugin_anchors", { rootPath, store }).catch((error) => {
+      return invoke("save_plugin_anchors", { rootPath, store }).catch((error) => {
         setLastError(`アンカーの保存に失敗しました: ${String(error)}`);
       });
-    }, 180);
+    };
+    // 閉じる前は、待たずに今書く。
+    const saveAnchorsNow = () => {
+      if (pluginAnchorSaveTimerRef.current !== null) {
+        window.clearTimeout(pluginAnchorSaveTimerRef.current);
+      }
+      return saveAnchors();
+    };
+    pluginAnchorSaveTimerRef.current = window.setTimeout(saveAnchors, 180);
     pluginAnchorSaveRootRef.current = rootPath;
+    setPendingSave(PLUGIN_ANCHORS_PENDING_SAVE, saveAnchorsNow);
   }, [projectFolder?.path]);
 
   const retargetPluginAnchors = useCallback((oldAbsolutePath: string, newAbsolutePath: string) => {

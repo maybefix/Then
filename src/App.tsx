@@ -28,6 +28,7 @@ import {
   useState,
 } from "react";
 import { manageAsyncRegistration } from "./utils/asyncRegistration";
+import { clearPendingSave, flushPendingSaves, setPendingSave } from "./pendingSaves";
 import { useVerticalMetricFontFamily } from "./utils/verticalMetricFonts";
 import { buildAppShellStyle } from "./appShellStyle";
 import { isRestorableRightSidebarTab } from "./utils/rightSidebarState";
@@ -6808,6 +6809,17 @@ export default function App() {
     return manageAsyncRegistration(
       listen<string>("then-open-export-source", (event) => {
         void handleProjectFileSelectRef.current(event.payload);
+      }),
+      (error) => setLastError(String(error)),
+    );
+  }, []);
+
+  // 閉じる前に、待っている遅延保存を書き切る。Rust は答えか時間切れ（2秒）を待ってから閉じる。
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    return manageAsyncRegistration(
+      listen("then-before-close", () => {
+        void flushPendingSaves().finally(() => invoke("finish_close_preparation"));
       }),
       (error) => setLastError(String(error)),
     );
