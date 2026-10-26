@@ -110,6 +110,37 @@ const { setPendingSave, clearPendingSave, flushPendingSaves, schedulePendingSave
   cancelPrevious();
 }
 
+// 作品を切り替えたとき（docs/SAVE_ON_WORK_SWITCH_FIX_PLAN.md）: 後片付けで「今書く」と答えると、
+// 取り消す代わりに待たずに一度だけ書き、一覧から外れる。「書かない」なら今のとおり取り消す。
+{
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const written = [];
+  let workChanged = false;
+  const cleanupA = schedulePendingSave("work", 1000, () => written.push("work A"), () => workChanged);
+  workChanged = true;
+  cleanupA();
+  assert.deepEqual(written, ["work A"], "a save cancelled because the work changed must run at once");
+  await wait(30);
+  await flushPendingSaves();
+  assert.deepEqual(written, ["work A"], "it must run only once and leave the pending list");
+
+  // 同じ作品の中で値が変わったとき（答えが偽）は、今のとおり取り消す。
+  const cleanupSame = schedulePendingSave("work", 20, () => written.push("same work"), () => false);
+  cleanupSame();
+  await wait(40);
+  await flushPendingSaves();
+  assert.deepEqual(written, ["work A"], "a save cancelled within the same work must not run");
+
+  // もう書き終えた予約は、後片付けで書き直さない（待ち終えたとき、閉じる前に書き切ったとき）。
+  const cleanupDone = schedulePendingSave("work", 10, () => written.push("timer"), () => true);
+  await wait(30);
+  cleanupDone();
+  const cleanupFlushed = schedulePendingSave("work", 1000, () => written.push("flushed"), () => true);
+  await flushPendingSaves();
+  cleanupFlushed();
+  assert.deepEqual(written, ["work A", "timer", "flushed"], "a save that already ran must not run again on cleanup");
+}
+
 // 何も待っていなければ、すぐ終わる。
 await flushPendingSaves();
 
