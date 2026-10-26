@@ -12,10 +12,12 @@
 - **確認された対象と挙動:** プラグインの受け口の分離（`docs/PLUGIN_HOST_SEPARATION_PLAN.md` の癖2）で、コードを読んで見つけた（実機では確かめていない）。本文は Rust の保存の記録（`save_journal`）で閉じるときに書き切るが、アンカーの 0.18 秒の保存待ち（`persistPluginAnchors`）には閉じるときの書き出しがない。次に開いたとき、本文とアンカーの位置がずれ、前後の文字列からのつなぎ直しに頼ることになる。
 - **状態:** 記録のみ（確認1で決めた）。直すには、閉じるときに画面の側の保存を待つ仕組み（Rust の `CloseRequested`）が要る。
 
-## 2026-10-26: プラグインの `anchors.delete` は、消せたときも false を返す
+## 2026-10-26: プラグインの `anchors.delete` が、消せたときも false を返す
 
 - **確認された対象と挙動:** プラグインの受け口の分離（`docs/PLUGIN_HOST_SEPARATION_PLAN.md` の癖4）の自動テストで見つけ、QA 用アプリでも確かめた（`.then/anchors.json` からは消えて `anchors: []` になったのに、答えは false）。`handlePluginRequest` は、消した後の一覧を `persistPluginAnchors` に渡してから、その数を `pluginAnchorsRef.current` の数と比べる。`persistPluginAnchors` が ref を先に新しい一覧へ書き換えるので、2つの数はいつも同じになる。SDK の型は `Promise<boolean>`。答えを使っているプラグイン（`docs/plugin-example`）はない。
-- **状態:** 未対応（分離では直さず、今の答えを `test:plugin-host` で固定した）。
+- **修正:** `src/plugins/pluginHostActions.ts` で、`persistPluginAnchors` を呼ぶ前に数を比べる。
+- **確認:** `test:plugin-host`（修正前に落ちることを確かめた）。QA 用アプリで、アンカーを消すと true、同じアンカーをもう一度消すと false になることを確かめた。
+- **状態:** 修正済み（`refactor/plugin-host`）。
 
 ## 2026-10-25: アプリ内ダイアログが重なると、先に出ていたほうの処理が答えをもらえずに止まる
 

@@ -16,7 +16,7 @@
 | 7 | 実施 | 済み |
 | 8 | 自動テスト | 済み |
 | 9 | 実機確認 | 済み |
-| 10 | 完了（確認2） | 確認待ち |
+| 10 | 完了（確認2） | 済み（2026-10-26） |
 
 ## 工程1: 調査の結果
 
@@ -243,6 +243,8 @@ App に残る、プラグインへの「送り出し」側（今回は動かさ�
 2. 癖1: このブランチで、分離の後に直す。
 3. 癖2: 記録だけにする。
 
+確認2（2026-10-26）で、実施の途中で見つけた癖4もこのブランチで直してから、push して PR を作ることになった。
+
 ## 工程7: 実施
 
 | コミット | 内容 |
@@ -253,6 +255,8 @@ App に残る、プラグインへの「送り出し」側（今回は動かさ�
 | `1e019ba` | `test:` `test:plugin-host` |
 | `53916e6` | `test:` 癖1（今は落ちる） |
 | `de22947` | `fix:` 癖1 |
+| `18e5dd7` | `test:` 癖4（今は落ちる） |
+| `7916fa5` | `fix:` 癖4 |
 
 - App.tsx は 9416 行から 8831 行へ（585 行減）。新しいファイルは、純粋な処理 49 行、フック 286 行（癖1の修正を含む）、受け口 495 行。
 - 元と同じであることの確かめ方: 3つの `refactor:` のコミットごとに `move-lines.mjs` で移し、`verify-move.mjs` で突き合わせた。どれも lost 0。added は import の行、`usePluginHost(...)` と `createPluginHostActions(...)` の呼び出しの行、新しいファイルの枠（import、引数の型、`return`）だけ。
@@ -262,7 +266,7 @@ App に残る、プラグインへの「送り出し」側（今回は動かさ�
   - App で使わなくなった import（型 9 つ、`createThenPluginAnchor`、`resolveThenPluginAnchor`、`isValidThenPluginKeybinding`、`ThenPluginRuntimeHostHandle`）を消した。`ThenPluginIcon` は1つ目のコミットから使われていなかったので、2つ目で消した。
 - 癖1の直し方（`de22947`）: アンカーのファイルが読めない（`load_plugin_anchors` が失敗する、または `version` が 1 でない・`anchors` が配列でない）作品を `pluginAnchorUnreadableRootRef` で覚え、その作品では 0.18 秒後の保存も、作品を切り替えるときの保存もしない。形が違うときは「アンカーの読み込みに失敗しました: 対応していない形式です」を出す。作品を開き直すたびに覚えた値を消して、読み直す。
 - 実施の途中で見つけた癖（工程2の5に足す）:
-  4. **`anchors.delete` は、消せたときも false を返す**（自動テストで確かめた）。`persistPluginAnchors` が ref を先に新しい一覧へ書き換えるため、比べる2つの数がいつも同じになる。SDK の型は `Promise<boolean>` だが、答えを使っているプラグイン（`docs/plugin-example`）はない。分離では直さず、今の答え（false）をテストで固定した。
+  4. **`anchors.delete` は、消せたときも false を返す**（自動テストで確かめた）。`persistPluginAnchors` が ref を先に新しい一覧へ書き換えるため、比べる2つの数がいつも同じになる。SDK の型は `Promise<boolean>` だが、答えを使っているプラグイン（`docs/plugin-example`）はない。分離のあいだは直さず、今の答え（false）をテストで固定した。確認2で直すことになり、`7916fa5` で、`persistPluginAnchors` を呼ぶ前に数を比べるようにした。消したかどうかに関係なく保存する点は変えていない。
 
 ## 工程8: 自動テスト
 
@@ -279,7 +283,9 @@ esbuild で `pluginHostActions.ts` と `usePluginHost.ts` を束ね、`invoke` �
 | 受け口の権限の確かめを外す（`pluginHostActions.ts`） | 「権限がありません: commands」で断ること（Missing expected rejection） |
 | 作品を切り替えるときの、前の作品への保存を消す（`usePluginHost.ts`） | 「a pending save must go to the previous work when switching」 |
 
-癖1のテストは、直す前のコミット `53916e6` で「broken: an unreadable anchor file must not be overwritten」で落ち、`de22947` で通った。
+癖1のテストは、直す前のコミット `53916e6` で「broken: an unreadable anchor file must not be overwritten」で落ち、`de22947` で通った。癖4のテスト（あるアンカーを消すと true、ないアンカーなら false）は、`18e5dd7` で「deleting an existing anchor must answer true」で落ち、`7916fa5` で通った。
+
+癖4の修正は受け口の1行なので、「後」の一式は動かし直さず、`npx tsc --noEmit`、`test:plugin-host`、`test:v061-plugins`、`test:project-entry-actions` を動かした（どれも通った）。下の比較の表は `de22947` の時点のもの。
 
 ### 前後の比較
 | | 前（`a931e22`） | 後（`de22947`） |
@@ -326,7 +332,7 @@ esbuild で `pluginHostActions.ts` と `usePluginHost.ts` を束ね、`invoke` �
 
 ### 今の挙動の癖を実機で確かめた結果
 - 癖1: 上の表のとおり、直した後の挙動を確かめた。
-- 癖4: `anchors.delete` は `del:false` を返し、`anchors.json` からは消えて `anchors: []` になった。
+- 癖4: 直す前は、`anchors.delete` が `del:false` を返し、`anchors.json` からは消えて `anchors: []` になった。直した後（`7916fa5`）は、QA 用アプリを build し直して同じ一時ライブラリで確かめた。アンカーを作って消すと `del:true`（ファイルのアンカーは 1 から 0）、同じアンカーをもう一度消すと `del:false`。片付けの後の残りは、どれも 0。
 - 癖2: 確かめていない（0.18 秒以内に閉じる操作を作れない。記録だけ）。
 - 癖3: 確かめていない（開発のときだけの違い）。
 
@@ -343,6 +349,7 @@ esbuild で `pluginHostActions.ts` と `usePluginHost.ts` を束ね、`invoke` �
 ### 変わったもの
 - App.tsx から、プラグインの受け口（`handlePluginRequest`）、読み込み（`reloadInstalledPlugins`）、導入と削除、アンカーの保存を、`src/plugins/usePluginHost.ts`・`src/plugins/pluginHostActions.ts`・`src/plugins/pluginHostModel.ts` へ移した。App.tsx は 585 行減った。
 - 癖1（読めないアンカーのファイルを上書きして消す）を直した。
+- 癖4（`anchors.delete` が消せたときも false を返す）を直した。
 
 ### 確かめたこと
 - 移したコードが元と同じこと（verify-move、lost 0）。
@@ -352,6 +359,5 @@ esbuild で `pluginHostActions.ts` と `usePluginHost.ts` を束ね、`invoke` �
 ### 残っている別の作業
 | 作業 | 理由 |
 |---|---|
-| 癖4（`anchors.delete` が消せたときも false を返す） | 分離の途中で見つけた。直すなら、`persistPluginAnchors` を呼ぶ前の数と比べる。答えが変わるので、利用者の判断が要る |
 | 癖2（閉じる直前のアンカーの書き換えが保存されない） | 確認1で記録だけにした。閉じるときの書き出しの仕組みが要る |
 | プラグインへの送り出し側（本文・選択範囲の知らせ、ショートカット、JSX）の分離 | 今回の範囲の外。エディタの処理と結び付いている |
