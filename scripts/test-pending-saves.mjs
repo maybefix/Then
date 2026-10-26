@@ -10,7 +10,7 @@ const bundled = await build({
   platform: "neutral",
   write: false,
 });
-const { setPendingSave, clearPendingSave, flushPendingSaves } = await import(
+const { setPendingSave, clearPendingSave, flushPendingSaves, schedulePendingSave } = await import(
   `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`
 );
 
@@ -76,6 +76,38 @@ const { setPendingSave, clearPendingSave, flushPendingSaves } = await import(
   });
   await flushPendingSaves();
   assert.deepEqual(written, ["cursor", "app-state"]);
+}
+
+// schedulePendingSave: 待ってから書く。閉じる前なら待たずに書き、待っていた分は書かない。取り消せる。
+{
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const written = [];
+  schedulePendingSave("later", 20, () => written.push("later"));
+  await wait(40);
+  assert.deepEqual(written, ["later"], "the save must run after the delay");
+  await flushPendingSaves();
+  assert.deepEqual(written, ["later"], "a save that already ran must not run again");
+
+  schedulePendingSave("now", 1000, () => written.push("now"));
+  await flushPendingSaves();
+  assert.deepEqual(written, ["later", "now"], "flushing must run a waiting save at once");
+  await wait(30);
+
+  const cancel = schedulePendingSave("cancelled", 20, () => written.push("cancelled"));
+  cancel();
+  await wait(40);
+  await flushPendingSaves();
+  assert.deepEqual(written, ["later", "now"], "a cancelled save must not run");
+
+  // 書き換えのたびに取り消して待ち直す（useEffect の後片付けと同じ）。最後の値だけを書く。
+  let cancelPrevious = () => {};
+  for (const value of [1, 2, 3]) {
+    cancelPrevious();
+    cancelPrevious = schedulePendingSave("latest", 1000, () => written.push(`latest ${value}`));
+  }
+  await flushPendingSaves();
+  assert.deepEqual(written.slice(2), ["latest 3"]);
+  cancelPrevious();
 }
 
 // 何も待っていなければ、すぐ終わる。
