@@ -15,8 +15,8 @@
 | 6 | 人の確認（確認1） | 済み |
 | 7 | 実施 | 済み |
 | 8 | 自動テスト | 済み |
-| 9 | 実機確認 | 途中 |
-| 10 | 完了（確認2） | |
+| 9 | 実機確認 | 済み |
+| 10 | 完了（確認2） | 待ち |
 
 ## 工程1: 調査の結果
 
@@ -197,4 +197,34 @@
 | 新しい失敗 | 0 |
 
 いちばん大きい JavaScript は 710,745 → 710,754 バイト。残ったプロセスは前後とも0。
+
+## 工程9: 実機確認
+
+QA 用アプリ `local.then.qa.startupidea1026`（`0b968d7` から build）。一時ライブラリに作品A・作品Bを置き、どちらの作品にも「外で足したIdea」を入れて、Rust の書き方（項目のキーが名前の順）の `default.json` の並び順の先頭に置いた。アプリ状態の `snippets` は［作品Aのメモ, アプリ状態にだけ残ったIdea］（外で足した Idea がなく、作品にない Idea がある）。設定は既定（起動画面を出す）。操作の前後で、両方の作品の `.then/project.json` と `.then/reference-layouts/default.json`（と `.bak`）のハッシュと更新時刻を写し取って比べた。
+
+| 確認したこと | 結果 |
+|---|---|
+| 起動画面の「前回の執筆を続ける作品A」で開く（記録の再現の手順） | 作品Aのインボックスは「作品Aの外で足したIdea」「作品Aのメモ」の順で、一覧の行も「作品Aの外で足したIdea」。4つのファイルとも書かれず（ハッシュ・更新時刻が同じ）、`.bak` もできなかった。作品Aの `project.json` に「アプリ状態にだけ残ったIdea」は入っていない |
+| 何も変えずに作品B → 作品A と切り替える | 作品Bは「作品Bの外で足したIdea」「作品Bのメモ」の順。4つのファイルとも書かれていない |
+| 作品Aで「実機で足したIdea」を追加し、2.5 秒待つ | 作品Aの `project.json` と `default.json` に入り、並び順の先頭になった。`.bak` は1つ前の中身。作品Bのファイルは書かれていない |
+| 止めて、アプリ状態を見る | `snippets` は作品Aの3つの Idea で、「アプリ状態にだけ残ったIdea」はない |
+| 止めているあいだに、作品Aに「再起動の前に外で足したIdea」を足して並び順の先頭に置き、起動画面を飛ばす設定にして起動する | 「再起動の前に外で足したIdea」が先頭のまま。ファイルは書かれていない |
+
+### 確かめられなかったこと
+- 別の作品のファイルを開く入口（`setWorkspaceFromDocumentPath`）。「ファイルを開く」「保存」「名前を付けて保存」のどれも OS のファイル選択を通るため。自動テストの場面4で代えた。
+- 開いていたファイルの読み込みが 0.7 秒より長いとき（工程3の2）。実機で読み込みを遅くする手立てがないため。自動テストの場面2で代えた。
+
+### 片付け
+`q.mjs stop` のあと `qa-cleanup.mjs` で、QA の Then・WebView2・テストの node と Edge・%TEMP% のテストのプロファイルがすべて0、`%APPDATA%` と `%LOCALAPPDATA%` の `local.then.qa.startupidea1026` と一時ライブラリを消した。この worktree の `src-tauri/target/release/Then.exe` は QA 用（`local.then.qa.startupidea1026`）。`git status` に変更はない（`src-tauri/Cargo.toml` の改行は `qa-build.mjs` が戻した）。
+
+## 工程10: 完了
+
+- 変わったもの: `src/App.tsx`（`restoreWorkspaceFromState`・`setWorkspaceFromDocumentPath` の中の順番）、`scripts/test-startup-idea-order.mjs`（新しい）、`package.json`、`docs/KNOWN_ISSUES.md`、この手順書。保存形式・UI・文言・Rust は変えていない。
+- 確かめたこと: 工程8と工程9。
+
+| 残っている別の作業 | 記録 |
+|---|---|
+| 作品を開くと、中身が同じでも保存の命令を出す（Rust が書かないので、ファイルは書かれない） | 工程2の5 |
+| カーソル位置は、動かしてから 0.6 秒以内に別のファイルへ移ると覚えられない | `docs/SAVE_ON_WORK_SWITCH_FIX_PLAN.md` の工程2の5 |
+| 子の窓の側の遅延保存 | `docs/ANCHOR_SAVE_ON_CLOSE_FIX_PLAN.md` の癖3 |
 
