@@ -28,7 +28,7 @@ import {
   useState,
 } from "react";
 import { manageAsyncRegistration } from "./utils/asyncRegistration";
-import { clearPendingSave, flushPendingSaves, setPendingSave } from "./pendingSaves";
+import { flushPendingSaves, schedulePendingSave } from "./pendingSaves";
 import { useVerticalMetricFontFamily } from "./utils/verticalMetricFonts";
 import { buildAppShellStyle } from "./appShellStyle";
 import { isRestorableRightSidebarTab } from "./utils/rightSidebarState";
@@ -1051,7 +1051,6 @@ function nextCanvasPlacement(board: JsonCanvasDocument) {
 
 export default function App() {
   const saveTimerRef = useRef<number | null>(null);
-  const referenceSaveTimerRef = useRef<number | null>(null);
   const referenceLayoutLoadedRootRef = useRef<string | null>(null);
   // 読み込んだままのレイアウト。これと同じあいだは保存しない。
   const referenceLayoutOnDiskRef = useRef<ReferenceLayout | null>(null);
@@ -2903,26 +2902,11 @@ export default function App() {
     // Opening a project does not rewrite its file (and its .bak) while nothing has changed.
     if (referenceLayout === referenceLayoutOnDiskRef.current) return;
 
-    if (referenceSaveTimerRef.current) {
-      window.clearTimeout(referenceSaveTimerRef.current);
-    }
-
-    referenceSaveTimerRef.current = window.setTimeout(() => {
-      saveReferenceLayout(rootPath, referenceLayout)
-        .catch((error) => {
-          setLastError(String(error));
-        })
-        .finally(() => {
-          referenceSaveTimerRef.current = null;
-        });
-    }, 700);
-
-    return () => {
-      if (referenceSaveTimerRef.current) {
-        window.clearTimeout(referenceSaveTimerRef.current);
-        referenceSaveTimerRef.current = null;
-      }
-    };
+    return schedulePendingSave("reference-layout", 700, () =>
+      saveReferenceLayout(rootPath, referenceLayout).catch((error) => {
+        setLastError(String(error));
+      }),
+    );
   }, [isHydrated, projectFolder?.path, referenceLayout]);
 
   useEffect(() => {
