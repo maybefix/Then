@@ -135,9 +135,13 @@ try {
   const open = async (layoutMode) => {
     await page.send("Page.navigate", { url: appUrl });
     await sleep(1200);
+    // The app saves its state about 0.7 s after loading. Stop this page from writing until the
+    // reload, or that save can land after ours and bring back the default settings.
     await evaluate(`(() => {
+      const setItem = Storage.prototype.setItem;
       localStorage.clear();
-      localStorage.setItem("then.app-state.v1", JSON.stringify({ settings: {
+      Storage.prototype.setItem = Storage.prototype.removeItem = Storage.prototype.clear = () => {};
+      setItem.call(localStorage, "then.app-state.v1", JSON.stringify({ settings: {
         writingMode: "vertical-rl", editorDisplayMode: "continuous", typewriterScroll: false, showComments: true,
         manuscript: { layoutMode: ${JSON.stringify(layoutMode)}, charactersPerLine: 20, linesPerPage: 20, showGrid: true, showPageBoundaries: true },
       } }));
@@ -161,6 +165,9 @@ try {
       return true;
     })()`);
     assert.ok(opened, "editor did not open");
+    const settings = await evaluate(`JSON.parse(localStorage.getItem("then.app-state.v1") ?? "null")?.settings ?? null`);
+    assert.ok(settings?.typewriterScroll === false && settings?.manuscript?.layoutMode === layoutMode,
+      `${layoutMode}: the test settings must survive the reload (typewriterScroll ${settings?.typewriterScroll}, layoutMode ${settings?.manuscript?.layoutMode})`);
     const text = await evaluate(`(() => { const parts = []; document.querySelector(".ProseMirror").editor.state.doc.forEach((n) => parts.push(n.textContent)); return parts.join("\\n"); })()`);
     assert.equal(text, SOURCE, `${layoutMode}: the pasted text must be kept as written`);
     return evaluate(`document.querySelectorAll(".manuscriptPageBoundary").length`);
@@ -190,12 +197,19 @@ try {
   })()`);
   let lastDrag = null;
 
-  /** Scrolls the editor sideways so the midpoint of `chars` sits in the middle of the viewport. */
+  /**
+   * Scrolls the editor sideways so the midpoint of `chars` sits in the middle of the viewport,
+   * unless every one of them can already be pressed: off screen or under a sidebar counts as hidden.
+   */
   const reveal = async (...chars) => {
     const rects = [];
     for (const char of chars) rects.push(await rectOf(char));
+    const hidden = await evaluate(`(() => {
+      const root = document.querySelector(".ProseMirror");
+      return ${JSON.stringify(rects)}.some((r) => !root.contains(document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2)));
+    })()`);
+    if (!hidden) return;
     const xs = rects.flatMap((r) => [r.left, r.right]);
-    if (xs.every((x) => x >= 0 && x <= 2400)) return;
     const mid = (Math.min(...xs) + Math.max(...xs)) / 2;
     await evaluate(`(() => {
       let el = document.querySelector(".ProseMirror");
