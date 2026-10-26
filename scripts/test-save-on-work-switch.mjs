@@ -310,7 +310,21 @@ try {
   const bodiesBackInA = await evaluate(`(async () => { await t.sleep(300); return t.ideaText(); })()`);
   if (DEBUG) console.log("back in A", bodiesBackInA);
 
-  const all = [...savesAfterIdea, ...savesAfterPlot];
+  // ---- 4. 同じ作品の中で Idea を続けて足すと、待ち直して最後に1回だけ書く ----
+  await evaluate("window.__saves.length = 0; 1");
+  await evaluate(`(async () => {
+    for (const body of ["続けて足すIdea一", "続けて足すIdea二"]) {
+      t.addIdea(body);
+      await t.waitFor(() => [...t.ideaList().querySelectorAll(".ideaCapture button")].some((button) => button.textContent.trim() === "追加" && !button.disabled), "add button");
+      t.clickAddIdea();
+      await t.sleep(200);
+    }
+    await t.sleep(1500);
+  })()`);
+  const savesSameWork = await evaluate("window.__saves.splice(0)");
+  if (DEBUG) console.log("same work", savesSameWork.map((save) => `${save.at} ${save.command} ${save.root}`));
+
+  const all = [...savesAfterIdea, ...savesAfterPlot, ...savesSameWork];
   const to = (saves, root, command) => saves.filter((save) => save.root === root && save.command === command);
   // 最後に、作品ごとの保存先（ディスクの代わり）に残ったもの。
   const stored = await evaluate("JSON.stringify(window.__works)").then(JSON.parse);
@@ -342,6 +356,11 @@ try {
   // 相手の作品の保存先は、元のまま。
   assert.deepEqual(stored[WORK_A].plotCards.map((card) => card.title), ["作品Aの章"], "作品Aのプロットは元のまま");
   assert.deepEqual(stored[WORK_B].snippets.flatMap((thread) => thread.fragments.map((fragment) => fragment.body)), ["作品Bのメモ"], "作品Bの Idea は元のまま");
+
+  // 同じ作品の中では、今までどおり待ち直す（書き換えのたびには書かない）。
+  const sameWorkIdea = to(savesSameWork, WORK_A, "save_project_snippets");
+  assert.equal(sameWorkIdea.length, 1, `同じ作品の中で続けて足した Idea は、最後に1回だけ書く（${sameWorkIdea.length}回）`);
+  assert.ok(sameWorkIdea[0].body.includes("続けて足すIdea一") && sameWorkIdea[0].body.includes("続けて足すIdea二"), "その1回に、続けて足した Idea が両方入っている");
 
   assert.deepEqual(pageErrors, [], "the page throws no errors");
   socket.close();
