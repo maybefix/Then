@@ -25,3 +25,18 @@ export async function flushPendingSaves() {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 }
+
+/** delayMs 待ってから save を呼ぶ。閉じる前なら待たずに呼ぶ。返す関数で取り消す（useEffect の後片付けに使う）。 */
+export function schedulePendingSave(key: string, delayMs: number, save: PendingSave): () => void {
+  const saveNow = () => {
+    clearTimeout(timer);
+    clearPendingSave(key, saveNow);
+    return save();
+  };
+  const timer = setTimeout(saveNow, delayMs);
+  setPendingSave(key, saveNow);
+  return () => {
+    clearTimeout(timer);
+    clearPendingSave(key, saveNow);
+  };
+}
