@@ -3101,10 +3101,6 @@ export default function App() {
       });
       // 旧版のワークスペースはそのまま開かず、取り込みへ誘導する。
       if (!folder.library) return "outsideLibrary";
-      setProjectFolder(folder);
-      setSearchScope("file");
-      setProjectSearchQuery("");
-      setWorkspaceAlert(null);
       const restoredSnippets =
         state.settings.snippetStorageMode === "workspace"
           ? await loadWorkspaceSnippets(folder.path)
@@ -3118,14 +3114,6 @@ export default function App() {
         revision: restoredFileProgress.revision,
         contentHash: restoredFileProgress.contentHash,
       });
-      setSnippetWorkspacePath(
-        state.settings.snippetStorageMode === "workspace" ? folder.path : null,
-      );
-      setPlotWorkspacePath(folder.path);
-      setPlotCards(restoredPlotCards);
-      setProofreadTermsWorkspacePath(folder.path);
-      setProjectProofreadTerms(restoredProofreadTerms);
-      setProjectProofreadIgnored(restoredProofreadIgnored);
 
       const restoredState: AppState = {
         ...state,
@@ -3155,6 +3143,20 @@ export default function App() {
           ];
       const nextTab = nextTabs[restoredTabs?.activeIndex ?? 0] ?? nextTabs[0];
 
+      // 作品のパスは、作品の Idea などと同じ描画で入れる。先に入れると、そのあいだに資料ボードの整合処理や
+      // 作品の Idea の保存が、アプリ状態に残った Idea を作品の Idea とみなして動く。
+      setProjectFolder(folder);
+      setSearchScope("file");
+      setProjectSearchQuery("");
+      setWorkspaceAlert(null);
+      setSnippetWorkspacePath(
+        state.settings.snippetStorageMode === "workspace" ? folder.path : null,
+      );
+      setPlotWorkspacePath(folder.path);
+      setPlotCards(restoredPlotCards);
+      setProofreadTermsWorkspacePath(folder.path);
+      setProjectProofreadTerms(restoredProofreadTerms);
+      setProjectProofreadIgnored(restoredProofreadIgnored);
       didMountEditorRef.current = false;
       setFocusedFolderPath(nextTab.path ? null : folder.path);
       setOpenTabs(nextTabs);
