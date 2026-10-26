@@ -175,6 +175,7 @@ import {
   makeReferenceLink,
   normalizedReferenceKey,
   reconcileIdeaThreadLayouts,
+  sameIdeaThreadLayouts,
 } from "./ideaReferenceModel";
 import {
   defaultIdeaThreads,
@@ -2926,7 +2927,7 @@ export default function App() {
         snippets,
         referenceCandidates.filter((file) => file.scope === "project" && file.imported),
       );
-      if (JSON.stringify(ideaThreads) === JSON.stringify(current.ideaThreads)) return current;
+      if (sameIdeaThreadLayouts(ideaThreads, current.ideaThreads)) return current;
       return { ...current, version: 3, ideaThreads };
     });
   }, [projectFolder?.path, referenceCandidates, snippets]);
