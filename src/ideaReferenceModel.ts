@@ -175,6 +175,18 @@ export function reconcileIdeaThreadLayouts(
 }
 
 /**
+ * 並び順が同じか。Rust は並び順の項目を serde_json::Value のまま読み書きし、キーを名前の順に
+ * 並べ替えるので、整合処理が作り直した項目とはキーの順だけが違う。キーの順は見ない。
+ */
+export function sameIdeaThreadLayouts(a: IdeaThreadLayout[], b: IdeaThreadLayout[]): boolean {
+  const sortedKeys = (_key: string, value: unknown) =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? Object.fromEntries(Object.entries(value).sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)))
+      : value;
+  return JSON.stringify(a, sortedKeys) === JSON.stringify(b, sortedKeys);
+}
+
+/**
  * 並び順と資料ボードの Idea カードを、指定した「Ideaの管理単位」の側に合わせる。
  * スレッドの ID は管理単位ごとに別（受信箱だけは同じ ID）なので、違う側のまま整合処理に
  * かけると並び順が崩れる。違う側なら、表示していた側を預け、預けていた側を出す。

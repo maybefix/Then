@@ -28,6 +28,7 @@ import {
   useState,
 } from "react";
 import { manageAsyncRegistration } from "./utils/asyncRegistration";
+import { flushPendingSaves, schedulePendingSave } from "./pendingSaves";
 import { useVerticalMetricFontFamily } from "./utils/verticalMetricFonts";
 import { buildAppShellStyle } from "./appShellStyle";
 import { isRestorableRightSidebarTab } from "./utils/rightSidebarState";
@@ -174,6 +175,7 @@ import {
   makeReferenceLink,
   normalizedReferenceKey,
   reconcileIdeaThreadLayouts,
+  sameIdeaThreadLayouts,
 } from "./ideaReferenceModel";
 import {
   defaultIdeaThreads,
@@ -278,36 +280,15 @@ import { createLoadedExportSource } from "./export/exportSource";
 import CanvasWindowApp from "./CanvasWindowApp";
 import type { DraftCanvasContext } from "./intermediateDraft";
 import { LinkedExportScreen } from "./components/export/LinkedExportScreen";
-import {
-  ThenPluginRuntimeHost,
-  type ThenPluginRuntimeHostHandle,
-} from "./plugins/PluginRuntimeHost";
+import { ThenPluginRuntimeHost } from "./plugins/PluginRuntimeHost";
 import { PluginIcon } from "./components/plugins/PluginIcon";
 import { AppIcon } from "./components/layout/AppIcon";
 import { mergeReferenceFiles, referenceFileKey, referenceKey } from "./referenceFileKeys";
-import {
-  computeTextChange,
-  createThenPluginAnchor,
-  mapAnchorsThroughTextChange,
-  resolveThenPluginAnchor,
-} from "./plugins/anchors";
-import {
-  isValidThenPluginKeybinding,
-  matchesThenPluginKeybinding,
-} from "./plugins/keybindings";
-import type {
-  LoadedThenPlugin,
-  ThenPluginAnchor,
-  ThenPluginAnchorStore,
-  ThenPluginCommand,
-  ThenPluginHostRequest,
-  ThenPluginIcon,
-  ThenPluginManifest,
-  ThenPluginModal,
-  ThenPluginScreen,
-  ThenPluginStatusItem,
-  ThenPluginView,
-} from "./plugins/types";
+import { computeTextChange, mapAnchorsThroughTextChange } from "./plugins/anchors";
+import { pluginDocumentPath } from "./plugins/pluginHostModel";
+import { usePluginHost } from "./plugins/usePluginHost";
+import { createPluginHostActions } from "./plugins/pluginHostActions";
+import { matchesThenPluginKeybinding } from "./plugins/keybindings";
 import {
   exportDocxWithDialog,
   exportPdfWithVivliostyle,
@@ -592,51 +573,6 @@ const CLOSED_DOCUMENT_TAB_LIMIT = 10;
 function isClosedTabInWorkspace(record: ClosedDocumentTab, workspacePath: string | null) {
   if (!record.workspacePath || !workspacePath) return record.workspacePath === workspacePath;
   return isSamePath(record.workspacePath, workspacePath);
-}
-
-function pluginDocumentPath(rootPath: string, absolutePath: string): string | null {
-  const root = normalizePathForCompare(rootPath);
-  const target = normalizePathForCompare(absolutePath);
-  if (target === root || !target.startsWith(`${root}\\`)) return null;
-  return absolutePath
-    .replace(/[\\/]+/g, "/")
-    .slice(rootPath.replace(/[\\/]+/g, "/").replace(/\/+$/, "").length + 1);
-}
-
-function pluginPermissionForMethod(method: string): ThenPluginManifest["permissions"][number] | null {
-  if (method === "editor.getSelection") return "document:selection";
-  if (method === "editor.moveCursor") return "document:navigate";
-  if (method.startsWith("anchors.")) return "document:anchors";
-  if (method.startsWith("views.")) return "views";
-  if (method.startsWith("statusbar.")) return "statusbar";
-  if (method.startsWith("storage.")) return "storage";
-  if (method.startsWith("commands.")) return "commands";
-  return null;
-}
-
-function objectArgs(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
-function pluginViewIcon(value: unknown): ThenPluginIcon | undefined {
-  if (value === undefined) return undefined;
-  const icon = objectArgs(value);
-  const paths = icon.paths;
-  const isValid = Array.isArray(paths)
-    && paths.length >= 1
-    && paths.length <= 8
-    && paths.every((path) =>
-      typeof path === "string"
-      && path.trim().length >= 1
-      && path.length <= 1024
-      && /^[A-Za-z0-9\s.,+-]+$/.test(path),
-    );
-  if (!isValid) {
-    throw new Error("view iconは1〜8本のSVG path dataで指定してください");
-  }
-  return { paths: paths as string[] };
 }
 
 function isPathInsideFolder(path: string, folderPath: string): boolean {
@@ -1115,8 +1051,6 @@ function nextCanvasPlacement(board: JsonCanvasDocument) {
 }
 
 export default function App() {
-  const saveTimerRef = useRef<number | null>(null);
-  const referenceSaveTimerRef = useRef<number | null>(null);
   const referenceLayoutLoadedRootRef = useRef<string | null>(null);
   // 読み込んだままのレイアウト。これと同じあいだは保存しない。
   const referenceLayoutOnDiskRef = useRef<ReferenceLayout | null>(null);
@@ -1135,24 +1069,14 @@ export default function App() {
   const portableProjectMutationGenerationRef = useRef<Map<string, number>>(new Map());
   const workspaceSwitchInProgressRef = useRef(false);
   const workspaceSwitchGenerationRef = useRef(0);
+  // 描画の直後の、開いている作品のパス。作品ごとの遅延保存の後片付けが、作品が変わったかを見る。
+  const openProjectPathRef = useRef<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const typewriterScrollFrameRef = useRef<number | null>(null);
   const nativeFullscreenRequestedRef = useRef(false);
   const nativeFullscreenRequestIdRef = useRef(0);
   const restoreMaximizedAfterFullscreenRef = useRef(false);
   const editorInstanceRef = useRef<TextEditorHandle | null>(null);
-  const pluginRuntimeHostRef = useRef<ThenPluginRuntimeHostHandle | null>(null);
-  const pluginWorkspacePathRef = useRef<string | null>(null);
-  const pluginAnchorSaveTimerRef = useRef<number | null>(null);
-  const pluginAnchorSaveRootRef = useRef<string | null>(null);
-  const pluginAnchorsRef = useRef<ThenPluginAnchor[]>([]);
-  const pluginAnchorMutationVersionRef = useRef(0);
-  const pluginCommandsRef = useRef<ThenPluginCommand[]>([]);
-  const pluginStorageQueuesRef = useRef<Map<string, Promise<void>>>(new Map());
-  const pluginActiveDocumentRef = useRef<{ path: string | null; text: string }>({
-    path: null,
-    text: "",
-  });
   const editorShellRef = useRef<HTMLDivElement | null>(null);
   const editorContextMenuRef = useRef<HTMLDivElement | null>(null);
   const editorFindInputRef = useRef<HTMLInputElement | null>(null);
@@ -1202,17 +1126,6 @@ export default function App() {
   const [closedDocumentTabs, setClosedDocumentTabs] = useState<ClosedDocumentTab[]>([]);
   const isClosingDocumentTabsRef = useRef(false);
   const [projectFolder, setProjectFolder] = useState<ProjectFolder | null>(null);
-  const [loadedPlugins, setLoadedPlugins] = useState<LoadedThenPlugin[]>([]);
-  const [pluginCommands, setPluginCommands] = useState<ThenPluginCommand[]>([]);
-  const [pluginViews, setPluginViews] = useState<ThenPluginView[]>([]);
-  const [pluginScreens, setPluginScreens] = useState<ThenPluginScreen[]>([]);
-  const [pluginModals, setPluginModals] = useState<ThenPluginModal[]>([]);
-  const [pluginStatusItems, setPluginStatusItems] = useState<ThenPluginStatusItem[]>([]);
-  const [activePluginScreenKey, setActivePluginScreenKey] = useState<string | null>(null);
-  const [activePluginModalKey, setActivePluginModalKey] = useState<string | null>(null);
-  const [sidebarPluginRuntimeAnchor, setSidebarPluginRuntimeAnchor] = useState<HTMLDivElement | null>(null);
-  const [screenPluginRuntimeAnchor, setScreenPluginRuntimeAnchor] = useState<HTMLDivElement | null>(null);
-  const [pluginAnchors, setPluginAnchors] = useState<ThenPluginAnchor[]>([]);
   const [projectAst, setProjectAst] = useState<ProjectAst | null>(null);
   const [checkpointCurrentProjectFiles, setCheckpointCurrentProjectFiles] = useState<ReadonlyMap<string, CheckpointCurrentProjectFile>>(() => new Map());
   const [checkpointCurrentProjectStatus, setCheckpointCurrentProjectStatus] = useState<CheckpointCurrentProjectStatus>("idle");
@@ -1388,56 +1301,49 @@ export default function App() {
   const [draftSelectRequest, setDraftSelectRequest] = useState<{ id: string; nonce: number } | null>(null);
   const [hasOpenedDraft, setHasOpenedDraft] = useState(false);
   useEffect(() => { if (rightSidebarTab === "draft") setHasOpenedDraft(true); }, [rightSidebarTab]);
-  const activePluginView = pluginViews.find(
-    (view) => rightSidebarTab === `plugin:${view.pluginId}:${view.id}`,
-  ) ?? null;
-  const pluginSelectionCommands = pluginCommands.filter(
-    (command) => command.menus?.includes("editor.selection"),
-  );
-  const activePluginScreen = pluginScreens.find(
-    (screen) => activePluginScreenKey === `${screen.pluginId}:${screen.id}`,
-  ) ?? null;
-  const activePluginModal = pluginModals.find(
-    (modal) => activePluginModalKey === `${modal.pluginId}:${modal.id}`,
-  ) ?? null;
-  const dockedPluginRuntimeView = appMode === "plugin" && activePluginScreen
-    ? { pluginId: activePluginScreen.pluginId, viewId: activePluginScreen.id }
-    : activePluginView
-      ? { pluginId: activePluginView.pluginId, viewId: activePluginView.id }
-      : null;
-  const isDockedPluginRuntimeVisible = appMode === "plugin"
-    ? Boolean(activePluginScreen)
-    : Boolean(activePluginView) && !isRightSidebarCollapsed && !isEditorFocusMode;
-  const pluginRuntimeAnchor = appMode === "plugin"
-    ? screenPluginRuntimeAnchor
-    : sidebarPluginRuntimeAnchor;
-  const pluginRuntimeActiveView = activePluginModal
-    ? { pluginId: activePluginModal.pluginId, viewId: activePluginModal.id }
-    : dockedPluginRuntimeView;
-  useEffect(() => {
-    if (appMode === "plugin" && !activePluginScreen) {
-      setAppMode("write");
-    }
-  }, [activePluginScreen, appMode]);
-  useEffect(() => {
-    if (rightSidebarTab.startsWith("plugin:") && !activePluginView) {
-      setRightSidebarTab("plot");
-    }
-  }, [activePluginView, rightSidebarTab]);
-  useEffect(() => {
-    if (activePluginModalKey && !activePluginModal) setActivePluginModalKey(null);
-  }, [activePluginModal, activePluginModalKey]);
-  useEffect(() => {
-    if (!activePluginModal) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      setActivePluginModalKey(null);
-    };
-    window.addEventListener("keydown", closeOnEscape, true);
-    return () => window.removeEventListener("keydown", closeOnEscape, true);
-  }, [activePluginModal]);
+  const {
+    pluginRuntimeHostRef,
+    pluginAnchorsRef,
+    pluginCommandsRef,
+    pluginStorageQueuesRef,
+    pluginActiveDocumentRef,
+    loadedPlugins,
+    pluginCommands,
+    setPluginCommands,
+    pluginViews,
+    setPluginViews,
+    pluginScreens,
+    setPluginScreens,
+    pluginModals,
+    setPluginModals,
+    pluginStatusItems,
+    setPluginStatusItems,
+    activePluginScreenKey,
+    setActivePluginScreenKey,
+    activePluginModalKey,
+    setActivePluginModalKey,
+    setSidebarPluginRuntimeAnchor,
+    setScreenPluginRuntimeAnchor,
+    activePluginView,
+    pluginSelectionCommands,
+    activePluginScreen,
+    activePluginModal,
+    isDockedPluginRuntimeVisible,
+    pluginRuntimeAnchor,
+    pluginRuntimeActiveView,
+    reloadInstalledPlugins,
+    persistPluginAnchors,
+    retargetPluginAnchors,
+  } = usePluginHost({
+    projectFolder,
+    setLastError,
+    appMode,
+    setAppMode,
+    rightSidebarTab,
+    setRightSidebarTab,
+    isRightSidebarCollapsed,
+    isEditorFocusMode,
+  });
   const [isPlotManagerOpen, setIsPlotManagerOpen] = useState(false);
   const [ideaFocusRequest, setIdeaFocusRequest] = useState<{
     threadId: string;
@@ -1449,128 +1355,6 @@ export default function App() {
   // 資料のカードを本文の枠へまだ収めていない作品（枠を測れるようになるまで待つ）。
   const [referenceLayoutFitRoot, setReferenceLayoutFitRoot] = useState<string | null>(null);
   const [referenceCandidates, setReferenceCandidates] = useState<ReferenceFileInfo[]>([]);
-
-  pluginCommandsRef.current = pluginCommands;
-  pluginAnchorsRef.current = pluginAnchors;
-
-  const reloadInstalledPlugins = useCallback(async () => {
-    if (!isTauriRuntime()) {
-      setLoadedPlugins([]);
-      return true;
-    }
-    try {
-      const result = await invoke<{ plugins: LoadedThenPlugin[]; errors: string[] }>(
-        "list_installed_plugins",
-      );
-      setLoadedPlugins(result.plugins);
-      setPluginCommands([]);
-      setPluginViews([]);
-      setPluginScreens([]);
-      setPluginModals([]);
-      setActivePluginModalKey(null);
-      setPluginStatusItems([]);
-      if (result.errors.length > 0) {
-        setLastError(`読み込めないプラグインがあります: ${result.errors.join(" / ")}`);
-      }
-      return result.errors.length === 0;
-    } catch (error) {
-      setLastError(`プラグインの読み込みに失敗しました: ${String(error)}`);
-      return false;
-    }
-  }, []);
-
-  useEffect(() => {
-    void reloadInstalledPlugins();
-  }, [reloadInstalledPlugins]);
-
-  useEffect(() => {
-    const workspacePath = projectFolder?.path ?? null;
-    if (pluginWorkspacePathRef.current === workspacePath) return;
-    pluginWorkspacePathRef.current = workspacePath;
-    pluginRuntimeHostRef.current?.emit("workspace.change", {
-      name: projectFolder?.name ?? null,
-      hasProject: Boolean(projectFolder),
-    });
-  }, [projectFolder?.name, projectFolder?.path]);
-
-  useEffect(() => {
-    if (pluginAnchorSaveTimerRef.current !== null) {
-      window.clearTimeout(pluginAnchorSaveTimerRef.current);
-      pluginAnchorSaveTimerRef.current = null;
-      pluginAnchorSaveRootRef.current = null;
-    }
-    const rootPath = projectFolder?.path;
-    if (!rootPath || !isTauriRuntime()) {
-      setPluginAnchors([]);
-      return;
-    }
-    const loadVersion = ++pluginAnchorMutationVersionRef.current;
-    setPluginAnchors([]);
-    pluginAnchorsRef.current = [];
-    let cancelled = false;
-    invoke<ThenPluginAnchorStore | null>("load_plugin_anchors", { rootPath })
-      .then((store) => {
-        if (cancelled || pluginAnchorMutationVersionRef.current !== loadVersion) return;
-        setPluginAnchors(store?.version === 1 && Array.isArray(store.anchors) ? store.anchors : []);
-      })
-      .catch((error) => {
-        if (!cancelled) setLastError(`アンカーの読み込みに失敗しました: ${String(error)}`);
-      });
-    return () => {
-      cancelled = true;
-      if (
-        pluginAnchorSaveTimerRef.current !== null &&
-        pluginAnchorSaveRootRef.current === rootPath
-      ) {
-        window.clearTimeout(pluginAnchorSaveTimerRef.current);
-        pluginAnchorSaveTimerRef.current = null;
-        pluginAnchorSaveRootRef.current = null;
-        const store: ThenPluginAnchorStore = { version: 1, anchors: pluginAnchorsRef.current };
-        void invoke("save_plugin_anchors", { rootPath, store });
-      }
-    };
-  }, [projectFolder?.path]);
-
-  const persistPluginAnchors = useCallback((anchors: ThenPluginAnchor[]) => {
-    pluginAnchorMutationVersionRef.current += 1;
-    setPluginAnchors(anchors);
-    pluginAnchorsRef.current = anchors;
-    const rootPath = projectFolder?.path;
-    if (!rootPath || !isTauriRuntime()) return;
-    if (pluginAnchorSaveTimerRef.current !== null) {
-      window.clearTimeout(pluginAnchorSaveTimerRef.current);
-    }
-    pluginAnchorSaveTimerRef.current = window.setTimeout(() => {
-      pluginAnchorSaveTimerRef.current = null;
-      pluginAnchorSaveRootRef.current = null;
-      const store: ThenPluginAnchorStore = { version: 1, anchors: pluginAnchorsRef.current };
-      invoke("save_plugin_anchors", { rootPath, store }).catch((error) => {
-        setLastError(`アンカーの保存に失敗しました: ${String(error)}`);
-      });
-    }, 180);
-    pluginAnchorSaveRootRef.current = rootPath;
-  }, [projectFolder?.path]);
-
-  const retargetPluginAnchors = useCallback((oldAbsolutePath: string, newAbsolutePath: string) => {
-    if (!projectFolder) return;
-    const oldPath = toProjectRelativePath(projectFolder.path, oldAbsolutePath).replace(/[\\/]+/g, "/");
-    const newPath = toProjectRelativePath(projectFolder.path, newAbsolutePath).replace(/[\\/]+/g, "/");
-    const comparableOld = oldPath.toLocaleLowerCase();
-    let changed = false;
-    const next = pluginAnchorsRef.current.map((anchor) => {
-      const comparableAnchor = anchor.documentPath.replace(/[\\/]+/g, "/").toLocaleLowerCase();
-      if (comparableAnchor !== comparableOld && !comparableAnchor.startsWith(`${comparableOld}/`)) {
-        return anchor;
-      }
-      changed = true;
-      return {
-        ...anchor,
-        documentPath: `${newPath}${anchor.documentPath.replace(/[\\/]+/g, "/").slice(oldPath.length)}`,
-        updatedAt: Date.now(),
-      };
-    });
-    if (changed) persistPluginAnchors(next);
-  }, [persistPluginAnchors, projectFolder]);
 
   const addPlotSection = useCallback(() => {
     setPlotCards((current) => appendPlotSection(current));
@@ -3114,32 +2898,24 @@ export default function App() {
     };
   }, [isHydrated, projectFolder]);
 
+  // useLayoutEffect は、同じ描画の useEffect の後片付けより先に走る。後片付けの時点で、もう新しい作品を指す。
+  useLayoutEffect(() => {
+    openProjectPathRef.current = projectFolder?.path ?? null;
+  }, [projectFolder?.path]);
+
   useEffect(() => {
     const rootPath = projectFolder?.path ?? null;
     if (!isHydrated || !rootPath || referenceLayoutLoadedRootRef.current !== rootPath) return;
     // Opening a project does not rewrite its file (and its .bak) while nothing has changed.
     if (referenceLayout === referenceLayoutOnDiskRef.current) return;
 
-    if (referenceSaveTimerRef.current) {
-      window.clearTimeout(referenceSaveTimerRef.current);
-    }
-
-    referenceSaveTimerRef.current = window.setTimeout(() => {
-      saveReferenceLayout(rootPath, referenceLayout)
-        .catch((error) => {
-          setLastError(String(error));
-        })
-        .finally(() => {
-          referenceSaveTimerRef.current = null;
-        });
-    }, 700);
-
-    return () => {
-      if (referenceSaveTimerRef.current) {
-        window.clearTimeout(referenceSaveTimerRef.current);
-        referenceSaveTimerRef.current = null;
-      }
-    };
+    return schedulePendingSave("reference-layout", 700, () =>
+      saveReferenceLayout(rootPath, referenceLayout).catch((error) => {
+        setLastError(String(error));
+      }),
+      // 作品が変わったら、待ち直す者がいないので、この作品へ今書く。
+      () => openProjectPathRef.current !== rootPath,
+    );
   }, [isHydrated, projectFolder?.path, referenceLayout]);
 
   useEffect(() => {
@@ -3151,7 +2927,7 @@ export default function App() {
         snippets,
         referenceCandidates.filter((file) => file.scope === "project" && file.imported),
       );
-      if (JSON.stringify(ideaThreads) === JSON.stringify(current.ideaThreads)) return current;
+      if (sameIdeaThreadLayouts(ideaThreads, current.ideaThreads)) return current;
       return { ...current, version: 3, ideaThreads };
     });
   }, [projectFolder?.path, referenceCandidates, snippets]);
@@ -3325,10 +3101,6 @@ export default function App() {
       });
       // 旧版のワークスペースはそのまま開かず、取り込みへ誘導する。
       if (!folder.library) return "outsideLibrary";
-      setProjectFolder(folder);
-      setSearchScope("file");
-      setProjectSearchQuery("");
-      setWorkspaceAlert(null);
       const restoredSnippets =
         state.settings.snippetStorageMode === "workspace"
           ? await loadWorkspaceSnippets(folder.path)
@@ -3342,14 +3114,6 @@ export default function App() {
         revision: restoredFileProgress.revision,
         contentHash: restoredFileProgress.contentHash,
       });
-      setSnippetWorkspacePath(
-        state.settings.snippetStorageMode === "workspace" ? folder.path : null,
-      );
-      setPlotWorkspacePath(folder.path);
-      setPlotCards(restoredPlotCards);
-      setProofreadTermsWorkspacePath(folder.path);
-      setProjectProofreadTerms(restoredProofreadTerms);
-      setProjectProofreadIgnored(restoredProofreadIgnored);
 
       const restoredState: AppState = {
         ...state,
@@ -3379,6 +3143,20 @@ export default function App() {
           ];
       const nextTab = nextTabs[restoredTabs?.activeIndex ?? 0] ?? nextTabs[0];
 
+      // 作品のパスは、作品の Idea などと同じ描画で入れる。先に入れると、そのあいだに資料ボードの整合処理や
+      // 作品の Idea の保存が、アプリ状態に残った Idea を作品の Idea とみなして動く。
+      setProjectFolder(folder);
+      setSearchScope("file");
+      setProjectSearchQuery("");
+      setWorkspaceAlert(null);
+      setSnippetWorkspacePath(
+        state.settings.snippetStorageMode === "workspace" ? folder.path : null,
+      );
+      setPlotWorkspacePath(folder.path);
+      setPlotCards(restoredPlotCards);
+      setProofreadTermsWorkspacePath(folder.path);
+      setProjectProofreadTerms(restoredProofreadTerms);
+      setProjectProofreadIgnored(restoredProofreadIgnored);
       didMountEditorRef.current = false;
       setFocusedFolderPath(nextTab.path ? null : folder.path);
       setOpenTabs(nextTabs);
@@ -3514,17 +3292,11 @@ export default function App() {
 
   useEffect(() => {
     if (!isHydrated) return;
-    if (saveTimerRef.current) {
-      window.clearTimeout(saveTimerRef.current);
-    }
-
-    saveTimerRef.current = window.setTimeout(() => {
-      saveStoredState(appState)
-        .catch(() => {
-          setLastError("アプリ状態の保存に失敗しました");
-        });
-      saveTimerRef.current = null;
-    }, 700);
+    return schedulePendingSave("app-state", 700, () =>
+      saveStoredState(appState).catch(() => {
+        setLastError("アプリ状態の保存に失敗しました");
+      }),
+    );
   }, [appState, isHydrated]);
 
   // カーソル位置の記憶。移動が落ち着いた後に現在ファイルの位置を保存する。
@@ -3534,7 +3306,8 @@ export default function App() {
     const offset = editorSelectionHead;
     const length = editorText.length;
 
-    const timer = window.setTimeout(() => {
+    // 閉じる前に書くときも、アプリ状態へ入れる。アプリ状態の保存は、描画し直した後に載る。
+    return schedulePendingSave("cursor-position", 600, () => {
       setAppState((current) => {
         const previous = current.cursorPositions[path];
         if (previous && previous.offset === offset && previous.length === length) {
@@ -3545,61 +3318,55 @@ export default function App() {
           cursorPositions: { ...current.cursorPositions, [path]: { offset, length } },
         };
       });
-    }, 600);
-
-    return () => window.clearTimeout(timer);
+    });
   }, [currentFilePath, editorSelectionHead, editorText, isHydrated]);
 
   useEffect(() => {
     if (!isHydrated || !projectFolder || settings.snippetStorageMode !== "workspace") return;
     if (snippetWorkspacePath !== projectFolder.path) return;
 
-    const timer = window.setTimeout(() => {
+    return schedulePendingSave("workspace-idea", 700, () =>
       saveWorkspaceSnippets(projectFolder.path, snippets).catch(() => {
         setLastError("ワークスペースのスニペット保存に失敗しました");
-      });
-    }, 700);
-
-    return () => window.clearTimeout(timer);
+      }),
+      () => openProjectPathRef.current !== projectFolder.path,
+    );
   }, [isHydrated, projectFolder, settings.snippetStorageMode, snippetWorkspacePath, snippets]);
 
   useEffect(() => {
     if (!isHydrated || !projectFolder) return;
     if (plotWorkspacePath !== projectFolder.path) return;
 
-    const timer = window.setTimeout(() => {
+    return schedulePendingSave("workspace-plot", 700, () =>
       saveWorkspacePlotCards(projectFolder.path, plotCards).catch(() => {
         setLastError("ワークスペースのプロット保存に失敗しました");
-      });
-    }, 700);
-
-    return () => window.clearTimeout(timer);
+      }),
+      () => openProjectPathRef.current !== projectFolder.path,
+    );
   }, [isHydrated, plotCards, plotWorkspacePath, projectFolder]);
 
   useEffect(() => {
     if (!isHydrated || !projectFolder) return;
     if (proofreadTermsWorkspacePath !== projectFolder.path) return;
 
-    const timer = window.setTimeout(() => {
+    return schedulePendingSave("workspace-proofread-terms", 700, () =>
       saveWorkspaceProofreadTerms(projectFolder.path, projectProofreadTerms).catch(() => {
         setLastError("ワークスペースの校正辞書の保存に失敗しました");
-      });
-    }, 700);
-
-    return () => window.clearTimeout(timer);
+      }),
+      () => openProjectPathRef.current !== projectFolder.path,
+    );
   }, [isHydrated, projectFolder, projectProofreadTerms, proofreadTermsWorkspacePath]);
 
   useEffect(() => {
     if (!isHydrated || !projectFolder) return;
     if (proofreadTermsWorkspacePath !== projectFolder.path) return;
 
-    const timer = window.setTimeout(() => {
+    return schedulePendingSave("workspace-proofread-ignored", 700, () =>
       saveWorkspaceProofreadIgnored(projectFolder.path, projectProofreadIgnored).catch(() => {
         setLastError("無視した指摘の保存に失敗しました");
-      });
-    }, 700);
-
-    return () => window.clearTimeout(timer);
+      }),
+      () => openProjectPathRef.current !== projectFolder.path,
+    );
   }, [isHydrated, projectFolder, projectProofreadIgnored, proofreadTermsWorkspacePath]);
 
   useEffect(() => {
@@ -3723,7 +3490,6 @@ export default function App() {
 
   useEffect(() => {
     return () => {
-      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
       if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
       if (typewriterScrollFrameRef.current) {
         window.cancelAnimationFrame(typewriterScrollFrameRef.current);
@@ -5300,12 +5066,7 @@ export default function App() {
         };
         if (existingIndex >= 0) nextTabs[existingIndex] = nextTab;
         else nextTabs.push(nextTab);
-        setOpenTabs(nextTabs);
-        syncDocumentTabToEditor(nextTab);
       }
-      setProjectFolder(folder);
-      setFocusedFolderPath(null);
-      setWorkspaceAlert(null);
       const nextSnippets =
         options.loadWorkspaceSnippets && settings.snippetStorageMode === "workspace"
           ? await loadWorkspaceSnippets(folder.path)
@@ -5319,6 +5080,15 @@ export default function App() {
         revision: nextFileProgress.revision,
         contentHash: nextFileProgress.contentHash,
       });
+      // 作品のパスとタブは、作品の Idea などと同じ描画で入れる。先に入れると、そのあいだに資料ボードの
+      // 整合処理が、前の作品の Idea で新しい作品の並び順を作り直す。
+      if (nextTabs && nextTab) {
+        setOpenTabs(nextTabs);
+        syncDocumentTabToEditor(nextTab);
+      }
+      setProjectFolder(folder);
+      setFocusedFolderPath(null);
+      setWorkspaceAlert(null);
       if (nextSnippets) {
         setSnippetWorkspacePath(folder.path);
       }
@@ -6990,409 +6760,53 @@ export default function App() {
 
   handleProjectFileSelectRef.current = handleProjectFileSelect;
 
-  const findPluginDocument = (documentPath: string) => {
-    if (!projectFolder) return null;
-    return collectProjectTextFiles(projectFolder).find(
-      (file) => pluginDocumentPath(projectFolder.path, file.path) === documentPath,
-    ) ?? null;
-  };
-
-  const readPluginDocumentText = async (documentPath: string): Promise<string> => {
-    const file = findPluginDocument(documentPath);
-    if (!file) throw new Error(`文書が見つかりません: ${documentPath}`);
-    if (currentFilePath && isSamePath(file.path, currentFilePath)) {
-      return editorInstanceRef.current?.getValue() ?? editorText;
-    }
-    const document = await invoke<TextDocument>("read_text_file", { path: file.path });
-    return parseFrontMatter(document.content).body;
-  };
-
-  const revealPluginRange = async (documentPath: string, from: number, to = from) => {
-    const file = findPluginDocument(documentPath);
-    if (!file) throw new Error(`文書が見つかりません: ${documentPath}`);
-    setAppMode("write");
-    if (!currentFilePath || !isSamePath(file.path, currentFilePath)) {
-      await handleProjectFileSelect(file.path);
-    }
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        editorInstanceRef.current?.selectRange(from, to);
-        editorInstanceRef.current?.focus();
-      });
-    });
-  };
-
-  const resolvePluginAnchor = async (pluginId: string, anchorId: string) => {
-    const anchor = pluginAnchorsRef.current.find(
-      (item) => item.id === anchorId && item.pluginId === pluginId,
-    );
-    if (!anchor) throw new Error(`アンカーが見つかりません: ${anchorId}`);
-    const text = await readPluginDocumentText(anchor.documentPath);
-    const resolved = resolveThenPluginAnchor(anchor, text);
-    if (!resolved) return null;
-    if (
-      resolved.from !== anchor.from ||
-      resolved.to !== anchor.to ||
-      resolved.contextBefore !== anchor.contextBefore ||
-      resolved.contextAfter !== anchor.contextAfter
-    ) {
-      persistPluginAnchors(
-        pluginAnchorsRef.current.map((item) => item.id === anchor.id ? resolved : item),
-      );
-    }
-    return resolved;
-  };
-
-  const updatePluginStorage = async (
-    pluginId: string,
-    updater: (data: Record<string, unknown>) => void,
-  ) => {
-    const rootPath = projectFolder?.path;
-    if (!rootPath) throw new Error("プロジェクトを開いてください");
-    const previous = pluginStorageQueuesRef.current.get(pluginId) ?? Promise.resolve();
-    const pending = previous.catch(() => undefined).then(async () => {
-      const data = await invoke<Record<string, unknown>>("load_plugin_project_data", {
-        rootPath,
-        pluginId,
-      });
-      updater(data);
-      await invoke("save_plugin_project_data", { rootPath, pluginId, data });
-    });
-    pluginStorageQueuesRef.current.set(pluginId, pending);
-    try {
-      await pending;
-    } finally {
-      if (pluginStorageQueuesRef.current.get(pluginId) === pending) {
-        pluginStorageQueuesRef.current.delete(pluginId);
-      }
-    }
-  };
-
-  const handlePluginRequest = async ({
-    pluginId,
-    method,
-    args,
-  }: ThenPluginHostRequest): Promise<unknown> => {
-    const plugin = loadedPlugins.find((item) => item.manifest.id === pluginId);
-    if (!plugin) throw new Error("プラグインが読み込まれていません");
-    const requiredPermission = pluginPermissionForMethod(method);
-    if (!requiredPermission || !plugin.manifest.permissions.includes(requiredPermission)) {
-      throw new Error(`権限がありません: ${requiredPermission ?? method}`);
-    }
-    const input = objectArgs(args);
-
-    if (method === "editor.getSelection") {
-      const editor = editorInstanceRef.current;
-      if (!editor) return null;
-      const selection = editor.getSelection();
-      return {
-        documentPath:
-          projectFolder && currentFilePath
-            ? pluginDocumentPath(projectFolder.path, currentFilePath)
-            : null,
-        ...selection,
-        text: editor.getValue().slice(selection.from, selection.to),
-      };
-    }
-
-    if (method === "editor.moveCursor") {
-      if (typeof input.anchorId === "string") {
-        const resolved = await resolvePluginAnchor(pluginId, input.anchorId);
-        if (!resolved) throw new Error("アンカーを現在の文書へ再接続できませんでした");
-        await revealPluginRange(resolved.documentPath, resolved.from, resolved.to);
-        return true;
-      }
-      const documentPath =
-        typeof input.documentPath === "string"
-          ? input.documentPath
-          : projectFolder && currentFilePath
-            ? pluginDocumentPath(projectFolder.path, currentFilePath)
-            : null;
-      if (!documentPath) throw new Error("移動先の文書が指定されていません");
-      const from = typeof input.from === "number"
-        ? input.from
-        : typeof input.offset === "number"
-          ? input.offset
-          : 0;
-      const to = typeof input.to === "number" ? input.to : from;
-      await revealPluginRange(documentPath, from, to);
-      return true;
-    }
-
-    if (method === "anchors.create") {
-      if (!projectFolder || !currentFilePath) throw new Error("プロジェクト内の文書を開いてください");
-      const documentPath = pluginDocumentPath(projectFolder.path, currentFilePath);
-      if (!documentPath) throw new Error("プロジェクト外の文書にはアンカーを作成できません");
-      const editor = editorInstanceRef.current;
-      if (!editor) throw new Error("エディタが準備できていません");
-      const selection = editor.getSelection();
-      const from = typeof input.from === "number" ? input.from : selection.from;
-      const to = typeof input.to === "number" ? input.to : selection.to;
-      const anchor = createThenPluginAnchor({
-        id: crypto.randomUUID(),
-        pluginId,
-        documentPath,
-        from,
-        to,
-        text: editor.getValue(),
-      });
-      persistPluginAnchors([...pluginAnchorsRef.current, anchor]);
-      return anchor;
-    }
-
-    if (method === "anchors.resolve" || method === "anchors.reveal") {
-      if (typeof input.anchorId !== "string") throw new Error("anchorId が必要です");
-      const resolved = await resolvePluginAnchor(pluginId, input.anchorId);
-      if (method === "anchors.reveal" && resolved) {
-        await revealPluginRange(resolved.documentPath, resolved.from, resolved.to);
-      }
-      return resolved;
-    }
-
-    if (method === "anchors.delete") {
-      if (typeof input.anchorId !== "string") throw new Error("anchorId が必要です");
-      const next = pluginAnchorsRef.current.filter(
-        (item) => !(item.id === input.anchorId && item.pluginId === pluginId),
-      );
-      persistPluginAnchors(next);
-      return next.length !== pluginAnchorsRef.current.length;
-    }
-
-    if (method === "storage.get") {
-      const rootPath = projectFolder?.path;
-      if (!rootPath) throw new Error("プロジェクトを開いてください");
-      const key = typeof input.key === "string" ? input.key : "";
-      if (!key) throw new Error("storage key が必要です");
-      await (pluginStorageQueuesRef.current.get(pluginId) ?? Promise.resolve()).catch(() => undefined);
-      const data = await invoke<Record<string, unknown>>("load_plugin_project_data", { rootPath, pluginId });
-      return data[key] ?? null;
-    }
-
-    if (method === "storage.set" || method === "storage.delete") {
-      const key = typeof input.key === "string" ? input.key : "";
-      if (!key || key.length > 200) throw new Error("storage key が不正です");
-      await updatePluginStorage(pluginId, (data) => {
-        if (method === "storage.delete") delete data[key];
-        else data[key] = input.value;
-      });
-      return true;
-    }
-
-    if (method === "commands.register") {
-      const id = typeof input.id === "string" ? input.id.trim() : "";
-      const title = typeof input.title === "string" ? input.title.trim() : "";
-      const keybinding = typeof input.keybinding === "string" ? input.keybinding.trim() : undefined;
-      const menus = Array.isArray(input.menus)
-        ? input.menus.filter((menu): menu is "editor.selection" => menu === "editor.selection")
-        : [];
-      if (Array.isArray(input.menus) && menus.length !== input.menus.length) {
-        throw new Error("未対応のコマンドメニューが指定されました");
-      }
-      if (!id || !title) throw new Error("command id と title が必要です");
-      if (keybinding && !isValidThenPluginKeybinding(keybinding)) {
-        throw new Error("ショートカットは Mod/Ctrl/Cmd を含む形式で指定してください");
-      }
-      setPluginCommands((current) => [
-        ...current.filter((item) => !(item.pluginId === pluginId && item.id === id)),
-        { pluginId, id, title, keybinding, menus },
-      ]);
-      return true;
-    }
-
-    if (method === "commands.unregister") {
-      const id = typeof input.id === "string" ? input.id : "";
-      setPluginCommands((current) => current.filter(
-        (item) => !(item.pluginId === pluginId && item.id === id),
-      ));
-      return true;
-    }
-
-    if (method === "views.register") {
-      const id = typeof input.id === "string" ? input.id.trim() : "";
-      const title = typeof input.title === "string" ? input.title.trim() : "";
-      const icon = pluginViewIcon(input.icon);
-      if (!id || !title) throw new Error("view id と title が必要です");
-      setPluginViews((current) => [
-        ...current.filter((item) => !(item.pluginId === pluginId && item.id === id)),
-        { pluginId, id, title, icon },
-      ]);
-      return true;
-    }
-
-    if (method === "views.unregister") {
-      const id = typeof input.id === "string" ? input.id : "";
-      setPluginViews((current) => current.filter(
-        (item) => !(item.pluginId === pluginId && item.id === id),
-      ));
-      return true;
-    }
-
-    if (method === "views.registerScreen") {
-      const id = typeof input.id === "string" ? input.id.trim() : "";
-      const title = typeof input.title === "string" ? input.title.trim() : "";
-      const icon = pluginViewIcon(input.icon);
-      if (!id || !title) throw new Error("screen id と title が必要です");
-      if (!plugin.manifest.icon?.paths.length) {
-        throw new Error("画面を登録するプラグインにはmanifest.jsonのiconが必要です");
-      }
-      setPluginScreens((current) => [
-        ...current.filter((item) => !(item.pluginId === pluginId && item.id === id)),
-        { pluginId, id, title, icon },
-      ]);
-      return true;
-    }
-
-    if (method === "views.unregisterScreen") {
-      const id = typeof input.id === "string" ? input.id : "";
-      setPluginScreens((current) => current.filter(
-        (item) => !(item.pluginId === pluginId && item.id === id),
-      ));
-      return true;
-    }
-
-    if (method === "views.registerModal") {
-      const id = typeof input.id === "string" ? input.id.trim() : "";
-      const title = typeof input.title === "string" ? input.title.trim() : "";
-      if (!id || !title) throw new Error("modal id と title が必要です");
-      setPluginModals((current) => [
-        ...current.filter((item) => !(item.pluginId === pluginId && item.id === id)),
-        { pluginId, id, title },
-      ]);
-      return true;
-    }
-
-    if (method === "views.unregisterModal") {
-      const id = typeof input.id === "string" ? input.id : "";
-      setPluginModals((current) => current.filter(
-        (item) => !(item.pluginId === pluginId && item.id === id),
-      ));
-      if (activePluginModalKey === `${pluginId}:${id}`) setActivePluginModalKey(null);
-      return true;
-    }
-
-    if (method === "views.openModal") {
-      const id = typeof input.id === "string" ? input.id : "";
-      const modal = pluginModals.find(
-        (item) => item.pluginId === pluginId && item.id === id,
-      );
-      if (!modal) throw new Error(`登録されていないmodalです: ${id}`);
-      setActivePluginModalKey(`${pluginId}:${id}`);
-      return true;
-    }
-
-    if (method === "views.closeModal") {
-      const id = typeof input.id === "string" ? input.id : "";
-      if (!activePluginModal || activePluginModal.pluginId !== pluginId) return false;
-      if (id && activePluginModal.id !== id) return false;
-      setActivePluginModalKey(null);
-      return true;
-    }
-
-    if (method === "views.open") {
-      const id = typeof input.id === "string" ? input.id : "";
-      const screen = pluginScreens.find(
-        (item) => item.pluginId === pluginId && item.id === id,
-      );
-      if (screen) {
-        setActivePluginScreenKey(`${pluginId}:${id}`);
-        setAppMode("plugin");
-        return true;
-      }
-      const view = pluginViews.find(
-        (item) => item.pluginId === pluginId && item.id === id,
-      );
-      if (view) {
-        setAppMode("write");
-        setIsRightSidebarCollapsed(false);
-        setRightSidebarTab(`plugin:${pluginId}:${id}`);
-        return true;
-      }
-      throw new Error(`登録されていないviewです: ${id}`);
-    }
-
-    if (method === "statusbar.set") {
-      const id = typeof input.id === "string" ? input.id.trim() : "";
-      const text = typeof input.text === "string" ? input.text.trim() : "";
-      const tooltip = typeof input.tooltip === "string" ? input.tooltip.trim() : undefined;
-      const commandId = typeof input.commandId === "string" ? input.commandId.trim() : undefined;
-      if (!id || !text || text.length > 160) {
-        throw new Error("status itemのidと160文字以内のtextが必要です");
-      }
-      setPluginStatusItems((current) => [
-        ...current.filter((item) => !(item.pluginId === pluginId && item.id === id)),
-        { pluginId, id, text, tooltip, commandId },
-      ]);
-      return true;
-    }
-
-    if (method === "statusbar.remove") {
-      const id = typeof input.id === "string" ? input.id : "";
-      setPluginStatusItems((current) => current.filter(
-        (item) => !(item.pluginId === pluginId && item.id === id),
-      ));
-      return true;
-    }
-
-    throw new Error(`未対応のThen APIです: ${method}`);
-  };
-
-  const handleInstallPlugin = async () => {
-    if (!isTauriRuntime()) {
-      showToast("デスクトップ版で利用してください");
-      return;
-    }
-    try {
-      const candidate = await invoke<{
-        sourcePath: string;
-        manifest: ThenPluginManifest;
-      } | null>("inspect_plugin_dialog");
-      if (!candidate) return;
-      const approved = await requestConfirm({
-        title: "プラグインを導入",
-        message: `「${candidate.manifest.name}」v${candidate.manifest.version} をThen全体へ導入しますか？`,
-        detail: candidate.manifest.permissions.length
-          ? `要求する権限: ${candidate.manifest.permissions.join(" / ")}`
-          : "このプラグインはThen API権限を要求しません。",
-        confirmLabel: "導入",
-      });
-      if (!approved) return;
-      const installed = await invoke<LoadedThenPlugin>("install_plugin", {
-        sourcePath: candidate.sourcePath,
-        expectedManifest: candidate.manifest,
-      });
-      await reloadInstalledPlugins();
-      showToast(`プラグイン「${installed.manifest.name}」を導入しました`);
-    } catch (error) {
-      setLastError(String(error));
-      showToast("プラグインを導入できませんでした");
-    }
-  };
-
-  const handleUninstallPlugin = async (plugin: LoadedThenPlugin) => {
-    const confirmed = await requestConfirm({
-      title: "プラグインを削除",
-      message: `「${plugin.manifest.name}」v${plugin.manifest.version} をThenから削除しますか？`,
-      detail:
-        "プラグイン本体だけを削除します。各プロジェクトに保存されたデータと永続アンカーは、再導入時に復元できるよう残します。",
-      confirmLabel: "削除",
-      danger: true,
-    });
-    if (!confirmed) return;
-    try {
-      await invoke("uninstall_plugin", { pluginId: plugin.manifest.id });
-      await reloadInstalledPlugins();
-      showToast(`プラグイン「${plugin.manifest.name}」を削除しました`);
-    } catch (error) {
-      setLastError(String(error));
-      showToast("プラグインを削除できませんでした");
-    }
-  };
+  const { handlePluginRequest, handleInstallPlugin, handleUninstallPlugin } = createPluginHostActions({
+    projectFolder,
+    currentFilePath,
+    editorText,
+    editorInstanceRef,
+    handleProjectFileSelect,
+    setAppMode,
+    setIsRightSidebarCollapsed,
+    setRightSidebarTab,
+    loadedPlugins,
+    pluginAnchorsRef,
+    persistPluginAnchors,
+    pluginStorageQueuesRef,
+    setPluginCommands,
+    setPluginViews,
+    setPluginScreens,
+    setPluginModals,
+    setPluginStatusItems,
+    pluginModals,
+    pluginScreens,
+    pluginViews,
+    activePluginModal,
+    activePluginModalKey,
+    setActivePluginModalKey,
+    setActivePluginScreenKey,
+    reloadInstalledPlugins,
+    requestConfirm,
+    showToast,
+    setLastError,
+  });
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
     return manageAsyncRegistration(
       listen<string>("then-open-export-source", (event) => {
         void handleProjectFileSelectRef.current(event.payload);
+      }),
+      (error) => setLastError(String(error)),
+    );
+  }, []);
+
+  // 閉じる前に、待っている遅延保存を書き切る。Rust は答えか時間切れ（2秒）を待ってから閉じる。
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    return manageAsyncRegistration(
+      listen("then-before-close", () => {
+        void flushPendingSaves().finally(() => invoke("finish_close_preparation"));
       }),
       (error) => setLastError(String(error)),
     );

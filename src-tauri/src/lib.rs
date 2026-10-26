@@ -10,6 +10,7 @@ use tauri_plugin_dialog::DialogExt;
 mod ai;
 mod atomic_file;
 mod checkpoint_store;
+mod close_gate;
 mod export_front_matter;
 mod external_url;
 mod intermediate_draft;
@@ -610,10 +611,26 @@ pub fn run() {
                     if matches!(event, tauri::WindowEvent::Moved(_) | tauri::WindowEvent::ScaleFactorChanged { .. }) {
                         native_ime::notify_layout(&window_for_events);
                     }
-                    if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
-                        save_journal::close_all();
-                        let _ = save_main_window_state(&app_handle, &window_for_events);
-                        close_linked_child_windows(&app_handle);
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        match MAIN_CLOSE_GATE.request() {
+                            close_gate::CloseDecision::StartWaiting => {
+                                // The webview writes its delayed saves (anchors, app state, project
+                                // files) first; close once it answers or the timeout passes.
+                                api.prevent_close();
+                                let _ = window_for_events.emit("then-before-close", ());
+                                let app_handle = app_handle.clone();
+                                let window = window_for_events.clone();
+                                std::thread::spawn(move || {
+                                    MAIN_CLOSE_GATE.wait_then_close(close_gate::CLOSE_PREPARATION_TIMEOUT);
+                                    save_journal::close_all();
+                                    let _ = save_main_window_state(&app_handle, &window);
+                                    close_linked_child_windows(&app_handle);
+                                    let _ = window.destroy();
+                                });
+                            }
+                            close_gate::CloseDecision::KeepWaiting => api.prevent_close(),
+                            close_gate::CloseDecision::Allow => {}
+                        }
                     }
                 });
             }
@@ -656,6 +673,7 @@ pub fn run() {
             discard_stale_library_imports,
             load_app_state,
             save_app_state,
+            finish_close_preparation,
             get_system_fonts,
             get_font_faces,
             open_text_file_dialog,
@@ -5206,6 +5224,14 @@ fn save_main_window_state(
         .map_err(|error| format!("failed to serialize main window state: {error}"))?;
     atomic_file::write_replacing(&main_window_state_path(app)?, content)
         .map_err(|error| format!("failed to write main window state: {error}"))
+}
+
+static MAIN_CLOSE_GATE: close_gate::CloseGate = close_gate::CloseGate::new();
+
+/// The webview has written its delayed saves; the main window may close.
+#[tauri::command]
+fn finish_close_preparation() {
+    MAIN_CLOSE_GATE.mark_ready();
 }
 
 #[tauri::command]

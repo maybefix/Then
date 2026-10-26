@@ -44,6 +44,8 @@ assert.ok(resolved, "context anchoring must reconnect after an edit made while T
 assert.equal(externallyEdited.slice(resolved.from, resolved.to), original.selectedText);
 
 const appSource = await readFile("src/App.tsx", "utf8");
+const pluginHostActionsSource = await readFile("src/plugins/pluginHostActions.ts", "utf8");
+const pluginHostSource = await readFile("src/plugins/usePluginHost.ts", "utf8");
 const rightSidebarSource = await readFile("src/components/layout/RightSidebar.tsx", "utf8");
 const leftSidebarSource = await readFile("src/components/layout/LeftSidebar.tsx", "utf8");
 const paletteSource = await readFile("src/paletteCommands.ts", "utf8");
@@ -54,24 +56,24 @@ const rustSource = await readFile("src-tauri/src/lib.rs", "utf8");
 const manifestSchema = JSON.parse(await readFile("plugin-sdk/manifest.schema.json", "utf8"));
 const sampleManifest = JSON.parse(await readFile("docs/plugin-example/manifest.json", "utf8"));
 assert.match(appSource, /pluginRuntimeHostRef\.current\?\.emit\([\s\S]*?"document\.change"/);
-assert.match(appSource, /pluginRuntimeHostRef\.current\?\.emit\("workspace\.change"/);
-assert.match(appSource, /editor\.getSelection/);
-assert.match(appSource, /editor\.moveCursor/);
-assert.match(appSource, /const revealPluginRange[\s\S]*?setAppMode\("write"\)/, "navigation from a plugin screen must reveal the editor");
-assert.match(appSource, /views\.register/);
-assert.match(appSource, /views\.registerScreen/);
-assert.match(appSource, /method === "views\.open"/);
-assert.match(appSource, /method === "views\.openModal"/);
-assert.match(appSource, /method === "views\.closeModal"/);
-const hostOpenModalSource = appSource.slice(
-  appSource.indexOf('if (method === "views.openModal")'),
-  appSource.indexOf('if (method === "views.closeModal")'),
+assert.match(pluginHostSource, /pluginRuntimeHostRef\.current\?\.emit\("workspace\.change"/);
+assert.match(pluginHostActionsSource, /editor\.getSelection/);
+assert.match(pluginHostActionsSource, /editor\.moveCursor/);
+assert.match(pluginHostActionsSource, /const revealPluginRange[\s\S]*?setAppMode\("write"\)/, "navigation from a plugin screen must reveal the editor");
+assert.match(pluginHostActionsSource, /views\.register/);
+assert.match(pluginHostActionsSource, /views\.registerScreen/);
+assert.match(pluginHostActionsSource, /method === "views\.open"/);
+assert.match(pluginHostActionsSource, /method === "views\.openModal"/);
+assert.match(pluginHostActionsSource, /method === "views\.closeModal"/);
+const hostOpenModalSource = pluginHostActionsSource.slice(
+  pluginHostActionsSource.indexOf('if (method === "views.openModal")'),
+  pluginHostActionsSource.indexOf('if (method === "views.closeModal")'),
 );
 assert.doesNotMatch(hostOpenModalSource, /setAppMode/, "opening a plugin modal must preserve the current screen");
-assert.match(appSource, /method === "statusbar\.set"/);
-assert.match(appSource, /method === "statusbar\.remove"/);
-assert.match(appSource, /command\.menus\?\.includes\("editor\.selection"\)/);
-assert.match(appSource, /commands\.register/);
+assert.match(pluginHostActionsSource, /method === "statusbar\.set"/);
+assert.match(pluginHostActionsSource, /method === "statusbar\.remove"/);
+assert.match(pluginHostSource, /command\.menus\?\.includes\("editor\.selection"\)/);
+assert.match(pluginHostActionsSource, /commands\.register/);
 assert.match(runtimeSource, /registerScreen: async/);
 assert.match(runtimeSource, /open: \(viewId\) => request\("views\.open"/);
 assert.match(runtimeSource, /registerModal: async/);
