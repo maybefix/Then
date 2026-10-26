@@ -5066,12 +5066,7 @@ export default function App() {
         };
         if (existingIndex >= 0) nextTabs[existingIndex] = nextTab;
         else nextTabs.push(nextTab);
-        setOpenTabs(nextTabs);
-        syncDocumentTabToEditor(nextTab);
       }
-      setProjectFolder(folder);
-      setFocusedFolderPath(null);
-      setWorkspaceAlert(null);
       const nextSnippets =
         options.loadWorkspaceSnippets && settings.snippetStorageMode === "workspace"
           ? await loadWorkspaceSnippets(folder.path)
@@ -5085,6 +5080,15 @@ export default function App() {
         revision: nextFileProgress.revision,
         contentHash: nextFileProgress.contentHash,
       });
+      // 作品のパスとタブは、作品の Idea などと同じ描画で入れる。先に入れると、そのあいだに資料ボードの
+      // 整合処理が、前の作品の Idea で新しい作品の並び順を作り直す。
+      if (nextTabs && nextTab) {
+        setOpenTabs(nextTabs);
+        syncDocumentTabToEditor(nextTab);
+      }
+      setProjectFolder(folder);
+      setFocusedFolderPath(null);
+      setWorkspaceAlert(null);
       if (nextSnippets) {
         setSnippetWorkspacePath(folder.path);
       }
