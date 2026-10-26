@@ -11,6 +11,7 @@ const bundled = await build({
     contents: [
       'export { createPluginHostActions } from "./src/plugins/pluginHostActions.ts";',
       'export { usePluginHost } from "./src/plugins/usePluginHost.ts";',
+      'export { flushPendingSaves } from "./src/pendingSaves.ts";',
     ].join("\n"),
     resolveDir: process.cwd(),
     loader: "ts",
@@ -80,7 +81,7 @@ const bundled = await build({
     },
   ],
 });
-const { createPluginHostActions, usePluginHost } = await import(
+const { createPluginHostActions, usePluginHost, flushPendingSaves } = await import(
   `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`
 );
 
@@ -743,6 +744,48 @@ for (const [label, load, message] of [
   view.render();
   flushTimers();
   assert.deepEqual(saves, [OTHER], `${label}: a readable work must still save`);
+  view.unmount();
+}
+
+// 閉じる前の書き切り: 0.18 秒の保存を待っているアンカーを、待たずにすぐ書く
+// （docs/ANCHOR_SAVE_ON_CLOSE_FIX_PLAN.md）。待っていなければ何も書かない。読めなかった作品では書かない。
+{
+  resetWindow();
+  const saves = [];
+  createRust({
+    list_installed_plugins: () => ({ plugins: [], errors: [] }),
+    load_plugin_anchors: ({ rootPath }) => {
+      if (rootPath === OTHER) throw new Error("failed to parse plugin anchors");
+      return null;
+    },
+    save_plugin_anchors: ({ rootPath, store }) => {
+      saves.push([rootPath, store.anchors.map((item) => item.id)]);
+    },
+  });
+  const view = mountHost();
+  view.render();
+  await settle();
+  view.render();
+  await flushPendingSaves();
+  assert.deepEqual(saves, [], "nothing pending must write nothing");
+
+  view.host.persistPluginAnchors([anchor("a", "c.txt", 0, 1)]);
+  view.host.persistPluginAnchors([anchor("a", "c.txt", 0, 1), anchor("b", "c.txt", 2, 3)]);
+  view.render();
+  await flushPendingSaves();
+  assert.deepEqual(saves, [[ROOT, ["a", "b"]]], "a pending anchor save must be written at once, with the latest anchors");
+  assert.equal(timers.size, 0, "the save timer must be cancelled");
+  flushTimers();
+  assert.equal(saves.length, 1, "the anchors must not be written twice");
+
+  view.app.projectFolder = other();
+  view.render();
+  await settle();
+  view.render();
+  view.host.persistPluginAnchors([anchor("o", "x.txt", 0, 1)]);
+  view.render();
+  await flushPendingSaves();
+  assert.equal(saves.length, 1, "an unreadable anchor file must not be written before closing either");
   view.unmount();
 }
 

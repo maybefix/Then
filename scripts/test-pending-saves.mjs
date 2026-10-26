@@ -1,0 +1,84 @@
+import assert from "node:assert/strict";
+import { build } from "esbuild";
+
+// 待っている遅延保存の一覧（src/pendingSaves.ts）を、実際に動かして確かめる
+// （docs/ANCHOR_SAVE_ON_CLOSE_FIX_PLAN.md）。閉じる前に、まだ書いていない保存を書き切る。
+const bundled = await build({
+  entryPoints: ["src/pendingSaves.ts"],
+  bundle: true,
+  format: "esm",
+  platform: "neutral",
+  write: false,
+});
+const { setPendingSave, clearPendingSave, flushPendingSaves } = await import(
+  `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`
+);
+
+// 載せた保存を、載せた順に書き、書き終わるのを待つ。書いた後は空になる。
+{
+  const written = [];
+  let release;
+  setPendingSave("a", () => written.push("a"));
+  setPendingSave("b", () => new Promise((resolve) => { release = () => { written.push("b"); resolve(); }; }));
+  let done = false;
+  const flushing = flushPendingSaves().then(() => { done = true; });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(written, ["a"]);
+  assert.equal(done, false, "flushing must wait for the saves to finish");
+  release();
+  await flushing;
+  assert.deepEqual(written, ["a", "b"]);
+  await flushPendingSaves();
+  assert.deepEqual(written, ["a", "b"], "a written save must not be written again");
+}
+
+// 同じ名前で載せ直すと、新しいほうだけを書く。
+{
+  const written = [];
+  setPendingSave("state", () => written.push("old"));
+  setPendingSave("state", () => written.push("new"));
+  await flushPendingSaves();
+  assert.deepEqual(written, ["new"]);
+}
+
+// 外す。保存を渡したときは、同じ名前で後から載った保存を外さない。
+{
+  const written = [];
+  const first = () => written.push("first");
+  setPendingSave("x", first);
+  clearPendingSave("x", first);
+  setPendingSave("y", () => written.push("y-old"));
+  const stale = () => written.push("stale");
+  clearPendingSave("y", stale);
+  setPendingSave("z", () => written.push("z"));
+  clearPendingSave("z");
+  await flushPendingSaves();
+  assert.deepEqual(written, ["y-old"]);
+}
+
+// 1つが失敗しても、ほかは書く。
+{
+  const written = [];
+  setPendingSave("fails", () => { throw new Error("disk full"); });
+  setPendingSave("rejects", () => Promise.reject(new Error("denied")));
+  setPendingSave("ok", () => written.push("ok"));
+  await flushPendingSaves();
+  assert.deepEqual(written, ["ok"]);
+}
+
+// 書き切る処理が次の遅延保存を始めたら（カーソル位置 → アプリ状態）、それも書く。
+// 次の保存は、React が描画し直してから（ここでは次のタスクで）載る。
+{
+  const written = [];
+  setPendingSave("cursor", () => {
+    written.push("cursor");
+    setTimeout(() => setPendingSave("app-state", () => written.push("app-state")), 0);
+  });
+  await flushPendingSaves();
+  assert.deepEqual(written, ["cursor", "app-state"]);
+}
+
+// 何も待っていなければ、すぐ終わる。
+await flushPendingSaves();
+
+console.log("pending saves: ok");
