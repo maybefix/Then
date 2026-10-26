@@ -3313,13 +3313,11 @@ export default function App() {
     if (!isHydrated || !projectFolder || settings.snippetStorageMode !== "workspace") return;
     if (snippetWorkspacePath !== projectFolder.path) return;
 
-    const timer = window.setTimeout(() => {
+    return schedulePendingSave("workspace-idea", 700, () =>
       saveWorkspaceSnippets(projectFolder.path, snippets).catch(() => {
         setLastError("ワークスペースのスニペット保存に失敗しました");
-      });
-    }, 700);
-
-    return () => window.clearTimeout(timer);
+      }),
+    );
   }, [isHydrated, projectFolder, settings.snippetStorageMode, snippetWorkspacePath, snippets]);
 
   useEffect(() => {
