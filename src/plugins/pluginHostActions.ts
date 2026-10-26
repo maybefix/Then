@@ -257,8 +257,10 @@ export function createPluginHostActions(deps: PluginHostActionDeps) {
       const next = pluginAnchorsRef.current.filter(
         (item) => !(item.id === input.anchorId && item.pluginId === pluginId),
       );
+      // persistPluginAnchors は ref を新しい一覧へ書き換えるので、その前に数を比べる。
+      const deleted = next.length !== pluginAnchorsRef.current.length;
       persistPluginAnchors(next);
-      return next.length !== pluginAnchorsRef.current.length;
+      return deleted;
     }
 
     if (method === "storage.get") {
