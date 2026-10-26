@@ -1050,7 +1050,6 @@ function nextCanvasPlacement(board: JsonCanvasDocument) {
 }
 
 export default function App() {
-  const saveTimerRef = useRef<number | null>(null);
   const referenceLayoutLoadedRootRef = useRef<string | null>(null);
   // 読み込んだままのレイアウト。これと同じあいだは保存しない。
   const referenceLayoutOnDiskRef = useRef<ReferenceLayout | null>(null);
@@ -3281,17 +3280,11 @@ export default function App() {
 
   useEffect(() => {
     if (!isHydrated) return;
-    if (saveTimerRef.current) {
-      window.clearTimeout(saveTimerRef.current);
-    }
-
-    saveTimerRef.current = window.setTimeout(() => {
-      saveStoredState(appState)
-        .catch(() => {
-          setLastError("アプリ状態の保存に失敗しました");
-        });
-      saveTimerRef.current = null;
-    }, 700);
+    return schedulePendingSave("app-state", 700, () =>
+      saveStoredState(appState).catch(() => {
+        setLastError("アプリ状態の保存に失敗しました");
+      }),
+    );
   }, [appState, isHydrated]);
 
   // カーソル位置の記憶。移動が落ち着いた後に現在ファイルの位置を保存する。
@@ -3490,7 +3483,6 @@ export default function App() {
 
   useEffect(() => {
     return () => {
-      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
       if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
       if (typewriterScrollFrameRef.current) {
         window.cancelAnimationFrame(typewriterScrollFrameRef.current);
