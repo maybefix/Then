@@ -1068,6 +1068,8 @@ export default function App() {
   const portableProjectMutationGenerationRef = useRef<Map<string, number>>(new Map());
   const workspaceSwitchInProgressRef = useRef(false);
   const workspaceSwitchGenerationRef = useRef(0);
+  // 描画の直後の、開いている作品のパス。作品ごとの遅延保存の後片付けが、作品が変わったかを見る。
+  const openProjectPathRef = useRef<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const typewriterScrollFrameRef = useRef<number | null>(null);
   const nativeFullscreenRequestedRef = useRef(false);
@@ -2895,6 +2897,11 @@ export default function App() {
     };
   }, [isHydrated, projectFolder]);
 
+  // useLayoutEffect は、同じ描画の useEffect の後片付けより先に走る。後片付けの時点で、もう新しい作品を指す。
+  useLayoutEffect(() => {
+    openProjectPathRef.current = projectFolder?.path ?? null;
+  }, [projectFolder?.path]);
+
   useEffect(() => {
     const rootPath = projectFolder?.path ?? null;
     if (!isHydrated || !rootPath || referenceLayoutLoadedRootRef.current !== rootPath) return;
@@ -2905,6 +2912,8 @@ export default function App() {
       saveReferenceLayout(rootPath, referenceLayout).catch((error) => {
         setLastError(String(error));
       }),
+      // 作品が変わったら、待ち直す者がいないので、この作品へ今書く。
+      () => openProjectPathRef.current !== rootPath,
     );
   }, [isHydrated, projectFolder?.path, referenceLayout]);
 
@@ -3317,6 +3326,7 @@ export default function App() {
       saveWorkspaceSnippets(projectFolder.path, snippets).catch(() => {
         setLastError("ワークスペースのスニペット保存に失敗しました");
       }),
+      () => openProjectPathRef.current !== projectFolder.path,
     );
   }, [isHydrated, projectFolder, settings.snippetStorageMode, snippetWorkspacePath, snippets]);
 
@@ -3328,6 +3338,7 @@ export default function App() {
       saveWorkspacePlotCards(projectFolder.path, plotCards).catch(() => {
         setLastError("ワークスペースのプロット保存に失敗しました");
       }),
+      () => openProjectPathRef.current !== projectFolder.path,
     );
   }, [isHydrated, plotCards, plotWorkspacePath, projectFolder]);
 
@@ -3339,6 +3350,7 @@ export default function App() {
       saveWorkspaceProofreadTerms(projectFolder.path, projectProofreadTerms).catch(() => {
         setLastError("ワークスペースの校正辞書の保存に失敗しました");
       }),
+      () => openProjectPathRef.current !== projectFolder.path,
     );
   }, [isHydrated, projectFolder, projectProofreadTerms, proofreadTermsWorkspacePath]);
 
@@ -3350,6 +3362,7 @@ export default function App() {
       saveWorkspaceProofreadIgnored(projectFolder.path, projectProofreadIgnored).catch(() => {
         setLastError("無視した指摘の保存に失敗しました");
       }),
+      () => openProjectPathRef.current !== projectFolder.path,
     );
   }, [isHydrated, projectFolder, projectProofreadIgnored, proofreadTermsWorkspacePath]);
 

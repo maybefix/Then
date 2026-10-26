@@ -26,8 +26,16 @@ export async function flushPendingSaves() {
   }
 }
 
-/** delayMs 待ってから save を呼ぶ。閉じる前なら待たずに呼ぶ。返す関数で取り消す（useEffect の後片付けに使う）。 */
-export function schedulePendingSave(key: string, delayMs: number, save: PendingSave): () => void {
+/**
+ * delayMs 待ってから save を呼ぶ。閉じる前なら待たずに呼ぶ。返す関数で取り消す（useEffect の後片付けに使う）。
+ * 取り消すときに saveOnCancel() が真なら、取り消さずにその場で呼ぶ（作品を切り替えたとき。待ち直す者がいない）。
+ */
+export function schedulePendingSave(
+  key: string,
+  delayMs: number,
+  save: PendingSave,
+  saveOnCancel?: () => boolean,
+): () => void {
   const saveNow = () => {
     clearTimeout(timer);
     clearPendingSave(key, saveNow);
@@ -36,6 +44,10 @@ export function schedulePendingSave(key: string, delayMs: number, save: PendingS
   const timer = setTimeout(saveNow, delayMs);
   setPendingSave(key, saveNow);
   return () => {
+    if (pendingSaves.get(key) === saveNow && saveOnCancel?.()) {
+      void saveNow();
+      return;
+    }
     clearTimeout(timer);
     clearPendingSave(key, saveNow);
   };
