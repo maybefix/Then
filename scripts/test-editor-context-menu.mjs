@@ -1,166 +1,164 @@
-// 右クリックメニューの実物を読み、表示条件と、全項目の呼び先・引数・順序を確かめる。
-// Appの呼び出し部分も評価して、propsの渡し忘れや取り違えを検出する。
+// Appからの受け渡しと、実際に描画したツールバー・階層メニューの全操作を検証する。
+// 寸法とCSSは test-editor-context-menu-layout.mjs が実際のブラウザで確認する。
 import assert from "node:assert/strict";
 import { build } from "esbuild";
 import { mkdir, readFile, writeFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { JSDOM } from "jsdom";
 
-const names = [
-  "editorContextMenu", "editorContextMenuRef", "pluginSelectionCommands", "pluginRuntimeHostRef",
-  "copyEditorSelection", "cutEditorSelection", "pasteIntoEditorSelection", "handTextToAi",
-  "closeEditorContextMenu", "openRubyNotationModal", "applyInlineNotation", "clearSelectionNotation",
-  "openDirectionNotationModal", "openManuscriptTidy",
-];
+const dom = new JSDOM('<main class="appShell" style="--ui-font-scale:1"><div id="root"></div></main>', { pretendToBeVisual: true, url: "http://localhost" });
+const globals = { window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
+  HTMLElement: dom.window.HTMLElement, Node: dom.window.Node, Event: dom.window.Event,
+  MouseEvent: dom.window.MouseEvent, KeyboardEvent: dom.window.KeyboardEvent,
+  requestAnimationFrame: dom.window.requestAnimationFrame.bind(dom.window), cancelAnimationFrame: dom.window.cancelAnimationFrame.bind(dom.window) };
+const previous = Object.fromEntries(Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+const React = await import("react");
+const { createRoot } = await import("react-dom/client");
+const { flushSync } = await import("react-dom");
+const names = ["editorContextMenu", "editorContextMenuRef", "pluginSelectionCommands", "pluginRuntimeHostRef",
+  "copyEditorSelection", "cutEditorSelection", "pasteIntoEditorSelection", "handTextToAi", "closeEditorContextMenu",
+  "openRubyNotationModal", "applyInlineNotation", "clearSelectionNotation", "openDirectionNotationModal", "openManuscriptTidy"];
 const app = await readFile("src/App.tsx", "utf8");
 const menuCalls = [...app.matchAll(/<EditorContextMenu\b/g)];
-const start = menuCalls[0]?.index ?? -1;
-assert.ok(start >= 0, "App must render the extracted menu");
-assert.equal(menuCalls.length, 1, "App must render one menu");
-assert.match(app.slice(start - 70, start), /\{editorContextMenu && \(/, "App must keep the open condition");
+assert.equal(menuCalls.length, 1, "App renders one menu");
+const start = menuCalls[0].index;
+assert.match(app.slice(start - 70, start), /\{editorContextMenu && \(/);
 const markup = app.slice(start, app.indexOf("/>", start) + 2);
 const bundled = await build({
-  stdin: {
-    contents: [
-      'import { EditorContextMenu } from "./src/components/editor/EditorContextMenu";',
-      'export { EditorContextMenu };',
-      `export const renderFromApp = ({ ${names.join(", ")} }) => (${markup});`,
-    ].join("\n"),
-    resolveDir: process.cwd(), loader: "tsx",
-  },
-  bundle: true, platform: "node", format: "esm", jsx: "automatic",
+  stdin: { contents: `import { EditorContextMenu } from "./src/components/editor/EditorContextMenu"; export const renderFromApp = ({ ${names.join(", ")} }) => (${markup});`, resolveDir: process.cwd(), loader: "tsx" },
+  bundle: true, platform: "node", format: "esm", jsx: "automatic", loader: { ".css": "empty" },
   external: ["react", "react-dom", "react/jsx-runtime"], write: false, logLevel: "error",
 });
 await mkdir(".tmp", { recursive: true });
 const compiled = path.resolve(".tmp", `editor-context-menu-${process.pid}.mjs`);
 await writeFile(compiled, bundled.outputFiles[0].text);
-const { EditorContextMenu, renderFromApp } = await import(pathToFileURL(compiled).href)
-  .finally(() => unlink(compiled));
-
-const originalGlobals = Object.fromEntries(["window", "document"].map((key) => [
-  key, Object.getOwnPropertyDescriptor(globalThis, key),
-]));
-let scale = 1;
-const shell = {};
-globalThis.window = { innerWidth: 1200, innerHeight: 800, getComputedStyle: (element) => {
-  assert.equal(element, shell);
-  return { getPropertyValue: (name) => { assert.equal(name, "--ui-font-scale"); return String(scale); } };
-} };
-globalThis.document = { querySelector: (selector) => { assert.equal(selector, ".appShell"); return shell; } };
-
-const elements = (node) => {
-  if (Array.isArray(node)) return node.flatMap(elements);
-  if (!node || typeof node !== "object" || !node.props) return [];
-  return [node, ...elements(node.props.children)];
-};
-const text = (node) => {
-  if (Array.isArray(node)) return node.map(text).join("");
-  if (typeof node === "string" || typeof node === "number") return String(node);
-  return node && typeof node === "object" ? text(node.props?.children) : "";
-};
-const buttons = (tree) => elements(tree).filter((node) => node.type === "button");
-const button = (tree, label) => {
-  const found = buttons(tree).filter((node) => text(node) === label);
-  assert.equal(found.length, 1, `${label} appears exactly once`);
-  return found[0];
-};
+const { renderFromApp } = await import(pathToFileURL(compiled).href).finally(() => unlink(compiled));
+const container = document.getElementById("root");
+const root = createRoot(container);
 const selection = { from: 2, to: 5, text: "対象語", x: 150, y: 200 };
-const commands = [
-  { pluginId: "qa.first", id: "run", title: "追加項目1" },
-  { pluginId: "qa.second", id: "run", title: "追加項目2" },
-];
-let calls = [];
-let inlineSucceeds = true;
-const spy = (name) => (...args) => { calls.push([name, ...args]); };
+const commands = [{ pluginId: "qa.first", id: "run", title: "追加項目1" }, { pluginId: "qa.second", id: "run", title: "追加項目2" }];
+let calls = [], inlineSucceeds = true, serial = 0;
+const spy = name => (...args) => { calls.push([name, ...args]); };
 const props = {
-  editorContextMenu: selection,
-  editorContextMenuRef: { current: null }, pluginSelectionCommands: [],
+  editorContextMenu: selection, editorContextMenuRef: { current: null }, pluginSelectionCommands: [],
   pluginRuntimeHostRef: { current: { executeCommand: spy("executeCommand") } },
-  ...Object.fromEntries(names.slice(4).map((name) => [name, spy(name)])),
+  ...Object.fromEntries(names.slice(4).map(name => [name, spy(name)])),
   applyInlineNotation: (...args) => { calls.push(["applyInlineNotation", ...args]); return inlineSucceeds; },
 };
-const render = (overrides = {}) => {
+const mount = (overrides = {}) => {
+  calls = []; inlineSucceeds = true;
   const values = { ...props, ...overrides };
   const element = renderFromApp(values);
-  assert.equal(element.type, EditorContextMenu);
   for (const name of names) assert.equal(element.props[name], values[name], `App passes ${name} unchanged`);
-  return EditorContextMenu(element.props);
+  flushSync(() => root.render(React.cloneElement(element, { key: ++serial })));
+  assert.equal(values.editorContextMenuRef.current, container.firstElementChild, "all panels use App's ref");
+  return values;
 };
-const expectClick = (tree, label, expected) => {
-  calls = [];
-  const item = button(tree, label);
-  assert.notEqual(item.props.disabled, true, `${label} is enabled`);
-  item.props.onClick();
-  assert.deepEqual(calls, expected, `${label}: exact handler, arguments and order`);
+const toolbar = () => container.querySelector('[role="toolbar"]');
+const main = () => container.querySelector('[role="menu"][aria-label="本文メニュー"]');
+const byText = (panel, label) => {
+  const found = [...panel.querySelectorAll("button")].filter(button => button.textContent.trim() === label);
+  assert.equal(found.length, 1, `${label} appears once in this panel`);
+  return found[0];
 };
+const quick = label => toolbar().querySelector(`[aria-label="${label}"]`);
+const click = button => { assert.ok(button); assert.equal(button.disabled, false, "target is enabled"); flushSync(() => button.click()); };
+const group = label => {
+  const trigger = main().querySelector(`[aria-label="${label}"]`);
+  const before = calls.length;
+  click(trigger);
+  assert.equal(calls.length, before, "opening a submenu does not edit text");
+  assert.equal(trigger.getAttribute("aria-expanded"), "true");
+  const panel = container.querySelector(`[role="menu"][aria-label="${label}"]`);
+  assert.ok(props.editorContextMenuRef.current.contains(panel), "submenu remains inside App's dismiss ref");
+  return panel;
+};
+const expectClick = (button, expected, label) => { calls = []; click(button); assert.deepEqual(calls, expected, label); };
+const key = (button, value) => flushSync(() => button.dispatchEvent(new KeyboardEvent("keydown", { key: value, bubbles: true })));
 
 try {
-  const menu = render();
-  assert.equal(menu.type, "div", "extraction adds no wrapper DOM");
-  assert.equal(menu.props.className, "editorContextMenu");
-  assert.equal(menu.props.role, "menu");
-  assert.equal(menu.ref, props.editorContextMenuRef, "outside-click dismissal keeps the same ref");
-  assert.deepEqual(menu.props.style, { left: 150, top: 200 });
-  assert.deepEqual(buttons(menu).map(text), [
-    "コピー", "切り取り", "貼り付け", "AIに渡す", "ルビ...", "縦中横", "圏点",
-    "記法をクリア", "文章方向...", "原稿を整える...",
-  ]);
-  assert.ok(buttons(menu).every((node) => node.props.role === "menuitem"));
-  for (const [label, handler] of [
-    ["コピー", "copyEditorSelection"], ["切り取り", "cutEditorSelection"],
-    ["貼り付け", "pasteIntoEditorSelection"], ["ルビ...", "openRubyNotationModal"],
-    ["記法をクリア", "clearSelectionNotation"], ["文章方向...", "openDirectionNotationModal"],
-    ["原稿を整える...", "openManuscriptTidy"],
-  ]) expectClick(menu, label, [[handler, selection]]);
-  expectClick(menu, "AIに渡す", [["handTextToAi", selection.text], ["closeEditorContextMenu"]]);
+  mount();
+  assert.equal(toolbar().querySelectorAll("button").length, 6);
+  assert.deepEqual([...toolbar().querySelectorAll("button")].map(button => button.getAttribute("aria-label")), ["切り取り", "コピー", "貼り付け", "ルビ", "縦中横", "圏点"]);
+  assert.deepEqual([...main().querySelectorAll("button")].map(button => button.getAttribute("aria-label") || button.textContent.trim()), ["AIに渡す", "独自記法", "行の操作"]);
+  for (const [label, handler] of [["コピー", "copyEditorSelection"], ["切り取り", "cutEditorSelection"], ["貼り付け", "pasteIntoEditorSelection"], ["ルビ", "openRubyNotationModal"]]) {
+    expectClick(quick(label), [[handler, selection]], `${label}: exact selection`);
+  }
   for (const [label, kind] of [["縦中横", "tcy"], ["圏点", "emphasis"]]) {
     inlineSucceeds = true;
-    expectClick(menu, label, [["applyInlineNotation", selection, kind], ["closeEditorContextMenu"]]);
+    expectClick(quick(label), [["applyInlineNotation", selection, kind], ["closeEditorContextMenu"]], `${label}: close on success`);
     inlineSucceeds = false;
-    expectClick(menu, label, [["applyInlineNotation", selection, kind]]);
+    expectClick(quick(label), [["applyInlineNotation", selection, kind]], `${label}: remain on failure`);
   }
   inlineSucceeds = true;
-  const withPlugins = render({ pluginSelectionCommands: commands });
-  assert.deepEqual(buttons(withPlugins).map(text).slice(0, 7), [
-    "コピー", "切り取り", "貼り付け", "AIに渡す", "追加項目1", "追加項目2", "ルビ...",
-  ]);
-  commands.forEach((command) => {
-    expectClick(withPlugins, command.title, [["executeCommand", command.pluginId, command.id], ["closeEditorContextMenu"]]);
-    assert.equal(button(withPlugins, command.title).key, `${command.pluginId}:${command.id}`);
-  });
-  const noRuntime = render({ pluginSelectionCommands: commands, pluginRuntimeHostRef: { current: null } });
-  expectClick(noRuntime, commands[0].title, [["closeEditorContextMenu"]]);
+  expectClick(byText(main(), "AIに渡す"), [["handTextToAi", selection.text], ["closeEditorContextMenu"]], "AI: hand over then close");
+  const notation = group("独自記法");
+  click(main().querySelector('[aria-label="独自記法"]'));
+  assert.equal(document.activeElement.textContent, "ルビ...", "an already open group can still receive keyboard focus");
+  assert.deepEqual([...notation.querySelectorAll("button")].map(button => button.textContent.trim()), ["ルビ...", "縦中横", "圏点", "記法をクリア"]);
+  expectClick(byText(notation, "ルビ..."), [["openRubyNotationModal", selection]], "ruby from submenu");
+  expectClick(byText(notation, "記法をクリア"), [["clearSelectionNotation", selection]], "clear notation");
+  for (const [label, kind] of [["縦中横", "tcy"], ["圏点", "emphasis"]]) {
+    inlineSucceeds = true;
+    expectClick(byText(notation, label), [["applyInlineNotation", selection, kind], ["closeEditorContextMenu"]], label + " from submenu");
+    inlineSucceeds = false;
+    expectClick(byText(notation, label), [["applyInlineNotation", selection, kind]], label + " failed from submenu");
+  }
+  const lines = group("行の操作");
+  expectClick(byText(lines, "文章方向..."), [["openDirectionNotationModal", selection]], "direction");
+  expectClick(byText(lines, "原稿を整える..."), [["openManuscriptTidy", selection]], "tidy");
+  assert.equal(container.querySelector('[role="menu"][aria-label="独自記法"]'), null, "one child menu at a time");
 
-  for (const [snapshot, disabledLabels] of [
-    [{ ...selection, from: 3, to: 3, text: "" }, ["コピー", "切り取り", "AIに渡す", "ルビ...", "縦中横", "圏点"]],
-    [{ ...selection, text: "一行\n二行", to: 7 }, ["ルビ...", "縦中横", "圏点"]],
-  ]) {
-    const tree = render({ editorContextMenu: snapshot, pluginSelectionCommands: commands });
-    assert.deepEqual(buttons(tree).filter((item) => item.props.disabled).map(text), disabledLabels);
-    const pluginLabels = buttons(tree).map(text).filter((label) => label.startsWith("追加項目"));
-    assert.equal(pluginLabels.length, snapshot.from === snapshot.to ? 0 : commands.length);
-    expectClick(tree, "貼り付け", [["pasteIntoEditorSelection", snapshot]]);
-    expectClick(tree, "文章方向...", [["openDirectionNotationModal", snapshot]]);
-    expectClick(tree, "原稿を整える...", [["openManuscriptTidy", snapshot]]);
+  mount({ pluginSelectionCommands: commands });
+  const plugin = group("プラグイン");
+  for (const command of commands) expectClick(byText(plugin, command.title), [["executeCommand", command.pluginId, command.id], ["closeEditorContextMenu"]], "plugin identifiers and order");
+  mount({ pluginSelectionCommands: commands, pluginRuntimeHostRef: { current: null } });
+  expectClick(byText(group("プラグイン"), commands[0].title), [["closeEditorContextMenu"]], "missing host is safe");
+
+  for (const snapshot of [{ ...selection, from: 3, to: 3, text: "" }, { ...selection, text: "一行\n二行", to: 7 }]) {
+    mount({ editorContextMenu: snapshot, pluginSelectionCommands: commands });
+    const empty = snapshot.from === snapshot.to;
+    for (const label of ["ルビ", "縦中横", "圏点"]) assert.equal(quick(label).disabled, true);
+    for (const label of ["コピー", "切り取り"]) assert.equal(quick(label).disabled, empty);
+    assert.equal(quick("貼り付け").disabled, false);
+    assert.equal(byText(main(), "AIに渡す").disabled, empty);
+    assert.equal(!!main().querySelector('[aria-label="プラグイン"]'), !empty);
+    const panel = group("独自記法");
+    for (const label of ["ルビ...", "縦中横", "圏点"]) assert.equal(byText(panel, label).disabled, true);
+    expectClick(byText(panel, "記法をクリア"), [["clearSelectionNotation", snapshot]], "clear is available without inline selection");
+    expectClick(quick("貼り付け"), [["pasteIntoEditorSelection", snapshot]], "paste keeps snapshot");
+    const linePanel = group("行の操作");
+    expectClick(byText(linePanel, "文章方向..."), [["openDirectionNotationModal", snapshot]], "multi-line/caret direction");
+    expectClick(byText(linePanel, "原稿を整える..."), [["openManuscriptTidy", snapshot]], "multi-line/caret tidy");
   }
-  for (const nextScale of [1, 1.25, 2]) {
-    scale = nextScale;
-    for (const snapshot of [selection, { ...selection, x: -100, y: -100 }, { ...selection, x: 1199, y: 799 },
-      { ...selection, from: 3, to: 3, text: "", x: 1199, y: 799 }]) {
-      for (const pluginSelectionCommands of [[], commands]) {
-        const tree = render({ editorContextMenu: snapshot, pluginSelectionCommands });
-        const height = 322 + (pluginSelectionCommands.length ? 31 + pluginSelectionCommands.length * 30 : 0);
-        assert.deepEqual(tree.props.style, {
-          left: Math.min(Math.max(8, snapshot.x / scale), Math.max(8, 1200 / scale - 236 - 8)),
-          top: Math.min(Math.max(8, snapshot.y / scale), Math.max(8, 800 / scale - height - 8)),
-        }, `menu position at scale ${scale}, ${pluginSelectionCommands.length} plugins`);
-      }
-    }
-  }
-  console.log("editor context menu: App props, all 10 items, plugin commands, selection guards, dismissal order, ref and scaled position passed");
+
+  mount();
+  assert.equal(document.activeElement.textContent, "AIに渡す");
+  key(document.activeElement, "ArrowDown");
+  assert.equal(document.activeElement.getAttribute("aria-label"), "独自記法");
+  key(document.activeElement, "ArrowRight");
+  assert.equal(document.activeElement.textContent, "ルビ...");
+  key(document.activeElement, "ArrowDown");
+  assert.equal(document.activeElement.textContent, "縦中横");
+  key(document.activeElement, "ArrowLeft");
+  assert.equal(document.activeElement.getAttribute("aria-label"), "独自記法");
+  key(document.activeElement, "ArrowRight");
+  calls = [];
+  key(document.activeElement, "Escape");
+  assert.equal(container.querySelector('[role="menu"][aria-label="独自記法"]'), null);
+  assert.deepEqual(calls, [], "Escape from child returns to parent");
+  key(document.activeElement, "Escape");
+  assert.deepEqual(calls, [["closeEditorContextMenu"]], "Escape at parent closes whole popup");
+  mount({ editorContextMenu: { ...selection, from: 2, to: 2, text: "" } });
+  key(document.activeElement, "ArrowRight");
+  assert.equal(document.activeElement.textContent, "記法をクリア", "keyboard skips disabled child items");
+  console.log("editor context menu: unchanged App contract, six quick actions, all ten actions, submenus, guards, refs and keyboard passed");
 } finally {
-  for (const [key, descriptor] of Object.entries(originalGlobals)) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else delete globalThis[key];
+  flushSync(() => root.unmount());
+  dom.window.close();
+  for (const [key, descriptor] of Object.entries(previous)) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key];
   }
 }

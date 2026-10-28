@@ -28,7 +28,7 @@ window.mountMenu = async ({ x, y, scale = 1, plugins = 1, theme = "dark", text =
   window.menuCalls = [];
   const record = name => (...args) => { window.menuCalls.push({ name, args }); };
   const selection = { x, y, from: 1, to: 1 + text.length, text };
-  flushSync(() => root.render(<EditorContextMenu key={++serial}
+  flushSync(() => root.render(window.fixtureElement = <EditorContextMenu key={++serial}
     editorContextMenu={selection} editorContextMenuRef={{ current: null }}
     pluginSelectionCommands={Array.from({ length: plugins }, (_, i) => ({ pluginId: "qa.menu", id: "item-" + i, title: "検証用コマンド " + i }))}
     pluginRuntimeHostRef={{ current: { executeCommand: record("plugin") } }}
@@ -37,6 +37,11 @@ window.mountMenu = async ({ x, y, scale = 1, plugins = 1, theme = "dark", text =
     openRubyNotationModal={record("ruby")} applyInlineNotation={(...args) => { record("inline")(...args); return true; }}
     clearSelectionNotation={record("clear")} openDirectionNotationModal={record("direction")} openManuscriptTidy={record("tidy")}
   />));
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+};
+window.setMenuScale = async scale => {
+  document.querySelector(".appShell").style.setProperty("--ui-font-scale", String(scale));
+  flushSync(() => root.render(React.cloneElement(window.fixtureElement)));
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 };
 window.openMenuGroup = async name => {
@@ -129,6 +134,8 @@ try {
   await evaluate('openMenuGroup("独自記法")');
   const side = await evaluate('document.querySelector(\'[role="menu"][aria-label="独自記法"]\').dataset.side');
   assert.equal(side, "left", "near the right edge, submenu opens left");
+  await evaluate("setMenuScale(2)");
+  await checkBounds(960, 680, "zoom change with submenu open");
   await viewport(420, 300);
   await sleep(100);
   await checkBounds(420, 300, "resize with submenu open");
@@ -136,7 +143,27 @@ try {
   assert.equal(await evaluate('!!document.querySelector(\'[aria-haspopup="menu"][aria-label="プラグイン"]\')'), false);
   assert.equal(await evaluate('document.querySelector(\'[aria-label="コピー"]\').disabled'), true);
   assert.equal(await evaluate('document.querySelector(\'[aria-label="貼り付け"]\').disabled'), false);
-  console.log(`editor context menu layout: ${scenarios} corner/scale cases, submenus, resize, long plugin scrolling and selection guards passed`);
+  await viewport(960, 680);
+  await evaluate('mountMenu({ x: 100, y: 100, plugins: 1 })');
+  const triggerPoint = await evaluate('(() => { const r = document.querySelector(\'[aria-haspopup="menu"][aria-label="独自記法"]\').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()');
+  await send("Input.dispatchMouseEvent", { type: "mouseMoved", ...triggerPoint });
+  await sleep(80);
+  assert.equal(await evaluate('!!document.querySelector(\'[role="menu"][aria-label="独自記法"]\')'), true, "hover opens submenu");
+  await send("Input.dispatchMouseEvent", { type: "mousePressed", ...triggerPoint, button: "left", clickCount: 1 });
+  await send("Input.dispatchMouseEvent", { type: "mouseReleased", ...triggerPoint, button: "left", clickCount: 1 });
+  await sleep(80);
+  assert.equal(await evaluate('!!document.querySelector(\'[role="menu"][aria-label="独自記法"]\')'), true, "click after hover keeps submenu open");
+  const childPoint = await evaluate('(() => { const r = document.querySelector(\'[role="menu"][aria-label="独自記法"]\').getBoundingClientRect(); return { x: r.left + 3, y: r.top + 3 }; })()');
+  for (let step = 1; step <= 5; step++) await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: triggerPoint.x + (childPoint.x - triggerPoint.x) * step / 5, y: triggerPoint.y + (childPoint.y - triggerPoint.y) * step / 5 });
+  await sleep(260);
+  assert.equal(await evaluate('!!document.querySelector(\'[role="menu"][aria-label="独自記法"]\')'), true, "pointer can cross from parent to child");
+  await checkBounds(960, 680, "pointer navigation");
+  const capture = process.argv.indexOf("--screenshot");
+  if (capture >= 0) {
+    const screenshot = await send("Page.captureScreenshot", { format: "png" });
+    await writeFile(path.resolve(process.argv[capture + 1]), Buffer.from(screenshot.data, "base64"));
+  }
+  console.log(`editor context menu layout: ${scenarios} corner/scale cases, submenus, resize, live zoom, long plugin scrolling, hover/click navigation and selection guards passed`);
 } finally {
   socket?.close();
   await stopBrowser(browser, profile);
