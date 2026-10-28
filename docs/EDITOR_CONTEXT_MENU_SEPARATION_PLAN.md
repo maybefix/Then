@@ -12,11 +12,11 @@ App.tsx に直接書かれた本文の右クリックメニューの描画を、
 | 1 | 調査 | 済み |
 | 2 | 仕組みの説明 | 済み（コードで確認。実機は工程9） |
 | 3 | 依存関係 | 済み |
-| 4 | 影響範囲 | 調査済み。「前」の一式を実行中 |
+| 4 | 影響範囲 | 済み。「前」の90本は87本成功、既存の失敗3本 |
 | 5 | 案 | 済み |
-| 6 | 人の確認（確認1） | 未確認 |
-| 7 | 実施 | 未着手 |
-| 8 | 自動テスト | 未着手 |
+| 6 | 人の確認（確認1） | 済み（案A） |
+| 7 | 実施 | 済み |
+| 8 | 自動テスト | 型検査・関係するテスト・回帰テスト・意図的な誤りの検出は成功。一式の前後比較は未実施 |
 | 9 | 実機確認 | 未着手 |
 | 10 | 完了（確認2） | 未確認 |
 
@@ -137,7 +137,7 @@ Appが `EditorContextMenuState | null` を持つ。nullなら閉じている。�
 
 ### 4-4. 今の自動テストの状態
 
-`667ef86` で変更前の一式を実行中。結果は `tmp/editor-context-menu/suite/suite-before.json`。スキルの既定に従い、Rustを変更しないときの除外対象 `test:ai`・`test:sidebar-file-move` 以外を実行する。
+`667ef86` で変更前の一式を実行した。結果は `tmp/editor-context-menu/suite/suite-before.json`。build成功、90本のうち87本成功、以下の既存の3本だけ失敗。メインのJavaScriptは710,754バイト。終了後のQA Then・QA WebView2・テスト用Edge・テスト用nodeはすべて0。スキルの既定に従い、Rustを変更しないときの除外対象 `test:ai`・`test:sidebar-file-move` 以外を実行した。
 
 2026-10-28、利用者から「テストは3つ既存の失敗が出る形になっている。それは現状は意図通りと扱っている」と確認を受けた。記録を調べ、次の3本を今回の修正対象に含めないことを確認した。
 
@@ -149,7 +149,7 @@ Appが `EditorContextMenuState | null` を持つ。nullなら閉じている。�
 
 根拠は `docs/PLUGIN_HOST_SEPARATION_PLAN.md` 工程8（298行）、`docs/SAVE_ON_WORK_SWITCH_FIX_PLAN.md` 工程4-4・工程8、`docs/STARTUP_IDEA_ORDER_FIX_PLAN.md` 工程4-4・工程8。最後の記録でも前後ともこの3本が失敗し、新しい失敗は0。古い記録にあるAI選択テストの競争は `docs/AI_SELECTION_TEST_RACE_FIX_PLAN.md` で別に修正済みだが、一式の中でタイムアウトする形は同文書でも別件として残っている。
 
-最初の制限環境での試行は、ブラウザのデバッグ接続に到達できず、プロセスの実測にも制限があったため終了した。記録は `suite-sandbox-attempt.json` として保存。ブラウザ起動と実測ができる環境で一式を取り直している。この環境由来の失敗は、上記3本にも分離による回帰にも混ぜない。
+最初の制限環境での試行は、ブラウザのデバッグ接続に到達できず、プロセスの実測にも制限があったため終了した。記録は `suite-sandbox-attempt.json` として保存。ブラウザ起動と実測ができる環境で一式を取り直し、上記の結果になった。この環境由来の失敗は、上記3本にも分離による回帰にも混ぜない。
 
 ## 工程5: 案
 
@@ -193,11 +193,30 @@ Appから約145行の描画を取り出し、呼び出しが十数行残る見�
 
 ## 工程7: 実施
 
-未着手。移動範囲・差分・改行形式・型検査・コミットを記録する。
+`move-lines.mjs` で4つの塊（145行の描画、幅・高さ、4行の型、合計151行）を移した。Appにはimportと8行の部品呼び出しを足した。
+
+移動直後の `verify-move.mjs src/App.tsx src/components/editor/EditorContextMenu.tsx --base checkpoint/before-editor-context-menu` は removed 151、lost 0、added 9。移した描画・定数・型の中身を落としていない。そのあと、Appで使わなくなった `canWrapInlineSelection` と `getScaledFixedMenuPosition` のimportを取り除き、型の跡の余分な空行を1行取り除いた。移し先では正しい相対パスで同じ共通関数をimportしている。
+
+Appのstate・ref・effect・右クリックの受け取り・編集操作・保存経路は移していない。新部品はフックを使わず、余分なDOM要素も作らない。Appは8,831行から8,686行へ減少（末尾の空要素を含む、同じ数え方）。新部品は197行。
 
 ## 工程8: 自動テスト
 
-未着手。回帰テスト、意図的な誤り2種類での失敗、前後比較と単独再実行の結果を記録する。
+### 型検査と関係するテスト
+
+`npx tsc --noEmit`、`test:editor-context-menu`（新規）、`test:editor-notation-actions`、`test:topbar-parts`、`test:plugin-host` がすべて成功。
+
+新テストは、Appの部品呼び出しを評価して14個のpropsが同じ値・関数・refで渡ることを確かめ、実際の部品の全10項目、プラグイン2件、空・単一行・複数行の選択、ホストがnullのとき、位置計算（拡大率1・1.25・2と画面端）を動かして確認する。分離前の145行を一時部品にしたものでも同じ確認が成功した。
+
+### 意図的な誤りの検出
+
+| 一時的に入れた誤り | 結果 |
+|---|---|
+| コピーへ渡す選択のtextを別の文字列にする | 「コピー: exact handler, arguments and order」で失敗 |
+| 縦中横が成功したときに閉じる呼び出しをしない | 「縦中横: exact handler, arguments and order」で失敗 |
+
+2つとも検出した。各試行のfinallyで変更前の内容を正確に戻し、最後に同一であることを確認した。結果は `tmp/editor-context-menu/mutations.json`。
+
+一式の前後比較は未実施。
 
 ## 工程9: 実機確認
 
