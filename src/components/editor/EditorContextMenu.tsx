@@ -65,6 +65,10 @@ export function EditorContextMenu({
   };
   const groupKeys: Group[] = hasSelection && pluginSelectionCommands.length ? ["notation", "line", "plugin"] : ["notation", "line"];
   const cancelClose = () => { if (closeTimer.current !== null) window.clearTimeout(closeTimer.current); closeTimer.current = null; };
+  const deferPointerChange = (change: () => void) => {
+    cancelClose();
+    closeTimer.current = window.setTimeout(() => { closeTimer.current = null; change(); }, 180);
+  };
   const open = (group: Group, keyboard = false) => {
     cancelClose();
     if (keyboard && group === openGroup && layout.subReady) {
@@ -81,9 +85,13 @@ export function EditorContextMenu({
     focusChild.current = false;
     setOpenGroup(null);
   };
+  const hoverGroup = (group: Group) => {
+    if (openGroup && openGroup !== group) deferPointerChange(() => { focusChild.current = false; setOpenGroup(group); });
+    else open(group);
+  };
 
   useEffect(() => () => { if (closeTimer.current !== null) window.clearTimeout(closeTimer.current); }, []);
-  useLayoutEffect(() => { setOpenGroup(null); focusChild.current = false; }, [editorContextMenu]);
+  useLayoutEffect(() => { cancelClose(); setOpenGroup(null); focusChild.current = false; }, [editorContextMenu]);
   useLayoutEffect(() => {
     if (layout.ready) mainRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
   }, [editorContextMenu, layout.ready]);
@@ -130,8 +138,8 @@ export function EditorContextMenu({
   return (
     <div ref={editorContextMenuRef} className="editorContextMenu editorContextMenuComposite" style={layout.rootStyle}
       onKeyDown={handleKeyDown} onPointerEnter={cancelClose}
-      onPointerLeave={() => { cancelClose(); closeTimer.current = window.setTimeout(() => setOpenGroup(null), 180); }}>
-      <div className="editorMenuPanel editorMenuToolbar" role="toolbar" aria-label="選択範囲の操作" onPointerEnter={() => closeChild()}>
+      onPointerLeave={() => deferPointerChange(() => setOpenGroup(null))}>
+      <div className="editorMenuPanel editorMenuToolbar" role="toolbar" aria-label="選択範囲の操作" onPointerEnter={() => deferPointerChange(() => setOpenGroup(null))}>
         {([items.cut, items.copy, items.paste] as Item[]).map(item => <button key={item.id} type="button"
           aria-label={item.label} title={item.label} disabled={item.disabled} onClick={item.run}>
           <AppIcon name={item.id as "cut" | "copy" | "paste"} />
@@ -141,12 +149,12 @@ export function EditorContextMenu({
         <button type="button" aria-label="圏点" title="圏点" disabled={items.emphasis.disabled} onClick={items.emphasis.run}><span className="editorMenuEmphasis">圏点</span></button>
       </div>
       <div ref={mainRef} className="editorMenuPanel editorMenuList" role="menu" aria-label="本文メニュー" onScroll={layout.updateLayout}>
-        <button type="button" role="menuitem" className="editorMenuItem" disabled={items.ai.disabled} onClick={items.ai.run} onPointerEnter={() => closeChild()}><span>{items.ai.label}</span></button>
+        <button type="button" role="menuitem" className="editorMenuItem" disabled={items.ai.disabled} onClick={items.ai.run} onPointerEnter={() => deferPointerChange(() => setOpenGroup(null))}><span>{items.ai.label}</span></button>
         {groupKeys.map(group => <button key={group} ref={element => { layout.triggerRefs.current[group] = element; }}
           type="button" role="menuitem" className="editorMenuItem" data-group={group}
           aria-label={groups[group].label} aria-haspopup="menu" aria-expanded={openGroup === group}
           aria-controls={openGroup === group ? `${menuId}-submenu` : undefined}
-          onPointerEnter={() => open(group)} onClick={() => open(group, true)}>
+          onPointerEnter={() => hoverGroup(group)} onClick={() => open(group, true)}>
           <span>{groups[group].label}</span><span className="editorMenuArrow" aria-hidden="true">›</span>
         </button>)}
       </div>
