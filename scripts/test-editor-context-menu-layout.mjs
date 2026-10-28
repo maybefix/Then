@@ -158,6 +158,18 @@ try {
   await sleep(260);
   assert.equal(await evaluate('!!document.querySelector(\'[role="menu"][aria-label="独自記法"]\')'), true, "pointer can cross from parent to child");
   await checkBounds(960, 680, "pointer navigation");
+  // A tall submenu shifts upward at the lower edge. Cross other parent rows diagonally.
+  await evaluate('mountMenu({ x: 958, y: 678, plugins: 60 })');
+  const edgeTrigger = await evaluate('(() => { const r = document.querySelector(\'[aria-haspopup="menu"][aria-label="プラグイン"]\').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()');
+  await send("Input.dispatchMouseEvent", { type: "mouseMoved", ...edgeTrigger });
+  await sleep(80);
+  const edgeChild = await evaluate('(() => { const r = document.querySelector(\'[role="menu"][aria-label="プラグイン"] button\').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()');
+  for (let step = 1; step <= 12; step++) {
+    await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: edgeTrigger.x + (edgeChild.x - edgeTrigger.x) * step / 12, y: edgeTrigger.y + (edgeChild.y - edgeTrigger.y) * step / 12 });
+    await sleep(10);
+  }
+  await sleep(260);
+  assert.equal(await evaluate('!!document.querySelector(\'[role="menu"][aria-label="プラグイン"]\')'), true, "bottom-right diagonal path keeps the intended child menu open");
   const capture = process.argv.indexOf("--screenshot");
   if (capture >= 0) {
     const screenshot = await send("Page.captureScreenshot", { format: "png" });
