@@ -273,7 +273,7 @@ try {
     await mouse("mouseReleased", x, y, "right");
     await sleep(400);
     const state = await evaluate(`(() => {
-      const item = [...document.querySelectorAll('[role="menu"] button')].find((b) => b.textContent.trim() === "コピー");
+      const item = document.querySelector('.editorContextMenu [aria-label="コピー"]');
       if (!item) return { menu: false };
       if (item.disabled) { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); return { menu: true, disabled: true }; }
       item.click();

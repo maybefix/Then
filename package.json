@@ -43,6 +43,8 @@
     "test:command-palette": "node scripts/test-command-palette.mjs",
     "test:editor-text-edits": "node scripts/test-editor-text-edits.mjs",
     "test:editor-notation-actions": "node scripts/test-editor-notation-actions.mjs",
+    "test:editor-context-menu": "node scripts/test-editor-context-menu.mjs",
+    "test:editor-context-menu-layout": "node scripts/test-editor-context-menu-layout.mjs",
     "test:project-portability": "node scripts/test-project-portability-baseline.mjs",
     "test:library": "node scripts/test-library-local-state.mjs && node scripts/test-library-transfer.mjs && node scripts/test-library-cross.mjs",
     "dev": "vite",

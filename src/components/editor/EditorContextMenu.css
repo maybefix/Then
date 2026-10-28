@@ -1,0 +1,110 @@
+.appShell[data-theme] .editorContextMenu.editorContextMenuComposite {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 6px;
+  width: 204px;
+  max-width: calc((100vw - 16px) / var(--ui-font-scale, 1));
+  max-height: calc((100dvh - 16px) / var(--ui-font-scale, 1));
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+  line-height: 1.4;
+}
+
+.editorContextMenuComposite .editorMenuPanel {
+  min-width: 0;
+  min-height: 0;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-popover, 0 12px 28px rgba(0, 0, 0, 0.4));
+}
+
+.editorContextMenuComposite .editorMenuList {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.editorContextMenu.editorContextMenuComposite button {
+  min-width: 0;
+  min-height: 30px;
+  border: 0;
+  outline-offset: -2px;
+}
+
+.editorContextMenu.editorContextMenuComposite button:focus-visible {
+  outline: 2px solid var(--accent);
+}
+
+.editorContextMenuComposite .editorMenuItem {
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding-inline: 6px;
+}
+
+.editorMenuItem > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editorMenuItem[aria-expanded="true"] {
+  background: var(--bg-hover, rgba(127, 127, 127, 0.14));
+  color: var(--text-primary);
+}
+
+.editorMenuArrow {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.editorContextMenuComposite .editorMenuToolbar {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1px;
+}
+
+.editorContextMenu.editorContextMenuComposite .editorMenuToolbar button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 32px;
+  padding: 0;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.editorMenuToolbar button:nth-child(4)::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  height: 20px;
+  border-left: 1px solid var(--border-subtle);
+}
+
+.editorMenuToolbar svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.editorMenuTcy { font-family: serif; font-size: 14px; font-weight: 700; letter-spacing: -1px; }
+.editorMenuEmphasis { text-decoration: overline dotted; }
+
+.editorContextMenuComposite .editorMenuSubmenu {
+  position: absolute;
+  z-index: 1;
+  width: 196px;
+  max-width: calc((100vw - 16px) / var(--ui-font-scale, 1));
+  max-height: calc((100dvh - 16px) / var(--ui-font-scale, 1));
+}

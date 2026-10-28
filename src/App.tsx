@@ -31,6 +31,7 @@ import { manageAsyncRegistration } from "./utils/asyncRegistration";
 import { flushPendingSaves, schedulePendingSave } from "./pendingSaves";
 import { useVerticalMetricFontFamily } from "./utils/verticalMetricFonts";
 import { buildAppShellStyle } from "./appShellStyle";
+import { EditorContextMenu, type EditorContextMenuState } from "./components/editor/EditorContextMenu";
 import { isRestorableRightSidebarTab } from "./utils/rightSidebarState";
 import type { LeftSidebarView } from "./utils/leftSidebarState";
 import {
@@ -97,7 +98,6 @@ import {
   updateDocumentAst,
 } from "./editor/ast/documentAst";
 import {
-  canWrapInlineSelection,
   normalizeSelectionRange,
   type EditorSelectionSnapshot,
   type LayoutDirection,
@@ -274,7 +274,6 @@ import {
   recordOpenedWorkspace,
   scopeDisplayName,
 } from "./utils/projectTree";
-import { getScaledFixedMenuPosition } from "./utils/contextMenuPosition";
 import type { LoadedExportSource } from "./export/types";
 import { createLoadedExportSource } from "./export/exportSource";
 import CanvasWindowApp from "./CanvasWindowApp";
@@ -299,13 +298,11 @@ const LEGACY_STORAGE_KEY = "brew.app-state.v1";
 const newTabName = "新しいタブ";
 const scratchWorkspaceName = "一時ファイル";
 const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
-const EDITOR_CONTEXT_MENU_WIDTH = 236;
 type AppMode = "write" | "canvas" | "export" | "checkpoint" | "plugin";
 type ToastAction = {
   label: string;
   onClick: () => void;
 };
-const EDITOR_CONTEXT_MENU_HEIGHT = 322;
 const defaultReferenceLayout: ReferenceLayout = {
   version: 3,
   name: "default",
@@ -323,11 +320,6 @@ type BreadcrumbOverflowItem =
   | { kind: "folder" | "file"; name: string; path: string }
   | { kind: "outline"; item: DocumentOutlineItem }
   | { kind: "scratch"; name: string };
-
-type EditorContextMenuState = EditorSelectionSnapshot & {
-  x: number;
-  y: number;
-};
 
 type EditorFindState = {
   open: boolean;
@@ -8326,151 +8318,14 @@ export default function App() {
                     )}
                   </div>
                   {editorContextMenu && (
-                    <div
-                      ref={editorContextMenuRef}
-                      className="editorContextMenu"
-                      role="menu"
-                      style={getScaledFixedMenuPosition(editorContextMenu.x, editorContextMenu.y, {
-                        width: EDITOR_CONTEXT_MENU_WIDTH,
-                        height: EDITOR_CONTEXT_MENU_HEIGHT + (
-                          pluginSelectionCommands.length > 0
-                            ? 31 + pluginSelectionCommands.length * 30
-                            : 0
-                        ),
-                      })}
-                    >
-                      <div className="contextMenuSection">
-                        <button
-                          type="button"
-                          role="menuitem"
-                          disabled={editorContextMenu.from === editorContextMenu.to}
-                          onClick={() => void copyEditorSelection(editorContextMenu)}
-                        >
-                          コピー
-                        </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          disabled={editorContextMenu.from === editorContextMenu.to}
-                          onClick={() => void cutEditorSelection(editorContextMenu)}
-                        >
-                          切り取り
-                        </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => void pasteIntoEditorSelection(editorContextMenu)}
-                        >
-                          貼り付け
-                        </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          disabled={editorContextMenu.from === editorContextMenu.to}
-                          onClick={() => {
-                            handTextToAi(editorContextMenu.text);
-                            closeEditorContextMenu();
-                          }}
-                        >
-                          AIに渡す
-                        </button>
-                      </div>
-                      <div className="contextMenuDivider" role="separator" />
-                      {pluginSelectionCommands.length > 0 && editorContextMenu.from !== editorContextMenu.to && (
-                        <>
-                          <div className="contextMenuSection">
-                            <span className="contextMenuLabel">プラグイン</span>
-                            {pluginSelectionCommands.map((command) => (
-                              <button
-                                type="button"
-                                role="menuitem"
-                                key={`${command.pluginId}:${command.id}`}
-                                onClick={() => {
-                                  pluginRuntimeHostRef.current?.executeCommand(
-                                    command.pluginId,
-                                    command.id,
-                                  );
-                                  closeEditorContextMenu();
-                                }}
-                              >
-                                {command.title}
-                              </button>
-                            ))}
-                          </div>
-                          <div className="contextMenuDivider" role="separator" />
-                        </>
-                      )}
-                      <div className="contextMenuSection">
-                        <span className="contextMenuLabel">独自記法</span>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          disabled={!canWrapInlineSelection(editorContextMenu)}
-                          title={customNotationSpecs[0].syntax}
-                          onClick={() => openRubyNotationModal(editorContextMenu)}
-                        >
-                          ルビ...
-                        </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          disabled={!canWrapInlineSelection(editorContextMenu)}
-                          title={customNotationSpecs[1].syntax}
-                          onClick={() => {
-                            if (applyInlineNotation(editorContextMenu, "tcy")) {
-                              closeEditorContextMenu();
-                            }
-                          }}
-                        >
-                          縦中横
-                        </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          disabled={!canWrapInlineSelection(editorContextMenu)}
-                          title={customNotationSpecs[2].syntax}
-                          onClick={() => {
-                            if (applyInlineNotation(editorContextMenu, "emphasis")) {
-                              closeEditorContextMenu();
-                            }
-                          }}
-                        >
-                          圏点
-                        </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          title="選択範囲または行の独自記法を外します"
-                          onClick={() => clearSelectionNotation(editorContextMenu)}
-                        >
-                          記法をクリア
-                        </button>
-                      </div>
-                      <div className="contextMenuDivider" role="separator" />
-                      <div className="contextMenuSection">
-                        <span className="contextMenuLabel">行指示</span>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          title={customNotationSpecs[3].syntax}
-                          onClick={() => openDirectionNotationModal(editorContextMenu)}
-                        >
-                          文章方向...
-                        </button>
-                      </div>
-                      <div className="contextMenuDivider" role="separator" />
-                      <div className="contextMenuSection">
-                        <span className="contextMenuLabel">整形</span>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          title="段落頭の字下げと「！」「？」のあとの空きを入れます"
-                          onClick={() => openManuscriptTidy(editorContextMenu)}
-                        >
-                          原稿を整える...
-                        </button>
-                      </div>
-                    </div>
+                    <EditorContextMenu
+                      {...{
+                        editorContextMenu, editorContextMenuRef, pluginSelectionCommands, pluginRuntimeHostRef,
+                        copyEditorSelection, cutEditorSelection, pasteIntoEditorSelection, handTextToAi,
+                        closeEditorContextMenu, openRubyNotationModal, applyInlineNotation, clearSelectionNotation,
+                        openDirectionNotationModal, openManuscriptTidy,
+                      }}
+                    />
                   )}
                 </div>
               </div>

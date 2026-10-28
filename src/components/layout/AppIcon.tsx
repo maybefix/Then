@@ -2,6 +2,8 @@ export type AppIconName =
   | "book"
   | "canvas"
   | "checkpointAdd"
+  | "copy"
+  | "cut"
   | "chevronDown"
   | "export"
   | "file"
@@ -16,6 +18,7 @@ export type AppIconName =
   | "openExternal"
   | "panelLeft"
   | "panelRight"
+  | "paste"
   | "plus"
   | "reference"
   | "search"
@@ -33,6 +36,12 @@ export function AppIcon({ name, className = "" }: { name: AppIconName; className
   };
 
   switch (name) {
+    case "copy":
+      return <svg {...common}><rect x="8" y="8" width="12" height="13" rx="1.5" /><path d="M15 8V3H3v13h5" /></svg>;
+    case "cut":
+      return <svg {...common}><circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="m8.5 7.5 12 13M8.5 16.5 20.5 3.5M11 12l-2.5 3" /></svg>;
+    case "paste":
+      return <svg {...common}><path d="M9 5H5v16h14V5h-4" /><rect x="9" y="2" width="6" height="5" rx="1" /><path d="M8 12h8M8 16h6" /></svg>;
     case "book":
       return (
         <svg {...common}>
