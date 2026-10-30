@@ -16,6 +16,7 @@
     "test:workspace-tree-actions": "node scripts/test-workspace-tree-actions.mjs",
     "test:project-search-actions": "node scripts/test-project-search-actions.mjs",
     "test:heading-move-actions": "node scripts/test-heading-move-actions.mjs",
+    "test:template-actions": "node scripts/test-template-actions.mjs",
     "test:native-ime": "node scripts/test-native-ime.mjs && node scripts/test-native-ime-integration.mjs",
     "test:code-blocks": "node scripts/test-code-blocks.mjs",
     "test:comment-out": "node scripts/test-comment-out.mjs",
