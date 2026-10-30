@@ -142,7 +142,7 @@ Rust の命令 `list_text_templates`、`register_text_template`。
 
 ### 4-4. 今の自動テストの状態
 
-「前」の一式は実行中（結果は工程8に書く）。
+「前」の一式（`511b774`、2026-10-31）: build 成功、メインの束 716,732 bytes、92件中4件が失敗。`test:ai-selection`、`test:canvas-save`、`test:v058-bundle`（元から上限超え）、`test:v0511-themes`。いずれも今回の変更より前からの失敗として扱い、「後」と比べる。残ったプロセスはすべて 0。
 
 ## 工程5: 案
 
