@@ -89,7 +89,8 @@ export function createTemplateActions(deps: TemplateActionDeps) {
 
     try {
       const templates = await loadTextTemplates();
-      const normalizedName = draft.name.replace(/\.(?:txt|md)$/i, "");
+      // Rust は前後の空白を削った名前でファイルを作るので、同じ名前を探すときも削っておく。
+      const normalizedName = draft.name.trim().replace(/\.(?:txt|md)$/i, "").trim();
       const existing = templates.find(
         (template) =>
           template.scope === draft.scope &&

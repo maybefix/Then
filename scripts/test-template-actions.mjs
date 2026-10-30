@@ -229,6 +229,18 @@ const registerCalls = (app) => app.calls.filter((call) => call.command === "regi
   assert.equal(registerCalls(caseOnly.app)[0].args.overwrite, true);
 }
 
+// ---- 癖1: 名前の前後の空白は削ってから同じ名前を探す（Rust も削るので、削らないと上書きの確認が出ずに断られる） ----
+{
+  const { app, actions } = createApp({ templates: [{ id: "w1", name: "第一章", scope: "workspace", extension: "txt" }] });
+  app.multiInputAnswer = { name: "  第一章 .txt ", scope: "workspace" };
+  await actions().handleRegisterCurrentFileAsTemplate();
+  assert.equal(app.confirms.length, 1, "a padded name must still find the registered template");
+  assert.equal(app.confirms[0].message, "「第一章」はすでに登録されています。");
+  assert.equal(registerCalls(app)[0].args.name, "第一章");
+  assert.equal(registerCalls(app)[0].args.overwrite, true);
+  assert.deepEqual(app.toasts, ["テンプレート「第一章」を登録しました"]);
+}
+
 // ---- 失敗したら通知し、エラーの文を残す ----
 {
   const { app, actions } = createApp();
