@@ -186,6 +186,7 @@ import { createProjectEntryActions } from "./projectEntryActions";
 import { createWorkspaceTreeActions } from "./workspaceTreeActions";
 import { createProjectSearchActions } from "./projectSearchActions";
 import { createHeadingMoveActions } from "./headingMoveActions";
+import { createTemplateActions } from "./templateActions";
 import {
   MAX_RECENT_REFERENCES,
   WHITESPACE_PATTERN,
@@ -6954,79 +6955,15 @@ export default function App() {
     void action();
   };
 
-  const loadTextTemplates = async (): Promise<TextTemplateSummary[]> => {
-    if (!isTauriRuntime()) return [];
-    return invoke<TextTemplateSummary[]>("list_text_templates", {
-      rootPath: projectFolder?.path ?? null,
-    });
-  };
-
-  const handleRegisterCurrentFileAsTemplate = async () => {
-    if (!isTauriRuntime()) {
-      showToast("テンプレート登録はTauri版で利用できます");
-      return;
-    }
-    const sourceExtension = currentFileName.toLowerCase().endsWith(".md") ? "md" : "txt";
-    const initialName = currentFileName.replace(/\.(?:txt|md)$/i, "") || "新規テンプレート";
-    const scopeOptions = projectFolder
-      ? [
-          { value: "workspace", label: "このワークスペース" },
-          { value: "profile", label: "すべてのワークスペースで共通" },
-        ]
-      : [{ value: "profile", label: "すべてのワークスペースで共通" }];
-    const draft = await requestMultiInput({
-      title: "このファイルをテンプレートとして登録",
-      fields: [
-        {
-          id: "name",
-          label: "テンプレート名",
-          initialValue: initialName,
-          placeholder: "例: 章のひな型",
-        },
-        {
-          id: "scope",
-          label: "保存先",
-          initialValue: projectFolder ? "workspace" : "profile",
-          options: scopeOptions,
-        },
-      ],
-      confirmLabel: "登録",
-    });
-    if (!draft) return;
-
-    try {
-      const templates = await loadTextTemplates();
-      const normalizedName = draft.name.replace(/\.(?:txt|md)$/i, "");
-      const existing = templates.find(
-        (template) =>
-          template.scope === draft.scope &&
-          template.extension === sourceExtension &&
-          template.name.localeCompare(normalizedName, undefined, { sensitivity: "accent" }) === 0,
-      );
-      let overwrite = false;
-      if (existing) {
-        overwrite = await requestConfirm({
-          title: "テンプレートを上書き",
-          message: `「${existing.name}」はすでに登録されています。`,
-          detail: "登録済みの内容を、現在のファイル内容で置き換えます。",
-          confirmLabel: "上書き",
-        });
-        if (!overwrite) return;
-      }
-      const registered = await invoke<TextTemplateSummary>("register_text_template", {
-        rootPath: projectFolder?.path ?? null,
-        scope: draft.scope,
-        name: normalizedName,
-        extension: sourceExtension,
-        content: markdown,
-        overwrite,
-      });
-      showToast(`テンプレート「${registered.name}」を登録しました`);
-    } catch (error) {
-      setLastError(String(error));
-      showToast("テンプレートを登録できませんでした");
-    }
-  };
+  const { loadTextTemplates, handleRegisterCurrentFileAsTemplate } = createTemplateActions({
+    projectFolder,
+    currentFileName,
+    markdown,
+    setLastError,
+    showToast,
+    requestMultiInput,
+    requestConfirm,
+  });
 
   const {
     handleCreateProjectFile,
@@ -7968,6 +7905,7 @@ export default function App() {
                 handleNewDocument, handleOpenTextFile, saveCurrentDocument, handleSaveAs,
                 handleRegisterCurrentFileAsTemplate, appMode, openManuscriptTidy, getCurrentEditorSelection,
                 handleOpenLinkedExport, handleOpenProjectFolder,
+                canRegisterTemplate: !(isNewTabStartPage || activeTab?.kind === "empty"),
               }}
             />
             {isLeftSidebarCollapsed && appMode === "write" && (
