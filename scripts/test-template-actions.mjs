@@ -241,6 +241,17 @@ const registerCalls = (app) => app.calls.filter((call) => call.command === "regi
   assert.deepEqual(app.toasts, ["テンプレート「第一章」を登録しました"]);
 }
 
+// ---- 癖3: 全角と半角、ひらがなとカタカナだけが違う名前は別のテンプレート（Rust は別のファイルを作る） ----
+for (const [registered, typed] of [["ア", "あ"], ["Ａ章", "A章"]]) {
+  const { app, actions } = createApp({ templates: [{ id: "w1", name: registered, scope: "workspace", extension: "txt" }] });
+  app.multiInputAnswer = { name: typed, scope: "workspace" };
+  await actions().handleRegisterCurrentFileAsTemplate();
+  assert.equal(app.confirms.length, 0, `${typed} must not be taken for ${registered}`);
+  assert.equal(registerCalls(app)[0].args.overwrite, false);
+  assert.deepEqual(app.templates.map((template) => template.name), [registered, typed]);
+  assert.deepEqual(app.toasts, [`テンプレート「${typed}」を登録しました`]);
+}
+
 // ---- 失敗したら通知し、エラーの文を残す ----
 {
   const { app, actions } = createApp();

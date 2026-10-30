@@ -95,7 +95,9 @@ export function createTemplateActions(deps: TemplateActionDeps) {
         (template) =>
           template.scope === draft.scope &&
           template.extension === sourceExtension &&
-          template.name.localeCompare(normalizedName, undefined, { sensitivity: "accent" }) === 0,
+          // Windows のファイル名と同じく、大文字小文字の違いだけを同じとみなす。localeCompare は
+          // 全角と半角、ひらがなとカタカナも同じとみなし、上書きの確認の後に別のファイルができていた。
+          template.name.toUpperCase() === normalizedName.toUpperCase(),
       );
       let overwrite = false;
       if (existing) {
