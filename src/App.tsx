@@ -7905,6 +7905,7 @@ export default function App() {
                 handleNewDocument, handleOpenTextFile, saveCurrentDocument, handleSaveAs,
                 handleRegisterCurrentFileAsTemplate, appMode, openManuscriptTidy, getCurrentEditorSelection,
                 handleOpenLinkedExport, handleOpenProjectFolder,
+                canRegisterTemplate: !(isNewTabStartPage || activeTab?.kind === "empty"),
               }}
             />
             {isLeftSidebarCollapsed && appMode === "write" && (

@@ -138,7 +138,7 @@ const expectExercised = (label, names) => {
     getCurrentEditorSelection: spy("getCurrentEditorSelection", mark("selection")),
   };
   const fileMenuRef = refOf("fileMenuRef");
-  const base = { fileMenuRef, isEditorFocusMode: false, isFileMenuOpen: false, appMode: "write" };
+  const base = { fileMenuRef, isEditorFocusMode: false, isFileMenuOpen: false, appMode: "write", canRegisterTemplate: true };
   const render = (overrides = {}) => TopbarFileMenu({ ...base, ...spies, ...overrides });
 
   const closed = render();
@@ -188,6 +188,13 @@ const expectExercised = (label, names) => {
     assert.equal(menuItem(render({ isFileMenuOpen: true, appMode }), "原稿を整える…").props.disabled, true,
       `原稿を整える must be disabled in ${appMode}`);
   }
+  // 開始画面と空のタブでは、テンプレートとして登録する本文がないので押せない。
+  assert.equal(menuItem(open, "このファイルをテンプレートとして登録…").props.disabled, false);
+  assert.equal(
+    menuItem(render({ isFileMenuOpen: true, canRegisterTemplate: false }), "このファイルをテンプレートとして登録…").props.disabled,
+    true,
+    "template registration must be disabled without a document",
+  );
   expectExercised("TopbarFileMenu", [...functionNames, "getCurrentEditorSelection"]);
 }
 
@@ -906,6 +913,15 @@ const expectExercised = (label, names) => {
   calls.length = 0;
   handleKeyDown({ key: "a" });
   assert.deepEqual(calls, [], "other keys close nothing");
+}
+
+// --- App は、本文の代わりに開始画面を出している間、テンプレート登録を押せなくする ---
+// 開始画面を出す条件（本文の欄の JSX）と同じ式を渡していることを、文字で確かめる。
+{
+  const app = await readFile("src/App.tsx", "utf8");
+  const startPage = 'isNewTabStartPage || activeTab?.kind === "empty"';
+  assert.ok(app.includes(") : " + startPage + " ? ("), "App must show the start page on this condition");
+  assert.ok(app.includes("canRegisterTemplate: !(" + startPage + "),"), "App must disable registration on the same condition");
 }
 
 console.log("topbar parts tests passed");

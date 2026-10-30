@@ -15,6 +15,7 @@ export type TopbarFileMenuProps = {
   saveCurrentDocument: () => Promise<void>;
   handleSaveAs: () => Promise<void>;
   handleRegisterCurrentFileAsTemplate: () => Promise<void>;
+  canRegisterTemplate: boolean;
   appMode: AppMode;
   openManuscriptTidy: (selection: EditorSelectionSnapshot | null) => void;
   getCurrentEditorSelection: () => EditorSelectionSnapshot | null;
@@ -26,7 +27,7 @@ export function TopbarFileMenu(props: TopbarFileMenuProps) {
   const {
     fileMenuRef, isEditorFocusMode, isFileMenuOpen, setIsFileMenuOpen, closeFileMenuAndRun,
     handleNewDocument, handleOpenTextFile, saveCurrentDocument, handleSaveAs,
-    handleRegisterCurrentFileAsTemplate, appMode, openManuscriptTidy, getCurrentEditorSelection,
+    handleRegisterCurrentFileAsTemplate, canRegisterTemplate, appMode, openManuscriptTidy, getCurrentEditorSelection,
     handleOpenLinkedExport, handleOpenProjectFolder,
   } = props;
 
@@ -79,6 +80,7 @@ export function TopbarFileMenu(props: TopbarFileMenuProps) {
           <button
             type="button"
             role="menuitem"
+            disabled={!canRegisterTemplate}
             onClick={() => closeFileMenuAndRun(handleRegisterCurrentFileAsTemplate)}
           >
             このファイルをテンプレートとして登録…
