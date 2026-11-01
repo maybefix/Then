@@ -18,7 +18,7 @@ const React = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { flushSync } = await import("react-dom");
 const names = ["editorContextMenu", "editorContextMenuRef", "pluginSelectionCommands", "pluginRuntimeHostRef",
-  "copyEditorSelection", "cutEditorSelection", "pasteIntoEditorSelection", "handTextToAi", "closeEditorContextMenu",
+  "copyEditorSelection", "cutEditorSelection", "pasteIntoEditorSelection", "closeEditorContextMenu",
   "openRubyNotationModal", "applyInlineNotation", "clearSelectionNotation", "openDirectionNotationModal", "openManuscriptTidy"];
 const app = await readFile("src/App.tsx", "utf8");
 const menuCalls = [...app.matchAll(/<EditorContextMenu\b/g)];
@@ -82,7 +82,7 @@ try {
   mount();
   assert.equal(toolbar().querySelectorAll("button").length, 6);
   assert.deepEqual([...toolbar().querySelectorAll("button")].map(button => button.getAttribute("aria-label")), ["切り取り", "コピー", "貼り付け", "ルビ", "縦中横", "圏点"]);
-  assert.deepEqual([...main().querySelectorAll("button")].map(button => button.getAttribute("aria-label") || button.textContent.trim()), ["AIに渡す", "独自記法", "行の操作"]);
+  assert.deepEqual([...main().querySelectorAll("button")].map(button => button.getAttribute("aria-label") || button.textContent.trim()), ["独自記法", "行の操作"]);
   for (const [label, handler] of [["コピー", "copyEditorSelection"], ["切り取り", "cutEditorSelection"], ["貼り付け", "pasteIntoEditorSelection"], ["ルビ", "openRubyNotationModal"]]) {
     expectClick(quick(label), [[handler, selection]], `${label}: exact selection`);
   }
@@ -93,7 +93,6 @@ try {
     expectClick(quick(label), [["applyInlineNotation", selection, kind]], `${label}: remain on failure`);
   }
   inlineSucceeds = true;
-  expectClick(byText(main(), "AIに渡す"), [["handTextToAi", selection.text], ["closeEditorContextMenu"]], "AI: hand over then close");
   const notation = group("独自記法");
   click(main().querySelector('[aria-label="独自記法"]'));
   assert.equal(document.activeElement.textContent, "ルビ...", "an already open group can still receive keyboard focus");
@@ -123,7 +122,6 @@ try {
     for (const label of ["ルビ", "縦中横", "圏点"]) assert.equal(quick(label).disabled, true);
     for (const label of ["コピー", "切り取り"]) assert.equal(quick(label).disabled, empty);
     assert.equal(quick("貼り付け").disabled, false);
-    assert.equal(byText(main(), "AIに渡す").disabled, empty);
     assert.equal(!!main().querySelector('[aria-label="プラグイン"]'), !empty);
     const panel = group("独自記法");
     for (const label of ["ルビ...", "縦中横", "圏点"]) assert.equal(byText(panel, label).disabled, true);
@@ -135,8 +133,7 @@ try {
   }
 
   mount();
-  assert.equal(document.activeElement.textContent, "AIに渡す");
-  key(document.activeElement, "ArrowDown");
+  assert.equal(document.activeElement.textContent, "独自記法›");
   assert.equal(document.activeElement.getAttribute("aria-label"), "独自記法");
   key(document.activeElement, "ArrowRight");
   assert.equal(document.activeElement.textContent, "ルビ...");

@@ -1251,11 +1251,6 @@ export default function App() {
     sourceError?: string;
   } | null>(null);
   const [rightSidebarTab, setRightSidebarTabState] = useState<string>("plot");
-  const [aiInsertRequest, setAiInsertRequest] = useState<{ text: string; nonce: number } | null>(null);
-  const consumeAiInsertRequest = useCallback(
-    (nonce: number) => setAiInsertRequest((current) => (current?.nonce === nonce ? null : current)),
-    [],
-  );
 
   const setRightSidebarTab = useCallback((tab: string) => {
     setRightSidebarTabState(tab);
@@ -5910,15 +5905,6 @@ export default function App() {
     window.requestAnimationFrame(() => editorInstanceRef.current?.focus());
   };
 
-  /** Shows the AI pane with `text` added to its composer. Nothing is sent (AI-26, AI-27). */
-  const handTextToAi = (text: string) => {
-    if (!text.trim()) return;
-    setIsEditorFocusMode(false);
-    setRightSidebarTab("ai");
-    setIsRightSidebarCollapsed(false);
-    setAiInsertRequest({ text, nonce: Date.now() });
-  };
-
   const leaveEditorFocusMode = () => {
     setIsEditorFocusMode(false);
     window.requestAnimationFrame(() => editorInstanceRef.current?.focus());
@@ -8259,7 +8245,7 @@ export default function App() {
                     <EditorContextMenu
                       {...{
                         editorContextMenu, editorContextMenuRef, pluginSelectionCommands, pluginRuntimeHostRef,
-                        copyEditorSelection, cutEditorSelection, pasteIntoEditorSelection, handTextToAi,
+                        copyEditorSelection, cutEditorSelection, pasteIntoEditorSelection,
                         closeEditorContextMenu, openRubyNotationModal, applyInlineNotation, clearSelectionNotation,
                         openDirectionNotationModal, openManuscriptTidy,
                       }}
@@ -8330,12 +8316,12 @@ export default function App() {
                 updateSettings, revealEditorRange, replaceEditorRange, projectProofreadTerms, appState,
                 setProjectProofreadTerms, setAppState, exportProofreadDictionary, importProofreadDictionary,
                 projectProofreadIgnored, proofreadIgnoreKey, setProjectProofreadIgnored, snippets,
-                setReferenceCandidates, addReferencesToIdeaThread, showToast, openReferenceCard,
-                aiInsertRequest, consumeAiInsertRequest, plotCards, setPlotCards, sortedReferenceCandidates,
+                showToast, openReferenceCard,
+                plotCards, setPlotCards, sortedReferenceCandidates,
                 openPlotReference, isPlotManagerOpen, transferMenuLabel, transferPlotCard, referenceLayout,
                 draggingId, ideaFocusRequest, setIdeaFocusRequest, captureFragment, openIdeaBinderCard,
                 createIdeaThread, renameIdeaThread, toggleThreadStar, deleteIdeaThread, addFragment,
-                updateFragmentBody, deleteFragment, moveFragment, moveFragmentToNewThread, handTextToAi,
+                updateFragmentBody, deleteFragment, moveFragment, moveFragmentToNewThread,
                 handleFragmentDragStart, handleFragmentDragEnd, handleAddReference, handleCreateReference,
                 moveIdeaReference, moveReferenceToNewThread, removeIdeaReference,
                 handleDeleteImportedReference, reorderIdeaThreadItem, transferIdeaThread,
@@ -8569,7 +8555,6 @@ export default function App() {
             <QuickIdeaModal
               threads={snippets}
               onCapture={captureFragment}
-              onAskAi={handTextToAi}
               onClose={() => setIsQuickIdeaModalOpen(false)}
             />
           )}

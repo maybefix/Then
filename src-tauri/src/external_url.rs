@@ -1,7 +1,7 @@
-//! Opens a link from a reference or an AI answer in the user's own browser
+//! Opens a link from a reference in the user's own browser
 //! or mail program, never inside Then's window.
 //!
-//! The text being shown can come from a web page an AI read, so only web and
+//! The text being shown can come from an external source, so only web and
 //! mail links pass; the check is repeated here because the page side is not
 //! the last word on what Windows is asked to open.
 

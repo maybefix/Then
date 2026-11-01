@@ -1,6 +1,5 @@
 // 保存したデータを読み込んだときに、形と値を整える処理（App.tsx から移した。docs/APP_STATE_NORMALIZE_SEPARATION_PLAN.md）。
 // アプリ全体の保存状態（AppState）と、作品のファイル（プロット・資料のレイアウト・校正の無視リスト）の両方を扱う。
-import { DEFAULT_AI_SETTINGS, normalizeAiSettings } from "./ai/settings";
 import { normalizeManuscriptSettings } from "./editor/manuscriptLayout";
 import { hash16 } from "./editor/ast/documentAst";
 import { normalizeWorkspaceDocumentTabs } from "./editor/workspaceDocumentTabs";
@@ -164,7 +163,6 @@ const defaultSettings: EditorSettings = {
   canvasOpensInWindow: false,
   exportOpensInWindow: false,
   proofread: { ...DEFAULT_PROOFREAD_OPTIONS, disabledRules: [] },
-  ai: DEFAULT_AI_SETTINGS,
 };
 
 export function normalizePathForCompare(path: string): string {
@@ -642,8 +640,10 @@ export function normalizeState(value: Partial<AppState> | null | undefined): App
   const rawSettings = (value?.settings ?? {}) as Partial<EditorSettings> & {
     /** v0.6.1以前の保存形式。trueは左右ともホバー表示。 */
     zoneMode?: unknown;
+    /** 廃止したAI設定は読み捨て、次回保存に持ち越さない。 */
+    ai?: unknown;
   };
-  const { zoneMode: legacyZoneMode, ...settings } = rawSettings;
+  const { zoneMode: legacyZoneMode, ai: _legacyAi, ...settings } = rawSettings;
   const recentWorkspaces = Array.isArray(value?.recentWorkspaces)
     ? value.recentWorkspaces.filter(
         (record): record is WorkspaceRecord =>
@@ -838,7 +838,6 @@ export function normalizeState(value: Partial<AppState> | null | undefined): App
           ? settings.exportOpensInWindow
           : defaultSettings.exportOpensInWindow,
       proofread: normalizeProofreadSettings(settings.proofread),
-      ai: normalizeAiSettings(settings.ai),
     },
     rightSidebarTab: normalizeRightSidebarTab(value?.rightSidebarTab),
     rightSidebarCollapsed: normalizeRightSidebarCollapsed(value?.rightSidebarCollapsed),

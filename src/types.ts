@@ -1,4 +1,3 @@
-import type { AiSettings } from "./ai/settings";
 import type { ExportFontFamily } from "./export/types";
 import type { ProofreadOptions } from "./proofread/types";
 import type { ProofreadTerm } from "./proofread/terms";
@@ -435,7 +434,6 @@ export type EditorSettings = {
   /** 校正ペインのしきい値と、外しているルール。 */
   proofread: ProofreadSettings;
   /** AI会話の既定の接続先・モデル・種類。APIキーは含めない。 */
-  ai: AiSettings;
 };
 
 /**

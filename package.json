@@ -6,10 +6,9 @@
   "scripts": {
     "experiment:native-ime": "node scripts/run-native-ime-experiment.mjs",
     "build:native-ime-limited": "node scripts/build-native-ime-limited.mjs",
-    "test:ai": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- ai:: external_url::",
+    "test:external-url": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- external_url::",
     "test:markdown-links": "node scripts/test-markdown-links.mjs",
-    "test:ai-selection": "node scripts/test-ai-selection-browser.mjs",
-    "test:ai-pane-layout": "node scripts/test-ai-pane-layout.mjs",
+    "test:editor-selection": "node scripts/test-editor-selection-browser.mjs",
     "test:right-sidebar": "node scripts/test-right-sidebar.mjs",
     "test:left-sidebar": "node scripts/test-left-sidebar.mjs",
     "test:topbar-parts": "node scripts/test-topbar-parts.mjs",

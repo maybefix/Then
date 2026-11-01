@@ -25,7 +25,6 @@ type BinderPaneProps = {
   onDeleteFragment: (threadId: string, fragmentId: string) => void;
   onMoveFragment: (fromThreadId: string, fragmentId: string, toThreadId: string) => void;
   onMoveFragmentToNewThread: (fromThreadId: string, fragmentId: string) => void;
-  onAskAi?: (text: string) => void;
   onFragmentDragStart: (event: DragEvent<HTMLElement>, threadId: string, fragmentId: string) => void;
   onFragmentDragEnd: () => void;
   onAddReference: (threadId: string) => void;
@@ -69,7 +68,6 @@ export function BinderPane(props: BinderPaneProps) {
         onDeleteFragment={props.onDeleteFragment}
         onMoveFragment={props.onMoveFragment}
         onMoveFragmentToNewThread={props.onMoveFragmentToNewThread}
-        onAskAi={props.onAskAi}
         onFragmentDragStart={props.onFragmentDragStart}
         onFragmentDragEnd={props.onFragmentDragEnd}
         onOpenFragmentCard={props.onOpenIdea}

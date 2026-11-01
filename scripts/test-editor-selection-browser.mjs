@@ -1,9 +1,9 @@
-// 本文で選んだ範囲を、右クリックの時点で正しく取れるか（AI-29）。ヘッドレスEdgeで
+// 本文で選んだ範囲を、右クリックの時点で正しく取れるか。ヘッドレスEdgeで
 // 実際のエディタを組み、マウスのドラッグで範囲を選び、右クリックメニューの「コピー」で
-// 渡る文字列を確かめる。「AIに渡す」は同じ控え（handleEditorContextMenu）を使う。
+// 渡る文字列を確かめる。
 // 利用者のクリップボードには触れない（navigator.clipboard.writeText をページ内で受ける）。
 //
-//   node scripts/test-ai-selection-browser.mjs [--dist <dir>] [--no-build]
+//   node scripts/test-editor-selection-browser.mjs [--dist <dir>] [--no-build]
 //
 // 確かめる場面（通常の表示と原稿用紙モードの両方）
 //   段落の中 / 見出し・段落・ルビ・傍点・縦中横をまたぐ / コメント行と \// の行をまたぐ /
@@ -25,7 +25,7 @@ const option = (name, fallback) => {
 };
 let dist = option("dist", null);
 if (!dist) {
-  dist = path.join(os.tmpdir(), "then-ai-selection-dist");
+  dist = path.join(os.tmpdir(), "then-editor-selection-dist");
   if (!args.includes("--no-build")) {
     const result = spawnSync("npx", ["vite", "build", "--base", "./", "--outDir", dist, "--emptyOutDir"], { stdio: "inherit", shell: true });
     if (result.status !== 0) process.exit(result.status ?? 1);
@@ -55,7 +55,7 @@ const edgePath = process.env.EDGE_PATH ?? [
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
 ].find((candidate) => existsSync(candidate));
 if (!edgePath) throw new Error("Edge or Chrome was not found; set EDGE_PATH.");
-const profileDir = mkdtempSync(path.join(os.tmpdir(), "then-ai-selection-qa-"));
+const profileDir = mkdtempSync(path.join(os.tmpdir(), "then-editor-selection-qa-"));
 const debugPort = 9800 + Math.floor(Math.random() * 150);
 const browser = spawn(edgePath, [
   "--headless=new", `--remote-debugging-port=${debugPort}`, `--user-data-dir=${profileDir}`,
@@ -321,7 +321,7 @@ try {
     record(layout, "TSF入力中（フォーカスは受け皿）", between("乙", "丙"), await rightClickCopy("一"));
     await evaluate(`(() => { document.querySelector(".ProseMirror").classList.remove("nativeImeActive"); document.querySelector(".qaFocusSink")?.remove(); return 1; })()`);
 
-    // 選択の外を右クリックすると、選択はその位置へ移って外れ、コピー（とAIに渡す）は押せない。
+    // 選択の外を右クリックすると、選択はその位置へ移って外れ、コピーは押せない。
     await drag("乙", "丙");
     const outside = await rightClickCopy("庚");
     results.push({ layout, name: "選択の外を右クリックすると、選択が外れてコピーは押せない",
