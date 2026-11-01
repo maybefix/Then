@@ -30,7 +30,8 @@ import {
 import { manageAsyncRegistration } from "./utils/asyncRegistration";
 import { flushPendingSaves, schedulePendingSave } from "./pendingSaves";
 import { useVerticalMetricFontFamily } from "./utils/verticalMetricFonts";
-import { buildAppShellStyle } from "./appShellStyle";
+import { buildAppShellAppearance } from "./appShellStyle";
+import { canvasAppearanceSettings } from "./canvasAppearance";
 import { EditorContextMenu, type EditorContextMenuState } from "./components/editor/EditorContextMenu";
 import { isRestorableRightSidebarTab } from "./utils/rightSidebarState";
 import type { LeftSidebarView } from "./utils/leftSidebarState";
@@ -4076,10 +4077,7 @@ export default function App() {
       scope: "project",
       boardId,
       selectNodeId,
-      theme: settings.theme,
-      editorFontFamily: settings.editorFontFamily,
-      uiFontFamily: settings.uiFontFamily,
-      uiFontScale: settings.uiFontScale,
+      ...canvasAppearanceSettings(settings),
       canvasDefaultWritingMode: settings.canvasDefaultWritingMode,
       canvasDefaultFontSource: settings.canvasDefaultFontSource,
       ideaThreads: snippets.map((thread) => ({
@@ -7793,7 +7791,7 @@ export default function App() {
         ref={appShellRef}
         className="appShell"
         data-shell-app-mode={appMode}
-        data-theme={settings.theme}
+        {...buildAppShellAppearance(settings, editorFontFamily, editorHeadingFontFamily)}
         data-writing-mode={settings.writingMode}
         data-zone-mode={settings.sidebarHoverMode !== "none" ? "true" : undefined}
         data-zone-left={
@@ -7808,9 +7806,6 @@ export default function App() {
         }
         data-startup-view={startupView}
         data-native-window={isTauriRuntime() ? "true" : undefined}
-        style={
-          buildAppShellStyle(settings, editorFontFamily, editorHeadingFontFamily)
-        }
       >
         <WindowControls overPage={startupView === "loading" || Boolean(librarySetupRequest)} />
         {librarySetupRequest && (

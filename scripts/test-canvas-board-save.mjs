@@ -56,6 +56,10 @@ const canvasUrl = await compile("src/CanvasWindowApp.tsx", {
   "react/jsx-runtime": pathToFileURL(require.resolve("react/jsx-runtime")).href,
   "@tauri-apps/api/core": url("export const invoke = (...args) => globalThis.canvasTestInvoke(...args);"),
   "@tauri-apps/api/event": url("export const emit = async () => {}; export const emitTo = emit; export const listen = async () => () => {};"),
+  "./utils/fontStack": await compile("src/utils/fontStack.ts"),
+  "./canvasAppearance": await compile("src/canvasAppearance.ts", {
+    "./utils/fontStack": await compile("src/utils/fontStack.ts"),
+  }),
   "./canvasTypes": await compile("src/canvasTypes.ts"),
   "./canvasThreads": await compile("src/canvasThreads.ts"),
   "./canvasResize": await compile("src/canvasResize.ts"),

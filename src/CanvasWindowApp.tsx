@@ -15,6 +15,7 @@ import {
 } from "react";
 import { createLatestFrameScheduler } from "./utils/latestFrameScheduler";
 import { withIdeographicSpaceFont } from "./utils/fontStack";
+import { buildCanvasThemeStyle, canvasAppearanceAttributes } from "./canvasAppearance";
 import {
   CANVAS_LIVE_DATA_EVENT,
   createCanvasDocument,
@@ -1257,12 +1258,7 @@ export default function CanvasWindowApp({
     selectedNodes.length === 1 && isTextNode(selectedNodes[0]) ? selectedNodes[0] : null;
 
   const themeStyle = useMemo(
-    () =>
-      ({
-        "--editor-font-family": withIdeographicSpaceFont(payload?.editorFontFamily),
-        "--ui-font-family": payload?.uiFontFamily,
-        "--ui-font-scale": payload?.uiFontScale,
-      }) as CSSProperties,
+    () => buildCanvasThemeStyle(payload),
     [payload?.editorFontFamily, payload?.uiFontFamily, payload?.uiFontScale],
   );
   const defaultCanvasWritingMode = payload?.canvasDefaultWritingMode ?? "horizontal-tb";
@@ -2811,8 +2807,7 @@ export default function CanvasWindowApp({
   return (
     <main
       className={embedded ? "canvasWindowRoot canvasEmbeddedRoot" : "appShell canvasWindowRoot"}
-      data-theme={embedded ? undefined : payload?.theme ?? "dark"}
-      style={embedded ? undefined : themeStyle}
+      {...canvasAppearanceAttributes(embedded, payload, themeStyle)}
     >
       <header className="canvasTopbar">
         <div className="canvasToolbarCluster canvasBoardCluster">
