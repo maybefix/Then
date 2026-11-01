@@ -61,7 +61,8 @@ try {
   await writeFile(path.join(dir, "one.css"), ".same { color: red; }\r\n");
   await writeFile(path.join(dir, "nested/two.css"), '@import "../three.css";\r\n.same { color: blue; }\r\n');
   await writeFile(path.join(dir, "three.css"), ".same { color: green; }\r\n");
-  assert.deepEqual([...await readAppCss(path.join(dir, "entry.css")).then(s => s.matchAll(/color: (\w+)/g))].map(m => m[1]), ["red", "green", "blue", "red"]);
+  const expanded = await readAppCss(path.join(dir, "entry.css"));
+  assert.deepEqual([...expanded.matchAll(/color: (\w+)/g)].map(m => m[1]), ["red", "green", "blue", "red"]);
   await writeFile(path.join(dir, "cycle.css"), '@import "./cycle.css";\r\n');
   await assert.rejects(readAppCss(path.join(dir, "cycle.css")), /CSS import cycle/);
 } finally {

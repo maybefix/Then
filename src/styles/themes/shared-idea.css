@@ -4,4 +4,3 @@
   --idea-card: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 88%, #fff);
   --idea-card-hover: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 84%, #fff);
 }
-
