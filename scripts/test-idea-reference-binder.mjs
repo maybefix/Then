@@ -1,3 +1,4 @@
+import { readAppCss } from "./lib/read-app-css.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import ts from "typescript";
@@ -16,7 +17,7 @@ const [types, model, app, ideaActions, binderPane, ideaPane, openCards, canvasAp
   readFile("src/components/binder/OpenCardsPane.tsx", "utf8"),
   readFile("src/CanvasWindowApp.tsx", "utf8"),
   readFile("src/components/references/ReferenceLayer.tsx", "utf8"),
-  readFile("src/App.css", "utf8"),
+  readAppCss(),
   readFile("src-tauri/src/lib.rs", "utf8"),
 ]);
 

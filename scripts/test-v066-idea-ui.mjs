@@ -1,3 +1,4 @@
+import { readAppCss } from "./lib/read-app-css.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
@@ -6,7 +7,7 @@ const [app, ideaActions, ideaPane, css, userManual, packageJson, packageLock, ta
     readFile("src/App.tsx", "utf8"),
     readFile("src/ideaThreadActions.ts", "utf8"),
     readFile("src/components/snippets/IdeaPane.tsx", "utf8"),
-    readFile("src/App.css", "utf8"),
+    readAppCss(),
     readFile("docs/USER_MANUAL.md", "utf8"),
     readFile("package.json", "utf8").then(JSON.parse),
     readFile("package-lock.json", "utf8").then(JSON.parse),

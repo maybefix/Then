@@ -1,0 +1,8 @@
+/* ---- サイドバー: VSCode風ステータス表示 ---- */
+/* 状態色。既存の進捗ドットの色を変数として共有する。 */
+:root {
+  --progress-todo: #9aa4ad;
+  --progress-writing: #4a90d9;
+  --progress-revising: #d8a13a;
+  --progress-done: #45ab78;
+}

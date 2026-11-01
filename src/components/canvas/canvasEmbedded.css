@@ -1,0 +1,14 @@
+.canvasEmbeddedHost {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+
+.canvasEmbeddedHost .canvasWindowRoot {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  border-radius: var(--radius-card);
+}
+

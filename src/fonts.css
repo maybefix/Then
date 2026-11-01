@@ -1,0 +1,23 @@
+/* 全角スペース（U+3000）だけを等幅和文フォントから描く（src/utils/fontStack.ts）。
+   プロポーショナル和文フォントは U+3000 を 0.6〜0.67em で持つため、字下げが
+   半角幅に見える。local() は最初に見つかったものを使う。 */
+@font-face {
+  font-family: "Then Ideographic Space";
+  src:
+    local("BIZ UDGothic"), local("BIZUDGothic-Regular"),
+    local("Yu Gothic Regular"), local("YuGothic-Regular"),
+    local("MS Gothic"), local("MS-Gothic"),
+    local("Hiragino Sans W3"), local("HiraginoSans-W3"),
+    local("Noto Sans CJK JP"), local("NotoSansCJKjp-Regular");
+  unicode-range: U+3000;
+}
+
+/* Then のロゴから作った欧文の表示用書体（英数字と . , : - / & だけ）。起動画面の文字ロゴに使う。 */
+@font-face {
+  font-family: "Then Serif";
+  src: url("./assets/brand/ThenSerif-Oblique.woff") format("woff");
+  font-weight: 400;
+  font-style: oblique;
+  font-display: block;
+}
+

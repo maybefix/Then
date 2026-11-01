@@ -1,3 +1,4 @@
+import { readAppCss } from "./lib/read-app-css.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import ts from "typescript";
@@ -283,7 +284,7 @@ const [appSource, editorSource, settingsSource, appCss, foundationsCss] = await 
     readFile("src/components/dialogs/AppearanceSettings.tsx", "utf8"),
     readFile("src/components/dialogs/BodySettings.tsx", "utf8"),
   ]).then((sources) => sources.join("\n")),
-  readFile("src/App.css", "utf8"),
+  readAppCss(),
   readFile("src/styles/themes/foundations.css", "utf8"),
 ]);
 

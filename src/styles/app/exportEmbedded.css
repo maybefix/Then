@@ -1,0 +1,44 @@
+.exportEmbeddedHost {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  background: var(--bg-root);
+}
+
+/* LinkedExportScreen は fixed の backdrop で全画面を覆うため、埋め込み時は
+   専用ウィンドウ（.exportWindowRoot）と同様にホスト内へ閉じ込める。 */
+.exportEmbeddedHost .exportModalBackdrop {
+  position: absolute;
+  inset: 0;
+  z-index: auto;
+  padding: 0;
+  background: var(--bg-root);
+  backdrop-filter: none;
+}
+
+.exportEmbeddedHost .linkedExportScreen {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.modeSwitcherIcon {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: middle;
+}
+
+.pluginModeSwitcherIcon path {
+  vector-effect: non-scaling-stroke;
+}
+

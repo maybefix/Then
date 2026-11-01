@@ -1,0 +1,44 @@
+.outlineItemTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileTreeOutlineChildren .outlineTreeItem .treeItemCharCount {
+  overflow: visible;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  text-overflow: clip;
+}
+
+.fileViewSummary {
+  display: flex;
+  height: 34px;
+  flex: 0 0 34px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 12px;
+  border-top: 0.5px solid var(--border-subtle);
+}
+
+.fileViewSummary strong {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+/* 資料ライブラリは左アクティビティバーから切り替える。 */
+.leftReferenceSidebarBody {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.referenceWorkspaceSidebar .referencePane {
+  background: var(--bg-panel);
+}
+
