@@ -188,8 +188,8 @@ import { createWorkspaceTreeActions } from "./workspaceTreeActions";
 import { createProjectSearchActions } from "./projectSearchActions";
 import { createHeadingMoveActions } from "./headingMoveActions";
 import { createTemplateActions } from "./templateActions";
+import { referenceCardKey, upsertRecentReference, upsertRecentReferences, nextReferenceZIndex } from "./referenceCardModel";
 import {
-  MAX_RECENT_REFERENCES,
   WHITESPACE_PATTERN,
   clampReferenceCardToStage,
   createDefaultState,
@@ -225,7 +225,6 @@ import type {
 } from "./editor/ast/types";
 import type {
   AppState,
-  BinderCardState,
   BreadcrumbDropTarget,
   DocumentTab,
   EditorSettings,
@@ -246,7 +245,6 @@ import type {
   WorkStatus,
   ProjectFolder,
   ProjectImportReport,
-  ReferenceCardState,
   ReferenceFileInfo,
   ReferenceLayout,
   ReferenceScope,
@@ -312,8 +310,6 @@ const defaultReferenceLayout: ReferenceLayout = {
   recent: [],
   ideaThreads: [],
 };
-const PINNED_REFERENCE_Z_BASE = 10000;
-const NORMAL_REFERENCE_Z_LIMIT = PINNED_REFERENCE_Z_BASE - 1;
 const PROJECT_AST_INDEX_BATCH_SIZE = 12;
 
 type WorkspaceSearchScope = "file" | "project" | "library";
@@ -710,40 +706,6 @@ async function restoreSnapshotTreeOrder(
   await visit(tree);
 }
 
-
-function referenceCardKey(card: Pick<ReferenceCardState, "sourcePath" | "scope">): string {
-  return referenceKey(card.sourcePath, card.scope);
-}
-
-function upsertRecentReference(
-  layout: ReferenceLayout,
-  file: ReferenceFileInfo,
-): ReferenceLayout {
-  const key = referenceFileKey(file);
-  return {
-    ...layout,
-    recent: [
-      file,
-      ...layout.recent.filter((item) => referenceFileKey(item) !== key),
-    ].slice(0, MAX_RECENT_REFERENCES),
-  };
-}
-
-function upsertRecentReferences(
-  layout: ReferenceLayout,
-  files: ReferenceFileInfo[],
-): ReferenceLayout {
-  return files.reduce((current, file) => upsertRecentReference(current, file), layout);
-}
-
-function nextReferenceZIndex(cards: BinderCardState[], pinned: boolean): number {
-  const maxZ = cards
-    .filter((card) => (pinned ? card.pinned : !card.pinned))
-    .reduce((max, card) => Math.max(max, card.zIndex), pinned ? PINNED_REFERENCE_Z_BASE : 0);
-  return pinned
-    ? Math.max(PINNED_REFERENCE_Z_BASE, maxZ + 1)
-    : Math.min(NORMAL_REFERENCE_Z_LIMIT, maxZ + 1);
-}
 
 async function loadStoredState(): Promise<AppState> {
   if (isTauriRuntime()) {
