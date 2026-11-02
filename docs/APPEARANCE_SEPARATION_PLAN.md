@@ -20,7 +20,7 @@
 | 7 | 実施 | 完了 |
 | 8 | 自動テストの前後比較 | 完了。新規の失敗0 |
 | 9 | QA用アプリで実機確認 | 完了。再起動と保存先も確認 |
-| 10 | 完了（確認2） | 実装・検証・片付け完了。push/PRの確認待ち |
+| 10 | 完了（確認2） | 実装・検証・片付け完了。2026-11-02にpush・PR作成の承認取得 |
 
 ## 工程1: 調査の結果
 
@@ -246,7 +246,7 @@ App.tsxに残したものは、フォント補正フック、設定のstate・�
 
 ## 工程10: 完了
 
-実装・自動検証・実機確認・片付けまで完了。pushとPRは確認2の回答後に行う。
+実装・自動検証・実機確認・片付けまで完了。2026-11-02に利用者から「AI機能の削除を含めてPRをpushしてください」との回答を受け、既存の公開リポジトリmaybefix/Thenのcodex/appearance-separationブランチへpushした。
 
 | 残る作業 | 位置づけ |
 |---|---|
@@ -256,3 +256,17 @@ App.tsxに残したものは、フォント補正フック、設定のstate・�
 | test:v0511-themesのShubokuの既存検査 | 前後とも同じ失敗。配色・枠の仕様は今回変更しなかった |
 
 開始時から未追跡だったlanding-page/は変更・コミットしていない。
+
+## 2026-11-02: 利用者の動作検証用インストーラー
+
+利用者の依頼で、AI機能削除と外観分離を含む通常版NSISインストーラーを生成した。バージョンは0.7.0、製品名Then、識別子local.then、アプリ本体はx64。QA版ではなく通常設定でビルドし直した。現在の開発用src-tauri/target/release/Then.exeも通常版に戻っている。
+
+- コードのコミット: 1ed76c323b1ab8ff6223528069d282bc033eec0d
+- 成果物: src-tauri/target/release/bundle/nsis/Then_0.7.0_x64-setup.exe
+- 検証用の写し: artifacts/appearance-separation-2026-11-02/Then_0.7.0_ai-removal_appearance_1ed76c3_x64-setup.exe
+- サイズ: 35,951,235 bytes
+- SHA-256: a4fa0fc7d0864c5339c5c2570e871ee87f76e7ff680940568d3e6abf4574cb9b
+- 検査: NSIS形式、更新日時、写しとのハッシュ一致、アプリのPEヘッダーがx64、製品名Then、バージョン0.7.0。Then.exeとAGPL-3.0.txt、Vivliostyle-NOTICE.md、NotoCJK-OFL.txtの同梱を7-Zipで確認した。
+- 記録: tmp/appearance-separation/installer/build.log、result.json、archive-list.txt。
+
+インストーラーの実行とインストール後の動作検証は、利用者が行う。生成・検査のプロセスは完了しており、アプリやインストーラーの新しいプロセスは起動していない。
