@@ -2,7 +2,7 @@ import { readAppCss } from "./lib/read-app-css.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [appSource, appCss, settingsSource, tabsSource, typesSource, manualSource] =
+const [appSource, appCss, settingsSource, tabsSource, typesSource, manualSource, tabStateSource] =
   await Promise.all([
     // 保存した設定の正規化は storedStateModel.ts へ移した（docs/APP_STATE_NORMALIZE_SEPARATION_PLAN.md）。
     Promise.all([
@@ -14,6 +14,7 @@ const [appSource, appCss, settingsSource, tabsSource, typesSource, manualSource]
     readFile("src/components/layout/DocumentTabs.tsx", "utf8"),
     readFile("src/types.ts", "utf8"),
     readFile("docs/USER_MANUAL.md", "utf8"),
+    readFile("src/editor/documentTabState.ts", "utf8"),
   ]);
 
 assert.match(typesSource, /showDocumentTabs: boolean;/);
@@ -69,7 +70,7 @@ assert.doesNotMatch(tabsSource, /\.scrollIntoView\(/);
 // タブ操作のショートカット。
 assert.match(appSource, /const isDocumentTabShortcut = mod && !event\.altKey/);
 // 新しいタブはアクティブなタブの右に置く。置き換えは元の位置で行う。
-assert.match(appSource, /function insertTabAfter\(/);
+assert.match(tabStateSource, /function insertTabAfter\(/);
 assert.match(appSource, /current\.map\(\(tab\) => \(tab\.id === activeTabId \? nextTab : tab\)\)/);
 
 assert.match(appCss, /--document-tabs-height: 35px/);

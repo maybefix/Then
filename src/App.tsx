@@ -111,6 +111,12 @@ import {
 import { createEditorClipboardActions } from "./editor/editorClipboardActions";
 import {
   createScratchDocumentTab,
+  createEmptyDocumentTab,
+  withoutEmptyTabs,
+  insertTabAfter,
+  CLOSED_DOCUMENT_TAB_LIMIT,
+  isClosedTabInWorkspace,
+  createFileDocumentTab,
   isDirtyDocumentTab,
   scratchFileName,
   type ClosedDocumentTab,
@@ -538,33 +544,6 @@ const fallbackFontFamilies = [
 
 const fallbackFontOptions = createFontOptions(fallbackFontFamilies);
 
-/** 文書を一つも開いていない状態を表すタブ。タブ帯には出ない。 */
-function createEmptyDocumentTab(): DocumentTab {
-  const id = `empty-${Date.now()}`;
-  return {
-    ...createScratchDocumentTab("", { id, documentKey: id, saveStatus: "saved" }),
-    kind: "empty",
-    name: "",
-  };
-}
-
-const withoutEmptyTabs = (tabs: DocumentTab[]) => tabs.filter((tab) => tab.kind !== "empty");
-
-/** 新しいタブは、アクティブなタブのすぐ右に置く。基準が見つからなければ末尾。 */
-function insertTabAfter(tabs: DocumentTab[], nextTab: DocumentTab, anchorTabId: string | null) {
-  const visible = withoutEmptyTabs(tabs);
-  const anchorIndex = anchorTabId ? visible.findIndex((tab) => tab.id === anchorTabId) : -1;
-  if (anchorIndex < 0) return [...visible, nextTab];
-  return [...visible.slice(0, anchorIndex + 1), nextTab, ...visible.slice(anchorIndex + 1)];
-}
-
-const CLOSED_DOCUMENT_TAB_LIMIT = 10;
-
-function isClosedTabInWorkspace(record: ClosedDocumentTab, workspacePath: string | null) {
-  if (!record.workspacePath || !workspacePath) return record.workspacePath === workspacePath;
-  return isSamePath(record.workspacePath, workspacePath);
-}
-
 function isPathInsideFolder(path: string, folderPath: string): boolean {
   const normalizedPath = normalizePathForCompare(path);
   const normalizedFolder = normalizePathForCompare(folderPath);
@@ -572,24 +551,6 @@ function isPathInsideFolder(path: string, folderPath: string): boolean {
     normalizedPath !== normalizedFolder &&
     normalizedPath.startsWith(`${normalizedFolder}\\`)
   );
-}
-
-function createFileDocumentTab(document: TextDocument): DocumentTab {
-  return {
-    id: `file:${document.path}`,
-    kind: "file",
-    path: document.path,
-    fileId: document.fileId ?? null,
-    contentHash: document.contentHash ?? null,
-    name: document.name,
-    markdown: document.content,
-    savedMarkdown: document.content,
-    editorRevision: null,
-    saveStatus: "saved",
-    documentKey: document.path,
-    activeOutlineLine: null,
-    viewportState: null,
-  };
 }
 
 type LoadedWorkspaceDocumentTabs = {
