@@ -1,0 +1,197 @@
+/* ===== ファイルビュー刷新 ===== */
+:root {
+  --left-sidebar-width: 320px;
+}
+
+.outlineExplorerSection {
+  padding-top: 2px;
+}
+
+.outlineExplorerSection .outlineTree {
+  padding: 0 0 8px;
+}
+
+.folderTreeItem {
+  margin-top: 4px;
+  color: var(--text-secondary);
+}
+
+.folderTreeItem:hover,
+.folderTreeItem.focusedTreeItem {
+  color: var(--text-primary);
+}
+
+.folderTreeItemPrimary {
+  width: 100%;
+  min-height: 31px;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  gap: 6px;
+  padding: 0 12px 0 var(--tree-item-indent, 10px);
+  font-size: 12px;
+  font-weight: 690;
+  letter-spacing: 0.02em;
+}
+
+.fileTreeItem {
+  min-height: 28px;
+  grid-template-columns: 16px 50px minmax(0, 1fr) 20px;
+  gap: 5px;
+  padding: 0 5px 0 var(--tree-item-indent, 10px);
+}
+
+.fileTreeItem:hover {
+  background: rgba(255, 255, 255, 0.032);
+}
+
+.fileTreeItem.activeTreeItem {
+  background:
+    linear-gradient(90deg, rgba(91, 113, 214, 0.2), rgba(91, 113, 214, 0.075));
+  color: #f0f1f5;
+  box-shadow: inset 2px 0 #7689ff;
+}
+
+.fileTreeItem.selectedTreeEntry:not(.activeTreeItem) {
+  background: rgba(91, 113, 214, 0.11);
+  box-shadow: inset 0 0 0 1px rgba(118, 137, 255, 0.3);
+}
+
+.treeFileDisclosure,
+.treeFileDisclosurePlaceholder {
+  display: grid;
+  width: 16px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-faint, var(--text-muted));
+}
+
+.treeFileDisclosure {
+  cursor: pointer;
+}
+
+.treeFileDisclosure:hover {
+  color: var(--text-secondary);
+}
+
+.fileTreeItemPrimary {
+  width: 100%;
+  min-height: 28px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  padding: 0;
+  font-size: 11.3px;
+  letter-spacing: 0.005em;
+}
+
+.fileTreeItem.activeTreeItem .fileTreeItemPrimary {
+  font-weight: 580;
+}
+
+.treeEntryMoreButton {
+  display: grid;
+  width: 20px;
+  height: 24px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint, var(--text-muted));
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: -0.08em;
+  opacity: 0;
+}
+
+.fileTreeItem:hover .treeEntryMoreButton,
+.fileTreeItem.activeTreeItem .treeEntryMoreButton,
+.treeEntryMoreButton:focus-visible {
+  opacity: 1;
+}
+
+.treeEntryMoreButton:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.treeItemCharCount {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.fileTreeOutlineChildren {
+  position: relative;
+  padding: 1px 0 4px;
+}
+
+.showOutlineGuides .fileTreeOutlineChildren::before {
+  position: absolute;
+  top: 0;
+  bottom: 5px;
+  left: var(--file-outline-guide-indent, 56px);
+  width: 1px;
+  background: var(--border-subtle);
+  content: "";
+  pointer-events: none;
+}
+
+.fileTreeOutlineChildren .nestedOutlineTreeChildren {
+  position: relative;
+}
+
+.showOutlineGuides .fileTreeOutlineChildren .nestedOutlineTreeChildren::before {
+  position: absolute;
+  top: 0;
+  bottom: 4px;
+  left: var(--nested-outline-guide-indent);
+  width: 1px;
+  background: var(--border-subtle);
+  content: "";
+  pointer-events: none;
+}
+
+.fileTreeOutlineChildren .outlineTreeItem {
+  min-height: 25px;
+  grid-template-columns: 25px minmax(0, 1fr) auto;
+  gap: 5px;
+  padding-right: 12px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.fileTreeOutlineChildren .outlineTreeItem:hover {
+  background: rgba(255, 255, 255, 0.026);
+  color: var(--text-primary);
+}
+
+.fileTreeOutlineChildren .activeOutlineTreeItem {
+  background: transparent;
+  color: var(--accent-strong);
+}
+
+.fileTreeOutlineChildren .outlineLevelMark {
+  display: inline-flex;
+  width: 24px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  border: 1px solid #cfd5da;
+  border-radius: 3px;
+  background: #eef1f3;
+  color: #5f6972;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 9.25px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.fileTreeOutlineChildren .activeOutlineTreeItem .outlineLevelMark {
+  border-color: #b3bdc5;
+  background: #e3e8ec;
+  color: #444e56;
+}

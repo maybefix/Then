@@ -31,3 +31,15 @@ export function buildAppShellStyle(
     } as React.CSSProperties
   );
 }
+
+// テーマとCSS変数を、同じルート要素へまとめて適用するための属性。
+export function buildAppShellAppearance(
+  settings: EditorSettings,
+  editorFontFamily: string,
+  editorHeadingFontFamily: string,
+) {
+  return {
+    "data-theme": settings.theme,
+    style: buildAppShellStyle(settings, editorFontFamily, editorHeadingFontFamily),
+  };
+}

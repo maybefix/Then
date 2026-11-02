@@ -1,3 +1,4 @@
+import { readAppCss } from "./lib/read-app-css.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
@@ -7,7 +8,7 @@ import { readFile } from "node:fs/promises";
 
 const editorSource = await readFile("src/VerticalTextEditor.tsx", "utf8");
 const appSource = await readFile("src/App.tsx", "utf8");
-const appCss = await readFile("src/App.css", "utf8");
+const appCss = await readAppCss();
 const pageBreaksSource = await readFile("src/editor/pageBreaks.ts", "utf8");
 
 // --- バグ1: ページ寸法変更で読書位置が失われ、白紙ページが見える ---

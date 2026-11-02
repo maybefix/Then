@@ -5,7 +5,7 @@ import type { LoadedThenPlugin, ThenPluginView } from "../../plugins/types";
 import type { ProofreadTerm } from "../../proofread/terms";
 import type { PropertyType, PropertyTypeSettings } from "../../properties/propertyModel";
 import type { PropertySet } from "../../properties/propertySets";
-import { mergeReferenceFiles, referenceFileKey } from "../../referenceFileKeys";
+import { referenceFileKey } from "../../referenceFileKeys";
 import type {
   AppState,
   CanvasScope,
@@ -17,7 +17,6 @@ import type {
   ReferenceLayout,
 } from "../../types";
 import type { FrontMatterParts } from "../../utils/frontmatter";
-import { AiPane } from "../ai/AiPane";
 import { BinderPane } from "../binder/BinderPane";
 import IntermediateDraftPane from "../canvas/IntermediateDraftPane";
 import { PlotPane, PlotPaneHeaderActions } from "../plot/PlotPane";
@@ -85,16 +84,6 @@ const rightSidebarBuiltinTabs: Array<{ id: string; label: string; icon: ReactNod
     ),
   },
   {
-    id: "ai",
-    label: "AI",
-    icon: (
-      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-        <path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5h-7l-4.5 3.5v-3.5H5A1.5 1.5 0 0 1 3.5 15V7A1.5 1.5 0 0 1 5 5.5Z" />
-        <path d="M12 8.2v4.6M9.7 10.5h4.6" />
-      </svg>
-    ),
-  },
-  {
     id: "properties",
     label: "プロパティ",
     icon: (
@@ -152,12 +141,8 @@ export type RightSidebarProps = {
   proofreadIgnoreKey: string;
   setProjectProofreadIgnored: Dispatch<SetStateAction<ProofreadIgnoredByPath>>;
   snippets: IdeaThread[];
-  setReferenceCandidates: Dispatch<SetStateAction<ReferenceFileInfo[]>>;
-  addReferencesToIdeaThread: (threadId: string, files: ReferenceFileInfo[]) => void;
   showToast: (message: string, action?: ToastAction | null) => void;
   openReferenceCard: (sourcePath: string, fileInfo?: ReferenceFileInfo, options?: { switchToReferenceTab?: boolean }) => void;
-  aiInsertRequest: { text: string; nonce: number } | null;
-  consumeAiInsertRequest: (nonce: number) => void;
   plotCards: PlotCard[];
   setPlotCards: Dispatch<SetStateAction<PlotCard[]>>;
   sortedReferenceCandidates: ReferenceFileInfo[];
@@ -180,7 +165,6 @@ export type RightSidebarProps = {
   deleteFragment: (threadId: string, fragmentId: string) => Promise<void>;
   moveFragment: (fromThreadId: string, fragmentId: string, toThreadId: string) => void;
   moveFragmentToNewThread: (fromThreadId: string, fragmentId: string) => Promise<void>;
-  handTextToAi: (text: string) => void;
   handleFragmentDragStart: (event: DragEvent<HTMLElement>, threadId: string, fragmentId: string) => void;
   handleFragmentDragEnd: () => void;
   handleAddReference: (scope?: CanvasScope, targetThreadId?: string) => Promise<void>;
@@ -209,13 +193,13 @@ export function RightSidebar(props: RightSidebarProps) {
     propertyTypeSettings, rememberPropertyType, returnFocusFromProperties, loadPropertySets, searchByProperty,
     editorText, settings, updateSettings, revealEditorRange, replaceEditorRange, projectProofreadTerms,
     appState, setProjectProofreadTerms, setAppState, exportProofreadDictionary, importProofreadDictionary,
-    projectProofreadIgnored, proofreadIgnoreKey, setProjectProofreadIgnored, snippets, setReferenceCandidates,
-    addReferencesToIdeaThread, showToast, openReferenceCard, aiInsertRequest, consumeAiInsertRequest,
+    projectProofreadIgnored, proofreadIgnoreKey, setProjectProofreadIgnored, snippets,
+    showToast, openReferenceCard,
     plotCards, setPlotCards, sortedReferenceCandidates, openPlotReference, isPlotManagerOpen,
     transferMenuLabel, transferPlotCard, referenceLayout, draggingId, ideaFocusRequest, setIdeaFocusRequest,
     captureFragment, openIdeaBinderCard, createIdeaThread, renameIdeaThread, toggleThreadStar,
     deleteIdeaThread, addFragment, updateFragmentBody, deleteFragment, moveFragment, moveFragmentToNewThread,
-    handTextToAi, handleFragmentDragStart, handleFragmentDragEnd, handleAddReference, handleCreateReference,
+    handleFragmentDragStart, handleFragmentDragEnd, handleAddReference, handleCreateReference,
     moveIdeaReference, moveReferenceToNewThread, removeIdeaReference, handleDeleteImportedReference,
     reorderIdeaThreadItem, transferIdeaThread, transferIdeaFragment, transferReferenceFile
   } = props;
@@ -381,24 +365,6 @@ export function RightSidebar(props: RightSidebarProps) {
                 })
               }
             />
-          ) : rightSidebarTab === "ai" ? (
-            <AiPane
-              rootPath={projectFolder?.path ?? null}
-              settings={settings.ai}
-              threads={snippets}
-              onReferenceSaved={(threadId, file) => {
-                setReferenceCandidates((current) =>
-                  mergeReferenceFiles([file], current).sort((left, right) =>
-                    left.sourcePath.localeCompare(right.sourcePath),
-                  ),
-                );
-                addReferencesToIdeaThread(threadId, [file]);
-                showToast(`「${file.name}」を資料に保存しました`);
-              }}
-              onOpenReference={(file) => openReferenceCard(file.sourcePath, file, { switchToReferenceTab: false })}
-              insertRequest={aiInsertRequest}
-              onInsertConsumed={consumeAiInsertRequest}
-            />
           ) : rightSidebarTab === "plot" ? (
             <PlotPane
               cards={plotCards}
@@ -441,7 +407,6 @@ export function RightSidebar(props: RightSidebarProps) {
               onMoveFragmentToNewThread={(threadId, fragmentId) =>
                 void moveFragmentToNewThread(threadId, fragmentId)
               }
-              onAskAi={handTextToAi}
               onFragmentDragStart={handleFragmentDragStart}
               onFragmentDragEnd={handleFragmentDragEnd}
               onAddReference={(threadId) => void handleAddReference("project", threadId)}

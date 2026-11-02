@@ -73,6 +73,21 @@ Date.now = () => 1_700_000_000_000;
 // ---------------------------------------------------------------------------
 
 {
+  const before = createDefaultState();
+  before.markdown = "原稿はそのまま残す";
+  before.settings.fontSize = 22;
+  const legacy = { ...before, rightSidebarTab: "ai", settings: {
+    ...before.settings,
+    ai: { provider: "openAi", models: { openAi: "old-model" }, defaultMode: "consult" },
+  } };
+  const after = normalizeState(legacy);
+  assert.deepEqual(after, { ...before, rightSidebarTab: "plot" }, "old AI settings are dropped without changing writing data or other settings");
+  assert.equal("ai" in after.settings, false, "removed settings are not persisted again");
+  assert.deepEqual(normalizeState(JSON.parse(JSON.stringify(after))), after, "the migrated state survives another save and load");
+  assert.equal(legacy.settings.ai.provider, "openAi", "migration leaves its input untouched");
+}
+
+{
   const legacy = normalizeState({ settings: { zoneMode: true } }).settings;
   assert.equal(legacy.sidebarHoverMode, "both", "v0.6.1 zoneMode: true means hover on both sides");
   assert.equal("zoneMode" in legacy, false, "the old key is not written back");

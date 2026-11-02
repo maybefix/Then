@@ -1,3 +1,4 @@
+import { readAppCss } from "./lib/read-app-css.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { JSDOM } from "jsdom";
@@ -49,7 +50,7 @@ const pluginHostSource = await readFile("src/plugins/usePluginHost.ts", "utf8");
 const rightSidebarSource = await readFile("src/components/layout/RightSidebar.tsx", "utf8");
 const leftSidebarSource = await readFile("src/components/layout/LeftSidebar.tsx", "utf8");
 const paletteSource = await readFile("src/paletteCommands.ts", "utf8");
-const appCssSource = await readFile("src/App.css", "utf8");
+const appCssSource = await readAppCss();
 const pluginManagerSource = await readFile("src/components/dialogs/PluginManagerModal.tsx", "utf8");
 const runtimeSource = await readFile("src/plugins/PluginRuntimeHost.tsx", "utf8");
 const rustSource = await readFile("src-tauri/src/lib.rs", "utf8");

@@ -33,7 +33,7 @@ window.mountMenu = async ({ x, y, scale = 1, plugins = 1, theme = "dark", text =
     pluginSelectionCommands={Array.from({ length: plugins }, (_, i) => ({ pluginId: "qa.menu", id: "item-" + i, title: "検証用コマンド " + i }))}
     pluginRuntimeHostRef={{ current: { executeCommand: record("plugin") } }}
     copyEditorSelection={async (...args) => record("copy")(...args)} cutEditorSelection={async (...args) => record("cut")(...args)}
-    pasteIntoEditorSelection={async (...args) => record("paste")(...args)} handTextToAi={record("ai")} closeEditorContextMenu={record("close")}
+    pasteIntoEditorSelection={async (...args) => record("paste")(...args)} closeEditorContextMenu={record("close")}
     openRubyNotationModal={record("ruby")} applyInlineNotation={(...args) => { record("inline")(...args); return true; }}
     clearSelectionNotation={record("clear")} openDirectionNotationModal={record("direction")} openManuscriptTidy={record("tidy")}
   />));

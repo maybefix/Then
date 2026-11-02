@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 /**
- * The link a reference or an AI answer may open, or null when it should stay
+ * The link a reference may open, or null when it should stay
  * plain text: only web pages and mail. javascript:, file:, relative paths and
  * the like are not links here. Rust checks again before handing it to Windows.
  */

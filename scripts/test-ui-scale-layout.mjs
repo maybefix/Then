@@ -1,7 +1,8 @@
+import { readAppCss } from "./lib/read-app-css.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const css = await readFile("src/App.css", "utf8");
+const css = await readAppCss();
 const zoomRules = [...css.matchAll(/([^{}]+)\{([^{}]*zoom:\s*var\(--ui-font-scale,\s*1\);[^{}]*)\}/g)];
 const chromeZoomRule = zoomRules.find((match) => match[1].includes(".topbar"));
 

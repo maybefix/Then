@@ -17,7 +17,6 @@ type EditorContextMenuProps = {
   copyEditorSelection: (selection: EditorSelectionSnapshot | null) => Promise<void>;
   cutEditorSelection: (selection: EditorSelectionSnapshot | null) => Promise<void>;
   pasteIntoEditorSelection: (selection: EditorSelectionSnapshot | null) => Promise<void>;
-  handTextToAi: (text: string) => void;
   closeEditorContextMenu: () => void;
   openRubyNotationModal: (selection: EditorSelectionSnapshot | null) => void;
   applyInlineNotation: (selection: EditorSelectionSnapshot, notation: "ruby" | "tcy" | "emphasis", argument?: string) => boolean;
@@ -31,7 +30,7 @@ type Item = { id: string; label: string; disabled?: boolean; title?: string; run
 
 export function EditorContextMenu({
   editorContextMenu, editorContextMenuRef, pluginSelectionCommands, pluginRuntimeHostRef,
-  copyEditorSelection, cutEditorSelection, pasteIntoEditorSelection, handTextToAi,
+  copyEditorSelection, cutEditorSelection, pasteIntoEditorSelection,
   closeEditorContextMenu, openRubyNotationModal, applyInlineNotation, clearSelectionNotation,
   openDirectionNotationModal, openManuscriptTidy,
 }: EditorContextMenuProps) {
@@ -53,7 +52,6 @@ export function EditorContextMenu({
     clear: { id: "clear", label: "記法をクリア", title: "選択範囲または行の独自記法を外します", run: () => clearSelectionNotation(editorContextMenu) },
     direction: { id: "direction", label: "文章方向...", title: customNotationSpecs[3].syntax, run: () => openDirectionNotationModal(editorContextMenu) },
     tidy: { id: "tidy", label: "原稿を整える...", run: () => openManuscriptTidy(editorContextMenu) },
-    ai: { id: "ai", label: "AIに渡す", disabled: !hasSelection, run: () => { handTextToAi(editorContextMenu.text); closeEditorContextMenu(); } },
   } satisfies Record<string, Item>;
   const groups: Record<Group, { label: string; items: Item[] }> = {
     notation: { label: "独自記法", items: [items.ruby, items.tcy, items.emphasis, items.clear] },
@@ -149,7 +147,6 @@ export function EditorContextMenu({
         <button type="button" aria-label="圏点" title="圏点" disabled={items.emphasis.disabled} onClick={items.emphasis.run}><span className="editorMenuEmphasis">圏点</span></button>
       </div>
       <div ref={mainRef} className="editorMenuPanel editorMenuList" role="menu" aria-label="本文メニュー" onScroll={layout.updateLayout}>
-        <button type="button" role="menuitem" className="editorMenuItem" disabled={items.ai.disabled} onClick={items.ai.run} onPointerEnter={() => deferPointerChange(() => setOpenGroup(null))}><span>{items.ai.label}</span></button>
         {groupKeys.map(group => <button key={group} ref={element => { layout.triggerRefs.current[group] = element; }}
           type="button" role="menuitem" className="editorMenuItem" data-group={group}
           aria-label={groups[group].label} aria-haspopup="menu" aria-expanded={openGroup === group}

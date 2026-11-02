@@ -1,0 +1,1052 @@
+.ideaScroll {
+  background: var(--idea-ground);
+}
+
+/* スレッド一覧: カードとして並べる。ペインが狭いうちは1列で本文を読ませ、
+   広げたら2列のタイルにして一覧性を取る。インボックスは常に先頭で横幅いっぱい。 */
+.ideaView:first-child .ideaScroll {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 8px;
+  padding: 10px 12px 18px;
+}
+
+.ideaView:first-child {
+  container-type: inline-size;
+}
+
+.ideaView:first-child .ideaScroll > .ideaEmpty {
+  grid-column: 1 / -1;
+}
+
+.ideaThreadRow {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  margin-top: 0;
+  padding: 11px 13px 10px;
+  border: 0.5px solid var(--border-subtle);
+  background: var(--idea-card);
+}
+
+.ideaThreadRow:hover {
+  border-color: var(--border-strong);
+  background: var(--idea-card-hover);
+}
+
+.ideaThreadRow.isInbox {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  background: transparent;
+}
+
+.ideaThreadRow.isInbox:hover {
+  background: var(--idea-card);
+}
+
+.ideaRowTitle {
+  font-size: 13.5px;
+}
+
+.ideaRowName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ideaRowInbox {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.ideaRowInbox svg,
+.ideaRowRefs svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.ideaRowSummary {
+  margin-top: 0;
+  color: var(--text-secondary);
+  -webkit-line-clamp: 3;
+}
+
+.ideaRowFoot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 2px;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ideaRowRefs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+@container (min-width: 420px) {
+  .ideaView:first-child .ideaScroll {
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  }
+
+  .ideaThreadRow:not(.isInbox) {
+    min-height: 124px;
+  }
+
+  .ideaThreadRow.isInbox {
+    grid-column: 1 / -1;
+  }
+
+  .ideaThreadRow.isInbox .ideaRowSummary {
+    -webkit-line-clamp: 2;
+  }
+}
+
+/* スレッド詳細: 沈めた地の上に、明るいカードを置く。 */
+.ideaFragment {
+  border-color: var(--border-subtle);
+  background: var(--idea-card);
+}
+
+.ideaFragment:hover,
+.ideaFragment:focus-within {
+  border-color: var(--border-strong);
+  background: var(--idea-card-hover);
+}
+
+.ideaFragmentBody {
+  color: var(--text-primary);
+  font-size: 13.5px;
+  line-height: 1.75;
+}
+
+.ideaReferencePreview {
+  color: var(--text-primary);
+}
+
+/* カードは左右とも同じ余白にする。ドラッグハンドルは専用の列を取らず、
+   Idea は日付の行全体を、資料は行の右側のつまみをつかむ。 */
+.ideaFragment {
+  position: relative;
+  display: block;
+  padding: 10px 12px;
+}
+
+.ideaFragmentFoot {
+  min-height: 24px;
+  margin-top: 4px;
+}
+
+.ideaFragmentFoot[draggable="true"],
+.ideaDragHandle {
+  cursor: grab;
+}
+
+.ideaFragmentFoot[draggable="true"]:active,
+.ideaDragHandle:active {
+  cursor: grabbing;
+}
+
+.ideaDragHandle {
+  margin: 0;
+}
+
+.ideaDragHandle .ideaGripGlyph {
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+  stroke: none;
+}
+
+/* 日付は常に見せ、操作ボタンとハンドルだけをポインタを乗せたとき（または
+   フォーカス中）に出す。場所は確保したままなので、カードの位置は動かない。 */
+.ideaFragmentBtns,
+.ideaReferenceMenuHost,
+.ideaDragHandle {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.ideaFragment:is(:hover, :focus-within) :is(.ideaFragmentBtns, .ideaReferenceMenuHost, .ideaDragHandle),
+.ideaReferenceMenuHost:has(.ideaReferenceMenu),
+.ideaFragmentBtns:has(.ideaFragmentMenu) {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .ideaFragmentBtns,
+  .ideaReferenceMenuHost,
+  .ideaDragHandle {
+    opacity: 1;
+  }
+}
+
+/* 資料は1行のカードにし、「…」を行の右端に置く。 */
+.ideaReferenceItem .ideaMixedItemMain {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ideaReferenceItem .ideaReferenceOpen {
+  flex: 1 1 auto;
+}
+
+.ideaReferenceItem .ideaReferenceMenuHost {
+  flex: 0 0 auto;
+  width: auto;
+  margin-top: 0;
+}
+
+.ideaReferenceItem .ideaReferenceVisual {
+  flex-basis: 40px;
+  width: 40px;
+  height: 30px;
+}
+
+/* スレッド詳細の見出し: 「‹ スレッド名 (件数)」を1行に並べ、操作は右端に置く。 */
+.ideaDetailHead {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.ideaDetailHead .ideaBackBtn {
+  flex: 0 0 auto;
+  width: 26px;
+  padding: 0;
+  justify-content: center;
+}
+
+.ideaDetailHead .ideaDetailTitle {
+  width: auto;
+  min-width: 3em;
+  max-width: 100%;
+  flex: 0 1 auto;
+  margin-top: 0;
+  field-sizing: content;
+}
+
+.ideaDetailCount {
+  flex: 0 0 auto;
+  padding: 1px 8px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--idea-card);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+
+.ideaDetailHead .ideaDetailActions {
+  margin-left: auto;
+}
+
+.ideaDetailTop .ideaCaptureInline {
+  padding-top: 10px;
+}
+
+/* 入力欄の「＋」と添付は位置を固定する（たたんでも開いても動かないので、
+   押した瞬間に入力欄が開閉してもボタンがずれない）。 */
+.ideaCaptureBox.ideaCaptureStacked {
+  position: relative;
+}
+
+.ideaCapturePlus {
+  position: absolute;
+  top: 12px;
+  left: 10px;
+  display: grid;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.ideaCapturePlus svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+}
+
+.ideaCaptureStacked textarea {
+  padding-right: 30px;
+  padding-left: 22px;
+}
+
+.ideaCaptureStacked .ideaClipHost {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
+
+/* 左に書いた日、右に「移動・カードで開く・その他」。 */
+.ideaFragmentDate {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ideaFragmentMenuHost {
+  position: relative;
+}
+
+.ideaFragmentMenu {
+  min-width: 180px;
+  max-height: 260px;
+  overflow-y: auto;
+  cursor: default;
+}
+
+.ideaFragmentMenu.opensUp {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+.ideaFragmentMenuFilter {
+  position: sticky;
+  top: 0;
+  height: 26px;
+  margin: 2px 2px 4px;
+  padding: 0 8px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: var(--radius-control, 6px);
+  outline: none;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font: 12px/1 var(--ui-font-family);
+}
+
+.ideaFragmentMenuFilter:focus {
+  border-color: var(--accent);
+}
+
+.ideaFragmentMenuLabel {
+  padding: 4px 8px 2px;
+  color: var(--text-muted);
+  font: 10px/1.4 var(--ui-font-family);
+}
+
+.ideaFragmentFoot:has(.ideaFragmentMenu) {
+  opacity: 1;
+}
+
+/* 入力欄: 空で、フォーカスが入力欄の外（または添付ボタン）にあるときは1行に
+   たたむ。添付ボタンは位置が変わらないので、たたんだままでも使える。 */
+.ideaCaptureBox.ideaCaptureStacked[data-empty="true"]:is(:not(:focus-within), [data-clip-focused="true"]) {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.ideaCaptureBox.ideaCaptureStacked[data-empty="true"]:is(:not(:focus-within), [data-clip-focused="true"]) textarea {
+  min-height: 22px;
+  height: 22px;
+  overflow: hidden;
+}
+
+.ideaCaptureBox.ideaCaptureStacked[data-empty="true"]:is(:not(:focus-within), [data-clip-focused="true"]) .ideaCapturePlus {
+  top: 10px;
+}
+
+.ideaCaptureBox.ideaCaptureStacked[data-empty="true"]:is(:not(:focus-within), [data-clip-focused="true"]) .ideaCaptureControls {
+  margin-top: 0;
+}
+
+.ideaCaptureBox.ideaCaptureStacked[data-empty="true"]:is(:not(:focus-within), [data-clip-focused="true"]) .ideaCaptureControls > :not(.ideaClipHost) {
+  display: none;
+}
+
+/* ペインから下はすべて縦書き（vertical-rl）で組む。カードは右から左へ積まれるブロックになり、
+   幅（ブロック方向の長さ）は内容から通常のレイアウトで決まる。横書きの箱の中に縦書きを
+   置く（直交フロー）と、Chromium は列の高さを推測で幅を見積もるため、本文の伸びに追従しない。
+   スクロールの起点も右端になり、scrollLeft は右端で 0、左へ行くほど負になる。 */
+.plotPane {
+  min-width: 0;
+  flex: 1;
+  writing-mode: vertical-rl;
+  overflow-x: scroll;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--border-strong) rgba(255, 255, 255, 0.04);
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+}
+
+.plotRightSidebarBody > .plotPane {
+  border: 0.5px solid var(--border-subtle);
+  border-radius: var(--radius-card, 8px);
+  background: color-mix(in srgb, var(--bg-panel) 72%, var(--sidebar-bg, var(--bg-root)));
+}
+
+.plotPane::-webkit-scrollbar {
+  height: 8px;
+}
+
+.plotPane::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.plotPane::-webkit-scrollbar-thumb {
+  border: 0;
+  border-radius: 4px;
+  background: var(--border-strong);
+}
+
+/* 縦書きでは column が右→左、row が上→下。 */
+.plotTrack {
+  display: flex;
+  min-width: 100%;
+  height: 100%;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 12px 16px;
+}
+
+.plotCard {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: flex-start;
+  overflow: visible;
+  padding: 0 9px;
+}
+
+.draggingPlotCard {
+  opacity: 0.45;
+}
+
+.plotCard:not(:last-child) {
+  border-right: 0.5px solid var(--border-subtle);
+}
+
+/* 番号バッジは開閉ボタン兼ドラッグハンドル。 */
+.plotCardNum {
+  position: relative;
+  touch-action: none;
+  user-select: none;
+  writing-mode: vertical-rl;
+  min-width: 30px;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-bottom: 16px;
+  padding: 10px 1px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-panel-strong);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: var(--plot-font-family);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+}
+
+/* 畳んだカードに本文があるときの印。以前の開閉ボタンと同じ、カード下端の位置に置く。 */
+.plotCardBodyMark {
+  display: grid;
+  width: 30px;
+  height: 26px;
+  flex: 0 0 26px;
+  place-items: center;
+  margin-top: 16px;
+}
+
+.plotCardBodyMark::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  content: "";
+}
+
+.plotPane[data-dragging-card="true"],
+.plotPane[data-dragging-card="true"] * {
+  cursor: grabbing !important;
+}
+
+/* ドラッグ中の差し込み位置。論理的な「前」は右側、「後ろ」は左側。 */
+.plotDropBefore::after,
+.plotDropAfter::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  content: "";
+  pointer-events: none;
+}
+
+.plotDropBefore::after {
+  right: -1px;
+}
+
+.plotDropAfter::after {
+  left: -1px;
+}
+
+.expandedPlotCard .plotCardNum {
+  border-color: rgba(201, 168, 74, 0.5);
+  color: var(--accent);
+}
+
+.plotCardContent {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0.9em;
+  overflow: visible;
+}
+
+.plotCardTitle,
+.plotCardBody {
+  display: block;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  resize: none;
+  outline: none;
+  border-radius: 4px;
+  font-family: var(--plot-font-family);
+  letter-spacing: 0.04em;
+  white-space: pre-wrap;
+  scrollbar-width: none;
+}
+
+.plotCardTitle::-webkit-scrollbar,
+.plotCardBody::-webkit-scrollbar {
+  display: none;
+}
+
+.plotCardTitle {
+  height: 100%;
+  width: 1.9em;
+  min-width: 1.9em;
+  max-width: 1.9em;
+  flex: 0 0 1.9em;
+  overflow: hidden;
+  padding: 2px;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 2.05;
+  white-space: nowrap;
+}
+
+.plotCardTitle:read-only {
+  cursor: default;
+}
+
+.expandedPlotCard .plotCardTitle {
+  color: var(--accent-strong);
+}
+
+.plotCardBody {
+  min-width: 2.05em;
+  max-width: none;
+  height: 100%;
+  flex: 0 0 auto;
+  overflow: visible;
+  padding: 2px;
+  color: #b4afa0;
+  font-size: 14px;
+  line-height: 2.05;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+/* 編集中の本文。textarea と、同じ文字列を流した見えないミラーを同じセルに重ね、
+   列の数（幅）はミラーのレイアウトで決まる。textarea はセルいっぱいに伸びるだけ。 */
+.plotCardBodyField {
+  display: grid;
+  height: 100%;
+  flex: 0 0 auto;
+  writing-mode: vertical-rl;
+}
+
+.plotCardBodyField > .plotCardBody {
+  box-sizing: border-box;
+  grid-area: 1 / 1;
+  width: auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.plotCardBodyMirror {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.plotCardBodyPreview {
+  cursor: text;
+  user-select: text;
+}
+
+.emptyPlotBodyPreview {
+  color: var(--text-faint);
+}
+
+.plotReferenceLink {
+  display: inline;
+  margin: 0;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(201, 168, 74, 0.12);
+  color: var(--accent-strong);
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  padding: 0 1px;
+  text-align: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+  writing-mode: inherit;
+}
+
+.plotReferenceLink:hover {
+  background: rgba(201, 168, 74, 0.2);
+  color: var(--accent);
+}
+
+.missingPlotReferenceLink {
+  background: rgba(190, 92, 92, 0.12);
+  color: var(--danger);
+}
+
+.plotReferenceSuggestMenu {
+  position: fixed;
+  z-index: 12000;
+  display: flex;
+  width: 136px;
+  max-width: calc(100vw - 16px);
+  height: auto;
+  max-height: min(340px, calc(100vh - 24px));
+  flex-direction: row-reverse;
+  align-items: flex-start;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-popover);
+  padding: 4px;
+  writing-mode: horizontal-tb;
+}
+
+.plotReferenceSuggestMenu button {
+  display: flex;
+  width: 3.4em;
+  min-width: 3.4em;
+  height: min(20.5em, calc(100vh - 40px));
+  max-height: 20.5em;
+  align-items: flex-start;
+  justify-content: flex-start;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  gap: 4px;
+  line-height: 1.55;
+  padding: 8px 6px;
+  text-align: start;
+  text-orientation: mixed;
+  writing-mode: vertical-rl;
+}
+
+.plotReferenceSuggestMenu button:hover,
+.plotReferenceSuggestMenu .activePlotReferenceSuggestion {
+  background: var(--accent-soft);
+}
+
+.plotReferenceSuggestMenu strong {
+  display: block;
+  height: 72%;
+  max-height: 72%;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: clip;
+  white-space: nowrap;
+  writing-mode: vertical-rl;
+}
+
+.plotReferenceSuggestMenu small {
+  display: block;
+  height: 28%;
+  max-height: 28%;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.35;
+  text-overflow: clip;
+  white-space: nowrap;
+  writing-mode: vertical-rl;
+}
+
+.plotReferenceSuggestMenu mark {
+  border-radius: 2px;
+  background: rgba(201, 168, 74, 0.26);
+  color: inherit;
+  padding: 0;
+}
+
+.plotReferenceSuggestHint {
+  display: flex;
+  width: 2.4em;
+  min-width: 2.4em;
+  height: min(20.5em, calc(100vh - 40px));
+  max-height: 20.5em;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+  padding: 6px 4px;
+  text-align: center;
+  white-space: nowrap;
+  writing-mode: vertical-rl;
+}
+
+.plotCardTitle:focus,
+.plotCardBody:focus {
+  background: rgba(201, 168, 74, 0.05);
+  color: var(--text-primary);
+}
+
+.plotCardTitle::placeholder,
+.plotCardBody::placeholder {
+  color: var(--text-faint);
+  opacity: 1;
+}
+
+/* カードの右クリックメニュー（章へ移動／削除）。 */
+.plotContextMenu {
+  width: auto;
+  min-width: 168px;
+}
+
+.plotContextMenu .plotContextDanger {
+  color: var(--danger);
+}
+
+.plotContextMenu .plotContextDanger:hover:not(:disabled) {
+  background: rgba(217, 115, 115, 0.12);
+  color: var(--danger);
+}
+
+.plotManagerModal {
+  display: grid;
+  /* viewport-relative caps must be divided by the UI zoom so the scaled box
+     still fits the window (zoom does not shrink vw/vh). */
+  width: min(860px, calc((100vw - 48px) / var(--ui-font-scale, 1)));
+  height: min(700px, calc((100vh - 56px) / var(--ui-font-scale, 1)));
+  max-height: calc((100vh - 56px) / var(--ui-font-scale, 1));
+  grid-template-rows: 46px minmax(0, 1fr) auto;
+}
+
+.plotManagerBoard {
+  min-height: 0;
+  background: var(--bg-secondary);
+}
+
+.plotManagerModal .modalActions {
+  padding: 10px 14px 12px;
+  border-top: 0.5px solid var(--border-subtle);
+  background: #202126;
+}
+
+/* 章ラベル（プロットの上位概念）。トラック内で縦帯として表示する。
+   セクションカードと縦方向のリズム（ツールバー高さ・番号/ブックマーク帯・余白）を揃える。 */
+.plotChapterBand {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: flex-start;
+  padding: 0 9px 12px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+}
+
+/* 章マークは開閉ボタン兼ドラッグハンドル。 */
+.plotChapterMark {
+  display: inline-grid;
+  min-width: 33px;
+  min-height: 57px;
+  flex: 0 0 auto;
+  place-items: center;
+  margin-bottom: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.plotChapterMark:hover {
+  background: var(--accent-soft);
+}
+
+.plotChapterMark svg {
+  width: 18px;
+  height: 18px;
+  fill: var(--accent);
+  stroke: none;
+}
+
+.plotChapterTitle {
+  width: 1.9em;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 4px 2px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  resize: none;
+  overflow: hidden;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  color: var(--accent-strong);
+  font-family: var(--plot-font-family);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.85;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+
+.plotChapterTitle::-webkit-scrollbar {
+  display: none;
+}
+
+.plotChapterTitle::placeholder {
+  color: var(--accent);
+  opacity: 0.5;
+}
+
+.collapsedPlotChapterBand {
+  background: var(--bg-panel-strong);
+}
+
+.collapsedPlotChapterBand .plotChapterMark svg {
+  fill: var(--text-muted);
+}
+
+.collapsedPlotChapterBand .plotChapterTitle {
+  color: var(--text-secondary);
+}
+
+.plotChapterCount {
+  display: inline-grid;
+  align-self: center;
+  flex: 0 0 auto;
+  place-items: center;
+  min-width: 20px;
+  margin-top: 8px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  writing-mode: horizontal-tb;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* 開いた章では件数を控えめに。 */
+.plotChapterBand:not(.collapsedPlotChapterBand) .plotChapterCount {
+  background: transparent;
+  color: var(--accent);
+  opacity: 0.75;
+}
+
+/* セクションを別の章へ移動するピッカー。 */
+.plotMoveModal {
+  display: flex;
+  flex-direction: column;
+}
+
+.plotMoveModal .modalForm {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.plotMoveModal .modalActions {
+  padding: 10px 14px 12px;
+  border-top: 0.5px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.plotMoveEmpty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.plotMoveList {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plotMoveOption {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control, 6px);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: start;
+}
+
+.plotMoveOption:hover:not(:disabled) {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+}
+
+.plotMoveOption:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.plotMoveOption small {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.rightSidebar .snippetPanel {
+  width: 100%;
+  min-width: 0;
+  flex: 1;
+  border-left: 0;
+  background: transparent;
+}
+
+.rightSidebar .panelHeader {
+  height: 50px;
+  flex-basis: 50px;
+  padding: 8px 14px 6px;
+}
+
+.rightSidebar .panelHeader h2 {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.rightSidebar .panelCount {
+  background: var(--bg-panel-strong);
+  color: var(--text-muted);
+}
+
+.rightSidebar .addButton {
+  width: 28px;
+  height: 28px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+.rightSidebar .panelSearch {
+  padding: 0 14px 10px;
+}
+
+.rightSidebar .searchIcon {
+  left: 12px;
+  width: 16px;
+  height: 16px;
+}
+
+.rightSidebar .searchBox input {
+  height: 34px;
+  padding: 0 10px 0 36px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-panel-strong);
+  font-size: 12px;
+}
+
+.rightSidebar .snippetList {
+  gap: 10px;
+  padding: 0 14px 14px;
+}
+
+.rightSidebar .snippetCard {
+  padding: 10px 12px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-panel-strong);
+}
+
+.rightSidebar .snippetCard:hover {
+  border-color: var(--border-strong);
+  background: #202025;
+}
+
+.rightSidebar .snippetTitle {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.rightSidebar .snippetPreview {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.rightSidebar .snippetMeta {
+  margin-top: 7px;
+  font-size: 11px;
+}
+
+.newTabStart h1 {
+  color: var(--text-primary);
+}
+
+.newTabEyebrow {
+  color: var(--accent);
+}

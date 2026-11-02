@@ -1,7 +1,8 @@
+import { readAppCss } from "./lib/read-app-css.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const appCss = await readFile(new URL("../src/App.css", import.meta.url), "utf8");
+const appCss = await readAppCss();
 
 function ruleBody(selector) {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

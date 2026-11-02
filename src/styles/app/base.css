@@ -1,0 +1,9358 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+input,
+textarea,
+[contenteditable="true"],
+.cm-content {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.appShell {
+  width: 100vw;
+  height: 100vh;
+  /* The native window already enforces 720px. Let the webview use that full
+     responsive range instead of laying out a clipped 920–980px canvas. */
+  min-width: 0;
+  min-height: 520px;
+  padding: 0;
+  background: var(--bg-root);
+  font-family: var(--ui-font-family);
+}
+
+.appShell[data-startup-view="portal"],
+.appShell[data-startup-view="loading"] {
+  min-width: 0;
+}
+
+/* 起動画面より前面、ウィンドウ操作ボタン（z-index: 2400）より背面に置く。 */
+.librarySetup {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: 48px 16px 24px;
+  background: var(--bg-root);
+}
+
+.librarySetupPanel {
+  display: grid;
+  width: min(640px, 100%);
+  gap: 22px;
+  color: var(--text-secondary);
+}
+
+.librarySetupPanel header {
+  display: grid;
+  gap: 8px;
+}
+
+.librarySetupEyebrow {
+  margin: 0;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.librarySetupPanel h1 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 26px;
+  font-weight: 650;
+}
+
+.librarySetupPanel header p:last-child {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.librarySetupFields {
+  display: grid;
+  gap: 14px;
+}
+
+.librarySetupField {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.librarySetupField > span {
+  color: var(--text-muted);
+}
+
+.librarySetupField input {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.librarySetupField small {
+  color: var(--text-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.librarySetupField code {
+  color: var(--text-secondary);
+  font-family: inherit;
+}
+
+.librarySetupLocation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.librarySetupPath {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.librarySetup button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.librarySetup button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.librarySetupImports {
+  display: grid;
+  gap: 8px;
+}
+
+.librarySetupImportsHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.librarySetupImportsHeader span {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.librarySetupImportsHeader small,
+.librarySetupEmpty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.librarySetupImports ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.librarySetupImports li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-bottom-width: 0;
+}
+
+.librarySetupImports li:first-child {
+  border-radius: 6px 6px 0 0;
+}
+
+.librarySetupImports li:last-child {
+  border-bottom-width: 1px;
+  border-radius: 0 0 6px 6px;
+}
+
+.librarySetupImports li:only-child {
+  border-radius: 6px;
+}
+
+.librarySetupImports label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.librarySetupImportName {
+  flex: none;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.librarySetupImportPath {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.librarySetupImportStatus {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.librarySetupImports li[data-state="running"] .librarySetupImportStatus {
+  color: var(--accent);
+}
+
+.librarySetupImports li[data-state="done"] .librarySetupImportStatus {
+  color: var(--progress-done, #45ab78);
+}
+
+.librarySetupImports li[data-state="failed"] .librarySetupImportStatus,
+.librarySetupImportError,
+.librarySetupError {
+  color: var(--danger, #d97373);
+}
+
+.librarySetupImportError {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.librarySetup .librarySetupAdd {
+  justify-self: start;
+  border-style: dashed;
+  color: var(--text-secondary);
+}
+
+.librarySetupError {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.librarySetupActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.librarySetup .librarySetupLink {
+  margin-right: auto;
+  border-color: transparent;
+  color: var(--text-muted);
+}
+
+.librarySetup .librarySetupLink:hover {
+  color: var(--text-primary);
+}
+
+.librarySetup .librarySetupPrimary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg-root);
+  font-weight: 600;
+}
+
+.librarySetupRunning {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.portalDialogLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 960;
+}
+
+.startupPortal,
+.startupPortalLoading {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-root);
+  color: var(--text-primary);
+}
+
+.startupPortal {
+  display: grid;
+  grid-template-rows: 44px minmax(0, 1fr) 54px;
+  overflow: hidden;
+}
+
+.startupPortalLoading {
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.startupPortalHeader,
+.startupPortalFooter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  border-color: var(--border-subtle);
+  background: var(--topbar-bg, var(--bg-panel));
+}
+
+.startupPortalHeader {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.startupPortalFooter {
+  justify-content: space-between;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.startupPortalMenuIcon,
+.startupPortalSettingsButton,
+.startupPortalActions button,
+.startupPortalWorkspace {
+  color: inherit;
+}
+
+/* 起動画面の上下の帯は --topbar-bg で塗るので、その上の文字も帯の文字色にする。 */
+.startupPortalMenuIcon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  color: var(--topbar-text-muted, var(--text-muted));
+}
+
+.startupPortalWordmark {
+  color: var(--topbar-text-primary, var(--text-primary));
+  font-family: "Then Serif", Georgia, serif;
+  font-size: 24px;
+  font-style: oblique;
+  font-weight: 400;
+  font-kerning: normal;
+  font-synthesis: none;
+  line-height: 1;
+}
+
+.startupPortalMain {
+  display: grid;
+  width: min(100%, 1040px);
+  min-height: 0;
+  margin: 0 auto;
+  padding: 48px 52px 42px;
+  grid-template-columns: minmax(250px, 0.85fr) minmax(360px, 1.25fr);
+  gap: 48px;
+  overflow: hidden;
+}
+
+.startupPortalIntro {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 20px;
+}
+
+.startupPortalMark {
+  display: block;
+  width: 58px;
+  height: 58px;
+}
+
+.startupPortalIntro h1,
+.startupPortalRecent h2,
+.startupPortalRecent p {
+  margin: 0;
+}
+
+.startupPortalIntro h1 {
+  max-width: 330px;
+  font-size: 23px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.startupPortalAlert {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--warning);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.startupPortalAlert span {
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.startupPortalActions {
+  display: grid;
+  gap: 8px;
+}
+
+.startupPortalActions button,
+.startupPortalSettingsButton,
+.startupPortalTextButton,
+.startupPortalWorkspace {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-button, 6px);
+  background: var(--bg-panel);
+  cursor: pointer;
+}
+
+.startupPortalActions button {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  text-align: left;
+}
+
+.startupPortalActions button:hover:not(:disabled),
+.startupPortalSettingsButton:hover,
+.startupPortalTextButton:hover,
+.startupPortalWorkspace:hover {
+  border-color: var(--border-strong);
+  background: var(--control-hover);
+}
+
+.startupPortalActions button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.startupPortalActions .startupPortalPrimaryButton {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent, #fff);
+}
+
+.startupPortalActions .startupPortalPrimaryButton:hover:not(:disabled) {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: var(--on-accent, #fff);
+}
+
+.startupPortalPrimaryButton span {
+  display: grid;
+  gap: 2px;
+}
+
+.startupPortalPrimaryButton small {
+  opacity: 0.78;
+}
+
+.startupPortal svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.startupPortalRecent {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.startupPortalRecentHeader {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.startupPortalRecent h2 {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.startupPortalRecent p {
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.startupPortalTextButton {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.startupPortalWorkspaceList {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  align-content: start;
+  grid-auto-rows: max-content;
+  gap: 8px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+.startupPortalWorkspace {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 12px;
+  text-align: left;
+}
+
+.startupPortalWorkspaceKind {
+  padding: 1px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.startupPortalWorkspaceKind.needsImport {
+  border-color: var(--progress-revising, #d8a13a);
+  color: var(--progress-revising, #d8a13a);
+}
+
+.startupPortalWorkspaceBody,
+.startupPortalWorkspaceTitle,
+.startupPortalWorkspaceMeta {
+  display: flex;
+  min-width: 0;
+}
+
+.startupPortalWorkspaceBody {
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.startupPortalWorkspaceTitle,
+.startupPortalWorkspaceMeta {
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.startupPortalWorkspaceTitle em {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.startupPortalWorkspaceMeta {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.startupPortalWorkspaceMeta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.startupPortalWorkspaceMeta time {
+  flex: 0 0 auto;
+}
+
+.startupPortalEmpty {
+  padding: 18px 0;
+}
+
+.startupPortalSettingsButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+}
+
+.startupPortalSkipSetting {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--topbar-text-secondary, var(--text-secondary));
+  font-size: 12px;
+}
+
+.startupPortalSkipSetting input {
+  accent-color: var(--accent);
+}
+
+/* 版の表示は帯の右端に置く。 */
+.startupPortalVersion {
+  color: var(--topbar-end-text, var(--topbar-text-muted, var(--text-muted)));
+  font-size: 11px;
+}
+
+@media (max-width: 760px) {
+  .startupPortal {
+    grid-template-rows: 44px minmax(0, 1fr) auto;
+  }
+
+  .startupPortalMain {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 34px;
+    padding: 30px 24px;
+  }
+
+  .startupPortalIntro {
+    justify-content: flex-start;
+  }
+
+  .startupPortalFooter {
+    flex-wrap: wrap;
+    padding-block: 10px;
+  }
+
+  .startupPortalSkipSetting {
+    order: 3;
+    width: 100%;
+  }
+}
+
+/* 高さが足りない小型ウィンドウでは、一覧の表示領域を残すため左右に並べる。 */
+@media (min-width: 600px) and (max-width: 760px) and (max-height: 700px) {
+  .startupPortalMain {
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.25fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 24px;
+    padding-block: 20px;
+  }
+
+  .startupPortalIntro {
+    justify-content: center;
+  }
+}
+
+/*
+ * UI（本文以外のクローム）の表示倍率。本文エディタはタイプライタースクロールや
+ * 改行マーク描画が getBoundingClientRect の座標に依存するため zoom の対象外とし、
+ * 文字サイズは --editor-font-size で独立して制御する。
+ */
+.topbar,
+.documentTabs,
+.leftWorkspaceCluster,
+.rightSidebar,
+.statusbar,
+.treeContextMenu,
+.snapshotMenu,
+.editorContextMenu,
+.editorFindPopover,
+.modal,
+.quickIdeaModal {
+  zoom: var(--ui-font-scale, 1);
+}
+
+.checkpointStudio {
+  zoom: var(--ui-font-scale, 1);
+}
+
+/*
+ * Export window chrome. The window is entirely chrome except the組版 preview,
+ * which must stay at its true (出力と同じ) scale — so zoom the surrounding
+ * panels individually and leave .exportPreviewPanel untouched. The fixed-width
+ * side panels grow their footprint, letting the preview take the remainder.
+ */
+.exportModalHeader,
+.exportResponsiveTabs,
+.exportFilesPanel,
+.exportSettingsPanel,
+.exportModalFooter {
+  zoom: var(--ui-font-scale, 1);
+}
+
+.printExportViewport {
+  display: none;
+}
+
+body.thenPdfExporting {
+  margin: 0;
+  background: #fff;
+}
+
+html[data-export-paginated="true"] {
+  background: #fff !important;
+}
+
+body.thenPdfExporting .appFrame {
+  display: none !important;
+}
+
+body.thenPdfExporting .appShell {
+  display: block;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: visible;
+  background: #fff;
+}
+
+body.thenPdfExporting .printExportViewport {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 100vh;
+  overflow: visible;
+  background: #fff;
+}
+
+@media print {
+  body.thenPdfExporting,
+  body.thenPdfExporting .appShell,
+  body.thenPdfExporting .printExportViewport {
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  body.thenPdfExporting .appFrame {
+    display: none !important;
+  }
+
+  body.thenPdfExporting .printExportViewport {
+    display: block !important;
+  }
+
+  body.thenPdfExporting .then-export-page {
+    margin: 0 !important;
+    box-shadow: none !important;
+  }
+}
+
+.appFrame {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  flex-direction: column;
+  border: 1px solid #2f332f;
+  background: var(--bg-primary);
+}
+
+.topbar {
+  /*
+   * Blur-backed themes make the topbar a stacking context. Keep that context
+   * above the workspace so its popovers are not painted behind the editor.
+   */
+  position: relative;
+  z-index: 6;
+  display: flex;
+  height: var(--documentbar-height);
+  flex: 0 0 var(--documentbar-height);
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px 0 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: linear-gradient(180deg, #20211f 0%, #1b1d1a 100%);
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+html:not([data-window-fullscreen="true"])
+  .appShell[data-native-window="true"]
+  .topbar,
+html:not([data-window-fullscreen="true"])
+  .appShell[data-native-window="true"]
+  .startupPortalHeader {
+  padding-right: calc(var(--window-controls-width) + 10px);
+}
+
+.windowControls {
+  position: fixed;
+  z-index: 2400;
+  top: 0;
+  right: 0;
+  display: flex;
+  width: var(--window-controls-width);
+  height: 36px;
+  /*
+   * ボタンは上部の帯に重なるので、帯の文字色に合わせる。帯の右端の色が帯の文字色と
+   * 合わないテーマ（グラデーションの帯）は、テーマ側で --topbar-end-text を決める。
+   */
+  color: var(--window-controls-color, var(--topbar-end-text, var(--topbar-text-secondary, var(--text-secondary))));
+}
+
+/*
+ * 起動中とライブラリの準備は、帯がなく、ふつうの背景がボタンの下に来る。App が印を付ける
+ * （.appShell:has() は原稿への挿入のたびにアプリ全体の style を計算し直させるので使わない）。
+ */
+.windowControls[data-over-page="true"] {
+  --window-controls-color: var(--text-secondary);
+  --window-controls-hover-color: var(--text-primary);
+}
+
+.windowControls[data-fullscreen="true"] {
+  display: none;
+}
+
+.windowControlButton {
+  display: inline-grid;
+  width: 46px;
+  height: 36px;
+  flex: 0 0 46px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  cursor: default;
+}
+
+/* ホバーの背景はボタンの文字色を薄く混ぜて作る。暗い帯では明るく、明るい帯では暗くなる。 */
+.windowControlButton:hover {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  color: var(--window-controls-hover-color, var(--topbar-end-text-hover, var(--topbar-text-primary, var(--text-primary))));
+}
+
+.windowControlButton:active {
+  background: color-mix(in srgb, currentColor 16%, transparent);
+}
+
+.windowControlButton:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.windowControlButton svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  stroke-width: 1;
+}
+
+.windowCloseButton:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+
+.windowCloseButton:active {
+  background: #a92317;
+}
+
+.fileMenu,
+.breadcrumbMenu {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+
+.fileMenu {
+  flex: 0 0 auto;
+}
+
+.breadcrumbMenu {
+  flex: 0 1 auto;
+}
+
+.menuButton {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.menuButton:hover,
+.menuButton[aria-expanded="true"] {
+  background: #353834;
+  color: var(--text-primary);
+}
+
+.breadcrumbs {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 0;
+  white-space: nowrap;
+}
+
+.breadcrumbSegment {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 7px;
+  flex: 0 1 auto;
+}
+
+.breadcrumbItem {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+
+.activeCrumb {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.breadcrumbCollapsedSegment {
+  display: none !important;
+}
+
+.crumbSeparator {
+  color: #666b62;
+}
+
+.outlineSeparator {
+  color: var(--text-secondary);
+}
+
+.breadcrumbFolderButton {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 310px;
+  height: 30px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.breadcrumbFolderButton span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.breadcrumbOverflowMenu {
+  flex: 0 0 auto;
+}
+
+.breadcrumbOverflowButton {
+  display: inline-grid;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.breadcrumbOverflowButton:hover,
+.breadcrumbOverflowButton[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.breadcrumbOverflowPopover {
+  left: 0;
+  width: clamp(230px, 30vw, 340px);
+  max-height: min(420px, calc(100vh - 96px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.breadcrumbOverflowItemIcon {
+  display: inline-grid;
+  width: 16px;
+  flex: 0 0 16px;
+  place-items: center;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.breadcrumbs[data-layout="minimal"] .breadcrumbSegment,
+.breadcrumbs[data-layout="minimal"] .breadcrumbItem {
+  max-width: min(240px, 100%);
+}
+
+.breadcrumbFolderButton:hover,
+.breadcrumbFolderButton[aria-expanded="true"] {
+  background: #2b2e2a;
+  color: var(--text-primary);
+}
+
+.menuPopover {
+  position: absolute;
+  top: calc(100% + 4px);
+  z-index: 20;
+  display: grid;
+  min-width: 190px;
+  max-width: min(360px, calc(100vw - 28px));
+  padding: 4px;
+  border: 1px solid #3d413b;
+  border-radius: 4px;
+  background: #1f211e;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.42);
+}
+
+.fileMenuPopover {
+  left: 0;
+}
+
+.breadcrumbPopover {
+  left: 0;
+  width: clamp(270px, 34vw, 440px);
+  min-width: 270px;
+  max-width: calc(100vw - 28px);
+  max-height: min(520px, calc((100vh - 96px) / var(--ui-font-scale, 1)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.breadcrumbBrowseHeader {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.breadcrumbBrowseBack {
+  display: inline-grid !important;
+  width: 28px;
+  min-height: 28px !important;
+  padding: 0 !important;
+  place-items: center;
+  font-size: 19px !important;
+  text-align: center !important;
+}
+
+.breadcrumbBrowseFolderName {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspaceSwitcherButton {
+  font-weight: 650;
+}
+
+.workspaceSwitcherBookIcon {
+  display: block;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.workspaceSwitcherPopover {
+  left: 0;
+  width: clamp(300px, 34vw, 420px);
+  min-width: 300px;
+  max-width: calc(100vw - 28px);
+  max-height: min(540px, calc((100vh - 96px) / var(--ui-font-scale, 1)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.workspaceSwitcherHeader {
+  display: grid;
+  gap: 3px;
+  padding: 7px 8px 9px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.workspaceSwitcherTitle {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspaceSwitcherPath,
+.workspaceRecordPath {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspaceSwitcherSearch {
+  display: flex;
+  min-width: 0;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 4px 4px;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+}
+
+.workspaceSwitcherSearch input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.workspaceSwitcherSearch input::placeholder {
+  color: var(--text-faint);
+}
+
+.workspaceSwitcherSectionLabel {
+  padding: 8px 8px 4px;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.workspaceSwitcherList {
+  display: grid;
+  gap: 2px;
+}
+
+.workspaceFolderTree {
+  display: grid;
+  gap: 2px;
+}
+
+.workspaceFolderTreeNode {
+  display: grid;
+  gap: 2px;
+}
+
+.workspaceFolderTreeRow {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+}
+
+.workspaceFolderDisclosure {
+  display: inline-grid !important;
+  width: 20px;
+  min-width: 20px !important;
+  min-height: 28px !important;
+  place-items: center;
+  padding: 0 !important;
+  color: var(--text-faint) !important;
+}
+
+.workspaceFolderDisclosure:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.workspaceFolderTreeIndent {
+  display: block;
+  width: 20px;
+  height: 1px;
+}
+
+.workspaceFolderTreeButton {
+  min-width: 0;
+}
+
+.workspaceFolderTreeButton span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activeWorkspaceFolderTreeButton {
+  background: var(--accent-soft) !important;
+  color: var(--text-primary) !important;
+}
+
+.workspaceFolderTreeIcon {
+  display: block;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.workspaceRecordButton {
+  display: grid !important;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px !important;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.workspaceRecordText {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.workspaceRecordName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspaceRecordBadge {
+  display: inline-flex;
+  min-height: 20px;
+  align-items: center;
+  padding: 0 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.outlinePopover {
+  top: calc(100% + 8px);
+  left: 0;
+  width: clamp(300px, 38vw, 430px);
+  max-height: min(520px, calc((100vh - 96px) / var(--ui-font-scale, 1)));
+  overflow: hidden;
+}
+
+.menuPopover button,
+.emptyMenuMessage {
+  display: flex;
+  min-width: 0;
+  min-height: 28px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: left;
+}
+
+.menuRow {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  border-radius: 3px;
+}
+
+.menuRow::before,
+.menuRow::after {
+  position: absolute;
+  right: 7px;
+  left: 7px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent-strong);
+  box-shadow: 0 0 0 3px rgba(109, 166, 217, 0.12);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+}
+
+.menuRow::before {
+  top: -1px;
+}
+
+.menuRow::after {
+  bottom: -1px;
+}
+
+.breadcrumbDrop-before::before,
+.breadcrumbDrop-after::after {
+  opacity: 1;
+}
+
+.draggingBreadcrumbEntry {
+  opacity: 0.45;
+}
+
+.breadcrumbPrimaryMenuItem,
+.menuRow > button:first-child {
+  min-width: 0;
+}
+
+.breadcrumbRowTools {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.menuRow:hover .breadcrumbRowTools,
+.menuRow:focus-within .breadcrumbRowTools {
+  opacity: 1;
+}
+
+.menuActionButton {
+  display: inline-grid !important;
+  min-width: 22px !important;
+  width: 22px;
+  min-height: 24px !important;
+  padding: 0 !important;
+  place-items: center;
+  text-align: center !important;
+  color: #9aa299 !important;
+}
+
+.menuActionButton:disabled {
+  cursor: default;
+  opacity: 0.28;
+}
+
+.menuActionButton:disabled:hover {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.menuPopover button {
+  cursor: pointer;
+}
+
+.menuPopover button:hover,
+.menuPopover .activeMenuItem {
+  background: #373b35;
+  color: var(--text-primary);
+}
+
+.editorContextMenu {
+  position: fixed;
+  z-index: 30;
+  display: grid;
+  width: 220px;
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-panel-strong);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.46);
+  color: var(--text-secondary);
+  font-family: var(--ui-font-family);
+  font-size: 12px;
+  writing-mode: horizontal-tb;
+}
+
+.contextMenuSection {
+  display: grid;
+  gap: 1px;
+}
+
+.contextMenuLabel {
+  padding: 5px 8px 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.contextMenuDivider {
+  height: 1px;
+  margin: 5px 3px;
+  background: var(--border-subtle);
+}
+
+.editorContextMenu button {
+  display: flex;
+  width: 100%;
+  min-height: 28px;
+  align-items: center;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.editorContextMenu button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text-primary);
+}
+
+.editorContextMenu button:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+.menuPopover button span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emptyMenuMessage {
+  color: var(--text-muted);
+}
+
+.menuDivider {
+  height: 1px;
+  margin: 5px 3px;
+  background: var(--border-subtle);
+}
+
+.topbarActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.iconButton,
+.addButton {
+  display: inline-grid;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.iconButton {
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  background: transparent;
+  color: #a6b1a1;
+  font-size: 15px;
+}
+
+.iconButton:hover,
+.addButton:hover {
+  background: #353834;
+  color: var(--text-primary);
+}
+
+.activeIconButton {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent-strong);
+}
+
+.topbarSvgIcon,
+.menuSvgIcon,
+.workspaceSwitcherBookIcon,
+.workspaceFolderTreeIcon {
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.topbarSvgIcon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.8;
+}
+
+.menuSvgIcon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  stroke-width: 1.65;
+}
+
+.workspace {
+  position: relative;
+  /* Confine workspace overlays below the topbar; modal backdrops remain above both. */
+  z-index: 0;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
+.documentTabs {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  width: 100%;
+  height: var(--document-tabs-height);
+  flex: 0 0 var(--document-tabs-height);
+  min-width: 0;
+  min-height: 0;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--sidebar-bg, var(--bg-secondary));
+  color: var(--text-secondary);
+}
+
+.documentTabCloseButton {
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.documentTabCloseButton:hover {
+  background: var(--control-hover);
+  color: var(--text-primary);
+}
+
+.documentTabsList {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 4px;
+  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.documentTabItem {
+  position: relative;
+  display: grid;
+  min-width: 116px;
+  max-width: 240px;
+  height: 100%;
+  min-height: 0;
+  flex: 0 1 210px;
+  grid-template-columns: minmax(0, 1fr) 26px;
+  align-items: center;
+  border-right: 1px solid var(--border-subtle);
+  border-bottom: 2px solid transparent;
+  background: color-mix(in srgb, var(--bg-panel) 44%, transparent);
+  color: var(--text-secondary);
+}
+
+.documentTabItem:hover {
+  background: var(--control-hover);
+}
+
+.activeDocumentTabItem {
+  border-bottom-color: var(--accent);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.activeDocumentTabItem:hover {
+  background: var(--bg-primary);
+}
+
+.documentTabButton {
+  display: grid;
+  min-width: 0;
+  height: 100%;
+  grid-template-columns: 14px minmax(0, 1fr) 8px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 3px 0 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.documentTabKind {
+  display: block;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  opacity: 0.6;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.activeDocumentTabItem .documentTabKind {
+  opacity: 0.85;
+}
+
+/* 進捗が付いたファイルは、アイコンだけを進捗色で塗る。名前の文字色は変えない。 */
+.progressDocumentTabKind:is(.progressText-writing, .progressText-revising, .progressText-done) {
+  opacity: 1;
+  stroke: var(--progress-color);
+  fill: color-mix(in srgb, var(--progress-color) 28%, transparent);
+}
+
+/* 未保存の下書きは、輪郭を破線にして通常のファイルと区別する。 */
+.scratchDocumentTabKind {
+  stroke-dasharray: 3 2.2;
+}
+
+.documentTabText {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.documentTabName,
+.documentTabPath {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.documentTabName {
+  color: inherit;
+  font-weight: 650;
+}
+
+.documentTabPath {
+  display: none;
+}
+
+.documentTabStatus {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.dirtyDocumentTabItem .documentTabStatus {
+  background: var(--warning);
+}
+
+.errorDocumentTabItem .documentTabStatus {
+  background: var(--danger);
+}
+
+.documentTabCloseButton {
+  width: 22px;
+  height: 22px;
+  margin-right: 2px;
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.documentTabItem:not(:hover):not(.activeDocumentTabItem) .documentTabCloseButton {
+  opacity: 0;
+}
+
+/* ドラッグ中は掴んだタブを薄くし、挿入位置に縦線を出す。 */
+.draggingDocumentTabsList,
+.draggingDocumentTabsList .documentTabButton {
+  cursor: grabbing;
+}
+
+.draggingDocumentTabItem {
+  opacity: 0.5;
+}
+
+.dropBeforeDocumentTabItem::before,
+.dropAfterDocumentTabItem::after {
+  position: absolute;
+  z-index: 1;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  content: "";
+  pointer-events: none;
+}
+
+.dropBeforeDocumentTabItem::before {
+  left: -1px;
+}
+
+.dropAfterDocumentTabItem::after {
+  right: -1px;
+}
+
+.documentTabContextMenu {
+  min-width: 188px;
+}
+
+.documentTabContextMenu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.documentTabContextMenu kbd {
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 10px;
+}
+
+.documentTabsNewButton {
+  display: inline-grid;
+  width: 36px;
+  min-width: 36px;
+  height: 100%;
+  flex: 0 0 36px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: var(--sidebar-bg, var(--bg-secondary));
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.documentTabsNewButton:hover,
+.documentTabsNewButton:focus-visible {
+  background: var(--control-hover);
+  color: var(--text-primary);
+  outline: none;
+}
+
+/*
+ * ホバー表示モード。タブバーは通常の流れに残したまま負の下マージンで
+ * 高さを打ち消し、下の編集面に重ねる。zoom は高さもマージンも同じ倍率で
+ * 拡大するため、UI表示サイズを変えても打ち消しがずれない。
+ */
+.documentTabsHoverZone {
+  position: relative;
+  /* モーダルの背景 (.modalBackdrop, z-index 10) より下に置き、
+     設定画面を開いている間はタブバーが手前に出ないようにする。 */
+  z-index: 6;
+  min-height: 0;
+  flex: 0 0 auto;
+}
+
+.hoverDocumentTabs {
+  margin-bottom: calc(var(--document-tabs-hover-strip) - var(--document-tabs-height));
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.documentTabsHoverZone:hover .hoverDocumentTabs,
+.documentTabsHoverZone:focus-within .hoverDocumentTabs,
+.hoverDocumentTabs.heldDocumentTabs {
+  box-shadow: 0 8px 18px rgb(0 0 0 / 18%);
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hoverDocumentTabs {
+    transform: none;
+    transition: none;
+  }
+}
+
+.editorColumn {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.editorFrame {
+  display: flex;
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.editor {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(255, 255, 255, 0.035), transparent 38%),
+    linear-gradient(135deg, #232520 0%, #20231f 48%, #191b18 100%);
+  color: var(--text-primary);
+  font-family: var(--editor-font-family);
+  font-size: var(--editor-font-size);
+  font-weight: 400;
+  line-height: var(--editor-line-height);
+  caret-color: var(--accent-strong);
+}
+
+.newTabStart {
+  display: flex;
+  width: min(560px, calc(100% - 64px));
+  min-height: 360px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 28px;
+  margin: 0 auto;
+  color: var(--text-secondary);
+  font-family: var(--start-page-font-family, var(--ui-font-family));
+}
+
+.newTabStart h1 {
+  margin: 0 0 14px;
+  color: var(--text-primary);
+  font-size: 32px;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+
+.newTabStart p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.scopeStartRecent {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  list-style: none;
+  overflow: hidden;
+}
+
+.scopeStartRecent li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.scopeStartRecent button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+
+.scopeStartRecent button:hover,
+.scopeStartRecent button:focus-visible {
+  background: var(--control-hover);
+}
+
+.scopeStartRecentName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scopeStartRecentTime {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.documentTabsEmpty {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.newTabEyebrow {
+  margin-bottom: 10px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.newTabActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.newTabActions button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-panel-strong);
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.newTabActions button:hover {
+  border-color: var(--accent-border, var(--border-strong));
+  background: var(--control-hover);
+}
+
+.editorContent {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-width: 100%;
+  height: 100%;
+  min-height: 100%;
+  justify-content: flex-end;
+}
+
+.editorFindPopover {
+  position: absolute;
+  z-index: 12;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  min-width: 452px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  color: var(--text-primary);
+}
+
+.editorFindRow {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 54px 34px 34px 34px 34px;
+  align-items: center;
+  min-height: 46px;
+}
+
+.editorFindRow + .editorFindRow {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.editorFindRow input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  padding: 0 14px;
+}
+
+.editorFindRow input::placeholder {
+  color: var(--text-muted);
+}
+
+.editorFindCount {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.editorFindRow button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-left: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.editorFindRow button:hover:not(:disabled),
+.editorFindRow button[aria-pressed="true"] {
+  background: var(--control-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-primary);
+}
+
+.editorFindRow button:disabled {
+  cursor: default;
+  opacity: 0.34;
+}
+
+.editorReplaceRow {
+  grid-template-columns: minmax(180px, 1fr) 72px 72px;
+}
+
+.editorReplaceRow button {
+  width: auto;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.propertiesPanel {
+  container: properties / inline-size;
+  /* The sidebar body is a flex row; as a size container the pane has no content
+     width of its own, so it has to be told to take the row's width. */
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 4px 10px 12px;
+  color: var(--text-secondary);
+  font-family: var(--ui-font-family);
+}
+
+.propertiesHeader {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 6px;
+}
+
+.propertiesHeaderSpacer {
+  flex: 1;
+}
+
+.propertiesCount {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.propertiesErrorCount {
+  flex: 0 0 auto;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.propertiesActionButton {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.propertiesActionButton:hover:not(:disabled),
+.propertiesActionButton[aria-pressed="true"] {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.propertiesActionButton:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.propertiesActionButton svg {
+  width: 14px;
+  height: 14px;
+}
+
+.propertiesSetMenuAnchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.propertiesSetMenu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  right: 0;
+  display: grid;
+  min-width: 180px;
+  max-height: 280px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--bg-panel-strong, var(--bg-secondary));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+}
+
+.propertiesSetMenu button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+
+.propertiesSetMenu button small {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.propertiesSetMenu button:hover:not(:disabled),
+.propertiesSetMenu button:focus-visible {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.propertiesSetMenu button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.workspaceAlert {
+  display: grid;
+  width: min(720px, calc(100% - 80px));
+  max-width: 720px;
+  gap: 10px;
+  margin: 28px auto 0;
+  padding: 12px 14px;
+  border-left: 3px solid var(--warning);
+  background: rgba(215, 182, 94, 0.1);
+  color: var(--text-secondary);
+  font-family: var(--ui-font-family);
+  font-size: 12px;
+}
+
+.workspaceAlert strong,
+.workspaceAlert span {
+  display: block;
+}
+
+.workspaceAlert strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.workspaceAlert span {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspaceAlertActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workspaceAlertActions button {
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  cursor: pointer;
+  padding: 0;
+  font-size: 12px;
+}
+
+.workspaceAlertActions button:hover {
+  color: var(--text-primary);
+}
+
+.outlineSearch {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: block;
+  padding: 7px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+}
+
+.outlineSearch span {
+  display: none;
+}
+
+.outlineSearch input {
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  outline: none;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.outlineList {
+  max-height: min(440px, calc((100vh - 170px) / var(--ui-font-scale, 1)));
+  overflow-y: auto;
+  padding: 2px 5px 6px;
+}
+
+.outlineMenuItem {
+  display: flex;
+  width: 100%;
+  min-height: 30px;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.outlineMenuItem:hover {
+  background: #353834;
+  color: var(--text-primary);
+}
+
+.verticalTypewriterShell {
+  position: relative;
+  box-sizing: border-box;
+  flex: 0 0 100%;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 100%;
+  overflow: hidden;
+  background: #1b1c1f;
+  color: #e9e4d6;
+}
+
+.verticalTypewriterScroller {
+  position: absolute;
+  inset: 0;
+  writing-mode: vertical-rl;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior: none;
+  scrollbar-color: var(--border-strong) rgba(255, 255, 255, 0.035);
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+  cursor: text;
+}
+
+/*
+ * 連続表示のスクロール領域は独立した合成レイヤーにする。画面倍率100%では、
+ * Chromium は背景が不透明でないスクロール領域を合成せず、タイプライター
+ * スクロールの毎フレーム本文を描き直してページ全体のレイヤー分けをやり直す
+ * （10万字で1打鍵あたり約10ms）。背景を不透明にして本文と一緒にスクロール
+ * させる（local）と、合成したままサブピクセルの文字描画も保てる。
+ */
+.verticalTypewriterShell:not([data-editor-display="paged"]) .verticalTypewriterScroller {
+  /* シェルと同じ背景（ダークテーマの暗さの重ねも含む）。カード型のテーマは
+     シェルが透明なので、透明のまま。 */
+  background-color: inherit;
+  background-image: inherit;
+  background-attachment: local;
+  will-change: scroll-position;
+}
+
+.verticalTypewriterScroller::-webkit-scrollbar {
+  display: block;
+  width: 10px;
+  height: 10px;
+}
+
+.verticalTypewriterScroller::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.verticalTypewriterScroller::-webkit-scrollbar-thumb {
+  min-width: 40px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--border-strong);
+  background-clip: content-box;
+}
+
+.verticalTypewriterScroller::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+  background-clip: content-box;
+}
+
+.verticalTypewriterScroller::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ページ編集の本文は、断片化させずに1つの流れのまま置く。表示するページは
+   ブロック方向の位置をずらして枠内へ出し、枠の外は clip で隠す。
+   multicol で断片へ切ると、ページの境目にかかる段落のレイアウトが分かれ、
+   ブラウザが OS へ渡すキャレット座標が前の断片（＝前のページ）のものになる。
+   IMEの変換候補ウィンドウが前のページへ出ていたのはそれが原因だった。
+   下のシート要素はページの見た目を描くだけで、本文の断片とは対応しない。 */
+.verticalTypewriterPageSurface {
+  position: relative;
+  min-width: 100%;
+  height: 100%;
+}
+
+.verticalTypewriterShell[data-editor-display="paged"] {
+  background: var(--bg-primary, #1b1c1f);
+}
+
+.verticalTypewriterShell[data-editor-display="paged"] .verticalTypewriterScroller {
+  z-index: 1;
+  inset: 30px 36px;
+  border: 0;
+  background: transparent;
+  scrollbar-gutter: auto;
+  scroll-snap-type: x mandatory;
+  scroll-snap-stop: always;
+}
+
+.verticalTypewriterShell[data-editor-display="paged"][data-page-flow="horizontal-rtl"]
+  .verticalTypewriterScroller {
+  direction: rtl;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.verticalTypewriterShell[data-editor-display="paged"][data-page-flow="vertical"]
+  .verticalTypewriterScroller {
+  direction: ltr;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+}
+
+.verticalTypewriterShell[data-editor-display="paged"][data-page-flow="vertical"]
+  .verticalTypewriterScroller::-webkit-scrollbar {
+  display: none;
+}
+
+
+.verticalTypewriterShell[data-editor-display="paged"] .verticalTypewriterPageSurface {
+  min-width: 0;
+  min-height: 0;
+}
+
+.pagedEditorSheet {
+  position: absolute;
+  z-index: 0;
+  box-sizing: border-box;
+  /* 外余白のぶんスナップ位置を手前へ戻す。ページ境界のスクロール量は
+     余白を含まない (index * (ページ高 + gap)) のままにする。 */
+  scroll-margin: var(--paged-outer-margin, 0px);
+  width: var(--paged-page-width);
+  height: var(--paged-page-height);
+  border: 1px solid color-mix(in srgb, var(--text-muted) 48%, transparent);
+  background: var(--bg-primary, #1b1c1f);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.12),
+    0 12px 32px rgba(0, 0, 0, 0.08);
+  scroll-snap-align: start;
+  pointer-events: none;
+}
+
+.pagedEditorSheet > span {
+  position: absolute;
+  right: 12px;
+  bottom: 9px;
+  color: var(--text-faint);
+  font-family: var(--ui-font-family);
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* ページ割りの結果は入力のたびに本文の枠と本文rootへ書き込む。未登録の
+   カスタムプロパティは子孫へ継承されるので、値が変わるたびに原稿の全要素
+   （長い原稿では数万個）のスタイルが再計算され、Enter 1回に0.5秒かかって
+   いた。どれも書き込んだ要素自身しか読まないので、継承しない登録にする。 */
+@property --paged-clip { syntax: "*"; inherits: false; }
+@property --paged-host-x { syntax: "*"; inherits: false; }
+@property --paged-host-y { syntax: "*"; inherits: false; }
+@property --paged-root-top { syntax: "*"; inherits: false; }
+@property --paged-root-right { syntax: "*"; inherits: false; }
+@property --paged-root-left { syntax: "*"; inherits: false; }
+@property --paged-root-width { syntax: "*"; inherits: false; }
+@property --paged-root-height { syntax: "*"; inherits: false; }
+
+.verticalTypewriterShell[data-editor-display="paged"] .verticalTypewriterEditor {
+  position: absolute;
+  top: var(--paged-outer-margin, 0px);
+  right: var(--paged-outer-margin, 0px);
+  z-index: 2;
+  width: var(--paged-page-width);
+  min-width: 0;
+  height: var(--paged-page-height);
+  /* hidden ではなく clip。hidden はスクロールコンテナなので、キャレット表示
+     （focus/scrollIntoView）やスクロールアンカリングでブラウザがこの枠自身を
+     内部スクロールしてしまい、そのぶん本文が段送りとは無関係にずれる。
+     ページ送りの transform と食い違ったまま固定され、最終ページで本文だけが
+     数十px下へ残る症状の原因になっていた。clip は非スクロールなので起きない。 */
+  overflow: clip;
+  overflow-anchor: none;
+  /* 本文は1つの流れのまま置いてページの位置へずらすので、版面の外へも伸びて
+     いる。multicol のときは段の箱が本文を版面の内側へ閉じ込めていたが、その
+     役目がなくなったぶんをここで切る。ページ枠ではなく版面で切らないと、
+     前後のページの行が余白へはみ出して見える。 */
+  clip-path: var(--paged-clip, inset(var(--paged-padding-y, 0px) var(--paged-padding-x, 0px)));
+  pointer-events: none;
+  transform: translate(
+    var(--paged-host-x, 0px),
+    var(--paged-host-y, 0px)
+  );
+}
+
+/* 位置と寸法はページ割りの計算結果から与える。インライン方向（縦書きなら
+   縦、横書きなら横）だけを版面に合わせ、ブロック方向は本文が流れるままに
+   伸ばす。表示するページはブロック方向の始端をずらして出す。transform では
+   なくレイアウト上の位置で動かすのは、ブラウザのキャレット座標計算に後段の
+   変換を挟ませないため。 */
+.verticalTypewriterShell[data-editor-display="paged"] .verticalTypewriterEditor .pm-root {
+  position: absolute;
+  top: var(--paged-root-top, 0px);
+  right: var(--paged-root-right, auto);
+  left: var(--paged-root-left, auto);
+  box-sizing: border-box;
+  width: var(--paged-root-width, auto);
+  min-width: 0;
+  max-width: none;
+  height: var(--paged-root-height, auto);
+  min-height: 0;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  direction: ltr;
+  overflow: visible;
+  pointer-events: auto;
+}
+
+.verticalTypewriterShell[data-editor-display="paged"] .verticalTypewriterEditor .pm-root p {
+  direction: ltr;
+  max-inline-size: 100%;
+  margin-inline: 0;
+  break-inside: auto;
+  contain: none;
+  overflow-clip-margin: 0;
+  orphans: 2;
+  widows: 2;
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-editor-display="paged"]
+  .verticalTypewriterEditor
+  .pm-root {
+  direction: ltr;
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-editor-display="paged"]
+  .verticalTypewriterEditor
+  .pm-root
+  p {
+  direction: ltr;
+}
+
+/*
+ * ページ送りボタンは用紙の辺の上へ横長の板として置く。円だと本文の脇で
+ * 存在感が強すぎるため、辺に沿った細い帯にして主張を抑える。
+ * --paged-nav-thickness は辺に対して垂直方向の厚み。用紙の辺へ中心を
+ * 合わせる計算に使うので、寸法を変えるときはこの変数を変える。
+ */
+.pagedEditorNav {
+  --paged-nav-thickness: 20px;
+  --paged-nav-length: 46px;
+
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  width: var(--paged-nav-length);
+  height: var(--paged-nav-thickness);
+  place-items: center;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 86%, transparent);
+  border-radius: 7px;
+  outline: none;
+  background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+  color: var(--text-secondary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  backdrop-filter: none;
+  transition:
+    color 120ms ease,
+    background 120ms ease,
+    border-color 120ms ease,
+    transform 120ms ease,
+    opacity 120ms ease;
+}
+
+/* 左右送りでは辺が縦なので、板も縦長にして辺に沿わせる。 */
+.verticalTypewriterShell[data-page-flow="horizontal-rtl"] .pagedEditorNav {
+  width: var(--paged-nav-thickness);
+  height: var(--paged-nav-length);
+}
+
+.pagedEditorNav svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.pagedEditorNav:hover:not(:disabled),
+.pagedEditorNav:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 68%, var(--border-strong));
+  background: color-mix(in srgb, var(--bg-secondary) 82%, var(--accent) 18%);
+  color: var(--text-primary);
+  transform: scale(1.06);
+}
+
+.pagedEditorNav:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+
+.verticalTypewriterShell[data-page-flow="horizontal-rtl"] .pagedEditorPrevious {
+  top: 50%;
+  right: calc(
+    36px + var(--paged-outer-margin, 20px) - var(--paged-nav-thickness) / 2
+  );
+  transform: translateY(-50%);
+}
+
+.verticalTypewriterShell[data-page-flow="horizontal-rtl"] .pagedEditorNext {
+  top: 50%;
+  left: calc(
+    36px + var(--paged-outer-margin, 20px) - var(--paged-nav-thickness) / 2
+  );
+  transform: translateY(-50%);
+}
+
+.verticalTypewriterShell[data-page-flow="horizontal-rtl"]
+  .pagedEditorNav:hover:not(:disabled),
+.verticalTypewriterShell[data-page-flow="horizontal-rtl"] .pagedEditorNav:focus-visible {
+  transform: translateY(-50%) scale(1.06);
+}
+
+/*
+ * 上下送りのボタンは用紙の上辺・下辺へ中心を合わせる。用紙はスクロール領域
+ * (シェルから 30px の inset) の内側にさらに外余白のぶん入るので、辺までの
+ * 距離は上下とも 30px + 外余白。以前は上が枠の上端 1px、下がシェル下端から
+ * 5px と別々の基準だったため、下だけ用紙から離れて中途半端に見えていた。
+ */
+.verticalTypewriterShell[data-page-flow="vertical"] .pagedEditorNav {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.verticalTypewriterShell[data-page-flow="vertical"] .pagedEditorPrevious {
+  top: calc(
+    30px + var(--paged-outer-margin, 20px) - var(--paged-nav-thickness) / 2
+  );
+}
+
+.verticalTypewriterShell[data-page-flow="vertical"] .pagedEditorNext {
+  bottom: calc(
+    30px + var(--paged-outer-margin, 20px) - var(--paged-nav-thickness) / 2
+  );
+}
+
+/*
+ * 窓が狭いと用紙の外余白が 0 になり、上辺がシェル上端から 30px まで上がる。
+ * ホバー表示のタブバーは上端に (タブバー高 - ストリップ) 分だけ重なるので、
+ * そのときだけ帯の下へ逃がす。余白がある通常の窓では用紙の辺の位置が勝つ。
+ */
+[data-document-tabs="hover"]
+  .verticalTypewriterShell[data-page-flow="vertical"]
+  .pagedEditorPrevious {
+  top: max(
+    calc(30px + var(--paged-outer-margin, 20px) - var(--paged-nav-thickness) / 2),
+    calc(
+      (var(--document-tabs-height) - var(--document-tabs-hover-strip)) *
+        var(--ui-font-scale, 1) + 4px
+    )
+  );
+}
+
+.verticalTypewriterShell[data-page-flow="vertical"]
+  .pagedEditorNav:hover:not(:disabled),
+.verticalTypewriterShell[data-page-flow="vertical"] .pagedEditorNav:focus-visible {
+  transform: translateX(-50%) scale(1.06);
+}
+
+.verticalTypewriterEditor {
+  position: relative;
+  min-width: 100%;
+  height: 100%;
+}
+
+.verticalTypewriterEditor .pm-root {
+  position: relative;
+  min-width: max-content;
+  height: 100%;
+  /* 上下余白は持たない。横方向は先頭・末尾の列をタイプライター設定の
+     全範囲（30〜65%）へ運べるよう、左右に各1画面分のスクロール余白を持つ。 */
+  padding: 0 100vw;
+  outline: none;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-family: var(--editor-font-family);
+  font-size: var(--editor-font-size);
+  line-height: var(--editor-line-height);
+  letter-spacing: 0.05em;
+  line-break: strict;
+  overflow-wrap: normal;
+  word-break: normal;
+  text-justify: inter-character;
+  text-spacing-trim: trim-start;
+  font-kerning: normal;
+  outline: none;
+  caret-color: #e8b04b;
+}
+
+.verticalTypewriterEditor .pm-root[data-empty="true"]::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  /* 空の段落は auto マージンで中央寄せされるため、プレースホルダも同じ
+     オフセット（残り領域の半分）だけインライン方向にずらして入力開始位置に
+     重ねる。段落側の中央寄せ計算と常に一致する。 */
+  inset-inline-start: calc(100% * (1 - var(--editor-measure-v-ratio, 0.75)) / 2);
+  color: rgba(233, 228, 214, 0.28);
+  white-space: pre-wrap;
+  pointer-events: none;
+  user-select: none;
+}
+
+.verticalTypewriterEditor .pm-root p {
+  position: relative;
+  min-block-size: 1lh;
+  margin: 0;
+  /* 縦書きの inline-size = 列の縦幅。編集領域（= pm-root の content 高さ）
+     に対する比率で決めるため、はみ出さない。auto マージンで列を上下中央に
+     置き、縦幅を縮めたときは上下均等に縮む（上基点にしない）。 */
+  max-inline-size: calc(100% * var(--editor-measure-v-ratio, 0.75));
+  margin-inline: auto;
+  /* Lines are laid out for real, never as content-visibility placeholders:
+     Chromium tracks every auto-visibility block with an intersection
+     observer, which cost more per keystroke than the layout it skipped. */
+  contain: layout style;
+  overflow-clip-margin: 4em;
+  white-space: pre-wrap;
+  line-break: strict;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  text-justify: inter-character;
+  text-spacing-trim: trim-start;
+}
+
+.verticalTypewriterEditor .pm-root p.pm-table-row {
+  display: grid;
+  /* Tracks come from the table's own content; the fallback keeps a table
+     readable if a row is rendered before its column extents are known. */
+  grid-template-columns: var(--table-tracks, repeat(var(--table-columns), 0 minmax(0, 1fr)) 0);
+  inline-size: min(var(--table-extent, 100%), calc(100% * var(--editor-measure-v-ratio, 0.75)));
+  /* 本文の行は auto マージンで中央に置かれるが、表は本文と同じ行頭から
+     始める。中央寄せのままだと、幅の狭い表だけ起点が本文とずれる。 */
+  margin-inline-start: calc(100% * (1 - var(--editor-measure-v-ratio, 0.75)) / 2);
+  margin-inline-end: auto;
+  align-items: stretch;
+  text-align: start;
+  text-indent: 0;
+  contain: style;
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+.verticalTypewriterEditor .pm-table-cell {
+  grid-row: 1;
+  min-inline-size: 0;
+  min-block-size: 1lh;
+  padding: 0.25em;
+  border-inline: 1px solid var(--border-subtle);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.verticalTypewriterEditor .pm-table-marker {
+  grid-row: 1;
+  /* Retain source positions without giving Markdown pipes visible space. */
+  font-size: 0;
+  line-height: 0;
+  overflow: hidden;
+}
+
+.verticalTypewriterEditor .pm-table-empty-input {
+  display: block;
+  min-block-size: 1lh;
+  min-inline-size: 1em;
+  outline: none;
+  white-space: pre-wrap;
+}
+
+.verticalTypewriterEditor .pm-table-header {
+  font-weight: bold;
+  background: var(--bg-panel-strong);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.verticalTypewriterEditor .pm-root p.pm-table-rule {
+  /* A zero-size block retains a local caret coordinate, unlike display:none.
+     Keep this stable even when the selection passes through the source rule. */
+  block-size: 0;
+  min-block-size: 0;
+  max-block-size: 0;
+  border: 0;
+  padding: 0;
+  font-size: 0;
+  line-height: 0;
+  overflow: hidden;
+}
+
+.verticalTypewriterEditor .pm-table-rule .pm-table-cell {
+  min-block-size: 0;
+  padding: 0;
+  border: 0;
+}
+
+.verticalTypewriterEditor .pm-root p.pm-table-rule::before,
+.verticalTypewriterEditor .pm-root p.pm-table-rule::after {
+  display: none;
+}
+
+.verticalTypewriterEditor .pm-table-row > .ProseMirror-trailingBreak,
+.verticalTypewriterEditor .pm-table-row > .ProseMirror-separator {
+  display: none;
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.pm-table-row {
+  inline-size: min(var(--table-extent, 100%), 100%);
+}
+
+.verticalTypewriterEditor .pm-root p.blank {
+  min-block-size: 1lh;
+}
+
+.verticalTypewriterEditor .pm-root p.heading {
+  font-family: var(--editor-heading-font-family, var(--editor-font-family));
+  font-weight: 600;
+  color: #f1dfb8;
+  line-height: 1.45;
+}
+
+.verticalTypewriterEditor .pm-root p.h1 {
+  font-size: 1.55em;
+}
+
+.verticalTypewriterEditor .pm-root p.h2 {
+  font-size: 1.38em;
+}
+
+.verticalTypewriterEditor .pm-root p.h3 {
+  font-size: 1.22em;
+}
+
+.verticalTypewriterEditor .pm-root p.h4 {
+  font-size: 1.12em;
+}
+
+.verticalTypewriterEditor .pm-root p.h5 {
+  font-size: 1.06em;
+}
+
+.verticalTypewriterEditor .pm-root p.h6 {
+  font-size: 1em;
+}
+
+/* 箇条書きは通常の行と同じ行間で組み、折り返し行は本文頭に揃える（ぶら下げ）。
+   行頭の字下げ＋マーカーを幅 --list-marker-size の箱（.list-marker）に入れ、
+   同じ幅だけ padding を足して text-indent で1行目だけ戻す。 */
+.verticalTypewriterEditor .pm-root p.list-line {
+  --list-level-indent: 0em;
+  padding-inline-start: calc(var(--list-level-indent) + var(--list-marker-size, 0em));
+  text-indent: calc(-1 * var(--list-marker-size, 0em));
+}
+
+.verticalTypewriterEditor .pm-root p.list-line[data-level="0"] {
+  --list-level-indent: 0.6em;
+}
+
+.verticalTypewriterEditor .pm-root p.list-line[data-level="1"] {
+  --list-level-indent: 1.5em;
+}
+
+.verticalTypewriterEditor .pm-root p.list-line[data-level="2"] {
+  --list-level-indent: 2.4em;
+}
+
+.verticalTypewriterEditor .pm-root p.list-line[data-level="3"] {
+  --list-level-indent: 3.3em;
+}
+
+.verticalTypewriterEditor .pm-root p.list-line[data-level="4"] {
+  --list-level-indent: 4.2em;
+}
+
+.verticalTypewriterEditor .pm-root p.list-line[data-level="5"] {
+  --list-level-indent: 5.1em;
+}
+
+.verticalTypewriterEditor .pm-root p.list-line[data-level="6"] {
+  --list-level-indent: 6em;
+}
+
+/* 箱の幅は1文字1ch。空白・記号・数字はどれも1ch以内なので箱からはみ出さない。
+   字間とタブ幅も1文字ぶんに収める。 */
+.verticalTypewriterEditor .pm-root p.list-line .list-marker {
+  display: inline-block;
+  inline-size: var(--list-marker-size);
+  letter-spacing: 0;
+  tab-size: 1ch;
+  text-indent: 0;
+  white-space: pre;
+}
+
+.verticalTypewriterEditor .pm-root p.jitsuki,
+.verticalTypewriterEditor .pm-root p.align-start,
+.verticalTypewriterEditor .pm-root p.align-center,
+.verticalTypewriterEditor .pm-root p.align-end {
+  min-inline-size: min(62vh, calc(100% * var(--editor-measure-v-ratio, 0.75)));
+}
+
+.verticalTypewriterEditor .pm-root p.jitsuki,
+.verticalTypewriterEditor .pm-root p.align-end {
+  text-align: end;
+  text-align-last: auto;
+}
+
+.verticalTypewriterEditor .pm-root p.align-center {
+  text-align: center;
+  text-align-last: auto;
+}
+
+.verticalTypewriterEditor .pm-root p.align-start {
+  text-align: start;
+  text-align-last: auto;
+}
+
+.verticalTypewriterEditor .pm-root p.active-line {
+  background: none;
+}
+
+.verticalTypewriterShell[data-colorize-japanese-quotes="true"] .japanese-quote {
+  color: color-mix(in srgb, var(--text-secondary) 76%, var(--accent) 24%);
+}
+
+.verticalTypewriterShell[data-show-line-numbers="true"]
+  .verticalTypewriterEditor
+  .pm-root
+  p {
+  max-inline-size: min(
+    calc(100% * var(--editor-measure-v-ratio, 0.75)),
+    calc(100% - 28px)
+  );
+}
+
+.visibleLineNumberLayer {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  contain: layout style paint;
+  direction: ltr;
+  overflow: hidden;
+  pointer-events: none;
+  text-orientation: mixed;
+  user-select: none;
+  writing-mode: horizontal-tb;
+}
+
+.visibleLineNumberContent {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.visibleLineNumber {
+  position: absolute;
+  color: var(--text-faint);
+  font-family: var(--ui-font-family);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1;
+  opacity: 0.72;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
+.visibleLineNumber.active {
+  color: color-mix(in srgb, var(--text-muted) 72%, var(--accent) 28%);
+  opacity: 0.96;
+}
+
+.activeVisualLineHighlight {
+  position: absolute;
+  border: 1px solid color-mix(in srgb, var(--accent) 7%, transparent);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  box-sizing: border-box;
+}
+
+.verticalTypewriterEditor .pm-root p.ks-justify {
+  text-align: justify;
+  text-align-last: auto;
+  text-justify: inter-character;
+  word-spacing: normal;
+}
+
+.verticalTypewriterEditor .pm-root p.heading:not(.align-start):not(.align-center):not(.align-end),
+.verticalTypewriterEditor .pm-root p.list-line:not(.align-start):not(.align-center):not(.align-end) {
+  text-align: start;
+  text-align-last: auto;
+}
+
+.verticalTypewriterEditor .ks-breakable-token {
+  overflow-wrap: anywhere;
+  white-space: normal;
+  word-break: normal;
+}
+
+.verticalTypewriterEditor .mk-hidden {
+  display: none;
+}
+
+/* コメント行（docs/COMMENT_OUT_SPEC.md）。記号ごと弱い色で見せ、非表示設定では畳む。 */
+.verticalTypewriterEditor .pm-comment {
+  color: var(--comment-color, var(--text-muted));
+}
+
+.verticalTypewriterEditor .pm-comment-hidden {
+  display: none;
+}
+
+/* コードブロック・行内コード（docs/CODE_BLOCK_SPEC.md）。本文と同じ組方向のまま
+   等幅フォントと背景で区別する。長い行は本文と同じく折り返す。 */
+.verticalTypewriterEditor .pm-code,
+.verticalTypewriterEditor .mk-code {
+  font-family: var(--code-font-family, "BIZ UDゴシック", "BIZ UDGothic", "MS Gothic", monospace);
+  background: var(--code-background, color-mix(in srgb, var(--text-primary) 6%, transparent));
+}
+
+.verticalTypewriterEditor .pm-code {
+  white-space: pre-wrap;
+  text-align: start;
+  text-indent: 0;
+}
+
+.verticalTypewriterEditor .pm-code-fence {
+  color: var(--text-muted);
+}
+
+.verticalTypewriterEditor .mk-code {
+  border-radius: 2px;
+}
+
+/* 画像記法 ![alt](src)。文字はそのまま見せ、ホバー表示の手がかりだけ添える。 */
+.verticalTypewriterEditor .mk-image {
+  color: var(--text-muted);
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+  text-underline-offset: 0.2em;
+}
+
+.imageHoverPreview {
+  position: fixed;
+  z-index: 40;
+  display: grid;
+  gap: 6px;
+  max-width: 360px;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-panel-strong);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.32);
+  color: var(--text-secondary);
+  font-family: var(--ui-font-family);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow: hidden;
+  writing-mode: horizontal-tb;
+  pointer-events: none;
+}
+
+.imageHoverPreview img {
+  display: block;
+  max-width: min(348px, 100%);
+  max-height: 280px;
+  object-fit: contain;
+  justify-self: center;
+  border-radius: 3px;
+  background: repeating-conic-gradient(rgba(127, 127, 127, 0.14) 0% 25%, transparent 0% 50%) 0 0 / 12px 12px;
+}
+
+.imageHoverPreview p {
+  margin: 0;
+}
+
+.imageHoverPreviewCaption {
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.imageHoverPreviewSource {
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.verticalTypewriterEditor .ruby-base {
+  display: ruby;
+  color: var(--ruby-base-color, var(--text-primary));
+  ruby-align: space-around;
+  ruby-position: over;
+}
+
+.verticalTypewriterEditor .ruby-base::after {
+  content: attr(data-rt);
+  display: ruby-text;
+  color: var(--ruby-reading-color, var(--accent));
+  font-size: 0.5em;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  pointer-events: none;
+  text-orientation: upright;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.verticalTypewriterEditor .em-goma,
+.verticalTypewriterEditor .em-auto {
+  text-emphasis: filled sesame var(--accent);
+  -webkit-text-emphasis: filled sesame var(--accent);
+}
+
+.verticalTypewriterEditor .em-dot {
+  text-emphasis: filled dot var(--accent);
+  -webkit-text-emphasis: filled dot var(--accent);
+}
+
+.verticalTypewriterEditor .tcy {
+  display: inline;
+  font-family: inherit;
+  font-feature-settings: "tnum" 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  line-height: 1;
+  margin-inline-end: 0.08em;
+  margin-inline-start: 0.06em;
+  overflow-wrap: normal;
+  padding-inline: 0.015em;
+  text-combine-upright: all;
+  text-orientation: mixed;
+  white-space: nowrap;
+  word-break: keep-all;
+  -webkit-text-combine: horizontal;
+}
+
+.verticalTypewriterEditor .tcy-rejected {
+  display: inline;
+  overflow-wrap: anywhere;
+  text-combine-upright: none;
+  text-orientation: mixed;
+  white-space: normal;
+  word-break: normal;
+  -webkit-text-combine: none;
+}
+
+.verticalTypewriterEditor .tcy[data-tcy-len="2"] {
+  font-size: 1em;
+}
+
+.verticalTypewriterEditor .tcy[data-tcy-kind="num"] {
+  font-feature-settings: "fwid" 1;
+  font-variant-east-asian: full-width;
+  font-variant-numeric: normal;
+  font-size: 1em;
+}
+
+.verticalTypewriterEditor .tcy[data-tcy-kind="punct"] {
+  font-feature-settings: normal;
+  font-size: 0.975em;
+  margin-inline-end: 0.14em;
+  margin-inline-start: 0.05em;
+  vertical-align: bottom;
+}
+
+.verticalTypewriterEditor .tcy[data-tcy-kind="punct"][data-tcy-atom="1"] {
+  font-feature-settings: normal;
+  font-variant-numeric: normal;
+  line-height: inherit;
+  margin-inline: 0;
+  padding-inline: 0;
+  user-select: auto;
+  -webkit-user-select: auto;
+}
+
+.verticalTypewriterEditor .tcy-boundary[data-tcy-kind="punct"] {
+  display: inline;
+  font-size: 1em;
+  line-height: inherit;
+  text-decoration: none;
+  white-space: pre;
+}
+
+.verticalTypewriterEditor .bold {
+  font-family: var(--editor-heading-font-family, var(--editor-font-family));
+  font-weight: 700;
+  font-synthesis-weight: auto;
+}
+
+.verticalTypewriterEditor .mk-cmd {
+  color: var(--accent-strong);
+}
+
+.visibleLineBreakLayer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  z-index: 1;
+  pointer-events: none;
+  user-select: none;
+  contain: layout style paint;
+  overflow: hidden;
+  writing-mode: horizontal-tb;
+  text-orientation: mixed;
+  direction: ltr;
+}
+
+.visibleLineBreakMark {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1em;
+  block-size: 1em;
+  color: var(--editor-symbol, var(--text-faint));
+  font-family: var(--ui-font-family);
+  font-size: 11px;
+  letter-spacing: 0;
+  line-height: 1;
+  opacity: 0.82;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  writing-mode: horizontal-tb;
+}
+
+.visibleLineBreakMark.blank {
+  color: var(--editor-symbol, var(--text-faint));
+  opacity: 0.56;
+}
+
+.visibleLineBreakMark.active {
+  color: var(--editor-symbol-active, var(--text-muted));
+  opacity: 0.95;
+}
+
+.verticalTypewriterGuide {
+  position: absolute;
+  left: var(--typewriter-guide-position, 50%);
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px solid rgba(232, 176, 75, 0.14);
+  pointer-events: none;
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterScroller {
+  writing-mode: horizontal-tb;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor {
+  min-width: 100%;
+  height: auto;
+  min-height: 100%;
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root {
+  box-sizing: border-box;
+  /* 文字表示幅は編集領域（100% - 左右ガター）に対する比率。比率なので
+     ウィンドウを縮めても余白の割合が保たれ、はみ出しもしない。 */
+  width: calc((100% - 64px) * var(--editor-measure-h-ratio, 0.75));
+  min-width: 0;
+  min-height: 100%;
+  height: auto;
+  margin: 0 auto;
+  padding: max(160px, 65vh) 0 max(220px, 72vh);
+  writing-mode: horizontal-tb;
+  text-orientation: mixed;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+  text-justify: auto;
+}
+
+/* タイプライタースクロールがオフなら、先頭・末尾の列を画面中央へ運ぶための
+   スクロール余白は要らない。ふつうの余白だけを残す。 */
+.verticalTypewriterShell[data-typewriter="off"] .verticalTypewriterEditor .pm-root {
+  padding: 0 max(48px, 4vw);
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-typewriter="off"]
+  .verticalTypewriterEditor
+  .pm-root {
+  padding: max(48px, 6vh) 0 max(96px, 20vh);
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root[data-empty="true"]::before {
+  /* 横書きは .pm-root 自体が幅制御・中央寄せされ段落はずれないため、
+     プレースホルダの中央寄せオフセットは不要。 */
+  inset-inline-start: auto;
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p {
+  /* 横書きの横幅は .pm-root の width で制御する（縦書き用の縦幅キャップと
+     中央寄せマージンを解除）。 */
+  max-inline-size: none;
+  margin-inline: 0;
+  text-justify: auto;
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-show-line-numbers="true"]
+  .verticalTypewriterEditor
+  .pm-root
+  p {
+  max-inline-size: none;
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .visibleLineNumber {
+  min-width: 24px;
+  text-align: right;
+  transform: translate(-100%, -50%);
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.jitsuki,
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.align-start,
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.align-center,
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.align-end {
+  min-inline-size: 0;
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .ruby-base::after {
+  transform: none;
+  writing-mode: horizontal-tb;
+  text-orientation: mixed;
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .em-goma,
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .em-auto,
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .em-dot {
+  text-emphasis-position: over;
+  -webkit-text-emphasis-position: over;
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .tcy,
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .tcy-rejected,
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .tcy-boundary {
+  margin-inline: 0;
+  padding-inline: 0;
+  text-combine-upright: none;
+  -webkit-text-combine: none;
+}
+
+.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterGuide {
+  left: 0;
+  right: 0;
+  top: var(--typewriter-guide-position, 50%);
+  bottom: auto;
+  width: auto;
+  height: 0;
+  border-left: 0;
+  border-top: 1px solid rgba(232, 176, 75, 0.14);
+}
+
+/* 書字方向のどちらの分岐にも効かせる。ページ枠の寸法はページ割りが持ち、
+   書字方向は文字の流れだけを決める。 */
+.appShell .verticalTypewriterShell[data-editor-display="paged"]
+  .verticalTypewriterEditor {
+  width: var(--paged-page-width);
+  min-width: 0;
+  height: var(--paged-page-height);
+  min-height: 0;
+}
+
+.appShell .verticalTypewriterShell[data-editor-display="paged"]
+  .verticalTypewriterEditor
+  .pm-root {
+  box-sizing: border-box;
+  width: var(--paged-root-width, auto);
+  min-width: 0;
+  max-width: none;
+  height: var(--paged-root-height, auto);
+  min-height: 0;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+
+.appShell .verticalTypewriterShell[data-editor-display="paged"]
+  .verticalTypewriterEditor
+  .pm-root
+  p {
+  max-inline-size: 100%;
+  margin-inline: 0;
+  contain: none;
+  overflow-clip-margin: 0;
+}
+
+/*
+ * 原稿用紙モード。表示方式（連続・ページ）とは独立に、字詰めと行送りだけを
+ * 変える。通常和文は1字＝1ic で送り、行の割り・禁則・ルビ・縦中横は既存の
+ * ブラウザ組版のまま使う。セル基準を崩す字間（letter-spacing・両端揃え・
+ * 約物の詰め・和欧間の自動空き）はここで打ち消す。
+ *
+ * 版面は字数×1ic に 1px だけ余裕を持たせる。欧文ランの補正量は Canvas の
+ * 計測から出すので、DOM の送り幅とわずかに食い違うことがある。その端数で
+ * 満行の最後の1字が次の行へ送られないようにするための余裕で、1字分には
+ * 遠く足りないので字数は変わらない。
+ */
+.verticalTypewriterShell[data-manuscript="true"] {
+  /* 原稿用紙のあいだは、原稿用紙用の文字サイズで組む。 */
+  --editor-font-size: var(--ms-font-size, 21px);
+  --ms-line-color: color-mix(in srgb, var(--accent) 20%, transparent);
+  --ms-boundary-color: color-mix(in srgb, var(--accent) 62%, transparent);
+}
+
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .pm-root {
+  --ms-measure: calc(var(--ms-chars, 20) * 1ic + 1px);
+  letter-spacing: 0;
+  font-kerning: none;
+  text-spacing-trim: space-all;
+  text-autospace: no-autospace;
+}
+
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .pm-root p {
+  inline-size: var(--ms-measure);
+  min-inline-size: 0;
+  max-inline-size: none;
+  text-align: start;
+  text-align-last: auto;
+  text-spacing-trim: space-all;
+}
+
+/* 地付き・右寄せは行末へ寄せても整数セルに乗る。 */
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .pm-root p.jitsuki,
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .pm-root p.align-end {
+  text-align: end;
+}
+
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .pm-root p.align-center {
+  text-align: center;
+}
+
+/*
+ * 行の高さは段落の行送りだけで決める。行内コードや別フォントの太字のように
+ * フォントが変わる部分は、文字の上下の位置がずれて行を押し広げ、以降の行が
+ * 升目からずれる。装飾の要素は行の高さの計算に加えない（字はそのまま描かれる）。
+ */
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .pm-root p span {
+  line-height: 0;
+}
+
+/* 原稿用紙では見出しも1行1行送り。大きな字や別の行送りはグリッドを崩す。 */
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .pm-root p.heading {
+  font-size: 1em;
+  line-height: inherit;
+}
+
+/*
+ * ルビは升目の脇（行間）へ書く。ブラウザのルビ組版では注記が行間に収まらない
+ * と行そのものが太り（行間1.82でも1行あたり約0.1行）、以降の行がすべて
+ * 升目からずれる。注記を「高さ0・幅は親文字の字数分」のインラインブロックに
+ * して負の余白で親文字に重ね（送りの合計は0）、相対配置で行の外側へ寄せる。
+ * 親文字は1字1升のまま、長いルビは親文字の中央から前後へはみ出す。
+ * 絶対配置（行内要素を基準にした配置）は使わない。段落を差し替えるたびの
+ * ブラウザの処理が重く、10万字で見出しの移動が1秒近く止まった。
+ * 注記の字は 0.5em なので、親文字の 1ic は注記側の 2ic にあたる。
+ */
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .ruby-base {
+  display: inline;
+  white-space: nowrap;
+}
+
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .ruby-base::after {
+  display: inline-block;
+  position: relative;
+  inset-block-start: -1.5em;
+  inline-size: calc(var(--ruby-cells, 1) * 2ic);
+  block-size: 0;
+  margin-inline-start: calc(var(--ruby-cells, 1) * -2ic);
+  line-height: 0;
+  text-align: center;
+  text-align-last: center;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+/*
+ * 傍点も升目の脇へ描く。ブラウザの圏点（text-emphasis）は行間に収まらないと
+ * 行を太らせ（1行あたり約0.08行）、以降の行が升目からずれる。圏点をやめ、
+ * 行の外側に足した余白（行内要素の上下の余白は行の太さに影響しない）へ、
+ * 1字（1ic）ごとに点を背景として描く。
+ */
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor :is(.em-goma, .em-auto, .em-dot) {
+  text-emphasis: none;
+  -webkit-text-emphasis: none;
+  padding-block-start: 0.45em;
+  background-image: radial-gradient(circle at 50% 50%, var(--accent) 0.1em, transparent 0.12em);
+  background-size: 0.45em 1ic;
+  background-position: right top;
+  background-repeat: repeat-y;
+  background-origin: padding-box;
+  background-clip: padding-box;
+  -webkit-box-decoration-break: slice;
+  box-decoration-break: slice;
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-manuscript="true"]
+  .verticalTypewriterEditor
+  :is(.em-goma, .em-auto, .em-dot) {
+  background-size: 1ic 0.45em;
+  background-position: left top;
+  background-repeat: repeat-x;
+}
+
+/*
+ * 句読点・閉じ括弧のぶら下げ（pushManuscriptHangingDecos）。ランを字数分
+ * 手前から組んで描く位置だけ戻し、後ろに同じ幅の空白を置く。空白は字の大きさ
+ * 0 で、幅は単語間隔だけで作る（::after の 1ic は字の大きさ 0 で 0 になるので、
+ * 段落で 1ic を長さにした --ms-cell を使う）。行末ではこの空白がぶら下がる。
+ */
+@property --ms-cell { syntax: "<length>"; inherits: true; initial-value: 0px; }
+
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .pm-root p {
+  --ms-cell: 1ic;
+}
+
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .ms-hang {
+  position: relative;
+  inset-inline-start: calc(var(--hang-cells, 1) * var(--ms-cell));
+  margin-inline-start: calc(var(--hang-cells, 1) * var(--ms-cell) * -1);
+}
+
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .ms-hang::after {
+  content: " ";
+  font-size: 0;
+  letter-spacing: 0;
+  word-spacing: calc(var(--hang-cells, 1) * var(--ms-cell));
+  white-space: pre-wrap;
+}
+
+/* 縦中横は1セルに収める。前後の空きを足すと後続の字がセルからずれる。 */
+.verticalTypewriterShell[data-manuscript="true"] .verticalTypewriterEditor .tcy {
+  margin-inline: 0;
+  padding-inline: 0;
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-manuscript="true"]
+  .verticalTypewriterEditor
+  .pm-root {
+  width: var(--ms-measure);
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-manuscript="true"]
+  .verticalTypewriterEditor
+  .pm-root
+  p {
+  inline-size: auto;
+}
+
+/*
+ * 罫線は本文rootの背景に描く。セル要素は作らず、選択・IME・キャレット・
+ * 検索には関わらない。スクロールにも追従するのでJSの処理はない。
+ * 字の送り（1ic ごとの線）と、行送り（1lh）の中央に1ic幅の升目を置く線の
+ * 2枚を重ねる。どちらも版面と同じ寸法で、段落と同じく中央に置く。
+ */
+.verticalTypewriterShell[data-manuscript="true"][data-manuscript-grid="true"]
+  .verticalTypewriterEditor
+  .pm-root {
+  --ms-cell-gap: calc((1lh - 1ic) / 2);
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      var(--ms-line-color) 0 1px,
+      transparent 1px 1ic
+    ),
+    repeating-linear-gradient(
+      to left,
+      transparent 0 var(--ms-cell-gap),
+      var(--ms-line-color) var(--ms-cell-gap) calc(var(--ms-cell-gap) + 1px),
+      transparent calc(var(--ms-cell-gap) + 1px) calc(1lh - var(--ms-cell-gap) - 1px),
+      var(--ms-line-color) calc(1lh - var(--ms-cell-gap) - 1px) calc(1lh - var(--ms-cell-gap)),
+      transparent calc(1lh - var(--ms-cell-gap)) 1lh
+    );
+  background-size: 100% var(--ms-measure);
+  /* 版面が表示領域より長いと段落は先頭寄せになる（auto マージンが 0）。
+     罫線も中央ではなく先頭へ寄せる。 */
+  background-position: right max(0px, 50%);
+  background-repeat: no-repeat;
+  background-origin: content-box;
+  background-clip: content-box;
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-manuscript="true"][data-manuscript-grid="true"]
+  .verticalTypewriterEditor
+  .pm-root {
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      var(--ms-line-color) 0 1px,
+      transparent 1px 1ic
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 var(--ms-cell-gap),
+      var(--ms-line-color) var(--ms-cell-gap) calc(var(--ms-cell-gap) + 1px),
+      transparent calc(var(--ms-cell-gap) + 1px) calc(1lh - var(--ms-cell-gap) - 1px),
+      var(--ms-line-color) calc(1lh - var(--ms-cell-gap) - 1px) calc(1lh - var(--ms-cell-gap)),
+      transparent calc(1lh - var(--ms-cell-gap)) 1lh
+    );
+  background-size: var(--ms-measure) 100%;
+  background-position: left top, left top;
+}
+
+/*
+ * ページ表示では罫線を用紙（.pagedEditorSheet）の版面に描く。本文の背景だと
+ * 書きかけの最終ページで、まだ行のない部分に升目が出ない。用紙は本文の外の
+ * 飾りの要素なので、選択・IMEには関わらない。ic と lh を本文と同じにするため、
+ * 用紙の字の指定を本文に揃える。
+ */
+.verticalTypewriterShell[data-manuscript="true"][data-editor-display="paged"]
+  .verticalTypewriterEditor
+  .pm-root {
+  background-image: none;
+}
+
+.verticalTypewriterShell[data-manuscript="true"][data-manuscript-grid="true"][data-editor-display="paged"]
+  .pagedEditorSheet {
+  --ms-cell-gap: calc((1lh - 1ic) / 2);
+  font-family: var(--editor-font-family);
+  font-size: var(--editor-font-size);
+  line-height: var(--editor-line-height);
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      var(--ms-line-color) 0 1px,
+      transparent 1px 1ic
+    ),
+    repeating-linear-gradient(
+      to left,
+      transparent 0 var(--ms-cell-gap),
+      var(--ms-line-color) var(--ms-cell-gap) calc(var(--ms-cell-gap) + 1px),
+      transparent calc(var(--ms-cell-gap) + 1px) calc(1lh - var(--ms-cell-gap) - 1px),
+      var(--ms-line-color) calc(1lh - var(--ms-cell-gap) - 1px) calc(1lh - var(--ms-cell-gap)),
+      transparent calc(1lh - var(--ms-cell-gap)) 1lh
+    );
+  background-size: var(--paged-content-width) var(--paged-content-height);
+  background-position:
+    right var(--paged-padding-x) top var(--paged-padding-y),
+    right var(--paged-padding-x) top var(--paged-padding-y);
+  background-repeat: no-repeat;
+  /* 本文は用紙の外形から余白ぶん内側に置かれる。枠線の内側を起点にすると1pxずれる。 */
+  background-origin: border-box;
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-manuscript="true"][data-manuscript-grid="true"][data-editor-display="paged"]
+  .pagedEditorSheet {
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      var(--ms-line-color) 0 1px,
+      transparent 1px 1ic
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 var(--ms-cell-gap),
+      var(--ms-line-color) var(--ms-cell-gap) calc(var(--ms-cell-gap) + 1px),
+      transparent calc(var(--ms-cell-gap) + 1px) calc(1lh - var(--ms-cell-gap) - 1px),
+      var(--ms-line-color) calc(1lh - var(--ms-cell-gap) - 1px) calc(1lh - var(--ms-cell-gap)),
+      transparent calc(1lh - var(--ms-cell-gap)) 1lh
+    );
+  background-position:
+    left var(--paged-padding-x) top var(--paged-padding-y),
+    left var(--paged-padding-x) top var(--paged-padding-y);
+}
+
+/* 字数は固定なので、版面が表示領域より長い窓では行の方向にもスクロールさせる。 */
+.verticalTypewriterShell[data-manuscript="true"][data-editor-display="continuous"]
+  .verticalTypewriterScroller {
+  overflow-y: auto;
+}
+
+.appShell[data-writing-mode="horizontal-tb"]
+  .verticalTypewriterShell[data-manuscript="true"][data-editor-display="continuous"]
+  .verticalTypewriterScroller {
+  overflow-x: auto;
+}
+
+/* ページ表示の用紙も字数×行数で決まるので、窓より大きければ送りと直交する
+   方向へスクロールさせる。 */
+.verticalTypewriterShell[data-manuscript="true"][data-editor-display="paged"][data-page-flow="horizontal-rtl"]
+  .verticalTypewriterScroller {
+  overflow-y: auto;
+}
+
+.verticalTypewriterShell[data-manuscript="true"][data-editor-display="paged"][data-page-flow="vertical"]
+  .verticalTypewriterScroller {
+  overflow-x: auto;
+}
+
+/* 本文と一緒にスクロールする枠の左上を原点に、境界を置く（大きさ0・はみ出し可）。 */
+.manuscriptPageBoundaryLayer {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  contain: layout style;
+  direction: ltr;
+  overflow: visible;
+  pointer-events: none;
+  user-select: none;
+  writing-mode: horizontal-tb;
+}
+
+.manuscriptPageBoundary {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+.manuscriptPageBoundary[data-axis="vertical"] {
+  width: 0;
+  border-left: 1px dashed var(--ms-boundary-color);
+}
+
+.manuscriptPageBoundary[data-axis="horizontal"] {
+  height: 0;
+  border-top: 1px dashed var(--ms-boundary-color);
+}
+
+.manuscriptPageBoundaryLabel {
+  position: absolute;
+  color: var(--ms-boundary-color);
+  font-family: var(--ui-font-family);
+  font-size: 10px;
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.manuscriptPageBoundary[data-axis="vertical"] .manuscriptPageBoundaryLabel {
+  top: calc(100% + 6px);
+  left: 0;
+  transform: translateX(-50%);
+  writing-mode: vertical-rl;
+}
+
+.manuscriptPageBoundary[data-axis="horizontal"] .manuscriptPageBoundaryLabel {
+  top: 0;
+  left: calc(100% + 8px);
+  transform: translateY(-50%);
+}
+
+.asideLine {
+  color: var(--text-muted);
+  font-style: italic;
+  font-weight: 500;
+}
+
+.insertedParagraph {
+  padding-left: 12px;
+  border-left: 2px solid var(--accent);
+  color: #d9dfd5;
+}
+
+.dropIndicator {
+  position: absolute;
+  z-index: 2;
+  border-radius: 2px;
+  background: var(--accent-strong);
+  box-shadow: 0 0 0 3px rgba(109, 166, 217, 0.12);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 80ms ease;
+}
+
+/* 横書き：行間に水平線 */
+.horizontalDropIndicator {
+  left: 40px;
+  width: min(720px, calc(100% - 80px));
+  height: 2px;
+}
+
+/* 縦書き：列間に垂直線（どの列に入るかを示す） */
+.verticalDropIndicator {
+  top: 24px;
+  bottom: 24px;
+  width: 2px;
+}
+
+.showDropIndicator {
+  opacity: 1;
+}
+
+.statusbar {
+  position: relative;
+  display: flex;
+  height: var(--statusbar-height);
+  flex: 0 0 var(--statusbar-height);
+  align-items: center;
+  gap: 12px;
+  padding: 0 18px;
+  border-top: 1px solid var(--border-subtle);
+  background: #1e201d;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* 項目は折り返さない。文字の幅より縮まなくなり、狭いときは min-width: 0 のファイルの場所とエラーの文だけが省略される。 */
+.statusbar > * {
+  white-space: nowrap;
+}
+
+/* SVG は文字と違って nowrap では幅が守られず、ほかの欄に押されて潰れるので、縮めない。 */
+.statusSaveIcon {
+  flex-shrink: 0;
+  color: var(--success);
+}
+
+.status-dirty .statusSaveIcon,
+.status-saving .statusSaveIcon,
+.status-loading .statusSaveIcon {
+  color: var(--warning);
+}
+
+.status-error .statusSaveIcon {
+  color: var(--danger);
+}
+
+.statusRight {
+  margin-left: auto;
+}
+
+.statusCheckpoint {
+  padding: 0 4px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.statusCheckpoint:hover {
+  background: var(--control-hover);
+  color: var(--text-primary);
+}
+
+.statusPath {
+  min-width: 0;
+  max-width: 42vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusError {
+  min-width: 0;
+  max-width: 34vw;
+  overflow: hidden;
+  color: var(--danger);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snippetPanel {
+  display: flex;
+  width: var(--snippet-width);
+  flex: 0 0 var(--snippet-width);
+  flex-direction: column;
+  border-left: 1px solid var(--border-subtle);
+  background: #20221f;
+}
+
+.panelHeader {
+  display: flex;
+  height: 80px;
+  flex: 0 0 80px;
+  align-items: center;
+  gap: 8px;
+  padding: 22px 20px 10px;
+}
+
+.panelHeader h2 {
+  flex: 1;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.panelCount {
+  min-width: 18px;
+  padding: 1px 6px 2px;
+  border-radius: 999px;
+  background: #1c1e1b;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.addButton {
+  width: 44px;
+  height: 40px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.panelSearch {
+  padding: 0 20px 18px;
+  border-top: 0;
+  border-bottom: 0;
+}
+
+.searchBox {
+  position: relative;
+  display: block;
+}
+
+.searchIcon {
+  position: absolute;
+  top: 50%;
+  left: 16px;
+  width: 22px;
+  height: 22px;
+  color: var(--text-muted);
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.45;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.searchBox input {
+  width: 100%;
+  height: 52px;
+  padding: 0 12px 0 46px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  outline: none;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.searchBox input::placeholder {
+  color: #7f847c;
+}
+
+.searchBox input:focus {
+  border-color: #657276;
+}
+
+.snippetList {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  padding: 0 20px 20px;
+}
+
+.snippetCard {
+  flex: 0 0 auto;
+  padding: 16px 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: #20221f;
+  cursor: grab;
+  user-select: none;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    opacity 120ms ease;
+}
+
+.snippetCardHeader {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.snippetTools {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.snippetCard:hover .snippetTools,
+.snippetCard:focus-within .snippetTools {
+  opacity: 1;
+}
+
+.snippetTools button {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.snippetTools button:hover {
+  background: #353834;
+  color: var(--text-primary);
+}
+
+.snippetCard:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-tertiary);
+}
+
+.snippetCard:active {
+  cursor: grabbing;
+}
+
+.snippetCard.dragging {
+  border-style: dashed;
+  opacity: 0.45;
+}
+
+.snippetTitle {
+  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snippetPreview {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.snippetMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.snippetMeta span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toast {
+  position: absolute;
+  /* 削除の「元に戻す」をプロット管理画面（モーダル z-index 10）の上でも押せるように。 */
+  z-index: 11;
+  bottom: 38px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 48px);
+  padding: 7px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: #252824;
+  color: var(--text-primary);
+  font-size: 12px;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  transform: translateX(-50%) translateY(6px);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+  white-space: nowrap;
+}
+
+.toast.showToast {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.toast.hasAction {
+  pointer-events: auto;
+}
+
+.toast > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toast button {
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent-strong);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.toast button:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.modalBackdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgba(20, 22, 20, 0.58);
+}
+
+.modal {
+  width: min(520px, 100%);
+  /* zoom (--ui-font-scale) multiplies the rendered height, so divide the
+     viewport cap by the scale to keep the dialog within the screen. */
+  max-height: min(620px, calc(100% / var(--ui-font-scale, 1)));
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: #292b28;
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.36);
+}
+
+.settingsModal {
+  display: flex;
+  width: min(560px, 100%);
+  flex-direction: column;
+}
+
+.pluginStatusBarItems {
+  position: absolute;
+  left: 50%;
+  display: inline-flex;
+  max-width: min(46%, 620px);
+  align-items: center;
+  gap: 6px;
+  transform: translateX(-50%);
+}
+
+.pluginStatusBarItems > span,
+.pluginStatusBarItems > button {
+  overflow: hidden;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pluginStatusBarItems > button {
+  cursor: pointer;
+}
+
+.pluginStatusBarItems > button:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.pluginManagerModal {
+  display: flex;
+  width: min(680px, 100%);
+  max-height: min(720px, calc(100% / var(--ui-font-scale, 1)));
+  flex-direction: column;
+}
+
+.pluginManagerHeading {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pluginManagerHeading h2 {
+  flex: 0 1 auto;
+}
+
+.pluginManagerHeading span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.pluginManagerToolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pluginManagerToolbar p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.pluginManagerToolbar > div {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.pluginManagerToolbar button,
+.pluginManagerDeleteButton {
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.pluginManagerToolbar button:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.pluginManagerToolbar .pluginManagerPrimaryButton {
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent-strong);
+}
+
+.pluginManagerToolbar button:disabled,
+.pluginManagerDeleteButton:disabled,
+.pluginManagerModal .modalClose:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.pluginManagerBody {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 12px 14px;
+}
+
+.pluginManagerList {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pluginManagerItem {
+  display: grid;
+  gap: 7px;
+  padding: 13px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: var(--bg-secondary);
+}
+
+.pluginManagerItemHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pluginManagerItemHeader > div {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pluginManagerIdentity {
+  align-items: center !important;
+}
+
+.pluginManagerIdentity > div {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pluginManagerIcon {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  fill: none;
+  stroke: var(--text-secondary);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.pluginManagerItemHeader strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pluginManagerItemHeader span,
+.pluginManagerItem code {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.pluginManagerItem p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pluginManagerItem code {
+  overflow-wrap: anywhere;
+}
+
+.pluginManagerDeleteButton {
+  flex: 0 0 auto;
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--border-strong));
+  color: #f0b2b2;
+}
+
+.pluginManagerDeleteButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: #ffd1d1;
+}
+
+.pluginPermissionList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.pluginPermissionList span {
+  padding: 3px 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.pluginManagerEmpty {
+  display: grid;
+  min-height: 180px;
+  place-content: center;
+  gap: 7px;
+  padding: 24px;
+  text-align: center;
+}
+
+.pluginManagerEmpty strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.pluginManagerEmpty span {
+  max-width: 420px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pluginManagerFooter {
+  flex: 0 0 auto;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+@media (max-width: 640px) {
+  .pluginManagerToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pluginManagerToolbar > div {
+    justify-content: flex-end;
+  }
+}
+
+.settingsTabList {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 8px 12px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.settingsTabList button {
+  min-width: 0;
+  height: 32px;
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.settingsTabList button:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.settingsTabList button.active,
+.settingsTabList button[aria-selected="true"] {
+  border-color: var(--border-subtle);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+}
+
+.commandPaletteBackdrop {
+  place-items: start center;
+  padding-top: 12vh;
+}
+
+.commandPalette {
+  display: flex;
+  width: min(520px, 100%);
+  max-height: 60vh;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+.commandPaletteInput {
+  margin: 0;
+  padding: 14px 16px;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 15px;
+  outline: none;
+}
+
+.commandPaletteInput::placeholder {
+  color: var(--text-muted);
+}
+
+.commandPaletteList {
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.commandPaletteItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.commandPaletteItem.active {
+  background: var(--accent-soft, var(--bg-panel-strong));
+}
+
+.commandPaletteItem.disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.commandPaletteText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.commandPaletteLabel {
+  font-size: 14px;
+}
+
+.commandPaletteDisabledReason {
+  font-size: 12px;
+}
+
+.commandPaletteHint {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.commandPaletteEmpty {
+  margin: 0;
+  padding: 18px 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.quickIdeaBackdrop {
+  place-items: start center;
+  padding: 0 24px;
+  padding-top: min(16vh, 132px);
+}
+
+.quickIdeaModal {
+  width: min(680px, calc((100vw - 72px) / var(--ui-font-scale, 1)));
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.44);
+}
+
+.quickIdeaCaptureBox {
+  padding: 22px 22px 18px;
+  border: 0;
+  border-radius: inherit;
+  background: var(--bg-panel);
+}
+
+.quickIdeaModal .quickIdeaCaptureBox textarea {
+  min-height: 190px;
+  max-height: min(420px, calc((100vh - 320px) / var(--ui-font-scale, 1)));
+  font-size: 17px;
+  line-height: 1.75;
+}
+
+.quickIdeaModal .ideaCaptureRow {
+  margin-top: 14px;
+}
+
+.quickIdeaModal .quickIdeaDestSelect {
+  max-width: 68%;
+  height: 42px;
+  border-radius: 21px;
+  padding: 0 16px;
+  font-size: 15px;
+}
+
+.quickIdeaModal .quickIdeaSubmit {
+  height: 42px;
+  border-radius: 21px;
+  padding: 0 22px;
+  font-size: 15px;
+}
+
+.settingsModal .modalForm {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.settingsTabPanel {
+  display: grid;
+  gap: 12px;
+}
+
+.settingsTabPanel[hidden] {
+  display: none;
+}
+
+.settingsModal .modalActions {
+  padding: 10px 14px 12px;
+  border-top: 0.5px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.compactModal {
+  width: min(440px, calc(100vw - 48px));
+}
+
+.modalHeader {
+  display: flex;
+  height: 46px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.modalHeader h2 {
+  flex: 1;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.modalClose {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.modalClose:hover {
+  background: #353834;
+  color: var(--text-primary);
+}
+
+.modalForm {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.modalForm label {
+  display: grid;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.dialogFieldHint {
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.modalForm input,
+.modalForm select,
+.modalForm textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  outline: none;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.modalForm input,
+.modalForm select {
+  height: 34px;
+  padding: 0 9px;
+}
+
+.modalForm input[type="range"] {
+  padding: 0;
+}
+
+.dialogRadioGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.dialogRadioGroup legend {
+  float: left;
+  margin-right: 6px;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.modalForm .dialogRadioGroup label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.modalForm .dialogRadioGroup input[type="radio"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent, currentColor);
+}
+
+.dialogRadioGroup small {
+  margin-left: 5px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.modalForm textarea {
+  min-height: 138px;
+  resize: vertical;
+  padding: 9px;
+  line-height: 1.5;
+}
+
+.modalForm input:focus,
+.modalForm select:focus,
+.modalForm textarea:focus {
+  border-color: #657276;
+}
+
+.modalFormGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.checkSetting {
+  display: flex !important;
+  align-items: center;
+  gap: 8px !important;
+}
+
+.checkSetting input {
+  width: 15px;
+  height: 15px;
+}
+
+.descriptiveCheckSetting {
+  align-items: flex-start;
+}
+
+.descriptiveCheckSetting input {
+  margin-top: 2px;
+}
+
+.checkSettingCopy {
+  display: grid;
+  gap: 2px;
+}
+
+.checkSettingCopy small {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.modalActions button {
+  min-width: 88px;
+  height: 32px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.modalActions button[type="submit"],
+.modalActions button:hover {
+  /*background: #353834;*/
+  color: var(--text-primary);
+}
+
+.modalActions .dangerAction {
+  border-color: rgba(217, 115, 115, 0.62);
+  color: #f0b2b2;
+}
+
+.modalActions .dangerAction:hover,
+.modalActions .dangerAction[type="submit"] {
+  background: rgba(217, 115, 115, 0.16);
+  color: #ffd1d1;
+}
+
+.dialogMessage {
+  display: grid;
+  gap: 5px;
+}
+
+.dialogMessage p {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.dialogMessage span {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.dialogOptionList {
+  display: grid;
+  gap: 6px;
+}
+
+.dialogOption {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.dialogOption:hover,
+.dialogOption:focus-visible {
+  border-color: var(--accent);
+}
+
+.dialogOption strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dialogOption span {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.dialogError {
+  margin: -4px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.notationModal .modalForm input[readonly] {
+  background: #222521;
+  color: var(--text-secondary);
+}
+
+.manuscriptTidyScope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.manuscriptTidyScope legend {
+  float: left;
+  margin-right: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.manuscriptTidyScope label {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px !important;
+}
+
+.manuscriptTidySummary {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.notationSyntax {
+  margin: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.14);
+  color: var(--text-muted);
+  font-family: Consolas, "Yu Gothic", monospace;
+  font-size: 11px;
+}
+
+.notationChoiceList {
+  display: grid;
+  gap: 7px;
+}
+
+.notationChoiceButton {
+  display: grid;
+  width: 100%;
+  min-height: 50px;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.notationChoiceButton:hover {
+  border-color: var(--border-strong);
+  background: #353834;
+  color: var(--text-primary);
+}
+
+.notationChoiceButton span {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.notationChoiceButton small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+::-webkit-scrollbar {
+  width: 14px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 4px solid transparent;
+  border-radius: 999px;
+  background: #8a8d88;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a5a8a2;
+  background-clip: content-box;
+}
+
+/* Sidebar refresh */
+:root {
+  --bg-root: #101112;
+  --bg-primary: #111214;
+  --bg-secondary: #191a1f;
+  --bg-tertiary: #202126;
+  --bg-panel: #17181d;
+  --bg-panel-strong: #202126;
+  --border-subtle: #2b2c34;
+  --border-strong: #3a3a44;
+  --text-primary: #eee6d3;
+  --text-secondary: #cfc5ae;
+  --text-muted: #8a8791;
+  --text-faint: #595864;
+  --accent: #d4ad52;
+  --accent-strong: #f0d48b;
+  --success: #7e9c4a;
+  --warning: #c9a84a;
+  --danger: #d97373;
+  --documentbar-height: 36px;
+  --statusbar-height: 26px;
+  --left-sidebar-width: 275px;
+  --right-sidebar-width: 300px;
+  /*280px*/
+}
+
+body {
+  background: var(--bg-root);
+}
+
+.appShell {
+  min-height: 520px;
+  background: var(--bg-root);
+  color: var(--text-primary);
+}
+
+.appFrame {
+  border: 0;
+  background: var(--bg-root);
+}
+
+.topbar {
+  gap: 8px;
+  padding: 0 10px 0 8px;
+  border-bottom: 0;
+  background: #121316;
+  box-shadow: inset 0 -0.5px var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.menuButton,
+.iconButton,
+.sidebarIconButton {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.menuButton:hover,
+.menuButton[aria-expanded="true"],
+.iconButton:hover,
+.sidebarIconButton:hover,
+.activeSidebarIconButton {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+}
+
+.iconButton svg,
+.sidebarIconButton svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.breadcrumbs {
+  gap: 7px;
+  font-size: 12px;
+}
+
+.breadcrumbFolderButton {
+  max-width: 260px;
+  height: 26px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.breadcrumbFolderButton:hover,
+.breadcrumbFolderButton[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.activeCrumb {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.crumbSeparator,
+.outlineSeparator {
+  color: var(--text-faint);
+}
+
+.menuPopover {
+  border-color: var(--border-strong);
+  background: var(--bg-panel-strong);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.46);
+}
+
+.menuPopover button,
+.emptyMenuMessage {
+  color: var(--text-secondary);
+}
+
+.menuPopover button:hover,
+.menuPopover .activeMenuItem {
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text-primary);
+}
+
+.workspace {
+  position: relative;
+  min-height: 0;
+  background: var(--bg-root);
+}
+
+.leftWorkspaceCluster {
+  display: contents;
+}
+
+.leftWorkspaceCluster[data-sidebar-collapsed="true"] .workspaceSidebar {
+  display: none;
+}
+
+.workspaceActivityBar {
+  display: flex;
+  width: 44px;
+  min-width: 44px;
+  height: 100%;
+  flex: 0 0 44px;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 0;
+  border-right: 0.5px solid var(--border-subtle);
+  background: var(--sidebar-bg, #17181d);
+  color: var(--text-faint);
+}
+
+.workspaceActivityButton {
+  position: relative;
+  display: grid;
+  width: 43px;
+  height: 34px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.workspaceActivityButton::before {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 0;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent-strong);
+  content: "";
+  opacity: 0;
+}
+
+.workspaceActivityButton:hover,
+.activeWorkspaceActivityButton {
+  background: var(--control-hover, rgba(255, 255, 255, 0.04));
+  color: var(--navigation-icon-hover, var(--text-primary));
+}
+
+.activeWorkspaceActivityButton::before {
+  opacity: 1;
+}
+
+.workspaceActivityIcon {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.workspaceSidebar {
+  display: flex;
+  width: var(--left-sidebar-width);
+  min-width: var(--left-sidebar-width);
+  height: 100%;
+  flex: 0 0 var(--left-sidebar-width);
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 0.5px solid var(--border-subtle);
+  background: #17181d;
+  color: var(--text-secondary);
+}
+
+.sidebarHeader,
+.rightSidebarHeader {
+  display: flex;
+  min-height: 42px;
+  flex: 0 0 42px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 12px;
+}
+
+.sidebarHeaderLabel {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebarHeaderActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.sidebarButtonSvg,
+.toolSvgIcon,
+.treeChevronIcon,
+.treeSvgIcon,
+.searchSvgIcon {
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sidebarButtonSvg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.7;
+}
+
+.toolSvgIcon {
+  width: 13px;
+  height: 13px;
+  stroke-width: 1.8;
+}
+
+.treeChevronIcon {
+  width: 11px;
+  height: 11px;
+  stroke-width: 2;
+}
+
+.treeSvgIcon {
+  width: 13px;
+  height: 13px;
+  stroke-width: 1.5;
+  opacity: 0.82;
+}
+
+.searchSvgIcon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.6;
+}
+
+.sidebarScroll {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 0 8px;
+}
+
+.projectSearchSidebarScroll {
+  overflow: hidden;
+}
+
+.sidebarSection {
+  padding: 0;
+}
+
+.sidebarSection + .sidebarSection {
+  border-top: 0.5px solid var(--border-subtle);
+}
+
+.sidebarSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 5px;
+  color: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+.tree {
+  padding: 0 0 4px;
+}
+
+.treeNode,
+.treeChildren {
+  min-width: 0;
+}
+
+.breadcrumbLibrarySegment {
+  flex: none;
+}
+
+/* ライブラリ名は上部の帯の中にあるので、帯の文字色にする。 */
+.breadcrumbLibraryButton span {
+  color: var(--topbar-text-muted, var(--text-muted));
+}
+
+.breadcrumbLibraryButton:hover span {
+  color: var(--topbar-text-primary, var(--text-primary));
+}
+
+.libraryBackButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 6px 8px 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-panel-strong);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.libraryBackButton:hover,
+.libraryBackButton:focus-visible {
+  border-color: var(--accent);
+}
+
+.libraryBackIcon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--accent);
+}
+
+.libraryBackName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.libraryBackButton small {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+/* ライブラリ直下では、ツリーの下に作品の一覧が見えるようにする。 */
+.hasLibraryProjects > .outlineExplorerSection {
+  min-height: auto;
+}
+
+.libraryProjects {
+  margin: 10px 0 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.libraryProjectsHeader {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 14px 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.libraryProjectsEmpty {
+  margin: 0;
+  padding: 4px 14px 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.libraryProjectRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 12px);
+  min-width: 0;
+  margin: 1px 6px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+
+.libraryProjectRow:hover,
+.libraryProjectRow:focus-visible {
+  border-color: var(--border-subtle);
+  background: var(--control-hover);
+}
+
+.libraryProjectRow.isDragging {
+  opacity: 0.4;
+}
+
+.libraryProjectRow.dropIndicator-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.libraryProjectRow.dropIndicator-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.libraryProjectBook {
+  flex: none;
+  width: 14px;
+  height: 17px;
+  border-radius: 1px 3px 3px 1px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 55%, #000) 0 3px,
+    color-mix(in srgb, var(--accent) 70%, transparent) 3px
+  );
+}
+
+.libraryProjectName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.libraryProjectGo {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-left: auto;
+  color: var(--text-muted);
+}
+
+.libraryMisplaced {
+  display: grid;
+  gap: 2px;
+  margin: 8px 10px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--progress-revising, #d8a13a) 55%, transparent);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.libraryMisplaced strong {
+  color: var(--progress-revising, #d8a13a);
+  font-weight: 600;
+}
+
+.libraryMisplacedPath {
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.libraryProjectActions {
+  display: grid;
+  gap: 1px;
+  padding: 6px 6px 0;
+}
+
+.libraryProjectActions button {
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.libraryProjectActions button:hover,
+.libraryProjectActions button:focus-visible {
+  background: var(--control-hover);
+  color: var(--text-primary);
+}
+
+.treeItem {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  color: var(--text-muted);
+  transition:
+    background 100ms ease,
+    color 100ms ease;
+}
+
+.treeItem::before,
+.treeItem::after {
+  position: absolute;
+  right: 7px;
+  left: 7px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent-strong);
+  box-shadow: 0 0 0 3px rgba(109, 166, 217, 0.12);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+}
+
+.treeItem::before {
+  top: -1px;
+}
+
+.treeItem::after {
+  bottom: -1px;
+}
+
+.treeDrop-before::before,
+.treeDrop-after::after {
+  opacity: 1;
+}
+
+.treeDrop-into {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-strong) 56%, transparent);
+}
+
+.draggingTreeEntry {
+  opacity: 0.45;
+}
+
+.treeItem:hover,
+.focusedTreeItem {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+}
+
+.activeTreeItem {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text-primary);
+}
+
+.selectedTreeEntry {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-strong) 44%, transparent);
+}
+
+.treeItemPrimary {
+  display: grid;
+  min-width: 0;
+  min-height: 27px;
+  grid-template-columns: 12px 15px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.draggableTreeItem .treeItemPrimary {
+  cursor: grab;
+}
+
+.treeDragHandle {
+  display: inline-grid;
+  width: 15px;
+  height: 24px;
+  place-items: center;
+  cursor: grab;
+  touch-action: none;
+}
+
+.treeChevron {
+  display: inline-grid;
+  width: 12px;
+  place-items: center;
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+.treeChevron[data-tree-outline-disclosure]:hover {
+  color: var(--accent-strong);
+}
+
+.treeItemName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.treeItemCharCount {
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.treeActiveDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.draggingTreeEntry .treeItemPrimary {
+  cursor: grabbing;
+}
+
+.treeContextMenu {
+  position: fixed;
+  z-index: 80;
+  display: grid;
+  min-width: 164px;
+  padding: 5px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-panel-strong);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.34);
+}
+
+.treeContextMenu button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+
+.treeContextMenu button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.treeContextMenu button:disabled {
+  background: transparent;
+  color: var(--text-faint);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.contextMenuHint {
+  max-width: 220px;
+  padding: 3px 10px 5px;
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.scratchTreeItem {
+  margin-top: 6px;
+}
+
+/* ファイル行は右端に進捗バッジを置くため 2 カラムにする。 */
+.fileTreeItem {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+/* ===== 進捗ラベル ===== */
+.fileProgressControl {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.fileProgressMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 90;
+  display: grid;
+  min-width: 128px;
+  padding: 5px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-panel-strong);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.34);
+}
+
+.fileProgressMenu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+
+.fileProgressMenu button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.fileProgressMenu button.activeProgressOption {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.sidebarEmptyState,
+.outlineEmptyState {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.sidebarEmptyState button {
+  width: 100%;
+  min-height: 30px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.sidebarEmptyState button:hover {
+  border-color: var(--text-faint);
+  color: var(--text-primary);
+}
+
+.outlineSidebarSection {
+  display: flex;
+  min-height: 180px;
+  flex-direction: column;
+}
+
+.outlineExplorerSection,
+.projectSearchModeSection,
+.projectSearchSidebarSection {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+}
+
+.projectSearchInputShell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 7px 10px 6px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-panel-strong);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.projectSearchInputShell:focus-within {
+  border-color: rgba(201, 168, 74, 0.55);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.projectSearchInputShell.projectSearchInputError {
+  border-color: color-mix(in srgb, var(--danger) 72%, transparent);
+}
+
+.projectSearchInputShell .searchSvgIcon {
+  position: absolute;
+  left: 9px;
+  width: 14px;
+  height: 14px;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.projectSearchInputShell input {
+  width: 0;
+  min-width: 0;
+  height: 34px;
+  flex: 1;
+  padding: 0 4px 0 29px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.projectSearchOptions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+}
+
+.projectSearchOptions button {
+  display: grid;
+  width: 27px;
+  height: 25px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font: 600 10px/1 var(--font-ui, inherit);
+}
+
+.projectSearchOptions button:hover {
+  background: var(--control-hover, rgba(127, 137, 143, 0.12));
+  color: var(--text-primary);
+}
+
+.projectSearchOptions .activeSearchOption {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent-strong);
+}
+
+.projectSearchError {
+  margin: -1px 10px 7px;
+  color: var(--danger);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.projectSearchScopeRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 8px;
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.projectSearchModes {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 4px;
+}
+
+.projectSearchModes button,
+.projectReplaceActions button {
+  min-width: 0;
+  min-height: 25px;
+  padding: 0 6px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 5px;
+  background: var(--bg-panel-strong);
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.projectSearchModes button:hover,
+.projectReplaceActions button:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.projectSearchModes .activeProjectSearchMode {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel-strong));
+  border-color: rgba(201, 168, 74, 0.55);
+  color: var(--accent-strong);
+}
+
+.projectSearchModes button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.projectReplaceDisclosure {
+  display: grid;
+  gap: 7px;
+  padding: 0 10px 10px;
+  border-bottom: 0.5px solid var(--border-subtle);
+}
+
+.projectReplaceToggle {
+  display: flex;
+  min-width: 0;
+  min-height: 25px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.projectReplaceToggle:hover,
+.projectReplaceToggle[aria-expanded="true"] {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.projectReplaceToggleIcon {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.projectReplacePanel {
+  display: grid;
+  gap: 7px;
+  padding: 0;
+}
+
+.projectReplacePanel label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.projectReplacePanel input {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 5px;
+  outline: none;
+  background: var(--bg-panel-strong);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.projectReplacePanel input:focus {
+  border-color: rgba(201, 168, 74, 0.5);
+}
+
+.projectReplaceActions {
+  display: grid;
+  gap: 4px;
+}
+
+.projectSearchSummary {
+  display: flex;
+  min-height: 27px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px;
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.projectReplaceActions button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.outlineSidebarList {
+  display: grid;
+  gap: 1px;
+  padding: 0 6px 8px;
+}
+
+.outlineSidebarItem {
+  display: grid;
+  min-width: 0;
+  min-height: 28px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.outlineSidebarItem:hover,
+.activeOutlineSidebarItem {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-primary);
+}
+
+.activeOutlineSidebarItem {
+  color: var(--accent-strong);
+}
+
+.outlineSidebarItem span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outlineLevelMark {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.outlineTree {
+  padding-top: 3px;
+}
+
+.outlineTreeChildren {
+  min-width: 0;
+}
+
+.outlineTreeNode {
+  position: relative;
+  min-width: 0;
+}
+
+.outlineTreeItem {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 25px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+
+.outlineHeadingDisclosure {
+  position: absolute;
+  top: 0;
+  left: calc(var(--outline-item-indent, 31px) - 30px);
+  z-index: 4;
+  display: grid;
+  width: 34px;
+  height: 25px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.outlineHeadingDisclosure:hover,
+.outlineHeadingDisclosure:focus-visible {
+  background: var(--control-hover, rgba(127, 137, 143, 0.12));
+  color: var(--text-primary);
+  outline: none;
+}
+
+.activeOutlineHeadingDisclosure {
+  color: var(--accent-strong);
+}
+
+.outlineTreeItem::before,
+.outlineTreeItem::after {
+  position: absolute;
+  z-index: 2;
+  right: 8px;
+  left: 8px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--accent-strong);
+  box-shadow: 0 0 0 3px rgba(109, 166, 217, 0.16);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+}
+
+.outlineTreeItem::before {
+  top: -1px;
+}
+
+.outlineTreeItem::after {
+  bottom: -1px;
+}
+
+.headingDrop-before::before,
+.headingDrop-after::after {
+  opacity: 1;
+}
+
+.draggingHeadingItem {
+  opacity: 0.42;
+}
+
+.headingFileDropTarget {
+  background: rgba(109, 166, 217, 0.1);
+  color: var(--text-primary);
+}
+
+.headingFileDropTarget::after {
+  opacity: 1;
+}
+
+.outlineTreeItem:hover,
+.activeOutlineTreeItem {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-primary);
+}
+
+.activeOutlineTreeItem {
+  color: var(--accent-strong);
+}
+
+.selectedOutlineTreeItem {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text-primary);
+}
+
+.selectedOutlineTreeItem.activeOutlineTreeItem {
+  color: var(--accent-strong);
+}
+
+.outlineTreeItem span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.treeHint {
+  min-height: 22px;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 22px;
+}
+
+.treeHintError {
+  color: var(--danger);
+}
+
+.projectSearchList {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  align-content: start;
+  gap: 8px;
+  overflow-y: auto;
+  padding: 0 6px 12px;
+  overscroll-behavior: contain;
+}
+
+.projectSearchResultGroup {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.projectSearchResultGroupHeader {
+  display: flex;
+  min-width: 0;
+  min-height: 25px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.projectSearchResultGroupHeader span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectSearchResultGroupHeader span:last-child {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.projectSearchResultItem {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 6px 8px 7px 14px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.projectSearchResultItem:hover {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-primary);
+}
+
+.projectSearchResultMeta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.projectSearchResultMeta span:first-child,
+.projectSearchResultExcerpt {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectSearchResultExcerpt {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.projectSearchResultExcerpt mark {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.projectSearchResultExcerpt .zeroLengthSearchMatch {
+  background: transparent;
+  color: var(--accent-strong);
+}
+
+.projectSearchLimitNotice {
+  padding: 6px 8px;
+  color: var(--text-faint);
+  font-size: 10px;
+  text-align: center;
+}
+
+.snapshotSection {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.snapshotDock {
+  display: flex;
+  max-height: 260px;
+  flex: 0 0 auto;
+  flex-direction: column;
+  padding: 7px 10px 9px;
+  border-top: 0.5px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--sidebar-bg, var(--bg-panel)) 88%, var(--bg-root));
+}
+
+/* 畳んだときは見出し1行ぶんだけ。一覧との間隔用の下余白も要らない。 */
+.collapsedSnapshotDock {
+  padding-block: 7px;
+}
+
+.collapsedSnapshotDock .snapshotSectionHeader {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.snapshotSectionHeader {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 1px 5px;
+  border-bottom: 0;
+}
+
+.snapshotSectionToggle {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.snapshotSectionToggle:hover {
+  color: var(--text-primary);
+}
+
+.snapshotCreateButton {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 0;
+}
+
+.snapshotCreateButton:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.snapshotCreateButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.snapshotCreateButton .sidebarButtonSvg {
+  width: 13px;
+  height: 13px;
+  transform: translate(0, 0);
+}
+
+.collapsedSnapshotDock .snapshotCreateButton {
+  width: 22px;
+  height: 22px;
+}
+
+.collapsedSnapshotDock .snapshotCreateButton .sidebarButtonSvg {
+  width: 12px;
+  height: 12px;
+}
+
+.snapshotList {
+  display: grid;
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  align-content: start;
+  gap: 2px;
+  overflow-y: auto;
+  padding: 1px 1px 4px;
+}
+
+.snapshotItem {
+  display: grid;
+  position: relative;
+  min-width: 0;
+  align-self: start;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+  padding: 1px 0 1px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.snapshotItem:hover {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-primary);
+}
+
+.snapshotItemBody {
+  display: grid;
+  min-width: 0;
+  align-items: center;
+  min-height: 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.snapshotItemTitleRow {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+
+.snapshotItemAge {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.snapshotShowAllButton {
+  justify-self: start;
+  margin-top: 4px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.snapshotShowAllButton:hover {
+  background: var(--control-hover);
+  color: var(--text-primary);
+}
+
+.snapshotItemTitle {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snapshotBadge {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent-strong);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.snapshotItemMenuControl {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: end;
+  padding-right: 2px;
+}
+
+.snapshotMoreButton {
+  display: inline-grid;
+  min-width: 22px;
+  height: 22px;
+  place-items: center;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.snapshotMoreButton:hover,
+.snapshotMoreButton[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.snapshotMenu {
+  position: fixed;
+  z-index: 95;
+  display: grid;
+  /* zoom does not shrink vw/vh, so divide the viewport caps by the UI zoom. */
+  width: min(248px, calc((100vw - 24px) / var(--ui-font-scale, 1)));
+  max-height: min(260px, calc((100vh - 24px) / var(--ui-font-scale, 1)));
+  overflow-y: auto;
+  padding: 6px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-panel-strong);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.36);
+}
+
+.snapshotMenuInfo {
+  display: grid;
+  gap: 5px;
+  padding: 6px 7px 5px;
+}
+
+.snapshotMenuInfo div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.snapshotMenuInfo span {
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.snapshotMenuInfo strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snapshotMenuDivider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border-subtle);
+}
+
+.snapshotMenu button {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+
+.snapshotMenu button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.snapshotMenu .snapshotMenuDanger {
+  color: var(--danger, #d36a6a);
+}
+
+.snapshotMenu .snapshotMenuDanger:hover {
+  background: color-mix(in srgb, var(--danger, #d36a6a) 14%, transparent);
+  color: var(--danger, #ef8f8f);
+}
+
+.snapshotEmptyState {
+  padding: 8px 0 8px 6px;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.shelterSnapshotGroup {
+  display: grid;
+  gap: 2px;
+  padding-top: 4px;
+}
+
+.shelterSnapshotToggle {
+  display: grid;
+  min-width: 0;
+  max-height: 20px;
+  min-height: 20px;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+}
+
+.shelterSnapshotToggle:hover {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-primary);
+}
+
+.shelterSnapshotToggle span:nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shelterSnapshotToggle span:last-child {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.shelterSnapshotList {
+  display: grid;
+  gap: 2px;
+}
+
+.sidebarFooter {
+  flex: 0 0 auto;
+  padding: 9px 12px;
+  border-top: 0.5px solid var(--border-subtle);
+}
+
+.sidebarFooterActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.sidebarAddButton {
+  display: inline-flex;
+  width: 100%;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.sidebarAddButton:hover {
+  border-color: var(--text-faint);
+  color: var(--text-primary);
+}
+
+.editorColumn {
+  min-width: 0;
+  background: var(--bg-root);
+}
+
+.editor {
+  position: relative;
+  background: #0f1012;
+  color: var(--text-primary);
+  caret-color: var(--accent);
+}
+
+.editorContent {
+  background: #0f1012;
+}
+
+.verticalTypewriterShell {
+  background: #0f1012;
+  color: #e9e4d6;
+}
+
+.verticalTypewriterEditor .pm-root {
+  padding: 0 100vw;
+  color: #e9e4d6;
+  font-family: var(--editor-font-family);
+  font-size: var(--editor-font-size);
+  line-height: var(--editor-line-height);
+  letter-spacing: 0.05em;
+  caret-color: var(--accent);
+}
+
+.verticalTypewriterEditor .pm-root p.heading {
+  color: var(--editor-heading-color, var(--accent-strong));
+  font-weight: 700;
+}
+
+.verticalTypewriterGuide {
+  border-left-color: rgba(201, 168, 74, 0.12);
+}
+
+.statusbar {
+  gap: 8px;
+  padding: 0 14px;
+  border-top: 0.5px solid var(--border-subtle);
+  background: var(--bg-root);
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.statusPath {
+  color: var(--text-faint);
+}
+
+.rightSidebar {
+  display: flex;
+  width: var(--right-sidebar-width);
+  min-width: var(--right-sidebar-width);
+  height: 100%;
+  flex: 0 0 var(--right-sidebar-width);
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 0.5px solid var(--border-subtle);
+  background: #17181d;
+  color: var(--text-secondary);
+  transition:
+    opacity 180ms ease,
+    transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.wideRightSidebar {
+  width: 480px;
+  min-width: 480px;
+  flex-basis: 480px;
+}
+
+.collapsedRightSidebar,
+.rightSidebar.collapsedRightSidebar {
+  width: 0;
+  min-width: 0;
+  flex-basis: 0;
+  border-left-color: transparent;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 切り替えボタンの内側の余白ぶん詰め、機能名の位置を左サイドバーの見出しにそろえる。 */
+.rightSidebarHeader {
+  padding: 0 10px 0 6px;
+}
+
+.plotPaneHeaderActions,
+.rightSidebarChromeActions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+.plotPaneHeaderActions {
+  padding-left: 2px;
+}
+
+.plotHeaderActionButton {
+  color: var(--text-muted);
+}
+
+.plotHeaderActionButton span {
+  line-height: 1;
+}
+
+.plotHeaderActionButton svg {
+  width: 15px;
+  height: 15px;
+}
+
+.rightSidebarBody {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* 右サイドバーのヘッダー左端の切り替え。上部バーの画面モードと同じ「アイコン＋機能名」で、
+   左サイドバーの見出しと同じ位置に置く。 */
+.rightPaneSwitcher {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  margin-right: auto;
+}
+
+/* 外枠の幅を内容から決めるので、負のマージンや max-width: 100% を使うと
+   機能名が削られる。狭いときだけ flex の縮みで省略させる。 */
+.rightPaneSwitcherButton {
+  display: inline-flex;
+  height: 26px;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-family: var(--ui-font-family);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.rightPaneSwitcherButton:hover,
+.rightPaneSwitcherButton[aria-expanded="true"] {
+  background: var(--control-hover, rgba(255, 255, 255, 0.04));
+  color: var(--text-primary);
+}
+
+.rightPaneSwitcherIcon {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  place-items: center;
+}
+
+/* 左サイドバーの絞り込みでは、アイコンの位置に状態記号を出す。 */
+.progressFilterMark {
+  color: var(--progress-color);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.rightPaneSwitcherIcon svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.pluginPaneInitial {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.rightPaneSwitcherLabel,
+.rightPaneSwitcherItemLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rightPaneSwitcherItemLabel {
+  flex: 1 1 auto;
+}
+
+.rightPaneSwitcherChevron {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  color: var(--text-muted);
+}
+
+.rightPaneSwitcherPopover {
+  left: 0;
+  min-width: 180px;
+}
+
+.rightPaneSwitcherPopover button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* プラグインのビューは iframe をワークスペースの手前に重ねているため、開いたメニューが
+   隠れてしまう。メニューを開いている間だけ iframe を引っ込める。 */
+.appShell[data-pane-menu-open="true"]
+  .pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost) {
+  visibility: hidden;
+}
+
+.pluginViewBody {
+  display: none;
+}
+
+.pluginRuntimeAnchor {
+  display: none;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.visiblePluginRuntimeAnchor {
+  display: block;
+}
+
+.pluginRuntimeHost {
+  display: none;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  flex: 1 1 auto;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.visiblePluginRuntimeHost {
+  display: block;
+}
+
+.pluginRuntimeDetachedHost {
+  position: fixed;
+  /* Keep normal plugin views above the workspace, but below Then's topbar and
+     native modal layer. The host follows the workspace in DOM order, so z=0
+     is sufficient without escaping above application dialogs. */
+  z-index: 0;
+  flex: none;
+  contain: layout paint;
+}
+
+.pluginRuntimeDetachedHost:not(.pluginModalRuntimeHost) {
+  transition: opacity 140ms ease;
+}
+
+.pluginModalRuntimeHost {
+  position: fixed;
+  z-index: 20000;
+  inset: 0;
+  display: block;
+  width: auto;
+  height: auto;
+  overflow: hidden;
+  background: transparent;
+  pointer-events: auto;
+}
+
+.pluginRuntimeFrame {
+  display: none;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--bg-panel, #17181d);
+}
+
+.pluginModalRuntimeHost .pluginRuntimeFrame {
+  background: transparent;
+}
+
+.pluginScreenPane {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-root);
+  overflow: hidden;
+}
+
+.workspace[data-app-mode="plugin"] > :is(
+  .leftWorkspaceCluster,
+  .editorColumn,
+  .rightSidebar
+) {
+  visibility: hidden;
+}
+
+.pluginScreenPane .pluginRuntimeAnchor {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.visiblePluginRuntimeHost[data-active-view-ready="true"] .activePluginRuntimeFrame {
+  display: block;
+  pointer-events: auto;
+}
+
+.plotRightSidebarBody {
+  padding: 8px 10px 10px 12px;
+}
+
+/* ===== 資料レイヤー ===== */
+.referenceLayer {
+  position: absolute;
+  top: calc(var(--documentbar-height) * var(--ui-font-scale, 1));
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 5;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.appFrame[data-editor-focus="true"] > .referenceLayer {
+  top: 0;
+}
+
+.referenceCard {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  min-width: 220px;
+  min-height: 44px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 0.5px solid color-mix(in srgb, var(--border-strong) 80%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-panel) 96%, transparent);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.22);
+  color: var(--text-primary);
+  pointer-events: auto;
+}
+
+.focusedReferenceCard {
+  border-color: color-mix(in srgb, var(--accent) 54%, var(--border-strong));
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+}
+
+.pinnedReferenceCard .referenceCardHeader {
+  color: var(--accent-strong);
+}
+
+.collapsedReferenceCard {
+  height: 36px;
+}
+
+.referenceCardHeader {
+  display: flex;
+  height: 36px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 11px;
+  border-bottom: 0.5px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-panel-strong) 90%, transparent);
+  cursor: grab;
+  user-select: none;
+}
+
+.referenceCardHeader:active {
+  cursor: grabbing;
+}
+
+.referenceCardHeader strong {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.binderCardSource {
+  flex: 0 0 auto;
+  color: var(--accent-strong);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+}
+
+.binderCardSource.reference {
+  color: #1f8f88;
+}
+
+.referenceCardActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.referenceCardActions button,
+.referenceBodyToolbar button,
+.referenceRowActions button {
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.referenceCardActions button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0;
+}
+
+.referenceCardActions button:hover,
+.referenceBodyToolbar button:hover:not(:disabled),
+.referenceRowActions button:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.referenceRowActions .dangerReferenceButton {
+  color: var(--danger);
+}
+
+.referenceRowActions .dangerReferenceButton:hover {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border-strong));
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.referenceCardActions button svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.referenceCardBody {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  background: var(--bg-panel);
+}
+
+.binderIdeaCardBody {
+  gap: 8px;
+  padding: 10px;
+}
+
+.binderIdeaCardBody textarea {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  resize: none;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 6px;
+  outline: none;
+  padding: 10px;
+  background: var(--bg-input, var(--bg-panel-strong));
+  color: var(--text-primary);
+  font: inherit;
+  line-height: 1.7;
+}
+
+.binderIdeaCardBody textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--border-strong));
+}
+
+.binderIdeaCardFooter {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.binderIdeaCardFooter button {
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.binderIdeaCardFooter button.isUsed {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent-strong);
+}
+
+.referenceBodyToolbar {
+  display: flex;
+  min-height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 0.5px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.referenceBodyToolbar button {
+  height: 24px;
+  padding: 0 8px;
+}
+
+.referenceBodyToolbar button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.referenceTextPreview,
+.referenceImageScroller,
+.referencePdfScroller {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.referenceTextPreview {
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.referenceTextPreview pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+}
+
+.referenceTextEditor {
+  min-height: 0;
+  flex: 1;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font: 13px/1.65 var(--ui-font-family);
+  padding: 12px 14px;
+}
+
+.referenceMarkdown h3,
+.referenceMarkdown h4,
+.referenceMarkdown h5,
+.referenceMarkdown h6,
+.referenceMarkdown p {
+  margin: 0 0 8px;
+}
+
+.referenceMarkdown h3 {
+  font-size: 15px;
+}
+
+.referenceMarkdown h4 {
+  font-size: 13px;
+}
+
+.referenceMarkdown h5,
+.referenceMarkdown h6 {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.referenceMarkdown code {
+  border-radius: 4px;
+  background: var(--silkdown-code-bg, var(--bg-panel-strong));
+  padding: 1px 4px;
+  font-size: 0.92em;
+}
+
+.referenceCodeBlock {
+  margin: 0 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--silkdown-code-bg, var(--bg-panel-strong));
+}
+
+.referenceCodeBlock figcaption {
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 4px 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.referenceCodeBlock pre {
+  margin: 0;
+  overflow: auto;
+  padding: 8px;
+}
+
+.referenceCodeBlock code {
+  display: block;
+  min-width: max-content;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: var(--text-primary);
+  font: 12px/1.55 var(--mono-font-family, ui-monospace, SFMono-Regular, Consolas, monospace);
+  white-space: pre;
+}
+
+.referenceTableScroller {
+  max-width: 100%;
+  margin: 0 0 10px;
+  overflow: auto;
+}
+
+.referenceMarkdownTable {
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.referenceMarkdownTable th,
+.referenceMarkdownTable td {
+  border: 1px solid var(--border-subtle);
+  padding: 5px 7px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.referenceMarkdownTable th {
+  background: var(--bg-panel-strong);
+  font-weight: 700;
+}
+
+.referenceTask {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0 0 8px;
+}
+
+.referenceTask input {
+  margin-top: 4px;
+}
+
+.referenceMarkdownBlank {
+  height: 8px;
+}
+
+.referenceMarkdownImage {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 8px 0;
+  border-radius: 6px;
+}
+
+.referenceMissingImage {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.referenceImageScroller {
+  display: grid;
+  place-items: start center;
+  padding: 10px;
+  background:
+    linear-gradient(45deg, rgba(128, 128, 128, 0.11) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(128, 128, 128, 0.11) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(128, 128, 128, 0.11) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(128, 128, 128, 0.11) 75%);
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-size: 16px 16px;
+}
+
+.referenceImageScroller img {
+  max-width: 100%;
+  height: auto;
+  transform-origin: top center;
+}
+
+.referencePdfScroller {
+  padding: 10px;
+  background: color-mix(in srgb, var(--bg-root) 82%, black);
+}
+
+.referencePdfScroller canvas {
+  display: block;
+  max-width: none;
+  margin: 0 auto;
+  background: white;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+}
+
+.referenceReadOnlyPreview {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+}
+
+.referenceReadOnlyPreview.referenceTextPreview,
+.referenceReadOnlyPreview.referenceImageScroller,
+.referenceReadOnlyPreview.referencePdfScroller {
+  flex: none;
+}
+
+.referenceReadOnlyPreview.referenceImageScroller,
+.referenceReadOnlyPreview.referencePdfScroller {
+  height: 100%;
+}
+
+.referenceReadOnlyPreview.referencePdfScroller canvas {
+  max-width: 100%;
+  height: auto;
+}
+
+.referenceReadOnlyPreview.referenceReadOnlyPdf {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.referenceReadOnlyPdf .referencePdfMiniNav {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 68%, transparent);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.referenceReadOnlyPdf .referencePdfMiniNav button {
+  min-width: 28px;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 72%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bg-panel) 88%, var(--bg-root));
+  color: var(--text-primary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.referenceReadOnlyPdf .referencePdfMiniNav button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.referenceReadOnlyPdf .referencePdfScroller {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.referenceReadOnlyPdf .referencePdfScroller canvas {
+  max-width: 100%;
+  height: auto;
+}
+
+.referencePlaceholder,
+.referenceError {
+  padding: 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.referenceError {
+  color: var(--danger);
+}
+
+.referenceResizeHandle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+}
+
+.referenceResizeHandle::after {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 7px;
+  height: 7px;
+  border-right: 1px solid var(--text-faint);
+  border-bottom: 1px solid var(--text-faint);
+  content: "";
+}
+
+.referencePane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.referencePaneTop {
+  flex: 0 0 auto;
+  padding: 12px 12px 10px;
+  border-bottom: 0.5px solid var(--border-subtle);
+}
+
+.referenceSearchRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.referenceSearch {
+  display: flex;
+  height: 32px;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-panel-strong);
+  padding: 0 9px;
+}
+
+.referenceSearch svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.referenceSearch input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: 12px/1.4 var(--ui-font-family);
+}
+
+.referenceTopAddButton {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-panel-strong);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.referenceTopAddButton:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.referenceTopAddButton.isActive {
+  border-color: color-mix(in srgb, var(--accent-strong) 34%, var(--border-subtle));
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.referenceTopAddButton svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+}
+
+.referencePaneSection {
+  flex: 0 0 auto;
+  padding: 12px 12px 0;
+}
+
+.referenceCandidatesSection {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.referenceSectionHeader {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 2px 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.referenceList {
+  display: flex;
+  max-height: 100%;
+  flex-direction: column;
+  gap: 6px;
+  overflow: auto;
+}
+
+.referenceRow {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  padding: 8px;
+}
+
+.referenceKindIcon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.referenceKindIcon svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.referenceKind-pdf {
+  color: var(--danger);
+}
+
+.referenceKind-image {
+  color: #6f58d9;
+}
+
+.referenceRowMain {
+  min-width: 0;
+}
+
+.referenceRowMain strong,
+.referenceRowMain span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.referenceRowMain strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.referenceRowMain span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.referenceRowActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.referenceActionButton {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 0.5px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+}
+
+.referenceActionButton:hover {
+  border-color: var(--border-subtle);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.referenceActionButton svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.activeReferenceIconButton {
+  color: var(--accent-strong);
+}
+
+.referenceEmpty {
+  margin: 0;
+  border: 0.5px dashed var(--border-subtle);
+  border-radius: 8px;
+  padding: 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.referenceScopeTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+.referenceProjectLabel {
+  min-width: 0;
+  color: var(--text-muted);
+  font: 600 11px/1.4 var(--ui-font-family);
+}
+
+.referenceKindFilters {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-panel-strong);
+  padding: 2px;
+}
+
+.referenceKindFilters button {
+  min-width: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: 11px/1.4 var(--ui-font-family);
+  white-space: nowrap;
+}
+
+.referenceKindFilters {
+  width: 100%;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.referenceKindFilters button {
+  flex: 1;
+  padding: 4px 5px;
+}
+
+.referenceKindFilters button.isActive {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.referenceTopActions,
+.referenceMenuHost {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+}
+
+.referenceTopActions .referenceTopAddButton {
+  width: 30px;
+  height: 30px;
+  flex-basis: 30px;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.referenceOpenCardList {
+  display: grid;
+  gap: 8px;
+}
+
+.referenceOpenCard {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: stretch;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-panel-strong) 94%, transparent);
+  padding: 8px;
+}
+
+.referenceOpenPreview {
+  display: grid;
+  min-height: 58px;
+  place-items: center;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 7px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 68%, transparent), transparent),
+    var(--bg-panel);
+  color: var(--accent-strong);
+  overflow: hidden;
+}
+
+.referenceOpenPreview img,
+.referenceOpenPreview canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.referencePdfThumb {
+  position: relative;
+  background: var(--bg-panel-strong);
+}
+
+.referencePdfThumb canvas {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 100%;
+  object-fit: contain;
+  box-shadow: 0 1px 4px rgba(20, 25, 32, 0.14);
+}
+
+.referencePdfThumb span {
+  position: absolute;
+  right: 4px;
+  bottom: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-panel-strong) 86%, transparent);
+  padding: 1px 5px;
+}
+
+.referenceTextThumb {
+  align-content: center;
+  justify-items: center;
+  gap: 4px;
+  padding: 5px;
+}
+
+.referenceTextThumb p {
+  display: -webkit-box;
+  margin: 0;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.referenceOpenPreview .referenceKindIcon {
+  width: 30px;
+  height: 30px;
+  background: transparent;
+}
+
+.referenceOpenPreview span {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.referenceOpenMain {
+  min-width: 0;
+}
+
+.referenceOpenMain strong {
+  display: block;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.referenceOpenMain small {
+  display: block;
+  overflow: hidden;
+  margin-top: 5px;
+  color: color-mix(in srgb, var(--warning, #b7791f) 80%, var(--text-muted));
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.referenceOpenActions {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+}
+
+.referenceRow {
+  grid-template-columns: 26px minmax(0, 1fr) auto 28px;
+  padding: 7px 8px;
+}
+
+.referenceRowOpenButton {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.referenceRowOpenButton:hover strong {
+  color: var(--accent-strong);
+}
+
+.referenceContextMenu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+  display: grid;
+  min-width: 144px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-panel-strong);
+  box-shadow: var(--shadow-popover);
+  padding: 4px;
+}
+
+.referenceTopMenu {
+  right: 0;
+}
+
+.referenceFloatingMenu {
+  z-index: 4000;
+  background: var(--bg-panel-strong, #ffffff);
+  color: var(--text-secondary, #3f4a5a);
+  font-family: var(--ui-font-family, system-ui, sans-serif);
+}
+
+.referenceContextMenu button {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 6px 8px;
+  text-align: left;
+  font: 12px/1.4 var(--ui-font-family);
+}
+
+.referenceContextMenu button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.referenceContextMenu button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.referenceContextMenu .dangerMenuItem {
+  color: var(--danger);
+}
+
+.referenceKind-image {
+  color: #1f8f88;
+}
+
+/* ===== Idea（スレッド二段ナビ） ===== */
+.binderPane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0;
+  overflow: auto;
+  padding: 0 0 16px;
+}
+
+.binderModePane {
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
+.binderTop {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 11px;
+  border-bottom: 0.5px solid var(--border-subtle);
+}
+
+.binderModePane > .ideaPane,
+.binderModePane > .referencePane {
+  min-height: 0;
+  flex: 1;
+}
+
+.binderModeTabs {
+  display: grid;
+  grid-template-columns: 0.8fr 1.35fr 0.8fr;
+  min-height: 35px;
+  flex: 0 0 auto;
+  border-bottom: 0.5px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-panel-strong) 76%, transparent);
+}
+
+.binderModeTabs button {
+  position: relative;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.binderModeTabs button:hover,
+.binderModeTabs button.isActive {
+  color: var(--text-primary);
+}
+
+.binderModeTabs button.isActive::after {
+  position: absolute;
+  right: 8px;
+  bottom: 0;
+  left: 8px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+  content: "";
+}
+
+.binderBackButton,
+.binderGroupTitle button {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.binderCapture {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.binderCapture input,
+.binderSearchRow input {
+  min-width: 0;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 7px;
+  outline: none;
+  background: var(--bg-input, var(--bg-panel-strong));
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.binderCapture input {
+  height: 31px;
+  padding: 0 9px;
+}
+
+.binderCapture button {
+  border: 0;
+  border-radius: 7px;
+  padding: 0 11px;
+  background: var(--accent);
+  color: var(--bg-panel);
+  cursor: pointer;
+}
+
+.binderCapture button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.binderCaptureMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.binderCaptureMeta button {
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 5px;
+  padding: 3px 8px;
+  background: var(--bg-panel-strong);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.binderCaptureMeta button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.binderSearchRow input {
+  width: 100%;
+  padding: 7px 9px;
+}
+
+.binderFilters,
+.binderScopeFilters {
+  display: flex;
+  gap: 4px;
+}
+
+.binderFilters button,
+.binderScopeFilters button {
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.binderFilters button.isActive,
+.binderScopeFilters button.isActive {
+  border-color: var(--text-primary);
+  background: var(--text-primary);
+  color: var(--bg-panel);
+}
+
+.binderSectionHeader,
+.binderGroupTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.binderSectionHeader {
+  margin: 10px 11px 4px;
+  padding-bottom: 4px;
+}
+
+.binderLibraryHeader {
+  border-bottom: 0;
+}
+
+.binderSearchOnly {
+  gap: 7px;
+}
+
+.binderResults {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  padding: 0 8px;
+}
+
+.binderSearchResult {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 20px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 7px;
+  border: 0;
+  border-bottom: 0.5px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.binderSearchResult:hover,
+.binderSearchResult:focus-visible {
+  outline: none;
+  background: var(--bg-hover);
+}
+
+.binderResultContent {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.binderResultContent strong,
+.binderResultPreview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.binderResultContent strong {
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.binderResultPreview {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.binderResultOpen {
+  color: var(--text-faint);
+  font-size: 12px;
+  opacity: 0;
+  transform: translate(-2px, 2px);
+  transition: opacity 100ms ease, transform 100ms ease;
+}
+
+.binderSearchResult:hover .binderResultOpen,
+.binderSearchResult:focus-visible .binderResultOpen {
+  color: var(--accent-strong);
+  opacity: 1;
+  transform: translate(0, 0);
+}
+
+.binderEmptyResult {
+  margin: 22px 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.binderSectionHeader h3,
+.binderGroupTitle span {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.binderSectionHeader > span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.binderOpenItems,
+.binderLibraryGroup,
+.binderThreadDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.binderOpenItems,
+.binderLibraryGroup {
+  padding: 0 8px;
+}
+
+.binderLibraryGroup + .binderLibraryGroup {
+  margin-top: 10px;
+}
+
+.binderOpenItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26px 26px;
+  align-items: center;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 7px;
+  background: var(--bg-panel-strong);
+}
+
+.binderOpenItem > button {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.binderOpenItem > button.isActive {
+  color: var(--accent-strong);
+}
+
+.binderOpenMain,
+.binderLibraryItem,
+.binderThreadItem {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
+
+.binderOpenMain {
+  padding: 7px 8px;
+}
+
+.binderOpenMain > span:last-child,
+.binderLibraryItem > span:last-child,
+.binderThreadItem > span:first-child {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.binderOpenMain strong,
+.binderLibraryItem strong,
+.binderThreadItem strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.binderOpenMain small,
+.binderLibraryItem small,
+.binderThreadItem small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.binderTypeBadge {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-panel));
+  color: var(--accent-strong);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.binderTypeBadge.reference {
+  background: color-mix(in srgb, #1f8f88 14%, var(--bg-panel));
+  color: #1f8f88;
+}
+
+.binderLibraryItem,
+.binderThreadItem {
+  width: 100%;
+  border: 0;
+  border-bottom: 0.5px solid var(--border-subtle);
+  border-radius: 0;
+  padding: 7px 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.binderLibraryItem:hover,
+.binderThreadItem:hover {
+  background: var(--bg-hover);
+}
+
+.binderReferenceActions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.binderReferenceActions select {
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 5px;
+  padding: 2px 4px;
+  background: var(--bg-panel-strong);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 10px;
+}
+
+.binderLibraryItem > span:not(.binderTypeBadge):last-child {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.binderThreadDetail h4 {
+  margin: 2px 7px 4px;
+  font-size: 13px;
+}
+
+.binderUsedDot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border: 1px solid var(--text-muted);
+  border-radius: 50%;
+}
+
+.binderUsedDot.used {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.binderEmpty {
+  margin: 5px 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.ideaPane {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ideaStage {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.ideaTrack {
+  display: flex;
+  width: 200%;
+  height: 100%;
+  transition: transform 240ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ideaTrack.showDetail {
+  transform: translateX(-50%);
+}
+
+.ideaView {
+  display: flex;
+  width: 50%;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.ideaViewTop {
+  flex: 0 0 auto;
+  border-bottom: 0.5px solid var(--border-subtle);
+}
+
+.ideaTopRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px 0;
+}
+
+.ideaNewThread {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.ideaNewThread:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-panel-strong);
+  color: var(--text-primary);
+}
+
+.ideaCapture {
+  padding: 10px 14px 0;
+}
+
+.ideaCaptureInline {
+  padding: 0 0 12px;
+}
+
+.ideaCaptureBox {
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 9px;
+  background: var(--bg-panel-strong);
+  padding: 8px 9px 9px;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.ideaCaptureBox:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.ideaCaptureBox textarea {
+  display: block;
+  width: 100%;
+  min-height: 46px;
+  max-height: 140px;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ideaCaptureBox textarea::placeholder {
+  color: var(--text-faint);
+}
+
+.ideaCaptureRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.ideaCaptureRowEnd {
+  justify-content: flex-end;
+}
+
+.ideaCaptureHint {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.ideaDestSelect {
+  min-width: 0;
+  max-width: 62%;
+  height: 26px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 6px;
+  /* 投稿欄（.ideaCaptureBox）と同じ背景色に揃える */
+  background: var(--bg-panel-strong);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 0 6px;
+}
+
+.ideaDestSelect:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.ideaPrimaryBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--bg-root);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.ideaPrimaryBtn:hover {
+  background: var(--accent-strong);
+}
+
+.ideaPrimaryBtn:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.ideaChipsRow {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px 12px;
+}
+
+.ideaSearchInput {
+  width: 110px;
+  flex: 1 1 110px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 9px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 6px;
+  outline: none;
+  background: var(--bg-panel-strong);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.ideaSearchInput:focus {
+  border-color: var(--accent);
+}
+
+.ideaChips {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.ideaChip {
+  height: 26px;
+  padding: 0 10px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.ideaChip:hover {
+  border-color: var(--border-strong);
+  color: var(--text-secondary);
+}
+
+.ideaChip.isActive {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent-strong);
+}
+
+.ideaScroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 14px 18px;
+}
+
+.ideaThreadRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 10px 11px 12px;
+  margin-top: 10px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
+}
+
+.ideaThreadRow:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-panel-strong);
+}
+
+.ideaThreadRow.isInbox {
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-secondary));
+}
+
+.ideaRowTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ideaRowStar {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--warning);
+}
+
+.ideaRowStar svg {
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+  stroke: none;
+}
+
+.ideaRowSummary {
+  display: -webkit-box;
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.ideaDetailTop {
+  padding: 10px 14px 0;
+}
+
+.ideaDetailNav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ideaBackBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 8px 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.ideaBackBtn:hover {
+  background: var(--bg-panel-strong);
+  color: var(--text-primary);
+}
+
+.ideaDetailActions {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.ideaIconBtn {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.ideaIconBtn:hover {
+  background: var(--bg-panel-strong);
+  color: var(--text-primary);
+}
+
+.ideaIconBtn.isOn {
+  color: var(--warning);
+}
+
+.ideaBackBtn svg,
+.ideaNewThread svg,
+.ideaPrimaryBtn svg,
+.ideaIconBtn svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.ideaIconBtn.isOn svg {
+  fill: currentColor;
+}
+
+.ideaDetailTitle {
+  width: 100%;
+  margin-top: 8px;
+  padding: 3px 5px;
+  border: 0.5px solid transparent;
+  border-radius: 6px;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.ideaDetailTitle:focus {
+  border-color: var(--border-strong);
+  background: var(--bg-panel-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.ideaDetailTitle:read-only {
+  cursor: default;
+}
+
+.ideaDetailStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 10px 5px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.ideaFragment {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  padding: 9px 9px 9px 6px;
+  margin-top: 8px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 9px;
+  background: var(--bg-secondary);
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    opacity 120ms ease;
+}
+
+.ideaFragment:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-panel-strong);
+}
+
+.ideaFragment.isDragging {
+  opacity: 0.4;
+}
+
+.ideaFragment.isReorderTarget {
+  border-color: var(--accent-border, var(--accent));
+}
+
+.ideaFragment.isReorderBefore {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.ideaFragment.isReorderAfter {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.ideaDragHandle {
+  align-self: start;
+  margin-top: 2px;
+  color: var(--text-faint);
+  cursor: grab;
+  line-height: 0;
+}
+
+.ideaDragHandle:active {
+  cursor: grabbing;
+}
+
+.ideaGripGlyph {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  stroke: none;
+}
+
+.ideaFragmentBody {
+  outline: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.ideaFragmentBody:focus {
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.ideaFragmentFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 7px;
+}
+
+.ideaFragmentBtns {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.ideaTextBtn {
+  height: 24px;
+  padding: 0 8px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.ideaTextBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.ideaMiniIcon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.ideaMiniIcon:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.ideaMiniIcon svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+}
+
+.ideaCaptureBox.ideaCaptureStacked {
+  padding: 8px 9px 9px;
+}
+
+.ideaCaptureStacked textarea {
+  min-height: 42px;
+  padding: 2px 3px 5px;
+}
+
+.ideaCaptureControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.ideaCaptureControls .ideaDestSelect {
+  flex: 0 1 150px;
+  width: 150px;
+  max-width: calc(100% - 118px);
+}
+
+.ideaCaptureSpacer {
+  flex: 1 1 auto;
+}
+
+.ideaCaptureControls .ideaPrimaryBtn {
+  flex: 0 0 auto;
+}
+
+.ideaClipHost,
+.ideaReferenceMenuHost {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.openCardsPane {
+  height: 100%;
+  overflow: auto;
+  padding: 10px;
+}
+
+.openCardsPaneHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 3px 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.openCardsEmpty {
+  margin: 24px 8px;
+  color: var(--text-faint);
+  font-size: 12px;
+  text-align: center;
+}
+
+.openCardsList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.openCardsItem {
+  padding: 7px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: var(--radius-card, 8px);
+  background: var(--bg-secondary);
+}
+
+.openCardsMain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--ui-font-family);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.openCardsMain > span:last-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.openCardsMain strong,
+.openCardsMain small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.openCardsMain small {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.openCardsKind {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: var(--radius-control, 6px);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.openCardsKind.reference {
+  color: var(--text-muted);
+}
+
+.openCardsActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 3px;
+  margin-top: 6px;
+}
+
+.openCardsActions button {
+  width: 26px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius-control, 5px);
+  background: transparent;
+  color: var(--text-muted);
+  font: 12px/1 var(--ui-font-family);
+  cursor: pointer;
+}
+
+.openCardsActions button:hover,
+.openCardsActions button.isActive {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text-primary);
+}
+
+.ideaClipButton {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-control, 6px);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.ideaClipButton:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.ideaClipButton svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ideaClipMenu {
+  top: calc(100% + 4px);
+  right: 0;
+  left: auto;
+  z-index: 40;
+  min-width: 168px;
+  max-width: calc(100vw - 24px);
+}
+
+.ideaClipMenu.align-start {
+  right: auto;
+  left: 0;
+}
+
+.ideaClipMenu button {
+  font: 12px/1.4 var(--ui-font-family);
+}
+
+.ideaReferenceMenu {
+  top: calc(100% + 4px);
+  right: 0;
+  left: auto;
+  z-index: 40;
+  min-width: 220px;
+  max-width: calc(100vw - 24px);
+}
+
+.ideaReferenceMenu label {
+  display: block;
+  padding: 5px 8px 6px;
+  color: var(--text-muted);
+  font: 10px/1.4 var(--ui-font-family);
+}
+
+.ideaReferenceMenu select {
+  display: block;
+  width: 100%;
+  height: 26px;
+  margin-top: 4px;
+  padding: 0 5px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: var(--radius-control, 5px);
+  outline: none;
+  background: var(--bg-panel-strong);
+  color: var(--text-secondary);
+  font: 11px/1.4 var(--ui-font-family);
+}
+
+.ideaReferenceMenu select:focus {
+  border-color: var(--accent);
+}
+
+.ideaReferenceMenu .dangerMenuItem {
+  color: var(--danger);
+}
+
+.ideaMixedItemMain {
+  min-width: 0;
+  width: 100%;
+}
+
+.ideaReferenceItem {
+  align-items: center;
+}
+
+.ideaReferenceItem.isMissing {
+  opacity: 0.72;
+}
+
+.ideaReferenceOpen {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ideaReferenceOpen:disabled {
+  cursor: default;
+}
+
+.ideaReferenceOpen > svg {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  opacity: 0.55;
+}
+
+.ideaReferenceVisual {
+  display: grid;
+  flex: 0 0 46px;
+  width: 46px;
+  height: 42px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius-control, 6px);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--text-muted);
+  font: 11px/1 var(--ui-font-family);
+}
+
+.ideaReferenceVisual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ideaReferenceCopy {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ideaReferenceCopy strong,
+.ideaReferencePreview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ideaReferencePreview {
+  color: var(--text-secondary);
+  font: 12px/1.5 var(--ui-font-family);
+}
+
+.ideaReferenceCopy strong {
+  color: var(--text-faint);
+  font: 10px/1.4 var(--ui-font-family);
+  font-weight: 500;
+}
+
+.ideaReferenceMenuHost {
+  justify-content: flex-end;
+  width: 100%;
+  margin-top: 7px;
+}
+
+.ideaEmpty {
+  margin-top: 30px;
+  padding: 22px;
+  border: 0.5px dashed var(--border-subtle);
+  border-radius: 10px;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.8;
+  text-align: center;
+}
+
+/* テーマの角丸トークンに追従（四角ベース/角丸ベースのテーマ両対応） */
+.ideaThreadRow,
+.ideaFragment,
+.ideaEmpty {
+  border-radius: var(--radius-card, 8px);
+}
+
+.ideaCaptureBox,
+.ideaSearchInput,
+.ideaDestSelect,
+.ideaDetailTitle {
+  border-radius: var(--radius-control, 6px);
+}
+
+.ideaNewThread,
+.ideaPrimaryBtn,
+.ideaChip,
+.ideaIconBtn,
+.ideaBackBtn,
+.ideaMiniIcon {
+  border-radius: var(--radius-button, 6px);
+}
+
+/* ---- バインダーの読みやすさ ----
+   ペインの地は沈めずに明るく保ち、カードをさらに明るくして境目を示す。本文は通常の文字色にし、
+   操作類はポインタを乗せたときだけ出す。明暗の向きはテーマの明暗で切り替える。 */
+.ideaPane {
+  --idea-ground: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 65%, #fff);
+  --idea-card: color-mix(in srgb, var(--sidebar-bg, var(--bg-root)) 10%, #fff);
+  --idea-card-hover: #fff;
+}

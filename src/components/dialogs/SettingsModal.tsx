@@ -1,6 +1,5 @@
 import { useState, type KeyboardEvent } from "react";
 import type { EditorSettings, FontOption } from "../../types";
-import { AiSettings } from "./AiSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { BodySettings } from "./BodySettings";
 import { CanvasSettings } from "./CanvasSettings";
@@ -22,7 +21,7 @@ type SettingsModalProps = {
   onSnippetStorageModeChange: (mode: EditorSettings["snippetStorageMode"]) => void;
 };
 
-type SettingsTab = "appearance" | "body" | "files" | "canvas" | "export" | "ai";
+type SettingsTab = "appearance" | "body" | "files" | "canvas" | "export";
 
 const settingsTabs: { id: SettingsTab; label: string }[] = [
   { id: "appearance", label: "外観" },
@@ -30,7 +29,6 @@ const settingsTabs: { id: SettingsTab; label: string }[] = [
   { id: "files", label: "ファイル" },
   { id: "canvas", label: "キャンバス" },
   { id: "export", label: "出力" },
-  { id: "ai", label: "AI" },
 ];
 
 export function SettingsModal({
@@ -95,7 +93,6 @@ export function SettingsModal({
     ),
     canvas: <CanvasSettings settings={settings} onUpdateSettings={onUpdateSettings} />,
     export: <ExportSettings settings={settings} onUpdateSettings={onUpdateSettings} />,
-    ai: <AiSettings settings={settings} onUpdateSettings={onUpdateSettings} />,
   };
 
   return (

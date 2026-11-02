@@ -1,0 +1,16 @@
+.appShell:is([data-theme="dark"], [data-theme$="-dark"])
+  .fileTreeOutlineChildren
+  .outlineLevelMark {
+  border-color: #50575e;
+  background: #33383d;
+  color: #c4cbd1;
+}
+
+.appShell:is([data-theme="dark"], [data-theme$="-dark"])
+  .fileTreeOutlineChildren
+  .activeOutlineTreeItem
+  .outlineLevelMark {
+  border-color: #68717a;
+  background: #3c4248;
+  color: #e0e5e9;
+}

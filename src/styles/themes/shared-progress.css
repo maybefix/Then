@@ -1,0 +1,6 @@
+
+.appShell:is([data-theme="dark"], [data-theme$="-dark"]) {
+  --progress-writing: #75b0ff;
+  --progress-revising: #e4ae55;
+  --progress-done: #69c792;
+}

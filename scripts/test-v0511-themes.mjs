@@ -1,3 +1,4 @@
+import { readAppCss } from "./lib/read-app-css.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
@@ -23,7 +24,7 @@ const [
   sharedVariants,
 ] =
   await Promise.all([
-    readFile("src/App.css", "utf8"),
+    readAppCss(),
     readFile("src/vendor/silkdown/theme.css", "utf8"),
     readFile("src/types.ts", "utf8"),
     readFile("src/themes.ts", "utf8"),

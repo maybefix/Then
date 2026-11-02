@@ -56,14 +56,12 @@ const values = {
   editorText: "本文",
   settings: {
     proofread: { ...(DEFAULT_PROOFREAD_OPTIONS ?? {}), disabledRules: [], disabledChecks: [] },
-    ai: { provider: null, models: {}, defaultMode: "consult", localEndpoint: "" },
   },
   projectProofreadTerms: [],
   appState: { proofreadTerms: [] },
   projectProofreadIgnored: {},
   proofreadIgnoreKey: "doc",
   snippets: [],
-  aiInsertRequest: null,
   plotCards: [],
   sortedReferenceCandidates: [],
   isPlotManagerOpen: false,
@@ -84,7 +82,6 @@ const render = (overrides = {}) => {
 const panes = {
   plot: /class="rightSidebarBody plotRightSidebarBody"/,
   idea: /class="binderPane"/,
-  ai: /class="aiPane"/,
   proof: /class="proofPane"/,
   properties: /class="propertiesPanel"/,
 };
@@ -97,7 +94,8 @@ for (const [tab, marker] of Object.entries(panes)) {
 }
 assert.match(render({ rightSidebarTab: "plot" }), /aria-label="プロット操作"/, "plot: the plot header actions are shown");
 assert.match(render({ rightSidebarTab: "idea" }), /aria-label="バインダー操作"/, "idea: the binder header actions are shown");
-assert.doesNotMatch(render({ rightSidebarTab: "ai" }), /プロット操作|バインダー操作/, "ai: no header actions of other tabs");
+assert.doesNotMatch(render({ rightSidebarTab: "proof" }), /プロット操作|バインダー操作/, "proof: no header actions of other tabs");
+assert.doesNotMatch(render(), /aria-label="補助ペイン：AI"|class="aiPane"/, "the removed AI pane is not offered");
 
 const open = render();
 assert.match(open, /<aside class="rightSidebar " aria-label="補助ペイン" aria-hidden="false">/, "open: the sidebar is visible and not inert");
@@ -132,6 +130,7 @@ assert.doesNotMatch(render(), /visiblePluginRuntimeAnchor/, "no plugin: the runt
     compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const state = await import(`data:text/javascript;base64,${Buffer.from(stateCode).toString("base64")}`);
+  assert.equal(state.normalizeRightSidebarTab("ai"), "plot", "a stored AI tab returns to plot");
   for (const name of ["normalizeRightSidebarCollapsed", "normalizeRightSidebarWide"]) {
     assert.equal(typeof state[name], "function", `${name} reads the stored value back`);
     assert.equal(state[name](true), true, name);

@@ -30,7 +30,8 @@ import {
 import { manageAsyncRegistration } from "./utils/asyncRegistration";
 import { flushPendingSaves, schedulePendingSave } from "./pendingSaves";
 import { useVerticalMetricFontFamily } from "./utils/verticalMetricFonts";
-import { buildAppShellStyle } from "./appShellStyle";
+import { buildAppShellAppearance } from "./appShellStyle";
+import { canvasAppearanceSettings } from "./canvasAppearance";
 import { EditorContextMenu, type EditorContextMenuState } from "./components/editor/EditorContextMenu";
 import { isRestorableRightSidebarTab } from "./utils/rightSidebarState";
 import type { LeftSidebarView } from "./utils/leftSidebarState";
@@ -1251,11 +1252,6 @@ export default function App() {
     sourceError?: string;
   } | null>(null);
   const [rightSidebarTab, setRightSidebarTabState] = useState<string>("plot");
-  const [aiInsertRequest, setAiInsertRequest] = useState<{ text: string; nonce: number } | null>(null);
-  const consumeAiInsertRequest = useCallback(
-    (nonce: number) => setAiInsertRequest((current) => (current?.nonce === nonce ? null : current)),
-    [],
-  );
 
   const setRightSidebarTab = useCallback((tab: string) => {
     setRightSidebarTabState(tab);
@@ -4081,10 +4077,7 @@ export default function App() {
       scope: "project",
       boardId,
       selectNodeId,
-      theme: settings.theme,
-      editorFontFamily: settings.editorFontFamily,
-      uiFontFamily: settings.uiFontFamily,
-      uiFontScale: settings.uiFontScale,
+      ...canvasAppearanceSettings(settings),
       canvasDefaultWritingMode: settings.canvasDefaultWritingMode,
       canvasDefaultFontSource: settings.canvasDefaultFontSource,
       ideaThreads: snippets.map((thread) => ({
@@ -5908,15 +5901,6 @@ export default function App() {
     setIsWorkspaceSwitcherOpen(false);
     setEditorContextMenu(null);
     window.requestAnimationFrame(() => editorInstanceRef.current?.focus());
-  };
-
-  /** Shows the AI pane with `text` added to its composer. Nothing is sent (AI-26, AI-27). */
-  const handTextToAi = (text: string) => {
-    if (!text.trim()) return;
-    setIsEditorFocusMode(false);
-    setRightSidebarTab("ai");
-    setIsRightSidebarCollapsed(false);
-    setAiInsertRequest({ text, nonce: Date.now() });
   };
 
   const leaveEditorFocusMode = () => {
@@ -7807,7 +7791,7 @@ export default function App() {
         ref={appShellRef}
         className="appShell"
         data-shell-app-mode={appMode}
-        data-theme={settings.theme}
+        {...buildAppShellAppearance(settings, editorFontFamily, editorHeadingFontFamily)}
         data-writing-mode={settings.writingMode}
         data-zone-mode={settings.sidebarHoverMode !== "none" ? "true" : undefined}
         data-zone-left={
@@ -7822,9 +7806,6 @@ export default function App() {
         }
         data-startup-view={startupView}
         data-native-window={isTauriRuntime() ? "true" : undefined}
-        style={
-          buildAppShellStyle(settings, editorFontFamily, editorHeadingFontFamily)
-        }
       >
         <WindowControls overPage={startupView === "loading" || Boolean(librarySetupRequest)} />
         {librarySetupRequest && (
@@ -8259,7 +8240,7 @@ export default function App() {
                     <EditorContextMenu
                       {...{
                         editorContextMenu, editorContextMenuRef, pluginSelectionCommands, pluginRuntimeHostRef,
-                        copyEditorSelection, cutEditorSelection, pasteIntoEditorSelection, handTextToAi,
+                        copyEditorSelection, cutEditorSelection, pasteIntoEditorSelection,
                         closeEditorContextMenu, openRubyNotationModal, applyInlineNotation, clearSelectionNotation,
                         openDirectionNotationModal, openManuscriptTidy,
                       }}
@@ -8330,12 +8311,12 @@ export default function App() {
                 updateSettings, revealEditorRange, replaceEditorRange, projectProofreadTerms, appState,
                 setProjectProofreadTerms, setAppState, exportProofreadDictionary, importProofreadDictionary,
                 projectProofreadIgnored, proofreadIgnoreKey, setProjectProofreadIgnored, snippets,
-                setReferenceCandidates, addReferencesToIdeaThread, showToast, openReferenceCard,
-                aiInsertRequest, consumeAiInsertRequest, plotCards, setPlotCards, sortedReferenceCandidates,
+                showToast, openReferenceCard,
+                plotCards, setPlotCards, sortedReferenceCandidates,
                 openPlotReference, isPlotManagerOpen, transferMenuLabel, transferPlotCard, referenceLayout,
                 draggingId, ideaFocusRequest, setIdeaFocusRequest, captureFragment, openIdeaBinderCard,
                 createIdeaThread, renameIdeaThread, toggleThreadStar, deleteIdeaThread, addFragment,
-                updateFragmentBody, deleteFragment, moveFragment, moveFragmentToNewThread, handTextToAi,
+                updateFragmentBody, deleteFragment, moveFragment, moveFragmentToNewThread,
                 handleFragmentDragStart, handleFragmentDragEnd, handleAddReference, handleCreateReference,
                 moveIdeaReference, moveReferenceToNewThread, removeIdeaReference,
                 handleDeleteImportedReference, reorderIdeaThreadItem, transferIdeaThread,
@@ -8569,7 +8550,6 @@ export default function App() {
             <QuickIdeaModal
               threads={snippets}
               onCapture={captureFragment}
-              onAskAi={handTextToAi}
               onClose={() => setIsQuickIdeaModalOpen(false)}
             />
           )}

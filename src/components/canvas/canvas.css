@@ -1,0 +1,1619 @@
+.canvasWindowRoot {
+  --canvas-radius-control: min(var(--radius-control, 6px), 4px);
+  --canvas-radius-card: min(var(--radius-card, 8px), 4px);
+  --canvas-radius-node: min(var(--radius-card, 8px), 2px);
+  --canvas-bg: color-mix(in srgb, var(--bg-root) 94%, #05070a);
+  --canvas-toolbar-bg: color-mix(in srgb, var(--bg-panel) 90%, var(--bg-root));
+  --canvas-toolbar-border: color-mix(in srgb, var(--border-subtle) 78%, transparent);
+  --canvas-toolbar-control: color-mix(in srgb, var(--bg-panel-strong) 82%, var(--bg-root));
+  --canvas-toolbar-control-hover: color-mix(in srgb, var(--accent-soft) 68%, var(--bg-panel-strong));
+  --canvas-board-bg: color-mix(in srgb, var(--bg-root) 86%, var(--bg-secondary));
+  --canvas-grid-minor: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  --canvas-grid-major: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  --canvas-node-bg: color-mix(in srgb, var(--bg-panel-strong) 88%, var(--bg-root));
+  --canvas-node-bg-active: color-mix(in srgb, var(--bg-panel-strong) 82%, var(--accent-soft));
+  --canvas-node-text: var(--text-primary);
+  --canvas-node-muted: var(--text-secondary);
+  --canvas-group-bg: color-mix(in srgb, var(--warning) 13%, var(--bg-panel));
+  --canvas-group-border: color-mix(in srgb, var(--warning) 62%, var(--border-subtle));
+  --canvas-group-text: color-mix(in srgb, var(--warning) 62%, var(--text-primary));
+  --canvas-inspector-bg: color-mix(in srgb, var(--bg-panel) 94%, var(--bg-root));
+  --canvas-inspector-section: color-mix(in srgb, var(--bg-panel-strong) 72%, transparent);
+  --canvas-focus-ring: color-mix(in srgb, var(--accent) 42%, transparent);
+  --canvas-shadow: color-mix(in srgb, #000 24%, transparent);
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--canvas-bg);
+  color: var(--text-primary);
+  font-feature-settings: "lnum", "locl" 0;
+}
+
+.canvasTopbar,
+.canvasInspector {
+  zoom: var(--ui-font-scale, 1);
+}
+
+.canvasTopbar {
+  display: flex;
+  height: 58px;
+  flex: 0 0 58px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--canvas-toolbar-border);
+  background: var(--canvas-toolbar-bg);
+  color: var(--text-primary);
+}
+
+.canvasSaveStatus {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.canvasToolbarCluster,
+.canvasToolGroup,
+.canvasZoomControls,
+.canvasSendControls {
+  display: inline-flex;
+  box-sizing: border-box;
+  min-height: 42px;
+  height: 42px;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: var(--canvas-radius-control);
+  background: var(--canvas-toolbar-control);
+}
+
+.canvasBoardCluster {
+  flex: 1 1 360px;
+  gap: 4px;
+  min-width: 220px;
+  max-width: 410px;
+  padding-left: 6px;
+}
+
+.canvasToolGroup button,
+.canvasZoomControls button,
+.canvasSendControls button,
+.canvasIconButton {
+  display: inline-grid;
+  box-sizing: border-box;
+  height: 34px;
+  min-width: 28px;
+  gap: 6px;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.canvasToolGroup {
+  align-items: center;
+  margin-left: auto;
+  padding: 3px;
+}
+
+.canvasTopbarRight {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.canvasToolGroup button {
+  width: 58px;
+  min-width: 58px;
+  height: 34px;
+  grid-template-rows: 17px 1fr;
+  gap: 3px;
+  padding: 4px 6px 5px;
+  line-height: 1;
+}
+
+.canvasToolGroup button span {
+  display: block;
+  font-size: 11px;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.canvasIconButton {
+  width: 34px;
+}
+
+.canvasTopbar > .canvasIconButton,
+.canvasStyleHost > .canvasIconButton,
+.canvasHelpHost > .canvasIconButton,
+.canvasReferenceHost > .canvasIconButton {
+  height: 42px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.canvasStyleHost,
+.canvasHelpHost,
+.canvasReferenceHost {
+  position: relative;
+  display: inline-flex;
+  height: 42px;
+  align-items: center;
+}
+
+.canvasToolGroup button:hover,
+.canvasZoomControls button:hover,
+.canvasSendControls button:hover,
+.canvasIconButton:hover {
+  background: var(--canvas-toolbar-control-hover);
+  color: var(--text-primary);
+}
+
+.canvasToolGroup button.isActive,
+.canvasIconButton.isActive {
+  background: var(--accent);
+  color: var(--selection-text);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 68%, transparent);
+}
+
+.canvasSendControls button:disabled,
+.canvasIconButton:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.canvasToolGroup svg,
+.canvasIconButton svg,
+.canvasPrimaryAction svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.canvasSendControls select {
+  height: 34px;
+  min-width: 0;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: var(--canvas-radius-control);
+  background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-root));
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+}
+
+.canvasSendPanel select,
+.canvasInspectorField input {
+  height: 30px;
+  min-width: 150px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: var(--canvas-radius-control);
+  background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-root));
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+}
+
+.canvasSendControls {
+  flex: 0 1 320px;
+  min-width: 220px;
+  margin-left: auto;
+}
+
+.canvasSendControls select {
+  width: min(190px, 15vw);
+  flex: 1 1 auto;
+}
+
+.canvasSendControls select:focus,
+.canvasSendPanel select:focus,
+.canvasInspectorField input:focus {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--canvas-focus-ring);
+}
+
+.canvasBoardMenuHost {
+  position: relative;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.canvasBoardTitleButton {
+  display: flex;
+  width: 100%;
+  height: 34px;
+  min-width: 0;
+  align-items: center;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: var(--canvas-radius-control);
+  background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-root));
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 10px;
+  text-align: left;
+}
+
+.canvasBoardTitleButton span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvasBoardTitleButton:hover,
+.canvasBoardTitleButton[aria-expanded="true"] {
+  border-color: var(--accent-border);
+  background: color-mix(in srgb, var(--accent-soft) 46%, var(--bg-primary));
+}
+
+.canvasBoardMenu {
+  position: absolute;
+  z-index: 35;
+  top: 40px;
+  left: 0;
+  display: grid;
+  width: min(360px, 72vw);
+  max-height: 320px;
+  overflow: auto;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: var(--canvas-radius-card);
+  background: var(--canvas-inspector-bg);
+  box-shadow: 0 18px 42px var(--canvas-shadow);
+}
+
+.canvasBoardMenuItem {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  align-items: center;
+  gap: 2px;
+  border-radius: 4px;
+}
+
+.canvasBoardMenuItem:hover,
+.canvasBoardMenuItem.isActive {
+  background: var(--canvas-toolbar-control-hover);
+  color: var(--text-primary);
+}
+
+.canvasBoardMenuItem.isDragging {
+  opacity: 0.45;
+}
+
+.canvasBoardDragHandle {
+  display: grid;
+  width: 22px;
+  flex: 0 0 22px;
+  color: var(--text-muted);
+  cursor: grab;
+  place-items: center;
+}
+
+.canvasBoardDragHandle svg,
+.canvasBoardMenuActions svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.canvasBoardDragHandle svg circle {
+  fill: currentColor;
+  stroke: none;
+}
+
+.canvasBoardMenu .canvasBoardSelectButton {
+  display: flex;
+  min-width: 0;
+  height: 32px;
+  flex: 1 1 auto;
+  align-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 8px;
+  text-align: left;
+}
+
+.canvasBoardMenuItem:hover .canvasBoardSelectButton,
+.canvasBoardMenuItem.isActive .canvasBoardSelectButton {
+  color: var(--text-primary);
+}
+
+.canvasBoardSelectButton span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvasBoardMenuActions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding-right: 3px;
+}
+
+.canvasBoardMenuActions button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  place-items: center;
+}
+
+.canvasBoardMenuActions button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 9%, transparent);
+  color: var(--text-primary);
+}
+
+.canvasBoardMenuActions button.dangerCanvasButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+
+.canvasBoardMenuActions button:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.canvasZoomControls span {
+  min-width: 46px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.dangerCanvasButton:hover {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+
+.canvasStylePopover,
+.canvasReferencePopover,
+.canvasHelpPopover {
+  position: absolute;
+  z-index: 30;
+  top: 48px;
+  right: 0;
+  padding: 12px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: var(--canvas-radius-card);
+  background: var(--canvas-inspector-bg);
+  box-shadow: 0 18px 42px var(--canvas-shadow);
+  color: var(--text-primary);
+}
+
+.canvasHelpPopover {
+  width: 330px;
+}
+
+.canvasReferencePopover {
+  display: grid;
+  width: 320px;
+  gap: 8px;
+}
+
+.canvasStylePopover {
+  display: grid;
+  width: 260px;
+  gap: 10px;
+}
+
+.canvasStylePopover h2,
+.canvasReferencePopover h2,
+.canvasHelpPopover h2 {
+  margin: 0 0 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 720;
+  letter-spacing: 0;
+}
+
+.canvasStylePopover h2 {
+  margin-bottom: 0;
+}
+
+.canvasStylePopover p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.canvasReferencePopover input {
+  height: 32px;
+  min-width: 0;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: var(--canvas-radius-control);
+  background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-root));
+  color: var(--text-primary);
+  outline: none;
+  padding: 0 8px;
+}
+
+.canvasReferenceList {
+  display: grid;
+  max-height: 320px;
+  overflow: auto;
+  gap: 4px;
+}
+
+.canvasReferenceList p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.canvasReferenceList button {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 2px 8px;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--canvas-radius-card);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.canvasReferenceList button:hover {
+  border-color: var(--canvas-toolbar-border);
+  background: var(--canvas-toolbar-control-hover);
+}
+
+.canvasReferenceList button span {
+  grid-row: 1 / 3;
+  align-self: center;
+  color: var(--accent-strong);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.canvasReferenceList button strong,
+.canvasReferenceList button small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvasReferenceList button strong {
+  font-size: 12px;
+}
+
+.canvasReferenceList button small {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.canvasStylePopover section {
+  display: grid;
+  gap: 6px;
+}
+
+.canvasStylePopover section > span {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.canvasStylePopover section > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.canvasStyleTitleInput {
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: 5px;
+  background: var(--canvas-toolbar-control);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+  padding: 0 9px;
+}
+
+.canvasStyleTitleInput:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--canvas-focus-ring);
+}
+
+.canvasStylePopover section > .canvasColorChoices {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.canvasStylePopover .canvasColorChoice {
+  display: grid;
+  width: 100%;
+  height: 30px;
+  place-items: center;
+  padding: 0;
+}
+
+.canvasStylePopover .canvasColorChoice i {
+  width: 15px;
+  height: 15px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 80%, transparent);
+  border-radius: 50%;
+  background: var(--canvas-card-color, var(--canvas-node-bg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, white 14%, transparent);
+}
+
+.canvasStylePopover .canvasColorChoice i:not([data-color]) {
+  background:
+    linear-gradient(135deg, transparent 44%, var(--text-secondary) 46% 54%, transparent 56%),
+    var(--canvas-node-bg);
+}
+
+.canvasStylePopover .canvasColorChoice.isActive {
+  border-color: var(--accent);
+  background: var(--canvas-toolbar-control-hover);
+  box-shadow: 0 0 0 2px var(--canvas-focus-ring);
+  color: var(--text-primary);
+}
+
+.canvasStylePopover button {
+  height: 32px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: 5px;
+  background: var(--canvas-toolbar-control);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.canvasStylePopover button:hover {
+  background: var(--canvas-toolbar-control-hover);
+  color: var(--text-primary);
+}
+
+.canvasStylePopover button.isActive {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--selection-text);
+}
+
+.canvasHelpPopover ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.canvasHelpPopover li {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.canvasSaveStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--canvas-toolbar-bg) 90%, transparent);
+}
+
+.canvasSaveStatus i {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.canvasWorkspace {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.canvasViewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background-color: var(--canvas-board-bg);
+  background-image:
+    linear-gradient(var(--canvas-grid-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--canvas-grid-major) 1px, transparent 1px),
+    linear-gradient(var(--canvas-grid-minor) 1px, transparent 1px),
+    linear-gradient(90deg, var(--canvas-grid-minor) 1px, transparent 1px);
+  background-position: 0 0, 0 0, 0 0, 0 0;
+  background-size: 112px 112px, 112px 112px, 28px 28px, 28px 28px;
+  cursor: default;
+}
+
+.canvasViewport-select {
+  cursor: grab;
+}
+
+.canvasViewport-select:active {
+  cursor: grabbing;
+}
+
+.canvasCreationPalette {
+  position: absolute;
+  z-index: 22;
+  left: 50%;
+  bottom: 18px;
+  width: max-content;
+  height: 50px;
+  min-height: 50px;
+  margin: 0;
+  padding: 4px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--canvas-toolbar-bg) 94%, transparent);
+  box-shadow: 0 16px 42px var(--canvas-shadow);
+  transform: translateX(-50%);
+}
+
+.canvasCreationPalette button {
+  height: 40px;
+}
+
+.canvasWorld {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+
+.canvasEdgeLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvasEdge path {
+  fill: none;
+  stroke: color-mix(in srgb, var(--accent) 68%, var(--text-secondary));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+  pointer-events: stroke;
+}
+
+.canvasEdge text {
+  fill: var(--text-secondary);
+  font-size: 13px;
+  paint-order: stroke;
+  stroke: var(--canvas-board-bg);
+  stroke-width: 4px;
+}
+
+.canvasEdge.isSelected path {
+  stroke: var(--accent-strong);
+  stroke-width: 4;
+}
+
+.canvasEdge.isDashed .canvasEdgeLine {
+  stroke-dasharray: 10 8;
+}
+
+.canvasThreadEdge {
+  fill: none;
+  stroke: color-mix(in srgb, var(--accent) 64%, var(--border-strong));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+  pointer-events: none;
+}
+
+.canvasNode {
+  position: absolute;
+  display: flex;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 72%, transparent);
+  border-radius: var(--canvas-radius-node);
+  color: var(--canvas-node-text);
+  box-shadow: 0 12px 30px var(--canvas-shadow);
+  cursor: move;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.canvasNode:active {
+  cursor: grabbing;
+}
+
+.canvasTextNode {
+  flex-direction: column;
+  padding: 12px;
+  background: var(--canvas-node-bg);
+}
+
+.canvasTextNode[data-color] {
+  border-color: color-mix(in srgb, var(--canvas-card-color) 54%, var(--border-strong));
+  background: color-mix(in srgb, var(--canvas-card-color) 16%, var(--canvas-node-bg));
+}
+
+.canvasTextNode[data-color="1"],
+.canvasColorChoice i[data-color="1"] {
+  --canvas-card-color: #e06c75;
+}
+
+.canvasTextNode[data-color="2"],
+.canvasColorChoice i[data-color="2"] {
+  --canvas-card-color: #dd8b46;
+}
+
+.canvasTextNode[data-color="3"],
+.canvasColorChoice i[data-color="3"] {
+  --canvas-card-color: #d6b84c;
+}
+
+.canvasTextNode[data-color="4"],
+.canvasColorChoice i[data-color="4"] {
+  --canvas-card-color: #63a76f;
+}
+
+.canvasTextNode[data-color="5"],
+.canvasColorChoice i[data-color="5"] {
+  --canvas-card-color: #548dc7;
+}
+
+.canvasTextNode[data-color="6"],
+.canvasColorChoice i[data-color="6"] {
+  --canvas-card-color: #9a72c7;
+}
+
+.canvasCardTitle,
+.canvasCardTitleInput {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  flex: 0 0 auto;
+  color: var(--canvas-node-text);
+  font-family: var(--canvas-node-font-family, var(--ui-font-family));
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.canvasCardTitle {
+  margin: 0 0 8px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.canvasCardTitleInput {
+  height: 30px;
+  margin: 0 0 8px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-strong) 68%, transparent);
+  background: transparent;
+  outline: none;
+  padding: 0 0 6px;
+}
+
+.canvasCardTitleInput:focus {
+  border-bottom-color: var(--accent);
+}
+
+.canvasTextNode textarea,
+.canvasCardText {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--canvas-node-text) !important;
+  -webkit-text-fill-color: var(--canvas-node-text);
+  font-family: var(--canvas-node-font-family, var(--ui-font-family));
+  font-size: 14px;
+  line-height: 1.55;
+  opacity: 1;
+  overflow: auto;
+  overflow-wrap: break-word;
+  text-align: start;
+  text-orientation: mixed;
+  writing-mode: var(--canvas-node-writing-mode, horizontal-tb);
+}
+
+.canvasTextNode textarea {
+  resize: none;
+  cursor: text;
+}
+
+.canvasCardText {
+  white-space: pre-wrap;
+  user-select: none;
+}
+
+.canvasCardText.isPlaceholder {
+  color: var(--canvas-node-muted) !important;
+  -webkit-text-fill-color: var(--canvas-node-muted);
+}
+
+.canvasTextNode.isVerticalWriting textarea,
+.canvasTextNode.isVerticalWriting .canvasCardText {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.canvasTextNode.isEditing {
+  cursor: default;
+}
+
+.canvasTextNode.isEditing:active {
+  cursor: default;
+}
+
+.canvasTextNode.isThreadChild {
+  border-left: 3px solid color-mix(in srgb, var(--accent) 62%, var(--border-strong));
+  box-shadow:
+    -6px 0 0 color-mix(in srgb, var(--accent) 9%, transparent),
+    0 10px 24px color-mix(in srgb, var(--canvas-shadow) 76%, transparent);
+}
+
+.canvasTextNode.hasThreadChildren {
+  padding-bottom: 20px;
+}
+
+.canvasNode.isThreadDropTarget {
+  border-color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, var(--canvas-node-bg));
+  box-shadow:
+    0 0 0 5px color-mix(in srgb, var(--success) 24%, transparent),
+    0 14px 34px var(--canvas-shadow);
+}
+
+.canvasNode.isThreadDropTarget::after {
+  position: absolute;
+  z-index: 8;
+  right: 10px;
+  bottom: 9px;
+  padding: 3px 7px;
+  border: 1px solid color-mix(in srgb, var(--success) 54%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--success) 18%, var(--bg-panel));
+  color: var(--text-primary);
+  content: "ここにまとめる";
+  font-size: 10px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.canvasThreadToggle {
+  position: absolute;
+  z-index: 7;
+  left: 50%;
+  bottom: -12px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  height: 23px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--accent-border) 72%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-soft) 82%, var(--bg-panel));
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.canvasThreadToggle:hover {
+  background: color-mix(in srgb, var(--accent-soft) 56%, var(--bg-panel-strong));
+}
+
+.canvasThreadToggle span {
+  min-width: 12px;
+  text-align: center;
+}
+
+.canvasGroupNode {
+  z-index: 0;
+  align-items: flex-start;
+  padding: 10px;
+  border: 1px dashed var(--canvas-group-border);
+  background: var(--canvas-group-bg);
+  box-shadow: none;
+}
+
+.canvasGroupNode input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--canvas-group-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.canvasTextNode {
+  z-index: 2;
+}
+
+.canvasReferenceNode {
+  z-index: 2;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 6px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--bg-panel-strong) 92%, var(--accent-soft));
+}
+
+.canvasReferenceNode header,
+.canvasReferenceNode footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.canvasReferenceNode header span {
+  color: var(--accent-strong);
+}
+
+.canvasReferenceNode header i {
+  font-style: normal;
+  opacity: 0.72;
+}
+
+.canvasReferenceTitle,
+.canvasReferenceNode footer span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.canvasReferenceTitle {
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.canvasReferenceNode footer span:first-child {
+  white-space: nowrap;
+}
+
+.canvasReferenceNode footer span:last-child {
+  flex: 0 0 auto;
+}
+
+.canvasReferencePreview {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 68%, transparent);
+  border-radius: var(--canvas-radius-control);
+  background: color-mix(in srgb, var(--bg-panel) 88%, var(--bg-root));
+  cursor: auto;
+}
+
+.canvasReferencePreview .referenceTextPreview {
+  padding: 10px;
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.canvasReferencePreview .referenceImageScroller,
+.canvasReferencePreview .referencePdfScroller {
+  padding: 8px;
+}
+
+.canvasReferencePreview .referencePlaceholder,
+.canvasReferencePreview .referenceError {
+  display: grid;
+  height: 100%;
+  min-height: 96px;
+  place-items: center;
+  padding: 12px;
+  text-align: center;
+}
+
+.canvasReferencePreview .referenceMarkdown h3 {
+  font-size: 13px;
+}
+
+.canvasReferencePreview .referenceMarkdown h4,
+.canvasReferencePreview .referenceMarkdown h5,
+.canvasReferencePreview .referenceMarkdown h6,
+.canvasReferencePreview .referenceMarkdown p {
+  font-size: 12px;
+}
+
+.canvasNode.canvasGroupNode.isSelected {
+  border-color: var(--accent-strong);
+  background: var(--canvas-group-bg);
+  box-shadow:
+    inset 0 0 0 1px var(--accent-strong),
+    0 14px 36px color-mix(in srgb, var(--canvas-shadow) 62%, transparent);
+}
+
+.canvasNode.isInSelectedGroup {
+  border-color: color-mix(in srgb, var(--accent-strong) 52%, var(--border-strong));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent),
+    0 12px 30px var(--canvas-shadow);
+}
+
+.canvasNode.isSelected {
+  border-color: var(--accent-strong);
+  background: var(--canvas-node-bg-active);
+  box-shadow:
+    0 0 0 3px var(--canvas-focus-ring),
+    0 14px 34px var(--canvas-shadow);
+}
+
+.canvasTextNode.isSelected[data-color] {
+  background: color-mix(in srgb, var(--canvas-card-color) 20%, var(--canvas-node-bg-active));
+}
+
+.canvasNode.isEdgeSource {
+  border-color: var(--success);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--success) 30%, transparent),
+    0 14px 34px var(--canvas-shadow);
+}
+
+.canvasOriginButton {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 3;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--accent-border) 72%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent-soft) 82%, var(--bg-panel));
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.canvasResizeHandle {
+  position: absolute;
+  z-index: 6;
+  width: 18px;
+  height: 18px;
+  opacity: 0.46;
+  transition: opacity 100ms ease;
+}
+
+.canvasNode:hover .canvasResizeHandle,
+.canvasNode.isSelected .canvasResizeHandle {
+  opacity: 0.86;
+}
+
+.canvasResizeHandle::after {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-color: color-mix(in srgb, var(--text-primary) 62%, transparent);
+  content: "";
+}
+
+.canvasResizeHandle-nw {
+  top: -5px;
+  left: -5px;
+  cursor: nwse-resize;
+}
+
+.canvasResizeHandle-nw::after {
+  top: 4px;
+  left: 4px;
+  border-top: 2px solid;
+  border-left: 2px solid;
+}
+
+.canvasResizeHandle-ne {
+  top: -5px;
+  right: -5px;
+  cursor: nesw-resize;
+}
+
+.canvasResizeHandle-ne::after {
+  top: 4px;
+  right: 4px;
+  border-top: 2px solid;
+  border-right: 2px solid;
+}
+
+.canvasResizeHandle-sw {
+  bottom: -5px;
+  left: -5px;
+  cursor: nesw-resize;
+}
+
+.canvasResizeHandle-sw::after {
+  bottom: 4px;
+  left: 4px;
+  border-bottom: 2px solid;
+  border-left: 2px solid;
+}
+
+.canvasResizeHandle-se {
+  right: -5px;
+  bottom: -5px;
+  cursor: nwse-resize;
+}
+
+.canvasResizeHandle-se::after {
+  right: 4px;
+  bottom: 4px;
+  border-right: 2px solid;
+  border-bottom: 2px solid;
+}
+
+.canvasEmptyHint {
+  position: absolute;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--canvas-radius-card);
+  background: var(--canvas-node-bg);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.canvasMarquee {
+  position: absolute;
+  z-index: 6;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  pointer-events: none;
+}
+
+.canvasEdgePreview {
+  fill: none;
+  stroke: var(--accent);
+  stroke-dasharray: 8 7;
+  stroke-linecap: round;
+  stroke-width: 2.5;
+  pointer-events: none;
+}
+
+.canvasFloatingBar {
+  position: absolute;
+  z-index: 24;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: var(--canvas-radius-card);
+  background: var(--canvas-inspector-bg);
+  box-shadow: 0 14px 34px var(--canvas-shadow);
+  transform: translateX(-50%);
+}
+
+.canvasFloatingBar > button,
+.canvasFloatingBar .canvasStyleHost > button,
+.canvasCornerRight button {
+  display: inline-grid;
+  min-width: 32px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 4px;
+}
+
+.canvasFloatingBar > button:hover:not(:disabled),
+.canvasFloatingBar .canvasStyleHost > button:hover:not(:disabled),
+.canvasCornerRight button:hover:not(:disabled) {
+  background: var(--canvas-toolbar-control-hover);
+  color: var(--text-primary);
+}
+
+.canvasFloatingBar > button:disabled,
+.canvasFloatingBar .canvasStyleHost > button:disabled,
+.canvasFloatingBar select:disabled,
+.canvasCornerRight button:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.canvasFloatingBar .canvasStyleHost > button.isActive {
+  background: var(--accent);
+  color: var(--selection-text);
+}
+
+.canvasFloatingBar svg,
+.canvasCornerRight svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.canvasFloatingBar .canvasStyleHost {
+  position: relative;
+  display: inline-flex;
+  height: auto;
+  align-items: center;
+}
+
+.canvasFloatingBar .canvasStylePopover {
+  top: calc(100% + 10px);
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.canvasFloatingBarDivider {
+  width: 1px;
+  height: 18px;
+  margin: 0 3px;
+  background: var(--canvas-toolbar-border);
+}
+
+.canvasFloatingBar select {
+  height: 28px;
+  max-width: 140px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: var(--canvas-radius-control);
+  background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-root));
+  color: var(--text-primary);
+  font-size: 11px;
+  outline: none;
+}
+
+.canvasEdgeLabelInput {
+  width: 110px;
+  height: 28px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: var(--canvas-radius-control);
+  background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-root));
+  color: var(--text-primary);
+  font-size: 11px;
+  outline: none;
+  padding: 0 7px;
+}
+
+.canvasEdgeLabelInput:focus {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--canvas-focus-ring);
+}
+
+.canvasConnectorChoice {
+  white-space: nowrap;
+}
+
+.canvasFloatingBar > button.canvasConnectorChoice.isActive {
+  background: var(--accent);
+  color: var(--selection-text);
+}
+
+.canvasCorner {
+  position: absolute;
+  z-index: 22;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.canvasCornerLeft {
+  bottom: 10px;
+  left: 12px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.canvasCornerRight {
+  right: 12px;
+  bottom: 10px;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: var(--canvas-radius-card);
+  background: var(--canvas-inspector-bg);
+  box-shadow: 0 10px 26px var(--canvas-shadow);
+}
+
+.canvasCornerRight .canvasZoomValue {
+  min-width: 44px;
+  font-size: 11px;
+}
+
+.canvasInspector {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-left: 1px solid var(--canvas-toolbar-border);
+  background: var(--canvas-inspector-bg);
+  color: var(--text-primary);
+  overflow: auto;
+}
+
+.canvasInspectorSection {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 72%, transparent);
+  border-radius: var(--canvas-radius-card);
+  background: var(--canvas-inspector-section);
+}
+
+.canvasInspectorEyebrow {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.canvasInspectorField span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.canvasInspectorField {
+  display: grid;
+  gap: 6px;
+}
+
+.canvasPrimaryAction,
+.canvasWideAction {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.canvasPrimaryAction {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--selection-text);
+  padding: 0 10px;
+}
+
+.canvasPrimaryAction:hover {
+  background: color-mix(in srgb, var(--accent) 84%, var(--text-primary));
+}
+
+.canvasPrimaryAction:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.canvasWideAction {
+  width: 100%;
+}
+
+.canvasSendPanel p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.canvasSendPanel select {
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 1120px) {
+  .canvasToolGroup button span,
+  .canvasPrimaryAction span {
+    display: none;
+  }
+
+  .canvasWorkspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.canvasModalBackdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, #000 28%, transparent);
+}
+
+.canvasRenameModal {
+  display: grid;
+  width: min(420px, calc(100vw - 40px));
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: var(--canvas-radius-card);
+  background: var(--canvas-inspector-bg);
+  box-shadow: 0 22px 60px var(--canvas-shadow);
+  color: var(--text-primary);
+}
+
+.canvasRenameModal header,
+.canvasRenameModal footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.canvasRenameModal h2 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.canvasRenameModal label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.canvasRenameModal input,
+.canvasRenameModal select {
+  height: 36px;
+  min-width: 0;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: var(--canvas-radius-control);
+  background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-root));
+  color: var(--text-primary);
+  outline: none;
+  padding: 0 10px;
+}
+
+.canvasRenameModal button {
+  min-width: 72px;
+  height: 32px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: 5px;
+  background: var(--canvas-toolbar-control);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.canvasRenameModal header button {
+  min-width: 32px;
+  font-size: 18px;
+}
+
+.canvasRenameModal button[type="submit"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--selection-text);
+}
+
+.canvasTransferNote {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.canvasDeleteModal p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.canvasDeleteModal button.dangerCanvasButton {
+  border-color: color-mix(in srgb, var(--danger) 60%, var(--canvas-toolbar-border));
+  background: color-mix(in srgb, var(--danger) 14%, var(--canvas-toolbar-control));
+  color: var(--danger);
+}
+
+.canvasTrashModal {
+  width: min(520px, calc(100vw - 40px));
+}
+
+.canvasTrashModal header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.canvasTrashModal header span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.canvasTrashList {
+  display: grid;
+  max-height: min(420px, 60vh);
+  overflow: auto;
+  gap: 6px;
+}
+
+.canvasTrashList > p {
+  margin: 12px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.canvasTrashList article {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: var(--canvas-radius-control);
+  background: color-mix(in srgb, var(--bg-primary) 76%, transparent);
+}
+
+.canvasTrashList article > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.canvasTrashList article strong,
+.canvasTrashList article span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvasTrashList article strong {
+  font-size: 12px;
+}
+
+.canvasTrashList article span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.canvasTrashList article > button {
+  min-width: 58px;
+  flex: 0 0 auto;
+}

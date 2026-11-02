@@ -1,3 +1,4 @@
+import { readAppCss } from "./lib/read-app-css.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
@@ -8,7 +9,7 @@ const [appSource, appCss, settingsSource, tabsSource, typesSource, manualSource]
       readFile("src/App.tsx", "utf8"),
       readFile("src/storedStateModel.ts", "utf8"),
     ]).then((sources) => sources.join("\n")),
-    readFile("src/App.css", "utf8"),
+    readAppCss(),
     readFile("src/components/dialogs/FileSettings.tsx", "utf8"),
     readFile("src/components/layout/DocumentTabs.tsx", "utf8"),
     readFile("src/types.ts", "utf8"),

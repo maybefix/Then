@@ -1,3 +1,4 @@
+import { readAppCss } from "./lib/read-app-css.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import ts from "typescript";
@@ -5,7 +6,7 @@ import ts from "typescript";
 const [app, css, controls, portal, packageJson, packageLock, tauriConfig, cargoToml] =
   await Promise.all([
     readFile("src/App.tsx", "utf8"),
-    readFile("src/App.css", "utf8"),
+    readAppCss(),
     readFile("src/components/layout/WindowControls.tsx", "utf8"),
     readFile("src/components/startup/StartupPortal.tsx", "utf8"),
     readFile("package.json", "utf8").then(JSON.parse),
