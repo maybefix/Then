@@ -194,6 +194,7 @@ import { createWorkspaceTreeActions } from "./workspaceTreeActions";
 import { createProjectSearchActions } from "./projectSearchActions";
 import { createHeadingMoveActions } from "./headingMoveActions";
 import { createTemplateActions } from "./templateActions";
+import { nextCanvasPlacement } from "./canvasPlacement";
 import { countDisplayCharacters } from "./editor/displayCharacterCount";
 import { referenceCardKey, upsertRecentReference, upsertRecentReferences, nextReferenceZIndex } from "./referenceCardModel";
 import {
@@ -944,18 +945,6 @@ async function ensureCanvasBoard(
   const boards = await listCanvasBoards(scope, rootPath);
   if (boards.length > 0) return boards[0];
   return await createCanvasBoard(scope, rootPath, name);
-}
-
-function nextCanvasPlacement(board: JsonCanvasDocument) {
-  const textNodes = board.nodes.filter((node) => node.type === "text");
-  if (textNodes.length === 0) return { x: 120, y: 120 };
-  const last = textNodes.reduce((rightmost, node) =>
-    node.x + node.width > rightmost.x + rightmost.width ? node : rightmost,
-  );
-  return {
-    x: last.x + 32,
-    y: last.y + 32,
-  };
 }
 
 export default function App() {
