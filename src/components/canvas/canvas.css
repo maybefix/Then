@@ -159,7 +159,7 @@
 .canvasToolGroup button.isActive,
 .canvasIconButton.isActive {
   background: var(--accent);
-  color: var(--selection-text);
+  color: var(--on-accent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 68%, transparent);
 }
 
@@ -603,7 +603,7 @@
 .canvasStylePopover button.isActive {
   border-color: var(--accent);
   background: var(--accent);
-  color: var(--selection-text);
+  color: var(--on-accent);
 }
 
 .canvasHelpPopover ul {
@@ -1261,7 +1261,7 @@
 
 .canvasFloatingBar .canvasStyleHost > button.isActive {
   background: var(--accent);
-  color: var(--selection-text);
+  color: var(--on-accent);
 }
 
 .canvasFloatingBar svg,
@@ -1330,7 +1330,7 @@
 
 .canvasFloatingBar > button.canvasConnectorChoice.isActive {
   background: var(--accent);
-  color: var(--selection-text);
+  color: var(--on-accent);
 }
 
 .canvasCorner {
@@ -1418,7 +1418,7 @@
 .canvasPrimaryAction {
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: var(--selection-text);
+  color: var(--on-accent);
   padding: 0 10px;
 }
 
@@ -1529,7 +1529,7 @@
 .canvasRenameModal button[type="submit"] {
   border-color: var(--accent);
   background: var(--accent);
-  color: var(--selection-text);
+  color: var(--on-accent);
 }
 
 .canvasTransferNote {
