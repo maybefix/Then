@@ -111,6 +111,12 @@ import {
 import { createEditorClipboardActions } from "./editor/editorClipboardActions";
 import {
   createScratchDocumentTab,
+  createEmptyDocumentTab,
+  withoutEmptyTabs,
+  insertTabAfter,
+  CLOSED_DOCUMENT_TAB_LIMIT,
+  isClosedTabInWorkspace,
+  createFileDocumentTab,
   isDirtyDocumentTab,
   scratchFileName,
   type ClosedDocumentTab,
@@ -188,9 +194,12 @@ import { createWorkspaceTreeActions } from "./workspaceTreeActions";
 import { createProjectSearchActions } from "./projectSearchActions";
 import { createHeadingMoveActions } from "./headingMoveActions";
 import { createTemplateActions } from "./templateActions";
+import { createSystemFontLoader } from "./systemFonts";
+import { useSystemFonts } from "./useSystemFonts";
+import { nextCanvasPlacement } from "./canvasPlacement";
+import { countDisplayCharacters } from "./editor/displayCharacterCount";
+import { referenceCardKey, upsertRecentReference, upsertRecentReferences, nextReferenceZIndex } from "./referenceCardModel";
 import {
-  MAX_RECENT_REFERENCES,
-  WHITESPACE_PATTERN,
   clampReferenceCardToStage,
   createDefaultState,
   fitReferenceLayoutToStage,
@@ -205,7 +214,6 @@ import {
   normalizeState,
   referenceInitialSize,
   snapshotId,
-  toCssFontFamilyValue,
   type ProofreadIgnoredByPath,
 } from "./storedStateModel";
 import {
@@ -225,13 +233,11 @@ import type {
 } from "./editor/ast/types";
 import type {
   AppState,
-  BinderCardState,
   BreadcrumbDropTarget,
   DocumentTab,
   EditorSettings,
   FileProgressStatus,
   FlatOutlineItem,
-  FontOption,
   IdeaOriginRef,
   IdeaReferenceLink,
   IdeaThread,
@@ -246,7 +252,6 @@ import type {
   WorkStatus,
   ProjectFolder,
   ProjectImportReport,
-  ReferenceCardState,
   ReferenceFileInfo,
   ReferenceLayout,
   ReferenceScope,
@@ -312,8 +317,6 @@ const defaultReferenceLayout: ReferenceLayout = {
   recent: [],
   ideaThreads: [],
 };
-const PINNED_REFERENCE_Z_BASE = 10000;
-const NORMAL_REFERENCE_Z_LIMIT = PINNED_REFERENCE_Z_BASE - 1;
 const PROJECT_AST_INDEX_BATCH_SIZE = 12;
 
 type WorkspaceSearchScope = "file" | "project" | "library";
@@ -511,64 +514,6 @@ const defaultPlotCards: PlotCard[] = [
   },
 ];
 
-function createFontOptions(fontFamilies: string[]): FontOption[] {
-  const uniqueFamilies = new Map<string, FontOption>();
-
-  for (const fontFamily of fontFamilies) {
-    const label = fontFamily.trim();
-    if (!label || uniqueFamilies.has(label)) continue;
-    uniqueFamilies.set(label, {
-      label,
-      cssFamily: toCssFontFamilyValue(label),
-    });
-  }
-
-  return Array.from(uniqueFamilies.values()).sort((left, right) =>
-    left.label.localeCompare(right.label),
-  );
-}
-
-const fallbackFontFamilies = [
-  "Noto Serif JP",
-  "Yu Mincho",
-  "Yu Gothic",
-  "BIZ UDMincho",
-  "BIZ UDPMincho",
-  "BIZ UDGothic",
-  "BIZ UDPGothic",
-  "Consolas",
-  "Segoe UI",
-];
-
-const fallbackFontOptions = createFontOptions(fallbackFontFamilies);
-
-/** 文書を一つも開いていない状態を表すタブ。タブ帯には出ない。 */
-function createEmptyDocumentTab(): DocumentTab {
-  const id = `empty-${Date.now()}`;
-  return {
-    ...createScratchDocumentTab("", { id, documentKey: id, saveStatus: "saved" }),
-    kind: "empty",
-    name: "",
-  };
-}
-
-const withoutEmptyTabs = (tabs: DocumentTab[]) => tabs.filter((tab) => tab.kind !== "empty");
-
-/** 新しいタブは、アクティブなタブのすぐ右に置く。基準が見つからなければ末尾。 */
-function insertTabAfter(tabs: DocumentTab[], nextTab: DocumentTab, anchorTabId: string | null) {
-  const visible = withoutEmptyTabs(tabs);
-  const anchorIndex = anchorTabId ? visible.findIndex((tab) => tab.id === anchorTabId) : -1;
-  if (anchorIndex < 0) return [...visible, nextTab];
-  return [...visible.slice(0, anchorIndex + 1), nextTab, ...visible.slice(anchorIndex + 1)];
-}
-
-const CLOSED_DOCUMENT_TAB_LIMIT = 10;
-
-function isClosedTabInWorkspace(record: ClosedDocumentTab, workspacePath: string | null) {
-  if (!record.workspacePath || !workspacePath) return record.workspacePath === workspacePath;
-  return isSamePath(record.workspacePath, workspacePath);
-}
-
 function isPathInsideFolder(path: string, folderPath: string): boolean {
   const normalizedPath = normalizePathForCompare(path);
   const normalizedFolder = normalizePathForCompare(folderPath);
@@ -576,24 +521,6 @@ function isPathInsideFolder(path: string, folderPath: string): boolean {
     normalizedPath !== normalizedFolder &&
     normalizedPath.startsWith(`${normalizedFolder}\\`)
   );
-}
-
-function createFileDocumentTab(document: TextDocument): DocumentTab {
-  return {
-    id: `file:${document.path}`,
-    kind: "file",
-    path: document.path,
-    fileId: document.fileId ?? null,
-    contentHash: document.contentHash ?? null,
-    name: document.name,
-    markdown: document.content,
-    savedMarkdown: document.content,
-    editorRevision: null,
-    saveStatus: "saved",
-    documentKey: document.path,
-    activeOutlineLine: null,
-    viewportState: null,
-  };
 }
 
 type LoadedWorkspaceDocumentTabs = {
@@ -645,15 +572,6 @@ async function loadWorkspaceDocumentTabs(
     ),
     missingNames,
   };
-}
-
-/**
- * 文字数カウント。`includeWhitespace` が false の場合は空白文字を除外する。
- * サロゲートペアを 1 文字として数えるため Array.from を用いる。
- */
-function countDisplayCharacters(text: string, includeWhitespace: boolean): number {
-  const target = includeWhitespace ? text : text.replace(WHITESPACE_PATTERN, "");
-  return Array.from(target).length;
 }
 
 function documentAstToText(documentAst: DocumentAst): string {
@@ -711,40 +629,6 @@ async function restoreSnapshotTreeOrder(
 }
 
 
-function referenceCardKey(card: Pick<ReferenceCardState, "sourcePath" | "scope">): string {
-  return referenceKey(card.sourcePath, card.scope);
-}
-
-function upsertRecentReference(
-  layout: ReferenceLayout,
-  file: ReferenceFileInfo,
-): ReferenceLayout {
-  const key = referenceFileKey(file);
-  return {
-    ...layout,
-    recent: [
-      file,
-      ...layout.recent.filter((item) => referenceFileKey(item) !== key),
-    ].slice(0, MAX_RECENT_REFERENCES),
-  };
-}
-
-function upsertRecentReferences(
-  layout: ReferenceLayout,
-  files: ReferenceFileInfo[],
-): ReferenceLayout {
-  return files.reduce((current, file) => upsertRecentReference(current, file), layout);
-}
-
-function nextReferenceZIndex(cards: BinderCardState[], pinned: boolean): number {
-  const maxZ = cards
-    .filter((card) => (pinned ? card.pinned : !card.pinned))
-    .reduce((max, card) => Math.max(max, card.zIndex), pinned ? PINNED_REFERENCE_Z_BASE : 0);
-  return pinned
-    ? Math.max(PINNED_REFERENCE_Z_BASE, maxZ + 1)
-    : Math.min(NORMAL_REFERENCE_Z_LIMIT, maxZ + 1);
-}
-
 async function loadStoredState(): Promise<AppState> {
   if (isTauriRuntime()) {
     const state = await invoke<AppState | null>("load_app_state");
@@ -766,15 +650,7 @@ async function saveStoredState(state: AppState): Promise<void> {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-async function loadSystemFonts(): Promise<FontOption[]> {
-  if (isTauriRuntime()) {
-    const fonts = await invoke<string[]>("get_system_fonts");
-    const options = createFontOptions(fonts);
-    return options.length > 0 ? options : fallbackFontOptions;
-  }
-
-  return fallbackFontOptions;
-}
+const loadSystemFonts = createSystemFontLoader(isTauriRuntime);
 
 async function loadWorkspaceSnippets(folderPath: string): Promise<IdeaThread[]> {
   if (!isTauriRuntime()) return defaultIdeaThreads();
@@ -1032,18 +908,6 @@ async function ensureCanvasBoard(
   return await createCanvasBoard(scope, rootPath, name);
 }
 
-function nextCanvasPlacement(board: JsonCanvasDocument) {
-  const textNodes = board.nodes.filter((node) => node.type === "text");
-  if (textNodes.length === 0) return { x: 120, y: 120 };
-  const last = textNodes.reduce((rightmost, node) =>
-    node.x + node.width > rightmost.x + rightmost.width ? node : rightmost,
-  );
-  return {
-    x: last.x + 32,
-    y: last.y + 32,
-  };
-}
-
 export default function App() {
   const referenceLayoutLoadedRootRef = useRef<string | null>(null);
   // 読み込んだままのレイアウト。これと同じあいだは保存しない。
@@ -1222,7 +1086,6 @@ export default function App() {
     chooseAppDialogOption,
     chooseAppDialog,
   } = useAppDialog();
-  const [systemFonts, setSystemFonts] = useState<FontOption[]>(fallbackFontOptions);
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsedState] = useState(false);
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsedState] = useState(false);
   const [isRightSidebarWide, setIsRightSidebarWideState] = useState(false);
@@ -3263,21 +3126,7 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {
-    let isCancelled = false;
-
-    loadSystemFonts()
-      .then((fonts) => {
-        if (!isCancelled) setSystemFonts(fonts);
-      })
-      .catch(() => {
-        if (!isCancelled) setSystemFonts(fallbackFontOptions);
-      });
-
-    return () => {
-      isCancelled = true;
-    };
-  }, []);
+  const systemFonts = useSystemFonts(loadSystemFonts);
 
   useEffect(() => {
     if (!isHydrated) return;

@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import ts from "typescript";
+import { build } from "esbuild";
 
-const source = await readFile("src/editor/documentTabState.ts", "utf8");
-const code = ts.transpileModule(source, {
-  compilerOptions: {
-    module: ts.ModuleKind.ESNext,
-    target: ts.ScriptTarget.ES2022,
-  },
-}).outputText;
-const moduleUrl = `data:text/javascript;base64,${Buffer.from(code).toString("base64")}`;
+// 文書タブモデルの実行時の依存先も含めて読み込む。検証する入出力は変えない。
+const bundled = await build({
+  entryPoints: ["src/editor/documentTabState.ts"],
+  bundle: true,
+  format: "esm",
+  platform: "neutral",
+  write: false,
+});
+const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`;
 const { reconcileSavedDocumentTabs } = await import(moduleUrl);
 
 const sourceTab = {

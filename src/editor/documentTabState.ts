@@ -1,3 +1,4 @@
+import { isSamePath } from "../utils/projectTree";
 import type {
   DocumentTab,
   TextDocument,
@@ -87,3 +88,48 @@ export type ClosedDocumentTab = {
   index: number;
   viewportState: DocumentTab["viewportState"];
 };
+
+/** 文書を一つも開いていない状態を表すタブ。タブ帯には出ない。 */
+export function createEmptyDocumentTab(): DocumentTab {
+  const id = `empty-${Date.now()}`;
+  return {
+    ...createScratchDocumentTab("", { id, documentKey: id, saveStatus: "saved" }),
+    kind: "empty",
+    name: "",
+  };
+}
+
+export const withoutEmptyTabs = (tabs: DocumentTab[]) => tabs.filter((tab) => tab.kind !== "empty");
+
+/** 新しいタブは、アクティブなタブのすぐ右に置く。基準が見つからなければ末尾。 */
+export function insertTabAfter(tabs: DocumentTab[], nextTab: DocumentTab, anchorTabId: string | null) {
+  const visible = withoutEmptyTabs(tabs);
+  const anchorIndex = anchorTabId ? visible.findIndex((tab) => tab.id === anchorTabId) : -1;
+  if (anchorIndex < 0) return [...visible, nextTab];
+  return [...visible.slice(0, anchorIndex + 1), nextTab, ...visible.slice(anchorIndex + 1)];
+}
+
+export const CLOSED_DOCUMENT_TAB_LIMIT = 10;
+
+export function isClosedTabInWorkspace(record: ClosedDocumentTab, workspacePath: string | null) {
+  if (!record.workspacePath || !workspacePath) return record.workspacePath === workspacePath;
+  return isSamePath(record.workspacePath, workspacePath);
+}
+
+export function createFileDocumentTab(document: TextDocument): DocumentTab {
+  return {
+    id: `file:${document.path}`,
+    kind: "file",
+    path: document.path,
+    fileId: document.fileId ?? null,
+    contentHash: document.contentHash ?? null,
+    name: document.name,
+    markdown: document.content,
+    savedMarkdown: document.content,
+    editorRevision: null,
+    saveStatus: "saved",
+    documentKey: document.path,
+    activeOutlineLine: null,
+    viewportState: null,
+  };
+}
