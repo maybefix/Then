@@ -194,9 +194,9 @@ import { createWorkspaceTreeActions } from "./workspaceTreeActions";
 import { createProjectSearchActions } from "./projectSearchActions";
 import { createHeadingMoveActions } from "./headingMoveActions";
 import { createTemplateActions } from "./templateActions";
+import { countDisplayCharacters } from "./editor/displayCharacterCount";
 import { referenceCardKey, upsertRecentReference, upsertRecentReferences, nextReferenceZIndex } from "./referenceCardModel";
 import {
-  WHITESPACE_PATTERN,
   clampReferenceCardToStage,
   createDefaultState,
   fitReferenceLayoutToStage,
@@ -602,15 +602,6 @@ async function loadWorkspaceDocumentTabs(
     ),
     missingNames,
   };
-}
-
-/**
- * 文字数カウント。`includeWhitespace` が false の場合は空白文字を除外する。
- * サロゲートペアを 1 文字として数えるため Array.from を用いる。
- */
-function countDisplayCharacters(text: string, includeWhitespace: boolean): number {
-  const target = includeWhitespace ? text : text.replace(WHITESPACE_PATTERN, "");
-  return Array.from(target).length;
 }
 
 function documentAstToText(documentAst: DocumentAst): string {
