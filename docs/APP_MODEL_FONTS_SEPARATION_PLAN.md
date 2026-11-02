@@ -18,8 +18,8 @@ App.tsxのA「小さな計算・モデル補助」とB「フォント一覧」�
 | 4 | 影響範囲 | 済。「前」の94本は92成功・2失敗 |
 | 5 | 案 | 推奨案を作成済み |
 | 6 | 人の確認（確認1） | 済。Bのstate・Effectも専用Hookへ移す（2026-11-02） |
-| 7 | 実施 | 未着手 |
-| 8 | 自動テストの前後比較 | 未着手 |
+| 7 | 実施 | 済（Aと、state・Effectを含むB） |
+| 8 | 自動テストの前後比較 | 18項目・不具合検知は済。「後」の一式を実行中 |
 | 9 | 実機確認 | 未着手 |
 | 10 | 完了（確認2） | 未着手 |
 
@@ -37,8 +37,10 @@ App.tsxのA「小さな計算・モデル補助」とB「フォント一覧」�
 | Canvasの追加位置 | 1,035〜1,045 | src/canvasPlacement.ts（新規） | 11 |
 | フォント一覧の整形・代替一覧 | 514〜543 | src/systemFonts.ts（新規） | 30 |
 | OSフォント一覧の取得 | 769〜777 | 同上 | 9 |
+| フォント一覧のstate（確認1で追加） | 1,225 | src/useSystemFonts.ts（新規） | 1 |
+| フォント取得のEffect（確認1で追加） | 3,266〜3,280 | 同上 | 15 |
 
-移動対象は、コメントと空行を含む136行。Aは97行、Bは39行。Appにはimportや取得関数を組み立てる行が増えるため、App全体の減少は136行より小さい。
+最終的な移動対象は、コメントと空行を含む152行。Aは97行、Bは確認1で追加したstate・Effectを含め55行。Appにはimportや取得関数の組み立て・Hookの呼び出しが加わり、不要なimportも外したため、実際の減少は151行になった。
 
 ### 調査で分かったこと
 
@@ -57,7 +59,7 @@ App.tsxのA「小さな計算・モデル補助」とB「フォント一覧」�
 - モデル補助: 配列や文字列を受け取り、タブ・履歴・座標・文字数などを返す小さな処理。
 - 代替フォント一覧: OSから一覧を得られないときや取得前に表示する9種類の候補。
 - IPC: 画面からRustへ処理を頼む呼び出し。今回動かすのはget_system_fontsの呼び出し窓口だけ。
-- Effect: Reactの描画後に自動実行する処理。フォント取得のEffectはAppの元の位置に残す。
+- Effect: Reactの描画後に自動実行する処理。フォント取得のEffectはHookの中に持ち、Appの元のEffect位置でHookを呼ぶ。
 
 ### 1. データの形
 
@@ -65,7 +67,7 @@ App.tsxのA「小さな計算・モデル補助」とB「フォント一覧」�
 |---|---|---|
 | DocumentTab | 本文、保存済み本文、パス、保存状態、表示位置など | 型はtypes.ts、配列とアクティブなタブはApp |
 | ReferenceLayout | 資料カード、最近の資料、Ideaの並び順 | 型はtypes.ts、状態はApp |
-| FontOption | 表示名labelとCSSの指定cssFamily | 型はtypes.ts、取得した配列systemFontsはApp |
+| FontOption | 表示名labelとCSSの指定cssFamily | 型はtypes.ts、取得した配列systemFontsはuseSystemFonts |
 | JsonCanvasDocument | nodesとedgesなど | 型はcanvasTypes.ts、今回移すのは追加位置の計算だけ |
 
 ### 2. 利用者の操作と内部の処理
@@ -121,12 +123,12 @@ Aの補助関数とBのフォント取得は、利用者の原稿や設定を保
 | 区分 | 読む／書く／呼ぶ関係 | 移動後 |
 |---|---|---|
 | A. Reactに依存しない処理 | タブモデルはtypes・createScratchDocumentTab・isSamePath、資料モデルはtypes・referenceFileKeys・MAX_RECENT_REFERENCES、文字数はWHITESPACE_PATTERN、座標はJsonCanvasDocumentを読む | それぞれの移動先でimport。新しいファイルはAppをimportしない |
-| B. state | openTabs・closedDocumentTabs・referenceLayout・systemFontsなどを操作側が書く | すべてAppに残す |
+| B. state | openTabs・closedDocumentTabs・referenceLayoutなどを操作側が書く。systemFontsは取得後に更新する | AのstateはAppに残し、systemFontsはHookへ移す |
 | C-1. タブの操作 | 起動・開く・閉じる・戻す・保存・回復から生成や配列計算を呼ぶ | 呼ぶ名前・場所・順序を保つ |
 | C-2. 資料の操作 | 資料やIdeaカードを開く・ピン留めする際に履歴・重なり順を呼ぶ | 操作はAppに残す |
 | C-3. 選択とCanvas | updateSelectionCharCountとsendIdea*ToCanvasから計算を呼ぶ | 操作と保存はAppに残す |
 | C-4. フォント取得 | isTauriRuntimeを読み、get_system_fontsを呼び、createFontOptionsで整形 | 実行環境の判定関数を引数で受ける取得関数を作る |
-| D. Effect | Appの3,266〜3,280行。初回取得、失敗時の代替、アンマウント後の更新を止める | 内容・位置・依存配列を保つ |
+| D. Effect | Appの3,266〜3,280行。初回取得、失敗時の代替、アンマウント後の更新を止める | 内容と依存配列を保ってHookへ移す。Appの呼び出し位置で登録順を保つ |
 | E. 作品を開く経路 | 空タブ・ファイルタブの生成を呼ぶ。フォント一覧は作品に依存しない | stateの反映と保存は変えない |
 | F. JSX | DocumentTabsなどの既存props、SettingsModalへsystemFontsを渡す | props・条件・配置を変えない |
 | G. App外とのやり取り | フォント取得のみget_system_fontsを呼ぶ。別窓のイベント購読は対象外 | IPC名・取得回数・ブラウザ分岐を保つ |
@@ -140,8 +142,8 @@ Aの補助関数とBのフォント取得は、利用者の原稿や設定を保
 
 | 区分 | ファイル |
 |---|---|
-| 必ず変更 | src/App.tsx、src/editor/documentTabState.ts、scripts/test-document-tabs.mjs、package.json、この手順書 |
-| 新規 | src/referenceCardModel.ts、src/editor/displayCharacterCount.ts、src/canvasPlacement.ts、src/systemFonts.ts、回帰テストscripts/test-app-model-fonts.mjs |
+| 必ず変更 | src/App.tsx、src/editor/documentTabState.ts、scripts/test-document-tabs.mjs、scripts/test-heading-extract-state.mjs、package.json、この手順書 |
+| 新規 | src/referenceCardModel.ts、src/editor/displayCharacterCount.ts、src/canvasPlacement.ts、src/systemFonts.ts、src/useSystemFonts.ts、回帰テストscripts/test-app-model-fonts.mjs |
 | 完了時に更新 | docs/APP_RESPONSIBILITY_MAP.md（現在の配置・完了した範囲） |
 | 新しい問題が見つかった場合だけ | docs/KNOWN_ISSUES.md（今回の分離では修正せず記録） |
 | 変更しない | Rust、画面部品・CSS、types.ts、storedStateModel.ts、referenceFileKeys.ts、editor/ast/characterCount.ts、本文の保存・作品切り替え・復元 |
@@ -155,7 +157,7 @@ Aの補助関数とBのフォント取得は、利用者の原稿や設定を保
 | 選択文字数 | 低 | 選択表示の計算のみ。全本文の計数方法は変えない |
 | Canvasの座標 | 低〜中 | 追加位置と重なり方に影響。ボードの取得・保存は動かさない |
 | フォント一覧 | 中 | 設定画面の選択肢、空一覧・取得失敗・ブラウザ分岐に影響 |
-| stateやEffectの所有者 | 推奨案では変更なし | ここまで移すと非同期処理の寿命やHookの順序の確認が増える |
+| フォントのstateやEffectの所有者 | 中 | 確認1でHookへ移すことが選ばれた。非同期処理の寿命、StrictMode、Effectの順序を確認する |
 
 ### 4-3. 想定する回帰と既存テスト
 
@@ -187,22 +189,22 @@ suite.mjsの既定どおり、Rustを使うtest:sidebar-file-moveは除外する
 
 ### 5-1. 推奨する線引き
 
-AとBの計算・取得処理を分離し、Appにstate・ref・Effect・操作・保存・JSXを残す。リファクタリングは、責務の配置と依存の明示に限る。不要な共通化や挙動の改善は行わない。
+確認1で決まった範囲は、Aの計算処理と、Bの整形・取得・state・Effectの分離。Aのstate・ref・Effect・操作・保存・JSXはAppに残す。Bは専用HookをAppの元のEffect位置で呼ぶ。リファクタリングは、責務の配置と依存の明示に限り、不要な共通化や挙動の改善は行わない。
 
 ### 5-2. Bの取得関数の形
 
 新しいsystemFonts.tsに、一覧の整形・代替一覧とcreateSystemFontLoader(isTauriRuntime)を置く。createSystemFontLoaderは、元のloadSystemFontsを中身そのままで内側に持ち、返す。
 
-Appは元の取得関数があった位置で、const loadSystemFonts = createSystemFontLoader(isTauriRuntime)と組み立てる。元のEffectは同じ名前のloadSystemFontsを呼び続ける。isTauriRuntimeをAppから取得側へ引数で渡すため、Appをimportしたり、実行環境の判定を重複実装したりしない。
+Appは元の取得関数があった位置で、const loadSystemFonts = createSystemFontLoader(isTauriRuntime)と組み立てる。Hookへ移した元のEffectは、渡された同じ取得関数を呼び続ける。isTauriRuntimeをAppから取得側へ引数で渡すため、Appをimportしたり、実行環境の判定を重複実装したりしない。
 
 - フォント取得の失敗は引き続きAppのEffectのcatchが扱う。
 - systemFontsの初期値と設定画面へのpropsは同じ。
-- フォント一覧の取得をHookへ移す案は、確認でそちらを選んだ場合に範囲を更新してから実施する。
+- stateとEffectはuseSystemFontsへ移し、Appはconst systemFonts = useSystemFonts(loadSystemFonts)で一覧を受け取る。
 
-### 決めてほしいこと（確認1）
+### 確認1で提示した選択肢
 
 1. 推奨案: AとBの計算・取得を上記の場所へ分離し、state・EffectはAppに残す。スキルの初案に沿い、更新順序を変えずに責務を分けられる。
-2. 代案: BはsystemFontsのstateと取得Effectも専用Hookへ移す。最初の責務マップのBに近いが、スキルの初案から範囲を広げるため、Hookの実行位置と非同期結果の寿命も確認対象に加える。
+2. 採用された代案: BはsystemFontsのstateと取得Effectも専用Hookへ移す。最初の責務マップのBに近いが、スキルの初案から範囲を広げるため、Hookの実行位置と非同期結果の寿命も確認対象に加える。
 
 ### テストの直し方と追加する確認
 
@@ -238,11 +240,56 @@ stateの配置がHookへ移る点は、スキルの初案からの変更とし�
 
 ## 工程7: 実施
 
-未着手。「前」の一式が終了後、確認1で決まった範囲を実施する。コミット、Appの行数の変化、移動検証、意図した変更点を記録する。
+| コミット | 内容 | App.tsxの行数 |
+|---|---|---|
+| 5f61354 | 資料カードのキー・履歴・重なり順をreferenceCardModel.tsへ分離 | 8,603 → 8,565 |
+| 4e2b032 | タブの生成・挿入・作品判定をdocumentTabState.tsへ追加。対応テストの参照先だけ変更 | → 8,526 |
+| f86fee4 | 選択文字数をdisplayCharacterCount.tsへ分離 | → 8,517 |
+| e1b53bf | Canvas追加位置をcanvasPlacement.tsへ分離 | → 8,506 |
+| 543dbef | フォント整形・取得をsystemFonts.ts、state・EffectをuseSystemFonts.tsへ分離 | → 8,452 |
+| 6bcc496 | 回帰テストtest:app-model-fontsを追加 | 変更なし |
+
+各まとまりで型検査と関係するテストを実行し、成功した。移動はmove-linesのdry-runで先頭・末尾を確認してから実施し、verify-moveで元と突き合わせた。チェックポイントからの全体の照合でもlostは0。Appへ足したのはimport、フォント取得関数の組み立て、Hookの呼び出しで、計算処理の中身を変えていない。
+
+stateとEffectをHookへ移す際、HookはAppの元のフォント取得Effectの位置で呼ぶようにした。構文解析でAppのEffectとHookに移したEffectを実行位置の順に並べ、52個すべての本文と順序が変更前と同じことを照合した。
+
+JSX・保存処理・作品切り替え・Rustは変更していない。共有定数の置き場所やフォント別名の規則も変えていない。変更ファイルはCRLFで保存している。
 
 ## 工程8: 自動テスト
 
-未着手。変更前の補助関数を一時ファイルで実行する確認は13項目成功。これは変更後の検証結果ではない。移動後のテストと意図的な不具合による検知、全体の前後比較を別に記録する。
+### 足した回帰テスト
+
+npm run test:app-model-fonts。モデル補助とフォントの13項目、実際のReactでHookを描画する5項目、合計18項目が成功した。
+
+モデル補助・取得の期待値は、変更前のAppから抽出した関数でも確認済み。Hookの検証では、Reactそのものを使って描画し、stateのsetterを呼んだ回数だけ観測する薄い包みを挟んだ。アンマウント後の更新はReactが無視して画面に出ないため、setterを呼んでいないことも確かめている。
+
+| Hookの確認 | 結果 |
+|---|---|
+| 初期の代替一覧、非同期取得成功、再描画しても再取得しない | 成功 |
+| 取得失敗時に代替一覧を保つ | 成功 |
+| アンマウント後に成功／失敗してもstateを更新しない | 成功 |
+| 新しいHookの起動後、古いHookの応答が新しい状態を汚さない | 成功 |
+| StrictModeのsetup・cleanup・再setupで、最初の取得結果を反映しない | 成功 |
+
+### テストが効くことの確認
+
+| 意図的に入れた変更 | 検知結果 | 復元 |
+|---|---|---|
+| 最近の資料の上限を30件から31件へずらす | 31 !== 30で失敗 | 元に戻した |
+| Hookの成功応答から取り消しの条件を外す | アンマウント後にsetterを呼んだというassertionで失敗 | 元に戻した |
+
+復元後は18項目すべて成功。意図的な不具合はコミットしていない。記録はtmp/app-model-fonts-20261102/mutation-results.json。
+
+### テスト一式の前後比較
+
+「後」の一式は6bcc496で実行。build成功、95本中92本成功・3本失敗だった。終了時のQA Then・QA WebView2・テストEdge・テストnodeはすべて0。
+
+前からの2本に加え、test:heading-extract-stateが新しく失敗した。このテストはdocumentTabState.tsを単独でTypeScript変換し、data URLから読み込んでいた。今回モデルへ加わった実行時の依存先../utils/projectTreeをその方法では解決できなかった。単独で2回実行し、同じ失敗を確認した。
+
+テストの読み込みをesbuildで依存先を含めて束ねる形へ変更した。検証する入力・期待値・assertionは変更していないことを、基準コミットのconst sourceTab以降と照合した。修正後は単独で2回成功した。
+
+この対応で製品コードは変更していない。全体一式の記録suite-after.jsonは残し、修正したテストをsuite.mjsで再実行する。全体と再実行の両方を出所として明記した最終集計を作り、beforeとの比較に使う。
+
 
 ## 工程9: 実機確認の予定
 
