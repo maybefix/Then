@@ -194,6 +194,8 @@ import { createWorkspaceTreeActions } from "./workspaceTreeActions";
 import { createProjectSearchActions } from "./projectSearchActions";
 import { createHeadingMoveActions } from "./headingMoveActions";
 import { createTemplateActions } from "./templateActions";
+import { createSystemFontLoader } from "./systemFonts";
+import { useSystemFonts } from "./useSystemFonts";
 import { nextCanvasPlacement } from "./canvasPlacement";
 import { countDisplayCharacters } from "./editor/displayCharacterCount";
 import { referenceCardKey, upsertRecentReference, upsertRecentReferences, nextReferenceZIndex } from "./referenceCardModel";
@@ -212,7 +214,6 @@ import {
   normalizeState,
   referenceInitialSize,
   snapshotId,
-  toCssFontFamilyValue,
   type ProofreadIgnoredByPath,
 } from "./storedStateModel";
 import {
@@ -237,7 +238,6 @@ import type {
   EditorSettings,
   FileProgressStatus,
   FlatOutlineItem,
-  FontOption,
   IdeaOriginRef,
   IdeaReferenceLink,
   IdeaThread,
@@ -514,37 +514,6 @@ const defaultPlotCards: PlotCard[] = [
   },
 ];
 
-function createFontOptions(fontFamilies: string[]): FontOption[] {
-  const uniqueFamilies = new Map<string, FontOption>();
-
-  for (const fontFamily of fontFamilies) {
-    const label = fontFamily.trim();
-    if (!label || uniqueFamilies.has(label)) continue;
-    uniqueFamilies.set(label, {
-      label,
-      cssFamily: toCssFontFamilyValue(label),
-    });
-  }
-
-  return Array.from(uniqueFamilies.values()).sort((left, right) =>
-    left.label.localeCompare(right.label),
-  );
-}
-
-const fallbackFontFamilies = [
-  "Noto Serif JP",
-  "Yu Mincho",
-  "Yu Gothic",
-  "BIZ UDMincho",
-  "BIZ UDPMincho",
-  "BIZ UDGothic",
-  "BIZ UDPGothic",
-  "Consolas",
-  "Segoe UI",
-];
-
-const fallbackFontOptions = createFontOptions(fallbackFontFamilies);
-
 function isPathInsideFolder(path: string, folderPath: string): boolean {
   const normalizedPath = normalizePathForCompare(path);
   const normalizedFolder = normalizePathForCompare(folderPath);
@@ -681,15 +650,7 @@ async function saveStoredState(state: AppState): Promise<void> {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-async function loadSystemFonts(): Promise<FontOption[]> {
-  if (isTauriRuntime()) {
-    const fonts = await invoke<string[]>("get_system_fonts");
-    const options = createFontOptions(fonts);
-    return options.length > 0 ? options : fallbackFontOptions;
-  }
-
-  return fallbackFontOptions;
-}
+const loadSystemFonts = createSystemFontLoader(isTauriRuntime);
 
 async function loadWorkspaceSnippets(folderPath: string): Promise<IdeaThread[]> {
   if (!isTauriRuntime()) return defaultIdeaThreads();
@@ -1125,7 +1086,6 @@ export default function App() {
     chooseAppDialogOption,
     chooseAppDialog,
   } = useAppDialog();
-  const [systemFonts, setSystemFonts] = useState<FontOption[]>(fallbackFontOptions);
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsedState] = useState(false);
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsedState] = useState(false);
   const [isRightSidebarWide, setIsRightSidebarWideState] = useState(false);
@@ -3166,21 +3126,7 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {
-    let isCancelled = false;
-
-    loadSystemFonts()
-      .then((fonts) => {
-        if (!isCancelled) setSystemFonts(fonts);
-      })
-      .catch(() => {
-        if (!isCancelled) setSystemFonts(fallbackFontOptions);
-      });
-
-    return () => {
-      isCancelled = true;
-    };
-  }, []);
+  const systemFonts = useSystemFonts(loadSystemFonts);
 
   useEffect(() => {
     if (!isHydrated) return;
