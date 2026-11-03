@@ -41,6 +41,15 @@ const {
 // 既定の Idea のスレッドが作った時刻を持つので、比べられるように時刻を止める。
 Date.now = () => 1_700_000_000_000;
 
+// Both new families retain all four mode IDs across JSON save/load cycles.
+for (const theme of ["aplil-light", "aplil-dark", "blossom-light", "blossom-dark"]) {
+  const state = structuredClone(createDefaultState());
+  state.settings.theme = theme;
+  const restored = normalizeState(JSON.parse(JSON.stringify(state)));
+  assert.equal(restored.settings.theme, theme);
+  assert.deepEqual(restored, state, `${theme}: save/load preserves the manuscript and settings`);
+}
+
 // ---------------------------------------------------------------------------
 // 保存状態: 空や壊れた値からでも、全項目がそろう
 // ---------------------------------------------------------------------------

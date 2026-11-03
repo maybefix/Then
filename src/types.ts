@@ -243,6 +243,10 @@ export const appThemeValues = [
   "violet-dark",
   "rose-light",
   "rose-dark",
+  "aplil-light",
+  "aplil-dark",
+  "blossom-light",
+  "blossom-dark",
 ] as const;
 
 export type AppTheme = (typeof appThemeValues)[number];

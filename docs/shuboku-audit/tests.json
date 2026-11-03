@@ -1,0 +1,183 @@
+{
+  "generatedAt": "2026-11-03T00:41:15.351Z",
+  "results": [
+    {
+      "name": "v0511-themes",
+      "file": "scripts/test-v0511-themes.mjs",
+      "exitCode": 1,
+      "signal": null,
+      "error": null,
+      "summary": [
+        "AssertionError [ERR_ASSERTION]: Shuboku plot surfaces must be borderless when collapsed or expanded",
+        "  code: 'ERR_ASSERTION',"
+      ]
+    },
+    {
+      "name": "appearance",
+      "file": "scripts/test-appearance.mjs",
+      "exitCode": 0,
+      "signal": null,
+      "error": null,
+      "summary": [
+        "PASS appearance: 66 themes, resolved fonts, payload, canvas inheritance, fallback, CSS import order and cycles"
+      ]
+    },
+    {
+      "name": "app-shell-style",
+      "file": "scripts/test-app-shell-style.mjs",
+      "exitCode": 0,
+      "signal": null,
+      "error": null,
+      "summary": [
+        "app shell style tests passed (appShellStyle.ts)"
+      ]
+    },
+    {
+      "name": "stored-state-model",
+      "file": "scripts/test-stored-state-model.mjs",
+      "exitCode": 0,
+      "signal": null,
+      "error": null,
+      "summary": [
+        "stored state model tests passed"
+      ]
+    },
+    {
+      "name": "v0511-focus-mode",
+      "file": "scripts/test-v0511-focus-mode.mjs",
+      "exitCode": 0,
+      "signal": null,
+      "error": null,
+      "summary": [
+        "v0.5.11 focus-mode regression checks passed."
+      ]
+    },
+    {
+      "name": "app-dialog",
+      "file": "scripts/test-app-dialog.mjs",
+      "exitCode": 0,
+      "signal": null,
+      "error": null,
+      "summary": []
+    },
+    {
+      "name": "left-sidebar",
+      "file": "scripts/test-left-sidebar.mjs",
+      "exitCode": 0,
+      "signal": null,
+      "error": null,
+      "summary": [
+        "left sidebar tests passed"
+      ]
+    },
+    {
+      "name": "right-sidebar",
+      "file": "scripts/test-right-sidebar.mjs",
+      "exitCode": 0,
+      "signal": null,
+      "error": null,
+      "summary": [
+        "right sidebar tests passed"
+      ]
+    },
+    {
+      "name": "command-palette",
+      "file": "scripts/test-command-palette.mjs",
+      "exitCode": 0,
+      "signal": null,
+      "error": null,
+      "summary": [
+        "command palette behavior tests passed"
+      ]
+    },
+    {
+      "name": "editor-context-menu-layout",
+      "file": "scripts/test-editor-context-menu-layout.mjs",
+      "exitCode": 0,
+      "signal": null,
+      "error": null,
+      "summary": [
+        "editor context menu layout: 48 corner/scale cases, submenus, resize, live zoom, long plugin scrolling, hover/click navigation and selection guards passed"
+      ],
+      "previousAttempt": {
+        "exitCode": 1,
+        "summary": [
+          "AssertionError [ERR_ASSERTION]: browser debug endpoint is ready",
+          "  code: 'ERR_ASSERTION',"
+        ]
+      }
+    },
+    {
+      "name": "properties-ui",
+      "file": "scripts/test-properties-ui.mjs",
+      "exitCode": 0,
+      "signal": null,
+      "error": null,
+      "summary": [
+        "19 passed"
+      ]
+    },
+    {
+      "name": "status-bar-layout",
+      "file": "scripts/test-status-bar-layout.mjs",
+      "exitCode": 0,
+      "signal": null,
+      "error": null,
+      "summary": [
+        "status bar layout tests passed"
+      ],
+      "previousAttempt": {
+        "exitCode": 1,
+        "summary": [
+          "Error: Could not reach http://127.0.0.1:9970/json/version"
+        ]
+      }
+    },
+    {
+      "name": "typewriter-scroll",
+      "file": "scripts/test-typewriter-scroll.mjs",
+      "exitCode": 0,
+      "signal": null,
+      "error": null,
+      "summary": [
+        "typewriter-scroll: smooth movement, retargeting, RTL, boundaries, composition and layout checks passed"
+      ]
+    },
+    {
+      "name": "code-blocks",
+      "file": "scripts/test-code-blocks.mjs",
+      "exitCode": 0,
+      "signal": null,
+      "error": null,
+      "summary": [
+        "code block tests passed"
+      ]
+    },
+    {
+      "name": "markdown-tables",
+      "file": "scripts/test-markdown-tables.mjs",
+      "exitCode": 0,
+      "signal": null,
+      "error": null,
+      "summary": [
+        "Markdown table parsing and source preservation passed.",
+        "Table column extents passed.",
+        "Table creation, column alignment and caret restoration passed."
+      ]
+    },
+    {
+      "name": "canvas-board-save",
+      "file": "scripts/test-canvas-board-save.mjs",
+      "exitCode": 0,
+      "signal": null,
+      "error": null,
+      "summary": [
+        "PASS queue: immutable destinations and snapshots, serialized edits, separate projects, retry after failure",
+        "PASS navigation: plain wheel zooms smoothly around the pointer",
+        "PASS regression: title, color, and body survive an immediate board switch",
+        "PASS switch: waits for saving and retains failed edits for retry",
+        "PASS projects: changing projects never saves an old board to a new destination"
+      ]
+    }
+  ]
+}
