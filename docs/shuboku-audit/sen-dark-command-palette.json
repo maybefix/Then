@@ -2,6 +2,11 @@
   "theme": "sen-dark",
   "name": "command-palette",
   "screenshot": "sen-dark-command-palette.png",
+  "keyboardNavigation": {
+    "before": "表を挿入…行数・列数を指定",
+    "after": "表：この列を開始揃え（横書き：左／縦書き：上）表のセルにカーソルを置いてください列の配置",
+    "moved": true
+  },
   "styles": {
     ".appFrame": [
       {
@@ -149,7 +154,7 @@
         "classes": "rightSidebar ",
         "color": "rgba(255, 255, 255, 0.72)",
         "background": "rgb(28, 27, 24)",
-        "backgroundImage": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+        "backgroundImage": "none",
         "border": [
           "0px",
           "0px",
@@ -160,7 +165,7 @@
           "rgba(255, 255, 255, 0.72)",
           "rgba(255, 255, 255, 0.72)",
           "rgba(255, 255, 255, 0.72)",
-          "color(srgb 1 1 1 / 0.09)"
+          "rgb(255, 255, 255)"
         ],
         "radius": "0px",
         "shadow": "none",
@@ -184,7 +189,7 @@
         "classes": "editorColumn ",
         "color": "rgb(255, 255, 255)",
         "background": "rgb(28, 27, 24)",
-        "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+        "backgroundImage": "none",
         "border": [
           "0px",
           "0px",
@@ -219,7 +224,7 @@
         "classes": "verticalTypewriterShell",
         "color": "rgb(255, 255, 255)",
         "background": "rgb(28, 27, 24)",
-        "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+        "backgroundImage": "none",
         "border": [
           "0px",
           "0px",
@@ -287,9 +292,9 @@
       {
         "tag": "FOOTER",
         "classes": "statusbar status-saved",
-        "color": "rgba(255, 255, 255, 0.48)",
+        "color": "rgba(255, 255, 255, 0.64)",
         "background": "rgb(28, 27, 24)",
-        "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+        "backgroundImage": "none",
         "border": [
           "2px",
           "0px",
@@ -297,14 +302,14 @@
           "0px"
         ],
         "borderColor": [
-          "color(srgb 1 1 1 / 0.09)",
-          "rgba(255, 255, 255, 0.48)",
-          "rgba(255, 255, 255, 0.48)",
-          "rgba(255, 255, 255, 0.48)"
+          "rgb(255, 255, 255)",
+          "rgba(255, 255, 255, 0.64)",
+          "rgba(255, 255, 255, 0.64)",
+          "rgba(255, 255, 255, 0.64)"
         ],
         "radius": "0px",
         "shadow": "none",
-        "outline": "rgba(255, 255, 255, 0.48) none 3px",
+        "outline": "rgba(255, 255, 255, 0.64) none 3px",
         "outlineOffset": "0px",
         "opacity": "1",
         "display": "flex",
@@ -406,10 +411,10 @@
         "background": "rgb(28, 27, 24)",
         "backgroundImage": "none",
         "border": [
-          "1px",
-          "1px",
-          "1px",
-          "1px"
+          "2px",
+          "2px",
+          "2px",
+          "2px"
         ],
         "borderColor": [
           "rgb(255, 255, 255)",
@@ -417,8 +422,8 @@
           "rgb(255, 255, 255)",
           "rgb(255, 255, 255)"
         ],
-        "radius": "10px",
-        "shadow": "rgba(0, 0, 0, 0.45) 0px 24px 60px 0px",
+        "radius": "0px",
+        "shadow": "none",
         "outline": "rgb(255, 255, 255) none 3px",
         "outlineOffset": "0px",
         "opacity": "1",
@@ -970,22 +975,27 @@
     }
   ],
   "paletteSelection": {
-    "text": "表を挿入…行数・列数を指定",
+    "text": "表：この列を開始揃え（横書き：左／縦書き：上）表のセルにカーソルを置いてください列の配置",
+    "disabled": true,
     "active": {
-      "background": "rgba(0, 0, 0, 0)",
-      "color": "rgb(255, 255, 255)",
-      "border": "0px none rgb(255, 255, 255)",
-      "outline": "rgb(255, 255, 255) none 3px",
+      "background": "rgb(28, 27, 24)",
+      "color": "rgba(255, 255, 255, 0.72)",
+      "border": "",
+      "borderLeft": "3px solid rgb(216, 95, 70)",
+      "markerPainted": true,
+      "outline": "rgba(255, 255, 255, 0.72) none 3px",
       "shadow": "none"
     },
     "inactive": {
       "background": "rgba(0, 0, 0, 0)",
-      "color": "rgb(255, 255, 255)",
-      "border": "0px none rgb(255, 255, 255)",
-      "outline": "rgb(255, 255, 255) none 3px",
+      "color": "rgba(255, 255, 255, 0.72)",
+      "border": "",
+      "borderLeft": "3px solid rgba(0, 0, 0, 0)",
+      "markerPainted": false,
+      "outline": "rgba(255, 255, 255, 0.72) none 3px",
       "shadow": "none"
     },
-    "visuallyDistinct": false
+    "visuallyDistinct": true
   },
   "active": {
     "tag": "INPUT",

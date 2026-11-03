@@ -1,0 +1,1023 @@
+{
+  "generatedAt": "2026-11-03T01:02:38.277Z",
+  "rows": [
+    {
+      "theme": "sen-light",
+      "frame": {
+        "treeShift": 3,
+        "editor": {
+          "background": "rgb(255, 255, 255)",
+          "image": "none",
+          "radius": "0px",
+          "shadow": "none",
+          "border": [
+            "0px",
+            "0px",
+            "0px",
+            "0px"
+          ],
+          "outline": "rgb(28, 27, 24) none 3px",
+          "color": "rgb(28, 27, 24)"
+        },
+        "editorSurface": {
+          "background": "rgb(255, 255, 255)",
+          "image": "none",
+          "radius": "0px",
+          "shadow": "none",
+          "border": [
+            "0px",
+            "0px",
+            "0px",
+            "0px"
+          ],
+          "outline": "rgb(28, 27, 24) none 3px",
+          "color": "rgb(28, 27, 24)"
+        },
+        "sidebar": {
+          "background": "rgb(255, 255, 255)",
+          "image": "none",
+          "radius": "0px",
+          "shadow": "none",
+          "border": [
+            "0px",
+            "0px",
+            "0px",
+            "2px"
+          ],
+          "outline": "rgba(28, 27, 24, 0.72) none 3px",
+          "color": "rgba(28, 27, 24, 0.72)"
+        },
+        "plot": [
+          {
+            "classes": "plotPane",
+            "background": "rgb(255, 255, 255)",
+            "image": "none",
+            "radius": "0px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgba(28, 27, 24, 0.72) none 0px",
+            "color": "rgba(28, 27, 24, 0.72)"
+          },
+          {
+            "classes": "plotCard expandedPlotCard",
+            "background": "rgba(0, 0, 0, 0)",
+            "image": "none",
+            "radius": "0px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgba(28, 27, 24, 0.72) none 0px",
+            "color": "rgba(28, 27, 24, 0.72)"
+          },
+          {
+            "classes": "plotCardNum",
+            "background": "rgb(255, 255, 255)",
+            "image": "none",
+            "radius": "6px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgb(179, 59, 37) none 0px",
+            "color": "rgb(179, 59, 37)"
+          },
+          {
+            "classes": "plotCardTitle",
+            "background": "rgb(255, 255, 255)",
+            "image": "none",
+            "radius": "4px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgb(179, 59, 37) none 0px",
+            "color": "rgb(179, 59, 37)"
+          },
+          {
+            "classes": "plotCardBody",
+            "background": "rgb(255, 255, 255)",
+            "image": "none",
+            "radius": "4px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgb(28, 27, 24) none 0px",
+            "color": "rgb(28, 27, 24)"
+          }
+        ],
+        "plotFocus": {
+          "normal": {
+            "background": "rgb(255, 255, 255)",
+            "image": "none",
+            "radius": "4px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgb(179, 59, 37) none 0px",
+            "color": "rgb(179, 59, 37)"
+          },
+          "focus": {
+            "background": "rgb(255, 255, 255)",
+            "image": "none",
+            "radius": "4px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgb(179, 59, 37) none 0px",
+            "color": "rgb(179, 59, 37)"
+          },
+          "focusVisible": false
+        }
+      },
+      "text": {
+        "fileName": {
+          "color": "rgba(28, 27, 24, 0.48)",
+          "surface": {
+            "r": 255,
+            "g": 255,
+            "b": 255,
+            "a": 1
+          },
+          "contrast": 3.129254588272804
+        },
+        "fileCount": {
+          "color": "rgba(28, 27, 24, 0.48)",
+          "surface": {
+            "r": 255,
+            "g": 255,
+            "b": 255,
+            "a": 1
+          },
+          "contrast": 3.129254588272804
+        },
+        "muted": {
+          "color": "rgba(28, 27, 24, 0.72)",
+          "surface": {
+            "r": 255,
+            "g": 255,
+            "b": 255,
+            "a": 1
+          },
+          "contrast": 6.807810023047184
+        },
+        "faint": {
+          "color": "rgba(28, 27, 24, 0.48)",
+          "surface": {
+            "r": 255,
+            "g": 255,
+            "b": 255,
+            "a": 1
+          },
+          "contrast": 3.129254588272804
+        }
+      },
+      "options": {
+        "checked": {
+          "background": "rgb(255, 255, 255)",
+          "border": "",
+          "borderColor": "rgb(28, 27, 24) rgb(28, 27, 24) rgba(28, 27, 24, 0.24)",
+          "shadow": "none",
+          "outline": "rgb(28, 27, 24) none 3px"
+        },
+        "unchecked": {
+          "background": "rgb(255, 255, 255)",
+          "border": "",
+          "borderColor": "rgb(28, 27, 24) rgb(28, 27, 24) rgba(28, 27, 24, 0.24)",
+          "shadow": "none",
+          "outline": "rgb(28, 27, 24) none 3px"
+        },
+        "focused": {
+          "background": "rgb(255, 255, 255)",
+          "border": "",
+          "borderColor": "rgb(28, 27, 24) rgb(28, 27, 24) rgba(28, 27, 24, 0.24)",
+          "shadow": "none",
+          "outline": "rgb(28, 27, 24) none 3px"
+        },
+        "inputOpacity": "0",
+        "focusVisible": true,
+        "distinct": false
+      },
+      "commands": {
+        "panel": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(28, 27, 24)",
+          "border": "1px solid rgb(28, 27, 24)",
+          "outline": "rgb(28, 27, 24) none 3px",
+          "shadow": "rgba(0, 0, 0, 0.45) 0px 24px 60px 0px",
+          "radius": "10px"
+        },
+        "active": {
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(28, 27, 24)",
+          "border": "0px none rgb(28, 27, 24)",
+          "outline": "rgb(28, 27, 24) none 3px",
+          "shadow": "none",
+          "radius": "6px"
+        },
+        "inactive": {
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(28, 27, 24)",
+          "border": "0px none rgb(28, 27, 24)",
+          "outline": "rgb(28, 27, 24) none 3px",
+          "shadow": "none",
+          "radius": "6px"
+        },
+        "distinct": false
+      },
+      "issues": [
+        "palette-selection-invisible",
+        "theme-selection-invisible",
+        "file-text-contrast-low",
+        "palette-ignores-flat-style"
+      ]
+    },
+    {
+      "theme": "sen-dark",
+      "frame": {
+        "treeShift": 3,
+        "editor": {
+          "background": "rgb(28, 27, 24)",
+          "image": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+          "radius": "0px",
+          "shadow": "none",
+          "border": [
+            "0px",
+            "0px",
+            "0px",
+            "0px"
+          ],
+          "outline": "rgb(255, 255, 255) none 3px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "editorSurface": {
+          "background": "rgb(28, 27, 24)",
+          "image": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+          "radius": "0px",
+          "shadow": "none",
+          "border": [
+            "0px",
+            "0px",
+            "0px",
+            "0px"
+          ],
+          "outline": "rgb(255, 255, 255) none 3px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "sidebar": {
+          "background": "rgb(28, 27, 24)",
+          "image": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+          "radius": "0px",
+          "shadow": "none",
+          "border": [
+            "0px",
+            "0px",
+            "0px",
+            "2px"
+          ],
+          "outline": "rgba(255, 255, 255, 0.72) none 3px",
+          "color": "rgba(255, 255, 255, 0.72)"
+        },
+        "plot": [
+          {
+            "classes": "plotPane",
+            "background": "rgb(28, 27, 24)",
+            "image": "none",
+            "radius": "0px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgba(255, 255, 255, 0.72) none 0px",
+            "color": "rgba(255, 255, 255, 0.72)"
+          },
+          {
+            "classes": "plotCard expandedPlotCard",
+            "background": "rgba(0, 0, 0, 0)",
+            "image": "none",
+            "radius": "0px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgba(255, 255, 255, 0.72) none 0px",
+            "color": "rgba(255, 255, 255, 0.72)"
+          },
+          {
+            "classes": "plotCardNum",
+            "background": "rgb(28, 27, 24)",
+            "image": "none",
+            "radius": "6px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgb(216, 95, 70) none 0px",
+            "color": "rgb(216, 95, 70)"
+          },
+          {
+            "classes": "plotCardTitle",
+            "background": "rgb(28, 27, 24)",
+            "image": "none",
+            "radius": "4px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgb(255, 255, 255) none 0px",
+            "color": "rgb(255, 255, 255)"
+          },
+          {
+            "classes": "plotCardBody",
+            "background": "rgb(28, 27, 24)",
+            "image": "none",
+            "radius": "4px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgb(255, 255, 255) none 0px",
+            "color": "rgb(255, 255, 255)"
+          }
+        ],
+        "plotFocus": {
+          "normal": {
+            "background": "rgb(28, 27, 24)",
+            "image": "none",
+            "radius": "4px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgb(216, 95, 70) none 0px",
+            "color": "rgb(216, 95, 70)"
+          },
+          "focus": {
+            "background": "rgb(28, 27, 24)",
+            "image": "none",
+            "radius": "4px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgb(255, 255, 255) none 0px",
+            "color": "rgb(255, 255, 255)"
+          },
+          "focusVisible": true
+        }
+      },
+      "text": {
+        "fileName": {
+          "color": "rgba(255, 255, 255, 0.48)",
+          "surface": {
+            "r": 28,
+            "g": 27,
+            "b": 24,
+            "a": 1
+          },
+          "contrast": 4.886814109020152
+        },
+        "fileCount": {
+          "color": "rgba(255, 255, 255, 0.48)",
+          "surface": {
+            "r": 28,
+            "g": 27,
+            "b": 24,
+            "a": 1
+          },
+          "contrast": 4.886814109020152
+        },
+        "muted": {
+          "color": "rgba(255, 255, 255, 0.72)",
+          "surface": {
+            "r": 28,
+            "g": 27,
+            "b": 24,
+            "a": 1
+          },
+          "contrast": 9.381589940277916
+        },
+        "faint": {
+          "color": "rgba(255, 255, 255, 0.48)",
+          "surface": {
+            "r": 28,
+            "g": 27,
+            "b": 24,
+            "a": 1
+          },
+          "contrast": 4.886814109020152
+        }
+      },
+      "options": {
+        "checked": {
+          "background": "rgb(28, 27, 24)",
+          "border": "",
+          "borderColor": "rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.24)",
+          "shadow": "none",
+          "outline": "rgb(255, 255, 255) none 3px"
+        },
+        "unchecked": {
+          "background": "rgb(28, 27, 24)",
+          "border": "",
+          "borderColor": "rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.24)",
+          "shadow": "none",
+          "outline": "rgb(255, 255, 255) none 3px"
+        },
+        "focused": {
+          "background": "rgb(28, 27, 24)",
+          "border": "",
+          "borderColor": "rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.24)",
+          "shadow": "none",
+          "outline": "rgb(255, 255, 255) none 3px"
+        },
+        "inputOpacity": "0",
+        "focusVisible": true,
+        "distinct": false
+      },
+      "commands": {
+        "panel": {
+          "background": "rgb(28, 27, 24)",
+          "color": "rgb(255, 255, 255)",
+          "border": "1px solid rgb(255, 255, 255)",
+          "outline": "rgb(255, 255, 255) none 3px",
+          "shadow": "rgba(0, 0, 0, 0.45) 0px 24px 60px 0px",
+          "radius": "10px"
+        },
+        "active": {
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(255, 255, 255)",
+          "border": "0px none rgb(255, 255, 255)",
+          "outline": "rgb(255, 255, 255) none 3px",
+          "shadow": "none",
+          "radius": "6px"
+        },
+        "inactive": {
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(255, 255, 255)",
+          "border": "0px none rgb(255, 255, 255)",
+          "outline": "rgb(255, 255, 255) none 3px",
+          "shadow": "none",
+          "radius": "6px"
+        },
+        "distinct": false
+      },
+      "issues": [
+        "palette-selection-invisible",
+        "theme-selection-invisible",
+        "flat-surface-overridden",
+        "palette-ignores-flat-style"
+      ]
+    },
+    {
+      "theme": "standard",
+      "frame": {
+        "treeShift": 0,
+        "editor": {
+          "background": "rgb(255, 255, 255)",
+          "image": "none",
+          "radius": "20px",
+          "shadow": "none",
+          "border": [
+            "0px",
+            "0px",
+            "0px",
+            "0px"
+          ],
+          "outline": "rgb(23, 23, 23) none 3px",
+          "color": "rgb(23, 23, 23)"
+        },
+        "editorSurface": {
+          "background": "rgba(0, 0, 0, 0)",
+          "image": "none",
+          "radius": "0px",
+          "shadow": "none",
+          "border": [
+            "0px",
+            "0px",
+            "0px",
+            "0px"
+          ],
+          "outline": "rgb(23, 23, 23) none 3px",
+          "color": "rgb(23, 23, 23)"
+        },
+        "sidebar": {
+          "background": "rgb(255, 255, 255)",
+          "image": "none",
+          "radius": "20px",
+          "shadow": "none",
+          "border": [
+            "0px",
+            "0px",
+            "0px",
+            "0px"
+          ],
+          "outline": "rgb(74, 74, 74) none 3px",
+          "color": "rgb(74, 74, 74)"
+        },
+        "plot": [
+          {
+            "classes": "plotPane",
+            "background": "color(srgb 1 1 1)",
+            "image": "none",
+            "radius": "20px",
+            "shadow": "none",
+            "border": [
+              "1px",
+              "1px",
+              "1px",
+              "1px"
+            ],
+            "outline": "rgb(74, 74, 74) none 3px",
+            "color": "rgb(74, 74, 74)"
+          },
+          {
+            "classes": "plotCard expandedPlotCard",
+            "background": "rgba(0, 0, 0, 0)",
+            "image": "none",
+            "radius": "0px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgb(74, 74, 74) none 3px",
+            "color": "rgb(74, 74, 74)"
+          },
+          {
+            "classes": "plotCardNum",
+            "background": "rgb(248, 247, 246)",
+            "image": "none",
+            "radius": "6px",
+            "shadow": "none",
+            "border": [
+              "1px",
+              "1px",
+              "1px",
+              "1px"
+            ],
+            "outline": "rgb(23, 23, 23) none 3px",
+            "color": "rgb(23, 23, 23)"
+          },
+          {
+            "classes": "plotCardTitle",
+            "background": "rgba(23, 23, 23, 0.09)",
+            "image": "none",
+            "radius": "4px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgb(23, 23, 23) none 3px",
+            "color": "rgb(23, 23, 23)"
+          },
+          {
+            "classes": "plotCardBody",
+            "background": "rgba(0, 0, 0, 0)",
+            "image": "none",
+            "radius": "4px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgb(74, 74, 74) none 3px",
+            "color": "rgb(74, 74, 74)"
+          }
+        ],
+        "plotFocus": {
+          "normal": {
+            "background": "rgba(0, 0, 0, 0)",
+            "image": "none",
+            "radius": "4px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgb(0, 0, 0) none 3px",
+            "color": "rgb(0, 0, 0)"
+          },
+          "focus": {
+            "background": "rgba(23, 23, 23, 0.09)",
+            "image": "none",
+            "radius": "4px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgb(23, 23, 23) none 3px",
+            "color": "rgb(23, 23, 23)"
+          },
+          "focusVisible": true
+        }
+      },
+      "text": {
+        "fileName": {
+          "color": "rgb(150, 150, 150)",
+          "surface": {
+            "r": 255,
+            "g": 255,
+            "b": 255,
+            "a": 1
+          },
+          "contrast": 2.95785217776342
+        },
+        "fileCount": {
+          "color": "rgb(150, 150, 150)",
+          "surface": {
+            "r": 255,
+            "g": 255,
+            "b": 255,
+            "a": 1
+          },
+          "contrast": 2.95785217776342
+        },
+        "muted": {
+          "color": "rgb(105, 105, 105)",
+          "surface": {
+            "r": 255,
+            "g": 255,
+            "b": 255,
+            "a": 1
+          },
+          "contrast": 5.489814557409947
+        },
+        "faint": {
+          "color": "rgb(150, 150, 150)",
+          "surface": {
+            "r": 255,
+            "g": 255,
+            "b": 255,
+            "a": 1
+          },
+          "contrast": 2.95785217776342
+        }
+      },
+      "options": {
+        "checked": {
+          "background": "rgb(255, 255, 255)",
+          "border": "1px solid rgba(23, 23, 23, 0.46)",
+          "borderColor": "rgba(23, 23, 23, 0.46)",
+          "shadow": "rgba(23, 23, 23, 0.09) 0px 0px 0px 3px",
+          "outline": "rgb(23, 23, 23) none 3px"
+        },
+        "unchecked": {
+          "background": "rgb(255, 255, 255)",
+          "border": "1px solid rgb(222, 222, 222)",
+          "borderColor": "rgb(222, 222, 222)",
+          "shadow": "none",
+          "outline": "rgb(23, 23, 23) none 3px"
+        },
+        "focused": {
+          "background": "rgb(255, 255, 255)",
+          "border": "1px solid rgba(23, 23, 23, 0.46)",
+          "borderColor": "rgba(23, 23, 23, 0.46)",
+          "shadow": "rgba(23, 23, 23, 0.09) 0px 0px 0px 3px",
+          "outline": "rgb(23, 23, 23) none 3px"
+        },
+        "inputOpacity": "0",
+        "focusVisible": true,
+        "distinct": true
+      },
+      "commands": {
+        "panel": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(23, 23, 23)",
+          "border": "1px solid rgb(183, 183, 183)",
+          "outline": "rgb(23, 23, 23) none 3px",
+          "shadow": "rgba(0, 0, 0, 0.45) 0px 24px 60px 0px",
+          "radius": "10px"
+        },
+        "active": {
+          "background": "rgba(23, 23, 23, 0.09)",
+          "color": "rgb(23, 23, 23)",
+          "border": "0px none rgb(23, 23, 23)",
+          "outline": "rgb(23, 23, 23) none 3px",
+          "shadow": "none",
+          "radius": "6px"
+        },
+        "inactive": {
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(23, 23, 23)",
+          "border": "0px none rgb(23, 23, 23)",
+          "outline": "rgb(23, 23, 23) none 3px",
+          "shadow": "none",
+          "radius": "6px"
+        },
+        "distinct": true
+      },
+      "issues": []
+    },
+    {
+      "theme": "dark",
+      "frame": {
+        "treeShift": 0,
+        "editor": {
+          "background": "rgb(31, 37, 41)",
+          "image": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+          "radius": "0px",
+          "shadow": "none",
+          "border": [
+            "0px",
+            "0px",
+            "0px",
+            "0px"
+          ],
+          "outline": "rgb(252, 252, 252) none 3px",
+          "color": "rgb(252, 252, 252)"
+        },
+        "editorSurface": {
+          "background": "rgb(31, 37, 41)",
+          "image": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+          "radius": "0px",
+          "shadow": "none",
+          "border": [
+            "0px",
+            "0px",
+            "0px",
+            "0px"
+          ],
+          "outline": "rgb(252, 252, 252) none 3px",
+          "color": "rgb(252, 252, 252)"
+        },
+        "sidebar": {
+          "background": "rgb(37, 44, 49)",
+          "image": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+          "radius": "0px",
+          "shadow": "none",
+          "border": [
+            "0px",
+            "0px",
+            "0px",
+            "1px"
+          ],
+          "outline": "rgb(217, 222, 225) none 3px",
+          "color": "rgb(217, 222, 225)"
+        },
+        "plot": [
+          {
+            "classes": "plotPane",
+            "background": "color(srgb 0.128157 0.152784 0.169569)",
+            "image": "none",
+            "radius": "0px",
+            "shadow": "none",
+            "border": [
+              "1px",
+              "1px",
+              "1px",
+              "1px"
+            ],
+            "outline": "rgb(217, 222, 225) none 3px",
+            "color": "rgb(217, 222, 225)"
+          },
+          {
+            "classes": "plotCard expandedPlotCard",
+            "background": "rgba(0, 0, 0, 0)",
+            "image": "none",
+            "radius": "0px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgb(217, 222, 225) none 3px",
+            "color": "rgb(217, 222, 225)"
+          },
+          {
+            "classes": "plotCardNum",
+            "background": "rgb(42, 49, 54)",
+            "image": "none",
+            "radius": "6px",
+            "shadow": "none",
+            "border": [
+              "1px",
+              "1px",
+              "1px",
+              "1px"
+            ],
+            "outline": "rgb(230, 233, 237) none 3px",
+            "color": "rgb(230, 233, 237)"
+          },
+          {
+            "classes": "plotCardTitle",
+            "background": "rgba(230, 233, 237, 0.1)",
+            "image": "none",
+            "radius": "4px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgb(252, 252, 252) none 3px",
+            "color": "rgb(252, 252, 252)"
+          },
+          {
+            "classes": "plotCardBody",
+            "background": "rgba(0, 0, 0, 0)",
+            "image": "none",
+            "radius": "4px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgb(217, 222, 225) none 3px",
+            "color": "rgb(217, 222, 225)"
+          }
+        ],
+        "plotFocus": {
+          "normal": {
+            "background": "rgba(0, 0, 0, 0)",
+            "image": "none",
+            "radius": "4px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgb(252, 252, 252) none 3px",
+            "color": "rgb(252, 252, 252)"
+          },
+          "focus": {
+            "background": "rgba(230, 233, 237, 0.1)",
+            "image": "none",
+            "radius": "4px",
+            "shadow": "none",
+            "border": [
+              "0px",
+              "0px",
+              "0px",
+              "0px"
+            ],
+            "outline": "rgb(252, 252, 252) none 3px",
+            "color": "rgb(252, 252, 252)"
+          },
+          "focusVisible": true
+        }
+      },
+      "text": {
+        "fileName": {
+          "color": "rgb(127, 137, 143)",
+          "surface": {
+            "r": 255,
+            "g": 255,
+            "b": 255,
+            "a": 1
+          },
+          "contrast": 3.5730672457456647
+        },
+        "fileCount": {
+          "color": "rgb(127, 137, 143)",
+          "surface": {
+            "r": 255,
+            "g": 255,
+            "b": 255,
+            "a": 1
+          },
+          "contrast": 3.5730672457456647
+        },
+        "muted": {
+          "color": "rgb(169, 177, 182)",
+          "surface": {
+            "r": 255,
+            "g": 255,
+            "b": 255,
+            "a": 1
+          },
+          "contrast": 2.1758638299053694
+        },
+        "faint": {
+          "color": "rgb(127, 137, 143)",
+          "surface": {
+            "r": 255,
+            "g": 255,
+            "b": 255,
+            "a": 1
+          },
+          "contrast": 3.5730672457456647
+        }
+      },
+      "options": {
+        "checked": {
+          "background": "rgb(37, 44, 49)",
+          "border": "1px solid rgba(230, 233, 237, 0.52)",
+          "borderColor": "rgba(230, 233, 237, 0.52)",
+          "shadow": "rgba(230, 233, 237, 0.1) 0px 0px 0px 3px",
+          "outline": "rgb(252, 252, 252) none 3px"
+        },
+        "unchecked": {
+          "background": "rgb(37, 44, 49)",
+          "border": "1px solid rgb(57, 66, 72)",
+          "borderColor": "rgb(57, 66, 72)",
+          "shadow": "none",
+          "outline": "rgb(252, 252, 252) none 3px"
+        },
+        "focused": {
+          "background": "rgb(37, 44, 49)",
+          "border": "1px solid rgba(230, 233, 237, 0.52)",
+          "borderColor": "rgba(230, 233, 237, 0.52)",
+          "shadow": "rgba(230, 233, 237, 0.1) 0px 0px 0px 3px",
+          "outline": "rgb(252, 252, 252) none 3px"
+        },
+        "inputOpacity": "0",
+        "focusVisible": true,
+        "distinct": true
+      },
+      "commands": {
+        "panel": {
+          "background": "rgb(31, 37, 41)",
+          "color": "rgb(252, 252, 252)",
+          "border": "1px solid rgb(86, 97, 104)",
+          "outline": "rgb(252, 252, 252) none 3px",
+          "shadow": "rgba(0, 0, 0, 0.45) 0px 24px 60px 0px",
+          "radius": "10px"
+        },
+        "active": {
+          "background": "rgba(230, 233, 237, 0.1)",
+          "color": "rgb(252, 252, 252)",
+          "border": "0px none rgb(252, 252, 252)",
+          "outline": "rgb(252, 252, 252) none 3px",
+          "shadow": "none",
+          "radius": "6px"
+        },
+        "inactive": {
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(252, 252, 252)",
+          "border": "0px none rgb(252, 252, 252)",
+          "outline": "rgb(252, 252, 252) none 3px",
+          "shadow": "none",
+          "radius": "6px"
+        },
+        "distinct": true
+      },
+      "issues": []
+    }
+  ]
+}

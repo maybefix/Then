@@ -167,7 +167,7 @@
         "classes": "rightSidebar ",
         "color": "rgba(255, 255, 255, 0.72)",
         "background": "rgb(28, 27, 24)",
-        "backgroundImage": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+        "backgroundImage": "none",
         "border": [
           "0px",
           "0px",
@@ -178,7 +178,7 @@
           "rgba(255, 255, 255, 0.72)",
           "rgba(255, 255, 255, 0.72)",
           "rgba(255, 255, 255, 0.72)",
-          "color(srgb 1 1 1 / 0.09)"
+          "rgb(255, 255, 255)"
         ],
         "radius": "0px",
         "shadow": "none",
@@ -202,7 +202,7 @@
         "classes": "editorColumn ",
         "color": "rgb(255, 255, 255)",
         "background": "rgb(28, 27, 24)",
-        "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+        "backgroundImage": "none",
         "border": [
           "0px",
           "0px",
@@ -237,7 +237,7 @@
         "classes": "verticalTypewriterShell",
         "color": "rgb(255, 255, 255)",
         "background": "rgb(28, 27, 24)",
-        "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+        "backgroundImage": "none",
         "border": [
           "0px",
           "0px",
@@ -305,9 +305,9 @@
       {
         "tag": "FOOTER",
         "classes": "statusbar status-saved",
-        "color": "rgba(255, 255, 255, 0.48)",
+        "color": "rgba(255, 255, 255, 0.64)",
         "background": "rgb(28, 27, 24)",
-        "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+        "backgroundImage": "none",
         "border": [
           "2px",
           "0px",
@@ -315,14 +315,14 @@
           "0px"
         ],
         "borderColor": [
-          "color(srgb 1 1 1 / 0.09)",
-          "rgba(255, 255, 255, 0.48)",
-          "rgba(255, 255, 255, 0.48)",
-          "rgba(255, 255, 255, 0.48)"
+          "rgb(255, 255, 255)",
+          "rgba(255, 255, 255, 0.64)",
+          "rgba(255, 255, 255, 0.64)",
+          "rgba(255, 255, 255, 0.64)"
         ],
         "radius": "0px",
         "shadow": "none",
-        "outline": "rgba(255, 255, 255, 0.48) none 3px",
+        "outline": "rgba(255, 255, 255, 0.64) none 3px",
         "outlineOffset": "0px",
         "opacity": "1",
         "display": "flex",

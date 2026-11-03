@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-03T00:54:55.185Z",
+  "generatedAt": "2026-11-03T01:36:01.257Z",
   "cases": [
     {
       "theme": "sen-light",
@@ -290,7 +290,7 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(28, 27, 24, 0.48)",
+            "color": "rgba(28, 27, 24, 0.64)",
             "background": "rgb(255, 255, 255)",
             "backgroundImage": "none",
             "border": [
@@ -301,13 +301,13 @@
             ],
             "borderColor": [
               "rgb(28, 27, 24)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)"
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(28, 27, 24, 0.48) none 3px",
+            "outline": "rgba(28, 27, 24, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -772,288 +772,7 @@
         ".pagedEditorSheet": [],
         ".editorFindPopover": []
       },
-      "lowContrast": [
-        {
-          "text": "字数",
-          "tag": "SPAN",
-          "classes": "sidebarHeaderUnit",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "02_駅前の喫茶店.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "32",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "03_春の帰り道.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "24",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "美月.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "17",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "遥.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "16",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "チェックポイントはまだありません",
-          "tag": "DIV",
-          "classes": "snapshotEmptyState",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "執筆中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "推敲中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "完了",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未",
-          "tag": "SPAN",
-          "classes": "progressLegendMark progressText-todo",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未着手",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存済み",
-          "tag": "SPAN",
-          "classes": "",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存点なし",
-          "tag": "BUTTON",
-          "classes": "statusCheckpoint",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "文字",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        }
-      ],
+      "lowContrast": [],
       "screenedCount": 62,
       "controls": [
         {
@@ -1941,7 +1660,7 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(28, 27, 24, 0.48)",
+            "color": "rgba(28, 27, 24, 0.64)",
             "background": "rgb(255, 255, 255)",
             "backgroundImage": "none",
             "border": [
@@ -1952,13 +1671,13 @@
             ],
             "borderColor": [
               "rgb(28, 27, 24)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)"
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(28, 27, 24, 0.48) none 3px",
+            "outline": "rgba(28, 27, 24, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -2423,288 +2142,7 @@
         ".pagedEditorSheet": [],
         ".editorFindPopover": []
       },
-      "lowContrast": [
-        {
-          "text": "字数",
-          "tag": "SPAN",
-          "classes": "sidebarHeaderUnit",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "02_駅前の喫茶店.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "32",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "03_春の帰り道.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "24",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "美月.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "17",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "遥.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "16",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "チェックポイントはまだありません",
-          "tag": "DIV",
-          "classes": "snapshotEmptyState",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "執筆中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "推敲中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "完了",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未",
-          "tag": "SPAN",
-          "classes": "progressLegendMark progressText-todo",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未着手",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存済み",
-          "tag": "SPAN",
-          "classes": "",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存点なし",
-          "tag": "BUTTON",
-          "classes": "statusCheckpoint",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "32",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "文字",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        }
-      ],
+      "lowContrast": [],
       "screenedCount": 59,
       "controls": [
         {
@@ -3320,7 +2758,7 @@
       "optionStates": {
         "checked": {
           "border": "",
-          "borderColor": "rgb(28, 27, 24) rgb(28, 27, 24) rgba(28, 27, 24, 0.24)",
+          "borderColor": "rgb(28, 27, 24) rgb(28, 27, 24) rgba(28, 27, 24, 0.24) rgb(179, 59, 37)",
           "background": "rgb(255, 255, 255)",
           "shadow": "none",
           "outline": "rgb(28, 27, 24) none 3px",
@@ -3328,7 +2766,7 @@
         },
         "unchecked": {
           "border": "",
-          "borderColor": "rgb(28, 27, 24) rgb(28, 27, 24) rgba(28, 27, 24, 0.24)",
+          "borderColor": "rgb(28, 27, 24) rgb(28, 27, 24) rgba(28, 27, 24, 0.24) rgba(0, 0, 0, 0)",
           "background": "rgb(255, 255, 255)",
           "shadow": "none",
           "outline": "rgb(28, 27, 24) none 3px",
@@ -3336,10 +2774,10 @@
         },
         "focused": {
           "border": "",
-          "borderColor": "rgb(28, 27, 24) rgb(28, 27, 24) rgba(28, 27, 24, 0.24)",
+          "borderColor": "rgb(28, 27, 24) rgb(28, 27, 24) rgba(28, 27, 24, 0.24) rgb(179, 59, 37)",
           "background": "rgb(255, 255, 255)",
           "shadow": "none",
-          "outline": "rgb(28, 27, 24) none 3px",
+          "outline": "rgb(179, 59, 37) solid 2px",
           "opacity": "1"
         },
         "input": {
@@ -3347,10 +2785,10 @@
           "borderColor": "rgb(0, 0, 0)",
           "background": "rgba(0, 0, 0, 0)",
           "shadow": "none",
-          "outline": "rgb(0, 0, 0) none 3px",
+          "outline": "rgb(16, 16, 16) auto 1px",
           "opacity": "0"
         },
-        "focusVisible": false
+        "focusVisible": true
       },
       "styles": {
         ".appFrame": [
@@ -3637,7 +3075,7 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(28, 27, 24, 0.48)",
+            "color": "rgba(28, 27, 24, 0.64)",
             "background": "rgb(255, 255, 255)",
             "backgroundImage": "none",
             "border": [
@@ -3648,13 +3086,13 @@
             ],
             "borderColor": [
               "rgb(28, 27, 24)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)"
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(28, 27, 24, 0.48) none 3px",
+            "outline": "rgba(28, 27, 24, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -4189,18 +3627,18 @@
               "0px",
               "0px",
               "1px",
-              "0px"
+              "3px"
             ],
             "borderColor": [
               "rgb(28, 27, 24)",
               "rgb(28, 27, 24)",
               "rgba(28, 27, 24, 0.24)",
-              "rgb(28, 27, 24)"
+              "rgb(179, 59, 37)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgb(28, 27, 24) none 3px",
-            "outlineOffset": "0px",
+            "outline": "rgb(179, 59, 37) solid 2px",
+            "outlineOffset": "2px",
             "opacity": "1",
             "display": "grid",
             "visibility": "visible",
@@ -4221,36 +3659,7 @@
         ".pagedEditorSheet": [],
         ".editorFindPopover": []
       },
-      "lowContrast": [
-        {
-          "text": "30",
-          "tag": "SPAN",
-          "classes": "",
-          "fontSize": "10px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "テーマ",
-          "tag": "SPAN",
-          "classes": "",
-          "fontSize": "10px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        }
-      ],
+      "lowContrast": [],
       "screenedCount": 75,
       "controls": [
         {
@@ -5178,7 +4587,7 @@
       "active": {
         "tag": "INPUT",
         "classes": "",
-        "focusVisible": false
+        "focusVisible": true
       },
       "pageOverflow": {
         "width": 1600,
@@ -5476,7 +4885,7 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(28, 27, 24, 0.48)",
+            "color": "rgba(28, 27, 24, 0.64)",
             "background": "rgb(255, 255, 255)",
             "backgroundImage": "none",
             "border": [
@@ -5487,13 +4896,13 @@
             ],
             "borderColor": [
               "rgb(28, 27, 24)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)"
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(28, 27, 24, 0.48) none 3px",
+            "outline": "rgba(28, 27, 24, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -5958,288 +5367,7 @@
         ".pagedEditorSheet": [],
         ".editorFindPopover": []
       },
-      "lowContrast": [
-        {
-          "text": "字数",
-          "tag": "SPAN",
-          "classes": "sidebarHeaderUnit",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "02_駅前の喫茶店.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "32",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "03_春の帰り道.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "24",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "美月.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "17",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "遥.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "16",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "チェックポイントはまだありません",
-          "tag": "DIV",
-          "classes": "snapshotEmptyState",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "執筆中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "推敲中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "完了",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未",
-          "tag": "SPAN",
-          "classes": "progressLegendMark progressText-todo",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未着手",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存済み",
-          "tag": "SPAN",
-          "classes": "",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存点なし",
-          "tag": "BUTTON",
-          "classes": "statusCheckpoint",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "文字",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        }
-      ],
+      "lowContrast": [],
       "screenedCount": 62,
       "controls": [
         {
@@ -7121,7 +6249,7 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(28, 27, 24, 0.48)",
+            "color": "rgba(28, 27, 24, 0.64)",
             "background": "rgb(255, 255, 255)",
             "backgroundImage": "none",
             "border": [
@@ -7132,13 +6260,13 @@
             ],
             "borderColor": [
               "rgb(28, 27, 24)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)"
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(28, 27, 24, 0.48) none 3px",
+            "outline": "rgba(28, 27, 24, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -7670,330 +6798,7 @@
         ],
         ".editorFindPopover": []
       },
-      "lowContrast": [
-        {
-          "text": "字数",
-          "tag": "SPAN",
-          "classes": "sidebarHeaderUnit",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "02_駅前の喫茶店.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "32",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "03_春の帰り道.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "24",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "美月.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "17",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "遥.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "16",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "チェックポイントはまだありません",
-          "tag": "DIV",
-          "classes": "snapshotEmptyState",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "執筆中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "推敲中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "完了",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未",
-          "tag": "SPAN",
-          "classes": "progressLegendMark progressText-todo",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未着手",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存済み",
-          "tag": "SPAN",
-          "classes": "",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "1",
-          "tag": "SPAN",
-          "classes": "statusPages",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "2",
-          "tag": "SPAN",
-          "classes": "statusPages",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "ページ",
-          "tag": "SPAN",
-          "classes": "statusPages",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存点なし",
-          "tag": "BUTTON",
-          "classes": "statusCheckpoint",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "文字",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        }
-      ],
+      "lowContrast": [],
       "screenedCount": 69,
       "controls": [
         {
@@ -8891,7 +7696,7 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(28, 27, 24, 0.48)",
+            "color": "rgba(28, 27, 24, 0.64)",
             "background": "rgb(255, 255, 255)",
             "backgroundImage": "none",
             "border": [
@@ -8902,13 +7707,13 @@
             ],
             "borderColor": [
               "rgb(28, 27, 24)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)"
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(28, 27, 24, 0.48) none 3px",
+            "outline": "rgba(28, 27, 24, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -9440,330 +8245,7 @@
         ],
         ".editorFindPopover": []
       },
-      "lowContrast": [
-        {
-          "text": "字数",
-          "tag": "SPAN",
-          "classes": "sidebarHeaderUnit",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "02_駅前の喫茶店.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "32",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "03_春の帰り道.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "24",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "美月.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "17",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "遥.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "16",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "チェックポイントはまだありません",
-          "tag": "DIV",
-          "classes": "snapshotEmptyState",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "執筆中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "推敲中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "完了",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未",
-          "tag": "SPAN",
-          "classes": "progressLegendMark progressText-todo",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未着手",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存済み",
-          "tag": "SPAN",
-          "classes": "",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "1",
-          "tag": "SPAN",
-          "classes": "statusPages",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "2",
-          "tag": "SPAN",
-          "classes": "statusPages",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "ページ",
-          "tag": "SPAN",
-          "classes": "statusPages",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存点なし",
-          "tag": "BUTTON",
-          "classes": "statusCheckpoint",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "文字",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        }
-      ],
+      "lowContrast": [],
       "screenedCount": 69,
       "controls": [
         {
@@ -10661,7 +9143,7 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(28, 27, 24, 0.48)",
+            "color": "rgba(28, 27, 24, 0.64)",
             "background": "rgb(255, 255, 255)",
             "backgroundImage": "none",
             "border": [
@@ -10672,13 +9154,13 @@
             ],
             "borderColor": [
               "rgb(28, 27, 24)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)"
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(28, 27, 24, 0.48) none 3px",
+            "outline": "rgba(28, 27, 24, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -11143,330 +9625,7 @@
         ".pagedEditorSheet": [],
         ".editorFindPopover": []
       },
-      "lowContrast": [
-        {
-          "text": "字数",
-          "tag": "SPAN",
-          "classes": "sidebarHeaderUnit",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "02_駅前の喫茶店.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "32",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "03_春の帰り道.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "24",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "美月.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "17",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "遥.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "16",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "チェックポイントはまだありません",
-          "tag": "DIV",
-          "classes": "snapshotEmptyState",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "執筆中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "推敲中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "完了",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未",
-          "tag": "SPAN",
-          "classes": "progressLegendMark progressText-todo",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未着手",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存済み",
-          "tag": "SPAN",
-          "classes": "",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "原稿用紙",
-          "tag": "SPAN",
-          "classes": "statusManuscript",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "2.2",
-          "tag": "SPAN",
-          "classes": "statusManuscript",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "枚",
-          "tag": "SPAN",
-          "classes": "statusManuscript",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存点なし",
-          "tag": "BUTTON",
-          "classes": "statusCheckpoint",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "文字",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        }
-      ],
+      "lowContrast": [],
       "screenedCount": 59,
       "controls": [
         {
@@ -12348,7 +10507,7 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(28, 27, 24, 0.48)",
+            "color": "rgba(28, 27, 24, 0.64)",
             "background": "rgb(255, 255, 255)",
             "backgroundImage": "none",
             "border": [
@@ -12359,13 +10518,13 @@
             ],
             "borderColor": [
               "rgb(28, 27, 24)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)"
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(28, 27, 24, 0.48) none 2.66667px",
+            "outline": "rgba(28, 27, 24, 0.64) none 2.66667px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -12830,288 +10989,7 @@
         ".pagedEditorSheet": [],
         ".editorFindPopover": []
       },
-      "lowContrast": [
-        {
-          "text": "字数",
-          "tag": "SPAN",
-          "classes": "sidebarHeaderUnit",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "02_駅前の喫茶店.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "32",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "03_春の帰り道.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "24",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "美月.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "17",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "遥.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "16",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "チェックポイントはまだありません",
-          "tag": "DIV",
-          "classes": "snapshotEmptyState",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "執筆中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "推敲中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "完了",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未",
-          "tag": "SPAN",
-          "classes": "progressLegendMark progressText-todo",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未着手",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存済み",
-          "tag": "SPAN",
-          "classes": "",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存点なし",
-          "tag": "BUTTON",
-          "classes": "statusCheckpoint",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "文字",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        }
-      ],
+      "lowContrast": [],
       "screenedCount": 60,
       "controls": [
         {
@@ -14011,7 +11889,7 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(28, 27, 24, 0.48)",
+            "color": "rgba(28, 27, 24, 0.64)",
             "background": "rgb(255, 255, 255)",
             "backgroundImage": "none",
             "border": [
@@ -14022,13 +11900,13 @@
             ],
             "borderColor": [
               "rgb(28, 27, 24)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)"
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(28, 27, 24, 0.48) none 3px",
+            "outline": "rgba(28, 27, 24, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -14493,288 +12371,7 @@
         ".pagedEditorSheet": [],
         ".editorFindPopover": []
       },
-      "lowContrast": [
-        {
-          "text": "字数",
-          "tag": "SPAN",
-          "classes": "sidebarHeaderUnit",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "02_駅前の喫茶店.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "32",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "03_春の帰り道.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "24",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "美月.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "17",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "遥.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "16",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "チェックポイントはまだありません",
-          "tag": "DIV",
-          "classes": "snapshotEmptyState",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "執筆中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "推敲中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "完了",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未",
-          "tag": "SPAN",
-          "classes": "progressLegendMark progressText-todo",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未着手",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存済み",
-          "tag": "SPAN",
-          "classes": "",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存点なし",
-          "tag": "BUTTON",
-          "classes": "statusCheckpoint",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "文字",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        }
-      ],
+      "lowContrast": [],
       "screenedCount": 62,
       "controls": [
         {
@@ -15656,7 +13253,7 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(28, 27, 24, 0.48)",
+            "color": "rgba(28, 27, 24, 0.64)",
             "background": "rgb(255, 255, 255)",
             "backgroundImage": "none",
             "border": [
@@ -15667,13 +13264,13 @@
             ],
             "borderColor": [
               "rgb(28, 27, 24)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)"
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(28, 27, 24, 0.48) none 3px",
+            "outline": "rgba(28, 27, 24, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -15704,330 +13301,7 @@
         ".pagedEditorSheet": [],
         ".editorFindPopover": []
       },
-      "lowContrast": [
-        {
-          "text": "字数",
-          "tag": "SPAN",
-          "classes": "sidebarHeaderUnit",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "02_駅前の喫茶店.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "32",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "03_春の帰り道.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "24",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "美月.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "17",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "遥.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "16",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "チェックポイントはまだありません",
-          "tag": "DIV",
-          "classes": "snapshotEmptyState",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "執筆中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "推敲中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "完了",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未",
-          "tag": "SPAN",
-          "classes": "progressLegendMark progressText-todo",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未着手",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存済み",
-          "tag": "SPAN",
-          "classes": "",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存点なし",
-          "tag": "BUTTON",
-          "classes": "statusCheckpoint",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "文字",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "2",
-          "tag": "SPAN",
-          "classes": "",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "件",
-          "tag": "SPAN",
-          "classes": "",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "11/3",
-          "tag": "TIME",
-          "classes": "",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        }
-      ],
+      "lowContrast": [],
       "screenedCount": 65,
       "controls": [
         {
@@ -16877,7 +14151,7 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(28, 27, 24, 0.48)",
+            "color": "rgba(28, 27, 24, 0.64)",
             "background": "rgb(255, 255, 255)",
             "backgroundImage": "none",
             "border": [
@@ -16888,13 +14162,13 @@
             ],
             "borderColor": [
               "rgb(28, 27, 24)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)"
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(28, 27, 24, 0.48) none 3px",
+            "outline": "rgba(28, 27, 24, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -16959,316 +14233,7 @@
         ".pagedEditorSheet": [],
         ".editorFindPopover": []
       },
-      "lowContrast": [
-        {
-          "text": "字数",
-          "tag": "SPAN",
-          "classes": "sidebarHeaderUnit",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "02_駅前の喫茶店.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "32",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "03_春の帰り道.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "24",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "美月.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "17",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "遥.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "16",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "チェックポイントはまだありません",
-          "tag": "DIV",
-          "classes": "snapshotEmptyState",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "執筆中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "推敲中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "完了",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未",
-          "tag": "SPAN",
-          "classes": "progressLegendMark progressText-todo",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未着手",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存済み",
-          "tag": "SPAN",
-          "classes": "",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存点なし",
-          "tag": "BUTTON",
-          "classes": "statusCheckpoint",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "文字",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "26文",
-          "tag": "SPAN",
-          "classes": "proofStatus",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "指摘はありません。",
-          "tag": "P",
-          "classes": "proofEmpty",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        }
-      ],
+      "lowContrast": [],
       "screenedCount": 64,
       "controls": [
         {
@@ -18086,7 +15051,7 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(28, 27, 24, 0.48)",
+            "color": "rgba(28, 27, 24, 0.64)",
             "background": "rgb(255, 255, 255)",
             "backgroundImage": "none",
             "border": [
@@ -18097,13 +15062,13 @@
             ],
             "borderColor": [
               "rgb(28, 27, 24)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)"
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(28, 27, 24, 0.48) none 3px",
+            "outline": "rgba(28, 27, 24, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -18168,288 +15133,7 @@
         ".pagedEditorSheet": [],
         ".editorFindPopover": []
       },
-      "lowContrast": [
-        {
-          "text": "字数",
-          "tag": "SPAN",
-          "classes": "sidebarHeaderUnit",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "02_駅前の喫茶店.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "32",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "03_春の帰り道.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "24",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "美月.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "17",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "遥.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "16",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "チェックポイントはまだありません",
-          "tag": "DIV",
-          "classes": "snapshotEmptyState",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "執筆中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "推敲中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "完了",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未",
-          "tag": "SPAN",
-          "classes": "progressLegendMark progressText-todo",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未着手",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存済み",
-          "tag": "SPAN",
-          "classes": "",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存点なし",
-          "tag": "BUTTON",
-          "classes": "statusCheckpoint",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "文字",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        }
-      ],
+      "lowContrast": [],
       "screenedCount": 58,
       "controls": [
         {
@@ -19275,7 +15959,7 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(28, 27, 24, 0.48)",
+            "color": "rgba(28, 27, 24, 0.64)",
             "background": "rgb(255, 255, 255)",
             "backgroundImage": "none",
             "border": [
@@ -19286,13 +15970,13 @@
             ],
             "borderColor": [
               "rgb(28, 27, 24)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)"
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(28, 27, 24, 0.48) none 3px",
+            "outline": "rgba(28, 27, 24, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -19425,22 +16109,7 @@
         ".pagedEditorSheet": [],
         ".editorFindPopover": []
       },
-      "lowContrast": [
-        {
-          "text": "ホバー表示にしたペインは画面端へ隠れ、マウスを移すと本文の上へ表示されます",
-          "tag": "SMALL",
-          "classes": "dialogFieldHint",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        }
-      ],
+      "lowContrast": [],
       "screenedCount": 18,
       "controls": [
         {
@@ -20085,6 +16754,11 @@
       "theme": "sen-light",
       "name": "command-palette",
       "screenshot": "sen-light-command-palette.png",
+      "keyboardNavigation": {
+        "before": "表を挿入…行数・列数を指定",
+        "after": "表：この列を開始揃え（横書き：左／縦書き：上）表のセルにカーソルを置いてください列の配置",
+        "moved": true
+      },
       "styles": {
         ".appFrame": [
           {
@@ -20370,7 +17044,7 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(28, 27, 24, 0.48)",
+            "color": "rgba(28, 27, 24, 0.64)",
             "background": "rgb(255, 255, 255)",
             "backgroundImage": "none",
             "border": [
@@ -20381,13 +17055,13 @@
             ],
             "borderColor": [
               "rgb(28, 27, 24)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)"
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(28, 27, 24, 0.48) none 3px",
+            "outline": "rgba(28, 27, 24, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -20489,10 +17163,10 @@
             "background": "rgb(255, 255, 255)",
             "backgroundImage": "none",
             "border": [
-              "1px",
-              "1px",
-              "1px",
-              "1px"
+              "2px",
+              "2px",
+              "2px",
+              "2px"
             ],
             "borderColor": [
               "rgb(28, 27, 24)",
@@ -20500,8 +17174,8 @@
               "rgb(28, 27, 24)",
               "rgb(28, 27, 24)"
             ],
-            "radius": "10px",
-            "shadow": "rgba(0, 0, 0, 0.45) 0px 24px 60px 0px",
+            "radius": "0px",
+            "shadow": "none",
             "outline": "rgb(28, 27, 24) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
@@ -21053,22 +17727,27 @@
         }
       ],
       "paletteSelection": {
-        "text": "表を挿入…行数・列数を指定",
+        "text": "表：この列を開始揃え（横書き：左／縦書き：上）表のセルにカーソルを置いてください列の配置",
+        "disabled": true,
         "active": {
-          "background": "rgba(0, 0, 0, 0)",
-          "color": "rgb(28, 27, 24)",
-          "border": "0px none rgb(28, 27, 24)",
-          "outline": "rgb(28, 27, 24) none 3px",
+          "background": "rgb(255, 255, 255)",
+          "color": "rgba(28, 27, 24, 0.72)",
+          "border": "",
+          "borderLeft": "3px solid rgb(179, 59, 37)",
+          "markerPainted": true,
+          "outline": "rgba(28, 27, 24, 0.72) none 3px",
           "shadow": "none"
         },
         "inactive": {
           "background": "rgba(0, 0, 0, 0)",
-          "color": "rgb(28, 27, 24)",
-          "border": "0px none rgb(28, 27, 24)",
-          "outline": "rgb(28, 27, 24) none 3px",
+          "color": "rgba(28, 27, 24, 0.72)",
+          "border": "",
+          "borderLeft": "3px solid rgba(0, 0, 0, 0)",
+          "markerPainted": false,
+          "outline": "rgba(28, 27, 24, 0.72) none 3px",
           "shadow": "none"
         },
-        "visuallyDistinct": false
+        "visuallyDistinct": true
       },
       "active": {
         "tag": "INPUT",
@@ -21371,7 +18050,7 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(28, 27, 24, 0.48)",
+            "color": "rgba(28, 27, 24, 0.64)",
             "background": "rgb(255, 255, 255)",
             "backgroundImage": "none",
             "border": [
@@ -21382,13 +18061,13 @@
             ],
             "borderColor": [
               "rgb(28, 27, 24)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)"
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(28, 27, 24, 0.48) none 3px",
+            "outline": "rgba(28, 27, 24, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -21487,288 +18166,7 @@
           }
         ]
       },
-      "lowContrast": [
-        {
-          "text": "字数",
-          "tag": "SPAN",
-          "classes": "sidebarHeaderUnit",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "02_駅前の喫茶店.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "32",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "03_春の帰り道.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "24",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "美月.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "17",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "遥.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "16",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "チェックポイントはまだありません",
-          "tag": "DIV",
-          "classes": "snapshotEmptyState",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "執筆中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "推敲中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "完了",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未",
-          "tag": "SPAN",
-          "classes": "progressLegendMark progressText-todo",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未着手",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存済み",
-          "tag": "SPAN",
-          "classes": "",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存点なし",
-          "tag": "BUTTON",
-          "classes": "statusCheckpoint",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "文字",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        }
-      ],
+      "lowContrast": [],
       "screenedCount": 58,
       "controls": [
         {
@@ -22642,7 +19040,7 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(28, 27, 24, 0.48)",
+            "color": "rgba(28, 27, 24, 0.64)",
             "background": "rgb(255, 255, 255)",
             "backgroundImage": "none",
             "border": [
@@ -22653,13 +19051,13 @@
             ],
             "borderColor": [
               "rgb(28, 27, 24)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)"
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(28, 27, 24, 0.48) none 3px",
+            "outline": "rgba(28, 27, 24, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -22758,288 +19156,7 @@
         ".pagedEditorSheet": [],
         ".editorFindPopover": []
       },
-      "lowContrast": [
-        {
-          "text": "字数",
-          "tag": "SPAN",
-          "classes": "sidebarHeaderUnit",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "02_駅前の喫茶店.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "32",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "03_春の帰り道.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "24",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "美月.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "17",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "遥.md",
-          "tag": "SPAN",
-          "classes": "treeItemName treeItemName-todo",
-          "fontSize": "12px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "16",
-          "tag": "SPAN",
-          "classes": "treeItemCharCount",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "チェックポイントはまだありません",
-          "tag": "DIV",
-          "classes": "snapshotEmptyState",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "執筆中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "推敲中",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "完了",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未",
-          "tag": "SPAN",
-          "classes": "progressLegendMark progressText-todo",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "未着手",
-          "tag": "SPAN",
-          "classes": "progressLegendItem",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存済み",
-          "tag": "SPAN",
-          "classes": "",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "保存点なし",
-          "tag": "BUTTON",
-          "classes": "statusCheckpoint",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "545",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        },
-        {
-          "text": "文字",
-          "tag": "SPAN",
-          "classes": "statusRight",
-          "fontSize": "11px",
-          "color": "rgba(28, 27, 24, 0.48)",
-          "background": {
-            "r": 255,
-            "g": 255,
-            "b": 255,
-            "a": 1
-          },
-          "contrast": 3.12
-        }
-      ],
+      "lowContrast": [],
       "screenedCount": 60,
       "controls": [
         {
@@ -23929,7 +20046,7 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(28, 27, 24, 0.48)",
+            "color": "rgba(28, 27, 24, 0.64)",
             "background": "rgb(255, 255, 255)",
             "backgroundImage": "none",
             "border": [
@@ -23940,13 +20057,13 @@
             ],
             "borderColor": [
               "rgb(28, 27, 24)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)",
-              "rgba(28, 27, 24, 0.48)"
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)",
+              "rgba(28, 27, 24, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(28, 27, 24, 0.48) none 3px",
+            "outline": "rgba(28, 27, 24, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "0.28",
             "display": "flex",
@@ -25075,7 +21192,7 @@
             "classes": "rightSidebar ",
             "color": "rgba(255, 255, 255, 0.72)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -25086,7 +21203,7 @@
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
-              "color(srgb 1 1 1 / 0.09)"
+              "rgb(255, 255, 255)"
             ],
             "radius": "0px",
             "shadow": "none",
@@ -25110,7 +21227,7 @@
             "classes": "editorColumn ",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -25145,7 +21262,7 @@
             "classes": "verticalTypewriterShell",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -25213,9 +21330,9 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(255, 255, 255, 0.48)",
+            "color": "rgba(255, 255, 255, 0.64)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "2px",
               "0px",
@@ -25223,14 +21340,14 @@
               "0px"
             ],
             "borderColor": [
-              "color(srgb 1 1 1 / 0.09)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)"
+              "rgb(255, 255, 255)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(255, 255, 255, 0.48) none 3px",
+            "outline": "rgba(255, 255, 255, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -26445,7 +22562,7 @@
             "classes": "rightSidebar ",
             "color": "rgba(255, 255, 255, 0.72)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -26456,7 +22573,7 @@
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
-              "color(srgb 1 1 1 / 0.09)"
+              "rgb(255, 255, 255)"
             ],
             "radius": "0px",
             "shadow": "none",
@@ -26480,7 +22597,7 @@
             "classes": "editorColumn ",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -26515,7 +22632,7 @@
             "classes": "verticalTypewriterShell",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -26583,9 +22700,9 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(255, 255, 255, 0.48)",
+            "color": "rgba(255, 255, 255, 0.64)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "2px",
               "0px",
@@ -26593,14 +22710,14 @@
               "0px"
             ],
             "borderColor": [
-              "color(srgb 1 1 1 / 0.09)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)"
+              "rgb(255, 255, 255)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(255, 255, 255, 0.48) none 3px",
+            "outline": "rgba(255, 255, 255, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -27681,7 +23798,7 @@
       "optionStates": {
         "checked": {
           "border": "",
-          "borderColor": "rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.24)",
+          "borderColor": "rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.24) rgb(216, 95, 70)",
           "background": "rgb(28, 27, 24)",
           "shadow": "none",
           "outline": "rgb(255, 255, 255) none 3px",
@@ -27689,7 +23806,7 @@
         },
         "unchecked": {
           "border": "",
-          "borderColor": "rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.24)",
+          "borderColor": "rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.24) rgba(0, 0, 0, 0)",
           "background": "rgb(28, 27, 24)",
           "shadow": "none",
           "outline": "rgb(255, 255, 255) none 3px",
@@ -27697,10 +23814,10 @@
         },
         "focused": {
           "border": "",
-          "borderColor": "rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.24)",
+          "borderColor": "rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.24) rgb(216, 95, 70)",
           "background": "rgb(28, 27, 24)",
           "shadow": "none",
-          "outline": "rgb(255, 255, 255) none 3px",
+          "outline": "rgb(216, 95, 70) solid 2px",
           "opacity": "1"
         },
         "input": {
@@ -27708,10 +23825,10 @@
           "borderColor": "rgb(255, 255, 255)",
           "background": "rgba(0, 0, 0, 0)",
           "shadow": "none",
-          "outline": "rgb(255, 255, 255) none 3px",
+          "outline": "rgb(16, 16, 16) auto 1px",
           "opacity": "0"
         },
-        "focusVisible": false
+        "focusVisible": true
       },
       "styles": {
         ".appFrame": [
@@ -27860,7 +23977,7 @@
             "classes": "rightSidebar ",
             "color": "rgba(255, 255, 255, 0.72)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -27871,7 +23988,7 @@
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
-              "color(srgb 1 1 1 / 0.09)"
+              "rgb(255, 255, 255)"
             ],
             "radius": "0px",
             "shadow": "none",
@@ -27895,7 +24012,7 @@
             "classes": "editorColumn ",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -27930,7 +24047,7 @@
             "classes": "verticalTypewriterShell",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -27998,9 +24115,9 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(255, 255, 255, 0.48)",
+            "color": "rgba(255, 255, 255, 0.64)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "2px",
               "0px",
@@ -28008,14 +24125,14 @@
               "0px"
             ],
             "borderColor": [
-              "color(srgb 1 1 1 / 0.09)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)"
+              "rgb(255, 255, 255)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(255, 255, 255, 0.48) none 3px",
+            "outline": "rgba(255, 255, 255, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -28550,18 +24667,18 @@
               "0px",
               "0px",
               "1px",
-              "0px"
+              "3px"
             ],
             "borderColor": [
               "rgb(255, 255, 255)",
               "rgb(255, 255, 255)",
               "rgba(255, 255, 255, 0.24)",
-              "rgb(255, 255, 255)"
+              "rgb(216, 95, 70)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgb(255, 255, 255) none 3px",
-            "outlineOffset": "0px",
+            "outline": "rgb(216, 95, 70) solid 2px",
+            "outlineOffset": "2px",
             "opacity": "1",
             "display": "grid",
             "visibility": "visible",
@@ -29534,7 +25651,7 @@
       "active": {
         "tag": "INPUT",
         "classes": "",
-        "focusVisible": false
+        "focusVisible": true
       },
       "pageOverflow": {
         "width": 1600,
@@ -29694,7 +25811,7 @@
             "classes": "rightSidebar ",
             "color": "rgba(255, 255, 255, 0.72)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -29705,7 +25822,7 @@
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
-              "color(srgb 1 1 1 / 0.09)"
+              "rgb(255, 255, 255)"
             ],
             "radius": "0px",
             "shadow": "none",
@@ -29729,7 +25846,7 @@
             "classes": "editorColumn ",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -29764,7 +25881,7 @@
             "classes": "verticalTypewriterShell",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -29832,9 +25949,9 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(255, 255, 255, 0.48)",
+            "color": "rgba(255, 255, 255, 0.64)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "2px",
               "0px",
@@ -29842,14 +25959,14 @@
               "0px"
             ],
             "borderColor": [
-              "color(srgb 1 1 1 / 0.09)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)"
+              "rgb(255, 255, 255)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(255, 255, 255, 0.48) none 3px",
+            "outline": "rgba(255, 255, 255, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -31058,7 +27175,7 @@
             "classes": "rightSidebar ",
             "color": "rgba(255, 255, 255, 0.72)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -31069,7 +27186,7 @@
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
-              "color(srgb 1 1 1 / 0.09)"
+              "rgb(255, 255, 255)"
             ],
             "radius": "0px",
             "shadow": "none",
@@ -31093,7 +27210,7 @@
             "classes": "editorColumn ",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -31128,7 +27245,7 @@
             "classes": "verticalTypewriterShell",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -31196,9 +27313,9 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(255, 255, 255, 0.48)",
+            "color": "rgba(255, 255, 255, 0.64)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "2px",
               "0px",
@@ -31206,14 +27323,14 @@
               "0px"
             ],
             "borderColor": [
-              "color(srgb 1 1 1 / 0.09)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)"
+              "rgb(255, 255, 255)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(255, 255, 255, 0.48) none 3px",
+            "outline": "rgba(255, 255, 255, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -32505,7 +28622,7 @@
             "classes": "rightSidebar ",
             "color": "rgba(255, 255, 255, 0.72)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -32516,7 +28633,7 @@
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
-              "color(srgb 1 1 1 / 0.09)"
+              "rgb(255, 255, 255)"
             ],
             "radius": "0px",
             "shadow": "none",
@@ -32540,7 +28657,7 @@
             "classes": "editorColumn ",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -32575,7 +28692,7 @@
             "classes": "verticalTypewriterShell",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -32643,9 +28760,9 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(255, 255, 255, 0.48)",
+            "color": "rgba(255, 255, 255, 0.64)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "2px",
               "0px",
@@ -32653,14 +28770,14 @@
               "0px"
             ],
             "borderColor": [
-              "color(srgb 1 1 1 / 0.09)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)"
+              "rgb(255, 255, 255)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(255, 255, 255, 0.48) none 3px",
+            "outline": "rgba(255, 255, 255, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -33952,7 +30069,7 @@
             "classes": "rightSidebar ",
             "color": "rgba(255, 255, 255, 0.72)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -33963,7 +30080,7 @@
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
-              "color(srgb 1 1 1 / 0.09)"
+              "rgb(255, 255, 255)"
             ],
             "radius": "0px",
             "shadow": "none",
@@ -33987,7 +30104,7 @@
             "classes": "editorColumn ",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -34022,7 +30139,7 @@
             "classes": "verticalTypewriterShell",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -34090,9 +30207,9 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(255, 255, 255, 0.48)",
+            "color": "rgba(255, 255, 255, 0.64)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "2px",
               "0px",
@@ -34100,14 +30217,14 @@
               "0px"
             ],
             "borderColor": [
-              "color(srgb 1 1 1 / 0.09)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)"
+              "rgb(255, 255, 255)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(255, 255, 255, 0.48) none 3px",
+            "outline": "rgba(255, 255, 255, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -35316,7 +31433,7 @@
             "classes": "rightSidebar ",
             "color": "rgba(255, 255, 255, 0.72)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -35327,7 +31444,7 @@
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
-              "color(srgb 1 1 1 / 0.09)"
+              "rgb(255, 255, 255)"
             ],
             "radius": "0px",
             "shadow": "none",
@@ -35351,7 +31468,7 @@
             "classes": "editorColumn ",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -35386,7 +31503,7 @@
             "classes": "verticalTypewriterShell",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -35454,9 +31571,9 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(255, 255, 255, 0.48)",
+            "color": "rgba(255, 255, 255, 0.64)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "2px",
               "0px",
@@ -35464,14 +31581,14 @@
               "0px"
             ],
             "borderColor": [
-              "color(srgb 1 1 1 / 0.09)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)"
+              "rgb(255, 255, 255)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(255, 255, 255, 0.48) none 2.66667px",
+            "outline": "rgba(255, 255, 255, 0.64) none 2.66667px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -36698,7 +32815,7 @@
             "classes": "rightSidebar ",
             "color": "rgba(255, 255, 255, 0.72)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -36709,7 +32826,7 @@
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
-              "color(srgb 1 1 1 / 0.09)"
+              "rgb(255, 255, 255)"
             ],
             "radius": "0px",
             "shadow": "none",
@@ -36733,7 +32850,7 @@
             "classes": "editorColumn ",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -36768,7 +32885,7 @@
             "classes": "verticalTypewriterShell",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -36836,9 +32953,9 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(255, 255, 255, 0.48)",
+            "color": "rgba(255, 255, 255, 0.64)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "2px",
               "0px",
@@ -36846,14 +32963,14 @@
               "0px"
             ],
             "borderColor": [
-              "color(srgb 1 1 1 / 0.09)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)"
+              "rgb(255, 255, 255)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(255, 255, 255, 0.48) none 3px",
+            "outline": "rgba(255, 255, 255, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -38062,7 +34179,7 @@
             "classes": "rightSidebar ",
             "color": "rgba(255, 255, 255, 0.72)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -38073,7 +34190,7 @@
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
-              "color(srgb 1 1 1 / 0.09)"
+              "rgb(255, 255, 255)"
             ],
             "radius": "0px",
             "shadow": "none",
@@ -38097,7 +34214,7 @@
             "classes": "editorColumn ",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -38132,7 +34249,7 @@
             "classes": "verticalTypewriterShell",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -38200,9 +34317,9 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(255, 255, 255, 0.48)",
+            "color": "rgba(255, 255, 255, 0.64)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "2px",
               "0px",
@@ -38210,14 +34327,14 @@
               "0px"
             ],
             "borderColor": [
-              "color(srgb 1 1 1 / 0.09)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)"
+              "rgb(255, 255, 255)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(255, 255, 255, 0.48) none 3px",
+            "outline": "rgba(255, 255, 255, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -38248,22 +34365,7 @@
         ".pagedEditorSheet": [],
         ".editorFindPopover": []
       },
-      "lowContrast": [
-        {
-          "text": "すべて",
-          "tag": "BUTTON",
-          "classes": "ideaChip isActive",
-          "fontSize": "12px",
-          "color": "rgb(216, 95, 70)",
-          "background": {
-            "r": 66.01968473663976,
-            "g": 45.115340253748556,
-            "b": 38.676816608996546,
-            "a": 1
-          },
-          "contrast": 3.447
-        }
-      ],
+      "lowContrast": [],
       "screenedCount": 65,
       "controls": [
         {
@@ -38975,7 +35077,7 @@
             "classes": "rightSidebar ",
             "color": "rgba(255, 255, 255, 0.72)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -38986,7 +35088,7 @@
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
-              "color(srgb 1 1 1 / 0.09)"
+              "rgb(255, 255, 255)"
             ],
             "radius": "0px",
             "shadow": "none",
@@ -39010,7 +35112,7 @@
             "classes": "editorColumn ",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -39045,7 +35147,7 @@
             "classes": "verticalTypewriterShell",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -39113,9 +35215,9 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(255, 255, 255, 0.48)",
+            "color": "rgba(255, 255, 255, 0.64)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "2px",
               "0px",
@@ -39123,14 +35225,14 @@
               "0px"
             ],
             "borderColor": [
-              "color(srgb 1 1 1 / 0.09)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)"
+              "rgb(255, 255, 255)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(255, 255, 255, 0.48) none 3px",
+            "outline": "rgba(255, 255, 255, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -39875,7 +35977,7 @@
             "classes": "rightSidebar ",
             "color": "rgba(255, 255, 255, 0.72)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -39886,7 +35988,7 @@
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
-              "color(srgb 1 1 1 / 0.09)"
+              "rgb(255, 255, 255)"
             ],
             "radius": "0px",
             "shadow": "none",
@@ -39910,7 +36012,7 @@
             "classes": "editorColumn ",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -39945,7 +36047,7 @@
             "classes": "verticalTypewriterShell",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -40013,9 +36115,9 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(255, 255, 255, 0.48)",
+            "color": "rgba(255, 255, 255, 0.64)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "2px",
               "0px",
@@ -40023,14 +36125,14 @@
               "0px"
             ],
             "borderColor": [
-              "color(srgb 1 1 1 / 0.09)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)"
+              "rgb(255, 255, 255)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(255, 255, 255, 0.48) none 3px",
+            "outline": "rgba(255, 255, 255, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -40783,7 +36885,7 @@
             "classes": "rightSidebar ",
             "color": "rgba(255, 255, 255, 0.72)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -40794,7 +36896,7 @@
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
-              "color(srgb 1 1 1 / 0.09)"
+              "rgb(255, 255, 255)"
             ],
             "radius": "0px",
             "shadow": "none",
@@ -40818,7 +36920,7 @@
             "classes": "editorColumn ",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -40853,7 +36955,7 @@
             "classes": "verticalTypewriterShell",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -40921,9 +37023,9 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(255, 255, 255, 0.48)",
+            "color": "rgba(255, 255, 255, 0.64)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "2px",
               "0px",
@@ -40931,14 +37033,14 @@
               "0px"
             ],
             "borderColor": [
-              "color(srgb 1 1 1 / 0.09)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)"
+              "rgb(255, 255, 255)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(255, 255, 255, 0.48) none 3px",
+            "outline": "rgba(255, 255, 255, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -41716,6 +37818,11 @@
       "theme": "sen-dark",
       "name": "command-palette",
       "screenshot": "sen-dark-command-palette.png",
+      "keyboardNavigation": {
+        "before": "表を挿入…行数・列数を指定",
+        "after": "表：この列を開始揃え（横書き：左／縦書き：上）表のセルにカーソルを置いてください列の配置",
+        "moved": true
+      },
       "styles": {
         ".appFrame": [
           {
@@ -41863,7 +37970,7 @@
             "classes": "rightSidebar ",
             "color": "rgba(255, 255, 255, 0.72)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -41874,7 +37981,7 @@
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
-              "color(srgb 1 1 1 / 0.09)"
+              "rgb(255, 255, 255)"
             ],
             "radius": "0px",
             "shadow": "none",
@@ -41898,7 +38005,7 @@
             "classes": "editorColumn ",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -41933,7 +38040,7 @@
             "classes": "verticalTypewriterShell",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -42001,9 +38108,9 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(255, 255, 255, 0.48)",
+            "color": "rgba(255, 255, 255, 0.64)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "2px",
               "0px",
@@ -42011,14 +38118,14 @@
               "0px"
             ],
             "borderColor": [
-              "color(srgb 1 1 1 / 0.09)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)"
+              "rgb(255, 255, 255)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(255, 255, 255, 0.48) none 3px",
+            "outline": "rgba(255, 255, 255, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -42120,10 +38227,10 @@
             "background": "rgb(28, 27, 24)",
             "backgroundImage": "none",
             "border": [
-              "1px",
-              "1px",
-              "1px",
-              "1px"
+              "2px",
+              "2px",
+              "2px",
+              "2px"
             ],
             "borderColor": [
               "rgb(255, 255, 255)",
@@ -42131,8 +38238,8 @@
               "rgb(255, 255, 255)",
               "rgb(255, 255, 255)"
             ],
-            "radius": "10px",
-            "shadow": "rgba(0, 0, 0, 0.45) 0px 24px 60px 0px",
+            "radius": "0px",
+            "shadow": "none",
             "outline": "rgb(255, 255, 255) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
@@ -42684,22 +38791,27 @@
         }
       ],
       "paletteSelection": {
-        "text": "表を挿入…行数・列数を指定",
+        "text": "表：この列を開始揃え（横書き：左／縦書き：上）表のセルにカーソルを置いてください列の配置",
+        "disabled": true,
         "active": {
-          "background": "rgba(0, 0, 0, 0)",
-          "color": "rgb(255, 255, 255)",
-          "border": "0px none rgb(255, 255, 255)",
-          "outline": "rgb(255, 255, 255) none 3px",
+          "background": "rgb(28, 27, 24)",
+          "color": "rgba(255, 255, 255, 0.72)",
+          "border": "",
+          "borderLeft": "3px solid rgb(216, 95, 70)",
+          "markerPainted": true,
+          "outline": "rgba(255, 255, 255, 0.72) none 3px",
           "shadow": "none"
         },
         "inactive": {
           "background": "rgba(0, 0, 0, 0)",
-          "color": "rgb(255, 255, 255)",
-          "border": "0px none rgb(255, 255, 255)",
-          "outline": "rgb(255, 255, 255) none 3px",
+          "color": "rgba(255, 255, 255, 0.72)",
+          "border": "",
+          "borderLeft": "3px solid rgba(0, 0, 0, 0)",
+          "markerPainted": false,
+          "outline": "rgba(255, 255, 255, 0.72) none 3px",
           "shadow": "none"
         },
-        "visuallyDistinct": false
+        "visuallyDistinct": true
       },
       "active": {
         "tag": "INPUT",
@@ -42864,7 +38976,7 @@
             "classes": "rightSidebar ",
             "color": "rgba(255, 255, 255, 0.72)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -42875,7 +38987,7 @@
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
-              "color(srgb 1 1 1 / 0.09)"
+              "rgb(255, 255, 255)"
             ],
             "radius": "0px",
             "shadow": "none",
@@ -42899,7 +39011,7 @@
             "classes": "editorColumn ",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -42934,7 +39046,7 @@
             "classes": "verticalTypewriterShell",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -43002,9 +39114,9 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(255, 255, 255, 0.48)",
+            "color": "rgba(255, 255, 255, 0.64)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "2px",
               "0px",
@@ -43012,14 +39124,14 @@
               "0px"
             ],
             "borderColor": [
-              "color(srgb 1 1 1 / 0.09)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)"
+              "rgb(255, 255, 255)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(255, 255, 255, 0.48) none 3px",
+            "outline": "rgba(255, 255, 255, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -43854,7 +39966,7 @@
             "classes": "rightSidebar ",
             "color": "rgba(255, 255, 255, 0.72)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -43865,7 +39977,7 @@
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
-              "color(srgb 1 1 1 / 0.09)"
+              "rgb(255, 255, 255)"
             ],
             "radius": "0px",
             "shadow": "none",
@@ -43889,7 +40001,7 @@
             "classes": "editorColumn ",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -43924,7 +40036,7 @@
             "classes": "verticalTypewriterShell",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -43992,9 +40104,9 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(255, 255, 255, 0.48)",
+            "color": "rgba(255, 255, 255, 0.64)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "2px",
               "0px",
@@ -44002,14 +40114,14 @@
               "0px"
             ],
             "borderColor": [
-              "color(srgb 1 1 1 / 0.09)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)"
+              "rgb(255, 255, 255)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(255, 255, 255, 0.48) none 3px",
+            "outline": "rgba(255, 255, 255, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "1",
             "display": "flex",
@@ -44860,7 +40972,7 @@
             "classes": "rightSidebar ",
             "color": "rgba(255, 255, 255, 0.72)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -44871,7 +40983,7 @@
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
               "rgba(255, 255, 255, 0.72)",
-              "color(srgb 1 1 1 / 0.09)"
+              "rgb(255, 255, 255)"
             ],
             "radius": "0px",
             "shadow": "none",
@@ -44895,7 +41007,7 @@
             "classes": "editorColumn ",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -44930,7 +41042,7 @@
             "classes": "verticalTypewriterShell",
             "color": "rgb(255, 255, 255)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "0px",
               "0px",
@@ -44998,9 +41110,9 @@
           {
             "tag": "FOOTER",
             "classes": "statusbar status-saved",
-            "color": "rgba(255, 255, 255, 0.48)",
+            "color": "rgba(255, 255, 255, 0.64)",
             "background": "rgb(28, 27, 24)",
-            "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+            "backgroundImage": "none",
             "border": [
               "2px",
               "0px",
@@ -45008,14 +41120,14 @@
               "0px"
             ],
             "borderColor": [
-              "color(srgb 1 1 1 / 0.09)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)",
-              "rgba(255, 255, 255, 0.48)"
+              "rgb(255, 255, 255)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)",
+              "rgba(255, 255, 255, 0.64)"
             ],
             "radius": "0px",
             "shadow": "none",
-            "outline": "rgba(255, 255, 255, 0.48) none 3px",
+            "outline": "rgba(255, 255, 255, 0.64) none 3px",
             "outlineOffset": "0px",
             "opacity": "0.28",
             "display": "flex",
@@ -49465,10 +45577,10 @@
           "borderColor": "rgb(0, 0, 0)",
           "background": "rgba(0, 0, 0, 0)",
           "shadow": "none",
-          "outline": "rgb(0, 0, 0) none 3px",
+          "outline": "rgb(16, 16, 16) auto 1px",
           "opacity": "0"
         },
-        "focusVisible": false
+        "focusVisible": true
       },
       "styles": {
         ".appFrame": [
@@ -51286,7 +47398,7 @@
       "active": {
         "tag": "INPUT",
         "classes": "",
-        "focusVisible": false
+        "focusVisible": true
       },
       "pageOverflow": {
         "width": 1600,
@@ -54655,10 +50767,10 @@
           "borderColor": "rgb(255, 255, 255)",
           "background": "rgba(0, 0, 0, 0)",
           "shadow": "none",
-          "outline": "rgb(255, 255, 255) none 3px",
+          "outline": "rgb(16, 16, 16) auto 1px",
           "opacity": "0"
         },
-        "focusVisible": false
+        "focusVisible": true
       },
       "styles": {
         ".appFrame": [
@@ -56558,7 +52670,7 @@
       "active": {
         "tag": "INPUT",
         "classes": "",
-        "focusVisible": false
+        "focusVisible": true
       },
       "pageOverflow": {
         "width": 1600,

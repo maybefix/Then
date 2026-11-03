@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-03T00:21:25.351Z",
-  "cssAndCatalogSha256": "937ce50e5c6d6720c951e382d520773fb0d43fdf87451b2995f5ab74a4615ba5",
+  "generatedAt": "2026-11-03T01:28:06.866Z",
+  "cssAndCatalogSha256": "c25bd2fc7b86b97de12cf66ac31432c035e4e2c53d8b4fc579fbad4cb20a9902",
   "themeCount": 66,
   "sceneCount": 132,
   "guardrails": {
@@ -1232,23 +1232,21 @@
       "mode": "light",
       "writing": "vertical-rl",
       "editorScheme": "light",
-      "configuredColor": "rgba(214, 164, 234, 0.24)",
-      "configuredAlpha": 0.24,
-      "measuredInkAlpha": 0.2397,
-      "measuredBackgroundAlpha": 0.2419,
-      "strokeRetention": 0.7603,
-      "maxInkChannelChange": 44,
+      "configuredColor": "rgba(214, 164, 234, 0.14)",
+      "configuredAlpha": 0.14,
+      "measuredInkAlpha": 0.1416,
+      "measuredBackgroundAlpha": 0.1434,
+      "strokeRetention": 0.8584,
+      "maxInkChannelChange": 26,
       "baselineContrast": 12.6347,
-      "crossingContrast": 6.6716,
+      "crossingContrast": 8.7021,
       "guideVisible": true,
       "guideZIndex": "auto",
       "scrollerZIndex": "auto",
       "borderWidth": 1,
       "borderStyle": "solid",
-      "status": "review",
-      "flags": [
-        "separation-loss-over-20pct"
-      ],
+      "status": "within-guardrail",
+      "flags": [],
       "rasterEvidence": {
         "lowestSeparation": {
           "point": {
@@ -1266,14 +1264,14 @@
             "b": 255
           },
           "onStroke": {
-            "r": 90,
-            "g": 78,
-            "b": 95
+            "r": 74,
+            "g": 67,
+            "b": 77
           },
           "onBackground": {
-            "r": 245.17040383374297,
-            "g": 233.18309143586856,
-            "b": 249.96532879289276
+            "r": 249.1928817608854,
+            "g": 242.11103024977,
+            "b": 252.02562236533154
           }
         },
         "lowestContrast": {
@@ -1292,14 +1290,14 @@
             "b": 255
           },
           "onStroke": {
-            "r": 90,
-            "g": 78,
-            "b": 95
+            "r": 74,
+            "g": 67,
+            "b": 77
           },
           "onBackground": {
-            "r": 245.17040383374297,
-            "g": 233.18309143586856,
-            "b": 249.96532879289276
+            "r": 249.1928817608854,
+            "g": 242.11103024977,
+            "b": 252.02562236533154
           }
         }
       }
@@ -1310,23 +1308,21 @@
       "mode": "light",
       "writing": "horizontal-tb",
       "editorScheme": "light",
-      "configuredColor": "rgba(214, 164, 234, 0.24)",
-      "configuredAlpha": 0.24,
-      "measuredInkAlpha": 0.2397,
-      "measuredBackgroundAlpha": 0.2419,
-      "strokeRetention": 0.7603,
-      "maxInkChannelChange": 44,
+      "configuredColor": "rgba(214, 164, 234, 0.14)",
+      "configuredAlpha": 0.14,
+      "measuredInkAlpha": 0.1416,
+      "measuredBackgroundAlpha": 0.1434,
+      "strokeRetention": 0.8584,
+      "maxInkChannelChange": 26,
       "baselineContrast": 12.6347,
-      "crossingContrast": 6.6716,
+      "crossingContrast": 8.7021,
       "guideVisible": true,
       "guideZIndex": "auto",
       "scrollerZIndex": "auto",
       "borderWidth": 1,
       "borderStyle": "solid",
-      "status": "review",
-      "flags": [
-        "separation-loss-over-20pct"
-      ],
+      "status": "within-guardrail",
+      "flags": [],
       "rasterEvidence": {
         "lowestSeparation": {
           "point": {
@@ -1344,14 +1340,14 @@
             "b": 255
           },
           "onStroke": {
-            "r": 90,
-            "g": 78,
-            "b": 95
+            "r": 74,
+            "g": 67,
+            "b": 77
           },
           "onBackground": {
-            "r": 245.17040383374297,
-            "g": 233.18309143586856,
-            "b": 249.96532879289276
+            "r": 249.1928817608854,
+            "g": 242.11103024977,
+            "b": 252.02562236533154
           }
         },
         "lowestContrast": {
@@ -1370,14 +1366,14 @@
             "b": 255
           },
           "onStroke": {
-            "r": 90,
-            "g": 78,
-            "b": 95
+            "r": 74,
+            "g": 67,
+            "b": 77
           },
           "onBackground": {
-            "r": 245.17040383374297,
-            "g": 233.18309143586856,
-            "b": 249.96532879289276
+            "r": 249.1928817608854,
+            "g": 242.11103024977,
+            "b": 252.02562236533154
           }
         }
       }
@@ -2300,23 +2296,21 @@
       "mode": "light",
       "writing": "vertical-rl",
       "editorScheme": "light",
-      "configuredColor": "rgba(28, 27, 24, 0.24)",
-      "configuredAlpha": 0.24,
+      "configuredColor": "rgba(28, 27, 24, 0.14)",
+      "configuredAlpha": 0.14,
       "measuredInkAlpha": null,
-      "measuredBackgroundAlpha": 0.2391,
-      "strokeRetention": 0.7609,
+      "measuredBackgroundAlpha": 0.1414,
+      "strokeRetention": 0.8586,
       "maxInkChannelChange": 0,
       "baselineContrast": 17.2225,
-      "crossingContrast": 10.3462,
+      "crossingContrast": 12.894,
       "guideVisible": true,
       "guideZIndex": "auto",
       "scrollerZIndex": "auto",
       "borderWidth": 1,
       "borderStyle": "solid",
-      "status": "review",
-      "flags": [
-        "separation-loss-over-20pct"
-      ],
+      "status": "within-guardrail",
+      "flags": [],
       "rasterEvidence": {
         "lowestSeparation": {
           "point": {
@@ -2339,9 +2333,9 @@
             "b": 24
           },
           "onBackground": {
-            "r": 200.7323648278236,
-            "g": 200.49330035569946,
-            "b": 199.7761069393271
+            "r": 222.9007292476765,
+            "g": 222.75932276859137,
+            "b": 222.335103331336
           }
         },
         "lowestContrast": {
@@ -2365,9 +2359,9 @@
             "b": 24
           },
           "onBackground": {
-            "r": 200.7323648278236,
-            "g": 200.49330035569946,
-            "b": 199.7761069393271
+            "r": 222.9007292476765,
+            "g": 222.75932276859137,
+            "b": 222.335103331336
           }
         }
       }
@@ -2378,20 +2372,20 @@
       "mode": "light",
       "writing": "horizontal-tb",
       "editorScheme": "light",
-      "configuredColor": "rgba(0, 0, 0, 0)",
-      "configuredAlpha": 0,
-      "measuredInkAlpha": 0,
-      "measuredBackgroundAlpha": 0,
-      "strokeRetention": 1,
+      "configuredColor": "rgba(28, 27, 24, 0.14)",
+      "configuredAlpha": 0.14,
+      "measuredInkAlpha": null,
+      "measuredBackgroundAlpha": 0.1414,
+      "strokeRetention": 0.8586,
       "maxInkChannelChange": 0,
       "baselineContrast": 17.2225,
-      "crossingContrast": 17.2225,
-      "guideVisible": false,
+      "crossingContrast": 12.894,
+      "guideVisible": true,
       "guideZIndex": "auto",
       "scrollerZIndex": "auto",
       "borderWidth": 1,
       "borderStyle": "solid",
-      "status": "not-visible",
+      "status": "within-guardrail",
       "flags": [],
       "rasterEvidence": {
         "lowestSeparation": {
@@ -2415,9 +2409,9 @@
             "b": 24
           },
           "onBackground": {
-            "r": 255,
-            "g": 255,
-            "b": 255
+            "r": 222.9007292476765,
+            "g": 222.75932276859137,
+            "b": 222.335103331336
           }
         },
         "lowestContrast": {
@@ -2441,9 +2435,9 @@
             "b": 24
           },
           "onBackground": {
-            "r": 255,
-            "g": 255,
-            "b": 255
+            "r": 222.9007292476765,
+            "g": 222.75932276859137,
+            "b": 222.335103331336
           }
         }
       }
@@ -3445,7 +3439,7 @@
       "configuredColor": "rgba(90, 97, 106, 0.12)",
       "configuredAlpha": 0.12,
       "measuredInkAlpha": 0.123,
-      "measuredBackgroundAlpha": 0.1216,
+      "measuredBackgroundAlpha": 0.125,
       "strokeRetention": 0.877,
       "maxInkChannelChange": 8,
       "baselineContrast": 14.4793,
@@ -7166,23 +7160,21 @@
       "mode": "dark",
       "writing": "vertical-rl",
       "editorScheme": "dark",
-      "configuredColor": "rgba(255, 255, 255, 0.24)",
-      "configuredAlpha": 0.24,
+      "configuredColor": "rgba(255, 255, 255, 0.14)",
+      "configuredAlpha": 0.14,
       "measuredInkAlpha": null,
-      "measuredBackgroundAlpha": 0.2399,
-      "strokeRetention": 0.7601,
+      "measuredBackgroundAlpha": 0.1414,
+      "strokeRetention": 0.8586,
       "maxInkChannelChange": 0,
-      "baselineContrast": 17.5797,
-      "crossingContrast": 8.0412,
+      "baselineContrast": 17.2225,
+      "crossingContrast": 11.1601,
       "guideVisible": true,
       "guideZIndex": "auto",
       "scrollerZIndex": "auto",
       "borderWidth": 1,
       "borderStyle": "solid",
-      "status": "review",
-      "flags": [
-        "separation-loss-over-20pct"
-      ],
+      "status": "within-guardrail",
+      "flags": [],
       "rasterEvidence": {
         "lowestSeparation": {
           "point": {
@@ -7195,9 +7187,9 @@
             "b": 255
           },
           "offBackground": {
-            "r": 26,
-            "g": 25,
-            "b": 22
+            "r": 28,
+            "g": 27,
+            "b": 24
           },
           "onStroke": {
             "r": 255,
@@ -7205,9 +7197,9 @@
             "b": 255
           },
           "onBackground": {
-            "r": 80.93389087264299,
-            "g": 80.1737768589864,
-            "b": 77.89343481801666
+            "r": 60.09927075232352,
+            "g": 59.24067723140864,
+            "b": 56.66489666866402
           }
         },
         "lowestContrast": {
@@ -7221,9 +7213,9 @@
             "b": 255
           },
           "offBackground": {
-            "r": 26,
-            "g": 25,
-            "b": 22
+            "r": 28,
+            "g": 27,
+            "b": 24
           },
           "onStroke": {
             "r": 255,
@@ -7231,9 +7223,9 @@
             "b": 255
           },
           "onBackground": {
-            "r": 80.93389087264299,
-            "g": 80.1737768589864,
-            "b": 77.89343481801666
+            "r": 60.09927075232352,
+            "g": 59.24067723140864,
+            "b": 56.66489666866402
           }
         }
       }
@@ -7244,20 +7236,20 @@
       "mode": "dark",
       "writing": "horizontal-tb",
       "editorScheme": "dark",
-      "configuredColor": "rgba(0, 0, 0, 0)",
-      "configuredAlpha": 0,
-      "measuredInkAlpha": 0,
-      "measuredBackgroundAlpha": 0,
-      "strokeRetention": 1,
+      "configuredColor": "rgba(255, 255, 255, 0.14)",
+      "configuredAlpha": 0.14,
+      "measuredInkAlpha": null,
+      "measuredBackgroundAlpha": 0.1414,
+      "strokeRetention": 0.8586,
       "maxInkChannelChange": 0,
-      "baselineContrast": 17.5797,
-      "crossingContrast": 17.5797,
-      "guideVisible": false,
+      "baselineContrast": 17.2225,
+      "crossingContrast": 11.1601,
+      "guideVisible": true,
       "guideZIndex": "auto",
       "scrollerZIndex": "auto",
       "borderWidth": 1,
       "borderStyle": "solid",
-      "status": "not-visible",
+      "status": "within-guardrail",
       "flags": [],
       "rasterEvidence": {
         "lowestSeparation": {
@@ -7271,9 +7263,9 @@
             "b": 255
           },
           "offBackground": {
-            "r": 26,
-            "g": 25,
-            "b": 22
+            "r": 28,
+            "g": 27,
+            "b": 24
           },
           "onStroke": {
             "r": 255,
@@ -7281,9 +7273,9 @@
             "b": 255
           },
           "onBackground": {
-            "r": 26,
-            "g": 25,
-            "b": 22
+            "r": 60.09927075232352,
+            "g": 59.24067723140864,
+            "b": 56.66489666866402
           }
         },
         "lowestContrast": {
@@ -7297,9 +7289,9 @@
             "b": 255
           },
           "offBackground": {
-            "r": 26,
-            "g": 25,
-            "b": 22
+            "r": 28,
+            "g": 27,
+            "b": 24
           },
           "onStroke": {
             "r": 255,
@@ -7307,9 +7299,9 @@
             "b": 255
           },
           "onBackground": {
-            "r": 26,
-            "g": 25,
-            "b": 22
+            "r": 60.09927075232352,
+            "g": 59.24067723140864,
+            "b": 56.66489666866402
           }
         }
       }
@@ -8159,7 +8151,7 @@
       "configuredColor": "rgba(114, 217, 149, 0.15)",
       "configuredAlpha": 0.15,
       "measuredInkAlpha": 0.1491,
-      "measuredBackgroundAlpha": 0.1502,
+      "measuredBackgroundAlpha": 0.1516,
       "strokeRetention": 0.8504,
       "maxInkChannelChange": 19,
       "baselineContrast": 17.6859,
@@ -8311,7 +8303,7 @@
       "configuredColor": "rgba(159, 177, 196, 0.15)",
       "configuredAlpha": 0.15,
       "measuredInkAlpha": 0.1475,
-      "measuredBackgroundAlpha": 0.1491,
+      "measuredBackgroundAlpha": 0.1503,
       "strokeRetention": 0.8522,
       "maxInkChannelChange": 11,
       "baselineContrast": 15.5731,
@@ -9375,7 +9367,7 @@
       "configuredColor": "rgba(130, 192, 150, 0.16)",
       "configuredAlpha": 0.16,
       "measuredInkAlpha": 0.1605,
-      "measuredBackgroundAlpha": 0.1625,
+      "measuredBackgroundAlpha": 0.166,
       "strokeRetention": 0.8392,
       "maxInkChannelChange": 17,
       "baselineContrast": 12.3923,

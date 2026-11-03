@@ -2,6 +2,11 @@
   "theme": "sen-light",
   "name": "command-palette",
   "screenshot": "sen-light-command-palette.png",
+  "keyboardNavigation": {
+    "before": "表を挿入…行数・列数を指定",
+    "after": "表：この列を開始揃え（横書き：左／縦書き：上）表のセルにカーソルを置いてください列の配置",
+    "moved": true
+  },
   "styles": {
     ".appFrame": [
       {
@@ -287,7 +292,7 @@
       {
         "tag": "FOOTER",
         "classes": "statusbar status-saved",
-        "color": "rgba(28, 27, 24, 0.48)",
+        "color": "rgba(28, 27, 24, 0.64)",
         "background": "rgb(255, 255, 255)",
         "backgroundImage": "none",
         "border": [
@@ -298,13 +303,13 @@
         ],
         "borderColor": [
           "rgb(28, 27, 24)",
-          "rgba(28, 27, 24, 0.48)",
-          "rgba(28, 27, 24, 0.48)",
-          "rgba(28, 27, 24, 0.48)"
+          "rgba(28, 27, 24, 0.64)",
+          "rgba(28, 27, 24, 0.64)",
+          "rgba(28, 27, 24, 0.64)"
         ],
         "radius": "0px",
         "shadow": "none",
-        "outline": "rgba(28, 27, 24, 0.48) none 3px",
+        "outline": "rgba(28, 27, 24, 0.64) none 3px",
         "outlineOffset": "0px",
         "opacity": "1",
         "display": "flex",
@@ -406,10 +411,10 @@
         "background": "rgb(255, 255, 255)",
         "backgroundImage": "none",
         "border": [
-          "1px",
-          "1px",
-          "1px",
-          "1px"
+          "2px",
+          "2px",
+          "2px",
+          "2px"
         ],
         "borderColor": [
           "rgb(28, 27, 24)",
@@ -417,8 +422,8 @@
           "rgb(28, 27, 24)",
           "rgb(28, 27, 24)"
         ],
-        "radius": "10px",
-        "shadow": "rgba(0, 0, 0, 0.45) 0px 24px 60px 0px",
+        "radius": "0px",
+        "shadow": "none",
         "outline": "rgb(28, 27, 24) none 3px",
         "outlineOffset": "0px",
         "opacity": "1",
@@ -970,22 +975,27 @@
     }
   ],
   "paletteSelection": {
-    "text": "表を挿入…行数・列数を指定",
+    "text": "表：この列を開始揃え（横書き：左／縦書き：上）表のセルにカーソルを置いてください列の配置",
+    "disabled": true,
     "active": {
-      "background": "rgba(0, 0, 0, 0)",
-      "color": "rgb(28, 27, 24)",
-      "border": "0px none rgb(28, 27, 24)",
-      "outline": "rgb(28, 27, 24) none 3px",
+      "background": "rgb(255, 255, 255)",
+      "color": "rgba(28, 27, 24, 0.72)",
+      "border": "",
+      "borderLeft": "3px solid rgb(179, 59, 37)",
+      "markerPainted": true,
+      "outline": "rgba(28, 27, 24, 0.72) none 3px",
       "shadow": "none"
     },
     "inactive": {
       "background": "rgba(0, 0, 0, 0)",
-      "color": "rgb(28, 27, 24)",
-      "border": "0px none rgb(28, 27, 24)",
-      "outline": "rgb(28, 27, 24) none 3px",
+      "color": "rgba(28, 27, 24, 0.72)",
+      "border": "",
+      "borderLeft": "3px solid rgba(0, 0, 0, 0)",
+      "markerPainted": false,
+      "outline": "rgba(28, 27, 24, 0.72) none 3px",
       "shadow": "none"
     },
-    "visuallyDistinct": false
+    "visuallyDistinct": true
   },
   "active": {
     "tag": "INPUT",

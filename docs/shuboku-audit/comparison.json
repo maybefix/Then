@@ -1,0 +1,390 @@
+{
+  "generatedAt": "2026-11-03T01:37:32.983182+00:00",
+  "beforeCheckpoint": "2f8d331",
+  "sources": {
+    "before": "before/",
+    "browser": "browser.json",
+    "contracts": "contracts.json",
+    "tests": "tests.json",
+    "guides": "../theme-guide-audit/results.json"
+  },
+  "browser": {
+    "caseCount": 40,
+    "shubokuCaseCount": 34,
+    "caseErrors": 0,
+    "runtimeExceptions": 0,
+    "shubokuScreenedTextCount": 1904,
+    "shubokuLowContrastSamplesBefore": 278,
+    "shubokuLowContrastSamplesAfter": 0
+  },
+  "tests": {
+    "beforePassed": 15,
+    "beforeFailed": [
+      "v0511-themes"
+    ],
+    "afterPassed": 16,
+    "afterFailed": []
+  },
+  "contracts": [
+    {
+      "theme": "sen-light",
+      "beforeIssues": [
+        "palette-selection-invisible",
+        "theme-selection-invisible",
+        "file-text-contrast-low",
+        "palette-ignores-flat-style"
+      ],
+      "afterIssues": [],
+      "fileNameContrast": {
+        "before": 3.129254588272804,
+        "after": 5.16825700728234
+      },
+      "fileCountContrast": {
+        "before": 3.129254588272804,
+        "after": 5.16825700728234
+      },
+      "binderFilterContrastAfter": 5.883932991469848,
+      "themeSelection": {
+        "checked": {
+          "background": "rgb(255, 255, 255)",
+          "border": "",
+          "borderColor": "rgb(28, 27, 24) rgb(28, 27, 24) rgba(28, 27, 24, 0.24) rgb(179, 59, 37)",
+          "borderLeft": "3px solid rgb(179, 59, 37)",
+          "borderLeftWidth": "3px",
+          "borderLeftStyle": "solid",
+          "markerAlpha": 1,
+          "shadow": "none",
+          "outline": "rgb(179, 59, 37) solid 2px"
+        },
+        "unchecked": {
+          "background": "rgb(255, 255, 255)",
+          "border": "",
+          "borderColor": "rgb(28, 27, 24) rgb(28, 27, 24) rgba(28, 27, 24, 0.24) rgba(0, 0, 0, 0)",
+          "borderLeft": "3px solid rgba(0, 0, 0, 0)",
+          "borderLeftWidth": "3px",
+          "borderLeftStyle": "solid",
+          "markerAlpha": 0,
+          "shadow": "none",
+          "outline": "rgb(179, 59, 37) solid 2px"
+        },
+        "focused": {
+          "background": "rgb(255, 255, 255)",
+          "border": "",
+          "borderColor": "rgb(28, 27, 24) rgb(28, 27, 24) rgba(28, 27, 24, 0.24) rgb(179, 59, 37)",
+          "borderLeft": "3px solid rgb(179, 59, 37)",
+          "borderLeftWidth": "3px",
+          "borderLeftStyle": "solid",
+          "markerAlpha": 1,
+          "shadow": "none",
+          "outline": "rgb(179, 59, 37) solid 2px"
+        },
+        "contentShift": 0,
+        "inputOpacity": "0",
+        "focusVisible": true,
+        "focusWidth": "2px",
+        "distinct": true
+      },
+      "commandSelection": {
+        "panel": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(28, 27, 24)",
+          "border": "2px solid rgb(28, 27, 24)",
+          "borderLeft": "2px solid rgb(28, 27, 24)",
+          "borderLeftWidth": "2px",
+          "borderLeftStyle": "solid",
+          "markerAlpha": 1,
+          "outline": "rgb(28, 27, 24) none 3px",
+          "shadow": "none",
+          "radius": "0px"
+        },
+        "active": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(28, 27, 24)",
+          "border": "",
+          "borderLeft": "3px solid rgb(179, 59, 37)",
+          "borderLeftWidth": "3px",
+          "borderLeftStyle": "solid",
+          "markerAlpha": 1,
+          "outline": "rgb(28, 27, 24) none 3px",
+          "shadow": "none",
+          "radius": "0px"
+        },
+        "inactive": {
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(28, 27, 24)",
+          "border": "",
+          "borderLeft": "3px solid rgba(0, 0, 0, 0)",
+          "borderLeftWidth": "3px",
+          "borderLeftStyle": "solid",
+          "markerAlpha": 0,
+          "outline": "rgb(28, 27, 24) none 3px",
+          "shadow": "none",
+          "radius": "0px"
+        },
+        "disabledColor": "rgba(28, 27, 24, 0.72)",
+        "activeDisabledColor": "rgba(28, 27, 24, 0.72)",
+        "contentShift": 0,
+        "distinct": true
+      }
+    },
+    {
+      "theme": "sen-dark",
+      "beforeIssues": [
+        "palette-selection-invisible",
+        "theme-selection-invisible",
+        "flat-surface-overridden",
+        "palette-ignores-flat-style"
+      ],
+      "afterIssues": [],
+      "fileNameContrast": {
+        "before": 4.886814109020152,
+        "after": 7.667286843497328
+      },
+      "fileCountContrast": {
+        "before": 4.886814109020152,
+        "after": 7.667286843497328
+      },
+      "binderFilterContrastAfter": 4.629650425181237,
+      "themeSelection": {
+        "checked": {
+          "background": "rgb(28, 27, 24)",
+          "border": "",
+          "borderColor": "rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.24) rgb(216, 95, 70)",
+          "borderLeft": "3px solid rgb(216, 95, 70)",
+          "borderLeftWidth": "3px",
+          "borderLeftStyle": "solid",
+          "markerAlpha": 1,
+          "shadow": "none",
+          "outline": "rgb(216, 95, 70) solid 2px"
+        },
+        "unchecked": {
+          "background": "rgb(28, 27, 24)",
+          "border": "",
+          "borderColor": "rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.24) rgba(0, 0, 0, 0)",
+          "borderLeft": "3px solid rgba(0, 0, 0, 0)",
+          "borderLeftWidth": "3px",
+          "borderLeftStyle": "solid",
+          "markerAlpha": 0,
+          "shadow": "none",
+          "outline": "rgb(216, 95, 70) solid 2px"
+        },
+        "focused": {
+          "background": "rgb(28, 27, 24)",
+          "border": "",
+          "borderColor": "rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.24) rgb(216, 95, 70)",
+          "borderLeft": "3px solid rgb(216, 95, 70)",
+          "borderLeftWidth": "3px",
+          "borderLeftStyle": "solid",
+          "markerAlpha": 1,
+          "shadow": "none",
+          "outline": "rgb(216, 95, 70) solid 2px"
+        },
+        "contentShift": 0,
+        "inputOpacity": "0",
+        "focusVisible": true,
+        "focusWidth": "2px",
+        "distinct": true
+      },
+      "commandSelection": {
+        "panel": {
+          "background": "rgb(28, 27, 24)",
+          "color": "rgb(255, 255, 255)",
+          "border": "2px solid rgb(255, 255, 255)",
+          "borderLeft": "2px solid rgb(255, 255, 255)",
+          "borderLeftWidth": "2px",
+          "borderLeftStyle": "solid",
+          "markerAlpha": 1,
+          "outline": "rgb(255, 255, 255) none 3px",
+          "shadow": "none",
+          "radius": "0px"
+        },
+        "active": {
+          "background": "rgb(28, 27, 24)",
+          "color": "rgb(255, 255, 255)",
+          "border": "",
+          "borderLeft": "3px solid rgb(216, 95, 70)",
+          "borderLeftWidth": "3px",
+          "borderLeftStyle": "solid",
+          "markerAlpha": 1,
+          "outline": "rgb(255, 255, 255) none 3px",
+          "shadow": "none",
+          "radius": "0px"
+        },
+        "inactive": {
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(255, 255, 255)",
+          "border": "",
+          "borderLeft": "3px solid rgba(0, 0, 0, 0)",
+          "borderLeftWidth": "3px",
+          "borderLeftStyle": "solid",
+          "markerAlpha": 0,
+          "outline": "rgb(255, 255, 255) none 3px",
+          "shadow": "none",
+          "radius": "0px"
+        },
+        "disabledColor": "rgba(255, 255, 255, 0.72)",
+        "activeDisabledColor": "rgba(255, 255, 255, 0.72)",
+        "contentShift": 0,
+        "distinct": true
+      }
+    }
+  ],
+  "guides": {
+    "themeCount": 66,
+    "sceneCount": 132,
+    "reviewScenesBefore": 4,
+    "invisibleScenesBefore": 2,
+    "reviewScenesAfter": 0,
+    "invisibleScenesAfter": 0,
+    "changed": [
+      {
+        "theme": "resonance-light",
+        "writing": "vertical-rl",
+        "before": {
+          "configuredAlpha": 0.24,
+          "guideVisible": true,
+          "strokeRetention": 0.7603,
+          "baselineContrast": 12.6347,
+          "crossingContrast": 6.6716,
+          "status": "review",
+          "flags": [
+            "separation-loss-over-20pct"
+          ]
+        },
+        "after": {
+          "configuredAlpha": 0.14,
+          "guideVisible": true,
+          "strokeRetention": 0.8584,
+          "baselineContrast": 12.6347,
+          "crossingContrast": 8.7021,
+          "status": "within-guardrail",
+          "flags": []
+        }
+      },
+      {
+        "theme": "resonance-light",
+        "writing": "horizontal-tb",
+        "before": {
+          "configuredAlpha": 0.24,
+          "guideVisible": true,
+          "strokeRetention": 0.7603,
+          "baselineContrast": 12.6347,
+          "crossingContrast": 6.6716,
+          "status": "review",
+          "flags": [
+            "separation-loss-over-20pct"
+          ]
+        },
+        "after": {
+          "configuredAlpha": 0.14,
+          "guideVisible": true,
+          "strokeRetention": 0.8584,
+          "baselineContrast": 12.6347,
+          "crossingContrast": 8.7021,
+          "status": "within-guardrail",
+          "flags": []
+        }
+      },
+      {
+        "theme": "sen-light",
+        "writing": "vertical-rl",
+        "before": {
+          "configuredAlpha": 0.24,
+          "guideVisible": true,
+          "strokeRetention": 0.7609,
+          "baselineContrast": 17.2225,
+          "crossingContrast": 10.3462,
+          "status": "review",
+          "flags": [
+            "separation-loss-over-20pct"
+          ]
+        },
+        "after": {
+          "configuredAlpha": 0.14,
+          "guideVisible": true,
+          "strokeRetention": 0.8586,
+          "baselineContrast": 17.2225,
+          "crossingContrast": 12.894,
+          "status": "within-guardrail",
+          "flags": []
+        }
+      },
+      {
+        "theme": "sen-light",
+        "writing": "horizontal-tb",
+        "before": {
+          "configuredAlpha": 0,
+          "guideVisible": false,
+          "strokeRetention": 1,
+          "baselineContrast": 17.2225,
+          "crossingContrast": 17.2225,
+          "status": "not-visible",
+          "flags": []
+        },
+        "after": {
+          "configuredAlpha": 0.14,
+          "guideVisible": true,
+          "strokeRetention": 0.8586,
+          "baselineContrast": 17.2225,
+          "crossingContrast": 12.894,
+          "status": "within-guardrail",
+          "flags": []
+        }
+      },
+      {
+        "theme": "sen-dark",
+        "writing": "vertical-rl",
+        "before": {
+          "configuredAlpha": 0.24,
+          "guideVisible": true,
+          "strokeRetention": 0.7601,
+          "baselineContrast": 17.5797,
+          "crossingContrast": 8.0412,
+          "status": "review",
+          "flags": [
+            "separation-loss-over-20pct"
+          ]
+        },
+        "after": {
+          "configuredAlpha": 0.14,
+          "guideVisible": true,
+          "strokeRetention": 0.8586,
+          "baselineContrast": 17.2225,
+          "crossingContrast": 11.1601,
+          "status": "within-guardrail",
+          "flags": []
+        }
+      },
+      {
+        "theme": "sen-dark",
+        "writing": "horizontal-tb",
+        "before": {
+          "configuredAlpha": 0,
+          "guideVisible": false,
+          "strokeRetention": 1,
+          "baselineContrast": 17.5797,
+          "crossingContrast": 17.5797,
+          "status": "not-visible",
+          "flags": []
+        },
+        "after": {
+          "configuredAlpha": 0.14,
+          "guideVisible": true,
+          "strokeRetention": 0.8586,
+          "baselineContrast": 17.2225,
+          "crossingContrast": 11.1601,
+          "status": "within-guardrail",
+          "flags": []
+        }
+      }
+    ],
+    "otherThemeCount": 63,
+    "otherSceneCount": 126,
+    "maximumOtherMeasurementDelta": {
+      "strokeRetention": 0.0,
+      "baselineContrast": 0.0,
+      "crossingContrast": 0.0
+    },
+    "note": "Main contrast/retention metrics compared with the checkpoint. Raster coverage estimates and tied evidence coordinates can differ slightly across captures."
+  }
+}

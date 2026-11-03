@@ -32,10 +32,10 @@
       "borderColor": "rgb(0, 0, 0)",
       "background": "rgba(0, 0, 0, 0)",
       "shadow": "none",
-      "outline": "rgb(0, 0, 0) none 3px",
+      "outline": "rgb(16, 16, 16) auto 1px",
       "opacity": "0"
     },
-    "focusVisible": false
+    "focusVisible": true
   },
   "styles": {
     ".appFrame": [
@@ -1853,7 +1853,7 @@
   "active": {
     "tag": "INPUT",
     "classes": "",
-    "focusVisible": false
+    "focusVisible": true
   },
   "pageOverflow": {
     "width": 1600,

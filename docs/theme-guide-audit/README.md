@@ -1,6 +1,6 @@
 # タイプライター中央線：全テーマ定量評価
 
-対象: 66テーマ × 縦書き・横書き = 132条件。要確認: 3テーマ / 4条件。不可視: 2条件。
+対象: 66テーマ × 縦書き・横書き = 132条件。要確認: 0テーマ / 0条件。不可視: 0条件。
 
 ## 指標と判定
 
@@ -13,10 +13,6 @@
 
 | テーマ | 方向 | 設定α | 筆画上の実測α | 色差保持率 | 通常→交差部の比 | 指摘 |
 |---|---|---:|---:|---:|---:|---|
-| Resonance (resonance-light) | 縦 | 24.0% | 24.0% | 76.0% | 12.63 → 6.67 | separation-loss-over-20pct |
-| Resonance (resonance-light) | 横 | 24.0% | 24.0% | 76.0% | 12.63 → 6.67 | separation-loss-over-20pct |
-| Shuboku (sen-light) | 縦 | 24.0% | 色一致のため推定不可 | 76.1% | 17.22 → 10.35 | separation-loss-over-20pct |
-| Shuboku (sen-dark) | 縦 | 24.0% | 色一致のため推定不可 | 76.0% | 17.58 → 8.04 | separation-loss-over-20pct |
 
 ## 全条件
 
@@ -32,4 +28,4 @@ JSONのrasterEvidenceには、色差・コントラストが最も小さくな�
 
 参考: [W3C: Contrast Minimum](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)。通常文字の4.5:1と、アンチエイリアスに依存しない色の評価について。
 
-測定はこの作業時点のワークスペース（未コミットのAplil/Blossomと中央線修正を含む）を対象とする。
+測定対象のCSSとテーマ一覧はJSON内のcssAndCatalogSha256で識別する。

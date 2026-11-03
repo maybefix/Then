@@ -1,15 +1,14 @@
 {
-  "generatedAt": "2026-11-03T00:41:15.351Z",
+  "generatedAt": "2026-11-03T01:34:08.654Z",
   "results": [
     {
       "name": "v0511-themes",
       "file": "scripts/test-v0511-themes.mjs",
-      "exitCode": 1,
+      "exitCode": 0,
       "signal": null,
       "error": null,
       "summary": [
-        "AssertionError [ERR_ASSERTION]: Shuboku plot surfaces must be borderless when collapsed or expanded",
-        "  code: 'ERR_ASSERTION',"
+        "v0.5.11 theme tests passed"
       ]
     },
     {
@@ -98,14 +97,7 @@
       "error": null,
       "summary": [
         "editor context menu layout: 48 corner/scale cases, submenus, resize, live zoom, long plugin scrolling, hover/click navigation and selection guards passed"
-      ],
-      "previousAttempt": {
-        "exitCode": 1,
-        "summary": [
-          "AssertionError [ERR_ASSERTION]: browser debug endpoint is ready",
-          "  code: 'ERR_ASSERTION',"
-        ]
-      }
+      ]
     },
     {
       "name": "properties-ui",
@@ -125,13 +117,7 @@
       "error": null,
       "summary": [
         "status bar layout tests passed"
-      ],
-      "previousAttempt": {
-        "exitCode": 1,
-        "summary": [
-          "Error: Could not reach http://127.0.0.1:9970/json/version"
-        ]
-      }
+      ]
     },
     {
       "name": "typewriter-scroll",

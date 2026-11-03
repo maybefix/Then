@@ -2,7 +2,8 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
+import { writeAuditFile as writeFile } from "./lib/write-audit-file.mjs";
 import os from "node:os";
 import path from "node:path";
 import { createServer } from "vite";
@@ -57,7 +58,7 @@ function measure(){
  }
  const controls=[...document.querySelectorAll('button,input,select,textarea')].filter(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility==='visible'&&r.bottom>0&&r.top<innerHeight}).slice(0,130).map(e=>({tag:e.tagName,classes:e.className,aria:e.getAttribute('aria-label'),title:e.title,text:e.textContent.trim().slice(0,35),type:e.type}));
  const activeOption=document.querySelector('.commandPaletteItem.active');let paletteSelection=null;
- if(activeOption){const read=()=>{const s=getComputedStyle(activeOption);return {background:s.backgroundColor,color:s.color,border:s.border,outline:s.outline,shadow:s.boxShadow}};const active=read();activeOption.classList.remove('active');const inactive=read();activeOption.classList.add('active');paletteSelection={text:activeOption.textContent.trim(),active,inactive,visuallyDistinct:JSON.stringify(active)!==JSON.stringify(inactive)};}
+ if(activeOption){const read=()=>{const s=getComputedStyle(activeOption);return {background:s.backgroundColor,color:s.color,border:s.border,borderLeft:s.borderLeft,markerPainted:parseFloat(s.borderLeftWidth)>=3&&s.borderLeftStyle==='solid'&&parse(s.borderLeftColor).a>.95,outline:s.outline,shadow:s.boxShadow}};const active=read();activeOption.classList.remove('active');const inactive=read();activeOption.classList.add('active');paletteSelection={text:activeOption.textContent.trim(),disabled:activeOption.getAttribute('aria-disabled')==='true',active,inactive,visuallyDistinct:JSON.stringify(active)!==JSON.stringify(inactive)};}
  return {theme:document.querySelector('.appShell').dataset.theme,styles,lowContrast,screenedCount:screened.length,controls,paletteSelection,
   active:{tag:document.activeElement.tagName,classes:document.activeElement.className,focusVisible:document.activeElement.matches(':focus-visible')},
   pageOverflow:{width:document.documentElement.scrollWidth,viewport:innerWidth,height:document.documentElement.scrollHeight},
@@ -92,8 +93,9 @@ try{
   const treeShift=await evaluate(`(async()=>{const rows=[...document.querySelectorAll('.fileTreeItem')];const row=rows[1],name=row?.querySelector('.treeItemName');if(!name)return null;const title=name.textContent,before=name.getBoundingClientRect().x;row.querySelector('.treeItemPrimary').click();await new Promise(r=>setTimeout(r,250));const after=[...document.querySelectorAll('.fileTreeItem .treeItemName')].find(e=>e.textContent===title);return {name:title,before,after:after?.getBoundingClientRect().x,shift:after?after.getBoundingClientRect().x-before:null}})()`);
   await record(theme,'tree-selection',{treeShift});
   await attempt(theme,'theme-picker',async()=>{await click('button[aria-label="テーマを選択"]');await wait('.themePickerModal');
+   await evaluate(`(()=>{document.querySelector('input[name="theme"]:checked').focus();return true})()`);await key('Tab','Tab',9,1);await key('Tab','Tab',9);
    const optionStates=await evaluate(`(()=>{const input=document.querySelector('input[name="theme"]:checked'),label=input.closest('label');label.scrollIntoView({block:'center'});const fields=e=>{const s=getComputedStyle(e);return {border:s.border,borderColor:s.borderColor,background:s.backgroundColor,shadow:s.boxShadow,outline:s.outline,opacity:s.opacity}};const checked=fields(label);input.checked=false;const unchecked=fields(label);input.checked=true;input.focus();return {checked,unchecked,focused:fields(label),input:fields(input),focusVisible:input.matches(':focus-visible')}})()`);
-   await record(theme,'theme-picker',{optionStates});await click('button[aria-label="テーマ選択を閉じる"]');});
+   await record(theme,'theme-picker',{optionStates});if(theme.startsWith('sen-')){assert.equal(cases.at(-1).styles['.themeOption:has(input:checked)'][0].border[3],'3px','Selected theme must paint its registration mark');assert.notEqual(optionStates.checked.borderColor,optionStates.unchecked.borderColor);assert.ok(optionStates.focusVisible,'Keyboard navigation must focus the theme radio');assert.match(optionStates.focused.outline,/solid 2px/,'Theme keyboard focus must be visible');}await click('button[aria-label="テーマ選択を閉じる"]');});
   if(theme==='standard'||theme==='dark')continue;
   for(const [name,query] of [['horizontal','&writing=horizontal'],['paged-vertical','&display=paged'],['paged-horizontal','&display=paged&writing=horizontal'],['manuscript','&manuscript=1'],['ui-scale-150','&scale=1.5']]){
    await attempt(theme,name,async()=>{await load(theme,query);await record(theme,name)});
@@ -104,7 +106,7 @@ try{
    await attempt(theme,name,async()=>{await click('.rightSidebar .rightPaneSwitcherButton');await sleep(100);await evaluate(`(()=>{const e=[...document.querySelectorAll('.rightSidebar [role="menuitemradio"]')].find(b=>b.textContent.trim()===${JSON.stringify(name)});if(!e)throw Error('Missing pane');e.click();return true})()`);await sleep(name==='校正'?700:250);await record(theme,name)});
   }
   await attempt(theme,'settings',async()=>{await click('button[aria-label="設定"]');await wait('.settingsModal');await record(theme,'settings');await key('Escape','Escape',27)});
-  await attempt(theme,'command-palette',async()=>{await key('p','KeyP',80,2);await wait('.commandPalette');await record(theme,'command-palette');await key('Escape','Escape',27)});
+  await attempt(theme,'command-palette',async()=>{await key('p','KeyP',80,2);await wait('.commandPalette');const before=await evaluate(`document.querySelector('.commandPaletteItem.active').textContent.trim()`);await key('ArrowDown','ArrowDown',40);const after=await evaluate(`document.querySelector('.commandPaletteItem.active').textContent.trim()`);assert.notEqual(after,before,'ArrowDown must move the active command');await record(theme,'command-palette',{keyboardNavigation:{before,after,moved:before!==after}});const state=cases.at(-1).paletteSelection;assert.ok(state.active.markerPainted&&!state.inactive.markerPainted,'Active command must paint its selection mark');if(state.disabled)assert.equal(state.active.color,state.inactive.color,'Selecting a disabled command must retain its muted text');await key('Escape','Escape',27)});
   await attempt(theme,'find',async()=>{await key('f','KeyF',70,2);await wait('.editorFindPopover');await record(theme,'find');await key('Escape','Escape',27)});
   await attempt(theme,'editor-context',async()=>{const point=await evaluate(`(()=>{const e=document.querySelector('.ProseMirror p'),r=e.getBoundingClientRect();return {x:Math.min(1200,Math.max(450,r.left+8)),y:Math.min(850,Math.max(180,r.top+20))}})()`);await send('Input.dispatchMouseEvent',{type:'mousePressed',button:'right',clickCount:1,x:point.x,y:point.y});await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'right',clickCount:1,x:point.x,y:point.y});await wait('.editorContextMenu');await record(theme,'editor-context');await key('Escape','Escape',27)});
   await load(theme);

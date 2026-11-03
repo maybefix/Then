@@ -1,6 +1,7 @@
 // Run relevant existing checks without stopping at the first failure.
 import { spawnSync } from "node:child_process";
-import { mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
+import { writeAuditFile as writeFile } from "./lib/write-audit-file.mjs";
 const allNames = ["v0511-themes", "appearance", "app-shell-style", "stored-state-model", "v0511-focus-mode", "app-dialog",
   "left-sidebar", "right-sidebar", "command-palette", "editor-context-menu-layout", "properties-ui", "status-bar-layout",
   "typewriter-scroll", "code-blocks", "markdown-tables", "canvas-board-save"];
@@ -24,3 +25,4 @@ if(only>=0){const prior=JSON.parse(await readFile(`${directory}/tests.json`,'utf
 });}
 await writeFile(`${directory}/tests.json`,JSON.stringify({generatedAt:new Date().toISOString(),results:merged},null,2));
 console.log(`${results.filter(r=>r.exitCode===0).length}/${results.length} checks passed; results saved to ${directory}`);
+if(merged.some(r=>r.exitCode!==0))process.exitCode=1;

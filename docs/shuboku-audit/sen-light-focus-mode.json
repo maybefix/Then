@@ -287,7 +287,7 @@
       {
         "tag": "FOOTER",
         "classes": "statusbar status-saved",
-        "color": "rgba(28, 27, 24, 0.48)",
+        "color": "rgba(28, 27, 24, 0.64)",
         "background": "rgb(255, 255, 255)",
         "backgroundImage": "none",
         "border": [
@@ -298,13 +298,13 @@
         ],
         "borderColor": [
           "rgb(28, 27, 24)",
-          "rgba(28, 27, 24, 0.48)",
-          "rgba(28, 27, 24, 0.48)",
-          "rgba(28, 27, 24, 0.48)"
+          "rgba(28, 27, 24, 0.64)",
+          "rgba(28, 27, 24, 0.64)",
+          "rgba(28, 27, 24, 0.64)"
         ],
         "radius": "0px",
         "shadow": "none",
-        "outline": "rgba(28, 27, 24, 0.48) none 3px",
+        "outline": "rgba(28, 27, 24, 0.64) none 3px",
         "outlineOffset": "0px",
         "opacity": "0.28",
         "display": "flex",

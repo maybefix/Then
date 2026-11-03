@@ -16,7 +16,7 @@ const cssAndCatalogSha256=await sourceHash();
 assert.equal(new Set(themeCatalog.map(t => t.id)).size, themeCatalog.length);
 const output = path.resolve("docs/theme-guide-audit");
 await mkdir(path.join(output, "screenshots"), { recursive: true });
-const keep = new Set(["sen-light", "sen-dark", "newsroom-light", "newsroom-dark", "aplil-dark", "blossom-dark"]);
+const keep = new Set(["sen-light", "sen-dark", "resonance-light", "newsroom-light", "newsroom-dark", "aplil-dark", "blossom-dark"]);
 const clip = { x: 0, y: 0, width: 640, height: 480, scale: 1 };
 const mix = (g, b, a) => ({ r: g.r*a+b.r*(1-a), g: g.g*a+b.g*(1-a), b: g.b*a+b.b*(1-a) });
 const distance = (a, b) => Math.max(...["r", "g", "b"].map(k => Math.abs(a[k]-b[k])));
@@ -132,6 +132,7 @@ try {
       const retention=Math.min(...retentions);
       const evidenceAt=i=>({point:scene.points[i],offStroke:samples.off[i],offBackground:samples.bare[i],onStroke:samples.on[i],onBackground:underBackgrounds[i]});
       const flags=[];
+      if(!guideVisible) flags.push("guide-not-visible");
       if(retention<.795) flags.push(retention<.05?"stroke-background-merge":"separation-loss-over-20pct");
       if(baselineContrast>=4.5 && crossingContrast<4.5) flags.push("local-contrast-below-4.5");
       if(scene.pointerEvents!=="none") flags.push("intercepts-input");
@@ -180,7 +181,7 @@ lines.push("","## 全条件","",`[全${rows.length}条件のCSV](results.csv) / 
  "## 再実行","","`npm run audit:typewriter-guides` はレポートを更新する。`npm run audit:typewriter-guides -- --check` は暫定基準を超える条件があると終了コード1を返す。テーマのCSSは変更しない。","",
  "固定したテスト寸法・1倍倍率で通常の本文色と中央線を交差させた測定。全フォント・全装飾・全組版・全倍率の読みやすさを保証するものではない。測定コードの塗りつぶし筆画プローブはフォントのアンチエイリアスを除いて描画順と合成色を検証するためのもの。","",
  "参考: [W3C: Contrast Minimum](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)。通常文字の4.5:1と、アンチエイリアスに依存しない色の評価について。","",
- "測定はこの作業時点のワークスペース（未コミットのAplil/Blossomと中央線修正を含む）を対象とする。");
+ "測定対象のCSSとテーマ一覧はJSON内のcssAndCatalogSha256で識別する。");
 await writeFile(path.join(output,"README.md"),lines.join('\n')+'\n');
 console.log(`AUDIT: ${themeCatalog.length} themes / ${rows.length} scenes; review ${affected.size} themes / ${review.length} scenes. Reports: ${output}`);
 if(process.argv.includes('--check')&&review.length)process.exitCode=1;

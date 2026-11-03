@@ -5,7 +5,7 @@
   "optionStates": {
     "checked": {
       "border": "",
-      "borderColor": "rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.24)",
+      "borderColor": "rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.24) rgb(216, 95, 70)",
       "background": "rgb(28, 27, 24)",
       "shadow": "none",
       "outline": "rgb(255, 255, 255) none 3px",
@@ -13,7 +13,7 @@
     },
     "unchecked": {
       "border": "",
-      "borderColor": "rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.24)",
+      "borderColor": "rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.24) rgba(0, 0, 0, 0)",
       "background": "rgb(28, 27, 24)",
       "shadow": "none",
       "outline": "rgb(255, 255, 255) none 3px",
@@ -21,10 +21,10 @@
     },
     "focused": {
       "border": "",
-      "borderColor": "rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.24)",
+      "borderColor": "rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.24) rgb(216, 95, 70)",
       "background": "rgb(28, 27, 24)",
       "shadow": "none",
-      "outline": "rgb(255, 255, 255) none 3px",
+      "outline": "rgb(216, 95, 70) solid 2px",
       "opacity": "1"
     },
     "input": {
@@ -32,10 +32,10 @@
       "borderColor": "rgb(255, 255, 255)",
       "background": "rgba(0, 0, 0, 0)",
       "shadow": "none",
-      "outline": "rgb(255, 255, 255) none 3px",
+      "outline": "rgb(16, 16, 16) auto 1px",
       "opacity": "0"
     },
-    "focusVisible": false
+    "focusVisible": true
   },
   "styles": {
     ".appFrame": [
@@ -184,7 +184,7 @@
         "classes": "rightSidebar ",
         "color": "rgba(255, 255, 255, 0.72)",
         "background": "rgb(28, 27, 24)",
-        "backgroundImage": "linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), none",
+        "backgroundImage": "none",
         "border": [
           "0px",
           "0px",
@@ -195,7 +195,7 @@
           "rgba(255, 255, 255, 0.72)",
           "rgba(255, 255, 255, 0.72)",
           "rgba(255, 255, 255, 0.72)",
-          "color(srgb 1 1 1 / 0.09)"
+          "rgb(255, 255, 255)"
         ],
         "radius": "0px",
         "shadow": "none",
@@ -219,7 +219,7 @@
         "classes": "editorColumn ",
         "color": "rgb(255, 255, 255)",
         "background": "rgb(28, 27, 24)",
-        "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+        "backgroundImage": "none",
         "border": [
           "0px",
           "0px",
@@ -254,7 +254,7 @@
         "classes": "verticalTypewriterShell",
         "color": "rgb(255, 255, 255)",
         "background": "rgb(28, 27, 24)",
-        "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+        "backgroundImage": "none",
         "border": [
           "0px",
           "0px",
@@ -322,9 +322,9 @@
       {
         "tag": "FOOTER",
         "classes": "statusbar status-saved",
-        "color": "rgba(255, 255, 255, 0.48)",
+        "color": "rgba(255, 255, 255, 0.64)",
         "background": "rgb(28, 27, 24)",
-        "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)), none",
+        "backgroundImage": "none",
         "border": [
           "2px",
           "0px",
@@ -332,14 +332,14 @@
           "0px"
         ],
         "borderColor": [
-          "color(srgb 1 1 1 / 0.09)",
-          "rgba(255, 255, 255, 0.48)",
-          "rgba(255, 255, 255, 0.48)",
-          "rgba(255, 255, 255, 0.48)"
+          "rgb(255, 255, 255)",
+          "rgba(255, 255, 255, 0.64)",
+          "rgba(255, 255, 255, 0.64)",
+          "rgba(255, 255, 255, 0.64)"
         ],
         "radius": "0px",
         "shadow": "none",
-        "outline": "rgba(255, 255, 255, 0.48) none 3px",
+        "outline": "rgba(255, 255, 255, 0.64) none 3px",
         "outlineOffset": "0px",
         "opacity": "1",
         "display": "flex",
@@ -874,18 +874,18 @@
           "0px",
           "0px",
           "1px",
-          "0px"
+          "3px"
         ],
         "borderColor": [
           "rgb(255, 255, 255)",
           "rgb(255, 255, 255)",
           "rgba(255, 255, 255, 0.24)",
-          "rgb(255, 255, 255)"
+          "rgb(216, 95, 70)"
         ],
         "radius": "0px",
         "shadow": "none",
-        "outline": "rgb(255, 255, 255) none 3px",
-        "outlineOffset": "0px",
+        "outline": "rgb(216, 95, 70) solid 2px",
+        "outlineOffset": "2px",
         "opacity": "1",
         "display": "grid",
         "visibility": "visible",
@@ -1858,7 +1858,7 @@
   "active": {
     "tag": "INPUT",
     "classes": "",
-    "focusVisible": false
+    "focusVisible": true
   },
   "pageOverflow": {
     "width": 1600,
