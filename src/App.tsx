@@ -175,6 +175,7 @@ import {
   appendPlotSection,
   renumberPlotCards,
 } from "./components/plot/plotCardUtils";
+import { defaultPlotCards, loadWorkspacePlotCards, saveWorkspacePlotCards } from "./plotCardModel";
 import { ReferenceLayer } from "./components/references/ReferenceLayer";
 import {
   alignIdeaLayoutToMode,
@@ -208,7 +209,6 @@ import {
   makeReferenceFileInfo,
   normalizeFileProgress,
   normalizePathForCompare,
-  normalizePlotCards,
   normalizeProofreadIgnored,
   normalizeReferenceLayout,
   normalizeSnapshots,
@@ -485,36 +485,6 @@ const EMPTY_WORKSPACE_SEARCH: ProjectSearchOutcome = {
   error: null,
 };
 
-const defaultPlotCards: PlotCard[] = [
-  {
-    id: "plot-1",
-    kind: "section",
-    num: "001",
-    title: "縦書きプロットテストです",
-    body: "",
-    expanded: false,
-    managerCollapsed: false,
-  },
-  {
-    id: "plot-2",
-    kind: "section",
-    num: "002",
-    title: "縦書きプロットテストです",
-    body: "",
-    expanded: false,
-    managerCollapsed: false,
-  },
-  {
-    id: "plot-3",
-    kind: "section",
-    num: "003",
-    title: "縦書きプロットテストです",
-    body: "これは縦書きプロットテストです。ちゃんと書けていることを確かめるためにあります。",
-    expanded: false,
-    managerCollapsed: false,
-  },
-];
-
 function isPathInsideFolder(path: string, folderPath: string): boolean {
   const normalizedPath = normalizePathForCompare(path);
   const normalizedFolder = normalizePathForCompare(folderPath);
@@ -662,17 +632,6 @@ async function loadWorkspaceSnippets(folderPath: string): Promise<IdeaThread[]> 
 async function saveWorkspaceSnippets(folderPath: string, snippets: IdeaThread[]): Promise<void> {
   if (!isTauriRuntime()) return;
   await invoke("save_project_snippets", { rootPath: folderPath, snippets });
-}
-
-async function loadWorkspacePlotCards(folderPath: string): Promise<PlotCard[]> {
-  if (!isTauriRuntime()) return defaultPlotCards;
-  const plotCards = await invoke<PlotCard[]>("load_project_plot_cards", { rootPath: folderPath });
-  return normalizePlotCards(plotCards);
-}
-
-async function saveWorkspacePlotCards(folderPath: string, plotCards: PlotCard[]): Promise<void> {
-  if (!isTauriRuntime()) return;
-  await invoke("save_project_plot_cards", { rootPath: folderPath, plotCards });
 }
 
 async function loadWorkspaceProofreadTerms(folderPath: string): Promise<ProofreadTerm[]> {
