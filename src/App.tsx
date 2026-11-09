@@ -125,8 +125,6 @@ import {
 import { mapTextOffsetThroughChange } from "./editor/textOffsetMapping";
 import { recordImportedProject } from "./utils/library";
 import {
-  plotCardReferencePaths,
-  rewritePlotCard,
   rewriteThreadItems,
   threadItemReferencePaths,
   type ReferenceRewrite,
@@ -173,9 +171,9 @@ import {
 import {
   appendPlotChapter,
   appendPlotSection,
-  renumberPlotCards,
 } from "./components/plot/plotCardUtils";
 import { defaultPlotCards, loadWorkspacePlotCards, saveWorkspacePlotCards } from "./plotCardModel";
+import { createPlotCardActions } from "./plotCardActions";
 import { ReferenceLayer } from "./components/references/ReferenceLayer";
 import {
   alignIdeaLayoutToMode,
@@ -6341,28 +6339,17 @@ export default function App() {
     showToast(`移動・コピーできませんでした: ${String(error)}`);
   };
 
-  const transferPlotCard = async (cardId: string) => {
-    const card = plotCards.find((item) => item.id === cardId);
-    if (!card) return;
-    const referencedPaths = plotCardReferencePaths([card]);
-    const options = await requestTransferOptions({
-      itemLabel: card.kind === "chapter" ? "章ラベル" : "プロット",
-      referenceCount: referencedPaths.filter(isExistingReference).length,
-    });
-    if (!options) return;
-    try {
-      const rewrite = await prepareReferenceRewrite(options.target, referencedPaths, options.copyReferences);
-      const targetCards = await loadWorkspacePlotCards(options.target);
-      await saveWorkspacePlotCards(options.target, [
-        ...targetCards,
-        { ...rewritePlotCard(card, rewrite), id: crypto.randomUUID() },
-      ]);
-      if (options.move) setPlotCards((current) => current.filter((item) => item.id !== cardId));
-      showToast(`${options.targetLabel}へ${options.move ? "移動" : "コピー"}しました`);
-    } catch (error) {
-      reportTransferError(error);
-    }
-  };
+  const { transferPlotCard, receiveCanvasCopyToPlot } = createPlotCardActions({
+    plotCards,
+    setPlotCards,
+    requestTransferOptions,
+    isExistingReference,
+    prepareReferenceRewrite,
+    showToast,
+    reportTransferError,
+    setRightSidebarTab,
+    setIsRightSidebarCollapsed,
+  });
 
   const ensureIdeaTransferAvailable = () => {
     if (settings.snippetStorageMode === "workspace") return true;
@@ -7203,34 +7190,7 @@ export default function App() {
 
     let unlistenCopyToPlot: (() => void) | null = null;
     void listen<CanvasCopyToPlotRequest>("then-canvas-copy-to-plot", (event) => {
-      const items = event.payload.items.filter((item) => item.text.trim().length > 0);
-      if (items.length === 0) return;
-
-      const stamp = Date.now().toString(36);
-      setPlotCards((current) =>
-        renumberPlotCards([
-          ...current,
-          ...items.map((item, index) => {
-            // 複数行のカードは1行目をタイトル、残りを本文に。1行だけなら本文のみ。
-            const lines = item.text.trim().split("\n");
-            const [firstLine, ...rest] = lines;
-            const title = lines.length > 1 ? firstLine.trim() : "";
-            const body = lines.length > 1 ? rest.join("\n").trim() : firstLine.trim();
-            return {
-              id: `plot-${stamp}-${index}`,
-              kind: "section" as const,
-              num: "",
-              title,
-              body,
-              expanded: false,
-              managerCollapsed: false,
-            };
-          }),
-        ]),
-      );
-      setRightSidebarTab("plot");
-      setIsRightSidebarCollapsed(false);
-      showToast(`${items.length} 件をプロットへ追加しました`);
+      receiveCanvasCopyToPlot(event);
     }).then((unlisten) => {
       unlistenCopyToPlot = unlisten;
     });
