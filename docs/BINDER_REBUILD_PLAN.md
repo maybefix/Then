@@ -1,7 +1,7 @@
 # バインダー再構築 計画書
 
 作成日: 2026-11-09
-状態: 計画（決めごと D-1〜D-7 は 2026-11-09 に確定。実装は未着手）
+状態: 実装中（決めごと D-1〜D-7 は 2026-11-09 に確定。1-1 は済み）
 モック: [docs/mockups/binder-rebuild.html](mockups/binder-rebuild.html)
 
 ## 0. 目的
@@ -183,7 +183,7 @@
 
 | # | 作業 | 主な対象 | 種類 |
 | --- | --- | --- | --- |
-| 1-1 | App.tsx から Plot の状態と保存を切り離す | [App.tsx](../src/App.tsx)（約8,500行、Plot 参照 約70か所） | 責務分離 |
+| 1-1 | App.tsx から Plot の状態と保存を切り離す（2026-11-09 実施。値と作品を開く経路は App に残し、読み書きと操作を移した。[PLOT_SEPARATION_PLAN.md](PLOT_SEPARATION_PLAN.md)） | [App.tsx](../src/App.tsx)（約8,500行、Plot 参照 約70か所） | 責務分離 |
 | 1-2 | App.tsx から Idea の状態と保存を切り離す | 同上（Idea 参照 約60か所） | 責務分離 |
 | 1-3 | Plot と Idea の現行挙動のテストを足す（移行の前後比較用） | `scripts/`（関連テストは現在7本） | テスト |
 | 1-3a | 原稿の保存の前に、外部で書き換えられていないかをハッシュで確かめる（3.9） | `src-tauri/src/lib.rs`（`save_markdown_file`）、App.tsx の保存処理 | 不具合修正 |
