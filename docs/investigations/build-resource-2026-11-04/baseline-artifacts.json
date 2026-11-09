@@ -1,0 +1,32 @@
+[
+  {
+    "Name": "brew_lib.dll",
+    "Length": 139776,
+    "LastWriteTimeUtc": "2026-11-03T22:30:06.8217582Z"
+  },
+  {
+    "Name": "brew_lib.dll.exp",
+    "Length": 676,
+    "LastWriteTimeUtc": "2026-11-03T22:30:06.6266589Z"
+  },
+  {
+    "Name": "brew_lib.dll.lib",
+    "Length": 1548,
+    "LastWriteTimeUtc": "2026-11-03T16:26:17.7627667Z"
+  },
+  {
+    "Name": "brew_lib.lib",
+    "Length": 134979058,
+    "LastWriteTimeUtc": "2026-11-03T22:30:06.0489757Z"
+  },
+  {
+    "Name": "brew_lib.pdb",
+    "Length": 2027520,
+    "LastWriteTimeUtc": "2026-11-03T22:30:06.8232737Z"
+  },
+  {
+    "Name": "libbrew_lib.rlib",
+    "Length": 269469300,
+    "LastWriteTimeUtc": "2026-11-03T22:30:09.1525222Z"
+  }
+]

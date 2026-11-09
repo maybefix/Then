@@ -2687,7 +2687,12 @@ function measureViewportAnchorDelta(
   const pos = pmPosFromTextOffset(editor.state.doc, viewportState.anchorOffset);
 
   try {
-    const coords = editor.view.coordsAtPos(pos);
+    // 保存アンカーがキャレットそのものなら、タイプライターと同じ列中心を使う。
+    // 縦書きの空行で coordsAtPos は列の片端を返し、復元するたびに半列ずれる。
+    const coords = viewportState.writingMode === "vertical-rl" && pos === editor.state.selection.head
+      ? selectionColumnAnchor(editor.view, viewportState.writingMode).rect
+      : editor.view.coordsAtPos(pos);
+    if (!coords) return null;
     const axis = scrollAxis(viewportState.writingMode);
     const scrollerRect = scroller.getBoundingClientRect();
     const viewportTarget =
@@ -3681,7 +3686,10 @@ export function VerticalTextEditor({
           if (!result) continue;
 
           try {
-            const coords = editor.view.coordsAtPos(result.pos);
+            const coords = mode === "vertical-rl" && result.pos === editor.state.selection.head
+              ? selectionColumnAnchor(editor.view, mode).rect
+              : editor.view.coordsAtPos(result.pos);
+            if (!coords) continue;
             const viewportStart = isHorizontalWriting(mode)
               ? scrollerRect.top
               : scrollerRect.left;
@@ -3720,7 +3728,6 @@ export function VerticalTextEditor({
         }
       },
       scrollCaretIntoView: (offsetPercent) => {
-        cancelInitialAdjustmentRef.current?.();
         const editor = tiptapRef.current;
         const scroller = scrollerRef.current;
         if (!typewriterScrollRef.current || !editor || !scroller || isEditorComposing(editor, composingRef)) return;
@@ -3794,7 +3801,6 @@ export function VerticalTextEditor({
     let pagedReflowFrame: number | null = null;
     let pagedReflowGeneration = 0;
     let initialAdjustmentFrame: number | null = null;
-    let initialAdjustmentExpiryTimer: number | null = null;
     let initialAdjustmentAllowed = true;
     let lineBreakQueued = false;
     let visualLineQueued = false;
@@ -3923,7 +3929,9 @@ export function VerticalTextEditor({
     // 扱わないと第1ページに残ったままになる。セッション中の表示位置があれば
     // そちらを優先し、なければカーソルを含むページへ復元する。
     const initialViewportToRestore =
-      validatedInitialViewport ??
+      // タイプライター中は保存済みviewportより、設定された固定位置を優先する。
+      // 別の本文アンカーを復元すると、その比率でカーソルまで動いてしまう。
+      typewriterScrollRef.current ? null : validatedInitialViewport ??
       (editorDisplayModeRef.current === "paged" && initialSelectionRef.current > 0
         ? {
             textLength: textRef.current.length,
@@ -3968,7 +3976,11 @@ export function VerticalTextEditor({
       centerInstant = false;
       centerWaitFrames = 1;
     };
-    const startCenterAnimation = (inFrame = false) => centerAnimation.request(inFrame);
+    const startCenterAnimation = (inFrame = false) => {
+      // App が起動時に固定位置を再適用しても、タブの保存済み表示位置を優先する。
+      if (initialAdjustmentAllowed && initialViewportToRestore) return;
+      centerAnimation.request(inFrame);
+    };
 
     startCenterAnimationRef.current = startCenterAnimation;
     stopCenterAnimationRef.current = stopCenterAnimation;
@@ -4019,8 +4031,6 @@ export function VerticalTextEditor({
       initialAdjustmentAllowed = false;
       if (initialAdjustmentFrame !== null) cancelAnimationFrame(initialAdjustmentFrame);
       initialAdjustmentFrame = null;
-      if (initialAdjustmentExpiryTimer !== null) window.clearTimeout(initialAdjustmentExpiryTimer);
-      initialAdjustmentExpiryTimer = null;
       if (centerFrame !== null) cancelAnimationFrame(centerFrame);
       centerFrame = null;
       centerQueued = false;
@@ -4077,7 +4087,8 @@ export function VerticalTextEditor({
           typewriterOffsetRef.current,
           writingModeRef.current,
         );
-        const extent = `${currentScroller.scrollWidth}:${currentScroller.scrollHeight}`;
+        const extent = `${currentScroller.clientWidth}:${currentScroller.clientHeight}:` +
+          `${currentScroller.scrollWidth}:${currentScroller.scrollHeight}`;
         const extentStable = extent === previousExtent;
         const aligned = remainingDelta !== null && Math.abs(remainingDelta) < SCROLL_EPS;
         const cannotMoveFurther =
@@ -4207,7 +4218,8 @@ export function VerticalTextEditor({
           currentScroller,
           initialViewportToRestore,
         );
-        const extent = `${currentScroller.scrollWidth}:${currentScroller.scrollHeight}`;
+        const extent = `${currentScroller.clientWidth}:${currentScroller.clientHeight}:` +
+          `${currentScroller.scrollWidth}:${currentScroller.scrollHeight}`;
         const extentStable = extent === previousExtent;
         const aligned = remainingDelta !== null && Math.abs(remainingDelta) < SCROLL_EPS;
         const cannotMoveFurther =
@@ -4230,6 +4242,18 @@ export function VerticalTextEditor({
       };
 
       initialAdjustmentFrame = requestAnimationFrame(step);
+    };
+
+    // 安定後はフレームを回し続けず、サイズ・フォント確定時だけ初期位置を再検証する。
+    // 500ms は1回の補正の上限。遅れて確定したレイアウトも、ユーザー操作が始まる
+    // までは対象にする（手動操作は cancelInitialAdjustment で以後の再開を止める）。
+    const restartInitialAdjustment = () => {
+      const editor = tiptapRef.current;
+      if (!initialAdjustmentAllowed || !editor ||
+        pointerDraggingRef.current || isEditorComposing(editor, composingRef)) return;
+      initialAdjustmentDeadline = performance.now() + INITIAL_CENTER_SETTLE_MS;
+      if (initialViewportToRestore) startInitialViewportRestore();
+      else startInitialCaretSettle();
     };
 
     const requestCenterCaret = (instant: boolean, eventType: string) => {
@@ -5201,6 +5225,7 @@ export function VerticalTextEditor({
       lastLayoutSignature = signature;
       visualLayoutCache = null;
       centerAnimation.invalidate();
+      if (editorDisplayModeRef.current === "continuous") restartInitialAdjustment();
       requestVisualLines();
     });
     visualLayoutObserver.observe(editor.view.dom);
@@ -5394,8 +5419,8 @@ export function VerticalTextEditor({
     };
 
     const handleResize = () => {
-      if (initialAdjustmentAllowed && initialViewportToRestore) {
-        startInitialViewportRestore();
+      if (initialAdjustmentAllowed) {
+        restartInitialAdjustment();
       } else {
         requestCenterCaret(true, "resize");
       }
@@ -5412,6 +5437,8 @@ export function VerticalTextEditor({
       // 総ページ数を再同期し、表示位置をアンカーのページへ復元する。
       if (editorDisplayModeRef.current === "paged") {
         requestPagedAnchorRestoreRef.current?.();
+      } else {
+        restartInitialAdjustment();
       }
     };
 
@@ -5486,10 +5513,6 @@ export function VerticalTextEditor({
       editor.commands.focus("start");
     }
     initialAdjustmentDeadline = performance.now() + INITIAL_CENTER_SETTLE_MS;
-    initialAdjustmentExpiryTimer = window.setTimeout(
-      cancelInitialAdjustment,
-      INITIAL_CENTER_SETTLE_MS,
-    );
     if (initialViewportToRestore) {
       startInitialViewportRestore();
     } else {
@@ -5501,14 +5524,7 @@ export function VerticalTextEditor({
     syncPageMetricsRef.current?.();
     document.fonts?.ready.then(() => {
       if (tiptapRef.current !== editor) return;
-      if (initialAdjustmentAllowed && performance.now() < initialAdjustmentDeadline) {
-        if (initialViewportToRestore) {
-          startInitialViewportRestore();
-        } else {
-          requestCenterCaret(true, "font-ready");
-          startInitialCaretSettle();
-        }
-      }
+      restartInitialAdjustment();
       requestVisibleWindow();
       requestLineBreakMarks();
     });

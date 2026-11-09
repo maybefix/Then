@@ -1,6 +1,7 @@
 @import "./fonts.css";
 @import "./styles/app/defaults.css";
 @import "./styles/app/base.css";
+@import "./styles/app/fileMenu.css";
 @import "./styles/themes/shared-idea.css";
 @import "./styles/app/ideaPlot.css";
 @import "./components/dialogs/themePicker.css";

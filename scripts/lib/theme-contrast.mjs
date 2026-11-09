@@ -211,6 +211,13 @@ export async function openThemePage(name) {
       read: async (selector) => JSON.parse(await evaluate(`__read(${JSON.stringify(selector)})`)),
       cssVar: (name) => evaluate(`__cssVar(${JSON.stringify(name)})`),
       moveMouse: (x, y) => send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y }),
+      pressKey: async (key, code, keyCode, modifiers = 0) => {
+        await send("Input.dispatchKeyEvent", { type: "keyDown", key, code, windowsVirtualKeyCode: keyCode, modifiers });
+        await send("Input.dispatchKeyEvent", { type: "keyUp", key, code, windowsVirtualKeyCode: keyCode, modifiers });
+      },
+      capture: async (clip) => (await send("Page.captureScreenshot", {
+        format: "png", captureBeyondViewport: false, ...(clip ? { clip } : {}),
+      })).data,
       close,
     };
   } catch (error) {

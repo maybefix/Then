@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Then / Pink theme studies</title>
+  <style>
+    * { box-sizing: border-box; } body { margin: 0; background: #faf6f5; color: #45434b; font: 15px/1.7 "Segoe UI", "Meiryo", sans-serif; }
+    main { max-width: 1700px; padding: 44px 40px 64px; margin: auto; }
+    .eyebrow { color: #ae2058; font-size: 12px; font-weight: 700; letter-spacing: .12em; }
+    h1 { margin: 8px 0 12px; font-size: 32px; line-height: 1.4; } p { margin: 0 0 20px; }
+    .intro { max-width: 800px; color: #605a65; }
+    .choices { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin: 28px 0; }
+    .choice { padding: 20px; border: 1px solid #e5dce1; border-radius: 12px; background: #fffcfd; text-align: left; color: inherit; cursor: pointer; font: inherit; }
+    .choice[aria-pressed="true"] { border: 2px solid #c72b68; padding: 19px; box-shadow: 0 0 0 3px #f9e5ee; }
+    .choice:focus-visible, a:focus-visible, .mode:focus-visible { outline: 2px solid #ae2058; outline-offset: 4px; }
+    .choice strong { display: block; font-size: 20px; margin-bottom: 5px; }
+    .choice span { display: block; color: #605a65; }
+    .palette { display: flex; gap: 6px; margin-top: 14px; }
+    .palette i { width: 34px; height: 20px; border-radius: 4px; border: 1px solid #45434b22; }
+    .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 22px 0 14px; }
+    .toolbar strong { margin-right: auto; } .mode { background: white; color: #45434b; border: 1px solid #b9a5b2; padding: 7px 16px; border-radius: 6px; font: inherit; cursor: pointer; }
+    .mode[aria-pressed="true"] { background: #c72b68; border-color: #c72b68; color: white; }
+    a { color: #ae2058; text-underline-offset: 3px; } .shot { display: block; width: 100%; border-radius: 10px; border: 1px solid #e5dce1; }
+    .caption { margin-top: 10px; color: #776d7a; font-size: 13px; } .links { display: flex; gap: 22px; margin-top: 24px; flex-wrap: wrap; }
+    @media (max-width: 1100px) { .choices { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 800px) { main { padding: 24px 18px; } .choices { grid-template-columns: 1fr; } h1 { font-size: 25px; } }
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">THEN / PINK THEME STUDIES</div>
+  <h1>チャコールと、ピンクと、原稿。</h1>
+  <p class="intro">添付の2枚をもとにした4案。現行のThenを実際に起動し、同じ原稿・同じ画面寸法で撮影しました。配色と角丸の変更だけで比較しています。</p>
+  <div class="choices">
+    <button class="choice" data-theme="charcoal" aria-pressed="true"><strong>A · Aplil Dark</strong><span>1枚目に近い、青みのチャコールと鮮やかなピンク。操作部から原稿面まで落ち着いた暗色に。</span><div class="palette"><i style="background:#35353f"></i><i style="background:#3e3e49"></i><i style="background:#41414c"></i><i style="background:#f477a4"></i><i style="background:#faf8fa"></i></div></button>
+    <button class="choice" data-theme="paper" aria-pressed="false"><strong>B · Aplil Light</strong><span>2枚目に近い、生成りの背景と白い原稿面。濃いラズベリーピンクで選択箇所を明快に。</span><div class="palette"><i style="background:#f5eeef"></i><i style="background:#faf6f5"></i><i style="background:#fffcfd"></i><i style="background:#c72b68"></i><i style="background:#45434b"></i></div></button>
+    <button class="choice" data-theme="split" aria-pressed="false"><strong>C · Blossom Dark</strong><span>暗い操作部の中央に明るい原稿面。1枚目と2枚目を組み合わせ、本文へ視線を集める案。</span><div class="palette"><i style="background:#35353f"></i><i style="background:#3e3e49"></i><i style="background:#fffcfd"></i><i style="background:#f477a4"></i><i style="background:#c72b68"></i></div></button>
+    <button class="choice" data-theme="reverse" aria-pressed="false"><strong>D · Blossom Light</strong><span>ライトテーマをベースに編集面だけをチャコールに。操作部は濃いピンク、本文側は明るいピンク。</span><div class="palette"><i style="background:#f5eeef"></i><i style="background:#faf6f5"></i><i style="background:#41414c"></i><i style="background:#c72b68"></i><i style="background:#f477a4"></i></div></button>
+  </div>
+  <div class="toolbar"><strong id="title">A · Aplil Dark</strong><button class="mode" data-writing="vertical" aria-pressed="true">縦書き</button><button class="mode" data-writing="horizontal" aria-pressed="false">横書き</button><a id="full" href="charcoal-vertical.png" target="_blank">原寸画像を開く ↗</a></div>
+  <img id="screenshot" class="shot" src="charcoal-vertical.png" alt="A · Aplil Dark 縦書きの実画面" width="1600" height="1000">
+  <p class="caption">1600 × 1000 px / 実コンポーネント・実CSS / 原稿・ファイルツリー・プロットはプレビュー用の架空データ。テーマ選択画面のAplil・Blossomから選択できます。</p>
+  <div class="links"><a href="../../../src/styles/themes/aplil-blossom.css">実装CSS</a><a href="README.md">仕様・再現方法</a><a href="verification.json">表示・コントラスト検証</a><a id="live" href="preview.html?theme=charcoal">操作できるプレビュー（Vite起動時）↗</a></div>
+</main>
+<script>
+  let theme = 'charcoal', writing = 'vertical';
+  function update() {
+    const label = document.querySelector(`[data-theme="${theme}"] strong`).textContent;
+    document.querySelectorAll('[data-theme]').forEach(b => b.setAttribute('aria-pressed', b.dataset.theme === theme));
+    document.querySelectorAll('[data-writing]').forEach(b => b.setAttribute('aria-pressed', b.dataset.writing === writing));
+    document.getElementById('title').textContent = label;
+    const source = `${theme}-${writing}.png`;
+    document.getElementById('screenshot').src = source;
+    document.getElementById('screenshot').alt = `${label} ${writing === 'vertical' ? '縦書き' : '横書き'}の実画面`;
+    document.getElementById('full').href = source;
+    document.getElementById('live').href = `preview.html?theme=${theme}&writing=${writing}`;
+  }
+  document.querySelectorAll('[data-theme]').forEach(b => b.onclick = () => { theme = b.dataset.theme; update(); });
+  document.querySelectorAll('[data-writing]').forEach(b => b.onclick = () => { writing = b.dataset.writing; update(); });
+  const initialTheme = new URLSearchParams(location.search).get('theme');
+  if (['charcoal', 'paper', 'split', 'reverse'].includes(initialTheme)) { theme = initialTheme; update(); }
+</script>
+</body></html>

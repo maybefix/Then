@@ -1,0 +1,11 @@
+{
+  "Label": "final-menu-only",
+  "Library": "libbrew_lib-2fa1c19230a1c5aa.rlib",
+  "HashBefore": "F29299DA4BF812BF8CC67821406F8357C126DE57A90A75BDA1FB5A5768EA59B9",
+  "HashAfter": "F29299DA4BF812BF8CC67821406F8357C126DE57A90A75BDA1FB5A5768EA59B9",
+  "LastWriteBefore": "2026-11-03T23:01:48.9046076Z",
+  "LastWriteAfter": "2026-11-03T23:01:48.9046076Z",
+  "LibraryCompilerInvocations": 0,
+  "AppLinksToSameLibrary": 1,
+  "Unchanged": true
+}

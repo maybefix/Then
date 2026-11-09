@@ -30,9 +30,14 @@
     "test:app-shell-style": "node scripts/test-app-shell-style.mjs",
     "test:appearance": "node scripts/test-appearance.mjs",
     "test:tree-row-contrast": "node scripts/test-tree-row-contrast.mjs",
+    "audit:typewriter-guides": "node scripts/audit-typewriter-guides.mjs",
+    "audit:shuboku": "node scripts/audit-shuboku-contracts.mjs",
+    "audit:shuboku:browser": "node scripts/audit-shuboku.mjs",
+    "audit:shuboku:tests": "node scripts/audit-shuboku-tests.mjs",
     "test:v066-idea": "node scripts/test-v066-idea-ui.mjs",
     "test:binder": "node scripts/test-idea-reference-binder.mjs",
     "test:idea-actions": "node scripts/test-idea-thread-actions.mjs",
+    "test:plot-card-actions": "node scripts/test-plot-card-actions.mjs",
     "test:app-dialog": "node scripts/test-app-dialog.mjs",
     "test:plugin-host": "node scripts/test-plugin-host.mjs",
     "test:pending-saves": "node scripts/test-pending-saves.mjs",
@@ -107,6 +112,7 @@
     "benchmark:typewriter": "node scripts/benchmark-typing.mjs --project --typewriter --at middle",
     "benchmark:manuscript": "node scripts/benchmark-manuscript-ab.mjs",
     "test:typewriter": "node scripts/test-typewriter-scroll.mjs && node scripts/test-editor-overlays.mjs && node scripts/test-indexed-decorations.mjs && node scripts/test-typewriter-ime-refresh.mjs",
+    "test:typewriter-startup": "node scripts/test-typewriter-startup-browser.mjs",
     "test:decoration-mapping": "node scripts/test-editor-optimization-audit.mjs && node scripts/test-decoration-mapping-exhaustive.mjs && node scripts/test-editor-range-replacement.mjs",
     "test:visual-line-index": "node scripts/test-visual-line-index.mjs",
     "fuzz:editor-decorations": "node scripts/fuzz-editor-decorations.mjs",
@@ -115,7 +121,7 @@
     "demo:validate": "node scripts/demo/validate-demo.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.3",

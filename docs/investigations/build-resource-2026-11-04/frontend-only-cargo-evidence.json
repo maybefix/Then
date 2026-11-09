@@ -1,0 +1,10 @@
+{
+  "AppCompilerInvocations": 1,
+  "LibraryCompilerInvocations": 0,
+  "ProgressLines": [
+    "   Compiling Then v0.7.0 (C:\\Users\\uest\\Documents\\then\\src-tauri)",
+    "    Finished `release` profile [optimized] target(s) in 43.13s",
+    "     Running makensis to produce C:\\Users\\uest\\Documents\\then\\src-tauri\\target\\release\\bundle\\nsis\\Then Resource QA 20261104_0.7.0_x64-setup.exe",
+    "    Finished 1 bundle at:"
+  ]
+}

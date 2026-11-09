@@ -1,0 +1,1382 @@
+{
+  "theme": "sen-light",
+  "name": "plot-focus",
+  "screenshot": "sen-light-plot-focus.png",
+  "fields": {
+    "tag": "TEXTAREA",
+    "before": {
+      "border": "0px none rgb(179, 59, 37)",
+      "outline": "rgb(179, 59, 37) none 0px",
+      "shadow": "none",
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(179, 59, 37)"
+    },
+    "after": {
+      "border": "0px none rgb(179, 59, 37)",
+      "outline": "rgb(179, 59, 37) none 0px",
+      "shadow": "none",
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(179, 59, 37)"
+    },
+    "focusVisible": false
+  },
+  "styles": {
+    ".appFrame": [
+      {
+        "tag": "SECTION",
+        "classes": "appFrame",
+        "color": "rgb(28, 27, 24)",
+        "background": "rgb(255, 255, 255)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)"
+        ],
+        "radius": "0px",
+        "shadow": "none",
+        "outline": "rgb(28, 27, 24) none 3px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "flex",
+        "visibility": "visible",
+        "z": "auto",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1600,
+          "height": 1000
+        }
+      }
+    ],
+    ".workspace": [
+      {
+        "tag": "DIV",
+        "classes": "workspace ",
+        "color": "rgb(28, 27, 24)",
+        "background": "rgb(255, 255, 255)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)"
+        ],
+        "radius": "0px",
+        "shadow": "none",
+        "outline": "rgb(28, 27, 24) none 3px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "flex",
+        "visibility": "visible",
+        "z": "0",
+        "rect": {
+          "x": 0,
+          "y": 71,
+          "width": 1600,
+          "height": 929
+        }
+      }
+    ],
+    ".leftWorkspaceCluster": [
+      {
+        "tag": "DIV",
+        "classes": "leftWorkspaceCluster ",
+        "color": "rgb(28, 27, 24)",
+        "background": "rgb(255, 255, 255)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "2px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)"
+        ],
+        "radius": "0px",
+        "shadow": "none",
+        "outline": "rgb(28, 27, 24) none 3px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "flex",
+        "visibility": "visible",
+        "z": "auto",
+        "rect": {
+          "x": 0,
+          "y": 71,
+          "width": 364,
+          "height": 929
+        }
+      }
+    ],
+    ".workspaceSidebar": [
+      {
+        "tag": "ASIDE",
+        "classes": "workspaceSidebar showOutlineGuides",
+        "color": "rgba(28, 27, 24, 0.72)",
+        "background": "rgb(255, 255, 255)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgba(28, 27, 24, 0.72)",
+          "rgba(28, 27, 24, 0.72)",
+          "rgba(28, 27, 24, 0.72)",
+          "rgba(28, 27, 24, 0.72)"
+        ],
+        "radius": "0px",
+        "shadow": "none",
+        "outline": "rgba(28, 27, 24, 0.72) none 3px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "flex",
+        "visibility": "visible",
+        "z": "auto",
+        "rect": {
+          "x": 44,
+          "y": 71,
+          "width": 320,
+          "height": 929
+        }
+      }
+    ],
+    ".rightSidebar": [
+      {
+        "tag": "ASIDE",
+        "classes": "rightSidebar ",
+        "color": "rgba(28, 27, 24, 0.72)",
+        "background": "rgb(255, 255, 255)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "0px",
+          "0px",
+          "2px"
+        ],
+        "borderColor": [
+          "rgba(28, 27, 24, 0.72)",
+          "rgba(28, 27, 24, 0.72)",
+          "rgba(28, 27, 24, 0.72)",
+          "rgb(28, 27, 24)"
+        ],
+        "radius": "0px",
+        "shadow": "none",
+        "outline": "rgba(28, 27, 24, 0.72) none 3px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "flex",
+        "visibility": "visible",
+        "z": "auto",
+        "rect": {
+          "x": 1300,
+          "y": 71,
+          "width": 300,
+          "height": 929
+        }
+      }
+    ],
+    ".editorColumn": [
+      {
+        "tag": "DIV",
+        "classes": "editorColumn ",
+        "color": "rgb(28, 27, 24)",
+        "background": "rgb(255, 255, 255)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)"
+        ],
+        "radius": "0px",
+        "shadow": "none",
+        "outline": "rgb(28, 27, 24) none 3px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "flex",
+        "visibility": "visible",
+        "z": "auto",
+        "rect": {
+          "x": 364,
+          "y": 71,
+          "width": 936,
+          "height": 929
+        }
+      }
+    ],
+    ".verticalTypewriterShell": [
+      {
+        "tag": "DIV",
+        "classes": "verticalTypewriterShell",
+        "color": "rgb(28, 27, 24)",
+        "background": "rgb(255, 255, 255)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)"
+        ],
+        "radius": "0px",
+        "shadow": "none",
+        "outline": "rgb(28, 27, 24) none 3px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "block",
+        "visibility": "visible",
+        "z": "auto",
+        "rect": {
+          "x": 364,
+          "y": 71,
+          "width": 936,
+          "height": 903
+        }
+      }
+    ],
+    ".ProseMirror": [
+      {
+        "tag": "DIV",
+        "classes": "tiptap ProseMirror pm-root",
+        "color": "rgb(28, 27, 24)",
+        "background": "rgba(0, 0, 0, 0)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)"
+        ],
+        "radius": "0px",
+        "shadow": "none",
+        "outline": "rgb(28, 27, 24) none 3px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "block",
+        "visibility": "visible",
+        "z": "auto",
+        "rect": {
+          "x": -1945.484375,
+          "y": 71,
+          "width": 4360.484375,
+          "height": 893
+        }
+      }
+    ],
+    ".statusbar": [
+      {
+        "tag": "FOOTER",
+        "classes": "statusbar status-saved",
+        "color": "rgba(28, 27, 24, 0.64)",
+        "background": "rgb(255, 255, 255)",
+        "backgroundImage": "none",
+        "border": [
+          "2px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgb(28, 27, 24)",
+          "rgba(28, 27, 24, 0.64)",
+          "rgba(28, 27, 24, 0.64)",
+          "rgba(28, 27, 24, 0.64)"
+        ],
+        "radius": "0px",
+        "shadow": "none",
+        "outline": "rgba(28, 27, 24, 0.64) none 3px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "flex",
+        "visibility": "visible",
+        "z": "18",
+        "rect": {
+          "x": 364,
+          "y": 974,
+          "width": 936,
+          "height": 26
+        }
+      }
+    ],
+    ".plotPane": [
+      {
+        "tag": "DIV",
+        "classes": "plotPane",
+        "color": "rgba(28, 27, 24, 0.72)",
+        "background": "rgb(255, 255, 255)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgba(28, 27, 24, 0.72)",
+          "rgba(28, 27, 24, 0.72)",
+          "rgba(28, 27, 24, 0.72)",
+          "rgba(28, 27, 24, 0.72)"
+        ],
+        "radius": "0px",
+        "shadow": "none",
+        "outline": "rgba(28, 27, 24, 0.72) none 0px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "block",
+        "visibility": "visible",
+        "z": "auto",
+        "rect": {
+          "x": 1314,
+          "y": 121,
+          "width": 276,
+          "height": 869
+        }
+      }
+    ],
+    ".plotCard": [
+      {
+        "tag": "ARTICLE",
+        "classes": "plotCard expandedPlotCard  ",
+        "color": "rgba(28, 27, 24, 0.72)",
+        "background": "rgba(0, 0, 0, 0)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgba(28, 27, 24, 0.72)",
+          "rgba(28, 27, 24, 0.72)",
+          "rgba(28, 27, 24, 0.72)",
+          "rgba(28, 27, 24, 0.72)"
+        ],
+        "radius": "0px",
+        "shadow": "none",
+        "outline": "rgba(28, 27, 24, 0.72) none 0px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "flex",
+        "visibility": "visible",
+        "z": "auto",
+        "rect": {
+          "x": 1429.421875,
+          "y": 133,
+          "width": 93.578125,
+          "height": 835
+        }
+      },
+      {
+        "tag": "ARTICLE",
+        "classes": "plotCard expandedPlotCard  ",
+        "color": "rgba(28, 27, 24, 0.72)",
+        "background": "rgba(0, 0, 0, 0)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgba(28, 27, 24, 0.72)",
+          "rgba(28, 27, 24, 0.72)",
+          "rgba(28, 27, 24, 0.72)",
+          "rgba(28, 27, 24, 0.72)"
+        ],
+        "radius": "0px",
+        "shadow": "none",
+        "outline": "rgba(28, 27, 24, 0.72) none 0px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "flex",
+        "visibility": "visible",
+        "z": "auto",
+        "rect": {
+          "x": 1335.84375,
+          "y": 133,
+          "width": 93.578125,
+          "height": 835
+        }
+      },
+      {
+        "tag": "ARTICLE",
+        "classes": "plotCard expandedPlotCard  ",
+        "color": "rgba(28, 27, 24, 0.72)",
+        "background": "rgba(0, 0, 0, 0)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgba(28, 27, 24, 0.72)",
+          "rgba(28, 27, 24, 0.72)",
+          "rgba(28, 27, 24, 0.72)",
+          "rgba(28, 27, 24, 0.72)"
+        ],
+        "radius": "0px",
+        "shadow": "none",
+        "outline": "rgba(28, 27, 24, 0.72) none 0px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "flex",
+        "visibility": "visible",
+        "z": "auto",
+        "rect": {
+          "x": 1242.265625,
+          "y": 133,
+          "width": 93.578125,
+          "height": 835
+        }
+      }
+    ],
+    ".plotCardNum": [
+      {
+        "tag": "BUTTON",
+        "classes": "plotCardNum",
+        "color": "rgb(179, 59, 37)",
+        "background": "rgb(255, 255, 255)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgb(179, 59, 37)",
+          "rgb(179, 59, 37)",
+          "rgb(179, 59, 37)",
+          "rgb(179, 59, 37)"
+        ],
+        "radius": "6px",
+        "shadow": "none",
+        "outline": "rgb(179, 59, 37) none 0px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "block",
+        "visibility": "visible",
+        "z": "auto",
+        "rect": {
+          "x": 1484,
+          "y": 133,
+          "width": 30,
+          "height": 53.375
+        }
+      },
+      {
+        "tag": "BUTTON",
+        "classes": "plotCardNum",
+        "color": "rgb(179, 59, 37)",
+        "background": "rgb(255, 255, 255)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgb(179, 59, 37)",
+          "rgb(179, 59, 37)",
+          "rgb(179, 59, 37)",
+          "rgb(179, 59, 37)"
+        ],
+        "radius": "6px",
+        "shadow": "none",
+        "outline": "rgb(179, 59, 37) none 0px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "block",
+        "visibility": "visible",
+        "z": "auto",
+        "rect": {
+          "x": 1390.421875,
+          "y": 133,
+          "width": 30,
+          "height": 55.03125
+        }
+      },
+      {
+        "tag": "BUTTON",
+        "classes": "plotCardNum",
+        "color": "rgb(179, 59, 37)",
+        "background": "rgb(255, 255, 255)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgb(179, 59, 37)",
+          "rgb(179, 59, 37)",
+          "rgb(179, 59, 37)",
+          "rgb(179, 59, 37)"
+        ],
+        "radius": "6px",
+        "shadow": "none",
+        "outline": "rgb(179, 59, 37) none 0px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "block",
+        "visibility": "visible",
+        "z": "auto",
+        "rect": {
+          "x": 1296.84375,
+          "y": 133,
+          "width": 30,
+          "height": 55.015625
+        }
+      }
+    ],
+    ".plotCardTitle": [
+      {
+        "tag": "TEXTAREA",
+        "classes": "plotCardTitle",
+        "color": "rgb(179, 59, 37)",
+        "background": "rgb(255, 255, 255)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgb(179, 59, 37)",
+          "rgb(179, 59, 37)",
+          "rgb(179, 59, 37)",
+          "rgb(179, 59, 37)"
+        ],
+        "radius": "4px",
+        "shadow": "none",
+        "outline": "rgb(179, 59, 37) none 0px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "block",
+        "visibility": "visible",
+        "z": "auto",
+        "rect": {
+          "x": 1485.5,
+          "y": 202.375,
+          "width": 28.5,
+          "height": 765.625
+        }
+      },
+      {
+        "tag": "TEXTAREA",
+        "classes": "plotCardTitle",
+        "color": "rgb(179, 59, 37)",
+        "background": "rgb(255, 255, 255)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgb(179, 59, 37)",
+          "rgb(179, 59, 37)",
+          "rgb(179, 59, 37)",
+          "rgb(179, 59, 37)"
+        ],
+        "radius": "4px",
+        "shadow": "none",
+        "outline": "rgb(179, 59, 37) none 0px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "block",
+        "visibility": "visible",
+        "z": "auto",
+        "rect": {
+          "x": 1391.921875,
+          "y": 204.03125,
+          "width": 28.5,
+          "height": 763.96875
+        }
+      },
+      {
+        "tag": "TEXTAREA",
+        "classes": "plotCardTitle",
+        "color": "rgb(179, 59, 37)",
+        "background": "rgb(255, 255, 255)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgb(179, 59, 37)",
+          "rgb(179, 59, 37)",
+          "rgb(179, 59, 37)",
+          "rgb(179, 59, 37)"
+        ],
+        "radius": "4px",
+        "shadow": "none",
+        "outline": "rgb(179, 59, 37) none 0px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "block",
+        "visibility": "visible",
+        "z": "auto",
+        "rect": {
+          "x": 1298.34375,
+          "y": 204.015625,
+          "width": 28.5,
+          "height": 763.984375
+        }
+      }
+    ],
+    ".plotCardBody": [
+      {
+        "tag": "DIV",
+        "classes": "plotCardBody plotCardBodyPreview ",
+        "color": "rgb(28, 27, 24)",
+        "background": "rgb(255, 255, 255)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)"
+        ],
+        "radius": "4px",
+        "shadow": "none",
+        "outline": "rgb(28, 27, 24) none 0px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "block",
+        "visibility": "visible",
+        "z": "auto",
+        "rect": {
+          "x": 1438.421875,
+          "y": 202.375,
+          "width": 32.6875,
+          "height": 765.625
+        }
+      },
+      {
+        "tag": "DIV",
+        "classes": "plotCardBody plotCardBodyPreview ",
+        "color": "rgb(28, 27, 24)",
+        "background": "rgb(255, 255, 255)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)"
+        ],
+        "radius": "4px",
+        "shadow": "none",
+        "outline": "rgb(28, 27, 24) none 0px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "block",
+        "visibility": "visible",
+        "z": "auto",
+        "rect": {
+          "x": 1344.84375,
+          "y": 204.03125,
+          "width": 32.6875,
+          "height": 763.96875
+        }
+      },
+      {
+        "tag": "DIV",
+        "classes": "plotCardBody plotCardBodyPreview ",
+        "color": "rgb(28, 27, 24)",
+        "background": "rgb(255, 255, 255)",
+        "backgroundImage": "none",
+        "border": [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "borderColor": [
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)",
+          "rgb(28, 27, 24)"
+        ],
+        "radius": "4px",
+        "shadow": "none",
+        "outline": "rgb(28, 27, 24) none 0px",
+        "outlineOffset": "0px",
+        "opacity": "1",
+        "display": "block",
+        "visibility": "visible",
+        "z": "auto",
+        "rect": {
+          "x": 1251.265625,
+          "y": 204.015625,
+          "width": 32.6875,
+          "height": 763.984375
+        }
+      }
+    ],
+    ".plotToolButton": [],
+    ".modal": [],
+    ".modalBackdrop": [],
+    ".themeOption:has(input:checked)": [],
+    ".ideaCard": [],
+    ".propertiesPanel": [],
+    ".proofPane": [],
+    ".commandPalette": [],
+    ".editorContextMenu": [],
+    ".pagedEditorSheet": [],
+    ".editorFindPopover": []
+  },
+  "lowContrast": [],
+  "screenedCount": 62,
+  "controls": [
+    {
+      "tag": "BUTTON",
+      "classes": "windowControlButton",
+      "aria": "最小化",
+      "title": "最小化",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "windowControlButton",
+      "aria": "最大化",
+      "title": "最大化",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "windowControlButton windowCloseButton",
+      "aria": "閉じる",
+      "title": "閉じる",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "menuButton",
+      "aria": "ファイルメニュー",
+      "title": "",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "breadcrumbFolderButton breadcrumbLibraryButton",
+      "aria": null,
+      "title": "ライブラリ「作品ライブラリ」へ戻る",
+      "text": "作品ライブラリ",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "breadcrumbFolderButton workspaceSwitcherButton",
+      "aria": "プロジェクトを切り替え",
+      "title": "",
+      "text": "夜明けの手紙",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "breadcrumbFolderButton outlineCrumbButton",
+      "aria": "第一章　夜明けの手紙 のアウトライン",
+      "title": "",
+      "text": "第一章　夜明けの手紙",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "iconButton editorFocusModeButton ",
+      "aria": "エディタをフルスクリーン表示",
+      "title": "エディタをフルスクリーン表示",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "iconButton",
+      "aria": "今の状態を保存点にする（Ctrl+Shift+S）",
+      "title": "今の状態を保存点にする（Ctrl+Shift+S）",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "iconButton ",
+      "aria": "横書きに切り替え",
+      "title": "横書きに切り替え",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "iconButton",
+      "aria": "テーマを選択",
+      "title": "テーマを選択",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "iconButton",
+      "aria": "設定",
+      "title": "設定",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "modeMenuButton",
+      "aria": "画面モード：本文",
+      "title": "画面モードを切り替え",
+      "text": "本文",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "documentTabButton",
+      "aria": null,
+      "title": "C:/theme-preview/library/夜明けの手紙/01_夜明けの手紙.md\n進捗: 執筆中",
+      "text": "01_夜明けの手紙.mdC:/theme-preview/librar",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "documentTabCloseButton",
+      "aria": "01_夜明けの手紙.md を閉じる",
+      "title": "閉じる (Ctrl+W)",
+      "text": "×",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "documentTabsNewButton",
+      "aria": "新しいタブ",
+      "title": "新しいタブ",
+      "text": "＋",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "workspaceActivityButton activeWorkspaceActivityButton",
+      "aria": "ファイルツリー",
+      "title": "ファイルツリー",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "workspaceActivityButton ",
+      "aria": "プロジェクト検索",
+      "title": "プロジェクト検索",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "workspaceActivityButton ",
+      "aria": "開いているカード",
+      "title": "開いているカード",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "workspaceActivityButton",
+      "aria": "新規ファイル",
+      "title": "新規ファイル",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "workspaceActivityButton",
+      "aria": "新規フォルダ",
+      "title": "新規フォルダ",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "rightPaneSwitcherButton",
+      "aria": "表示するファイル：ファイル",
+      "title": "表示するファイルを切り替え",
+      "text": "ファイル",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "sidebarIconButton",
+      "aria": "左サイドバーを畳む",
+      "title": "左サイドバーを畳む",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "libraryBackButton",
+      "aria": null,
+      "title": "ライブラリ「作品ライブラリ」へ戻る",
+      "text": "作品ライブラリライブラリ",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "treeFileDisclosure",
+      "aria": "01_夜明けの手紙.mdの見出しを折りたたむ",
+      "title": "見出しを展開・折りたたみ",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "treeItemPrimary fileTreeItemPrimary",
+      "aria": null,
+      "title": "C:/theme-preview/library/夜明けの手紙/01_夜明けの手紙.md",
+      "text": "01_夜明けの手紙.md545",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "fileProgressMarker progressText-writing",
+      "aria": "進捗: 執筆中",
+      "title": "執筆中",
+      "text": "執",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "treeEntryMoreButton",
+      "aria": "01_夜明けの手紙.mdのメニュー",
+      "title": "その他の操作",
+      "text": "•••",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "outlineHeadingDisclosure activeOutlineHeadingDisclosure",
+      "aria": "第一章　夜明けの手紙を折りたたむ",
+      "title": "子見出しを折りたたむ",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "outlineTreeItem collapsibleOutlineTreeItem activeOutlineTreeItem",
+      "aria": null,
+      "title": "第一章　夜明けの手紙",
+      "text": "#第一章　夜明けの手紙221",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "outlineTreeItem",
+      "aria": null,
+      "title": "窓辺の約束",
+      "text": "#窓辺の約束199",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "outlineTreeItem",
+      "aria": null,
+      "title": "返事を書く",
+      "text": "#返事を書く125",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "treeFileDisclosure",
+      "aria": "02_駅前の喫茶店.mdの見出しを折りたたむ",
+      "title": "見出しを展開・折りたたみ",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "treeItemPrimary fileTreeItemPrimary",
+      "aria": null,
+      "title": "C:/theme-preview/library/夜明けの手紙/02_駅前の喫茶店.md",
+      "text": "02_駅前の喫茶店.md32",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "fileProgressMarker progressText-todo",
+      "aria": "進捗: 未着手",
+      "title": "未着手",
+      "text": "未",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "treeEntryMoreButton",
+      "aria": "02_駅前の喫茶店.mdのメニュー",
+      "title": "その他の操作",
+      "text": "•••",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "outlineTreeItem",
+      "aria": null,
+      "title": "第二章　駅前の喫茶店",
+      "text": "#第二章　駅前の喫茶店32",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "treeFileDisclosure",
+      "aria": "03_春の帰り道.mdの見出しを折りたたむ",
+      "title": "見出しを展開・折りたたみ",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "treeItemPrimary fileTreeItemPrimary",
+      "aria": null,
+      "title": "C:/theme-preview/library/夜明けの手紙/03_春の帰り道.md",
+      "text": "03_春の帰り道.md24",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "fileProgressMarker progressText-todo",
+      "aria": "進捗: 未着手",
+      "title": "未着手",
+      "text": "未",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "treeEntryMoreButton",
+      "aria": "03_春の帰り道.mdのメニュー",
+      "title": "その他の操作",
+      "text": "•••",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "outlineTreeItem",
+      "aria": null,
+      "title": "第三章　春の帰り道",
+      "text": "#第三章　春の帰り道24",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "treeItemPrimary folderTreeItemPrimary",
+      "aria": null,
+      "title": "C:/theme-preview/library/夜明けの手紙/登場人物",
+      "text": "登場人物33",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "treeFileDisclosure",
+      "aria": "美月.mdの見出しを折りたたむ",
+      "title": "見出しを展開・折りたたみ",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "treeItemPrimary fileTreeItemPrimary",
+      "aria": null,
+      "title": "C:/theme-preview/library/夜明けの手紙/登場人物/美月.md",
+      "text": "美月.md17",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "fileProgressMarker progressText-todo",
+      "aria": "進捗: 未着手",
+      "title": "未着手",
+      "text": "未",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "treeEntryMoreButton",
+      "aria": "美月.mdのメニュー",
+      "title": "その他の操作",
+      "text": "•••",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "outlineTreeItem",
+      "aria": null,
+      "title": "美月",
+      "text": "#美月17",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "treeFileDisclosure",
+      "aria": "遥.mdの見出しを折りたたむ",
+      "title": "見出しを展開・折りたたみ",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "treeItemPrimary fileTreeItemPrimary",
+      "aria": null,
+      "title": "C:/theme-preview/library/夜明けの手紙/登場人物/遥.md",
+      "text": "遥.md16",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "fileProgressMarker progressText-todo",
+      "aria": "進捗: 未着手",
+      "title": "未着手",
+      "text": "未",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "treeEntryMoreButton",
+      "aria": "遥.mdのメニュー",
+      "title": "その他の操作",
+      "text": "•••",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "outlineTreeItem",
+      "aria": null,
+      "title": "遥",
+      "text": "#遥16",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "treeItemPrimary folderTreeItemPrimary",
+      "aria": null,
+      "title": "C:/theme-preview/library/夜明けの手紙/資料",
+      "text": "資料0",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "snapshotSectionToggle",
+      "aria": null,
+      "title": "",
+      "text": "チェックポイント",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "snapshotCreateButton",
+      "aria": "今の状態を保存点にする（Ctrl+Shift+S）",
+      "title": "今の状態を保存点にする（Ctrl+Shift+S）",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "editorFocusExitButton ",
+      "aria": "通常表示に戻す",
+      "title": "通常表示に戻す (Esc)",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "statusCheckpoint",
+      "aria": null,
+      "title": "今の状態を保存点にする（Ctrl+Shift+S）",
+      "text": "保存点なし",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "rightPaneSwitcherButton",
+      "aria": "補助ペイン：プロット",
+      "title": "補助ペインを切り替え",
+      "text": "プロット",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "sidebarIconButton plotHeaderActionButton",
+      "aria": "セクションを追加",
+      "title": "セクションを追加",
+      "text": "＋",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "sidebarIconButton plotHeaderActionButton",
+      "aria": "章を追加",
+      "title": "章を追加",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "sidebarIconButton plotHeaderActionButton",
+      "aria": "プロットを管理",
+      "title": "プロットを管理",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "sidebarIconButton",
+      "aria": "ペイン幅を拡張",
+      "title": "ペイン幅を拡張",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "sidebarIconButton",
+      "aria": "右サイドバーを畳む",
+      "title": "右サイドバーを畳む",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "plotChapterMark",
+      "aria": "章を折りたたむ",
+      "title": "クリックで展開/折りたたみ・ドラッグで並び替え",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "tag": "TEXTAREA",
+      "classes": "plotChapterTitle",
+      "aria": "章のタイトル",
+      "title": "",
+      "text": "第一幕　届いた手紙",
+      "type": "textarea"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "plotCardNum",
+      "aria": "001 を折りたたむ",
+      "title": "クリックで展開/折りたたみ・ドラッグで並び替え",
+      "text": "001",
+      "type": "button"
+    },
+    {
+      "tag": "TEXTAREA",
+      "classes": "plotCardTitle",
+      "aria": "001 タイトル",
+      "title": "",
+      "text": "夜明けの手紙",
+      "type": "textarea"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "plotCardNum",
+      "aria": "002 を折りたたむ",
+      "title": "クリックで展開/折りたたみ・ドラッグで並び替え",
+      "text": "002",
+      "type": "button"
+    },
+    {
+      "tag": "TEXTAREA",
+      "classes": "plotCardTitle",
+      "aria": "002 タイトル",
+      "title": "",
+      "text": "駅前の喫茶店",
+      "type": "textarea"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "plotCardNum",
+      "aria": "003 を折りたたむ",
+      "title": "クリックで展開/折りたたみ・ドラッグで並び替え",
+      "text": "003",
+      "type": "button"
+    },
+    {
+      "tag": "TEXTAREA",
+      "classes": "plotCardTitle",
+      "aria": "003 タイトル",
+      "title": "",
+      "text": "春の約束",
+      "type": "textarea"
+    }
+  ],
+  "paletteSelection": null,
+  "active": {
+    "tag": "TEXTAREA",
+    "classes": "plotCardTitle",
+    "focusVisible": false
+  },
+  "pageOverflow": {
+    "width": 1600,
+    "viewport": 1600,
+    "height": 1000
+  },
+  "plotToolButtonCount": 0
+}

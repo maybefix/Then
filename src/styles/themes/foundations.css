@@ -224,10 +224,13 @@
   color: var(--text-faint);
 }
 
-.appShell[data-theme] .verticalTypewriterGuide { border-left-color: var(--accent-soft); }
+/* Guide colors may need transparency even when selection backgrounds are solid. */
+.appShell[data-theme] .verticalTypewriterGuide {
+  border-left-color: var(--typewriter-guide-color, var(--accent-soft));
+}
 
 .appShell[data-theme][data-writing-mode="horizontal-tb"] .verticalTypewriterGuide {
-  border-top-color: var(--accent-soft);
+  border-top-color: var(--typewriter-guide-color, var(--accent-soft));
 }
 
 .appShell[data-theme] .menuPopover,

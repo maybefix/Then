@@ -1,0 +1,62 @@
+{
+  "removedTemporaryBytes": 358500675,
+  "removedQaDataBytes": 0,
+  "removedOldRustOutputLogicalBytes": 621247875.0,
+  "oldRustOutputs": [
+    {
+      "FullName": "C:\\Users\\uest\\Documents\\then\\src-tauri\\target\\release\\brew_lib.lib",
+      "Length": 102080902
+    },
+    {
+      "FullName": "C:\\Users\\uest\\Documents\\then\\src-tauri\\target\\release\\brew_lib.dll",
+      "Length": 119296
+    },
+    {
+      "FullName": "C:\\Users\\uest\\Documents\\then\\src-tauri\\target\\release\\brew_lib.dll.exp",
+      "Length": 735
+    },
+    {
+      "FullName": "C:\\Users\\uest\\Documents\\then\\src-tauri\\target\\release\\brew_lib.dll.lib",
+      "Length": 1548
+    },
+    {
+      "FullName": "C:\\Users\\uest\\Documents\\then\\src-tauri\\target\\release\\brew_lib.pdb",
+      "Length": 1544192
+    },
+    {
+      "FullName": "C:\\Users\\uest\\Documents\\then\\src-tauri\\target\\release\\libbrew_lib.rlib",
+      "Length": 41667584
+    },
+    {
+      "FullName": "C:\\Users\\uest\\Documents\\then\\src-tauri\\target\\release\\deps\\brew_lib.lib",
+      "Length": 134979058
+    },
+    {
+      "FullName": "C:\\Users\\uest\\Documents\\then\\src-tauri\\target\\release\\deps\\brew_lib.dll",
+      "Length": 139776
+    },
+    {
+      "FullName": "C:\\Users\\uest\\Documents\\then\\src-tauri\\target\\release\\deps\\brew_lib.dll.exp",
+      "Length": 676
+    },
+    {
+      "FullName": "C:\\Users\\uest\\Documents\\then\\src-tauri\\target\\release\\deps\\brew_lib.dll.lib",
+      "Length": 1548
+    },
+    {
+      "FullName": "C:\\Users\\uest\\Documents\\then\\src-tauri\\target\\release\\deps\\brew_lib.pdb",
+      "Length": 2027520
+    },
+    {
+      "FullName": "C:\\Users\\uest\\Documents\\then\\src-tauri\\target\\release\\deps\\libbrew_lib.rlib",
+      "Length": 269469300
+    },
+    {
+      "FullName": "C:\\Users\\uest\\Documents\\then\\src-tauri\\target\\release\\deps\\libbrew_lib-ea85518c61dd7897.rlib",
+      "Length": 69215740
+    }
+  ],
+  "testedArtifact": "C:\\Users\\uest\\Documents\\then\\artifacts\\build-resource-20261104\\Then_0.7.0_windows-resource-QA_x64-setup.exe",
+  "sha256": "fe0bf2e4befa04d7b6570053c90a81a9ee1ee5bb1ff80b582e33c74ad51d9363",
+  "qaUninstalled": true
+}

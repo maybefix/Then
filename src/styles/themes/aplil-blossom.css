@@ -1,0 +1,182 @@
+/* Aplil (B light / A dark) and Blossom (D light / C dark).
+   Shared palettes keep the two families consistent; editor scopes resolve
+   text, syntax and selection colors independently from the surrounding UI. */
+.appShell:is([data-theme^="aplil-"], [data-theme^="blossom-"]) {
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-button: 8px;
+  --brand-gradient: var(--accent);
+  --action-gradient: var(--accent);
+  --action-text: var(--on-accent);
+  --editor-heading-color: var(--text-primary);
+  --topbar-text-primary: var(--text-primary);
+  --topbar-text-secondary: var(--text-secondary);
+  --topbar-text-muted: var(--text-muted);
+  --topbar-text-faint: var(--text-faint);
+  --silkdown-code-color: var(--text-primary);
+  --silkdown-blockquote-color: var(--text-secondary);
+  --silkdown-link-color: var(--accent-strong);
+  --silkdown-hr-color: var(--border-subtle);
+  --selection-bg: var(--accent);
+  --selection-text: var(--on-accent);
+  --navigation-icon: var(--text-muted);
+  --navigation-icon-hover: var(--text-primary);
+  --editor-depth-bg: var(--editor-bg);
+  --auxiliary-depth-bg: var(--sidebar-bg);
+}
+
+/* Charcoal palette: Aplil Dark, Blossom Dark chrome, Blossom Light editor. */
+.appShell[data-theme="aplil-dark"],
+.appShell[data-theme="blossom-dark"],
+.appShell[data-theme="blossom-light"] .editorColumn {
+  color-scheme: dark;
+  --bg-root: #35353f;
+  --bg-primary: #41414c;
+  --bg-secondary: #3c3c47;
+  --bg-tertiary: #50505e;
+  --bg-panel: #41414c;
+  --bg-panel-strong: #4b4b58;
+  --canvas-bg: #35353f;
+  --sidebar-bg: #3e3e49;
+  --topbar-bg: #3e3e49;
+  --editor-bg: #41414c;
+  --card-bg: #484854;
+  --card-hover: #50505e;
+  --text-primary: #faf8fa;
+  --text-secondary: #dedbe2;
+  --text-muted: #bcb8c5;
+  --text-faint: #a6a1b0;
+  --border-subtle: #595966;
+  --border-strong: #7d7889;
+  --accent: #f477a4;
+  --accent-strong: #ff9bbe;
+  --primary-hover: #ff91b6;
+  --primary-pressed: #df6893;
+  --on-accent: #302531;
+  --focus-ring: #ff9bbe;
+  --accent-soft: #593f50;
+  --typewriter-guide-color: rgba(244, 119, 164, 0.14);
+  --accent-border: #c56d91;
+  --control-hover: #4d4655;
+  --success: #a4d2b6;
+  --warning: #e6c782;
+  --danger: #ffaaa7;
+  --danger-soft: #603f46;
+  --overlay: #20202ac9;
+  --card-float-shadow: 0 3px 12px #15151d24;
+  --shadow-popover: 0 12px 32px #17171f55;
+  --shadow-modal: 0 24px 60px #17171f77;
+  --silkdown-code-bg: #514250;
+}
+
+/* Paper palette: Aplil Light, Blossom Light chrome, Blossom Dark editor. */
+.appShell[data-theme="aplil-light"],
+.appShell[data-theme="blossom-light"],
+.appShell[data-theme="blossom-dark"] .editorColumn {
+  --editor-depth-bg: var(--editor-bg);
+  color-scheme: light;
+  --bg-root: #faf6f5;
+  --bg-primary: #fffcfd;
+  --bg-secondary: #f7f0f2;
+  --bg-tertiary: #eee4e9;
+  --bg-panel: #fffcfd;
+  --bg-panel-strong: #f5edf1;
+  --canvas-bg: #f5eeef;
+  --sidebar-bg: #faf6f5;
+  --topbar-bg: #faf6f5;
+  --editor-bg: #fffcfd;
+  --card-bg: #fffcfd;
+  --card-hover: #f8edf2;
+  --text-primary: #45434b;
+  --text-secondary: #605a65;
+  --text-muted: #776d7a;
+  --text-faint: #817584;
+  --border-subtle: #e5dce1;
+  --border-strong: #b9a5b2;
+  --accent: #c72b68;
+  --accent-strong: #ae2058;
+  --primary-hover: #ae2058;
+  --primary-pressed: #92194a;
+  --on-accent: #ffffff;
+  --focus-ring: #ae2058;
+  --accent-soft: #f9e5ee;
+  --typewriter-guide-color: rgba(199, 43, 104, 0.14);
+  --accent-border: #cb7c9c;
+  --control-hover: #f4e8ee;
+  --success: #39734f;
+  --warning: #8b641c;
+  --danger: #b73642;
+  --danger-soft: #fbe7e9;
+  --overlay: #45434b66;
+  --card-float-shadow: 0 2px 10px #51404d0a;
+  --shadow-popover: 0 12px 32px #51404d24;
+  --shadow-modal: 0 24px 60px #51404d30;
+  --silkdown-code-bg: #f5e7ee;
+}
+
+/* Blossom Dark: light manuscript within the dark UI. */
+.appShell[data-theme="blossom-dark"] .editorColumn {
+  --editor-heading-color: #45434b;
+  --silkdown-code-color: var(--text-primary);
+  --silkdown-blockquote-color: var(--text-secondary);
+  --silkdown-link-color: var(--accent-strong);
+  --silkdown-hr-color: var(--border-subtle);
+  --selection-bg: var(--accent);
+  --selection-text: var(--on-accent);
+  --action-gradient: var(--accent);
+  --action-text: var(--on-accent);
+  background: var(--editor-bg);
+  color: var(--text-primary);
+}
+
+/* Blossom Light: dark manuscript within the light UI. */
+.appShell[data-theme="blossom-light"] .editorColumn {
+  --editor-depth-bg: var(--editor-bg);
+  --editor-heading-color: var(--text-primary);
+  --silkdown-code-color: var(--text-primary);
+  --silkdown-blockquote-color: var(--text-secondary);
+  --silkdown-link-color: var(--accent-strong);
+  --silkdown-hr-color: var(--border-subtle);
+  --selection-bg: var(--accent);
+  --selection-text: var(--on-accent);
+  --action-gradient: var(--accent);
+  --action-text: var(--on-accent);
+  background: var(--editor-bg);
+  color: var(--text-primary);
+}
+
+/* Existing active markers plus an inset line keep selection identifiable. */
+.appShell:is([data-theme^="aplil-"], [data-theme^="blossom-"]) :is(.activeTreeItem, .activeOutlineTreeItem) {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+  box-shadow: inset 3px 0 var(--accent);
+}
+.appShell:is([data-theme^="aplil-"], [data-theme^="blossom-"]) :is(.themePickerButton, .addButton, .ideaAdd):hover {
+  background: var(--primary-hover);
+  filter: none;
+}
+.appShell:is([data-theme^="aplil-"], [data-theme^="blossom-"]) :is(.themePickerButton, .addButton, .ideaAdd):active {
+  background: var(--primary-pressed);
+}
+.appShell:is([data-theme^="aplil-"], [data-theme^="blossom-"]) :is(button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Picker swatches: sidebar at left, manuscript and text at right. */
+.themePreview-aplil-light,
+.themePreview-blossom-dark { border-color: #e5dce1; background: #fffcfd; }
+.themePreview-aplil-dark,
+.themePreview-blossom-light { border-color: #595966; background: #41414c; }
+.themePreview-aplil-light::before,
+.themePreview-blossom-light::before { background: #faf6f5; }
+.themePreview-aplil-dark::before,
+.themePreview-blossom-dark::before { background: #3e3e49; }
+.themePreview-aplil-light i,
+.themePreview-blossom-dark i { background: #45434b; }
+.themePreview-aplil-dark i,
+.themePreview-blossom-light i { background: #faf8fa; }
+.themePreview-aplil-light b,
+.themePreview-blossom-dark b { background: #c72b68; }
+.themePreview-aplil-dark b,
+.themePreview-blossom-light b { background: #f477a4; }

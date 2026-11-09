@@ -1,0 +1,1 @@
+{"lowMemory":true,"args":["--ci","--bundles","nsis","--config","tmp/build-resource-comparison-20261104/qa-config.json","--verbose"]}

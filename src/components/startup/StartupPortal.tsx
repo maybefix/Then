@@ -14,6 +14,7 @@ type StartupPortalProps = {
   onClearHistory: () => void;
   onSkipStartupPortalChange: (value: boolean) => void;
   onOpenSettings: () => void;
+  onOpenHelp: () => void;
 };
 
 type PortalIconName =
@@ -111,6 +112,7 @@ export function StartupPortal({
   onClearHistory,
   onSkipStartupPortalChange,
   onOpenSettings,
+  onOpenHelp,
 }: StartupPortalProps) {
   const sortedWorkspaces = [...recentWorkspaces].sort(
     (left, right) => right.lastOpenedAt - left.lastOpenedAt,
@@ -210,6 +212,9 @@ export function StartupPortal({
         <button className="startupPortalSettingsButton" type="button" onClick={onOpenSettings}>
           <PortalIcon name="settings" />
           設定
+        </button>
+        <button className="startupPortalSettingsButton" type="button" onClick={onOpenHelp}>
+          ヘルプ
         </button>
         <label className="startupPortalSkipSetting">
           <input

@@ -1,0 +1,14 @@
+{
+  "installerSha256": "77c7e0fc3bdb9cc9afda31dafcdb480a944682dfc8793acd6996d0c000270c3d",
+  "exeSha256": "6a379795912b35aef0fe12acf92e75d5fc303ac66ce1c6584605e8077a96735d",
+  "key": "/assets/index-CaPg16qp.js",
+  "keyOffset": 21901798,
+  "references": [
+    {
+      "offset": 42012912,
+      "keyAddress": "1414e41e6",
+      "dataAddress": "1",
+      "length": 0
+    }
+  ]
+}

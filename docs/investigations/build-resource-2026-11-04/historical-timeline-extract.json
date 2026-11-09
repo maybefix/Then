@@ -1,0 +1,48 @@
+[
+  {
+    "timestamp": "2026-11-03T14:10:46.210Z",
+    "id": "exec-be864aa3-4a38-4277-bc3a-d32c5d6888f1",
+    "status": "failed",
+    "output": [
+      "memory allocation of 8650761 bytes failed"
+    ]
+  },
+  {
+    "timestamp": "2026-11-03T14:22:43.363Z",
+    "id": "exec-41ca4cad-eb8d-4870-9a00-99519541434b",
+    "status": "failed",
+    "output": [
+      "error: failed to build archive at `C:\\Users\\uest\\Documents\\then\\src-tauri\\target\\release\\deps\\brew_lib.lib`: ディスクに十分な空き領域がありません。 (os error 112)"
+    ]
+  },
+  {
+    "timestamp": "2026-11-03T15:08:28.614Z",
+    "id": "exec-3e065c10-d4ac-43c7-aade-7171b4e7f6d5",
+    "status": "completed",
+    "output": [
+      "  \"sha256\": \"77c7e0fc3bdb9cc9afda31dafcdb480a944682dfc8793acd6996d0c000270c3d\","
+    ]
+  },
+  {
+    "timestamp": "2026-11-03T15:22:15.322Z",
+    "id": "exec-29606d67-f5f2-4b0d-bd3a-2e08a93babaf",
+    "status": "completed",
+    "output": [
+      "    \"Name\": \"2919fcdb6d655debc35623c9af402ccc013cf93a7468447ed3bd23fbd5da69b9.js\",",
+      "    \"Length\": 0,",
+      "    \"LastWriteTime\": \"2026-11-03T23:10:36.4341089+09:00\"",
+      "    \"Length\": 283,",
+      "    \"LastWriteTime\": \"2026-11-03T12:32:32.4456226+09:00\"",
+      "    \"Length\": 283,",
+      "    \"LastWriteTime\": \"2026-11-03T15:13:34.9293067+09:00\"",
+      "    \"Length\": 283,",
+      "    \"LastWriteTime\": \"2026-11-03T23:12:41.1625881+09:00\"",
+      "    \"Length\": 284,",
+      "    \"LastWriteTime\": \"2026-11-03T14:55:34.1665107+09:00\"",
+      "    \"Length\": 284,",
+      "    \"LastWriteTime\": \"2026-11-03T20:14:40.7165078+09:00\"",
+      "    \"Length\": 384,",
+      "    \"LastWriteTime\": \"2026-11-03T12:32:32.5300123+09:00\""
+    ]
+  }
+]

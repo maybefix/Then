@@ -9,6 +9,7 @@
   --sen-paper: #fff;
   --sen-ink: #1c1b18;
   --sen-ink-72: rgba(28, 27, 24, 0.72);
+  --sen-ink-64: rgba(28, 27, 24, 0.64);
   --sen-ink-48: rgba(28, 27, 24, 0.48);
   --sen-ink-24: rgba(28, 27, 24, 0.24);
   --sen-vermilion: #b33b25;
@@ -28,7 +29,7 @@
   --text-primary: var(--sen-ink);
   --text-secondary: var(--sen-ink-72);
   --text-muted: var(--sen-ink-72);
-  --text-faint: var(--sen-ink-48);
+  --text-faint: var(--sen-ink-64);
   --accent: var(--sen-vermilion);
   --accent-strong: var(--sen-vermilion);
   --focus-ring: var(--sen-vermilion);
@@ -41,6 +42,10 @@
   --accent-border: var(--sen-vermilion);
   --danger-soft: transparent;
   --editor-bg: var(--sen-paper);
+  --theme-editor-depth-bg: var(--sen-paper);
+  --theme-auxiliary-depth-bg: var(--sen-paper);
+  --theme-depth-divider: var(--sen-ink);
+  --typewriter-guide-color: rgba(28, 27, 24, 0.14);
   --editor-heading-color: var(--sen-ink);
   --card-bg: var(--sen-paper);
   --card-hover: var(--sen-paper);
@@ -54,7 +59,7 @@
   --topbar-text-primary: var(--sen-ink);
   --topbar-text-secondary: var(--sen-ink);
   --topbar-text-muted: var(--sen-ink-72);
-  --topbar-text-faint: var(--sen-ink-48);
+  --topbar-text-faint: var(--sen-ink-64);
   --card-float-shadow: none;
   --shadow-popover: none;
   --shadow-modal: none;
@@ -74,9 +79,11 @@
   --sen-paper: #1c1b18;
   --sen-ink: #fff;
   --sen-ink-72: rgba(255, 255, 255, 0.72);
+  --sen-ink-64: rgba(255, 255, 255, 0.64);
   --sen-ink-48: rgba(255, 255, 255, 0.48);
   --sen-ink-24: rgba(255, 255, 255, 0.24);
   --sen-vermilion: #d85f46;
+  --typewriter-guide-color: rgba(255, 255, 255, 0.14);
   --on-accent: #1c1b18;
   --action-text: #1c1b18;
   --selection-text: #1c1b18;
@@ -237,6 +244,20 @@
   box-shadow: none;
 }
 
+/* Reserve the selection mark so checking a theme never moves its contents. */
+.appShell[data-theme|="sen"] .themeOptions .themeOption {
+  border-left: 3px solid transparent;
+}
+
+.appShell[data-theme|="sen"] .themeOption:has(input:checked) {
+  border-left-color: var(--sen-vermilion);
+}
+
+.appShell[data-theme|="sen"] .themeOption:has(input:focus-visible) {
+  outline: 2px solid var(--sen-vermilion);
+  outline-offset: 2px;
+}
+
 .appShell[data-theme|="sen"] :is(
   .modalForm input,
   .modalForm select,
@@ -319,11 +340,30 @@
   color: var(--sen-vermilion);
 }
 
-.appShell[data-theme|="sen"] :is(.menuPopover, .editorContextMenu, .modal, .toast) {
+.appShell[data-theme|="sen"] :is(.menuPopover, .editorContextMenu, .commandPalette, .modal, .toast) {
   border: 2px solid var(--sen-ink);
   border-radius: 0;
   background: var(--sen-paper);
   box-shadow: none;
+}
+
+/* The keyboard's active command uses the same registration mark as the tree. */
+.appShell[data-theme|="sen"] .commandPaletteItem {
+  border-left: 3px solid transparent;
+  border-radius: 0;
+}
+
+.appShell[data-theme|="sen"] .commandPaletteItem.active {
+  border-left-color: var(--sen-vermilion);
+  background: var(--sen-paper);
+}
+
+.appShell[data-theme|="sen"] .ideaChip.isActive {
+  border-color: var(--sen-vermilion);
+  background: var(--sen-paper);
+  color: var(--sen-vermilion);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .appShell[data-theme|="sen"] :is(
@@ -368,10 +408,6 @@
   background: var(--sen-paper);
   outline: 0;
   box-shadow: none;
-}
-
-.appShell[data-theme|="sen"] .verticalTypewriterGuide {
-  border-color: var(--sen-ink-24);
 }
 
 .appShell[data-theme|="sen"] .activeVisualLineHighlight {

@@ -42,6 +42,8 @@ export const themeCatalog: ThemeDefinition[] = [
   { id: "moss-light", label: "Moss", description: "白とモスグリーン", mode: "light" },
   { id: "violet-light", label: "Violet", description: "白とバイオレット", mode: "light" },
   { id: "rose-light", label: "Rose", description: "白とローズレッド", mode: "light" },
+  { id: "aplil-light", label: "Aplil", description: "生成りとラズベリーピンク", mode: "light" },
+  { id: "blossom-light", label: "Blossom", description: "生成りの操作部とチャコールの原稿面", mode: "light" },
   { id: "dark", label: "Default", description: "グレーブルー", mode: "dark" },
   { id: "minimal-dark", label: "Minimal", description: "ブラックとブライトブルー", mode: "dark" },
   { id: "resonance-dark", label: "Resonance", description: "深い紫とラベンダー", mode: "dark" },
@@ -70,6 +72,8 @@ export const themeCatalog: ThemeDefinition[] = [
   { id: "moss-dark", label: "Moss", description: "深緑とミストグリーン", mode: "dark" },
   { id: "violet-dark", label: "Violet", description: "夜紫とライトバイオレット", mode: "dark" },
   { id: "rose-dark", label: "Rose", description: "墨色とローズピンク", mode: "dark" },
+  { id: "aplil-dark", label: "Aplil", description: "チャコールと鮮やかなピンク", mode: "dark" },
+  { id: "blossom-dark", label: "Blossom", description: "チャコールの操作部と明るい原稿面", mode: "dark" },
 ];
 
 export const getThemeDefinition = (theme: AppTheme) =>

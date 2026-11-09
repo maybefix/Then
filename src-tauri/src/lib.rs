@@ -562,9 +562,13 @@ fn disable_webview_native_ui(webview: &tauri::WebviewWindow) {
 #[cfg(not(windows))]
 fn disable_webview_native_ui(_webview: &tauri::WebviewWindow) {}
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    let context = tauri::generate_context!();
+#[cfg(mobile)]
+#[tauri::mobile_entry_point]
+pub fn run_mobile() {
+    run(tauri::generate_context!());
+}
+
+pub fn run(context: tauri::Context<tauri::Wry>) {
     // A second launch brings the running Then forward instead of opening a
     // second one on the same manuscripts.
     let Some(instance) = single_instance::claim(&context.config().identifier) else {

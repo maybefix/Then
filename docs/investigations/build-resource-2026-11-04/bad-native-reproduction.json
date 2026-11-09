@@ -1,0 +1,21 @@
+{
+  "time": "2026-11-03T16:19:45.335Z",
+  "state": {
+    "url": "http://tauri.localhost/",
+    "rootChildren": 0,
+    "entry": "/assets/index-CaPg16qp.js",
+    "status": 200,
+    "mime": "text/html",
+    "bodyEqualsHome": true,
+    "bodyPrefix": "<!DOCTYPE html><html lang=\"ja\"><head>\n    <meta charset=\"UTF-8\">\n    <"
+  },
+  "browserErrors": [
+    {
+      "source": "javascript",
+      "level": "error",
+      "text": "Failed to load module script: Expected a JavaScript-or-Wasm module script but the server responded with a MIME type of \"text/html\". Strict MIME type checking is enforced for module scripts per HTML spec.",
+      "timestamp": 1793722784476.309,
+      "url": "http://tauri.localhost/assets/index-CaPg16qp.js"
+    }
+  ]
+}

@@ -48,6 +48,7 @@ import { CommandPalette, type PaletteCommand } from "./components/dialogs/Comman
 import { createPaletteCommands } from "./paletteCommands";
 import { PluginManagerModal } from "./components/dialogs/PluginManagerModal";
 import { SettingsModal } from "./components/dialogs/SettingsModal";
+import { HelpModal } from "./components/dialogs/HelpModal";
 import { ThemePickerModal } from "./components/dialogs/ThemePickerModal";
 import { ManuscriptTidyModal } from "./components/dialogs/ManuscriptTidyModal";
 import { RightSidebar } from "./components/layout/RightSidebar";
@@ -124,8 +125,6 @@ import {
 import { mapTextOffsetThroughChange } from "./editor/textOffsetMapping";
 import { recordImportedProject } from "./utils/library";
 import {
-  plotCardReferencePaths,
-  rewritePlotCard,
   rewriteThreadItems,
   threadItemReferencePaths,
   type ReferenceRewrite,
@@ -172,8 +171,9 @@ import {
 import {
   appendPlotChapter,
   appendPlotSection,
-  renumberPlotCards,
 } from "./components/plot/plotCardUtils";
+import { defaultPlotCards, loadWorkspacePlotCards, saveWorkspacePlotCards } from "./plotCardModel";
+import { createPlotCardActions } from "./plotCardActions";
 import { ReferenceLayer } from "./components/references/ReferenceLayer";
 import {
   alignIdeaLayoutToMode,
@@ -207,7 +207,6 @@ import {
   makeReferenceFileInfo,
   normalizeFileProgress,
   normalizePathForCompare,
-  normalizePlotCards,
   normalizeProofreadIgnored,
   normalizeReferenceLayout,
   normalizeSnapshots,
@@ -484,36 +483,6 @@ const EMPTY_WORKSPACE_SEARCH: ProjectSearchOutcome = {
   error: null,
 };
 
-const defaultPlotCards: PlotCard[] = [
-  {
-    id: "plot-1",
-    kind: "section",
-    num: "001",
-    title: "縦書きプロットテストです",
-    body: "",
-    expanded: false,
-    managerCollapsed: false,
-  },
-  {
-    id: "plot-2",
-    kind: "section",
-    num: "002",
-    title: "縦書きプロットテストです",
-    body: "",
-    expanded: false,
-    managerCollapsed: false,
-  },
-  {
-    id: "plot-3",
-    kind: "section",
-    num: "003",
-    title: "縦書きプロットテストです",
-    body: "これは縦書きプロットテストです。ちゃんと書けていることを確かめるためにあります。",
-    expanded: false,
-    managerCollapsed: false,
-  },
-];
-
 function isPathInsideFolder(path: string, folderPath: string): boolean {
   const normalizedPath = normalizePathForCompare(path);
   const normalizedFolder = normalizePathForCompare(folderPath);
@@ -661,17 +630,6 @@ async function loadWorkspaceSnippets(folderPath: string): Promise<IdeaThread[]> 
 async function saveWorkspaceSnippets(folderPath: string, snippets: IdeaThread[]): Promise<void> {
   if (!isTauriRuntime()) return;
   await invoke("save_project_snippets", { rootPath: folderPath, snippets });
-}
-
-async function loadWorkspacePlotCards(folderPath: string): Promise<PlotCard[]> {
-  if (!isTauriRuntime()) return defaultPlotCards;
-  const plotCards = await invoke<PlotCard[]>("load_project_plot_cards", { rootPath: folderPath });
-  return normalizePlotCards(plotCards);
-}
-
-async function saveWorkspacePlotCards(folderPath: string, plotCards: PlotCard[]): Promise<void> {
-  if (!isTauriRuntime()) return;
-  await invoke("save_project_plot_cards", { rootPath: folderPath, plotCards });
 }
 
 async function loadWorkspaceProofreadTerms(folderPath: string): Promise<ProofreadTerm[]> {
@@ -1040,6 +998,7 @@ export default function App() {
     selectionLines: ManuscriptTidyLineRange | null;
   } | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isPluginManagerOpen, setIsPluginManagerOpen] = useState(false);
   /** エディタのスクロール領域の実測内寸。文字表示幅設定の上限算出に使う。 */
   const [editorViewportSize, setEditorViewportSize] = useState<{
@@ -4161,6 +4120,13 @@ export default function App() {
     const mod = event.ctrlKey || event.metaKey;
     const key = event.key;
 
+    if (isHelpModalOpen) {
+      if (mod && ["n", "f", "p", "s", "i", "b"].includes(key.toLowerCase())) {
+        event.preventDefault();
+      }
+      return;
+    }
+
     // Ctrl+Alt+I：Idea ペインを開かずにメモを追加する。
     if (mod && event.altKey && !event.shiftKey && (key === "i" || key === "I")) {
       event.preventDefault();
@@ -6373,28 +6339,17 @@ export default function App() {
     showToast(`移動・コピーできませんでした: ${String(error)}`);
   };
 
-  const transferPlotCard = async (cardId: string) => {
-    const card = plotCards.find((item) => item.id === cardId);
-    if (!card) return;
-    const referencedPaths = plotCardReferencePaths([card]);
-    const options = await requestTransferOptions({
-      itemLabel: card.kind === "chapter" ? "章ラベル" : "プロット",
-      referenceCount: referencedPaths.filter(isExistingReference).length,
-    });
-    if (!options) return;
-    try {
-      const rewrite = await prepareReferenceRewrite(options.target, referencedPaths, options.copyReferences);
-      const targetCards = await loadWorkspacePlotCards(options.target);
-      await saveWorkspacePlotCards(options.target, [
-        ...targetCards,
-        { ...rewritePlotCard(card, rewrite), id: crypto.randomUUID() },
-      ]);
-      if (options.move) setPlotCards((current) => current.filter((item) => item.id !== cardId));
-      showToast(`${options.targetLabel}へ${options.move ? "移動" : "コピー"}しました`);
-    } catch (error) {
-      reportTransferError(error);
-    }
-  };
+  const { transferPlotCard, receiveCanvasCopyToPlot } = createPlotCardActions({
+    plotCards,
+    setPlotCards,
+    requestTransferOptions,
+    isExistingReference,
+    prepareReferenceRewrite,
+    showToast,
+    reportTransferError,
+    setRightSidebarTab,
+    setIsRightSidebarCollapsed,
+  });
 
   const ensureIdeaTransferAvailable = () => {
     if (settings.snippetStorageMode === "workspace") return true;
@@ -7235,34 +7190,7 @@ export default function App() {
 
     let unlistenCopyToPlot: (() => void) | null = null;
     void listen<CanvasCopyToPlotRequest>("then-canvas-copy-to-plot", (event) => {
-      const items = event.payload.items.filter((item) => item.text.trim().length > 0);
-      if (items.length === 0) return;
-
-      const stamp = Date.now().toString(36);
-      setPlotCards((current) =>
-        renumberPlotCards([
-          ...current,
-          ...items.map((item, index) => {
-            // 複数行のカードは1行目をタイトル、残りを本文に。1行だけなら本文のみ。
-            const lines = item.text.trim().split("\n");
-            const [firstLine, ...rest] = lines;
-            const title = lines.length > 1 ? firstLine.trim() : "";
-            const body = lines.length > 1 ? rest.join("\n").trim() : firstLine.trim();
-            return {
-              id: `plot-${stamp}-${index}`,
-              kind: "section" as const,
-              num: "",
-              title,
-              body,
-              expanded: false,
-              managerCollapsed: false,
-            };
-          }),
-        ]),
-      );
-      setRightSidebarTab("plot");
-      setIsRightSidebarCollapsed(false);
-      showToast(`${items.length} 件をプロットへ追加しました`);
+      receiveCanvasCopyToPlot(event);
     }).then((unlisten) => {
       unlistenCopyToPlot = unlisten;
     });
@@ -7714,6 +7642,7 @@ export default function App() {
               setStartupView("editor");
               setIsSettingsModalOpen(true);
             }}
+            onOpenHelp={() => setIsHelpModalOpen(true)}
           />
           </>
         ) : (
@@ -7735,6 +7664,10 @@ export default function App() {
                 handleNewDocument, handleOpenTextFile, saveCurrentDocument, handleSaveAs,
                 handleRegisterCurrentFileAsTemplate, appMode, openManuscriptTidy, getCurrentEditorSelection,
                 handleOpenLinkedExport, handleOpenProjectFolder,
+                onOpenHelp: () => {
+                  fileMenuRef.current?.querySelector<HTMLButtonElement>(".menuButton")?.focus();
+                  setIsHelpModalOpen(true);
+                },
                 canRegisterTemplate: !(isNewTabStartPage || activeTab?.kind === "empty"),
               }}
             />
@@ -8447,6 +8380,7 @@ export default function App() {
           )}
           </section>
         )}
+        {isHelpModalOpen && <HelpModal onClose={() => setIsHelpModalOpen(false)} />}
       </main>
   );
 }

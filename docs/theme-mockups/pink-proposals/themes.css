@@ -1,0 +1,160 @@
+/* Initial proposal archive. The preview now uses the registered Aplil and
+   Blossom themes from src/styles/themes/aplil-blossom.css instead of this file. */
+.appShell[data-pink-proposal] {
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-button: 8px;
+  --brand-gradient: var(--accent);
+  --action-gradient: var(--accent);
+  --action-text: var(--on-accent);
+  --editor-heading-color: var(--text-primary);
+  --topbar-text-primary: var(--text-primary);
+  --topbar-text-secondary: var(--text-secondary);
+  --topbar-text-muted: var(--text-muted);
+  --topbar-text-faint: var(--text-faint);
+  --silkdown-code-color: var(--text-primary);
+  --silkdown-blockquote-color: var(--text-secondary);
+  --silkdown-link-color: var(--accent-strong);
+  --silkdown-hr-color: var(--border-subtle);
+  --selection-bg: var(--accent);
+  --selection-text: var(--on-accent);
+  --navigation-icon: var(--text-muted);
+  --navigation-icon-hover: var(--text-primary);
+  --editor-depth-bg: var(--editor-bg);
+  --auxiliary-depth-bg: var(--sidebar-bg);
+}
+
+/* A — Charcoal Pink: reference 1's blue-gray canvas and clear candy pink. */
+.appShell[data-pink-proposal="charcoal"],
+.appShell[data-pink-proposal="split"],
+.appShell[data-pink-proposal="reverse"] .editorColumn {
+  color-scheme: dark;
+  --bg-root: #35353f;
+  --bg-primary: #41414c;
+  --bg-secondary: #3c3c47;
+  --bg-tertiary: #50505e;
+  --bg-panel: #41414c;
+  --bg-panel-strong: #4b4b58;
+  --canvas-bg: #35353f;
+  --sidebar-bg: #3e3e49;
+  --topbar-bg: #3e3e49;
+  --editor-bg: #41414c;
+  --card-bg: #484854;
+  --card-hover: #50505e;
+  --text-primary: #faf8fa;
+  --text-secondary: #dedbe2;
+  --text-muted: #bcb8c5;
+  --text-faint: #a6a1b0;
+  --border-subtle: #595966;
+  --border-strong: #7d7889;
+  --accent: #f477a4;
+  --accent-strong: #ff9bbe;
+  --primary-hover: #ff91b6;
+  --primary-pressed: #df6893;
+  --on-accent: #302531;
+  --focus-ring: #ff9bbe;
+  --accent-soft: #593f50;
+  --accent-border: #c56d91;
+  --control-hover: #4d4655;
+  --success: #a4d2b6;
+  --warning: #e6c782;
+  --danger: #ffaaa7;
+  --danger-soft: #603f46;
+  --overlay: #20202ac9;
+  --card-float-shadow: 0 3px 12px #15151d24;
+  --shadow-popover: 0 12px 32px #17171f55;
+  --shadow-modal: 0 24px 60px #17171f77;
+  --silkdown-code-bg: #514250;
+}
+
+/* B — Raspberry Paper: reference 2's warm canvas, white cards, deep pink. */
+.appShell[data-pink-proposal="paper"],
+.appShell[data-pink-proposal="reverse"],
+.appShell[data-pink-proposal="split"] .editorColumn {
+  --editor-depth-bg: var(--editor-bg);
+  color-scheme: light;
+  --bg-root: #faf6f5;
+  --bg-primary: #fffcfd;
+  --bg-secondary: #f7f0f2;
+  --bg-tertiary: #eee4e9;
+  --bg-panel: #fffcfd;
+  --bg-panel-strong: #f5edf1;
+  --canvas-bg: #f5eeef;
+  --sidebar-bg: #faf6f5;
+  --topbar-bg: #faf6f5;
+  --editor-bg: #fffcfd;
+  --card-bg: #fffcfd;
+  --card-hover: #f8edf2;
+  --text-primary: #45434b;
+  --text-secondary: #605a65;
+  --text-muted: #776d7a;
+  --text-faint: #817584;
+  --border-subtle: #e5dce1;
+  --border-strong: #b9a5b2;
+  --accent: #c72b68;
+  --accent-strong: #ae2058;
+  --primary-hover: #ae2058;
+  --primary-pressed: #92194a;
+  --on-accent: #ffffff;
+  --focus-ring: #ae2058;
+  --accent-soft: #f9e5ee;
+  --accent-border: #cb7c9c;
+  --control-hover: #f4e8ee;
+  --success: #39734f;
+  --warning: #8b641c;
+  --danger: #b73642;
+  --danger-soft: #fbe7e9;
+  --overlay: #45434b66;
+  --card-float-shadow: 0 2px 10px #51404d0a;
+  --shadow-popover: 0 12px 32px #51404d24;
+  --shadow-modal: 0 24px 60px #51404d30;
+  --silkdown-code-bg: #f5e7ee;
+}
+
+/* C — Pink Desk: the editor must resolve its own text and syntax tokens. */
+.appShell[data-pink-proposal="split"] .editorColumn {
+  --editor-heading-color: #45434b;
+  --silkdown-code-color: var(--text-primary);
+  --silkdown-blockquote-color: var(--text-secondary);
+  --silkdown-link-color: var(--accent-strong);
+  --silkdown-hr-color: var(--border-subtle);
+  --selection-bg: #c72b68;
+  --selection-text: #fff;
+  background: var(--editor-bg);
+  color: var(--text-primary);
+}
+
+/* D — Paper Night: light chrome with a charcoal manuscript, opposite of C.
+   Resolve inherited syntax/action colors again inside the dark editor. */
+.appShell[data-pink-proposal="reverse"] .editorColumn {
+  --editor-depth-bg: var(--editor-bg);
+  --editor-heading-color: var(--text-primary);
+  --silkdown-code-color: var(--text-primary);
+  --silkdown-blockquote-color: var(--text-secondary);
+  --silkdown-link-color: var(--accent-strong);
+  --silkdown-hr-color: var(--border-subtle);
+  --selection-bg: var(--accent);
+  --selection-text: var(--on-accent);
+  --action-gradient: var(--accent);
+  --action-text: var(--on-accent);
+  background: var(--editor-bg);
+  color: var(--text-primary);
+}
+
+/* Existing active markers plus an inset line keep selection identifiable. */
+.appShell[data-pink-proposal] :is(.activeTreeItem, .activeOutlineTreeItem) {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+  box-shadow: inset 3px 0 var(--accent);
+}
+.appShell[data-pink-proposal] :is(.themePickerButton, .addButton, .ideaAdd):hover {
+  background: var(--primary-hover);
+  filter: none;
+}
+.appShell[data-pink-proposal] :is(.themePickerButton, .addButton, .ideaAdd):active {
+  background: var(--primary-pressed);
+}
+.appShell[data-pink-proposal] :is(button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
