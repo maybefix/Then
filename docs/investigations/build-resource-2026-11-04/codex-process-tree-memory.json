@@ -1,0 +1,80 @@
+{
+  "Time": "2026-11-03T16:21:16.8890489Z",
+  "RootIds": [
+    16720
+  ],
+  "TotalProcesses": 110,
+  "PrivateBytes": 5080850432.0,
+  "Groups": [
+    {
+      "Name": "cargo.exe",
+      "Count": 2,
+      "PrivateMiB": 84.0
+    },
+    {
+      "Name": "ChatGPT.exe",
+      "Count": 15,
+      "PrivateMiB": 2004.0
+    },
+    {
+      "Name": "cmd.exe",
+      "Count": 10,
+      "PrivateMiB": 46.0
+    },
+    {
+      "Name": "codex-code-mode-host.exe",
+      "Count": 1,
+      "PrivateMiB": 16.0
+    },
+    {
+      "Name": "codex-computer-use-swift.exe",
+      "Count": 1,
+      "PrivateMiB": 58.0
+    },
+    {
+      "Name": "codex.exe",
+      "Count": 6,
+      "PrivateMiB": 282.0
+    },
+    {
+      "Name": "conhost.exe",
+      "Count": 35,
+      "PrivateMiB": 41.0
+    },
+    {
+      "Name": "git.exe",
+      "Count": 2,
+      "PrivateMiB": 41.0
+    },
+    {
+      "Name": "GoogleIMEJaConverter.exe",
+      "Count": 1,
+      "PrivateMiB": 17.0
+    },
+    {
+      "Name": "GoogleIMEJaRenderer.exe",
+      "Count": 1,
+      "PrivateMiB": 39.0
+    },
+    {
+      "Name": "node_repl.exe",
+      "Count": 11,
+      "PrivateMiB": 31.0
+    },
+    {
+      "Name": "node.exe",
+      "Count": 23,
+      "PrivateMiB": 957.0
+    },
+    {
+      "Name": "pwsh.exe",
+      "Count": 1,
+      "PrivateMiB": 31.0
+    },
+    {
+      "Name": "rustc.exe",
+      "Count": 1,
+      "PrivateMiB": 1199.0
+    }
+  ]
+}

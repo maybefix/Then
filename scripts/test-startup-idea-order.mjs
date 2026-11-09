@@ -21,6 +21,8 @@ const option = (name, fallback) => {
   return index >= 0 ? args[index + 1] : fallback;
 };
 const DEBUG = args.includes("--debug");
+const TYPEWRITER_STARTUP = args.includes("--typewriter") || args.includes("--offset-viewport");
+const OFFSET_VIEWPORT = args.includes("--offset-viewport");
 
 // build は作品の外へ出す（dist を書き換えない。開発サーバーにも見られない）。
 let dist = option("dist", null);
@@ -60,7 +62,7 @@ const STALE_IDEA = "アプリ状態にだけ残ったIdea";
  * 並び順の先頭に置かれている。アプリ状態の Idea は、外で足す前の作品Aのもの（ext がなく、
  * 作品にはない Idea が1つある）。
  */
-function installMock({ library, workA, workB, skipStartupPortal, staleIdea, readDelayMs = 15 }) {
+function installMock({ library, workA, workB, skipStartupPortal, staleIdea, readDelayMs = 15, typewriterStartup = false, offsetViewport = false }) {
   const thread = (id, kind, title, fragments) => ({ id, kind, title, starred: false, createdAt: 1, updatedAt: 1,
     fragments: fragments.map(([fragmentId, body]) => ({ id: fragmentId, body, used: false, createdAt: 1, updatedAt: 1 })) });
   const card = (id, title) => ({ id, kind: "section", num: "1", title, body: "", expanded: false, managerCollapsed: false });
@@ -90,6 +92,26 @@ function installMock({ library, workA, workB, skipStartupPortal, staleIdea, read
     settings: { skipStartupPortal, snippetStorageMode: "workspace" },
     snippets: [thread("idea-inbox", "inbox", "インボックス", [["a-1", "作品Aのメモ"], ["stale-1", staleIdea]])],
   };
+  if (typewriterStartup) {
+    Object.assign(state.settings, { theme: "sen-light", writingMode: "vertical-rl",
+      editorDisplayMode: "continuous", typewriterScroll: true, typewriterOffset: 63,
+      showTypewriterGuide: true, showLineNumbers: true, editorFontFamily: '"游明朝"',
+      fontSize: 17, lineHeight: 1.55, editorMeasureVertical: 84 });
+    state.cursorPositions = {};
+    state.documentTabsByWorkspace = {};
+    for (const [root, item] of Object.entries(works)) {
+      item.text = Array.from({ length: 120 }, (_, i) => `段落${i}　` +
+        "起動時の固定位置を検証します。AI Codeと日本語の文章です。".repeat(6)).join("\n") + "\n";
+      const file = `${root}/本文.txt`;
+      state.cursorPositions[file] = { length: item.text.length, offset: item.text.length };
+      state.documentTabsByWorkspace[root.toLowerCase().replaceAll("/", "\\")] = {
+        activeIndex: 0, tabs: [{ path: file, name: "本文.txt", fileId: file, contentHash: null,
+          activeOutlineLine: null, viewportState: { textLength: item.text.length,
+            writingMode: "vertical-rl", anchorOffset: item.text.length - (offsetViewport ? 117 : 0),
+            anchorRatio: offsetViewport ? 0.6629704459924504 : 0.6297252774871749 } }],
+      };
+    }
+  }
   const saves = { save_project_snippets: "snippets", save_project_plot_cards: "plotCards", save_reference_layout: "layout",
     save_project_proofread_terms: "proofreadTerms", save_project_proofread_ignored: "proofreadIgnored" };
   const loads = { load_project_snippets: "snippets", load_project_plot_cards: "plotCards", load_reference_layout: "layout",
@@ -111,7 +133,8 @@ function installMock({ library, workA, workB, skipStartupPortal, staleIdea, read
     "plugin:window|is_maximized": () => false,
     "plugin:window|is_fullscreen": () => false,
     "plugin:event|listen": () => callbackId++,
-    get_font_faces: () => [],
+    get_font_faces: () => typewriterStartup
+      ? [{ localNames: ["YuMincho-Regular"], weight: 400, italic: false }] : [],
     journal_recovery_scan: () => [],
     load_library_property_types: () => ({}),
   };
@@ -258,7 +281,7 @@ try {
     await send("Runtime.enable");
     await send("Emulation.setDeviceMetricsOverride", { width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false });
     await send("Page.addScriptToEvaluateOnNewDocument", {
-      source: `(${installMock})(${JSON.stringify({ library: LIBRARY, workA: WORK_A, workB: WORK_B, staleIdea: STALE_IDEA, ...mock })})`,
+      source: `(${installMock})(${JSON.stringify({ library: LIBRARY, workA: WORK_A, workB: WORK_B, staleIdea: STALE_IDEA, typewriterStartup: TYPEWRITER_STARTUP, offsetViewport: OFFSET_VIEWPORT, ...mock })})`,
     });
     await send("Page.navigate", { url: appUrl });
     await sleep(1000);
@@ -270,6 +293,21 @@ try {
     } catch (error) {
       const unknown = await evaluate("[...window.__unknownCommands].join(', ')");
       throw new Error(`作品Aが開かなかった（差し替えていない命令: ${unknown}）: ${error.message}\n${pageErrors.slice(0, 3).join("\n")}`);
+    }
+    if (TYPEWRITER_STARTUP) {
+      await sleep(750);
+      const geometry = await evaluate(`(() => {
+        const root = document.querySelector('.ProseMirror');
+        const last = root.lastElementChild.getBoundingClientRect();
+        const area = document.querySelector('.verticalTypewriterScroller').getBoundingClientRect();
+        return { delta: (last.left + last.right) / 2 - (area.left + area.width * .63),
+          empty: !root.lastElementChild.textContent, width: area.width,
+          font: getComputedStyle(root).fontFamily };
+      })()`);
+      console.log("App startup typewriter", JSON.stringify({ skipStartupPortal: mock.skipStartupPortal,
+        readDelayMs: mock.readDelayMs ?? 15, ...geometry }));
+      expect.ok(geometry.empty, "the actual App must restore the final empty paragraph");
+      expect.ok(Math.abs(geometry.delta) < 1, `App startup typewriter drifted ${geometry.delta}px`);
     }
     return { socket, evaluate, pageErrors };
   }

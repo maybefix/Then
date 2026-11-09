@@ -1,0 +1,16 @@
+{
+  "input": "assets/index-DAlOvSBp.js",
+  "injected": {
+    "error": "Command failed: C:/Users/uest/Documents/then/tmp/build-resource-investigation/reproduce-tauri-cache.exe C:/Users/uest/Documents/then/dist/assets/index-DAlOvSBp.js C:/Users/uest/Documents/then/tmp/build-resource-investigation/cache-fixture\nmemory allocation of 8650761 bytes failed\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+    "out": "hash=c67b0e09b5aafe92ef61d3f3221af9db48ba441359ba2434a7ee7f21e5281355\n",
+    "err": "memory allocation of 8650761 bytes failed\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+  },
+  "reused": {
+    "out": "hash=c67b0e09b5aafe92ef61d3f3221af9db48ba441359ba2434a7ee7f21e5281355\ncodegen_success=true\ncache=c67b0e09b5aafe92ef61d3f3221af9db48ba441359ba2434a7ee7f21e5281355.js bytes=0\n",
+    "err": ""
+  },
+  "fresh": {
+    "out": "hash=c67b0e09b5aafe92ef61d3f3221af9db48ba441359ba2434a7ee7f21e5281355\ncodegen_success=true\ncache=c67b0e09b5aafe92ef61d3f3221af9db48ba441359ba2434a7ee7f21e5281355.js bytes=187020\n",
+    "err": ""
+  }
+}

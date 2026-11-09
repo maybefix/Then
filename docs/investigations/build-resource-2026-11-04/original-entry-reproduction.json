@@ -1,0 +1,11 @@
+{
+  "origFault": {
+    "error": "Command failed: C:/Users/uest/Documents/then/tmp/build-resource-investigation/reproduce-tauri-cache.exe C:/Users/uest/Documents/then/tmp/build-resource-investigation/frontend-menu-removed/assets/index-CaPg16qp.js C:/Users/uest/Documents/then/tmp/build-resource-investigation/original-fault-cache\nmemory allocation of 8650761 bytes failed\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+    "out": "hash=2919fcdb6d655debc35623c9af402ccc013cf93a7468447ed3bd23fbd5da69b9\n",
+    "err": "memory allocation of 8650761 bytes failed\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+  },
+  "origRetry": {
+    "out": "hash=2919fcdb6d655debc35623c9af402ccc013cf93a7468447ed3bd23fbd5da69b9\ncodegen_success=true\ncache=2919fcdb6d655debc35623c9af402ccc013cf93a7468447ed3bd23fbd5da69b9.js bytes=0\n",
+    "err": ""
+  }
+}

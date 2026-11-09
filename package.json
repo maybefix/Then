@@ -111,6 +111,7 @@
     "benchmark:typewriter": "node scripts/benchmark-typing.mjs --project --typewriter --at middle",
     "benchmark:manuscript": "node scripts/benchmark-manuscript-ab.mjs",
     "test:typewriter": "node scripts/test-typewriter-scroll.mjs && node scripts/test-editor-overlays.mjs && node scripts/test-indexed-decorations.mjs && node scripts/test-typewriter-ime-refresh.mjs",
+    "test:typewriter-startup": "node scripts/test-typewriter-startup-browser.mjs",
     "test:decoration-mapping": "node scripts/test-editor-optimization-audit.mjs && node scripts/test-decoration-mapping-exhaustive.mjs && node scripts/test-editor-range-replacement.mjs",
     "test:visual-line-index": "node scripts/test-visual-line-index.mjs",
     "fuzz:editor-decorations": "node scripts/fuzz-editor-decorations.mjs",
@@ -119,7 +120,7 @@
     "demo:validate": "node scripts/demo/validate-demo.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.3",

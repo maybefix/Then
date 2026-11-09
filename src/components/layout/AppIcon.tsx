@@ -7,12 +7,15 @@ export type AppIconName =
   | "chevronDown"
   | "export"
   | "file"
+  | "filePlus"
   | "files"
   | "folder"
   | "folderPlus"
+  | "folderOpen"
   | "fullscreen"
   | "fullscreenExit"
   | "history"
+  | "help"
   | "horizontal"
   | "menu"
   | "openExternal"
@@ -22,8 +25,11 @@ export type AppIconName =
   | "plus"
   | "reference"
   | "search"
+  | "save"
+  | "saveAs"
   | "settings"
   | "theme"
+  | "template"
   | "vertical"
   | "write";
 
@@ -36,6 +42,16 @@ export function AppIcon({ name, className = "" }: { name: AppIconName; className
   };
 
   switch (name) {
+    case "filePlus":
+      return <svg {...common}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M12 12v6M9 15h6" /></svg>;
+    case "folderOpen":
+      return <svg {...common}><path d="M3 17V6a2 2 0 0 1 2-2h5l2 2h6a2 2 0 0 1 2 2v2M3 17l3-7h16l-3 9H5a2 2 0 0 1-2-2z" /></svg>;
+    case "save":
+      return <svg {...common}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2zM7 3v6h10V3M7 21v-8h10v8" /></svg>;
+    case "saveAs":
+      return <svg {...common}><path d="M7 3h10l4 4v10M7 3v6h10V3M3 7v12a2 2 0 0 0 2 2h12M7 21v-8h10v8M3 7h4" /></svg>;
+    case "help":
+      return <svg {...common}><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.5 2.5 0 0 1 5 .5c0 1.5-2.5 2-2.5 3.5M12 16.5h.01" /></svg>;
     case "copy":
       return <svg {...common}><rect x="8" y="8" width="12" height="13" rx="1.5" /><path d="M15 8V3H3v13h5" /></svg>;
     case "cut":
@@ -126,6 +142,7 @@ export function AppIcon({ name, className = "" }: { name: AppIconName; className
           <path d="M12 7v5l3.5 2" />
         </svg>
       );
+    case "template":
     case "checkpointAdd":
       return (
         <svg {...common}>

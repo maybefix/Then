@@ -1,0 +1,45 @@
+[
+  {
+    "path": "C:/Users/uest/.codex/sessions",
+    "MiB": 590,
+    "files": 439,
+    "largest": [
+      {
+        "path": "C:/Users/uest/.codex/sessions/2026/10/24/rollout-2026-10-24T23-19-58-01a16e48-5d50-7eb2-b292-3dcd2cdd62a7.jsonl.zst",
+        "size": 58066586
+      },
+      {
+        "path": "C:/Users/uest/.codex/sessions/2026/06/07/rollout-2026-06-07T16-45-58-019ea10b-9d9a-7ef3-89e7-5f31effbf8f3.jsonl.zst",
+        "size": 22395785
+      }
+    ]
+  },
+  {
+    "path": "C:/Users/uest/.codex/archived_sessions",
+    "MiB": 23,
+    "files": 8,
+    "largest": []
+  },
+  {
+    "path": "C:/Users/uest/.codex/worktrees",
+    "error": "ENOENT"
+  },
+  {
+    "path": "C:/Users/uest/.codex/log",
+    "MiB": 0,
+    "files": 1,
+    "largest": []
+  },
+  {
+    "path": "C:/Users/uest/.codex/tmp",
+    "MiB": 0,
+    "files": 47,
+    "largest": []
+  },
+  {
+    "path": "C:/Users/uest/.codex/node_repl",
+    "MiB": 0,
+    "files": 1,
+    "largest": []
+  }
+]

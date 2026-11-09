@@ -1,0 +1,114 @@
+[
+  {
+    "label": "baseline",
+    "build": {
+      "label": "baseline",
+      "pid": 21568,
+      "exitCode": 0,
+      "started": "2026-11-03T22:16:21.0579579Z",
+      "finished": "2026-11-03T22:31:00.7402055Z",
+      "elapsedSeconds": 879.6822476,
+      "startingFreeBytes": 17515646976,
+      "minimumFreeBytes": 17038266368,
+      "targetBeforeBytes": 1867363076.0,
+      "targetAfterBytes": 2164750153.0,
+      "nativeArtifacts": [],
+      "installer": "C:\\Users\\uest\\Documents\\then\\tmp\\build-resource-comparison-20261104\\baseline-installer.exe"
+    },
+    "samples": 567,
+    "rustPeakPrivateMiB": 2116.0,
+    "rustPeakWorkingSetMiB": 1465.0,
+    "startFreePhysicalMiB": 1686.0,
+    "minimumFreePhysicalMiB": 401.0,
+    "startFreeCommitMiB": 13539.0,
+    "minimumFreeCommitMiB": 11434.0,
+    "peakDropInFreeDiskMiB": 455.0,
+    "startDesktopPrivateMiB": 1958.0,
+    "maxDesktopPrivateMiB": 2037.0,
+    "smoke": {
+      "label": "baseline",
+      "installer": "C:\\Users\\uest\\Documents\\then\\tmp\\build-resource-comparison-20261104\\baseline-installer.exe",
+      "installDirectory": "C:\\Users\\uest\\Documents\\then\\tmp\\build-resource-comparison-20261104\\installed",
+      "errors": [],
+      "check": {
+        "initial": "portal",
+        "native": true,
+        "entry": {
+          "url": "http://tauri.localhost/assets/index-CaPg16qp.js",
+          "status": 200,
+          "mime": "text/javascript",
+          "length": 669255,
+          "html": false
+        },
+        "menu": {
+          "text": "",
+          "icon": true,
+          "visible": true
+        },
+        "menuOpened": true
+      },
+      "installExitCode": 0,
+      "installOutput": "",
+      "installerSha256": "9376560ca4dfcfa65662f9b1459524f1c4b8c2c78aece6a10d483289eea6cf6b",
+      "installedExe": "C:\\Users\\uest\\Documents\\then\\tmp\\build-resource-comparison-20261104\\installed\\Then.exe",
+      "installedExeSha256": "aa54a9e421eb628dfa069b87f6e0bd4a0d89868363e4c4d68ebb561d7ef73098",
+      "passed": true
+    }
+  },
+  {
+    "label": "rlib",
+    "build": {
+      "label": "rlib",
+      "pid": 24100,
+      "exitCode": 0,
+      "started": "2026-11-03T22:31:16.7180975Z",
+      "finished": "2026-11-03T22:39:11.1804236Z",
+      "elapsedSeconds": 474.4623261,
+      "startingFreeBytes": 17147990016,
+      "minimumFreeBytes": 16453480448,
+      "targetBeforeBytes": 2164750153.0,
+      "targetAfterBytes": 2634313572.0,
+      "nativeArtifacts": [],
+      "installer": "C:\\Users\\uest\\Documents\\then\\tmp\\build-resource-comparison-20261104\\rlib-installer.exe"
+    },
+    "samples": 316,
+    "rustPeakPrivateMiB": 2075.0,
+    "rustPeakWorkingSetMiB": 1466.0,
+    "startFreePhysicalMiB": 2022.0,
+    "minimumFreePhysicalMiB": 266.0,
+    "startFreeCommitMiB": 13571.0,
+    "minimumFreeCommitMiB": 11579.0,
+    "peakDropInFreeDiskMiB": 662.0,
+    "startDesktopPrivateMiB": 2011.0,
+    "maxDesktopPrivateMiB": 2013.0,
+    "smoke": {
+      "label": "rlib",
+      "installer": "C:\\Users\\uest\\Documents\\then\\tmp\\build-resource-comparison-20261104\\rlib-installer.exe",
+      "installDirectory": "C:\\Users\\uest\\Documents\\then\\tmp\\build-resource-comparison-20261104\\installed",
+      "errors": [],
+      "check": {
+        "initial": "portal",
+        "native": true,
+        "entry": {
+          "url": "http://tauri.localhost/assets/index-CaPg16qp.js",
+          "status": 200,
+          "mime": "text/javascript",
+          "length": 669255,
+          "html": false
+        },
+        "menu": {
+          "text": "",
+          "icon": true,
+          "visible": true
+        },
+        "menuOpened": true
+      },
+      "installExitCode": 0,
+      "installOutput": "",
+      "installerSha256": "5cee892ba2ad1cb06fa302290bea06c46afc96d4273bcea34f9b585524eec961",
+      "installedExe": "C:\\Users\\uest\\Documents\\then\\tmp\\build-resource-comparison-20261104\\installed\\Then.exe",
+      "installedExeSha256": "d3439ed0e21898e30e6ae148f7717396da0bc8082d725e6a77753ba62a9488e9",
+      "passed": true
+    }
+  }
+]

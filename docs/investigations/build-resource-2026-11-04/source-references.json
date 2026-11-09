@@ -1,0 +1,125 @@
+[
+  {
+    "path": "package.json",
+    "lines": [
+      {
+        "n": 56,
+        "s": "    \"dev\": \"vite\","
+      },
+      {
+        "n": 71,
+        "s": "    \"build\": \"tsc && vite build\","
+      },
+      {
+        "n": 122,
+        "s": "    \"tauri:dev\": \"tauri dev\","
+      },
+      {
+        "n": 123,
+        "s": "    \"tauri:build\": \"tauri build\""
+      }
+    ]
+  },
+  {
+    "path": "src-tauri/Cargo.toml",
+    "lines": [
+      {
+        "n": 10,
+        "s": "crate-type = [\"staticlib\", \"cdylib\", \"rlib\"]"
+      }
+    ]
+  },
+  {
+    "path": "src-tauri/src/main.rs",
+    "lines": [
+      {
+        "n": 4,
+        "s": "    brew_lib::run();"
+      }
+    ]
+  },
+  {
+    "path": "src-tauri/src/lib.rs",
+    "lines": [
+      {
+        "n": 567,
+        "s": "    let context = tauri::generate_context!();"
+      },
+      {
+        "n": 3354,
+        "s": "    proofread_ignored: BTreeMap<String, Vec<String>>,"
+      },
+      {
+        "n": 3456,
+        "s": "    let path = reference_layout_path(&root);"
+      },
+      {
+        "n": 4135,
+        "s": "fn reference_layout_path(root: &Path) -> PathBuf {"
+      },
+      {
+        "n": 4313,
+        "s": "    let path = reference_layout_path(root);"
+      },
+      {
+        "n": 5488,
+        "s": "        reference_layout_path, stable_file_id, ReferenceCardConfig, ReferenceFileInfo,"
+      },
+      {
+        "n": 5574,
+        "s": "        let path = reference_layout_path(&test_dir);"
+      }
+    ]
+  },
+  {
+    "path": "scripts/repair-tauri-asset-cache.mjs",
+    "lines": [
+      {
+        "n": 4,
+        "s": "import { brotliDecompressSync } from \"node:zlib\";"
+      },
+      {
+        "n": 11,
+        "s": "  const build = path.join(target, \"release\", \"build\");"
+      },
+      {
+        "n": 29,
+        "s": "        brotliDecompressSync(compressed);"
+      },
+      {
+        "n": 34,
+        "s": "      if (!valid) {"
+      }
+    ]
+  },
+  {
+    "path": "scripts/lib/stop-browser.mjs",
+    "lines": [
+      {
+        "n": 2,
+        "s": "// throwaway profile. On Windows, ChildProcess.kill() ends only the parent"
+      },
+      {
+        "n": 4,
+        "s": "// fails silently, and each run leaves ~460 MB behind in %TEMP%."
+      },
+      {
+        "n": 6,
+        "s": "// The msedge.exe a script spawns can be only a launcher: it starts the real"
+      }
+    ]
+  },
+  {
+    "path": "vite.config.ts",
+    "lines": [
+      {
+        "n": 38,
+        "s": "    watch: {"
+      },
+      {
+        "n": 39,
+        "s": "      ignored: [\"**/.edge-ui-check*/**\", \"**/src-tauri/target/**\", \"**/tmp/**\"],"
+      }
+    ]
+  }
+]

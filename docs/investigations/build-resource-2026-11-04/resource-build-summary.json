@@ -1,0 +1,96 @@
+{
+  "command": "cargo rustc --offline --manifest-path src-tauri/Cargo.toml --release --lib -- --cfg then_resource_probe",
+  "cargoJobs": 1,
+  "result": "Finished `release` profile [optimized] target(s) in 10m 36s",
+  "firstSample": "2026-11-03T16:14:59.8542907Z",
+  "lastSample": "2026-11-03T16:26:21.4059315Z",
+  "sampleCount": 254,
+  "peakRustPrivateCommitBytes": 1391050752,
+  "peakRustWorkingSetBytes": 1052991488,
+  "byPid": {
+    "356": {
+      "process": "rustc.exe",
+      "maxPrivateBytes": 11096064,
+      "peakPrivateCommitBytes": 360333312,
+      "peakWorkingSetBytes": 74625024
+    },
+    "5916": {
+      "process": "rustc.exe",
+      "maxPrivateBytes": 112762880,
+      "peakPrivateCommitBytes": 112762880,
+      "peakWorkingSetBytes": 26718208
+    },
+    "7976": {
+      "process": "rustc.exe",
+      "maxPrivateBytes": 21544960,
+      "peakPrivateCommitBytes": 399626240,
+      "peakWorkingSetBytes": 150597632
+    },
+    "9648": {
+      "process": "rustc.exe",
+      "maxPrivateBytes": 15503360,
+      "peakPrivateCommitBytes": 347054080,
+      "peakWorkingSetBytes": 117899264
+    },
+    "9988": {
+      "process": "rustc.exe",
+      "maxPrivateBytes": 790093824,
+      "peakPrivateCommitBytes": 790114304,
+      "peakWorkingSetBytes": 516452352
+    },
+    "20000": {
+      "process": "cargo.exe",
+      "maxPrivateBytes": 7561216,
+      "peakPrivateCommitBytes": 18350080,
+      "peakWorkingSetBytes": 25190400
+    },
+    "21136": {
+      "process": "rustc.exe",
+      "maxPrivateBytes": 1363582976,
+      "peakPrivateCommitBytes": 1391050752,
+      "peakWorkingSetBytes": 1052991488
+    },
+    "22024": {
+      "process": "rustc.exe",
+      "maxPrivateBytes": 263475200,
+      "peakPrivateCommitBytes": 321593344,
+      "peakWorkingSetBytes": 172122112
+    },
+    "24072": {
+      "process": "rustc.exe",
+      "maxPrivateBytes": 459972608,
+      "peakPrivateCommitBytes": 459972608,
+      "peakWorkingSetBytes": 123482112
+    },
+    "24532": {
+      "process": "link.exe",
+      "maxPrivateBytes": 189599744,
+      "peakPrivateCommitBytes": 190664704,
+      "peakWorkingSetBytes": 88231936
+    },
+    "24540": {
+      "process": "link.exe",
+      "maxPrivateBytes": 264650752,
+      "peakPrivateCommitBytes": 264650752,
+      "peakWorkingSetBytes": 204636160
+    },
+    "24932": {
+      "process": "cargo.exe",
+      "maxPrivateBytes": 88035328,
+      "peakPrivateCommitBytes": 88064000,
+      "peakWorkingSetBytes": 103358464
+    },
+    "25444": {
+      "process": "rustc.exe",
+      "maxPrivateBytes": 479326208,
+      "peakPrivateCommitBytes": 479371264,
+      "peakWorkingSetBytes": 164884480
+    },
+    "25520": {
+      "process": "link.exe",
+      "maxPrivateBytes": 186892288,
+      "peakPrivateCommitBytes": 256507904,
+      "peakWorkingSetBytes": 238571520
+    }
+  }
+}

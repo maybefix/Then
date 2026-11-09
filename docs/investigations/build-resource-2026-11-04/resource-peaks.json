@@ -1,0 +1,84 @@
+{
+  "from": "2026-11-03T16:14:59.8542907Z",
+  "to": "2026-11-03T16:21:41.1544607Z",
+  "byPid": {
+    "356": {
+      "name": "rustc.exe",
+      "private": 11096064,
+      "peakCommit": 360333312,
+      "peakWS": 74625024
+    },
+    "5916": {
+      "name": "rustc.exe",
+      "private": 112762880,
+      "peakCommit": 112762880,
+      "peakWS": 26718208
+    },
+    "7976": {
+      "name": "rustc.exe",
+      "private": 21544960,
+      "peakCommit": 399626240,
+      "peakWS": 150597632
+    },
+    "9648": {
+      "name": "rustc.exe",
+      "private": 15503360,
+      "peakCommit": 347054080,
+      "peakWS": 117899264
+    },
+    "9988": {
+      "name": "rustc.exe",
+      "private": 790093824,
+      "peakCommit": 790114304,
+      "peakWS": 516452352
+    },
+    "20000": {
+      "name": "cargo.exe",
+      "private": 7561216,
+      "peakCommit": 18350080,
+      "peakWS": 25190400
+    },
+    "21136": {
+      "name": "rustc.exe",
+      "private": 1363582976,
+      "peakCommit": 1391050752,
+      "peakWS": 1052991488
+    },
+    "22024": {
+      "name": "rustc.exe",
+      "private": 263475200,
+      "peakCommit": 321593344,
+      "peakWS": 172122112
+    },
+    "24072": {
+      "name": "rustc.exe",
+      "private": 459972608,
+      "peakCommit": 459972608,
+      "peakWS": 123482112
+    },
+    "24532": {
+      "name": "link.exe",
+      "private": 189599744,
+      "peakCommit": 190664704,
+      "peakWS": 88231936
+    },
+    "24540": {
+      "name": "link.exe",
+      "private": 264650752,
+      "peakCommit": 264650752,
+      "peakWS": 204636160
+    },
+    "24932": {
+      "name": "cargo.exe",
+      "private": 88035328,
+      "peakCommit": 88064000,
+      "peakWS": 103358464
+    },
+    "25444": {
+      "name": "rustc.exe",
+      "private": 479326208,
+      "peakCommit": 479371264,
+      "peakWS": 164884480
+    }
+  }
+}

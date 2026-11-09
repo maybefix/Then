@@ -48,6 +48,7 @@ import { CommandPalette, type PaletteCommand } from "./components/dialogs/Comman
 import { createPaletteCommands } from "./paletteCommands";
 import { PluginManagerModal } from "./components/dialogs/PluginManagerModal";
 import { SettingsModal } from "./components/dialogs/SettingsModal";
+import { HelpModal } from "./components/dialogs/HelpModal";
 import { ThemePickerModal } from "./components/dialogs/ThemePickerModal";
 import { ManuscriptTidyModal } from "./components/dialogs/ManuscriptTidyModal";
 import { RightSidebar } from "./components/layout/RightSidebar";
@@ -1040,6 +1041,7 @@ export default function App() {
     selectionLines: ManuscriptTidyLineRange | null;
   } | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isPluginManagerOpen, setIsPluginManagerOpen] = useState(false);
   /** エディタのスクロール領域の実測内寸。文字表示幅設定の上限算出に使う。 */
   const [editorViewportSize, setEditorViewportSize] = useState<{
@@ -4160,6 +4162,13 @@ export default function App() {
   editorShortcutHandlerRef.current = (event: KeyboardEvent) => {
     const mod = event.ctrlKey || event.metaKey;
     const key = event.key;
+
+    if (isHelpModalOpen) {
+      if (mod && ["n", "f", "p", "s", "i", "b"].includes(key.toLowerCase())) {
+        event.preventDefault();
+      }
+      return;
+    }
 
     // Ctrl+Alt+I：Idea ペインを開かずにメモを追加する。
     if (mod && event.altKey && !event.shiftKey && (key === "i" || key === "I")) {
@@ -7714,6 +7723,7 @@ export default function App() {
               setStartupView("editor");
               setIsSettingsModalOpen(true);
             }}
+            onOpenHelp={() => setIsHelpModalOpen(true)}
           />
           </>
         ) : (
@@ -7735,6 +7745,10 @@ export default function App() {
                 handleNewDocument, handleOpenTextFile, saveCurrentDocument, handleSaveAs,
                 handleRegisterCurrentFileAsTemplate, appMode, openManuscriptTidy, getCurrentEditorSelection,
                 handleOpenLinkedExport, handleOpenProjectFolder,
+                onOpenHelp: () => {
+                  fileMenuRef.current?.querySelector<HTMLButtonElement>(".menuButton")?.focus();
+                  setIsHelpModalOpen(true);
+                },
                 canRegisterTemplate: !(isNewTabStartPage || activeTab?.kind === "empty"),
               }}
             />
@@ -8447,6 +8461,7 @@ export default function App() {
           )}
           </section>
         )}
+        {isHelpModalOpen && <HelpModal onClose={() => setIsHelpModalOpen(false)} />}
       </main>
   );
 }

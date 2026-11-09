@@ -1,0 +1,116 @@
+[
+  {
+    "name": "sessions",
+    "MiB": 590,
+    "bytes": 619119294,
+    "files": 439
+  },
+  {
+    "name": "plugins",
+    "MiB": 533,
+    "bytes": 559366424,
+    "files": 2455
+  },
+  {
+    "name": "visualizations",
+    "MiB": 471,
+    "bytes": 493896731,
+    "files": 3186
+  },
+  {
+    "name": "thread_history_1.sqlite",
+    "MiB": 436,
+    "bytes": 457097216,
+    "files": 1
+  },
+  {
+    "name": ".sandbox-bin",
+    "MiB": 328,
+    "bytes": 343687592,
+    "files": 11
+  },
+  {
+    "name": ".tmp",
+    "MiB": 113,
+    "bytes": 119008789,
+    "files": 6740
+  },
+  {
+    "name": "sqlite",
+    "MiB": 107,
+    "bytes": 111993672,
+    "files": 17
+  },
+  {
+    "name": "logs_2.sqlite",
+    "MiB": 71,
+    "bytes": 74702848,
+    "files": 1
+  },
+  {
+    "name": "cache",
+    "MiB": 64,
+    "bytes": 66853829,
+    "files": 7
+  },
+  {
+    "name": "generated_images",
+    "MiB": 48,
+    "bytes": 50815500,
+    "files": 34
+  },
+  {
+    "name": "archived_sessions",
+    "MiB": 23,
+    "bytes": 24304934,
+    "files": 8
+  },
+  {
+    "name": "state_5.sqlite",
+    "MiB": 12,
+    "bytes": 12345344,
+    "files": 1
+  },
+  {
+    "name": "skills",
+    "MiB": 9,
+    "bytes": 9035892,
+    "files": 550
+  },
+  {
+    "name": "logs_2.sqlite-wal",
+    "MiB": 8,
+    "bytes": 8684992,
+    "files": 1
+  },
+  {
+    "name": ".sandbox",
+    "MiB": 7,
+    "bytes": 7070527,
+    "files": 96
+  },
+  {
+    "name": "vendor_imports",
+    "MiB": 6,
+    "bytes": 6469699,
+    "files": 867
+  },
+  {
+    "name": "thread_history_1.sqlite-wal",
+    "MiB": 4,
+    "bytes": 4161232,
+    "files": 1
+  },
+  {
+    "name": "state_5.sqlite-wal",
+    "MiB": 4,
+    "bytes": 4157112,
+    "files": 1
+  },
+  {
+    "name": "queue_1.sqlite-wal",
+    "MiB": 2,
+    "bytes": 2039432,
+    "files": 1
+  }
+]

@@ -1,0 +1,237 @@
+[
+  {
+    "path": "src-tauri/target",
+    "total": 1913741852,
+    "count": 3517,
+    "largest": [
+      {
+        "path": "C:/Users/uest/Documents/then/src-tauri/target/release/deps/libbrew_lib.rlib",
+        "size": 269471056
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/src-tauri/target/release/deps/brew_lib.lib",
+        "size": 134980696
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/src-tauri/target/release/deps/libwindows-dde509c68766ba23.rlib",
+        "size": 103201368
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/src-tauri/target/release/deps/libwindows-dde509c68766ba23.rmeta",
+        "size": 98442958
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/src-tauri/target/release/deps/Then.exe",
+        "size": 45686272
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/src-tauri/target/release/Then.exe",
+        "size": 45686272
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/src-tauri/target/release/deps/libtauri_utils-d99dd582347f14cc.rlib",
+        "size": 42251014
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/src-tauri/target/release/bundle/nsis/Then_0.7.0_x64-setup.exe",
+        "size": 35954099
+      }
+    ]
+  },
+  {
+    "path": "artifacts",
+    "total": 1983125066,
+    "count": 1065,
+    "largest": [
+      {
+        "path": "C:/Users/uest/Documents/then/artifacts/paragraph-flow-qa-2026-10-10/input-root-cause-trace.json",
+        "size": 123041932
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/artifacts/native-tsf-limited/Then-TSF-Limited-r2.exe",
+        "size": 45666816
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/artifacts/ms30-qa-2026-10-21/Then-ms30-qa-a2.exe",
+        "size": 45340672
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/artifacts/ms30-qa-2026-10-21/Then-ms30-qa-a3.exe",
+        "size": 45340672
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/artifacts/ms30-qa-2026-10-21/Then-ms30-qa-ib3.exe",
+        "size": 45340672
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/artifacts/ms30-qa-2026-10-21/Then-ms30-qa-base.exe",
+        "size": 45340160
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/artifacts/save-journal-qa/Then-SaveJournal-QA-followups.exe",
+        "size": 45335040
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/artifacts/save-journal-qa/Then-SaveJournal-QA-15s.exe",
+        "size": 45046272
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/artifacts/save-journal-qa/Then-SaveJournal-QA.exe",
+        "size": 45046272
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/artifacts/paragraph-flow-qa-2026-10-10/Then-paragraph-flow-qa.exe",
+        "size": 44664832
+      }
+    ]
+  },
+  {
+    "path": ".tmp",
+    "total": 389801363,
+    "count": 2380,
+    "largest": [
+      {
+        "path": "C:/Users/uest/Documents/then/.tmp/investigation-manuscript-100k.trace.json",
+        "size": 60215464
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/.tmp/canvas-contrast-installer/Then.exe",
+        "size": 45683712
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/.tmp/Then_0.7.0_x64-setup-before-startup-fix.exe",
+        "size": 35760378
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/.tmp/native-strict.trace.json",
+        "size": 24307494
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/.tmp/native-input.trace.json",
+        "size": 24143526
+      }
+    ]
+  },
+  {
+    "path": "tmp",
+    "total": 221430677,
+    "count": 1233,
+    "largest": [
+      {
+        "path": "C:/Users/uest/Documents/then/tmp/release-v0.6.6/verified/Then.exe",
+        "size": 44672512
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/tmp/editor-context-menu-layout/Then_0.7.0_x64-setup-before-build.exe",
+        "size": 36428969
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/tmp/app-model-fonts-20261102/installer/previous-Then_0.7.0_x64-setup.exe",
+        "size": 35951235
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/tmp/typewriter-startup-real-app/before/fonts/NotoSerifCJKjp-Regular.otf",
+        "size": 24573864
+      }
+    ]
+  },
+  {
+    "path": "target",
+    "total": 193858201,
+    "count": 73,
+    "largest": [
+      {
+        "path": "C:/Users/uest/Documents/then/target/qa/results/heap-0.5.8-snapshot-normal.heapsnapshot",
+        "size": 83190421
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/target/qa/bin/Then-0.5.8-qa.exe",
+        "size": 43041792
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/target/qa/bin/Then-0.5.6-qa.exe",
+        "size": 43041280
+      }
+    ]
+  },
+  {
+    "path": "node_modules",
+    "total": 205203734,
+    "count": 7478,
+    "largest": [
+      {
+        "path": "C:/Users/uest/Documents/then/node_modules/@napi-rs/canvas-win32-x64-msvc/skia.win32-x64-msvc.node",
+        "size": 27456512
+      }
+    ]
+  },
+  {
+    "path": ".claude/worktrees",
+    "total": 1048257659,
+    "count": 24784,
+    "largest": [
+      {
+        "path": "C:/Users/uest/Documents/then/.claude/worktrees/compassionate-hypatia-d2cbd2/src-tauri/target/release/Then.exe",
+        "size": 47654912
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/.claude/worktrees/peaceful-maxwell-d7d8da/src-tauri/target/release/Then.exe",
+        "size": 47654912
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/.claude/worktrees/compassionate-hypatia-d2cbd2/node_modules/@napi-rs/canvas-win32-x64-msvc/skia.win32-x64-msvc.node",
+        "size": 27456512
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/.claude/worktrees/peaceful-maxwell-d7d8da/node_modules/@napi-rs/canvas-win32-x64-msvc/skia.win32-x64-msvc.node",
+        "size": 27456512
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/.claude/worktrees/upbeat-babbage-398ee3/node_modules/@napi-rs/canvas-win32-x64-msvc/skia.win32-x64-msvc.node",
+        "size": 27456512
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/.claude/worktrees/compassionate-hypatia-d2cbd2/dist/fonts/NotoSerifCJKjp-Regular.otf",
+        "size": 24573864
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/.claude/worktrees/compassionate-hypatia-d2cbd2/public/fonts/NotoSerifCJKjp-Regular.otf",
+        "size": 24573864
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/.claude/worktrees/peaceful-maxwell-d7d8da/dist/fonts/NotoSerifCJKjp-Regular.otf",
+        "size": 24573864
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/.claude/worktrees/peaceful-maxwell-d7d8da/public/fonts/NotoSerifCJKjp-Regular.otf",
+        "size": 24573864
+      },
+      {
+        "path": "C:/Users/uest/Documents/then/.claude/worktrees/upbeat-babbage-398ee3/public/fonts/NotoSerifCJKjp-Regular.otf",
+        "size": 24573864
+      }
+    ]
+  },
+  {
+    "path": "dist",
+    "total": 51160562,
+    "count": 40,
+    "largest": [
+      {
+        "path": "C:/Users/uest/Documents/then/dist/fonts/NotoSerifCJKjp-Regular.otf",
+        "size": 24573864
+      }
+    ]
+  },
+  {
+    "path": "public",
+    "total": 46167267,
+    "count": 16,
+    "largest": [
+      {
+        "path": "C:/Users/uest/Documents/then/public/fonts/NotoSerifCJKjp-Regular.otf",
+        "size": 24573864
+      }
+    ]
+  }
+]

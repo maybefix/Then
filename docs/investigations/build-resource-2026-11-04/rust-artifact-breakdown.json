@@ -1,0 +1,135 @@
+{
+  ".rustc_info.json": {
+    "bytes": 1111,
+    "files": 1,
+    "extensions": {
+      ".json": 1111
+    }
+  },
+  "CACHEDIR.TAG": {
+    "bytes": 177,
+    "files": 1,
+    "extensions": {
+      ".TAG": 177
+    }
+  },
+  "debug/.cargo-lock": {
+    "bytes": 0,
+    "files": 1,
+    "extensions": {
+      ".cargo-lock": 0
+    }
+  },
+  "debug/THIRD_PARTY_LICENSES": {
+    "bytes": 41878,
+    "files": 3,
+    "extensions": {
+      ".txt": 39577,
+      ".md": 2301
+    }
+  },
+  "release/.cargo-lock": {
+    "bytes": 0,
+    "files": 1,
+    "extensions": {
+      ".cargo-lock": 0
+    }
+  },
+  "release/.fingerprint": {
+    "bytes": 357961,
+    "files": 1698,
+    "extensions": {
+      "(none)": 23876,
+      ".timestamp": 19056,
+      ".json": 315029
+    }
+  },
+  "release/build": {
+    "bytes": 317244609,
+    "files": 904,
+    "extensions": {
+      ".timestamp": 2640,
+      "(none)": 133277,
+      ".exe": 84420608,
+      ".d": 24385,
+      ".pdb": 166068224,
+      ".rs": 655059,
+      ".toml": 177432,
+      ".json": 75505,
+      ".lib": 31567126,
+      ".rc": 899,
+      ".js": 1534008,
+      ".otf": 30537606,
+      ".html": 7235,
+      ".svg": 14869,
+      ".md": 958,
+      ".css": 125396,
+      ".woff": 6851,
+      ".map": 860909,
+      ".woff2": 78273,
+      ".png": 3052,
+      ".mjs": 424454,
+      ".o": 48905,
+      ".a": 49730,
+      ".dll": 427208
+    }
+  },
+  "release/bundle": {
+    "bytes": 35954099,
+    "files": 1,
+    "extensions": {
+      ".exe": 35954099
+    }
+  },
+  "release/deps": {
+    "bytes": 1562674959,
+    "files": 1115,
+    "extensions": {
+      ".d": 1832139,
+      ".dll": 66736128,
+      ".exp": 28805,
+      ".lib": 135036178,
+      ".pdb": 80560128,
+      ".rlib": 839685592,
+      ".rmeta": 393109717,
+      ".exe": 45686272
+    }
+  },
+  "release/nsis": {
+    "bytes": 46074,
+    "files": 4,
+    "extensions": {
+      ".nsh": 14797,
+      ".nsi": 31277
+    }
+  },
+  "release/Then.d": {
+    "bytes": 12102,
+    "files": 1,
+    "extensions": {
+      ".d": 12102
+    }
+  },
+  "release/Then.exe": {
+    "bytes": 45686272,
+    "files": 1,
+    "extensions": {
+      ".exe": 45686272
+    }
+  },
+  "release/Then.pdb": {
+    "bytes": 5894144,
+    "files": 1,
+    "extensions": {
+      ".pdb": 5894144
+    }
+  },
+  "release/THIRD_PARTY_LICENSES": {
+    "bytes": 41878,
+    "files": 3,
+    "extensions": {
+      ".txt": 39577,
+      ".md": 2301
+    }
+  }
+}

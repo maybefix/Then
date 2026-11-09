@@ -78,6 +78,7 @@ const textOf = (node) => {
   if (node === null || node === undefined || typeof node === "boolean") return "";
   if (typeof node === "string" || typeof node === "number") return String(node);
   if (Array.isArray(node)) return node.map(textOf).join("");
+  if (node.props?.className === "fileMenuShortcut") return "";
   return textOf(node.props?.children);
 };
 const findAll = (tree, predicate) => elementsOf(tree).filter(predicate);
@@ -131,7 +132,7 @@ const expectExercised = (label, names) => {
   const functionNames = [
     "setIsFileMenuOpen", "closeFileMenuAndRun", "handleNewDocument", "handleOpenTextFile", "saveCurrentDocument",
     "handleSaveAs", "handleRegisterCurrentFileAsTemplate", "openManuscriptTidy", "handleOpenLinkedExport",
-    "handleOpenProjectFolder",
+    "handleOpenProjectFolder", "onOpenHelp",
   ];
   const spies = {
     ...spiesOf(functionNames),
@@ -161,37 +162,38 @@ const expectExercised = (label, names) => {
   assert.equal(button(open, "ファイルメニュー").props["aria-expanded"], true);
   assert.deepEqual(
     findAll(open, (element) => element.props.role === "menuitem").map(textOf),
-    ["新規ファイル", "ファイルを開く", "保存", "別名で保存", "このファイルをテンプレートとして登録…", "原稿を整える…", "エクスポート…", "フォルダを開く"],
+    ["新規ファイル", "ファイルを開く", "フォルダを開く", "保存", "別名で保存", "テンプレートに登録", "原稿を整える", "エクスポート", "ヘルプ"],
   );
   for (const [text, name] of [
     ["新規ファイル", "handleNewDocument"],
     ["ファイルを開く", "handleOpenTextFile"],
     ["保存", "saveCurrentDocument"],
     ["別名で保存", "handleSaveAs"],
-    ["このファイルをテンプレートとして登録…", "handleRegisterCurrentFileAsTemplate"],
-    ["エクスポート…", "handleOpenLinkedExport"],
+    ["テンプレートに登録", "handleRegisterCurrentFileAsTemplate"],
+    ["エクスポート", "handleOpenLinkedExport"],
     ["フォルダを開く", "handleOpenProjectFolder"],
+    ["ヘルプ", "onOpenHelp"],
   ]) {
     expectCalls(text, () => menuItem(open, text).props.onClick(), [{ name: "closeFileMenuAndRun", args: ["<fn>"] }]);
     assert.equal(lastFunctionArg, spies[name], `${text} must run ${name}`);
     expectDeferred(text, [{ name, args: [] }]);
   }
-  assert.equal(menuItem(open, "原稿を整える…").props.disabled, false);
-  expectCalls("原稿を整える…", () => menuItem(open, "原稿を整える…").props.onClick(), [
+  assert.equal(menuItem(open, "原稿を整える").props.disabled, false);
+  expectCalls("原稿を整える", () => menuItem(open, "原稿を整える").props.onClick(), [
     { name: "closeFileMenuAndRun", args: ["<fn>"] },
   ]);
-  expectDeferred("原稿を整える…", [
+  expectDeferred("原稿を整える", [
     { name: "getCurrentEditorSelection", args: [] },
     { name: "openManuscriptTidy", args: [mark("selection")] },
   ]);
   for (const appMode of ["canvas", "export", "checkpoint", "plugin"]) {
-    assert.equal(menuItem(render({ isFileMenuOpen: true, appMode }), "原稿を整える…").props.disabled, true,
+    assert.equal(menuItem(render({ isFileMenuOpen: true, appMode }), "原稿を整える").props.disabled, true,
       `原稿を整える must be disabled in ${appMode}`);
   }
   // 開始画面と空のタブでは、テンプレートとして登録する本文がないので押せない。
-  assert.equal(menuItem(open, "このファイルをテンプレートとして登録…").props.disabled, false);
+  assert.equal(menuItem(open, "テンプレートに登録").props.disabled, false);
   assert.equal(
-    menuItem(render({ isFileMenuOpen: true, canRegisterTemplate: false }), "このファイルをテンプレートとして登録…").props.disabled,
+    menuItem(render({ isFileMenuOpen: true, canRegisterTemplate: false }), "テンプレートに登録").props.disabled,
     true,
     "template registration must be disabled without a document",
   );

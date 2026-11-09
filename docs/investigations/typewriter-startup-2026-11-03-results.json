@@ -1,0 +1,258 @@
+[
+  {
+    "mode": "vertical-rl",
+    "case": "baseline",
+    "report": {
+      "ratio": 0.6300455729166666,
+      "delta": 0.08750000000009095,
+      "width": 1920,
+      "height": 958,
+      "scroll": -32283,
+      "scrollTop": 0,
+      "extent": 34935,
+      "selection": 20049,
+      "font": "\"Yu Mincho\", serif"
+    },
+    "timeline": []
+  },
+  {
+    "mode": "vertical-rl",
+    "case": "startup-width-at-150ms",
+    "report": {
+      "ratio": 0.5446714743589743,
+      "delta": -133.11249999999995,
+      "width": 1560,
+      "height": 958,
+      "scroll": -32283,
+      "scrollTop": 0,
+      "extent": 34935,
+      "selection": 20049,
+      "font": "\"Yu Mincho\", serif"
+    },
+    "timeline": [
+      {
+        "at": 80,
+        "ratio": 0.6300455729166666,
+        "delta": 0.08750000000009095,
+        "width": 1920,
+        "height": 958,
+        "scroll": -32283,
+        "scrollTop": 0,
+        "extent": 34935,
+        "selection": 20049,
+        "font": "\"Yu Mincho\", serif"
+      },
+      {
+        "at": 600,
+        "ratio": 0.5446714743589743,
+        "delta": -133.11249999999995,
+        "width": 1560,
+        "height": 958,
+        "scroll": -32283,
+        "scrollTop": 0,
+        "extent": 34935,
+        "selection": 20049,
+        "font": "\"Yu Mincho\", serif"
+      }
+    ]
+  },
+  {
+    "mode": "vertical-rl",
+    "case": "resize-recovers",
+    "report": {
+      "ratio": 0.6299278846153846,
+      "delta": -0.11249999999995453,
+      "width": 1560,
+      "height": 958,
+      "scroll": -32416,
+      "scrollTop": 0,
+      "extent": 34935,
+      "selection": 20049,
+      "font": "\"Yu Mincho\", serif"
+    }
+  },
+  {
+    "mode": "vertical-rl",
+    "case": "startup-width-at-800ms",
+    "report": {
+      "ratio": 0.5446714743589743,
+      "delta": -133.11249999999995,
+      "width": 1560,
+      "height": 958,
+      "scroll": -32283,
+      "scrollTop": 0,
+      "extent": 34935,
+      "selection": 20049,
+      "font": "\"Yu Mincho\", serif"
+    },
+    "timeline": [
+      {
+        "at": 80,
+        "ratio": 0.6300455729166666,
+        "delta": 0.08750000000009095,
+        "width": 1920,
+        "height": 958,
+        "scroll": -32283,
+        "scrollTop": 0,
+        "extent": 34935,
+        "selection": 20049,
+        "font": "\"Yu Mincho\", serif"
+      },
+      {
+        "at": 600,
+        "ratio": 0.6300455729166666,
+        "delta": 0.08750000000009095,
+        "width": 1920,
+        "height": 958,
+        "scroll": -32283,
+        "scrollTop": 0,
+        "extent": 34935,
+        "selection": 20049,
+        "font": "\"Yu Mincho\", serif"
+      }
+    ]
+  },
+  {
+    "mode": "vertical-rl",
+    "case": "resize-recovers",
+    "report": {
+      "ratio": 0.6299278846153846,
+      "delta": -0.11249999999995453,
+      "width": 1560,
+      "height": 958,
+      "scroll": -32416,
+      "scrollTop": 0,
+      "extent": 34935,
+      "selection": 20049,
+      "font": "\"Yu Mincho\", serif"
+    }
+  },
+  {
+    "mode": "horizontal-tb",
+    "case": "baseline",
+    "report": {
+      "ratio": 0.6302844467640919,
+      "delta": 0.2725000000000364,
+      "width": 1920,
+      "height": 958,
+      "scroll": 0,
+      "scrollTop": 15585,
+      "extent": 1910,
+      "selection": 20049,
+      "font": "\"Yu Mincho\", serif"
+    },
+    "timeline": []
+  },
+  {
+    "mode": "horizontal-tb",
+    "case": "startup-width-at-150ms",
+    "report": {
+      "ratio": 0.8562760960334029,
+      "delta": 216.77250000000004,
+      "width": 1560,
+      "height": 958,
+      "scroll": 0,
+      "scrollTop": 20551,
+      "extent": 1550,
+      "selection": 20049,
+      "font": "\"Yu Mincho\", serif"
+    },
+    "timeline": [
+      {
+        "at": 80,
+        "ratio": 0.6302844467640919,
+        "delta": 0.2725000000000364,
+        "width": 1920,
+        "height": 958,
+        "scroll": 0,
+        "scrollTop": 15585,
+        "extent": 1910,
+        "selection": 20049,
+        "font": "\"Yu Mincho\", serif"
+      },
+      {
+        "at": 600,
+        "ratio": 0.8562760960334029,
+        "delta": 216.77250000000004,
+        "width": 1560,
+        "height": 958,
+        "scroll": 0,
+        "scrollTop": 20551,
+        "extent": 1550,
+        "selection": 20049,
+        "font": "\"Yu Mincho\", serif"
+      }
+    ]
+  },
+  {
+    "mode": "horizontal-tb",
+    "case": "resize-recovers",
+    "report": {
+      "ratio": 0.6297625260960334,
+      "delta": -0.22749999999996362,
+      "width": 1560,
+      "height": 958,
+      "scroll": 0,
+      "scrollTop": 20768,
+      "extent": 1550,
+      "selection": 20049,
+      "font": "\"Yu Mincho\", serif"
+    }
+  },
+  {
+    "mode": "horizontal-tb",
+    "case": "startup-width-at-800ms",
+    "report": {
+      "ratio": 0.8562760960334029,
+      "delta": 216.77250000000004,
+      "width": 1560,
+      "height": 958,
+      "scroll": 0,
+      "scrollTop": 20551,
+      "extent": 1550,
+      "selection": 20049,
+      "font": "\"Yu Mincho\", serif"
+    },
+    "timeline": [
+      {
+        "at": 80,
+        "ratio": 0.6302844467640919,
+        "delta": 0.2725000000000364,
+        "width": 1920,
+        "height": 958,
+        "scroll": 0,
+        "scrollTop": 15585,
+        "extent": 1910,
+        "selection": 20049,
+        "font": "\"Yu Mincho\", serif"
+      },
+      {
+        "at": 600,
+        "ratio": 0.6302844467640919,
+        "delta": 0.2725000000000364,
+        "width": 1920,
+        "height": 958,
+        "scroll": 0,
+        "scrollTop": 15585,
+        "extent": 1910,
+        "selection": 20049,
+        "font": "\"Yu Mincho\", serif"
+      }
+    ]
+  },
+  {
+    "mode": "horizontal-tb",
+    "case": "resize-recovers",
+    "report": {
+      "ratio": 0.6297625260960334,
+      "delta": -0.22749999999996362,
+      "width": 1560,
+      "height": 958,
+      "scroll": 0,
+      "scrollTop": 20768,
+      "extent": 1550,
+      "selection": 20049,
+      "font": "\"Yu Mincho\", serif"
+    }
+  }
+]
