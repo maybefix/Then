@@ -184,11 +184,8 @@ import {
   reconcileIdeaThreadLayouts,
   sameIdeaThreadLayouts,
 } from "./ideaReferenceModel";
-import {
-  defaultIdeaThreads,
-  normalizeIdeaThreads,
-} from "./ideaThreadModel";
 import { createIdeaThreadActions } from "./ideaThreadActions";
+import { loadWorkspaceSnippets, saveWorkspaceSnippets } from "./ideaThreadStorage";
 import { createProjectEntryActions } from "./projectEntryActions";
 import { createWorkspaceTreeActions } from "./workspaceTreeActions";
 import { createProjectSearchActions } from "./projectSearchActions";
@@ -620,17 +617,6 @@ async function saveStoredState(state: AppState): Promise<void> {
 }
 
 const loadSystemFonts = createSystemFontLoader(isTauriRuntime);
-
-async function loadWorkspaceSnippets(folderPath: string): Promise<IdeaThread[]> {
-  if (!isTauriRuntime()) return defaultIdeaThreads();
-  const loaded = await invoke<IdeaThread[]>("load_project_snippets", { rootPath: folderPath });
-  return loaded.length ? normalizeIdeaThreads(loaded) : defaultIdeaThreads();
-}
-
-async function saveWorkspaceSnippets(folderPath: string, snippets: IdeaThread[]): Promise<void> {
-  if (!isTauriRuntime()) return;
-  await invoke("save_project_snippets", { rootPath: folderPath, snippets });
-}
 
 async function loadWorkspaceProofreadTerms(folderPath: string): Promise<ProofreadTerm[]> {
   if (!isTauriRuntime()) return [];
