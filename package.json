@@ -37,6 +37,7 @@
     "test:v066-idea": "node scripts/test-v066-idea-ui.mjs",
     "test:binder": "node scripts/test-idea-reference-binder.mjs",
     "test:idea-actions": "node scripts/test-idea-thread-actions.mjs",
+    "test:plot-card-actions": "node scripts/test-plot-card-actions.mjs",
     "test:app-dialog": "node scripts/test-app-dialog.mjs",
     "test:plugin-host": "node scripts/test-plugin-host.mjs",
     "test:pending-saves": "node scripts/test-pending-saves.mjs",
