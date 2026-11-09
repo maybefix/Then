@@ -124,11 +124,7 @@ import {
 } from "./editor/documentTabState";
 import { mapTextOffsetThroughChange } from "./editor/textOffsetMapping";
 import { recordImportedProject } from "./utils/library";
-import {
-  rewriteThreadItems,
-  threadItemReferencePaths,
-  type ReferenceRewrite,
-} from "./utils/libraryTransfer";
+import { type ReferenceRewrite } from "./utils/libraryTransfer";
 import { displayedCharacterCount } from "./editor/ast/characterCount";
 import {
   createWorkspaceDocumentTabs,
@@ -236,7 +232,6 @@ import type {
   FlatOutlineItem,
   IdeaOriginRef,
   IdeaReferenceLink,
-  IdeaThread,
   ManuscriptSnapshot,
   ManuscriptSnapshotFile,
   OutlineItem,
@@ -6343,84 +6338,6 @@ export default function App() {
     return false;
   };
 
-  const transferIdeaThread = async (threadId: string) => {
-    if (!ensureIdeaTransferAvailable()) return;
-    const thread = snippets.find((item) => item.id === threadId);
-    if (!thread || thread.kind === "inbox") return;
-    const layout = referenceLayout.ideaThreads.find((item) => item.threadId === threadId);
-    const referencedPaths = threadItemReferencePaths(layout?.items ?? []);
-    const options = await requestTransferOptions({
-      itemLabel: "スレッド",
-      referenceCount: referencedPaths.filter(isExistingReference).length,
-    });
-    if (!options) return;
-    try {
-      const rewrite = await prepareReferenceRewrite(options.target, referencedPaths, options.copyReferences);
-      const fragmentIds = new Map(thread.fragments.map((fragment) => [fragment.id, crypto.randomUUID()]));
-      const copiedThread: IdeaThread = {
-        ...thread,
-        id: crypto.randomUUID(),
-        updatedAt: Date.now(),
-        fragments: thread.fragments.map((fragment) => ({
-          ...fragment,
-          id: fragmentIds.get(fragment.id) ?? crypto.randomUUID(),
-        })),
-      };
-      const [targetThreads, targetLayout] = await Promise.all([
-        loadWorkspaceSnippets(options.target),
-        loadReferenceLayout(options.target),
-      ]);
-      await saveWorkspaceSnippets(options.target, [...targetThreads, copiedThread]);
-      if (layout) {
-        const items = rewriteThreadItems(layout.items, rewrite).map((item) =>
-          item.sourceType === "idea"
-            ? { ...item, fragmentId: fragmentIds.get(item.fragmentId) ?? item.fragmentId }
-            : { ...item, id: crypto.randomUUID() },
-        );
-        // 移す先は作品ごとの Idea なので、相手の並び順も作品ごとの側に合わせてから足す。
-        const workspaceLayout = alignIdeaLayoutToMode(targetLayout, "workspace");
-        await saveReferenceLayout(options.target, {
-          ...workspaceLayout,
-          ideaThreads: [...workspaceLayout.ideaThreads, { threadId: copiedThread.id, items }],
-        });
-      }
-      if (options.move) updateIdeaThreads((threads) => threads.filter((item) => item.id !== threadId));
-      showToast(`スレッドを${options.targetLabel}へ${options.move ? "移動" : "コピー"}しました`);
-    } catch (error) {
-      reportTransferError(error);
-    }
-  };
-
-  const transferIdeaFragment = async (threadId: string, fragmentId: string) => {
-    if (!ensureIdeaTransferAvailable()) return;
-    const fragment = snippets
-      .find((item) => item.id === threadId)
-      ?.fragments.find((item) => item.id === fragmentId);
-    if (!fragment) return;
-    const options = await requestTransferOptions({ itemLabel: "断片", referenceCount: 0 });
-    if (!options) return;
-    try {
-      const targetThreads = await loadWorkspaceSnippets(options.target);
-      const copiedFragment = { ...fragment, id: crypto.randomUUID(), updatedAt: Date.now() };
-      // 送り先では未整理メモ（インボックス）に入れる。読み込みで必ずインボックスが補われる。
-      const nextThreads = targetThreads.map((item) =>
-        item.kind === "inbox"
-          ? { ...item, updatedAt: Date.now(), fragments: [...item.fragments, copiedFragment] }
-          : item,
-      );
-      await saveWorkspaceSnippets(options.target, nextThreads);
-      if (options.move) {
-        patchThread(threadId, (thread) => ({
-          ...thread,
-          fragments: thread.fragments.filter((item) => item.id !== fragmentId),
-        }));
-      }
-      showToast(`断片を${options.targetLabel}のインボックスへ${options.move ? "移動" : "コピー"}しました`);
-    } catch (error) {
-      reportTransferError(error);
-    }
-  };
-
   const transferReferenceFile = async (file: ReferenceFileInfo) => {
     if (!projectFolder) return;
     const options = await requestTransferOptions({
@@ -6960,18 +6877,6 @@ export default function App() {
     });
   };
 
-  const requestNewIdeaThreadName = async (): Promise<string | null> => {
-    const value = await requestInput({
-      title: "新規スレッドに追加",
-      label: "スレッド名",
-      initialValue: "",
-      placeholder: "新しいスレッド名",
-      confirmLabel: "作成",
-    });
-    const title = value?.trim() ?? "";
-    return title || null;
-  };
-
   const {
     updateIdeaThreads,
     patchThread,
@@ -6991,6 +6896,8 @@ export default function App() {
     deleteIdeaThread,
     receiveCanvasCopyToIdea,
     receiveCanvasFocusIdea,
+    transferIdeaThread,
+    transferIdeaFragment,
   } = createIdeaThreadActions({
     snippets,
     referenceLayout,
@@ -7002,7 +6909,14 @@ export default function App() {
     setIsRightSidebarCollapsed,
     showToast,
     requestConfirm,
-    requestNewIdeaThreadName,
+    requestInput,
+    requestTransferOptions,
+    isExistingReference,
+    prepareReferenceRewrite,
+    reportTransferError,
+    loadReferenceLayout,
+    saveReferenceLayout,
+    ensureIdeaTransferAvailable,
   });
 
   const insertFragmentToEditor = (threadId: string, fragmentId: string) => {

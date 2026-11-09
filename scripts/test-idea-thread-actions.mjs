@@ -147,7 +147,7 @@ function createHarness({ mode = "workspace", threads, layouts } = {}) {
       setIsRightSidebarCollapsed: (next) => { state.rightSidebarCollapsed = apply(state.rightSidebarCollapsed, next); },
       showToast: (message, action = null) => { log.toasts.push({ message, action }); },
       requestConfirm: async (options) => { log.confirms.push(options); return log.confirmAnswer; },
-      requestNewIdeaThreadName: async () => log.threadName,
+      requestInput: async (options) => { (log.inputs ??= []).push(options); return log.threadName; },
     });
   const lastToast = () => log.toasts.at(-1);
   return { state, log, actions, lastToast };

@@ -43,7 +43,7 @@ assert.match(app, /countIdeaReferenceLinks/);
 assert.match(app, /onMoveReference=\{moveIdeaReference\}/);
 assert.match(app, /moveFragmentToNewThread/);
 assert.match(app, /moveReferenceToNewThread/);
-assert.match(app, /title: "新規スレッドに追加"/);
+assert.match(ideaActions, /title: "新規スレッドに追加"/);
 assert.match(app, /onReorderItem=\{reorderIdeaThreadItem\}/);
 assert.match(app, /<OpenCardsPane/);
 
