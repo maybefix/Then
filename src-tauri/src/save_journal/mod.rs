@@ -478,6 +478,116 @@ mod tests {
         assert!(!lock_path(&root.0, "123x1").exists());
     }
 
+    // Saves while the file changes outside Then (BINDER 1-3a,
+    // docs/SAVE_EXTERNAL_CHANGE_FIX_PLAN.md). These go through record_edits
+    // and save as the app does, so they need the recovery area set.
+    fn test_area() {
+        static AREA_ROOT: OnceLock<()> = OnceLock::new();
+        AREA_ROOT.get_or_init(|| {
+            let own = format!("then-journal-area-{}", std::process::id());
+            // Earlier test runs leave their area behind (the run lock is held until the process ends).
+            if let Ok(entries) = std::fs::read_dir(std::env::temp_dir()) {
+                for entry in entries.flatten() {
+                    let name = entry.file_name().to_string_lossy().into_owned();
+                    if name.starts_with("then-journal-area-") && name != own {
+                        let _ = std::fs::remove_dir_all(entry.path());
+                    }
+                }
+            }
+            init(std::env::temp_dir().join(own));
+        });
+    }
+
+    /// One change appended at the end of `before`, as the editor would send it.
+    fn append_edit(gen: u64, before: &str, insert: &str) -> EditInput {
+        let length = before.encode_utf16().count();
+        EditInput { gen, replace: false, length, from: length, to: length, insert: insert.into() }
+    }
+
+    #[test]
+    fn external_change_before_the_first_edit_is_not_overwritten() {
+        test_area();
+        let root = TempRoot::new("external-before-edit");
+        let doc = root.0.join("doc.md");
+        std::fs::write(&doc, "開いたときの本文").unwrap();
+        // The tab holds what was read when the file was opened.
+        let opened = std::fs::read_to_string(&doc).unwrap();
+        std::fs::write(&doc, "外部で書き換えた本文").unwrap();
+
+        let key = "external-before-edit";
+        let path = doc.to_string_lossy().to_string();
+        record_edits(key, &path, Some(opened.clone()), vec![append_edit(1, &opened, "。")]).unwrap();
+        let result = save(key, &path, 1, &format!("{opened}。"));
+        forget(key, true);
+
+        assert_eq!(
+            std::fs::read_to_string(&doc).unwrap(),
+            "外部で書き換えた本文",
+            "a change made between opening and the first edit must not be overwritten"
+        );
+        assert!(result.is_err(), "the save must report the outside change");
+    }
+
+    #[test]
+    fn external_change_after_an_edit_is_refused() {
+        test_area();
+        let root = TempRoot::new("external-after-edit");
+        let doc = root.0.join("doc.md");
+        std::fs::write(&doc, "本文").unwrap();
+        let opened = std::fs::read_to_string(&doc).unwrap();
+
+        let key = "external-after-edit";
+        let path = doc.to_string_lossy().to_string();
+        record_edits(key, &path, Some(opened.clone()), vec![append_edit(1, &opened, "。")]).unwrap();
+        std::fs::write(&doc, "外部で書き換えた本文").unwrap();
+        let result = save(key, &path, 1, &format!("{opened}。"));
+        forget(key, true);
+
+        assert!(result.is_err());
+        assert_eq!(std::fs::read_to_string(&doc).unwrap(), "外部で書き換えた本文");
+    }
+
+    #[test]
+    fn external_change_absent_saves_quietly() {
+        test_area();
+        let root = TempRoot::new("external-none");
+        let doc = root.0.join("doc.md");
+        std::fs::write(&doc, "本文").unwrap();
+        let opened = std::fs::read_to_string(&doc).unwrap();
+
+        let key = "external-none";
+        let path = doc.to_string_lossy().to_string();
+        record_edits(key, &path, Some(opened.clone()), vec![append_edit(1, &opened, "。")]).unwrap();
+        let first = save(key, &path, 1, "本文。");
+        record_edits(key, &path, None, vec![append_edit(2, "本文。", "続き")]).unwrap();
+        let second = save(key, &path, 2, "本文。続き");
+        forget(key, true);
+
+        assert!(first.is_ok() && second.is_ok());
+        assert_eq!(std::fs::read_to_string(&doc).unwrap(), "本文。続き");
+    }
+
+    #[test]
+    fn external_change_of_line_endings_only_is_refused_today() {
+        // Today the whole file is compared byte for byte, so CRLF <-> LF alone
+        // counts as a change (plan Q2 decides whether that stays).
+        test_area();
+        let root = TempRoot::new("external-crlf");
+        let doc = root.0.join("doc.md");
+        std::fs::write(&doc, "一行目\n二行目").unwrap();
+        let opened = std::fs::read_to_string(&doc).unwrap();
+
+        let key = "external-crlf";
+        let path = doc.to_string_lossy().to_string();
+        record_edits(key, &path, Some(opened.clone()), vec![append_edit(1, &opened, "。")]).unwrap();
+        std::fs::write(&doc, "一行目\r\n二行目").unwrap();
+        let result = save(key, &path, 1, &format!("{opened}。"));
+        forget(key, true);
+
+        assert!(result.is_err());
+        assert_eq!(std::fs::read_to_string(&doc).unwrap(), "一行目\r\n二行目");
+    }
+
     #[test]
     fn utf16_offsets_map_to_bytes() {
         let text = "あa𠮷b";

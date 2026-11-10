@@ -39,6 +39,7 @@
     "test:idea-actions": "node scripts/test-idea-thread-actions.mjs",
     "test:plot-card-actions": "node scripts/test-plot-card-actions.mjs",
     "test:binder-baseline": "node scripts/test-binder-migration-baseline.mjs",
+    "test:save-external-change": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- save_journal::tests::external_",
     "test:binder-baseline-rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- binder_migration_baseline::",
     "test:app-dialog": "node scripts/test-app-dialog.mjs",
     "test:plugin-host": "node scripts/test-plugin-host.mjs",
