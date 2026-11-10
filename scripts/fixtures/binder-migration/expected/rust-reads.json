@@ -1,0 +1,739 @@
+{
+  "changedFiles": [
+    "作品E/.then/project.json"
+  ],
+  "works": {
+    "作品A": {
+      "candidates": [
+        {
+          "imported": true,
+          "kind": "image",
+          "name": "map (2).png",
+          "scope": "project",
+          "size": 66,
+          "sourcePath": ".then/references/imports/map (2).png"
+        },
+        {
+          "imported": true,
+          "kind": "text",
+          "name": "どこにもない資料.txt",
+          "scope": "project",
+          "size": 48,
+          "sourcePath": ".then/references/imports/どこにもない資料.txt"
+        },
+        {
+          "imported": true,
+          "kind": "pdf",
+          "name": "設定集.pdf",
+          "scope": "project",
+          "size": 15,
+          "sourcePath": ".then/references/imports/設定集.pdf"
+        },
+        {
+          "imported": true,
+          "kind": "markdown",
+          "name": "資料a.md",
+          "scope": "project",
+          "size": 16,
+          "sourcePath": ".then/references/imports/資料a.md"
+        }
+      ],
+      "ideaThreads": [
+        {
+          "createdAt": 1767225600000,
+          "fragments": [
+            {
+              "body": "インボックスの一つ目",
+              "createdAt": 1767225600100,
+              "id": "a-i1",
+              "updatedAt": 1767225600100,
+              "used": false
+            },
+            {
+              "body": "使用済みの断片",
+              "createdAt": 1767225600200,
+              "id": "a-i2",
+              "updatedAt": 1767225600250,
+              "used": true
+            }
+          ],
+          "id": "idea-inbox",
+          "kind": "inbox",
+          "starred": false,
+          "title": "インボックス",
+          "updatedAt": 1767225600000
+        },
+        {
+          "createdAt": 1767225600300,
+          "fragments": [
+            {
+              "body": "港の場面の一",
+              "createdAt": 1767225600300,
+              "id": "a-s1",
+              "updatedAt": 1767225600300,
+              "used": false
+            },
+            {
+              "body": "港の場面の二",
+              "createdAt": 1767225600400,
+              "id": "a-s2",
+              "updatedAt": 1767225600400,
+              "used": false
+            },
+            {
+              "body": "Canvasから来た断片",
+              "createdAt": 1767225600500,
+              "id": "a-s3",
+              "originRef": {
+                "copiedAt": 1767225600490,
+                "source": "canvas",
+                "sourceBoardId": "board-1",
+                "sourceBoardScope": "project",
+                "sourceId": "node-1"
+              },
+              "updatedAt": 1767225600500,
+              "used": false
+            }
+          ],
+          "id": "a-t1",
+          "kind": "thread",
+          "starred": true,
+          "title": "場面: 港",
+          "updatedAt": 1767225600300
+        },
+        {
+          "createdAt": 1767225600600,
+          "fragments": [
+            {
+              "body": "手紙の伏線\n二行目",
+              "createdAt": 1767225600600,
+              "id": "a-f1",
+              "updatedAt": 1767225600600,
+              "used": false
+            }
+          ],
+          "id": "a-t2",
+          "kind": "thread",
+          "starred": false,
+          "title": "伏線",
+          "updatedAt": 1767225600600
+        },
+        {
+          "createdAt": 1767225600700,
+          "fragments": [],
+          "id": "a-t3",
+          "kind": "thread",
+          "starred": false,
+          "title": "空のスレッド",
+          "updatedAt": 1767225600700
+        }
+      ],
+      "layout": {
+        "cards": [
+          {
+            "collapsed": false,
+            "height": 400.0,
+            "id": "card-ref-1",
+            "kind": "pdf",
+            "pinned": false,
+            "scope": "project",
+            "sourcePath": ".then/references/imports/設定集.pdf",
+            "sourceType": "reference",
+            "width": 320.0,
+            "x": 40.0,
+            "y": 50.0,
+            "zIndex": 1
+          },
+          {
+            "collapsed": false,
+            "fragmentId": "a-s2",
+            "height": 300.0,
+            "id": "card-idea-1",
+            "kind": "",
+            "pinned": true,
+            "scope": "project",
+            "sourcePath": "",
+            "sourceType": "idea",
+            "threadId": "a-t1",
+            "width": 320.0,
+            "x": 80.0,
+            "y": 90.0,
+            "zIndex": 2
+          }
+        ],
+        "ideaThreads": [
+          {
+            "items": [
+              {
+                "fragmentId": "a-i2",
+                "sourceType": "idea"
+              },
+              {
+                "fragmentId": "a-i1",
+                "sourceType": "idea"
+              }
+            ],
+            "threadId": "idea-inbox"
+          },
+          {
+            "items": [
+              {
+                "fragmentId": "a-s1",
+                "sourceType": "idea"
+              },
+              {
+                "createdAt": 1767225600350,
+                "id": "a-r1",
+                "sourcePath": ".then/references/imports/資料a.md",
+                "sourceType": "reference"
+              },
+              {
+                "fragmentId": "a-s2",
+                "sourceType": "idea"
+              },
+              {
+                "createdAt": 1767225600360,
+                "id": "a-r2",
+                "sourcePath": ".then/references/imports/map (2).png",
+                "sourceType": "reference"
+              },
+              {
+                "fragmentId": "a-s3",
+                "sourceType": "idea"
+              }
+            ],
+            "threadId": "a-t1"
+          },
+          {
+            "items": [
+              {
+                "createdAt": 1767225600650,
+                "id": "a-r3",
+                "sourcePath": "第一章/a.md",
+                "sourceType": "reference"
+              },
+              {
+                "fragmentId": "a-f1",
+                "sourceType": "idea"
+              }
+            ],
+            "threadId": "a-t2"
+          },
+          {
+            "items": [],
+            "threadId": "a-t3"
+          }
+        ],
+        "ideaThreadsMode": "workspace",
+        "name": "default",
+        "otherIdea": {
+          "cards": [
+            {
+              "collapsed": true,
+              "fragmentId": "p-s1",
+              "height": 300,
+              "id": "card-idea-p",
+              "pinned": false,
+              "sourceType": "idea",
+              "threadId": "p-t1",
+              "width": 320,
+              "x": 10,
+              "y": 20,
+              "zIndex": 3
+            }
+          ],
+          "ideaThreads": [
+            {
+              "items": [
+                {
+                  "fragmentId": "p-i2",
+                  "sourceType": "idea"
+                },
+                {
+                  "createdAt": 1767225600800,
+                  "id": "a-pr1",
+                  "sourcePath": ".then/references/imports/設定集.pdf",
+                  "sourceType": "reference"
+                },
+                {
+                  "fragmentId": "p-i1",
+                  "sourceType": "idea"
+                }
+              ],
+              "threadId": "idea-inbox"
+            },
+            {
+              "items": [
+                {
+                  "fragmentId": "p-s2",
+                  "sourceType": "idea"
+                },
+                {
+                  "fragmentId": "p-s1",
+                  "sourceType": "idea"
+                }
+              ],
+              "threadId": "p-t1"
+            }
+          ],
+          "mode": "profile"
+        },
+        "recent": [],
+        "version": 3
+      },
+      "plotCards": [
+        {
+          "body": "",
+          "expanded": false,
+          "id": "a-ch1",
+          "kind": "chapter",
+          "managerCollapsed": false,
+          "num": "",
+          "title": "第一章　港町"
+        },
+        {
+          "body": "主人公が港に着く。@[[第一章/a.md]] を見ながら書く。",
+          "expanded": true,
+          "id": "a-p1",
+          "kind": "section",
+          "managerCollapsed": false,
+          "num": "001",
+          "title": "港に着く"
+        },
+        {
+          "body": "地図は @[[.then/references/imports/map (2).png]]。\n二行目の本文。",
+          "expanded": false,
+          "id": "a-p3",
+          "kind": "section",
+          "managerCollapsed": true,
+          "num": "003",
+          "title": "坂の上の家"
+        },
+        {
+          "body": "",
+          "expanded": false,
+          "id": "a-ch2",
+          "kind": "chapter",
+          "managerCollapsed": false,
+          "num": "",
+          "title": ""
+        },
+        {
+          "body": "題のないセクション。@[[.then/references/imports/資料a.md]] と @[[.then/references/imports/資料a.md]] を二度参照する。@[[消した資料.md]] は行き先がない",
+          "expanded": false,
+          "id": "a-p4",
+          "kind": "section",
+          "managerCollapsed": false,
+          "num": "004",
+          "title": ""
+        }
+      ]
+    },
+    "作品B": {
+      "candidates": [
+        {
+          "imported": true,
+          "kind": "markdown",
+          "name": "消えたスレッドの資料.md",
+          "scope": "project",
+          "size": 48,
+          "sourcePath": ".then/references/imports/消えたスレッドの資料.md"
+        },
+        {
+          "imported": true,
+          "kind": "markdown",
+          "name": "重複.md",
+          "scope": "project",
+          "size": 33,
+          "sourcePath": ".then/references/imports/重複.md"
+        }
+      ],
+      "ideaThreads": [
+        {
+          "createdAt": 1767225600000,
+          "fragments": [
+            {
+              "body": "一つ目のインボックス",
+              "createdAt": 1767225600100,
+              "id": "b-i1",
+              "updatedAt": 1767225600100,
+              "used": false
+            }
+          ],
+          "id": "idea-inbox",
+          "kind": "inbox",
+          "starred": false,
+          "title": "インボックス",
+          "updatedAt": 1767225600000
+        },
+        {
+          "createdAt": 1767225600000,
+          "fragments": [
+            {
+              "body": "利用者が書いた断片（サンプルのスレッドの中）",
+              "createdAt": 1767225600150,
+              "id": "b-sample",
+              "updatedAt": 1767225600150,
+              "used": false
+            }
+          ],
+          "id": "idea-sample-scene",
+          "kind": "thread",
+          "starred": false,
+          "title": "サンプル: 場面",
+          "updatedAt": 1767225600000
+        },
+        {
+          "createdAt": 1767225600200,
+          "fragments": [
+            {
+              "body": "主人公が改札の前で一瞬立ち止まる描写を入れる。",
+              "createdAt": 1767225600160,
+              "id": "b-s0",
+              "updatedAt": 1767225600160,
+              "used": false
+            },
+            {
+              "body": "Bの場面の一",
+              "createdAt": 1767225600200,
+              "id": "b-s1",
+              "updatedAt": 1767225600200,
+              "used": false
+            },
+            {
+              "body": "Bの場面の二（並び順にない）",
+              "createdAt": 1767225600210,
+              "id": "b-s2",
+              "updatedAt": 1767225600210,
+              "used": false
+            }
+          ],
+          "id": "b-t1",
+          "kind": "thread",
+          "starred": false,
+          "title": "Bの場面",
+          "updatedAt": 1767225600200
+        },
+        {
+          "createdAt": 1767225600300,
+          "fragments": [
+            {
+              "body": "二つ目のインボックスの断片",
+              "createdAt": 1767225600300,
+              "id": "b-i2",
+              "updatedAt": 1767225600300,
+              "used": false
+            }
+          ],
+          "id": "inbox-2",
+          "kind": "inbox",
+          "starred": false,
+          "title": "二つ目のインボックス",
+          "updatedAt": 1767225600300
+        }
+      ],
+      "layout": {
+        "cards": [],
+        "ideaThreads": [
+          {
+            "items": [
+              {
+                "fragmentId": "b-i1",
+                "sourceType": "idea"
+              }
+            ],
+            "threadId": "idea-inbox"
+          },
+          {
+            "items": [
+              {
+                "fragmentId": "b-gone",
+                "sourceType": "idea"
+              },
+              {
+                "fragmentId": "b-s1",
+                "sourceType": "idea"
+              },
+              {
+                "createdAt": 1767225600220,
+                "id": "b-r1",
+                "sourcePath": ".then\\references\\imports\\重複.md",
+                "sourceType": "reference"
+              },
+              {
+                "createdAt": 1767225600230,
+                "id": "b-r2",
+                "sourcePath": ".then/references/imports/重複.md",
+                "sourceType": "reference"
+              },
+              {
+                "fragmentId": "b-s1",
+                "sourceType": "idea"
+              }
+            ],
+            "threadId": "b-t1"
+          },
+          {
+            "items": [
+              {
+                "fragmentId": "b-x",
+                "sourceType": "idea"
+              },
+              {
+                "createdAt": 1767225600240,
+                "id": "b-r3",
+                "sourcePath": ".then/references/imports/消えたスレッドの資料.md",
+                "sourceType": "reference"
+              }
+            ],
+            "threadId": "b-deleted"
+          }
+        ],
+        "ideaThreadsMode": "workspace",
+        "name": "default",
+        "recent": [],
+        "version": 3
+      },
+      "plotCards": [
+        {
+          "body": "",
+          "expanded": false,
+          "id": "plot-1",
+          "kind": "section",
+          "managerCollapsed": false,
+          "num": "001",
+          "title": "縦書きプロットテストです"
+        },
+        {
+          "body": "",
+          "expanded": false,
+          "id": "plot-2",
+          "kind": "section",
+          "managerCollapsed": false,
+          "num": "002",
+          "title": "縦書きプロットテストです"
+        },
+        {
+          "body": "これは縦書きプロットテストです。ちゃんと書けていることを確かめるためにあります。",
+          "expanded": false,
+          "id": "plot-3",
+          "kind": "section",
+          "managerCollapsed": false,
+          "num": "003",
+          "title": "縦書きプロットテストです"
+        },
+        {
+          "body": "",
+          "expanded": false,
+          "id": "b-ch",
+          "kind": "chapter",
+          "managerCollapsed": false,
+          "num": "",
+          "title": "番号の章"
+        },
+        {
+          "body": "",
+          "expanded": false,
+          "id": "b-nonum",
+          "kind": "section",
+          "managerCollapsed": false,
+          "num": "",
+          "title": "番号なし"
+        },
+        {
+          "body": "",
+          "expanded": false,
+          "id": "b-odd",
+          "kind": "scene",
+          "managerCollapsed": false,
+          "num": "009",
+          "title": "種類が分からない"
+        },
+        {
+          "body": "",
+          "expanded": false,
+          "id": "b-ch-num",
+          "kind": "chapter",
+          "managerCollapsed": false,
+          "num": "007",
+          "title": "番号のある章"
+        }
+      ]
+    },
+    "作品C": {
+      "candidates": [],
+      "ideaThreads": [
+        {
+          "createdAt": "読んだ時刻",
+          "fragments": [
+            {
+              "body": "旧形式の本文",
+              "createdAt": "読んだ時刻",
+              "id": "c-s1",
+              "updatedAt": "読んだ時刻",
+              "used": false
+            },
+            {
+              "body": "題だけの付箋",
+              "createdAt": "読んだ時刻",
+              "id": "c-s2",
+              "updatedAt": "読んだ時刻",
+              "used": false
+            }
+          ],
+          "id": "idea-inbox",
+          "kind": "inbox",
+          "starred": false,
+          "title": "インボックス",
+          "updatedAt": "読んだ時刻"
+        }
+      ],
+      "layout": {
+        "cards": [],
+        "ideaThreads": [],
+        "name": "default",
+        "recent": [],
+        "version": 3
+      },
+      "plotCards": []
+    },
+    "作品D": {
+      "candidates": [],
+      "ideaThreads": [],
+      "layout": {
+        "cards": [],
+        "ideaThreads": [],
+        "name": "default",
+        "recent": [],
+        "version": 3
+      },
+      "plotCards": []
+    },
+    "作品E": {
+      "candidates": [],
+      "ideaThreads": [
+        {
+          "createdAt": 1767225600000,
+          "fragments": [
+            {
+              "body": "バックアップから戻るIdea",
+              "createdAt": 1767225600100,
+              "id": "e-i1",
+              "updatedAt": 1767225600100,
+              "used": false
+            }
+          ],
+          "id": "idea-inbox",
+          "kind": "inbox",
+          "starred": false,
+          "title": "インボックス",
+          "updatedAt": 1767225600000
+        }
+      ],
+      "layout": {
+        "cards": [],
+        "ideaThreads": [],
+        "name": "default",
+        "recent": [],
+        "version": 3
+      },
+      "plotCards": [
+        {
+          "body": "",
+          "expanded": false,
+          "id": "e-p1",
+          "kind": "section",
+          "managerCollapsed": false,
+          "num": "001",
+          "title": "バックアップから戻るカード"
+        }
+      ]
+    },
+    "（ライブラリの直下）": {
+      "candidates": [
+        {
+          "imported": true,
+          "kind": "image",
+          "name": "港の写真.png",
+          "scope": "project",
+          "size": 66,
+          "sourcePath": ".then/references/imports/港の写真.png"
+        }
+      ],
+      "ideaThreads": [
+        {
+          "createdAt": 1767225609000,
+          "fragments": [
+            {
+              "body": "ライブラリの直下で書いたIdea",
+              "createdAt": 1767225609000,
+              "id": "lib-f1",
+              "updatedAt": 1767225609000,
+              "used": false
+            }
+          ],
+          "id": "idea-inbox",
+          "kind": "inbox",
+          "starred": false,
+          "title": "インボックス",
+          "updatedAt": 1767225609000
+        },
+        {
+          "createdAt": 1767225609100,
+          "fragments": [
+            {
+              "body": "送られてきた断片",
+              "createdAt": 1767225609100,
+              "id": "lib-f2",
+              "updatedAt": 1767225609100,
+              "used": false
+            }
+          ],
+          "id": "lib-t1",
+          "kind": "thread",
+          "starred": false,
+          "title": "作品Aから送ったスレッド",
+          "updatedAt": 1767225609100
+        }
+      ],
+      "layout": {
+        "cards": [],
+        "ideaThreads": [
+          {
+            "items": [
+              {
+                "fragmentId": "lib-f1",
+                "sourceType": "idea"
+              }
+            ],
+            "threadId": "idea-inbox"
+          },
+          {
+            "items": [
+              {
+                "fragmentId": "lib-f2",
+                "sourceType": "idea"
+              }
+            ],
+            "threadId": "lib-t1"
+          }
+        ],
+        "ideaThreadsMode": "workspace",
+        "name": "default",
+        "recent": [],
+        "version": 3
+      },
+      "plotCards": [
+        {
+          "body": "作品Aからコピーした。@[[.then/references/imports/港の写真.png]]",
+          "expanded": false,
+          "id": "lib-plot-1",
+          "kind": "section",
+          "managerCollapsed": false,
+          "num": "001",
+          "title": "ライブラリへ送った港"
+        }
+      ]
+    }
+  }
+}

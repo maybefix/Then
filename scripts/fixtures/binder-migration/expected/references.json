@@ -1,0 +1,77 @@
+{
+  "作品A": {
+    "files": [
+      ".then/references/imports/map (2).png",
+      ".then/references/imports/どこにもない資料.txt",
+      ".then/references/imports/設定集.pdf",
+      ".then/references/imports/資料a.md"
+    ],
+    "plot": [
+      "第一章/a.md",
+      ".then/references/imports/map (2).png",
+      ".then/references/imports/資料a.md",
+      ".then/references/imports/資料a.md",
+      "消した資料.md"
+    ],
+    "ideaWorkspace": [
+      ".then/references/imports/どこにもない資料.txt",
+      ".then/references/imports/設定集.pdf",
+      ".then/references/imports/資料a.md",
+      ".then/references/imports/map (2).png",
+      "第一章/a.md"
+    ],
+    "ideaProfile": [
+      ".then/references/imports/設定集.pdf",
+      ".then/references/imports/map (2).png",
+      ".then/references/imports/どこにもない資料.txt",
+      ".then/references/imports/資料a.md"
+    ]
+  },
+  "作品B": {
+    "files": [
+      ".then/references/imports/消えたスレッドの資料.md",
+      ".then/references/imports/重複.md"
+    ],
+    "plot": [],
+    "ideaWorkspace": [
+      ".then/references/imports/消えたスレッドの資料.md",
+      ".then/references/imports/重複.md"
+    ],
+    "ideaProfile": [
+      ".then/references/imports/消えたスレッドの資料.md",
+      ".then/references/imports/重複.md"
+    ]
+  },
+  "作品C": {
+    "files": [],
+    "plot": [],
+    "ideaWorkspace": [],
+    "ideaProfile": []
+  },
+  "作品D": {
+    "files": [],
+    "plot": [],
+    "ideaWorkspace": [],
+    "ideaProfile": []
+  },
+  "作品E": {
+    "files": [],
+    "plot": [],
+    "ideaWorkspace": [],
+    "ideaProfile": []
+  },
+  "（ライブラリの直下）": {
+    "files": [
+      ".then/references/imports/港の写真.png"
+    ],
+    "plot": [
+      ".then/references/imports/港の写真.png"
+    ],
+    "ideaWorkspace": [
+      ".then/references/imports/港の写真.png"
+    ],
+    "ideaProfile": [
+      ".then/references/imports/港の写真.png"
+    ]
+  }
+}
