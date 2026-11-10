@@ -1,0 +1,104 @@
+{
+  "works": {
+    "作品A": {
+      "children": [
+        {
+          "hasContentHash": true,
+          "hasFileId": true,
+          "hasModifiedAt": true,
+          "kind": "file",
+          "name": "序章.md",
+          "path": "序章.md"
+        },
+        {
+          "children": [
+            {
+              "hasContentHash": true,
+              "hasFileId": true,
+              "hasModifiedAt": true,
+              "kind": "file",
+              "name": "港.md",
+              "path": "第一章/港.md"
+            },
+            {
+              "hasContentHash": true,
+              "hasFileId": true,
+              "hasModifiedAt": true,
+              "kind": "file",
+              "name": "灯台.md",
+              "path": "第一章/灯台.md"
+            }
+          ],
+          "kind": "folder",
+          "name": "第一章",
+          "path": "第一章"
+        },
+        {
+          "hasContentHash": true,
+          "hasFileId": true,
+          "hasModifiedAt": true,
+          "kind": "file",
+          "name": "あとがき.txt",
+          "path": "あとがき.txt"
+        }
+      ],
+      "name": "作品A"
+    },
+    "作品B": {
+      "children": [
+        {
+          "children": [
+            {
+              "children": [
+                {
+                  "hasContentHash": true,
+                  "hasFileId": true,
+                  "hasModifiedAt": true,
+                  "kind": "file",
+                  "name": "年表.md",
+                  "path": "素材/年表/年表.md"
+                }
+              ],
+              "kind": "folder",
+              "name": "年表",
+              "path": "素材/年表"
+            },
+            {
+              "hasContentHash": true,
+              "hasFileId": true,
+              "hasModifiedAt": true,
+              "kind": "file",
+              "name": "人物.md",
+              "path": "素材/人物.md"
+            }
+          ],
+          "kind": "folder",
+          "name": "素材",
+          "path": "素材"
+        },
+        {
+          "hasContentHash": true,
+          "hasFileId": true,
+          "hasModifiedAt": true,
+          "kind": "file",
+          "name": "本編.md",
+          "path": "本編.md"
+        }
+      ],
+      "name": "作品B"
+    },
+    "作品C": {
+      "children": [
+        {
+          "hasContentHash": true,
+          "hasFileId": true,
+          "hasModifiedAt": true,
+          "kind": "file",
+          "name": "一.md",
+          "path": "一.md"
+        }
+      ],
+      "name": "作品C"
+    }
+  }
+}

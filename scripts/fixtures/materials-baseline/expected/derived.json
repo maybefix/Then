@@ -1,0 +1,137 @@
+{
+  "作品A": {
+    "textFiles": [
+      "序章.md",
+      "第一章/港.md",
+      "第一章/灯台.md",
+      "あとがき.txt"
+    ],
+    "ast": {
+      "fileCount": 4,
+      "indexedCount": 4,
+      "totalTextLength": 83,
+      "totalOutlineCount": 4,
+      "outlineByFile": {
+        "序章.md": 1,
+        "第一章/港.md": 2,
+        "第一章/灯台.md": 1,
+        "あとがき.txt": 0
+      }
+    },
+    "sidebar": {
+      "projectTotalCharCount": 65,
+      "folderCharCounts": {
+        "第一章": 39,
+        ".": 65
+      }
+    },
+    "library": {
+      "charCount": 65,
+      "fileCount": 4,
+      "progress": {
+        "todo": 2,
+        "writing": 1,
+        "revising": 0,
+        "done": 1,
+        "archived": 0
+      }
+    },
+    "search": {
+      "total": 4,
+      "matchedFileCount": 3,
+      "hits": [
+        "あとがき.txt:1:6",
+        "第一章/港.md:3:1",
+        "第一章/港.md:7:8",
+        "序章.md:3:1"
+      ],
+      "totalWithComments": 5
+    }
+  },
+  "作品B": {
+    "textFiles": [
+      "素材/年表/年表.md",
+      "素材/人物.md",
+      "本編.md"
+    ],
+    "ast": {
+      "fileCount": 3,
+      "indexedCount": 3,
+      "totalTextLength": 48,
+      "totalOutlineCount": 4,
+      "outlineByFile": {
+        "素材/年表/年表.md": 1,
+        "素材/人物.md": 2,
+        "本編.md": 1
+      }
+    },
+    "sidebar": {
+      "projectTotalCharCount": 31,
+      "folderCharCounts": {
+        "素材/年表": 8,
+        "素材": 22,
+        ".": 31
+      }
+    },
+    "library": {
+      "charCount": 31,
+      "fileCount": 3,
+      "progress": {
+        "todo": 1,
+        "writing": 1,
+        "revising": 1,
+        "done": 0,
+        "archived": 0
+      }
+    },
+    "search": {
+      "total": 3,
+      "matchedFileCount": 3,
+      "hits": [
+        "素材/人物.md:3:4",
+        "素材/年表/年表.md:3:3",
+        "本編.md:3:1"
+      ],
+      "totalWithComments": 3
+    }
+  },
+  "作品C": {
+    "textFiles": [
+      "一.md"
+    ],
+    "ast": {
+      "fileCount": 1,
+      "indexedCount": 1,
+      "totalTextLength": 9,
+      "totalOutlineCount": 1,
+      "outlineByFile": {
+        "一.md": 1
+      }
+    },
+    "sidebar": {
+      "projectTotalCharCount": 5,
+      "folderCharCounts": {
+        ".": 5
+      }
+    },
+    "library": {
+      "charCount": 5,
+      "fileCount": 1,
+      "progress": {
+        "todo": 1,
+        "writing": 0,
+        "revising": 0,
+        "done": 0,
+        "archived": 0
+      }
+    },
+    "search": {
+      "total": 1,
+      "matchedFileCount": 1,
+      "hits": [
+        "一.md:3:1"
+      ],
+      "totalWithComments": 1
+    }
+  }
+}
