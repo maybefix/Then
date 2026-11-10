@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "plotCards": [
+    {
+      "id": "lib-plot-1",
+      "kind": "section",
+      "num": "001",
+      "title": "ライブラリへ送った港",
+      "body": "作品Aからコピーした。@[[.then/references/imports/港の写真.png]]",
+      "expanded": false,
+      "managerCollapsed": false
+    }
+  ],
+  "ideaThreads": [
+    {
+      "id": "idea-inbox",
+      "kind": "inbox",
+      "title": "インボックス",
+      "starred": false,
+      "createdAt": 1767225609000,
+      "updatedAt": 1767225609000,
+      "fragments": [
+        {
+          "id": "lib-f1",
+          "body": "ライブラリの直下で書いたIdea",
+          "used": false,
+          "createdAt": 1767225609000,
+          "updatedAt": 1767225609000
+        }
+      ]
+    },
+    {
+      "id": "lib-t1",
+      "kind": "thread",
+      "title": "作品Aから送ったスレッド",
+      "starred": false,
+      "createdAt": 1767225609100,
+      "updatedAt": 1767225609100,
+      "fragments": [
+        {
+          "id": "lib-f2",
+          "body": "送られてきた断片",
+          "used": false,
+          "createdAt": 1767225609100,
+          "updatedAt": 1767225609100
+        }
+      ]
+    }
+  ]
+}

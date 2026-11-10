@@ -1,0 +1,74 @@
+{
+  "settings": {
+    "snippetStorageMode": "workspace"
+  },
+  "snippets": [
+    {
+      "id": "idea-inbox",
+      "kind": "inbox",
+      "title": "インボックス",
+      "starred": false,
+      "createdAt": 1767225600000,
+      "updatedAt": 1767225600000,
+      "fragments": [
+        {
+          "id": "stale-1",
+          "body": "最後に開いた作品のIdea（アプリ状態の写し）",
+          "used": false,
+          "createdAt": 1767225600000,
+          "updatedAt": 1767225600000
+        }
+      ]
+    }
+  ],
+  "profileSnippets": [
+    {
+      "id": "idea-inbox",
+      "kind": "inbox",
+      "title": "インボックス",
+      "starred": false,
+      "createdAt": 1767225601000,
+      "updatedAt": 1767225601000,
+      "fragments": [
+        {
+          "id": "p-i1",
+          "body": "共有のインボックスの一",
+          "used": false,
+          "createdAt": 1767225601000,
+          "updatedAt": 1767225601000
+        },
+        {
+          "id": "p-i2",
+          "body": "共有のインボックスの二",
+          "used": false,
+          "createdAt": 1767225601100,
+          "updatedAt": 1767225601100
+        }
+      ]
+    },
+    {
+      "id": "p-t1",
+      "kind": "thread",
+      "title": "共有のスレッド",
+      "starred": true,
+      "createdAt": 1767225601200,
+      "updatedAt": 1767225601200,
+      "fragments": [
+        {
+          "id": "p-s1",
+          "body": "共有の断片の一",
+          "used": false,
+          "createdAt": 1767225601200,
+          "updatedAt": 1767225601200
+        },
+        {
+          "id": "p-s2",
+          "body": "共有の断片の二",
+          "used": true,
+          "createdAt": 1767225601300,
+          "updatedAt": 1767225601300
+        }
+      ]
+    }
+  ]
+}

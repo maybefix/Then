@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "plotCards": [
+    {
+      "id": "e-p1",
+      "kind": "section",
+      "num": "001",
+      "title": "バックアップから戻るカード",
+      "body": "",
+      "expanded": false,
+      "managerCollapsed": false
+    }
+  ],
+  "ideaThreads": [
+    {
+      "id": "idea-inbox",
+      "kind": "inbox",
+      "title": "インボックス",
+      "starred": false,
+      "createdAt": 1767225600000,
+      "updatedAt": 1767225600000,
+      "fragments": [
+        {
+          "id": "e-i1",
+          "body": "バックアップから戻るIdea",
+          "used": false,
+          "createdAt": 1767225600100,
+          "updatedAt": 1767225600100
+        }
+      ]
+    }
+  ]
+}

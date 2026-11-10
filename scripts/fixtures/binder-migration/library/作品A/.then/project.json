@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "plotCards": [
+    {
+      "id": "a-ch1",
+      "kind": "chapter",
+      "num": "",
+      "title": "第一章　港町",
+      "body": "",
+      "expanded": false,
+      "managerCollapsed": false
+    },
+    {
+      "id": "a-p1",
+      "kind": "section",
+      "num": "001",
+      "title": "港に着く",
+      "body": "主人公が港に着く。@[[第一章/a.md]] を見ながら書く。",
+      "expanded": true,
+      "managerCollapsed": false
+    },
+    {
+      "id": "a-p3",
+      "kind": "section",
+      "num": "003",
+      "title": "坂の上の家",
+      "body": "地図は @[[.then/references/imports/map (2).png]]。\n二行目の本文。",
+      "expanded": false,
+      "managerCollapsed": true
+    },
+    {
+      "id": "a-ch2",
+      "kind": "chapter",
+      "num": "",
+      "title": "",
+      "body": "",
+      "expanded": false,
+      "managerCollapsed": false
+    },
+    {
+      "id": "a-p4",
+      "kind": "section",
+      "num": "004",
+      "title": "",
+      "body": "題のないセクション。@[[.then/references/imports/資料a.md]] と @[[.then/references/imports/資料a.md]] を二度参照する。@[[消した資料.md]] は行き先がない",
+      "expanded": false,
+      "managerCollapsed": false
+    }
+  ],
+  "ideaThreads": [
+    {
+      "id": "idea-inbox",
+      "kind": "inbox",
+      "title": "インボックス",
+      "starred": false,
+      "createdAt": 1767225600000,
+      "updatedAt": 1767225600000,
+      "fragments": [
+        {
+          "id": "a-i1",
+          "body": "インボックスの一つ目",
+          "used": false,
+          "createdAt": 1767225600100,
+          "updatedAt": 1767225600100
+        },
+        {
+          "id": "a-i2",
+          "body": "使用済みの断片",
+          "used": true,
+          "createdAt": 1767225600200,
+          "updatedAt": 1767225600250
+        }
+      ]
+    },
+    {
+      "id": "a-t1",
+      "kind": "thread",
+      "title": "場面: 港",
+      "starred": true,
+      "createdAt": 1767225600300,
+      "updatedAt": 1767225600300,
+      "fragments": [
+        {
+          "id": "a-s1",
+          "body": "港の場面の一",
+          "used": false,
+          "createdAt": 1767225600300,
+          "updatedAt": 1767225600300
+        },
+        {
+          "id": "a-s2",
+          "body": "港の場面の二",
+          "used": false,
+          "createdAt": 1767225600400,
+          "updatedAt": 1767225600400
+        },
+        {
+          "id": "a-s3",
+          "body": "Canvasから来た断片",
+          "used": false,
+          "createdAt": 1767225600500,
+          "updatedAt": 1767225600500,
+          "originRef": {
+            "source": "canvas",
+            "sourceId": "node-1",
+            "sourceBoardId": "board-1",
+            "sourceBoardScope": "project",
+            "copiedAt": 1767225600490
+          }
+        }
+      ]
+    },
+    {
+      "id": "a-t2",
+      "kind": "thread",
+      "title": "伏線",
+      "starred": false,
+      "createdAt": 1767225600600,
+      "updatedAt": 1767225600600,
+      "fragments": [
+        {
+          "id": "a-f1",
+          "body": "手紙の伏線\n二行目",
+          "used": false,
+          "createdAt": 1767225600600,
+          "updatedAt": 1767225600600
+        }
+      ]
+    },
+    {
+      "id": "a-t3",
+      "kind": "thread",
+      "title": "空のスレッド",
+      "starred": false,
+      "createdAt": 1767225600700,
+      "updatedAt": 1767225600700,
+      "fragments": []
+    }
+  ]
+}

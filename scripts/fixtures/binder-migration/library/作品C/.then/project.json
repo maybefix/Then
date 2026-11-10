@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "snippets": [
+    {
+      "id": "c-s1",
+      "title": "旧い題",
+      "text": "旧形式の本文",
+      "category": "",
+      "tags": []
+    },
+    {
+      "id": "c-s2",
+      "title": "題だけの付箋",
+      "text": "  ",
+      "category": "",
+      "tags": []
+    },
+    {
+      "id": "c-s3",
+      "title": "",
+      "text": "",
+      "category": "",
+      "tags": []
+    }
+  ]
+}
