@@ -1,8 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { TextSplice } from "./editor/lineTextUpdate";
 import {
+  acceptDiskState,
   discardRecovery,
   forgetDocumentJournal,
+  isDocumentConflict,
   journalPositionOf,
   placeBodyChange,
   recordDocumentChange,
@@ -328,6 +330,11 @@ type QueuedDocumentSave = {
 };
 
 type DocumentSaveRequest = Omit<QueuedDocumentSave, "waiters">;
+
+/** ステータスバーに出す文。外部の変更で断られたときの見分け用の前置きは外す。 */
+function conflictFreeMessage(error: unknown) {
+  return String(error).replace(/^(Error: )?document content conflict: /, "");
+}
 
 type DocumentSaveQueue = {
   running: boolean;
@@ -853,6 +860,10 @@ export default function App() {
   // 確認ダイアログを待つ間にタブの状態が進むため、閉じる処理は最新の一覧を参照する。
   const openTabsRef = useRef(openTabs);
   openTabsRef.current = openTabs;
+  // 保存しようとして、ほかのアプリでファイルが変わっていたタブ。選んでもらうまで自動保存しない。
+  const [conflictTabIds, setConflictTabIds] = useState<ReadonlySet<string>>(() => new Set());
+  const conflictTabIdsRef = useRef(conflictTabIds);
+  conflictTabIdsRef.current = conflictTabIds;
   const [closedDocumentTabs, setClosedDocumentTabs] = useState<ClosedDocumentTab[]>([]);
   const isClosingDocumentTabsRef = useRef(false);
   const [projectFolder, setProjectFolder] = useState<ProjectFolder | null>(null);
@@ -1789,7 +1800,14 @@ export default function App() {
       const activeFile = openTabsRef.current.find((tab) => tab.id === activeTabId);
       if (activeFile?.path && previousMarkdown !== nextMarkdown) {
         // Every change of a saved document reaches its recovery journal.
-        recordDocumentChange(activeFile.id, activeFile.path, previousMarkdown, nextMarkdown, change);
+        recordDocumentChange(
+          activeFile.id,
+          activeFile.path,
+          previousMarkdown,
+          nextMarkdown,
+          change,
+          activeFile.contentHash,
+        );
       }
       patchActiveTab((tab) => ({
         ...tab,
@@ -1858,6 +1876,7 @@ export default function App() {
               savingRequest.path,
               savingRequest.content,
               savingRequest.journalPosition,
+              openTabsRef.current.find((tab) => tab.id === savingRequest.tabId)?.contentHash ?? null,
             );
 
             if (activeTabIdRef.current === savingRequest.tabId) {
@@ -1881,7 +1900,10 @@ export default function App() {
             setLastError("");
             savingRequest.waiters.forEach((waiter) => waiter.resolve(document));
           } catch (error) {
-            setLastError(String(error));
+            if (isDocumentConflict(error)) {
+              setConflictTabIds((current) => new Set(current).add(savingRequest.tabId));
+            }
+            setLastError(conflictFreeMessage(error));
             setOpenTabs((current) =>
               current.map((tab) =>
                 tab.id === savingRequest.tabId ? { ...tab, saveStatus: "error" } : tab,
@@ -3184,6 +3206,8 @@ export default function App() {
       setSaveStatus("saved");
       return;
     }
+    // ほかのアプリでの変更をどうするか選んでもらうまで、上書きしに行かない。
+    if (conflictTabIdsRef.current.has(activeTabId)) return;
 
     setSaveStatus("dirty");
     const timer = window.setTimeout(() => {
@@ -6915,33 +6939,41 @@ export default function App() {
     scanRecovery().then(setRecoveryItems, (error) => setLastError(String(error)));
   }, [startupView]);
 
+  // 一つの原稿の本文を、作品のチェックポイントに入れる。入れたチェックポイントの id を返す。
+  // 復旧と、ほかのアプリでの変更を選ぶダイアログ（消える側を残す）で使う。
+  const storeTextInCheckpoint = async (path: string, markdown: string): Promise<string | null> => {
+    if (!projectFolder || !canWritePortableProjectState(projectFolder.path)) return null;
+    if (!(await waitForPortableProjectWrite(projectFolder.path))) return null;
+    const now = new Date();
+    const snapshot = buildManuscriptSnapshot(
+      `${getWorkspaceName(path)} ${now.toLocaleDateString("ja-JP")} ${now.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`,
+      "",
+      "manual",
+      currentWorkspaceSnapshots[0] ? [currentWorkspaceSnapshots[0].id] : [],
+      { path, markdown },
+    );
+    beginPortableProjectMutation(projectFolder.path);
+    const stored = await invoke<CheckpointLoadResult>("create_project_checkpoint", {
+      rootPath: projectFolder.path,
+      snapshot,
+    });
+    if (!applyCheckpointStoreResult(projectFolder.path, stored)) return null;
+    if (stored.warnings.length) {
+      showToast(checkpointWarningMessage(stored.warnings[0]));
+      return null;
+    }
+    return snapshot.id;
+  };
+
   const restoreRecoveredText = async (item: RecoveryItem): Promise<boolean> => {
     const destination = recoveryDestination(item);
     const existing = item.path
       ? openTabsRef.current.find((tab) => tab.path && isSamePath(tab.path, item.path!))
       : undefined;
     if (destination === "checkpoint") {
-      if (!projectFolder || !canWritePortableProjectState(projectFolder.path)) return false;
-      if (!(await waitForPortableProjectWrite(projectFolder.path))) return false;
-      const now = new Date();
-      const snapshot = buildManuscriptSnapshot(
-        `${getWorkspaceName(item.path!)} ${now.toLocaleDateString("ja-JP")} ${now.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`,
-        "",
-        "manual",
-        currentWorkspaceSnapshots[0] ? [currentWorkspaceSnapshots[0].id] : [],
-        { path: item.path!, markdown: item.content },
-      );
-      beginPortableProjectMutation(projectFolder.path);
-      const stored = await invoke<CheckpointLoadResult>("create_project_checkpoint", {
-        rootPath: projectFolder.path,
-        snapshot,
-      });
-      if (!applyCheckpointStoreResult(projectFolder.path, stored)) return false;
-      if (stored.warnings.length) {
-        showToast(checkpointWarningMessage(stored.warnings[0]));
-        return false;
-      }
-      showToast("チェックポイントに保存しました", { label: "見る", onClick: () => openCheckpointStudio(snapshot.id) });
+      const checkpointId = await storeTextInCheckpoint(item.path!, item.content);
+      if (!checkpointId) return false;
+      showToast("チェックポイントに保存しました", { label: "見る", onClick: () => openCheckpointStudio(checkpointId) });
       return true;
     }
     if (destination === "scratch" || (existing && isDirtyDocumentTab(existing))) {
@@ -6965,7 +6997,7 @@ export default function App() {
       saveStatus: "dirty",
     };
     // この実行の記録に入ってから、前回の記録を消す。
-    await recordRestoredText(tab.id, document.path, document.content, item.content);
+    await recordRestoredText(tab.id, document.path, document.content, item.content, document.contentHash ?? null);
     setOpenTabs((current) =>
       existing
         ? current.map((candidate) => (candidate.id === tab.id ? tab : candidate))
@@ -7013,6 +7045,103 @@ export default function App() {
       }
     })();
   }, [appDialog, projectFolder, recoveryItems, startupView]);
+
+  // 保存しようとしたら、ほかのアプリでファイルが変わっていた。消える側はチェックポイントに残す
+  // （作品の外のファイルは残す場所がないので、そのまま選んだほうにする）。
+  const keepBeforeConflictChoice = async (path: string, markdown: string) => {
+    if (!projectFolder || !isPathInsideFolder(path, projectFolder.path)) return true;
+    return (await storeTextInCheckpoint(path, markdown)) !== null;
+  };
+
+  const reloadConflictedTab = async (tabId: string, path: string) => {
+    const tab = openTabsRef.current.find((candidate) => candidate.id === tabId);
+    if (!tab) return;
+    if (!(await keepBeforeConflictChoice(path, tab.markdown))) {
+      showToast("チェックポイントに保存できなかったため、読み込みませんでした");
+      return;
+    }
+    const document = await invoke<TextDocument>("read_text_file", { path });
+    // 記録は今の本文から始め直す（次に打ったとき、読み込んだファイルを基準にする）。
+    forgetDocumentJournal(tabId);
+    setOpenTabs((current) =>
+      current.map((candidate) =>
+        candidate.id === tabId
+          ? {
+              ...candidate,
+              markdown: document.content,
+              savedMarkdown: document.content,
+              contentHash: document.contentHash ?? null,
+              fileId: document.fileId ?? candidate.fileId,
+              editorRevision: null,
+              saveStatus: "saved",
+            }
+          : candidate,
+      ),
+    );
+    if (activeTabIdRef.current === tabId) {
+      lastSavedMarkdownRef.current = document.content;
+      setAppState((current) => ({ ...current, markdown: document.content }));
+    }
+    setLastError("");
+    showToast(`「${document.name}」を読み込みました`);
+  };
+
+  const overwriteConflictedTab = async (tabId: string, path: string) => {
+    const document = await invoke<TextDocument>("read_text_file", { path });
+    if (!(await keepBeforeConflictChoice(path, document.content))) {
+      showToast("チェックポイントに保存できなかったため、上書きしませんでした");
+      return;
+    }
+    await acceptDiskState(tabId, path, document.contentHash ?? "");
+    const tab = openTabsRef.current.find((candidate) => candidate.id === tabId);
+    if (!tab) return;
+    await enqueueDocumentSave({
+      tabId,
+      path,
+      content: tab.markdown,
+      journalPosition: journalPositionOf(tabId, tab.markdown),
+    });
+    showToast(`「${tab.name}」を上書きしました`);
+  };
+
+  const conflictPromptOpenRef = useRef(false);
+  useEffect(() => {
+    if (appDialog || conflictPromptOpenRef.current || !conflictTabIds.has(activeTabId)) return;
+    const tab = openTabsRef.current.find((candidate) => candidate.id === activeTabId);
+    const clearConflict = (tabId: string) =>
+      setConflictTabIds((current) => {
+        if (!current.has(tabId)) return current;
+        const next = new Set(current);
+        next.delete(tabId);
+        return next;
+      });
+    if (!tab?.path) {
+      clearConflict(activeTabId);
+      return;
+    }
+    const { id: tabId, path, name } = tab;
+    conflictPromptOpenRef.current = true;
+    void (async () => {
+      try {
+        const choice = await requestChoice({
+          title: "ほかのアプリでファイルが変更されました",
+          message: `「${name}」`,
+          detail: path,
+          primaryLabel: "ファイルの内容を読み込む",
+          secondaryLabel: "この内容で上書きする",
+        });
+        // 選んだあとの保存がまた断られたら、もう一度尋ねられるよう、先に外す。
+        clearConflict(tabId);
+        if (choice === "primary") await reloadConflictedTab(tabId, path);
+        else if (choice === "secondary") await overwriteConflictedTab(tabId, path);
+      } catch (error) {
+        setLastError(conflictFreeMessage(error));
+        if (!isDocumentConflict(error)) showToast(error instanceof Error ? error.message : String(error));
+      } finally {
+        conflictPromptOpenRef.current = false;
+      }
+    })();
+  }, [activeTabId, appDialog, conflictTabIds]);
 
   // ライブラリをまだ持っていなければ、起動画面の前にライブラリの準備画面を出す。
   useEffect(() => {
