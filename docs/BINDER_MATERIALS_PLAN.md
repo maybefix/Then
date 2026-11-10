@@ -11,7 +11,7 @@
 | 1 | 調査 | 済み（2026-11-11） |
 | 2 | 仕組みの説明 | 済み |
 | 3 | 依存関係 | 済み |
-| 4 | 影響範囲 | 済み（「前」の一式の結果は 4-4） |
+| 4 | 影響範囲 | 済み |
 | 5 | 案 | 済み |
 | 6 | 人の確認（確認1） | 待ち |
 | 7 | 実施 | |
@@ -153,7 +153,15 @@
 
 ### 4-4. 今の自動テストの状態（「前」の一式の結果）
 
-（「前」の一式の完了後に書く）
+2026-11-11、コミット `36375c9`（チェックポイント）で動かした。build は成功、本体のチャンクは 710,480 バイト。100本中97本が通り、落ちた3本は今回と関係ない元からの失敗として扱う。
+
+| テスト | 結果 | 理由 |
+|---|---|---|
+| `test:editor-selection` | 時間切れ（600秒） | build のあとで止まった。「後」でも落ちたら単独で2回動かして確かめる |
+| `test:editor-text-edits` | 失敗 | `every icon draws its own picture` のアサーション |
+| `test:v058-bundle` | 失敗 | 本体のチャンクが Vite の 500 kB の警告を超えている（710,480 バイト）。元から超えている |
+
+一式の終わりに残っていたプロセス: QA の Then 0、QA の WebView2 0、テストの Edge 0、テストの node 0。
 
 ## 工程5: 案
 
@@ -213,6 +221,9 @@
 
 - `test:materials-baseline-rust`（`src-tauri/src/materials_listing_baseline.rs`）: 見本データ `scripts/fixtures/materials-baseline/library` の3作品（素材フォルダなし／`素材` という名前のフォルダはあるが `materialsFolder` なし／`project.json` なし）を一時フォルダへ写し、`list_project_folder` の答えの並び・名前・種類・入れ子と、ファイル ID・ハッシュ・更新時刻があるかを `expected/listing.json` と比べる。
 - `test:materials-baseline`（`scripts/test-materials-baseline.mjs`）: その一覧を今の処理へ通し、`collectProjectTextFiles` の並び（書き出し・チェックポイント・置換の対象）、AST の件数・字数・見出しの数、左のツリーのフォルダごとの字数と作品の合計、ライブラリ画面の字数・ファイル数・進捗の内訳、全文検索の当たり（コメントを含めるときも）を `expected/derived.json` と比べる。
+- 期待値で目に留めておくこと: 作品Bの `素材/人物.md` は今は原稿として、字数（作品の合計 31 字のうち 22 字が `素材/` の中）・進捗の内訳（執筆中 1）・書き出しの対象に入っている。`materialsFolder` を書かない限り、入れたあとも同じであることを確かめる（D-7）。
+- 効くことの確かめ: 一覧から作品Bの `年表.md` を落とす不具合を `list_project_entries_within` に、作品Aの `灯台.md` を落とす不具合を `collectProjectTextFiles` に入れ、それぞれ `test:materials-baseline-rust`（「作品B の一覧が期待値と違う」）と `test:materials-baseline`（「作品A の結果が期待値と違う」）が落ちることを見てから、`git checkout` で戻した。
+- 一緒に動かしたもの: `test:binder-baseline`、`test:binder-baseline-rust`、`test:save-external-change` は、固定テストを足したあとも ok（変わっていない）。
 - 経過: 「前」の一式が動いているあいだに、Rust のテストを登録する1行（`lib.rs` の `mod materials_listing_baseline;`）を一度入れてすぐ戻した。そのあいだに一式で動いた cargo のテストは `test:external-url` だけで、結果は ok。足したのはテスト用の mod だけなので、結果への影響はない。
 
 ## 工程9: 実機確認
