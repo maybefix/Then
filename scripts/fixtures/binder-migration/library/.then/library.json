@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "library-fixture",
+  "name": "見本ライブラリ",
+  "projectOrder": [
+    "作品A",
+    "作品B",
+    "作品C",
+    "作品D",
+    "作品E"
+  ]
+}

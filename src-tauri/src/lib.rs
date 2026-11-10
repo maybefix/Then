@@ -5482,6 +5482,8 @@ fn wide_null_terminated_to_string(value: &[u16]) -> String {
 }
 
 #[cfg(test)]
+mod binder_migration_baseline;
+#[cfg(test)]
 mod file_move_diagnostics;
 
 #[cfg(test)]

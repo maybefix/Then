@@ -1,0 +1,286 @@
+{
+  "作品A": {
+    "threads": [
+      {
+        "kind": "inbox",
+        "title": "インボックス",
+        "starred": false,
+        "createdAt": 1767225600000,
+        "updatedAt": 1767225600000,
+        "items": [
+          {
+            "type": "idea",
+            "body": "使用済みの断片",
+            "used": true,
+            "createdAt": 1767225600200,
+            "updatedAt": 1767225600250
+          },
+          {
+            "type": "idea",
+            "body": "インボックスの一つ目",
+            "used": false,
+            "createdAt": 1767225600100,
+            "updatedAt": 1767225600100
+          },
+          {
+            "type": "reference",
+            "path": ".then/references/imports/どこにもない資料.txt",
+            "createdAt": 2
+          },
+          {
+            "type": "reference",
+            "path": ".then/references/imports/設定集.pdf",
+            "createdAt": 3
+          }
+        ]
+      },
+      {
+        "kind": "thread",
+        "title": "場面: 港",
+        "starred": true,
+        "createdAt": 1767225600300,
+        "updatedAt": 1767225600300,
+        "items": [
+          {
+            "type": "idea",
+            "body": "港の場面の一",
+            "used": false,
+            "createdAt": 1767225600300,
+            "updatedAt": 1767225600300
+          },
+          {
+            "type": "reference",
+            "path": ".then/references/imports/資料a.md",
+            "createdAt": 1767225600350
+          },
+          {
+            "type": "idea",
+            "body": "港の場面の二",
+            "used": false,
+            "createdAt": 1767225600400,
+            "updatedAt": 1767225600400
+          },
+          {
+            "type": "reference",
+            "path": ".then/references/imports/map (2).png",
+            "createdAt": 1767225600360
+          },
+          {
+            "type": "idea",
+            "body": "Canvasから来た断片",
+            "used": false,
+            "createdAt": 1767225600500,
+            "updatedAt": 1767225600500,
+            "origin": {
+              "source": "canvas",
+              "sourceId": "node-1",
+              "sourceBoardId": "board-1",
+              "sourceBoardScope": "project",
+              "copiedAt": 1767225600490
+            }
+          }
+        ]
+      },
+      {
+        "kind": "thread",
+        "title": "伏線",
+        "starred": false,
+        "createdAt": 1767225600600,
+        "updatedAt": 1767225600600,
+        "items": [
+          {
+            "type": "reference",
+            "path": "第一章/a.md",
+            "createdAt": 1767225600650
+          },
+          {
+            "type": "idea",
+            "body": "手紙の伏線\n二行目",
+            "used": false,
+            "createdAt": 1767225600600,
+            "updatedAt": 1767225600600
+          }
+        ]
+      },
+      {
+        "kind": "thread",
+        "title": "空のスレッド",
+        "starred": false,
+        "createdAt": 1767225600700,
+        "updatedAt": 1767225600700,
+        "items": []
+      }
+    ],
+    "openCards": [
+      {
+        "thread": "場面: 港",
+        "body": "港の場面の二"
+      }
+    ]
+  },
+  "作品B": {
+    "threads": [
+      {
+        "kind": "inbox",
+        "title": "インボックス",
+        "starred": false,
+        "createdAt": 1767225600000,
+        "updatedAt": 1767225600000,
+        "items": [
+          {
+            "type": "idea",
+            "body": "一つ目のインボックス",
+            "used": false,
+            "createdAt": 1767225600100,
+            "updatedAt": 1767225600100
+          },
+          {
+            "type": "idea",
+            "body": "二つ目のインボックスの断片",
+            "used": false,
+            "createdAt": 1767225600300,
+            "updatedAt": 1767225600300
+          },
+          {
+            "type": "reference",
+            "path": ".then/references/imports/消えたスレッドの資料.md",
+            "createdAt": 1767225600240
+          }
+        ]
+      },
+      {
+        "kind": "thread",
+        "title": "Bの場面",
+        "starred": false,
+        "createdAt": 1767225600200,
+        "updatedAt": 1767225600200,
+        "items": [
+          {
+            "type": "idea",
+            "body": "Bの場面の一",
+            "used": false,
+            "createdAt": 1767225600200,
+            "updatedAt": 1767225600200
+          },
+          {
+            "type": "reference",
+            "path": ".then/references/imports/重複.md",
+            "createdAt": 1767225600220
+          },
+          {
+            "type": "idea",
+            "body": "Bの場面の二（並び順にない）",
+            "used": false,
+            "createdAt": 1767225600210,
+            "updatedAt": 1767225600210
+          }
+        ]
+      }
+    ],
+    "openCards": []
+  },
+  "作品C": {
+    "threads": [
+      {
+        "kind": "inbox",
+        "title": "インボックス",
+        "starred": false,
+        "createdAt": "読んだ時刻",
+        "updatedAt": "読んだ時刻",
+        "items": [
+          {
+            "type": "idea",
+            "body": "旧形式の本文",
+            "used": false,
+            "createdAt": "読んだ時刻",
+            "updatedAt": "読んだ時刻"
+          },
+          {
+            "type": "idea",
+            "body": "題だけの付箋",
+            "used": false,
+            "createdAt": "読んだ時刻",
+            "updatedAt": "読んだ時刻"
+          }
+        ]
+      }
+    ],
+    "openCards": []
+  },
+  "作品D": {
+    "threads": [
+      {
+        "kind": "inbox",
+        "title": "インボックス",
+        "starred": false,
+        "createdAt": "読んだ時刻",
+        "updatedAt": "読んだ時刻",
+        "items": []
+      }
+    ],
+    "openCards": []
+  },
+  "作品E": {
+    "threads": [
+      {
+        "kind": "inbox",
+        "title": "インボックス",
+        "starred": false,
+        "createdAt": 1767225600000,
+        "updatedAt": 1767225600000,
+        "items": [
+          {
+            "type": "idea",
+            "body": "バックアップから戻るIdea",
+            "used": false,
+            "createdAt": 1767225600100,
+            "updatedAt": 1767225600100
+          }
+        ]
+      }
+    ],
+    "openCards": []
+  },
+  "（ライブラリの直下）": {
+    "threads": [
+      {
+        "kind": "inbox",
+        "title": "インボックス",
+        "starred": false,
+        "createdAt": 1767225609000,
+        "updatedAt": 1767225609000,
+        "items": [
+          {
+            "type": "idea",
+            "body": "ライブラリの直下で書いたIdea",
+            "used": false,
+            "createdAt": 1767225609000,
+            "updatedAt": 1767225609000
+          },
+          {
+            "type": "reference",
+            "path": ".then/references/imports/港の写真.png",
+            "createdAt": 1
+          }
+        ]
+      },
+      {
+        "kind": "thread",
+        "title": "作品Aから送ったスレッド",
+        "starred": false,
+        "createdAt": 1767225609100,
+        "updatedAt": 1767225609100,
+        "items": [
+          {
+            "type": "idea",
+            "body": "送られてきた断片",
+            "used": false,
+            "createdAt": 1767225609100,
+            "updatedAt": 1767225609100
+          }
+        ]
+      }
+    ],
+    "openCards": []
+  }
+}

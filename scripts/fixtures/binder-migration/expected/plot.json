@@ -1,0 +1,120 @@
+{
+  "作品A": [
+    {
+      "kind": "chapter",
+      "num": "",
+      "title": "第一章　港町",
+      "body": "",
+      "links": []
+    },
+    {
+      "kind": "section",
+      "num": "001",
+      "title": "港に着く",
+      "body": "主人公が港に着く。@[[第一章/a.md]] を見ながら書く。",
+      "links": [
+        "第一章/a.md"
+      ]
+    },
+    {
+      "kind": "section",
+      "num": "003",
+      "title": "坂の上の家",
+      "body": "地図は @[[.then/references/imports/map (2).png]]。\n二行目の本文。",
+      "links": [
+        ".then/references/imports/map (2).png"
+      ]
+    },
+    {
+      "kind": "chapter",
+      "num": "",
+      "title": "",
+      "body": "",
+      "links": []
+    },
+    {
+      "kind": "section",
+      "num": "004",
+      "title": "",
+      "body": "題のないセクション。@[[.then/references/imports/資料a.md]] と @[[.then/references/imports/資料a.md]] を二度参照する。@[[消した資料.md]] は行き先がない",
+      "links": [
+        ".then/references/imports/資料a.md",
+        ".then/references/imports/資料a.md",
+        "消した資料.md"
+      ]
+    }
+  ],
+  "作品B": [
+    {
+      "kind": "section",
+      "num": "001",
+      "title": "縦書きプロットテストです",
+      "body": "",
+      "links": []
+    },
+    {
+      "kind": "section",
+      "num": "002",
+      "title": "縦書きプロットテストです",
+      "body": "",
+      "links": []
+    },
+    {
+      "kind": "section",
+      "num": "003",
+      "title": "縦書きプロットテストです",
+      "body": "これは縦書きプロットテストです。ちゃんと書けていることを確かめるためにあります。",
+      "links": []
+    },
+    {
+      "kind": "chapter",
+      "num": "",
+      "title": "番号の章",
+      "body": "",
+      "links": []
+    },
+    {
+      "kind": "section",
+      "num": "005",
+      "title": "番号なし",
+      "body": "",
+      "links": []
+    },
+    {
+      "kind": "section",
+      "num": "009",
+      "title": "種類が分からない",
+      "body": "",
+      "links": []
+    },
+    {
+      "kind": "chapter",
+      "num": "",
+      "title": "番号のある章",
+      "body": "",
+      "links": []
+    }
+  ],
+  "作品C": [],
+  "作品D": [],
+  "作品E": [
+    {
+      "kind": "section",
+      "num": "001",
+      "title": "バックアップから戻るカード",
+      "body": "",
+      "links": []
+    }
+  ],
+  "（ライブラリの直下）": [
+    {
+      "kind": "section",
+      "num": "001",
+      "title": "ライブラリへ送った港",
+      "body": "作品Aからコピーした。@[[.then/references/imports/港の写真.png]]",
+      "links": [
+        ".then/references/imports/港の写真.png"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "version": 3,
+  "name": "default",
+  "cards": [],
+  "recent": [],
+  "ideaThreadsMode": "workspace",
+  "ideaThreads": [
+    {
+      "threadId": "idea-inbox",
+      "items": [
+        {
+          "sourceType": "idea",
+          "fragmentId": "lib-f1"
+        }
+      ]
+    },
+    {
+      "threadId": "lib-t1",
+      "items": [
+        {
+          "sourceType": "idea",
+          "fragmentId": "lib-f2"
+        }
+      ]
+    }
+  ]
+}

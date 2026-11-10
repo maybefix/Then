@@ -1,0 +1,348 @@
+{
+  "作品A": {
+    "threads": [
+      {
+        "kind": "inbox",
+        "title": "インボックス",
+        "starred": false,
+        "createdAt": 1767225601000,
+        "updatedAt": 1767225601000,
+        "items": [
+          {
+            "type": "idea",
+            "body": "共有のインボックスの二",
+            "used": false,
+            "createdAt": 1767225601100,
+            "updatedAt": 1767225601100
+          },
+          {
+            "type": "reference",
+            "path": ".then/references/imports/設定集.pdf",
+            "createdAt": 1767225600800
+          },
+          {
+            "type": "idea",
+            "body": "共有のインボックスの一",
+            "used": false,
+            "createdAt": 1767225601000,
+            "updatedAt": 1767225601000
+          },
+          {
+            "type": "reference",
+            "path": ".then/references/imports/map (2).png",
+            "createdAt": 1
+          },
+          {
+            "type": "reference",
+            "path": ".then/references/imports/どこにもない資料.txt",
+            "createdAt": 2
+          },
+          {
+            "type": "reference",
+            "path": ".then/references/imports/資料a.md",
+            "createdAt": 4
+          }
+        ]
+      },
+      {
+        "kind": "thread",
+        "title": "共有のスレッド",
+        "starred": true,
+        "createdAt": 1767225601200,
+        "updatedAt": 1767225601200,
+        "items": [
+          {
+            "type": "idea",
+            "body": "共有の断片の二",
+            "used": true,
+            "createdAt": 1767225601300,
+            "updatedAt": 1767225601300
+          },
+          {
+            "type": "idea",
+            "body": "共有の断片の一",
+            "used": false,
+            "createdAt": 1767225601200,
+            "updatedAt": 1767225601200
+          }
+        ]
+      }
+    ],
+    "openCards": [
+      {
+        "thread": "共有のスレッド",
+        "body": "共有の断片の一"
+      }
+    ]
+  },
+  "作品B": {
+    "threads": [
+      {
+        "kind": "inbox",
+        "title": "インボックス",
+        "starred": false,
+        "createdAt": 1767225601000,
+        "updatedAt": 1767225601000,
+        "items": [
+          {
+            "type": "idea",
+            "body": "共有のインボックスの一",
+            "used": false,
+            "createdAt": 1767225601000,
+            "updatedAt": 1767225601000
+          },
+          {
+            "type": "idea",
+            "body": "共有のインボックスの二",
+            "used": false,
+            "createdAt": 1767225601100,
+            "updatedAt": 1767225601100
+          },
+          {
+            "type": "reference",
+            "path": ".then/references/imports/消えたスレッドの資料.md",
+            "createdAt": 1
+          },
+          {
+            "type": "reference",
+            "path": ".then/references/imports/重複.md",
+            "createdAt": 2
+          }
+        ]
+      },
+      {
+        "kind": "thread",
+        "title": "共有のスレッド",
+        "starred": true,
+        "createdAt": 1767225601200,
+        "updatedAt": 1767225601200,
+        "items": [
+          {
+            "type": "idea",
+            "body": "共有の断片の一",
+            "used": false,
+            "createdAt": 1767225601200,
+            "updatedAt": 1767225601200
+          },
+          {
+            "type": "idea",
+            "body": "共有の断片の二",
+            "used": true,
+            "createdAt": 1767225601300,
+            "updatedAt": 1767225601300
+          }
+        ]
+      }
+    ],
+    "openCards": []
+  },
+  "作品C": {
+    "threads": [
+      {
+        "kind": "inbox",
+        "title": "インボックス",
+        "starred": false,
+        "createdAt": 1767225601000,
+        "updatedAt": 1767225601000,
+        "items": [
+          {
+            "type": "idea",
+            "body": "共有のインボックスの一",
+            "used": false,
+            "createdAt": 1767225601000,
+            "updatedAt": 1767225601000
+          },
+          {
+            "type": "idea",
+            "body": "共有のインボックスの二",
+            "used": false,
+            "createdAt": 1767225601100,
+            "updatedAt": 1767225601100
+          }
+        ]
+      },
+      {
+        "kind": "thread",
+        "title": "共有のスレッド",
+        "starred": true,
+        "createdAt": 1767225601200,
+        "updatedAt": 1767225601200,
+        "items": [
+          {
+            "type": "idea",
+            "body": "共有の断片の一",
+            "used": false,
+            "createdAt": 1767225601200,
+            "updatedAt": 1767225601200
+          },
+          {
+            "type": "idea",
+            "body": "共有の断片の二",
+            "used": true,
+            "createdAt": 1767225601300,
+            "updatedAt": 1767225601300
+          }
+        ]
+      }
+    ],
+    "openCards": []
+  },
+  "作品D": {
+    "threads": [
+      {
+        "kind": "inbox",
+        "title": "インボックス",
+        "starred": false,
+        "createdAt": 1767225601000,
+        "updatedAt": 1767225601000,
+        "items": [
+          {
+            "type": "idea",
+            "body": "共有のインボックスの一",
+            "used": false,
+            "createdAt": 1767225601000,
+            "updatedAt": 1767225601000
+          },
+          {
+            "type": "idea",
+            "body": "共有のインボックスの二",
+            "used": false,
+            "createdAt": 1767225601100,
+            "updatedAt": 1767225601100
+          }
+        ]
+      },
+      {
+        "kind": "thread",
+        "title": "共有のスレッド",
+        "starred": true,
+        "createdAt": 1767225601200,
+        "updatedAt": 1767225601200,
+        "items": [
+          {
+            "type": "idea",
+            "body": "共有の断片の一",
+            "used": false,
+            "createdAt": 1767225601200,
+            "updatedAt": 1767225601200
+          },
+          {
+            "type": "idea",
+            "body": "共有の断片の二",
+            "used": true,
+            "createdAt": 1767225601300,
+            "updatedAt": 1767225601300
+          }
+        ]
+      }
+    ],
+    "openCards": []
+  },
+  "作品E": {
+    "threads": [
+      {
+        "kind": "inbox",
+        "title": "インボックス",
+        "starred": false,
+        "createdAt": 1767225601000,
+        "updatedAt": 1767225601000,
+        "items": [
+          {
+            "type": "idea",
+            "body": "共有のインボックスの一",
+            "used": false,
+            "createdAt": 1767225601000,
+            "updatedAt": 1767225601000
+          },
+          {
+            "type": "idea",
+            "body": "共有のインボックスの二",
+            "used": false,
+            "createdAt": 1767225601100,
+            "updatedAt": 1767225601100
+          }
+        ]
+      },
+      {
+        "kind": "thread",
+        "title": "共有のスレッド",
+        "starred": true,
+        "createdAt": 1767225601200,
+        "updatedAt": 1767225601200,
+        "items": [
+          {
+            "type": "idea",
+            "body": "共有の断片の一",
+            "used": false,
+            "createdAt": 1767225601200,
+            "updatedAt": 1767225601200
+          },
+          {
+            "type": "idea",
+            "body": "共有の断片の二",
+            "used": true,
+            "createdAt": 1767225601300,
+            "updatedAt": 1767225601300
+          }
+        ]
+      }
+    ],
+    "openCards": []
+  },
+  "（ライブラリの直下）": {
+    "threads": [
+      {
+        "kind": "inbox",
+        "title": "インボックス",
+        "starred": false,
+        "createdAt": 1767225601000,
+        "updatedAt": 1767225601000,
+        "items": [
+          {
+            "type": "idea",
+            "body": "共有のインボックスの一",
+            "used": false,
+            "createdAt": 1767225601000,
+            "updatedAt": 1767225601000
+          },
+          {
+            "type": "idea",
+            "body": "共有のインボックスの二",
+            "used": false,
+            "createdAt": 1767225601100,
+            "updatedAt": 1767225601100
+          },
+          {
+            "type": "reference",
+            "path": ".then/references/imports/港の写真.png",
+            "createdAt": 1
+          }
+        ]
+      },
+      {
+        "kind": "thread",
+        "title": "共有のスレッド",
+        "starred": true,
+        "createdAt": 1767225601200,
+        "updatedAt": 1767225601200,
+        "items": [
+          {
+            "type": "idea",
+            "body": "共有の断片の一",
+            "used": false,
+            "createdAt": 1767225601200,
+            "updatedAt": 1767225601200
+          },
+          {
+            "type": "idea",
+            "body": "共有の断片の二",
+            "used": true,
+            "createdAt": 1767225601300,
+            "updatedAt": 1767225601300
+          }
+        ]
+      }
+    ],
+    "openCards": []
+  }
+}

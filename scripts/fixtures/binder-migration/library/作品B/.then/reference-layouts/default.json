@@ -1,0 +1,62 @@
+{
+  "version": 3,
+  "name": "default",
+  "cards": [],
+  "recent": [],
+  "ideaThreadsMode": "workspace",
+  "ideaThreads": [
+    {
+      "threadId": "idea-inbox",
+      "items": [
+        {
+          "sourceType": "idea",
+          "fragmentId": "b-i1"
+        }
+      ]
+    },
+    {
+      "threadId": "b-t1",
+      "items": [
+        {
+          "sourceType": "idea",
+          "fragmentId": "b-gone"
+        },
+        {
+          "sourceType": "idea",
+          "fragmentId": "b-s1"
+        },
+        {
+          "id": "b-r1",
+          "sourceType": "reference",
+          "sourcePath": ".then\\references\\imports\\重複.md",
+          "createdAt": 1767225600220
+        },
+        {
+          "id": "b-r2",
+          "sourceType": "reference",
+          "sourcePath": ".then/references/imports/重複.md",
+          "createdAt": 1767225600230
+        },
+        {
+          "sourceType": "idea",
+          "fragmentId": "b-s1"
+        }
+      ]
+    },
+    {
+      "threadId": "b-deleted",
+      "items": [
+        {
+          "sourceType": "idea",
+          "fragmentId": "b-x"
+        },
+        {
+          "id": "b-r3",
+          "sourceType": "reference",
+          "sourcePath": ".then/references/imports/消えたスレッドの資料.md",
+          "createdAt": 1767225600240
+        }
+      ]
+    }
+  ]
+}
