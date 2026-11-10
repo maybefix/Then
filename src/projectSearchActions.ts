@@ -7,6 +7,7 @@ import type {
   ProjectSearchOutcome,
   ProjectSearchResult,
 } from "./editor/ast/types";
+import { isDocumentConflict } from "./editor/saveJournal";
 import { replaceMarkdownBodyMatches } from "./search/editorFindReplace";
 import type { TextSearchOptions } from "./search/textSearch";
 import type { AppState, DocumentTab, ProjectFolder, SaveStatus, TextDocument } from "./types";
@@ -195,6 +196,8 @@ export function createProjectSearchActions(deps: ProjectSearchActionDeps) {
             ...tab,
             markdown: document.content,
             savedMarkdown: document.content,
+            contentHash: document.contentHash ?? tab.contentHash,
+            fileId: document.fileId ?? tab.fileId,
             editorRevision: null,
             name: document.name,
             saveStatus: "saved",
@@ -215,6 +218,8 @@ export function createProjectSearchActions(deps: ProjectSearchActionDeps) {
     };
     // 失敗したときに、今のファイルの失敗かを見分けるため、処理中のファイルを覚えておく。
     let processingPath: string | null = null;
+    // ほかのアプリで変わっていたので置換しなかったファイルの数。
+    let changedOutsideCount = 0;
     try {
       const files = collectProjectTextFiles(projectFolder);
       let totalCount = 0;
@@ -222,11 +227,17 @@ export function createProjectSearchActions(deps: ProjectSearchActionDeps) {
       for (const file of files) {
         processingPath = file.path;
         const openTab = openTabs.find((tab) => tab.path === file.path);
-        const sourceMarkdown =
-          openTab?.path === currentFilePath
-            ? markdown
-            : openTab?.markdown ??
-              (await invoke<TextDocument>("read_text_file", { path: file.path })).content;
+        // 書くのは、置換の元にしたファイル（タブなら開いたときの、ほかは今読んだ中身）の上だけ。
+        let sourceMarkdown: string;
+        let expectedHash: string | null;
+        if (openTab) {
+          sourceMarkdown = openTab.path === currentFilePath ? markdown : openTab.markdown;
+          expectedHash = openTab.contentHash;
+        } else {
+          const read = await invoke<TextDocument>("read_text_file", { path: file.path });
+          sourceMarkdown = read.content;
+          expectedHash = read.contentHash ?? null;
+        }
         const result = replaceMarkdownBodyMatches(
           sourceMarkdown,
           projectSearchQuery,
@@ -236,10 +247,18 @@ export function createProjectSearchActions(deps: ProjectSearchActionDeps) {
         if (result.error) throw new Error(result.error);
         if (result.count === 0) continue;
 
-        const document = await invoke<TextDocument>("save_text_file", {
-          path: file.path,
-          content: result.markdown,
-        });
+        let document: TextDocument;
+        try {
+          document = await invoke<TextDocument>("save_text_file", {
+            path: file.path,
+            content: result.markdown,
+            expectedHash,
+          });
+        } catch (error) {
+          if (!isDocumentConflict(error)) throw error;
+          changedOutsideCount += 1;
+          continue;
+        }
         savedDocuments.push(document);
         totalCount += result.count;
         setProjectAst((current) =>
@@ -253,13 +272,16 @@ export function createProjectSearchActions(deps: ProjectSearchActionDeps) {
         );
       }
 
+      const changedOutsideNote = changedOutsideCount
+        ? `（ほかのアプリで変更された${changedOutsideCount}ファイルは置換していません）`
+        : "";
       if (!savedDocuments.length) {
-        showToast("置換できる一致がありません");
+        showToast(changedOutsideCount ? changedOutsideNote.slice(1, -1) : "置換できる一致がありません");
         return;
       }
 
       applySavedDocuments();
-      showToast(`${totalCount}件をプロジェクト全体で置換しました`);
+      showToast(`${totalCount}件をプロジェクト全体で置換しました${changedOutsideNote}`);
     } catch (error) {
       if (savedDocuments.length) applySavedDocuments();
       setLastError(String(error));

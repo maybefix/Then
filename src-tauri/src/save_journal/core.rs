@@ -329,10 +329,29 @@ impl Journal {
     /// Start journaling a document. `text` is what Then shows before the first
     /// recorded change (the file's own text when None); it is generation 0.
     pub fn start<F: Fs>(fs: &mut F, dir: &Path, doc: &Path, text: Option<Vec<u8>>) -> R<Journal> {
+        Self::start_from(fs, dir, doc, text, None, None)
+    }
+
+    /// Like `start`, from the file state Then knows: `opened` is the hash of
+    /// the file when the tab read it, `then_wrote` the hash of what Then last
+    /// wrote there by another path. If the file is neither, it changed outside
+    /// Then, so `opened` stays the known state and the first save refuses.
+    pub fn start_from<F: Fs>(
+        fs: &mut F,
+        dir: &Path,
+        doc: &Path,
+        text: Option<Vec<u8>>,
+        opened: Option<Hash>,
+        then_wrote: Option<Hash>,
+    ) -> R<Journal> {
         fs.mkdirs(dir)?;
         let disk = fs.read(doc)?;
         let id = fs.file_id(doc)?.unwrap_or_default();
-        let disk_hash = sha(&disk);
+        let on_disk = sha(&disk);
+        let disk_hash = match opened {
+            Some(opened) if opened != on_disk && then_wrote != Some(on_disk) => opened,
+            _ => on_disk,
+        };
         let content = text.unwrap_or(disk);
         let log = seg_log(dir, 0);
         fs.create_write(&log, &[])?;

@@ -211,4 +211,34 @@ for (const failRate of [0, 0.5]) {
   }
   client.forgetDocumentJournal(key);
 }
+// The hash of the file when the tab read it goes with the batch that opens
+// the journal, and with a save that may open one (BINDER 1-3a).
+{
+  const sent = [];
+  globalThis.__fakeInvoke = async (command, args) => {
+    sent.push({ command, base: args.base ?? null, expectedHash: args.expectedHash ?? null });
+    if (command === "journal_save") return { path: args.path, name: "h.md", content: args.content, contentHash: "next" };
+    return undefined;
+  };
+  await client.saveThroughJournal("hash-save-first", "C:/novel/h.md", "本文", null, "opened");
+  assert.deepEqual(sent.splice(0), [{ command: "journal_save", base: null, expectedHash: "opened" }]);
+
+  client.recordDocumentChange("hash-edit", "C:/novel/h.md", "本文", "本文。", null, "opened");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  client.recordDocumentChange("hash-edit", "C:/novel/h.md", "本文。", "本文。。", null, "ignored later");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await client.saveThroughJournal("hash-edit", "C:/novel/h.md", "本文。。");
+  assert.deepEqual(sent.splice(0), [
+    { command: "journal_edits", base: "本文", expectedHash: "opened" },
+    { command: "journal_edits", base: null, expectedHash: null },
+    { command: "journal_save", base: null, expectedHash: "opened" },
+  ]);
+  client.forgetDocumentJournal("hash-edit");
+  sent.length = 0;
+
+  assert.equal(client.isDocumentConflict(new Error("document content conflict: ファイルが外部で変更されたため保存しませんでした")), true);
+  assert.equal(client.isDocumentConflict("disk full"), false);
+  await client.acceptDiskState("hash-edit", "C:/novel/h.md", "seen");
+  assert.deepEqual(sent, [{ command: "journal_accept_disk", base: null, expectedHash: "seen" }]);
+}
 console.log("save journal client tests passed");

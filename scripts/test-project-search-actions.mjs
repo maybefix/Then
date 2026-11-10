@@ -119,18 +119,25 @@ const reset = (overrides = {}) => {
     lineJumps: [],
     invokes: [],
     failSavePath: null,
+    // ほかのアプリで変わったことにするファイル（保存は document content conflict で断られる）。
+    changedOutsidePaths: [],
+    expectedHashes: {},
     ...overrides,
   };
   globalThis.__invoke = async (command, args) => {
     s.invokes.push({ command, path: args.path });
     if (command === "read_text_file") {
       if (!(args.path in s.disk)) throw new Error(`missing ${args.path}`);
-      return { path: args.path, name: args.path.split("/").pop(), content: s.disk[args.path] };
+      return { path: args.path, name: args.path.split("/").pop(), content: s.disk[args.path], contentHash: `read:${args.path}` };
     }
     if (command === "save_text_file") {
+      s.expectedHashes[args.path] = args.expectedHash;
       if (args.path === s.failSavePath) throw new Error(`disk full: ${args.path}`);
+      if (s.changedOutsidePaths.includes(args.path)) {
+        throw new Error("document content conflict: ファイルが外部で変更されたため保存しませんでした（content changed）");
+      }
       s.disk[args.path] = args.content;
-      return { path: args.path, name: args.path.split("/").pop(), content: args.content };
+      return { path: args.path, name: args.path.split("/").pop(), content: args.content, contentHash: `saved:${args.path}` };
     }
     throw new Error(`unexpected command ${command}`);
   };
@@ -257,6 +264,40 @@ assert.deepEqual(s.toasts, ["3件をプロジェクト全体で置換しまし�
 reset({ projectSearchQuery: "照合(語)", projectReplaceValue: "[$1]", projectSearchOptions: { useRegex: true, matchCase: false } });
 await actions().handleReplaceInProject();
 assert.equal(s.disk[`${ROOT}/b.md`], "# B\n[語]と[語]。追記\n");
+
+// ほかのアプリで変わったファイルは置換しない（BINDER 1-3a）。開いているタブは開いたときのハッシュ、
+// 開いていないファイルは今読んだハッシュで比べ、ほかのファイルは置換して、置換しなかった数を知らせる。
+reset({
+  openTabs: [
+    tab("a.md", "# A\n照合語がある。\n", { saveStatus: "dirty", contentHash: "opened:a" }),
+    tab("b.md", "# B\n照合語と照合語。追記\n", { contentHash: "opened:b" }),
+    tab("other.md", "# 他\n照合語\n"),
+  ],
+  changedOutsidePaths: [`${ROOT}/b.md`],
+});
+await actions().handleReplaceInProject();
+assert.deepEqual(s.expectedHashes, {
+  [`${ROOT}/a.md`]: "opened:a",
+  [`${ROOT}/b.md`]: "opened:b",
+  [`${ROOT}/章/c.md`]: `read:${ROOT}/章/c.md`,
+});
+assert.equal(s.disk[`${ROOT}/b.md`], "# B\n照合語と照合語。\n", "the outside change stays");
+assert.deepEqual(
+  s.openTabs.map((item) => [item.name, item.markdown, item.saveStatus, item.contentHash]),
+  [
+    ["a.md", "# A\n照合済がある。編集中\n", "saved", `saved:${ROOT}/a.md`],
+    ["b.md", "# B\n照合語と照合語。追記\n", "saved", "opened:b"],
+    ["other.md", "# 他\n照合語\n", "saved", undefined],
+  ],
+  "the skipped tab keeps its text; saved tabs take the new hash",
+);
+assert.deepEqual(s.lastErrors, [""]);
+assert.deepEqual(s.toasts, ["2件をプロジェクト全体で置換しました（ほかのアプリで変更された1ファイルは置換していません）"]);
+
+reset({ changedOutsidePaths: [`${ROOT}/a.md`, `${ROOT}/b.md`, `${ROOT}/章/c.md`] });
+await actions().handleReplaceInProject();
+assert.deepEqual(s.toasts, ["ほかのアプリで変更された3ファイルは置換していません"]);
+assert.deepEqual(s.saveStatuses, []);
 
 // 一致がひとつもないとき。
 reset({ projectSearchQuery: "存在しない語" });

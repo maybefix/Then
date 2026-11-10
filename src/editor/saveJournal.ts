@@ -54,6 +54,12 @@ type DocumentJournal = {
   path: string;
   /** Text of generation 0; sent with every batch until the backend has it. */
   base: string | null;
+  /**
+   * Hash of the file when the tab read it (TextDocument.contentHash). The
+   * backend compares the file with it when the journal opens, so a change made
+   * outside Then before the first edit is not saved over.
+   */
+  expectedHash: string | null;
   queue: Edit[];
   /** Latest generation recorded here. */
   gen: number;
@@ -87,7 +93,13 @@ function send(key: string, journal: DocumentJournal) {
   if (journal.queue.length === 0) return;
   const edits = journal.queue.splice(0);
   const last = edits[edits.length - 1].gen;
-  journal.sending = invoke<void>("journal_edits", { key, path: journal.path, base: journal.base, edits })
+  journal.sending = invoke<void>("journal_edits", {
+    key,
+    path: journal.path,
+    base: journal.base,
+    expectedHash: journal.base === null ? null : journal.expectedHash,
+    edits,
+  })
     .then(() => {
       journal.base = null;
       journal.acknowledged = Math.max(journal.acknowledged, last);
@@ -129,12 +141,14 @@ export function recordDocumentChange(
   previous: string,
   next: string,
   change: TextSplice | null = null,
+  expectedHash: string | null = null,
 ) {
   let journal = journals.get(key);
   if (!journal) {
     journal = {
       path,
       base: previous,
+      expectedHash,
       queue: [],
       gen: 0,
       acknowledged: 0,
@@ -184,18 +198,22 @@ export function journalPositionOf(key: string, text: string): number {
 /**
  * Autosave through the journal: writes `content`, the text of generation
  * `gen` (from journalPositionOf at request time). Changes after it keep being
- * recorded meanwhile and stay for the next save.
+ * recorded meanwhile and stay for the next save. `expectedHash` is the hash
+ * of the file when the tab read it; the backend uses it only if it has no
+ * journal open for `key` yet.
  */
 export async function saveThroughJournal(
   key: string,
   path: string,
   content: string,
   gen?: number | null,
+  expectedHash: string | null = null,
 ): Promise<TextDocument> {
   const journal = journals.get(key);
   if (!journal) {
-    return invoke<TextDocument>("journal_save", { key, path, gen: 0, content });
+    return invoke<TextDocument>("journal_save", { key, path, gen: 0, content, expectedHash });
   }
+  expectedHash = expectedHash ?? journal.expectedHash;
   // Without a position, the text names its own generation only if it is the
   // current one; otherwise the backend keeps the text itself in its intent.
   const target = gen ?? journal.gen;
@@ -205,7 +223,7 @@ export async function saveThroughJournal(
     await journal.sending;
   }
   try {
-    return await invoke<TextDocument>("journal_save", { key, path, gen: target, content });
+    return await invoke<TextDocument>("journal_save", { key, path, gen: target, content, expectedHash });
   } catch (error) {
     if (journal.acknowledged < target) journal.needsResync = true;
     throw error;
@@ -248,8 +266,14 @@ export function discardRecovery(id: string): Promise<void> {
  * Record a restored text as the tab's change from `savedText` (the file) and
  * resolve once the backend has it, so the earlier run's folder can go.
  */
-export async function recordRestoredText(key: string, path: string, savedText: string, text: string) {
-  recordDocumentChange(key, path, savedText, text);
+export async function recordRestoredText(
+  key: string,
+  path: string,
+  savedText: string,
+  text: string,
+  expectedHash: string | null = null,
+) {
+  recordDocumentChange(key, path, savedText, text, null, expectedHash);
   const journal = journals.get(key)!;
   const target = journal.gen;
   // A lost batch goes out again as the whole text; a few tries, not a loop.
@@ -258,6 +282,19 @@ export async function recordRestoredText(key: string, path: string, savedText: s
     while (journal.sending) await journal.sending;
   }
   if (journal.acknowledged < target) throw new Error("復旧用の記録を書けませんでした");
+}
+
+/** The save was refused because the file is not the one the tab read (see CONFLICT in the backend). */
+export function isDocumentConflict(error: unknown): boolean {
+  return String(error).includes("document content conflict");
+}
+
+/**
+ * 「この内容で上書きする」: the person saw the file whose hash is
+ * `expectedHash`; the next save writes over it. Refused if it changed again.
+ */
+export function acceptDiskState(key: string, path: string, expectedHash: string): Promise<void> {
+  return invoke<void>("journal_accept_disk", { key, path, expectedHash });
 }
 
 /** The tab closed after the person chose what to keep: drop its journal. */
