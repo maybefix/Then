@@ -124,11 +124,7 @@ import {
 } from "./editor/documentTabState";
 import { mapTextOffsetThroughChange } from "./editor/textOffsetMapping";
 import { recordImportedProject } from "./utils/library";
-import {
-  rewriteThreadItems,
-  threadItemReferencePaths,
-  type ReferenceRewrite,
-} from "./utils/libraryTransfer";
+import { type ReferenceRewrite } from "./utils/libraryTransfer";
 import { displayedCharacterCount } from "./editor/ast/characterCount";
 import {
   createWorkspaceDocumentTabs,
@@ -153,20 +149,12 @@ import {
 } from "./search/editorFindReplace";
 import {
   CANVAS_LIVE_DATA_EVENT,
-  createCanvasDocument,
-  createCanvasEdge,
-  createCanvasGroupNode,
-  createCanvasTextNode,
-  normalizeCanvasDocument,
-  type CanvasBoardSummary,
   type CanvasCopyToIdeaRequest,
   type CanvasCopyToPlotRequest,
   type CanvasFocusIdeaRequest,
   type CanvasLiveDataEvent,
-  type CanvasNode,
   type CanvasScope,
   type CanvasWindowPayload,
-  type JsonCanvasDocument,
 } from "./canvasTypes";
 import {
   appendPlotChapter,
@@ -184,11 +172,8 @@ import {
   reconcileIdeaThreadLayouts,
   sameIdeaThreadLayouts,
 } from "./ideaReferenceModel";
-import {
-  defaultIdeaThreads,
-  normalizeIdeaThreads,
-} from "./ideaThreadModel";
 import { createIdeaThreadActions } from "./ideaThreadActions";
+import { loadWorkspaceSnippets, saveWorkspaceSnippets } from "./ideaThreadStorage";
 import { createProjectEntryActions } from "./projectEntryActions";
 import { createWorkspaceTreeActions } from "./workspaceTreeActions";
 import { createProjectSearchActions } from "./projectSearchActions";
@@ -196,7 +181,6 @@ import { createHeadingMoveActions } from "./headingMoveActions";
 import { createTemplateActions } from "./templateActions";
 import { createSystemFontLoader } from "./systemFonts";
 import { useSystemFonts } from "./useSystemFonts";
-import { nextCanvasPlacement } from "./canvasPlacement";
 import { countDisplayCharacters } from "./editor/displayCharacterCount";
 import { referenceCardKey, upsertRecentReference, upsertRecentReferences, nextReferenceZIndex } from "./referenceCardModel";
 import {
@@ -237,9 +221,7 @@ import type {
   EditorSettings,
   FileProgressStatus,
   FlatOutlineItem,
-  IdeaOriginRef,
   IdeaReferenceLink,
-  IdeaThread,
   ManuscriptSnapshot,
   ManuscriptSnapshotFile,
   OutlineItem,
@@ -621,17 +603,6 @@ async function saveStoredState(state: AppState): Promise<void> {
 
 const loadSystemFonts = createSystemFontLoader(isTauriRuntime);
 
-async function loadWorkspaceSnippets(folderPath: string): Promise<IdeaThread[]> {
-  if (!isTauriRuntime()) return defaultIdeaThreads();
-  const loaded = await invoke<IdeaThread[]>("load_project_snippets", { rootPath: folderPath });
-  return loaded.length ? normalizeIdeaThreads(loaded) : defaultIdeaThreads();
-}
-
-async function saveWorkspaceSnippets(folderPath: string, snippets: IdeaThread[]): Promise<void> {
-  if (!isTauriRuntime()) return;
-  await invoke("save_project_snippets", { rootPath: folderPath, snippets });
-}
-
 async function loadWorkspaceProofreadTerms(folderPath: string): Promise<ProofreadTerm[]> {
   if (!isTauriRuntime()) return [];
   const terms = await invoke<unknown>("load_project_proofread_terms", { rootPath: folderPath });
@@ -807,63 +778,6 @@ async function listReferenceCandidates(folderPath: string): Promise<ReferenceFil
     rootPath: folderPath,
     scope: "project",
   });
-}
-
-async function listCanvasBoards(
-  scope: CanvasScope,
-  rootPath: string | null,
-): Promise<CanvasBoardSummary[]> {
-  if (!isTauriRuntime()) return [];
-  return await invoke<CanvasBoardSummary[]>("list_canvas_boards", { scope, rootPath });
-}
-
-async function createCanvasBoard(
-  scope: CanvasScope,
-  rootPath: string | null,
-  name: string,
-): Promise<CanvasBoardSummary> {
-  if (!isTauriRuntime()) {
-    return {
-      id: "browser-preview",
-      name,
-      path: "",
-      scope,
-      updatedAt: Date.now(),
-      nodeCount: 0,
-      edgeCount: 0,
-    };
-  }
-  return await invoke<CanvasBoardSummary>("create_canvas_board", { scope, rootPath, name });
-}
-
-async function loadCanvasBoard(
-  scope: CanvasScope,
-  rootPath: string | null,
-  boardId: string,
-): Promise<JsonCanvasDocument> {
-  if (!isTauriRuntime()) return createCanvasDocument("Idea Board", scope);
-  const board = await invoke<unknown>("load_canvas_board", { scope, rootPath, boardId });
-  return normalizeCanvasDocument(board, "Idea Board", scope);
-}
-
-async function saveCanvasBoard(
-  scope: CanvasScope,
-  rootPath: string | null,
-  boardId: string,
-  board: JsonCanvasDocument,
-): Promise<void> {
-  if (!isTauriRuntime()) return;
-  await invoke("save_canvas_board", { scope, rootPath, boardId, board });
-}
-
-async function ensureCanvasBoard(
-  scope: CanvasScope,
-  rootPath: string | null,
-  name: string,
-): Promise<CanvasBoardSummary> {
-  const boards = await listCanvasBoards(scope, rootPath);
-  if (boards.length > 0) return boards[0];
-  return await createCanvasBoard(scope, rootPath, name);
 }
 
 export default function App() {
@@ -6357,84 +6271,6 @@ export default function App() {
     return false;
   };
 
-  const transferIdeaThread = async (threadId: string) => {
-    if (!ensureIdeaTransferAvailable()) return;
-    const thread = snippets.find((item) => item.id === threadId);
-    if (!thread || thread.kind === "inbox") return;
-    const layout = referenceLayout.ideaThreads.find((item) => item.threadId === threadId);
-    const referencedPaths = threadItemReferencePaths(layout?.items ?? []);
-    const options = await requestTransferOptions({
-      itemLabel: "スレッド",
-      referenceCount: referencedPaths.filter(isExistingReference).length,
-    });
-    if (!options) return;
-    try {
-      const rewrite = await prepareReferenceRewrite(options.target, referencedPaths, options.copyReferences);
-      const fragmentIds = new Map(thread.fragments.map((fragment) => [fragment.id, crypto.randomUUID()]));
-      const copiedThread: IdeaThread = {
-        ...thread,
-        id: crypto.randomUUID(),
-        updatedAt: Date.now(),
-        fragments: thread.fragments.map((fragment) => ({
-          ...fragment,
-          id: fragmentIds.get(fragment.id) ?? crypto.randomUUID(),
-        })),
-      };
-      const [targetThreads, targetLayout] = await Promise.all([
-        loadWorkspaceSnippets(options.target),
-        loadReferenceLayout(options.target),
-      ]);
-      await saveWorkspaceSnippets(options.target, [...targetThreads, copiedThread]);
-      if (layout) {
-        const items = rewriteThreadItems(layout.items, rewrite).map((item) =>
-          item.sourceType === "idea"
-            ? { ...item, fragmentId: fragmentIds.get(item.fragmentId) ?? item.fragmentId }
-            : { ...item, id: crypto.randomUUID() },
-        );
-        // 移す先は作品ごとの Idea なので、相手の並び順も作品ごとの側に合わせてから足す。
-        const workspaceLayout = alignIdeaLayoutToMode(targetLayout, "workspace");
-        await saveReferenceLayout(options.target, {
-          ...workspaceLayout,
-          ideaThreads: [...workspaceLayout.ideaThreads, { threadId: copiedThread.id, items }],
-        });
-      }
-      if (options.move) updateIdeaThreads((threads) => threads.filter((item) => item.id !== threadId));
-      showToast(`スレッドを${options.targetLabel}へ${options.move ? "移動" : "コピー"}しました`);
-    } catch (error) {
-      reportTransferError(error);
-    }
-  };
-
-  const transferIdeaFragment = async (threadId: string, fragmentId: string) => {
-    if (!ensureIdeaTransferAvailable()) return;
-    const fragment = snippets
-      .find((item) => item.id === threadId)
-      ?.fragments.find((item) => item.id === fragmentId);
-    if (!fragment) return;
-    const options = await requestTransferOptions({ itemLabel: "断片", referenceCount: 0 });
-    if (!options) return;
-    try {
-      const targetThreads = await loadWorkspaceSnippets(options.target);
-      const copiedFragment = { ...fragment, id: crypto.randomUUID(), updatedAt: Date.now() };
-      // 送り先では未整理メモ（インボックス）に入れる。読み込みで必ずインボックスが補われる。
-      const nextThreads = targetThreads.map((item) =>
-        item.kind === "inbox"
-          ? { ...item, updatedAt: Date.now(), fragments: [...item.fragments, copiedFragment] }
-          : item,
-      );
-      await saveWorkspaceSnippets(options.target, nextThreads);
-      if (options.move) {
-        patchThread(threadId, (thread) => ({
-          ...thread,
-          fragments: thread.fragments.filter((item) => item.id !== fragmentId),
-        }));
-      }
-      showToast(`断片を${options.targetLabel}のインボックスへ${options.move ? "移動" : "コピー"}しました`);
-    } catch (error) {
-      reportTransferError(error);
-    }
-  };
-
   const transferReferenceFile = async (file: ReferenceFileInfo) => {
     if (!projectFolder) return;
     const options = await requestTransferOptions({
@@ -6842,44 +6678,6 @@ export default function App() {
     return editorInstanceRef.current;
   };
 
-  const insertParagraph = (text: string, pos?: number) => {
-    const view = getEditorView();
-    if (!view) return false;
-
-    const selection = view.getSelection();
-    const insertFrom = typeof pos === "number" ? pos : selection.from;
-    const insertTo = typeof pos === "number" ? pos : selection.to;
-    const doc = view.getValue();
-    const before = insertFrom > 0 ? doc.slice(insertFrom - 1, insertFrom) : "\n";
-    const after = insertTo < doc.length ? doc.slice(insertTo, insertTo + 1) : "\n";
-    const prefix = before === "\n" ? "" : "\n";
-    const suffix = after === "\n" ? "" : "\n";
-    const insertedText = `${prefix}${text}${suffix}`;
-    const cursorPos = insertFrom + prefix.length + text.length;
-
-    view.replaceRange(insertFrom, insertTo, insertedText, cursorPos);
-    view.focus();
-    return true;
-  };
-
-  const markFragmentUsed = (threadId: string, fragmentId: string, used: boolean) => {
-    patchThread(threadId, (thread) => ({
-      ...thread,
-      fragments: thread.fragments.map((fragment) =>
-        fragment.id === fragmentId
-          ? { ...fragment, used, updatedAt: Date.now() }
-          : fragment,
-      ),
-    }));
-  };
-
-  const toggleFragmentUsed = (threadId: string, fragmentId: string) => {
-    const thread = snippets.find((item) => item.id === threadId);
-    const fragment = thread?.fragments.find((item) => item.id === fragmentId);
-    if (!fragment) return;
-    markFragmentUsed(threadId, fragmentId, !fragment.used);
-  };
-
   const openIdeaBinderCard = (threadId: string, fragmentId: string) => {
     const thread = snippets.find((item) => item.id === threadId);
     const fragment = thread?.fragments.find((item) => item.id === fragmentId);
@@ -6933,62 +6731,7 @@ export default function App() {
     });
   };
 
-  const reorderFragment = (
-    threadId: string,
-    fragmentId: string,
-    targetFragmentId: string,
-    position: "before" | "after",
-  ) => {
-    if (fragmentId === targetFragmentId) return;
-    const thread = snippets.find((item) => item.id === threadId);
-    const originalIndex = thread?.fragments.findIndex((item) => item.id === fragmentId) ?? -1;
-    const moving = originalIndex >= 0 ? thread?.fragments[originalIndex] : null;
-    if (!thread || !moving) return;
-
-    const withoutMoving = thread.fragments.filter((fragment) => fragment.id !== fragmentId);
-    const targetIndex = withoutMoving.findIndex((fragment) => fragment.id === targetFragmentId);
-    if (targetIndex < 0) return;
-
-    const insertIndex = position === "after" ? targetIndex + 1 : targetIndex;
-    const fragments = [...withoutMoving];
-    fragments.splice(insertIndex, 0, moving);
-    const orderChanged = fragments.some(
-      (fragment, index) => fragment.id !== thread.fragments[index]?.id,
-    );
-    if (!orderChanged) return;
-
-    patchThread(threadId, (current) => ({ ...current, fragments }));
-    showToast("並び順を変更しました", {
-      label: "元に戻す",
-      onClick: () => {
-        patchThread(threadId, (current) => {
-          const currentIndex = current.fragments.findIndex((item) => item.id === fragmentId);
-          if (currentIndex < 0) return current;
-          const next = [...current.fragments];
-          const [currentFragment] = next.splice(currentIndex, 1);
-          next.splice(Math.min(originalIndex, next.length), 0, currentFragment);
-          return { ...current, fragments: next };
-        });
-        showToast("並び替えを元に戻しました");
-      },
-    });
-  };
-
-  const requestNewIdeaThreadName = async (): Promise<string | null> => {
-    const value = await requestInput({
-      title: "新規スレッドに追加",
-      label: "スレッド名",
-      initialValue: "",
-      placeholder: "新しいスレッド名",
-      confirmLabel: "作成",
-    });
-    const title = value?.trim() ?? "";
-    return title || null;
-  };
-
   const {
-    updateIdeaThreads,
-    patchThread,
     handleFragmentDragStart,
     handleFragmentDragEnd,
     blockIdeaDropOnEditor,
@@ -7005,6 +6748,8 @@ export default function App() {
     deleteIdeaThread,
     receiveCanvasCopyToIdea,
     receiveCanvasFocusIdea,
+    transferIdeaThread,
+    transferIdeaFragment,
   } = createIdeaThreadActions({
     snippets,
     referenceLayout,
@@ -7016,159 +6761,15 @@ export default function App() {
     setIsRightSidebarCollapsed,
     showToast,
     requestConfirm,
-    requestNewIdeaThreadName,
+    requestInput,
+    requestTransferOptions,
+    isExistingReference,
+    prepareReferenceRewrite,
+    reportTransferError,
+    loadReferenceLayout,
+    saveReferenceLayout,
+    ensureIdeaTransferAvailable,
   });
-
-  const insertFragmentToEditor = (threadId: string, fragmentId: string) => {
-    const thread = snippets.find((item) => item.id === threadId);
-    const fragment = thread?.fragments.find((item) => item.id === fragmentId);
-    if (!fragment) return;
-    if (insertParagraph(fragment.body)) {
-      markFragmentUsed(threadId, fragmentId, true);
-      showToast("本文へ挿入しました");
-    }
-  };
-
-  const insertThreadToEditor = (threadId: string) => {
-    const thread = snippets.find((item) => item.id === threadId);
-    if (!thread) return;
-    const pending = thread.fragments.filter((fragment) => !fragment.used);
-    if (pending.length === 0) {
-      showToast("未使用の断片がありません");
-      return;
-    }
-    if (insertParagraph(pending.map((fragment) => fragment.body).join("\n"))) {
-      const pendingIds = new Set(pending.map((fragment) => fragment.id));
-      const now = Date.now();
-      patchThread(threadId, (current) => ({
-        ...current,
-        fragments: current.fragments.map((fragment) =>
-          pendingIds.has(fragment.id)
-            ? { ...fragment, used: true, updatedAt: now }
-            : fragment,
-        ),
-      }));
-      showToast(`${pending.length} 件を本文へ挿入しました`);
-    }
-  };
-
-  const openCanvasOrigin = (origin: IdeaOriginRef) => {
-    void openIdeaCanvasBoard(origin.sourceBoardScope, origin.sourceBoardId, origin.sourceId);
-  };
-
-  const sendIdeaFragmentToCanvas = async (threadId: string, fragmentId: string) => {
-    const thread = snippets.find((item) => item.id === threadId);
-    const fragment = thread?.fragments.find((item) => item.id === fragmentId);
-    if (!thread || !fragment) return;
-    if (!isTauriRuntime()) {
-      showToast("Canvas 送信はTauri版で利用できます");
-      return;
-    }
-
-    if (!projectFolder) {
-      showToast("先にプロジェクトを開いてください");
-      return;
-    }
-    const scope: CanvasScope = "project";
-    const rootPath = projectFolder.path;
-    try {
-      const summary = await ensureCanvasBoard(
-        scope,
-        rootPath,
-        `${projectFolder.name} Board`,
-      );
-      const board = await loadCanvasBoard(scope, rootPath, summary.id);
-      const position = nextCanvasPlacement(board);
-      const node = createCanvasTextNode(fragment.body, {
-        ...position,
-        writingMode: settings.canvasDefaultWritingMode,
-        fontSource: settings.canvasDefaultFontSource,
-        thenOrigin: {
-          source: "idea",
-          sourceId: fragment.id,
-          sourceThreadId: thread.id,
-          sourceWorkspacePath: projectFolder?.path ?? "",
-          copiedAt: Date.now(),
-        },
-      });
-      await saveCanvasBoard(scope, rootPath, summary.id, {
-        ...board,
-        nodes: [...board.nodes, node],
-      });
-      showToast("Canvas へ送信しました");
-      await openIdeaCanvasBoard(scope, summary.id, node.id);
-    } catch (error) {
-      setLastError(String(error));
-      showToast("Canvas へ送信できませんでした");
-    }
-  };
-
-  const sendIdeaThreadToCanvas = async (threadId: string) => {
-    const thread = snippets.find((item) => item.id === threadId);
-    if (!thread) return;
-    if (!isTauriRuntime()) {
-      showToast("Canvas 送信はTauri版で利用できます");
-      return;
-    }
-
-    if (!projectFolder) {
-      showToast("先にプロジェクトを開いてください");
-      return;
-    }
-    const scope: CanvasScope = "project";
-    const rootPath = projectFolder.path;
-    try {
-      const summary = await ensureCanvasBoard(
-        scope,
-        rootPath,
-        `${projectFolder.name} Board`,
-      );
-      const board = await loadCanvasBoard(scope, rootPath, summary.id);
-      const position = nextCanvasPlacement(board);
-      const copiedAt = Date.now();
-      const group = createCanvasGroupNode(thread.title, {
-        x: position.x,
-        y: position.y,
-        width: Math.max(520, thread.fragments.length * 180),
-        height: 310,
-        thenOrigin: {
-          source: "idea",
-          sourceId: thread.id,
-          sourceThreadId: thread.id,
-          sourceWorkspacePath: projectFolder?.path ?? "",
-          copiedAt,
-        },
-      });
-      const nodes: CanvasNode[] = thread.fragments.map((fragment, index) =>
-        createCanvasTextNode(fragment.body, {
-          x: group.x + 28 + index * 210,
-          y: group.y + 72,
-          width: 180,
-          height: 170,
-          writingMode: settings.canvasDefaultWritingMode,
-          fontSource: settings.canvasDefaultFontSource,
-          thenOrigin: {
-            source: "idea",
-            sourceId: fragment.id,
-            sourceThreadId: thread.id,
-            sourceWorkspacePath: projectFolder?.path ?? "",
-            copiedAt,
-          },
-        }),
-      );
-      const edges = nodes.slice(1).map((node, index) => createCanvasEdge(nodes[index].id, node.id));
-      await saveCanvasBoard(scope, rootPath, summary.id, {
-        ...board,
-        nodes: [...board.nodes, group, ...nodes],
-        edges: [...board.edges, ...edges],
-      });
-      showToast("Thread を Canvas へ送信しました");
-      await openIdeaCanvasBoard(scope, summary.id, group.id);
-    } catch (error) {
-      setLastError(String(error));
-      showToast("Thread を Canvas へ送信できませんでした");
-    }
-  };
 
   useEffect(() => {
     if (!isTauriRuntime()) return;

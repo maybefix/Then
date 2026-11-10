@@ -4,7 +4,7 @@ import { build } from "esbuild";
 // ideaThreadModel.ts と ideaThreadActions.ts を1つにまとめて読み込む（ID の連番を共有させる）。
 const bundled = await build({
   stdin: {
-    contents: 'export * from "./src/ideaThreadModel.ts"; export * from "./src/ideaThreadActions.ts";',
+    contents: 'export * from "./src/ideaThreadModel.ts"; export * from "./src/ideaThreadActions.ts"; export * from "./src/ideaThreadStorage.ts";',
     resolveDir: process.cwd(),
     loader: "ts",
   },
@@ -17,11 +17,13 @@ const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundled.outputFiles
 const {
   createIdeaThreadActions,
   defaultIdeaThreads,
+  loadWorkspaceSnippets,
   makeIdeaFragment,
   nextIdeaId,
   normalizeIdeaThreads,
+  saveWorkspaceSnippets,
 } = await import(moduleUrl);
-const { alignIdeaLayoutToMode, reconcileIdeaThreadLayouts } = await import(
+const { alignIdeaLayoutToMode, makeIdeaItem, makeReferenceLink, normalizedReferenceKey, reconcileIdeaThreadLayouts } = await import(
   `data:text/javascript;base64,${Buffer.from((await build({
     entryPoints: ["src/ideaReferenceModel.ts"],
     bundle: true,
@@ -113,7 +115,33 @@ const thread = (id, kind, title, fragments) => ({
   id, kind, title, starred: false, createdAt: 1, updatedAt: 1, fragments,
 });
 
-function createHarness({ mode = "workspace", threads, layouts } = {}) {
+// 作品ごとの保存先（Rust の代わり）。Idea は window.__TAURI_INTERNALS__.invoke の入れ物で受け、
+// 資料ボードは App から受け取る loadReferenceLayout / saveReferenceLayout の入れ物で受ける。
+const emptyLayout = () => ({ version: 3, name: "default", cards: [], recent: [], ideaThreads: [] });
+const projectStore = { snippets: new Map(), layout: new Map(), calls: [], failSave: false };
+globalThis.window = {
+  __TAURI_INTERNALS__: {
+    invoke: async (command, args) => {
+      projectStore.calls.push({ command, args: structuredClone(args) });
+      if (command === "load_project_snippets") return structuredClone(projectStore.snippets.get(args.rootPath) ?? []);
+      if (command === "save_project_snippets") {
+        if (projectStore.failSave) throw new Error("disk full");
+        projectStore.snippets.set(args.rootPath, structuredClone(args.snippets));
+        return null;
+      }
+      throw new Error(`unexpected command ${command}`);
+    },
+    transformCallback: () => 0,
+  },
+};
+const resetProjectStore = () => {
+  projectStore.snippets.clear();
+  projectStore.layout.clear();
+  projectStore.calls.length = 0;
+  projectStore.failSave = false;
+};
+
+function createHarness({ mode = "workspace", threads, layouts, transfer = {} } = {}) {
   const initialThreads = threads ?? [
     thread("idea-inbox", "inbox", "インボックス", [frag("i1")]),
     thread("t1", "thread", "場面", [frag("a"), frag("b"), frag("c")]),
@@ -147,7 +175,29 @@ function createHarness({ mode = "workspace", threads, layouts } = {}) {
       setIsRightSidebarCollapsed: (next) => { state.rightSidebarCollapsed = apply(state.rightSidebarCollapsed, next); },
       showToast: (message, action = null) => { log.toasts.push({ message, action }); },
       requestConfirm: async (options) => { log.confirms.push(options); return log.confirmAnswer; },
-      requestNewIdeaThreadName: async () => log.threadName,
+      requestInput: async (options) => { (log.inputs ??= []).push(options); return log.threadName; },
+      // 作品間の移動・コピーで App から受け取る道具（App の同じ名前の処理の代わり）。
+      requestTransferOptions: async (request) => {
+        (log.transferRequests ??= []).push(request);
+        return transfer.options ?? null;
+      },
+      isExistingReference: (path) => (transfer.existing ?? []).includes(path),
+      prepareReferenceRewrite: async (targetPath, referencedPaths, copyReferences) => {
+        (log.rewriteRequests ??= []).push({ targetPath, referencedPaths, copyReferences });
+        return transfer.rewrite ?? { copied: new Map(), dropped: new Set() };
+      },
+      reportTransferError: (error) => { (log.transferErrors ??= []).push(String(error)); },
+      loadReferenceLayout: async (folderPath) => structuredClone(projectStore.layout.get(folderPath) ?? emptyLayout()),
+      saveReferenceLayout: async (folderPath, layout) => {
+        if (projectStore.failSave) throw new Error("disk full");
+        projectStore.layout.set(folderPath, structuredClone(layout));
+      },
+      // App の ensureIdeaTransferAvailable と同じ（管理単位が作品ごとのときだけ通す）。
+      ensureIdeaTransferAvailable: () => {
+        if (state.app.settings.snippetStorageMode === "workspace") return true;
+        log.toasts.push({ message: "Idea をプロファイルに保存している間は、作品ごとの移動・コピーはできません", action: null });
+        return false;
+      },
     });
   const lastToast = () => log.toasts.at(-1);
   return { state, log, actions, lastToast };
@@ -612,4 +662,212 @@ function assertConsistent(state, label) {
   assert.equal(textDrop.dataTransfer.dropEffect, "copy");
 }
 
-console.log("PASS Idea thread actions: normalize/migrate, add/move/undo order, threads, references, Canvas, drag");
+// ---------------------------------------------------------------------------
+// 作品の Idea の読み書き（ideaThreadStorage.ts）
+// ---------------------------------------------------------------------------
+
+{
+  resetProjectStore();
+  // 空の作品は、空のインボックスだけ。
+  const empty = await loadWorkspaceSnippets("C:/lib/空");
+  assert.deepEqual(empty.map((entry) => [entry.id, entry.kind, entry.fragments.length]), [["idea-inbox", "inbox", 0]]);
+  assert.deepEqual(projectStore.calls.at(-1), { command: "load_project_snippets", args: { rootPath: "C:/lib/空" } });
+
+  // 読み込んだものは正規化する（インボックスを補って先頭に置き、サンプルを捨てる）。
+  projectStore.snippets.set("C:/lib/A", [
+    thread("t9", "thread", "場面", [frag("x", "本文x")]),
+    thread("idea-sample-scene", "thread", "サンプル", [frag("s")]),
+  ]);
+  const loaded = await loadWorkspaceSnippets("C:/lib/A");
+  assert.deepEqual(loaded.map((entry) => entry.id), ["idea-inbox", "t9"]);
+  assert.deepEqual(loaded[1].fragments.map((fragment) => fragment.body), ["本文x"]);
+
+  const toSave = [thread("idea-inbox", "inbox", "インボックス", [frag("q")])];
+  await saveWorkspaceSnippets("C:/lib/A", toSave);
+  assert.deepEqual(projectStore.calls.at(-1), { command: "save_project_snippets", args: { rootPath: "C:/lib/A", snippets: toSave } });
+  assert.deepEqual(projectStore.snippets.get("C:/lib/A"), toSave);
+}
+
+// ---------------------------------------------------------------------------
+// 作品間の移動・コピー（transferIdeaThread / transferIdeaFragment）
+// ---------------------------------------------------------------------------
+
+const transferThreads = () => [
+  thread("idea-inbox", "inbox", "インボックス", [frag("i1")]),
+  thread("t1", "thread", "場面", [frag("a", "本文a"), frag("b", "本文b")]),
+  thread("t2", "thread", "伏線", [frag("d")]),
+];
+const refA = makeReferenceLink(".then/references/imports/a.md", 5);
+const refMissing = makeReferenceLink(".then/references/imports/missing.md", 6);
+const transferLayouts = () => [
+  { threadId: "idea-inbox", items: [makeIdeaItem("i1")] },
+  { threadId: "t1", items: [makeIdeaItem("a"), refA, refMissing, makeIdeaItem("b")] },
+  { threadId: "t2", items: [makeIdeaItem("d")] },
+];
+const copiedA = { name: "a.md", sourcePath: ".then/references/imports/a-copy.md", scope: "project", imported: true };
+
+// スレッドのコピー: 行き先の末尾に新しい ID で足し、並び順の断片の ID と資料のパスも書き換える。手元は残す。
+{
+  resetProjectStore();
+  projectStore.snippets.set("C:/lib/B", [thread("idea-inbox", "inbox", "インボックス", [frag("bx")])]);
+  projectStore.layout.set("C:/lib/B", { ...emptyLayout(), ideaThreads: [{ threadId: "idea-inbox", items: [makeIdeaItem("bx")] }] });
+  const { state, actions, log, lastToast } = createHarness({
+    threads: transferThreads(),
+    layouts: transferLayouts(),
+    transfer: {
+      options: { target: "C:/lib/B", targetLabel: "作品B", move: false, copyReferences: true },
+      existing: [refA.sourcePath],
+      rewrite: { copied: new Map([[normalizedReferenceKey(refA.sourcePath), copiedA]]), dropped: new Set() },
+    },
+  });
+  const before = JSON.stringify(state);
+  await actions().transferIdeaThread("t1");
+
+  assert.deepEqual(log.transferRequests, [{ itemLabel: "スレッド", referenceCount: 1 }], "only existing references are counted");
+  assert.deepEqual(log.rewriteRequests, [
+    { targetPath: "C:/lib/B", referencedPaths: [refA.sourcePath, refMissing.sourcePath], copyReferences: true },
+  ]);
+  const targetThreads = projectStore.snippets.get("C:/lib/B");
+  assert.deepEqual(targetThreads.map((entry) => entry.title), ["インボックス", "場面"]);
+  const copy = targetThreads[1];
+  assert.notEqual(copy.id, "t1");
+  assert.deepEqual(copy.fragments.map((fragment) => fragment.body), ["本文a", "本文b"]);
+  assert.ok(copy.fragments.every((fragment) => !["a", "b"].includes(fragment.id)), "fragment ids are renewed");
+
+  const targetLayout = projectStore.layout.get("C:/lib/B");
+  assert.equal(targetLayout.ideaThreadsMode, "workspace", "the target order is aligned to the per-work side");
+  assert.deepEqual(targetLayout.ideaThreads.map((layout) => layout.threadId), ["idea-inbox", copy.id]);
+  const copiedItems = targetLayout.ideaThreads[1].items;
+  assert.deepEqual(copiedItems.map((item) => item.sourceType), ["idea", "reference", "reference", "idea"]);
+  assert.deepEqual(
+    copiedItems.filter((item) => item.sourceType === "idea").map((item) => item.fragmentId),
+    copy.fragments.map((fragment) => fragment.id),
+  );
+  assert.equal(copiedItems[1].sourcePath, copiedA.sourcePath, "copied reference points at the copy");
+  assert.equal(copiedItems[2].sourcePath, refMissing.sourcePath, "uncopied reference keeps its path");
+  assert.ok(copiedItems[1].id !== refA.id && copiedItems[2].id !== refMissing.id, "reference link ids are renewed");
+
+  assert.equal(JSON.stringify(state), before, "copy keeps the local thread");
+  assert.equal(lastToast().message, "スレッドを作品Bへコピーしました");
+}
+
+// スレッドの移動: 手元から消す。インボックスは送らない。
+{
+  resetProjectStore();
+  const { state, actions, log, lastToast } = createHarness({
+    threads: transferThreads(),
+    layouts: transferLayouts(),
+    transfer: { options: { target: "C:/lib/C", targetLabel: "作品C", move: true, copyReferences: false } },
+  });
+  await actions().transferIdeaThread("idea-inbox");
+  assert.equal(log.transferRequests, undefined, "the inbox is never transferred");
+  assert.equal(projectStore.calls.length, 0);
+
+  await actions().transferIdeaThread("t2");
+  assert.deepEqual(log.transferRequests, [{ itemLabel: "スレッド", referenceCount: 0 }]);
+  // 何もない作品は、読み込みで補われたインボックスの後ろに入る。
+  assert.deepEqual(projectStore.snippets.get("C:/lib/C").map((entry) => entry.title), ["インボックス", "伏線"]);
+  assert.deepEqual(threadIds(state), ["idea-inbox", "t1"]);
+  assert.equal(lastToast().message, "スレッドを作品Cへ移動しました");
+}
+
+// 断片のコピーと移動: 行き先のインボックスの末尾に新しい ID で入る。移動なら手元のスレッドから消す。
+{
+  resetProjectStore();
+  projectStore.snippets.set("C:/lib/B", [
+    thread("idea-inbox", "inbox", "インボックス", [frag("bx")]),
+    thread("tb", "thread", "Bの場面", []),
+  ]);
+  const harness = createHarness({
+    threads: transferThreads(),
+    layouts: transferLayouts(),
+    transfer: { options: { target: "C:/lib/B", targetLabel: "作品B", move: false, copyReferences: false } },
+  });
+  const before = JSON.stringify(harness.state);
+  await harness.actions().transferIdeaFragment("t1", "b");
+  assert.deepEqual(harness.log.transferRequests, [{ itemLabel: "断片", referenceCount: 0 }]);
+  const inbox = projectStore.snippets.get("C:/lib/B")[0];
+  assert.deepEqual(inbox.fragments.map((fragment) => fragment.body), ["bx", "本文b"], "appended to the inbox");
+  assert.notEqual(inbox.fragments[1].id, "b");
+  assert.deepEqual(projectStore.snippets.get("C:/lib/B")[1].fragments, []);
+  assert.equal(JSON.stringify(harness.state), before, "copy keeps the local fragment");
+  assert.equal(harness.lastToast().message, "断片を作品Bのインボックスへコピーしました");
+
+  // 何もない作品へ移動すると、読み込みで補われたインボックスに入る。
+  const moving = createHarness({
+    threads: transferThreads(),
+    layouts: transferLayouts(),
+    transfer: { options: { target: "C:/lib/空", targetLabel: "空の作品", move: true, copyReferences: false } },
+  });
+  await moving.actions().transferIdeaFragment("t1", "a");
+  assert.deepEqual(projectStore.snippets.get("C:/lib/空").map((entry) => [entry.id, entry.fragments.map((f) => f.body)]), [
+    ["idea-inbox", ["本文a"]],
+  ]);
+  assert.deepEqual(bodyOrder(moving.state, "t1"), ["b"]);
+  assert.equal(moving.lastToast().message, "断片を空の作品のインボックスへ移動しました");
+
+  // ない断片は行き先を聞かない。
+  await moving.actions().transferIdeaFragment("t1", "nothing");
+  assert.equal(moving.log.transferRequests.length, 1);
+}
+
+// 管理単位が「全作品で共有」のときは、行き先を聞かずに知らせるだけ。
+{
+  resetProjectStore();
+  const { actions, log, lastToast } = createHarness({
+    mode: "profile",
+    threads: transferThreads(),
+    layouts: transferLayouts(),
+    transfer: { options: { target: "C:/lib/B", targetLabel: "作品B", move: true, copyReferences: false } },
+  });
+  await actions().transferIdeaThread("t1");
+  await actions().transferIdeaFragment("t1", "a");
+  assert.equal(log.transferRequests, undefined);
+  assert.equal(projectStore.calls.length, 0);
+  assert.equal(lastToast().message, "Idea をプロファイルに保存している間は、作品ごとの移動・コピーはできません");
+}
+
+// やめたとき・保存に失敗したとき: 手元は変わらない。失敗は知らせる。
+{
+  resetProjectStore();
+  const cancelled = createHarness({ threads: transferThreads(), layouts: transferLayouts() });
+  const before = JSON.stringify(cancelled.state);
+  await cancelled.actions().transferIdeaThread("t1");
+  await cancelled.actions().transferIdeaFragment("t1", "a");
+  assert.equal(cancelled.log.transferRequests.length, 2);
+  assert.equal(projectStore.calls.length, 0);
+  assert.equal(JSON.stringify(cancelled.state), before);
+
+  projectStore.failSave = true;
+  const failing = createHarness({
+    threads: transferThreads(),
+    layouts: transferLayouts(),
+    transfer: { options: { target: "C:/lib/B", targetLabel: "作品B", move: true, copyReferences: false } },
+  });
+  const failingBefore = JSON.stringify(failing.state);
+  await failing.actions().transferIdeaThread("t1");
+  await failing.actions().transferIdeaFragment("t1", "a");
+  assert.deepEqual(failing.log.transferErrors, ["Error: disk full", "Error: disk full"]);
+  assert.equal(JSON.stringify(failing.state), failingBefore, "a failed move keeps the local Idea");
+}
+
+// 新規スレッドの名前: 入力ダイアログで聞き、空白だけならやめる。
+{
+  const { state, actions, log } = createHarness();
+  log.threadName = "   ";
+  await actions().moveFragmentToNewThread("t1", "a");
+  assert.deepEqual(log.inputs, [{
+    title: "新規スレッドに追加",
+    label: "スレッド名",
+    initialValue: "",
+    placeholder: "新しいスレッド名",
+    confirmLabel: "作成",
+  }]);
+  assert.deepEqual(threadIds(state), ["idea-inbox", "t1", "t2"], "a blank name creates nothing");
+
+  log.threadName = "  新章  ";
+  await actions().moveFragmentToNewThread("t1", "a");
+  assert.equal(state.app.snippets[1].title, "新章", "the name is trimmed");
+}
+
+console.log("PASS Idea thread actions: normalize/migrate, add/move/undo order, threads, references, Canvas, drag, storage, transfer");

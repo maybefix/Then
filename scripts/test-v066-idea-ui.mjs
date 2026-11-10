@@ -73,7 +73,6 @@ assert.match(
 assert.match(ideaActions, /title: "断片を削除"/);
 assert.match(ideaActions, /showToast\("断片を削除しました", \{\s*label: "元に戻す"/);
 assert.match(ideaActions, /showToast\(`「\$\{toThread\.title\}」へ移動しました`, \{\s*label: "元に戻す"/);
-assert.match(app, /showToast\("並び順を変更しました", \{\s*label: "元に戻す"/);
 assert.match(css, /\.toast\.hasAction\s*\{[^}]*pointer-events:\s*auto;/s);
 assert.match(css, /\.referenceContextMenu \.dangerMenuItem\s*\{[^}]*var\(--danger\)/s);
 
