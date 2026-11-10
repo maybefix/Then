@@ -10,7 +10,7 @@
 pub mod core;
 pub mod fs;
 
-use self::core::{recorded_doc, recover, sha, DiskClass, Journal, SaveError};
+use self::core::{recorded_doc, recover, sha, DiskClass, Hash, Journal, SaveError};
 use self::fs::{real_file_id, FsError, RealFs};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -34,6 +34,50 @@ static AREA: OnceLock<Area> = OnceLock::new();
 fn journals() -> &'static Mutex<HashMap<String, Entry>> {
     static JOURNALS: OnceLock<Mutex<HashMap<String, Entry>>> = OnceLock::new();
     JOURNALS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// What Then itself last wrote to each manuscript (any path: journal saves,
+/// replace, restore), so a journal that starts later does not take Then's own
+/// write for an outside change.
+fn then_writes() -> &'static Mutex<HashMap<PathBuf, Hash>> {
+    static WRITES: OnceLock<Mutex<HashMap<PathBuf, Hash>>> = OnceLock::new();
+    WRITES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn then_wrote(path: &Path) -> Option<Hash> {
+    then_writes().lock().ok()?.get(path).copied()
+}
+
+fn remember_then_write(path: &Path, hash: Hash) {
+    if let Ok(mut writes) = then_writes().lock() {
+        writes.insert(path.to_path_buf(), hash);
+    }
+}
+
+/// The 64-character hex SHA-256 the app passes around (TextDocument.contentHash).
+/// Empty or malformed means "not known": nothing to compare.
+pub fn parse_hash(hex: Option<&str>) -> Option<Hash> {
+    let hex = hex?.trim();
+    if hex.len() != 64 {
+        return None;
+    }
+    let mut hash = [0u8; 32];
+    for (index, byte) in hash.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(hex.get(index * 2..index * 2 + 2)?, 16).ok()?;
+    }
+    Some(hash)
+}
+
+/// Prefix of every refusal because the file is not the one Then knows; the
+/// app tells these apart from other save failures by it.
+pub const CONFLICT: &str = "document content conflict";
+
+fn start_journal(key: &str, path: &str, text: Option<Vec<u8>>, opened: Option<&str>) -> Result<Entry, String> {
+    let mut fs = RealFs::default();
+    let doc = Path::new(path);
+    let journal = Journal::start_from(&mut fs, &journal_dir(key)?, doc, text, parse_hash(opened), then_wrote(doc))
+        .map_err(fs_error)?;
+    Ok(Entry { journal, fs })
 }
 
 /// Opens `path` so no other process can open it while the handle lives.
@@ -126,17 +170,22 @@ pub struct EditInput {
 }
 
 /// Record editor changes (UTF-16 offsets into the text before each change).
-/// `base` is the text before the first change (generation 0); it opens the journal.
-pub fn record_edits(key: &str, path: &str, base: Option<String>, edits: Vec<EditInput>) -> Result<(), String> {
+/// `base` is the text before the first change (generation 0); it opens the
+/// journal, with `opened` the hash of the file when the tab read it.
+pub fn record_edits(
+    key: &str,
+    path: &str,
+    base: Option<String>,
+    opened: Option<&str>,
+    edits: Vec<EditInput>,
+) -> Result<(), String> {
     let mut journals = journals().lock().map_err(|_| "journal lock poisoned")?;
     if !journals.contains_key(key) {
         let Some(base) = base else {
             return Err("journal is not open".into());
         };
-        let mut fs = RealFs::default();
-        let journal = Journal::start(&mut fs, &journal_dir(key)?, Path::new(path), Some(base.into_bytes()))
-            .map_err(fs_error)?;
-        journals.insert(key.to_string(), Entry { journal, fs });
+        let entry = start_journal(key, path, Some(base.into_bytes()), opened)?;
+        journals.insert(key.to_string(), entry);
     }
     let entry = journals.get_mut(key).unwrap();
     // A rename record that cannot be written yet stays queued ahead of the edits.
@@ -176,23 +225,27 @@ pub struct Saved {
 }
 
 /// Save `content`, the text of generation `gen` as fixed when the save was
-/// requested. Changes recorded after it stay in the journal.
-pub fn save(key: &str, path: &str, gen: u64, content: &str) -> Result<Saved, String> {
+/// requested. Changes recorded after it stay in the journal. `opened` is
+/// used only when no journal is open yet (see record_edits).
+pub fn save(key: &str, path: &str, gen: u64, content: &str, opened: Option<&str>) -> Result<Saved, String> {
     let mut journals = journals().lock().map_err(|_| "journal lock poisoned")?;
     if !journals.contains_key(key) {
-        let mut fs = RealFs::default();
-        let journal = Journal::start(&mut fs, &journal_dir(key)?, Path::new(path), None).map_err(fs_error)?;
-        journals.insert(key.to_string(), Entry { journal, fs });
+        let entry = start_journal(key, path, None, opened)?;
+        journals.insert(key.to_string(), entry);
     }
     let entry = journals.get_mut(key).unwrap();
     // Queued if it cannot be written now; the save's own sync writes it first.
     let _ = entry.journal.set_doc(&mut entry.fs, Path::new(path));
-    match entry.journal.save(&mut entry.fs, gen, content.as_bytes()) {
+    let result = entry.journal.save(&mut entry.fs, gen, content.as_bytes());
+    if matches!(result, Ok(true)) {
+        remember_then_write(Path::new(path), sha(content.as_bytes()));
+    }
+    match result {
         Ok(_) => Ok(Saved {
             file_id: Some(entry.journal.disk_id().to_string()).filter(|id| !id.is_empty()),
         }),
         Err(SaveError::Ahead) => Err("保存する世代の記録がまだ届いていません".into()),
-        Err(SaveError::External(why)) => Err(format!("ファイルが外部で変更されたため保存しませんでした（{why}）")),
+        Err(SaveError::External(why)) => Err(format!("{CONFLICT}: ファイルが外部で変更されたため保存しませんでした（{why}）")),
         Err(SaveError::Journal(error)) => Err(format!("復旧用の記録を書けないため保存しませんでした（{}）", fs_error(error))),
         Err(SaveError::Original(error)) => Err(format!("failed to write text file: {}", fs_error(error))),
         Err(SaveError::Verify) => Err("保存した内容を読み直すと一致しませんでした".into()),
@@ -202,6 +255,7 @@ pub fn save(key: &str, path: &str, gen: u64, content: &str) -> Result<Saved, Str
 /// Then wrote `path` through another command; journals on it take that as
 /// the file's known state instead of an outside change.
 pub fn note_then_write(path: &Path, content: &[u8]) {
+    remember_then_write(path, sha(content));
     let Ok(mut journals) = journals().lock() else { return };
     let matching: Vec<&mut Entry> = journals.values_mut().filter(|e| e.journal.doc == path).collect();
     if matching.is_empty() {
@@ -212,6 +266,31 @@ pub fn note_then_write(path: &Path, content: &[u8]) {
     for entry in matching {
         entry.journal.note_disk(hash, id.clone());
     }
+}
+
+/// The person chose to overwrite the file as it is now: `expected` is the
+/// hash of the file they saw (and Then kept). If it changed again since,
+/// refuse, so a newer outside change is not lost either.
+pub fn accept_disk(key: &str, path: &str, expected: &str) -> Result<(), String> {
+    let doc = Path::new(path);
+    let expected = parse_hash(Some(expected)).ok_or("expected hash is not a SHA-256")?;
+    let current = std::fs::read(doc).map_err(|error| format!("failed to read text file: {error}"))?;
+    if sha(&current) != expected {
+        return Err(format!("{CONFLICT}: 確かめたあとにファイルがまた変更されました"));
+    }
+    let mut journals = journals().lock().map_err(|_| "journal lock poisoned")?;
+    match journals.get_mut(key) {
+        Some(entry) => {
+            let id = real_file_id(doc).map_err(fs_error)?.unwrap_or_default();
+            entry.journal.note_disk(expected, id);
+        }
+        // No journal yet: one started now takes the file as it is.
+        None => {
+            let entry = start_journal(key, path, None, None)?;
+            journals.insert(key.to_string(), entry);
+        }
+    }
+    Ok(())
 }
 
 /// Close a journal. Its files stay when something is not on disk, unless
@@ -498,6 +577,11 @@ mod tests {
         });
     }
 
+    /// TextDocument.contentHash of `text`.
+    fn hex(text: &str) -> String {
+        sha(text.as_bytes()).iter().map(|byte| format!("{byte:02x}")).collect()
+    }
+
     /// One change appended at the end of `before`, as the editor would send it.
     fn append_edit(gen: u64, before: &str, insert: &str) -> EditInput {
         let length = before.encode_utf16().count();
@@ -516,8 +600,8 @@ mod tests {
 
         let key = "external-before-edit";
         let path = doc.to_string_lossy().to_string();
-        record_edits(key, &path, Some(opened.clone()), vec![append_edit(1, &opened, "。")]).unwrap();
-        let result = save(key, &path, 1, &format!("{opened}。"));
+        record_edits(key, &path, Some(opened.clone()), Some(&hex(&opened)), vec![append_edit(1, &opened, "。")]).unwrap();
+        let result = save(key, &path, 1, &format!("{opened}。"), None);
         forget(key, true);
 
         assert_eq!(
@@ -525,7 +609,121 @@ mod tests {
             "外部で書き換えた本文",
             "a change made between opening and the first edit must not be overwritten"
         );
-        assert!(result.is_err(), "the save must report the outside change");
+        let error = result.err().expect("the save must report the outside change");
+        assert!(error.starts_with(CONFLICT), "the app tells a conflict apart by its prefix: {error}");
+    }
+
+    #[test]
+    fn external_change_without_a_journal_is_refused_too() {
+        // A save before any recorded change (no journal yet) uses the same baseline.
+        test_area();
+        let root = TempRoot::new("external-no-journal");
+        let doc = root.0.join("doc.md");
+        std::fs::write(&doc, "本文").unwrap();
+        let opened = std::fs::read_to_string(&doc).unwrap();
+        std::fs::write(&doc, "外部").unwrap();
+
+        let key = "external-no-journal";
+        let path = doc.to_string_lossy().to_string();
+        let result = save(key, &path, 0, "本文。", Some(&hex(&opened)));
+        forget(key, true);
+
+        assert!(result.err().is_some_and(|error| error.starts_with(CONFLICT)));
+        assert_eq!(std::fs::read_to_string(&doc).unwrap(), "外部");
+    }
+
+    #[test]
+    fn external_change_by_then_itself_is_not_a_conflict() {
+        // Replace or restore wrote the file after the tab read it; the tab's hash is older.
+        test_area();
+        let root = TempRoot::new("external-then-write");
+        let doc = root.0.join("doc.md");
+        std::fs::write(&doc, "本文").unwrap();
+        let opened = std::fs::read_to_string(&doc).unwrap();
+        std::fs::write(&doc, "置換した本文").unwrap();
+        note_then_write(&doc, "置換した本文".as_bytes());
+
+        let key = "external-then-write";
+        let path = doc.to_string_lossy().to_string();
+        let replaced = "置換した本文".to_string();
+        record_edits(key, &path, Some(replaced.clone()), Some(&hex(&opened)), vec![append_edit(1, &replaced, "。")])
+            .unwrap();
+        let result = save(key, &path, 1, "置換した本文。", None);
+        forget(key, true);
+
+        assert!(result.is_ok(), "{result:?}", result = result.err());
+        assert_eq!(std::fs::read_to_string(&doc).unwrap(), "置換した本文。");
+    }
+
+    #[test]
+    fn external_change_overwrite_after_accepting_the_file() {
+        // 「この内容で上書きする」: the person saw the file as it is now.
+        test_area();
+        let root = TempRoot::new("external-overwrite");
+        let doc = root.0.join("doc.md");
+        std::fs::write(&doc, "本文").unwrap();
+        let opened = std::fs::read_to_string(&doc).unwrap();
+        let key = "external-overwrite";
+        let path = doc.to_string_lossy().to_string();
+        record_edits(key, &path, Some(opened.clone()), Some(&hex(&opened)), vec![append_edit(1, &opened, "。")]).unwrap();
+        std::fs::write(&doc, "外部").unwrap();
+        assert!(save(key, &path, 1, "本文。", None).is_err());
+
+        accept_disk(key, &path, &hex("外部")).unwrap();
+        let first = save(key, &path, 1, "本文。", None);
+        record_edits(key, &path, None, None, vec![append_edit(2, "本文。", "続き")]).unwrap();
+        let second = save(key, &path, 2, "本文。続き", None);
+        forget(key, true);
+
+        assert!(first.is_ok() && second.is_ok());
+        assert_eq!(std::fs::read_to_string(&doc).unwrap(), "本文。続き");
+    }
+
+    #[test]
+    fn external_change_accept_refuses_a_newer_change() {
+        test_area();
+        let root = TempRoot::new("external-accept-stale");
+        let doc = root.0.join("doc.md");
+        std::fs::write(&doc, "本文").unwrap();
+        let opened = std::fs::read_to_string(&doc).unwrap();
+        let key = "external-accept-stale";
+        let path = doc.to_string_lossy().to_string();
+        record_edits(key, &path, Some(opened.clone()), Some(&hex(&opened)), vec![append_edit(1, &opened, "。")]).unwrap();
+        std::fs::write(&doc, "外部2").unwrap();
+
+        // The person saw "外部1"; the file changed again before they chose.
+        let accepted = accept_disk(key, &path, &hex("外部1"));
+        let saved = save(key, &path, 1, "本文。", None);
+        forget(key, true);
+
+        assert!(accepted.err().is_some_and(|error| error.starts_with(CONFLICT)));
+        assert!(saved.is_err());
+        assert_eq!(std::fs::read_to_string(&doc).unwrap(), "外部2");
+    }
+
+    #[test]
+    fn external_change_reload_starts_again_from_the_file() {
+        // 「ファイルの内容を読み込む」: the journal is dropped and the tab holds the file.
+        test_area();
+        let root = TempRoot::new("external-reload");
+        let doc = root.0.join("doc.md");
+        std::fs::write(&doc, "本文").unwrap();
+        let opened = std::fs::read_to_string(&doc).unwrap();
+        let key = "external-reload";
+        let path = doc.to_string_lossy().to_string();
+        record_edits(key, &path, Some(opened.clone()), Some(&hex(&opened)), vec![append_edit(1, &opened, "。")]).unwrap();
+        std::fs::write(&doc, "外部").unwrap();
+        assert!(save(key, &path, 1, "本文。", None).is_err());
+
+        forget(key, true);
+        let reloaded = std::fs::read_to_string(&doc).unwrap();
+        record_edits(key, &path, Some(reloaded.clone()), Some(&hex(&reloaded)), vec![append_edit(1, &reloaded, "！")])
+            .unwrap();
+        let result = save(key, &path, 1, "外部！", None);
+        forget(key, true);
+
+        assert!(result.is_ok());
+        assert_eq!(std::fs::read_to_string(&doc).unwrap(), "外部！");
     }
 
     #[test]
@@ -538,9 +736,9 @@ mod tests {
 
         let key = "external-after-edit";
         let path = doc.to_string_lossy().to_string();
-        record_edits(key, &path, Some(opened.clone()), vec![append_edit(1, &opened, "。")]).unwrap();
+        record_edits(key, &path, Some(opened.clone()), Some(&hex(&opened)), vec![append_edit(1, &opened, "。")]).unwrap();
         std::fs::write(&doc, "外部で書き換えた本文").unwrap();
-        let result = save(key, &path, 1, &format!("{opened}。"));
+        let result = save(key, &path, 1, &format!("{opened}。"), None);
         forget(key, true);
 
         assert!(result.is_err());
@@ -557,10 +755,10 @@ mod tests {
 
         let key = "external-none";
         let path = doc.to_string_lossy().to_string();
-        record_edits(key, &path, Some(opened.clone()), vec![append_edit(1, &opened, "。")]).unwrap();
-        let first = save(key, &path, 1, "本文。");
-        record_edits(key, &path, None, vec![append_edit(2, "本文。", "続き")]).unwrap();
-        let second = save(key, &path, 2, "本文。続き");
+        record_edits(key, &path, Some(opened.clone()), Some(&hex(&opened)), vec![append_edit(1, &opened, "。")]).unwrap();
+        let first = save(key, &path, 1, "本文。", None);
+        record_edits(key, &path, None, None, vec![append_edit(2, "本文。", "続き")]).unwrap();
+        let second = save(key, &path, 2, "本文。続き", None);
         forget(key, true);
 
         assert!(first.is_ok() && second.is_ok());
@@ -568,9 +766,9 @@ mod tests {
     }
 
     #[test]
-    fn external_change_of_line_endings_only_is_refused_today() {
-        // Today the whole file is compared byte for byte, so CRLF <-> LF alone
-        // counts as a change (plan Q2 decides whether that stays).
+    fn external_change_of_line_endings_only_is_refused() {
+        // The whole file is compared byte for byte, so CRLF <-> LF alone counts
+        // as a change (plan Q2: asking beats losing an outside edit).
         test_area();
         let root = TempRoot::new("external-crlf");
         let doc = root.0.join("doc.md");
@@ -579,9 +777,9 @@ mod tests {
 
         let key = "external-crlf";
         let path = doc.to_string_lossy().to_string();
-        record_edits(key, &path, Some(opened.clone()), vec![append_edit(1, &opened, "。")]).unwrap();
+        record_edits(key, &path, Some(opened.clone()), Some(&hex(&opened)), vec![append_edit(1, &opened, "。")]).unwrap();
         std::fs::write(&doc, "一行目\r\n二行目").unwrap();
-        let result = save(key, &path, 1, &format!("{opened}。"));
+        let result = save(key, &path, 1, &format!("{opened}。"), None);
         forget(key, true);
 
         assert!(result.is_err());

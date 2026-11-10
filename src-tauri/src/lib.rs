@@ -675,6 +675,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             save_text_file,
             journal_edits,
             journal_save,
+            journal_accept_disk,
             journal_forget,
             journal_recovery_scan,
             journal_recovery_discard,
@@ -1125,7 +1126,7 @@ fn save_markdown_file_dialog(
 
 #[tauri::command(async)]
 fn save_markdown_file(path: String, content: String) -> Result<MarkdownDocument, String> {
-    save_text_file(path, content)
+    save_text_file(path, content, None)
 }
 
 #[tauri::command]
@@ -1175,18 +1176,27 @@ async fn journal_edits(
     key: String,
     path: String,
     base: Option<String>,
+    expected_hash: Option<String>,
     edits: Vec<save_journal::EditInput>,
 ) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || save_journal::record_edits(&key, &path, base, edits))
+    tauri::async_runtime::spawn_blocking(move || {
+        save_journal::record_edits(&key, &path, base, expected_hash.as_deref(), edits)
+    })
         .await
         .map_err(|error| error.to_string())?
 }
 
 /// Autosave of an open document: in place, behind its recovery journal.
 #[tauri::command]
-async fn journal_save(key: String, path: String, gen: u64, content: String) -> Result<TextDocument, String> {
+async fn journal_save(
+    key: String,
+    path: String,
+    gen: u64,
+    content: String,
+    expected_hash: Option<String>,
+) -> Result<TextDocument, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let saved = save_journal::save(&key, &path, gen, &content)?;
+        let saved = save_journal::save(&key, &path, gen, &content, expected_hash.as_deref())?;
         let name = Path::new(&path)
             .file_name()
             .and_then(|value| value.to_str())
@@ -1202,6 +1212,15 @@ async fn journal_save(key: String, path: String, gen: u64, content: String) -> R
     })
     .await
     .map_err(|error| error.to_string())?
+}
+
+/// The person chose to overwrite a file that changed outside Then;
+/// `expected_hash` is the file as they saw it (see save_journal::accept_disk).
+#[tauri::command]
+async fn journal_accept_disk(key: String, path: String, expected_hash: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || save_journal::accept_disk(&key, &path, &expected_hash))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -1224,8 +1243,18 @@ fn journal_recovery_discard(id: String) -> Result<(), String> {
 }
 
 #[tauri::command(async)]
-fn save_text_file(path: String, content: String) -> Result<TextDocument, String> {
+fn save_text_file(path: String, content: String, expected_hash: Option<String>) -> Result<TextDocument, String> {
     let path = PathBuf::from(path);
+    // Same rule as the journal: write only over the file the caller read.
+    if let Some(expected) = save_journal::parse_hash(expected_hash.as_deref()) {
+        let current = std::fs::read(&path).map_err(|error| format!("failed to read text file: {error}"))?;
+        if Sha256::digest(&current).as_slice() != expected {
+            return Err(format!(
+                "{}: ファイルが外部で変更されたため保存しませんでした（content changed）",
+                save_journal::CONFLICT
+            ));
+        }
+    }
     write_text_file(&path, &content)?;
     read_text_document(&path)
 }
@@ -5501,6 +5530,39 @@ mod tests {
             content_hash(b"abc"),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
+    }
+
+    #[test]
+    fn external_change_save_text_file_writes_only_over_the_file_read() {
+        // Project replace passes the hash it read (BINDER 1-3a).
+        let test_dir = std::env::temp_dir().join(format!(
+            "then-save-text-expected-{}-{}",
+            std::process::id(),
+            super::now_millis()
+        ));
+        std::fs::create_dir_all(&test_dir).expect("create test directory");
+        let path = test_dir.join("doc.md");
+        std::fs::write(&path, "本文").expect("write test file");
+        let read = read_text_document(&path).expect("read test file");
+        let path_text = path.to_string_lossy().to_string();
+
+        std::fs::write(&path, "外部").expect("change outside");
+        let refused = super::save_text_file(path_text.clone(), "置換".into(), read.content_hash.clone());
+        let after_refusal = std::fs::read_to_string(&path).expect("read after refusal");
+
+        let current = read_text_document(&path).expect("read again");
+        let saved = super::save_text_file(path_text.clone(), "置換".into(), current.content_hash.clone());
+        let unchecked = super::save_text_file(path_text, "確かめない".into(), None);
+        let last = std::fs::read_to_string(&path).expect("read last");
+        std::fs::remove_dir_all(&test_dir).expect("remove test directory");
+
+        assert!(refused
+            .err()
+            .is_some_and(|error| error.starts_with(super::save_journal::CONFLICT)));
+        assert_eq!(after_refusal, "外部");
+        assert_eq!(saved.expect("matching hash saves").content, "置換");
+        assert!(unchecked.is_ok(), "no hash: written as before");
+        assert_eq!(last, "確かめない");
     }
 
     #[test]
