@@ -37,6 +37,8 @@ type ProjectAstDocumentInput = Pick<TextDocument, "path" | "name"> & {
 type ProjectAstFileRef = {
   path: string;
   name: string;
+  /** 素材のときだけ "material"（ProjectEntry.role を写す）。 */
+  role?: "material";
 };
 
 const DEFAULT_MAX_PROJECT_SEARCH_RESULTS = 80;
@@ -57,7 +59,11 @@ export function collectProjectTextFiles(folder: ProjectFolder | null): ProjectAs
   const walk = (entries: ProjectEntry[]) => {
     for (const entry of entries) {
       if (entry.kind === "file") {
-        files.push({ path: entry.path, name: entry.name });
+        files.push(
+          entry.role === "material"
+            ? { path: entry.path, name: entry.name, role: entry.role }
+            : { path: entry.path, name: entry.name },
+        );
       } else {
         walk(entry.children);
       }
@@ -66,6 +72,11 @@ export function collectProjectTextFiles(folder: ProjectFolder | null): ProjectAs
 
   walk(folder.children);
   return files;
+}
+
+/** 原稿だけ（素材を除く）。字数・進捗・書き出しのように、素材を数えない処理が使う（BINDER 3.6）。 */
+export function collectManuscriptFiles(folder: ProjectFolder | null): ProjectAstFileRef[] {
+  return collectProjectTextFiles(folder).filter((file) => file.role !== "material");
 }
 
 function createPendingProjectAstFile(file: ProjectAstFileRef): ProjectAstFile {

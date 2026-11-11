@@ -651,6 +651,11 @@ export type ProjectEntry = {
   contentHash?: string | null;
   /** 最終更新時刻（ミリ秒）。ファイル一覧から得たものだけに入る。 */
   modifiedAt?: number;
+  /**
+   * 素材フォルダとその中のものだけ "material"。欄がなければ原稿。
+   * 判定はファイル一覧（Rust の list_project_folder）が一度だけ行う。画面側でパスから決めない（BINDER 3.6）。
+   */
+  role?: "material";
 };
 
 export type DeleteProjectEntryPlan = {
