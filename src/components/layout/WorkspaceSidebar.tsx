@@ -269,6 +269,8 @@ function getFolderProgress(
   const found = new Set<FileProgressStatus>();
   const visit = (node: { children: ProjectEntry[] }) => {
     for (const child of node.children) {
+      // 素材には進捗がない（BINDER 3.6）。
+      if (child.role === "material") continue;
       if (child.kind === "folder") visit(child);
       else found.add(progress[child.path] ?? "todo");
     }
@@ -342,6 +344,11 @@ function collectFilteredOutPaths(
     let hasFile = false;
     let hasVisible = false;
     for (const entry of entries) {
+      // 素材には進捗がないので、「すべて」のときだけ出す（BINDER 3.6）。
+      if (entry.role === "material") {
+        if (filter !== "all") hidden.add(entry.path);
+        continue;
+      }
       if (entry.kind === "folder") {
         const child = visit(entry.children);
         const isVisible = child.hasVisible || (filter === "all" && !child.hasFile);
@@ -1804,7 +1811,8 @@ export function WorkspaceSidebar({
           )
         : null;
     const treeItemIndent = 10 + depth * 14;
-    const fileStatus = !isFolder ? getFileProgress(fileProgress, entry.path) : null;
+    const isMaterial = isProjectEntry(entry) && entry.role === "material";
+    const fileStatus = !isFolder && !isMaterial ? getFileProgress(fileProgress, entry.path) : null;
     const folderStatus = isFolder ? getFolderProgress(entry, fileProgress) : null;
     const folderProgressTitle =
       folderStatus === "done"
@@ -1916,7 +1924,7 @@ export function WorkspaceSidebar({
                 title={entry.path}
                 onClick={(event) => handleTreeItemClick(event, entry, false, hasOutline)}
               >
-                <span className={`treeItemName treeItemName-${fileStatus}`}>
+                <span className={fileStatus ? `treeItemName treeItemName-${fileStatus}` : "treeItemName"}>
                   {entryDisplayName}
                 </span>
                 {charCountLabel && (
@@ -1924,10 +1932,12 @@ export function WorkspaceSidebar({
                 )}
               </button>
               <span className="treeStatusColumn">
-                <FileProgressControl
-                  status={fileStatus ?? "todo"}
-                  onChange={(status) => onSetFileProgress(entry.path, status)}
-                />
+                {fileStatus && (
+                  <FileProgressControl
+                    status={fileStatus}
+                    onChange={(status) => onSetFileProgress(entry.path, status)}
+                  />
+                )}
               </span>
               <button
                 className="treeEntryMoreButton"

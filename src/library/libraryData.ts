@@ -106,7 +106,10 @@ export function computeWorkStats(
   fileProgress: Record<string, string>,
   countOptions: CharacterCountOptions,
 ): WorkStats {
-  const files = collectFiles(index.folder.children);
+  // 字数・ファイル数・進捗は原稿だけで数える。最終更新は素材の更新も入れる（BINDER 3.6、D-5）。
+  const allFiles = collectFiles(index.folder.children);
+  const files = allFiles.filter((file) => file.role !== "material");
+  const materialPaths = new Set(allFiles.filter((file) => file.role === "material").map((file) => file.path));
   const progress: Record<FileProgressStatus, number> = {
     todo: 0,
     writing: 0,
@@ -125,11 +128,12 @@ export function computeWorkStats(
         : "todo";
     progress[key] += 1;
   }
-  const modified = files.flatMap((file) => (typeof file.modifiedAt === "number" ? [file.modifiedAt] : []));
+  const modified = allFiles.flatMap((file) => (typeof file.modifiedAt === "number" ? [file.modifiedAt] : []));
   return {
     signature: folderSignature(index.folder),
     charCount: index.ast.files.reduce(
-      (sum, file) => sum + displayedCharacterCount(file, countOptions),
+      (sum, file) =>
+        materialPaths.has(file.path) ? sum : sum + displayedCharacterCount(file, countOptions),
       0,
     ),
     fileCount: files.length,
