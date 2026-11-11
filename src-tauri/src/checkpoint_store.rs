@@ -467,6 +467,7 @@ fn runtime_tree_entry(root: &Path, entry: StoredProjectEntry) -> ProjectEntry {
         file_id: entry.file_id,
         content_hash: entry.content_hash,
         modified_at: None,
+        role: None,
     }
 }
 
@@ -893,6 +894,7 @@ mod tests {
                     file_id: None,
                     content_hash: None,
                     modified_at: None,
+                    role: None,
                 }],
                 library: None,
             },

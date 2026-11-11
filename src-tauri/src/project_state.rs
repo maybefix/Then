@@ -64,6 +64,22 @@ pub(super) struct ProjectConfig {
     /// 書き出しの前付け（表紙・目次）に使う作品ごとの値。
     #[serde(default, rename = "exportFrontMatter", skip_serializing_if = "Option::is_none")]
     pub(super) export_front_matter: Option<ExportFrontMatterConfig>,
+    /// 素材を置く、作品直下のフォルダの名前（BINDER 3.6）。未設定なら素材はない。
+    #[serde(default, rename = "materialsFolder", skip_serializing_if = "Option::is_none")]
+    pub(super) materials_folder: Option<String>,
+}
+
+impl ProjectConfig {
+    /// 素材フォルダの名前。作品直下の1つのフォルダ名として使えない値は、作品を開けなくせずに未設定と同じに扱う。
+    pub(super) fn materials_folder_name(&self) -> Option<&str> {
+        let name = self.materials_folder.as_deref()?;
+        let usable = !name.trim().is_empty()
+            && name.trim() == name
+            && !matches!(name, "." | ".." | ".then" | ".brew")
+            && !name.contains(['/', '\\', ':'])
+            && !name.chars().any(char::is_control);
+        usable.then_some(name)
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -122,6 +138,7 @@ impl Default for ProjectConfig {
             file_progress: BTreeMap::new(),
             work: None,
             export_front_matter: None,
+            materials_folder: None,
         }
     }
 }
