@@ -208,7 +208,12 @@ struct ProjectEntry {
     /// Last modification time in milliseconds, for "recently edited" lists.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     modified_at: Option<i64>,
+    /// 素材フォルダとその中のものだけ `"material"`。原稿は欄を持たない（BINDER 3.6）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    role: Option<String>,
 }
+
+const MATERIAL_ROLE: &str = "material";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -4047,6 +4052,17 @@ fn list_project_folder(path: &Path) -> Result<ProjectFolder, String> {
     })
 }
 
+/// 一覧の1件が素材かどうか。作品直下の素材フォルダ（`materialsFolder`）そのものと、その中のものが素材。
+/// 判定はここで一度だけ行い、画面側は `role` を読むだけにする（BINDER 3.6）。
+fn material_role(root: &Path, path: &Path, config: &ProjectConfig) -> Option<String> {
+    let name = config.materials_folder_name()?;
+    let first = path.strip_prefix(root).ok()?.components().next()?;
+    let first = first.as_os_str().to_str()?;
+    first
+        .eq_ignore_ascii_case(name)
+        .then(|| MATERIAL_ROLE.to_string())
+}
+
 fn list_project_entries(
     root: &Path,
     path: &Path,
@@ -4103,6 +4119,7 @@ fn list_project_entries_within(
                 file_id: None,
                 content_hash: None,
                 modified_at: None,
+                role: material_role(root, &entry_path, config),
             });
             continue;
         }
@@ -4130,6 +4147,7 @@ fn list_project_entries_within(
                 .and_then(|metadata| metadata.modified().ok())
                 .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
                 .map(|duration| duration.as_millis() as i64),
+            role: material_role(root, &entry_path, config),
         });
     }
     debug_log(&format!(
@@ -4969,6 +4987,15 @@ fn update_project_config_after_rename(old_path: &Path, new_path: &Path) -> Resul
             &new_progress_path,
             renamed_directory,
         );
+        // 素材フォルダを作品直下で改名したら、記録した名前も追う（BINDER 3.6）。
+        if renamed_directory
+            && parent_key == "."
+            && config
+                .materials_folder_name()
+                .is_some_and(|name| name.eq_ignore_ascii_case(old_name))
+        {
+            config.materials_folder = Some(new_name.to_string());
+        }
         Ok(())
     })
     .map(|_| ())
@@ -5512,6 +5539,10 @@ fn wide_null_terminated_to_string(value: &[u16]) -> String {
 
 #[cfg(test)]
 mod binder_migration_baseline;
+#[cfg(test)]
+mod materials_listing_baseline;
+#[cfg(test)]
+mod materials_role;
 #[cfg(test)]
 mod file_move_diagnostics;
 

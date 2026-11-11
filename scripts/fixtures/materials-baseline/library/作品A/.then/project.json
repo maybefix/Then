@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "order": {
+    ".": [
+      "序章.md",
+      "第一章",
+      "あとがき.txt"
+    ]
+  },
+  "fileProgress": {
+    "序章.md": {
+      "status": "done",
+      "updatedAt": 1
+    },
+    "第一章/港.md": {
+      "status": "writing",
+      "updatedAt": 2
+    }
+  }
+}

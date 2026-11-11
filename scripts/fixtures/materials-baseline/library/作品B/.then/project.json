@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "fileProgress": {
+    "本編.md": {
+      "status": "revising",
+      "updatedAt": 3
+    },
+    "素材/人物.md": {
+      "status": "writing",
+      "updatedAt": 4
+    }
+  }
+}

@@ -135,6 +135,7 @@
 | App.tsx 内の `collectProjectTextFiles` 呼び出し（8か所） | `src/App.tsx` | 呼び出しごとに上の分類で決める |
 
 - 判定は、一覧を作る側で一度だけ行い、各ファイルに「原稿／素材」の区分を付けて渡す。各処理で毎回パスを見て判定しない。
+- 1-3b の確認1（2026-11-11）で補った点: 全文検索とチェックポイントが索引（AST）を使うため、AST は全ファイルで作り、字数と見出しの集計で素材を外す。チェックポイントには素材も入れる（外すと、全体の復元で素材が消え、1-3a の退避が素材で失敗するため）。全文検索・置換は素材を含める。`materialsFolder` が未設定なら素材はない。詳しくは [BINDER_MATERIALS_PLAN.md](BINDER_MATERIALS_PLAN.md)。
 
 ### 3.7 既存の資料の移動（2026-11-09 決定）
 
@@ -187,7 +188,7 @@
 | 1-2 | App.tsx から Idea の状態と保存を切り離す（2026-11-10 実施。1-1 と同じ線引きで、読み書き・作品間の移動・コピーを移し、使われていない約290行を消した。「Ideaの管理単位」にしか関わらない処理は 2-4 で消す候補として残した。[IDEA_STATE_SEPARATION_PLAN.md](IDEA_STATE_SEPARATION_PLAN.md)） | 同上（Idea 参照 約60か所） | 責務分離 |
 | 1-3 | Plot と Idea の現行挙動のテストを足す（移行の前後比較用。2026-11-10 実施。見本データ `scripts/fixtures/binder-migration/` を今の読み込みに通した見え方を期待値にし、`test:binder-baseline`・`test:binder-baseline-rust` で確かめる。1-6・2-4 は移行の結果をこの期待値と比べる。[PLOT_IDEA_BASELINE_PLAN.md](PLOT_IDEA_BASELINE_PLAN.md)） | `scripts/`（関連テストは現在7本） | テスト |
 | 1-3a | 原稿の保存の前に、外部で書き換えられていないかをハッシュで確かめる（3.9。2026-11-10 実施。原稿の保存は `save_markdown_file` ではなく保存の記録の `journal_save` を通っていて、比べる基準を最初に打ったときに取っていたのを、開いたときのハッシュにした。違えば「ファイルの内容を読み込む」「この内容で上書きする」を選んでもらい、消える側はチェックポイントに残す。プロジェクト全体の置換も比べる。[SAVE_EXTERNAL_CHANGE_FIX_PLAN.md](SAVE_EXTERNAL_CHANGE_FIX_PLAN.md)） | `src-tauri/src/lib.rs`（`save_markdown_file`）、App.tsx の保存処理 | 不具合修正 |
-| 1-3b | ファイル一覧に「原稿／素材」の区分を付け、各処理の素材の扱いを 3.6 の表どおりにする | `src-tauri/src/lib.rs`（`list_project_folder`）、3.6 の表の各箇所 | 機能 |
+| 1-3b | ファイル一覧に「原稿／素材」の区分を付け、各処理の素材の扱いを 3.6 の表どおりにする（2026-11-11 実施。`project.json` の `materialsFolder` があるときだけ、一覧が素材に `role: "material"` を付ける。字数・進捗・書き出しは原稿だけ、検索・置換・チェックポイント・索引は素材も含む。未設定の作品は何も変わらない。[BINDER_MATERIALS_PLAN.md](BINDER_MATERIALS_PLAN.md)） | `src-tauri/src/lib.rs`（`list_project_folder`）、3.6 の表の各箇所 | 機能 |
 | 1-4 | バインダーを三段化（原稿／素材／投稿。投稿はこの時点では既存 Idea を指す） | [WorkspaceSidebar.tsx](../src/components/layout/WorkspaceSidebar.tsx) | 機能 |
 | 1-5 | 概要（`synopsis`）と、キーと表示名の対応表（3.5b）、中央のコルクボード表示 | `src/properties/`、新規コンポーネント | 機能 |
 | 1-6 | Plot → ノート「プロット（移行）」への移行（`project.json` の `plotCards` はバックアップ後に空にする）。ノートモード（2-2）ができるまでは、このノートも原稿と同じエディタで開く | [PlotPane.tsx](../src/components/plot/PlotPane.tsx) を退役 | 移行 |

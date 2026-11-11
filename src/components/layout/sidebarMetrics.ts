@@ -93,16 +93,26 @@ export function buildSidebarMetrics(
   }
 
   const folderCharCounts = new Map<string, number | null>();
-  const visitFolder = (path: string, children: ProjectEntry[]): FolderCount => {
+  const materialPaths = new Set<string>();
+  // 素材は作品の字数に足さない。素材フォルダの中では、そのフォルダ自身の字数として数える（BINDER 3.6）。
+  const visitFolder = (
+    path: string,
+    children: ProjectEntry[],
+    isMaterialFolder = false,
+  ): FolderCount => {
     const result: FolderCount = { descendantFileCount: 0, indexedFileCount: 0, total: 0 };
     for (const entry of children) {
+      const leavesManuscripts = entry.role === "material" && !isMaterialFolder;
       if (entry.kind === "folder") {
-        const nested = visitFolder(entry.path, entry.children);
+        const nested = visitFolder(entry.path, entry.children, entry.role === "material");
+        if (leavesManuscripts) continue;
         result.descendantFileCount += nested.descendantFileCount;
         result.indexedFileCount += nested.indexedFileCount;
         result.total += nested.total;
         continue;
       }
+      if (entry.role === "material") materialPaths.add(entry.path);
+      if (leavesManuscripts) continue;
       result.descendantFileCount += 1;
       const astFile = projectAstFiles.get(entry.path);
       if (astFile?.status !== "indexed") continue;
@@ -124,7 +134,8 @@ export function buildSidebarMetrics(
     headingCharCounts,
     projectTotalCharCount: projectAst
       ? projectAst.files.reduce(
-          (sum, file) => sum + displayedCharacterCount(file, options),
+          (sum, file) =>
+            materialPaths.has(file.path) ? sum : sum + displayedCharacterCount(file, options),
           0,
         )
       : null,

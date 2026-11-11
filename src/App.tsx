@@ -134,6 +134,7 @@ import {
   workspaceDocumentTabsKey,
 } from "./editor/workspaceDocumentTabs";
 import {
+  collectManuscriptFiles,
   collectProjectTextFiles,
   createProjectAstSkeleton,
   markProjectAstFileError,
@@ -5480,10 +5481,19 @@ export default function App() {
 
     setLastError("");
     try {
-      const projectFiles = projectFolder ? collectProjectTextFiles(projectFolder) : [];
+      // 書き出すのは原稿だけ。原稿がないとき、開いているのが素材なら代わりに出さない（BINDER 3.6、D-5）。
+      const projectFiles = projectFolder ? collectManuscriptFiles(projectFolder) : [];
+      const currentIsMaterial = Boolean(
+        currentFilePath &&
+          collectProjectTextFiles(projectFolder).some(
+            (file) => file.role === "material" && isSamePath(file.path, currentFilePath),
+          ),
+      );
       const candidates = projectFiles.length > 0
         ? projectFiles
-        : [{ path: currentFilePath ?? "", name: currentFileName }];
+        : currentIsMaterial
+          ? []
+          : [{ path: currentFilePath ?? "", name: currentFileName }];
       const sources: LoadedExportSource[] = [];
       const readErrors: string[] = [];
       // Flags files whose properties are broken YAML; without the parser the list
