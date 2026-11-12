@@ -720,6 +720,8 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             delete_text_template,
             create_markdown_file,
             create_project_folder,
+            create_project_materials_folder,
+            set_project_materials_folder,
             rename_project_entry,
             plan_delete_project_entry,
             delete_project_entry_to_trash,
@@ -2436,6 +2438,75 @@ fn create_project_folder(folder_path: String, name: String) -> Result<ProjectFol
 
     std::fs::create_dir(&path).map_err(|error| format!("failed to create folder: {error}"))?;
     list_project_folder(&folder)
+}
+
+/// 素材フォルダにする名前を確かめる。作品に使える素材フォルダがすでにあれば断る（1作品に1つ。BINDER 1-4）。
+fn materials_folder_name_for(root: &Path, name: &str) -> Result<String, String> {
+    let name = normalize_project_entry_name(name)?;
+    let config = load_project_config(root)?;
+    if config
+        .materials_folder_name()
+        .is_some_and(|current| root.join(current).is_dir())
+    {
+        return Err("materials folder already exists".to_string());
+    }
+    let probe = ProjectConfig {
+        materials_folder: Some(name.clone()),
+        ..ProjectConfig::default()
+    };
+    if probe.materials_folder_name().is_none() {
+        return Err("name cannot be used for the materials folder".to_string());
+    }
+    Ok(name)
+}
+
+fn write_materials_folder(root: &Path, name: String) -> Result<(), String> {
+    update_project_config(root, move |config| {
+        config.materials_folder = Some(name);
+        Ok(())
+    })
+    .map(|_| ())
+}
+
+/// 作品直下に素材フォルダを作り、`materialsFolder` に名前を書く（BINDER 1-4）。
+/// 同じ名前のものがあれば作らない（既存のフォルダを黙って素材にしない）。
+#[tauri::command]
+fn create_project_materials_folder(root_path: String, name: String) -> Result<ProjectFolder, String> {
+    let root = PathBuf::from(root_path);
+    if !root.is_dir() {
+        return Err("project root does not exist".to_string());
+    }
+    let name = materials_folder_name_for(&root, &name)?;
+    let path = root.join(&name);
+    if path.exists() {
+        return Err("folder already exists".to_string());
+    }
+    std::fs::create_dir(&path).map_err(|error| format!("failed to create folder: {error}"))?;
+    if let Err(error) = write_materials_folder(&root, name) {
+        let _ = std::fs::remove_dir(&path);
+        return Err(error);
+    }
+    list_project_folder(&root)
+}
+
+/// 作品直下の既存のフォルダを素材フォルダにする。利用者が右クリックで選んだときだけ呼ぶ（BINDER 1-4）。
+#[tauri::command]
+fn set_project_materials_folder(root_path: String, folder_path: String) -> Result<ProjectFolder, String> {
+    let root = PathBuf::from(root_path);
+    let folder = PathBuf::from(folder_path);
+    if !root.is_dir() || !folder.is_dir() {
+        return Err("folder does not exist".to_string());
+    }
+    if folder.parent() != Some(root.as_path()) {
+        return Err("materials folder must be directly inside the work".to_string());
+    }
+    let name = folder
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "folder name is not valid".to_string())?;
+    let name = materials_folder_name_for(&root, name)?;
+    write_materials_folder(&root, name)?;
+    list_project_folder(&root)
 }
 
 #[tauri::command]

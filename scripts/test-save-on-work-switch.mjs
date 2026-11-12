@@ -306,7 +306,7 @@ try {
   assert.ok(plotSwitch.clickedAfter < 700, `the switch must start within 0.7 s of the edit (${plotSwitch.clickedAfter} ms)`);
 
   // ---- 3. 作品Aに戻ったら、書いた Idea が残っている ----
-  await evaluate(`t.rightPane("バインダー")`);
+  await evaluate(`t.rightPane("アイデア")`);
   const bodiesBackInA = await evaluate(`(async () => { await t.sleep(300); return t.ideaText(); })()`);
   if (DEBUG) console.log("back in A", bodiesBackInA);
 

@@ -40,7 +40,7 @@ const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
 const rightSidebarBuiltinTabs: Array<{ id: string; label: string; icon: ReactNode }> = [
   {
     id: "idea",
-    label: "バインダー",
+    label: "アイデア",
     icon: (
       <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
         <path d="M9 18h6" />
@@ -248,7 +248,7 @@ export function RightSidebar(props: RightSidebarProps) {
             />
           )}
           {rightSidebarTab === "idea" && (
-            <div className="plotPaneHeaderActions" aria-label="バインダー操作">
+            <div className="plotPaneHeaderActions" aria-label="アイデア操作">
               <button
                 className="sidebarIconButton plotHeaderActionButton"
                 type="button"

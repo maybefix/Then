@@ -1,0 +1,1725 @@
+{
+  "作品A": {
+    "files": [
+      "序章.md",
+      "第一章/港.md",
+      "第一章/灯台.md",
+      "あとがき.txt"
+    ],
+    "filters": {
+      "all": {
+        "header": "ファイル字数",
+        "libraryBack": "見本ライブラリライブラリ",
+        "empty": null,
+        "rows": [
+          {
+            "path": "序章.md",
+            "kind": "file",
+            "parent": ".",
+            "indent": "24px",
+            "name": "序章.md",
+            "nameClass": [
+              "treeItemName-done"
+            ],
+            "chars": "15",
+            "progress": "完",
+            "folderDot": null,
+            "expanded": "true",
+            "flags": [
+              "activeTreeItem",
+              "selectedTreeEntry",
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "heading": "序章",
+            "file": "序章.md",
+            "indent": "61px",
+            "chars": "15",
+            "classes": []
+          },
+          {
+            "path": "第一章",
+            "kind": "folder",
+            "parent": ".",
+            "indent": "24px",
+            "name": "第一章",
+            "nameClass": [],
+            "chars": "39",
+            "progress": null,
+            "folderDot": "progressText-writing",
+            "expanded": "true",
+            "flags": [
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "path": "第一章/港.md",
+            "kind": "file",
+            "parent": "第一章",
+            "indent": "38px",
+            "name": "港.md",
+            "nameClass": [
+              "treeItemName-writing"
+            ],
+            "chars": "30",
+            "progress": "執",
+            "folderDot": null,
+            "expanded": "true",
+            "flags": [
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "heading": "港",
+            "file": "第一章/港.md",
+            "indent": "75px",
+            "chars": "12",
+            "classes": [
+              "collapsibleOutlineTreeItem"
+            ]
+          },
+          {
+            "heading": "夜",
+            "file": "第一章/港.md",
+            "indent": "91px",
+            "chars": "18",
+            "classes": []
+          },
+          {
+            "path": "第一章/灯台.md",
+            "kind": "file",
+            "parent": "第一章",
+            "indent": "38px",
+            "name": "灯台.md",
+            "nameClass": [
+              "treeItemName-todo"
+            ],
+            "chars": "9",
+            "progress": "未",
+            "folderDot": null,
+            "expanded": "true",
+            "flags": [
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "heading": "灯台",
+            "file": "第一章/灯台.md",
+            "indent": "75px",
+            "chars": "9",
+            "classes": []
+          },
+          {
+            "path": "あとがき.txt",
+            "kind": "file",
+            "parent": ".",
+            "indent": "24px",
+            "name": "あとがき",
+            "nameClass": [
+              "treeItemName-todo"
+            ],
+            "chars": "11",
+            "progress": "未",
+            "folderDot": null,
+            "expanded": null,
+            "flags": [
+              "draggableTreeItem"
+            ]
+          }
+        ],
+        "snapshotDock": true,
+        "footer": "執執筆中推推敲中完完了未未着手合計 65字",
+        "libraryProjects": null
+      },
+      "todo": {
+        "header": "未未着手字数",
+        "libraryBack": "見本ライブラリライブラリ",
+        "empty": null,
+        "rows": [
+          {
+            "path": "第一章",
+            "kind": "folder",
+            "parent": ".",
+            "indent": "24px",
+            "name": "第一章",
+            "nameClass": [],
+            "chars": "39",
+            "progress": null,
+            "folderDot": "progressText-writing",
+            "expanded": "true",
+            "flags": [
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "path": "第一章/灯台.md",
+            "kind": "file",
+            "parent": "第一章",
+            "indent": "38px",
+            "name": "灯台.md",
+            "nameClass": [
+              "treeItemName-todo"
+            ],
+            "chars": "9",
+            "progress": "未",
+            "folderDot": null,
+            "expanded": "true",
+            "flags": [
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "heading": "灯台",
+            "file": "第一章/灯台.md",
+            "indent": "75px",
+            "chars": "9",
+            "classes": []
+          },
+          {
+            "path": "あとがき.txt",
+            "kind": "file",
+            "parent": ".",
+            "indent": "24px",
+            "name": "あとがき",
+            "nameClass": [
+              "treeItemName-todo"
+            ],
+            "chars": "11",
+            "progress": "未",
+            "folderDot": null,
+            "expanded": null,
+            "flags": [
+              "draggableTreeItem"
+            ]
+          }
+        ],
+        "snapshotDock": true,
+        "footer": "執執筆中推推敲中完完了未未着手合計 65字",
+        "libraryProjects": null
+      },
+      "writing": {
+        "header": "執執筆中字数",
+        "libraryBack": "見本ライブラリライブラリ",
+        "empty": null,
+        "rows": [
+          {
+            "path": "第一章",
+            "kind": "folder",
+            "parent": ".",
+            "indent": "24px",
+            "name": "第一章",
+            "nameClass": [],
+            "chars": "39",
+            "progress": null,
+            "folderDot": "progressText-writing",
+            "expanded": "true",
+            "flags": [
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "path": "第一章/港.md",
+            "kind": "file",
+            "parent": "第一章",
+            "indent": "38px",
+            "name": "港.md",
+            "nameClass": [
+              "treeItemName-writing"
+            ],
+            "chars": "30",
+            "progress": "執",
+            "folderDot": null,
+            "expanded": "true",
+            "flags": [
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "heading": "港",
+            "file": "第一章/港.md",
+            "indent": "75px",
+            "chars": "12",
+            "classes": [
+              "collapsibleOutlineTreeItem"
+            ]
+          },
+          {
+            "heading": "夜",
+            "file": "第一章/港.md",
+            "indent": "91px",
+            "chars": "18",
+            "classes": []
+          }
+        ],
+        "snapshotDock": true,
+        "footer": "執執筆中推推敲中完完了未未着手合計 65字",
+        "libraryProjects": null
+      },
+      "revising": {
+        "header": "推推敲中字数",
+        "libraryBack": "見本ライブラリライブラリ",
+        "empty": "推敲中のファイルはありません",
+        "rows": [],
+        "snapshotDock": true,
+        "footer": "執執筆中推推敲中完完了未未着手合計 65字",
+        "libraryProjects": null
+      },
+      "done": {
+        "header": "完完了字数",
+        "libraryBack": "見本ライブラリライブラリ",
+        "empty": null,
+        "rows": [
+          {
+            "path": "序章.md",
+            "kind": "file",
+            "parent": ".",
+            "indent": "24px",
+            "name": "序章.md",
+            "nameClass": [
+              "treeItemName-done"
+            ],
+            "chars": "15",
+            "progress": "完",
+            "folderDot": null,
+            "expanded": "true",
+            "flags": [
+              "activeTreeItem",
+              "selectedTreeEntry",
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "heading": "序章",
+            "file": "序章.md",
+            "indent": "61px",
+            "chars": "15",
+            "classes": []
+          }
+        ],
+        "snapshotDock": true,
+        "footer": "執執筆中推推敲中完完了未未着手合計 65字",
+        "libraryProjects": null
+      },
+      "archived": {
+        "header": "アアーカイブ字数",
+        "libraryBack": "見本ライブラリライブラリ",
+        "empty": "アーカイブのファイルはありません",
+        "rows": [],
+        "snapshotDock": true,
+        "footer": "執執筆中推推敲中完完了未未着手合計 65字",
+        "libraryProjects": null
+      }
+    },
+    "interactions": {
+      "steps": [
+        {
+          "label": "2つ目のファイルをクリック",
+          "calls": [
+            [
+              "onSelectFile",
+              "第一章/港.md"
+            ]
+          ],
+          "selected": [
+            "第一章/港.md"
+          ]
+        },
+        {
+          "label": "1つ目を Ctrl+クリック",
+          "calls": [],
+          "selected": [
+            "序章.md",
+            "第一章/港.md"
+          ]
+        },
+        {
+          "label": "1つ目をもう一度 Ctrl+クリック（外す）",
+          "calls": [],
+          "selected": [
+            "第一章/港.md"
+          ]
+        },
+        {
+          "label": "フォルダ 第一章 をクリック",
+          "calls": [
+            [
+              "onFolderCollapsedChange",
+              "第一章",
+              true
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "見出しの開閉ボタン",
+          "calls": [
+            [
+              "onOutlineCollapsedChange",
+              "序章.md",
+              true
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "子見出しの開閉ボタン",
+          "calls": [
+            [
+              "onOutlineHeadingCollapsedChange",
+              "第一章/港.md:C:/materials-baseline/作品A/第一章/港.md:1:1:2a93f9606689d000",
+              true
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "見出しをクリック",
+          "calls": [
+            [
+              "onJumpProjectOutline",
+              "序章.md",
+              "序章"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "メニューの「削除」",
+          "calls": [
+            [
+              "onDeleteEntry",
+              {
+                "path": "序章.md",
+                "name": "序章.md",
+                "kind": "file"
+              }
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "フォルダのメニューの「ファイルを追加」",
+          "calls": [
+            [
+              "onCreateFile",
+              "第一章"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "序章.md を 第一章/港.md の後ろへ（別のフォルダ）",
+          "calls": [
+            [
+              "onMoveEntry",
+              [
+                "序章.md"
+              ],
+              "第一章",
+              "第一章/港.md",
+              "after"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "序章.md を 第一章/灯台.md の後ろへ（別のフォルダ）",
+          "calls": [
+            [
+              "onMoveEntry",
+              [
+                "序章.md"
+              ],
+              "第一章",
+              "第一章/灯台.md",
+              "after"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "序章.md を あとがき.txt の後ろへ（同じフォルダ）",
+          "calls": [
+            [
+              "onReorderEntry",
+              ".",
+              [
+                "序章.md"
+              ],
+              "あとがき.txt",
+              "after"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "序章.md をフォルダ 第一章 の中へ",
+          "calls": [
+            [
+              "onMoveEntry",
+              [
+                "序章.md"
+              ],
+              "第一章"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "第一章/港.md を 序章.md の後ろへ（別のフォルダ）",
+          "calls": [
+            [
+              "onMoveEntry",
+              [
+                "第一章/港.md"
+              ],
+              ".",
+              "序章.md",
+              "after"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "第一章/港.md を 第一章/灯台.md の後ろへ（同じフォルダ）",
+          "calls": [
+            [
+              "onReorderEntry",
+              "第一章",
+              [
+                "第一章/港.md"
+              ],
+              "第一章/灯台.md",
+              "after"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "第一章/港.md を あとがき.txt の後ろへ（別のフォルダ）",
+          "calls": [
+            [
+              "onMoveEntry",
+              [
+                "第一章/港.md"
+              ],
+              ".",
+              "あとがき.txt",
+              "after"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "第一章/港.md をフォルダ 第一章 の中へ",
+          "calls": [],
+          "selected": [
+            "第一章/港.md"
+          ]
+        },
+        {
+          "label": "第一章/灯台.md を 序章.md の後ろへ（別のフォルダ）",
+          "calls": [
+            [
+              "onMoveEntry",
+              [
+                "第一章/灯台.md"
+              ],
+              ".",
+              "序章.md",
+              "after"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "第一章/灯台.md を 第一章/港.md の後ろへ（同じフォルダ）",
+          "calls": [
+            [
+              "onReorderEntry",
+              "第一章",
+              [
+                "第一章/灯台.md"
+              ],
+              "第一章/港.md",
+              "after"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "第一章/灯台.md を あとがき.txt の後ろへ（別のフォルダ）",
+          "calls": [
+            [
+              "onMoveEntry",
+              [
+                "第一章/灯台.md"
+              ],
+              ".",
+              "あとがき.txt",
+              "after"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "第一章/灯台.md をフォルダ 第一章 の中へ",
+          "calls": [],
+          "selected": [
+            "第一章/灯台.md"
+          ]
+        },
+        {
+          "label": "あとがき.txt を 序章.md の後ろへ（同じフォルダ）",
+          "calls": [
+            [
+              "onReorderEntry",
+              ".",
+              [
+                "あとがき.txt"
+              ],
+              "序章.md",
+              "after"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "あとがき.txt を 第一章/港.md の後ろへ（別のフォルダ）",
+          "calls": [
+            [
+              "onMoveEntry",
+              [
+                "あとがき.txt"
+              ],
+              "第一章",
+              "第一章/港.md",
+              "after"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "あとがき.txt を 第一章/灯台.md の後ろへ（別のフォルダ）",
+          "calls": [
+            [
+              "onMoveEntry",
+              [
+                "あとがき.txt"
+              ],
+              "第一章",
+              "第一章/灯台.md",
+              "after"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "あとがき.txt をフォルダ 第一章 の中へ",
+          "calls": [
+            [
+              "onMoveEntry",
+              [
+                "あとがき.txt"
+              ],
+              "第一章"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "フォルダ 第一章 を 序章.md の前へ",
+          "calls": [],
+          "selected": []
+        },
+        {
+          "label": "序章.md と 第一章/港.md を選んで、フォルダ 第一章 の中へ",
+          "calls": [
+            [
+              "onSelectFile",
+              "序章.md"
+            ],
+            [
+              "onMoveEntry",
+              [
+                "序章.md",
+                "第一章/港.md"
+              ],
+              "第一章"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "序章.md と 第一章/灯台.md を選んで、フォルダ 第一章 の中へ",
+          "calls": [
+            [
+              "onSelectFile",
+              "序章.md"
+            ],
+            [
+              "onMoveEntry",
+              [
+                "序章.md",
+                "第一章/灯台.md"
+              ],
+              "第一章"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "序章.md と あとがき.txt を選んで、フォルダ 第一章 の中へ",
+          "calls": [
+            [
+              "onSelectFile",
+              "序章.md"
+            ],
+            [
+              "onMoveEntry",
+              [
+                "序章.md",
+                "あとがき.txt"
+              ],
+              "第一章"
+            ]
+          ],
+          "selected": []
+        }
+      ],
+      "menus": {
+        "序章.md": [
+          "開く",
+          "リネーム",
+          "削除"
+        ],
+        "第一章": [
+          "開く",
+          "ファイルを追加",
+          "フォルダを追加",
+          "リネーム",
+          "削除"
+        ],
+        "第一章/港.md": [
+          "開く",
+          "リネーム",
+          "削除"
+        ],
+        "第一章/灯台.md": [
+          "開く",
+          "リネーム",
+          "削除"
+        ],
+        "あとがき.txt": [
+          "開く",
+          "リネーム",
+          "削除"
+        ]
+      },
+      "collapsedAll": [
+        {
+          "path": "序章.md",
+          "kind": "file",
+          "parent": ".",
+          "indent": "24px",
+          "name": "序章.md",
+          "nameClass": [
+            "treeItemName-done"
+          ],
+          "chars": "15",
+          "progress": "完",
+          "folderDot": null,
+          "expanded": "false",
+          "flags": [
+            "activeTreeItem",
+            "draggableTreeItem"
+          ]
+        },
+        {
+          "path": "第一章",
+          "kind": "folder",
+          "parent": ".",
+          "indent": "24px",
+          "name": "第一章",
+          "nameClass": [],
+          "chars": "39",
+          "progress": null,
+          "folderDot": "progressText-writing",
+          "expanded": "false",
+          "flags": [
+            "draggableTreeItem"
+          ]
+        },
+        {
+          "path": "あとがき.txt",
+          "kind": "file",
+          "parent": ".",
+          "indent": "24px",
+          "name": "あとがき",
+          "nameClass": [
+            "treeItemName-todo"
+          ],
+          "chars": "11",
+          "progress": "未",
+          "folderDot": null,
+          "expanded": null,
+          "flags": [
+            "draggableTreeItem"
+          ]
+        }
+      ]
+    },
+    "startPageRecent": [
+      "あとがき.txt",
+      "第一章/灯台.md",
+      "第一章/港.md",
+      "序章.md"
+    ]
+  },
+  "作品B": {
+    "files": [
+      "素材/年表/年表.md",
+      "素材/人物.md",
+      "本編.md"
+    ],
+    "filters": {
+      "all": {
+        "header": "ファイル字数",
+        "libraryBack": "見本ライブラリライブラリ",
+        "empty": null,
+        "rows": [
+          {
+            "path": "素材",
+            "kind": "folder",
+            "parent": ".",
+            "indent": "24px",
+            "name": "素材",
+            "nameClass": [],
+            "chars": "22",
+            "progress": null,
+            "folderDot": "progressText-writing",
+            "expanded": "true",
+            "flags": [
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "path": "素材/年表",
+            "kind": "folder",
+            "parent": "素材",
+            "indent": "38px",
+            "name": "年表",
+            "nameClass": [],
+            "chars": "8",
+            "progress": null,
+            "folderDot": "progressText-todo",
+            "expanded": "true",
+            "flags": [
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "path": "素材/年表/年表.md",
+            "kind": "file",
+            "parent": "素材/年表",
+            "indent": "52px",
+            "name": "年表.md",
+            "nameClass": [
+              "treeItemName-todo"
+            ],
+            "chars": "8",
+            "progress": "未",
+            "folderDot": null,
+            "expanded": "true",
+            "flags": [
+              "activeTreeItem",
+              "selectedTreeEntry",
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "heading": "年表",
+            "file": "素材/年表/年表.md",
+            "indent": "89px",
+            "chars": "8",
+            "classes": []
+          },
+          {
+            "path": "素材/人物.md",
+            "kind": "file",
+            "parent": "素材",
+            "indent": "38px",
+            "name": "人物.md",
+            "nameClass": [
+              "treeItemName-writing"
+            ],
+            "chars": "14",
+            "progress": "執",
+            "folderDot": null,
+            "expanded": "true",
+            "flags": [
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "heading": "人物",
+            "file": "素材/人物.md",
+            "indent": "75px",
+            "chars": "3",
+            "classes": [
+              "collapsibleOutlineTreeItem"
+            ]
+          },
+          {
+            "heading": "汐見",
+            "file": "素材/人物.md",
+            "indent": "91px",
+            "chars": "11",
+            "classes": []
+          },
+          {
+            "path": "本編.md",
+            "kind": "file",
+            "parent": ".",
+            "indent": "24px",
+            "name": "本編.md",
+            "nameClass": [
+              "treeItemName-revising"
+            ],
+            "chars": "9",
+            "progress": "推",
+            "folderDot": null,
+            "expanded": "true",
+            "flags": [
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "heading": "本編",
+            "file": "本編.md",
+            "indent": "61px",
+            "chars": "9",
+            "classes": []
+          }
+        ],
+        "snapshotDock": true,
+        "footer": "執執筆中推推敲中完完了未未着手合計 31字",
+        "libraryProjects": null
+      },
+      "todo": {
+        "header": "未未着手字数",
+        "libraryBack": "見本ライブラリライブラリ",
+        "empty": null,
+        "rows": [
+          {
+            "path": "素材",
+            "kind": "folder",
+            "parent": ".",
+            "indent": "24px",
+            "name": "素材",
+            "nameClass": [],
+            "chars": "22",
+            "progress": null,
+            "folderDot": "progressText-writing",
+            "expanded": "true",
+            "flags": [
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "path": "素材/年表",
+            "kind": "folder",
+            "parent": "素材",
+            "indent": "38px",
+            "name": "年表",
+            "nameClass": [],
+            "chars": "8",
+            "progress": null,
+            "folderDot": "progressText-todo",
+            "expanded": "true",
+            "flags": [
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "path": "素材/年表/年表.md",
+            "kind": "file",
+            "parent": "素材/年表",
+            "indent": "52px",
+            "name": "年表.md",
+            "nameClass": [
+              "treeItemName-todo"
+            ],
+            "chars": "8",
+            "progress": "未",
+            "folderDot": null,
+            "expanded": "true",
+            "flags": [
+              "activeTreeItem",
+              "selectedTreeEntry",
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "heading": "年表",
+            "file": "素材/年表/年表.md",
+            "indent": "89px",
+            "chars": "8",
+            "classes": []
+          }
+        ],
+        "snapshotDock": true,
+        "footer": "執執筆中推推敲中完完了未未着手合計 31字",
+        "libraryProjects": null
+      },
+      "writing": {
+        "header": "執執筆中字数",
+        "libraryBack": "見本ライブラリライブラリ",
+        "empty": null,
+        "rows": [
+          {
+            "path": "素材",
+            "kind": "folder",
+            "parent": ".",
+            "indent": "24px",
+            "name": "素材",
+            "nameClass": [],
+            "chars": "22",
+            "progress": null,
+            "folderDot": "progressText-writing",
+            "expanded": "true",
+            "flags": [
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "path": "素材/人物.md",
+            "kind": "file",
+            "parent": "素材",
+            "indent": "38px",
+            "name": "人物.md",
+            "nameClass": [
+              "treeItemName-writing"
+            ],
+            "chars": "14",
+            "progress": "執",
+            "folderDot": null,
+            "expanded": "true",
+            "flags": [
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "heading": "人物",
+            "file": "素材/人物.md",
+            "indent": "75px",
+            "chars": "3",
+            "classes": [
+              "collapsibleOutlineTreeItem"
+            ]
+          },
+          {
+            "heading": "汐見",
+            "file": "素材/人物.md",
+            "indent": "91px",
+            "chars": "11",
+            "classes": []
+          }
+        ],
+        "snapshotDock": true,
+        "footer": "執執筆中推推敲中完完了未未着手合計 31字",
+        "libraryProjects": null
+      },
+      "revising": {
+        "header": "推推敲中字数",
+        "libraryBack": "見本ライブラリライブラリ",
+        "empty": null,
+        "rows": [
+          {
+            "path": "本編.md",
+            "kind": "file",
+            "parent": ".",
+            "indent": "24px",
+            "name": "本編.md",
+            "nameClass": [
+              "treeItemName-revising"
+            ],
+            "chars": "9",
+            "progress": "推",
+            "folderDot": null,
+            "expanded": "true",
+            "flags": [
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "heading": "本編",
+            "file": "本編.md",
+            "indent": "61px",
+            "chars": "9",
+            "classes": []
+          }
+        ],
+        "snapshotDock": true,
+        "footer": "執執筆中推推敲中完完了未未着手合計 31字",
+        "libraryProjects": null
+      },
+      "done": {
+        "header": "完完了字数",
+        "libraryBack": "見本ライブラリライブラリ",
+        "empty": "完了のファイルはありません",
+        "rows": [],
+        "snapshotDock": true,
+        "footer": "執執筆中推推敲中完完了未未着手合計 31字",
+        "libraryProjects": null
+      },
+      "archived": {
+        "header": "アアーカイブ字数",
+        "libraryBack": "見本ライブラリライブラリ",
+        "empty": "アーカイブのファイルはありません",
+        "rows": [],
+        "snapshotDock": true,
+        "footer": "執執筆中推推敲中完完了未未着手合計 31字",
+        "libraryProjects": null
+      }
+    },
+    "interactions": {
+      "steps": [
+        {
+          "label": "2つ目のファイルをクリック",
+          "calls": [
+            [
+              "onSelectFile",
+              "素材/人物.md"
+            ]
+          ],
+          "selected": [
+            "素材/人物.md"
+          ]
+        },
+        {
+          "label": "1つ目を Ctrl+クリック",
+          "calls": [],
+          "selected": [
+            "素材/年表/年表.md",
+            "素材/人物.md"
+          ]
+        },
+        {
+          "label": "1つ目をもう一度 Ctrl+クリック（外す）",
+          "calls": [],
+          "selected": [
+            "素材/人物.md"
+          ]
+        },
+        {
+          "label": "フォルダ 素材 をクリック",
+          "calls": [
+            [
+              "onFolderCollapsedChange",
+              "素材",
+              true
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "フォルダ 素材/年表 をクリック",
+          "calls": [
+            [
+              "onFolderCollapsedChange",
+              "素材/年表",
+              true
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "見出しの開閉ボタン",
+          "calls": [
+            [
+              "onOutlineCollapsedChange",
+              "素材/年表/年表.md",
+              true
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "子見出しの開閉ボタン",
+          "calls": [
+            [
+              "onOutlineHeadingCollapsedChange",
+              "素材/人物.md:C:/materials-baseline/作品B/素材/人物.md:1:1:c9ed7760c2c07100",
+              true
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "見出しをクリック",
+          "calls": [
+            [
+              "onJumpProjectOutline",
+              "素材/年表/年表.md",
+              "年表"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "メニューの「削除」",
+          "calls": [
+            [
+              "onDeleteEntry",
+              {
+                "path": "素材/年表/年表.md",
+                "name": "年表.md",
+                "kind": "file"
+              }
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "フォルダのメニューの「ファイルを追加」",
+          "calls": [
+            [
+              "onCreateFile",
+              "素材"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "素材/年表/年表.md を 素材/人物.md の後ろへ（別のフォルダ）",
+          "calls": [
+            [
+              "onMoveEntry",
+              [
+                "素材/年表/年表.md"
+              ],
+              "素材",
+              "素材/人物.md",
+              "after"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "素材/年表/年表.md を 本編.md の後ろへ（別のフォルダ）",
+          "calls": [
+            [
+              "onMoveEntry",
+              [
+                "素材/年表/年表.md"
+              ],
+              ".",
+              "本編.md",
+              "after"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "素材/年表/年表.md をフォルダ 素材 の中へ",
+          "calls": [
+            [
+              "onMoveEntry",
+              [
+                "素材/年表/年表.md"
+              ],
+              "素材"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "素材/年表/年表.md をフォルダ 素材/年表 の中へ",
+          "calls": [],
+          "selected": [
+            "素材/年表/年表.md"
+          ]
+        },
+        {
+          "label": "素材/人物.md を 素材/年表/年表.md の後ろへ（別のフォルダ）",
+          "calls": [
+            [
+              "onMoveEntry",
+              [
+                "素材/人物.md"
+              ],
+              "素材/年表",
+              "素材/年表/年表.md",
+              "after"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "素材/人物.md を 本編.md の後ろへ（別のフォルダ）",
+          "calls": [
+            [
+              "onMoveEntry",
+              [
+                "素材/人物.md"
+              ],
+              ".",
+              "本編.md",
+              "after"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "素材/人物.md をフォルダ 素材 の中へ",
+          "calls": [],
+          "selected": [
+            "素材/人物.md"
+          ]
+        },
+        {
+          "label": "素材/人物.md をフォルダ 素材/年表 の中へ",
+          "calls": [
+            [
+              "onMoveEntry",
+              [
+                "素材/人物.md"
+              ],
+              "素材/年表"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "本編.md を 素材/年表/年表.md の後ろへ（別のフォルダ）",
+          "calls": [
+            [
+              "onMoveEntry",
+              [
+                "本編.md"
+              ],
+              "素材/年表",
+              "素材/年表/年表.md",
+              "after"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "本編.md を 素材/人物.md の後ろへ（別のフォルダ）",
+          "calls": [
+            [
+              "onMoveEntry",
+              [
+                "本編.md"
+              ],
+              "素材",
+              "素材/人物.md",
+              "after"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "本編.md をフォルダ 素材 の中へ",
+          "calls": [
+            [
+              "onMoveEntry",
+              [
+                "本編.md"
+              ],
+              "素材"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "本編.md をフォルダ 素材/年表 の中へ",
+          "calls": [
+            [
+              "onMoveEntry",
+              [
+                "本編.md"
+              ],
+              "素材/年表"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "フォルダ 素材 を 素材/年表/年表.md の前へ",
+          "calls": [],
+          "selected": []
+        },
+        {
+          "label": "フォルダ 素材/年表 を 素材/年表/年表.md の前へ",
+          "calls": [],
+          "selected": []
+        },
+        {
+          "label": "素材/年表/年表.md と 素材/人物.md を選んで、フォルダ 素材 の中へ",
+          "calls": [
+            [
+              "onSelectFile",
+              "素材/年表/年表.md"
+            ],
+            [
+              "onMoveEntry",
+              [
+                "素材/年表/年表.md",
+                "素材/人物.md"
+              ],
+              "素材"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "素材/年表/年表.md と 本編.md を選んで、フォルダ 素材 の中へ",
+          "calls": [
+            [
+              "onSelectFile",
+              "素材/年表/年表.md"
+            ],
+            [
+              "onMoveEntry",
+              [
+                "素材/年表/年表.md",
+                "本編.md"
+              ],
+              "素材"
+            ]
+          ],
+          "selected": []
+        },
+        {
+          "label": "素材/人物.md と 本編.md を選んで、フォルダ 素材 の中へ",
+          "calls": [
+            [
+              "onSelectFile",
+              "素材/人物.md"
+            ],
+            [
+              "onMoveEntry",
+              [
+                "素材/人物.md",
+                "本編.md"
+              ],
+              "素材"
+            ]
+          ],
+          "selected": []
+        }
+      ],
+      "menus": {
+        "素材": [
+          "開く",
+          "ファイルを追加",
+          "フォルダを追加",
+          "リネーム",
+          "削除"
+        ],
+        "素材/年表": [
+          "開く",
+          "ファイルを追加",
+          "フォルダを追加",
+          "リネーム",
+          "削除"
+        ],
+        "素材/年表/年表.md": [
+          "開く",
+          "リネーム",
+          "削除"
+        ],
+        "素材/人物.md": [
+          "開く",
+          "リネーム",
+          "削除"
+        ],
+        "本編.md": [
+          "開く",
+          "リネーム",
+          "削除"
+        ]
+      },
+      "collapsedAll": [
+        {
+          "path": "素材",
+          "kind": "folder",
+          "parent": ".",
+          "indent": "24px",
+          "name": "素材",
+          "nameClass": [],
+          "chars": "22",
+          "progress": null,
+          "folderDot": "progressText-writing",
+          "expanded": "false",
+          "flags": [
+            "draggableTreeItem"
+          ]
+        },
+        {
+          "path": "本編.md",
+          "kind": "file",
+          "parent": ".",
+          "indent": "24px",
+          "name": "本編.md",
+          "nameClass": [
+            "treeItemName-revising"
+          ],
+          "chars": "9",
+          "progress": "推",
+          "folderDot": null,
+          "expanded": "false",
+          "flags": [
+            "draggableTreeItem"
+          ]
+        }
+      ]
+    },
+    "startPageRecent": [
+      "本編.md",
+      "素材/人物.md",
+      "素材/年表/年表.md"
+    ]
+  },
+  "作品C": {
+    "files": [
+      "一.md"
+    ],
+    "filters": {
+      "all": {
+        "header": "ファイル字数",
+        "libraryBack": "見本ライブラリライブラリ",
+        "empty": null,
+        "rows": [
+          {
+            "path": "一.md",
+            "kind": "file",
+            "parent": ".",
+            "indent": "24px",
+            "name": "一.md",
+            "nameClass": [
+              "treeItemName-todo"
+            ],
+            "chars": "5",
+            "progress": "未",
+            "folderDot": null,
+            "expanded": "true",
+            "flags": [
+              "activeTreeItem",
+              "selectedTreeEntry",
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "heading": "一",
+            "file": "一.md",
+            "indent": "61px",
+            "chars": "5",
+            "classes": []
+          }
+        ],
+        "snapshotDock": true,
+        "footer": "執執筆中推推敲中完完了未未着手合計 5字",
+        "libraryProjects": null
+      },
+      "todo": {
+        "header": "未未着手字数",
+        "libraryBack": "見本ライブラリライブラリ",
+        "empty": null,
+        "rows": [
+          {
+            "path": "一.md",
+            "kind": "file",
+            "parent": ".",
+            "indent": "24px",
+            "name": "一.md",
+            "nameClass": [
+              "treeItemName-todo"
+            ],
+            "chars": "5",
+            "progress": "未",
+            "folderDot": null,
+            "expanded": "true",
+            "flags": [
+              "activeTreeItem",
+              "selectedTreeEntry",
+              "draggableTreeItem"
+            ]
+          },
+          {
+            "heading": "一",
+            "file": "一.md",
+            "indent": "61px",
+            "chars": "5",
+            "classes": []
+          }
+        ],
+        "snapshotDock": true,
+        "footer": "執執筆中推推敲中完完了未未着手合計 5字",
+        "libraryProjects": null
+      },
+      "writing": {
+        "header": "執執筆中字数",
+        "libraryBack": "見本ライブラリライブラリ",
+        "empty": "執筆中のファイルはありません",
+        "rows": [],
+        "snapshotDock": true,
+        "footer": "執執筆中推推敲中完完了未未着手合計 5字",
+        "libraryProjects": null
+      },
+      "revising": {
+        "header": "推推敲中字数",
+        "libraryBack": "見本ライブラリライブラリ",
+        "empty": "推敲中のファイルはありません",
+        "rows": [],
+        "snapshotDock": true,
+        "footer": "執執筆中推推敲中完完了未未着手合計 5字",
+        "libraryProjects": null
+      },
+      "done": {
+        "header": "完完了字数",
+        "libraryBack": "見本ライブラリライブラリ",
+        "empty": "完了のファイルはありません",
+        "rows": [],
+        "snapshotDock": true,
+        "footer": "執執筆中推推敲中完完了未未着手合計 5字",
+        "libraryProjects": null
+      },
+      "archived": {
+        "header": "アアーカイブ字数",
+        "libraryBack": "見本ライブラリライブラリ",
+        "empty": "アーカイブのファイルはありません",
+        "rows": [],
+        "snapshotDock": true,
+        "footer": "執執筆中推推敲中完完了未未着手合計 5字",
+        "libraryProjects": null
+      }
+    },
+    "interactions": {
+      "steps": [
+        {
+          "label": "見出しの開閉ボタン",
+          "calls": [
+            [
+              "onOutlineCollapsedChange",
+              "一.md",
+              true
+            ]
+          ],
+          "selected": [
+            "一.md"
+          ]
+        },
+        {
+          "label": "見出しをクリック",
+          "calls": [
+            [
+              "onJumpProjectOutline",
+              "一.md",
+              "一"
+            ]
+          ],
+          "selected": [
+            "一.md"
+          ]
+        },
+        {
+          "label": "メニューの「削除」",
+          "calls": [
+            [
+              "onDeleteEntry",
+              {
+                "path": "一.md",
+                "name": "一.md",
+                "kind": "file"
+              }
+            ]
+          ],
+          "selected": [
+            "一.md"
+          ]
+        }
+      ],
+      "menus": {
+        "一.md": [
+          "開く",
+          "リネーム",
+          "削除"
+        ]
+      },
+      "collapsedAll": [
+        {
+          "path": "一.md",
+          "kind": "file",
+          "parent": ".",
+          "indent": "24px",
+          "name": "一.md",
+          "nameClass": [
+            "treeItemName-todo"
+          ],
+          "chars": "5",
+          "progress": "未",
+          "folderDot": null,
+          "expanded": "false",
+          "flags": [
+            "activeTreeItem",
+            "selectedTreeEntry",
+            "draggableTreeItem"
+          ]
+        }
+      ]
+    },
+    "startPageRecent": [
+      "一.md"
+    ]
+  },
+  "ライブラリ直下": {
+    "header": "ファイル字数",
+    "libraryBack": null,
+    "empty": null,
+    "rows": [
+      {
+        "path": "一.md",
+        "kind": "file",
+        "parent": ".",
+        "indent": "10px",
+        "name": "一.md",
+        "nameClass": [
+          "treeItemName-todo"
+        ],
+        "chars": "5",
+        "progress": "未",
+        "folderDot": null,
+        "expanded": "true",
+        "flags": [
+          "activeTreeItem",
+          "selectedTreeEntry",
+          "draggableTreeItem"
+        ]
+      },
+      {
+        "heading": "一",
+        "file": "一.md",
+        "indent": "47px",
+        "chars": "5",
+        "classes": []
+      }
+    ],
+    "snapshotDock": false,
+    "footer": "執執筆中推推敲中完完了未未着手合計 5字",
+    "libraryProjects": "作品3作品A作品B作品C＋ 新しい作品既存の作品を取り込む…"
+  },
+  "フォルダなし": {
+    "header": "ファイル",
+    "libraryBack": null,
+    "empty": "見出しがありません",
+    "rows": [],
+    "snapshotDock": false,
+    "footer": null,
+    "libraryProjects": null
+  }
+}

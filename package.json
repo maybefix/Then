@@ -43,6 +43,8 @@
     "test:binder-baseline-rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- binder_migration_baseline::",
     "test:materials-baseline": "node scripts/test-materials-baseline.mjs",
     "test:materials": "node scripts/test-materials.mjs",
+    "test:binder-tree-baseline": "node scripts/test-binder-tree-baseline.mjs",
+    "test:binder-tiers": "node scripts/test-binder-tiers.mjs",
     "test:materials-baseline-rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- materials_listing_baseline::",
     "test:materials-rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- materials_role::",
     "test:app-dialog": "node scripts/test-app-dialog.mjs",

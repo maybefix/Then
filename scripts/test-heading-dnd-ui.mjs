@@ -18,7 +18,14 @@ let sidebarSource = await readFile(
   "src/components/layout/WorkspaceSidebar.tsx",
   "utf8",
 );
+// 段の分け方（binderTiers.ts）は型の import だけなので、1ファイルで訳して data URL から読む。
+const binderTiersUrl = `data:text/javascript;base64,${Buffer.from(
+  ts.transpileModule(await readFile("src/components/layout/binderTiers.ts", "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText,
+).toString("base64")}`;
 sidebarSource = sidebarSource
+  .replace('from "./binderTiers"', `from "${binderTiersUrl}"`)
   .replace('from "react"', `from "${reactUrl}"`)
   .replace('from "react-dom"', `from "${reactDomUrl}"`)
   .replace(

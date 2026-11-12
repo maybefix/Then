@@ -28,9 +28,20 @@ const row = (state, status) => `<div class="treeItem ${ROW_STATES[state]} fileTr
   <button class="treeEntryMoreButton" type="button" data-part="more">•••</button>
 </div>`;
 
+// バインダーの段の見出しと投稿の段の行（BINDER 1-4。WorkspaceSidebar の renderBinderSectionHeader と投稿の段を写す）。
+const binderParts = `<div class="binderSection"><div class="binderSectionHeader">
+  <button class="binderSectionToggle" type="button"><span class="binderSectionLabel" data-part="section-label">原稿</span></button>
+  <span class="binderSectionCount" data-part="section-count">1,234</span></div></div>
+<div class="binderSection"><div class="binderSectionHeader">
+  <span class="binderSectionToggle"><span class="binderSectionLabel">素材</span></span>
+  <button class="binderSectionAction" type="button" data-part="section-action">素材フォルダを作る</button></div>
+  <div class="treeItem binderPostItem"><button class="treeItemPrimary binderPostItemPrimary" type="button">
+    <span class="treeItemName" data-part="post-name">アイデア</span><span class="treeItemCharCount" data-part="post-count">3</span></button></div></div>`;
+
 const body = `<section class="appFrame" data-app-mode="write"><div class="workspace" data-app-mode="write">
 <div class="leftWorkspaceCluster" data-sidebar-collapsed="false">
   <aside class="workspaceSidebar"><div class="sidebarScroll">
+    ${binderParts}
     ${Object.keys(ROW_STATES).flatMap((state) => Object.keys(STATUSES).map((status) => row(state, status))).join("\n")}
   </div></aside>
 </div></div></section>`;
@@ -64,6 +75,42 @@ try {
             failures.push(`${theme} / ${state} row / ${status}: ${part} ${round(value)} (unselected ${round(plainContrast)}; ${seen.rawColor})`);
           }
         }
+      }
+    }
+    // 段の見出しと投稿の行は、選んでいない原稿の行の同じ役の部品（名前・字数）と同じくらい読めること。
+    // 位置から背景を拾う page.read は、この場面では白を返すことがある（行どうしを比べる上の確かめには効かない）。
+    // ここでは部品の祖先の背景色を重ねて背景を求め、原稿の行も同じやり方で測って比べる。
+    for (const [part, like] of [["section-label", "name"], ["section-count", "count"], ["section-action", "count"], ["post-name", "name"], ["post-count", "count"]]) {
+      const [plain, seen] = JSON.parse(await page.evaluate(`JSON.stringify([
+        '[data-row="plain-todo"] [data-part="${like}"]', '[data-part="${part}"]',
+      ].map((selector) => {
+        const parse = (text) => {
+          const match = /rgba?\\(([^)]+)\\)/.exec(text);
+          if (!match) return null;
+          const [r, g, b, a = 1] = match[1].split(/[\\s,/]+/).filter(Boolean).map(Number);
+          return { r, g, b, a };
+        };
+        const over = (top, bottom) => ({
+          r: top.r * top.a + bottom.r * (1 - top.a), g: top.g * top.a + bottom.g * (1 - top.a),
+          b: top.b * top.a + bottom.b * (1 - top.a), a: 1,
+        });
+        const element = document.querySelector(selector);
+        const layers = [];
+        for (let node = element; node; node = node.parentElement) {
+          const color = parse(getComputedStyle(node).backgroundColor);
+          if (color && color.a > 0) layers.push(color);
+          if (color && color.a >= 1) break;
+        }
+        const surface = layers.reduceRight((bottom, top) => over(top, bottom), { r: 255, g: 255, b: 255, a: 1 });
+        const style = getComputedStyle(element);
+        const ink = parse(style.color);
+        return { surface, color: over({ ...ink, a: ink.a * Number(style.opacity) }, surface), rawColor: style.color };
+      }))`));
+      const value = contrast(seen.color, seen.surface);
+      const plainContrast = contrast(plain.color, plain.surface);
+      if (debug) console.log(`${theme}\tbinder\t${part}\t${round(value)}\t${round(plainContrast)}`);
+      if (value < MIN_CONTRAST && value < plainContrast * 0.9) {
+        failures.push(`${theme} / binder ${part}: ${round(value)} (file row ${like} ${round(plainContrast)}; ${seen.rawColor})`);
       }
     }
   }

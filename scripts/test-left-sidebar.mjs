@@ -67,6 +67,7 @@ const functionNames = [
   "handleQuickCreateManuscriptSnapshot", "openCheckpointStudio", "handleEditManuscriptSnapshotDetails",
   "handleRestoreManuscriptSnapshot", "handleDeleteManuscriptSnapshot", "enterLibraryRoot", "enterProject",
   "handleCreateLibraryProject", "handleImportProjectIntoLibrary", "reorderLibraryProjects",
+  "openIdeaPane", "handleCreateMaterialsFolder", "handleSetMaterialsFolder",
 ];
 const spies = Object.fromEntries(
   functionNames.map((name) => [name, (...args) => {
@@ -85,7 +86,8 @@ const baseValues = {
   projectFolder: { path: "C:/work", name: "work", children: [] },
   focusedFolderPath: "C:/work/第一部",
   referenceLayout: { cards: mark("referenceLayout.cards") },
-  snippets: mark("snippets"),
+  // 投稿の段に件数を出すので、配列の目印にする。
+  snippets: [{ id: mark("snippets.0") }, { id: mark("snippets.1") }, { id: mark("snippets.2") }],
   sortedReferenceCandidates: mark("sortedReferenceCandidates"),
   currentFilePath: mark("currentFilePath"),
   currentFileName: mark("currentFileName"),
@@ -260,6 +262,7 @@ const expectCalls = (label, action, expected) => {
     showSnapshotSection: mark("settings.showCheckpointSection"),
     library: mark("libraryContext"),
     isLibrarySearchLoading: true,
+    ideaThreadCount: 3,
   };
 
   // 関数の props ごとに、渡す見本の引数と、届くべき App の関数と引数。
@@ -321,6 +324,9 @@ const expectCalls = (label, action, expected) => {
       args: [["C:/library/作品2", "C:/library/作品1"]],
       name: "reorderLibraryProjects",
     },
+    onOpenIdeas: { args: [], name: "openIdeaPane" },
+    onCreateMaterialsFolder: { args: [], name: "handleCreateMaterialsFolder" },
+    onSetMaterialsFolder: { args: ["C:/work/資料"], name: "handleSetMaterialsFolder" },
   };
 
   // 渡している props が、確かめる表と過不足なく一致すること（足したのに確かめていない、を防ぐ）。
@@ -365,7 +371,7 @@ const expectCalls = (label, action, expected) => {
   assert.deepEqual(Object.keys(pane.props).sort(),
     ["candidates", "cards", "onCloseCard", "onCollapseCard", "onFocusCard", "onPinCard", "threads"]);
   assert.equal(pane.props.cards, mark("referenceLayout.cards"));
-  assert.equal(pane.props.threads, mark("snippets"));
+  assert.equal(pane.props.threads, baseValues.snippets);
   assert.equal(pane.props.candidates, mark("sortedReferenceCandidates"));
   for (const [key, args, name] of [
     ["onFocusCard", ["card-1"], "focusReferenceCard"],

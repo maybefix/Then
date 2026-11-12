@@ -35,6 +35,7 @@ import {
   getSidebarFolderCharCount,
   getSidebarHeadingCharCount,
 } from "./sidebarMetrics";
+import { orderRootEntriesByTier, splitBinderTiers } from "./binderTiers";
 
 type WorkspaceSidebarProps = {
   projectFolder: ProjectFolder | null;
@@ -131,6 +132,14 @@ type WorkspaceSidebarProps = {
   onReorderLibraryProjects: (orderedPaths: string[]) => void;
   /** ライブラリ全体の検索で、ほかの作品の索引を読み込んでいる間 true。 */
   isLibrarySearchLoading: boolean;
+  /** 投稿の段に出すアイデアのスレッドの数（BINDER 1-4。2-1 までは既存の Idea を指す）。 */
+  ideaThreadCount?: number;
+  /** 投稿の段から、右のアイデアのペインを開く。 */
+  onOpenIdeas?: () => void;
+  /** 素材フォルダを新しく作る（名前は App 側で聞く）。 */
+  onCreateMaterialsFolder?: () => void;
+  /** 作品直下の既存のフォルダを素材フォルダにする。 */
+  onSetMaterialsFolder?: (folderPath: string) => void;
 };
 
 type TreeContextMenu = {
@@ -138,6 +147,8 @@ type TreeContextMenu = {
   y: number;
   entry: ProjectFolder | ProjectEntry;
   isRoot: boolean;
+  /** 段の見出しのメニュー。行のメニューと項目を変える。 */
+  section?: "manuscript" | "materials";
 } | null;
 
 type PointerDragState = {
@@ -400,7 +411,8 @@ function collectFilePathsInDisplayOrder(root: ProjectFolder): string[] {
       }
     }
   };
-  visit(root.children);
+  // 作品直下は段の順（原稿→素材）。素材フォルダがなければ一覧の順のまま。
+  visit(orderRootEntriesByTier(root));
   return paths;
 }
 
@@ -501,7 +513,9 @@ type SidebarIconName =
   | "file"
   | "folder"
   | "folderPlus"
+  | "note"
   | "plus"
+  | "post"
   | "search";
 
 function SidebarIcon({ name, className = "" }: { name: SidebarIconName; className?: string }) {
@@ -567,11 +581,24 @@ function SidebarIcon({ name, className = "" }: { name: SidebarIconName; classNam
           <line x1="9" y1="13" x2="15" y2="13" />
         </svg>
       );
+    case "note":
+      return (
+        <svg {...common}>
+          <path d="M5 3h14v18H5z" />
+          <path d="M8.5 8h7M8.5 12h7M8.5 16h4.5" />
+        </svg>
+      );
     case "plus":
       return (
         <svg {...common}>
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      );
+    case "post":
+      return (
+        <svg {...common}>
+          <path d="M3.5 4.5h17v12H10l-4.5 3.5v-3.5h-2z" />
         </svg>
       );
     case "search":
@@ -797,6 +824,10 @@ export function WorkspaceSidebar({
   onImportProject,
   onReorderLibraryProjects,
   isLibrarySearchLoading,
+  ideaThreadCount = 0,
+  onOpenIdeas,
+  onCreateMaterialsFolder,
+  onSetMaterialsFolder,
 }: WorkspaceSidebarProps) {
   const [contextMenu, setContextMenu] = useState<TreeContextMenu>(null);
   const [headingContextMenu, setHeadingContextMenu] = useState<HeadingContextMenu>(null);
@@ -845,6 +876,11 @@ export function WorkspaceSidebar({
     [countCode, countWhitespace, projectAst, projectFolder],
   );
   const projectAstFiles = sidebarMetrics.projectAstFiles;
+  // 作品を開いているときだけ三段（原稿／素材／投稿）にする。ライブラリ直下は今のまま（BINDER 1-4）。
+  const binderTiers = useMemo(
+    () => (projectFolder && library?.role !== "root" ? splitBinderTiers(projectFolder) : null),
+    [library?.role, projectFolder],
+  );
   const filteredOutPaths = useMemo(
     () =>
       projectFolder
@@ -958,6 +994,18 @@ export function WorkspaceSidebar({
     dragState: PointerDragState,
   ) => {
     const element = document.elementFromPoint(clientX, clientY);
+    // 段の見出し（原稿＝作品直下、素材＝素材フォルダ）へ落とすと、その段のいちばん上のフォルダの中へ移す。
+    const sectionHeader = element?.closest<HTMLElement>("[data-binder-drop-folder]");
+    if (sectionHeader) {
+      const folderPath = sectionHeader.dataset.binderDropFolder;
+      const alreadyThere = dragState.sourceParentPaths.every((parentPath) => parentPath === folderPath);
+      updateDropTarget(
+        folderPath && !alreadyThere
+          ? { kind: "moveInto", folderPath, entryPath: folderPath }
+          : null,
+      );
+      return;
+    }
     const row = element?.closest<HTMLElement>("[data-tree-entry-path]");
     if (!row) {
       updateDropTarget(null);
@@ -983,12 +1031,15 @@ export function WorkspaceSidebar({
     const offset = clientY - rect.top;
     const isMiddleFolderDrop =
       targetEntryKind === "folder" &&
-      !dragState.sourceParentPaths.every(
-        (parentPath) => parentPath === targetEntryPath,
-      ) &&
       offset > rect.height * 0.28 &&
       offset < rect.height * 0.72;
     if (isMiddleFolderDrop) {
+      // すでにそのフォルダの中にあるものを真ん中へ落としても、何もしない（以前は前後の並べ替えと
+      // みなして、フォルダの外へ出していた。BINDER 1-4 の確認1で直すと決めた）。
+      if (dragState.sourceParentPaths.every((parentPath) => parentPath === targetEntryPath)) {
+        updateDropTarget(null);
+        return;
+      }
       updateDropTarget({
         kind: "moveInto",
         folderPath: targetEntryPath,
@@ -1436,8 +1487,17 @@ export function WorkspaceSidebar({
   const renderContextMenu = (): JSX.Element | null => {
     if (!contextMenu) return null;
 
-    const { entry, isRoot, x, y } = contextMenu;
+    const { entry, isRoot, section, x, y } = contextMenu;
     const kind = getEntryKind(entry);
+    // 作品直下の、素材でないフォルダ。素材フォルダがまだない作品でだけ、素材フォルダにできる。
+    const canBecomeMaterialsFolder =
+      !section &&
+      Boolean(binderTiers && !binderTiers.materialsFolder && onSetMaterialsFolder) &&
+      kind === "folder" &&
+      isProjectEntry(entry) &&
+      entry.role !== "material" &&
+      projectFolder !== null &&
+      findParentPath(projectFolder, entry.path) === projectFolder.path;
 
     return createPortal(
       <div
@@ -1446,17 +1506,19 @@ export function WorkspaceSidebar({
         role="menu"
         onPointerDown={(event) => event.stopPropagation()}
       >
-        <button
-          type="button"
-          role="menuitem"
-          onClick={() =>
-            closeContextMenuAndRun(() =>
-              kind === "folder" ? onSelectFolder(entry.path) : onSelectFile(entry.path),
-            )
-          }
-        >
-          開く
-        </button>
+        {!section && (
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() =>
+              closeContextMenuAndRun(() =>
+                kind === "folder" ? onSelectFolder(entry.path) : onSelectFile(entry.path),
+              )
+            }
+          >
+            開く
+          </button>
+        )}
         {kind === "folder" && (
           <>
             <button
@@ -1475,6 +1537,15 @@ export function WorkspaceSidebar({
             </button>
           </>
         )}
+        {canBecomeMaterialsFolder && (
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => closeContextMenuAndRun(() => onSetMaterialsFolder?.(entry.path))}
+          >
+            素材フォルダにする
+          </button>
+        )}
         {!isRoot && (
           <>
             <button
@@ -1484,7 +1555,8 @@ export function WorkspaceSidebar({
             >
               リネーム
             </button>
-            {isProjectEntry(entry) && (
+            {/* 素材フォルダそのものは段の見出しのメニューから消さない（決めてほしいこと 12）。 */}
+            {isProjectEntry(entry) && section !== "materials" && (
               <button
                 type="button"
                 role="menuitem"
@@ -2001,13 +2073,174 @@ export function WorkspaceSidebar({
   const projectTotalCharCount = sidebarMetrics.projectTotalCharCount;
 
   const visibleRootEntries = projectFolder
-    ? projectFolder.children.filter((entry) => !filteredOutPaths.has(entry.path))
+    ? (binderTiers ? binderTiers.manuscriptEntries : projectFolder.children).filter(
+        (entry) => !filteredOutPaths.has(entry.path),
+      )
     : [];
+
+  const openSectionContextMenu = (
+    event: ReactMouseEvent<HTMLElement>,
+    entry: ProjectFolder | ProjectEntry,
+    section: "manuscript" | "materials",
+  ) => {
+    event.preventDefault();
+    setHeadingContextMenu(null);
+    const position = getScaledFixedMenuPosition(event.clientX, event.clientY, {
+      width: TREE_CONTEXT_MENU_WIDTH,
+      height: TREE_CONTEXT_MENU_HEIGHT,
+    });
+    setContextMenu({ x: position.left, y: position.top, entry, isRoot: section === "manuscript", section });
+  };
+
+  // 段の見出しの行。畳める段は、今のフォルダの折りたたみの欄にパスで入れる（原稿＝作品のルート、素材＝素材フォルダ）。
+  const renderBinderSectionHeader = ({
+    section,
+    label,
+    collapsePath,
+    count,
+    dropFolderPath,
+    menuEntry,
+    action,
+  }: {
+    section: "manuscript" | "materials" | "posts";
+    label: string;
+    collapsePath?: string;
+    count?: string | null;
+    dropFolderPath?: string;
+    menuEntry?: ProjectFolder | ProjectEntry;
+    action?: JSX.Element;
+  }) => {
+    const isCollapsed = collapsePath ? collapsedFolderPaths.has(collapsePath) : false;
+    // 段ごとのアイコンを開閉の印の場所に置き、名前はフォルダの行より濃い文字にする（2026-11-12 に E 案に決めた）。
+    const icon = (
+      <SidebarIcon
+        name={section === "manuscript" ? "file" : section === "materials" ? "note" : "post"}
+        className="binderSectionIcon"
+      />
+    );
+    const isDropTarget =
+      dropFolderPath !== undefined &&
+      dropTarget?.kind === "moveInto" &&
+      dropTarget.entryPath === dropFolderPath;
+    return (
+      <div
+        className={["binderSectionHeader", isDropTarget ? "treeDrop-into" : ""].filter(Boolean).join(" ")}
+        data-binder-section={section}
+        data-binder-drop-folder={dropFolderPath}
+        onContextMenu={
+          menuEntry && section !== "posts"
+            ? (event) => openSectionContextMenu(event, menuEntry, section)
+            : undefined
+        }
+      >
+        {collapsePath ? (
+          <button
+            className="binderSectionToggle"
+            type="button"
+            aria-expanded={!isCollapsed}
+            onClick={() => onFolderCollapsedChange(collapsePath, !isCollapsed)}
+          >
+            {icon}
+            <span className="binderSectionLabel">{label}</span>
+          </button>
+        ) : (
+          <span className="binderSectionToggle">
+            {icon}
+            <span className="binderSectionLabel">{label}</span>
+          </span>
+        )}
+        {action ?? (count ? <span className="binderSectionCount">{count}</span> : null)}
+      </div>
+    );
+  };
+
+  // 段の中身は、段の見出しから一段下げて描く（E 案の見出しの下に入れる。2026-11-12）。
+  const renderBinderTiers = (folder: ProjectFolder, tiers: NonNullable<typeof binderTiers>) => {
+    const { materialsFolder } = tiers;
+    const isManuscriptCollapsed = collapsedFolderPaths.has(folder.path);
+    const isMaterialsCollapsed = materialsFolder ? collapsedFolderPaths.has(materialsFolder.path) : false;
+    const materialsCharCount = materialsFolder
+      ? getSidebarFolderCharCount(sidebarMetrics, materialsFolder.path)
+      : null;
+    const visibleMaterials = materialsFolder
+      ? materialsFolder.children.filter((entry) => !filteredOutPaths.has(entry.path))
+      : [];
+    return (
+      <>
+        <div className="binderSection" role="group" aria-label="原稿">
+          {renderBinderSectionHeader({
+            section: "manuscript",
+            label: "原稿",
+            collapsePath: folder.path,
+            count: projectTotalCharCount === null ? null : formatTreeCharCount(projectTotalCharCount),
+            dropFolderPath: folder.path,
+            menuEntry: folder,
+          })}
+          {!isManuscriptCollapsed &&
+            (visibleRootEntries.length > 0 ? (
+              visibleRootEntries.map((entry) => renderEntry(entry, 1, folder.path))
+            ) : (
+              <div className="outlineEmptyState">
+                {folder.children.length === 0 || progressFilter === "all"
+                  ? "空のフォルダ"
+                  : `${fileProgressLabels[progressFilter]}のファイルはありません`}
+              </div>
+            ))}
+        </div>
+        {/* 素材には進捗がないので、「すべて」以外の絞り込みでは段ごと隠す（1-3b の D-5）。 */}
+        {progressFilter === "all" && (
+          <div className="binderSection" role="group" aria-label="素材">
+            {materialsFolder
+              ? renderBinderSectionHeader({
+                  section: "materials",
+                  label: "素材",
+                  collapsePath: materialsFolder.path,
+                  count: materialsCharCount === null ? null : formatTreeCharCount(materialsCharCount),
+                  dropFolderPath: materialsFolder.path,
+                  menuEntry: materialsFolder,
+                })
+              : renderBinderSectionHeader({
+                  section: "materials",
+                  label: "素材",
+                  action: onCreateMaterialsFolder ? (
+                    <button
+                      className="binderSectionAction"
+                      type="button"
+                      onClick={() => onCreateMaterialsFolder()}
+                    >
+                      素材フォルダを作る
+                    </button>
+                  ) : undefined,
+                })}
+            {materialsFolder &&
+              !isMaterialsCollapsed &&
+              visibleMaterials.map((entry) => renderEntry(entry, 1, materialsFolder.path))}
+          </div>
+        )}
+        <div className="binderSection" role="group" aria-label="投稿">
+          {renderBinderSectionHeader({ section: "posts", label: "投稿" })}
+          <div className="treeItem binderPostItem">
+            <button
+              className="treeItemPrimary binderPostItemPrimary"
+              type="button"
+              disabled={!onOpenIdeas}
+              onClick={() => onOpenIdeas?.()}
+            >
+              <span className="treeItemName">アイデア</span>
+              <span className="treeItemCharCount">{charCountFormatter.format(ideaThreadCount)}</span>
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  };
 
   const renderOutlineMode = () => (
     <section className="sidebarSection outlineExplorerSection" aria-label="アウトライン">
       <div className="tree outlineTree">
-        {projectFolder ? (
+        {projectFolder && binderTiers ? (
+          renderBinderTiers(projectFolder, binderTiers)
+        ) : projectFolder ? (
           visibleRootEntries.length > 0 ? (
             visibleRootEntries.map((entry) =>
               renderEntry(entry, 0, projectFolder.path),

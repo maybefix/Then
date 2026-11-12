@@ -113,6 +113,9 @@ export type LeftSidebarProps = {
   handleImportProjectIntoLibrary: () => Promise<void>;
   reorderLibraryProjects: (orderedPaths: string[]) => Promise<void>;
   libraryCorpus: { isLoading: boolean } | null;
+  openIdeaPane: () => void;
+  handleCreateMaterialsFolder: ProjectEntryActions["handleCreateMaterialsFolder"];
+  handleSetMaterialsFolder: ProjectEntryActions["handleSetMaterialsFolder"];
 };
 
 export function LeftSidebar(props: LeftSidebarProps) {
@@ -134,7 +137,8 @@ export function LeftSidebar(props: LeftSidebarProps) {
     currentWorkspaceSnapshots, updateSettings, handleQuickCreateManuscriptSnapshot, openCheckpointStudio,
     handleEditManuscriptSnapshotDetails, handleRestoreManuscriptSnapshot, handleDeleteManuscriptSnapshot,
     libraryContext, enterLibraryRoot, enterProject, handleCreateLibraryProject,
-    handleImportProjectIntoLibrary, reorderLibraryProjects, libraryCorpus
+    handleImportProjectIntoLibrary, reorderLibraryProjects, libraryCorpus, openIdeaPane,
+    handleCreateMaterialsFolder, handleSetMaterialsFolder
   } = props;
   const isProjectSearchMode = leftSidebarView === "search";
 
@@ -354,6 +358,10 @@ export function LeftSidebar(props: LeftSidebarProps) {
             onImportProject={() => void handleImportProjectIntoLibrary()}
             onReorderLibraryProjects={(paths) => void reorderLibraryProjects(paths)}
             isLibrarySearchLoading={Boolean(libraryCorpus?.isLoading)}
+            ideaThreadCount={snippets.length}
+            onOpenIdeas={openIdeaPane}
+            onCreateMaterialsFolder={() => void handleCreateMaterialsFolder()}
+            onSetMaterialsFolder={(folderPath) => void handleSetMaterialsFolder(folderPath)}
         />
         )}
     </div>

@@ -461,6 +461,53 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     }
   };
 
+  const materialsFolderErrorMessage = (error: unknown, name: string) => {
+    const message = String(error);
+    if (message.includes("materials folder already exists")) return "この作品にはもう素材フォルダがあります";
+    if (message.includes("folder already exists")) return `「${name}」はもうあります。別の名前にしてください`;
+    if (message.includes("cannot be used") || message.includes("invalid characters") || message.includes("required")) {
+      return `「${name}」は素材フォルダの名前に使えません`;
+    }
+    return "素材フォルダを作れませんでした";
+  };
+
+  /** 作品直下に素材フォルダを作り、project.json の materialsFolder に名前を書く（BINDER 1-4）。 */
+  const handleCreateMaterialsFolder = async () => {
+    if (!projectFolder) return;
+    const rootPath = projectFolder.path;
+    const name = await requestInput({
+      title: "素材フォルダを作成",
+      label: "フォルダ名",
+      initialValue: "素材",
+      confirmLabel: "作成",
+      placeholder: "例: 素材",
+    });
+    if (!name) return;
+    try {
+      await invoke<ProjectFolder>("create_project_materials_folder", { rootPath, name });
+      await refreshProjectFolder(rootPath);
+      showToast(`「${name.trim()}」を素材フォルダとして作成しました`);
+    } catch (error) {
+      setLastError(String(error));
+      showToast(materialsFolderErrorMessage(error, name.trim()));
+    }
+  };
+
+  /** 作品直下の既存のフォルダを素材フォルダにする。右クリックで選んだときだけ（BINDER 1-4）。 */
+  const handleSetMaterialsFolder = async (folderPath: string) => {
+    if (!projectFolder) return;
+    const rootPath = projectFolder.path;
+    const name = folderPath.split(/[\\/]/).pop() ?? folderPath;
+    try {
+      await invoke<ProjectFolder>("set_project_materials_folder", { rootPath, folderPath });
+      await refreshProjectFolder(rootPath);
+      showToast(`「${name}」を素材フォルダにしました`);
+    } catch (error) {
+      setLastError(String(error));
+      showToast(materialsFolderErrorMessage(error, name));
+    }
+  };
+
   const handleRenameProjectEntry = async (entry: ProjectFolder | ProjectEntry) => {
     if (!projectFolder) return;
     const isFolderEntry = !("kind" in entry) || entry.kind === "folder";
@@ -1040,6 +1087,8 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
   return {
     handleCreateProjectFile,
     handleCreateProjectFolder,
+    handleCreateMaterialsFolder,
+    handleSetMaterialsFolder,
     handleRenameProjectEntry,
     handleDeleteProjectEntry,
     handleMoveProjectEntriesToFolder,

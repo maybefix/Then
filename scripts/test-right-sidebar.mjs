@@ -93,8 +93,8 @@ for (const [tab, marker] of Object.entries(panes)) {
   }
 }
 assert.match(render({ rightSidebarTab: "plot" }), /aria-label="プロット操作"/, "plot: the plot header actions are shown");
-assert.match(render({ rightSidebarTab: "idea" }), /aria-label="バインダー操作"/, "idea: the binder header actions are shown");
-assert.doesNotMatch(render({ rightSidebarTab: "proof" }), /プロット操作|バインダー操作/, "proof: no header actions of other tabs");
+assert.match(render({ rightSidebarTab: "idea" }), /aria-label="アイデア操作"/, "idea: the idea header actions are shown");
+assert.doesNotMatch(render({ rightSidebarTab: "proof" }), /プロット操作|アイデア操作/, "proof: no header actions of other tabs");
 assert.doesNotMatch(render(), /aria-label="補助ペイン：AI"|class="aiPane"/, "the removed AI pane is not offered");
 
 const open = render();
