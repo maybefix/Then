@@ -1,7 +1,7 @@
 # バインダー再構築 計画書
 
 作成日: 2026-11-09
-状態: 実装中（決めごと D-1〜D-7 は 2026-11-09 に確定。1-1・1-2・1-3 は済み）
+状態: 実装中（決めごと D-1〜D-7 は 2026-11-09 に確定。1-1〜1-4 は済み）
 モック: [docs/mockups/binder-rebuild.html](mockups/binder-rebuild.html)
 
 ## 0. 目的
@@ -189,7 +189,7 @@
 | 1-3 | Plot と Idea の現行挙動のテストを足す（移行の前後比較用。2026-11-10 実施。見本データ `scripts/fixtures/binder-migration/` を今の読み込みに通した見え方を期待値にし、`test:binder-baseline`・`test:binder-baseline-rust` で確かめる。1-6・2-4 は移行の結果をこの期待値と比べる。[PLOT_IDEA_BASELINE_PLAN.md](PLOT_IDEA_BASELINE_PLAN.md)） | `scripts/`（関連テストは現在7本） | テスト |
 | 1-3a | 原稿の保存の前に、外部で書き換えられていないかをハッシュで確かめる（3.9。2026-11-10 実施。原稿の保存は `save_markdown_file` ではなく保存の記録の `journal_save` を通っていて、比べる基準を最初に打ったときに取っていたのを、開いたときのハッシュにした。違えば「ファイルの内容を読み込む」「この内容で上書きする」を選んでもらい、消える側はチェックポイントに残す。プロジェクト全体の置換も比べる。[SAVE_EXTERNAL_CHANGE_FIX_PLAN.md](SAVE_EXTERNAL_CHANGE_FIX_PLAN.md)） | `src-tauri/src/lib.rs`（`save_markdown_file`）、App.tsx の保存処理 | 不具合修正 |
 | 1-3b | ファイル一覧に「原稿／素材」の区分を付け、各処理の素材の扱いを 3.6 の表どおりにする（2026-11-11 実施。`project.json` の `materialsFolder` があるときだけ、一覧が素材に `role: "material"` を付ける。字数・進捗・書き出しは原稿だけ、検索・置換・チェックポイント・索引は素材も含む。未設定の作品は何も変わらない。[BINDER_MATERIALS_PLAN.md](BINDER_MATERIALS_PLAN.md)） | `src-tauri/src/lib.rs`（`list_project_folder`）、3.6 の表の各箇所 | 機能 |
-| 1-4 | バインダーを三段化（原稿／素材／投稿。投稿はこの時点では既存 Idea を指す） | [WorkspaceSidebar.tsx](../src/components/layout/WorkspaceSidebar.tsx) | 機能 |
+| 1-4 | バインダーを三段化（原稿／素材／投稿。投稿はこの時点では既存 Idea を指す。2026-11-12 実施。素材は一覧の `role` だけで分け、素材の段は素材フォルダの中身を出す。素材フォルダを作る（ボタン）・既存の作品直下のフォルダを素材フォルダにする（右クリック）操作を足した。段の見出しへのドラッグで段をまたいで移せる。投稿の段は「アイデア」1行で右のペインを開く。右のペインの名前は「アイデア」に。素材フォルダのない作品のツリーは変えていない。[BINDER_TIERS_PLAN.md](BINDER_TIERS_PLAN.md)） | [WorkspaceSidebar.tsx](../src/components/layout/WorkspaceSidebar.tsx) | 機能 |
 | 1-5 | 概要（`synopsis`）と、キーと表示名の対応表（3.5b）、中央のコルクボード表示 | `src/properties/`、新規コンポーネント | 機能 |
 | 1-6 | Plot → ノート「プロット（移行）」への移行（`project.json` の `plotCards` はバックアップ後に空にする）。ノートモード（2-2）ができるまでは、このノートも原稿と同じエディタで開く | [PlotPane.tsx](../src/components/plot/PlotPane.tsx) を退役 | 移行 |
 | 1-7 | 右ペイン「この場面」（概要と進捗だけ） | [RightSidebar.tsx](../src/components/layout/RightSidebar.tsx) | 機能 |
