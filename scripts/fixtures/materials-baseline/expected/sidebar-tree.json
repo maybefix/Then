@@ -16,7 +16,7 @@
             "path": "序章.md",
             "kind": "file",
             "parent": ".",
-            "indent": "10px",
+            "indent": "24px",
             "name": "序章.md",
             "nameClass": [
               "treeItemName-done"
@@ -34,7 +34,7 @@
           {
             "heading": "序章",
             "file": "序章.md",
-            "indent": "47px",
+            "indent": "61px",
             "chars": "15",
             "classes": []
           },
@@ -42,7 +42,7 @@
             "path": "第一章",
             "kind": "folder",
             "parent": ".",
-            "indent": "10px",
+            "indent": "24px",
             "name": "第一章",
             "nameClass": [],
             "chars": "39",
@@ -57,7 +57,7 @@
             "path": "第一章/港.md",
             "kind": "file",
             "parent": "第一章",
-            "indent": "24px",
+            "indent": "38px",
             "name": "港.md",
             "nameClass": [
               "treeItemName-writing"
@@ -73,7 +73,7 @@
           {
             "heading": "港",
             "file": "第一章/港.md",
-            "indent": "61px",
+            "indent": "75px",
             "chars": "12",
             "classes": [
               "collapsibleOutlineTreeItem"
@@ -82,7 +82,7 @@
           {
             "heading": "夜",
             "file": "第一章/港.md",
-            "indent": "77px",
+            "indent": "91px",
             "chars": "18",
             "classes": []
           },
@@ -90,7 +90,7 @@
             "path": "第一章/灯台.md",
             "kind": "file",
             "parent": "第一章",
-            "indent": "24px",
+            "indent": "38px",
             "name": "灯台.md",
             "nameClass": [
               "treeItemName-todo"
@@ -106,7 +106,7 @@
           {
             "heading": "灯台",
             "file": "第一章/灯台.md",
-            "indent": "61px",
+            "indent": "75px",
             "chars": "9",
             "classes": []
           },
@@ -114,7 +114,7 @@
             "path": "あとがき.txt",
             "kind": "file",
             "parent": ".",
-            "indent": "10px",
+            "indent": "24px",
             "name": "あとがき",
             "nameClass": [
               "treeItemName-todo"
@@ -141,7 +141,7 @@
             "path": "第一章",
             "kind": "folder",
             "parent": ".",
-            "indent": "10px",
+            "indent": "24px",
             "name": "第一章",
             "nameClass": [],
             "chars": "39",
@@ -156,7 +156,7 @@
             "path": "第一章/灯台.md",
             "kind": "file",
             "parent": "第一章",
-            "indent": "24px",
+            "indent": "38px",
             "name": "灯台.md",
             "nameClass": [
               "treeItemName-todo"
@@ -172,7 +172,7 @@
           {
             "heading": "灯台",
             "file": "第一章/灯台.md",
-            "indent": "61px",
+            "indent": "75px",
             "chars": "9",
             "classes": []
           },
@@ -180,7 +180,7 @@
             "path": "あとがき.txt",
             "kind": "file",
             "parent": ".",
-            "indent": "10px",
+            "indent": "24px",
             "name": "あとがき",
             "nameClass": [
               "treeItemName-todo"
@@ -207,7 +207,7 @@
             "path": "第一章",
             "kind": "folder",
             "parent": ".",
-            "indent": "10px",
+            "indent": "24px",
             "name": "第一章",
             "nameClass": [],
             "chars": "39",
@@ -222,7 +222,7 @@
             "path": "第一章/港.md",
             "kind": "file",
             "parent": "第一章",
-            "indent": "24px",
+            "indent": "38px",
             "name": "港.md",
             "nameClass": [
               "treeItemName-writing"
@@ -238,7 +238,7 @@
           {
             "heading": "港",
             "file": "第一章/港.md",
-            "indent": "61px",
+            "indent": "75px",
             "chars": "12",
             "classes": [
               "collapsibleOutlineTreeItem"
@@ -247,7 +247,7 @@
           {
             "heading": "夜",
             "file": "第一章/港.md",
-            "indent": "77px",
+            "indent": "91px",
             "chars": "18",
             "classes": []
           }
@@ -274,7 +274,7 @@
             "path": "序章.md",
             "kind": "file",
             "parent": ".",
-            "indent": "10px",
+            "indent": "24px",
             "name": "序章.md",
             "nameClass": [
               "treeItemName-done"
@@ -292,7 +292,7 @@
           {
             "heading": "序章",
             "file": "序章.md",
-            "indent": "47px",
+            "indent": "61px",
             "chars": "15",
             "classes": []
           }
@@ -722,7 +722,7 @@
           "path": "序章.md",
           "kind": "file",
           "parent": ".",
-          "indent": "10px",
+          "indent": "24px",
           "name": "序章.md",
           "nameClass": [
             "treeItemName-done"
@@ -740,7 +740,7 @@
           "path": "第一章",
           "kind": "folder",
           "parent": ".",
-          "indent": "10px",
+          "indent": "24px",
           "name": "第一章",
           "nameClass": [],
           "chars": "39",
@@ -755,7 +755,7 @@
           "path": "あとがき.txt",
           "kind": "file",
           "parent": ".",
-          "indent": "10px",
+          "indent": "24px",
           "name": "あとがき",
           "nameClass": [
             "treeItemName-todo"
@@ -793,7 +793,7 @@
             "path": "素材",
             "kind": "folder",
             "parent": ".",
-            "indent": "10px",
+            "indent": "24px",
             "name": "素材",
             "nameClass": [],
             "chars": "22",
@@ -808,7 +808,7 @@
             "path": "素材/年表",
             "kind": "folder",
             "parent": "素材",
-            "indent": "24px",
+            "indent": "38px",
             "name": "年表",
             "nameClass": [],
             "chars": "8",
@@ -823,7 +823,7 @@
             "path": "素材/年表/年表.md",
             "kind": "file",
             "parent": "素材/年表",
-            "indent": "38px",
+            "indent": "52px",
             "name": "年表.md",
             "nameClass": [
               "treeItemName-todo"
@@ -841,7 +841,7 @@
           {
             "heading": "年表",
             "file": "素材/年表/年表.md",
-            "indent": "75px",
+            "indent": "89px",
             "chars": "8",
             "classes": []
           },
@@ -849,7 +849,7 @@
             "path": "素材/人物.md",
             "kind": "file",
             "parent": "素材",
-            "indent": "24px",
+            "indent": "38px",
             "name": "人物.md",
             "nameClass": [
               "treeItemName-writing"
@@ -865,7 +865,7 @@
           {
             "heading": "人物",
             "file": "素材/人物.md",
-            "indent": "61px",
+            "indent": "75px",
             "chars": "3",
             "classes": [
               "collapsibleOutlineTreeItem"
@@ -874,7 +874,7 @@
           {
             "heading": "汐見",
             "file": "素材/人物.md",
-            "indent": "77px",
+            "indent": "91px",
             "chars": "11",
             "classes": []
           },
@@ -882,7 +882,7 @@
             "path": "本編.md",
             "kind": "file",
             "parent": ".",
-            "indent": "10px",
+            "indent": "24px",
             "name": "本編.md",
             "nameClass": [
               "treeItemName-revising"
@@ -898,7 +898,7 @@
           {
             "heading": "本編",
             "file": "本編.md",
-            "indent": "47px",
+            "indent": "61px",
             "chars": "9",
             "classes": []
           }
@@ -916,7 +916,7 @@
             "path": "素材",
             "kind": "folder",
             "parent": ".",
-            "indent": "10px",
+            "indent": "24px",
             "name": "素材",
             "nameClass": [],
             "chars": "22",
@@ -931,7 +931,7 @@
             "path": "素材/年表",
             "kind": "folder",
             "parent": "素材",
-            "indent": "24px",
+            "indent": "38px",
             "name": "年表",
             "nameClass": [],
             "chars": "8",
@@ -946,7 +946,7 @@
             "path": "素材/年表/年表.md",
             "kind": "file",
             "parent": "素材/年表",
-            "indent": "38px",
+            "indent": "52px",
             "name": "年表.md",
             "nameClass": [
               "treeItemName-todo"
@@ -964,7 +964,7 @@
           {
             "heading": "年表",
             "file": "素材/年表/年表.md",
-            "indent": "75px",
+            "indent": "89px",
             "chars": "8",
             "classes": []
           }
@@ -982,7 +982,7 @@
             "path": "素材",
             "kind": "folder",
             "parent": ".",
-            "indent": "10px",
+            "indent": "24px",
             "name": "素材",
             "nameClass": [],
             "chars": "22",
@@ -997,7 +997,7 @@
             "path": "素材/人物.md",
             "kind": "file",
             "parent": "素材",
-            "indent": "24px",
+            "indent": "38px",
             "name": "人物.md",
             "nameClass": [
               "treeItemName-writing"
@@ -1013,7 +1013,7 @@
           {
             "heading": "人物",
             "file": "素材/人物.md",
-            "indent": "61px",
+            "indent": "75px",
             "chars": "3",
             "classes": [
               "collapsibleOutlineTreeItem"
@@ -1022,7 +1022,7 @@
           {
             "heading": "汐見",
             "file": "素材/人物.md",
-            "indent": "77px",
+            "indent": "91px",
             "chars": "11",
             "classes": []
           }
@@ -1040,7 +1040,7 @@
             "path": "本編.md",
             "kind": "file",
             "parent": ".",
-            "indent": "10px",
+            "indent": "24px",
             "name": "本編.md",
             "nameClass": [
               "treeItemName-revising"
@@ -1056,7 +1056,7 @@
           {
             "heading": "本編",
             "file": "本編.md",
-            "indent": "47px",
+            "indent": "61px",
             "chars": "9",
             "classes": []
           }
@@ -1449,7 +1449,7 @@
           "path": "素材",
           "kind": "folder",
           "parent": ".",
-          "indent": "10px",
+          "indent": "24px",
           "name": "素材",
           "nameClass": [],
           "chars": "22",
@@ -1464,7 +1464,7 @@
           "path": "本編.md",
           "kind": "file",
           "parent": ".",
-          "indent": "10px",
+          "indent": "24px",
           "name": "本編.md",
           "nameClass": [
             "treeItemName-revising"
@@ -1499,7 +1499,7 @@
             "path": "一.md",
             "kind": "file",
             "parent": ".",
-            "indent": "10px",
+            "indent": "24px",
             "name": "一.md",
             "nameClass": [
               "treeItemName-todo"
@@ -1517,7 +1517,7 @@
           {
             "heading": "一",
             "file": "一.md",
-            "indent": "47px",
+            "indent": "61px",
             "chars": "5",
             "classes": []
           }
@@ -1535,7 +1535,7 @@
             "path": "一.md",
             "kind": "file",
             "parent": ".",
-            "indent": "10px",
+            "indent": "24px",
             "name": "一.md",
             "nameClass": [
               "treeItemName-todo"
@@ -1553,7 +1553,7 @@
           {
             "heading": "一",
             "file": "一.md",
-            "indent": "47px",
+            "indent": "61px",
             "chars": "5",
             "classes": []
           }
@@ -1656,7 +1656,7 @@
           "path": "一.md",
           "kind": "file",
           "parent": ".",
-          "indent": "10px",
+          "indent": "24px",
           "name": "一.md",
           "nameClass": [
             "treeItemName-todo"

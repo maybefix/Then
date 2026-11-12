@@ -2154,6 +2154,7 @@ export function WorkspaceSidebar({
     );
   };
 
+  // 段の中身は、段の見出しから一段下げて描く（E 案の見出しの下に入れる。2026-11-12）。
   const renderBinderTiers = (folder: ProjectFolder, tiers: NonNullable<typeof binderTiers>) => {
     const { materialsFolder } = tiers;
     const isManuscriptCollapsed = collapsedFolderPaths.has(folder.path);
@@ -2177,7 +2178,7 @@ export function WorkspaceSidebar({
           })}
           {!isManuscriptCollapsed &&
             (visibleRootEntries.length > 0 ? (
-              visibleRootEntries.map((entry) => renderEntry(entry, 0, folder.path))
+              visibleRootEntries.map((entry) => renderEntry(entry, 1, folder.path))
             ) : (
               <div className="outlineEmptyState">
                 {folder.children.length === 0 || progressFilter === "all"
@@ -2213,7 +2214,7 @@ export function WorkspaceSidebar({
                 })}
             {materialsFolder &&
               !isMaterialsCollapsed &&
-              visibleMaterials.map((entry) => renderEntry(entry, 0, materialsFolder.path))}
+              visibleMaterials.map((entry) => renderEntry(entry, 1, materialsFolder.path))}
           </div>
         )}
         <div className="binderSection" role="group" aria-label="投稿">

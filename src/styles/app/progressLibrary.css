@@ -537,6 +537,6 @@ button.binderSectionToggle {
   min-height: 28px;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 6px;
-  padding: 0 49px 0 31px;
+  padding: 0 49px 0 45px;
   font-size: 11.3px;
 }
