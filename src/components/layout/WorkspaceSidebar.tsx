@@ -2183,7 +2183,7 @@ export function WorkspaceSidebar({
                     <button
                       className="binderSectionAction"
                       type="button"
-                      onClick={onCreateMaterialsFolder}
+                      onClick={() => onCreateMaterialsFolder()}
                     >
                       素材フォルダを作る
                     </button>
@@ -2201,7 +2201,7 @@ export function WorkspaceSidebar({
               className="treeItemPrimary binderPostItemPrimary"
               type="button"
               disabled={!onOpenIdeas}
-              onClick={onOpenIdeas}
+              onClick={() => onOpenIdeas?.()}
             >
               <span className="treeItemName">アイデア</span>
               <span className="treeItemCharCount">{charCountFormatter.format(ideaThreadCount)}</span>
