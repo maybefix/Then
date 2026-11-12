@@ -2,7 +2,7 @@
 // one card per file, in the folder's order. A card shows the file's name, its
 // progress mark, its synopsis and its length. Dragging a card reorders the files
 // (the same order the binder shows); the synopsis is edited on the card.
-// Loaded lazily; reading the synopsis loads the YAML parser.
+// The synopsis is read with the YAML parser, which loads on the first read.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import type { SynopsisState } from "../../corkboard/synopsis";
 import { fileProgressLabels, type FileProgressStatus, type ProjectEntry, type TextDocument } from "../../types";

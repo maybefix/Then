@@ -28,8 +28,6 @@ import {
   useMemo,
   useRef,
   useState,
-  lazy,
-  Suspense,
 } from "react";
 import { manageAsyncRegistration } from "./utils/asyncRegistration";
 import { flushPendingSaves, schedulePendingSave } from "./pendingSaves";
@@ -277,6 +275,7 @@ import { LinkedExportScreen } from "./components/export/LinkedExportScreen";
 import { ThenPluginRuntimeHost } from "./plugins/PluginRuntimeHost";
 import { PluginIcon } from "./components/plugins/PluginIcon";
 import { AppIcon } from "./components/layout/AppIcon";
+import { Corkboard } from "./components/corkboard/Corkboard";
 import { mergeReferenceFiles, referenceFileKey, referenceKey } from "./referenceFileKeys";
 import { computeTextChange, mapAnchorsThroughTextChange } from "./plugins/anchors";
 import { pluginDocumentPath } from "./plugins/pluginHostModel";
@@ -295,9 +294,8 @@ const scratchWorkspaceName = "一時ファイル";
 const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
 type AppMode = "write" | "corkboard" | "canvas" | "export" | "checkpoint" | "plugin";
 
-// The corkboard (BINDER 1-5) and the synopsis writer load the YAML parser, so
-// they stay out of the main bundle until the corkboard is opened.
-const Corkboard = lazy(() => import("./components/corkboard/Corkboard"));
+// The synopsis writer loads the YAML parser, so it stays out of the main bundle
+// until a synopsis is written (the corkboard reads it the same way). BINDER 1-5.
 const loadSynopsisWriter = () => import("./corkboard/synopsisWriter");
 type ToastAction = {
   label: string;
@@ -7952,23 +7950,21 @@ export default function App() {
 
             {appMode === "corkboard" && projectFolder && corkboardFolder && (
               <div className="corkboardHost">
-                <Suspense fallback={null}>
-                  <Corkboard
-                    folderName={isSamePath(corkboardFolder, projectFolder.path)
-                      ? projectFolder.name
-                      : findProjectEntry(projectFolder.children, corkboardFolder)?.name ?? getWorkspaceName(corkboardFolder)}
-                    entries={getFolderChildren(projectFolder, corkboardFolder)}
-                    fileProgress={appState.fileProgress}
-                    charCountOf={corkboardCharCountOf}
-                    openTabMarkdown={(path) => openTabs.find((tab) => tab.path !== null && isSamePath(tab.path, path))?.markdown ?? null}
-                    readFile={(path) => invoke<TextDocument>("read_text_file", { path })}
-                    onSaveSynopsis={saveSynopsisFromCorkboard}
-                    onOpen={(path) => void openFromCorkboard(path)}
-                    onReorder={(draggedPath, targetPath, position) =>
-                      void handleSidebarEntryReorder(corkboardFolder, [draggedPath], targetPath, position)
-                    }
-                  />
-                </Suspense>
+                <Corkboard
+                  folderName={isSamePath(corkboardFolder, projectFolder.path)
+                    ? projectFolder.name
+                    : findProjectEntry(projectFolder.children, corkboardFolder)?.name ?? getWorkspaceName(corkboardFolder)}
+                  entries={getFolderChildren(projectFolder, corkboardFolder)}
+                  fileProgress={appState.fileProgress}
+                  charCountOf={corkboardCharCountOf}
+                  openTabMarkdown={(path) => openTabs.find((tab) => tab.path !== null && isSamePath(tab.path, path))?.markdown ?? null}
+                  readFile={(path) => invoke<TextDocument>("read_text_file", { path })}
+                  onSaveSynopsis={saveSynopsisFromCorkboard}
+                  onOpen={(path) => void openFromCorkboard(path)}
+                  onReorder={(draggedPath, targetPath, position) =>
+                    void handleSidebarEntryReorder(corkboardFolder, [draggedPath], targetPath, position)
+                  }
+                />
               </div>
             )}
 

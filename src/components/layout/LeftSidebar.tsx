@@ -146,7 +146,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
     <div
       className={`leftWorkspaceCluster ${
         // The corkboard shows the binder too: its folder is chosen there (BINDER 1-5).
-        appMode !== "write" && appMode !== "corkboard" && appMode !== "plugin" ? "modeHiddenPane" : ""
+        appMode !== "write" && appMode !== "plugin" && appMode !== "corkboard" ? "modeHiddenPane" : ""
       }`}
       data-sidebar-collapsed={isLeftSidebarCollapsed}
       aria-hidden={isEditorFocusMode || appMode === "plugin"}
