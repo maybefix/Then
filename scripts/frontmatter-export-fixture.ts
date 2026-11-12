@@ -17,7 +17,8 @@ import { updateMarkdownBody } from "../src/utils/frontmatter";
 import { analyzeFrontMatter } from "../src/utils/frontmatterYaml";
 
 const BOM = String.fromCharCode(0xfeff);
-const YAML_MARKERS = ["slug", "making-then", "publish", "夜の港シリーズ"];
+// BINDER 1-5: the synopsis and the material links live in the front matter too.
+const YAML_MARKERS = ["slug", "making-then", "publish", "夜の港シリーズ", "synopsis", "書庫に眠っていた", "materials", "汐見"];
 const countFrontMatterErrors = (metadata: string) => analyzeFrontMatter(metadata).errors.length;
 
 type Case = {
@@ -34,6 +35,16 @@ const cases: Case[] = [
     name: "BOM付き",
     file: `${BOM}---\nslug: making-then\npublish: true\n---\n# 見出し\n\n本文その一。`,
     mustContain: ["見出し", "本文その一"],
+  },
+  {
+    name: "概要と素材（BINDER 1-5）",
+    file: "---\r\nsynopsis: 書庫に眠っていた未発送の手紙。\r\nmaterials:\r\n  - \"[[汐見]]\"\r\nsourceCards: []\r\n---\r\n# 第一章\r\n\r\n本文その一。\r\n",
+    mustContain: ["第一章", "本文その一"],
+  },
+  {
+    name: "空の概要（BINDER 1-5）",
+    file: "---\nsynopsis:\n---\n本文その一。\n",
+    mustContain: ["本文その一"],
   },
   {
     name: "CRLF",
