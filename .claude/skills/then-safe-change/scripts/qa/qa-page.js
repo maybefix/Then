@@ -57,7 +57,7 @@
       }
       throw new Error(`startup did not finish: ${document.body.innerText.slice(0, 200)}`);
     },
-    /** 右サイドバーの表示を切り替える（「バインダー」「プロット」「AI」など）。 */
+    /** 右サイドバーの表示を切り替える（「アイデア」「プロット」「AI」など）。 */
     async rightPane(label) {
       const button = must([...document.querySelectorAll(".rightPaneSwitcherButton")].find((element) => element.getAttribute("aria-label")?.startsWith("補助ペイン")), "right pane switcher");
       button.click();
@@ -90,7 +90,7 @@
         await sleep(300);
       }
     },
-    /** Idea（右サイドバーの「バインダー」）の操作。 */
+    /** Idea（右サイドバーの「アイデア」。BINDER 1-4 までは「バインダー」）の操作。 */
     idea: {
       list: () => must(document.querySelector('section.ideaView[aria-label="スレッド一覧"]'), "Idea list"),
       detail: () => must(document.querySelector('section.ideaView[aria-label="スレッド詳細"]'), "Idea detail"),
