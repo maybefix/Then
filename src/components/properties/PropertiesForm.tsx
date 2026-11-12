@@ -20,6 +20,7 @@ import {
   type PropertyTypeSettings,
   type PropertyValue,
 } from "../../properties/propertyModel";
+import { keyOfLabel, labelledPropertyType, propertyLabel } from "../../properties/propertyLabels";
 import { analyzeFrontMatter } from "../../utils/frontmatterYaml";
 import "./properties.css";
 
@@ -356,6 +357,7 @@ function PropertyRowView({
   onEditSource: () => void;
   onSearch?: (value: string) => void;
 }) {
+  const label = propertyLabel(row.key);
   const [keyDraft, setKeyDraft] = useState(row.key);
   const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => setKeyDraft(row.key), [row.key]);
@@ -414,30 +416,44 @@ function PropertyRowView({
           </div>
         )}
       </div>
-      <input
-        className={`propertyKey${keyInvalid ? " invalid" : ""}`}
-        data-dirty={keyDraft !== row.key}
-        value={keyDraft}
-        spellCheck={false}
-        aria-label="プロパティ名"
-        aria-invalid={keyInvalid}
-        title={keyTaken ? "同じ名前のプロパティがあります" : undefined}
-        onChange={(event) => setKeyDraft(event.target.value)}
-        onBlur={commitKey}
-        onKeyDown={(event) => {
-          if (event.nativeEvent.isComposing) return;
-          if (event.key === "Enter") {
-            event.preventDefault();
-            commitKey();
-          } else if (event.key === "Escape") {
-            setKeyDraft(row.key);
-          }
-        }}
-      />
+      {label !== null ? (
+        // A key the app reads (BINDER 3.5b): shown by its name, and not renamed,
+        // since another name would no longer be read as this property.
+        <input
+          className="propertyKey"
+          data-property-label={row.key}
+          value={label}
+          readOnly
+          spellCheck={false}
+          aria-label="プロパティ名"
+          title={row.key}
+        />
+      ) : (
+        <input
+          className={`propertyKey${keyInvalid ? " invalid" : ""}`}
+          data-dirty={keyDraft !== row.key}
+          value={keyDraft}
+          spellCheck={false}
+          aria-label="プロパティ名"
+          aria-invalid={keyInvalid}
+          title={keyTaken ? "同じ名前のプロパティがあります" : undefined}
+          onChange={(event) => setKeyDraft(event.target.value)}
+          onBlur={commitKey}
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing) return;
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commitKey();
+            } else if (event.key === "Escape") {
+              setKeyDraft(row.key);
+            }
+          }}
+        />
+      )}
       <div className="propertyValue">
         <ValueEditor row={row} onValue={onValue} onEditSource={onEditSource} onSearch={onSearch} />
       </div>
-      <button type="button" className="propertyRemove" aria-label={`${row.key}を削除`} onClick={onRemove}>
+      <button type="button" className="propertyRemove" aria-label={`${label ?? row.key}を削除`} onClick={onRemove}>
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
           <path d="m4.5 4.5 7 7M11.5 4.5l-7 7" />
         </svg>
@@ -651,16 +667,23 @@ function AddRow({
   const [active, setActive] = useState(0);
   const trimmed = name.trim();
   const suggestions = Object.entries(typeSettings)
-    .filter(([key]) => !existingKeys.has(key) && key.toLowerCase().includes(trimmed.toLowerCase()))
+    .filter(([key]) => {
+      if (existingKeys.has(key)) return false;
+      const query = trimmed.toLowerCase();
+      return key.toLowerCase().includes(query) || (propertyLabel(key)?.includes(trimmed) ?? false);
+    })
     .slice(0, 8);
-  const duplicate = existingKeys.has(trimmed);
-  const type: PropertyType = typeSettings[trimmed] ?? "text";
+  const typedKey = keyOfLabel(trimmed) ?? trimmed;
+  const duplicate = existingKeys.has(typedKey);
+  const typeOf = (key: string): PropertyType => typeSettings[key] ?? labelledPropertyType(key) ?? "text";
+  const type = typeOf(typedKey);
 
   const finish = (key: string) => {
-    const next = key.trim();
+    // Typing the shown name (「概要」) adds the key the app reads (synopsis).
+    const next = keyOfLabel(key.trim()) ?? key.trim();
     if (!next) return onCancel();
     if (existingKeys.has(next)) return;
-    onAdd(next, typeSettings[next] ?? "text");
+    onAdd(next, typeOf(next));
   };
 
   return (
@@ -724,7 +747,7 @@ function AddRow({
                 onClick={() => finish(key)}
               >
                 <TypeIcon type={suggestedType} />
-                <span>{key}</span>
+                <span title={propertyLabel(key) ? key : undefined}>{propertyLabel(key) ?? key}</span>
                 <small>{TYPE_LABEL[suggestedType]}</small>
               </button>
             ))}
