@@ -513,7 +513,9 @@ type SidebarIconName =
   | "file"
   | "folder"
   | "folderPlus"
+  | "note"
   | "plus"
+  | "post"
   | "search";
 
 function SidebarIcon({ name, className = "" }: { name: SidebarIconName; className?: string }) {
@@ -579,11 +581,24 @@ function SidebarIcon({ name, className = "" }: { name: SidebarIconName; classNam
           <line x1="9" y1="13" x2="15" y2="13" />
         </svg>
       );
+    case "note":
+      return (
+        <svg {...common}>
+          <path d="M5 3h14v18H5z" />
+          <path d="M8.5 8h7M8.5 12h7M8.5 16h4.5" />
+        </svg>
+      );
     case "plus":
       return (
         <svg {...common}>
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      );
+    case "post":
+      return (
+        <svg {...common}>
+          <path d="M3.5 4.5h17v12H10l-4.5 3.5v-3.5h-2z" />
         </svg>
       );
     case "search":
@@ -2096,6 +2111,13 @@ export function WorkspaceSidebar({
     action?: JSX.Element;
   }) => {
     const isCollapsed = collapsePath ? collapsedFolderPaths.has(collapsePath) : false;
+    // 段ごとのアイコンを開閉の印の場所に置き、名前はフォルダの行より濃い文字にする（2026-11-12 に E 案に決めた）。
+    const icon = (
+      <SidebarIcon
+        name={section === "manuscript" ? "file" : section === "materials" ? "note" : "post"}
+        className="binderSectionIcon"
+      />
+    );
     const isDropTarget =
       dropFolderPath !== undefined &&
       dropTarget?.kind === "moveInto" &&
@@ -2118,12 +2140,12 @@ export function WorkspaceSidebar({
             aria-expanded={!isCollapsed}
             onClick={() => onFolderCollapsedChange(collapsePath, !isCollapsed)}
           >
-            <SidebarIcon name={isCollapsed ? "chevronRight" : "chevronDown"} className="treeChevronIcon" />
+            {icon}
             <span className="binderSectionLabel">{label}</span>
           </button>
         ) : (
           <span className="binderSectionToggle">
-            <span className="binderSectionChevronPlaceholder" aria-hidden="true" />
+            {icon}
             <span className="binderSectionLabel">{label}</span>
           </span>
         )}

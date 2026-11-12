@@ -485,10 +485,10 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: inherit;
   font: inherit;
-  font-size: 11px;
-  font-weight: 650;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 690;
   letter-spacing: 0.06em;
 }
 
@@ -496,13 +496,15 @@ button.binderSectionToggle {
   cursor: pointer;
 }
 
-button.binderSectionToggle:hover {
-  color: var(--text-primary);
-}
-
-.binderSectionChevronPlaceholder {
+.binderSectionIcon {
   width: 14px;
+  height: 14px;
   flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .binderSectionCount {

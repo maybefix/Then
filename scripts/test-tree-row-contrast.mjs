@@ -80,7 +80,7 @@ try {
     // 段の見出しと投稿の行は、選んでいない原稿の行の同じ役の部品（名前・字数）と同じくらい読めること。
     // 位置から背景を拾う page.read は、この場面では白を返すことがある（行どうしを比べる上の確かめには効かない）。
     // ここでは部品の祖先の背景色を重ねて背景を求め、原稿の行も同じやり方で測って比べる。
-    for (const [part, like] of [["section-label", "count"], ["section-count", "count"], ["section-action", "count"], ["post-name", "name"], ["post-count", "count"]]) {
+    for (const [part, like] of [["section-label", "name"], ["section-count", "count"], ["section-action", "count"], ["post-name", "name"], ["post-count", "count"]]) {
       const [plain, seen] = JSON.parse(await page.evaluate(`JSON.stringify([
         '[data-row="plain-todo"] [data-part="${like}"]', '[data-part="${part}"]',
       ].map((selector) => {
