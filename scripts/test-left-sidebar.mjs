@@ -67,7 +67,7 @@ const functionNames = [
   "handleQuickCreateManuscriptSnapshot", "openCheckpointStudio", "handleEditManuscriptSnapshotDetails",
   "handleRestoreManuscriptSnapshot", "handleDeleteManuscriptSnapshot", "enterLibraryRoot", "enterProject",
   "handleCreateLibraryProject", "handleImportProjectIntoLibrary", "reorderLibraryProjects",
-  "openIdeaPane", "handleCreateMaterialsFolder", "handleSetMaterialsFolder",
+  "openIdeaPane", "handleCreateMaterialsFolder", "handleSetMaterialsFolder", "handleCorkboardFolderClick",
 ];
 const spies = Object.fromEntries(
   functionNames.map((name) => [name, (...args) => {
@@ -327,6 +327,8 @@ const expectCalls = (label, action, expected) => {
     onOpenIdeas: { args: [], name: "openIdeaPane" },
     onCreateMaterialsFolder: { args: [], name: "handleCreateMaterialsFolder" },
     onSetMaterialsFolder: { args: ["C:/work/資料"], name: "handleSetMaterialsFolder" },
+    // BINDER 1-5: コルクボード中のフォルダの行のクリック。
+    onFolderClick: { args: ["C:/work/第一部"], name: "handleCorkboardFolderClick" },
   };
 
   // 渡している props が、確かめる表と過不足なく一致すること（足したのに確かめていない、を防ぐ）。

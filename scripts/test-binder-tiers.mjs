@@ -402,6 +402,29 @@ async function choose(target, label) {
   await view.unmount();
 }
 
+// BINDER 1-5: コルクボード中にフォルダの行を押すと、受け取った側（onFolderClick）が
+// true を返したときは開閉しない。false のときと、受け取る側がないときは今までどおり開閉する。
+{
+  const taken = [];
+  const view = await mount(props(withMaterials, {
+    onFolderClick: (path) => {
+      taken.push(rel(path));
+      return rel(path) === "第一章";
+    },
+  }));
+  takeCalls();
+  await click(row(view.container, "第一章").querySelector(".treeItemPrimary"));
+  assert.deepEqual(takeCalls(), [], "受け取ったら開閉しない");
+  await click(row(view.container, "資料/年表").querySelector(".treeItemPrimary"));
+  assert.deepEqual(takeCalls(), [["onFolderCollapsedChange", "資料/年表", true]], "受け取らなければ開閉する");
+  assert.deepEqual(taken, ["第一章", "資料/年表"]);
+  await view.unmount();
+  const plain = await mount(props(withMaterials));
+  await click(row(plain.container, "第一章").querySelector(".treeItemPrimary"));
+  assert.deepEqual(takeCalls(), [["onFolderCollapsedChange", "第一章", true]], "受け取る側がなければ今までどおり");
+  await plain.unmount();
+}
+
 // ライブラリ直下では段を出さない。
 {
   const library = { path: root, name: "ライブラリ", role: "root", projects: [], misplacedProjects: [] };

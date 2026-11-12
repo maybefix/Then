@@ -99,6 +99,8 @@ export type LeftSidebarProps = {
   handleDeleteProjectEntry: ProjectEntryActions["handleDeleteProjectEntry"];
   handleMoveProjectEntriesToFolder: ProjectEntryActions["handleMoveProjectEntriesToFolder"];
   handleSidebarEntryReorder: ProjectEntryActions["handleSidebarEntryReorder"];
+  /** BINDER 1-5: a folder row clicked while the corkboard is shown. */
+  handleCorkboardFolderClick?: (path: string) => boolean;
   currentWorkspaceSnapshots: ManuscriptSnapshot[];
   updateSettings: <Key extends keyof EditorSettings>(key: Key, value: EditorSettings[Key]) => void;
   handleQuickCreateManuscriptSnapshot: () => Promise<unknown>;
@@ -133,7 +135,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
     setProjectSearchUseRegex, setProjectSearchMatchCase, setSearchIncludeComments, setSearchScope,
     setProjectReplaceValue, handleProjectSearchResultOpen, handleReplaceInCurrentFile, handleReplaceInProject,
     handleCreateProjectFile, handleProjectFileSelect, handleProjectFolderSelect, handleRenameProjectEntry,
-    handleDeleteProjectEntry, handleMoveProjectEntriesToFolder, handleSidebarEntryReorder,
+    handleDeleteProjectEntry, handleMoveProjectEntriesToFolder, handleSidebarEntryReorder, handleCorkboardFolderClick,
     currentWorkspaceSnapshots, updateSettings, handleQuickCreateManuscriptSnapshot, openCheckpointStudio,
     handleEditManuscriptSnapshotDetails, handleRestoreManuscriptSnapshot, handleDeleteManuscriptSnapshot,
     libraryContext, enterLibraryRoot, enterProject, handleCreateLibraryProject,
@@ -327,6 +329,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
         onCreateFolder={(folderPath) => void handleCreateProjectFolder(folderPath)}
         onSelectFile={(path) => void handleProjectFileSelect(path)}
         onSelectFolder={(path) => void handleProjectFolderSelect(path)}
+        onFolderClick={handleCorkboardFolderClick}
         onRenameEntry={(entry) => void handleRenameProjectEntry(entry)}
         onDeleteEntry={(entry) => void handleDeleteProjectEntry(entry)}
         onMoveEntry={(sourcePaths, targetFolderPath, targetPath, position) =>

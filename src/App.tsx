@@ -6739,6 +6739,19 @@ export default function App() {
     const folder = manuscriptFolderOf(focusedFolderPath);
     if (folder) setCorkboardFolderPath(folder);
   }, [appMode, focusedFolderPath, manuscriptFolderOf]);
+  // A manuscript folder row clicked in the binder while the corkboard is shown
+  // becomes its folder (decided at 確認2, 2026-11-12), and opens if it was
+  // closed. Clicking the folder already shown, or a material folder, opens and
+  // closes the row as before.
+  const handleCorkboardFolderClick = (path: string): boolean => {
+    if (appMode !== "corkboard") return false;
+    const folder = manuscriptFolderOf(path);
+    if (!folder || (corkboardFolder && isSamePath(folder, corkboardFolder))) return false;
+    setFocusedFolderPath(folder);
+    setCorkboardFolderPath(folder);
+    if (collapsedTreeFolderPaths.has(folder)) handleFolderCollapsedChange(folder, false);
+    return true;
+  };
   // Without a work there is nothing to lay out.
   useEffect(() => {
     if (appMode === "corkboard" && !projectFolder) setAppMode("write");
@@ -7657,7 +7670,7 @@ export default function App() {
                 handleRestoreManuscriptSnapshot, handleDeleteManuscriptSnapshot, libraryContext,
                 enterLibraryRoot, enterProject, handleCreateLibraryProject, handleImportProjectIntoLibrary,
                 reorderLibraryProjects, libraryCorpus, openIdeaPane, handleCreateMaterialsFolder,
-                handleSetMaterialsFolder,
+                handleSetMaterialsFolder, handleCorkboardFolderClick,
                 // In the corkboard these open the file in the body (BINDER 1-5).
                 handleProjectFileSelect: selectBinderFile,
                 handleProjectSearchResultOpen: openSearchResultInBody,
