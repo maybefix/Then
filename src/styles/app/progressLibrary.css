@@ -460,3 +460,81 @@
   pointer-events: none;
 }
 @keyframes nativeImeBlink { 50% { opacity: 0; } }
+
+/* バインダーの段（原稿／素材／投稿。BINDER 1-4）。見出しは控えめな文字色だけで分け、アクセントの色は使わない。 */
+.binderSection + .binderSection {
+  margin-top: 6px;
+}
+
+.binderSectionHeader {
+  display: flex;
+  min-height: 26px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 49px 2px 10px;
+  border-radius: 5px;
+  color: var(--text-muted);
+}
+
+.binderSectionToggle {
+  display: inline-flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+}
+
+button.binderSectionToggle {
+  cursor: pointer;
+}
+
+button.binderSectionToggle:hover {
+  color: var(--text-primary);
+}
+
+.binderSectionChevronPlaceholder {
+  width: 14px;
+  flex: none;
+}
+
+.binderSectionCount {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.binderSectionAction {
+  flex: none;
+  margin-right: -39px;
+  padding: 1px 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.binderSectionAction:hover {
+  background: var(--control-hover);
+  color: var(--text-primary);
+}
+
+.binderPostItemPrimary {
+  width: 100%;
+  min-height: 28px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  padding: 0 49px 0 31px;
+  font-size: 11.3px;
+}

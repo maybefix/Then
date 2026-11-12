@@ -5367,6 +5367,12 @@ export default function App() {
     setLastError("");
   };
 
+  // 左のバインダーの投稿の段から、右のアイデアのペインを開く（BINDER 1-4）。
+  const openIdeaPane = () => {
+    setRightSidebarTab("idea");
+    setIsRightSidebarCollapsed(false);
+  };
+
   const handleNewDocument = async () => {
     if (projectFolder) {
       void handleCreateProjectFile(focusedFolderPath ?? projectFolder.path);
@@ -6626,6 +6632,8 @@ export default function App() {
   const {
     handleCreateProjectFile,
     handleCreateProjectFolder,
+    handleCreateMaterialsFolder,
+    handleSetMaterialsFolder,
     handleRenameProjectEntry,
     handleDeleteProjectEntry,
     handleMoveProjectEntriesToFolder,
@@ -7500,7 +7508,8 @@ export default function App() {
                 handleQuickCreateManuscriptSnapshot, openCheckpointStudio, handleEditManuscriptSnapshotDetails,
                 handleRestoreManuscriptSnapshot, handleDeleteManuscriptSnapshot, libraryContext,
                 enterLibraryRoot, enterProject, handleCreateLibraryProject, handleImportProjectIntoLibrary,
-                reorderLibraryProjects, libraryCorpus
+                reorderLibraryProjects, libraryCorpus, openIdeaPane, handleCreateMaterialsFolder,
+                handleSetMaterialsFolder
               }}
             />
             <div className={`editorColumn ${
