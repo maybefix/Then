@@ -76,6 +76,7 @@
     "test:properties-ui": "node scripts/test-properties-ui.mjs",
     "test:synopsis-baseline": "node scripts/test-synopsis-baseline.mjs",
     "test:property-labels": "node scripts/test-property-labels.mjs",
+    "test:synopsis-actions": "node scripts/test-synopsis-actions.mjs",
     "test:property-type-store": "node scripts/test-property-type-store.mjs",
     "test:property-search": "node scripts/test-property-search.mjs",
     "test:markdown-table-ime": "node scripts/test-markdown-table-ime.mjs",
