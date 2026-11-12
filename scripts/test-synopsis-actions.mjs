@@ -67,7 +67,7 @@ function host({ active = null, tabs = {}, files = {} } = {}) {
   return {
     log,
     disk,
-    activeTabPath: () => active,
+    isActiveTab: (p) => p === active,
     openTabMarkdown: (p) => (p in tabs ? tabs[p] : null),
     updateActiveMarkdown: (markdown) => log.push(["active", markdown]),
     updateBackgroundTab: (p, markdown) => log.push(["background", p, markdown]),

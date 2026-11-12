@@ -6,8 +6,8 @@ import type { TextDocument } from "../types";
 import { writeSynopsis } from "./synopsis";
 
 export type SynopsisWriterHost = {
-  /** The tab showing `path` in the editor, if any. */
-  activeTabPath: () => string | null;
+  /** Whether the tab shown in the editor has `path` open. */
+  isActiveTab: (path: string) => boolean;
   /** Text of the tab that has `path` open (active or not), or null when no tab has it. */
   openTabMarkdown: (path: string) => string | null;
   /** Put new front matter into the active tab, like the properties pane does. */
@@ -42,7 +42,7 @@ export async function saveSynopsis(
   if (tabMarkdown !== null) {
     const next = writeSynopsis(tabMarkdown, text);
     if (next === tabMarkdown) return { status: "unchanged" };
-    if (host.activeTabPath() === path) host.updateActiveMarkdown(next);
+    if (host.isActiveTab(path)) host.updateActiveMarkdown(next);
     else host.updateBackgroundTab(path, next);
     return { status: "tab" };
   }

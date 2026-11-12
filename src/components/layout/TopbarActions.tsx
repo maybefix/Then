@@ -2,7 +2,7 @@ import type { Dispatch, KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObjec
 import type { EditorSettings, ProjectFolder } from "../../types";
 import { AppIcon } from "./AppIcon";
 
-type AppMode = "write" | "canvas" | "export" | "checkpoint" | "plugin";
+type AppMode = "write" | "corkboard" | "canvas" | "export" | "checkpoint" | "plugin";
 
 type ModeMenuEntry = {
   key: string;
@@ -73,7 +73,7 @@ export function TopbarActions(props: TopbarActionsProps) {
           <AppIcon name="fullscreen" className="topbarSvgIcon" />
         </button>
       )}
-      {isRightSidebarCollapsed && (appMode === "write" || appMode === "canvas") && (
+      {isRightSidebarCollapsed && (appMode === "write" || appMode === "corkboard" || appMode === "canvas") && (
         <button
           className="iconButton"
           type="button"

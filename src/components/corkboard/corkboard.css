@@ -1,6 +1,13 @@
 /* ===== コルクボード（BINDER 1-5）=====
    色はテーマの変数だけを使う。アクセントは選んだカードと落とす位置の印だけ。 */
 
+.corkboardHost {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+
 .corkboard {
   position: relative;
   display: flex;

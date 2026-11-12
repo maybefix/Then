@@ -28,6 +28,8 @@ import {
   useMemo,
   useRef,
   useState,
+  lazy,
+  Suspense,
 } from "react";
 import { manageAsyncRegistration } from "./utils/asyncRegistration";
 import { flushPendingSaves, schedulePendingSave } from "./pendingSaves";
@@ -137,6 +139,7 @@ import {
   collectManuscriptFiles,
   collectProjectTextFiles,
   createProjectAstSkeleton,
+  getProjectAstFile,
   markProjectAstFileError,
   searchDocumentAstFullText,
   searchProjectAstFullTextWithOptions,
@@ -257,6 +260,7 @@ import {
   findContainingFolderPath,
   findPathToEntry,
   findProjectEntry,
+  getFolderChildren,
   getParentPath,
   getWorkspaceName,
   isPathSameOrInside,
@@ -289,7 +293,12 @@ const LEGACY_STORAGE_KEY = "brew.app-state.v1";
 const newTabName = "新しいタブ";
 const scratchWorkspaceName = "一時ファイル";
 const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
-type AppMode = "write" | "canvas" | "export" | "checkpoint" | "plugin";
+type AppMode = "write" | "corkboard" | "canvas" | "export" | "checkpoint" | "plugin";
+
+// The corkboard (BINDER 1-5) and the synopsis writer load the YAML parser, so
+// they stay out of the main bundle until the corkboard is opened.
+const Corkboard = lazy(() => import("./components/corkboard/Corkboard"));
+const loadSynopsisWriter = () => import("./corkboard/synopsisWriter");
 type ToastAction = {
   label: string;
   onClick: () => void;
@@ -5546,9 +5555,13 @@ export default function App() {
   };
 
   /** 画面上部のモード切替。canvas/export は設定により別ウィンドウ起動になる。 */
-  const switchAppMode = (mode: "write" | "canvas" | "export" | "checkpoint") => {
+  const switchAppMode = (mode: "write" | "corkboard" | "canvas" | "export" | "checkpoint") => {
     if (mode === "write") {
       setAppMode("write");
+      return;
+    }
+    if (mode === "corkboard") {
+      openCorkboard();
       return;
     }
     if (mode === "checkpoint") {
@@ -5585,6 +5598,18 @@ export default function App() {
       opensInWindow: false,
       select: () => switchAppMode("write"),
     },
+    // BINDER 1-5: the manuscripts of the folder chosen in the binder, as cards.
+    ...(projectFolder
+      ? [{
+          key: "corkboard",
+          label: "コルクボード",
+          title: "コルクボード",
+          icon: <AppIcon name="corkboard" className="modeSwitcherIcon" />,
+          isActive: appMode === "corkboard",
+          opensInWindow: false,
+          select: () => switchAppMode("corkboard"),
+        }]
+      : []),
     {
       key: "canvas",
       label: "キャンバス",
@@ -6688,6 +6713,131 @@ export default function App() {
     setClosedDocumentTabs,
   });
 
+  // ===== コルクボード（BINDER 1-5） =====
+  // The folder the corkboard lays out. Kept apart from focusedFolderPath, which
+  // opening a file clears. Only manuscript folders: materials are not cards.
+  const [corkboardFolderPath, setCorkboardFolderPath] = useState<string | null>(null);
+  const manuscriptFolderOf = useCallback((path: string | null): string | null => {
+    if (!projectFolder || !path) return null;
+    if (isSamePath(path, projectFolder.path)) return projectFolder.path;
+    const entry = findProjectEntry(projectFolder.children, path);
+    return entry?.kind === "folder" && entry.role !== "material" ? entry.path : null;
+  }, [projectFolder]);
+  const corkboardFolder = projectFolder
+    ? manuscriptFolderOf(corkboardFolderPath) ?? projectFolder.path
+    : null;
+  const openCorkboard = () => {
+    if (!projectFolder) return;
+    setCorkboardFolderPath(
+      manuscriptFolderOf(focusedFolderPath)
+        ?? manuscriptFolderOf(currentFilePath ? getParentPath(currentFilePath) : null)
+        ?? projectFolder.path,
+    );
+    setAppMode("corkboard");
+  };
+  // A folder chosen in the binder while the corkboard is shown becomes its folder.
+  useEffect(() => {
+    if (appMode !== "corkboard") return;
+    const folder = manuscriptFolderOf(focusedFolderPath);
+    if (folder) setCorkboardFolderPath(folder);
+  }, [appMode, focusedFolderPath, manuscriptFolderOf]);
+  // Without a work there is nothing to lay out.
+  useEffect(() => {
+    if (appMode === "corkboard" && !projectFolder) setAppMode("write");
+  }, [appMode, projectFolder]);
+
+  const openFromCorkboard = async (path: string) => {
+    setAppMode("write");
+    await handleProjectFileSelect(path);
+    // The editor was only hidden; give it the focus back where its caret is.
+    window.requestAnimationFrame(() => editorInstanceRef.current?.focus());
+  };
+  // A file, heading or search result picked in the left sidebar opens in the
+  // body, as it does from the body.
+  const selectBinderFile = (path: string) => {
+    if (appMode === "corkboard") return openFromCorkboard(path);
+    return handleProjectFileSelect(path);
+  };
+  const openSearchResultInBody: typeof handleProjectSearchResultOpen = (result) => {
+    if (appMode === "corkboard") setAppMode("write");
+    return handleProjectSearchResultOpen(result);
+  };
+  const jumpToProjectOutlineInBody: typeof handleProjectOutlineJump = (path, item) => {
+    if (appMode === "corkboard") setAppMode("write");
+    return handleProjectOutlineJump(path, item);
+  };
+
+  const corkboardCharCountOf = (path: string): number | null => {
+    const file = getProjectAstFile(projectAst, path);
+    return file?.status === "indexed"
+      ? displayedCharacterCount(file, { includeWhitespace: settings.countWhitespace, includeCode: settings.countCode })
+      : null;
+  };
+  const openTabWithPath = (path: string) =>
+    openTabsRef.current.find((tab) => tab.path !== null && isSamePath(tab.path, path)) ?? null;
+
+  // A synopsis edited for a file open in a tab that is not shown: into the tab,
+  // through the recovery journal, and saved like the tab's own edits (BINDER 3.9).
+  const updateBackgroundTabMarkdown = (path: string, nextMarkdown: string) => {
+    const tab = openTabWithPath(path);
+    if (!tab?.path || tab.id === activeTabIdRef.current) return;
+    recordDocumentChange(tab.id, tab.path, tab.markdown, nextMarkdown, null, tab.contentHash);
+    setOpenTabs((current) =>
+      current.map((candidate) =>
+        candidate.id === tab.id ? { ...candidate, markdown: nextMarkdown, saveStatus: "dirty" } : candidate,
+      ),
+    );
+    void enqueueDocumentSave({
+      tabId: tab.id,
+      path: tab.path,
+      content: nextMarkdown,
+      journalPosition: journalPositionOf(tab.id, nextMarkdown),
+    }).catch(() => undefined);
+  };
+
+  const saveSynopsisFromCorkboard = async (
+    path: string,
+    text: string,
+    base: { content: string; contentHash: string | null } | null,
+  ) => {
+    try {
+      const writer = await loadSynopsisWriter();
+      const host = {
+        isActiveTab: (target: string) => {
+          const tab = openTabWithPath(target);
+          return tab !== null && tab.id === activeTabIdRef.current;
+        },
+        openTabMarkdown: (target: string) => {
+          const tab = openTabWithPath(target);
+          if (!tab) return null;
+          return tab.id === activeTabIdRef.current ? activeMarkdownRef.current : tab.markdown;
+        },
+        updateActiveMarkdown: (nextMarkdown: string) => updateFrontMatter(parseFrontMatter(nextMarkdown).metadata),
+        updateBackgroundTab: updateBackgroundTabMarkdown,
+        readFile: (target: string) => invoke<TextDocument>("read_text_file", { path: target }),
+        saveFile: (target: string, content: string, expectedHash: string | null) =>
+          invoke<TextDocument>("save_text_file", { path: target, content, expectedHash }),
+        isConflict: isDocumentConflict,
+      };
+      let result = await writer.saveSynopsis(host, path, text, base);
+      if (result.status === "conflict") {
+        const choice = await requestChoice({
+          title: "ほかのアプリでファイルが変更されました",
+          message: `「${getWorkspaceName(path)}」`,
+          detail: path,
+          primaryLabel: "ファイルの内容を読み込む",
+          secondaryLabel: "この概要で上書きする",
+        });
+        if (choice !== "secondary") return;
+        result = await writer.overwriteSynopsis(host, path, text, result.current);
+        if (result.status === "conflict") showToast("ほかのアプリでまた変更されたため、概要を書き込みませんでした");
+      }
+    } catch (error) {
+      setLastError(conflictFreeMessage(error));
+      showToast(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   const { handleHeadingMove, handleHeadingExtract } = createHeadingMoveActions({
     projectFolder,
     currentFilePath,
@@ -7419,7 +7569,7 @@ export default function App() {
                 canRegisterTemplate: !(isNewTabStartPage || activeTab?.kind === "empty"),
               }}
             />
-            {isLeftSidebarCollapsed && appMode === "write" && (
+            {isLeftSidebarCollapsed && (appMode === "write" || appMode === "corkboard") && (
               <button
                 className="iconButton"
                 type="button"
@@ -7498,18 +7648,22 @@ export default function App() {
                 handleOutlineCollapsedChange, collapsedTreeOutlineHeadingKeys,
                 handleOutlineHeadingCollapsedChange, projectSearchQuery, workspaceSearchOutcome,
                 projectSearchUseRegex, projectSearchMatchCase, searchIncludeComments, searchScope,
-                projectReplaceValue, isProjectReplacing, jumpToOutlineItem, handleProjectOutlineJump,
+                projectReplaceValue, isProjectReplacing, jumpToOutlineItem,
                 handleHeadingMove, handleHeadingExtract, setProjectSearchQuery, setProjectSearchUseRegex,
                 setProjectSearchMatchCase, setSearchIncludeComments, setSearchScope, setProjectReplaceValue,
-                handleProjectSearchResultOpen, handleReplaceInCurrentFile, handleReplaceInProject,
-                handleCreateProjectFile, handleProjectFileSelect, handleProjectFolderSelect,
+                handleReplaceInCurrentFile, handleReplaceInProject,
+                handleCreateProjectFile, handleProjectFolderSelect,
                 handleRenameProjectEntry, handleDeleteProjectEntry, handleMoveProjectEntriesToFolder,
                 handleSidebarEntryReorder, currentWorkspaceSnapshots, updateSettings,
                 handleQuickCreateManuscriptSnapshot, openCheckpointStudio, handleEditManuscriptSnapshotDetails,
                 handleRestoreManuscriptSnapshot, handleDeleteManuscriptSnapshot, libraryContext,
                 enterLibraryRoot, enterProject, handleCreateLibraryProject, handleImportProjectIntoLibrary,
                 reorderLibraryProjects, libraryCorpus, openIdeaPane, handleCreateMaterialsFolder,
-                handleSetMaterialsFolder
+                handleSetMaterialsFolder,
+                // In the corkboard these open the file in the body (BINDER 1-5).
+                handleProjectFileSelect: selectBinderFile,
+                handleProjectSearchResultOpen: openSearchResultInBody,
+                handleProjectOutlineJump: jumpToProjectOutlineInBody,
               }}
             />
             <div className={`editorColumn ${
@@ -7795,6 +7949,28 @@ export default function App() {
                 }
               />
             </div>
+
+            {appMode === "corkboard" && projectFolder && corkboardFolder && (
+              <div className="corkboardHost">
+                <Suspense fallback={null}>
+                  <Corkboard
+                    folderName={isSamePath(corkboardFolder, projectFolder.path)
+                      ? projectFolder.name
+                      : findProjectEntry(projectFolder.children, corkboardFolder)?.name ?? getWorkspaceName(corkboardFolder)}
+                    entries={getFolderChildren(projectFolder, corkboardFolder)}
+                    fileProgress={appState.fileProgress}
+                    charCountOf={corkboardCharCountOf}
+                    openTabMarkdown={(path) => openTabs.find((tab) => tab.path !== null && isSamePath(tab.path, path))?.markdown ?? null}
+                    readFile={(path) => invoke<TextDocument>("read_text_file", { path })}
+                    onSaveSynopsis={saveSynopsisFromCorkboard}
+                    onOpen={(path) => void openFromCorkboard(path)}
+                    onReorder={(draggedPath, targetPath, position) =>
+                      void handleSidebarEntryReorder(corkboardFolder, [draggedPath], targetPath, position)
+                    }
+                  />
+                </Suspense>
+              </div>
+            )}
 
             {appMode === "canvas" && canvasEmbedPayload && (
               <div className="canvasEmbeddedHost">

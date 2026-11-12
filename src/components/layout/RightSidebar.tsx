@@ -26,7 +26,7 @@ import { PropertiesPanel } from "../properties/PropertiesPanel";
 import { AppIcon } from "./AppIcon";
 import { RightPaneSwitcher, type RightPaneSwitcherItem } from "./RightPaneSwitcher";
 
-type AppMode = "write" | "canvas" | "export" | "checkpoint" | "plugin";
+type AppMode = "write" | "corkboard" | "canvas" | "export" | "checkpoint" | "plugin";
 
 type ToastAction = {
   label: string;

@@ -713,6 +713,11 @@ textarea,
   zoom: var(--ui-font-scale, 1);
 }
 
+/* BINDER 1-5: the corkboard is chrome, not the editor. */
+.corkboard {
+  zoom: var(--ui-font-scale, 1);
+}
+
 /*
  * Export window chrome. The window is entirely chrome except the組版 preview,
  * which must stay at its true (出力と同じ) scale — so zoom the surrounding

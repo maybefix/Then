@@ -24,7 +24,7 @@ import { OpenCardsPane } from "../binder/OpenCardsPane";
 import { AppIcon } from "./AppIcon";
 import { WorkspaceSidebar, type SidebarHeadingSelection } from "./WorkspaceSidebar";
 
-type AppMode = "write" | "canvas" | "export" | "checkpoint" | "plugin";
+type AppMode = "write" | "corkboard" | "canvas" | "export" | "checkpoint" | "plugin";
 
 type WorkspaceSearchScope = "file" | "project" | "library";
 
@@ -145,7 +145,8 @@ export function LeftSidebar(props: LeftSidebarProps) {
   return (
     <div
       className={`leftWorkspaceCluster ${
-        appMode !== "write" && appMode !== "plugin" ? "modeHiddenPane" : ""
+        // The corkboard shows the binder too: its folder is chosen there (BINDER 1-5).
+        appMode !== "write" && appMode !== "corkboard" && appMode !== "plugin" ? "modeHiddenPane" : ""
       }`}
       data-sidebar-collapsed={isLeftSidebarCollapsed}
       aria-hidden={isEditorFocusMode || appMode === "plugin"}
