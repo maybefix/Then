@@ -1,7 +1,10 @@
 //! ファイル一覧の「原稿／素材」の区分（BINDER 1-3b、docs/BINDER_MATERIALS_PLAN.md）を確かめる。
 //! 素材は、作品直下の `project.json` の `materialsFolder` に書かれたフォルダと、その中のもの。
 
-use super::{list_project_folder, project_state::update_project_config, rename_project_entry, ProjectEntry};
+use super::{
+    create_project_materials_folder, list_project_folder, project_state::update_project_config,
+    rename_project_entry, set_project_materials_folder, ProjectEntry,
+};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -194,4 +197,80 @@ fn materials_folder_survives_other_project_config_updates() {
     .unwrap();
     let text = std::fs::read_to_string(unset.0.join(".then/project.json")).unwrap();
     assert!(!text.contains("materialsFolder"), "未設定の作品には書き足さない: {text}");
+}
+fn read_config(root: &Path) -> serde_json::Value {
+    serde_json::from_str(&std::fs::read_to_string(root.join(".then/project.json")).unwrap()).unwrap()
+}
+
+fn path_string(path: &Path) -> String {
+    path.to_string_lossy().to_string()
+}
+
+#[test]
+fn creating_the_materials_folder_writes_its_name_and_keeps_other_settings() {
+    let work = temp_work("create", None);
+    std::fs::remove_dir_all(work.0.join("素材")).unwrap();
+    update_project_config(&work.0, |config| {
+        config.order.insert(".".into(), vec!["本編.md".into()]);
+        Ok(())
+    })
+    .unwrap();
+    let folder = create_project_materials_folder(path_string(&work.0), "資料".into()).expect("create");
+    assert!(work.0.join("資料").is_dir());
+    let config = read_config(&work.0);
+    assert_eq!(config["materialsFolder"], "資料");
+    assert_eq!(config["order"]["."][0], "本編.md", "ほかの欄は消さない");
+    assert!(folder
+        .children
+        .iter()
+        .any(|entry| entry.name == "資料" && entry.role.as_deref() == Some("material")));
+
+    // 1作品に1つ。すでにあれば作らない。
+    let error = create_project_materials_folder(path_string(&work.0), "素材2".into()).err().expect("断るはず");
+    assert!(error.contains("already exists"), "{error}");
+    assert!(!work.0.join("素材2").exists());
+}
+
+#[test]
+fn creating_does_not_adopt_an_existing_folder_with_the_same_name() {
+    let work = temp_work("create-same", None);
+    let error = create_project_materials_folder(path_string(&work.0), "素材".into()).err().expect("断るはず");
+    assert!(error.contains("already exists"), "{error}");
+    assert!(!read_config(&work.0).as_object().unwrap().contains_key("materialsFolder"));
+    assert!(material_paths(&work.0).is_empty(), "「素材」という名前の原稿のフォルダはそのまま");
+}
+
+#[test]
+fn creating_rejects_names_that_cannot_be_the_materials_folder() {
+    let work = temp_work("create-bad", None);
+    for name in ["", "  ", ".then", "a/b", "a:b"] {
+        assert!(
+            create_project_materials_folder(path_string(&work.0), name.into()).is_err(),
+            "{name:?} は素材フォルダにできない"
+        );
+    }
+    assert!(!read_config(&work.0).as_object().unwrap().contains_key("materialsFolder"));
+}
+
+#[test]
+fn an_existing_root_folder_becomes_materials_only_when_chosen() {
+    let work = temp_work("adopt", None);
+    assert!(material_paths(&work.0).is_empty());
+    let nested = work.0.join("第一章").join("素材");
+    assert!(set_project_materials_folder(path_string(&work.0), path_string(&nested)).is_err(), "作品直下でないフォルダは断る");
+    set_project_materials_folder(path_string(&work.0), path_string(&work.0.join("素材"))).expect("adopt");
+    assert_eq!(read_config(&work.0)["materialsFolder"], "素材");
+    assert_eq!(
+        material_paths(&work.0),
+        vec!["素材", "素材/人物.md", "素材/年表", "素材/年表/年表.md"]
+    );
+    let error = set_project_materials_folder(path_string(&work.0), path_string(&work.0.join("第一章"))).err().expect("断るはず");
+    assert!(error.contains("already exists"), "{error}");
+}
+
+#[test]
+fn a_recorded_but_missing_materials_folder_can_be_replaced() {
+    let work = temp_work("missing", Some("消えた素材"));
+    create_project_materials_folder(path_string(&work.0), "資料".into()).expect("replace missing");
+    assert_eq!(read_config(&work.0)["materialsFolder"], "資料");
 }
