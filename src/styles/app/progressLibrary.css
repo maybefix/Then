@@ -471,7 +471,7 @@
   min-height: 26px;
   align-items: center;
   gap: 6px;
-  padding: 6px 49px 2px 10px;
+  padding: 6px 38px 2px 0;
   border-radius: 5px;
   color: var(--text-muted);
 }
@@ -514,7 +514,7 @@ button.binderSectionToggle:hover {
 
 .binderSectionAction {
   flex: none;
-  margin-right: -39px;
+  margin-right: -28px;
   padding: 1px 7px;
   border: 1px solid var(--border-subtle);
   border-radius: 4px;
