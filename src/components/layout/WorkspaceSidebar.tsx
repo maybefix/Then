@@ -97,6 +97,11 @@ type WorkspaceSidebarProps = {
   onCreateFolder: (folderPath?: string) => void;
   onSelectFile: (path: string) => void;
   onSelectFolder: (path: string) => void;
+  /**
+   * A click on a folder row. Returns true when it was taken (the corkboard shows
+   * that folder, BINDER 1-5); otherwise the row opens or closes as before.
+   */
+  onFolderClick?: (path: string) => boolean;
   onRenameEntry: (entry: ProjectFolder | ProjectEntry) => void;
   onDeleteEntry: (entry: ProjectEntry) => void;
   onMoveEntry: (
@@ -803,6 +808,7 @@ export function WorkspaceSidebar({
   onCreateFolder,
   onSelectFile,
   onSelectFolder,
+  onFolderClick,
   onRenameEntry,
   onDeleteEntry,
   onMoveEntry,
@@ -1205,6 +1211,7 @@ export function WorkspaceSidebar({
     }
     if (isFolder) {
       replaceSelectedFilePaths([]);
+      if (onFolderClick?.(entry.path)) return;
       onFolderCollapsedChange(entry.path, !collapsedFolderPaths.has(entry.path));
       return;
     }

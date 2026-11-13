@@ -2,7 +2,7 @@ import type { Dispatch, RefObject, SetStateAction } from "react";
 import type { EditorSelectionSnapshot } from "../../editor/selectionEdits";
 import { AppIcon } from "./AppIcon";
 
-type AppMode = "write" | "canvas" | "export" | "checkpoint" | "plugin";
+type AppMode = "write" | "corkboard" | "canvas" | "export" | "checkpoint" | "plugin";
 
 export type TopbarFileMenuProps = {
   fileMenuRef: RefObject<HTMLDivElement>;

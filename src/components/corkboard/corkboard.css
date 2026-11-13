@@ -1,0 +1,168 @@
+/* ===== コルクボード（BINDER 1-5）=====
+   色はテーマの変数だけを使う。アクセントは選んだカードと落とす位置の印だけ。 */
+
+.corkboardHost {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+
+.corkboard {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: auto;
+  padding: 18px 24px 28px;
+  background: var(--bg-root);
+  color: var(--text-primary);
+  font-family: var(--ui-font-family);
+}
+
+.corkboardHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.corkboardTitle {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.corkboardSummary {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.corkboardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.corkboardCard {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 176px;
+  flex-direction: column;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  cursor: default;
+  outline: none;
+}
+
+.corkboardCard:focus-visible,
+.corkboardCard[data-selected="true"] {
+  border-color: var(--accent-border, var(--accent));
+}
+
+.corkboardCard[data-dragging="true"] {
+  opacity: 0.5;
+}
+
+.corkboardCard[data-drop]::before {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  content: "";
+}
+
+.corkboardCard[data-drop="before"]::before { left: -9px; }
+.corkboardCard[data-drop="after"]::before { right: -9px; }
+
+.corkboardCardHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 7px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.corkboardCardName {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.corkboardProgress {
+  flex: none;
+  color: var(--progress-color);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.corkboardSynopsis,
+.corkboardSynopsisInput {
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 8px 12px;
+  color: var(--text-secondary, var(--text-primary));
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.corkboardSynopsis {
+  display: -webkit-box;
+  min-height: 3.5em;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 7;
+  line-clamp: 7;
+  outline: none;
+}
+
+.corkboardSynopsis[data-editable="true"] {
+  cursor: text;
+}
+
+.corkboardSynopsis[data-editable="true"]:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--accent-border, var(--accent));
+}
+
+.corkboardSynopsisInput {
+  display: block;
+  width: 100%;
+  min-height: 3.5em;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 0;
+  background: var(--bg-root);
+  box-shadow: inset 0 0 0 1px var(--accent-border, var(--accent));
+  outline: none;
+  resize: none;
+}
+
+.corkboardCardFoot {
+  min-height: 26px;
+  padding: 5px 12px;
+  color: var(--text-faint, var(--text-muted));
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}

@@ -3,6 +3,7 @@ export type AppIconName =
   | "canvas"
   | "checkpointAdd"
   | "copy"
+  | "corkboard"
   | "cut"
   | "chevronDown"
   | "export"
@@ -72,6 +73,16 @@ export function AppIcon({ name, className = "" }: { name: AppIconName; className
           <rect x="13" y="13" width="7" height="6" rx="1.5" />
           <path d="M11 8h3.5A2.5 2.5 0 0 1 17 10.5V13" />
           <path d="M13 16H9.5A2.5 2.5 0 0 1 7 13.5V11" />
+        </svg>
+      );
+    case "corkboard":
+      // BINDER 1-5: cards laid out in a grid.
+      return (
+        <svg {...common}>
+          <rect x="4" y="4" width="7" height="7" rx="1.5" />
+          <rect x="13" y="4" width="7" height="7" rx="1.5" />
+          <rect x="4" y="13" width="7" height="7" rx="1.5" />
+          <rect x="13" y="13" width="7" height="7" rx="1.5" />
         </svg>
       );
     case "chevronDown":
