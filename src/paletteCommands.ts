@@ -217,7 +217,7 @@ export function createPaletteCommands(deps: PaletteCommandDeps): PaletteCommand[
     },
     {
       id: "idea-quick-capture",
-      label: "Idea にメモを追加…",
+      label: "アイデアに投稿…",
       hint: "Ctrl+Alt+I",
       run: () => setIsQuickIdeaModalOpen(true),
     },
