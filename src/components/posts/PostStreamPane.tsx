@@ -158,10 +158,6 @@ export function PostStreamPane({ stream, filter, onFilterChange, legacy, legacyF
         data-post-id={entry.id}
       >
         <div className="postMain">
-          <div className="postHead">
-            <time dateTime={entry.at}>{timeLabel(entry.at)}</time>
-            {otherWork && <span className="postWork">{otherWork}</span>}
-          </div>
           <div
             className="ideaFragmentBody postBody"
             contentEditable={available}
@@ -171,7 +167,12 @@ export function PostStreamPane({ stream, filter, onFilterChange, legacy, legacyF
           >
             {entry.body}
           </div>
+          {/* 今の Idea の断片と同じく、左に時刻（と、ほかの作品なら作品名）、右に操作。 */}
           <div className="ideaFragmentFoot postFoot">
+            <span className="postHead">
+              <time className="ideaFragmentDate" dateTime={entry.at}>{timeLabel(entry.at)}</time>
+              {otherWork && <span className="postWork">{otherWork}</span>}
+            </span>
             <span className="ideaFragmentBtns postMenuHost">
               <button className="ideaMiniIcon" type="button" aria-label="返信" title="返信" onClick={() => { setReplyTo((current) => current === entry.id ? null : entry.id); setReplyText(""); }}><ReplyIcon /></button>
               {entry.filed

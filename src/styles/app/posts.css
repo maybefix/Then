@@ -20,12 +20,10 @@
 
 .postHead {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 8px;
-  margin-bottom: 2px;
-  color: var(--text-muted);
   font-size: 11px;
-  font-variant-numeric: tabular-nums;
 }
 
 .postWork {
@@ -36,16 +34,17 @@
   white-space: nowrap;
 }
 
-.postFoot {
-  justify-content: flex-end;
-}
-
 .postMenuHost {
   position: relative;
 }
 
 .postReply {
   margin-top: 6px;
+}
+
+.postStreamPane .ideaChips {
+  flex: 1 1 auto;
+  flex-wrap: wrap;
 }
 
 .postChipCount {
