@@ -166,6 +166,7 @@ import {
 } from "./components/plot/plotCardUtils";
 import { defaultPlotCards, loadWorkspacePlotCards, saveWorkspacePlotCards } from "./plotCardModel";
 import { createPlotCardActions } from "./plotCardActions";
+import { migratePlotToNotes, plotMigrationMessage } from "./plotMigration";
 import { ReferenceLayer } from "./components/references/ReferenceLayer";
 import {
   alignIdeaLayoutToMode,
@@ -2845,17 +2846,41 @@ export default function App() {
     setLastError("");
   };
 
+  /**
+   * Plot をノート「プロット（移行）」へ移してから開く（BINDER 1-6）。移したら true（ファイル一覧を読み直す）。
+   * 失敗しても作品は開く。次に開いたときにやり直す。
+   */
+  const migratePlotBeforeOpening = async (rootPaths: string[]) => {
+    const summary = await migratePlotToNotes(rootPaths);
+    for (const failure of summary.failed) {
+      console.error("plot migration failed", failure.rootPath, failure.error);
+      setLastError(String(failure.error));
+    }
+    const message = plotMigrationMessage(summary);
+    if (message) showToast(message);
+    return summary.migrated.length > 0;
+  };
+
   const restoreWorkspaceFromState = async (
     state: AppState,
   ): Promise<boolean | "outsideLibrary"> => {
     if (!isTauriRuntime() || !state.lastWorkspacePath) return false;
 
     try {
-      const folder = await invoke<ProjectFolder>("list_project_text_files", {
+      let folder = await invoke<ProjectFolder>("list_project_text_files", {
         folderPath: state.lastWorkspacePath,
       });
       // 旧版のワークスペースはそのまま開かず、取り込みへ誘導する。
       if (!folder.library) return "outsideLibrary";
+      // 起動時に、ライブラリ直下とライブラリの全作品の Plot をノートへ移す（BINDER 1-6、確認1の 1）。
+      const migrated = await migratePlotBeforeOpening([
+        folder.library.path,
+        ...folder.library.projects.map((project) => project.path),
+        folder.path,
+      ]);
+      if (migrated) {
+        folder = await invoke<ProjectFolder>("list_project_text_files", { folderPath: folder.path });
+      }
       const restoredSnippets =
         state.settings.snippetStorageMode === "workspace"
           ? await loadWorkspaceSnippets(folder.path)
@@ -3122,8 +3147,8 @@ export default function App() {
     let isCancelled = false;
     const workspaceSwitchGeneration = workspaceSwitchGenerationRef.current;
 
-    Promise.all([
-      projectFolder?.path === activeWorkspaceRootPath
+    migratePlotBeforeOpening([activeWorkspaceRootPath]).then((migrated) => Promise.all([
+      projectFolder?.path === activeWorkspaceRootPath && !migrated
         ? Promise.resolve(projectFolder)
         : invoke<ProjectFolder>("list_project_text_files", {
             folderPath: activeWorkspaceRootPath,
@@ -3134,7 +3159,7 @@ export default function App() {
       loadWorkspaceProofreadIgnored(activeWorkspaceRootPath),
       loadWorkspaceFileProgress(activeWorkspaceRootPath, appStateRef.current),
       loadWorkspaceCheckpoints(activeWorkspaceRootPath, appStateRef.current),
-    ])
+    ]))
       .then(([
         folder,
         workspaceSnippets,
@@ -4790,6 +4815,9 @@ export default function App() {
           folderPath: enclosingPath,
         });
       }
+      if (await migratePlotBeforeOpening([folder.path])) {
+        folder = await invoke<ProjectFolder>("list_project_text_files", { folderPath: folder.path });
+      }
       const switched = !projectFolder || !isSamePath(projectFolder.path, folder.path);
       let restoredTabs: LoadedWorkspaceDocumentTabs | null = null;
       let nextTabs: DocumentTab[] | null = null;
@@ -5712,6 +5740,9 @@ export default function App() {
     const focusedPath = options.focusFolderPath ?? folder.path;
 
     try {
+      if (await migratePlotBeforeOpening([folder.path])) {
+        folder = await invoke<ProjectFolder>("list_project_text_files", { folderPath: folder.path });
+      }
       const restoredSnippets =
         settings.snippetStorageMode === "workspace"
           ? await loadWorkspaceSnippets(folder.path)

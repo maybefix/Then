@@ -37,6 +37,38 @@ export type PlotMigrationResult = {
  * 画面に見えていた形（`normalizePlotCards`）で文字を作り、読んだときのままの `plotCards` を Rust へ返す。
  * Rust は `project.json` を読み直して同じであることを確かめてから、バックアップ・ノート・空の `plotCards` を書く。
  */
+export type PlotMigrationSummary = { migrated: string[]; failed: { rootPath: string; error: unknown }[] };
+
+/**
+ * いくつかの作品（ライブラリ直下を含む）を順に移す。起動時のライブラリ全体と、作品を開いたときに使う。
+ * 1つの失敗はほかを止めない。同じパスは1回だけ。
+ */
+export async function migratePlotToNotes(rootPaths: string[]): Promise<PlotMigrationSummary> {
+  const summary: PlotMigrationSummary = { migrated: [], failed: [] };
+  const seen = new Set<string>();
+  for (const rootPath of rootPaths) {
+    const key = rootPath.replace(/\\/g, "/").replace(/\/+$/, "").toLocaleLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    try {
+      const result = await migrateWorkspacePlotToNote(rootPath);
+      if (result.status === "migrated") summary.migrated.push(rootPath);
+    } catch (error) {
+      summary.failed.push({ rootPath, error });
+    }
+  }
+  return summary;
+}
+
+/** 移した結果の通知の文。何も起きなければ null。 */
+export function plotMigrationMessage(summary: PlotMigrationSummary): string | null {
+  if (summary.failed.length > 0) return "プロットをノートに移せませんでした";
+  if (summary.migrated.length === 0) return null;
+  return summary.migrated.length === 1
+    ? `プロットをノート「${PLOT_MIGRATION_NOTE_NAME}」に移しました`
+    : `${summary.migrated.length}作品のプロットをノート「${PLOT_MIGRATION_NOTE_NAME}」に移しました`;
+}
+
 export async function migrateWorkspacePlotToNote(rootPath: string): Promise<PlotMigrationResult> {
   const storedCards = await invoke<unknown[]>("load_project_plot_cards", { rootPath });
   const note = plotCardsToNote(normalizePlotCards(storedCards));
