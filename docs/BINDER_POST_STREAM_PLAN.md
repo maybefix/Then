@@ -426,3 +426,17 @@ A を勧める。調査の結果、IdeaPane は親（`BinderPane`）から受け
 ### 「以前のアイデア」の中の見た目（実機）
 
 断片13件のインボックスを持つ作品で、QA 用アプリを動かして確かめた（利用者が開いていた Then を閉じたあと）。一覧、スレッドの詳細への切り替え、長い一覧のスクロール（高さ 1,365px の中身を 372px の枠で最後まで送れた）は崩れていない。気になる点: 絞り込みの行が上下2段になり、「すべて」が2つ並ぶ（上は投稿の絞り込み、下は今の Idea のスレッドの絞り込み）。片付けのあと、QA のプロセスと一時フォルダは 0。
+
+### R1〜R3 の直し（2026-11-14、`417b380`）
+
+| # | 直し方 | 確かめ方 |
+|---|---|---|
+| R1 | 古い Idea が空でも「以前のアイデア」を常に出す（`RightSidebar.tsx` の表示の条件を外した） | `test:right-sidebar` に「古い Idea が空でも『以前のアイデア』を出す」を足した |
+| R2 | Canvas の「Ideaへ送る」で既存のスレッド（見つからなければインボックス）へ送ったときも、送り先を開く要求を出す（`ideaThreadActions.ts`） | `test:idea-actions` に、既存のスレッドとインボックスへ送ったときに送り先が開くことを足した |
+| R3 | フォルダを開いていないときは、投稿の流れを出さず、今の Idea をそのまま出す（`PostStreamPane.tsx`、`PostStream.scoped`） | `test:post-stream` と `test:right-sidebar` に、フォルダなしで今の Idea（資料のクリップを含む）が出ることを足した |
+
+効くことの確かめ: 3つの直しをそれぞれわざと元に戻し、足したテストが落ちることを見てから `git checkout` で戻した。
+
+関係するテスト（`test:right-sidebar`・`left-sidebar`・`binder-tiers`・`scene-pane`・`v066-idea`・`binder`・`idea-actions`・`binder-baseline`・`post-stream`・`palette-commands`・`stored-state-model`・`startup-idea-order`・`save-on-work-switch`）は、すべて通った。
+
+実機確認はまだ: QA 用アプリの build が、PC の空きメモリ不足（16 GB 中の空きが 約0.8 GB）で `npm run build` の途中で止まった（「memory allocation of 1967580 bytes failed」）。コードの誤りではない。`src-tauri/target/release/Then.exe` は、直しの前（`c1911d7`）の QA 用 build のまま。
