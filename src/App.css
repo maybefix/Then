@@ -4,6 +4,7 @@
 @import "./styles/app/fileMenu.css";
 @import "./styles/themes/shared-idea.css";
 @import "./styles/app/ideaPlot.css";
+@import "./styles/app/posts.css";
 @import "./components/dialogs/themePicker.css";
 @import "./styles/app/exportWorkspace.css";
 @import "./components/canvas/canvas.css";

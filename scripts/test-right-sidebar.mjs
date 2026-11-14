@@ -68,6 +68,9 @@ const values = {
   referenceLayout: { ideaThreads: [] },
   draggingId: null,
   ideaFocusRequest: null,
+  // 投稿の流れ（BINDER 2-1）。
+  postStream: { scoped: true, available: true, posts: [], work: undefined, add: async () => true, editBody: async () => true, setFiled: async () => {}, remove: async () => {}, refresh: async () => {} },
+  postFilter: "inbox",
 };
 const render = (overrides = {}) => {
   const props = new Proxy({ ...values, ...overrides }, {
@@ -79,7 +82,7 @@ const render = (overrides = {}) => {
 
 // Server rendering does not run effects, so each pane only shows what it draws first.
 const panes = {
-  idea: /class="binderPane"/,
+  idea: /class="ideaPane postStreamPane"/,
   proof: /class="proofPane"/,
   properties: /class="propertiesPanel"/,
   scene: /class="scenePane"/,
@@ -90,6 +93,26 @@ for (const [tab, marker] of Object.entries(panes)) {
   for (const [other, otherMarker] of Object.entries(panes)) {
     if (other !== tab) assert.doesNotMatch(html, otherMarker, `${tab}: the ${other} pane is not shown`);
   }
+}
+// BINDER 2-1: 「アイデア」は投稿の流れ。今の Idea は、中身があるときだけ「以前のアイデア」から開く（2-4 で移すまで）。
+{
+  const empty = render({ rightSidebarTab: "idea" });
+  // 後退 R1: 古い Idea が空でも「以前のアイデア」を出す。資料の取り込み・新しいテキスト資料・スレッドの作成は、ここにしか入口がない。
+  assert.match(empty, />以前のアイデア</, "no old ideas: the way to the current Idea is still offered");
+  assert.doesNotMatch(empty, /class="binderPane"/, "the old pane opens only when asked");
+  assert.match(empty, />受信箱</, "the inbox filter is offered");
+  assert.match(empty, />すべて</, "the all filter is offered");
+  assert.doesNotMatch(empty, />この作品</, "no open work: no this-work filter");
+  const withWork = render({ rightSidebarTab: "idea", postStream: { ...values.postStream, work: { id: "w-1", name: "作品A" } } });
+  assert.match(withWork, />この作品</, "an open work offers the this-work filter");
+  const oldIdeas = [{ id: "idea-inbox", kind: "inbox", title: "インボックス", starred: false, createdAt: 0, updatedAt: 0, fragments: [{ id: "f1", body: "古い断片", used: false, createdAt: 0, updatedAt: 0 }] }];
+  const withOld = render({ rightSidebarTab: "idea", snippets: oldIdeas });
+  assert.match(withOld, />以前のアイデア</, "old ideas: the way to them is offered");
+  assert.doesNotMatch(withOld, /class="binderPane"/, "the old pane opens only when asked");
+  // 後退 R3: フォルダを開いていないときは、今の Idea（資料のクリップを含む）をそのまま出す。
+  const noFolder = render({ rightSidebarTab: "idea", postStream: { ...values.postStream, scoped: false, available: false } });
+  assert.match(noFolder, /class="binderPane"/, "no folder: the current Idea is shown");
+  assert.match(noFolder, /aria-label="資料を追加"/, "no folder: references can still be added");
 }
 // 「プロット」は BINDER 1-6 でなくなった。切り替えにも出さない。
 assert.doesNotMatch(render(), /aria-label="補助ペイン：プロット"|プロット操作|plotPane"/, "the removed plot pane is not offered");

@@ -137,8 +137,8 @@ type WorkspaceSidebarProps = {
   onReorderLibraryProjects: (orderedPaths: string[]) => void;
   /** ライブラリ全体の検索で、ほかの作品の索引を読み込んでいる間 true。 */
   isLibrarySearchLoading: boolean;
-  /** 投稿の段に出すアイデアのスレッドの数（BINDER 1-4。2-1 までは既存の Idea を指す）。 */
-  ideaThreadCount?: number;
+  /** 投稿の段に出す、受信箱の投稿の数（BINDER 2-1）。 */
+  postInboxCount?: number;
   /** 投稿の段から、右のアイデアのペインを開く。 */
   onOpenIdeas?: () => void;
   /** 素材フォルダを新しく作る（名前は App 側で聞く）。 */
@@ -824,7 +824,7 @@ export function WorkspaceSidebar({
   onImportProject,
   onReorderLibraryProjects,
   isLibrarySearchLoading,
-  ideaThreadCount = 0,
+  postInboxCount = 0,
   onOpenIdeas,
   onCreateMaterialsFolder,
   onSetMaterialsFolder,
@@ -2228,7 +2228,7 @@ export function WorkspaceSidebar({
               onClick={() => onOpenIdeas?.()}
             >
               <span className="treeItemName">アイデア</span>
-              <span className="treeItemCharCount">{charCountFormatter.format(ideaThreadCount)}</span>
+              <span className="treeItemCharCount">{charCountFormatter.format(postInboxCount)}</span>
             </button>
           </div>
         </div>

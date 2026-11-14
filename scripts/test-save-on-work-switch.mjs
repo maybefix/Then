@@ -182,9 +182,11 @@ function pageHelpers() {
     },
     // パンくずは「ライブラリ › 作品 › ファイル」。作品のボタン（作品の切り替え）の文字で、開いている作品を見る。
     workName: () => [...document.querySelectorAll(".workspaceSwitcherButton")].map(text).find((name) => name.startsWith("作品")) ?? "",
-    ideaList: () => must(document.querySelector('section.ideaView[aria-label="スレッド一覧"]'), "Idea list"),
+    // BINDER 2-1: 今の Idea は、右のペイン「アイデア」の「以前のアイデア」の中にある（2-4 で移すまで）。
+    openOldIdeas: () => { if (!document.querySelector("section.ideaView")) [...document.querySelectorAll(".postStreamPane .ideaChip")].find((button) => text(button) === "以前のアイデア")?.click(); },
+    ideaList: () => { t.openOldIdeas(); return must(document.querySelector('section.ideaView[aria-label="スレッド一覧"]'), "Idea list"); },
     // Idea の一覧（スレッドの行に最新の Idea が出る）と詳細の文字。
-    ideaText: () => [...document.querySelectorAll("section.ideaView")].map(text).join(" / "),
+    ideaText: () => { t.openOldIdeas(); return [...document.querySelectorAll("section.ideaView")].map(text).join(" / "); },
     plotTitles: () => [...document.querySelectorAll(".plotPane input, .plotPane textarea, .plotCardTitle")].map((element) => element.value ?? text(element)),
     /** 一覧の入力欄に書いて「追加」を押す。 */
     addIdea(body) {

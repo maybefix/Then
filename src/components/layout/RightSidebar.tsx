@@ -17,6 +17,9 @@ import type {
 } from "../../types";
 import type { FrontMatterParts } from "../../utils/frontmatter";
 import { BinderPane } from "../binder/BinderPane";
+import { PostStreamPane } from "../posts/PostStreamPane";
+import type { PostFilter } from "../../posts/postModel";
+import type { PostStream } from "../../posts/usePostStream";
 import IntermediateDraftPane from "../canvas/IntermediateDraftPane";
 import { PluginIcon } from "../plugins/PluginIcon";
 import ProofreadPane from "../proofread/ProofreadPane";
@@ -168,6 +171,9 @@ export type RightSidebarProps = {
   transferIdeaThread: (threadId: string) => Promise<void>;
   transferIdeaFragment: (threadId: string, fragmentId: string) => Promise<void>;
   transferReferenceFile: (file: ReferenceFileInfo) => Promise<void>;
+  postStream: PostStream;
+  postFilter: PostFilter;
+  setPostFilter: (filter: PostFilter) => void;
 };
 
 /**
@@ -192,7 +198,8 @@ export function RightSidebar(props: RightSidebarProps) {
     deleteIdeaThread, addFragment, updateFragmentBody, deleteFragment, moveFragment, moveFragmentToNewThread,
     handleFragmentDragStart, handleFragmentDragEnd, handleAddReference, handleCreateReference,
     moveIdeaReference, moveReferenceToNewThread, removeIdeaReference, handleDeleteImportedReference,
-    reorderIdeaThreadItem, transferIdeaThread, transferIdeaFragment, transferReferenceFile
+    reorderIdeaThreadItem, transferIdeaThread, transferIdeaFragment, transferReferenceFile,
+    postStream, postFilter, setPostFilter,
   } = props;
   const rightPaneSwitcherItems: RightPaneSwitcherItem[] = [
     ...rightSidebarBuiltinTabs,
@@ -348,6 +355,14 @@ export function RightSidebar(props: RightSidebarProps) {
               }
             />
           ) : (
+            <PostStreamPane
+              stream={postStream}
+              filter={postFilter}
+              onFilterChange={setPostFilter}
+              legacyFocusNonce={ideaFocusRequest?.nonce ?? null}
+              // 2-4 で移すまでの今の Idea。中身が空でも常に出す。資料の取り込み・新しいテキスト資料・
+              // スレッドの作成は、ここにしか入口がない（BINDER 2-1 の後退 R1・R3）。
+              legacy={(
             <BinderPane
               rootPath={projectFolder?.path ?? null}
               threads={snippets}
@@ -403,6 +418,8 @@ export function RightSidebar(props: RightSidebarProps) {
                     }
                   : undefined
               }
+            />
+              )}
             />
           )}
         </div>

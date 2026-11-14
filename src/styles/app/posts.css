@@ -1,0 +1,60 @@
+/* 投稿の流れ（BINDER 2-1）。カード・チップ・入力欄は Idea の見た目をそのまま使い、色は足さない。 */
+.postStreamPane .postScroll {
+  padding: 4px 12px 18px;
+}
+
+.postDayLabel {
+  margin: 14px 2px 6px;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.postItem.isReply {
+  border-left: 2px solid var(--border-strong);
+}
+
+.postItem.isContext {
+  opacity: 0.55;
+}
+
+.postHead {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.postWork {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.postMenuHost {
+  position: relative;
+}
+
+.postReply {
+  margin-top: 6px;
+}
+
+.postStreamPane .ideaChips {
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+}
+
+.postChipCount {
+  margin-left: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.postLegacy {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}

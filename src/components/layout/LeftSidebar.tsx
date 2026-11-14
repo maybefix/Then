@@ -116,6 +116,8 @@ export type LeftSidebarProps = {
   reorderLibraryProjects: (orderedPaths: string[]) => Promise<void>;
   libraryCorpus: { isLoading: boolean } | null;
   openIdeaPane: () => void;
+  /** 受信箱の投稿の数（BINDER 2-1）。 */
+  postInboxCount: number;
   handleCreateMaterialsFolder: ProjectEntryActions["handleCreateMaterialsFolder"];
   handleSetMaterialsFolder: ProjectEntryActions["handleSetMaterialsFolder"];
 };
@@ -139,7 +141,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
     currentWorkspaceSnapshots, updateSettings, handleQuickCreateManuscriptSnapshot, openCheckpointStudio,
     handleEditManuscriptSnapshotDetails, handleRestoreManuscriptSnapshot, handleDeleteManuscriptSnapshot,
     libraryContext, enterLibraryRoot, enterProject, handleCreateLibraryProject,
-    handleImportProjectIntoLibrary, reorderLibraryProjects, libraryCorpus, openIdeaPane,
+    handleImportProjectIntoLibrary, reorderLibraryProjects, libraryCorpus, openIdeaPane, postInboxCount,
     handleCreateMaterialsFolder, handleSetMaterialsFolder
   } = props;
   const isProjectSearchMode = leftSidebarView === "search";
@@ -362,7 +364,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
             onImportProject={() => void handleImportProjectIntoLibrary()}
             onReorderLibraryProjects={(paths) => void reorderLibraryProjects(paths)}
             isLibrarySearchLoading={Boolean(libraryCorpus?.isLoading)}
-            ideaThreadCount={snippets.length}
+            postInboxCount={postInboxCount}
             onOpenIdeas={openIdeaPane}
             onCreateMaterialsFolder={() => void handleCreateMaterialsFolder()}
             onSetMaterialsFolder={(folderPath) => void handleSetMaterialsFolder(folderPath)}
