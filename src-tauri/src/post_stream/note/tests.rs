@@ -336,3 +336,26 @@ fn retarget_helper_matches_whole_names_only() {
     assert_eq!(retarget_relative("素材2/手紙.md", "素材", "設定"), None);
     assert_eq!(retarget_relative("素材", "素材/手紙.md", "x"), None);
 }
+
+#[test]
+fn when_the_post_cannot_be_written_the_note_and_the_new_folder_are_taken_back() {
+    let dir = TestDirectory::new("rollback");
+    let (root, a, _) = library(&dir);
+    let id = post_id(&add(&a, AT, "書けない", None).unwrap(), "書けない");
+    let seen = hashes(&a, &[&id]);
+    let file = posts_file(&root);
+    let text = std::fs::read_to_string(&file).unwrap();
+    let mut permissions = std::fs::metadata(&file).unwrap().permissions();
+    permissions.set_readonly(true);
+    std::fs::set_permissions(&file, permissions.clone()).unwrap();
+
+    let result = make_note(&a, &seen, "書けない", NOTE);
+
+    #[allow(clippy::permissions_set_readonly_false)]
+    permissions.set_readonly(false);
+    std::fs::set_permissions(&file, permissions).unwrap();
+    assert!(result.is_err(), "the posts file is read-only");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), text);
+    assert!(!a.join("素材").exists(), "the note and the folder made this time are removed");
+    assert_eq!(materials_folder(&a), None, "materialsFolder is put back");
+}
