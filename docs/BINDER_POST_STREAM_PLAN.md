@@ -439,4 +439,14 @@ A を勧める。調査の結果、IdeaPane は親（`BinderPane`）から受け
 
 関係するテスト（`test:right-sidebar`・`left-sidebar`・`binder-tiers`・`scene-pane`・`v066-idea`・`binder`・`idea-actions`・`binder-baseline`・`post-stream`・`palette-commands`・`stored-state-model`・`startup-idea-order`・`save-on-work-switch`）は、すべて通った。
 
-実機確認はまだ: QA 用アプリの build が、PC の空きメモリ不足（16 GB 中の空きが 約0.8 GB）で `npm run build` の途中で止まった（「memory allocation of 1967580 bytes failed」）。コードの誤りではない。`src-tauri/target/release/Then.exe` は、直しの前（`c1911d7`）の QA 用 build のまま。
+1回目の build は、PC の空きメモリ不足（16 GB 中の空きが 約0.8 GB）で `npm run build` の途中で止まった（コードの誤りではない）。利用者がメモリを空けたあと（空き 約4.7 GB）に build し直し、QA 用アプリで確かめた。
+
+| # | 確認したこと | 結果 |
+|---|---|---|
+| R1 | 古い Idea が空の作品B を開く | 絞り込みに「以前のアイデア」が出た。開くとクリップのメニュー（「ファイルを追加」「新しいテキスト資料」）が出た。「新しいテキスト資料」で「取材メモ.md」を作ると、通知「「取材メモ.md」を作成しました」、作品Bの `.then/references/imports/取材メモ.md` ができ、インボックスに入った |
+| R2 | 投稿の流れを出した状態で、Canvas と同じイベント（`then-canvas-copy-to-idea`）で既存のインボックスへカードを1枚送る | 通知「1 件を Idea へ取り込みました」。右のペインが「以前のアイデア」に切り替わり、インボックスの詳細に送ったカードが出た |
+| R3 | アプリの状態から開いていた作品とファイルを外して起動し、起動画面の「新しい原稿を始める」で書く（パンくずは「一時ファイル」） | 右のペインに投稿の流れではなく今の Idea がそのまま出て、クリップもあった。書いたメモはアプリの状態（`app-state.json` の `snippets`）に保存された |
+
+確かめられなかったこと: 「ファイルを追加」は OS のファイル選択を開くので操作できない（入口がメニューに出ることまで確かめた）。
+
+片付け: QA の Then・WebView2・テストの Edge と node は 0、一時フォルダも消した。`src-tauri/target/release/Then.exe` は QA 用の build（`28ed24d`）で上書きされている。
