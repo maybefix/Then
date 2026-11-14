@@ -24,7 +24,7 @@ import type {
   ProjectEntry,
   ProjectFolder,
 } from "../../types";
-import { fileProgressLabels, fileProgressStatuses } from "../../types";
+import { fileProgressLabels, fileProgressMarkers, fileProgressStatuses } from "../../types";
 import { RightPaneSwitcher, type RightPaneSwitcherItem } from "./RightPaneSwitcher";
 import { logHeadingDnd } from "../../utils/headingDndDiagnostics";
 import { getScaledFixedMenuPosition, getUiFontScale } from "../../utils/contextMenuPosition";
@@ -259,13 +259,7 @@ function displayEntryName(name: string, isFolder: boolean): string {
   return /\.txt$/i.test(name) && name.length > 4 ? name.slice(0, -4) : name;
 }
 
-const PROGRESS_MARKERS: Record<FileProgressStatus, string> = {
-  todo: "未",
-  writing: "執",
-  revising: "推",
-  done: "完",
-  archived: "ア",
-};
+const PROGRESS_MARKERS = fileProgressMarkers;
 
 /** フォルダドットの優先度。執筆中 > 推敲中 > 未着手 > 完了。アーカイブは数えない。 */
 const FOLDER_PROGRESS_PRIORITY: readonly FileProgressStatus[] = [

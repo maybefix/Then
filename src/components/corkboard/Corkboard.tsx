@@ -5,30 +5,17 @@
 // The synopsis is read with the YAML parser, which loads on the first read.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import type { SynopsisState } from "../../corkboard/synopsis";
-import { fileProgressLabels, type FileProgressStatus, type ProjectEntry, type TextDocument } from "../../types";
+import { loadSynopsis } from "../../corkboard/loadSynopsis";
+import { fileProgressLabels, fileProgressMarkers, type FileProgressStatus, type ProjectEntry, type TextDocument } from "../../types";
 import "./corkboard.css";
 
-const PROGRESS_MARKERS: Record<FileProgressStatus, string> = {
-  todo: "未",
-  writing: "執",
-  revising: "推",
-  done: "完",
-  archived: "ア",
-};
+const PROGRESS_MARKERS = fileProgressMarkers;
 
 const charCountFormatter = new Intl.NumberFormat("ja-JP");
 
 /** The binder's name for a file: .txt is left off on screen only. */
 function displayName(name: string): string {
   return /\.txt$/i.test(name) && name.length > 4 ? name.slice(0, -4) : name;
-}
-
-type SynopsisModule = typeof import("../../corkboard/synopsis");
-let loadedSynopsis: SynopsisModule | null = null;
-function loadSynopsis(): Promise<SynopsisModule> {
-  return loadedSynopsis
-    ? Promise.resolve(loadedSynopsis)
-    : import("../../corkboard/synopsis").then((module) => (loadedSynopsis = module));
 }
 
 /** What a card read from its file: the synopsis, and the text it was read from. */

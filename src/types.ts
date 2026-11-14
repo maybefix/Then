@@ -339,6 +339,15 @@ export const fileProgressLabels: Record<FileProgressStatus, string> = {
   archived: "アーカイブ",
 };
 
+/** 進捗の漢字一文字の記号。バインダー・コルクボード・「この場面」で使う。 */
+export const fileProgressMarkers: Record<FileProgressStatus, string> = {
+  todo: "未",
+  writing: "執",
+  revising: "推",
+  done: "完",
+  archived: "ア",
+};
+
 /** 左サイドバーのツリーの絞り込み。"all" はアーカイブ以外のすべて。 */
 export type FileProgressFilter = "all" | FileProgressStatus;
 

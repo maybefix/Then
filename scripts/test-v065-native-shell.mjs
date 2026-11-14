@@ -48,7 +48,7 @@ const sidebarStateCode = ts.transpileModule(sidebarStateSource, {
 const sidebarState = await import(
   `data:text/javascript;base64,${Buffer.from(sidebarStateCode).toString("base64")}`
 );
-for (const tab of ["idea", "proof", "draft"]) {
+for (const tab of ["scene", "idea", "proof", "draft", "properties"]) {
   assert.equal(sidebarState.normalizeRightSidebarTab(tab), tab);
 }
 // 「プロット」は BINDER 1-6 でなくなった。保存されている "plot" と分からない値は「アイデア」で開く。

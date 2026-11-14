@@ -78,6 +78,7 @@
     "test:property-labels": "node scripts/test-property-labels.mjs",
     "test:synopsis-actions": "node scripts/test-synopsis-actions.mjs",
     "test:corkboard": "node scripts/test-corkboard.mjs",
+    "test:scene-pane": "node scripts/test-scene-pane.mjs",
     "test:plot-migration": "node scripts/test-plot-migration.mjs",
     "test:plot-migration-rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- plot_migration::",
     "test:property-type-store": "node scripts/test-property-type-store.mjs",
