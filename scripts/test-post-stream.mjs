@@ -6,6 +6,7 @@ import { build } from "esbuild";
 import { JSDOM } from "jsdom";
 
 // BINDER 2-1: 右のペイン「アイデア」の投稿の流れ（docs/BINDER_POST_STREAM_PLAN.md）。
+// BINDER 2-3: 投稿 →「ノートにする」（docs/BINDER_POST_TO_NOTE_PLAN.md）の画面の側の流れも、同じ入れ物で確かめる。
 // 投稿の並べ方（返信・絞り込み・日の区切り）と、画面から Rust へ送る操作を確かめる。
 // Rust の命令は、同じ約束（1件ごとの操作、本文を直す・消すときは行のハッシュを比べる）で動く入れ物に差し替える。
 // ファイルの書き方そのものは cargo のテスト（post_stream::tests）で確かめる。
@@ -35,16 +36,23 @@ const tauriStub = {
 await build({
   stdin: {
     contents: `
-      import { createElement, useState } from "react";
+      import { createElement, useMemo, useRef, useState } from "react";
       import { PostStreamPane } from "./src/components/posts/PostStreamPane";
       import { usePostStream } from "./src/posts/usePostStream";
+      import { createPostNoteActions } from "./src/posts/postNoteActions";
       export * from "./src/posts/postModel";
-      export function Harness({ scope, legacy, legacyFocusNonce, initialFilter = "inbox", onFilter, showToast }) {
+      export function Harness({ scope, legacy, legacyFocusNonce, initialFilter = "inbox", onFilter, showToast, noteDeps }) {
         const stream = usePostStream(scope, { showToast });
         const [filter, setFilter] = useState(initialFilter);
+        // App と同じく、描画のたびに deps を入れ替える（BINDER 2-3）。
+        const depsRef = useRef(null);
+        depsRef.current = { stream, showToast, projectFolder: scope ? { path: scope, name: "", children: [] } : null, ...noteDeps };
+        const noteActions = useMemo(() => createPostNoteActions(depsRef), []);
         return createElement(PostStreamPane, {
           stream, filter, legacy, legacyFocusNonce,
           onFilterChange: (next) => { onFilter?.(next); setFilter(next); },
+          onMakeNote: noteDeps && stream.work ? (post) => void noteActions.makeNote(post) : undefined,
+          onOpenNote: (post) => void noteActions.openNote(post),
         });
       }`,
     resolveDir: path.resolve("."),
@@ -60,7 +68,7 @@ await build({
   plugins: [tauriStub],
 });
 const model = await import(`${pathToFileURL(path.join(dir, "post-stream.mjs")).href}?${Date.now()}`);
-const { Harness, arrangePosts, groupByDay, dayLabel, localIsoNow, normalizePostFilter, countInbox } = model;
+const { Harness, arrangePosts, groupByDay, dayLabel, localIsoNow, normalizePostFilter, countInbox, noteThread, noteNameFromBody, noteTextFor, joinWorkPath, noteLabel } = model;
 
 const cases = [];
 const test = (name, fn) => cases.push([name, fn]);
@@ -139,6 +147,44 @@ test("時刻は時差つきの地方時。絞り込みの保存値は分から�
   assert.equal(normalizePostFilter(undefined), "inbox");
 });
 
+// ---- ノートにする（2-3）: まとめ方・名前・本文 ----
+test("ノートにするのは、押した投稿とその下の返信（返信の返信も）。古い順で、ノートにした返信は入れない", () => {
+  const posts = [
+    post("p1", "2026-11-14T09:00:00+09:00"),
+    post("r2", "2026-11-14T09:30:00+09:00", { replyTo: "p1" }),
+    post("r1", "2026-11-14T09:10:00+09:00", { replyTo: "p1" }),
+    post("rr", "2026-11-14T09:40:00+09:00", { replyTo: "r1" }),
+    post("rn", "2026-11-14T09:50:00+09:00", { replyTo: "p1", noted: true }),
+    post("p2", "2026-11-14T10:00:00+09:00"),
+  ];
+  assert.deepEqual(noteThread(posts, "p1").map((entry) => entry.id), ["p1", "r1", "r2", "rr"]);
+  assert.deepEqual(noteThread(posts, "r1").map((entry) => entry.id), ["r1", "rr"], "a reply takes only what is under it");
+  assert.deepEqual(noteThread(posts, "rn"), [], "an already noted post");
+  assert.deepEqual(noteThread(posts, "nope"), []);
+});
+
+test("名前の初期値は書き出しの1行目。使えない文字と行頭の記号を除き、20字まで", () => {
+  assert.equal(noteNameFromBody("\n  閉局の日に、返事が集まる。\n二行目"), "閉局の日に、返事が集まる。");
+  assert.equal(noteNameFromBody("# 見出し: A/B?"), "見出し AB");
+  assert.equal(noteNameFromBody("- ・ 箇条"), "箇条");
+  assert.equal(noteNameFromBody("..隠し"), "隠し");
+  assert.equal(noteNameFromBody("一二三四五六七八九十一二三四五六七八九十超える"), "一二三四五六七八九十一二三四五六七八九十");
+  assert.equal(noteNameFromBody("😀".repeat(25)), "😀".repeat(20), "counts characters, not UTF-16 units");
+  assert.equal(noteNameFromBody("   "), "");
+});
+
+test("本文は見出しのあと、投稿1件を1段落。日時は書かない", () => {
+  const posts = [post("p1", "2026-11-14T09:00:00+09:00", { body: " 一つ目\n続き " }), post("r1", "2026-11-14T09:10:00+09:00", { body: "二つ目" })];
+  assert.equal(noteTextFor(" 手紙 ", posts), "# 手紙\n\n一つ目\n続き\n\n二つ目\n");
+});
+
+test("作品のフォルダと相対パスをつなぎ、札にはファイル名を拡張子なしで出す", () => {
+  assert.equal(joinWorkPath("C:\\lib\\作品A", "素材/人物/汐見.md"), "C:\\lib\\作品A\\素材\\人物\\汐見.md");
+  assert.equal(joinWorkPath("/lib/作品A/", "素材/汐見.md"), "/lib/作品A/素材/汐見.md");
+  assert.equal(noteLabel("素材/人物/汐見.md"), "汐見");
+  assert.equal(noteLabel("素材/メモ.MD"), "メモ");
+});
+
 // ---- 画面と、Rust へ送る操作 ----
 /** Rust の post_stream と同じ約束で動く入れ物。 */
 function fakeBackend({ work = A, initial = [] } = {}) {
@@ -146,7 +192,13 @@ function fakeBackend({ work = A, initial = [] } = {}) {
   let revision = 0;
   const calls = [];
   const hashOf = (entry) => `h${JSON.stringify(entry).length}-${entry.body}-${entry.filed}`;
-  const view = (entry) => ({ ...entry, filed: Boolean(entry.filed), noted: false, hash: hashOf(entry) });
+  const view = ({ note, noteExists, ...entry }) => ({
+    ...entry,
+    filed: Boolean(entry.filed),
+    noted: Boolean(note),
+    ...(note ? { note: { ...note, exists: noteExists ?? true } } : {}),
+    hash: hashOf(entry),
+  });
   const snapshot = () => ({ posts: lines.map(view), work, signature: `s${revision}`, imported: 0 });
   const conflict = () => { throw new Error("POST_CONFLICT: 投稿が外部で変更されたため保存しませんでした"); };
   let counter = 0;
@@ -190,6 +242,23 @@ function fakeBackend({ work = A, initial = [] } = {}) {
           revision += 1;
           return snapshot();
         }
+        case "posts_make_note": {
+          for (const { id, hash } of args.posts) {
+            const entry = lines.find((existing) => existing.id === id);
+            if (!entry || hashOf(entry) !== hash || entry.note) conflict();
+          }
+          const notePath = `C:\\lib\\作品A\\素材\\${args.noteName}.md`;
+          const note = { work: work.id, path: `素材/${args.noteName}.md`, workRoot: "C:\\lib\\作品A", workName: work.name };
+          lines = lines.map((entry) => args.posts.some(({ id }) => id === entry.id) ? { ...entry, note } : entry);
+          revision += 1;
+          return { snapshot: snapshot(), notePath, noteHash: `nh-${args.noteName}` };
+        }
+        case "posts_unlink_note": {
+          lines = lines.map(({ note, ...entry }) => args.ids.includes(entry.id) ? entry : { ...entry, ...(note ? { note } : {}) });
+          revision += 1;
+          return { snapshot: snapshot(), noteUnchanged: backend.noteUnchanged ?? true };
+        }
+        case "posts_retarget_notes": return null;
         default: throw new Error(`unexpected command ${command}`);
       }
     },
@@ -410,6 +479,151 @@ test("アプリに戻ったとき、ファイルが変わっていれば読み�
   await settle();
   assert.equal(loads(), before + 1);
   assert.ok(item(container, "外で直した"));
+  unmount();
+});
+
+/** 「ノートにする」の App 側の入れ物。呼ばれた操作を記録する。 */
+function noteDepsFor({ name = "手紙", dirty = false } = {}) {
+  const log = [];
+  let active = "C:\\lib\\作品A\\本文.md";
+  const deps = {
+    requestInput: async (options) => { log.push(["input", options]); return name; },
+    refreshProjectFolder: async (folderPath) => { log.push(["refresh", folderPath]); return { path: folderPath, name: "", children: [] }; },
+    openFile: async (path) => { log.push(["open", path]); active = path; },
+    openFileInWork: async (workRoot, path) => { log.push(["openInWork", workRoot, path]); },
+    isFileDirty: () => dirty,
+    activeFilePath: () => active,
+    trashFile: async (path) => { log.push(["trash", path]); return true; },
+  };
+  return { deps, log };
+}
+
+test("「ノートにする」は名前を聞き、押した投稿とその下の返信を1本にし、開いて、受信箱から外す", async () => {
+  const backend = fakeBackend({ initial: [
+    { id: "p1", at: "2026-11-14T09:00:00+09:00", body: "閉局の日に、返事が集まる。", work: A },
+    { id: "r1", at: "2026-11-14T09:10:00+09:00", body: "返事を書くのは町の人。", work: A, replyTo: "p1" },
+    { id: "p2", at: "2026-11-14T10:00:00+09:00", body: "別の投稿", work: A },
+  ] });
+  const { deps, log } = noteDepsFor();
+  const { container, toasts, unmount } = await mount({ noteDeps: deps });
+  await click(button(item(container, "閉局の日に、返事が集まる。"), "ノートにする"));
+  const [, options] = log.find(([kind]) => kind === "input");
+  assert.equal(options.initialValue, "閉局の日に、返事が集まる。");
+  assert.equal(options.confirmLabel, "ノートを作る");
+  const [, args] = backend.calls.find(([command]) => command === "posts_make_note");
+  assert.deepEqual(args.posts.map((entry) => entry.id), ["p1", "r1"]);
+  assert.ok(args.posts.every((entry) => entry.hash.startsWith("h")));
+  assert.equal(args.noteName, "手紙");
+  assert.equal(args.noteText, "# 手紙\n\n閉局の日に、返事が集まる。\n\n返事を書くのは町の人。\n");
+  assert.deepEqual(log.slice(1), [
+    ["refresh", "C:/lib/作品A"],
+    ["open", "C:\\lib\\作品A\\素材\\手紙.md"],
+  ], "the list is read again before the note opens (note mode comes from the list)");
+  assert.equal(toasts.at(-1).message, "ノート「手紙」を作りました");
+  assert.equal(toasts.at(-1).action.label, "元に戻す");
+  assert.deepEqual(bodies(container), ["別の投稿"], "both left the inbox");
+  assert.equal(chip(container, "受信箱").textContent, "受信箱1");
+  await click(chip(container, "すべて"));
+  for (const body of ["閉局の日に、返事が集まる。", "返事を書くのは町の人。"]) {
+    const entry = item(container, body);
+    assert.equal(entry.querySelector(".postNoteTag").textContent, "手紙");
+    assert.equal(button(entry, "ノートにする"), undefined);
+    assert.equal(button(entry, "受信箱から外す"), undefined);
+    assert.equal(button(entry, "受信箱に戻す"), undefined);
+    assert.ok(button(entry, "返信"), "reply stays");
+  }
+  assert.ok(button(item(container, "別の投稿"), "ノートにする"));
+  await click(item(container, "返事を書くのは町の人。").querySelector(".postNoteTag"));
+  assert.deepEqual(log.at(-1), ["open", "C:\\lib\\作品A\\素材\\手紙.md"]);
+  unmount();
+});
+
+test("名前の小窓を閉じたら何も作らない", async () => {
+  const backend = fakeBackend({ initial: [{ id: "p1", at: "2026-11-14T09:00:00+09:00", body: "一", work: A }] });
+  const { deps } = noteDepsFor({ name: null });
+  const { container, unmount } = await mount({ noteDeps: deps });
+  await click(button(item(container, "一"), "ノートにする"));
+  assert.equal(backend.calls.some(([command]) => command === "posts_make_note"), false);
+  assert.deepEqual(bodies(container), ["一"]);
+  unmount();
+});
+
+test("「元に戻す」はリンクを外して受信箱に戻し、作ったときのままのノートをゴミ箱へ移す", async () => {
+  const backend = fakeBackend({ initial: [{ id: "p1", at: "2026-11-14T09:00:00+09:00", body: "一", work: A }] });
+  const { deps, log } = noteDepsFor();
+  const { container, toasts, unmount } = await mount({ noteDeps: deps });
+  await click(button(item(container, "一"), "ノートにする"));
+  await act(async () => toasts.at(-1).action.onClick());
+  await settle();
+  const [, args] = backend.calls.find(([command]) => command === "posts_unlink_note");
+  assert.deepEqual(args, { scopePath: "C:/lib/作品A", ids: ["p1"], notePath: "C:\\lib\\作品A\\素材\\手紙.md", noteHash: "nh-手紙" });
+  assert.deepEqual(log.slice(-3), [
+    ["open", "C:\\lib\\作品A\\本文.md"],
+    ["refresh", "C:/lib/作品A"],
+    ["trash", "C:\\lib\\作品A\\素材\\手紙.md"],
+  ], "back to the file open before, then the note goes (deleting the open file would reopen the first file in the list)");
+  assert.equal(toasts.at(-1).message, "投稿を受信箱に戻し、ノート「手紙」をゴミ箱へ移しました");
+  assert.deepEqual(bodies(container), ["一"]);
+  assert.ok(button(item(container, "一"), "ノートにする"));
+  unmount();
+});
+
+test("書き足したノートは、元に戻してもゴミ箱へ移さない（保存前の変更も）", async () => {
+  for (const [dirty, unchanged] of [[true, true], [false, false]]) {
+    const backend = fakeBackend({ initial: [{ id: "p1", at: "2026-11-14T09:00:00+09:00", body: "一", work: A }] });
+    backend.noteUnchanged = unchanged;
+    const { deps, log } = noteDepsFor({ dirty });
+    const { container, toasts, unmount } = await mount({ noteDeps: deps });
+    await click(button(item(container, "一"), "ノートにする"));
+    await act(async () => toasts.at(-1).action.onClick());
+    await settle();
+    assert.equal(log.some(([kind]) => kind === "trash"), false, `dirty=${dirty} unchanged=${unchanged}`);
+    assert.equal(toasts.at(-1).message, "投稿を受信箱に戻しました（ノート「手紙」は残しました）");
+    assert.deepEqual(bodies(container), ["一"]);
+    unmount();
+  }
+});
+
+test("ライブラリ直下では「ノートにする」を出さない", async () => {
+  fakeBackend({ work: null, initial: [{ id: "p1", at: "2026-11-14T09:00:00+09:00", body: "着想" }] });
+  const { deps } = noteDepsFor();
+  const { container, unmount } = await mount({ scope: "C:/lib", noteDeps: deps });
+  assert.ok(item(container, "着想"));
+  assert.equal(button(item(container, "着想"), "ノートにする"), undefined);
+  unmount();
+});
+
+test("別の作品のノートの札は作品名を添え、その作品に切り替えて開く。なくなったノートの札は薄く、押せない", async () => {
+  fakeBackend({ initial: [
+    { id: "p1", at: "2026-11-14T09:00:00+09:00", body: "Bで", work: B, note: { work: B.id, path: "素材/汐見.md", workRoot: "C:\\lib\\作品B", workName: "作品B" } },
+    { id: "p2", at: "2026-11-14T10:00:00+09:00", body: "消えた", work: A, note: { work: A.id, path: "素材/消えた.md", workRoot: "C:\\lib\\作品A", workName: "作品A" }, noteExists: false },
+  ] });
+  const { deps, log } = noteDepsFor();
+  const { container, unmount } = await mount({ noteDeps: deps, initialFilter: "all" });
+  const other = item(container, "Bで").querySelector(".postNoteTag");
+  assert.equal(other.textContent, "作品B / 汐見");
+  await click(other);
+  assert.deepEqual(log.at(-1), ["openInWork", "C:\\lib\\作品B", "C:\\lib\\作品B\\素材\\汐見.md"]);
+  const missing = item(container, "消えた").querySelector(".postNoteTag");
+  assert.equal(missing.textContent, "消えた");
+  assert.ok(missing.classList.contains("isMissing"));
+  assert.equal(missing.disabled, true);
+  const before = log.length;
+  await click(missing);
+  assert.equal(log.length, before);
+  unmount();
+});
+
+test("ノートの札があれば、投稿のファイルが同じでもアプリに戻ったときに読み直す（ノートが消えたかを見る）", async () => {
+  const backend = fakeBackend({ initial: [{ id: "p1", at: "2026-11-14T09:00:00+09:00", body: "札", work: A, note: { work: A.id, path: "素材/札.md", workRoot: "C:/lib/作品A", workName: "作品A" } }] });
+  const { container, unmount } = await mount({ initialFilter: "all" });
+  const loads = () => backend.calls.filter(([command]) => command === "posts_load").length;
+  const before = loads();
+  backend.lines()[0].noteExists = false;
+  await act(async () => window.dispatchEvent(new window.Event("focus")));
+  await settle();
+  assert.equal(loads(), before + 1);
+  assert.ok(item(container, "札").querySelector(".postNoteTag").classList.contains("isMissing"));
   unmount();
 });
 

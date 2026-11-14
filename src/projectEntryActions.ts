@@ -66,7 +66,7 @@ type MoveProjectEntriesResult = {
   moves: MovedProjectEntry[];
 };
 
-type PathChange = { oldPath: string; newPath: string };
+export type PathChange = { oldPath: string; newPath: string };
 
 /**
  * サイドバーの見出しの開閉の記録の名前（`<ファイル>:<見出しの id>`。見出しの id も `<ファイル>:` で
@@ -142,6 +142,8 @@ export type ProjectEntryActionDeps = {
   replaceActiveTab: (nextTab: DocumentTab) => void;
   setProjectProofreadIgnored: Dispatch<SetStateAction<Record<string, string[]>>>;
   setClosedDocumentTabs: Dispatch<SetStateAction<ClosedDocumentTab[]>>;
+  /** 投稿に残したノートへのリンクを、改名・移動に合わせて付け替える（BINDER 2-3）。 */
+  retargetPostNotes: (rootPath: string, changes: PathChange[]) => void;
 };
 
 /**
@@ -191,6 +193,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     replaceActiveTab,
     setProjectProofreadIgnored,
     setClosedDocumentTabs,
+    retargetPostNotes,
   } = deps;
 
   /**
@@ -210,6 +213,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
       return changed ? nextPath : null;
     };
 
+    retargetPostNotes(rootPath, changes);
     for (const change of changes) {
       retargetPluginAnchors(change.oldPath, change.newPath);
       const oldReferencePath = toProjectRelativePath(rootPath, change.oldPath);
@@ -643,6 +647,21 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     });
     if (!shouldDelete) return;
 
+    const result = await trashProjectEntry(entry);
+    if (!result) return;
+    showToast(
+      result.fallbackUsed === "appTrash"
+        ? `「${entry.name}」をThenのTrashへ移動しました`
+        : `「${entry.name}」をゴミ箱へ移動しました`,
+    );
+  };
+
+  /**
+   * 項目をゴミ箱へ移し、タブ・選んでいるフォルダ・索引から外す。確認は呼び出し側が受け持つ
+   * （削除の確認のあと、または「ノートにする」の元に戻す。BINDER 2-3）。失敗したら null。
+   */
+  const trashProjectEntry = async (entry: ProjectEntry): Promise<DeleteProjectEntryResult | null> => {
+    if (!projectFolder) return null;
     try {
       const result = await invoke<DeleteProjectEntryResult>("delete_project_entry_to_trash", {
         rootPath: projectFolder.path,
@@ -709,14 +728,11 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           setLastError("");
         }
       }
-      showToast(
-        result.fallbackUsed === "appTrash"
-          ? `「${entry.name}」をThenのTrashへ移動しました`
-          : `「${entry.name}」をゴミ箱へ移動しました`,
-      );
+      return result;
     } catch (error) {
       setLastError(String(error));
       showToast("削除できませんでした");
+      return null;
     }
   };
 
@@ -1081,6 +1097,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     handleSetMaterialsFolder,
     handleRenameProjectEntry,
     handleDeleteProjectEntry,
+    trashProjectEntry,
     handleMoveProjectEntriesToFolder,
     handleMoveProjectEntry,
     handleBreadcrumbEntryDragStart,

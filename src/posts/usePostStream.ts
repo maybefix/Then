@@ -4,9 +4,11 @@ import {
   isPostConflict,
   localIsoNow,
   type DeletedPost,
+  type MadeNote,
   type Post,
   type PostWork,
   type PostsSnapshot,
+  type UnlinkedNote,
 } from "./postModel";
 
 const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
@@ -25,7 +27,13 @@ export type PostStream = {
   editBody: (post: Post, body: string) => Promise<boolean>;
   setFiled: (post: Post, filed: boolean) => Promise<void>;
   remove: (post: Post) => Promise<void>;
-  /** ファイルが変わっていれば読み直す（右のペインを開いたとき・アプリに戻ったとき）。 */
+  /** 投稿（とその下の返信）をノートにする（2-3）。書けなかったときは null。 */
+  makeNote: (posts: Post[], name: string, text: string) => Promise<MadeNote | null>;
+  /** 「ノートにする」の元に戻す。投稿のリンクを外し、ノートが作ったときのままかを返す。 */
+  unlinkNote: (ids: string[], notePath: string, noteHash: string) => Promise<UnlinkedNote | null>;
+  /** Then の中の改名・移動に合わせて、ノートへのリンクを付け替える。 */
+  retargetNotes: (changes: { oldPath: string; newPath: string }[]) => Promise<void>;
+  /** ファイルが変わっていれば読み直す（右のペインを開いたとき・アプリに戻ったとき・ファイル一覧が変わったとき）。ノートの札があれば必ず読み直す。 */
   refresh: () => Promise<void>;
 };
 
@@ -42,6 +50,8 @@ export function usePostStream(scopePath: string | null, { showToast }: Options):
   const scopeRef = useRef(scopePath);
   scopeRef.current = scopePath;
   const signatureRef = useRef<string | null>(null);
+  /** ノートの札があるか。あれば、投稿のファイルが同じでも読み直す（ノートの側が消えた・移ったかを見るため。2-3）。 */
+  const hasNotesRef = useRef(false);
   /** 最初の読み込みが失敗したか。失敗したときだけ、読み直しの要求で読み込みをやり直す。 */
   const loadFailedRef = useRef(false);
   const toastRef = useRef(showToast);
@@ -50,6 +60,7 @@ export function usePostStream(scopePath: string | null, { showToast }: Options):
   const accept = useCallback((scope: string, next: PostsSnapshot) => {
     if (scopeRef.current !== scope) return;
     signatureRef.current = next.signature;
+    hasNotesRef.current = next.posts.some((post) => post.note);
     setSnapshot(next);
   }, []);
 
@@ -93,7 +104,7 @@ export function usePostStream(scopePath: string | null, { showToast }: Options):
     if (signatureRef.current === null && !loadFailedRef.current) return;
     try {
       const signature = await invoke<string>("posts_signature", { scopePath: scope });
-      if (signature === signatureRef.current) return;
+      if (signature === signatureRef.current && !hasNotesRef.current) return;
     } catch {
       // 読み直してみる。
     }
@@ -175,6 +186,31 @@ export function usePostStream(scopePath: string | null, { showToast }: Options):
     });
   }, [accept, report, run]);
 
+  const makeNote = useCallback(async (posts: Post[], name: string, text: string) => {
+    const scope = scopeRef.current;
+    if (!scope || posts.length === 0) return null;
+    const made = await run<MadeNote>("posts_make_note", {
+      posts: posts.map((post) => ({ id: post.id, hash: post.hash })), noteName: name, noteText: text,
+    });
+    if (made) accept(scope, made.snapshot);
+    return made;
+  }, [accept, run]);
+
+  const unlinkNote = useCallback(async (ids: string[], notePath: string, noteHash: string) => {
+    const scope = scopeRef.current;
+    if (!scope) return null;
+    const unlinked = await run<UnlinkedNote>("posts_unlink_note", { ids, notePath, noteHash });
+    if (unlinked) accept(scope, unlinked.snapshot);
+    return unlinked;
+  }, [accept, run]);
+
+  const retargetNotes = useCallback(async (changes: { oldPath: string; newPath: string }[]) => {
+    const scope = scopeRef.current;
+    if (!scope || changes.length === 0) return;
+    const next = await run<PostsSnapshot | null>("posts_retarget_notes", { changes });
+    if (next) accept(scope, next);
+  }, [accept, run]);
+
   return {
     scoped: Boolean(scopePath),
     available: Boolean(scopePath) && snapshot !== null,
@@ -184,6 +220,9 @@ export function usePostStream(scopePath: string | null, { showToast }: Options):
     editBody,
     setFiled,
     remove,
+    makeNote,
+    unlinkNote,
+    retargetNotes,
     refresh,
   };
 }

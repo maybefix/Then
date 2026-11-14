@@ -58,3 +58,64 @@
   flex: 1;
   flex-direction: column;
 }
+
+/* 「ノートにする」と、ノートにした投稿の札（BINDER 2-3）。色は中立のまま足さない（coral を使わない）。 */
+.postNoteBtn {
+  height: 24px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--radius-button, 6px);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.postNoteBtn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.postNoteTag {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.postNoteTag span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.postNoteTag svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.postNoteTag:hover:not(:disabled) {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
+/* 外で改名・移動・削除されたノート（3.3 の行き先のないリンクと同じく薄く）。 */
+.postNoteTag.isMissing {
+  color: var(--text-faint);
+  cursor: default;
+  opacity: 0.6;
+}

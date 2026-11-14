@@ -7,6 +7,7 @@ import {
   dayLabel,
   groupByDay,
   isFromWork,
+  noteLabel,
   postFilterLabels,
   postFilters,
   timeLabel,
@@ -23,6 +24,10 @@ type PostStreamPaneProps = {
   legacy?: ReactNode;
   /** Canvas の「Ideaで開く」など、今の Idea を出してほしいとき。変わるたびに「以前のアイデア」へ切り替える。 */
   legacyFocusNonce?: number | null;
+  /** 「ノートにする」（2-3）。ないとき（ライブラリ直下）はボタンを出さない。 */
+  onMakeNote?: (post: Post) => void;
+  /** 札を押してノートを開く。 */
+  onOpenNote?: (post: Post) => void;
 };
 
 function PlusIcon() {
@@ -37,13 +42,16 @@ function FileAwayIcon() {
 function ReturnToInboxIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 13h5l1.5 3h3L15 13h5" /><path d="M6 5h12l2 8v6H4v-6z" /><path d="m9 11 3-3 3 3" /></svg>;
 }
+function NoteIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z" /><path d="M14 3v4h4" /><path d="M10 12h5M10 16h5" /></svg>;
+}
 function MoreIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="18" cy="12" r="1" /></svg>;
 }
 
 type View = "stream" | "legacy";
 
-export function PostStreamPane({ stream, filter, onFilterChange, legacy, legacyFocusNonce }: PostStreamPaneProps) {
+export function PostStreamPane({ stream, filter, onFilterChange, legacy, legacyFocusNonce, onMakeNote, onOpenNote }: PostStreamPaneProps) {
   const { scoped, available, posts, work, add, editBody, setFiled, remove, refresh } = stream;
   const [view, setView] = useState<View>("stream");
   const [text, setText] = useState("");
@@ -172,10 +180,32 @@ export function PostStreamPane({ stream, filter, onFilterChange, legacy, legacyF
             <span className="postHead">
               <time className="ideaFragmentDate" dateTime={entry.at}>{timeLabel(entry.at)}</time>
               {otherWork && <span className="postWork">{otherWork}</span>}
+              {entry.note && (() => {
+                const note = entry.note;
+                const label = noteLabel(note.path);
+                // いまの作品のノートでなければ、作品名も添える。
+                const shown = note.workName && note.work !== work?.id ? `${note.workName} / ${label}` : label;
+                return (
+                  <button
+                    type="button"
+                    className={`postNoteTag ${note.exists ? "" : "isMissing"}`}
+                    disabled={!note.exists}
+                    title={shown}
+                    aria-label={`ノート「${shown}」を開く`}
+                    onClick={() => onOpenNote?.(entry)}
+                  >
+                    <NoteIcon /><span>{shown}</span>
+                  </button>
+                );
+              })()}
             </span>
             <span className="ideaFragmentBtns postMenuHost">
+              {onMakeNote && !entry.noted && (
+                <button className="postNoteBtn" type="button" onClick={() => onMakeNote(entry)}>ノートにする</button>
+              )}
               <button className="ideaMiniIcon" type="button" aria-label="返信" title="返信" onClick={() => { setReplyTo((current) => current === entry.id ? null : entry.id); setReplyText(""); }}><ReplyIcon /></button>
-              {entry.filed
+              {/* ノートにした投稿は受信箱に入らないので、外す・戻すを出さない（確認1の 3）。 */}
+              {entry.noted ? null : entry.filed
                 ? <button className="ideaMiniIcon" type="button" aria-label="受信箱に戻す" title="受信箱に戻す" onClick={() => void setFiled(entry, false)}><ReturnToInboxIcon /></button>
                 : <button className="ideaMiniIcon" type="button" aria-label="受信箱から外す" title="受信箱から外す" onClick={() => void setFiled(entry, true)}><FileAwayIcon /></button>}
               <button className="ideaMiniIcon" type="button" aria-label="その他の操作" title="その他の操作" aria-haspopup="menu" aria-expanded={menuId === entry.id} onClick={() => setMenuId((current) => current === entry.id ? null : entry.id)}><MoreIcon /></button>
