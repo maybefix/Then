@@ -328,23 +328,14 @@
 .appShell[data-theme] .modalForm input:focus,
 .appShell[data-theme] .modalForm select:focus,
 .appShell[data-theme] .modalForm textarea:focus,
-.appShell[data-theme] .ideaAdd:hover,
-.appShell[data-theme] .expandedPlotCard .plotCardNum { border-color: var(--accent-border); }
+.appShell[data-theme] .ideaAdd:hover { border-color: var(--accent-border); }
 
 .appShell[data-theme] .projectSearchInput:focus,
 .appShell[data-theme] .modalForm input:focus-visible,
 .appShell[data-theme] .modalForm select:focus-visible,
 .appShell[data-theme] .modalForm textarea:focus-visible { box-shadow: 0 0 0 3px var(--accent-soft); }
 
-.appShell[data-theme] .ideaText:focus,
-.appShell[data-theme] .plotCardTitle:focus,
-.appShell[data-theme] .plotCardBody:focus { background: var(--accent-soft); }
-
-.appShell[data-theme] .plotCardBody { color: var(--text-secondary); }
-
-.appShell[data-theme] .plotManagerModal .modalActions { background: var(--bg-secondary); }
-
-.appShell[data-theme] .plotManagerBoard { background: var(--sidebar-bg); }
+.appShell[data-theme] .ideaText:focus { background: var(--accent-soft); }
 
 .appShell[data-theme] .toast {
   background: var(--bg-panel);

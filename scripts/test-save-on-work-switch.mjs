@@ -53,7 +53,7 @@ const WORK_B = `${LIBRARY}/作品B`;
 const NEW_IDEA = "作品Aで切り替える直前に書いたIdea";
 
 /*
- * Rust の代わり（ページの中で動く）。作品ごとに Idea・プロット・資料ボードを持ち、保存の命令は
+ * Rust の代わり（ページの中で動く）。作品ごとに Idea・資料ボードを持ち（Plot は移行済みで空）、保存の命令は
  * 記録して中身を置き換える（もう一度開くと、保存したものが読まれる）。
  */
 function installMock({ library, workA, workB }) {
@@ -69,7 +69,7 @@ function installMock({ library, workA, workB }) {
     },
     text: `${name}の本文です。`,
     snippets: [thread("idea-inbox", "inbox", "インボックス", [[`${letter}-1`, `${name}のメモ`]])],
-    plotCards: [card(`${letter}-plot-1`, `${name}の章`)],
+    plotCards: [],
     layout: { version: 3, name: "default", cards: [], recent: [], ideaThreads: [] },
     proofreadTerms: [],
     proofreadIgnored: {},
@@ -286,24 +286,14 @@ try {
   if (DEBUG) console.log("Idea → B", ideaSwitch, savesAfterIdea.map((save) => `${save.at} ${save.command} ${save.root} ${save.body.slice(0, 160)}`));
   assert.ok(ideaSwitch.clickedAfter < 700, `the switch must start within 0.7 s of the edit (${ideaSwitch.clickedAfter} ms)`);
 
-  // ---- 2. 作品Bでプロットのカードを足し、すぐ作品Aへ切り替える ----
-  await evaluate(`t.rightPane("プロット")`);
-  const plotSwitch = await evaluate(`(async () => {
-    const add = document.querySelector('[aria-label="セクションを追加"]');
-    if (!add) throw new Error("no plot add button: " + document.querySelector(".rightSidebar")?.innerText.slice(0, 200));
-    const started = performance.now();
-    add.click();
-    await t.sleep(50);
-    const paneAfterAdd = document.querySelector(".rightSidebar")?.innerText ?? "";
+  // ---- 2. 作品Bから作品Aへ切り替える（Plot は BINDER 1-6 でなくなったので、ここでは何も足さない） ----
+  await evaluate(`(async () => {
     await t.startSwitch("作品A");
-    const clickedAfter = Math.round(performance.now() - started);
     await t.waitFor(() => t.workName() === "作品A", "work A");
     await t.sleep(2000);
-    return { clickedAfter, paneAfterAdd };
   })()`);
-  const savesAfterPlot = await evaluate("window.__saves.splice(0)");
-  if (DEBUG) console.log("plot → A", plotSwitch, savesAfterPlot.map((save) => `${save.at} ${save.command} ${save.root} ${save.body.slice(0, 160)}`));
-  assert.ok(plotSwitch.clickedAfter < 700, `the switch must start within 0.7 s of the edit (${plotSwitch.clickedAfter} ms)`);
+  const savesAfterReturn = await evaluate("window.__saves.splice(0)");
+  if (DEBUG) console.log("→ A", savesAfterReturn.map((save) => `${save.at} ${save.command} ${save.root} ${save.body.slice(0, 160)}`));
 
   // ---- 3. 作品Aに戻ったら、書いた Idea が残っている ----
   await evaluate(`t.rightPane("アイデア")`);
@@ -324,11 +314,11 @@ try {
   const savesSameWork = await evaluate("window.__saves.splice(0)");
   if (DEBUG) console.log("same work", savesSameWork.map((save) => `${save.at} ${save.command} ${save.root}`));
 
-  const all = [...savesAfterIdea, ...savesAfterPlot, ...savesSameWork];
+  const all = [...savesAfterIdea, ...savesAfterReturn, ...savesSameWork];
   const to = (saves, root, command) => saves.filter((save) => save.root === root && save.command === command);
   // 最後に、作品ごとの保存先（ディスクの代わり）に残ったもの。
   const stored = await evaluate("JSON.stringify(window.__works)").then(JSON.parse);
-  if (DEBUG) console.log("stored", JSON.stringify(Object.fromEntries(Object.entries(stored).map(([root, work]) => [root, { snippets: work.snippets, plotCards: work.plotCards }]))));
+  if (DEBUG) console.log("stored", JSON.stringify(Object.fromEntries(Object.entries(stored).map(([root, work]) => [root, { snippets: work.snippets }]))));
 
   // 前の作品のデータを、新しい作品へ書かない。
   for (const save of all.filter((item) => item.root === WORK_B)) {
@@ -348,13 +338,11 @@ try {
   assert.ok(to(savesAfterIdea, WORK_A, "save_reference_layout").some((save) => save.body.includes(newFragment.id)), "切り替える直前に書いた Idea の並び順を、作品Aの資料ボードのファイルへ保存する");
   assert.ok(bodiesBackInA.includes(NEW_IDEA), `作品Aへ戻ると、切り替える直前に書いた Idea がある（${bodiesBackInA}）`);
   // 開き直しただけでは、資料ボードのファイル（と .bak）を書き直さない。保存した並び順は、キーの順だけが違って読まれる。
-  assert.deepEqual(to(savesAfterPlot, WORK_A, "save_reference_layout").map((save) => save.body), [], "作品Aを開き直しただけで、資料ボードのファイルを書き直さない");
+  assert.deepEqual(to(savesAfterReturn, WORK_A, "save_reference_layout").map((save) => save.body), [], "作品Aを開き直しただけで、資料ボードのファイルを書き直さない");
 
-  // 切り替える直前のプロットは、作品Bへ書かれる。
-  assert.ok(to(savesAfterPlot, WORK_B, "save_project_plot_cards").some((save) => parse(save).length === 2), "切り替える直前に足したプロットのカードを、作品Aへ切り替えるときに作品Bへ保存する");
-  assert.equal(stored[WORK_B].plotCards.length, 2, "作品Bの保存先に、切り替える直前に足したプロットのカードが残る");
+  // Plot はもう保存しない（BINDER 1-6）。
+  assert.deepEqual(all.filter((save) => save.command === "save_project_plot_cards"), [], "Plot is no longer saved");
   // 相手の作品の保存先は、元のまま。
-  assert.deepEqual(stored[WORK_A].plotCards.map((card) => card.title), ["作品Aの章"], "作品Aのプロットは元のまま");
   assert.deepEqual(stored[WORK_B].snippets.flatMap((thread) => thread.fragments.map((fragment) => fragment.body)), ["作品Bのメモ"], "作品Bの Idea は元のまま");
 
   // 同じ作品の中では、今までどおり待ち直す（書き換えのたびには書かない）。

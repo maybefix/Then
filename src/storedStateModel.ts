@@ -1,5 +1,5 @@
 // 保存したデータを読み込んだときに、形と値を整える処理（App.tsx から移した。docs/APP_STATE_NORMALIZE_SEPARATION_PLAN.md）。
-// アプリ全体の保存状態（AppState）と、作品のファイル（プロット・資料のレイアウト・校正の無視リスト）の両方を扱う。
+// アプリ全体の保存状態（AppState）と、作品のファイル（移行前のプロット・資料のレイアウト・校正の無視リスト）の両方を扱う。
 import { normalizeManuscriptSettings } from "./editor/manuscriptLayout";
 import { hash16 } from "./editor/ast/documentAst";
 import { normalizeWorkspaceDocumentTabs } from "./editor/workspaceDocumentTabs";
@@ -133,7 +133,6 @@ const defaultSettings: EditorSettings = {
   manuscript: DEFAULT_MANUSCRIPT_SETTINGS,
   canvasDefaultWritingMode: "horizontal-tb",
   canvasDefaultFontSource: "ui",
-  plotFontSource: "editor",
   startPageFontSource: "ui",
   headingFontSource: "body",
   headingFontFamily: toCssFontFamilyValue("Noto Sans JP"),
@@ -176,7 +175,7 @@ export function createDefaultState(): AppState {
     snippets: threads,
     profileSnippets: threads,
     settings: defaultSettings,
-    rightSidebarTab: "plot",
+    rightSidebarTab: "idea",
     rightSidebarCollapsed: false,
     rightSidebarWide: false,
     leftSidebarView: "files",
@@ -642,8 +641,10 @@ export function normalizeState(value: Partial<AppState> | null | undefined): App
     zoneMode?: unknown;
     /** 廃止したAI設定は読み捨て、次回保存に持ち越さない。 */
     ai?: unknown;
+    /** 廃止したプロット表示フォント（BINDER 1-6 で Plot がなくなった）。読み捨てる。 */
+    plotFontSource?: unknown;
   };
-  const { zoneMode: legacyZoneMode, ai: _legacyAi, ...settings } = rawSettings;
+  const { zoneMode: legacyZoneMode, ai: _legacyAi, plotFontSource: _legacyPlotFont, ...settings } = rawSettings;
   const recentWorkspaces = Array.isArray(value?.recentWorkspaces)
     ? value.recentWorkspaces.filter(
         (record): record is WorkspaceRecord =>
@@ -811,10 +812,6 @@ export function normalizeState(value: Partial<AppState> | null | undefined): App
         settings.canvasDefaultFontSource === "editor" || settings.canvasDefaultFontSource === "ui"
           ? settings.canvasDefaultFontSource
           : defaultSettings.canvasDefaultFontSource,
-      plotFontSource:
-        settings.plotFontSource === "editor" || settings.plotFontSource === "ui"
-          ? settings.plotFontSource
-          : defaultSettings.plotFontSource,
       startPageFontSource:
         settings.startPageFontSource === "editor" || settings.startPageFontSource === "ui"
           ? settings.startPageFontSource

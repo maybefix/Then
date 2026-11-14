@@ -1,7 +1,7 @@
 # バインダー再構築 計画書
 
 作成日: 2026-11-09
-状態: 実装中（決めごと D-1〜D-7 は 2026-11-09 に確定。1-1〜1-4 は済み）
+状態: 実装中（決めごと D-1〜D-7 は 2026-11-09 に確定。1-1〜1-6 は済み）
 モック: [docs/mockups/binder-rebuild.html](mockups/binder-rebuild.html)
 
 ## 0. 目的
@@ -191,7 +191,7 @@
 | 1-3b | ファイル一覧に「原稿／素材」の区分を付け、各処理の素材の扱いを 3.6 の表どおりにする（2026-11-11 実施。`project.json` の `materialsFolder` があるときだけ、一覧が素材に `role: "material"` を付ける。字数・進捗・書き出しは原稿だけ、検索・置換・チェックポイント・索引は素材も含む。未設定の作品は何も変わらない。[BINDER_MATERIALS_PLAN.md](BINDER_MATERIALS_PLAN.md)） | `src-tauri/src/lib.rs`（`list_project_folder`）、3.6 の表の各箇所 | 機能 |
 | 1-4 | バインダーを三段化（原稿／素材／投稿。投稿はこの時点では既存 Idea を指す。2026-11-12 実施。素材は一覧の `role` だけで分け、素材の段は素材フォルダの中身を出す。素材フォルダを作る（ボタン）・既存の作品直下のフォルダを素材フォルダにする（右クリック）操作を足した。段の見出しへのドラッグで段をまたいで移せる。投稿の段は「アイデア」1行で右のペインを開く。右のペインの名前は「アイデア」に。素材フォルダのない作品のツリーは変えていない。[BINDER_TIERS_PLAN.md](BINDER_TIERS_PLAN.md)） | [WorkspaceSidebar.tsx](../src/components/layout/WorkspaceSidebar.tsx) | 機能 |
 | 1-5 | 概要（`synopsis`）と、キーと表示名の対応表（3.5b）、中央のコルクボード表示（2026-11-12 実施。対応表は `src/properties/propertyLabels.ts` で、プロパティ欄は `synopsis` を「概要」と出し、キーは英語のまま。コルクボードは「本文 ▾」から開き、選んだフォルダの直下の原稿を1ファイル1枚のカードで並べる。カードは名前・進捗・概要・字数で、概要のないカードは概要の欄に何も出さない。カードの上で概要を直すと、タブで開いていればタブへ、開いていなければ読んだときのハッシュを付けてファイルへ書き、外で変わっていれば選んでもらう。全部消すと空の `synopsis:` を残す。並べ替えはバインダーと同じ処理。[BINDER_CORKBOARD_PLAN.md](BINDER_CORKBOARD_PLAN.md)） | `src/properties/`、新規コンポーネント | 機能 |
-| 1-6 | Plot → ノート「プロット（移行）」への移行（`project.json` の `plotCards` はバックアップ後に空にする）。ノートモード（2-2）ができるまでは、このノートも原稿と同じエディタで開く | [PlotPane.tsx](../src/components/plot/PlotPane.tsx) を退役 | 移行 |
+| 1-6 | Plot → ノート「プロット（移行）」への移行（`project.json` の `plotCards` はバックアップ後に空にする）。ノートモード（2-2）ができるまでは、このノートも原稿と同じエディタで開く（2026-11-14 実施。起動時に最後に開いていた作品のライブラリの直下と全作品を移し、ほかは開いたときに移す。ノートは素材フォルダに置き、なければ「素材」を作る（ふつうのフォルダ「素材」があれば「素材-2」）。ライブラリ直下は直下に置く。バックアップは `.then/backups/plot-cards-<日時>.json`、記録は `project.json` の `plotMigration`。右のペインの「プロット」・Canvas の「プロットへ送る」・設定の「プロット表示フォント」も外した。[BINDER_PLOT_MIGRATION_PLAN.md](BINDER_PLOT_MIGRATION_PLAN.md)） | `PlotPane.tsx` を退役（消した） | 移行 |
 | 1-7 | 右ペイン「この場面」（概要と進捗だけ） | [RightSidebar.tsx](../src/components/layout/RightSidebar.tsx) | 機能 |
 
 ### 第2段階: 投稿とノート

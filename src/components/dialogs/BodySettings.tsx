@@ -64,21 +64,6 @@ export function BodySettings({ settings, systemFonts, editorMeasureLimit, onUpda
         </label>
       )}
       <label>
-        <span>プロット表示フォント</span>
-        <select
-          value={settings.plotFontSource}
-          onChange={(event) =>
-            onUpdateSettings(
-              "plotFontSource",
-              event.target.value as EditorSettings["plotFontSource"],
-            )
-          }
-        >
-          <option value="editor">本文フォント</option>
-          <option value="ui">UIフォント</option>
-        </select>
-      </label>
-      <label>
         <span>本文方向</span>
         <select
           value={settings.writingMode}

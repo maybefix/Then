@@ -57,7 +57,7 @@ const WORK_B = `${LIBRARY}/作品B`;
 const STALE_IDEA = "アプリ状態にだけ残ったIdea";
 
 /*
- * Rust の代わり（ページの中で動く）。作品ごとに Idea・プロット・資料ボードを持ち、保存の命令は
+ * Rust の代わり（ページの中で動く）。作品ごとに Idea・資料ボードを持ち（Plot は移行済みで空）、保存の命令は
  * 記録して中身を置き換える。どちらの作品にも、Then を閉じているあいだに外で足した Idea（ext）があり、
  * 並び順の先頭に置かれている。アプリ状態の Idea は、外で足す前の作品Aのもの（ext がなく、
  * 作品にはない Idea が1つある）。
@@ -75,7 +75,7 @@ function installMock({ library, workA, workB, skipStartupPortal, staleIdea, read
     },
     text: `${name}の本文です。`,
     snippets: [thread("idea-inbox", "inbox", "インボックス", [[`${letter}-1`, `${name}のメモ`], [`${letter}-ext`, `${name}の外で足したIdea`]])],
-    plotCards: [card(`${letter}-plot-1`, `${name}の章`)],
+    plotCards: [],
     // Rust の書き方（項目のキーが名前の順）。外で足した Idea が先頭。
     layout: { version: 3, name: "default", cards: [], recent: [], ideaThreadsMode: "workspace",
       ideaThreads: [{ threadId: "idea-inbox", items: [{ fragmentId: `${letter}-ext`, sourceType: "idea" }, { fragmentId: `${letter}-1`, sourceType: "idea" }] }] },

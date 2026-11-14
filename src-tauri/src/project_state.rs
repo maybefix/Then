@@ -67,6 +67,19 @@ pub(super) struct ProjectConfig {
     /// 素材を置く、作品直下のフォルダの名前（BINDER 3.6）。未設定なら素材はない。
     #[serde(default, rename = "materialsFolder", skip_serializing_if = "Option::is_none")]
     pub(super) materials_folder: Option<String>,
+    /// Plot をノートへ移した記録（BINDER 1-6）。2-5 がノートの本文のリンクを書き換えるときに場所を知るため。
+    #[serde(default, rename = "plotMigration", skip_serializing_if = "Option::is_none")]
+    pub(super) plot_migration: Option<PlotMigrationRecord>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct PlotMigrationRecord {
+    /// 作品のフォルダからのノートの相対パス（`/` 区切り）。
+    pub(super) note_path: String,
+    /// 作品のフォルダからのバックアップの相対パス。
+    pub(super) backup_path: String,
+    pub(super) migrated_at: i64,
 }
 
 impl ProjectConfig {
@@ -139,6 +152,7 @@ impl Default for ProjectConfig {
             work: None,
             export_front_matter: None,
             materials_folder: None,
+            plot_migration: None,
         }
     }
 }

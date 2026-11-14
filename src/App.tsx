@@ -154,18 +154,12 @@ import {
 import {
   CANVAS_LIVE_DATA_EVENT,
   type CanvasCopyToIdeaRequest,
-  type CanvasCopyToPlotRequest,
   type CanvasFocusIdeaRequest,
   type CanvasLiveDataEvent,
   type CanvasScope,
   type CanvasWindowPayload,
 } from "./canvasTypes";
-import {
-  appendPlotChapter,
-  appendPlotSection,
-} from "./components/plot/plotCardUtils";
-import { defaultPlotCards, loadWorkspacePlotCards, saveWorkspacePlotCards } from "./plotCardModel";
-import { createPlotCardActions } from "./plotCardActions";
+import { migratePlotToNotes, plotMigrationMessage } from "./plotMigration";
 import { ReferenceLayer } from "./components/references/ReferenceLayer";
 import {
   alignIdeaLayoutToMode,
@@ -229,7 +223,6 @@ import type {
   ManuscriptSnapshot,
   ManuscriptSnapshotFile,
   OutlineItem,
-  PlotCard,
   ProjectEntry,
   FolderInspection,
   LibraryProjectSummary,
@@ -880,7 +873,6 @@ export default function App() {
   const [checkpointCurrentProjectStatus, setCheckpointCurrentProjectStatus] = useState<CheckpointCurrentProjectStatus>("idle");
   const [checkpointUnavailableProjectPaths, setCheckpointUnavailableProjectPaths] = useState<ReadonlySet<string>>(() => new Set());
   const [snippetWorkspacePath, setSnippetWorkspacePath] = useState<string | null>(null);
-  const [plotWorkspacePath, setPlotWorkspacePath] = useState<string | null>(null);
   const [projectProofreadTerms, setProjectProofreadTerms] = useState<ProofreadTerm[]>([]);
   const [projectProofreadIgnored, setProjectProofreadIgnored] = useState<ProofreadIgnoredByPath>(
     {},
@@ -888,7 +880,6 @@ export default function App() {
   const [proofreadTermsWorkspacePath, setProofreadTermsWorkspacePath] = useState<string | null>(
     null,
   );
-  const [plotCards, setPlotCards] = useState<PlotCard[]>(() => defaultPlotCards);
   const [focusedFolderPath, setFocusedFolderPath] = useState<string | null>(null);
   const [workspaceAlert, setWorkspaceAlert] = useState<WorkspaceAlert>(null);
   const [outlineQuery, setOutlineQuery] = useState("");
@@ -1006,7 +997,7 @@ export default function App() {
     sources: LoadedExportSource[];
     sourceError?: string;
   } | null>(null);
-  const [rightSidebarTab, setRightSidebarTabState] = useState<string>("plot");
+  const [rightSidebarTab, setRightSidebarTabState] = useState<string>("idea");
 
   const setRightSidebarTab = useCallback((tab: string) => {
     setRightSidebarTabState(tab);
@@ -1088,7 +1079,6 @@ export default function App() {
     isRightSidebarCollapsed,
     isEditorFocusMode,
   });
-  const [isPlotManagerOpen, setIsPlotManagerOpen] = useState(false);
   const [ideaFocusRequest, setIdeaFocusRequest] = useState<{
     threadId: string;
     fragmentId?: string;
@@ -1099,14 +1089,6 @@ export default function App() {
   // 資料のカードを本文の枠へまだ収めていない作品（枠を測れるようになるまで待つ）。
   const [referenceLayoutFitRoot, setReferenceLayoutFitRoot] = useState<string | null>(null);
   const [referenceCandidates, setReferenceCandidates] = useState<ReferenceFileInfo[]>([]);
-
-  const addPlotSection = useCallback(() => {
-    setPlotCards((current) => appendPlotSection(current));
-  }, []);
-
-  const addPlotChapter = useCallback(() => {
-    setPlotCards((current) => appendPlotChapter(current));
-  }, []);
 
   const patchReferenceLayout = useCallback(
     (updater: (layout: ReferenceLayout) => ReferenceLayout) => {
@@ -2533,19 +2515,6 @@ export default function App() {
       });
   }, [projectFolder, referenceCandidates, referenceLayout.recent]);
 
-  const openPlotReference = useCallback(
-    (sourcePath: string, fileInfo: ReferenceFileInfo) => {
-      const file =
-        sortedReferenceCandidates.find(
-          (item) =>
-            item.scope === fileInfo.scope &&
-            item.sourcePath.toLocaleLowerCase() === sourcePath.toLocaleLowerCase(),
-        ) ?? fileInfo;
-      openReferenceCard(file.sourcePath, file, { switchToReferenceTab: false });
-    },
-    [openReferenceCard, sortedReferenceCandidates],
-  );
-
   useEffect(() => {
     if (!projectFolder) {
       projectAstBuildIdRef.current += 1;
@@ -2825,8 +2794,6 @@ export default function App() {
     didMountEditorRef.current = false;
     setProjectFolder(null);
     setSnippetWorkspacePath(null);
-    setPlotWorkspacePath(null);
-    setPlotCards(defaultPlotCards);
     setProofreadTermsWorkspacePath(null);
     setProjectProofreadTerms([]);
     setProjectProofreadIgnored({});
@@ -2845,22 +2812,45 @@ export default function App() {
     setLastError("");
   };
 
+  /**
+   * Plot をノート「プロット（移行）」へ移してから開く（BINDER 1-6）。移したら true（ファイル一覧を読み直す）。
+   * 失敗しても作品は開く。次に開いたときにやり直す。
+   */
+  const migratePlotBeforeOpening = async (rootPaths: string[]) => {
+    const summary = await migratePlotToNotes(rootPaths);
+    for (const failure of summary.failed) {
+      console.error("plot migration failed", failure.rootPath, failure.error);
+      setLastError(String(failure.error));
+    }
+    const message = plotMigrationMessage(summary);
+    if (message) showToast(message);
+    return summary.migrated.length > 0;
+  };
+
   const restoreWorkspaceFromState = async (
     state: AppState,
   ): Promise<boolean | "outsideLibrary"> => {
     if (!isTauriRuntime() || !state.lastWorkspacePath) return false;
 
     try {
-      const folder = await invoke<ProjectFolder>("list_project_text_files", {
+      let folder = await invoke<ProjectFolder>("list_project_text_files", {
         folderPath: state.lastWorkspacePath,
       });
       // 旧版のワークスペースはそのまま開かず、取り込みへ誘導する。
       if (!folder.library) return "outsideLibrary";
+      // 起動時に、ライブラリ直下とライブラリの全作品の Plot をノートへ移す（BINDER 1-6、確認1の 1）。
+      const migrated = await migratePlotBeforeOpening([
+        folder.library.path,
+        ...folder.library.projects.map((project) => project.path),
+        folder.path,
+      ]);
+      if (migrated) {
+        folder = await invoke<ProjectFolder>("list_project_text_files", { folderPath: folder.path });
+      }
       const restoredSnippets =
         state.settings.snippetStorageMode === "workspace"
           ? await loadWorkspaceSnippets(folder.path)
           : state.snippets;
-      const restoredPlotCards = await loadWorkspacePlotCards(folder.path);
       const restoredProofreadTerms = await loadWorkspaceProofreadTerms(folder.path);
       const restoredProofreadIgnored = await loadWorkspaceProofreadIgnored(folder.path);
       const restoredFileProgress = await loadWorkspaceFileProgress(folder.path, state);
@@ -2907,8 +2897,6 @@ export default function App() {
       setSnippetWorkspacePath(
         state.settings.snippetStorageMode === "workspace" ? folder.path : null,
       );
-      setPlotWorkspacePath(folder.path);
-      setPlotCards(restoredPlotCards);
       setProofreadTermsWorkspacePath(folder.path);
       setProjectProofreadTerms(restoredProofreadTerms);
       setProjectProofreadIgnored(restoredProofreadIgnored);
@@ -3076,18 +3064,6 @@ export default function App() {
 
   useEffect(() => {
     if (!isHydrated || !projectFolder) return;
-    if (plotWorkspacePath !== projectFolder.path) return;
-
-    return schedulePendingSave("workspace-plot", 700, () =>
-      saveWorkspacePlotCards(projectFolder.path, plotCards).catch(() => {
-        setLastError("ワークスペースのプロット保存に失敗しました");
-      }),
-      () => openProjectPathRef.current !== projectFolder.path,
-    );
-  }, [isHydrated, plotCards, plotWorkspacePath, projectFolder]);
-
-  useEffect(() => {
-    if (!isHydrated || !projectFolder) return;
     if (proofreadTermsWorkspacePath !== projectFolder.path) return;
 
     return schedulePendingSave("workspace-proofread-terms", 700, () =>
@@ -3122,23 +3098,21 @@ export default function App() {
     let isCancelled = false;
     const workspaceSwitchGeneration = workspaceSwitchGenerationRef.current;
 
-    Promise.all([
-      projectFolder?.path === activeWorkspaceRootPath
+    migratePlotBeforeOpening([activeWorkspaceRootPath]).then((migrated) => Promise.all([
+      projectFolder?.path === activeWorkspaceRootPath && !migrated
         ? Promise.resolve(projectFolder)
         : invoke<ProjectFolder>("list_project_text_files", {
             folderPath: activeWorkspaceRootPath,
           }),
       loadWorkspaceSnippets(activeWorkspaceRootPath),
-      loadWorkspacePlotCards(activeWorkspaceRootPath),
       loadWorkspaceProofreadTerms(activeWorkspaceRootPath),
       loadWorkspaceProofreadIgnored(activeWorkspaceRootPath),
       loadWorkspaceFileProgress(activeWorkspaceRootPath, appStateRef.current),
       loadWorkspaceCheckpoints(activeWorkspaceRootPath, appStateRef.current),
-    ])
+    ]))
       .then(([
         folder,
         workspaceSnippets,
-        workspacePlotCards,
         workspaceProofreadTerms,
         workspaceProofreadIgnored,
         workspaceFileProgress,
@@ -3154,8 +3128,6 @@ export default function App() {
         setFocusedFolderPath(null);
         setWorkspaceAlert(null);
         setSnippetWorkspacePath(folder.path);
-        setPlotWorkspacePath(folder.path);
-        setPlotCards(workspacePlotCards);
         setProofreadTermsWorkspacePath(folder.path);
         setProjectProofreadTerms(workspaceProofreadTerms);
         setProjectProofreadIgnored(workspaceProofreadIgnored);
@@ -4790,6 +4762,9 @@ export default function App() {
           folderPath: enclosingPath,
         });
       }
+      if (await migratePlotBeforeOpening([folder.path])) {
+        folder = await invoke<ProjectFolder>("list_project_text_files", { folderPath: folder.path });
+      }
       const switched = !projectFolder || !isSamePath(projectFolder.path, folder.path);
       let restoredTabs: LoadedWorkspaceDocumentTabs | null = null;
       let nextTabs: DocumentTab[] | null = null;
@@ -4818,7 +4793,6 @@ export default function App() {
         options.loadWorkspaceSnippets && settings.snippetStorageMode === "workspace"
           ? await loadWorkspaceSnippets(folder.path)
           : null;
-      const nextPlotCards = await loadWorkspacePlotCards(folder.path);
       const nextProofreadTerms = await loadWorkspaceProofreadTerms(folder.path);
       const nextProofreadIgnored = await loadWorkspaceProofreadIgnored(folder.path);
       const nextFileProgress = await loadWorkspaceFileProgress(folder.path, appStateRef.current);
@@ -4839,8 +4813,6 @@ export default function App() {
       if (nextSnippets) {
         setSnippetWorkspacePath(folder.path);
       }
-      setPlotWorkspacePath(folder.path);
-      setPlotCards(nextPlotCards);
       setProofreadTermsWorkspacePath(folder.path);
       setProjectProofreadTerms(nextProofreadTerms);
       setProjectProofreadIgnored(nextProofreadIgnored);
@@ -5712,11 +5684,13 @@ export default function App() {
     const focusedPath = options.focusFolderPath ?? folder.path;
 
     try {
+      if (await migratePlotBeforeOpening([folder.path])) {
+        folder = await invoke<ProjectFolder>("list_project_text_files", { folderPath: folder.path });
+      }
       const restoredSnippets =
         settings.snippetStorageMode === "workspace"
           ? await loadWorkspaceSnippets(folder.path)
           : snippets;
-      const restoredPlotCards = await loadWorkspacePlotCards(folder.path);
       const restoredProofreadTerms = await loadWorkspaceProofreadTerms(folder.path);
       const restoredProofreadIgnored = await loadWorkspaceProofreadIgnored(folder.path);
       const restoredFileProgress = await loadWorkspaceFileProgress(
@@ -5742,8 +5716,6 @@ export default function App() {
       setFocusedFolderPath(focusedPath);
       setWorkspaceSwitcherQuery("");
       setSnippetWorkspacePath(settings.snippetStorageMode === "workspace" ? folder.path : null);
-      setPlotWorkspacePath(folder.path);
-      setPlotCards(restoredPlotCards);
       setProofreadTermsWorkspacePath(folder.path);
       setProjectProofreadTerms(restoredProofreadTerms);
       setProjectProofreadIgnored(restoredProofreadIgnored);
@@ -6316,18 +6288,6 @@ export default function App() {
     showToast(`移動・コピーできませんでした: ${String(error)}`);
   };
 
-  const { transferPlotCard, receiveCanvasCopyToPlot } = createPlotCardActions({
-    plotCards,
-    setPlotCards,
-    requestTransferOptions,
-    isExistingReference,
-    prepareReferenceRewrite,
-    showToast,
-    reportTransferError,
-    setRightSidebarTab,
-    setIsRightSidebarCollapsed,
-  });
-
   const ensureIdeaTransferAvailable = () => {
     if (settings.snippetStorageMode === "workspace") return true;
     showToast("Idea をプロファイルに保存している間は、作品ごとの移動・コピーはできません");
@@ -6686,7 +6646,6 @@ export default function App() {
     setDraggingBreadcrumbEntryPath,
     breadcrumbDragEntryRef,
     setAppState,
-    setPlotCards,
     setReferenceLayout,
     setReferenceCandidates,
     setProjectAst,
@@ -6992,17 +6951,9 @@ export default function App() {
       unlistenFocus = unlisten;
     });
 
-    let unlistenCopyToPlot: (() => void) | null = null;
-    void listen<CanvasCopyToPlotRequest>("then-canvas-copy-to-plot", (event) => {
-      receiveCanvasCopyToPlot(event);
-    }).then((unlisten) => {
-      unlistenCopyToPlot = unlisten;
-    });
-
     return () => {
       unlistenCopy?.();
       unlistenFocus?.();
-      unlistenCopyToPlot?.();
     };
   }, []);
 
@@ -7752,10 +7703,6 @@ export default function App() {
                         folder={projectFolder}
                         onOpenFile={(path) => void handleProjectFileSelect(path)}
                         onCreateFile={() => void handleCreateProjectFile(projectFolder.path)}
-                        onOpenPlot={() => {
-                          setRightSidebarTab("plot");
-                          setIsRightSidebarCollapsed(false);
-                        }}
                         onOpenCanvas={() => void openIdeaCanvasBoard("project")}
                       />
                     ) : isNewTabStartPage || activeTab?.kind === "empty" ? (
@@ -8018,8 +7965,7 @@ export default function App() {
             <RightSidebar
               {...{
                 isRightSidebarWide, isRightSidebarCollapsed, appMode, isEditorFocusMode, pluginViews,
-                loadedPlugins, rightSidebarTab, setRightSidebarTab, addPlotSection, addPlotChapter,
-                setIsPlotManagerOpen, openIdeaCanvasBoard, setIsRightSidebarWide, setIsRightSidebarCollapsed,
+                loadedPlugins, rightSidebarTab, setRightSidebarTab, openIdeaCanvasBoard, setIsRightSidebarWide, setIsRightSidebarCollapsed,
                 setSidebarPluginRuntimeAnchor, isDockedPluginRuntimeVisible, hasOpenedDraft, projectFolder,
                 draftCanvasContext, setDraftSelectRequest, activePluginView, documentKey, frontMatter,
                 updateFrontMatter, handleClearFrontMatter, propertyTypeSettings, rememberPropertyType,
@@ -8028,8 +7974,7 @@ export default function App() {
                 setProjectProofreadTerms, setAppState, exportProofreadDictionary, importProofreadDictionary,
                 projectProofreadIgnored, proofreadIgnoreKey, setProjectProofreadIgnored, snippets,
                 showToast, openReferenceCard,
-                plotCards, setPlotCards, sortedReferenceCandidates,
-                openPlotReference, isPlotManagerOpen, transferMenuLabel, transferPlotCard, referenceLayout,
+                sortedReferenceCandidates, transferMenuLabel, referenceLayout,
                 draggingId, ideaFocusRequest, setIdeaFocusRequest, captureFragment, openIdeaBinderCard,
                 createIdeaThread, renameIdeaThread, toggleThreadStar, deleteIdeaThread, addFragment,
                 updateFragmentBody, deleteFragment, moveFragment, moveFragmentToNewThread,

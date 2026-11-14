@@ -1,6 +1,6 @@
 import type { CanvasNode, JsonCanvasDocument } from "../canvasTypes";
 import { normalizedReferenceKey } from "../ideaReferenceModel";
-import type { IdeaThreadItemLink, PlotCard, ReferenceFileInfo } from "../types";
+import type { IdeaThreadItemLink, ReferenceFileInfo } from "../types";
 
 /**
  * Moving or copying an item between a library root and one of its projects
@@ -15,10 +15,6 @@ export type ReferenceRewrite = {
   dropped: Set<string>;
 };
 
-const PLOT_REFERENCE_PATTERN = /@\[\[([^\]]+)\]\]/g;
-
-const baseName = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
-
 export function uniqueReferencePaths(paths: string[]): string[] {
   const seen = new Map<string, string>();
   for (const path of paths) {
@@ -26,24 +22,6 @@ export function uniqueReferencePaths(paths: string[]): string[] {
     if (!seen.has(key)) seen.set(key, path);
   }
   return [...seen.values()];
-}
-
-export function plotCardReferencePaths(cards: PlotCard[]): string[] {
-  return uniqueReferencePaths(
-    cards.flatMap((card) => [...card.body.matchAll(PLOT_REFERENCE_PATTERN)].map((match) => match[1])),
-  );
-}
-
-/** A dropped reference keeps its file name as plain text so the sentence still reads. */
-export function rewritePlotCard(card: PlotCard, rewrite: ReferenceRewrite): PlotCard {
-  const body = card.body.replace(PLOT_REFERENCE_PATTERN, (whole, path: string) => {
-    const key = normalizedReferenceKey(path);
-    const copy = rewrite.copied.get(key);
-    if (copy) return `@[[${copy.sourcePath.replace(/\\/g, "/")}]]`;
-    if (rewrite.dropped.has(key)) return baseName(path);
-    return whole;
-  });
-  return body === card.body ? card : { ...card, body };
 }
 
 export function threadItemReferencePaths(items: IdeaThreadItemLink[]): string[] {

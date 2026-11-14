@@ -11,9 +11,7 @@ const bundled = await build({
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`;
 const {
   boardReferencePaths,
-  plotCardReferencePaths,
   rewriteBoard,
-  rewritePlotCard,
   rewriteThreadItems,
   threadItemReferencePaths,
 } = await import(moduleUrl);
@@ -30,26 +28,6 @@ const rewrite = {
   copied: new Map([["資料/map.png", copiedMap]]),
   dropped: new Set(["資料/memo.md"]),
 };
-
-const card = {
-  id: "c1",
-  kind: "section",
-  num: "1",
-  title: "",
-  body: "地図は @[[資料/map.png]] 、メモは @[[資料/memo.md]] 、他は @[[資料/other.pdf]]",
-  expanded: false,
-  managerCollapsed: false,
-};
-assert.deepEqual(plotCardReferencePaths([card, { ...card, id: "c2" }]), [
-  "資料/map.png",
-  "資料/memo.md",
-  "資料/other.pdf",
-]);
-assert.equal(
-  rewritePlotCard(card, rewrite).body,
-  "地図は @[[.then/references/imports/map (2).png]] 、メモは memo.md 、他は @[[資料/other.pdf]]",
-  "copied links point at the copy, dropped links keep their file name as text",
-);
 
 const items = [
   { sourceType: "idea", fragmentId: "f1" },

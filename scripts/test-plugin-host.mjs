@@ -508,7 +508,7 @@ function mountHost({ projectFolder = novel() } = {}) {
   const app = {
     projectFolder,
     appMode: "write",
-    rightSidebarTab: "plot",
+    rightSidebarTab: "idea",
     isRightSidebarCollapsed: false,
     isEditorFocusMode: false,
     errors: [],
@@ -584,7 +584,7 @@ function mountHost({ projectFolder = novel() } = {}) {
   assert.deepEqual([view.host.pluginCommands, view.host.pluginModals, view.host.activePluginModalKey], [[], [], null]);
 }
 
-// 登録が消えたら、画面は書くモードへ、横の欄はプロットへ戻し、モーダルは閉じる。Esc でもモーダルを閉じる。
+// 登録が消えたら、画面は書くモードへ、横の欄はアイデアへ戻し、モーダルは閉じる。Esc でもモーダルを閉じる。
 {
   resetWindow();
   createRust({ list_installed_plugins: () => ({ plugins: [], errors: [] }), load_plugin_anchors: () => null });
@@ -606,7 +606,7 @@ function mountHost({ projectFolder = novel() } = {}) {
   assert.equal(view.host.activePluginView?.id, "v");
   view.host.setPluginViews([]);
   view.render();
-  assert.equal(view.app.rightSidebarTab, "plot");
+  assert.equal(view.app.rightSidebarTab, "idea");
 
   view.host.setPluginModals([{ pluginId: "p", id: "m", title: "M" }]);
   view.host.setActivePluginModalKey("p:m");

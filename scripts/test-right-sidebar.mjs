@@ -44,7 +44,7 @@ const values = {
   isEditorFocusMode: false,
   pluginViews: [{ pluginId: "demo", id: "notes", title: "メモ帳" }],
   loadedPlugins: [],
-  rightSidebarTab: "plot",
+  rightSidebarTab: "idea",
   isDockedPluginRuntimeVisible: false,
   hasOpenedDraft: false,
   projectFolder: null,
@@ -62,9 +62,7 @@ const values = {
   projectProofreadIgnored: {},
   proofreadIgnoreKey: "doc",
   snippets: [],
-  plotCards: [],
   sortedReferenceCandidates: [],
-  isPlotManagerOpen: false,
   transferMenuLabel: null,
   referenceLayout: { ideaThreads: [] },
   draggingId: null,
@@ -80,7 +78,6 @@ const render = (overrides = {}) => {
 
 // Server rendering does not run effects, so each pane only shows what it draws first.
 const panes = {
-  plot: /class="rightSidebarBody plotRightSidebarBody"/,
   idea: /class="binderPane"/,
   proof: /class="proofPane"/,
   properties: /class="propertiesPanel"/,
@@ -92,9 +89,10 @@ for (const [tab, marker] of Object.entries(panes)) {
     if (other !== tab) assert.doesNotMatch(html, otherMarker, `${tab}: the ${other} pane is not shown`);
   }
 }
-assert.match(render({ rightSidebarTab: "plot" }), /aria-label="プロット操作"/, "plot: the plot header actions are shown");
+// 「プロット」は BINDER 1-6 でなくなった。切り替えにも出さない。
+assert.doesNotMatch(render(), /aria-label="補助ペイン：プロット"|プロット操作|plotPane"/, "the removed plot pane is not offered");
 assert.match(render({ rightSidebarTab: "idea" }), /aria-label="アイデア操作"/, "idea: the idea header actions are shown");
-assert.doesNotMatch(render({ rightSidebarTab: "proof" }), /プロット操作|アイデア操作/, "proof: no header actions of other tabs");
+assert.doesNotMatch(render({ rightSidebarTab: "proof" }), /アイデア操作/, "proof: no header actions of other tabs");
 assert.doesNotMatch(render(), /aria-label="補助ペイン：AI"|class="aiPane"/, "the removed AI pane is not offered");
 
 const open = render();
@@ -114,7 +112,7 @@ assert.match(wide, /aria-label="ペイン幅を戻す"/);
 const draft = render({ rightSidebarTab: "draft", hasOpenedDraft: true });
 assert.match(draft, /<div class="draftPaneHost">/, "draft: the draft pane is shown");
 assert.doesNotMatch(draft, new RegExp(Object.values(panes).map((re) => re.source).join("|")), "draft: no other pane");
-assert.match(render({ rightSidebarTab: "plot", hasOpenedDraft: true }), /<div class="draftPaneHost" hidden="">/, "the opened draft pane stays mounted but hidden");
+assert.match(render({ rightSidebarTab: "idea", hasOpenedDraft: true }), /<div class="draftPaneHost" hidden="">/, "the opened draft pane stays mounted but hidden");
 
 const pluginView = values.pluginViews[0];
 const plugin = render({ rightSidebarTab: "plugin:demo:notes", activePluginView: pluginView, isDockedPluginRuntimeVisible: true });
@@ -130,7 +128,8 @@ assert.doesNotMatch(render(), /visiblePluginRuntimeAnchor/, "no plugin: the runt
     compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const state = await import(`data:text/javascript;base64,${Buffer.from(stateCode).toString("base64")}`);
-  assert.equal(state.normalizeRightSidebarTab("ai"), "plot", "a stored AI tab returns to plot");
+  assert.equal(state.normalizeRightSidebarTab("ai"), "idea", "a stored AI tab returns to idea");
+  assert.equal(state.normalizeRightSidebarTab("plot"), "idea", "a stored plot tab returns to idea (BINDER 1-6)");
   for (const name of ["normalizeRightSidebarCollapsed", "normalizeRightSidebarWide"]) {
     assert.equal(typeof state[name], "function", `${name} reads the stored value back`);
     assert.equal(state[name](true), true, name);

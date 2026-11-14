@@ -17,6 +17,7 @@ mod library;
 mod markdown_image;
 mod native_ime;
 mod native_clipboard;
+mod plot_migration;
 mod project_state;
 mod save_journal;
 mod single_instance;
@@ -404,7 +405,7 @@ fn default_plot_card_kind() -> String {
     "section".to_string()
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct PlotCardConfig {
     id: String,
     #[serde(default = "default_plot_card_kind")]
@@ -734,6 +735,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             save_project_snippets,
             load_project_plot_cards,
             save_project_plot_cards,
+            plot_migration::migrate_project_plot_to_note,
             load_project_proofread_terms,
             save_project_proofread_terms,
             load_project_proofread_ignored,

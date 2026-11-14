@@ -31,7 +31,6 @@ import {
   type CanvasCopyToIdeaItem,
   type CanvasEdgeConnector,
   type CanvasCopyToIdeaRequest,
-  type CanvasCopyToPlotRequest,
   type CanvasEdge,
   type CanvasFocusIdeaRequest,
   type CanvasGroupNode,
@@ -675,7 +674,6 @@ function CanvasGlyph({
     | "fit"
     | "undo"
     | "redo"
-    | "plot"
     | "panel"
     | "grip"
     | "chevronUp"
@@ -833,17 +831,6 @@ function CanvasGlyph({
         <svg {...common}>
           <path d="m15 14 5-5-5-5" />
           <path d="M20 9H10a6 6 0 0 0 0 12h3" />
-        </svg>
-      );
-    case "plot":
-      return (
-        <svg {...common}>
-          <path d="M8 5h13" />
-          <path d="M8 12h13" />
-          <path d="M8 19h13" />
-          <path d="M3 5h.01" />
-          <path d="M3 12h.01" />
-          <path d="M3 19h.01" />
         </svg>
       );
     case "panel":
@@ -2686,29 +2673,6 @@ export default function CanvasWindowApp({
     }
   };
 
-  /** 選択中のテキストカード（グループ選択時は内包カード）をプロット欄へ送る。 */
-  const sendSelectedToPlot = async () => {
-    if (!board || !activeBoardId || textNodesForIdea.length === 0) return;
-    const items: CanvasCopyToIdeaItem[] = textNodesForIdea
-      .map((node) => ({ nodeId: node.id, text: textForNode(node) }))
-      .filter((item) => item.text.trim().length > 0);
-    if (items.length === 0) return;
-    const request: CanvasCopyToPlotRequest = {
-      boardId: activeBoardId,
-      boardScope: scope,
-      boardName: boardName(board),
-      items,
-    };
-    try {
-      if (isTauriRuntime()) {
-        await emitMainWindow("then-canvas-copy-to-plot", request);
-      }
-      setStatus(`${items.length}件をプロットへ送信しました`);
-    } catch (error) {
-      setStatus(`プロットへ送信できませんでした: ${String(error)}`);
-    }
-  };
-
   const focusIdeaOrigin = async (node: CanvasNode) => {
     const origin = "thenOrigin" in node ? node.thenOrigin : undefined;
     if (!origin || !isTauriRuntime()) return;
@@ -3473,15 +3437,6 @@ export default function CanvasWindowApp({
                     onClick={() => void sendSelectedToIdea()}
                   >
                     <CanvasGlyph name="send" />
-                  </button>
-                  <button
-                    type="button"
-                    title="プロットへ送る"
-                    aria-label="プロットへ送る"
-                    disabled={textNodesForIdea.length === 0}
-                    onClick={() => void sendSelectedToPlot()}
-                  >
-                    <CanvasGlyph name="plot" />
                   </button>
                   <span className="canvasFloatingBarDivider" aria-hidden="true" />
                   <button

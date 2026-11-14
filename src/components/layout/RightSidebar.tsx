@@ -11,7 +11,6 @@ import type {
   CanvasScope,
   EditorSettings,
   IdeaThread,
-  PlotCard,
   ProjectFolder,
   ReferenceFileInfo,
   ReferenceLayout,
@@ -19,7 +18,6 @@ import type {
 import type { FrontMatterParts } from "../../utils/frontmatter";
 import { BinderPane } from "../binder/BinderPane";
 import IntermediateDraftPane from "../canvas/IntermediateDraftPane";
-import { PlotPane, PlotPaneHeaderActions } from "../plot/PlotPane";
 import { PluginIcon } from "../plugins/PluginIcon";
 import ProofreadPane from "../proofread/ProofreadPane";
 import { PropertiesPanel } from "../properties/PropertiesPanel";
@@ -46,19 +44,6 @@ const rightSidebarBuiltinTabs: Array<{ id: string; label: string; icon: ReactNod
         <path d="M9 18h6" />
         <path d="M10 22h4" />
         <path d="M8.4 14.6c-1.7-1.2-2.6-3-2.6-5.1A6.2 6.2 0 0 1 12 3.3a6.2 6.2 0 0 1 6.2 6.2c0 2.1-.9 3.9-2.6 5.1-.8.6-1.2 1.3-1.3 2.2H9.7c-.1-.9-.5-1.6-1.3-2.2Z" />
-      </svg>
-    ),
-  },
-  {
-    id: "plot",
-    label: "プロット",
-    icon: (
-      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-        <path d="M4 5.5c2.3-.9 4.8-.6 8 1.1v12c-3.2-1.7-5.7-2-8-1.1v-12Z" />
-        <path d="M20 5.5c-2.3-.9-4.8-.6-8 1.1v12c3.2-1.7 5.7-2 8-1.1v-12Z" />
-        <path d="M12 6.6v12" />
-        <path d="M6.5 8.8c1.1-.1 2.2.1 3.4.7" />
-        <path d="M17.5 8.8c-1.1-.1-2.2.1-3.4.7" />
       </svg>
     ),
   },
@@ -104,9 +89,6 @@ export type RightSidebarProps = {
   loadedPlugins: LoadedThenPlugin[];
   rightSidebarTab: string;
   setRightSidebarTab: (tab: string) => void;
-  addPlotSection: () => void;
-  addPlotChapter: () => void;
-  setIsPlotManagerOpen: Dispatch<SetStateAction<boolean>>;
   openIdeaCanvasBoard: (scope?: CanvasScope, boardId?: string, selectNodeId?: string) => Promise<void>;
   setIsRightSidebarWide: (wide: boolean) => void;
   setIsRightSidebarCollapsed: (collapsed: boolean) => void;
@@ -143,13 +125,8 @@ export type RightSidebarProps = {
   snippets: IdeaThread[];
   showToast: (message: string, action?: ToastAction | null) => void;
   openReferenceCard: (sourcePath: string, fileInfo?: ReferenceFileInfo, options?: { switchToReferenceTab?: boolean }) => void;
-  plotCards: PlotCard[];
-  setPlotCards: Dispatch<SetStateAction<PlotCard[]>>;
   sortedReferenceCandidates: ReferenceFileInfo[];
-  openPlotReference: (sourcePath: string, fileInfo: ReferenceFileInfo) => void;
-  isPlotManagerOpen: boolean;
   transferMenuLabel: string | null;
-  transferPlotCard: (cardId: string) => Promise<void>;
   referenceLayout: ReferenceLayout;
   draggingId: string | null;
   ideaFocusRequest: IdeaFocusRequest | null;
@@ -186,7 +163,7 @@ export type RightSidebarProps = {
 export function RightSidebar(props: RightSidebarProps) {
   const {
     isRightSidebarWide, isRightSidebarCollapsed, appMode, isEditorFocusMode, pluginViews, loadedPlugins,
-    rightSidebarTab, setRightSidebarTab, addPlotSection, addPlotChapter, setIsPlotManagerOpen,
+    rightSidebarTab, setRightSidebarTab,
     openIdeaCanvasBoard, setIsRightSidebarWide, setIsRightSidebarCollapsed, setSidebarPluginRuntimeAnchor,
     isDockedPluginRuntimeVisible, hasOpenedDraft, projectFolder, draftCanvasContext, setDraftSelectRequest,
     activePluginView, documentKey, frontMatter, updateFrontMatter, handleClearFrontMatter,
@@ -195,8 +172,8 @@ export function RightSidebar(props: RightSidebarProps) {
     appState, setProjectProofreadTerms, setAppState, exportProofreadDictionary, importProofreadDictionary,
     projectProofreadIgnored, proofreadIgnoreKey, setProjectProofreadIgnored, snippets,
     showToast, openReferenceCard,
-    plotCards, setPlotCards, sortedReferenceCandidates, openPlotReference, isPlotManagerOpen,
-    transferMenuLabel, transferPlotCard, referenceLayout, draggingId, ideaFocusRequest, setIdeaFocusRequest,
+    sortedReferenceCandidates,
+    transferMenuLabel, referenceLayout, draggingId, ideaFocusRequest, setIdeaFocusRequest,
     captureFragment, openIdeaBinderCard, createIdeaThread, renameIdeaThread, toggleThreadStar,
     deleteIdeaThread, addFragment, updateFragmentBody, deleteFragment, moveFragment, moveFragmentToNewThread,
     handleFragmentDragStart, handleFragmentDragEnd, handleAddReference, handleCreateReference,
@@ -240,13 +217,6 @@ export function RightSidebar(props: RightSidebarProps) {
             activeId={rightSidebarTab}
             onSelect={setRightSidebarTab}
           />
-          {rightSidebarTab === "plot" && (
-            <PlotPaneHeaderActions
-              onAddSection={addPlotSection}
-              onAddChapter={addPlotChapter}
-              onOpenManager={() => setIsPlotManagerOpen(true)}
-            />
-          )}
           {rightSidebarTab === "idea" && (
             <div className="plotPaneHeaderActions" aria-label="アイデア操作">
               <button
@@ -286,11 +256,7 @@ export function RightSidebar(props: RightSidebarProps) {
             </button>
           </div>
         </div>
-        <div
-          className={`rightSidebarBody ${
-            rightSidebarTab === "plot" ? "plotRightSidebarBody" : ""
-          }`}
-        >
+        <div className="rightSidebarBody">
           <div
             ref={setSidebarPluginRuntimeAnchor}
             className={`pluginRuntimeAnchor${isDockedPluginRuntimeVisible ? " visiblePluginRuntimeAnchor" : ""}`}
@@ -363,22 +329,6 @@ export function RightSidebar(props: RightSidebarProps) {
                   ...settings.proofread,
                   disabledChecks: checkIds,
                 })
-              }
-            />
-          ) : rightSidebarTab === "plot" ? (
-            <PlotPane
-              cards={plotCards}
-              onCardsChange={setPlotCards}
-              referenceCandidates={sortedReferenceCandidates}
-              onOpenReference={openPlotReference}
-              onMissingReference={() => showToast("存在しないファイルです")}
-              onNotify={showToast}
-              isManagerOpen={isPlotManagerOpen}
-              onManagerOpenChange={setIsPlotManagerOpen}
-              transfer={
-                transferMenuLabel
-                  ? { label: transferMenuLabel, onTransfer: (cardId) => void transferPlotCard(cardId) }
-                  : undefined
               }
             />
           ) : (
