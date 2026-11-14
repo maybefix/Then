@@ -86,8 +86,9 @@ const baseValues = {
   projectFolder: { path: "C:/work", name: "work", children: [] },
   focusedFolderPath: "C:/work/第一部",
   referenceLayout: { cards: mark("referenceLayout.cards") },
-  // 投稿の段に件数を出すので、配列の目印にする。
   snippets: [{ id: mark("snippets.0") }, { id: mark("snippets.1") }, { id: mark("snippets.2") }],
+  // BINDER 2-1: 投稿の段に出すのは、受信箱の投稿の数。
+  postInboxCount: 3,
   sortedReferenceCandidates: mark("sortedReferenceCandidates"),
   currentFilePath: mark("currentFilePath"),
   currentFileName: mark("currentFileName"),
@@ -262,7 +263,7 @@ const expectCalls = (label, action, expected) => {
     showSnapshotSection: mark("settings.showCheckpointSection"),
     library: mark("libraryContext"),
     isLibrarySearchLoading: true,
-    ideaThreadCount: 3,
+    postInboxCount: 3,
   };
 
   // 関数の props ごとに、渡す見本の引数と、届くべき App の関数と引数。

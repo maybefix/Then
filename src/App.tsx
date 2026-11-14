@@ -203,6 +203,9 @@ import {
   type ProofreadTerm,
 } from "./proofread/terms";
 import { QuickIdeaModal } from "./components/snippets/QuickIdeaModal";
+import { QuickPostModal } from "./components/posts/QuickPostModal";
+import { countInbox, type PostFilter } from "./posts/postModel";
+import { usePostStream } from "./posts/usePostStream";
 import { StatusBar } from "./components/status/StatusBar";
 import { useCheckpointStatusInfo } from "./components/status/useCheckpointStatusInfo";
 import type {
@@ -3608,6 +3611,14 @@ export default function App() {
       toastTimerRef.current = null;
     }, action ? 5000 : 2200);
   };
+
+  // 投稿の流れ（BINDER 2-1）。開いているフォルダから、Rust が投稿のファイルの場所を決める。
+  const postStream = usePostStream(projectFolder?.path ?? null, { showToast });
+  const postInboxCount = useMemo(() => countInbox(postStream.posts), [postStream.posts]);
+  const postFilter = appState.postFilter;
+  const setPostFilter = useCallback((filter: PostFilter) => {
+    setAppState((current) => (current.postFilter === filter ? current : { ...current, postFilter: filter }));
+  }, []);
 
   const refreshPortableProjectState = useCallback(
     async (rootPath: string, source: "focus" | "checkpoint") => {
@@ -7636,7 +7647,7 @@ export default function App() {
                 handleQuickCreateManuscriptSnapshot, openCheckpointStudio, handleEditManuscriptSnapshotDetails,
                 handleRestoreManuscriptSnapshot, handleDeleteManuscriptSnapshot, libraryContext,
                 enterLibraryRoot, enterProject, handleCreateLibraryProject, handleImportProjectIntoLibrary,
-                reorderLibraryProjects, libraryCorpus, openIdeaPane, handleCreateMaterialsFolder,
+                reorderLibraryProjects, libraryCorpus, openIdeaPane, postInboxCount, handleCreateMaterialsFolder,
                 handleSetMaterialsFolder, handleCorkboardFolderClick,
                 // In the corkboard these open the file in the body (BINDER 1-5).
                 handleProjectFileSelect: selectBinderFile,
@@ -7997,7 +8008,7 @@ export default function App() {
                 handleFragmentDragStart, handleFragmentDragEnd, handleAddReference, handleCreateReference,
                 moveIdeaReference, moveReferenceToNewThread, removeIdeaReference,
                 handleDeleteImportedReference, reorderIdeaThreadItem, transferIdeaThread,
-                transferIdeaFragment, transferReferenceFile
+                transferIdeaFragment, transferReferenceFile, postStream, postFilter, setPostFilter,
               }}
             />
           </div>
@@ -8223,7 +8234,10 @@ export default function App() {
               restoreFocus={restoreFocusAfterCommandPalette}
             />
           )}
-          {isQuickIdeaModalOpen && (
+          {isQuickIdeaModalOpen && postStream.available && (
+            <QuickPostModal onPost={(body) => postStream.add(body)} onClose={() => setIsQuickIdeaModalOpen(false)} />
+          )}
+          {isQuickIdeaModalOpen && !postStream.available && (
             <QuickIdeaModal
               threads={snippets}
               onCapture={captureFragment}

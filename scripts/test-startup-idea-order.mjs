@@ -217,7 +217,13 @@ function pageHelpers() {
       throw new Error(`timed out: ${what}`);
     },
     workName: () => [...document.querySelectorAll(".workspaceSwitcherButton")].map(text).find((name) => name.startsWith("作品")) ?? "",
-    ideaText: () => [...document.querySelectorAll("section.ideaView")].map(text).join(" / "),
+    // BINDER 2-1: 今の Idea は、右のペイン「アイデア」の「以前のアイデア」の中にある（2-4 で移すまで）。
+    ideaText: () => {
+      if (!document.querySelector("section.ideaView")) {
+        [...document.querySelectorAll(".postStreamPane .ideaChip")].find((button) => text(button) === "以前のアイデア")?.click();
+      }
+      return [...document.querySelectorAll("section.ideaView")].map(text).join(" / ");
+    },
     /** 起動画面があれば「あとで」「前回の執筆を続ける」を押して、作品Aの本文と Idea が出るまで待つ。 */
     async startup() {
       const until = Date.now() + 30_000;

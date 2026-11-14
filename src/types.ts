@@ -3,6 +3,7 @@ import type { ProofreadOptions } from "./proofread/types";
 import type { ProofreadTerm } from "./proofread/terms";
 import type { LeftSidebarView } from "./utils/leftSidebarState";
 import type { RestorableRightSidebarTab } from "./utils/rightSidebarState";
+import type { PostFilter } from "./posts/postModel";
 
 export type {
   ProofreadTerm,
@@ -535,6 +536,8 @@ export type AppState = {
   rightSidebarTab: RestorableRightSidebarTab;
   /** 右サイドバーを畳んでいたか。次回起動時に復元する。 */
   rightSidebarCollapsed: boolean;
+  /** 投稿の流れの絞り込み（受信箱・すべて・この作品）。次回起動時に復元する（BINDER 2-1）。 */
+  postFilter: PostFilter;
   /** 右サイドバーの幅を広げていたか（ペイン幅を拡張）。次回起動時に復元する。 */
   rightSidebarWide: boolean;
   /** 最後に表示していた左サイドバーのビュー。次回起動時に復元する。 */

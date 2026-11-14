@@ -17,6 +17,9 @@ import type {
 } from "../../types";
 import type { FrontMatterParts } from "../../utils/frontmatter";
 import { BinderPane } from "../binder/BinderPane";
+import { PostStreamPane } from "../posts/PostStreamPane";
+import type { PostFilter } from "../../posts/postModel";
+import type { PostStream } from "../../posts/usePostStream";
 import IntermediateDraftPane from "../canvas/IntermediateDraftPane";
 import { PluginIcon } from "../plugins/PluginIcon";
 import ProofreadPane from "../proofread/ProofreadPane";
@@ -168,6 +171,9 @@ export type RightSidebarProps = {
   transferIdeaThread: (threadId: string) => Promise<void>;
   transferIdeaFragment: (threadId: string, fragmentId: string) => Promise<void>;
   transferReferenceFile: (file: ReferenceFileInfo) => Promise<void>;
+  postStream: PostStream;
+  postFilter: PostFilter;
+  setPostFilter: (filter: PostFilter) => void;
 };
 
 /**
@@ -192,8 +198,13 @@ export function RightSidebar(props: RightSidebarProps) {
     deleteIdeaThread, addFragment, updateFragmentBody, deleteFragment, moveFragment, moveFragmentToNewThread,
     handleFragmentDragStart, handleFragmentDragEnd, handleAddReference, handleCreateReference,
     moveIdeaReference, moveReferenceToNewThread, removeIdeaReference, handleDeleteImportedReference,
-    reorderIdeaThreadItem, transferIdeaThread, transferIdeaFragment, transferReferenceFile
+    reorderIdeaThreadItem, transferIdeaThread, transferIdeaFragment, transferReferenceFile,
+    postStream, postFilter, setPostFilter,
   } = props;
+  // 2-4 で移すまでの今の Idea。断片か名前のあるスレッドか資料が1つでもあるときだけ「以前のアイデア」を出す。
+  const hasLegacyIdeas =
+    snippets.some((thread) => thread.kind !== "inbox" || thread.fragments.length > 0) ||
+    referenceLayout.ideaThreads.some((layout) => layout.items.some((item) => item.sourceType === "reference"));
   const rightPaneSwitcherItems: RightPaneSwitcherItem[] = [
     ...rightSidebarBuiltinTabs,
     ...pluginViews.map((view) => {
@@ -348,6 +359,12 @@ export function RightSidebar(props: RightSidebarProps) {
               }
             />
           ) : (
+            <PostStreamPane
+              stream={postStream}
+              filter={postFilter}
+              onFilterChange={setPostFilter}
+              legacyFocusNonce={ideaFocusRequest?.nonce ?? null}
+              legacy={hasLegacyIdeas ? (
             <BinderPane
               rootPath={projectFolder?.path ?? null}
               threads={snippets}
@@ -403,6 +420,8 @@ export function RightSidebar(props: RightSidebarProps) {
                     }
                   : undefined
               }
+            />
+              ) : undefined}
             />
           )}
         </div>

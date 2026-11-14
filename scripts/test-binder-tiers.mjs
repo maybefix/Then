@@ -216,7 +216,7 @@ function props(folder, overrides = {}) {
     onImportProject: noop,
     onReorderLibraryProjects: noop,
     isLibrarySearchLoading: false,
-    ideaThreadCount: 3,
+    postInboxCount: 3,
     onOpenIdeas: spy("onOpenIdeas"),
     onCreateMaterialsFolder: spy("onCreateMaterialsFolder"),
     onSetMaterialsFolder: spy("onSetMaterialsFolder"),

@@ -9,6 +9,7 @@ import { normalizeLibraryWorkStats } from "./library/libraryData";
 import { PROOFREAD_RULES } from "./proofread/rules";
 import { normalizeProofreadTerms } from "./proofread/terms";
 import { DEFAULT_PROOFREAD_OPTIONS } from "./proofread/types";
+import { normalizePostFilter } from "./posts/postModel";
 import { mergeReferenceFiles } from "./referenceFileKeys";
 import { referenceKindFromPath, referenceNameFromPath } from "./referencePathModel";
 import { normalizeAppTheme } from "./themes";
@@ -177,6 +178,7 @@ export function createDefaultState(): AppState {
     settings: defaultSettings,
     rightSidebarTab: "idea",
     rightSidebarCollapsed: false,
+    postFilter: "inbox",
     rightSidebarWide: false,
     leftSidebarView: "files",
     leftSidebarCollapsed: false,
@@ -838,6 +840,7 @@ export function normalizeState(value: Partial<AppState> | null | undefined): App
     },
     rightSidebarTab: normalizeRightSidebarTab(value?.rightSidebarTab),
     rightSidebarCollapsed: normalizeRightSidebarCollapsed(value?.rightSidebarCollapsed),
+    postFilter: normalizePostFilter(value?.postFilter),
     rightSidebarWide: normalizeRightSidebarWide(value?.rightSidebarWide),
     leftSidebarView: normalizeLeftSidebarView(value?.leftSidebarView),
     leftSidebarCollapsed: normalizeLeftSidebarCollapsed(value?.leftSidebarCollapsed),
