@@ -70,6 +70,9 @@ pub(super) struct ProjectConfig {
     /// Plot をノートへ移した記録（BINDER 1-6）。2-5 がノートの本文のリンクを書き換えるときに場所を知るため。
     #[serde(default, rename = "plotMigration", skip_serializing_if = "Option::is_none")]
     pub(super) plot_migration: Option<PlotMigrationRecord>,
+    /// 作品の固定の ID（BINDER 2-1）。投稿に書いた作品を記録する。フォルダを改名・移動しても変わらない。
+    #[serde(default, rename = "workId", skip_serializing_if = "Option::is_none")]
+    pub(super) work_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -153,6 +156,7 @@ impl Default for ProjectConfig {
             export_front_matter: None,
             materials_folder: None,
             plot_migration: None,
+            work_id: None,
         }
     }
 }

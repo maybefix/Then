@@ -30,8 +30,21 @@ fn temporary_path(path: &Path) -> PathBuf {
 
 /// Writes `content` to `path`, replacing any file there all at once.
 pub fn write_replacing(path: &Path, content: impl AsRef<[u8]>) -> std::io::Result<()> {
+    with_lock(path, || replace_while_locked(path, content))
+}
+
+/// Runs `work` while holding this file's write lock, so a read, a change and a
+/// write (or an append) happen without another save of the same file in
+/// between. Inside `work`, write only with [`replace_while_locked`]: calling
+/// [`write_replacing`] there would wait on the lock already held.
+pub fn with_lock<R>(path: &Path, work: impl FnOnce() -> R) -> R {
     let lock = file_lock(path);
     let _one_at_a_time = lock.lock().unwrap_or_else(|e| e.into_inner());
+    work()
+}
+
+/// [`write_replacing`] for a caller already inside [`with_lock`] for `path`.
+pub fn replace_while_locked(path: &Path, content: impl AsRef<[u8]>) -> std::io::Result<()> {
     let temporary = temporary_path(path);
     let result = (|| {
         let mut file = std::fs::File::create(&temporary)?;
