@@ -18,7 +18,7 @@ import type {
 import type { FrontMatterParts } from "../../utils/frontmatter";
 import { BinderPane } from "../binder/BinderPane";
 import { PostStreamPane } from "../posts/PostStreamPane";
-import type { PostFilter } from "../../posts/postModel";
+import type { Post, PostFilter } from "../../posts/postModel";
 import type { PostStream } from "../../posts/usePostStream";
 import IntermediateDraftPane from "../canvas/IntermediateDraftPane";
 import { PluginIcon } from "../plugins/PluginIcon";
@@ -174,6 +174,8 @@ export type RightSidebarProps = {
   postStream: PostStream;
   postFilter: PostFilter;
   setPostFilter: (filter: PostFilter) => void;
+  /** 投稿 →「ノートにする」と、札からノートを開く（BINDER 2-3）。 */
+  postNoteActions: { makeNote: (post: Post) => Promise<void>; openNote: (post: Post) => Promise<void> };
 };
 
 /**
@@ -199,7 +201,7 @@ export function RightSidebar(props: RightSidebarProps) {
     handleFragmentDragStart, handleFragmentDragEnd, handleAddReference, handleCreateReference,
     moveIdeaReference, moveReferenceToNewThread, removeIdeaReference, handleDeleteImportedReference,
     reorderIdeaThreadItem, transferIdeaThread, transferIdeaFragment, transferReferenceFile,
-    postStream, postFilter, setPostFilter,
+    postStream, postFilter, setPostFilter, postNoteActions,
   } = props;
   const rightPaneSwitcherItems: RightPaneSwitcherItem[] = [
     ...rightSidebarBuiltinTabs,
@@ -359,6 +361,9 @@ export function RightSidebar(props: RightSidebarProps) {
               stream={postStream}
               filter={postFilter}
               onFilterChange={setPostFilter}
+              // ライブラリ直下（作品を開いていない）では素材の区分がないので出さない（確認1の 1）。
+              onMakeNote={postStream.work ? (post) => void postNoteActions.makeNote(post) : undefined}
+              onOpenNote={(post) => void postNoteActions.openNote(post)}
               legacyFocusNonce={ideaFocusRequest?.nonce ?? null}
               // 2-4 で移すまでの今の Idea。中身が空でも常に出す。資料の取り込み・新しいテキスト資料・
               // スレッドの作成は、ここにしか入口がない（BINDER 2-1 の後退 R1・R3）。

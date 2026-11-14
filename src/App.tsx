@@ -207,6 +207,7 @@ import { QuickIdeaModal } from "./components/snippets/QuickIdeaModal";
 import { QuickPostModal } from "./components/posts/QuickPostModal";
 import { countInbox, type PostFilter } from "./posts/postModel";
 import { usePostStream } from "./posts/usePostStream";
+import { createPostNoteActions, type PostNoteDeps } from "./posts/postNoteActions";
 import { StatusBar } from "./components/status/StatusBar";
 import { useCheckpointStatusInfo } from "./components/status/useCheckpointStatusInfo";
 import type {
@@ -6638,6 +6639,7 @@ export default function App() {
     handleSetMaterialsFolder,
     handleRenameProjectEntry,
     handleDeleteProjectEntry,
+    trashProjectEntry,
     handleMoveProjectEntriesToFolder,
     handleMoveProjectEntry,
     handleBreadcrumbEntryDragStart,
@@ -6687,7 +6689,36 @@ export default function App() {
     replaceActiveTab,
     setProjectProofreadIgnored,
     setClosedDocumentTabs,
+    retargetPostNotes: (_rootPath, changes) => void postStream.retargetNotes(changes),
   });
+
+  // 投稿 →「ノートにする」（BINDER 2-3）。別の作品のノートの札は、作品を切り替え終えてから開く。
+  const [pendingNoteOpen, setPendingNoteOpen] = useState<{ workRoot: string; path: string } | null>(null);
+  const postNoteDepsRef = useRef<PostNoteDeps>(null as unknown as PostNoteDeps);
+  postNoteDepsRef.current = {
+    stream: postStream,
+    projectFolder,
+    requestInput,
+    showToast,
+    refreshProjectFolder,
+    openFile: (path) => handleProjectFileSelect(path),
+    openFileInWork: async (workRoot, path) => {
+      if (await openWorkspace(workRoot)) setPendingNoteOpen({ workRoot, path });
+    },
+    isFileDirty: (path) => openTabsRef.current.some(
+      (tab) => Boolean(tab.path) && isSamePath(tab.path!, path) && isDirtyDocumentTab(tab),
+    ),
+    trashFile: async (folder, path) => {
+      const entry = findProjectEntry(folder.children, path);
+      return entry ? Boolean(await trashProjectEntry(entry)) : false;
+    },
+  };
+  const postNoteActions = useMemo(() => createPostNoteActions(postNoteDepsRef), []);
+  useEffect(() => {
+    if (!pendingNoteOpen || !projectFolder || !isSamePath(projectFolder.path, pendingNoteOpen.workRoot)) return;
+    setPendingNoteOpen(null);
+    void handleProjectFileSelectRef.current(pendingNoteOpen.path);
+  }, [pendingNoteOpen, projectFolder]);
 
   // ===== コルクボード（BINDER 1-5） =====
   // The folder the corkboard lays out. Kept apart from focusedFolderPath, which
@@ -8020,6 +8051,7 @@ export default function App() {
                 moveIdeaReference, moveReferenceToNewThread, removeIdeaReference,
                 handleDeleteImportedReference, reorderIdeaThreadItem, transferIdeaThread,
                 transferIdeaFragment, transferReferenceFile, postStream, postFilter, setPostFilter,
+                postNoteActions,
               }}
             />
           </div>

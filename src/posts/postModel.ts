@@ -5,6 +5,19 @@
 
 export type PostWork = { id: string; name: string };
 
+/** 「ノートにする」（2-3）で作ったノートの場所。 */
+export type PostNote = {
+  /** ノートを作った作品の workId。 */
+  work: string;
+  /** 作品のフォルダからの相対パス（区切りは `/`）。 */
+  path: string;
+  /** ノートのある作品のフォルダ。ライブラリの中で見つからなければない。 */
+  workRoot?: string;
+  workName?: string;
+  /** ファイルがあるか。外で改名・移動・削除されていれば偽（札を薄く出し、押せない）。 */
+  exists: boolean;
+};
+
 export type Post = {
   id: string;
   /** 書いた時刻。時差つきの ISO 8601。 */
@@ -17,6 +30,8 @@ export type Post = {
   filed: boolean;
   /** 「ノートにする」（2-3）で作ったノートがあるか。 */
   noted: boolean;
+  /** そのノートの場所。 */
+  note?: PostNote;
   /** ファイルのこの行のハッシュ。本文を直す・消すときに返す。 */
   hash: string;
 };
@@ -186,3 +201,64 @@ export function localIsoNow(now = new Date()): string {
   const sign = offset >= 0 ? "+" : "-";
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}${sign}${pad(Math.trunc(offset / 60))}:${pad(offset % 60)}`;
 }
+
+export type MadeNote = {
+  snapshot: PostsSnapshot;
+  /** 作ったノートの絶対パス。 */
+  notePath: string;
+  /** 作ったときのノートの中身のハッシュ。 */
+  noteHash: string;
+};
+
+export type UnlinkedNote = { snapshot: PostsSnapshot; noteUnchanged: boolean };
+
+/**
+ * 「ノートにする」でまとめる投稿。押した投稿と、その下の返信（返信の返信も）を、古い順に。
+ * すでにノートにした返信は入れない（1つの投稿に1本）。
+ */
+export function noteThread(posts: Post[], id: string): Post[] {
+  const head = posts.find((post) => post.id === id);
+  if (!head || head.noted) return [];
+  const picked = new Set([head.id]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const post of posts) {
+      if (picked.has(post.id) || post.noted || !post.replyTo || !picked.has(post.replyTo)) continue;
+      picked.add(post.id);
+      grew = true;
+    }
+  }
+  return posts.filter((post) => picked.has(post.id)).sort((a, b) => -newestFirst(a, b));
+}
+
+/** ノートの名前の初期値。書き出しの1行目から、ファイル名に使えない文字と行頭の記号を除いて20字まで。 */
+export function noteNameFromBody(body: string): string {
+  const line = body.split(/\r?\n/).map((text) => text.trim()).find(Boolean) ?? "";
+  const cleaned = line
+    .replace(/[\\/:*?"<>|]/g, "")
+    .replace(/^[#>\-*+・\s]+/, "")
+    .replace(/^\.+/, "")
+    .trim();
+  return Array.from(cleaned).slice(0, 20).join("").trim();
+}
+
+/** ノートの本文。見出し（名前）のあと、投稿1件を1段落として古い順に。日時は書かない（投稿の側に残る）。 */
+export function noteTextFor(name: string, posts: Post[]): string {
+  const paragraphs = posts.map((post) => post.body.trim()).filter(Boolean);
+  return `# ${name.trim()}\n\n${paragraphs.join("\n\n")}\n`;
+}
+
+/** 作品のフォルダと、そこからの相対パス（`/` 区切り）をつなぐ。区切りは作品のフォルダに合わせる。 */
+export function joinWorkPath(workRoot: string, relative: string): string {
+  const separator = workRoot.includes("\\") ? "\\" : "/";
+  const base = workRoot.replace(/[\\/]+$/, "");
+  return `${base}${separator}${relative.split("/").join(separator)}`;
+}
+
+/** 札に出すノートの名前（拡張子なし）。 */
+export function noteLabel(path: string): string {
+  const name = path.split(/[\\/]/).pop() ?? path;
+  return name.replace(/\.md$/i, "");
+}
+
