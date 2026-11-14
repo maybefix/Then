@@ -121,6 +121,7 @@ import {
   isClosedTabInWorkspace,
   createFileDocumentTab,
   isDirtyDocumentTab,
+  replaceDocumentTab,
   scratchFileName,
   type ClosedDocumentTab,
 } from "./editor/documentTabState";
@@ -1752,14 +1753,7 @@ export default function App() {
     (document: TextDocument) => {
       const nextTab = createFileDocumentTab(document);
       // 置き換えたタブは元の位置に残す。同じファイルを開いている別のタブは畳む。
-      setOpenTabs((current) => {
-        const replaced = current.some((tab) => tab.id === activeTabId)
-          ? current.map((tab) => (tab.id === activeTabId ? nextTab : tab))
-          : [...current, nextTab];
-        return withoutEmptyTabs(replaced).filter(
-          (tab) => tab.id === nextTab.id || tab.path !== document.path,
-        );
-      });
+      setOpenTabs((current) => replaceDocumentTab(current, activeTabId, nextTab));
       syncDocumentTabToEditor(nextTab);
       return nextTab;
     },
@@ -4431,15 +4425,14 @@ export default function App() {
     } = {},
   ) => {
     didMountEditorRef.current = false;
-    if (options.replaceActive) {
-      replaceActiveTabWithDocument(document);
-    } else {
-      openDocumentInTab(document, { index: options.index, viewportState: options.viewportState });
-    }
+    // すでに開いているタブへ切り替えたときは、そのタブの本文（書きかけ）を出す。
+    const tab = options.replaceActive
+      ? replaceActiveTabWithDocument(document)
+      : openDocumentInTab(document, { index: options.index, viewportState: options.viewportState });
     setFocusedFolderPath(null);
     setAppState((current) => ({
       ...current,
-      markdown: document.content,
+      markdown: tab.markdown,
       lastWorkspacePath: projectFolder?.path ?? current.lastWorkspacePath,
       lastFilePath: document.path,
     }));

@@ -109,6 +109,22 @@ export function insertTabAfter(tabs: DocumentTab[], nextTab: DocumentTab, anchor
   return [...visible.slice(0, anchorIndex + 1), nextTab, ...visible.slice(anchorIndex + 1)];
 }
 
+/**
+ * 作業中のタブを、別のファイル（保存・名前を付けて保存・復元で読んだもの）で置き換えた一覧。
+ * 作業中のタブがあればその場所に、なければ同じファイルのタブの場所に、どちらもなければ末尾に置く。
+ * 同じファイルのほかのタブは畳む。タブの ID はパスから作るので、ID でなくパスで見分ける。
+ */
+export function replaceDocumentTab(tabs: DocumentTab[], activeTabId: string, nextTab: DocumentTab) {
+  const samePath = (tab: DocumentTab) =>
+    Boolean(tab.path && nextTab.path && isSamePath(tab.path, nextTab.path));
+  const activeIndex = tabs.findIndex((tab) => tab.id === activeTabId);
+  const index = activeIndex >= 0 ? activeIndex : tabs.findIndex(samePath);
+  const placed = index >= 0
+    ? tabs.flatMap((tab, position) => (position === index ? [nextTab] : samePath(tab) ? [] : [tab]))
+    : [...tabs, nextTab];
+  return withoutEmptyTabs(placed);
+}
+
 export const CLOSED_DOCUMENT_TAB_LIMIT = 10;
 
 export function isClosedTabInWorkspace(record: ClosedDocumentTab, workspacePath: string | null) {

@@ -5,6 +5,7 @@ import type { ProjectAst } from "./editor/ast/types";
 import {
   createScratchDocumentTab,
   isDirtyDocumentTab,
+  withoutEmptyTabs,
   type ClosedDocumentTab,
 } from "./editor/documentTabState";
 import { closeDocumentJournal, forgetDocumentJournal } from "./editor/saveJournal";
@@ -138,7 +139,7 @@ export type ProjectEntryActionDeps = {
   loadTextTemplates: () => Promise<TextTemplateSummary[]>;
   enqueueDocumentSave: (request: { tabId: string; path: string; content: string }) => Promise<TextDocument>;
   refreshProjectFolder: (folderPath: string) => Promise<ProjectFolder | null>;
-  loadDocumentIntoEditor: (document: TextDocument, options?: { replaceActive?: boolean }) => void;
+  loadDocumentIntoEditor: (document: TextDocument, options?: { replaceActive?: boolean; index?: number }) => void;
   replaceActiveTab: (nextTab: DocumentTab) => void;
   setProjectProofreadIgnored: Dispatch<SetStateAction<Record<string, string[]>>>;
   setClosedDocumentTabs: Dispatch<SetStateAction<ClosedDocumentTab[]>>;
@@ -698,9 +699,13 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           : path,
       );
 
-      setOpenTabs((current) =>
-        current.filter((tab) => !tab.path || !isPathSameOrInside(tab.path, entry.path)),
-      );
+      const isDeletedTab = (tab: DocumentTab) => Boolean(tab.path && isPathSameOrInside(tab.path, entry.path));
+      // 次のファイルは、消したタブがあった場所に開く（並びは空のタブを除いて数える）。
+      const activeIndex = openTabs.findIndex((tab) => tab.id === activeTabIdRef.current);
+      const nextTabIndex = activeIndex >= 0
+        ? withoutEmptyTabs(openTabs.slice(0, activeIndex)).filter((tab) => !isDeletedTab(tab)).length
+        : undefined;
+      setOpenTabs((current) => current.filter((tab) => !isDeletedTab(tab)));
       for (const tab of openTabs) {
         if (tab.path && isPathSameOrInside(tab.path, entry.path)) forgetDocumentJournal(tab.id);
       }
@@ -710,7 +715,9 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
           const document = await invoke<TextDocument>("read_text_file", {
             path: nextFile.path,
           });
-          loadDocumentIntoEditor(document, { replaceActive: true });
+          // 置き換えでなく開く。消したタブはもう一覧にないので、置き換えると、同じファイルの
+          // タブがすでに開いているときに2つになっていた（docs/DELETE_DUPLICATE_TAB_PLAN.md）。
+          loadDocumentIntoEditor(document, { index: nextTabIndex });
         } else {
           didMountEditorRef.current = false;
           setFocusedFolderPath(projectFolder.path);
