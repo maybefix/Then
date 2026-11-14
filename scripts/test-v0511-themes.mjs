@@ -1,7 +1,6 @@
 import { readAppCss } from "./lib/read-app-css.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { JSDOM } from "jsdom";
 
 const [
   appCss,
