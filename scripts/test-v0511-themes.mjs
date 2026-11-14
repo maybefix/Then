@@ -117,24 +117,9 @@ assert.match(
 );
 assert.doesNotMatch(senCss, /linear-gradient/);
 assert.doesNotMatch(senCss, /Yu Gothic UI/, "Shuboku must inherit the configured UI font");
-// Match the current DOM instead of a removed .plotToolButton selector or the
-// formatting/order of a selector list. Browser contracts check the final cascade.
-for (const theme of ["sen-light", "sen-dark"]) {
-  const dom = new JSDOM(`<style>${senCss}</style><div class="appShell" data-theme="${theme}">
-    <div class="appFrame"><div class="plotRightSidebarBody"><div class="plotPane">
-      <div class="plotCard"><button class="plotCardNum">1</button></div>
-      <div class="plotCard expandedPlotCard"><button class="plotCardNum">2</button>
-        <textarea class="plotCardTitle"></textarea><textarea class="plotCardBody"></textarea>
-      </div></div></div></div></div>`);
-  const { document } = dom.window;
-  const borderResets = [...document.styleSheets[0].cssRules].filter(rule =>
-    rule.selectorText && /^(?:0|0px)$/.test(rule.style?.getPropertyValue("border")));
-  for (const element of document.querySelectorAll(".plotPane, .plotCard, .plotCardNum, .plotCardTitle, .plotCardBody")) {
-    assert.ok(borderResets.some(rule => element.matches(rule.selectorText)),
-      `${theme}: ${element.className} must have a border reset in its current state`);
-  }
-  dom.window.close();
-}
+// The Plot pane was retired in BINDER 1-6 (Plot moves to the note 「プロット（移行）」), so SEN
+// keeps no Plot rules.
+assert.doesNotMatch(senCss, /\.(?:plot[A-Z]|plotPane\b|expandedPlotCard)/, "SEN must not keep styles for the retired Plot pane");
 assert.ok(
   [...senCss.matchAll(/(?:^|\n)\s*box-shadow:\s*([^;]+);/g)]
     .every(([, value]) => value.trim() === "none"),
