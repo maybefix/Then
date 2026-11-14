@@ -10,6 +10,8 @@ type StatusBarProps = {
   showFilePath: boolean;
   lastError: string;
   charCount: number;
+  /** ノート（素材）を開いているとき。字数の前に「ノート」と出す（BINDER 2-2）。 */
+  isNote?: boolean;
   selectionCharCount: number | null;
   pageMetrics: { current: number; total: number } | null;
   /** 原稿用紙モードのときだけ渡す。 */
@@ -102,6 +104,7 @@ export function StatusBar({
   showFilePath,
   lastError,
   charCount,
+  isNote = false,
   selectionCharCount,
   pageMetrics,
   manuscriptProgress = null,
@@ -145,6 +148,7 @@ export function StatusBar({
         </span>
       )}
       <span className="statusRight">
+        {isNote ? "ノート · " : ""}
         {selectionCharCount !== null ? `${selectionCharCount} / ` : ""}
         {charCount}文字
       </span>

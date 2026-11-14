@@ -308,6 +308,15 @@
   color: var(--topbar-text-primary);
 }
 
+/* ノートのあいだの本文方向のボタン（BINDER 2-2）。 */
+.appShell[data-theme] .topbar .iconButton:disabled,
+.appShell[data-theme] .topbar .iconButton:disabled:hover {
+  background: transparent;
+  color: var(--topbar-text-muted);
+  cursor: default;
+  opacity: 0.35;
+}
+
 .appShell[data-theme] .iconButton:hover,
 .appShell[data-theme] .sidebarIconButton:hover,
 .appShell[data-theme] .activeSidebarIconButton {

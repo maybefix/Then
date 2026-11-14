@@ -287,6 +287,15 @@ const expectExercised = (label, names) => {
   expectCalls("縦書きに切り替え", () => toVertical.props.onClick(), [
     { name: "updateSettings", args: ["writingMode", "vertical-rl"] },
   ]);
+  assert.equal(toHorizontal.props.disabled, false, "原稿では本文方向のボタンを押せる");
+  // BINDER 2-2: ノートのあいだは同じ場所に残したまま押せない（横書きに決まっているため）。
+  for (const writingMode of ["vertical-rl", "horizontal-tb"]) {
+    const noteTree = render({ settings: { ...base.settings, writingMode }, isNoteDocument: true });
+    const label = writingMode === "horizontal-tb" ? "縦書きに切り替え" : "横書きに切り替え";
+    const locked = button(noteTree, label);
+    assert.equal(locked.props.disabled, true, `ノートでは本文方向のボタンを押せない（${writingMode}）`);
+    assert.doesNotMatch(locked.props.className, /activeIconButton/, `ノートでは本文方向のボタンを強調しない（${writingMode}）`);
+  }
 
   // テーマ、設定
   expectCalls("テーマを選択", () => button(tree, "テーマを選択").props.onClick(), [

@@ -176,6 +176,7 @@ import { createProjectEntryActions } from "./projectEntryActions";
 import { createWorkspaceTreeActions } from "./workspaceTreeActions";
 import { createProjectSearchActions } from "./projectSearchActions";
 import { createHeadingMoveActions } from "./headingMoveActions";
+import { collectMaterialPaths, documentModeFor, editorSettingsFor } from "./editor/noteMode";
 import { createTemplateActions } from "./templateActions";
 import { createSystemFontLoader } from "./systemFonts";
 import { useSystemFonts } from "./useSystemFonts";
@@ -2006,6 +2007,11 @@ export default function App() {
   const currentFilePath = activeTab?.path ?? null;
   const currentFileName = activeTab?.name ?? scratchFileName;
   const documentKey = activeTab?.documentKey ?? "initial-document";
+  // ノートかどうかは一覧の role だけで決め、エディタの見え方はここで一度だけ差し替える（BINDER 2-2）。
+  const materialPaths = useMemo(() => collectMaterialPaths(collectProjectTextFiles(projectFolder)), [projectFolder]);
+  const documentMode = documentModeFor(currentFilePath, materialPaths);
+  const editorSettings = useMemo(() => editorSettingsFor(settings, documentMode), [documentMode, settings]);
+  const isNotePath = useCallback((path: string) => documentModeFor(path, materialPaths) === "note", [materialPaths]);
   const isNewTabStartPage =
     activeTab?.kind === "scratch" && activeTab.name === newTabName && markdown.trim() === "";
   const activeWorkspaceRootPath = useMemo(() => {
@@ -3318,7 +3324,7 @@ export default function App() {
     [],
   );
 
-  const isVerticalWriting = settings.writingMode === "vertical-rl";
+  const isVerticalWriting = editorSettings.writingMode === "vertical-rl";
   const editorFontFamily = useVerticalMetricFontFamily(settings.editorFontFamily, isVerticalWriting);
   const editorHeadingFontFamily = useVerticalMetricFontFamily(
     settings.headingFontSource === "custom" ? settings.headingFontFamily : settings.editorFontFamily,
@@ -3332,12 +3338,14 @@ export default function App() {
    */
   const editorMeasureLimit = useMemo(() => {
     if (!editorViewportSize) return null;
+    // ノートを開いているあいだは、設定画面の向き（原稿）の実寸が測れない。
+    if (editorSettings.writingMode !== settings.writingMode) return null;
     const available =
       settings.writingMode === "horizontal-tb"
         ? editorViewportSize.width - 64
         : editorViewportSize.height - editorViewportSize.verticalPadding;
     return Math.max(0, Math.floor(available));
-  }, [editorViewportSize, settings.writingMode]);
+  }, [editorSettings.writingMode, editorViewportSize, settings.writingMode]);
 
   const handleBreadcrumbKeyDown = useCallback((event: ReactKeyboardEvent<HTMLElement>) => {
     const menu = breadcrumbMenuRef.current?.querySelector(".menuPopover");
@@ -3384,17 +3392,17 @@ export default function App() {
   }, []);
 
   const applyTypewriterScroll = useCallback(() => {
-    if (!settings.typewriterScroll) return;
+    if (!editorSettings.typewriterScroll) return;
 
     const editor = editorInstanceRef.current;
     if (!editor || editor.isComposing()) return;
     const selection = editor.getSelection();
     if (selection.from !== selection.to) return;
     editor.scrollCaretIntoView(settings.typewriterOffset);
-  }, [settings.typewriterOffset, settings.typewriterScroll]);
+  }, [settings.typewriterOffset, editorSettings.typewriterScroll]);
 
   const scheduleTypewriterScroll = useCallback(() => {
-    if (!settings.typewriterScroll) return;
+    if (!editorSettings.typewriterScroll) return;
     if (typewriterScrollFrameRef.current) {
       window.cancelAnimationFrame(typewriterScrollFrameRef.current);
     }
@@ -3402,10 +3410,10 @@ export default function App() {
       typewriterScrollFrameRef.current = null;
       applyTypewriterScroll();
     });
-  }, [applyTypewriterScroll, settings.typewriterScroll]);
+  }, [applyTypewriterScroll, editorSettings.typewriterScroll]);
 
   useEffect(() => {
-    if (!settings.typewriterScroll) {
+    if (!editorSettings.typewriterScroll) {
       if (typewriterScrollFrameRef.current) {
         window.cancelAnimationFrame(typewriterScrollFrameRef.current);
         typewriterScrollFrameRef.current = null;
@@ -3413,7 +3421,7 @@ export default function App() {
       return;
     }
     scheduleTypewriterScroll();
-  }, [scheduleTypewriterScroll, settings.typewriterScroll]);
+  }, [scheduleTypewriterScroll, editorSettings.typewriterScroll]);
 
   const handleTextChange = useCallback((nextText: string, editorRevision: number, change?: TextSplice | null) => {
     didMountEditorRef.current = true;
@@ -6824,7 +6832,7 @@ export default function App() {
     currentFilePath,
     openTabs,
     setOpenTabs,
-    settings,
+    settings: editorSettings,
     headingMoveInProgressRef,
     activeTabIdRef,
     editorInstanceRef,
@@ -7456,7 +7464,7 @@ export default function App() {
         className="appShell"
         data-shell-app-mode={appMode}
         {...buildAppShellAppearance(settings, editorFontFamily, editorHeadingFontFamily)}
-        data-writing-mode={settings.writingMode}
+        data-writing-mode={editorSettings.writingMode}
         data-zone-mode={settings.sidebarHoverMode !== "none" ? "true" : undefined}
         data-zone-left={
           settings.sidebarHoverMode === "both" || settings.sidebarHoverMode === "left"
@@ -7593,6 +7601,7 @@ export default function App() {
             <TopbarActions
               {...{
                 appMode, isEditorFocusMode, settings, toggleEditorFocusMode, isRightSidebarCollapsed,
+                isNoteDocument: documentMode === "note",
                 setIsRightSidebarCollapsed, projectFolder, handleQuickCreateManuscriptSnapshot, updateSettings,
                 setShouldReturnToSettingsAfterThemePicker, setIsThemePickerModalOpen, setIsSettingsModalOpen,
                 modeMenuRef, modeMenuButtonRef, isModeMenuOpen, activeModeMenuEntry, setIsModeMenuOpen,
@@ -7607,6 +7616,7 @@ export default function App() {
               displayMode={settings.documentTabsDisplayMode}
               activeTabId={activeTabId}
               fileProgress={appState.fileProgress}
+              isNotePath={isNotePath}
               onActivateTab={activateDocumentTab}
               onCloseTabs={(tabIds) => void closeDocumentTabs(tabIds)}
               onMoveTab={moveDocumentTab}
@@ -7757,11 +7767,11 @@ export default function App() {
                             key={documentKey}
                             text={editorText}
                             editorRevision={activeTab?.editorRevision ?? null}
-                            writingMode={settings.writingMode}
-                            editorDisplayMode={settings.editorDisplayMode}
-                            pageFlowDirection={settings.pageFlowDirection}
-                            typewriterScroll={settings.typewriterScroll}
-                            showTypewriterGuide={settings.showTypewriterGuide}
+                            writingMode={editorSettings.writingMode}
+                            editorDisplayMode={editorSettings.editorDisplayMode}
+                            pageFlowDirection={editorSettings.pageFlowDirection}
+                            typewriterScroll={editorSettings.typewriterScroll}
+                            showTypewriterGuide={editorSettings.showTypewriterGuide}
                             typewriterOffset={settings.typewriterOffset}
                             showLineBreakMarks={settings.showLineBreakMarks}
                             showLineNumbers={settings.showLineNumbers}
@@ -7777,12 +7787,12 @@ export default function App() {
                               settings.lineHeight,
                               settings.editorMeasureHorizontal,
                               settings.editorMeasureVertical,
-                              settings.manuscript.layoutMode,
+                              editorSettings.manuscript.layoutMode,
                               settings.manuscript.charactersPerLine,
                               settings.manuscript.linesPerPage,
                               settings.manuscript.fontSize,
                             ].join("|")}
-                            manuscript={settings.manuscript}
+                            manuscript={editorSettings.manuscript}
                             onManuscriptProgressChange={editorManuscriptProgress.setSnapshot}
                             initialSelectionOffset={initialSelectionOffset}
                             initialViewportState={activeTab?.viewportState ?? null}
@@ -7924,9 +7934,10 @@ export default function App() {
                 showFilePath={settings.showStatusFilePath}
                 lastError={lastError}
                 charCount={charCount}
+                isNote={documentMode === "note"}
                 selectionCharCount={selectionCharCount}
-                pageMetrics={editorPageMetrics}
-                manuscriptProgress={settings.manuscript.layoutMode === "manuscript" ? editorManuscriptProgress : null}
+                pageMetrics={editorSettings.editorDisplayMode === "paged" ? editorPageMetrics : null}
+                manuscriptProgress={editorSettings.manuscript.layoutMode === "manuscript" ? editorManuscriptProgress : null}
                 checkpoint={checkpointStatus}
                 pluginItems={pluginStatusItems}
                 onPluginItemClick={(pluginId, commandId) =>
