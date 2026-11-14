@@ -40,8 +40,8 @@ export type PostNoteDeps = {
   activeFilePath: () => string | null;
   /** そのファイルのタブに、まだ保存していない変更があるか。 */
   isFileDirty: (path: string) => boolean;
-  /** 確認なしでゴミ箱へ移す。移せたら true。 */
-  trashFile: (folder: ProjectFolder, path: string) => Promise<boolean>;
+  /** 確認なしでゴミ箱へ移す。移せたら true。直前のタブの切り替えが画面に入ってから移す（App が受け持つ）。 */
+  trashFile: (path: string) => Promise<boolean>;
 };
 
 export function createPostNoteActions(depsRef: MutableRefObject<PostNoteDeps>) {
@@ -59,8 +59,8 @@ export function createPostNoteActions(depsRef: MutableRefObject<PostNoteDeps>) {
     // 削除は一覧の最初のファイルを開き直すため）。
     const active = activeFilePath();
     if (previousPath && active && isSamePath(active, made.notePath)) await openFile(previousPath);
-    const folder = (await refreshProjectFolder(projectFolder.path)) ?? projectFolder;
-    if (await trashFile(folder, made.notePath)) {
+    await refreshProjectFolder(projectFolder.path);
+    if (await trashFile(made.notePath)) {
       showToast(`投稿を受信箱に戻し、ノート「${name}」をゴミ箱へ移しました`);
     }
   };

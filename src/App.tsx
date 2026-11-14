@@ -6698,6 +6698,9 @@ export default function App() {
 
   // 投稿 →「ノートにする」（BINDER 2-3）。別の作品のノートの札は、作品を切り替え終えてから開く。
   const [pendingNoteOpen, setPendingNoteOpen] = useState<{ workRoot: string; path: string } | null>(null);
+  // 「元に戻す」でノートをゴミ箱へ移すのは、元のタブへ戻したのが画面に入ってから（削除は、そのとき開いている
+  // ファイルを見て、消したのが開いているファイルなら一覧の最初のファイルを開き直すため）。
+  const [pendingNoteTrash, setPendingNoteTrash] = useState<{ path: string; resolve: (trashed: boolean) => void } | null>(null);
   const postNoteDepsRef = useRef<PostNoteDeps>(null as unknown as PostNoteDeps);
   postNoteDepsRef.current = {
     stream: postStream,
@@ -6713,10 +6716,7 @@ export default function App() {
     isFileDirty: (path) => openTabsRef.current.some(
       (tab) => Boolean(tab.path) && isSamePath(tab.path!, path) && isDirtyDocumentTab(tab),
     ),
-    trashFile: async (folder, path) => {
-      const entry = findProjectEntry(folder.children, path);
-      return entry ? Boolean(await trashProjectEntry(entry)) : false;
-    },
+    trashFile: (path) => new Promise<boolean>((resolve) => setPendingNoteTrash({ path, resolve })),
   };
   const postNoteActions = useMemo(() => createPostNoteActions(postNoteDepsRef), []);
   useEffect(() => {
@@ -6724,6 +6724,18 @@ export default function App() {
     setPendingNoteOpen(null);
     void handleProjectFileSelectRef.current(pendingNoteOpen.path);
   }, [pendingNoteOpen, projectFolder]);
+  useEffect(() => {
+    if (!pendingNoteTrash) return;
+    setPendingNoteTrash(null);
+    const entry = projectFolder ? findProjectEntry(projectFolder.children, pendingNoteTrash.path) : null;
+    if (!entry) {
+      pendingNoteTrash.resolve(false);
+      return;
+    }
+    void trashProjectEntry(entry).then((result) => pendingNoteTrash.resolve(Boolean(result)));
+    // この描画の trashProjectEntry（そのときのタブと一覧）で消す。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingNoteTrash]);
 
   // ===== コルクボード（BINDER 1-5） =====
   // The folder the corkboard lays out. Kept apart from focusedFolderPath, which

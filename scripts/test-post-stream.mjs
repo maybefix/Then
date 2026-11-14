@@ -493,7 +493,7 @@ function noteDepsFor({ name = "手紙", dirty = false } = {}) {
     openFileInWork: async (workRoot, path) => { log.push(["openInWork", workRoot, path]); },
     isFileDirty: () => dirty,
     activeFilePath: () => active,
-    trashFile: async (_folder, path) => { log.push(["trash", path]); return true; },
+    trashFile: async (path) => { log.push(["trash", path]); return true; },
   };
   return { deps, log };
 }
