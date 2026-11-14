@@ -201,10 +201,6 @@ export function RightSidebar(props: RightSidebarProps) {
     reorderIdeaThreadItem, transferIdeaThread, transferIdeaFragment, transferReferenceFile,
     postStream, postFilter, setPostFilter,
   } = props;
-  // 2-4 で移すまでの今の Idea。断片か名前のあるスレッドか資料が1つでもあるときだけ「以前のアイデア」を出す。
-  const hasLegacyIdeas =
-    snippets.some((thread) => thread.kind !== "inbox" || thread.fragments.length > 0) ||
-    referenceLayout.ideaThreads.some((layout) => layout.items.some((item) => item.sourceType === "reference"));
   const rightPaneSwitcherItems: RightPaneSwitcherItem[] = [
     ...rightSidebarBuiltinTabs,
     ...pluginViews.map((view) => {
@@ -364,7 +360,9 @@ export function RightSidebar(props: RightSidebarProps) {
               filter={postFilter}
               onFilterChange={setPostFilter}
               legacyFocusNonce={ideaFocusRequest?.nonce ?? null}
-              legacy={hasLegacyIdeas ? (
+              // 2-4 で移すまでの今の Idea。中身が空でも常に出す。資料の取り込み・新しいテキスト資料・
+              // スレッドの作成は、ここにしか入口がない（BINDER 2-1 の後退 R1・R3）。
+              legacy={(
             <BinderPane
               rootPath={projectFolder?.path ?? null}
               threads={snippets}
@@ -421,7 +419,7 @@ export function RightSidebar(props: RightSidebarProps) {
                   : undefined
               }
             />
-              ) : undefined}
+              )}
             />
           )}
         </div>

@@ -621,6 +621,11 @@ export function createIdeaThreadActions(deps: IdeaThreadActionDeps) {
     const copiedAt = Date.now();
     const newThreadId =
       request.targetThreadId === CANVAS_NEW_THREAD_TARGET ? nextIdeaId("thread") : null;
+    // 既存のスレッドへ送ったときも、送り先を開く。右のペイン「アイデア」は投稿の流れが先に出るので、
+    // 開く要求がないと、送った断片が「以前のアイデア」の奥に隠れたままになる（BINDER 2-1 の後退 R2）。
+    const inboxThread = snippets.find((thread) => thread.kind === "inbox") ?? snippets[0];
+    const focusThreadId = newThreadId
+      ?? (snippets.some((thread) => thread.id === request.targetThreadId) ? request.targetThreadId : inboxThread?.id);
     updateIdeaThreads((threads) => {
       if (newThreadId) {
         const now = Date.now();
@@ -676,7 +681,7 @@ export function createIdeaThreadActions(deps: IdeaThreadActionDeps) {
     });
     setRightSidebarTab("idea");
     setIsRightSidebarCollapsed(false);
-    if (newThreadId) setIdeaFocusRequest({ threadId: newThreadId, nonce: copiedAt });
+    if (focusThreadId) setIdeaFocusRequest({ threadId: focusThreadId, nonce: copiedAt });
     showToast(`${items.length} 件を Idea へ取り込みました`);
   };
 

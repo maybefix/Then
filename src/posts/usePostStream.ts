@@ -14,7 +14,9 @@ const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
 type ToastAction = { label: string; onClick: () => void };
 
 export type PostStream = {
-  /** 投稿を読み書きできる場所が開いているか（フォルダを開いていなければ偽）。 */
+  /** フォルダを開いているか。開いていなければ投稿を書く場所がない。 */
+  scoped: boolean;
+  /** 投稿を読み終えて、読み書きできるか。 */
   available: boolean;
   posts: Post[];
   work: PostWork | undefined;
@@ -174,6 +176,7 @@ export function usePostStream(scopePath: string | null, { showToast }: Options):
   }, [accept, report, run]);
 
   return {
+    scoped: Boolean(scopePath),
     available: Boolean(scopePath) && snapshot !== null,
     posts: snapshot?.posts ?? [],
     work: snapshot?.work,

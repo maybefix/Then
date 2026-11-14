@@ -44,7 +44,7 @@ function MoreIcon() {
 type View = "stream" | "legacy";
 
 export function PostStreamPane({ stream, filter, onFilterChange, legacy, legacyFocusNonce }: PostStreamPaneProps) {
-  const { available, posts, work, add, editBody, setFiled, remove, refresh } = stream;
+  const { scoped, available, posts, work, add, editBody, setFiled, remove, refresh } = stream;
   const [view, setView] = useState<View>("stream");
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -213,6 +213,16 @@ export function PostStreamPane({ stream, filter, onFilterChange, legacy, legacyF
       </article>
     );
   };
+
+  // フォルダを開いていない（ファイルを1本だけ開いた）ときは投稿を書く場所がないので、今の Idea をそのまま出す
+  // （2-1 の前と同じく、ここで Idea を書ける。BINDER 2-1 の後退 R3）。
+  if (!scoped && legacy) {
+    return (
+      <section className="ideaPane postStreamPane" aria-label="アイデア">
+        <div className="postLegacy">{legacy}</div>
+      </section>
+    );
+  }
 
   return (
     <section className="ideaPane postStreamPane" aria-label="アイデア">

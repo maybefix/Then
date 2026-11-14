@@ -589,10 +589,15 @@ function assertConsistent(state, label) {
   assert.equal(lastToast().message, "2 件を Idea へ取り込みました");
 
   // 既存のスレッドへは末尾に足す。見つからなければインボックスへ。
+  // 既存のスレッドへ送ったときも、送り先を開く（BINDER 2-1 の後退 R2: 右のペインは投稿の流れが先に出るため）。
+  state.focusRequest = null;
   actions().receiveCanvasCopyToIdea({ ...request, targetThreadId: "t2", threadTitle: undefined });
   assert.deepEqual(state.app.snippets.find((entry) => entry.id === "t2").fragments.map((fragment) => fragment.body), ["d", "一枚目", "二枚目"]);
+  assert.equal(state.focusRequest?.threadId, "t2", "an existing thread is opened too");
+  state.focusRequest = null;
   actions().receiveCanvasCopyToIdea({ ...request, targetThreadId: "missing", items: [{ nodeId: "n9", text: "迷子" }] });
   assert.deepEqual(state.app.snippets[0].fragments.map((fragment) => fragment.body), ["i1", "迷子"]);
+  assert.equal(state.focusRequest?.threadId, state.app.snippets[0].id, "a missing target opens the inbox it went to");
 
   // 名前がなければボード名、それもなければ「Canvas から」。
   actions().receiveCanvasCopyToIdea({ ...request, threadTitle: " ", boardName: "" });

@@ -364,19 +364,26 @@ test("「この作品」は作品を開いているときだけ。ほかの作�
   atRoot.unmount();
 });
 
-test("フォルダを開いていなければ書けない。「以前のアイデア」で今の Idea を出し、Canvas からの要求でも切り替える", async () => {
+test("「以前のアイデア」で今の Idea を出し、Canvas からの要求でも切り替える。フォルダがなければ今の Idea をそのまま出す", async () => {
   const backend = fakeBackend();
   const legacy = React.createElement("div", { className: "legacyMarker" }, "古い");
+  // BINDER 2-1 の後退 R3: フォルダを開いていなくても、2-1 の前と同じく今の Idea で書ける。
   const none = await mount({ scope: null, legacy });
-  assert.equal(composer(none.container).disabled, true);
+  assert.ok(none.container.querySelector(".legacyMarker"), "no folder: the current Idea is shown as it was");
+  assert.equal(composer(none.container), null, "no folder: no post box that cannot post");
+  assert.equal(chip(none.container, "受信箱"), undefined);
   assert.equal(backend.calls.length, 0);
-  assert.equal(none.container.querySelector(".legacyMarker"), null);
-  await click(chip(none.container, "以前のアイデア"));
-  assert.ok(none.container.querySelector(".legacyMarker"));
-  assert.equal(composer(none.container), null);
-  await click(chip(none.container, "受信箱"));
-  assert.equal(none.container.querySelector(".legacyMarker"), null);
   none.unmount();
+
+  fakeBackend();
+  const open = await mount({ legacy });
+  assert.equal(open.container.querySelector(".legacyMarker"), null, "a folder: the post stream comes first");
+  await click(chip(open.container, "以前のアイデア"));
+  assert.ok(open.container.querySelector(".legacyMarker"));
+  assert.equal(composer(open.container), null);
+  await click(chip(open.container, "受信箱"));
+  assert.equal(open.container.querySelector(".legacyMarker"), null);
+  open.unmount();
 
   fakeBackend();
   const pending = await mount({ legacy, legacyFocusNonce: 7 });
