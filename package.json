@@ -114,6 +114,7 @@
     "test:document-tabs": "node scripts/test-document-tabs.mjs",
     "test:status-bar": "node scripts/test-status-bar.mjs",
     "test:status-bar-layout": "node scripts/test-status-bar-layout.mjs",
+    "test:replace-active-tab": "node scripts/test-replace-active-tab.mjs",
     "test:workspace-tabs": "node --experimental-strip-types scripts/test-workspace-document-tabs.mjs",
     "test:v070-manuscript": "node scripts/test-v070-manuscript.mjs",
     "test:v070-manuscript-browser": "node scripts/test-v070-manuscript-browser.mjs",
