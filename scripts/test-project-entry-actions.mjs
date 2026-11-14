@@ -436,7 +436,8 @@ for (const [oldName, answer, expected] of [
   assert.deepEqual(Object.keys(app.appState.cursorPositions), [p("c.txt")]);
   assert.equal(app.appState.lastFilePath, null);
   assert.deepEqual(app.log[3].args, { path: p("第一章", "b.txt") });
-  assert.deepEqual(app.loaded, [{ document: { path: p("第一章", "b.txt"), name: "b.txt", content: "B" }, options: { replaceActive: true } }]);
+  // 消したタブの場所（ここでは先頭）に開く。すでに開いていれば、そのタブへ切り替える（docs/DELETE_DUPLICATE_TAB_PLAN.md）。
+  assert.deepEqual(app.loaded, [{ document: { path: p("第一章", "b.txt"), name: "b.txt", content: "B" }, options: { index: 0 } }]);
   // 消したファイルを指す資料カード・最近の資料・資料の候補は外す
   // （docs/PROJECT_ENTRY_RETARGET_FIX_PLAN.md の確認1）。
   assert.deepEqual(app.referenceLayout.cards.map((card) => card.sourcePath), ["c.txt"]);
@@ -452,6 +453,44 @@ for (const [oldName, answer, expected] of [
     "the deleted tab's record is dropped, as the confirmation said its unsaved text would be",
   );
   assert.deepEqual(app.toasts, ["「a.txt」をゴミ箱へ移動しました"]);
+}
+
+// ---- 削除（開いているファイルが、タブの並びの途中にある） ----
+// 次のファイルは、消したタブがあった場所に開く。置き換えで開くと、すでに開いているタブと同じタブが
+// もう1つできていた（docs/DELETE_DUPLICATE_TAB_PLAN.md）。
+{
+  const world = defaultWorld();
+  world.openTabs = [tab(p("c.txt")), world.openTabs[0], tab(p("第一章", "b.txt"))];
+  const { app, actions } = setup(world);
+  const deleted = p("第一章", "a.txt");
+  app.commands.plan_delete_project_entry = () => ({ rootKind: "file", textFileCount: 1, nonTextFileCount: 0, folderCount: 0, warnings: [] });
+  app.commands.delete_project_entry_to_trash = () => ({ deletedPaths: [deleted], fallbackUsed: "none" });
+  app.commands.read_text_file = ({ path }) => ({ path, name: "b.txt", content: "B" });
+  app.refreshedFolder = projectFolder([folder(p("第一章"), [file(p("第一章", "b.txt"))]), file(p("c.txt"))]);
+  app.confirmAnswers.push(true);
+  await actions().handleDeleteProjectEntry(file(deleted));
+
+  assert.deepEqual(app.openTabs.map((item) => item.path), [p("c.txt"), p("第一章", "b.txt")]);
+  assert.deepEqual(app.loaded.map(({ options }) => options), [{ index: 1 }], "the next file goes where the deleted tab was");
+  assert.equal(app.loaded.some(({ options }) => options?.replaceActive), false, "the deleted tab is gone, so nothing is replaced");
+}
+
+// ---- 削除（フォルダ。消えるタブが、開いているタブより前にもある） ----
+// 消したタブの場所は、残るタブだけで数える。
+{
+  const world = defaultWorld();
+  world.openTabs = [world.openTabs[0], tab(p("c.txt")), tab(p("第一章", "b.txt"))];
+  world.activeTabId = `file:${p("第一章", "b.txt")}`;
+  const { app, actions } = setup(world);
+  app.commands.plan_delete_project_entry = () => ({ rootKind: "folder", textFileCount: 2, nonTextFileCount: 0, folderCount: 1, warnings: [] });
+  app.commands.delete_project_entry_to_trash = () => ({ deletedPaths: [p("第一章")], fallbackUsed: "none" });
+  app.commands.read_text_file = ({ path }) => ({ path, name: "c.txt", content: "C" });
+  app.refreshedFolder = projectFolder([file(p("c.txt"))]);
+  app.confirmAnswers.push(true);
+  await actions().handleDeleteProjectEntry(folder(p("第一章"), []));
+
+  assert.deepEqual(app.openTabs.map((item) => item.path), [p("c.txt")]);
+  assert.deepEqual(app.loaded.map(({ options }) => options), [{ index: 1 }], "only the tabs left are counted");
 }
 
 // ---- 削除（フォルダ、最後のファイルまで消える、Then の Trash） ----
