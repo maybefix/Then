@@ -29,8 +29,8 @@ sidebarSource = sidebarSource
   .replace('from "react"', `from "${reactUrl}"`)
   .replace('from "react-dom"', `from "${reactDomUrl}"`)
   .replace(
-    'import { fileProgressLabels, fileProgressStatuses } from "../../types";',
-    'const fileProgressStatuses = ["todo", "writing", "revising", "done", "archived"];\nconst fileProgressLabels = { todo: "未着手", writing: "執筆中", revising: "推敲中", done: "完了", archived: "アーカイブ" };',
+    'import { fileProgressLabels, fileProgressMarkers, fileProgressStatuses } from "../../types";',
+    'const fileProgressStatuses = ["todo", "writing", "revising", "done", "archived"];\nconst fileProgressLabels = { todo: "未着手", writing: "執筆中", revising: "推敲中", done: "完了", archived: "アーカイブ" };\nconst fileProgressMarkers = { todo: "未", writing: "執", revising: "推", done: "完", archived: "ア" };',
   )
   .replace(
     'import { RightPaneSwitcher, type RightPaneSwitcherItem } from "./RightPaneSwitcher";',
