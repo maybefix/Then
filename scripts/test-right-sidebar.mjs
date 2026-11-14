@@ -159,4 +159,46 @@ assert.doesNotMatch(render(), /visiblePluginRuntimeAnchor/, "no plugin: the runt
   assert.match(sidebar, /onClick=\{\(\) => setIsRightSidebarWide\(!isRightSidebarWide\)\}/);
 }
 
+// --- 切り替えに出るペインの並び（BINDER 1-7 の前に固定する） ---
+// 描画した切り替えは選ばれているペインしか出さないので、切り替えを全部の項目を並べる代わりのものに差し替えて組む。
+{
+  const listedPath = path.join(tmpDir, `right-sidebar-listed-${process.pid}.mjs`);
+  const listed = await build({
+    entryPoints: ["src/components/layout/RightSidebar.tsx"],
+    bundle: true,
+    format: "esm",
+    platform: "node",
+    jsx: "automatic",
+    loader: { ".css": "empty" },
+    external: ["react", "react-dom", "react/jsx-runtime"],
+    write: false,
+    logLevel: "error",
+    plugins: [{
+      name: "list-panes",
+      setup(pluginBuild) {
+        pluginBuild.onResolve({ filter: /\/RightPaneSwitcher$/ }, () => ({ path: "switcher", namespace: "list-panes" }));
+        pluginBuild.onLoad({ filter: /.*/, namespace: "list-panes" }, () => ({
+          contents: `import { createElement } from "react";
+export function RightPaneSwitcher({ items, activeId }) {
+  return createElement("ol", { "data-active": activeId }, items.map((item) => createElement("li", { key: item.id, "data-id": item.id }, item.label)));
+}`,
+          loader: "js",
+          resolveDir: process.cwd(),
+        }));
+      },
+    }],
+  });
+  await writeFile(listedPath, listed.outputFiles[0].text);
+  const { RightSidebar: ListedSidebar } = await import(pathToFileURL(listedPath).href).finally(() => unlink(listedPath));
+  const renderListed = (overrides = {}) => {
+    const props = new Proxy({ ...values, ...overrides }, {
+      get: (target, key) => (key in target ? target[key] : () => {}),
+      has: () => true,
+    });
+    return renderToStaticMarkup(createElement(ListedSidebar, props));
+  };
+  const panes = [...renderListed().matchAll(/<li data-id="([^"]+)">([^<]*)<\/li>/g)].map((match) => `${match[1]}:${match[2]}`);
+  assert.deepEqual(panes, ["idea:アイデア", "proof:校正", "draft:中間稿", "properties:プロパティ", "plugin:demo:notes:メモ帳"], "the panes offered, in order");
+}
+
 console.log("right sidebar tests passed");
