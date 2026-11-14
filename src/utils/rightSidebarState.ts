@@ -1,4 +1,4 @@
-export const restorableRightSidebarTabs = ["idea", "plot", "proof", "draft", "properties"] as const;
+export const restorableRightSidebarTabs = ["idea", "proof", "draft", "properties"] as const;
 
 export type RestorableRightSidebarTab = (typeof restorableRightSidebarTabs)[number];
 
@@ -9,7 +9,8 @@ export function isRestorableRightSidebarTab(
 }
 
 export function normalizeRightSidebarTab(value: unknown): RestorableRightSidebarTab {
-  return isRestorableRightSidebarTab(value) ? value : "plot";
+  // 「プロット」は BINDER 1-6 でなくなった。保存されている "plot" も、分からない値と同じく「アイデア」で開く。
+  return isRestorableRightSidebarTab(value) ? value : "idea";
 }
 
 export function normalizeRightSidebarCollapsed(value: unknown): boolean {

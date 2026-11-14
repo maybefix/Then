@@ -252,13 +252,13 @@
 }
 
 /* Rounded cards clip their scrollers' ends. The editor (.verticalTypewriterScroller)
-   and the right-pane plot list (.plotPane) set standard `scrollbar-width: thin`
+   sets standard `scrollbar-width: thin`
    + `scrollbar-color`, which on Chromium draws increment/decrement arrows that
    the corner cuts off — and standard scrollbars give no way to hide them.
    Reverting those two props to `auto` re-enables the already-defined
    `::-webkit-scrollbar` (a rounded thumb, no buttons), so each bar ends cleanly
    inside the corner. */
-.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="bronze-"], [data-theme^="moss-"], [data-theme^="violet-"], [data-theme^="rose-"], [data-theme^="aplil-"], [data-theme^="blossom-"], [data-theme="standard"], [data-theme^="signal-red-"], [data-theme^="mono-press-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.verticalTypewriterScroller, .plotPane) {
+.appShell:is([data-theme^="promise-"], [data-theme^="flat-"], [data-theme^="bronze-"], [data-theme^="moss-"], [data-theme^="violet-"], [data-theme^="rose-"], [data-theme^="aplil-"], [data-theme^="blossom-"], [data-theme="standard"], [data-theme^="signal-red-"], [data-theme^="mono-press-"], [data-theme^="minimal-"], [data-theme^="resonance-"], [data-theme^="express-"], [data-theme^="blue-sky-"], [data-theme^="orchestrating-"], [data-theme^="shaping-"]) :is(.verticalTypewriterScroller) {
   scrollbar-width: auto;
   scrollbar-color: auto;
 }

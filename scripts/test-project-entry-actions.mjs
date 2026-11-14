@@ -110,7 +110,6 @@ function setup(world = defaultWorld(), { tauri = true } = {}) {
       collapsedOutlinePathsByWorkspace: { [ROOT]: [p("第一章", "a.txt"), p("c.txt")] },
       collapsedOutlineHeadingKeysByWorkspace: { [ROOT]: [headingKey(p("第一章", "a.txt")), headingKey(p("c.txt"))] },
     },
-    plotCards: [{ id: "plot", kind: "section", num: "001", title: "", body: "@[[第一章/a.txt]] と @[[c.txt]]", expanded: false, managerCollapsed: false }],
     referenceLayout: {
       cards: [referenceCard("第一章/a.txt"), referenceCard("c.txt")],
       recent: [referenceFile("第一章/a.txt")],
@@ -197,7 +196,6 @@ function setup(world = defaultWorld(), { tauri = true } = {}) {
       setDraggingBreadcrumbEntryPath: setter("draggingBreadcrumbEntryPath"),
       breadcrumbDragEntryRef: refs.breadcrumbDragEntryRef,
       setAppState: setter("appState"),
-      setPlotCards: setter("plotCards"),
       setReferenceLayout: setter("referenceLayout"),
       setReferenceCandidates: setter("referenceCandidates"),
       setProjectAst: setter("projectAst"),
@@ -295,7 +293,6 @@ const forgotten = (app) => app.journal.filter((entry) => entry.command === "jour
   assert.equal(refs.lastSavedMarkdownRef.current, "A2");
   assert.deepEqual(app.appState.fileProgress, { [newPath]: "writing", [p("c.txt")]: "done" });
   assert.deepEqual(Object.keys(app.appState.cursorPositions), [newPath, p("c.txt")]);
-  assert.equal(app.plotCards[0].body, "@[[第一章/a2.txt]] と @[[c.txt]]");
   assert.deepEqual(app.referenceLayout.cards.map((card) => card.sourcePath), ["第一章/a2.txt", "c.txt"]);
   assert.deepEqual(app.referenceLayout.recent.map((item) => [item.sourcePath, item.name]), [["第一章/a2.txt", "a2.txt"]]);
   assert.deepEqual(app.referenceCandidates.map((item) => item.sourcePath), ["第一章/a2.txt", "c.txt"]);
@@ -337,7 +334,6 @@ const forgotten = (app) => app.journal.filter((entry) => entry.command === "jour
   assert.equal(app.appState.lastFilePath, p("第1章", "a.txt"));
   assert.equal(app.appState.markdown, "A2");
   assert.equal(app.appState.fileProgress[p("第1章", "a.txt")], "writing");
-  assert.equal(app.plotCards[0].body, "@[[第1章/a.txt]] と @[[c.txt]]");
   assert.equal(app.focusedFolderPath, p("第1章"));
   assert.deepEqual([...app.collapsedWorkspaceFolderPaths], [p("第1章")]);
   assert.deepEqual(app.appState.collapsedFolderPathsByWorkspace[ROOT], [p("第1章")], "a closed folder stays closed under its new name");
@@ -439,12 +435,11 @@ for (const [oldName, answer, expected] of [
   assert.equal(app.appState.lastFilePath, null);
   assert.deepEqual(app.log[3].args, { path: p("第一章", "b.txt") });
   assert.deepEqual(app.loaded, [{ document: { path: p("第一章", "b.txt"), name: "b.txt", content: "B" }, options: { replaceActive: true } }]);
-  // 消したファイルを指す資料カード・最近の資料・資料の候補は外し、プロットの本文（利用者の文章）は残す
+  // 消したファイルを指す資料カード・最近の資料・資料の候補は外す
   // （docs/PROJECT_ENTRY_RETARGET_FIX_PLAN.md の確認1）。
   assert.deepEqual(app.referenceLayout.cards.map((card) => card.sourcePath), ["c.txt"]);
   assert.deepEqual(app.referenceLayout.recent, []);
   assert.deepEqual(app.referenceCandidates.map((item) => item.sourcePath), ["c.txt"]);
-  assert.equal(app.plotCards[0].body, "@[[第一章/a.txt]] と @[[c.txt]]");
   assert.deepEqual(app.appState.collapsedOutlinePathsByWorkspace[ROOT], [p("c.txt")]);
   assert.deepEqual(app.appState.collapsedOutlineHeadingKeysByWorkspace[ROOT], [headingKey(p("c.txt"))]);
   assert.deepEqual(app.proofreadIgnored, { "c.txt": ["ignore-c"] });
@@ -542,7 +537,6 @@ for (const [oldName, answer, expected] of [
   assert.equal(refs.lastSavedMarkdownRef.current, "A2");
   assert.equal(app.appState.fileProgress[newPath], "writing");
   assert.equal(app.appState.fileProgress[oldPath], undefined);
-  assert.equal(app.plotCards[0].body, "@[[a.txt]] と @[[c.txt]]");
   assert.deepEqual(app.referenceLayout.cards.map((card) => card.sourcePath), ["a.txt", "c.txt"]);
   assert.deepEqual(app.anchorRetargets, [[oldPath, newPath]]);
   assert.equal(app.focusedFolderPath, ROOT, "a moved file selects its new folder");
@@ -612,7 +606,6 @@ for (const [oldName, answer, expected] of [
   assert.equal(app.appState.lastFilePath, p("a.txt"));
   assert.equal(app.appState.fileProgress[p("a.txt")], "writing");
   assert.deepEqual(app.anchorRetargets, [[a, p("a.txt")], [b, p("b.txt")]]);
-  assert.equal(app.plotCards[0].body, "@[[a.txt]] と @[[c.txt]]");
   assert.equal(app.focusedFolderPath, ROOT);
   assert.equal(app.projectFolder, movedFolder);
   assert.deepEqual(app.appState.collapsedOutlineHeadingKeysByWorkspace[ROOT], [headingKey(p("a.txt")), headingKey(p("c.txt"))]);

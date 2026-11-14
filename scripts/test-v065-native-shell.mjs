@@ -48,10 +48,12 @@ const sidebarStateCode = ts.transpileModule(sidebarStateSource, {
 const sidebarState = await import(
   `data:text/javascript;base64,${Buffer.from(sidebarStateCode).toString("base64")}`
 );
-for (const tab of ["idea", "plot", "proof", "draft"]) {
+for (const tab of ["idea", "proof", "draft"]) {
   assert.equal(sidebarState.normalizeRightSidebarTab(tab), tab);
 }
-assert.equal(sidebarState.normalizeRightSidebarTab("plugin:missing:view"), "plot");
+// 「プロット」は BINDER 1-6 でなくなった。保存されている "plot" と分からない値は「アイデア」で開く。
+assert.equal(sidebarState.normalizeRightSidebarTab("plot"), "idea");
+assert.equal(sidebarState.normalizeRightSidebarTab("plugin:missing:view"), "idea");
 assert.match(app, /setRightSidebarTabState\(state\.rightSidebarTab\)/);
 assert.match(app, /current\.rightSidebarTab === tab/);
 

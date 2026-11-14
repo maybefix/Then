@@ -6,7 +6,6 @@
     "Noto Sans JP", sans-serif;
   --editor-font-family:
     "Then Ideographic Space", "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", YuMincho, serif;
-  --plot-font-family: var(--editor-font-family);
   --editor-font-size: 24px;
   --editor-line-height: 2.3;
   --ui-font-scale: 1;

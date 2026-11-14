@@ -26,7 +26,6 @@ const { buildAppShellStyle, withIdeographicSpaceFont } = await import(
 const settings = {
   editorFontFamily: "\"Yu Mincho\", serif",
   uiFontFamily: "\"Yu Gothic UI\", sans-serif",
-  plotFontSource: "ui",
   startPageFontSource: "ui",
   uiFontScale: 1.25,
   fontSize: 18,
@@ -43,7 +42,6 @@ const style = buildAppShellStyle(settings, resolvedEditor, resolvedHeading);
 assert.deepEqual(Object.keys(style), [
   "--editor-font-family",
   "--ui-font-family",
-  "--plot-font-family",
   "--start-page-font-family",
   "--ui-font-scale",
   "--editor-font-size",
@@ -58,7 +56,6 @@ assert.equal(style["--editor-font-family"], withIdeographicSpaceFont(resolvedEdi
 assert.notEqual(style["--editor-font-family"], resolvedEditor, "the ideographic space font is appended");
 assert.equal(style["--editor-heading-font-family"], withIdeographicSpaceFont(resolvedHeading));
 assert.equal(style["--ui-font-family"], settings.uiFontFamily);
-assert.equal(style["--plot-font-family"], settings.uiFontFamily);
 assert.equal(style["--start-page-font-family"], settings.uiFontFamily);
 assert.equal(style["--ui-font-scale"], 1.25);
 assert.equal(style["--editor-font-size"], "18px");
@@ -68,13 +65,12 @@ assert.equal(style["--editor-measure-v-ratio"], 0.65);
 assert.equal(style["--typewriter-guide-position"], "45%");
 assert.equal(style["--zone-sidebar-opacity"], 0.6);
 
-// プロットと起動画面を本文のフォントにすると、設定のフォント名（選び直す前）を使う。
+// 起動画面を本文のフォントにすると、設定のフォント名（選び直す前）を使う。
 const editorSourced = buildAppShellStyle(
-  { ...settings, plotFontSource: "editor", startPageFontSource: "editor" },
+  { ...settings, startPageFontSource: "editor" },
   resolvedEditor,
   resolvedHeading,
 );
-assert.equal(editorSourced["--plot-font-family"], withIdeographicSpaceFont(settings.editorFontFamily));
 assert.equal(editorSourced["--start-page-font-family"], withIdeographicSpaceFont(settings.editorFontFamily));
 assert.equal(editorSourced["--editor-font-family"], withIdeographicSpaceFont(resolvedEditor));
 

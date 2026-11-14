@@ -17,7 +17,7 @@ const api = await import(`data:text/javascript;base64,${Buffer.from(bundle.outpu
 const { buildAppShellAppearance, buildAppShellStyle, canvasAppearanceSettings, buildCanvasThemeStyle, canvasAppearanceAttributes, themeCatalog } = api;
 const settings = {
   editorFontFamily: '"Yu Mincho", serif', uiFontFamily: '"Yu Gothic UI", sans-serif',
-  plotFontSource: "ui", startPageFontSource: "editor", uiFontScale: 1.25,
+  startPageFontSource: "editor", uiFontScale: 1.25,
   fontSize: 18, lineHeight: 1.9, editorMeasureHorizontal: 80, editorMeasureVertical: 65,
   typewriterOffset: 45, zoneModeOpacity: 0.6,
 };
@@ -28,7 +28,6 @@ for (const { id: theme } of themeCatalog) {
   assert.deepEqual(shell.style, buildAppShellStyle(current, '"Then Vertical Body"', '"Then Vertical Heading"'));
   assert.equal(shell.style["--editor-font-family"], '"Then Ideographic Space", "Then Vertical Body"');
   assert.equal(shell.style["--editor-heading-font-family"], '"Then Ideographic Space", "Then Vertical Heading"');
-  assert.equal(shell.style["--plot-font-family"], current.uiFontFamily);
   assert.equal(shell.style["--start-page-font-family"], '"Then Ideographic Space", "Yu Mincho", serif');
   const transferred = canvasAppearanceSettings(current);
   assert.deepEqual(transferred, { theme, editorFontFamily: current.editorFontFamily, uiFontFamily: current.uiFontFamily, uiFontScale: 1.25 });

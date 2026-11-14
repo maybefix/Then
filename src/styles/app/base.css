@@ -4118,7 +4118,7 @@ html:not([data-window-fullscreen="true"])
 
 .toast {
   position: absolute;
-  /* 削除の「元に戻す」をプロット管理画面（モーダル z-index 10）の上でも押せるように。 */
+  /* 削除の「元に戻す」をモーダル（z-index 10）の上でも押せるように。 */
   z-index: 11;
   bottom: 38px;
   left: 50%;
@@ -7046,10 +7046,6 @@ body {
 .visiblePluginRuntimeHost[data-active-view-ready="true"] .activePluginRuntimeFrame {
   display: block;
   pointer-events: auto;
-}
-
-.plotRightSidebarBody {
-  padding: 8px 10px 10px 12px;
 }
 
 /* ===== 資料レイヤー ===== */

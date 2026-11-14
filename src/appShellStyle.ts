@@ -11,10 +11,6 @@ export function buildAppShellStyle(
     {
       "--editor-font-family": withIdeographicSpaceFont(editorFontFamily),
       "--ui-font-family": settings.uiFontFamily,
-      "--plot-font-family":
-        settings.plotFontSource === "ui"
-          ? settings.uiFontFamily
-          : withIdeographicSpaceFont(settings.editorFontFamily),
       "--start-page-font-family":
         settings.startPageFontSource === "editor"
           ? withIdeographicSpaceFont(settings.editorFontFamily)

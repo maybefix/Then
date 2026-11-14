@@ -23,7 +23,6 @@ export function ScopeStartPage({
   folder,
   onOpenFile,
   onCreateFile,
-  onOpenPlot,
   onOpenCanvas,
   onEditWork,
 }: {
@@ -32,7 +31,6 @@ export function ScopeStartPage({
   onEditWork?: () => void;
   onOpenFile: (path: string) => void;
   onCreateFile: () => void;
-  onOpenPlot: () => void;
   onOpenCanvas: () => void;
 }) {
   const isLibraryRoot = folder.library?.role === "root";
@@ -56,9 +54,6 @@ export function ScopeStartPage({
       <div className="newTabActions">
         <button type="button" onClick={onCreateFile}>
           ＋ 新規ファイル
-        </button>
-        <button type="button" onClick={onOpenPlot}>
-          プロットを開く
         </button>
         <button type="button" onClick={onOpenCanvas}>
           Canvas を開く

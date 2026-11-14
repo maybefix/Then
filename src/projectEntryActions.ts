@@ -1,6 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Dispatch, DragEvent, MutableRefObject, SetStateAction } from "react";
-import { replacePlotReferencePath } from "./components/plot/plotCardUtils";
 import { createProjectAstSkeleton, removeProjectAstPaths } from "./editor/ast/projectAst";
 import type { ProjectAst } from "./editor/ast/types";
 import {
@@ -23,7 +22,6 @@ import type {
   DeleteProjectEntryPlan,
   DeleteProjectEntryResult,
   DocumentTab,
-  PlotCard,
   ProjectEntry,
   ProjectFolder,
   ReferenceFileInfo,
@@ -107,7 +105,6 @@ export type ProjectEntryActionDeps = {
   setDraggingBreadcrumbEntryPath: Dispatch<SetStateAction<string | null>>;
   breadcrumbDragEntryRef: MutableRefObject<{ folderPath: string; entryPath: string } | null>;
   setAppState: Dispatch<SetStateAction<AppState>>;
-  setPlotCards: Dispatch<SetStateAction<PlotCard[]>>;
   setReferenceLayout: Dispatch<SetStateAction<ReferenceLayout>>;
   setReferenceCandidates: Dispatch<SetStateAction<ReferenceFileInfo[]>>;
   setProjectAst: Dispatch<SetStateAction<ProjectAst | null>>;
@@ -172,7 +169,6 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     setDraggingBreadcrumbEntryPath,
     breadcrumbDragEntryRef,
     setAppState,
-    setPlotCards,
     setReferenceLayout,
     setReferenceCandidates,
     setProjectAst,
@@ -219,12 +215,6 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
       const oldReferencePath = toProjectRelativePath(rootPath, change.oldPath);
       const newReferencePath = toProjectRelativePath(rootPath, change.newPath);
       if (!oldReferencePath || !newReferencePath) continue;
-      setPlotCards((current) =>
-        current.map((card) => ({
-          ...card,
-          body: replacePlotReferencePath(card.body, oldReferencePath, newReferencePath),
-        })),
-      );
       setReferenceLayout((current) => ({
         ...current,
         cards: current.cards.map((card) =>
@@ -312,7 +302,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
   const closeTabJournals = (tabs: DocumentTab[]) =>
     Promise.all(tabs.map((tab) => closeDocumentJournal(tab.id)));
 
-  /** 削除したパスを、retargetPathOwners と同じ置き場所から取り除く。プロットの本文のリンクは、利用者の文章なので残す。 */
+  /** 削除したパスを、retargetPathOwners と同じ置き場所から取り除く。 */
   const removePathOwners = (rootPath: string, removedPath: string) => {
     const deletedAnchorRoot = toProjectRelativePath(rootPath, removedPath)
       .replace(/[\\/]+/g, "/")

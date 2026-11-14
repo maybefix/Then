@@ -90,8 +90,11 @@ for (const theme of ["aplil-light", "aplil-dark", "blossom-light", "blossom-dark
     ai: { provider: "openAi", models: { openAi: "old-model" }, defaultMode: "consult" },
   } };
   const after = normalizeState(legacy);
-  assert.deepEqual(after, { ...before, rightSidebarTab: "plot" }, "old AI settings are dropped without changing writing data or other settings");
+  assert.deepEqual(after, { ...before, rightSidebarTab: "idea" }, "old AI settings are dropped without changing writing data or other settings");
   assert.equal("ai" in after.settings, false, "removed settings are not persisted again");
+  const withPlotFont = normalizeState({ ...before, settings: { ...before.settings, plotFontSource: "ui" } });
+  assert.equal("plotFontSource" in withPlotFont.settings, false, "the removed plot font setting is dropped (BINDER 1-6)");
+  assert.equal(normalizeState({ ...before, rightSidebarTab: "plot" }).rightSidebarTab, "idea", "a stored plot tab opens the idea pane");
   assert.deepEqual(normalizeState(JSON.parse(JSON.stringify(after))), after, "the migrated state survives another save and load");
   assert.equal(legacy.settings.ai.provider, "openAi", "migration leaves its input untouched");
 }

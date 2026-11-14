@@ -213,7 +213,6 @@
   .fileViewSummary,
   .modalHeader,
   .modalActions,
-  .plotPaneHeader,
   .referencePaneTop
 ) {
   border-color: var(--sen-ink);
@@ -378,35 +377,6 @@
   border-color: var(--sen-vermilion);
   outline: 2px solid var(--sen-vermilion);
   outline-offset: 1px;
-  box-shadow: none;
-}
-
-/* Plot is an unboxed writing surface in both collapsed and expanded states. */
-.appShell[data-theme|="sen"] .plotRightSidebarBody > .plotPane,
-.appShell[data-theme|="sen"] .plotCard,
-.appShell[data-theme|="sen"] .plotCard:not(:last-child),
-.appShell[data-theme|="sen"] .plotCardNum,
-.appShell[data-theme|="sen"] .expandedPlotCard .plotCardNum,
-.appShell[data-theme|="sen"] :is(.plotCardTitle, .plotCardBody) {
-  border: 0;
-  outline: 0;
-  box-shadow: none;
-}
-
-.appShell[data-theme|="sen"] .plotRightSidebarBody > .plotPane,
-.appShell[data-theme|="sen"] :is(.plotCardNum, .plotCardTitle, .plotCardBody) {
-  background: var(--sen-paper);
-}
-
-.appShell[data-theme|="sen"] .plotCardBody,
-.appShell[data-theme|="sen"] :is(.plotCardTitle, .plotCardBody):focus {
-  color: var(--sen-ink);
-}
-
-.appShell[data-theme|="sen"] :is(.plotCardTitle, .plotCardBody):focus {
-  border: 0;
-  background: var(--sen-paper);
-  outline: 0;
   box-shadow: none;
 }
 

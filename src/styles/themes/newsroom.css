@@ -221,7 +221,7 @@
   box-shadow: none;
 }
 
-.appShell[data-theme="newsroom-light"] :is(.ideaCard, .rightSidebar .snippetCard, .plotCard, .themeOption) {
+.appShell[data-theme="newsroom-light"] :is(.ideaCard, .rightSidebar .snippetCard, .themeOption) {
   border: 0;
   border-bottom: 1px solid var(--border-subtle);
   border-radius: 0;
@@ -250,10 +250,7 @@
   .modalForm select,
   .modalForm textarea,
   .ideaSearch input,
-  .projectSearchInput,
-  .plotCardTitle,
-  .plotCardBody
-) {
+  .projectSearchInput) {
   border-color: var(--border-subtle);
   background: #fff;
   box-shadow: none;
@@ -394,7 +391,7 @@
   box-shadow: none;
 }
 
-.appShell[data-theme="newsroom-dark"] :is(.ideaCard, .rightSidebar .snippetCard, .plotCard, .themeOption) {
+.appShell[data-theme="newsroom-dark"] :is(.ideaCard, .rightSidebar .snippetCard, .themeOption) {
   border: 0;
   border-bottom: 1px solid var(--border-subtle);
   border-radius: 0;
@@ -423,10 +420,7 @@
   .modalForm select,
   .modalForm textarea,
   .ideaSearch input,
-  .projectSearchInput,
-  .plotCardTitle,
-  .plotCardBody
-) {
+  .projectSearchInput) {
   border-color: var(--border-subtle);
   background: var(--bg-panel-strong);
   box-shadow: none;

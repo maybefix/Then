@@ -101,7 +101,7 @@ export function usePluginHost({
   }, [activePluginScreen, appMode]);
   useEffect(() => {
     if (rightSidebarTab.startsWith("plugin:") && !activePluginView) {
-      setRightSidebarTab("plot");
+      setRightSidebarTab("idea");
     }
   }, [activePluginView, rightSidebarTab]);
   useEffect(() => {
