@@ -241,6 +241,7 @@ function setup(world = defaultWorld(), { tauri = true } = {}) {
       replaceActiveTab: (nextTab) => app.replaced.push(nextTab),
       setProjectProofreadIgnored: setter("proofreadIgnored"),
       setClosedDocumentTabs: setter("closedDocumentTabs"),
+      retargetPostNotes: (rootPath, changes) => (app.postNoteRetargets ??= []).push([rootPath, changes]),
     });
   };
   return { app, refs, actions };
@@ -297,6 +298,7 @@ const forgotten = (app) => app.journal.filter((entry) => entry.command === "jour
   assert.deepEqual(app.referenceLayout.recent.map((item) => [item.sourcePath, item.name]), [["第一章/a2.txt", "a2.txt"]]);
   assert.deepEqual(app.referenceCandidates.map((item) => item.sourcePath), ["第一章/a2.txt", "c.txt"]);
   assert.deepEqual(app.anchorRetargets, [[oldPath, newPath]]);
+  assert.deepEqual(app.postNoteRetargets, [[ROOT, [{ oldPath, newPath }]]], "links from posts to notes follow the rename (BINDER 2-3)");
   assert.equal(app.focusedFolderPath, p("第一章"));
   assert.deepEqual([...app.collapsedWorkspaceFolderPaths], [p("第一章")], "a file rename leaves folders alone");
   assert.equal(refs.projectAstBuildIdRef.current, 1);
@@ -539,6 +541,7 @@ for (const [oldName, answer, expected] of [
   assert.equal(app.appState.fileProgress[oldPath], undefined);
   assert.deepEqual(app.referenceLayout.cards.map((card) => card.sourcePath), ["a.txt", "c.txt"]);
   assert.deepEqual(app.anchorRetargets, [[oldPath, newPath]]);
+  assert.deepEqual(app.postNoteRetargets, [[ROOT, [{ oldPath, newPath }]]], "links from posts to notes follow the move (BINDER 2-3)");
   assert.equal(app.focusedFolderPath, ROOT, "a moved file selects its new folder");
   assert.equal(app.projectFolder, movedFolder);
   assertSaveMarkUntouched(app, "move");
@@ -606,6 +609,7 @@ for (const [oldName, answer, expected] of [
   assert.equal(app.appState.lastFilePath, p("a.txt"));
   assert.equal(app.appState.fileProgress[p("a.txt")], "writing");
   assert.deepEqual(app.anchorRetargets, [[a, p("a.txt")], [b, p("b.txt")]]);
+  assert.deepEqual(app.postNoteRetargets.map(([root, changes]) => [root, changes.map(({ oldPath, newPath }) => [oldPath, newPath])]), [[ROOT, [[a, p("a.txt")], [b, p("b.txt")]]]], "links from posts to notes follow every move at once (BINDER 2-3)");
   assert.equal(app.focusedFolderPath, ROOT);
   assert.equal(app.projectFolder, movedFolder);
   assert.deepEqual(app.appState.collapsedOutlineHeadingKeysByWorkspace[ROOT], [headingKey(p("a.txt")), headingKey(p("c.txt"))]);
