@@ -5,16 +5,10 @@
 // The synopsis is read with the YAML parser, which loads on the first read.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import type { SynopsisState } from "../../corkboard/synopsis";
-import { fileProgressLabels, type FileProgressStatus, type ProjectEntry, type TextDocument } from "../../types";
+import { fileProgressLabels, fileProgressMarkers, type FileProgressStatus, type ProjectEntry, type TextDocument } from "../../types";
 import "./corkboard.css";
 
-const PROGRESS_MARKERS: Record<FileProgressStatus, string> = {
-  todo: "未",
-  writing: "執",
-  revising: "推",
-  done: "完",
-  archived: "ア",
-};
+const PROGRESS_MARKERS = fileProgressMarkers;
 
 const charCountFormatter = new Intl.NumberFormat("ja-JP");
 
