@@ -72,6 +72,9 @@ pub(super) struct PostView {
     filed: bool,
     /// 「ノートにする」（2-3）で作ったノートがあるか。受信箱から外れる。
     noted: bool,
+    /// そのノートの場所（2-3）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    note: Option<note::NoteView>,
     /// この行のハッシュ。本文を直す・消すときに返してもらう。
     hash: String,
 }
@@ -205,7 +208,8 @@ fn view(post: &PostLine, line: &str) -> PostView {
         reply_to: post.reply_to.clone(),
         edited: post.edited.clone(),
         filed: post.filed,
-        noted: post.extra.get("note").is_some_and(|note| !note.is_null()),
+        noted: note::has_note(post),
+        note: None,
         hash: line_hash(line),
     }
 }
@@ -263,7 +267,12 @@ fn signature(file: &Path) -> String {
 
 fn snapshot(place: &Place, work: Option<WorkRef>, imported: usize) -> Result<PostsSnapshot, String> {
     let lines = read_lines(&place.file)?;
-    let posts = latest_indexes(&lines).into_iter().map(|(index, post)| view(&post, &lines[index])).collect();
+    let mut entries: Vec<(PostView, Option<note::StoredNote>)> = latest_indexes(&lines)
+        .into_iter()
+        .map(|(index, post)| (view(&post, &lines[index]), note::stored_note(&post)))
+        .collect();
+    note::resolve_notes(place, &mut entries);
+    let posts = entries.into_iter().map(|(view, _)| view).collect();
     Ok(PostsSnapshot { posts, work, signature: signature(&place.file), imported })
 }
 
@@ -465,6 +474,8 @@ pub(super) fn posts_delete(scope_path: String, id: String, expected_hash: String
 pub(super) fn posts_restore(scope_path: String, line: String, index: usize) -> Result<PostsSnapshot, String> {
     restore(Path::new(&scope_path), &line, index)
 }
+
+pub(super) mod note;
 
 #[cfg(test)]
 mod tests;

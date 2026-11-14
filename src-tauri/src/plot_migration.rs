@@ -27,7 +27,7 @@ pub(super) struct PlotMigrationResult {
     note_path: Option<String>,
 }
 
-fn relative_slash_path(root: &Path, path: &Path) -> String {
+pub(super) fn relative_slash_path(root: &Path, path: &Path) -> String {
     path.strip_prefix(root)
         .unwrap_or(path)
         .components()
@@ -37,7 +37,7 @@ fn relative_slash_path(root: &Path, path: &Path) -> String {
 }
 
 /// `name`、`name-2`、`name-3` … の順に、`exists` が偽になる最初の名前。
-fn first_free_name(stem: &str, extension: &str, exists: impl Fn(&str) -> bool) -> String {
+pub(super) fn first_free_name(stem: &str, extension: &str, exists: impl Fn(&str) -> bool) -> String {
     let mut index = 1;
     loop {
         let candidate = if index == 1 {
@@ -79,7 +79,7 @@ fn backup_stamp(millis: i64) -> String {
     )
 }
 
-fn write_new_file(path: &Path, content: &[u8]) -> Result<(), String> {
+pub(super) fn write_new_file(path: &Path, content: &[u8]) -> Result<(), String> {
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -116,8 +116,8 @@ fn write_backup(root: &Path, cards: &[PlotCardConfig], migrated_at: i64) -> Resu
 
 /// ノートを置くフォルダ。ライブラリ直下は三段でないのでそのまま。作品は素材フォルダで、なければ「素材」を作る。
 /// 登録されていないふつうのフォルダ「素材」があれば、それは原稿なので使わず「素材-2」を作る（確認1の 2）。
-/// 返り値の2つ目は、今回作ったフォルダ（失敗したら消す）。
-fn note_folder(root: &Path, materials_folder: Option<&str>) -> Result<(PathBuf, Option<String>), String> {
+/// 返り値の2つ目は、今回作ったフォルダ（失敗したら消す）。2-3「ノートにする」も使う（post_stream.rs）。
+pub(super) fn note_folder(root: &Path, materials_folder: Option<&str>) -> Result<(PathBuf, Option<String>), String> {
     if library::is_library_root(root) {
         return Ok((root.to_path_buf(), None));
     }
