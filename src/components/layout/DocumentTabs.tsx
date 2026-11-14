@@ -12,6 +12,8 @@ type DocumentTabsProps = {
   activeTabId: string;
   /** ファイルパスごとの進捗ラベル。タブのファイルアイコンを色分けする。 */
   fileProgress: Record<string, FileProgressStatus>;
+  /** 素材（ノート）のパスか。ノートのタブは印をノートの形にし、進捗の色を付けない（BINDER 2-2）。 */
+  isNotePath?: (path: string) => boolean;
   onActivateTab: (tabId: string) => void;
   onCloseTabs: (tabIds: string[]) => void;
   /** tabId を beforeTabId の直前へ移す。null なら末尾。 */
@@ -66,6 +68,7 @@ export function DocumentTabs({
   displayMode,
   activeTabId,
   fileProgress,
+  isNotePath,
   onActivateTab,
   onCloseTabs,
   onMoveTab,
@@ -411,7 +414,8 @@ export function DocumentTabs({
         {visibleTabs.map((tab, index) => {
           const isActive = tab.id === activeTabId;
           const tabStatus = getTabStatusLabel(tab);
-          const progress = tab.path ? fileProgress[tab.path] ?? "todo" : null;
+          const isNote = Boolean(tab.path && isNotePath?.(tab.path));
+          const progress = tab.path && !isNote ? fileProgress[tab.path] ?? "todo" : null;
           const isDirty = isDirtyDocumentTab(tab);
           const isDropBefore = dropTarget?.beforeTabId === tab.id;
           const isDropAfter =
@@ -481,14 +485,24 @@ export function DocumentTabs({
                   className={[
                     "documentTabKind",
                     tab.kind === "scratch" ? "scratchDocumentTabKind" : "",
+                    isNote ? "noteDocumentTabKind" : "",
                     progress ? `progressDocumentTabKind progressText-${progress}` : "",
                   ].filter(Boolean).join(" ")}
                   viewBox="0 0 24 24"
                   aria-hidden="true"
                   focusable="false"
                 >
-                  <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-                  <path d="M14 3v5h5" />
+                  {isNote ? (
+                    <>
+                      <path d="M6 3h12a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+                      <path d="M8.5 8h7M8.5 12h7M8.5 16h4.5" />
+                    </>
+                  ) : (
+                    <>
+                      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+                      <path d="M14 3v5h5" />
+                    </>
+                  )}
                 </svg>
                 <span className="documentTabText">
                   <span className="documentTabName">{tab.name}</span>

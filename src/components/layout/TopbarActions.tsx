@@ -18,6 +18,8 @@ export type TopbarActionsProps = {
   appMode: AppMode;
   isEditorFocusMode: boolean;
   settings: EditorSettings;
+  /** ノート（素材）を開いているあいだは横書きに決まっているので、本文方向のボタンを押せなくする（BINDER 2-2）。 */
+  isNoteDocument?: boolean;
   toggleEditorFocusMode: () => void;
   isRightSidebarCollapsed: boolean;
   setIsRightSidebarCollapsed: (collapsed: boolean) => void;
@@ -38,7 +40,7 @@ export type TopbarActionsProps = {
 
 export function TopbarActions(props: TopbarActionsProps) {
   const {
-    appMode, isEditorFocusMode, settings, toggleEditorFocusMode, isRightSidebarCollapsed,
+    appMode, isEditorFocusMode, settings, isNoteDocument = false, toggleEditorFocusMode, isRightSidebarCollapsed,
     setIsRightSidebarCollapsed, projectFolder, handleQuickCreateManuscriptSnapshot, updateSettings,
     setShouldReturnToSettingsAfterThemePicker, setIsThemePickerModalOpen, setIsSettingsModalOpen,
     modeMenuRef, modeMenuButtonRef, isModeMenuOpen, activeModeMenuEntry, setIsModeMenuOpen,
@@ -96,8 +98,9 @@ export function TopbarActions(props: TopbarActionsProps) {
         </button>
       )}
       <button
-        className={`iconButton ${settings.writingMode === "horizontal-tb" ? "activeIconButton" : ""}`}
+        className={`iconButton ${settings.writingMode === "horizontal-tb" && !isNoteDocument ? "activeIconButton" : ""}`}
         type="button"
+        disabled={isNoteDocument}
         aria-label={settings.writingMode === "horizontal-tb" ? "縦書きに切り替え" : "横書きに切り替え"}
         title={settings.writingMode === "horizontal-tb" ? "縦書きに切り替え" : "横書きに切り替え"}
         onClick={() =>
