@@ -6706,6 +6706,7 @@ export default function App() {
     showToast,
     refreshProjectFolder,
     openFile: (path) => handleProjectFileSelect(path),
+    activeFilePath: () => currentFilePath,
     openFileInWork: async (workRoot, path) => {
       if (await openWorkspace(workRoot)) setPendingNoteOpen({ workRoot, path });
     },

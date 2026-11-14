@@ -36,6 +36,8 @@ export type PostNoteDeps = {
   openFile: (path: string) => Promise<void>;
   /** 別の作品に切り替えてから、そのファイルを開く。 */
   openFileInWork: (workRoot: string, path: string) => Promise<void>;
+  /** いま開いているファイル。 */
+  activeFilePath: () => string | null;
   /** そのファイルのタブに、まだ保存していない変更があるか。 */
   isFileDirty: (path: string) => boolean;
   /** 確認なしでゴミ箱へ移す。移せたら true。 */
@@ -43,8 +45,8 @@ export type PostNoteDeps = {
 };
 
 export function createPostNoteActions(depsRef: MutableRefObject<PostNoteDeps>) {
-  const undoMakeNote = async (made: MadeNote, ids: string[], name: string) => {
-    const { stream, isFileDirty, refreshProjectFolder, projectFolder, trashFile, showToast } = depsRef.current;
+  const undoMakeNote = async (made: MadeNote, ids: string[], name: string, previousPath: string | null) => {
+    const { stream, isFileDirty, refreshProjectFolder, projectFolder, trashFile, showToast, activeFilePath, openFile } = depsRef.current;
     // 作ったあとに書き足していれば（保存前の変更も）、ノートは残してリンクだけ外す。
     const dirty = isFileDirty(made.notePath);
     const unlinked = await stream.unlinkNote(ids, made.notePath, made.noteHash);
@@ -53,6 +55,10 @@ export function createPostNoteActions(depsRef: MutableRefObject<PostNoteDeps>) {
       showToast(`投稿を受信箱に戻しました（ノート「${name}」は残しました）`);
       return;
     }
+    // ノートを開いたままなら、作る前に開いていたファイルへ戻ってから消す（開いているファイルを消すと、
+    // 削除は一覧の最初のファイルを開き直すため）。
+    const active = activeFilePath();
+    if (previousPath && active && isSamePath(active, made.notePath)) await openFile(previousPath);
     const folder = (await refreshProjectFolder(projectFolder.path)) ?? projectFolder;
     if (await trashFile(folder, made.notePath)) {
       showToast(`投稿を受信箱に戻し、ノート「${name}」をゴミ箱へ移しました`);
@@ -61,8 +67,9 @@ export function createPostNoteActions(depsRef: MutableRefObject<PostNoteDeps>) {
 
   /** 投稿と、その下の返信をノートにする。ライブラリ直下（作品がない）では何もしない。 */
   const makeNote = async (post: Post) => {
-    const { stream, projectFolder, requestInput, refreshProjectFolder, openFile, showToast } = depsRef.current;
+    const { stream, projectFolder, requestInput, refreshProjectFolder, openFile, showToast, activeFilePath } = depsRef.current;
     if (!projectFolder || !stream.work) return;
+    const previousPath = activeFilePath();
     const posts = noteThread(stream.posts, post.id);
     if (posts.length === 0) return;
     const entered = await requestInput({
@@ -82,7 +89,7 @@ export function createPostNoteActions(depsRef: MutableRefObject<PostNoteDeps>) {
     const ids = posts.map((entry) => entry.id);
     showToast(`ノート「${label}」を作りました`, {
       label: "元に戻す",
-      onClick: () => void undoMakeNote(made, ids, label),
+      onClick: () => void undoMakeNote(made, ids, label, previousPath),
     });
   };
 

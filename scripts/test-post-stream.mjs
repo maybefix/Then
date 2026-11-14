@@ -485,12 +485,14 @@ test("アプリに戻ったとき、ファイルが変わっていれば読み�
 /** 「ノートにする」の App 側の入れ物。呼ばれた操作を記録する。 */
 function noteDepsFor({ name = "手紙", dirty = false } = {}) {
   const log = [];
+  let active = "C:\\lib\\作品A\\本文.md";
   const deps = {
     requestInput: async (options) => { log.push(["input", options]); return name; },
     refreshProjectFolder: async (folderPath) => { log.push(["refresh", folderPath]); return { path: folderPath, name: "", children: [] }; },
-    openFile: async (path) => { log.push(["open", path]); },
+    openFile: async (path) => { log.push(["open", path]); active = path; },
     openFileInWork: async (workRoot, path) => { log.push(["openInWork", workRoot, path]); },
     isFileDirty: () => dirty,
+    activeFilePath: () => active,
     trashFile: async (_folder, path) => { log.push(["trash", path]); return true; },
   };
   return { deps, log };
@@ -555,7 +557,11 @@ test("「元に戻す」はリンクを外して受信箱に戻し、作った�
   await settle();
   const [, args] = backend.calls.find(([command]) => command === "posts_unlink_note");
   assert.deepEqual(args, { scopePath: "C:/lib/作品A", ids: ["p1"], notePath: "C:\\lib\\作品A\\素材\\手紙.md", noteHash: "nh-手紙" });
-  assert.deepEqual(log.at(-1), ["trash", "C:\\lib\\作品A\\素材\\手紙.md"]);
+  assert.deepEqual(log.slice(-3), [
+    ["open", "C:\\lib\\作品A\\本文.md"],
+    ["refresh", "C:/lib/作品A"],
+    ["trash", "C:\\lib\\作品A\\素材\\手紙.md"],
+  ], "back to the file open before, then the note goes (deleting the open file would reopen the first file in the list)");
   assert.equal(toasts.at(-1).message, "投稿を受信箱に戻し、ノート「手紙」をゴミ箱へ移しました");
   assert.deepEqual(bodies(container), ["一"]);
   assert.ok(button(item(container, "一"), "ノートにする"));
