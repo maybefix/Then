@@ -3624,6 +3624,10 @@ export default function App() {
   // 投稿の流れ（BINDER 2-1）。開いているフォルダから、Rust が投稿のファイルの場所を決める。
   const postStream = usePostStream(projectFolder?.path ?? null, { showToast });
   const postInboxCount = useMemo(() => countInbox(postStream.posts), [postStream.posts]);
+  // ファイル一覧が変わったら（Then の中の削除・改名・移動、アプリに戻ったときの読み直し）、ノートの札が指すファイルが
+  // あるかを見直す（BINDER 2-3）。投稿のファイルが同じで、札もなければ読まない。
+  const refreshPosts = postStream.refresh;
+  useEffect(() => { void refreshPosts(); }, [projectFolder, refreshPosts]);
   const postFilter = appState.postFilter;
   const setPostFilter = useCallback((filter: PostFilter) => {
     setAppState((current) => (current.postFilter === filter ? current : { ...current, postFilter: filter }));

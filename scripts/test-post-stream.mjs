@@ -608,6 +608,19 @@ test("別の作品のノートの札は作品名を添え、その作品に切�
   unmount();
 });
 
+test("ノートの札があれば、投稿のファイルが同じでもアプリに戻ったときに読み直す（ノートが消えたかを見る）", async () => {
+  const backend = fakeBackend({ initial: [{ id: "p1", at: "2026-11-14T09:00:00+09:00", body: "札", work: A, note: { work: A.id, path: "素材/札.md", workRoot: "C:/lib/作品A", workName: "作品A" } }] });
+  const { container, unmount } = await mount({ initialFilter: "all" });
+  const loads = () => backend.calls.filter(([command]) => command === "posts_load").length;
+  const before = loads();
+  backend.lines()[0].noteExists = false;
+  await act(async () => window.dispatchEvent(new window.Event("focus")));
+  await settle();
+  assert.equal(loads(), before + 1);
+  assert.ok(item(container, "札").querySelector(".postNoteTag").classList.contains("isMissing"));
+  unmount();
+});
+
 let failed = 0;
 for (const [name, fn] of cases) {
   try {

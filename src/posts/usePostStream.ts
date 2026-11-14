@@ -33,7 +33,7 @@ export type PostStream = {
   unlinkNote: (ids: string[], notePath: string, noteHash: string) => Promise<UnlinkedNote | null>;
   /** Then の中の改名・移動に合わせて、ノートへのリンクを付け替える。 */
   retargetNotes: (changes: { oldPath: string; newPath: string }[]) => Promise<void>;
-  /** ファイルが変わっていれば読み直す（右のペインを開いたとき・アプリに戻ったとき）。 */
+  /** ファイルが変わっていれば読み直す（右のペインを開いたとき・アプリに戻ったとき・ファイル一覧が変わったとき）。ノートの札があれば必ず読み直す。 */
   refresh: () => Promise<void>;
 };
 
@@ -50,6 +50,8 @@ export function usePostStream(scopePath: string | null, { showToast }: Options):
   const scopeRef = useRef(scopePath);
   scopeRef.current = scopePath;
   const signatureRef = useRef<string | null>(null);
+  /** ノートの札があるか。あれば、投稿のファイルが同じでも読み直す（ノートの側が消えた・移ったかを見るため。2-3）。 */
+  const hasNotesRef = useRef(false);
   /** 最初の読み込みが失敗したか。失敗したときだけ、読み直しの要求で読み込みをやり直す。 */
   const loadFailedRef = useRef(false);
   const toastRef = useRef(showToast);
@@ -58,6 +60,7 @@ export function usePostStream(scopePath: string | null, { showToast }: Options):
   const accept = useCallback((scope: string, next: PostsSnapshot) => {
     if (scopeRef.current !== scope) return;
     signatureRef.current = next.signature;
+    hasNotesRef.current = next.posts.some((post) => post.note);
     setSnapshot(next);
   }, []);
 
@@ -101,7 +104,7 @@ export function usePostStream(scopePath: string | null, { showToast }: Options):
     if (signatureRef.current === null && !loadFailedRef.current) return;
     try {
       const signature = await invoke<string>("posts_signature", { scopePath: scope });
-      if (signature === signatureRef.current) return;
+      if (signature === signatureRef.current && !hasNotesRef.current) return;
     } catch {
       // 読み直してみる。
     }
