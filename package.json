@@ -79,6 +79,8 @@
     "test:synopsis-actions": "node scripts/test-synopsis-actions.mjs",
     "test:corkboard": "node scripts/test-corkboard.mjs",
     "test:scene-pane": "node scripts/test-scene-pane.mjs",
+    "test:post-stream": "node scripts/test-post-stream.mjs",
+    "test:post-stream-rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- post_stream:: atomic_file::",
     "test:plot-migration": "node scripts/test-plot-migration.mjs",
     "test:plot-migration-rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- plot_migration::",
     "test:property-type-store": "node scripts/test-property-type-store.mjs",

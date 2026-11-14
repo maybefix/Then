@@ -40,6 +40,8 @@ export function usePostStream(scopePath: string | null, { showToast }: Options):
   const scopeRef = useRef(scopePath);
   scopeRef.current = scopePath;
   const signatureRef = useRef<string | null>(null);
+  /** 最初の読み込みが失敗したか。失敗したときだけ、読み直しの要求で読み込みをやり直す。 */
+  const loadFailedRef = useRef(false);
   const toastRef = useRef(showToast);
   toastRef.current = showToast;
 
@@ -67,6 +69,7 @@ export function usePostStream(scopePath: string | null, { showToast }: Options):
     } catch (error) {
       if (scopeRef.current === scope) {
         signatureRef.current = null;
+        loadFailedRef.current = true;
         setSnapshot(null);
       }
       console.warn("[posts] load failed", error);
@@ -75,6 +78,7 @@ export function usePostStream(scopePath: string | null, { showToast }: Options):
 
   useEffect(() => {
     signatureRef.current = null;
+    loadFailedRef.current = false;
     setSnapshot(null);
     if (!scopePath || !isTauriRuntime()) return;
     void load(scopePath);
@@ -83,6 +87,8 @@ export function usePostStream(scopePath: string | null, { showToast }: Options):
   const refresh = useCallback(async () => {
     const scope = scopeRef.current;
     if (!scope || !isTauriRuntime()) return;
+    // 最初の読み込みがまだなら、それに任せる（右のペインは開いた直後にも読み直しを頼むため、二重に読まない）。
+    if (signatureRef.current === null && !loadFailedRef.current) return;
     try {
       const signature = await invoke<string>("posts_signature", { scopePath: scope });
       if (signature === signatureRef.current) return;
