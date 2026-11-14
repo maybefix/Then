@@ -475,6 +475,24 @@ for (const [oldName, answer, expected] of [
   assert.equal(app.loaded.some(({ options }) => options?.replaceActive), false, "the deleted tab is gone, so nothing is replaced");
 }
 
+// ---- 削除（フォルダ。消えるタブが、開いているタブより前にもある） ----
+// 消したタブの場所は、残るタブだけで数える。
+{
+  const world = defaultWorld();
+  world.openTabs = [world.openTabs[0], tab(p("c.txt")), tab(p("第一章", "b.txt"))];
+  world.activeTabId = `file:${p("第一章", "b.txt")}`;
+  const { app, actions } = setup(world);
+  app.commands.plan_delete_project_entry = () => ({ rootKind: "folder", textFileCount: 2, nonTextFileCount: 0, folderCount: 1, warnings: [] });
+  app.commands.delete_project_entry_to_trash = () => ({ deletedPaths: [p("第一章")], fallbackUsed: "none" });
+  app.commands.read_text_file = ({ path }) => ({ path, name: "c.txt", content: "C" });
+  app.refreshedFolder = projectFolder([file(p("c.txt"))]);
+  app.confirmAnswers.push(true);
+  await actions().handleDeleteProjectEntry(folder(p("第一章"), []));
+
+  assert.deepEqual(app.openTabs.map((item) => item.path), [p("c.txt")]);
+  assert.deepEqual(app.loaded.map(({ options }) => options), [{ index: 1 }], "only the tabs left are counted");
+}
+
 // ---- 削除（フォルダ、最後のファイルまで消える、Then の Trash） ----
 {
   const { app, refs, actions } = setup();
