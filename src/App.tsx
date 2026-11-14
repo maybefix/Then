@@ -7363,6 +7363,22 @@ export default function App() {
     });
   };
 
+  // 「この場面」（BINDER 1-7）: 本文に出ている文書の概要と進捗。本文かコルクボードを出しているときだけ。
+  // 進捗は一覧の項目のパスで引き・書く（バインダーとコルクボードと同じキー）。素材・作品の外・無題の文書は進捗を持たない。
+  const sceneEntry = currentFilePath && projectFolder ? findProjectEntry(projectFolder.children, currentFilePath) : null;
+  const sceneProgressPath = sceneEntry?.kind === "file" && sceneEntry.role !== "material" ? sceneEntry.path : null;
+  const scene = {
+    markdown:
+      (appMode === "write" || appMode === "corkboard") && activeTab && activeTab.kind !== "empty" && !isNewTabStartPage
+        ? markdown
+        : null,
+    onChangeMarkdown: (next: string) => updateFrontMatter(parseFrontMatter(next).metadata),
+    progress: sceneProgressPath ? appState.fileProgress[sceneProgressPath] ?? "todo" : null,
+    onSetProgress: (status: FileProgressStatus) => {
+      if (sceneProgressPath) handleSetFileProgress(sceneProgressPath, status);
+    },
+  };
+
   const handleSnippetStorageModeChange = async (
     mode: EditorSettings["snippetStorageMode"],
   ) => {
@@ -7967,7 +7983,7 @@ export default function App() {
                 isRightSidebarWide, isRightSidebarCollapsed, appMode, isEditorFocusMode, pluginViews,
                 loadedPlugins, rightSidebarTab, setRightSidebarTab, openIdeaCanvasBoard, setIsRightSidebarWide, setIsRightSidebarCollapsed,
                 setSidebarPluginRuntimeAnchor, isDockedPluginRuntimeVisible, hasOpenedDraft, projectFolder,
-                draftCanvasContext, setDraftSelectRequest, activePluginView, documentKey, frontMatter,
+                draftCanvasContext, setDraftSelectRequest, activePluginView, documentKey, scene, frontMatter,
                 updateFrontMatter, handleClearFrontMatter, propertyTypeSettings, rememberPropertyType,
                 returnFocusFromProperties, loadPropertySets, searchByProperty, editorText, settings,
                 updateSettings, revealEditorRange, replaceEditorRange, projectProofreadTerms, appState,

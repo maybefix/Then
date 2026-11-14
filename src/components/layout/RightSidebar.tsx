@@ -21,6 +21,7 @@ import IntermediateDraftPane from "../canvas/IntermediateDraftPane";
 import { PluginIcon } from "../plugins/PluginIcon";
 import ProofreadPane from "../proofread/ProofreadPane";
 import { PropertiesPanel } from "../properties/PropertiesPanel";
+import { ScenePane, type ScenePaneProps } from "../scene/ScenePane";
 import { AppIcon } from "./AppIcon";
 import { RightPaneSwitcher, type RightPaneSwitcherItem } from "./RightPaneSwitcher";
 
@@ -36,6 +37,17 @@ type ProofreadIgnoredByPath = Record<string, string[]>;
 const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
 
 const rightSidebarBuiltinTabs: Array<{ id: string; label: string; icon: ReactNode }> = [
+  {
+    id: "scene",
+    label: "この場面",
+    icon: (
+      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+        <rect x="5" y="3" width="14" height="18" rx="1" />
+        <path d="M5 8h14" />
+        <path d="M9 12h6M9 16h4" />
+      </svg>
+    ),
+  },
   {
     id: "idea",
     label: "アイデア",
@@ -100,6 +112,8 @@ export type RightSidebarProps = {
   setDraftSelectRequest: Dispatch<SetStateAction<{ id: string; nonce: number } | null>>;
   activePluginView: ThenPluginView | null;
   documentKey: string;
+  /** 「この場面」に渡す、表示中の文書と進捗（BINDER 1-7）。 */
+  scene: Omit<ScenePaneProps, "documentKey" | "onExit">;
   frontMatter: FrontMatterParts;
   updateFrontMatter: (metadata: string) => void;
   handleClearFrontMatter: () => Promise<void>;
@@ -166,7 +180,7 @@ export function RightSidebar(props: RightSidebarProps) {
     rightSidebarTab, setRightSidebarTab,
     openIdeaCanvasBoard, setIsRightSidebarWide, setIsRightSidebarCollapsed, setSidebarPluginRuntimeAnchor,
     isDockedPluginRuntimeVisible, hasOpenedDraft, projectFolder, draftCanvasContext, setDraftSelectRequest,
-    activePluginView, documentKey, frontMatter, updateFrontMatter, handleClearFrontMatter,
+    activePluginView, documentKey, scene, frontMatter, updateFrontMatter, handleClearFrontMatter,
     propertyTypeSettings, rememberPropertyType, returnFocusFromProperties, loadPropertySets, searchByProperty,
     editorText, settings, updateSettings, revealEditorRange, replaceEditorRange, projectProofreadTerms,
     appState, setProjectProofreadTerms, setAppState, exportProofreadDictionary, importProofreadDictionary,
@@ -270,6 +284,8 @@ export function RightSidebar(props: RightSidebarProps) {
           </div>}
           {rightSidebarTab === "draft" ? null : activePluginView ? (
             <div className="pluginViewBody" aria-label={activePluginView.title} />
+          ) : rightSidebarTab === "scene" ? (
+            <ScenePane documentKey={documentKey} {...scene} onExit={returnFocusFromProperties} />
           ) : rightSidebarTab === "properties" ? (
             <PropertiesPanel
               documentKey={documentKey}

@@ -48,6 +48,7 @@ const values = {
   isDockedPluginRuntimeVisible: false,
   hasOpenedDraft: false,
   projectFolder: null,
+  scene: { markdown: "---\nsynopsis: 書庫の手紙。\n---\n本文", onChangeMarkdown: () => {}, progress: "writing", onSetProgress: () => {} },
   draftCanvasContext: null,
   activePluginView: null,
   documentKey: "doc",
@@ -81,6 +82,7 @@ const panes = {
   idea: /class="binderPane"/,
   proof: /class="proofPane"/,
   properties: /class="propertiesPanel"/,
+  scene: /class="scenePane"/,
 };
 for (const [tab, marker] of Object.entries(panes)) {
   const html = render({ rightSidebarTab: tab });
@@ -130,6 +132,7 @@ assert.doesNotMatch(render(), /visiblePluginRuntimeAnchor/, "no plugin: the runt
   const state = await import(`data:text/javascript;base64,${Buffer.from(stateCode).toString("base64")}`);
   assert.equal(state.normalizeRightSidebarTab("ai"), "idea", "a stored AI tab returns to idea");
   assert.equal(state.normalizeRightSidebarTab("plot"), "idea", "a stored plot tab returns to idea (BINDER 1-6)");
+  assert.equal(state.normalizeRightSidebarTab("scene"), "scene", "a stored この場面 comes back (BINDER 1-7)");
   for (const name of ["normalizeRightSidebarCollapsed", "normalizeRightSidebarWide"]) {
     assert.equal(typeof state[name], "function", `${name} reads the stored value back`);
     assert.equal(state[name](true), true, name);
@@ -157,6 +160,11 @@ assert.doesNotMatch(render(), /visiblePluginRuntimeAnchor/, "no plugin: the runt
   // 幅のボタンは、今の値をひっくり返す関数ではなく、次の値を渡す（保存する関数は値を受け取る）。
   const sidebar = await readFile("src/components/layout/RightSidebar.tsx", "utf8");
   assert.match(sidebar, /onClick=\{\(\) => setIsRightSidebarWide\(!isRightSidebarWide\)\}/);
+
+  // 「この場面」（BINDER 1-7）: 概要はプロパティ欄と同じ書き込み口へ、進捗はバインダーと同じ保存へ、一覧の項目のパスで。
+  assert.match(app, /onChangeMarkdown: \(next: string\) => updateFrontMatter\(parseFrontMatter\(next\)\.metadata\)/);
+  assert.match(app, /if \(sceneProgressPath\) handleSetFileProgress\(sceneProgressPath, status\)/);
+  assert.match(app, /sceneEntry\?\.kind === "file" && sceneEntry\.role !== "material" \? sceneEntry\.path : null/);
 }
 
 // --- 切り替えに出るペインの並び（BINDER 1-7 の前に固定する） ---
@@ -198,7 +206,7 @@ export function RightPaneSwitcher({ items, activeId }) {
     return renderToStaticMarkup(createElement(ListedSidebar, props));
   };
   const panes = [...renderListed().matchAll(/<li data-id="([^"]+)">([^<]*)<\/li>/g)].map((match) => `${match[1]}:${match[2]}`);
-  assert.deepEqual(panes, ["idea:アイデア", "proof:校正", "draft:中間稿", "properties:プロパティ", "plugin:demo:notes:メモ帳"], "the panes offered, in order");
+  assert.deepEqual(panes, ["scene:この場面", "idea:アイデア", "proof:校正", "draft:中間稿", "properties:プロパティ", "plugin:demo:notes:メモ帳"], "the panes offered, in order (BINDER 1-7: この場面 first)");
 }
 
 console.log("right sidebar tests passed");
