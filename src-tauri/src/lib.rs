@@ -16,6 +16,7 @@ mod idea_migration;
 mod intermediate_draft;
 mod library;
 mod markdown_image;
+mod material_files;
 mod native_ime;
 mod native_clipboard;
 mod plot_migration;
