@@ -219,3 +219,26 @@ QA 用アプリ（識別子 `local.then.qa.caret1115`）で、本物のキーと
 見つけたこと: 「アイデアに投稿」の入力欄は、閉じるときにフォーカスを戻す処理を持たず、Esc のあとはどこにもフォーカスがない（直す前から。KNOWN_ISSUES に記録）。
 
 片付け: QA の Then 0、QA の WebView2 0、テストの Edge 0、テストの node 0、一時プロファイル 0。`src-tauri/target/release/Then.exe` は QA 用の build（`1713490`）。
+
+## 工程12: 投稿の入力欄のフォーカスの修正（2026-11-15 に頼まれた）
+
+チェックポイント: タグ `checkpoint/before-quickpost-focus`（`fccc856`）。
+
+| コミット | 内容 |
+|---|---|
+| `8f0a9a1` | 先に落ちるテスト。`test-app-dialog-focus.mjs` に、投稿の入力欄を Esc で閉じると呼んだ側の戻し方で本文へ戻る確認を足した |
+| `01902d2` | `QuickPostModal` は開く前の要素を控え、閉じたら `onRestoreFocus` で戻す。App から `restoreFocusAfterCommandPalette` を渡す |
+
+わざと入れた不具合2つ（戻し方を呼ばない、入力欄へ移ったあとに控える）で、テストが落ちることを確かめて戻した。
+
+「後」の一式（`01902d2`、118本）: 落ちたのは元からの2本（`test:editor-text-edits`、`test:v058-bundle`）だけ。
+
+実機確認（QA 用アプリ、`01902d2`）:
+
+| 確認したこと | 結果 |
+|---|---|
+| Ctrl+Alt+I → Esc →「★」 | 開くとフォーカスは入力欄。閉じると本文へ戻り、「最後★の行。」 |
+| パレット →「アイデアに投稿…」→ Esc →「★」 | 同上 |
+| Ctrl+Alt+I →「QAの投稿」→ Enter →「★」 | 投稿して入力欄が閉じ、本文へ戻り、「最後★の行。」 |
+
+片付け: QA の Then 0、QA の WebView2 0、テストの Edge 0、テストの node 0、一時プロファイル 0。`src-tauri/target/release/Then.exe` は QA 用の build（`01902d2`）。
