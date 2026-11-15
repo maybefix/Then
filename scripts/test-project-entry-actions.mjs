@@ -242,6 +242,7 @@ function setup(world = defaultWorld(), { tauri = true } = {}) {
       setProjectProofreadIgnored: setter("proofreadIgnored"),
       setClosedDocumentTabs: setter("closedDocumentTabs"),
       retargetPostNotes: (rootPath, changes) => (app.postNoteRetargets ??= []).push([rootPath, changes]),
+      notifyCanvasPathChanges: (rootPath, changes) => (app.canvasPathChanges ??= []).push([rootPath, changes]),
     });
   };
   return { app, refs, actions };
@@ -824,6 +825,89 @@ const reorderWorld = () => {
 // ---- 資料ボードの読み込み（App に残る useEffect。文字で確かめ、動くことは実機で確かめる） ----
 // 名前の変更・移動・並べ替え・新規・削除で作品のフォルダの木が替わっても、資料ボードはディスクから
 // 読み直さない（保存を待っている付け替えを上書きしないため）。読み直すのは資料の候補だけ。
+// ---- 素材の段の画像・PDF の名前の変更と移動（BINDER 2-6） ----
+// ファイルの一覧に入っていないので一覧は読み直さず、資料カード・最近の資料・資料の候補と、開いている Canvas
+// への知らせだけを付け替える。
+function imageWorld(app) {
+  const image = (sourcePath) => ({ ...referenceFile(sourcePath), kind: "image" });
+  app.referenceLayout = {
+    cards: [{ ...referenceCard("素材/資料/地図.png"), kind: "image" }, referenceCard("c.txt")],
+    recent: [image("素材/資料/地図.png")],
+  };
+  app.referenceCandidates = [image("素材/資料/地図.png"), referenceFile("c.txt")];
+}
+{
+  const { app, actions } = setup();
+  imageWorld(app);
+  const reference = { path: p("素材", "資料", "地図.png"), name: "地図.png" };
+  app.inputAnswers.push("地図");
+  await actions().handleRenameMaterialReference(reference);
+  assert.deepEqual(commandsOf(app), [], "拡張子を書かずに同じ名前なら何もしない");
+  assert.equal(app.inputs[0].label, "ファイル名");
+  assert.equal(app.inputs[0].initialValue, "地図.png");
+
+  app.inputAnswers.push(" 港 ");
+  app.commands.rename_project_entry = (args) => ({ path: p("素材", "資料", "港.png"), name: "港.png", content: "" });
+  await actions().handleRenameMaterialReference(reference);
+  assert.deepEqual(commandsOf(app), ["rename_project_entry"], "一覧は読み直さない");
+  assert.deepEqual(app.log[0].args, { path: reference.path, name: "港" }, "拡張子は Rust が元のものを足す");
+  assert.equal(app.log[0].pathChanging, true);
+  assert.deepEqual(app.referenceLayout.cards.map((card) => [card.sourcePath, card.kind]), [["素材/資料/港.png", "image"], ["c.txt", "text"]]);
+  assert.deepEqual(app.referenceLayout.recent.map((file) => [file.sourcePath, file.name]), [["素材/資料/港.png", "港.png"]]);
+  assert.deepEqual(app.referenceCandidates.map((file) => file.sourcePath), ["素材/資料/港.png", "c.txt"]);
+  assert.deepEqual(app.canvasPathChanges, [[ROOT, [{ oldPath: "素材/資料/地図.png", newPath: "素材/資料/港.png" }]]], "開いている Canvas に知らせる");
+  assert.deepEqual(app.toasts, ["「地図.png」をリネームしました"]);
+
+  app.inputAnswers.push("海");
+  app.commands.rename_project_entry = () => { throw new Error("entry with that name already exists"); };
+  await actions().handleRenameMaterialReference({ path: p("素材", "資料", "港.png"), name: "港.png" });
+  assert.equal(app.toasts.at(-1), "名前を変更できませんでした");
+  assert.match(app.lastError, /already exists/);
+}
+{
+  const { app, actions } = setup();
+  imageWorld(app);
+  const reference = { path: p("素材", "資料", "地図.png"), name: "地図.png" };
+  await actions().handleMoveMaterialReference(reference, p("素材", "資料"));
+  assert.deepEqual(commandsOf(app), [], "同じフォルダへは動かさない");
+
+  app.commands.move_project_entry = (args) => ({
+    projectFolder: app.projectFolder,
+    movedDocument: null,
+    oldPath: args.sourcePath,
+    newPath: p("素材", "年表", "地図.png"),
+    oldParentPath: p("素材", "資料"),
+    newParentPath: p("素材", "年表"),
+  });
+  await actions().handleMoveMaterialReference(reference, p("素材", "年表"));
+  assert.deepEqual(commandsOf(app), ["move_project_entry"]);
+  assert.deepEqual(app.log[0].args, {
+    rootPath: ROOT,
+    sourcePath: reference.path,
+    targetFolderPath: p("素材", "年表"),
+    targetPath: null,
+    position: null,
+  }, "並び順は渡さない");
+  assert.equal(app.referenceLayout.cards[0].sourcePath, "素材/年表/地図.png");
+  assert.equal(app.referenceLayout.recent[0].sourcePath, "素材/年表/地図.png");
+  assert.equal(app.referenceCandidates[0].sourcePath, "素材/年表/地図.png");
+  assert.deepEqual(app.canvasPathChanges, [[ROOT, [{ oldPath: "素材/資料/地図.png", newPath: "素材/年表/地図.png" }]]]);
+  assert.equal(app.focusedFolderPath, p("素材", "年表"));
+  assert.deepEqual(app.toasts, ["「地図.png」を移動しました"]);
+
+  app.commands.move_project_entry = () => { throw new Error("images and PDFs stay inside the materials folder"); };
+  await actions().handleMoveMaterialReference({ path: p("素材", "年表", "地図.png"), name: "地図.png" }, ROOT);
+  assert.equal(app.toasts.at(-1), "移動できませんでした");
+}
+{
+  // 本文のファイルの名前の変更も、開いている Canvas に作品からの相対パスで知らせる（確認1の 1）。
+  const { app, actions } = setup();
+  app.inputAnswers.push("a2");
+  app.commands.rename_project_entry = () => ({ path: p("第一章", "a2.txt"), name: "a2.txt", content: "A2", fileId: "f1", contentHash: "h2" });
+  await actions().handleRenameProjectEntry(file(p("第一章", "a.txt")));
+  assert.deepEqual(app.canvasPathChanges, [[ROOT, [{ oldPath: "第一章/a.txt", newPath: "第一章/a2.txt" }]]]);
+}
+
 {
   const appSource = await readFile("src/App.tsx", "utf8");
   const effectDeps = (marker) => {

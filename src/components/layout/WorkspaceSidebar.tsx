@@ -152,6 +152,10 @@ type WorkspaceSidebarProps = {
   materialReferences?: MaterialReference[];
   onOpenReference?: (reference: MaterialReference) => void;
   onDeleteReference?: (reference: MaterialReference) => void;
+  /** 画像・PDF の名前を変える（BINDER 2-6）。 */
+  onRenameReference?: (reference: MaterialReference) => void;
+  /** 画像・PDF を素材の中のフォルダへ移す（BINDER 2-6）。原稿の段へは落とせない。 */
+  onMoveReference?: (reference: MaterialReference, targetFolderPath: string) => void;
   /** 資料のファイルを取り込む（取り込み先は素材フォルダの「資料」）。 */
   onImportReferences?: () => void;
 };
@@ -178,6 +182,8 @@ type TreeContextMenu = {
   section?: "manuscript" | "materials";
   /** 素材の段の画像・PDF の行のメニュー。 */
   reference?: MaterialReference;
+  /** 素材フォルダのない作品の、素材の段の見出しのメニュー（「資料を取り込む…」だけ。BINDER 2-6、確認1の 4）。 */
+  importOnly?: boolean;
 } | null;
 
 type PointerDragState = {
@@ -191,6 +197,8 @@ type PointerDragState = {
   startX: number;
   startY: number;
   isDragging: boolean;
+  /** 素材の段の画像・PDF を動かしているとき（BINDER 2-6）。素材の中のフォルダへだけ落とせる。 */
+  reference?: MaterialReference;
 };
 
 type TreeDropTarget =
@@ -855,6 +863,8 @@ export function WorkspaceSidebar({
   materialReferences = [],
   onOpenReference,
   onDeleteReference,
+  onRenameReference,
+  onMoveReference,
   onImportReferences,
 }: WorkspaceSidebarProps) {
   const [contextMenu, setContextMenu] = useState<TreeContextMenu>(null);
@@ -1024,6 +1034,30 @@ export function WorkspaceSidebar({
     const element = document.elementFromPoint(clientX, clientY);
     // 段の見出し（原稿＝作品直下、素材＝素材フォルダ）へ落とすと、その段のいちばん上のフォルダの中へ移す。
     const sectionHeader = element?.closest<HTMLElement>("[data-binder-drop-folder]");
+    // 画像・PDF は素材の中だけで動かす（BINDER 2-6）。素材の段の見出しと素材の中の行だけを受け、
+    // 前・後の並べ替えはせず、そのフォルダ（ファイルの行ならその行のフォルダ）の中へ入れる。
+    if (dragState.reference) {
+      const sourceParentKey = parentKey(dragState.reference.path);
+      let folderPath: string | undefined;
+      if (sectionHeader) {
+        if (sectionHeader.dataset.binderSection === "materials") folderPath = sectionHeader.dataset.binderDropFolder;
+      } else {
+        const row = element?.closest<HTMLElement>("[data-tree-entry-path]");
+        if (row?.dataset.treeEntryMaterial === "true") {
+          // 画像・PDF の行は、置かれたフォルダを data-tree-reference-folder に持つ（並べ替えの目印にならないように）。
+          folderPath =
+            row.dataset.treeEntryKind === "folder"
+              ? row.dataset.treeEntryPath
+              : row.dataset.treeFolderPath ?? row.dataset.treeReferenceFolder;
+        }
+      }
+      updateDropTarget(
+        folderPath && folderKey(folderPath) !== sourceParentKey
+          ? { kind: "moveInto", folderPath, entryPath: folderPath }
+          : null,
+      );
+      return;
+    }
     if (sectionHeader) {
       const folderPath = sectionHeader.dataset.binderDropFolder;
       const alreadyThere = dragState.sourceParentPaths.every((parentPath) => parentPath === folderPath);
@@ -1045,6 +1079,8 @@ export function WorkspaceSidebar({
     const targetEntryKind = row.dataset.treeEntryKind;
     if (
       !targetEntryPath ||
+      // 画像・PDF の行は並び順を持たないので、ファイルの一覧の行の前・後の目印にしない。
+      row.dataset.treeReference === "true" ||
       dragState.entryPaths.includes(targetEntryPath) ||
       (targetEntryKind === "folder" &&
         dragState.entryPaths.some((sourcePath) =>
@@ -1158,6 +1194,30 @@ export function WorkspaceSidebar({
     captureTarget.setPointerCapture(event.pointerId);
   };
 
+  /** 素材の段の画像・PDF の行を押したとき。1つずつ動かす（複数選択はしない）。 */
+  const handleReferencePointerDown = (
+    event: ReactPointerEvent<HTMLElement>,
+    reference: MaterialReference,
+  ) => {
+    if (event.button !== 0 || !onMoveReference) return;
+    const eventTarget = event.target instanceof Element ? event.target : event.currentTarget;
+    const captureTarget = eventTarget.closest<HTMLElement>("button") ?? event.currentTarget;
+    pointerDragRef.current = {
+      pointerId: event.pointerId,
+      entryPath: reference.path,
+      entryPaths: [reference.path],
+      sourceParentPaths: [reference.path.replace(/[\\/][^\\/]*$/, "")],
+      reorderFolderPath: null,
+      replaceSelectionOnDrag: false,
+      captureTarget,
+      startX: event.clientX,
+      startY: event.clientY,
+      isDragging: false,
+      reference,
+    };
+    captureTarget.setPointerCapture(event.pointerId);
+  };
+
   const handleTreePointerMove = (event: ReactPointerEvent<HTMLElement>) => {
     const dragState = pointerDragRef.current;
     if (!dragState || dragState.pointerId !== event.pointerId) return;
@@ -1189,7 +1249,9 @@ export function WorkspaceSidebar({
         suppressNextClickRef.current = false;
       }, 0);
       const activeDropTarget = dropTargetRef.current;
-      if (activeDropTarget?.kind === "reorder") {
+      if (dragState.reference) {
+        if (activeDropTarget?.kind === "moveInto") onMoveReference?.(dragState.reference, activeDropTarget.folderPath);
+      } else if (activeDropTarget?.kind === "reorder") {
         const isSameParent =
           dragState.reorderFolderPath !== null &&
           normalizeSidebarPath(activeDropTarget.folderPath) ===
@@ -1516,7 +1578,26 @@ export function WorkspaceSidebar({
   const renderContextMenu = (): JSX.Element | null => {
     if (!contextMenu) return null;
 
-    const { entry, isRoot, section, reference, x, y } = contextMenu;
+    const { entry, isRoot, section, reference, importOnly, x, y } = contextMenu;
+    if (importOnly) {
+      return createPortal(
+        <div
+          className="treeContextMenu"
+          style={{ left: x, top: y }}
+          role="menu"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => closeContextMenuAndRun(() => onImportReferences?.())}
+          >
+            資料を取り込む…
+          </button>
+        </div>,
+        document.querySelector<HTMLElement>(".appShell") ?? document.body,
+      );
+    }
     if (reference) {
       return createPortal(
         <div
@@ -1532,6 +1613,15 @@ export function WorkspaceSidebar({
           >
             開く
           </button>
+          {onRenameReference && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => closeContextMenuAndRun(() => onRenameReference(reference))}
+            >
+              リネーム
+            </button>
+          )}
           {onDeleteReference && (
             <button
               type="button"
@@ -1899,9 +1989,20 @@ export function WorkspaceSidebar({
   const renderReferenceRow = (reference: MaterialReference, depth: number): JSX.Element => (
     <div className="treeNode" key={reference.path}>
       <div
-        className="treeItem fileTreeItem materialReferenceItem"
+        className={[
+          "treeItem fileTreeItem materialReferenceItem",
+          draggingEntryPaths.has(reference.path) ? "draggingTreeEntry" : "",
+        ].filter(Boolean).join(" ")}
         data-tree-entry-path={reference.path}
+        data-tree-entry-kind="file"
+        data-tree-reference-folder={reference.path.replace(/[\\/][^\\/]*$/, "")}
+        data-tree-entry-material="true"
+        data-tree-reference="true"
         style={{ "--tree-item-indent": `${10 + depth * 14}px` } as CSSProperties}
+        onPointerDown={onMoveReference ? (event) => handleReferencePointerDown(event, reference) : undefined}
+        onPointerMove={onMoveReference ? handleTreePointerMove : undefined}
+        onPointerUp={onMoveReference ? handleTreePointerUp : undefined}
+        onPointerCancel={onMoveReference ? resetPointerDrag : undefined}
         onContextMenu={(event) => {
           event.preventDefault();
           setHeadingContextMenu(null);
@@ -1923,7 +2024,13 @@ export function WorkspaceSidebar({
           className="treeItemPrimary fileTreeItemPrimary"
           type="button"
           title={reference.path}
-          onClick={() => onOpenReference?.(reference)}
+          onClick={(event) => {
+            if (suppressNextClickRef.current) {
+              event.preventDefault();
+              return;
+            }
+            onOpenReference?.(reference);
+          }}
         >
           <span className="treeItemName">{reference.name}</span>
         </button>
@@ -2019,6 +2126,7 @@ export function WorkspaceSidebar({
           data-tree-entry-path={entry.path}
           data-tree-entry-kind={kind}
           data-tree-folder-path={parentFolderPath ?? undefined}
+          data-tree-entry-material={isMaterial ? "true" : undefined}
           data-outline-file-row={!isFolder ? "true" : undefined}
           data-outline-file-path={!isFolder ? entry.path : undefined}
           style={
@@ -2220,6 +2328,7 @@ export function WorkspaceSidebar({
     dropFolderPath,
     menuEntry,
     action,
+    importOnly,
   }: {
     section: "manuscript" | "materials" | "posts";
     label: string;
@@ -2228,6 +2337,8 @@ export function WorkspaceSidebar({
     dropFolderPath?: string;
     menuEntry?: ProjectFolder | ProjectEntry;
     action?: JSX.Element;
+    /** 素材フォルダのない作品で、右クリックに「資料を取り込む…」だけを出す。 */
+    importOnly?: boolean;
   }) => {
     const isCollapsed = collapsePath ? collapsedFolderPaths.has(collapsePath) : false;
     // 段ごとのアイコンを開閉の印の場所に置き、名前はフォルダの行より濃い文字にする（2026-11-12 に E 案に決めた）。
@@ -2249,7 +2360,17 @@ export function WorkspaceSidebar({
         onContextMenu={
           menuEntry && section !== "posts"
             ? (event) => openSectionContextMenu(event, menuEntry, section)
-            : undefined
+            : importOnly && projectFolder
+              ? (event) => {
+                  event.preventDefault();
+                  setHeadingContextMenu(null);
+                  const position = getScaledFixedMenuPosition(event.clientX, event.clientY, {
+                    width: TREE_CONTEXT_MENU_WIDTH,
+                    height: 40,
+                  });
+                  setContextMenu({ x: position.left, y: position.top, entry: projectFolder, isRoot: false, importOnly: true });
+                }
+              : undefined
         }
       >
         {collapsePath ? (
@@ -2321,6 +2442,7 @@ export function WorkspaceSidebar({
               : renderBinderSectionHeader({
                   section: "materials",
                   label: "素材",
+                  importOnly: Boolean(onImportReferences),
                   action: onCreateMaterialsFolder ? (
                     <button
                       className="binderSectionAction"

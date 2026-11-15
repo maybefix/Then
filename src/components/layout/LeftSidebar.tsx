@@ -122,6 +122,9 @@ export type LeftSidebarProps = {
   handleAddReference: () => Promise<void>;
   openReferenceCard: (sourcePath: string, fileInfo?: ReferenceFileInfo, options?: { switchToReferenceTab?: boolean }) => void;
   handleDeleteImportedReference: (sourcePath: string) => Promise<void>;
+  /** 素材の段の画像・PDF の改名・移動（BINDER 2-6）。 */
+  handleRenameMaterialReference: ProjectEntryActions["handleRenameMaterialReference"];
+  handleMoveMaterialReference: ProjectEntryActions["handleMoveMaterialReference"];
 };
 
 /** 作品のフォルダと、そこからの相対パス（`/` 区切り）をつなぐ。区切りは作品のフォルダに合わせる。 */
@@ -151,7 +154,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
     libraryContext, enterLibraryRoot, enterProject, handleCreateLibraryProject,
     handleImportProjectIntoLibrary, reorderLibraryProjects, libraryCorpus, openIdeaPane, postInboxCount,
     handleCreateMaterialsFolder, handleSetMaterialsFolder, handleAddReference, openReferenceCard,
-    handleDeleteImportedReference,
+    handleDeleteImportedReference, handleRenameMaterialReference, handleMoveMaterialReference,
   } = props;
   // 素材の段に並べる画像・PDF（ファイルの一覧には入らない。BINDER 2-5、確認1の 7）。
   const materialReferences = projectFolder
@@ -393,6 +396,8 @@ export function LeftSidebar(props: LeftSidebarProps) {
               openReferenceCard(reference.sourcePath, file, { switchToReferenceTab: false });
             }}
             onDeleteReference={(reference) => void handleDeleteImportedReference(reference.sourcePath)}
+            onRenameReference={(reference) => void handleRenameMaterialReference(reference)}
+            onMoveReference={(reference, targetFolderPath) => void handleMoveMaterialReference(reference, targetFolderPath)}
             onImportReferences={() => void handleAddReference()}
         />
         )}
