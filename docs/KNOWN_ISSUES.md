@@ -55,6 +55,7 @@
 - **原因（コードから）:** (1) 本文のリンクの表示は資料の候補（取り込み資料の一覧）から探すため、と見られる（未確認）。(2)(3) `normalizeIdeaThreads`（`src/ideaThreadModel.ts`）が、読み込みのときにサンプルの ID のスレッドを捨て、インボックスを1つにまとめる。
 - **扱い:** 今は直さない。1-3 の期待値（`scripts/fixtures/binder-migration/expected/`）には今の姿のまま入っている。(1) は 1-6（Plot → ノート）で、(2)(3) は 2-4（Idea → 投稿）で、移行で拾うかを決める。
 - **1-6 の結果（2026-11-14）:** (1) は Plot の画面ごとなくなった。ノート「プロット（移行）」では、リンクはパスのまま文字として見える（`test:plot-migration`、QA 用アプリで確かめた）。(2)(3) は 2-4 で扱う。
+- **2-4 の結果（2026-11-15）:** (2) サンプルの ID のスレッドの中の利用者の断片は、移行で拾ってノートにする（`test:idea-migration` の違いの一覧）。(3) 2つ目のインボックスの断片は、ほかのインボックスの断片と同じく投稿になる（題は要らなくなった）。Idea の画面ごとなくなった（`docs/BINDER_IDEA_MIGRATION_PLAN.md`）。
 - **状態:** (1) は解消（Plot の廃止による）。(2)(3) は記録のみ（2026-11-10）。
 
 ## 2026-10-31: テンプレート登録で、同じ名前の判定が Rust のファイル名とずれる／本文のない画面でも登録できる
@@ -372,6 +373,8 @@
 - **状態:** 修正済み（`fix/editor-text-quirks`）。
 
 ## 2026-10-23: 「Ideaの管理単位」を切り替えると、作品ごとの並び順と資料リンクの所属が崩れる
+
+- **2026-11-15:** 設定「Ideaの管理単位」は BINDER 2-4 で消した（Idea は投稿とノートへ移した）。この項の挙動はもう起きない。
 
 - **確認された対象と挙動:** Idea 分離の調査中にコードを読んで見つけた。実機ではまだ確かめていない。設定の「Ideaの管理単位」（`snippetStorageMode`）は選んだ時点で切り替わり、確認も通知もない（`src/components/dialogs/FileSettings.tsx`）。右サイドバーの Idea は、作品ごとの組（`.then/project.json` の `ideaThreads`）と全作品共通の組（アプリ状態の `profileSnippets`）の間で丸ごと入れ替わる。断片そのものはどちらの保存先にも残る。
 - **見込み:** スレッド内の並び順と資料リンクの置き場所は、管理単位に関係なく作品ごとの `.then/reference-layouts/default.json` に保存している。管理単位を切り替えると Idea の組が変わり、`reconcileIdeaThreadLayouts`（`src/ideaReferenceModel.ts`）を呼ぶ整合処理（`src/App.tsx` の `referenceCandidates` / `snippets` を見る effect）が、新しい組に合わせてこのファイルを書き換える。
