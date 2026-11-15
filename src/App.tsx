@@ -6954,6 +6954,7 @@ export default function App() {
                 onFieldValueChange={updateAppDialogFieldValue}
                 onChoice={chooseAppDialog}
                 onOption={chooseAppDialogOption}
+                onRestoreFocus={restoreFocusAfterCommandPalette}
               />
             </div>
           )}
@@ -7685,6 +7686,7 @@ export default function App() {
                 setIsThemePickerModalOpen(true);
               }}
               onUpdateSettings={updateSettings}
+              onRestoreFocus={restoreFocusAfterCommandPalette}
             />
           )}
           {isThemePickerModalOpen && (
@@ -7698,6 +7700,7 @@ export default function App() {
                 }
               }}
               onSelect={(theme) => updateSettings("theme", theme)}
+              onRestoreFocus={restoreFocusAfterCommandPalette}
             />
           )}
           {/* 確認と入力のダイアログは、設定などのモーダルから開くこともあるので、いちばん上に置く。 */}
@@ -7711,11 +7714,14 @@ export default function App() {
               onFieldValueChange={updateAppDialogFieldValue}
               onChoice={chooseAppDialog}
               onOption={chooseAppDialogOption}
+              onRestoreFocus={restoreFocusAfterCommandPalette}
             />
           )}
           </section>
         )}
-        {isHelpModalOpen && <HelpModal onClose={() => setIsHelpModalOpen(false)} />}
+        {isHelpModalOpen && (
+          <HelpModal onClose={() => setIsHelpModalOpen(false)} onRestoreFocus={restoreFocusAfterCommandPalette} />
+        )}
       </main>
   );
 }

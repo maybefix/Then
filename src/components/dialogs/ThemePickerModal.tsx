@@ -6,14 +6,17 @@ type ThemePickerModalProps = {
   selectedTheme: AppTheme;
   onClose: () => void;
   onSelect: (theme: AppTheme) => void;
+  /** Hands focus back on close (the manuscript needs its own restorer to keep the caret). */
+  onRestoreFocus?: (previouslyFocused: HTMLElement) => void;
 };
 
 export function ThemePickerModal({
   selectedTheme,
   onClose,
   onSelect,
+  onRestoreFocus,
 }: ThemePickerModalProps) {
-  const dialogRef = useModalFocus(onClose, 'input[name="theme"]:checked');
+  const dialogRef = useModalFocus(onClose, 'input[name="theme"]:checked', onRestoreFocus);
   return (
     <div className="modalBackdrop themePickerBackdrop" role="presentation">
       <section
