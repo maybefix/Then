@@ -50,7 +50,8 @@ assert.match(progressLoader, /legacyFileProgress: shouldMigrate \? state\.filePr
 const progressSetter = section(
   app,
   "const handleSetFileProgress =",
-  "const handleSnippetStorageModeChange",
+  // 区切り。2-4 で次にあった handleSnippetStorageModeChange を消したので、その次の宣言にした。
+  "const sceneEntry = currentFilePath && projectFolder",
 );
 const persistedProgressIndex = progressSetter.indexOf('invoke<ProjectFileProgressState>("set_project_file_progress"');
 const mirroredProgressIndex = progressSetter.indexOf("setAppState((current)", persistedProgressIndex);
