@@ -16,6 +16,7 @@ mod idea_migration;
 mod intermediate_draft;
 mod library;
 mod markdown_image;
+mod material_files;
 mod native_ime;
 mod native_clipboard;
 mod plot_migration;
@@ -2535,7 +2536,19 @@ fn rename_project_entry(path: String, name: String) -> Result<TextDocument, Stri
     let parent = path
         .parent()
         .ok_or_else(|| "entry parent does not exist".to_string())?;
-    let next_name = if path.is_file() {
+    let root = find_project_root(parent);
+    // 素材の段の画像・PDF は、素材フォルダの中でだけ改名する。拡張子は変えず、中身は読まない（BINDER 2-6）。
+    let is_material = path.is_file() && material_files::is_material_file(&path);
+    if is_material
+        && !root
+            .as_deref()
+            .is_some_and(|root| material_files::is_in_materials(root, &path))
+    {
+        return Err("only images and PDFs in the materials folder can be renamed".to_string());
+    }
+    let next_name = if is_material {
+        material_files::material_file_name(&name, &path)?
+    } else if path.is_file() {
         normalize_text_file_name(&name)?
     } else {
         normalize_project_entry_name(&name)?
@@ -2545,6 +2558,12 @@ fn rename_project_entry(path: String, name: String) -> Result<TextDocument, Stri
     if next_path.exists() {
         return Err("entry with that name already exists".to_string());
     }
+
+    // ボードの資料カードを付け替えるための、作品からの相対パスと、失敗したときに戻す project.json。
+    let board_paths = root
+        .as_deref()
+        .and_then(|root| material_files::relative_paths(root, &path, &next_path));
+    let config_before = root.as_deref().map(material_files::ConfigSnapshot::take);
 
     std::fs::rename(&path, &next_path)
         .map_err(|error| format!("failed to rename entry: {error}"))?;
@@ -2558,8 +2577,21 @@ fn rename_project_entry(path: String, name: String) -> Result<TextDocument, Stri
             )),
         };
     }
+    if let (Some(root), Some((old, new))) = (root.as_deref(), board_paths.as_ref()) {
+        if let Err(board_error) = material_files::retarget_boards(root, old, new) {
+            if let Some(snapshot) = config_before {
+                snapshot.restore();
+            }
+            return match std::fs::rename(&next_path, &path) {
+                Ok(()) => Err(format!("failed to update boards after rename: {board_error}")),
+                Err(rollback_error) => Err(format!(
+                    "failed to update boards after rename and rollback failed: {board_error}; {rollback_error}"
+                )),
+            };
+        }
+    }
 
-    if next_path.is_file() {
+    if next_path.is_file() && !is_material {
         read_text_document(&next_path)
     } else {
         Ok(TextDocument {
@@ -3048,8 +3080,25 @@ fn move_project_entry_unlocked(
     if !target_folder.is_dir() {
         return Err("target folder does not exist".to_string());
     }
-    if source.is_file() && !is_supported_text_extension(&source) {
+    // 素材の段の画像・PDF は、素材フォルダの中でだけ動かす。並び順は持たず、中身は読まない（BINDER 2-6）。
+    let source_is_material = source.is_file() && material_files::is_material_file(&source);
+    if source.is_file() && !source_is_material && !is_supported_text_extension(&source) {
         return Err("only text files can be moved in the project tree".to_string());
+    }
+    // project.json の錠はもう持っているので、錠を取らずに読む。
+    let materials = material_files::materials_folder(&root, &load_project_config_unlocked(&root)?);
+    let source_in_materials = material_files::is_in(materials.as_deref(), &source);
+    let target_in_materials = material_files::is_in(materials.as_deref(), &target_folder);
+    if source_is_material && !(source_in_materials && target_in_materials) {
+        return Err("images and PDFs stay inside the materials folder".to_string());
+    }
+    // 画像・PDF を含むフォルダは、素材の外（原稿の段）へ出さない（確認1の 3）。
+    if source.is_dir()
+        && source_in_materials
+        && !target_in_materials
+        && material_files::folder_has_material_files(&source)
+    {
+        return Err("a folder with images or PDFs stays inside the materials folder".to_string());
     }
 
     let root_canonical = root
@@ -3083,6 +3132,8 @@ fn move_project_entry_unlocked(
     }
 
     let ordered_target = match (target_path.as_deref(), position.as_deref()) {
+        // 画像・PDF は並び順を持たないので、前・後を受け取っても、そのフォルダの中へ入れるだけ。
+        _ if source_is_material => None,
         (None, None) => None,
         (Some(path), Some(position @ ("before" | "after"))) => {
             let path = PathBuf::from(path);
@@ -3118,29 +3169,48 @@ fn move_project_entry_unlocked(
     }
 
     let current_config = load_project_config_unlocked(&root)?;
-    let config_updates = prepare_project_config_after_move(
-        current_config,
-        &root,
-        &source,
-        &next_path,
-        &old_parent,
-        &target_folder,
-        source_is_dir,
-        ordered_target.as_ref().map(|(path, _)| path.as_path()),
-        ordered_target.as_ref().map(|(_, position)| *position),
-    )?;
+    let config_updates = if source_is_material {
+        None
+    } else {
+        Some(prepare_project_config_after_move(
+            current_config,
+            &root,
+            &source,
+            &next_path,
+            &old_parent,
+            &target_folder,
+            source_is_dir,
+            ordered_target.as_ref().map(|(path, _)| path.as_path()),
+            ordered_target.as_ref().map(|(_, position)| *position),
+        )?)
+    };
+    let board_paths = material_files::relative_paths(&root, &source, &next_path);
+    let config_before = material_files::ConfigSnapshot::take(&root);
 
     std::fs::rename(&source, &next_path)
         .map_err(|error| format!("failed to move entry: {error}"))?;
-    if let Err(config_error) = save_project_config_unlocked(&root, &config_updates) {
-        return match std::fs::rename(&next_path, &source) {
-            Ok(()) => Err(format!("failed to update project config after move: {config_error}")),
-            Err(rollback_error) => Err(format!(
-                "failed to update project config after move and rollback failed: {config_error}; {rollback_error}"
-            )),
-        };
+    if let Some(config_updates) = &config_updates {
+        if let Err(config_error) = save_project_config_unlocked(&root, config_updates) {
+            return match std::fs::rename(&next_path, &source) {
+                Ok(()) => Err(format!("failed to update project config after move: {config_error}")),
+                Err(rollback_error) => Err(format!(
+                    "failed to update project config after move and rollback failed: {config_error}; {rollback_error}"
+                )),
+            };
+        }
     }
-    let moved_document = if next_path.is_file() {
+    if let Some((old, new)) = &board_paths {
+        if let Err(board_error) = material_files::retarget_boards(&root, old, new) {
+            config_before.restore();
+            return match std::fs::rename(&next_path, &source) {
+                Ok(()) => Err(format!("failed to update boards after move: {board_error}")),
+                Err(rollback_error) => Err(format!(
+                    "failed to update boards after move and rollback failed: {board_error}; {rollback_error}"
+                )),
+            };
+        }
+    }
+    let moved_document = if next_path.is_file() && !source_is_material {
         Some(read_text_document(&next_path)?)
     } else {
         None

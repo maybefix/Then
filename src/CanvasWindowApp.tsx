@@ -19,6 +19,7 @@ import { buildCanvasThemeStyle, canvasAppearanceAttributes } from "./canvasAppea
 import {
   CANVAS_COPY_TO_POST_EVENT,
   CANVAS_LIVE_DATA_EVENT,
+  CANVAS_PATH_CHANGES_EVENT,
   createCanvasDocument,
   createCanvasEdge,
   createCanvasGroupNode,
@@ -27,7 +28,9 @@ import {
   nextCanvasId,
   normalizeCanvasDocument,
   REFERENCE_FILE_DRAG_MIME,
+  retargetCanvasReferenceNodes,
   type CanvasBoardSummary,
+  type CanvasPathChangesEvent,
   type CanvasCopyToPostRequest,
   type CanvasEdgeConnector,
   type CanvasEdge,
@@ -1509,6 +1512,37 @@ export default function CanvasWindowApp({
     });
     return () => dispose?.();
   }, [embedded]);
+
+  // 作品の中の改名・移動（BINDER 2-6）。ボードのファイルは Rust が書き換えたので、持っているボードと履歴の
+  // 資料カードも付け替える（そのままだと次の保存で古いパスに戻る）。別ウィンドウ・埋め込みのどちらでも受ける。
+  const payloadRootPath = payload?.rootPath ?? null;
+  useEffect(() => {
+    if (!isTauriRuntime() || !payloadRootPath) return;
+    let disposed = false;
+    let dispose: (() => void) | undefined;
+    void listen<CanvasPathChangesEvent>(CANVAS_PATH_CHANGES_EVENT, (event) => {
+      const { rootPath, changes } = event.payload;
+      if (normalizedReferenceKey(rootPath) !== normalizedReferenceKey(payloadRootPath)) return;
+      const retarget = (document: JsonCanvasDocument) => retargetCanvasReferenceNodes(document, changes) ?? document;
+      const stack = historyRef.current;
+      stack.undo = stack.undo.map(retarget);
+      stack.redo = stack.redo.map(retarget);
+      setBoard((current) => {
+        if (!current) return current;
+        const next = retargetCanvasReferenceNodes(current, changes);
+        if (!next) return current;
+        boardRef.current = next;
+        return next;
+      });
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else dispose = unlisten;
+    });
+    return () => {
+      disposed = true;
+      dispose?.();
+    };
+  }, [payloadRootPath]);
 
 
   useEffect(() => {

@@ -125,6 +125,60 @@ export type CanvasCopyToPostRequest = {
   bodies: string[];
 };
 
+/**
+ * メイン画面 → 開いているキャンバス（別ウィンドウ・埋め込み）へ、作品の中のファイル・フォルダの改名・移動を知らせる
+ * イベント（BINDER 2-6）。ボードのファイルは Rust が書き換えるが、開いているキャンバスは持っているボードを丸ごと
+ * 保存し直すので、持っている資料カードも付け替える。パスは作品からの相対パス（`/` 区切り）。
+ */
+export const CANVAS_PATH_CHANGES_EVENT = "then-canvas-path-changes";
+
+export type CanvasPathChange = { oldPath: string; newPath: string };
+
+export type CanvasPathChangesEvent = {
+  rootPath: string;
+  changes: CanvasPathChange[];
+};
+
+function canvasReferenceKind(path: string): ReferenceKind {
+  const extension = path.split(".").pop()?.toLocaleLowerCase();
+  if (extension === "txt") return "text";
+  if (extension === "md") return "markdown";
+  if (extension === "png" || extension === "jpg" || extension === "jpeg" || extension === "webp") return "image";
+  if (extension === "pdf") return "pdf";
+  return "unknown";
+}
+
+/**
+ * ボードの作品の資料カードを、改名・移動に合わせて付け替える（パス・名前・種類。フォルダなら中のものすべて）。
+ * 同じ付け替えを2回しても結果は同じ。変わるカードがなければ null。
+ */
+export function retargetCanvasReferenceNodes(
+  board: JsonCanvasDocument,
+  changes: CanvasPathChange[],
+): JsonCanvasDocument | null {
+  let changed = false;
+  const nodes = board.nodes.map((node) => {
+    if (node.type !== "reference" || node.scope !== "project") return node;
+    let sourcePath = node.sourcePath.replace(/\\/g, "/");
+    for (const change of changes) {
+      if (!change.oldPath || !change.newPath) continue;
+      if (sourcePath === change.oldPath) sourcePath = change.newPath;
+      else if (sourcePath.startsWith(`${change.oldPath}/`)) {
+        sourcePath = `${change.newPath}${sourcePath.slice(change.oldPath.length)}`;
+      }
+    }
+    if (sourcePath === node.sourcePath) return node;
+    changed = true;
+    return {
+      ...node,
+      sourcePath,
+      name: sourcePath.split("/").filter(Boolean).pop() ?? sourcePath,
+      kind: canvasReferenceKind(sourcePath),
+    };
+  });
+  return changed ? { ...board, nodes } : null;
+}
+
 export type CanvasWindowPayload = {
   requestId: string;
   rootPath: string | null;

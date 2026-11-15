@@ -14,7 +14,7 @@ import {
   scanRecovery,
   type RecoveryItem,
 } from "./editor/saveJournal";
-import { emitTo, listen } from "@tauri-apps/api/event";
+import { emit, emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ChangeEvent,
@@ -155,8 +155,10 @@ import {
 import {
   CANVAS_COPY_TO_POST_EVENT,
   CANVAS_LIVE_DATA_EVENT,
+  CANVAS_PATH_CHANGES_EVENT,
   type CanvasCopyToPostRequest,
   type CanvasLiveDataEvent,
+  type CanvasPathChangesEvent,
   type CanvasScope,
   type CanvasWindowPayload,
 } from "./canvasTypes";
@@ -6196,6 +6198,8 @@ export default function App() {
     handleCreateMaterialsFolder,
     handleSetMaterialsFolder,
     handleRenameProjectEntry,
+    handleRenameMaterialReference,
+    handleMoveMaterialReference,
     handleDeleteProjectEntry,
     trashProjectEntry,
     handleMoveProjectEntriesToFolder,
@@ -6248,6 +6252,12 @@ export default function App() {
     setProjectProofreadIgnored,
     setClosedDocumentTabs,
     retargetPostNotes: (_rootPath, changes) => void postStream.retargetNotes(changes),
+    // 別ウィンドウと埋め込みの Canvas の両方が受ける（BINDER 2-6）。
+    notifyCanvasPathChanges: (rootPath, changes) => {
+      if (!isTauriRuntime()) return;
+      const payload: CanvasPathChangesEvent = { rootPath, changes };
+      emit(CANVAS_PATH_CHANGES_EVENT, payload).catch(() => {});
+    },
   });
 
   // 投稿 →「ノートにする」（BINDER 2-3）。別の作品のノートの札は、作品を切り替え終えてから開く。
@@ -7087,6 +7097,7 @@ export default function App() {
                 handleAddReference: () => handleAddReference(),
                 openReferenceCard,
                 handleDeleteImportedReference: (sourcePath: string) => handleDeleteImportedReference(sourcePath),
+                handleRenameMaterialReference, handleMoveMaterialReference,
                 // In the corkboard these open the file in the body (BINDER 1-5).
                 handleProjectFileSelect: selectBinderFile,
                 handleProjectSearchResultOpen: openSearchResultInBody,

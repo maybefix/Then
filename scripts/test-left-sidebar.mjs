@@ -70,6 +70,8 @@ const functionNames = [
   "openIdeaPane", "handleCreateMaterialsFolder", "handleSetMaterialsFolder", "handleCorkboardFolderClick",
   // BINDER 2-5: 素材の段の資料（取り込む・資料カードで開く・消す）。
   "handleAddReference", "openReferenceCard", "handleDeleteImportedReference",
+  // BINDER 2-6: 素材の段の画像・PDF の改名・移動。
+  "handleRenameMaterialReference", "handleMoveMaterialReference",
 ];
 const spies = Object.fromEntries(
   functionNames.map((name) => [name, (...args) => {
@@ -344,6 +346,11 @@ const expectCalls = (label, action, expected) => {
       args: [{ path: "C:/work/素材/資料/map.png", sourcePath: "素材/資料/map.png", name: "map.png", kind: "image" }],
       name: "handleDeleteImportedReference",
       expectedArgs: ["素材/資料/map.png"],
+    },
+    onRenameReference: { args: [{ path: "C:/work/素材/資料/map.png", sourcePath: "素材/資料/map.png", name: "map.png", kind: "image" }], name: "handleRenameMaterialReference" },
+    onMoveReference: {
+      args: [{ path: "C:/work/素材/資料/map.png", sourcePath: "素材/資料/map.png", name: "map.png", kind: "image" }, "C:/work/素材/年表"],
+      name: "handleMoveMaterialReference",
     },
     // BINDER 1-5: コルクボード中のフォルダの行のクリック。
     onFolderClick: { args: ["C:/work/第一部"], name: "handleCorkboardFolderClick" },

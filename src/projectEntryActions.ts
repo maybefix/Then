@@ -145,6 +145,12 @@ export type ProjectEntryActionDeps = {
   setClosedDocumentTabs: Dispatch<SetStateAction<ClosedDocumentTab[]>>;
   /** 投稿に残したノートへのリンクを、改名・移動に合わせて付け替える（BINDER 2-3）。 */
   retargetPostNotes: (rootPath: string, changes: PathChange[]) => void;
+  /**
+   * 開いている Canvas に、改名・移動を知らせる（作品からの相対パス、`/` 区切り）。ボードのファイルは Rust が
+   * 書き換えるが、開いている Canvas は持っているボードを丸ごと保存し直すので、持っている資料カードも付け替えてもらう
+   * （BINDER 2-6）。
+   */
+  notifyCanvasPathChanges: (rootPath: string, changes: PathChange[]) => void;
 };
 
 /**
@@ -195,6 +201,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     setProjectProofreadIgnored,
     setClosedDocumentTabs,
     retargetPostNotes,
+    notifyCanvasPathChanges,
   } = deps;
 
   /**
@@ -215,11 +222,13 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     };
 
     retargetPostNotes(rootPath, changes);
+    const referenceChanges: PathChange[] = [];
     for (const change of changes) {
       retargetPluginAnchors(change.oldPath, change.newPath);
       const oldReferencePath = toProjectRelativePath(rootPath, change.oldPath);
       const newReferencePath = toProjectRelativePath(rootPath, change.newPath);
       if (!oldReferencePath || !newReferencePath) continue;
+      referenceChanges.push({ oldPath: oldReferencePath, newPath: newReferencePath });
       setReferenceLayout((current) => ({
         ...current,
         cards: current.cards.map((card) =>
@@ -242,6 +251,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
         return next;
       });
     }
+    if (referenceChanges.length > 0) notifyCanvasPathChanges(rootPath, referenceChanges);
 
     setAppState((current) => {
       const retargetRecord = <T,>(record: Record<string, T>): Record<string, T> => {
@@ -743,6 +753,74 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     }
   };
 
+  /**
+   * 素材の段の画像・PDF の名前を変える（BINDER 2-6）。ファイルの一覧には入っていないので、一覧は読み直さず、
+   * パスを覚えている置き場所（資料カード・最近の資料・資料の候補・開いている Canvas）だけを付け替える。
+   * 拡張子は Rust が元のものを残す。
+   */
+  const handleRenameMaterialReference = async (reference: { path: string; name: string }) => {
+    if (!projectFolder) return;
+    const enteredName = await requestInput({
+      title: "名前を変更",
+      label: "ファイル名",
+      initialValue: reference.name,
+      confirmLabel: "変更",
+    });
+    if (!enteredName?.trim()) return;
+    const extension = reference.name.match(/\.[^.]+$/)?.[0] ?? "";
+    const trimmed = enteredName.trim();
+    const name = trimmed.toLocaleLowerCase().endsWith(extension.toLocaleLowerCase())
+      ? trimmed
+      : `${trimmed}${extension}`;
+    if (name === reference.name) return;
+
+    projectEntryPathChangeInProgressRef.current = true;
+    try {
+      const document = await invoke<TextDocument>("rename_project_entry", {
+        path: reference.path,
+        name: trimmed,
+      });
+      retargetPathOwners(projectFolder.path, [{ oldPath: reference.path, newPath: document.path }]);
+      setLastError("");
+      showToast(`「${reference.name}」をリネームしました`);
+    } catch (error) {
+      setLastError(String(error));
+      showToast("名前を変更できませんでした");
+    } finally {
+      projectEntryPathChangeInProgressRef.current = false;
+    }
+  };
+
+  /** 素材の段の画像・PDF を、素材の中のフォルダへ移す（BINDER 2-6）。並び順は持たない。 */
+  const handleMoveMaterialReference = async (
+    reference: { path: string; name: string },
+    targetFolderPath: string,
+  ) => {
+    if (!projectFolder) return;
+    const parentPath = reference.path.replace(/[\\/][^\\/]*$/, "");
+    if (isSamePath(parentPath, targetFolderPath)) return;
+
+    projectEntryPathChangeInProgressRef.current = true;
+    try {
+      const result = await invoke<MoveProjectEntryResult>("move_project_entry", {
+        rootPath: projectFolder.path,
+        sourcePath: reference.path,
+        targetFolderPath,
+        targetPath: null,
+        position: null,
+      });
+      retargetPathOwners(projectFolder.path, [{ oldPath: result.oldPath, newPath: result.newPath }]);
+      setFocusedFolderPath(result.newParentPath);
+      setLastError("");
+      showToast(`「${reference.name}」を移動しました`);
+    } catch (error) {
+      setLastError(String(error));
+      showToast("移動できませんでした");
+    } finally {
+      projectEntryPathChangeInProgressRef.current = false;
+    }
+  };
+
   const handleMoveProjectEntryToFolder = async (
     sourcePath: string,
     targetFolderPath: string,
@@ -1103,6 +1181,8 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     handleCreateMaterialsFolder,
     handleSetMaterialsFolder,
     handleRenameProjectEntry,
+    handleRenameMaterialReference,
+    handleMoveMaterialReference,
     handleDeleteProjectEntry,
     trashProjectEntry,
     handleMoveProjectEntriesToFolder,

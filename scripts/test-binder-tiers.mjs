@@ -470,6 +470,60 @@ async function choose(target, label) {
   await view.unmount();
 }
 
+// 素材の段の画像・PDF の改名・移動（BINDER 2-6）。右クリックに「リネーム」。ドラッグは素材の中のフォルダ・素材の段の
+// 見出しへだけ落とせ、並び順は持たないので、ファイルの行へ落とすとその行のフォルダの中へ入れる。原稿の段へは落とせない。
+{
+  const references = [
+    { path: p("資料/年表/地図.png"), sourcePath: "資料/年表/地図.png", name: "地図.png", kind: "image" },
+    { path: p("資料/設定集.pdf"), sourcePath: "資料/設定集.pdf", name: "設定集.pdf", kind: "pdf" },
+  ];
+  const view = await mount(props(withMaterials, {
+    materialReferences: references,
+    onOpenReference: spy("onOpenReference"),
+    onDeleteReference: spy("onDeleteReference"),
+    onRenameReference: spy("onRenameReference"),
+    onMoveReference: spy("onMoveReference"),
+    onImportReferences: spy("onImportReferences"),
+  }));
+  takeCalls();
+  assert.deepEqual(await menuLabels(row(view.container, "資料/年表/地図.png")), ["開く", "リネーム", "削除"]);
+  await choose(row(view.container, "資料/年表/地図.png"), "リネーム");
+  assert.deepEqual(takeCalls(), [["onRenameReference", "資料/年表/地図.png"]]);
+
+  await drag(row(view.container, "資料/年表/地図.png"), header(view.container, "materials"));
+  assert.deepEqual(takeCalls(), [["onMoveReference", "資料/年表/地図.png", "資料"]], "素材の段の見出しへ＝素材フォルダの中へ");
+  await drag(row(view.container, "資料/設定集.pdf"), row(view.container, "資料/年表"), 5);
+  assert.deepEqual(takeCalls(), [["onMoveReference", "資料/設定集.pdf", "資料/年表"]], "素材の中のフォルダの行なら、上の端でもその中へ");
+  await drag(row(view.container, "資料/設定集.pdf"), row(view.container, "資料/年表/年表.md"), 18);
+  assert.deepEqual(takeCalls(), [["onMoveReference", "資料/設定集.pdf", "資料/年表"]], "素材のファイルの行なら、その行のフォルダの中へ");
+  await drag(row(view.container, "資料/設定集.pdf"), row(view.container, "資料/年表/地図.png"), 10);
+  assert.deepEqual(takeCalls(), [["onMoveReference", "資料/設定集.pdf", "資料/年表"]], "画像の行なら、その画像のフォルダの中へ");
+  await drag(row(view.container, "資料/設定集.pdf"), row(view.container, "資料/人物.md"), 10);
+  assert.deepEqual(takeCalls(), [], "同じフォルダの中では動かさない（並び順はない）");
+  await drag(row(view.container, "資料/設定集.pdf"), header(view.container, "manuscript"));
+  assert.deepEqual(takeCalls(), [], "原稿の段の見出しへは落とせない");
+  await drag(row(view.container, "資料/設定集.pdf"), row(view.container, "第一章"), 10);
+  await drag(row(view.container, "資料/設定集.pdf"), row(view.container, "第一章/港.md"), 10);
+  assert.deepEqual(takeCalls(), [], "原稿の段の行へは落とせない");
+
+  // ファイルの一覧の行は、画像・PDF の行を並べ替えの目印にしない。
+  await drag(row(view.container, "資料/人物.md"), row(view.container, "資料/設定集.pdf"), 18);
+  assert.deepEqual(takeCalls(), [], "画像の行の前後へは並べ替えない");
+  await click(row(view.container, "資料/設定集.pdf").querySelector(".treeItemPrimary"));
+  assert.deepEqual(takeCalls(), [["onOpenReference", "資料/設定集.pdf"]], "ドラッグのあとでも、押せば開く");
+  await view.unmount();
+}
+
+// 素材フォルダのない作品でも、素材の段の見出しの右クリックから資料を取り込める（BINDER 2-6、確認1の 4）。
+{
+  const view = await mount(props(withoutMaterials, { onImportReferences: spy("onImportReferences") }));
+  takeCalls();
+  assert.deepEqual(await menuLabels(header(view.container, "materials")), ["資料を取り込む…"]);
+  await choose(header(view.container, "materials"), "資料を取り込む…");
+  assert.deepEqual(takeCalls(), [["onImportReferences"]]);
+  await view.unmount();
+}
+
 // ライブラリ直下では段を出さない。
 {
   const library = { path: root, name: "ライブラリ", role: "root", projects: [], misplacedProjects: [] };
