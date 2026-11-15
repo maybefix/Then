@@ -3,7 +3,10 @@
 
 use super::super::project_state::{load_project_config, project_config_path, update_project_config};
 use super::super::{load_project_snippets, now_millis, save_project_snippets, IdeaThreadConfig};
-use super::{fail_at, migrate_ideas, migrate_profile_ideas, note_name_for, IdeaMigrationPlan};
+use super::{
+    fail_at, migrate_ideas, migrate_profile_ideas, note_name_for, reference_areas, references_folder_for_import,
+    IdeaMigrationPlan,
+};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -456,6 +459,37 @@ fn profile_ideas_become_root_notes_and_posts_without_a_work_once() {
     assert_eq!(posts(&library).len(), 1);
     assert!(posts(&library)[0].get("work").is_none());
     assert!(migrate_profile_ideas(&library.work("作品A"), &stored, &plan).is_err(), "only a library root");
+}
+
+#[test]
+fn references_are_imported_into_the_materials_folder_and_listed_from_it() {
+    let library = TempLibrary::new("areas");
+
+    // 素材フォルダのない作品: 取り込むと「素材」を作って登録し、その中の「資料」へ入れる。
+    let root = library.work("作品C");
+    assert_eq!(reference_areas(&root), Vec::<PathBuf>::new(), "nothing to list yet");
+    let folder = references_folder_for_import(&root).expect("import folder");
+    assert_eq!(folder, root.join("素材").join("資料"));
+    assert_eq!(read_json(&project_config_path(&root))["materialsFolder"], "素材");
+    assert_eq!(reference_areas(&root), vec![root.join("素材")], "the whole materials folder is listed");
+
+    // 移行の前の取り込みのフォルダも、残っていれば並べる（移行に失敗した作品の資料が消えて見えないように）。
+    let before = library.work("作品A");
+    let areas = reference_areas(&before);
+    assert_eq!(areas, vec![before.join(".then").join("references").join("imports")]);
+
+    // 移行のあとは素材フォルダ（取り込みのフォルダはなくなる）。
+    migrate_ideas(&before, &threads(&before), &plan_for(&before)).unwrap();
+    assert_eq!(reference_areas(&before), vec![before.join("素材")]);
+    assert_eq!(references_folder_for_import(&before).unwrap(), before.join("素材").join("資料"));
+
+    // ライブラリ直下: 移行で作った資料のフォルダ（ふつうのフォルダ「資料」があったので「資料-2」）へ。
+    let top = library.work("");
+    std::fs::create_dir(top.join("資料")).unwrap();
+    migrate_ideas(&top, &threads(&top), &plan_for(&top)).unwrap();
+    assert_eq!(references_folder_for_import(&top).unwrap(), top.join("資料-2"));
+    assert_eq!(reference_areas(&top), vec![top.join("資料-2")]);
+    assert!(read_json(&project_config_path(&top)).get("materialsFolder").is_none(), "no materials folder at the root");
 }
 
 #[test]

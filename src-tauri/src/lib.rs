@@ -2133,7 +2133,10 @@ fn transfer_reference_files(
     let source = reference_scope_root(&app, "project", Some(&source_root))?;
     let target = reference_scope_root(&app, "project", Some(&target_root))?;
     library::ensure_same_library(Path::new(&source_root), Path::new(&target_root))?;
-    let source_imports = reference_imports_dir(&source).canonicalize().ok();
+    let source_areas: Vec<PathBuf> = idea_migration::reference_areas(&source)
+        .into_iter()
+        .filter_map(|area| area.canonicalize().ok())
+        .collect();
 
     let mut transferred = Vec::new();
     for source_path in source_paths {
@@ -2148,9 +2151,7 @@ fn transfer_reference_files(
             from: source_path,
             file: reference_file_info(&target, &imported, "project")?,
         });
-        let was_imported = source_imports
-            .as_ref()
-            .is_some_and(|imports| absolute.starts_with(imports));
+        let was_imported = source_areas.iter().any(|area| absolute.starts_with(area));
         if remove_imported_sources && was_imported {
             std::fs::remove_file(&absolute)
                 .map_err(|error| format!("failed to remove the moved reference: {error}"))?;
@@ -3945,9 +3946,9 @@ fn list_reference_candidates(
     if scope == "project" {
         if let Some(root_path) = root_path.as_deref() {
             let root = reference_scope_root(&app, "project", Some(root_path))?;
-            let imports_dir = reference_imports_dir(&root);
-            if imports_dir.is_dir() {
-                collect_reference_candidates(&root, &imports_dir, "project", &mut files)?;
+            // 素材フォルダ（ライブラリ直下は資料のフォルダ）と、移行の前の取り込みのフォルダ（BINDER 2-5）。
+            for area in idea_migration::reference_areas(&root) {
+                collect_reference_candidates(&root, &area, "project", &mut files)?;
             }
         } else if scope == "project" {
             return Err("project reference list requires a project root".to_string());
@@ -3955,6 +3956,7 @@ fn list_reference_candidates(
     }
 
     files.sort_by_key(|file| file.source_path.to_lowercase());
+    files.dedup_by(|a, b| a.source_path == b.source_path);
     Ok(files)
 }
 
@@ -3968,10 +3970,7 @@ fn delete_imported_reference(
     let scope = normalize_reference_scope(scope.as_deref())?;
     let root = reference_scope_root(&app, &scope, root_path.as_deref())?;
     let path = resolve_reference_source_path(&app, root_path.as_deref(), &scope, &source_path)?;
-    let imports_dir = reference_imports_dir_for_scope(&app, &scope, &root)?
-        .canonicalize()
-        .map_err(|error| format!("failed to resolve reference import directory: {error}"))?;
-    if !path.starts_with(&imports_dir) {
+    if !is_imported_reference(&root, &scope, &path)? {
         return Err("only imported reference files can be deleted".to_string());
     }
 
@@ -4414,13 +4413,14 @@ fn reference_scope_root(
     }
 }
 
+/// 資料を取り込む先（BINDER 2-5、確認1の 6）。作品は `<素材フォルダ>/資料/`、ライブラリ直下は資料のフォルダ。
 fn reference_imports_dir_for_scope(
     _app: &tauri::AppHandle,
     scope: &str,
     root: &Path,
 ) -> Result<PathBuf, String> {
     match scope {
-        "project" => Ok(reference_imports_dir(root)),
+        "project" => idea_migration::references_folder_for_import(root),
         "global" => Err("global references are no longer supported".to_string()),
         _ => Err("unknown reference scope".to_string()),
     }
@@ -4913,11 +4913,11 @@ fn is_imported_reference(root: &Path, scope: &str, path: &Path) -> Result<bool, 
     if scope == "global" {
         return Ok(path.starts_with(&root));
     }
-    let imports_dir = reference_imports_dir(&root);
-    Ok(imports_dir
-        .canonicalize()
-        .map(|dir| path.starts_with(dir))
-        .unwrap_or(false))
+    // 素材フォルダ（ライブラリ直下は資料のフォルダ）と、移行の前の取り込みのフォルダの中（BINDER 2-5）。
+    Ok(idea_migration::reference_areas(&root)
+        .into_iter()
+        .filter_map(|area| area.canonicalize().ok())
+        .any(|area| path.starts_with(area)))
 }
 
 fn resolve_reference_source_path(

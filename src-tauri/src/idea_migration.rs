@@ -753,6 +753,51 @@ pub(super) fn migrate_profile_ideas(
     })
 }
 
+/// 2-5 のあとで資料を置く場所。作品は `<素材フォルダ>/資料/`、ライブラリ直下は移行で作った資料のフォルダ
+/// （なければ「資料」）。作品に素材フォルダがなければ「素材」を作って登録する（1-6 と同じ決め方）。
+pub(super) fn references_folder_for_import(root: &Path) -> Result<PathBuf, String> {
+    let folder = if library::is_library_root(root) {
+        let config = load_project_config(root)?;
+        let name = config
+            .idea_migration
+            .and_then(|record| record.references_folder)
+            .unwrap_or_else(|| REFERENCES_FOLDER_NAME.to_string());
+        root.join(name)
+    } else {
+        let _guard = lock_project_config()?;
+        let mut config = load_project_config_unlocked(root)?;
+        let (materials, created) = note_folder(root, config.materials_folder_name())?;
+        if let Some(name) = created {
+            config.materials_folder = Some(name.clone());
+            if let Err(error) = save_project_config_unlocked(root, &config) {
+                let _ = std::fs::remove_dir(root.join(&name));
+                return Err(error);
+            }
+        }
+        materials.join(REFERENCES_FOLDER_NAME)
+    };
+    std::fs::create_dir_all(&folder).map_err(|error| format!("failed to create reference folder: {error}"))?;
+    Ok(folder)
+}
+
+/// 資料として扱う場所（候補に出し、消せる）。作品は素材フォルダ全体、ライブラリ直下は資料のフォルダ。
+/// 移行の前の（または移行に失敗した）`.then/references/imports/` も含める。あるものだけ返す。
+pub(super) fn reference_areas(root: &Path) -> Vec<PathBuf> {
+    let mut areas = vec![reference_imports_dir(root)];
+    if let Ok(config) = load_project_config(root) {
+        if library::is_library_root(root) {
+            let name = config
+                .idea_migration
+                .and_then(|record| record.references_folder)
+                .unwrap_or_else(|| REFERENCES_FOLDER_NAME.to_string());
+            areas.push(root.join(name));
+        } else if let Some(name) = config.materials_folder_name() {
+            areas.push(root.join(name));
+        }
+    }
+    areas.into_iter().filter(|area| area.is_dir()).collect()
+}
+
 #[tauri::command(async)]
 pub(super) fn migrate_project_ideas(
     root_path: String,
