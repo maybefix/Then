@@ -60,6 +60,7 @@
     "test:stored-state-model": "node scripts/test-stored-state-model.mjs",
     "test:app-model-fonts": "node scripts/test-app-model-fonts.mjs",
     "test:command-palette": "node scripts/test-command-palette.mjs",
+    "test:app-dialog-focus": "node scripts/test-app-dialog-focus.mjs",
     "test:editor-text-edits": "node scripts/test-editor-text-edits.mjs",
     "test:editor-notation-actions": "node scripts/test-editor-notation-actions.mjs",
     "test:editor-context-menu": "node scripts/test-editor-context-menu.mjs",

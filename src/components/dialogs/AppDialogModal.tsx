@@ -12,6 +12,8 @@ type AppDialogModalProps = {
   onFieldValueChange: (fieldId: string, value: string) => void;
   onChoice: (value: "primary" | "secondary") => void;
   onOption: (id: string) => void;
+  /** Hands focus back on close (the manuscript needs its own restorer to keep the caret). */
+  onRestoreFocus?: (previouslyFocused: HTMLElement) => void;
 };
 
 export function AppDialogModal({
@@ -22,10 +24,13 @@ export function AppDialogModal({
   onFieldValueChange,
   onChoice,
   onOption,
+  onRestoreFocus,
 }: AppDialogModalProps) {
   const dialogRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const restoreFocusRef = useRef(onRestoreFocus);
+  restoreFocusRef.current = onRestoreFocus;
 
   useLayoutEffect(() => {
     const dialogElement = dialogRef.current;
@@ -93,7 +98,9 @@ export function AppDialogModal({
     return () => {
       window.removeEventListener("keydown", handleKeyDown, true);
       document.removeEventListener("focusin", handleFocusIn);
-      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+      if (!previouslyFocused?.isConnected) return;
+      if (restoreFocusRef.current) restoreFocusRef.current(previouslyFocused);
+      else previouslyFocused.focus();
     };
   }, []);
 

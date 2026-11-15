@@ -436,6 +436,12 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
             name: draft.fileName,
           });
       await refreshProjectFolder(targetFolderPath);
+      // 新しいファイルは本文の末尾から書き始める（見出しだけのファイルなら見出しの次の行）。
+      const end = document.content.length;
+      setAppState((current) => ({
+        ...current,
+        cursorPositions: { ...current.cursorPositions, [document.path]: { offset: end, length: end } },
+      }));
       loadDocumentIntoEditor(document);
       showToast(`「${document.name}」を作成しました`);
     } catch (error) {
