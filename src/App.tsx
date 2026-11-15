@@ -127,7 +127,7 @@ import {
 } from "./editor/documentTabState";
 import { mapTextOffsetThroughChange } from "./editor/textOffsetMapping";
 import { recordImportedProject } from "./utils/library";
-import { type ReferenceRewrite } from "./utils/libraryTransfer";
+
 import { displayedCharacterCount } from "./editor/ast/characterCount";
 import {
   createWorkspaceDocumentTabs,
@@ -153,26 +153,18 @@ import {
   type EditorFindMatch,
 } from "./search/editorFindReplace";
 import {
+  CANVAS_COPY_TO_POST_EVENT,
   CANVAS_LIVE_DATA_EVENT,
-  type CanvasCopyToIdeaRequest,
-  type CanvasFocusIdeaRequest,
+  type CanvasCopyToPostRequest,
   type CanvasLiveDataEvent,
   type CanvasScope,
   type CanvasWindowPayload,
 } from "./canvasTypes";
 import { migratePlotToNotes, plotMigrationMessage } from "./plotMigration";
+import { ideaMigrationMessage, migrateIdeas, type ProfileIdeas } from "./ideaMigration";
+import { localIsoNow } from "./posts/postModel";
 import { ReferenceLayer } from "./components/references/ReferenceLayer";
-import {
-  alignIdeaLayoutToMode,
-  countIdeaReferenceLinks,
-  ideaThreadItemKey,
-  makeReferenceLink,
-  normalizedReferenceKey,
-  reconcileIdeaThreadLayouts,
-  sameIdeaThreadLayouts,
-} from "./ideaReferenceModel";
-import { createIdeaThreadActions } from "./ideaThreadActions";
-import { loadWorkspaceSnippets, saveWorkspaceSnippets } from "./ideaThreadStorage";
+
 import { createProjectEntryActions } from "./projectEntryActions";
 import { createWorkspaceTreeActions } from "./workspaceTreeActions";
 import { createProjectSearchActions } from "./projectSearchActions";
@@ -182,7 +174,7 @@ import { createTemplateActions } from "./templateActions";
 import { createSystemFontLoader } from "./systemFonts";
 import { useSystemFonts } from "./useSystemFonts";
 import { countDisplayCharacters } from "./editor/displayCharacterCount";
-import { referenceCardKey, upsertRecentReference, upsertRecentReferences, nextReferenceZIndex } from "./referenceCardModel";
+import { referenceCardKey, upsertRecentReference, nextReferenceZIndex } from "./referenceCardModel";
 import {
   clampReferenceCardToStage,
   createDefaultState,
@@ -204,7 +196,7 @@ import {
   normalizeProofreadTerms,
   type ProofreadTerm,
 } from "./proofread/terms";
-import { QuickIdeaModal } from "./components/snippets/QuickIdeaModal";
+
 import { QuickPostModal } from "./components/posts/QuickPostModal";
 import { countInbox, type PostFilter } from "./posts/postModel";
 import { usePostStream } from "./posts/usePostStream";
@@ -225,7 +217,7 @@ import type {
   EditorSettings,
   FileProgressStatus,
   FlatOutlineItem,
-  IdeaReferenceLink,
+
   ManuscriptSnapshot,
   ManuscriptSnapshotFile,
   OutlineItem,
@@ -245,7 +237,7 @@ import type {
   WorkspaceAlert,
   WorkspaceDocumentTabs,
 } from "./types";
-import { isIdeaBinderCard, isReferenceBinderCard, workStatusLabels } from "./types";
+import { isReferenceBinderCard, workStatusLabels } from "./types";
 import { trackZoneRightHover } from "./utils/zoneRightHover";
 import {
   parseFrontMatter,
@@ -796,10 +788,13 @@ async function listReferenceCandidates(folderPath: string): Promise<ReferenceFil
 
 export default function App() {
   const referenceLayoutLoadedRootRef = useRef<string | null>(null);
+  // 資料を取り込んだ・消したあとでファイル一覧を読み直す（素材の段に出るため。BINDER 2-5）。定義より前の処理から呼ぶ。
+  const refreshProjectFolderRef = useRef<() => Promise<unknown>>(async () => null);
+  // アプリ側の Idea を移した記録（BINDER 2-4）。起動の処理が置き換えるアプリ状態にも入れる。
+  const profileMigrationRef = useRef<AppState["profileSnippetsMigration"] | null>(null);
   // 読み込んだままのレイアウト。これと同じあいだは保存しない。
   const referenceLayoutOnDiskRef = useRef<ReferenceLayout | null>(null);
-  // 並び順を読み込んだ時点の「Ideaの管理単位」に合わせるため、最新の値を持っておく。
-  const snippetStorageModeRef = useRef<EditorSettings["snippetStorageMode"]>("workspace");
+
   const workspaceFolderTreeRootRef = useRef<string | null>(null);
   const activeTabIdRef = useRef("initial-document-tab");
   const documentSaveQueuesRef = useRef<Map<string, DocumentSaveQueue>>(new Map());
@@ -878,7 +873,7 @@ export default function App() {
   const [checkpointCurrentProjectFiles, setCheckpointCurrentProjectFiles] = useState<ReadonlyMap<string, CheckpointCurrentProjectFile>>(() => new Map());
   const [checkpointCurrentProjectStatus, setCheckpointCurrentProjectStatus] = useState<CheckpointCurrentProjectStatus>("idle");
   const [checkpointUnavailableProjectPaths, setCheckpointUnavailableProjectPaths] = useState<ReadonlySet<string>>(() => new Set());
-  const [snippetWorkspacePath, setSnippetWorkspacePath] = useState<string | null>(null);
+
   const [projectProofreadTerms, setProjectProofreadTerms] = useState<ProofreadTerm[]>([]);
   const [projectProofreadIgnored, setProjectProofreadIgnored] = useState<ProofreadIgnoredByPath>(
     {},
@@ -907,7 +902,7 @@ export default function App() {
   });
   const [toast, setToast] = useState("");
   const [toastAction, setToastAction] = useState<ToastAction | null>(null);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
+
   const [draggingBreadcrumbEntryPath, setDraggingBreadcrumbEntryPath] =
     useState<string | null>(null);
   const [breadcrumbDropTarget, setBreadcrumbDropTarget] =
@@ -1085,11 +1080,7 @@ export default function App() {
     isRightSidebarCollapsed,
     isEditorFocusMode,
   });
-  const [ideaFocusRequest, setIdeaFocusRequest] = useState<{
-    threadId: string;
-    fragmentId?: string;
-    nonce: number;
-  } | null>(null);
+
   const [referenceLayout, setReferenceLayout] =
     useState<ReferenceLayout>(() => defaultReferenceLayout);
   // 資料のカードを本文の枠へまだ収めていない作品（枠を測れるようになるまで待つ）。
@@ -1217,42 +1208,7 @@ export default function App() {
     [projectFolder],
   );
 
-  const addReferencesToIdeaThread = useCallback(
-    (threadId: string, files: ReferenceFileInfo[]) => {
-      setReferenceLayout((current) => {
-        const ideaThreads = reconcileIdeaThreadLayouts(current.ideaThreads, appState.snippets);
-        const target = ideaThreads.find((layout) => layout.threadId === threadId);
-        if (!target) return current;
-        const existing = new Set(
-          target.items
-            .filter((item): item is IdeaReferenceLink => item.sourceType === "reference")
-            .map((item) => normalizedReferenceKey(item.sourcePath)),
-        );
-        const additions = files.flatMap((file) => {
-          const key = normalizedReferenceKey(file.sourcePath);
-          if (!key || existing.has(key)) return [];
-          existing.add(key);
-          return [makeReferenceLink(file.sourcePath)];
-        });
-        if (!additions.length) return current;
-        return {
-          ...upsertRecentReferences(current, files),
-          version: 3,
-          ideaThreads: ideaThreads.map((layout) =>
-            layout.threadId === threadId
-              ? { ...layout, items: [...additions, ...layout.items] }
-              : layout,
-          ),
-        };
-      });
-    },
-    [appState.snippets],
-  );
-
-  const handleAddReference = useCallback(async (
-    scope: ReferenceScope = "project",
-    targetThreadId?: string,
-  ) => {
+  const handleAddReference = useCallback(async (scope: ReferenceScope = "project") => {
     if (scope === "project" && !projectFolder) {
       showToast("先にフォルダを開いてください");
       return;
@@ -1276,10 +1232,10 @@ export default function App() {
           left.sourcePath.localeCompare(right.sourcePath),
         ),
       );
-      if (targetThreadId) {
-        addReferencesToIdeaThread(targetThreadId, result.files);
-      } else if (result.files[0]) {
-        openReferenceCard(result.files[0].sourcePath, result.files[0]);
+      // 取り込み先は素材フォルダの「資料」（BINDER 2-5）。素材フォルダを作ったときもあるので一覧を読み直す。
+      void refreshProjectFolderRef.current();
+      if (result.files[0]) {
+        openReferenceCard(result.files[0].sourcePath, result.files[0], { switchToReferenceTab: false });
       }
       if (result.failures.length) {
         setLastError(result.failures.map((failure) => `${failure.path}: ${failure.message}`).join("\n"));
@@ -1291,66 +1247,16 @@ export default function App() {
       setLastError(String(error));
       showToast("資料を追加できませんでした");
     }
-  }, [addReferencesToIdeaThread, openReferenceCard, projectFolder]);
-
-  const handleCreateReference = useCallback(async (
-    scope: ReferenceScope = "project",
-    targetThreadId?: string,
-  ) => {
-    if (scope === "project" && !projectFolder) {
-      showToast("先にフォルダを開いてください");
-      return;
-    }
-    if (!isTauriRuntime()) {
-      showToast("資料の作成はTauri版で利用できます");
-      return;
-    }
-
-    const name = await requestInput({
-      title: "資料を新規作成",
-      label: "ファイル名（.txt / .md）",
-      initialValue: "新しい資料.md",
-      confirmLabel: "作成",
-      placeholder: "例: 世界観メモ.md",
-    });
-    if (!name) return;
-
-    try {
-      const file = await invoke<ReferenceFileInfo>("create_reference_text_file", {
-        rootPath: projectFolder?.path ?? null,
-        scope,
-        name,
-      });
-      setReferenceCandidates((current) =>
-        mergeReferenceFiles([file], current).sort((left, right) =>
-          left.sourcePath.localeCompare(right.sourcePath),
-        ),
-      );
-      if (targetThreadId) {
-        addReferencesToIdeaThread(targetThreadId, [file]);
-        showToast(`「${file.name}」を作成しました`);
-      } else {
-        openReferenceCard(file.sourcePath, file);
-      }
-    } catch (error) {
-      setLastError(String(error));
-      showToast("資料を作成できませんでした");
-    }
-  }, [addReferencesToIdeaThread, openReferenceCard, projectFolder]);
+  }, [openReferenceCard, projectFolder]);
 
   const handleDeleteImportedReference = useCallback(
     async (sourcePath: string, scope: ReferenceScope = "project") => {
       if (scope === "project" && !projectFolder) return;
       const fileName = sourcePath.split(/[\\/]/).filter(Boolean).pop() ?? sourcePath;
-      const referenceCount = countIdeaReferenceLinks(referenceLayout.ideaThreads, sourcePath);
       const confirmed = await requestConfirm({
         title: "資料ファイルを削除",
-        message: referenceCount > 0
-          ? `この資料は${referenceCount}個のIdeaスレッドから参照されています。`
-          : `「${fileName}」をこのプロジェクトから削除しますか？`,
-        detail: referenceCount > 0
-          ? "資料ファイルと、すべてのスレッドからの参照を削除します。"
-          : "取り込んだ資料ファイルを削除します。この操作は元に戻せません。",
+        message: `「${fileName}」をこのプロジェクトから削除しますか？`,
+        detail: "資料ファイルを削除します。この操作は元に戻せません。",
         confirmLabel: "削除する",
         danger: true,
       });
@@ -1371,150 +1277,19 @@ export default function App() {
           recent: current.recent.filter(
             (file) => referenceFileKey(file) !== deletedKey,
           ),
-          ideaThreads: current.ideaThreads.map((layout) => ({
-            ...layout,
-            items: layout.items.filter(
-              (item) =>
-                item.sourceType !== "reference"
-                || normalizedReferenceKey(item.sourcePath) !== normalizedReferenceKey(sourcePath),
-            ),
-          })),
         }));
         setReferenceCandidates((current) =>
           current.filter((file) => referenceFileKey(file) !== deletedKey),
         );
+        void refreshProjectFolderRef.current();
         showToast(`「${fileName}」を削除しました`);
       } catch (error) {
         setLastError(String(error));
         showToast("資料を削除できませんでした");
       }
     },
-    [projectFolder, referenceLayout.ideaThreads],
+    [projectFolder],
   );
-
-  const moveIdeaReference = useCallback((
-    fromThreadId: string,
-    linkId: string,
-    toThreadId: string,
-    keepOriginal: boolean,
-  ) => {
-    if (fromThreadId === toThreadId) return;
-    setReferenceLayout((current) => {
-      const layouts = reconcileIdeaThreadLayouts(current.ideaThreads, appState.snippets);
-      const source = layouts.find((layout) => layout.threadId === fromThreadId);
-      const target = layouts.find((layout) => layout.threadId === toThreadId);
-      const link = source?.items.find(
-        (item): item is IdeaReferenceLink => item.sourceType === "reference" && item.id === linkId,
-      );
-      if (!source || !target || !link) return current;
-      const alreadyThere = target.items.some(
-        (item) =>
-          item.sourceType === "reference"
-          && normalizedReferenceKey(item.sourcePath) === normalizedReferenceKey(link.sourcePath),
-      );
-      return {
-        ...current,
-        version: 3,
-        ideaThreads: layouts.map((layout) => {
-          if (layout.threadId === fromThreadId && !keepOriginal) {
-            return { ...layout, items: layout.items.filter((item) => ideaThreadItemKey(item) !== `reference:${linkId}`) };
-          }
-          if (layout.threadId === toThreadId && !alreadyThere) {
-            return { ...layout, items: [makeReferenceLink(link.sourcePath), ...layout.items] };
-          }
-          return layout;
-        }),
-      };
-    });
-  }, [appState.snippets]);
-
-  const removeIdeaReference = useCallback(async (threadId: string, linkId: string) => {
-    const source = referenceLayout.ideaThreads.find((layout) => layout.threadId === threadId);
-    const link = source?.items.find(
-      (item): item is IdeaReferenceLink => item.sourceType === "reference" && item.id === linkId,
-    );
-    if (!link) return;
-    const count = countIdeaReferenceLinks(referenceLayout.ideaThreads, link.sourcePath);
-    if (count <= 1) {
-      const fileExists = referenceCandidates.some(
-        (file) => normalizedReferenceKey(file.sourcePath) === normalizedReferenceKey(link.sourcePath),
-      );
-      const confirmed = await requestConfirm({
-        title: fileExists ? "資料を削除" : "見つからない資料の参照を削除",
-        message: fileExists
-          ? "この資料はほかのスレッドから参照されていません。"
-          : "資料ファイルが見つかりません。この参照を削除しますか？",
-        detail: fileExists
-          ? "このプロジェクトからの削除になりますが、よろしいですか？"
-          : undefined,
-        confirmLabel: fileExists ? "削除する" : "参照を削除",
-        danger: true,
-      });
-      if (!confirmed || !projectFolder) return;
-      try {
-        if (fileExists) {
-          await invoke("delete_imported_reference", {
-            rootPath: projectFolder.path,
-            sourcePath: link.sourcePath,
-            scope: "project",
-          });
-        }
-        const key = normalizedReferenceKey(link.sourcePath);
-        setReferenceLayout((current) => ({
-          ...current,
-          cards: current.cards.filter(
-            (card) => !isReferenceBinderCard(card) || normalizedReferenceKey(card.sourcePath) !== key,
-          ),
-          recent: current.recent.filter((file) => normalizedReferenceKey(file.sourcePath) !== key),
-          ideaThreads: current.ideaThreads.map((layout) => ({
-            ...layout,
-            items: layout.items.filter(
-              (item) => item.sourceType !== "reference" || normalizedReferenceKey(item.sourcePath) !== key,
-            ),
-          })),
-        }));
-        setReferenceCandidates((current) =>
-          current.filter((file) => normalizedReferenceKey(file.sourcePath) !== key),
-        );
-        showToast(fileExists ? "資料を削除しました" : "見つからない資料の参照を削除しました");
-      } catch (error) {
-        setLastError(String(error));
-        showToast("資料を削除できませんでした");
-      }
-      return;
-    }
-    setReferenceLayout((current) => ({
-      ...current,
-      ideaThreads: current.ideaThreads.map((layout) =>
-        layout.threadId === threadId
-          ? { ...layout, items: layout.items.filter((item) => ideaThreadItemKey(item) !== `reference:${linkId}`) }
-          : layout,
-      ),
-    }));
-    showToast("このスレッドから資料を外しました");
-  }, [projectFolder, referenceCandidates, referenceLayout.ideaThreads]);
-
-  const reorderIdeaThreadItem = useCallback((
-    threadId: string,
-    itemKey: string,
-    targetKey: string,
-    position: "before" | "after",
-  ) => {
-    if (itemKey === targetKey) return;
-    setReferenceLayout((current) => ({
-      ...current,
-      ideaThreads: current.ideaThreads.map((layout) => {
-        if (layout.threadId !== threadId) return layout;
-        const moving = layout.items.find((item) => ideaThreadItemKey(item) === itemKey);
-        if (!moving) return layout;
-        const items = layout.items.filter((item) => ideaThreadItemKey(item) !== itemKey);
-        const targetIndex = items.findIndex((item) => ideaThreadItemKey(item) === targetKey);
-        if (targetIndex < 0) return layout;
-        items.splice(position === "after" ? targetIndex + 1 : targetIndex, 0, moving);
-        return { ...layout, items };
-      }),
-    }));
-  }, []);
 
   const returnFocusToEditor = useCallback(() => {
     editorInstanceRef.current?.focus();
@@ -1913,8 +1688,7 @@ export default function App() {
     });
   }, []);
 
-  const { snippets, settings } = appState;
-  snippetStorageModeRef.current = settings.snippetStorageMode;
+  const { settings } = appState;
   const zoneRightEnabled = settings.sidebarHoverMode === "both" || settings.sidebarHoverMode === "right";
   // Zoneモードの右ペインの表示判定は .appShell の属性で行う（zoneRightHover.ts）。
   useEffect(() => {
@@ -2551,7 +2325,8 @@ export default function App() {
           listReferenceCandidates(rootPath),
         ]);
         if (isCancelled) return;
-        const normalizedLayout = alignIdeaLayoutToMode(layout, snippetStorageModeRef.current);
+        // 移行（BINDER 2-4）の前の Idea の並び順が残っていても、そのまま持って書き戻す（移行のやり直しのため）。
+        const normalizedLayout = layout;
         referenceLayoutOnDiskRef.current = normalizedLayout;
         setReferenceLayout(normalizedLayout);
         setReferenceCandidates(candidates);
@@ -2646,34 +2421,6 @@ export default function App() {
     );
   }, [isHydrated, projectFolder?.path, referenceLayout]);
 
-  useEffect(() => {
-    const rootPath = projectFolder?.path ?? null;
-    if (!rootPath || referenceLayoutLoadedRootRef.current !== rootPath) return;
-    setReferenceLayout((current) => {
-      const ideaThreads = reconcileIdeaThreadLayouts(
-        current.ideaThreads,
-        snippets,
-        referenceCandidates.filter((file) => file.scope === "project" && file.imported),
-      );
-      if (sameIdeaThreadLayouts(ideaThreads, current.ideaThreads)) return current;
-      return { ...current, version: 3, ideaThreads };
-    });
-  }, [projectFolder?.path, referenceCandidates, snippets]);
-
-  useEffect(() => {
-    const liveIdeas = new Set(
-      snippets.flatMap((thread) =>
-        thread.fragments.map((fragment) => `${thread.id}:${fragment.id}`),
-      ),
-    );
-    setReferenceLayout((current) => {
-      const cards = current.cards.filter(
-        (card) =>
-          !isIdeaBinderCard(card) || liveIdeas.has(`${card.threadId}:${card.fragmentId}`),
-      );
-      return cards.length === current.cards.length ? current : { ...current, cards };
-    });
-  }, [snippets]);
 
   useEffect(() => {
     const rootPath = projectFolder?.path ?? null;
@@ -2797,7 +2544,6 @@ export default function App() {
   ) => {
     didMountEditorRef.current = false;
     setProjectFolder(null);
-    setSnippetWorkspacePath(null);
     setProofreadTermsWorkspacePath(null);
     setProjectProofreadTerms([]);
     setProjectProofreadIgnored({});
@@ -2817,18 +2563,30 @@ export default function App() {
   };
 
   /**
-   * Plot をノート「プロット（移行）」へ移してから開く（BINDER 1-6）。移したら true（ファイル一覧を読み直す）。
-   * 失敗しても作品は開く。次に開いたときにやり直す。
+   * Plot をノート「プロット（移行）」へ（BINDER 1-6）、Idea を投稿とノートへ、資料を素材フォルダへ（2-4・2-5）移して
+   * から開く。移したら true（ファイル一覧を読み直す）。Plot を先に移すので、ノート「プロット（移行）」の資料リンクも
+   * 書き換わる。失敗しても作品は開く。次に開いたときにやり直す。profile は起動時だけ渡す（アプリ側の Idea）。
    */
-  const migratePlotBeforeOpening = async (rootPaths: string[]) => {
+  const migratePlotBeforeOpening = async (rootPaths: string[], profile?: ProfileIdeas) => {
     const summary = await migratePlotToNotes(rootPaths);
     for (const failure of summary.failed) {
       console.error("plot migration failed", failure.rootPath, failure.error);
       setLastError(String(failure.error));
     }
-    const message = plotMigrationMessage(summary);
+    const ideas = await migrateIdeas(rootPaths, profile);
+    for (const failure of ideas.failed) {
+      console.error("idea migration failed", failure.rootPath, failure.error);
+      setLastError(String(failure.error));
+    }
+    if (profile && ideas.profileMigrated) {
+      const record = { library: profile.libraryRoot, at: localIsoNow() };
+      // 起動の処理は、移す前に読んだアプリ状態でまとめて置き換えるので、そこでも入れてもらう。
+      profileMigrationRef.current = record;
+      setAppState((current) => ({ ...current, profileSnippets: [], profileSnippetsMigration: record }));
+    }
+    const message = [plotMigrationMessage(summary), ideaMigrationMessage(ideas)].filter(Boolean).join("。");
     if (message) showToast(message);
-    return summary.migrated.length > 0;
+    return summary.migrated.length > 0 || ideas.migrated.length > 0 || ideas.profileMigrated;
   };
 
   const restoreWorkspaceFromState = async (
@@ -2842,19 +2600,18 @@ export default function App() {
       });
       // 旧版のワークスペースはそのまま開かず、取り込みへ誘導する。
       if (!folder.library) return "outsideLibrary";
-      // 起動時に、ライブラリ直下とライブラリの全作品の Plot をノートへ移す（BINDER 1-6、確認1の 1）。
+      // 起動時に、ライブラリ直下とライブラリの全作品の Plot・Idea・資料を移す（BINDER 1-6・2-4・2-5、確認1の 1）。
+      // アプリ側の Idea は、更新後に最初に開いたライブラリの投稿とノートへ移す（2-4）。
       const migrated = await migratePlotBeforeOpening([
         folder.library.path,
         ...folder.library.projects.map((project) => project.path),
         folder.path,
-      ]);
+      ], state.profileSnippetsMigration
+        ? undefined
+        : { libraryRoot: folder.library.path, threads: state.profileSnippets });
       if (migrated) {
         folder = await invoke<ProjectFolder>("list_project_text_files", { folderPath: folder.path });
       }
-      const restoredSnippets =
-        state.settings.snippetStorageMode === "workspace"
-          ? await loadWorkspaceSnippets(folder.path)
-          : state.snippets;
       const restoredProofreadTerms = await loadWorkspaceProofreadTerms(folder.path);
       const restoredProofreadIgnored = await loadWorkspaceProofreadIgnored(folder.path);
       const restoredFileProgress = await loadWorkspaceFileProgress(folder.path, state);
@@ -2866,7 +2623,9 @@ export default function App() {
 
       const restoredState: AppState = {
         ...state,
-        snippets: restoredSnippets,
+        ...(profileMigrationRef.current
+          ? { profileSnippets: [], profileSnippetsMigration: profileMigrationRef.current }
+          : {}),
         recentWorkspaces: recordOpenedWorkspace(state.recentWorkspaces, folder),
       };
       const workspaceKey = workspaceDocumentTabsKey(folder.path);
@@ -2892,15 +2651,11 @@ export default function App() {
           ];
       const nextTab = nextTabs[restoredTabs?.activeIndex ?? 0] ?? nextTabs[0];
 
-      // 作品のパスは、作品の Idea などと同じ描画で入れる。先に入れると、そのあいだに資料ボードの整合処理や
-      // 作品の Idea の保存が、アプリ状態に残った Idea を作品の Idea とみなして動く。
+      // 作品のパスは、作品の校正辞書などと同じ描画で入れる。
       setProjectFolder(folder);
       setSearchScope("file");
       setProjectSearchQuery("");
       setWorkspaceAlert(null);
-      setSnippetWorkspacePath(
-        state.settings.snippetStorageMode === "workspace" ? folder.path : null,
-      );
       setProofreadTermsWorkspacePath(folder.path);
       setProjectProofreadTerms(restoredProofreadTerms);
       setProjectProofreadIgnored(restoredProofreadIgnored);
@@ -3054,17 +2809,6 @@ export default function App() {
     });
   }, [currentFilePath, editorSelectionHead, editorText, isHydrated]);
 
-  useEffect(() => {
-    if (!isHydrated || !projectFolder || settings.snippetStorageMode !== "workspace") return;
-    if (snippetWorkspacePath !== projectFolder.path) return;
-
-    return schedulePendingSave("workspace-idea", 700, () =>
-      saveWorkspaceSnippets(projectFolder.path, snippets).catch(() => {
-        setLastError("ワークスペースのスニペット保存に失敗しました");
-      }),
-      () => openProjectPathRef.current !== projectFolder.path,
-    );
-  }, [isHydrated, projectFolder, settings.snippetStorageMode, snippetWorkspacePath, snippets]);
 
   useEffect(() => {
     if (!isHydrated || !projectFolder) return;
@@ -3092,10 +2836,9 @@ export default function App() {
 
   useEffect(() => {
     if (!isHydrated || !isTauriRuntime()) return;
-    if (settings.snippetStorageMode !== "workspace") return;
     if (workspaceSwitchInProgressRef.current) return;
     if (!currentFilePath || !activeWorkspaceRootPath) return;
-    if (snippetWorkspacePath === activeWorkspaceRootPath && projectFolder?.path === activeWorkspaceRootPath) {
+    if (proofreadTermsWorkspacePath === activeWorkspaceRootPath && projectFolder?.path === activeWorkspaceRootPath) {
       return;
     }
 
@@ -3108,7 +2851,6 @@ export default function App() {
         : invoke<ProjectFolder>("list_project_text_files", {
             folderPath: activeWorkspaceRootPath,
           }),
-      loadWorkspaceSnippets(activeWorkspaceRootPath),
       loadWorkspaceProofreadTerms(activeWorkspaceRootPath),
       loadWorkspaceProofreadIgnored(activeWorkspaceRootPath),
       loadWorkspaceFileProgress(activeWorkspaceRootPath, appStateRef.current),
@@ -3116,7 +2858,6 @@ export default function App() {
     ]))
       .then(([
         folder,
-        workspaceSnippets,
         workspaceProofreadTerms,
         workspaceProofreadIgnored,
         workspaceFileProgress,
@@ -3131,13 +2872,11 @@ export default function App() {
         setProjectFolder(folder);
         setFocusedFolderPath(null);
         setWorkspaceAlert(null);
-        setSnippetWorkspacePath(folder.path);
         setProofreadTermsWorkspacePath(folder.path);
         setProjectProofreadTerms(workspaceProofreadTerms);
         setProjectProofreadIgnored(workspaceProofreadIgnored);
         setAppState((current) => ({
           ...current,
-          snippets: workspaceSnippets,
           lastWorkspacePath: folder.path,
           lastFilePath: currentFilePath,
           fileProgress: replaceWorkspaceFileProgress(
@@ -3179,8 +2918,7 @@ export default function App() {
     currentFilePath,
     isHydrated,
     projectFolder,
-    settings.snippetStorageMode,
-    snippetWorkspacePath,
+    proofreadTermsWorkspacePath,
   ]);
 
   useEffect(() => {
@@ -3622,6 +3360,30 @@ export default function App() {
   // あるかを見直す（BINDER 2-3）。投稿のファイルが同じで、札もなければ読まない。
   const refreshPosts = postStream.refresh;
   useEffect(() => { void refreshPosts(); }, [projectFolder, refreshPosts]);
+  // 投稿を書く場所がない（フォルダを開いていない）ときは、すばやく投稿する窓を開いたままにしない。
+  useEffect(() => {
+    if (!postStream.available) setIsQuickIdeaModalOpen(false);
+  }, [postStream.available]);
+  // Canvas の「投稿にする」（BINDER 2-4、確認1の 8）。カード1枚ずつを、今の作品の投稿にする。
+  const addPostRef = useRef(postStream.add);
+  addPostRef.current = postStream.add;
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let unlisten: (() => void) | null = null;
+    let disposed = false;
+    void listen<CanvasCopyToPostRequest>(CANVAS_COPY_TO_POST_EVENT, async (event) => {
+      for (const body of event.payload.bodies) {
+        if (!(await addPostRef.current(body))) break;
+      }
+    }).then((dispose) => {
+      if (disposed) dispose();
+      else unlisten = dispose;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
   const postFilter = appState.postFilter;
   const setPostFilter = useCallback((filter: PostFilter) => {
     setAppState((current) => (current.postFilter === filter ? current : { ...current, postFilter: filter }));
@@ -3824,16 +3586,6 @@ export default function App() {
       ...canvasAppearanceSettings(settings),
       canvasDefaultWritingMode: settings.canvasDefaultWritingMode,
       canvasDefaultFontSource: settings.canvasDefaultFontSource,
-      ideaThreads: snippets.map((thread) => ({
-        id: thread.id,
-        kind: thread.kind,
-        title: thread.title,
-        fragments: thread.fragments.map((fragment) => ({
-          id: fragment.id,
-          body: fragment.body,
-          used: fragment.used,
-        })),
-      })),
       referenceFiles: projectFolder ? sortedReferenceCandidates : [],
       rightSidebarVisible: !isRightSidebarCollapsed,
     };
@@ -4063,7 +3815,7 @@ export default function App() {
       return;
     }
 
-    // Ctrl+Alt+I：Idea ペインを開かずにメモを追加する。
+    // Ctrl+Alt+I：アイデアのペインを開かずに投稿する。
     if (mod && event.altKey && !event.shiftKey && (key === "i" || key === "I")) {
       event.preventDefault();
       setIsCommandPaletteOpen(false);
@@ -4757,7 +4509,7 @@ export default function App() {
   }, [projectFolder]);
 
   const setWorkspaceFromDocumentPath = useCallback(
-    async (document: TextDocument, options: { loadWorkspaceSnippets?: boolean } = {}) => {
+    async (document: TextDocument) => {
       if (!isTauriRuntime()) return null;
       const folderPath =
         projectFolder && findContainingFolderPath(projectFolder, document.path)
@@ -4806,10 +4558,6 @@ export default function App() {
         if (existingIndex >= 0) nextTabs[existingIndex] = nextTab;
         else nextTabs.push(nextTab);
       }
-      const nextSnippets =
-        options.loadWorkspaceSnippets && settings.snippetStorageMode === "workspace"
-          ? await loadWorkspaceSnippets(folder.path)
-          : null;
       const nextProofreadTerms = await loadWorkspaceProofreadTerms(folder.path);
       const nextProofreadIgnored = await loadWorkspaceProofreadIgnored(folder.path);
       const nextFileProgress = await loadWorkspaceFileProgress(folder.path, appStateRef.current);
@@ -4818,8 +4566,7 @@ export default function App() {
         revision: nextFileProgress.revision,
         contentHash: nextFileProgress.contentHash,
       });
-      // 作品のパスとタブは、作品の Idea などと同じ描画で入れる。先に入れると、そのあいだに資料ボードの
-      // 整合処理が、前の作品の Idea で新しい作品の並び順を作り直す。
+      // 作品のパスとタブは、作品の校正辞書などと同じ描画で入れる。
       if (nextTabs && nextTab) {
         setOpenTabs(nextTabs);
         syncDocumentTabToEditor(nextTab);
@@ -4827,9 +4574,6 @@ export default function App() {
       setProjectFolder(folder);
       setFocusedFolderPath(null);
       setWorkspaceAlert(null);
-      if (nextSnippets) {
-        setSnippetWorkspacePath(folder.path);
-      }
       setProofreadTermsWorkspacePath(folder.path);
       setProjectProofreadTerms(nextProofreadTerms);
       setProjectProofreadIgnored(nextProofreadIgnored);
@@ -4846,7 +4590,6 @@ export default function App() {
         }
         return {
           ...current,
-          snippets: nextSnippets ?? current.snippets,
           markdown: nextTab?.markdown ?? current.markdown,
           lastWorkspacePath: folder.path,
           lastFilePath: document.path,
@@ -4891,7 +4634,6 @@ export default function App() {
       appState.documentTabsByWorkspace,
       projectFolder,
       rememberCurrentWorkspaceTabs,
-      settings.snippetStorageMode,
       syncDocumentTabToEditor,
     ],
   );
@@ -4904,6 +4646,7 @@ export default function App() {
     setProjectFolder(folder);
     return folder;
   }, [projectFolder]);
+  refreshProjectFolderRef.current = () => refreshProjectFolder("");
 
   /** `confirmed` は呼び出し側が確認と完了通知を受け持つとき（チェックポイント画面）。成功したら true。 */
   const handleRestoreManuscriptSnapshot = useCallback(
@@ -5389,9 +5132,7 @@ export default function App() {
       if (!document) {
         return;
       }
-      const workspace = await setWorkspaceFromDocumentPath(document, {
-        loadWorkspaceSnippets: true,
-      });
+      const workspace = await setWorkspaceFromDocumentPath(document);
       if (!workspace?.switched) loadDocumentIntoEditor(document);
       showToast(`「${document.name}」を開きました`);
     } catch (error) {
@@ -5427,7 +5168,7 @@ export default function App() {
 
       const wasScratch = !currentFilePath;
       const workspace = wasScratch
-        ? await setWorkspaceFromDocumentPath(document, { loadWorkspaceSnippets: true })
+        ? await setWorkspaceFromDocumentPath(document)
         : null;
       if (!workspace?.switched) loadDocumentIntoEditor(document, { replaceActive: true });
       const refreshPath = currentFilePath
@@ -5461,9 +5202,7 @@ export default function App() {
         setSaveStatus(previousSaveStatus);
         return;
       }
-      const workspace = await setWorkspaceFromDocumentPath(document, {
-        loadWorkspaceSnippets: true,
-      });
+      const workspace = await setWorkspaceFromDocumentPath(document);
       if (!workspace?.switched) loadDocumentIntoEditor(document, { replaceActive: true });
       if (!workspace && projectFolder) {
         await refreshProjectFolder(projectFolder.path);
@@ -5704,10 +5443,6 @@ export default function App() {
       if (await migratePlotBeforeOpening([folder.path])) {
         folder = await invoke<ProjectFolder>("list_project_text_files", { folderPath: folder.path });
       }
-      const restoredSnippets =
-        settings.snippetStorageMode === "workspace"
-          ? await loadWorkspaceSnippets(folder.path)
-          : snippets;
       const restoredProofreadTerms = await loadWorkspaceProofreadTerms(folder.path);
       const restoredProofreadIgnored = await loadWorkspaceProofreadIgnored(folder.path);
       const restoredFileProgress = await loadWorkspaceFileProgress(
@@ -5732,7 +5467,6 @@ export default function App() {
       setWorkspaceAlert(null);
       setFocusedFolderPath(focusedPath);
       setWorkspaceSwitcherQuery("");
-      setSnippetWorkspacePath(settings.snippetStorageMode === "workspace" ? folder.path : null);
       setProofreadTermsWorkspacePath(folder.path);
       setProjectProofreadTerms(restoredProofreadTerms);
       setProjectProofreadIgnored(restoredProofreadIgnored);
@@ -5758,7 +5492,6 @@ export default function App() {
         }
         return {
           ...current,
-          snippets: restoredSnippets,
           markdown: nextTab.markdown,
           lastWorkspacePath: folder.path,
           lastFilePath: nextTab.path,
@@ -6191,167 +5924,6 @@ export default function App() {
     if (report) enterProject(report.projectPath);
   };
 
-  // ---- ライブラリと作品の間での項目の移動・コピー ----
-  // ライブラリ直下からは作品へ、作品からはライブラリ直下へ送る。
-
-  /** 移動・コピーのメニュー項目名。ライブラリの外では出さない。 */
-  const transferMenuLabel = !libraryContext
-    ? null
-    : libraryContext.role === "root"
-      ? "作品へ移動・コピー…"
-      : "ライブラリへ移動・コピー…";
-
-  const transferDestinations = (): { path: string; label: string }[] => {
-    if (!libraryContext || !projectFolder) return [];
-    return libraryContext.role === "root"
-      ? libraryContext.projects.map((project) => ({ path: project.path, label: `作品「${project.name}」` }))
-      : [{ path: libraryContext.path, label: `ライブラリ「${libraryContext.name}」の直下` }];
-  };
-
-  /** 送り先・移動かコピーか・資料の扱いを尋ねる。 */
-  const requestTransferOptions = async ({
-    itemLabel,
-    referenceCount,
-    canMove = true,
-  }: {
-    itemLabel: string;
-    referenceCount: number;
-    canMove?: boolean;
-  }): Promise<{ target: string; targetLabel: string; move: boolean; copyReferences: boolean } | null> => {
-    const destinations = transferDestinations();
-    if (!destinations.length) {
-      showToast(
-        libraryContext?.role === "root"
-          ? "送り先の作品がありません"
-          : "ライブラリ内の作品を開いているときに使えます",
-      );
-      return null;
-    }
-    const values = await requestMultiInput({
-      title: `${itemLabel}を移動・コピー`,
-      fields: [
-        {
-          id: "target",
-          label: "送り先",
-          initialValue: destinations[0].path,
-          options: destinations.map((item) => ({ value: item.path, label: item.label })),
-        },
-        {
-          id: "mode",
-          label: "方法",
-          initialValue: "copy",
-          options: [
-            { value: "copy", label: "コピー（元に残す）" },
-            ...(canMove ? [{ value: "move", label: "移動（元から取り除く）" }] : []),
-          ],
-        },
-        ...(referenceCount > 0
-          ? [{
-              id: "references",
-              label: `参照している資料（${referenceCount}件）`,
-              initialValue: "copy",
-              options: [
-                { value: "copy", label: "送り先へ資料もコピーする" },
-                { value: "drop", label: "資料への参照を外す" },
-              ],
-            }]
-          : []),
-      ],
-      confirmLabel: "実行",
-    });
-    if (!values) return null;
-    const target = destinations.find((item) => item.path === values.target) ?? destinations[0];
-    return {
-      target: target.path,
-      targetLabel: target.label,
-      move: values.mode === "move",
-      copyReferences: values.references !== "drop",
-    };
-  };
-
-  const isExistingReference = (path: string) =>
-    referenceCandidates.some(
-      (file) => normalizedReferenceKey(file.sourcePath) === normalizedReferenceKey(path),
-    );
-
-  /** 送る項目が参照している資料を、送り先へコピーするか参照を外すかに振り分ける。 */
-  const prepareReferenceRewrite = async (
-    targetPath: string,
-    referencedPaths: string[],
-    copyReferences: boolean,
-  ): Promise<ReferenceRewrite> => {
-    const existing = referencedPaths.filter(isExistingReference);
-    if (!existing.length || !projectFolder) return { copied: new Map(), dropped: new Set() };
-    if (!copyReferences) {
-      return { copied: new Map(), dropped: new Set(existing.map(normalizedReferenceKey)) };
-    }
-    const transferred = await invoke<{ from: string; file: ReferenceFileInfo }[]>(
-      "transfer_reference_files",
-      {
-        sourceRoot: projectFolder.path,
-        targetRoot: targetPath,
-        sourcePaths: existing,
-        removeImportedSources: false,
-      },
-    );
-    return {
-      copied: new Map(transferred.map((item) => [normalizedReferenceKey(item.from), item.file])),
-      dropped: new Set(),
-    };
-  };
-
-  const reportTransferError = (error: unknown) => {
-    setLastError(String(error));
-    showToast(`移動・コピーできませんでした: ${String(error)}`);
-  };
-
-  const ensureIdeaTransferAvailable = () => {
-    if (settings.snippetStorageMode === "workspace") return true;
-    showToast("Idea をプロファイルに保存している間は、作品ごとの移動・コピーはできません");
-    return false;
-  };
-
-  const transferReferenceFile = async (file: ReferenceFileInfo) => {
-    if (!projectFolder) return;
-    const options = await requestTransferOptions({
-      itemLabel: "資料",
-      referenceCount: 0,
-      // ツリー内の文書として置かれた資料は元の場所から動かさない。
-      canMove: file.imported,
-    });
-    if (!options) return;
-    try {
-      await invoke("transfer_reference_files", {
-        sourceRoot: projectFolder.path,
-        targetRoot: options.target,
-        sourcePaths: [file.sourcePath],
-        removeImportedSources: options.move,
-      });
-      if (options.move) {
-        const key = normalizedReferenceKey(file.sourcePath);
-        setReferenceCandidates((current) =>
-          current.filter((item) => normalizedReferenceKey(item.sourcePath) !== key),
-        );
-        setReferenceLayout((current) => ({
-          ...current,
-          cards: current.cards.filter(
-            (card) => !isReferenceBinderCard(card) || normalizedReferenceKey(card.sourcePath) !== key,
-          ),
-          recent: current.recent.filter((item) => normalizedReferenceKey(item.sourcePath) !== key),
-          ideaThreads: current.ideaThreads.map((layout) => ({
-            ...layout,
-            items: layout.items.filter(
-              (item) => item.sourceType !== "reference" || normalizedReferenceKey(item.sourcePath) !== key,
-            ),
-          })),
-        }));
-      }
-      showToast(`「${file.name}」を${options.targetLabel}へ${options.move ? "移動" : "コピー"}しました`);
-    } catch (error) {
-      reportTransferError(error);
-    }
-  };
-
   const handleOpenProjectFolder = async () => {
     await openWorkspace();
   };
@@ -6479,23 +6051,12 @@ export default function App() {
     setAppMode("write");
   }, [projectPathForModeReset]);
 
-  // 別ウィンドウのキャンバスへ Idea・資料の最新一覧を届ける。断片編集は
-  // キーストロークごとに snippets が変わるためデバウンスする。ウィンドウが
+  // 別ウィンドウのキャンバスへ資料の最新一覧を届ける。ウィンドウが
   // 存在しない場合は誰も受け取らないだけで害はない（ボードの再読込もしない）。
   useEffect(() => {
     if (!isTauriRuntime()) return;
     const timer = window.setTimeout(() => {
       const payload: CanvasLiveDataEvent = {
-        ideaThreads: snippets.map((thread) => ({
-          id: thread.id,
-          kind: thread.kind,
-          title: thread.title,
-          fragments: thread.fragments.map((fragment) => ({
-            id: fragment.id,
-            body: fragment.body,
-            used: fragment.used,
-          })),
-        })),
         referenceFiles: projectFolder ? sortedReferenceCandidates : [],
       };
       emitTo("idea-canvas", CANVAS_LIVE_DATA_EVENT, payload).catch(() => {
@@ -6503,7 +6064,7 @@ export default function App() {
       });
     }, 400);
     return () => window.clearTimeout(timer);
-  }, [snippets, sortedReferenceCandidates, projectFolder]);
+  }, [sortedReferenceCandidates, projectFolder]);
 
   const jumpToEditorLine = (line: number) => {
     const targetLine = Math.max(1, line);
@@ -6899,123 +6460,6 @@ export default function App() {
   const getEditorView = () => {
     return editorInstanceRef.current;
   };
-
-  const openIdeaBinderCard = (threadId: string, fragmentId: string) => {
-    const thread = snippets.find((item) => item.id === threadId);
-    const fragment = thread?.fragments.find((item) => item.id === fragmentId);
-    if (!thread || !fragment) return;
-
-    setReferenceLayout((current) => {
-      const existing = current.cards.find(
-        (card) =>
-          isIdeaBinderCard(card) &&
-          card.threadId === threadId &&
-          card.fragmentId === fragmentId,
-      );
-      if (existing) {
-        return {
-          ...current,
-          cards: current.cards.map((card) =>
-            card.id === existing.id
-              ? {
-                  ...card,
-                  collapsed: false,
-                  zIndex: nextReferenceZIndex(current.cards, card.pinned),
-                }
-              : card,
-          ),
-        };
-      }
-
-      const stageRect = workspaceRef.current?.getBoundingClientRect();
-      const editorRect = editorShellRef.current?.getBoundingClientRect();
-      const index = current.cards.length;
-      const originX = editorRect && stageRect ? editorRect.left - stageRect.left : 0;
-      const originY = editorRect && stageRect ? editorRect.top - stageRect.top : 0;
-      const card = clampReferenceCardToStage(
-        {
-          id: `idea-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-          sourceType: "idea" as const,
-          threadId,
-          fragmentId,
-          x: originX + 88 + index * 28,
-          y: originY + 88 + index * 28,
-          width: 320,
-          height: 300,
-          zIndex: nextReferenceZIndex(current.cards, false),
-          collapsed: false,
-          pinned: false,
-        },
-        stageRect?.width ?? 1200,
-        stageRect?.height ?? 800,
-      );
-      return { ...current, version: 3, cards: [...current.cards, card] };
-    });
-  };
-
-  const {
-    handleFragmentDragStart,
-    handleFragmentDragEnd,
-    blockIdeaDropOnEditor,
-    captureFragment,
-    addFragment,
-    updateFragmentBody,
-    deleteFragment,
-    moveFragment,
-    createIdeaThread,
-    moveFragmentToNewThread,
-    moveReferenceToNewThread,
-    renameIdeaThread,
-    toggleThreadStar,
-    deleteIdeaThread,
-    receiveCanvasCopyToIdea,
-    receiveCanvasFocusIdea,
-    transferIdeaThread,
-    transferIdeaFragment,
-  } = createIdeaThreadActions({
-    snippets,
-    referenceLayout,
-    setAppState,
-    setReferenceLayout,
-    setDraggingId,
-    setIdeaFocusRequest,
-    setRightSidebarTab,
-    setIsRightSidebarCollapsed,
-    showToast,
-    requestConfirm,
-    requestInput,
-    requestTransferOptions,
-    isExistingReference,
-    prepareReferenceRewrite,
-    reportTransferError,
-    loadReferenceLayout,
-    saveReferenceLayout,
-    ensureIdeaTransferAvailable,
-  });
-
-  useEffect(() => {
-    if (!isTauriRuntime()) return;
-
-    let unlistenCopy: (() => void) | null = null;
-    let unlistenFocus: (() => void) | null = null;
-
-    void listen<CanvasCopyToIdeaRequest>("then-canvas-copy-to-idea", (event) => {
-      receiveCanvasCopyToIdea(event.payload);
-    }).then((unlisten) => {
-      unlistenCopy = unlisten;
-    });
-
-    void listen<CanvasFocusIdeaRequest>("then-canvas-focus-idea", (event) => {
-      receiveCanvasFocusIdea(event.payload);
-    }).then((unlisten) => {
-      unlistenFocus = unlisten;
-    });
-
-    return () => {
-      unlistenCopy?.();
-      unlistenFocus?.();
-    };
-  }, []);
 
   const updateSettings = <Key extends keyof EditorSettings>(
     key: Key,
@@ -7439,66 +6883,6 @@ export default function App() {
     },
   };
 
-  const handleSnippetStorageModeChange = async (
-    mode: EditorSettings["snippetStorageMode"],
-  ) => {
-    if (mode === settings.snippetStorageMode) return;
-    const confirmed = await requestConfirm({
-      title: "Ideaの管理単位を切り替え",
-      message:
-        mode === "profile"
-          ? "右サイドバーの Idea を、全作品で共有する Idea に切り替えますか？"
-          : "右サイドバーの Idea を、作品ごとの Idea に切り替えますか？",
-      confirmLabel: mode === "profile" ? "共有の Idea に切り替える" : "作品ごとの Idea に切り替える",
-    });
-    if (!confirmed) return;
-
-    // 作品の Idea は0.7秒遅れて保存する。切り替えるとその保存が取り消されるので、先に書き終える。
-    if (
-      projectFolder
-      && settings.snippetStorageMode === "workspace"
-      && snippetWorkspacePath === projectFolder.path
-    ) {
-      try {
-        await saveWorkspaceSnippets(projectFolder.path, snippets);
-      } catch (error) {
-        setLastError(String(error));
-        showToast("Idea を保存できなかったため、管理単位を切り替えませんでした");
-        return;
-      }
-    }
-
-    updateSettings("snippetStorageMode", mode);
-    if (!projectFolder) return;
-    // 並び順と Idea カードを切り替え先の側に合わせる。Idea の組を入れ替えるのと同じ描画で
-    // 合わせないと、整合処理が今の並び順を新しい組に合わせて崩してしまう。
-    const alignReferenceLayout = () => {
-      if (referenceLayoutLoadedRootRef.current !== projectFolder.path) return;
-      setReferenceLayout((current) => alignIdeaLayoutToMode(current, mode));
-    };
-
-    if (mode === "workspace") {
-      try {
-        const workspaceSnippets = await loadWorkspaceSnippets(projectFolder.path);
-        setSnippetWorkspacePath(projectFolder.path);
-        alignReferenceLayout();
-        setAppState((current) => ({ ...current, snippets: workspaceSnippets }));
-      } catch (error) {
-        setLastError(String(error));
-      }
-      return;
-    }
-
-    const profileState = normalizeState(
-      isTauriRuntime()
-        ? await invoke<AppState | null>("load_app_state")
-        : JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "null"),
-    );
-    setSnippetWorkspacePath(null);
-    alignReferenceLayout();
-    setAppState((current) => ({ ...current, snippets: profileState.profileSnippets }));
-  };
-
   return (
       <main
         ref={appShellRef}
@@ -7680,7 +7064,7 @@ export default function App() {
               {...{
                 appMode, isLeftSidebarCollapsed, isEditorFocusMode, leftSidebarView, setIsLeftSidebarCollapsed,
                 setLeftSidebarView, handleNewDocument, projectFolder, handleCreateProjectFolder,
-                focusedFolderPath, handleOpenProjectFolder, referenceLayout, snippets,
+                focusedFolderPath, handleOpenProjectFolder, referenceLayout,
                 sortedReferenceCandidates, focusReferenceCard, closeReferenceCard, pinReferenceCard,
                 collapseReferenceCard, currentFilePath, currentFileName, charCount, outlineItems,
                 activeOutlineIds, activeOutlineChain, projectAst, settings, appState, handleSetFileProgress,
@@ -7700,6 +7084,9 @@ export default function App() {
                 enterLibraryRoot, enterProject, handleCreateLibraryProject, handleImportProjectIntoLibrary,
                 reorderLibraryProjects, libraryCorpus, openIdeaPane, postInboxCount, handleCreateMaterialsFolder,
                 handleSetMaterialsFolder, handleCorkboardFolderClick,
+                handleAddReference: () => handleAddReference(),
+                openReferenceCard,
+                handleDeleteImportedReference: (sourcePath: string) => handleDeleteImportedReference(sourcePath),
                 // In the corkboard these open the file in the body (BINDER 1-5).
                 handleProjectFileSelect: selectBinderFile,
                 handleProjectSearchResultOpen: openSearchResultInBody,
@@ -7728,8 +7115,7 @@ export default function App() {
                   ref={editorShellRef}
                   className="editor"
                   onContextMenu={handleEditorContextMenu}
-                  onDragOverCapture={blockIdeaDropOnEditor}
-                  onDropCapture={blockIdeaDropOnEditor}
+
                 >
                   <div className="editorContent">
                     {workspaceAlert && (
@@ -8016,11 +7402,7 @@ export default function App() {
                   draftSelectRequest={draftSelectRequest}
                   onDraftSelectionConsumed={(nonce) => setDraftSelectRequest((current) => current?.nonce === nonce ? null : current)}
                   onOpenDraft={() => { setRightSidebarTab("draft"); setIsRightSidebarCollapsed(false); }}
-                  liveIdeaThreads={snippets.map((thread) => ({
-                    id: thread.id,
-                    kind: thread.kind,
-                    title: thread.title,
-                  }))}
+
                   liveReferenceFiles={
                     projectFolder ? sortedReferenceCandidates : []
                   }
@@ -8051,17 +7433,8 @@ export default function App() {
                 returnFocusFromProperties, loadPropertySets, searchByProperty, editorText, settings,
                 updateSettings, revealEditorRange, replaceEditorRange, projectProofreadTerms, appState,
                 setProjectProofreadTerms, setAppState, exportProofreadDictionary, importProofreadDictionary,
-                projectProofreadIgnored, proofreadIgnoreKey, setProjectProofreadIgnored, snippets,
-                showToast, openReferenceCard,
-                sortedReferenceCandidates, transferMenuLabel, referenceLayout,
-                draggingId, ideaFocusRequest, setIdeaFocusRequest, captureFragment, openIdeaBinderCard,
-                createIdeaThread, renameIdeaThread, toggleThreadStar, deleteIdeaThread, addFragment,
-                updateFragmentBody, deleteFragment, moveFragment, moveFragmentToNewThread,
-                handleFragmentDragStart, handleFragmentDragEnd, handleAddReference, handleCreateReference,
-                moveIdeaReference, moveReferenceToNewThread, removeIdeaReference,
-                handleDeleteImportedReference, reorderIdeaThreadItem, transferIdeaThread,
-                transferIdeaFragment, transferReferenceFile, postStream, postFilter, setPostFilter,
-                postNoteActions,
+                projectProofreadIgnored, proofreadIgnoreKey, setProjectProofreadIgnored,
+                postStream, postFilter, setPostFilter, postNoteActions,
               }}
             />
           </div>
@@ -8091,8 +7464,6 @@ export default function App() {
             onLayoutChange={patchReferenceLayout}
             onReturnFocusToEditor={returnFocusToEditor}
             onTextSaved={handleReferenceTextSaved}
-            ideaThreads={snippets}
-            onUpdateIdeaFragment={updateFragmentBody}
           />
 
           {appMode === "export" && exportEmbedPayload && (
@@ -8290,13 +7661,7 @@ export default function App() {
           {isQuickIdeaModalOpen && postStream.available && (
             <QuickPostModal onPost={(body) => postStream.add(body)} onClose={() => setIsQuickIdeaModalOpen(false)} />
           )}
-          {isQuickIdeaModalOpen && !postStream.available && (
-            <QuickIdeaModal
-              threads={snippets}
-              onCapture={captureFragment}
-              onClose={() => setIsQuickIdeaModalOpen(false)}
-            />
-          )}
+
           {isSettingsModalOpen && (
             <SettingsModal
               settings={settings}
@@ -8309,9 +7674,6 @@ export default function App() {
                 setIsThemePickerModalOpen(true);
               }}
               onUpdateSettings={updateSettings}
-              onSnippetStorageModeChange={(mode) =>
-                void handleSnippetStorageModeChange(mode)
-              }
             />
           )}
           {isThemePickerModalOpen && (

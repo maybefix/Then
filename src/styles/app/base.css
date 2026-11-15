@@ -3906,15 +3906,6 @@ html:not([data-window-fullscreen="true"])
   white-space: nowrap;
 }
 
-.snippetPanel {
-  display: flex;
-  width: var(--snippet-width);
-  flex: 0 0 var(--snippet-width);
-  flex-direction: column;
-  border-left: 1px solid var(--border-subtle);
-  background: #20221f;
-}
-
 .panelHeader {
   display: flex;
   height: 80px;
@@ -3998,122 +3989,6 @@ html:not([data-window-fullscreen="true"])
 
 .searchBox input:focus {
   border-color: #657276;
-}
-
-.snippetList {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
-  padding: 0 20px 20px;
-}
-
-.snippetCard {
-  flex: 0 0 auto;
-  padding: 16px 18px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: #20221f;
-  cursor: grab;
-  user-select: none;
-  transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    opacity 120ms ease;
-}
-
-.snippetCardHeader {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 3px;
-}
-
-.snippetTools {
-  display: inline-flex;
-  flex: 0 0 auto;
-  gap: 2px;
-  margin-left: auto;
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-
-.snippetCard:hover .snippetTools,
-.snippetCard:focus-within .snippetTools {
-  opacity: 1;
-}
-
-.snippetTools button {
-  display: inline-grid;
-  width: 20px;
-  height: 20px;
-  place-items: center;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 12px;
-  line-height: 1;
-}
-
-.snippetTools button:hover {
-  background: #353834;
-  color: var(--text-primary);
-}
-
-.snippetCard:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-tertiary);
-}
-
-.snippetCard:active {
-  cursor: grabbing;
-}
-
-.snippetCard.dragging {
-  border-style: dashed;
-  opacity: 0.45;
-}
-
-.snippetTitle {
-  overflow: hidden;
-  min-width: 0;
-  flex: 1;
-  color: var(--text-primary);
-  font-size: 16px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.snippetPreview {
-  display: -webkit-box;
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.45;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.snippetMeta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 10px;
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
-.snippetMeta span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .toast {
@@ -4620,14 +4495,6 @@ html:not([data-window-fullscreen="true"])
 
 .quickIdeaModal .ideaCaptureRow {
   margin-top: 14px;
-}
-
-.quickIdeaModal .quickIdeaDestSelect {
-  max-width: 68%;
-  height: 42px;
-  border-radius: 21px;
-  padding: 0 16px;
-  font-size: 15px;
 }
 
 .quickIdeaModal .quickIdeaSubmit {
@@ -7193,54 +7060,6 @@ body {
   background: var(--bg-panel);
 }
 
-.binderIdeaCardBody {
-  gap: 8px;
-  padding: 10px;
-}
-
-.binderIdeaCardBody textarea {
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  resize: none;
-  border: 0.5px solid var(--border-subtle);
-  border-radius: 6px;
-  outline: none;
-  padding: 10px;
-  background: var(--bg-input, var(--bg-panel-strong));
-  color: var(--text-primary);
-  font: inherit;
-  line-height: 1.7;
-}
-
-.binderIdeaCardBody textarea:focus {
-  border-color: color-mix(in srgb, var(--accent) 65%, var(--border-strong));
-}
-
-.binderIdeaCardFooter {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: space-between;
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.binderIdeaCardFooter button {
-  border: 0.5px solid var(--border-subtle);
-  border-radius: 999px;
-  padding: 3px 9px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.binderIdeaCardFooter button.isUsed {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-subtle));
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent-strong);
-}
-
 .referenceBodyToolbar {
   display: flex;
   min-height: 34px;
@@ -8031,16 +7850,6 @@ body {
 }
 
 /* ===== Idea（スレッド二段ナビ） ===== */
-.binderPane {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 0;
-  overflow: auto;
-  padding: 0 0 16px;
-}
 
 .binderModePane {
   overflow: hidden;
@@ -8482,70 +8291,13 @@ body {
   overflow: hidden;
 }
 
-.ideaStage {
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  overflow: hidden;
-}
-
-.ideaTrack {
-  display: flex;
-  width: 200%;
-  height: 100%;
-  transition: transform 240ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.ideaTrack.showDetail {
-  transform: translateX(-50%);
-}
-
-.ideaView {
-  display: flex;
-  width: 50%;
-  min-width: 0;
-  min-height: 0;
-  flex-direction: column;
-}
-
 .ideaViewTop {
   flex: 0 0 auto;
   border-bottom: 0.5px solid var(--border-subtle);
 }
 
-.ideaTopRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 14px 0;
-}
-
-.ideaNewThread {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px;
-  border: 0.5px solid var(--border-subtle);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.ideaNewThread:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-panel-strong);
-  color: var(--text-primary);
-}
-
 .ideaCapture {
   padding: 10px 14px 0;
-}
-
-.ideaCaptureInline {
-  padding: 0 0 12px;
 }
 
 .ideaCaptureBox {
@@ -8598,24 +8350,6 @@ body {
   font-size: 11px;
 }
 
-.ideaDestSelect {
-  min-width: 0;
-  max-width: 62%;
-  height: 26px;
-  border: 0.5px solid var(--border-subtle);
-  border-radius: 6px;
-  /* 投稿欄（.ideaCaptureBox）と同じ背景色に揃える */
-  background: var(--bg-panel-strong);
-  color: var(--text-secondary);
-  font-size: 12px;
-  padding: 0 6px;
-}
-
-.ideaDestSelect:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-
 .ideaPrimaryBtn {
   display: inline-flex;
   align-items: center;
@@ -8644,24 +8378,6 @@ body {
   display: flex;
   align-items: center;
   padding: 10px 14px 12px;
-}
-
-.ideaSearchInput {
-  width: 110px;
-  flex: 1 1 110px;
-  min-width: 0;
-  height: 28px;
-  padding: 0 9px;
-  border: 0.5px solid var(--border-subtle);
-  border-radius: 6px;
-  outline: none;
-  background: var(--bg-panel-strong);
-  color: var(--text-primary);
-  font-size: 12px;
-}
-
-.ideaSearchInput:focus {
-  border-color: var(--accent);
 }
 
 .ideaChips {
@@ -8699,72 +8415,6 @@ body {
   padding: 8px 14px 18px;
 }
 
-.ideaThreadRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  padding: 11px 10px 11px 12px;
-  margin-top: 10px;
-  border: 0.5px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-secondary);
-  cursor: pointer;
-  transition:
-    border-color 120ms ease,
-    background 120ms ease;
-}
-
-.ideaThreadRow:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-panel-strong);
-}
-
-.ideaThreadRow.isInbox {
-  background: color-mix(in srgb, var(--accent) 6%, var(--bg-secondary));
-}
-
-.ideaRowTitle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ideaRowStar {
-  display: inline-grid;
-  flex: 0 0 auto;
-  place-items: center;
-  color: var(--warning);
-}
-
-.ideaRowStar svg {
-  width: 13px;
-  height: 13px;
-  fill: currentColor;
-  stroke: none;
-}
-
-.ideaRowSummary {
-  display: -webkit-box;
-  margin-top: 4px;
-  overflow: hidden;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.55;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.ideaDetailTop {
-  padding: 10px 14px 0;
-}
-
 .ideaDetailNav {
   display: flex;
   align-items: center;
@@ -8772,55 +8422,7 @@ body {
   gap: 8px;
 }
 
-.ideaBackBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 28px;
-  padding: 0 8px 0 6px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.ideaBackBtn:hover {
-  background: var(--bg-panel-strong);
-  color: var(--text-primary);
-}
-
-.ideaDetailActions {
-  display: inline-flex;
-  gap: 2px;
-}
-
-.ideaIconBtn {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.ideaIconBtn:hover {
-  background: var(--bg-panel-strong);
-  color: var(--text-primary);
-}
-
-.ideaIconBtn.isOn {
-  color: var(--warning);
-}
-
-.ideaBackBtn svg,
-.ideaNewThread svg,
-.ideaPrimaryBtn svg,
-.ideaIconBtn svg {
+.ideaPrimaryBtn svg {
   width: 15px;
   height: 15px;
   fill: none;
@@ -8828,34 +8430,6 @@ body {
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.8;
-}
-
-.ideaIconBtn.isOn svg {
-  fill: currentColor;
-}
-
-.ideaDetailTitle {
-  width: 100%;
-  margin-top: 8px;
-  padding: 3px 5px;
-  border: 0.5px solid transparent;
-  border-radius: 6px;
-  outline: none;
-  background: transparent;
-  color: var(--text-primary);
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1.4;
-}
-
-.ideaDetailTitle:focus {
-  border-color: var(--border-strong);
-  background: var(--bg-panel-strong);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
-}
-
-.ideaDetailTitle:read-only {
-  cursor: default;
 }
 
 .ideaDetailStats {
@@ -8901,25 +8475,6 @@ body {
 
 .ideaFragment.isReorderAfter {
   box-shadow: inset 0 -2px 0 var(--accent);
-}
-
-.ideaDragHandle {
-  align-self: start;
-  margin-top: 2px;
-  color: var(--text-faint);
-  cursor: grab;
-  line-height: 0;
-}
-
-.ideaDragHandle:active {
-  cursor: grabbing;
-}
-
-.ideaGripGlyph {
-  width: 14px;
-  height: 14px;
-  fill: currentColor;
-  stroke: none;
 }
 
 .ideaFragmentBody {
@@ -9009,12 +8564,6 @@ body {
   margin-top: 6px;
 }
 
-.ideaCaptureControls .ideaDestSelect {
-  flex: 0 1 150px;
-  width: 150px;
-  max-width: calc(100% - 118px);
-}
-
 .ideaCaptureSpacer {
   flex: 1 1 auto;
 }
@@ -9023,8 +8572,7 @@ body {
   flex: 0 0 auto;
 }
 
-.ideaClipHost,
-.ideaReferenceMenuHost {
+.ideaClipHost {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -9141,50 +8689,6 @@ body {
   color: var(--text-primary);
 }
 
-.ideaClipButton {
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
-  border: 0;
-  border-radius: var(--radius-control, 6px);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.ideaClipButton:hover {
-  color: var(--text-primary);
-  background: var(--bg-tertiary);
-}
-
-.ideaClipButton svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.ideaClipMenu {
-  top: calc(100% + 4px);
-  right: 0;
-  left: auto;
-  z-index: 40;
-  min-width: 168px;
-  max-width: calc(100vw - 24px);
-}
-
-.ideaClipMenu.align-start {
-  right: auto;
-  left: 0;
-}
-
-.ideaClipMenu button {
-  font: 12px/1.4 var(--ui-font-family);
-}
-
 .ideaReferenceMenu {
   top: calc(100% + 4px);
   right: 0;
@@ -9223,128 +8727,17 @@ body {
   color: var(--danger);
 }
 
-.ideaMixedItemMain {
-  min-width: 0;
-  width: 100%;
-}
-
-.ideaReferenceItem {
-  align-items: center;
-}
-
-.ideaReferenceItem.isMissing {
-  opacity: 0.72;
-}
-
-.ideaReferenceOpen {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.ideaReferenceOpen:disabled {
-  cursor: default;
-}
-
-.ideaReferenceOpen > svg {
-  flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
-  opacity: 0.55;
-}
-
-.ideaReferenceVisual {
-  display: grid;
-  flex: 0 0 46px;
-  width: 46px;
-  height: 42px;
-  place-items: center;
-  overflow: hidden;
-  border-radius: var(--radius-control, 6px);
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  color: var(--text-muted);
-  font: 11px/1 var(--ui-font-family);
-}
-
-.ideaReferenceVisual img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.ideaReferenceCopy {
-  display: flex;
-  flex: 1 1 auto;
-  min-width: 0;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.ideaReferenceCopy strong,
-.ideaReferencePreview {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ideaReferencePreview {
-  color: var(--text-secondary);
-  font: 12px/1.5 var(--ui-font-family);
-}
-
-.ideaReferenceCopy strong {
-  color: var(--text-faint);
-  font: 10px/1.4 var(--ui-font-family);
-  font-weight: 500;
-}
-
-.ideaReferenceMenuHost {
-  justify-content: flex-end;
-  width: 100%;
-  margin-top: 7px;
-}
-
-.ideaEmpty {
-  margin-top: 30px;
-  padding: 22px;
-  border: 0.5px dashed var(--border-subtle);
-  border-radius: 10px;
-  color: var(--text-faint);
-  font-size: 12px;
-  line-height: 1.8;
-  text-align: center;
-}
-
 /* テーマの角丸トークンに追従（四角ベース/角丸ベースのテーマ両対応） */
-.ideaThreadRow,
-.ideaFragment,
-.ideaEmpty {
+.ideaFragment {
   border-radius: var(--radius-card, 8px);
 }
 
-.ideaCaptureBox,
-.ideaSearchInput,
-.ideaDestSelect,
-.ideaDetailTitle {
+.ideaCaptureBox {
   border-radius: var(--radius-control, 6px);
 }
 
-.ideaNewThread,
 .ideaPrimaryBtn,
 .ideaChip,
-.ideaIconBtn,
-.ideaBackBtn,
 .ideaMiniIcon {
   border-radius: var(--radius-button, 6px);
 }

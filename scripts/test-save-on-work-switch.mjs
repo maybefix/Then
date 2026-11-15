@@ -10,6 +10,8 @@ import { guardBrowser, stopBrowser } from "./lib/stop-browser.mjs";
 // 作品を切り替える直前（0.7秒以内）の遅延保存が、前の作品へ書かれることを、App 全体を Edge で動かして
 // 確かめる（docs/SAVE_ON_WORK_SWITCH_FIX_PLAN.md）。Rust の代わりに、作品ごとの保存先を持つ入れ物を
 // 置き、どの作品へ何を保存したかを記録する。前の作品のデータを新しい作品へ書かないことも確かめる。
+// 遅延保存の例は、資料カードを畳むこと（資料の並びのファイルを0.7秒遅れて書く）。BINDER 2-4 で Idea を
+// 投稿とノートへ移して Idea の遅延保存がなくなったので、Idea から資料カードに替えた。
 //
 //   node scripts/test-save-on-work-switch.mjs [--dist <dir>] [--debug]
 
@@ -50,16 +52,13 @@ const appUrl = `http://127.0.0.1:${server.address().port}/`;
 const LIBRARY = "C:/qa/library";
 const WORK_A = `${LIBRARY}/作品A`;
 const WORK_B = `${LIBRARY}/作品B`;
-const NEW_IDEA = "作品Aで切り替える直前に書いたIdea";
-
 /*
- * Rust の代わり（ページの中で動く）。作品ごとに Idea・資料ボードを持ち（Plot は移行済みで空）、保存の命令は
- * 記録して中身を置き換える（もう一度開くと、保存したものが読まれる）。
+ * Rust の代わり（ページの中で動く）。作品ごとに資料ボード（開いた資料カード1枚）を持ち（Plot と Idea は移行済みで
+ * 空）、保存の命令は記録して中身を置き換える（もう一度開くと、保存したものが読まれる）。
  */
 function installMock({ library, workA, workB }) {
-  const thread = (id, kind, title, fragments) => ({ id, kind, title, starred: false, createdAt: 1, updatedAt: 1,
-    fragments: fragments.map(([fragmentId, body]) => ({ id: fragmentId, body, used: false, createdAt: 1, updatedAt: 1 })) });
-  const card = (id, title) => ({ id, kind: "section", num: "1", title, body: "", expanded: false, managerCollapsed: false });
+  const referenceCard = (id, sourcePath) => ({ id, sourceType: "reference", scope: "project", sourcePath, kind: "markdown",
+    x: 40, y: 60, width: 320, height: 300, zIndex: 1, collapsed: false, pinned: false });
   const projects = [{ path: workA, name: "作品A" }, { path: workB, name: "作品B" }];
   const work = (root, name, letter) => ({
     folder: {
@@ -68,9 +67,9 @@ function installMock({ library, workA, workB }) {
       library: { path: library, name: "library", role: "project", projects, misplacedProjects: [] },
     },
     text: `${name}の本文です。`,
-    snippets: [thread("idea-inbox", "inbox", "インボックス", [[`${letter}-1`, `${name}のメモ`]])],
+    snippets: [],
     plotCards: [],
-    layout: { version: 3, name: "default", cards: [], recent: [], ideaThreads: [] },
+    layout: { version: 3, name: "default", cards: [referenceCard(`card-${letter}`, `素材/資料/${name}の資料.md`)], recent: [], ideaThreads: [] },
     proofreadTerms: [],
     proofreadIgnored: {},
   });
@@ -81,7 +80,7 @@ function installMock({ library, workA, workB }) {
     lastFilePath: `${workA}/本文.txt`,
     rightSidebarTab: "idea",
     recentWorkspaces: projects.map((project, index) => ({ ...project, lastOpenedAt: 2 - index })),
-    settings: { skipStartupPortal: true, snippetStorageMode: "workspace" },
+    settings: { skipStartupPortal: true },
   };
   const saves = { save_project_snippets: "snippets", save_project_plot_cards: "plotCards", save_reference_layout: "layout",
     save_project_proofread_terms: "proofreadTerms", save_project_proofread_ignored: "proofreadIgnored" };
@@ -106,6 +105,7 @@ function installMock({ library, workA, workB }) {
     get_font_faces: () => [],
     journal_recovery_scan: () => [],
     load_library_property_types: () => ({}),
+    read_reference_text: ({ sourcePath }) => `${sourcePath} の本文`,
   };
   window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener() {} };
   window.__TAURI_INTERNALS__ = {
@@ -182,21 +182,12 @@ function pageHelpers() {
     },
     // パンくずは「ライブラリ › 作品 › ファイル」。作品のボタン（作品の切り替え）の文字で、開いている作品を見る。
     workName: () => [...document.querySelectorAll(".workspaceSwitcherButton")].map(text).find((name) => name.startsWith("作品")) ?? "",
-    // BINDER 2-1: 今の Idea は、右のペイン「アイデア」の「以前のアイデア」の中にある（2-4 で移すまで）。
-    openOldIdeas: () => { if (!document.querySelector("section.ideaView")) [...document.querySelectorAll(".postStreamPane .ideaChip")].find((button) => text(button) === "以前のアイデア")?.click(); },
-    ideaList: () => { t.openOldIdeas(); return must(document.querySelector('section.ideaView[aria-label="スレッド一覧"]'), "Idea list"); },
-    // Idea の一覧（スレッドの行に最新の Idea が出る）と詳細の文字。
-    ideaText: () => { t.openOldIdeas(); return [...document.querySelectorAll("section.ideaView")].map(text).join(" / "); },
-    plotTitles: () => [...document.querySelectorAll(".plotPane input, .plotPane textarea, .plotCardTitle")].map((element) => element.value ?? text(element)),
-    /** 一覧の入力欄に書いて「追加」を押す。 */
-    addIdea(body) {
-      const capture = must(window.t.ideaList().querySelector(".ideaCapture"), "Idea composer");
-      const textarea = capture.querySelector("textarea");
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(textarea, body);
-      textarea.dispatchEvent(new Event("input", { bubbles: true }));
-    },
-    clickAddIdea() {
-      must([...window.t.ideaList().querySelectorAll(".ideaCapture button")].find((button) => text(button) === "追加" && !button.disabled), "追加").click();
+    // 開いている資料カード（題はファイル名）と、畳んでいるか。
+    cardTitle: () => text(document.querySelector(".referenceCard .referenceCardHeader strong")),
+    cardCollapsed: () => Boolean(document.querySelector(".referenceCard.collapsedReferenceCard")),
+    /** 資料カードの「折り畳み」／「展開」を押す。 */
+    toggleCard() {
+      must(document.querySelector('.referenceCard .referenceCardActions button[aria-label="折り畳み"], .referenceCard .referenceCardActions button[aria-label="展開"]'), "card toggle").click();
     },
     /** 作品の切り替えメニューを開いて、作品を押す（待たない）。 */
     async startSwitch(name) {
@@ -258,7 +249,7 @@ try {
   await evaluate(`(${pageHelpers})()`);
   const opened = await evaluate(`(async () => {
     try {
-      await t.waitFor(() => t.workName() === "作品A" && t.ideaText().includes("作品Aのメモ"), "work A with its Idea", 30_000);
+      await t.waitFor(() => t.workName() === "作品A" && t.cardTitle() === "作品Aの資料.md", "work A with its card", 30_000);
       return true;
     } catch { return false; }
   })()`);
@@ -271,22 +262,21 @@ try {
   await sleep(1500);
   await evaluate("window.__saves.length = 0; 1");
 
-  // ---- 1. 作品Aで Idea を書き、0.7秒たたないうちに作品Bへ切り替える ----
-  const ideaSwitch = await evaluate(`(async () => {
-    t.addIdea(${JSON.stringify(NEW_IDEA)});
-    await t.waitFor(() => [...t.ideaList().querySelectorAll(".ideaCapture button")].some((button) => button.textContent.trim() === "追加" && !button.disabled), "add button");
+  // ---- 1. 作品Aで資料カードを畳み、0.7秒たたないうちに作品Bへ切り替える ----
+  const cardSwitch = await evaluate(`(async () => {
     const started = performance.now();
-    t.clickAddIdea();
-    await t.waitFor(() => t.ideaText().includes(${JSON.stringify(NEW_IDEA)}), "new Idea in the list", 2000);
+    t.toggleCard();
+    await t.waitFor(() => t.cardCollapsed(), "card A collapsed", 2000);
     await t.startSwitch("作品B");
     const clickedAfter = Math.round(performance.now() - started);
-    await t.waitFor(() => t.workName() === "作品B" && t.ideaText().includes("作品Bのメモ"), "work B with its Idea");
+    await t.waitFor(() => t.workName() === "作品B" && t.cardTitle() === "作品Bの資料.md", "work B with its card");
     await t.sleep(2000);
-    return { clickedAfter, bodiesInB: t.ideaText() };
+    return { clickedAfter, collapsedInB: t.cardCollapsed() };
   })()`);
-  const savesAfterIdea = await evaluate("window.__saves.splice(0)");
-  if (DEBUG) console.log("Idea → B", ideaSwitch, savesAfterIdea.map((save) => `${save.at} ${save.command} ${save.root} ${save.body.slice(0, 160)}`));
-  assert.ok(ideaSwitch.clickedAfter < 700, `the switch must start within 0.7 s of the edit (${ideaSwitch.clickedAfter} ms)`);
+  const savesAfterCard = await evaluate("window.__saves.splice(0)");
+  if (DEBUG) console.log("card → B", cardSwitch, savesAfterCard.map((save) => `${save.at} ${save.command} ${save.root} ${save.body.slice(0, 160)}`));
+  assert.ok(cardSwitch.clickedAfter < 700, `the switch must start within 0.7 s of the edit (${cardSwitch.clickedAfter} ms)`);
+  assert.equal(cardSwitch.collapsedInB, false, "作品Bのカードは畳まれていない");
 
   // ---- 2. 作品Bから作品Aへ切り替える（Plot は BINDER 1-6 でなくなったので、ここでは何も足さない） ----
   await evaluate(`(async () => {
@@ -297,30 +287,27 @@ try {
   const savesAfterReturn = await evaluate("window.__saves.splice(0)");
   if (DEBUG) console.log("→ A", savesAfterReturn.map((save) => `${save.at} ${save.command} ${save.root} ${save.body.slice(0, 160)}`));
 
-  // ---- 3. 作品Aに戻ったら、書いた Idea が残っている ----
-  await evaluate(`t.rightPane("アイデア")`);
-  const bodiesBackInA = await evaluate(`(async () => { await t.sleep(300); return t.ideaText(); })()`);
-  if (DEBUG) console.log("back in A", bodiesBackInA);
+  // ---- 3. 作品Aに戻ったら、畳んだカードは畳んだまま ----
+  const collapsedBackInA = await evaluate(`(async () => { await t.sleep(300); return t.cardTitle() === "作品Aの資料.md" && t.cardCollapsed(); })()`);
 
-  // ---- 4. 同じ作品の中で Idea を続けて足すと、待ち直して最後に1回だけ書く ----
+  // ---- 4. 同じ作品の中で続けて変えると、待ち直して最後に1回だけ書く ----
   await evaluate("window.__saves.length = 0; 1");
   await evaluate(`(async () => {
-    for (const body of ["続けて足すIdea一", "続けて足すIdea二"]) {
-      t.addIdea(body);
-      await t.waitFor(() => [...t.ideaList().querySelectorAll(".ideaCapture button")].some((button) => button.textContent.trim() === "追加" && !button.disabled), "add button");
-      t.clickAddIdea();
-      await t.sleep(200);
-    }
+    t.toggleCard();
+    await t.sleep(200);
+    t.toggleCard();
+    await t.sleep(200);
+    t.toggleCard();
     await t.sleep(1500);
   })()`);
   const savesSameWork = await evaluate("window.__saves.splice(0)");
   if (DEBUG) console.log("same work", savesSameWork.map((save) => `${save.at} ${save.command} ${save.root}`));
 
-  const all = [...savesAfterIdea, ...savesAfterReturn, ...savesSameWork];
+  const all = [...savesAfterCard, ...savesAfterReturn, ...savesSameWork];
   const to = (saves, root, command) => saves.filter((save) => save.root === root && save.command === command);
   // 最後に、作品ごとの保存先（ディスクの代わり）に残ったもの。
   const stored = await evaluate("JSON.stringify(window.__works)").then(JSON.parse);
-  if (DEBUG) console.log("stored", JSON.stringify(Object.fromEntries(Object.entries(stored).map(([root, work]) => [root, { snippets: work.snippets }]))));
+  if (DEBUG) console.log("stored", JSON.stringify(Object.fromEntries(Object.entries(stored).map(([root, work]) => [root, { layout: work.layout }]))));
 
   // 前の作品のデータを、新しい作品へ書かない。
   for (const save of all.filter((item) => item.root === WORK_B)) {
@@ -330,27 +317,25 @@ try {
     assert.ok(!save.body.includes("作品B"), `作品Bのデータを作品Aへ書いてはいけない: ${save.command} ${save.body.slice(0, 200)}`);
   }
 
-  // 切り替える直前の Idea は、作品Aへ書かれる。
-  const newFragment = to(savesAfterIdea, WORK_A, "save_project_snippets")
-    .flatMap((save) => parse(save).flatMap((thread) => thread.fragments))
-    .find((fragment) => fragment.body === NEW_IDEA);
-  assert.ok(newFragment, "切り替える直前に書いた Idea を、作品Bへ切り替えるときに作品Aの project.json へ保存する");
-  assert.ok(stored[WORK_A].snippets.some((thread) => thread.fragments.some((fragment) => fragment.body === NEW_IDEA)), "作品Aの保存先に、切り替える直前に書いた Idea が残る");
-  // Idea の並び順（資料ボードのファイル）も、作品Aへ書かれる。
-  assert.ok(to(savesAfterIdea, WORK_A, "save_reference_layout").some((save) => save.body.includes(newFragment.id)), "切り替える直前に書いた Idea の並び順を、作品Aの資料ボードのファイルへ保存する");
-  assert.ok(bodiesBackInA.includes(NEW_IDEA), `作品Aへ戻ると、切り替える直前に書いた Idea がある（${bodiesBackInA}）`);
-  // 開き直しただけでは、資料ボードのファイル（と .bak）を書き直さない。保存した並び順は、キーの順だけが違って読まれる。
+  // 切り替える直前に畳んだカードは、作品Aの資料ボードのファイルへ書かれる。
+  const savedA = to(savesAfterCard, WORK_A, "save_reference_layout").map(parse);
+  assert.ok(savedA.some((layout) => layout.cards.some((card) => card.id === "card-a" && card.collapsed)), "切り替える直前に畳んだカードを、作品Bへ切り替えるときに作品Aの資料ボードのファイルへ保存する");
+  // 保存先（最後に読む）は、手順4で3回切り替えた最後の状態（開いている）。
+  assert.equal(stored[WORK_A].layout.cards.find((card) => card.id === "card-a")?.collapsed, false, "作品Aの保存先には、最後に書いた状態が残る");
+  assert.ok(collapsedBackInA, "作品Aへ戻ると、切り替える直前に畳んだカードは畳んだまま");
+  // 開き直しただけでは、資料ボードのファイル（と .bak）を書き直さない。
   assert.deepEqual(to(savesAfterReturn, WORK_A, "save_reference_layout").map((save) => save.body), [], "作品Aを開き直しただけで、資料ボードのファイルを書き直さない");
 
-  // Plot はもう保存しない（BINDER 1-6）。
+  // Plot と Idea はもう保存しない（BINDER 1-6・2-4）。
   assert.deepEqual(all.filter((save) => save.command === "save_project_plot_cards"), [], "Plot is no longer saved");
+  assert.deepEqual(all.filter((save) => save.command === "save_project_snippets"), [], "Idea is no longer saved");
   // 相手の作品の保存先は、元のまま。
-  assert.deepEqual(stored[WORK_B].snippets.flatMap((thread) => thread.fragments.map((fragment) => fragment.body)), ["作品Bのメモ"], "作品Bの Idea は元のまま");
+  assert.deepEqual(stored[WORK_B].layout.cards.map((card) => [card.id, card.collapsed]), [["card-b", false]], "作品Bの資料ボードは元のまま");
 
   // 同じ作品の中では、今までどおり待ち直す（書き換えのたびには書かない）。
-  const sameWorkIdea = to(savesSameWork, WORK_A, "save_project_snippets");
-  assert.equal(sameWorkIdea.length, 1, `同じ作品の中で続けて足した Idea は、最後に1回だけ書く（${sameWorkIdea.length}回）`);
-  assert.ok(sameWorkIdea[0].body.includes("続けて足すIdea一") && sameWorkIdea[0].body.includes("続けて足すIdea二"), "その1回に、続けて足した Idea が両方入っている");
+  const sameWork = to(savesSameWork, WORK_A, "save_reference_layout");
+  assert.equal(sameWork.length, 1, `同じ作品の中で続けて変えた資料ボードは、最後に1回だけ書く（${sameWork.length}回）`);
+  assert.equal(parse(sameWork[0]).cards.find((card) => card.id === "card-a")?.collapsed, false, "その1回に、最後の状態（開いている）が入っている");
 
   assert.deepEqual(pageErrors, [], "the page throws no errors");
   socket.close();

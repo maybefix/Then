@@ -52,13 +52,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.postLegacy {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
 /* 「ノートにする」と、ノートにした投稿の札（BINDER 2-3）。色は中立のまま足さない（coral を使わない）。 */
 .postNoteBtn {
   height: 24px;

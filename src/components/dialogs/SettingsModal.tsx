@@ -18,7 +18,7 @@ type SettingsModalProps = {
     key: Key,
     value: EditorSettings[Key],
   ) => void;
-  onSnippetStorageModeChange: (mode: EditorSettings["snippetStorageMode"]) => void;
+
 };
 
 type SettingsTab = "appearance" | "body" | "files" | "canvas" | "export";
@@ -38,7 +38,7 @@ export function SettingsModal({
   onClose,
   onOpenThemePicker,
   onUpdateSettings,
-  onSnippetStorageModeChange,
+
 }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
   const dialogRef = useModalFocus(onClose);
@@ -87,7 +87,6 @@ export function SettingsModal({
     files: (
       <FileSettings
         settings={settings}
-        onSnippetStorageModeChange={onSnippetStorageModeChange}
         onUpdateSettings={onUpdateSettings}
       />
     ),

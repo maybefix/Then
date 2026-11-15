@@ -1,7 +1,4 @@
-.ideaFragment.isFocusedOrigin {
-  border-color: var(--accent-strong);
-  box-shadow: 0 0 0 2px rgba(140, 201, 238, 0.22);
-}
+
 
 .exportEmptyState,
 .exportErrorState {

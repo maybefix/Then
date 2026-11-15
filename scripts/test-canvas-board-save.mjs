@@ -101,7 +101,7 @@ async function mount() {
     [key("project", "one", "c"), board("C")], [key("project", "two", "a"), board("Other")]]);
   calls = []; loadGate = null; writeGate = null; failingWrite = false;
   payload = { requestId: "test", scope: "project", rootPath: "one", boardId: "a", workspaceName: "Test",
-    theme: "light", uiFontScale: 1, ideaThreads: [], referenceFiles: [] };
+    theme: "light", uiFontScale: 1, referenceFiles: [] };
   root = createRoot(document.getElementById("root"));
   await render();
 }

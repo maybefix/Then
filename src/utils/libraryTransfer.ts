@@ -1,6 +1,6 @@
 import type { CanvasNode, JsonCanvasDocument } from "../canvasTypes";
 import { normalizedReferenceKey } from "../ideaReferenceModel";
-import type { IdeaThreadItemLink, ReferenceFileInfo } from "../types";
+import type { ReferenceFileInfo } from "../types";
 
 /**
  * Moving or copying an item between a library root and one of its projects
@@ -22,25 +22,6 @@ export function uniqueReferencePaths(paths: string[]): string[] {
     if (!seen.has(key)) seen.set(key, path);
   }
   return [...seen.values()];
-}
-
-export function threadItemReferencePaths(items: IdeaThreadItemLink[]): string[] {
-  return uniqueReferencePaths(
-    items.flatMap((item) => (item.sourceType === "reference" ? [item.sourcePath] : [])),
-  );
-}
-
-export function rewriteThreadItems(
-  items: IdeaThreadItemLink[],
-  rewrite: ReferenceRewrite,
-): IdeaThreadItemLink[] {
-  return items.flatMap<IdeaThreadItemLink>((item) => {
-    if (item.sourceType !== "reference") return [item];
-    const key = normalizedReferenceKey(item.sourcePath);
-    const copy = rewrite.copied.get(key);
-    if (copy) return [{ ...item, sourcePath: copy.sourcePath }];
-    return rewrite.dropped.has(key) ? [] : [item];
-  });
 }
 
 export function boardReferencePaths(board: JsonCanvasDocument): string[] {

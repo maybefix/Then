@@ -1,14 +1,12 @@
 import type {
   BinderCardState,
-  IdeaThread,
   ReferenceFileInfo,
 } from "../../types";
-import { isIdeaBinderCard } from "../../types";
+import { isReferenceBinderCard } from "../../types";
 import { normalizedReferenceKey } from "../../ideaReferenceModel";
 
 type OpenCardsPaneProps = {
   cards: BinderCardState[];
-  threads: IdeaThread[];
   candidates: ReferenceFileInfo[];
   onFocusCard: (cardId: string) => void;
   onCloseCard: (cardId: string) => void;
@@ -19,14 +17,15 @@ type OpenCardsPaneProps = {
 const fileName = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 
 export function OpenCardsPane({
-  cards,
-  threads,
+  cards: allCards,
   candidates,
   onFocusCard,
   onCloseCard,
   onPinCard,
   onCollapseCard,
 }: OpenCardsPaneProps) {
+  // 移行（BINDER 2-4）の前の Idea カードが並びに残っていても出さない。
+  const cards = allCards.filter(isReferenceBinderCard);
   const files = new Map(candidates.map((file) => [normalizedReferenceKey(file.sourcePath), file]));
   return (
     <section className="openCardsPane" aria-label="開いているカード">
@@ -39,18 +38,13 @@ export function OpenCardsPane({
             .slice()
             .sort((left, right) => right.zIndex - left.zIndex)
             .map((card) => {
-              const idea = isIdeaBinderCard(card);
-              const thread = idea ? threads.find((entry) => entry.id === card.threadId) : null;
-              const fragment = idea
-                ? thread?.fragments.find((entry) => entry.id === card.fragmentId)
-                : null;
-              const file = idea ? null : files.get(normalizedReferenceKey(card.sourcePath));
-              const title = idea ? thread?.title ?? "Idea" : file?.name ?? fileName(card.sourcePath);
-              const detail = idea ? fragment?.body ?? "削除済み" : file?.kind === "image" ? "画像資料" : file?.kind === "pdf" ? "PDF資料" : "テキスト資料";
+              const file = files.get(normalizedReferenceKey(card.sourcePath));
+              const title = file?.name ?? fileName(card.sourcePath);
+              const detail = file?.kind === "image" ? "画像資料" : file?.kind === "pdf" ? "PDF資料" : "テキスト資料";
               return (
                 <article className="openCardsItem" key={card.id}>
                   <button type="button" className="openCardsMain" onClick={() => onFocusCard(card.id)}>
-                    <span className={`openCardsKind ${idea ? "idea" : "reference"}`} aria-hidden="true">{idea ? "I" : file?.kind === "image" ? "▧" : file?.kind === "pdf" ? "▤" : "≡"}</span>
+                    <span className="openCardsKind reference" aria-hidden="true">{file?.kind === "image" ? "▧" : file?.kind === "pdf" ? "▤" : "≡"}</span>
                     <span><strong>{title}</strong><small>{detail}</small></span>
                   </button>
                   <div className="openCardsActions">

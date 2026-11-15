@@ -1098,21 +1098,6 @@
     0 14px 34px var(--canvas-shadow);
 }
 
-.canvasOriginButton {
-  position: absolute;
-  left: 0;
-  top: calc(100% + 6px);
-  z-index: 3;
-  height: 22px;
-  padding: 0 7px;
-  border: 1px solid color-mix(in srgb, var(--accent-border) 72%, transparent);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--accent-soft) 82%, var(--bg-panel));
-  color: var(--text-primary);
-  cursor: pointer;
-  font-size: 11px;
-}
-
 .canvasResizeHandle {
   position: absolute;
   z-index: 6;

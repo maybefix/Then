@@ -155,14 +155,17 @@ export type ReferenceLayout = {
   recent: ReferenceFileInfo[];
   /** version 3 で追加。旧データは読み込み時に fragments から補完する。 */
   ideaThreads: IdeaThreadLayout[];
-  /** ideaThreads と Idea カードがどちらの「Ideaの管理単位」のものか。無いときは今の管理単位として読む。 */
-  ideaThreadsMode?: EditorSettings["snippetStorageMode"];
+  /** ideaThreads と Idea カードがどちらの「Ideaの管理単位」のものか（BINDER 2-4 の移行で読むだけ）。 */
+  ideaThreadsMode?: IdeaStorageMode;
   /** 表示していない側の管理単位の並び順と Idea カード。切り替えて戻したときに元へ戻す。 */
   otherIdea?: OtherIdeaLayout;
 };
 
+/** 2-4 で消した設定「Ideaの管理単位」の値。移行の前の資料の並びを読むときだけ使う。 */
+export type IdeaStorageMode = "workspace" | "profile";
+
 export type OtherIdeaLayout = {
-  mode: EditorSettings["snippetStorageMode"];
+  mode: IdeaStorageMode;
   ideaThreads: IdeaThreadLayout[];
   cards: IdeaBinderCardState[];
 };
@@ -397,7 +400,6 @@ export type EditorSettings = {
   colorizeJapaneseQuotes: boolean;
   /** コメント行（行頭 // と <!-- -->）を本文中に表示するか。false で畳む。 */
   showComments: boolean;
-  snippetStorageMode: "workspace" | "profile";
   /** プロジェクト切替メニューでフォルダパスを表示するか。 */
   showWorkspacePaths: boolean;
   /** ステータスバーに現在のファイルパスを表示するか。 */
@@ -526,11 +528,12 @@ export type AppState = {
    */
   markdown: string;
   /**
-   * Idea スレッド一覧。フィールド名は永続化キー(`snippets`)互換のため維持しているが、
-   * 中身は新しい {@link IdeaThread} モデル。
+   * 全作品で共有していた Idea（2-4 の前の「Ideaの管理単位: 全作品で共有する」）。最初に開いたライブラリの
+   * 投稿とノートへ移すまで持つ（移したら空）。
    */
-  snippets: IdeaThread[];
   profileSnippets: IdeaThread[];
+  /** アプリ側の Idea を投稿とノートへ移した記録（BINDER 2-4）。あれば、もう移さない。 */
+  profileSnippetsMigration?: { library: string; at: string };
   settings: EditorSettings;
   /** 最後に表示していた、次回起動時にも復元可能な右サイドバーのタブ。 */
   rightSidebarTab: RestorableRightSidebarTab;

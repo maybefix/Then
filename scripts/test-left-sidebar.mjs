@@ -68,6 +68,8 @@ const functionNames = [
   "handleRestoreManuscriptSnapshot", "handleDeleteManuscriptSnapshot", "enterLibraryRoot", "enterProject",
   "handleCreateLibraryProject", "handleImportProjectIntoLibrary", "reorderLibraryProjects",
   "openIdeaPane", "handleCreateMaterialsFolder", "handleSetMaterialsFolder", "handleCorkboardFolderClick",
+  // BINDER 2-5: 素材の段の資料（取り込む・資料カードで開く・消す）。
+  "handleAddReference", "openReferenceCard", "handleDeleteImportedReference",
 ];
 const spies = Object.fromEntries(
   functionNames.map((name) => [name, (...args) => {
@@ -86,10 +88,13 @@ const baseValues = {
   projectFolder: { path: "C:/work", name: "work", children: [] },
   focusedFolderPath: "C:/work/第一部",
   referenceLayout: { cards: mark("referenceLayout.cards") },
-  snippets: [{ id: mark("snippets.0") }, { id: mark("snippets.1") }, { id: mark("snippets.2") }],
   // BINDER 2-1: 投稿の段に出すのは、受信箱の投稿の数。
   postInboxCount: 3,
-  sortedReferenceCandidates: mark("sortedReferenceCandidates"),
+  // 素材の段には、画像・PDF だけを置かれたフォルダの中に並べる（BINDER 2-5、確認1の 7）。
+  sortedReferenceCandidates: [
+    { scope: "project", sourcePath: "素材/資料/map.png", name: "map.png", kind: "image", size: 1, imported: true },
+    { scope: "project", sourcePath: "素材/資料/memo.md", name: "memo.md", kind: "markdown", size: 1, imported: true },
+  ],
   currentFilePath: mark("currentFilePath"),
   currentFileName: mark("currentFileName"),
   charCount: mark("charCount"),
@@ -230,6 +235,7 @@ const expectCalls = (label, action, expected) => {
 
   const expectedValues = {
     projectFolder: baseValues.projectFolder,
+    materialReferences: [{ path: "C:/work/素材/資料/map.png", sourcePath: "素材/資料/map.png", name: "map.png", kind: "image" }],
     currentFilePath: mark("currentFilePath"),
     currentFileName: mark("currentFileName"),
     currentFileCharCount: mark("charCount"),
@@ -328,6 +334,17 @@ const expectCalls = (label, action, expected) => {
     onOpenIdeas: { args: [], name: "openIdeaPane" },
     onCreateMaterialsFolder: { args: [], name: "handleCreateMaterialsFolder" },
     onSetMaterialsFolder: { args: ["C:/work/資料"], name: "handleSetMaterialsFolder" },
+    onImportReferences: { args: [], name: "handleAddReference" },
+    onOpenReference: {
+      args: [{ path: "C:/work/素材/資料/map.png", sourcePath: "素材/資料/map.png", name: "map.png", kind: "image" }],
+      name: "openReferenceCard",
+      expectedArgs: ["素材/資料/map.png", baseValues.sortedReferenceCandidates[0], { switchToReferenceTab: false }],
+    },
+    onDeleteReference: {
+      args: [{ path: "C:/work/素材/資料/map.png", sourcePath: "素材/資料/map.png", name: "map.png", kind: "image" }],
+      name: "handleDeleteImportedReference",
+      expectedArgs: ["素材/資料/map.png"],
+    },
     // BINDER 1-5: コルクボード中のフォルダの行のクリック。
     onFolderClick: { args: ["C:/work/第一部"], name: "handleCorkboardFolderClick" },
   };
@@ -372,10 +389,9 @@ const expectCalls = (label, action, expected) => {
 
   const pane = findOne(tree, (element) => element.type === OpenCardsPane, "OpenCardsPane");
   assert.deepEqual(Object.keys(pane.props).sort(),
-    ["candidates", "cards", "onCloseCard", "onCollapseCard", "onFocusCard", "onPinCard", "threads"]);
+    ["candidates", "cards", "onCloseCard", "onCollapseCard", "onFocusCard", "onPinCard"]);
   assert.equal(pane.props.cards, mark("referenceLayout.cards"));
-  assert.equal(pane.props.threads, baseValues.snippets);
-  assert.equal(pane.props.candidates, mark("sortedReferenceCandidates"));
+  assert.equal(pane.props.candidates, baseValues.sortedReferenceCandidates);
   for (const [key, args, name] of [
     ["onFocusCard", ["card-1"], "focusReferenceCard"],
     ["onCloseCard", ["card-2"], "closeReferenceCard"],

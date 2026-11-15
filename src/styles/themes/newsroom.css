@@ -221,7 +221,7 @@
   box-shadow: none;
 }
 
-.appShell[data-theme="newsroom-light"] :is(.ideaCard, .rightSidebar .snippetCard, .themeOption) {
+.appShell[data-theme="newsroom-light"] :is(.ideaCard, .themeOption) {
   border: 0;
   border-bottom: 1px solid var(--border-subtle);
   border-radius: 0;
@@ -229,7 +229,7 @@
   box-shadow: none;
 }
 
-.appShell[data-theme="newsroom-light"] :is(.ideaCard, .rightSidebar .snippetCard, .themeOption):hover {
+.appShell[data-theme="newsroom-light"] :is(.ideaCard, .themeOption):hover {
   background: var(--card-hover);
   box-shadow: inset 3px 0 0 var(--accent);
 }
@@ -391,7 +391,7 @@
   box-shadow: none;
 }
 
-.appShell[data-theme="newsroom-dark"] :is(.ideaCard, .rightSidebar .snippetCard, .themeOption) {
+.appShell[data-theme="newsroom-dark"] :is(.ideaCard, .themeOption) {
   border: 0;
   border-bottom: 1px solid var(--border-subtle);
   border-radius: 0;
@@ -399,7 +399,7 @@
   box-shadow: none;
 }
 
-.appShell[data-theme="newsroom-dark"] :is(.ideaCard, .rightSidebar .snippetCard, .themeOption):hover {
+.appShell[data-theme="newsroom-dark"] :is(.ideaCard, .themeOption):hover {
   background: var(--card-hover);
   box-shadow: inset 3px 0 0 var(--accent);
 }

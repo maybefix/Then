@@ -425,6 +425,51 @@ async function choose(target, label) {
   await plain.unmount();
 }
 
+// 素材の段の画像・PDF と「資料を取り込む…」（BINDER 2-5、確認1の 7・U1）。画像・PDF はファイルの一覧に入らないので、
+// 資料の候補から置かれたフォルダの中に並べ、押すと資料カードで開く。原稿の段には出さない。
+{
+  const references = [
+    { path: p("資料/年表/地図.png"), sourcePath: "資料/年表/地図.png", name: "地図.png", kind: "image" },
+    { path: p("資料/設定集.pdf"), sourcePath: "資料/設定集.pdf", name: "設定集.pdf", kind: "pdf" },
+    { path: p("第一章/挿絵.png"), sourcePath: "第一章/挿絵.png", name: "挿絵.png", kind: "image" },
+  ];
+  const view = await mount(props(withMaterials, {
+    materialReferences: references,
+    onOpenReference: spy("onOpenReference"),
+    onDeleteReference: spy("onDeleteReference"),
+    onImportReferences: spy("onImportReferences"),
+  }));
+  const tiers = sections(view.container);
+  assert.deepEqual(
+    tiers[1].rows,
+    [
+      ["資料/人物.md", "24px", "資料"],
+      ["資料/年表", "24px", "資料"],
+      ["資料/年表/年表.md", "38px", "資料/年表"],
+      ["資料/年表/地図.png", "38px", ""],
+      ["資料/設定集.pdf", "24px", ""],
+    ],
+    "画像・PDF は置かれたフォルダの中に、ほかのファイルのあとに並ぶ",
+  );
+  assert.ok(!tiers[0].rows.some(([path]) => path.endsWith(".png")), "原稿の段のフォルダには出さない");
+  takeCalls();
+  await click(row(view.container, "資料/設定集.pdf").querySelector(".treeItemPrimary"));
+  assert.deepEqual(takeCalls(), [["onOpenReference", "資料/設定集.pdf"]], "押すと資料カードで開く");
+  assert.deepEqual(await menuLabels(row(view.container, "資料/年表/地図.png")), ["開く", "削除"]);
+  await choose(row(view.container, "資料/年表/地図.png"), "削除");
+  assert.deepEqual(takeCalls(), [["onDeleteReference", "資料/年表/地図.png"]]);
+  assert.deepEqual(
+    await menuLabels(header(view.container, "materials")),
+    ["ファイルを追加", "フォルダを追加", "資料を取り込む…", "リネーム"],
+    "素材の段の見出しから資料を取り込める",
+  );
+  assert.ok((await menuLabels(row(view.container, "資料/年表"))).includes("資料を取り込む…"), "素材の中のフォルダからも");
+  assert.ok(!(await menuLabels(row(view.container, "第一章"))).includes("資料を取り込む…"), "原稿のフォルダからは取り込まない");
+  await choose(header(view.container, "materials"), "資料を取り込む…");
+  assert.deepEqual(takeCalls(), [["onImportReferences"]]);
+  await view.unmount();
+}
+
 // ライブラリ直下では段を出さない。
 {
   const library = { path: root, name: "ライブラリ", role: "root", projects: [], misplacedProjects: [] };

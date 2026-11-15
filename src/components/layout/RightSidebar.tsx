@@ -1,22 +1,18 @@
-import type { Dispatch, DragEvent, ReactNode, SetStateAction } from "react";
-import type { IdeaFocusRequest } from "../../ideaThreadActions";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type { DraftCanvasContext } from "../../intermediateDraft";
 import type { LoadedThenPlugin, ThenPluginView } from "../../plugins/types";
 import type { ProofreadTerm } from "../../proofread/terms";
 import type { PropertyType, PropertyTypeSettings } from "../../properties/propertyModel";
 import type { PropertySet } from "../../properties/propertySets";
-import { referenceFileKey } from "../../referenceFileKeys";
+
 import type {
   AppState,
   CanvasScope,
   EditorSettings,
-  IdeaThread,
   ProjectFolder,
-  ReferenceFileInfo,
-  ReferenceLayout,
 } from "../../types";
 import type { FrontMatterParts } from "../../utils/frontmatter";
-import { BinderPane } from "../binder/BinderPane";
+
 import { PostStreamPane } from "../posts/PostStreamPane";
 import type { Post, PostFilter } from "../../posts/postModel";
 import type { PostStream } from "../../posts/usePostStream";
@@ -30,10 +26,6 @@ import { RightPaneSwitcher, type RightPaneSwitcherItem } from "./RightPaneSwitch
 
 type AppMode = "write" | "corkboard" | "canvas" | "export" | "checkpoint" | "plugin";
 
-type ToastAction = {
-  label: string;
-  onClick: () => void;
-};
 
 type ProofreadIgnoredByPath = Record<string, string[]>;
 
@@ -139,38 +131,6 @@ export type RightSidebarProps = {
   projectProofreadIgnored: ProofreadIgnoredByPath;
   proofreadIgnoreKey: string;
   setProjectProofreadIgnored: Dispatch<SetStateAction<ProofreadIgnoredByPath>>;
-  snippets: IdeaThread[];
-  showToast: (message: string, action?: ToastAction | null) => void;
-  openReferenceCard: (sourcePath: string, fileInfo?: ReferenceFileInfo, options?: { switchToReferenceTab?: boolean }) => void;
-  sortedReferenceCandidates: ReferenceFileInfo[];
-  transferMenuLabel: string | null;
-  referenceLayout: ReferenceLayout;
-  draggingId: string | null;
-  ideaFocusRequest: IdeaFocusRequest | null;
-  setIdeaFocusRequest: Dispatch<SetStateAction<IdeaFocusRequest | null>>;
-  captureFragment: (body: string, destId: string) => void;
-  openIdeaBinderCard: (threadId: string, fragmentId: string) => void;
-  createIdeaThread: (initialTitle?: string) => string;
-  renameIdeaThread: (threadId: string, title: string) => void;
-  toggleThreadStar: (threadId: string) => void;
-  deleteIdeaThread: (threadId: string) => Promise<void>;
-  addFragment: (threadId: string, body: string) => void;
-  updateFragmentBody: (threadId: string, fragmentId: string, body: string) => void;
-  deleteFragment: (threadId: string, fragmentId: string) => Promise<void>;
-  moveFragment: (fromThreadId: string, fragmentId: string, toThreadId: string) => void;
-  moveFragmentToNewThread: (fromThreadId: string, fragmentId: string) => Promise<void>;
-  handleFragmentDragStart: (event: DragEvent<HTMLElement>, threadId: string, fragmentId: string) => void;
-  handleFragmentDragEnd: () => void;
-  handleAddReference: (scope?: CanvasScope, targetThreadId?: string) => Promise<void>;
-  handleCreateReference: (scope?: CanvasScope, targetThreadId?: string) => Promise<void>;
-  moveIdeaReference: (fromThreadId: string, linkId: string, toThreadId: string, keepOriginal: boolean) => void;
-  moveReferenceToNewThread: (fromThreadId: string, linkId: string, copy: boolean) => Promise<void>;
-  removeIdeaReference: (threadId: string, linkId: string) => Promise<void>;
-  handleDeleteImportedReference: (sourcePath: string, scope?: CanvasScope) => Promise<void>;
-  reorderIdeaThreadItem: (threadId: string, itemKey: string, targetKey: string, position: "before" | "after") => void;
-  transferIdeaThread: (threadId: string) => Promise<void>;
-  transferIdeaFragment: (threadId: string, fragmentId: string) => Promise<void>;
-  transferReferenceFile: (file: ReferenceFileInfo) => Promise<void>;
   postStream: PostStream;
   postFilter: PostFilter;
   setPostFilter: (filter: PostFilter) => void;
@@ -192,15 +152,7 @@ export function RightSidebar(props: RightSidebarProps) {
     propertyTypeSettings, rememberPropertyType, returnFocusFromProperties, loadPropertySets, searchByProperty,
     editorText, settings, updateSettings, revealEditorRange, replaceEditorRange, projectProofreadTerms,
     appState, setProjectProofreadTerms, setAppState, exportProofreadDictionary, importProofreadDictionary,
-    projectProofreadIgnored, proofreadIgnoreKey, setProjectProofreadIgnored, snippets,
-    showToast, openReferenceCard,
-    sortedReferenceCandidates,
-    transferMenuLabel, referenceLayout, draggingId, ideaFocusRequest, setIdeaFocusRequest,
-    captureFragment, openIdeaBinderCard, createIdeaThread, renameIdeaThread, toggleThreadStar,
-    deleteIdeaThread, addFragment, updateFragmentBody, deleteFragment, moveFragment, moveFragmentToNewThread,
-    handleFragmentDragStart, handleFragmentDragEnd, handleAddReference, handleCreateReference,
-    moveIdeaReference, moveReferenceToNewThread, removeIdeaReference, handleDeleteImportedReference,
-    reorderIdeaThreadItem, transferIdeaThread, transferIdeaFragment, transferReferenceFile,
+    projectProofreadIgnored, proofreadIgnoreKey, setProjectProofreadIgnored,
     postStream, postFilter, setPostFilter, postNoteActions,
   } = props;
   const rightPaneSwitcherItems: RightPaneSwitcherItem[] = [
@@ -364,67 +316,6 @@ export function RightSidebar(props: RightSidebarProps) {
               // ライブラリ直下（作品を開いていない）では素材の区分がないので出さない（確認1の 1）。
               onMakeNote={postStream.work ? (post) => void postNoteActions.makeNote(post) : undefined}
               onOpenNote={(post) => void postNoteActions.openNote(post)}
-              legacyFocusNonce={ideaFocusRequest?.nonce ?? null}
-              // 2-4 で移すまでの今の Idea。中身が空でも常に出す。資料の取り込み・新しいテキスト資料・
-              // スレッドの作成は、ここにしか入口がない（BINDER 2-1 の後退 R1・R3）。
-              legacy={(
-            <BinderPane
-              rootPath={projectFolder?.path ?? null}
-              threads={snippets}
-              threadLayouts={referenceLayout.ideaThreads}
-              candidates={sortedReferenceCandidates}
-              draggingId={draggingId}
-              focusRequest={ideaFocusRequest}
-              onFocusRequestConsumed={(nonce) =>
-                setIdeaFocusRequest((current) =>
-                  current?.nonce === nonce ? null : current,
-                )
-              }
-              onCapture={captureFragment}
-              onOpenIdea={openIdeaBinderCard}
-              onCreateThread={createIdeaThread}
-              onRenameThread={renameIdeaThread}
-              onToggleStar={toggleThreadStar}
-              onDeleteThread={deleteIdeaThread}
-              onAddFragment={addFragment}
-              onUpdateFragment={updateFragmentBody}
-              onDeleteFragment={deleteFragment}
-              onMoveFragment={moveFragment}
-              onMoveFragmentToNewThread={(threadId, fragmentId) =>
-                void moveFragmentToNewThread(threadId, fragmentId)
-              }
-              onFragmentDragStart={handleFragmentDragStart}
-              onFragmentDragEnd={handleFragmentDragEnd}
-              onAddReference={(threadId) => void handleAddReference("project", threadId)}
-              onCreateReference={(threadId) => void handleCreateReference("project", threadId)}
-              onOpenReference={(targetFile) => {
-                const file =
-                  sortedReferenceCandidates.find(
-                    (item) => referenceFileKey(item) === referenceFileKey(targetFile),
-                  ) ?? targetFile;
-                openReferenceCard(file.sourcePath, file, { switchToReferenceTab: false });
-              }}
-              onMoveReference={moveIdeaReference}
-              onMoveReferenceToNewThread={(threadId, linkId, copy) =>
-                void moveReferenceToNewThread(threadId, linkId, copy)
-              }
-              onRemoveReference={(threadId, linkId) => void removeIdeaReference(threadId, linkId)}
-              onDeleteReferenceFile={(file) =>
-                void handleDeleteImportedReference(file.sourcePath, file.scope)
-              }
-              onReorderItem={reorderIdeaThreadItem}
-              transfer={
-                transferMenuLabel
-                  ? {
-                      label: transferMenuLabel,
-                      onThread: (threadId) => void transferIdeaThread(threadId),
-                      onFragment: (threadId, fragmentId) => void transferIdeaFragment(threadId, fragmentId),
-                      onReferenceFile: (file) => void transferReferenceFile(file),
-                    }
-                  : undefined
-              }
-            />
-              )}
             />
           )}
         </div>

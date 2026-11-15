@@ -330,6 +330,68 @@ fn import_own_file(place: &Place) -> Result<usize, String> {
     Ok(count)
 }
 
+/// Idea の移行（BINDER 2-4）が足す投稿1件。ID は断片から決まる値（同じ断片は2回足さない）。
+pub(super) struct MigratedPost {
+    pub(super) id: String,
+    pub(super) at: String,
+    pub(super) body: String,
+    pub(super) edited: Option<String>,
+    pub(super) filed: bool,
+    /// Canvas から来た断片の元（`originRef`）。知らない欄として行に残す。
+    pub(super) origin: Option<Value>,
+}
+
+/// 投稿のファイルと、投稿に書く作品（ライブラリ直下ではない）。作品に ID がなければ付ける。
+/// `project.json` の鍵を取るので、移行の鍵を取る前に呼ぶ。
+pub(super) fn migration_target(scope: &Path) -> Result<(PathBuf, Option<(String, String)>), String> {
+    let place = place_for(scope)?;
+    let work = place.work_root.as_deref().map(|root| current_work(root, true)).transpose()?;
+    Ok((place.file, work.map(|work| (work.id, work.name))))
+}
+
+/// 移行の投稿を、投稿のファイルの鍵を取ったまま（`atomic_file::with_lock` の中で）末尾に足す。
+/// 同じ ID の行がすでにあれば足さない。返り値は足した件数。
+pub(super) fn append_migrated_while_locked(
+    file: &Path,
+    work: Option<&(String, String)>,
+    posts: &[MigratedPost],
+) -> Result<usize, String> {
+    let lines = read_lines(file)?;
+    let mut known: Vec<String> = latest_indexes(&lines).into_iter().map(|(_, post)| post.id).collect();
+    let mut added = Vec::new();
+    for post in posts {
+        if post.body.trim().is_empty() || known.contains(&post.id) {
+            continue;
+        }
+        known.push(post.id.clone());
+        let mut extra = Map::new();
+        if let Some(origin) = post.origin.clone().filter(|origin| !origin.is_null()) {
+            extra.insert("origin".to_string(), origin);
+        }
+        let line = PostLine {
+            v: VERSION,
+            id: post.id.clone(),
+            at: post.at.clone(),
+            work: work.map(|(id, name)| StoredWork { id: id.clone(), name: name.clone(), extra: Map::new() }),
+            reply_to: None,
+            body: post.body.clone(),
+            edited: post.edited.clone(),
+            filed: post.filed,
+            extra,
+        };
+        added.push(serde_json::to_string(&line).map_err(|error| error.to_string())?);
+    }
+    append_lines(file, &added)?;
+    Ok(added.len())
+}
+
+/// 移行の投稿の ID。作品（またはライブラリ直下・アプリ側）の印と断片の ID から決まる。
+pub(super) fn migrated_post_id(key: &str, fragment_id: &str) -> String {
+    let digest = Sha256::digest(format!("{key}|{fragment_id}"));
+    let hex: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+    format!("p-idea-{}", &hex[..16])
+}
+
 pub(super) fn load(scope: &Path) -> Result<PostsSnapshot, String> {
     let place = place_for(scope)?;
     let imported = import_own_file(&place)?;
