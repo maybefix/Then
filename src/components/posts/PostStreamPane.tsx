@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent, ReactNode } from "react";
-import { IdeaComposerBox } from "../snippets/IdeaComposerBox";
+import type { KeyboardEvent } from "react";
+import { IdeaComposerBox } from "./IdeaComposerBox";
 import {
   arrangePosts,
   countInbox,
@@ -20,10 +20,7 @@ type PostStreamPaneProps = {
   stream: PostStream;
   filter: PostFilter;
   onFilterChange: (filter: PostFilter) => void;
-  /** 2-4 で移すまでの、今の Idea（スレッド）の画面。中身があるときだけ渡す。 */
-  legacy?: ReactNode;
-  /** Canvas の「Ideaで開く」など、今の Idea を出してほしいとき。変わるたびに「以前のアイデア」へ切り替える。 */
-  legacyFocusNonce?: number | null;
+
   /** 「ノートにする」（2-3）。ないとき（ライブラリ直下）はボタンを出さない。 */
   onMakeNote?: (post: Post) => void;
   /** 札を押してノートを開く。 */
@@ -49,27 +46,16 @@ function MoreIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="18" cy="12" r="1" /></svg>;
 }
 
-type View = "stream" | "legacy";
-
-export function PostStreamPane({ stream, filter, onFilterChange, legacy, legacyFocusNonce, onMakeNote, onOpenNote }: PostStreamPaneProps) {
+export function PostStreamPane({ stream, filter, onFilterChange, onMakeNote, onOpenNote }: PostStreamPaneProps) {
   const { scoped, available, posts, work, add, editBody, setFiled, remove, refresh } = stream;
-  const [view, setView] = useState<View>("stream");
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
   const [menuId, setMenuId] = useState<string | null>(null);
   const composingRef = useRef(false);
-  // 開いたときにすでに来ている要求（Canvas から右のペインを開いた直後）も受ける。
-  const lastLegacyNonceRef = useRef<number | null>(null);
 
   // 右のペインを開いたときに、外で書き換えられていれば読み直す。
   useEffect(() => { void refresh(); }, [refresh]);
-  useEffect(() => {
-    if (legacyFocusNonce == null || legacyFocusNonce === lastLegacyNonceRef.current) return;
-    lastLegacyNonceRef.current = legacyFocusNonce;
-    if (legacy) setView("legacy");
-  }, [legacy, legacyFocusNonce]);
-  useEffect(() => { if (!legacy && view === "legacy") setView("stream"); }, [legacy, view]);
   // 作品を開いていない（ライブラリ直下）ときは「この作品」がないので、受信箱で見せる。
   const effectiveFilter: PostFilter = filter === "work" && !work ? "inbox" : filter;
 
@@ -133,24 +119,14 @@ export function PostStreamPane({ stream, filter, onFilterChange, legacy, legacyF
           <button
             key={value}
             type="button"
-            className={`ideaChip ${view === "stream" && effectiveFilter === value ? "isActive" : ""}`}
-            aria-pressed={view === "stream" && effectiveFilter === value}
-            onClick={() => { setView("stream"); onFilterChange(value); }}
+            className={`ideaChip ${effectiveFilter === value ? "isActive" : ""}`}
+            aria-pressed={effectiveFilter === value}
+            onClick={() => onFilterChange(value)}
           >
             {postFilterLabels[value]}
             {value === "inbox" && inboxCount > 0 && <span className="postChipCount">{inboxCount}</span>}
           </button>
         ))}
-        {legacy && (
-          <button
-            type="button"
-            className={`ideaChip ${view === "legacy" ? "isActive" : ""}`}
-            aria-pressed={view === "legacy"}
-            onClick={() => setView("legacy")}
-          >
-            以前のアイデア
-          </button>
-        )}
       </div>
     </div>
   );
@@ -244,57 +220,41 @@ export function PostStreamPane({ stream, filter, onFilterChange, legacy, legacyF
     );
   };
 
-  // フォルダを開いていない（ファイルを1本だけ開いた）ときは投稿を書く場所がないので、今の Idea をそのまま出す
-  // （2-1 の前と同じく、ここで Idea を書ける。BINDER 2-1 の後退 R3）。
-  if (!scoped && legacy) {
-    return (
-      <section className="ideaPane postStreamPane" aria-label="アイデア">
-        <div className="postLegacy">{legacy}</div>
-      </section>
-    );
-  }
+  // フォルダを開いていない（ファイルを1本だけ開いた）ときは投稿を書く場所がないので、投稿の欄を出さない（BINDER 2-1）。
+  if (!scoped) return <section className="ideaPane postStreamPane" aria-label="アイデア" />;
 
   return (
     <section className="ideaPane postStreamPane" aria-label="アイデア">
-      {view === "legacy" && legacy ? (
-        <>
-          <div className="ideaViewTop">{chips}</div>
-          <div className="postLegacy">{legacy}</div>
-        </>
-      ) : (
-        <>
-          <div className="ideaViewTop">
-            <div className="ideaCapture">
-              <IdeaComposerBox text={text}>
-                <span className="ideaCapturePlus" aria-hidden="true"><PlusIcon /></span>
-                <textarea
-                  value={text}
-                  rows={2}
-                  aria-label="投稿"
-                  disabled={!available}
-                  onChange={(event) => setText(event.target.value)}
-                  onCompositionStart={() => (composingRef.current = true)}
-                  onCompositionEnd={() => (composingRef.current = false)}
-                  onKeyDown={(event) => submitOnEnter(event, () => void post())}
-                />
-                <div className="ideaCaptureControls">
-                  <span className="ideaCaptureSpacer" />
-                  <button className="ideaPrimaryBtn" type="button" disabled={!available || !text.trim()} onClick={() => void post()}><PlusIcon /><span>投稿</span></button>
-                </div>
-              </IdeaComposerBox>
+      <div className="ideaViewTop">
+        <div className="ideaCapture">
+          <IdeaComposerBox text={text}>
+            <span className="ideaCapturePlus" aria-hidden="true"><PlusIcon /></span>
+            <textarea
+              value={text}
+              rows={2}
+              aria-label="投稿"
+              disabled={!available}
+              onChange={(event) => setText(event.target.value)}
+              onCompositionStart={() => (composingRef.current = true)}
+              onCompositionEnd={() => (composingRef.current = false)}
+              onKeyDown={(event) => submitOnEnter(event, () => void post())}
+            />
+            <div className="ideaCaptureControls">
+              <span className="ideaCaptureSpacer" />
+              <button className="ideaPrimaryBtn" type="button" disabled={!available || !text.trim()} onClick={() => void post()}><PlusIcon /><span>投稿</span></button>
             </div>
-            {chips}
-          </div>
-          <div className="ideaScroll postScroll">
-            {days.map((day) => (
-              <section key={day.key || "unknown"} className="postDay" aria-label={dayLabel(day.key) || undefined}>
-                {dayLabel(day.key) && <h3 className="postDayLabel">{dayLabel(day.key)}</h3>}
-                {day.rows.map(renderPost)}
-              </section>
-            ))}
-          </div>
-        </>
-      )}
+          </IdeaComposerBox>
+        </div>
+        {chips}
+      </div>
+      <div className="ideaScroll postScroll">
+        {days.map((day) => (
+          <section key={day.key || "unknown"} className="postDay" aria-label={dayLabel(day.key) || undefined}>
+            {dayLabel(day.key) && <h3 className="postDayLabel">{dayLabel(day.key)}</h3>}
+            {day.rows.map(renderPost)}
+          </section>
+        ))}
+      </div>
     </section>
   );
 }

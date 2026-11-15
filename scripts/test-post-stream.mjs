@@ -41,7 +41,7 @@ await build({
       import { usePostStream } from "./src/posts/usePostStream";
       import { createPostNoteActions } from "./src/posts/postNoteActions";
       export * from "./src/posts/postModel";
-      export function Harness({ scope, legacy, legacyFocusNonce, initialFilter = "inbox", onFilter, showToast, noteDeps }) {
+      export function Harness({ scope, initialFilter = "inbox", onFilter, showToast, noteDeps }) {
         const stream = usePostStream(scope, { showToast });
         const [filter, setFilter] = useState(initialFilter);
         // App と同じく、描画のたびに deps を入れ替える（BINDER 2-3）。
@@ -49,7 +49,7 @@ await build({
         depsRef.current = { stream, showToast, projectFolder: scope ? { path: scope, name: "", children: [] } : null, ...noteDeps };
         const noteActions = useMemo(() => createPostNoteActions(depsRef), []);
         return createElement(PostStreamPane, {
-          stream, filter, legacy, legacyFocusNonce,
+          stream, filter,
           onFilterChange: (next) => { onFilter?.(next); setFilter(next); },
           onMakeNote: noteDeps && stream.work ? (post) => void noteActions.makeNote(post) : undefined,
           onOpenNote: (post) => void noteActions.openNote(post),
@@ -433,37 +433,21 @@ test("「この作品」は作品を開いているときだけ。ほかの作�
   atRoot.unmount();
 });
 
-test("「以前のアイデア」で今の Idea を出し、Canvas からの要求でも切り替える。フォルダがなければ今の Idea をそのまま出す", async () => {
+// BINDER 2-4 で Idea を投稿とノートへ移し、「以前のアイデア」（今の Idea の画面）を外した。
+test("「以前のアイデア」はない。フォルダがなければ投稿の欄を出さない", async () => {
   const backend = fakeBackend();
-  const legacy = React.createElement("div", { className: "legacyMarker" }, "古い");
-  // BINDER 2-1 の後退 R3: フォルダを開いていなくても、2-1 の前と同じく今の Idea で書ける。
-  const none = await mount({ scope: null, legacy });
-  assert.ok(none.container.querySelector(".legacyMarker"), "no folder: the current Idea is shown as it was");
+  const none = await mount({ scope: null });
   assert.equal(composer(none.container), null, "no folder: no post box that cannot post");
   assert.equal(chip(none.container, "受信箱"), undefined);
   assert.equal(backend.calls.length, 0);
   none.unmount();
 
   fakeBackend();
-  const open = await mount({ legacy });
-  assert.equal(open.container.querySelector(".legacyMarker"), null, "a folder: the post stream comes first");
-  await click(chip(open.container, "以前のアイデア"));
-  assert.ok(open.container.querySelector(".legacyMarker"));
-  assert.equal(composer(open.container), null);
-  await click(chip(open.container, "受信箱"));
-  assert.equal(open.container.querySelector(".legacyMarker"), null);
+  const open = await mount();
+  assert.equal(chip(open.container, "以前のアイデア"), undefined, "the old Idea view is gone");
+  assert.ok(composer(open.container));
+  assert.ok(chip(open.container, "受信箱"));
   open.unmount();
-
-  fakeBackend();
-  const pending = await mount({ legacy, legacyFocusNonce: 7 });
-  assert.ok(pending.container.querySelector(".legacyMarker"), "a request already waiting when the pane opens");
-  await click(chip(pending.container, "受信箱"));
-  await pending.render({ legacyFocusNonce: 8 });
-  assert.ok(pending.container.querySelector(".legacyMarker"), "a new request switches again");
-  await pending.render({ legacy: undefined });
-  assert.equal(chip(pending.container, "以前のアイデア"), undefined);
-  assert.ok(composer(pending.container));
-  pending.unmount();
 });
 
 test("アプリに戻ったとき、ファイルが変わっていれば読み直し、変わっていなければ読まない", async () => {

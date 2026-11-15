@@ -1,7 +1,6 @@
 import type {
   CanvasNodeFontSource,
   CanvasScope,
-  IdeaOriginRef,
   ReferenceFileInfo,
   ReferenceKind,
   WritingMode,
@@ -105,36 +104,25 @@ export type CanvasBoardSummary = {
   edgeCount: number;
 };
 
-export type CanvasIdeaFragmentOption = {
-  id: string;
-  body: string;
-  used: boolean;
-};
-
-export type CanvasIdeaThreadOption = {
-  id: string;
-  kind: "inbox" | "thread";
-  title: string;
-  /** 別ウィンドウのサイドパネルでドラッグ投入するための断片一覧（任意）。 */
-  fragments?: CanvasIdeaFragmentOption[];
-};
-
-/**
- * サイドバー→キャンバスの HTML5 DnD で使う MIME。
- * Idea 断片は App.tsx 側のドラッグ開始が設定する既存の MIME を共有する。
- */
-export const IDEA_FRAGMENT_DRAG_MIME = "application/x-brew-snippet-id";
+/** サイドバー→キャンバスの HTML5 DnD で使う MIME。 */
 export const REFERENCE_FILE_DRAG_MIME = "application/x-then-reference-file";
 
 /**
- * メイン画面 → 別ウィンドウキャンバスへ Idea・資料の最新一覧だけを届けるイベント。
+ * メイン画面 → 別ウィンドウキャンバスへ資料の最新一覧だけを届けるイベント。
  * then-canvas-payload と違いボードの再読込（選択・undo履歴のリセット）を起こさない。
  */
 export const CANVAS_LIVE_DATA_EVENT = "then-canvas-live-data";
 
 export type CanvasLiveDataEvent = {
-  ideaThreads: CanvasIdeaThreadOption[];
   referenceFiles: ReferenceFileInfo[];
+};
+
+/** キャンバス → メイン画面へ、選んだカードを投稿にしてもらうイベント（BINDER 2-4、確認1の 8）。 */
+export const CANVAS_COPY_TO_POST_EVENT = "then-canvas-copy-to-post";
+
+export type CanvasCopyToPostRequest = {
+  /** カード1枚ずつの本文。1件ずつ投稿にする。 */
+  bodies: string[];
 };
 
 export type CanvasWindowPayload = {
@@ -150,30 +138,11 @@ export type CanvasWindowPayload = {
   uiFontScale: number;
   canvasDefaultWritingMode: WritingMode;
   canvasDefaultFontSource: CanvasNodeFontSource;
-  ideaThreads: CanvasIdeaThreadOption[];
   referenceFiles?: ReferenceFileInfo[];
   /** メイン画面の右サイドバー表示状態。別ウィンドウのサイドパネルへ引き継ぐ。 */
   rightSidebarVisible?: boolean;
 };
 
-export type CanvasCopyToIdeaItem = {
-  nodeId: string;
-  text: string;
-};
-
-export type CanvasCopyToIdeaRequest = {
-  boardId: string;
-  boardScope: CanvasScope;
-  boardName: string;
-  targetThreadId: string;
-  threadTitle?: string;
-  items: CanvasCopyToIdeaItem[];
-};
-
-export type CanvasFocusIdeaRequest = {
-  threadId: string;
-  fragmentId?: string;
-};
 
 let canvasIdCounter = 0;
 
@@ -476,20 +445,5 @@ export function normalizeCanvasDocument(
       createdAt: isFiniteNumber(then?.createdAt) ? then.createdAt : now,
       updatedAt: isFiniteNumber(then?.updatedAt) ? then.updatedAt : now,
     },
-  };
-}
-
-export function createIdeaOriginRef(
-  boardScope: CanvasScope,
-  boardId: string,
-  nodeId: string,
-  copiedAt = Date.now(),
-): IdeaOriginRef {
-  return {
-    source: "canvas",
-    sourceId: nodeId,
-    sourceBoardId: boardId,
-    sourceBoardScope: boardScope,
-    copiedAt,
   };
 }

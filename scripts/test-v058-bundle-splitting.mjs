@@ -31,12 +31,12 @@ const mainSource = await readFile("src/main.tsx", "utf8");
 const appSource = await readFile("src/App.tsx", "utf8");
 const rightSidebarSource = await readFile("src/components/layout/RightSidebar.tsx", "utf8");
 const leftSidebarSource = await readFile("src/components/layout/LeftSidebar.tsx", "utf8");
-const binderSource = await readFile("src/components/binder/BinderPane.tsx", "utf8");
+
 const mainImports = staticRuntimeImports(mainSource, "src/main.tsx");
 const appImports = staticRuntimeImports(appSource, "src/App.tsx");
 const rightSidebarImports = staticRuntimeImports(rightSidebarSource, "src/components/layout/RightSidebar.tsx");
 const leftSidebarImports = staticRuntimeImports(leftSidebarSource, "src/components/layout/LeftSidebar.tsx");
-const binderImports = staticRuntimeImports(binderSource, "src/components/binder/BinderPane.tsx");
+
 
 for (const modulePath of ["./App", "./CanvasWindowApp", "./ExportWindowApp"]) {
   assert.equal(
@@ -69,7 +69,8 @@ for (const modulePath of ["../binder/OpenCardsPane"]) {
   );
 }
 
-for (const modulePath of ["../binder/BinderPane"]) {
+// 右のアイデアのペインは投稿の流れ（BINDER 2-1）。2-4 で今の Idea の画面（BinderPane・IdeaPane）を外した。
+for (const modulePath of ["../posts/PostStreamPane"]) {
   assert.equal(
     rightSidebarImports.has(modulePath),
     true,
@@ -77,19 +78,11 @@ for (const modulePath of ["../binder/BinderPane"]) {
   );
 }
 
-for (const modulePath of ["../snippets/IdeaPane"]) {
-  assert.equal(
-    binderImports.has(modulePath),
-    true,
-    `${modulePath} must remain eagerly available through the binder screen`,
-  );
-}
-
 assert.doesNotMatch(mainSource, /\blazy\(/, "root screens must not wait for a first-use import");
 assert.doesNotMatch(appSource, /\blazy\(/, "feature screens must not wait for a first-use import");
 assert.doesNotMatch(rightSidebarSource, /\blazy\(/, "right sidebar panes must not wait for a first-use import");
 assert.doesNotMatch(leftSidebarSource, /\blazy\(/, "left sidebar panes must not wait for a first-use import");
-assert.doesNotMatch(binderSource, /\blazy\(/, "binder screens must not wait for a first-use import");
+
 
 const viteSource = await readFile("vite.config.ts", "utf8");
 assert.match(

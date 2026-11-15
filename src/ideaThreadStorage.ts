@@ -10,7 +10,3 @@ export async function loadWorkspaceSnippets(folderPath: string): Promise<IdeaThr
   return loaded.length ? normalizeIdeaThreads(loaded) : defaultIdeaThreads();
 }
 
-export async function saveWorkspaceSnippets(folderPath: string, snippets: IdeaThread[]): Promise<void> {
-  if (!isTauriRuntime()) return;
-  await invoke("save_project_snippets", { rootPath: folderPath, snippets });
-}

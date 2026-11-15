@@ -219,6 +219,7 @@ export function createPaletteCommands(deps: PaletteCommandDeps): PaletteCommand[
       id: "idea-quick-capture",
       label: "アイデアに投稿…",
       hint: "Ctrl+Alt+I",
+      disabledReason: projectFolder ? undefined : "プロジェクトを開いてください",
       run: () => setIsQuickIdeaModalOpen(true),
     },
     {

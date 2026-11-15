@@ -18,6 +18,7 @@ import type {
   BinderCardState,
   CursorPosition,
   EditorSettings,
+  IdeaStorageMode,
   FileProgressStatus,
   IdeaBinderCardState,
   IdeaThreadLayout,
@@ -145,7 +146,7 @@ const defaultSettings: EditorSettings = {
   highlightCurrentLine: false,
   colorizeJapaneseQuotes: false,
   showComments: true,
-  snippetStorageMode: "workspace",
+
   showWorkspacePaths: true,
   showStatusFilePath: false,
   showDocumentTabs: true,
@@ -170,11 +171,9 @@ export function normalizePathForCompare(path: string): string {
 }
 
 export function createDefaultState(): AppState {
-  const threads = defaultIdeaThreads();
   return {
     markdown: initialMarkdown,
-    snippets: threads,
-    profileSnippets: threads,
+    profileSnippets: defaultIdeaThreads(),
     settings: defaultSettings,
     rightSidebarTab: "idea",
     rightSidebarCollapsed: false,
@@ -498,7 +497,7 @@ export function normalizeReferenceLayout(value: unknown): ReferenceLayout {
     };
   };
   const ideaThreads = toIdeaThreadLayouts(raw?.ideaThreads);
-  const isStorageMode = (mode: unknown): mode is EditorSettings["snippetStorageMode"] =>
+  const isStorageMode = (mode: unknown): mode is IdeaStorageMode =>
     mode === "workspace" || mode === "profile";
   const ideaThreadsMode = isStorageMode(raw?.ideaThreadsMode) ? raw.ideaThreadsMode : undefined;
   const rawOther = raw?.otherIdea as Partial<OtherIdeaLayout> | undefined;
@@ -650,8 +649,16 @@ export function normalizeState(value: Partial<AppState> | null | undefined): App
     ai?: unknown;
     /** 廃止したプロット表示フォント（BINDER 1-6 で Plot がなくなった）。読み捨てる。 */
     plotFontSource?: unknown;
+    /** 廃止した「Ideaの管理単位」（BINDER 2-4 で Idea を投稿とノートへ移した）。読み捨てる。 */
+    snippetStorageMode?: unknown;
   };
-  const { zoneMode: legacyZoneMode, ai: _legacyAi, plotFontSource: _legacyPlotFont, ...settings } = rawSettings;
+  const {
+    zoneMode: legacyZoneMode,
+    ai: _legacyAi,
+    plotFontSource: _legacyPlotFont,
+    snippetStorageMode: _legacyIdeaMode,
+    ...settings
+  } = rawSettings;
   const recentWorkspaces = Array.isArray(value?.recentWorkspaces)
     ? value.recentWorkspaces.filter(
         (record): record is WorkspaceRecord =>
@@ -662,19 +669,18 @@ export function normalizeState(value: Partial<AppState> | null | undefined): App
       )
     : [];
 
+  // とても古いアプリ状態は、共有の Idea を `snippets` に持っていた。
+  const legacySnippets = (value as { snippets?: unknown } | null | undefined)?.snippets;
   const profileSnippets = normalizeIdeaThreads(
     Array.isArray(value?.profileSnippets)
       ? value.profileSnippets
-      : Array.isArray(value?.snippets)
-        ? value.snippets
+      : Array.isArray(legacySnippets)
+        ? legacySnippets
         : defaultIdeaThreads(),
   );
 
   return {
     markdown: typeof value?.markdown === "string" ? value.markdown : initialMarkdown,
-    snippets: Array.isArray(value?.snippets)
-      ? normalizeIdeaThreads(value.snippets)
-      : profileSnippets,
     profileSnippets,
     ...(isProfileSnippetsMigration(value?.profileSnippetsMigration)
       ? { profileSnippetsMigration: value.profileSnippetsMigration }
@@ -707,8 +713,7 @@ export function normalizeState(value: Partial<AppState> | null | undefined): App
         typeof settings.lineHeight === "number" && Number.isFinite(settings.lineHeight)
           ? Math.min(2.4, Math.max(1.4, settings.lineHeight))
           : defaultSettings.lineHeight,
-      snippetStorageMode:
-        settings.snippetStorageMode === "profile" ? "profile" : "workspace",
+
       showWorkspacePaths:
         typeof settings.showWorkspacePaths === "boolean"
           ? settings.showWorkspacePaths

@@ -12,6 +12,9 @@ import { guardBrowser, stopBrowser } from "./lib/stop-browser.mjs";
 // Rust の代わりに作品ごとの保存先を持つ入れ物を置く。命令は少し待ってから答える（Tauri の IPC と同じく、
 // 答えのあいだに描画が入る）。入口は、起動画面の「前回の執筆を続ける」、起動画面を飛ばす起動、
 // 開いている作品から別の作品のファイルを「ファイルを開く」の3つ。
+// BINDER 2-4 で Idea を投稿とノートへ移し、Idea の画面と保存をなくした。移行の前（または移行に失敗した）作品の
+// Idea の並び順も、開いただけでは書き直さず、Idea を書かないことを確かめる（ここの Rust の代わりは移行の命令に
+// 答えないので、移行は起きない）。
 //
 //   node scripts/test-startup-idea-order.mjs [--dist <dir>] [--debug]
 
@@ -89,7 +92,7 @@ function installMock({ library, workA, workB, skipStartupPortal, staleIdea, read
     lastFilePath: `${workA}/本文.txt`,
     rightSidebarTab: "idea",
     recentWorkspaces: projects.map((project, index) => ({ ...project, lastOpenedAt: 2 - index })),
-    settings: { skipStartupPortal, snippetStorageMode: "workspace" },
+    settings: { skipStartupPortal },
     snippets: [thread("idea-inbox", "inbox", "インボックス", [["a-1", "作品Aのメモ"], ["stale-1", staleIdea]])],
   };
   if (typewriterStartup) {
@@ -217,22 +220,15 @@ function pageHelpers() {
       throw new Error(`timed out: ${what}`);
     },
     workName: () => [...document.querySelectorAll(".workspaceSwitcherButton")].map(text).find((name) => name.startsWith("作品")) ?? "",
-    // BINDER 2-1: 今の Idea は、右のペイン「アイデア」の「以前のアイデア」の中にある（2-4 で移すまで）。
-    ideaText: () => {
-      if (!document.querySelector("section.ideaView")) {
-        [...document.querySelectorAll(".postStreamPane .ideaChip")].find((button) => text(button) === "以前のアイデア")?.click();
-      }
-      return [...document.querySelectorAll("section.ideaView")].map(text).join(" / ");
-    },
-    /** 起動画面があれば「あとで」「前回の執筆を続ける」を押して、作品Aの本文と Idea が出るまで待つ。 */
+    /** 起動画面があれば「あとで」「前回の執筆を続ける」を押して、作品Aの本文が出るまで待つ。 */
     async startup() {
       const until = Date.now() + 30_000;
       while (Date.now() < until) {
-        if (window.t.workName() === "作品A" && document.querySelector(".ProseMirror") && window.t.ideaText()) return;
+        if (window.t.workName() === "作品A" && document.querySelector(".ProseMirror")) return;
         [...document.querySelectorAll("button")].find((button) => text(button) === "あとで" || text(button).startsWith("前回の執筆を続ける"))?.click();
         await sleep(200);
       }
-      throw new Error(`startup did not finish: ${window.t.workName()} / ${window.t.ideaText().slice(0, 200)} / ${document.querySelector(".rightSidebar")?.innerText.slice(0, 300)}`);
+      throw new Error(`startup did not finish: ${window.t.workName()} / ${document.querySelector(".rightSidebar")?.innerText.slice(0, 300)}`);
     },
     async openFileFromMenu() {
       must(document.querySelector('[aria-label="ファイルメニュー"]'), "file menu").click();
@@ -322,9 +318,10 @@ try {
   const to = (saves, root, command) => saves.filter((save) => save.root === root && save.command === command);
   const describe = (saves) => saves.map((save) => `${save.at} ${save.command} ${save.root} ${save.body.slice(0, 200)}`);
 
-  /** 作品を開いただけで、並び順を変えず、資料ボードのファイルを書かず、ほかの Idea を書かない。 */
+  /** 作品を開いただけで、並び順を変えず、資料ボードのファイルを書かず、Idea を書かない。 */
   function assertOpenedUntouched(label, saves, works, root, own) {
     if (DEBUG) console.log(label, describe(saves));
+    expect.deepEqual(saves.filter((save) => save.command === "save_project_snippets").map((save) => save.root), [], `${label}: Idea はもう書かない（BINDER 2-4）`);
     expect.deepEqual(order(works[root].layout), [`${own}-ext`, `${own}-1`], `${label}: 作品の Idea の並び順は元のまま（外で足した Idea が先頭）`);
     expect.deepEqual(to(saves, root, "save_reference_layout").map((save) => save.body), [], `${label}: 開いただけで、資料ボードのファイルを書かない`);
     for (const save of saves.filter((item) => item.root === root)) {
@@ -338,10 +335,7 @@ try {
     const { socket, evaluate, pageErrors } = await openApp({ skipStartupPortal: false });
     await sleep(2500);
     const saves = await evaluate("window.__saves.splice(0)");
-    const ideas = await evaluate("t.ideaText()");
     assertOpenedUntouched("前回の執筆を続ける", saves, await stored(evaluate), WORK_A, "a");
-    // 一覧のスレッドの行には、並び順の先頭の Idea が出る。
-    expect.ok(ideas.includes("作品Aの外で足したIdea") && !ideas.includes(STALE_IDEA), `前回の執筆を続ける: 並び順の先頭の Idea が一覧に出る（${ideas}）`);
     expect.deepEqual(pageErrors, [], "the page throws no errors");
     socket.close();
   }
@@ -370,8 +364,6 @@ try {
       await t.sleep(2500);
     })()`);
     const savesB = await evaluate("window.__saves.splice(0)");
-    const ideasB = await evaluate("t.ideaText()");
-    expect.ok(ideasB.includes("作品Bの外で足したIdea") && !ideasB.includes("作品A"), `別の作品のファイルを開く: 並び順の先頭の Idea が一覧に出る（${ideasB}）`);
     const works = await stored(evaluate);
     assertOpenedUntouched("別の作品のファイルを開く", savesB, works, WORK_B, "b");
     for (const save of savesB.filter((item) => item.root === WORK_B)) {

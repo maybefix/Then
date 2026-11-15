@@ -145,7 +145,29 @@ type WorkspaceSidebarProps = {
   onCreateMaterialsFolder?: () => void;
   /** 作品直下の既存のフォルダを素材フォルダにする。 */
   onSetMaterialsFolder?: (folderPath: string) => void;
+  /**
+   * 素材フォルダの中の画像・PDF（BINDER 2-5、確認1の 7）。ファイルの一覧（txt・md だけ）には入らないので、
+   * 資料の候補から渡してもらい、置かれたフォルダの中に並べる。押すと資料カードで開く。
+   */
+  materialReferences?: MaterialReference[];
+  onOpenReference?: (reference: MaterialReference) => void;
+  onDeleteReference?: (reference: MaterialReference) => void;
+  /** 資料のファイルを取り込む（取り込み先は素材フォルダの「資料」）。 */
+  onImportReferences?: () => void;
 };
+
+export type MaterialReference = {
+  /** 絶対パス。 */
+  path: string;
+  /** 作品のフォルダからの相対パス（資料カードで開くとき）。 */
+  sourcePath: string;
+  name: string;
+  kind: string;
+};
+
+/** フォルダのパスを比べる形（区切りと大文字小文字をそろえる）。 */
+const folderKey = (path: string) => path.replace(/[\\/]+/g, "/").replace(/\/+$/, "").toLocaleLowerCase();
+const parentKey = (path: string) => folderKey(path).replace(/\/[^/]*$/, "");
 
 type TreeContextMenu = {
   x: number;
@@ -154,6 +176,8 @@ type TreeContextMenu = {
   isRoot: boolean;
   /** 段の見出しのメニュー。行のメニューと項目を変える。 */
   section?: "manuscript" | "materials";
+  /** 素材の段の画像・PDF の行のメニュー。 */
+  reference?: MaterialReference;
 } | null;
 
 type PointerDragState = {
@@ -828,6 +852,10 @@ export function WorkspaceSidebar({
   onOpenIdeas,
   onCreateMaterialsFolder,
   onSetMaterialsFolder,
+  materialReferences = [],
+  onOpenReference,
+  onDeleteReference,
+  onImportReferences,
 }: WorkspaceSidebarProps) {
   const [contextMenu, setContextMenu] = useState<TreeContextMenu>(null);
   const [headingContextMenu, setHeadingContextMenu] = useState<HeadingContextMenu>(null);
@@ -1488,8 +1516,44 @@ export function WorkspaceSidebar({
   const renderContextMenu = (): JSX.Element | null => {
     if (!contextMenu) return null;
 
-    const { entry, isRoot, section, x, y } = contextMenu;
+    const { entry, isRoot, section, reference, x, y } = contextMenu;
+    if (reference) {
+      return createPortal(
+        <div
+          className="treeContextMenu"
+          style={{ left: x, top: y }}
+          role="menu"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => closeContextMenuAndRun(() => onOpenReference?.(reference))}
+          >
+            開く
+          </button>
+          {onDeleteReference && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => closeContextMenuAndRun(() => onDeleteReference(reference))}
+            >
+              削除
+            </button>
+          )}
+        </div>,
+        document.querySelector<HTMLElement>(".appShell") ?? document.body,
+      );
+    }
     const kind = getEntryKind(entry);
+    // 資料を取り込めるのは、素材の段（素材フォルダとその中のフォルダ）と、ライブラリ直下（三段でない）のフォルダ。
+    // 取り込み先はどちらも決まった「資料」のフォルダ（BINDER 2-5）。
+    const canImportReferences =
+      Boolean(onImportReferences) &&
+      kind === "folder" &&
+      (section === "materials" ||
+        (isProjectEntry(entry) && entry.role === "material") ||
+        (!binderTiers && library?.role === "root"));
     // 作品直下の、素材でないフォルダ。素材フォルダがまだない作品でだけ、素材フォルダにできる。
     const canBecomeMaterialsFolder =
       !section &&
@@ -1537,6 +1601,15 @@ export function WorkspaceSidebar({
               フォルダを追加
             </button>
           </>
+        )}
+        {canImportReferences && (
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => closeContextMenuAndRun(() => onImportReferences?.())}
+          >
+            資料を取り込む…
+          </button>
         )}
         {canBecomeMaterialsFolder && (
           <button
@@ -1817,6 +1890,48 @@ export function WorkspaceSidebar({
     });
   };
 
+  /** そのフォルダの中にじかに置かれた、素材の画像・PDF。 */
+  const referencesIn = (folderPath: string) => {
+    const key = folderKey(folderPath);
+    return materialReferences.filter((reference) => parentKey(reference.path) === key);
+  };
+
+  const renderReferenceRow = (reference: MaterialReference, depth: number): JSX.Element => (
+    <div className="treeNode" key={reference.path}>
+      <div
+        className="treeItem fileTreeItem materialReferenceItem"
+        data-tree-entry-path={reference.path}
+        style={{ "--tree-item-indent": `${10 + depth * 14}px` } as CSSProperties}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          setHeadingContextMenu(null);
+          const position = getScaledFixedMenuPosition(event.clientX, event.clientY, {
+            width: TREE_CONTEXT_MENU_WIDTH,
+            height: 72,
+          });
+          setContextMenu({
+            x: position.left,
+            y: position.top,
+            entry: projectFolder as ProjectFolder,
+            isRoot: false,
+            reference,
+          });
+        }}
+      >
+        <span className="treeFileDisclosurePlaceholder" aria-hidden="true" />
+        <button
+          className="treeItemPrimary fileTreeItemPrimary"
+          type="button"
+          title={reference.path}
+          onClick={() => onOpenReference?.(reference)}
+        >
+          <span className="treeItemName">{reference.name}</span>
+        </button>
+        <span className="treeStatusColumn" />
+      </div>
+    </div>
+  );
+
   const renderEntry = (
     entry: ProjectFolder | ProjectEntry,
     depth: number,
@@ -1828,7 +1943,9 @@ export function WorkspaceSidebar({
     const visibleChildren = isFolder
       ? entry.children.filter((child) => !filteredOutPaths.has(child.path))
       : [];
-    const hasChildren = visibleChildren.length > 0;
+    const folderReferences =
+      isFolder && isProjectEntry(entry) && entry.role === "material" ? referencesIn(entry.path) : [];
+    const hasChildren = visibleChildren.length > 0 || folderReferences.length > 0;
     const isFolderExpanded = isFolder && !collapsedFolderPaths.has(entry.path);
     const isCurrentFile = entry.path === currentFilePath;
     const isFocused = entry.path === focusedFolderPath;
@@ -2043,6 +2160,7 @@ export function WorkspaceSidebar({
         {isFolder && hasChildren && isFolderExpanded && (
           <div className="treeChildren">
             {visibleChildren.map((child) => renderEntry(child, depth + 1, entry.path))}
+            {folderReferences.map((reference) => renderReferenceRow(reference, depth + 1))}
           </div>
         )}
         {!isFolder && hasOutline && isOutlineExpanded && (
@@ -2216,6 +2334,9 @@ export function WorkspaceSidebar({
             {materialsFolder &&
               !isMaterialsCollapsed &&
               visibleMaterials.map((entry) => renderEntry(entry, 1, materialsFolder.path))}
+            {materialsFolder &&
+              !isMaterialsCollapsed &&
+              referencesIn(materialsFolder.path).map((reference) => renderReferenceRow(reference, 1))}
           </div>
         )}
         <div className="binderSection" role="group" aria-label="投稿">

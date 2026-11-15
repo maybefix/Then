@@ -233,6 +233,8 @@ const rows = (commands) => commands.map((command) => [command.id, command.label,
     ...tableOnly,
     "checkpoint-create": project,
     "checkpoint-open": project,
+    // 投稿を書く場所はフォルダの中だけ。フォルダがないときの今の Idea への書き込みは BINDER 2-4 で外した。
+    "idea-quick-capture": project,
     "idea-board-open": project,
   });
 

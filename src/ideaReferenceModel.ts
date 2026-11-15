@@ -1,11 +1,11 @@
 import type {
   BinderCardState,
-  EditorSettings,
   IdeaBinderCardState,
   IdeaFragmentLink,
   IdeaReferenceLink,
   IdeaThread,
   IdeaThreadItemLink,
+  IdeaStorageMode,
   IdeaThreadLayout,
   ReferenceFileInfo,
   ReferenceLayout,
@@ -13,11 +13,6 @@ import type {
 
 export const normalizeIdeaReferencePath = (sourcePath: string): string =>
   sourcePath.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/{2,}/g, "/");
-
-export const ideaThreadItemKey = (item: IdeaThreadItemLink): string =>
-  item.sourceType === "idea"
-    ? `idea:${item.fragmentId}`
-    : `reference:${item.id}`;
 
 export const normalizedReferenceKey = (sourcePath: string): string =>
   normalizeIdeaReferencePath(sourcePath).toLocaleLowerCase();
@@ -175,18 +170,6 @@ export function reconcileIdeaThreadLayouts(
 }
 
 /**
- * 並び順が同じか。Rust は並び順の項目を serde_json::Value のまま読み書きし、キーを名前の順に
- * 並べ替えるので、整合処理が作り直した項目とはキーの順だけが違う。キーの順は見ない。
- */
-export function sameIdeaThreadLayouts(a: IdeaThreadLayout[], b: IdeaThreadLayout[]): boolean {
-  const sortedKeys = (_key: string, value: unknown) =>
-    value && typeof value === "object" && !Array.isArray(value)
-      ? Object.fromEntries(Object.entries(value).sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)))
-      : value;
-  return JSON.stringify(a, sortedKeys) === JSON.stringify(b, sortedKeys);
-}
-
-/**
  * 並び順と資料ボードの Idea カードを、指定した「Ideaの管理単位」の側に合わせる。
  * スレッドの ID は管理単位ごとに別（受信箱だけは同じ ID）なので、違う側のまま整合処理に
  * かけると並び順が崩れる。違う側なら、表示していた側を預け、預けていた側を出す。
@@ -194,7 +177,7 @@ export function sameIdeaThreadLayouts(a: IdeaThreadLayout[], b: IdeaThreadLayout
  */
 export function alignIdeaLayoutToMode<T extends Pick<ReferenceLayout, "cards" | "ideaThreads" | "ideaThreadsMode" | "otherIdea">>(
   layout: T,
-  mode: EditorSettings["snippetStorageMode"],
+  mode: IdeaStorageMode,
 ): T {
   if (!layout.ideaThreadsMode) return { ...layout, ideaThreadsMode: mode };
   if (layout.ideaThreadsMode === mode) return layout;
@@ -212,18 +195,4 @@ export function alignIdeaLayoutToMode<T extends Pick<ReferenceLayout, "cards" | 
       cards: layout.cards.filter(isIdeaCard),
     },
   };
-}
-
-export function countIdeaReferenceLinks(
-  layouts: IdeaThreadLayout[],
-  sourcePath: string,
-): number {
-  const key = normalizedReferenceKey(sourcePath);
-  return layouts.reduce(
-    (count, layout) =>
-      count + layout.items.filter(
-        (item) => item.sourceType === "reference" && normalizedReferenceKey(item.sourcePath) === key,
-      ).length,
-    0,
-  );
 }

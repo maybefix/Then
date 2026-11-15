@@ -17,24 +17,21 @@ import { createLatestFrameScheduler } from "./utils/latestFrameScheduler";
 import { withIdeographicSpaceFont } from "./utils/fontStack";
 import { buildCanvasThemeStyle, canvasAppearanceAttributes } from "./canvasAppearance";
 import {
+  CANVAS_COPY_TO_POST_EVENT,
   CANVAS_LIVE_DATA_EVENT,
   createCanvasDocument,
   createCanvasEdge,
   createCanvasGroupNode,
   createCanvasReferenceNode,
   createCanvasTextNode,
-  IDEA_FRAGMENT_DRAG_MIME,
   nextCanvasId,
   normalizeCanvasDocument,
   REFERENCE_FILE_DRAG_MIME,
   type CanvasBoardSummary,
-  type CanvasCopyToIdeaItem,
+  type CanvasCopyToPostRequest,
   type CanvasEdgeConnector,
-  type CanvasCopyToIdeaRequest,
   type CanvasEdge,
-  type CanvasFocusIdeaRequest,
   type CanvasGroupNode,
-  type CanvasIdeaThreadOption,
   type CanvasLiveDataEvent,
   type CanvasNode,
   type CanvasReferenceNode,
@@ -68,7 +65,7 @@ import {
 
 const CANVAS_WIDTH = 6400;
 const CANVAS_HEIGHT = 4200;
-const NEW_THREAD_TARGET = "__new__";
+
 const LOCAL_STORAGE_PREFIX = "then.canvas-board";
 const HISTORY_LIMIT = 60;
 const MIN_ZOOM = 0.35;
@@ -182,7 +179,6 @@ const fallbackPayload: CanvasWindowPayload = {
   uiFontScale: 1,
   canvasDefaultWritingMode: "horizontal-tb",
   canvasDefaultFontSource: "ui",
-  ideaThreads: [{ id: "idea-inbox", kind: "inbox", title: "インボックス" }],
 };
 
 function localStorageKey(scope: CanvasScope, rootPath: string | null) {
@@ -851,40 +847,22 @@ function CanvasGlyph({
   }
 }
 
-function fragmentPreview(body: string) {
-  const line = body.replace(/\s+/g, " ").trim();
-  return line.length > 64 ? `${line.slice(0, 64)}…` : line;
-}
-
 /**
- * 別ウィンドウ表示のキャンバスで、メイン画面の右サイドバー相当（Idea・資料）を
- * 引き継ぐサイドパネル。項目はドラッグまたはクリックでキャンバスへ追加する。
+ * 別ウィンドウ表示のキャンバスで、メイン画面の資料を引き継ぐサイドパネル。
+ * 項目はドラッグまたはクリックでキャンバスへ追加する。
  */
 function CanvasSidePanel({
-  threads,
   referenceFiles,
-  onInsertFragment,
   onInsertReference,
   onClose,
 }: {
-  threads: CanvasIdeaThreadOption[];
   referenceFiles: ReferenceFileInfo[];
-  onInsertFragment: (body: string) => void;
   onInsertReference: (file: ReferenceFileInfo) => void;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<"idea" | "reference">("idea");
   const [query, setQuery] = useState("");
   const normalized = query.trim().toLocaleLowerCase();
 
-  const visibleThreads = threads
-    .map((thread) => ({
-      ...thread,
-      fragments: (thread.fragments ?? []).filter((fragment) =>
-        normalized ? fragment.body.toLocaleLowerCase().includes(normalized) : true,
-      ),
-    }))
-    .filter((thread) => !normalized || thread.fragments.length > 0);
   const visibleFiles = referenceFiles.filter((file) =>
     normalized
       ? `${file.name} ${file.sourcePath}`.toLocaleLowerCase().includes(normalized)
@@ -892,25 +870,10 @@ function CanvasSidePanel({
   );
 
   return (
-    <aside className="canvasSidePanel" aria-label="Idea と資料">
+    <aside className="canvasSidePanel" aria-label="資料">
       <header className="canvasSidePanelHeader">
         <div className="canvasSidePanelTabs" role="tablist" aria-label="サイドパネル">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "idea"}
-            className={tab === "idea" ? "isActive" : ""}
-            onClick={() => setTab("idea")}
-          >
-            Idea
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "reference"}
-            className={tab === "reference" ? "isActive" : ""}
-            onClick={() => setTab("reference")}
-          >
+          <button type="button" role="tab" aria-selected className="isActive">
             資料
           </button>
         </div>
@@ -928,43 +891,12 @@ function CanvasSidePanel({
         className="canvasSidePanelSearch"
         value={query}
         type="search"
-        placeholder={tab === "idea" ? "断片を検索" : "資料を検索"}
-        aria-label={tab === "idea" ? "断片を検索" : "資料を検索"}
+        placeholder="資料を検索"
+        aria-label="資料を検索"
         onChange={(event) => setQuery(event.target.value)}
       />
       <div className="canvasSidePanelBody">
-        {tab === "idea" ? (
-          visibleThreads.length === 0 ? (
-            <p className="canvasSidePanelEmpty">Idea 断片がありません</p>
-          ) : (
-            visibleThreads.map((thread) => (
-              <section className="canvasSidePanelGroup" key={thread.id}>
-                <h3>{thread.title}</h3>
-                {thread.fragments.length === 0 ? (
-                  <p className="canvasSidePanelEmpty">断片がありません</p>
-                ) : (
-                  thread.fragments.map((fragment) => (
-                    <button
-                      className={`canvasSidePanelItem ${fragment.used ? "isUsed" : ""}`}
-                      key={fragment.id}
-                      type="button"
-                      draggable
-                      title="ドラッグまたはクリックでキャンバスへ追加"
-                      onDragStart={(event) => {
-                        event.dataTransfer.effectAllowed = "copy";
-                        event.dataTransfer.setData(IDEA_FRAGMENT_DRAG_MIME, fragment.id);
-                        event.dataTransfer.setData("text/plain", fragment.body);
-                      }}
-                      onClick={() => onInsertFragment(fragment.body)}
-                    >
-                      {fragmentPreview(fragment.body)}
-                    </button>
-                  ))
-                )}
-              </section>
-            ))
-          )
-        ) : visibleFiles.length === 0 ? (
+        {visibleFiles.length === 0 ? (
           <p className="canvasSidePanelEmpty">資料がありません</p>
         ) : (
           visibleFiles.map((file) => (
@@ -1001,8 +933,7 @@ type CanvasWindowAppProps = {
   embedded?: boolean;
   /** embedded 時のペイロード。requestId が変わるとボードを読み直す。 */
   embeddedPayload?: CanvasWindowPayload | null;
-  /** embedded 時に Idea 送信先セレクトへ反映する最新のスレッド一覧。 */
-  liveIdeaThreads?: CanvasIdeaThreadOption[];
+
   /** embedded 時に資料メニューへ反映する最新の資料一覧。 */
   liveReferenceFiles?: ReferenceFileInfo[];
   onDraftCanvasChange?: (context: DraftCanvasContext | null) => void;
@@ -1014,7 +945,6 @@ type CanvasWindowAppProps = {
 export default function CanvasWindowApp({
   embedded = false,
   embeddedPayload = null,
-  liveIdeaThreads,
   liveReferenceFiles,
   onDraftCanvasChange,
   draftSelectRequest,
@@ -1057,7 +987,7 @@ export default function CanvasWindowApp({
   const [threadDropTargetId, setThreadDropTargetId] = useState<string | null>(null);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
-  const [targetThreadId, setTargetThreadId] = useState("idea-inbox");
+
   const [pan, setPan] = useState<Point>({ x: 180, y: 120 });
   const [zoom, setZoom] = useState(1);
   const panRef = useRef(pan);
@@ -1085,12 +1015,12 @@ export default function CanvasWindowApp({
   const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
   const [trashedBoards, setTrashedBoards] = useState<TrashedCanvasBoardSummary[]>([]);
   const [isTrashLoading, setIsTrashLoading] = useState(false);
-  // 別ウィンドウ表示のときだけ使う Idea・資料サイドパネル。
+  // 別ウィンドウ表示のときだけ使う資料のサイドパネル。
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(true);
   const [isDraftPanelOpen, setIsDraftPanelOpen] = useState(false);
   /**
-   * メイン画面から届く Idea・資料の最新一覧（別ウィンドウ用）。payload と違い
-   * ボードの再読込を伴わないため、断片の追加・編集が開いたままのウィンドウにも
+   * メイン画面から届く資料の最新一覧（別ウィンドウ用）。payload と違い
+   * ボードの再読込を伴わないため、資料の追加が開いたままのウィンドウにも
    * 反映される。null の間は payload の内容を使う。
    */
   const [livePanelData, setLivePanelData] = useState<CanvasLiveDataEvent | null>(null);
@@ -1166,8 +1096,7 @@ export default function CanvasWindowApp({
     (payload?.rootPath ? livePanelData?.referenceFiles : undefined) ??
     payload?.referenceFiles ??
     [];
-  const ideaThreadOptions =
-    liveIdeaThreads ?? livePanelData?.ideaThreads ?? payload?.ideaThreads ?? [];
+
   const filteredReferenceFiles = useMemo(() => {
     const normalized = referenceQuery.trim().toLocaleLowerCase();
     if (!normalized) return referenceFiles;
@@ -1175,7 +1104,7 @@ export default function CanvasWindowApp({
       `${file.name} ${file.sourcePath}`.toLocaleLowerCase().includes(normalized),
     );
   }, [referenceFiles, referenceQuery]);
-  const textNodesForIdea = useMemo(() => {
+  const textNodesForPosts = useMemo(() => {
     if (!board) return [];
     const selectedGroup = selectedNodes.length === 1 ? selectedNodes[0] : null;
     if (selectedGroup && isGroupNode(selectedGroup)) {
@@ -1444,21 +1373,6 @@ export default function CanvasWindowApp({
     setSelectedEdgeId(null);
   };
 
-  const insertIdeaTextNodeAt = (body: string, point: Point) => {
-    if (!board) return;
-    const width = 260;
-    const height = 150;
-    const node = createCanvasTextNode(body, {
-      x: Math.max(0, point.x - width / 2),
-      y: Math.max(0, point.y - height / 2),
-      writingMode: defaultCanvasWritingMode,
-      fontSource: defaultCanvasFontSource,
-    });
-    pushHistory();
-    patchBoard((current) => ({ ...current, nodes: [...current.nodes, node] }));
-    setSelectedIds(new Set([node.id]));
-    setSelectedEdgeId(null);
-  };
 
   const addReferenceNode = (file: (typeof referenceFiles)[number]) => {
     void insertReferenceNodeAt(file, viewportCenterWorld());
@@ -1467,12 +1381,9 @@ export default function CanvasWindowApp({
     setReferenceQuery("");
   };
 
-  // 右サイドバー（embedded）／サイドパネル（別ウィンドウ）から Idea 断片・資料を
-  // ドラッグしてキャンバスへ落とす。断片本文は text/plain で受け取る。
-  const canAcceptCanvasDrop = (event: ReactDragEvent<HTMLDivElement>) => {
-    const types = event.dataTransfer.types;
-    return types.includes(IDEA_FRAGMENT_DRAG_MIME) || types.includes(REFERENCE_FILE_DRAG_MIME);
-  };
+  // 左の資料／サイドパネル（別ウィンドウ）から資料をドラッグしてキャンバスへ落とす。
+  const canAcceptCanvasDrop = (event: ReactDragEvent<HTMLDivElement>) =>
+    event.dataTransfer.types.includes(REFERENCE_FILE_DRAG_MIME);
 
   const handleViewportDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
     if (!canAcceptCanvasDrop(event)) return;
@@ -1485,22 +1396,16 @@ export default function CanvasWindowApp({
     event.preventDefault();
     event.stopPropagation();
     const point = screenToWorld(event.clientX, event.clientY);
-    if (event.dataTransfer.types.includes(REFERENCE_FILE_DRAG_MIME)) {
-      try {
-        const file = JSON.parse(
-          event.dataTransfer.getData(REFERENCE_FILE_DRAG_MIME),
-        ) as ReferenceFileInfo;
-        if (file && typeof file.sourcePath === "string" && file.sourcePath) {
-          void insertReferenceNodeAt(file, point);
-        }
-      } catch {
-        // 壊れたドラッグデータは無視する
+    try {
+      const file = JSON.parse(
+        event.dataTransfer.getData(REFERENCE_FILE_DRAG_MIME),
+      ) as ReferenceFileInfo;
+      if (file && typeof file.sourcePath === "string" && file.sourcePath) {
+        void insertReferenceNodeAt(file, point);
       }
-      return;
+    } catch {
+      // 壊れたドラッグデータは無視する
     }
-    const body = event.dataTransfer.getData("text/plain");
-    if (!body.trim()) return;
-    insertIdeaTextNodeAt(body, point);
   };
 
   const loadBoardList = useCallback(
@@ -1586,11 +1491,6 @@ export default function CanvasWindowApp({
 
   useEffect(() => {
     if (!payload) return;
-    setTargetThreadId(
-      payload.ideaThreads.find((thread) => thread.kind === "inbox")?.id ??
-        payload.ideaThreads[0]?.id ??
-        "idea-inbox",
-    );
     // メイン画面の右サイドバー表示状態を別ウィンドウのサイドパネルへ引き継ぐ。
     if (!embedded) setIsSidePanelOpen(payload.rightSidebarVisible ?? true);
     // 開き直しの payload は最新のスナップショットなので、古いライブ差分は破棄する。
@@ -1598,7 +1498,7 @@ export default function CanvasWindowApp({
     void loadBoardList("project", payload.boardId, payload.selectNodeId);
   }, [payload, loadBoardList, embedded]);
 
-  // メイン画面からの Idea・資料のライブ更新（別ウィンドウのみ）。ボードには触れない。
+  // メイン画面からの資料のライブ更新（別ウィンドウのみ）。ボードには触れない。
   useEffect(() => {
     if (embedded || !isTauriRuntime()) return;
     let dispose: (() => void) | undefined;
@@ -1610,15 +1510,6 @@ export default function CanvasWindowApp({
     return () => dispose?.();
   }, [embedded]);
 
-  // ライブ更新で送信先スレッドが消えた場合はインボックス（先頭）へ戻す。
-  useEffect(() => {
-    if (targetThreadId === NEW_THREAD_TARGET || ideaThreadOptions.length === 0) return;
-    if (ideaThreadOptions.some((thread) => thread.id === targetThreadId)) return;
-    setTargetThreadId(
-      ideaThreadOptions.find((thread) => thread.kind === "inbox")?.id ??
-        ideaThreadOptions[0].id,
-    );
-  }, [ideaThreadOptions, targetThreadId]);
 
   useEffect(() => {
     if (!board || !activeBoardId || !payload) return;
@@ -2644,44 +2535,22 @@ export default function CanvasWindowApp({
     setPan(nextPan);
   };
 
-  const sendSelectedToIdea = async () => {
-    if (!board || !activeBoardId || textNodesForIdea.length === 0) return;
-    const items: CanvasCopyToIdeaItem[] = textNodesForIdea
-      .map((node) => ({ nodeId: node.id, text: textForNode(node) }))
-      .filter((item) => item.text.trim().length > 0);
-    if (items.length === 0) return;
-    const group = selectedNodes.length === 1 && isGroupNode(selectedNodes[0]) ? selectedNodes[0] : null;
-    const request: CanvasCopyToIdeaRequest = {
-      boardId: activeBoardId,
-      boardScope: scope,
-      boardName: boardName(board),
-      targetThreadId,
-      threadTitle: group?.label?.trim() || boardName(board),
-      items,
-    };
+  /** 選んだカード（グループなら中のカード）を1枚ずつ投稿にする（BINDER 2-4、確認1の 8）。 */
+  const postSelectedCards = async () => {
+    if (!board || !activeBoardId || textNodesForPosts.length === 0) return;
+    const bodies = textNodesForPosts
+      .map((node) => textForNode(node))
+      .filter((text) => text.trim().length > 0);
+    if (bodies.length === 0) return;
+    const request: CanvasCopyToPostRequest = { bodies };
     try {
       if (isTauriRuntime()) {
-        await emitMainWindow("then-canvas-copy-to-idea", request);
+        await emitMainWindow(CANVAS_COPY_TO_POST_EVENT, request);
       }
-      setStatus(
-        targetThreadId === NEW_THREAD_TARGET
-          ? `${items.length}件を新規スレッドへ送信しました`
-          : `${items.length}件を Idea へ送信しました`,
-      );
+      setStatus(`${bodies.length}件を投稿にしました`);
     } catch (error) {
-      setStatus(`Idea へ送信できませんでした: ${String(error)}`);
+      setStatus(`投稿にできませんでした: ${String(error)}`);
     }
-  };
-
-  const focusIdeaOrigin = async (node: CanvasNode) => {
-    const origin = "thenOrigin" in node ? node.thenOrigin : undefined;
-    if (!origin || !isTauriRuntime()) return;
-    const request: CanvasFocusIdeaRequest = {
-      threadId: origin.sourceThreadId,
-      fragmentId: origin.sourceId,
-    };
-    await emitMainWindow("then-canvas-focus-idea", request);
-    setStatus("元 Idea を表示しました");
   };
 
   const renderEdge = (edge: CanvasEdge) => {
@@ -3046,15 +2915,6 @@ export default function CanvasWindowApp({
                   onFocus={() => handleNodeFocus(node.id)}
                   onChange={(event) => updateNode(node.id, { label: event.target.value })}
                 />
-                {node.thenOrigin && (
-                  <button
-                    className="canvasOriginButton"
-                    type="button"
-                    onClick={() => void focusIdeaOrigin(node)}
-                  >
-                    元Idea
-                  </button>
-                )}
                 {CANVAS_RESIZE_CORNERS.map((corner) => (
                   <span
                     key={corner}
@@ -3156,15 +3016,6 @@ export default function CanvasWindowApp({
                   }
                 }}
               >
-                {node.thenOrigin && (
-                  <button
-                    className="canvasOriginButton"
-                    type="button"
-                    onClick={() => void focusIdeaOrigin(node)}
-                  >
-                    元Idea
-                  </button>
-                )}
                 {threadChildCounts.has(node.id) && (
                   <button
                     className="canvasThreadToggle"
@@ -3415,26 +3266,12 @@ export default function CanvasWindowApp({
                     </button>
                   )}
                   <span className="canvasFloatingBarDivider" aria-hidden="true" />
-                  <select
-                    value={targetThreadId}
-                    disabled={textNodesForIdea.length === 0}
-                    onChange={(event) => setTargetThreadId(event.target.value)}
-                    aria-label="Idea の送信先スレッド"
-                  >
-                    {ideaThreadOptions.map((thread) => (
-                      <option key={thread.id} value={thread.id}>
-                        {thread.kind === "inbox" ? "▾ " : ""}
-                        {thread.title}
-                      </option>
-                    ))}
-                    <option value={NEW_THREAD_TARGET}>新規スレッド</option>
-                  </select>
                   <button
                     type="button"
-                    title="Idea へ送る"
-                    aria-label="Idea へ送る"
-                    disabled={textNodesForIdea.length === 0}
-                    onClick={() => void sendSelectedToIdea()}
+                    title="投稿にする"
+                    aria-label="投稿にする"
+                    disabled={textNodesForPosts.length === 0}
+                    onClick={() => void postSelectedCards()}
                   >
                     <CanvasGlyph name="send" />
                   </button>
@@ -3504,9 +3341,7 @@ export default function CanvasWindowApp({
         )}
         {!embedded && isSidePanelOpen && (
           <CanvasSidePanel
-            threads={ideaThreadOptions}
             referenceFiles={referenceFiles}
-            onInsertFragment={(body) => insertIdeaTextNodeAt(body, viewportCenterWorld())}
             onInsertReference={(file) => void insertReferenceNodeAt(file, viewportCenterWorld())}
             onClose={() => setIsSidePanelOpen(false)}
           />

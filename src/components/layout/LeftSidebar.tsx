@@ -12,7 +12,6 @@ import type {
   AppState,
   EditorSettings,
   FileProgressStatus,
-  IdeaThread,
   LibraryContext,
   ManuscriptSnapshot,
   OutlineItem,
@@ -43,7 +42,6 @@ export type LeftSidebarProps = {
   focusedFolderPath: string | null;
   handleOpenProjectFolder: () => Promise<void>;
   referenceLayout: ReferenceLayout;
-  snippets: IdeaThread[];
   sortedReferenceCandidates: ReferenceFileInfo[];
   focusReferenceCard: (cardId: string) => void;
   closeReferenceCard: (cardId: string) => void;
@@ -120,13 +118,23 @@ export type LeftSidebarProps = {
   postInboxCount: number;
   handleCreateMaterialsFolder: ProjectEntryActions["handleCreateMaterialsFolder"];
   handleSetMaterialsFolder: ProjectEntryActions["handleSetMaterialsFolder"];
+  /** 資料のファイルを取り込む・資料カードで開く・消す（BINDER 2-5）。 */
+  handleAddReference: () => Promise<void>;
+  openReferenceCard: (sourcePath: string, fileInfo?: ReferenceFileInfo, options?: { switchToReferenceTab?: boolean }) => void;
+  handleDeleteImportedReference: (sourcePath: string) => Promise<void>;
+};
+
+/** 作品のフォルダと、そこからの相対パス（`/` 区切り）をつなぐ。区切りは作品のフォルダに合わせる。 */
+const joinRootPath = (root: string, relative: string) => {
+  const separator = root.includes("\\") ? "\\" : "/";
+  return `${root.replace(/[\\/]+$/, "")}${separator}${relative.split("/").join(separator)}`;
 };
 
 export function LeftSidebar(props: LeftSidebarProps) {
   const {
     appMode, isLeftSidebarCollapsed, isEditorFocusMode, leftSidebarView, setIsLeftSidebarCollapsed,
     setLeftSidebarView, handleNewDocument, projectFolder, handleCreateProjectFolder, focusedFolderPath,
-    handleOpenProjectFolder, referenceLayout, snippets, sortedReferenceCandidates, focusReferenceCard,
+    handleOpenProjectFolder, referenceLayout, sortedReferenceCandidates, focusReferenceCard,
     closeReferenceCard, pinReferenceCard, collapseReferenceCard, currentFilePath, currentFileName, charCount,
     outlineItems, activeOutlineIds, activeOutlineChain, projectAst, settings, appState, handleSetFileProgress,
     collapsedTreeFolderPaths, handleFolderCollapsedChange, collapsedTreeOutlinePaths,
@@ -142,8 +150,20 @@ export function LeftSidebar(props: LeftSidebarProps) {
     handleEditManuscriptSnapshotDetails, handleRestoreManuscriptSnapshot, handleDeleteManuscriptSnapshot,
     libraryContext, enterLibraryRoot, enterProject, handleCreateLibraryProject,
     handleImportProjectIntoLibrary, reorderLibraryProjects, libraryCorpus, openIdeaPane, postInboxCount,
-    handleCreateMaterialsFolder, handleSetMaterialsFolder
+    handleCreateMaterialsFolder, handleSetMaterialsFolder, handleAddReference, openReferenceCard,
+    handleDeleteImportedReference,
   } = props;
+  // 素材の段に並べる画像・PDF（ファイルの一覧には入らない。BINDER 2-5、確認1の 7）。
+  const materialReferences = projectFolder
+    ? sortedReferenceCandidates
+        .filter((file) => file.kind === "image" || file.kind === "pdf")
+        .map((file) => ({
+          path: joinRootPath(projectFolder.path, file.sourcePath),
+          sourcePath: file.sourcePath,
+          name: file.name,
+          kind: file.kind,
+        }))
+    : [];
   const isProjectSearchMode = leftSidebarView === "search";
 
   return (
@@ -253,7 +273,6 @@ export function LeftSidebar(props: LeftSidebarProps) {
             <div className="leftReferenceSidebarBody">
               <OpenCardsPane
                 cards={referenceLayout.cards}
-                threads={snippets}
                 candidates={sortedReferenceCandidates}
                 onFocusCard={focusReferenceCard}
                 onCloseCard={closeReferenceCard}
@@ -368,6 +387,13 @@ export function LeftSidebar(props: LeftSidebarProps) {
             onOpenIdeas={openIdeaPane}
             onCreateMaterialsFolder={() => void handleCreateMaterialsFolder()}
             onSetMaterialsFolder={(folderPath) => void handleSetMaterialsFolder(folderPath)}
+            materialReferences={materialReferences}
+            onOpenReference={(reference) => {
+              const file = sortedReferenceCandidates.find((item) => item.sourcePath === reference.sourcePath);
+              openReferenceCard(reference.sourcePath, file, { switchToReferenceTab: false });
+            }}
+            onDeleteReference={(reference) => void handleDeleteImportedReference(reference.sourcePath)}
+            onImportReferences={() => void handleAddReference()}
         />
         )}
     </div>

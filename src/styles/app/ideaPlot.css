@@ -4,117 +4,6 @@
 
 /* スレッド一覧: カードとして並べる。ペインが狭いうちは1列で本文を読ませ、
    広げたら2列のタイルにして一覧性を取る。インボックスは常に先頭で横幅いっぱい。 */
-.ideaView:first-child .ideaScroll {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-content: start;
-  gap: 8px;
-  padding: 10px 12px 18px;
-}
-
-.ideaView:first-child {
-  container-type: inline-size;
-}
-
-.ideaView:first-child .ideaScroll > .ideaEmpty {
-  grid-column: 1 / -1;
-}
-
-.ideaThreadRow {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 5px;
-  margin-top: 0;
-  padding: 11px 13px 10px;
-  border: 0.5px solid var(--border-subtle);
-  background: var(--idea-card);
-}
-
-.ideaThreadRow:hover {
-  border-color: var(--border-strong);
-  background: var(--idea-card-hover);
-}
-
-.ideaThreadRow.isInbox {
-  border-style: dashed;
-  border-color: var(--border-strong);
-  background: transparent;
-}
-
-.ideaThreadRow.isInbox:hover {
-  background: var(--idea-card);
-}
-
-.ideaRowTitle {
-  font-size: 13.5px;
-}
-
-.ideaRowName {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ideaRowInbox {
-  display: inline-grid;
-  flex: 0 0 auto;
-  place-items: center;
-  color: var(--text-muted);
-}
-
-.ideaRowInbox svg,
-.ideaRowRefs svg {
-  width: 13px;
-  height: 13px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.8;
-}
-
-.ideaRowSummary {
-  margin-top: 0;
-  color: var(--text-secondary);
-  -webkit-line-clamp: 3;
-}
-
-.ideaRowFoot {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: auto;
-  padding-top: 2px;
-  color: var(--text-faint);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.ideaRowRefs {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  margin-left: auto;
-}
-
-@container (min-width: 420px) {
-  .ideaView:first-child .ideaScroll {
-    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  }
-
-  .ideaThreadRow:not(.isInbox) {
-    min-height: 124px;
-  }
-
-  .ideaThreadRow.isInbox {
-    grid-column: 1 / -1;
-  }
-
-  .ideaThreadRow.isInbox .ideaRowSummary {
-    -webkit-line-clamp: 2;
-  }
-}
 
 /* スレッド詳細: 沈めた地の上に、明るいカードを置く。 */
 .ideaFragment {
@@ -134,10 +23,6 @@
   line-height: 1.75;
 }
 
-.ideaReferencePreview {
-  color: var(--text-primary);
-}
-
 /* カードは左右とも同じ余白にする。ドラッグハンドルは専用の列を取らず、
    Idea は日付の行全体を、資料は行の右側のつまみをつかむ。 */
 .ideaFragment {
@@ -151,116 +36,35 @@
   margin-top: 4px;
 }
 
-.ideaFragmentFoot[draggable="true"],
-.ideaDragHandle {
+.ideaFragmentFoot[draggable="true"] {
   cursor: grab;
 }
 
-.ideaFragmentFoot[draggable="true"]:active,
-.ideaDragHandle:active {
+.ideaFragmentFoot[draggable="true"]:active {
   cursor: grabbing;
-}
-
-.ideaDragHandle {
-  margin: 0;
-}
-
-.ideaDragHandle .ideaGripGlyph {
-  width: 13px;
-  height: 13px;
-  fill: currentColor;
-  stroke: none;
 }
 
 /* 日付は常に見せ、操作ボタンとハンドルだけをポインタを乗せたとき（または
    フォーカス中）に出す。場所は確保したままなので、カードの位置は動かない。 */
-.ideaFragmentBtns,
-.ideaReferenceMenuHost,
-.ideaDragHandle {
+.ideaFragmentBtns {
   opacity: 0;
   transition: opacity 120ms ease;
 }
 
-.ideaFragment:is(:hover, :focus-within) :is(.ideaFragmentBtns, .ideaReferenceMenuHost, .ideaDragHandle),
-.ideaReferenceMenuHost:has(.ideaReferenceMenu),
+.ideaFragment:is(:hover, :focus-within) :is(.ideaFragmentBtns),
 .ideaFragmentBtns:has(.ideaFragmentMenu) {
   opacity: 1;
 }
 
 @media (hover: none) {
-  .ideaFragmentBtns,
-  .ideaReferenceMenuHost,
-  .ideaDragHandle {
+  .ideaFragmentBtns {
     opacity: 1;
   }
 }
 
 /* 資料は1行のカードにし、「…」を行の右端に置く。 */
-.ideaReferenceItem .ideaMixedItemMain {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.ideaReferenceItem .ideaReferenceOpen {
-  flex: 1 1 auto;
-}
-
-.ideaReferenceItem .ideaReferenceMenuHost {
-  flex: 0 0 auto;
-  width: auto;
-  margin-top: 0;
-}
-
-.ideaReferenceItem .ideaReferenceVisual {
-  flex-basis: 40px;
-  width: 40px;
-  height: 30px;
-}
 
 /* スレッド詳細の見出し: 「‹ スレッド名 (件数)」を1行に並べ、操作は右端に置く。 */
-.ideaDetailHead {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 4px;
-}
-
-.ideaDetailHead .ideaBackBtn {
-  flex: 0 0 auto;
-  width: 26px;
-  padding: 0;
-  justify-content: center;
-}
-
-.ideaDetailHead .ideaDetailTitle {
-  width: auto;
-  min-width: 3em;
-  max-width: 100%;
-  flex: 0 1 auto;
-  margin-top: 0;
-  field-sizing: content;
-}
-
-.ideaDetailCount {
-  flex: 0 0 auto;
-  padding: 1px 8px;
-  border: 0.5px solid var(--border-subtle);
-  border-radius: 999px;
-  background: var(--idea-card);
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.5;
-}
-
-.ideaDetailHead .ideaDetailActions {
-  margin-left: auto;
-}
-
-.ideaDetailTop .ideaCaptureInline {
-  padding-top: 10px;
-}
 
 /* 入力欄の「＋」と添付は位置を固定する（たたんでも開いても動かないので、
    押した瞬間に入力欄が開閉してもボタンがずれない）。 */
@@ -304,10 +108,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.ideaFragmentMenuHost {
-  position: relative;
-}
-
 .ideaFragmentMenu {
   min-width: 180px;
   max-height: 260px;
@@ -318,30 +118,6 @@
 .ideaFragmentMenu.opensUp {
   top: auto;
   bottom: calc(100% + 4px);
-}
-
-.ideaFragmentMenuFilter {
-  position: sticky;
-  top: 0;
-  height: 26px;
-  margin: 2px 2px 4px;
-  padding: 0 8px;
-  border: 0.5px solid var(--border-subtle);
-  border-radius: var(--radius-control, 6px);
-  outline: none;
-  background: var(--bg-panel);
-  color: var(--text-primary);
-  font: 12px/1 var(--ui-font-family);
-}
-
-.ideaFragmentMenuFilter:focus {
-  border-color: var(--accent);
-}
-
-.ideaFragmentMenuLabel {
-  padding: 4px 8px 2px;
-  color: var(--text-muted);
-  font: 10px/1.4 var(--ui-font-family);
 }
 
 .ideaFragmentFoot:has(.ideaFragmentMenu) {
@@ -374,14 +150,6 @@
 }
 
 /* セクションを別の章へ移動するピッカー。 */
-
-.rightSidebar .snippetPanel {
-  width: 100%;
-  min-width: 0;
-  flex: 1;
-  border-left: 0;
-  background: transparent;
-}
 
 .rightSidebar .panelHeader {
   height: 50px;
@@ -426,39 +194,6 @@
   border-radius: 6px;
   background: var(--bg-panel-strong);
   font-size: 12px;
-}
-
-.rightSidebar .snippetList {
-  gap: 10px;
-  padding: 0 14px 14px;
-}
-
-.rightSidebar .snippetCard {
-  padding: 10px 12px;
-  border: 0.5px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--bg-panel-strong);
-}
-
-.rightSidebar .snippetCard:hover {
-  border-color: var(--border-strong);
-  background: #202025;
-}
-
-.rightSidebar .snippetTitle {
-  font-size: 13px;
-  font-weight: 650;
-}
-
-.rightSidebar .snippetPreview {
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.rightSidebar .snippetMeta {
-  margin-top: 7px;
-  font-size: 11px;
 }
 
 .newTabStart h1 {

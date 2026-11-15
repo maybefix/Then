@@ -152,7 +152,8 @@ for (const theme of ["aplil-light", "aplil-dark", "blossom-light", "blossom-dark
   }).settings;
   const defaults = createDefaultState().settings;
   assert.equal(choices.exportFontFamily, defaults.exportFontFamily);
-  assert.equal(choices.snippetStorageMode, "workspace");
+  // 「Ideaの管理単位」は BINDER 2-4 で消した。保存された値は読み捨てる。
+  assert.equal("snippetStorageMode" in choices, false, "the removed Idea storage setting is dropped");
   assert.equal(choices.editorDisplayMode, "paged");
   assert.equal(choices.pageFlowDirection, "vertical");
   assert.equal(choices.documentTabsDisplayMode, "hover");

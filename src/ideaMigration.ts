@@ -183,7 +183,7 @@ export async function migrateIdeas(rootPaths: string[], profile?: ProfileIdeas):
     seen.add(key);
     try {
       const result = await migrateWorkspaceIdeas(rootPath);
-      if (result.status === "migrated") summary.migrated.push(rootPath);
+      if (result?.status === "migrated") summary.migrated.push(rootPath);
     } catch (error) {
       summary.failed.push({ rootPath, error });
     }

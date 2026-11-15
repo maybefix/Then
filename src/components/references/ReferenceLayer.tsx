@@ -9,18 +9,15 @@ import {
   useState,
 } from "react";
 import type {
-  BinderCardState,
   BinderCardFrame,
-  IdeaBinderCardState,
-  IdeaFragment,
-  IdeaThread,
+  BinderCardState,
   ReferenceBinary,
   ReferenceCardState,
   ReferenceKind,
   ReferenceLayout,
   ReferenceScope,
 } from "../../types";
-import { isIdeaBinderCard } from "../../types";
+import { isReferenceBinderCard } from "../../types";
 import { binaryDataUrl, MarkdownLite } from "../markdown/MarkdownLite";
 
 type ReferenceLayerProps = {
@@ -29,21 +26,16 @@ type ReferenceLayerProps = {
   onLayoutChange: (updater: (layout: ReferenceLayout) => ReferenceLayout) => void;
   onReturnFocusToEditor: () => void;
   onTextSaved: (sourcePath: string, scope: ReferenceScope, text: string) => void;
-  ideaThreads: IdeaThread[];
-  onUpdateIdeaFragment: (threadId: string, fragmentId: string, body: string) => void;
 };
 
 type ReferenceCardProps = {
   rootPath: string;
-  card: BinderCardState;
+  card: ReferenceCardState;
   isFocused: boolean;
   onPatch: (patch: BinderCardPatch) => void;
   onClose: () => void;
   onBringToFront: () => void;
   onTextSaved: (sourcePath: string, scope: ReferenceScope, text: string) => void;
-  ideaThread?: IdeaThread;
-  ideaFragment?: IdeaFragment;
-  onUpdateIdeaFragment: (threadId: string, fragmentId: string, body: string) => void;
 };
 
 type BinderCardPatch = Partial<BinderCardFrame> & {
@@ -54,8 +46,8 @@ type BinderCardPatch = Partial<BinderCardFrame> & {
 };
 
 type DragMode =
-  | { kind: "move"; startX: number; startY: number; original: BinderCardState }
-  | { kind: "resize"; startX: number; startY: number; original: BinderCardState };
+  | { kind: "move"; startX: number; startY: number; original: ReferenceCardState }
+  | { kind: "resize"; startX: number; startY: number; original: ReferenceCardState };
 
 const MIN_CARD_WIDTH = 220;
 const MIN_CARD_HEIGHT = 140;
@@ -135,16 +127,13 @@ export function ReferenceLayer({
   onLayoutChange,
   onReturnFocusToEditor,
   onTextSaved,
-  ideaThreads,
-  onUpdateIdeaFragment,
 }: ReferenceLayerProps) {
   const maxZ = useMemo(
     () => layout.cards.reduce((max, card) => Math.max(max, card.zIndex), 0),
     [layout.cards],
   );
-  const visibleCards = rootPath
-    ? layout.cards
-    : layout.cards.filter(isIdeaBinderCard);
+  // 資料カードだけを出す。移行（BINDER 2-4）の前の Idea カードが並びに残っていても出さない。
+  const visibleCards = rootPath ? layout.cards.filter(isReferenceBinderCard) : [];
 
   if (visibleCards.length === 0) return null;
 
@@ -160,19 +149,6 @@ export function ReferenceLayer({
           onClose={() => onLayoutChange((current) => removeCard(current, card.id))}
           onBringToFront={() => onLayoutChange((current) => bringCardToFront(current, card.id))}
           onTextSaved={onTextSaved}
-          ideaThread={
-            isIdeaBinderCard(card)
-              ? ideaThreads.find((thread) => thread.id === card.threadId)
-              : undefined
-          }
-          ideaFragment={
-            isIdeaBinderCard(card)
-              ? ideaThreads
-                  .find((thread) => thread.id === card.threadId)
-                  ?.fragments.find((fragment) => fragment.id === card.fragmentId)
-              : undefined
-          }
-          onUpdateIdeaFragment={onUpdateIdeaFragment}
         />
       ))}
     </div>
@@ -187,9 +163,6 @@ function BinderCard({
   onClose,
   onBringToFront,
   onTextSaved,
-  ideaThread,
-  ideaFragment,
-  onUpdateIdeaFragment,
 }: ReferenceCardProps) {
   const [dragMode, setDragMode] = useState<DragMode | null>(null);
 
@@ -240,9 +213,7 @@ function BinderCard({
     setDragMode(null);
   };
 
-  const cardTitle = isIdeaBinderCard(card)
-    ? ideaThread?.title ?? "削除された Idea"
-    : fileNameFromPath(card.sourcePath);
+  const cardTitle = fileNameFromPath(card.sourcePath);
 
   return (
     <article
@@ -264,9 +235,7 @@ function BinderCard({
         onPointerUp={stopDrag}
         onPointerCancel={stopDrag}
       >
-        <span className={`binderCardSource ${isIdeaBinderCard(card) ? "idea" : "reference"}`}>
-          {isIdeaBinderCard(card) ? "Idea" : "資料"}
-        </span>
+        <span className="binderCardSource reference">資料</span>
         <strong>{cardTitle}</strong>
         <div className="referenceCardActions" onPointerDown={(event) => event.stopPropagation()}>
           <button
@@ -301,21 +270,12 @@ function BinderCard({
       </header>
       {!card.collapsed && (
         <>
-          {isIdeaBinderCard(card) ? (
-            <IdeaBinderCardBody
-              card={card}
-              thread={ideaThread}
-              fragment={ideaFragment}
-              onUpdate={onUpdateIdeaFragment}
-            />
-          ) : (
-            <ReferenceCardBody
-              rootPath={rootPath}
-              card={card}
-              onPatch={onPatch}
-              onTextSaved={onTextSaved}
-            />
-          )}
+          <ReferenceCardBody
+            rootPath={rootPath}
+            card={card}
+            onPatch={onPatch}
+            onTextSaved={onTextSaved}
+          />
           <span
             className="referenceResizeHandle"
             role="presentation"
@@ -327,60 +287,6 @@ function BinderCard({
         </>
       )}
     </article>
-  );
-}
-
-function IdeaBinderCardBody({
-  card,
-  thread,
-  fragment,
-  onUpdate,
-}: {
-  card: IdeaBinderCardState;
-  thread?: IdeaThread;
-  fragment?: IdeaFragment;
-  onUpdate: (threadId: string, fragmentId: string, body: string) => void;
-}) {
-  const [draft, setDraft] = useState(fragment?.body ?? "");
-  const editingRef = useRef(false);
-
-  useEffect(() => {
-    if (!editingRef.current) setDraft(fragment?.body ?? "");
-  }, [fragment?.body]);
-
-  if (!thread || !fragment) {
-    return <div className="referenceCardBody referencePlaceholder">この Idea は削除されています</div>;
-  }
-
-  const save = () => {
-    editingRef.current = false;
-    if (draft.trim() && draft !== fragment.body) {
-      onUpdate(card.threadId, card.fragmentId, draft);
-    } else if (!draft.trim()) {
-      setDraft(fragment.body);
-    }
-  };
-
-  return (
-    <div className="referenceCardBody binderIdeaCardBody">
-      <textarea
-        aria-label={`${thread.title}のIdea本文`}
-        value={draft}
-        onFocus={() => {
-          editingRef.current = true;
-        }}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={save}
-        onKeyDown={(event) => {
-          if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-            event.currentTarget.blur();
-          }
-        }}
-      />
-      <div className="binderIdeaCardFooter">
-        <span>{draft.length} 文字</span>
-      </div>
-    </div>
   );
 }
 

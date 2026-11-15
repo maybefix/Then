@@ -34,9 +34,9 @@
     "audit:shuboku": "node scripts/audit-shuboku-contracts.mjs",
     "audit:shuboku:browser": "node scripts/audit-shuboku.mjs",
     "audit:shuboku:tests": "node scripts/audit-shuboku-tests.mjs",
-    "test:v066-idea": "node scripts/test-v066-idea-ui.mjs",
-    "test:binder": "node scripts/test-idea-reference-binder.mjs",
-    "test:idea-actions": "node scripts/test-idea-thread-actions.mjs",
+    
+    
+    
     "test:plot-card-actions": "node scripts/test-plot-card-actions.mjs",
     "test:binder-baseline": "node scripts/test-binder-migration-baseline.mjs",
     "test:save-external-change": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- external_change",

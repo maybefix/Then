@@ -11,7 +11,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const { createRoot } = await import("react-dom/client");
 const server = await createServer({ server: { middlewareMode: true }, appType: "custom" });
 try {
-  const { IdeaComposerBox } = await server.ssrLoadModule("/src/components/snippets/IdeaComposerBox.tsx");
+  const { IdeaComposerBox } = await server.ssrLoadModule("/src/components/posts/IdeaComposerBox.tsx");
   const root = createRoot(document.querySelector("#root"));
   const render = async text => act(async () => root.render(React.createElement(IdeaComposerBox, { text },
     React.createElement("textarea", { defaultValue: text }),

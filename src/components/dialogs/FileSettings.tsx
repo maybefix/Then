@@ -1,7 +1,7 @@
 import type { EditorSettings } from "../../types";
 import type { SettingsPanelProps } from "./SettingsPanelTypes";
 
-export function FileSettings({ settings, onSnippetStorageModeChange, onUpdateSettings }: SettingsPanelProps & { onSnippetStorageModeChange: (mode: EditorSettings["snippetStorageMode"]) => void }) {
+export function FileSettings({ settings, onUpdateSettings }: SettingsPanelProps) {
   return (
     <>
       <label className="checkSetting">
@@ -95,20 +95,6 @@ export function FileSettings({ settings, onSnippetStorageModeChange, onUpdateSet
           }
         />
         <span>起動時に前回のワークスペースを直接開く</span>
-      </label>
-      <label>
-        <span>Ideaの管理単位</span>
-        <select
-          value={settings.snippetStorageMode}
-          onChange={(event) =>
-            onSnippetStorageModeChange(
-              event.target.value as EditorSettings["snippetStorageMode"],
-            )
-          }
-        >
-          <option value="workspace">作品ごとに分ける</option>
-          <option value="profile">全作品で共有する</option>
-        </select>
       </label>
     </>
   );

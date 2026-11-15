@@ -232,7 +232,6 @@
 
 .appShell[data-theme|="sen"] :is(
   .ideaCard,
-  .rightSidebar .snippetCard,
   .themeOption,
   .notationChoiceButton
 ) {
@@ -330,7 +329,6 @@
   .treeItem:hover,
   .focusedTreeItem,
   .ideaCard:hover,
-  .rightSidebar .snippetCard:hover,
   .themeOption:hover,
   .menuPopover button:hover,
   .editorContextMenu button:hover:not(:disabled)
