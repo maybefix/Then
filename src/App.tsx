@@ -7672,7 +7672,11 @@ export default function App() {
             />
           )}
           {isQuickIdeaModalOpen && postStream.available && (
-            <QuickPostModal onPost={(body) => postStream.add(body)} onClose={() => setIsQuickIdeaModalOpen(false)} />
+            <QuickPostModal
+              onPost={(body) => postStream.add(body)}
+              onClose={() => setIsQuickIdeaModalOpen(false)}
+              onRestoreFocus={restoreFocusAfterCommandPalette}
+            />
           )}
 
           {isSettingsModalOpen && (
