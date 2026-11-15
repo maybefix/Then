@@ -289,4 +289,45 @@ async function rewriteAfter(files, change, path) {
   assert.equal(linkRewriteMessage("「汐見」をリネームしました", { rewritten: 0, skipped: 0 }), null);
 }
 
+// 6. 10万字・50ファイルの重さ（BINDER 3-1 の工程5の 5-5）。時間は出すだけで、ゆるい上限だけ確かめる。
+{
+  const files = {};
+  const paragraph = "潮の匂いのする坂を、彼女は手紙を抱えて下りていった。".repeat(4);
+  for (let n = 0; n < 50; n += 1) {
+    const lines = [];
+    while (lines.join("\n").length < 2000) lines.push(paragraph);
+    lines.splice(3, 0, `// [[汐見]] と [[灯台]] の場面 ${n}`);
+    files[n < 40 ? `第${n}章.md` : `素材/ノート${n}.md`] = lines.join("\n") + (n >= 40 ? "\n[[汐見]] @[[第1章.md]]" : "");
+  }
+  files["素材/汐見.md"] = "# 汐見";
+  files["素材/灯台.md"] = "# 灯台";
+  const work = makeWork(files);
+  const total = Object.values(files).reduce((sum, text) => sum + text.length, 0);
+  assert.ok(total >= 100000, `10万字以上（${total}字）`);
+  const index = new LinkIndex(ROOT);
+  let started = performance.now();
+  await index.refresh(work.stamps(), work.readText);
+  const firstMs = performance.now() - started;
+  const cache = index.toCache();
+  const again = new LinkIndex(ROOT);
+  started = performance.now();
+  again.loadCache(cache);
+  const second = await again.refresh(work.stamps(), work.readText);
+  const secondMs = performance.now() - started;
+  assert.equal(second.read, 0);
+  const long = Object.values(files).join("\n");
+  started = performance.now();
+  for (let n = 0; n < 20; n += 1) again.setFileText(p("第0章.md"), long);
+  const saveMs = (performance.now() - started) / 20;
+  started = performance.now();
+  const backlinks = again.backlinksTo(p("素材/汐見.md"));
+  const backlinksMs = performance.now() - started;
+  assert.equal(backlinks.length, 50);
+  console.log(
+    `10万字（${total}字・${Object.keys(files).length}ファイル）: 初回 ${firstMs.toFixed(1)}ms、2回目 ${secondMs.toFixed(1)}ms、` +
+      `保存1回（${long.length}字の1本）${saveMs.toFixed(2)}ms、リンク元 ${backlinksMs.toFixed(2)}ms`,
+  );
+  assert.ok(saveMs < 50, "保存1回の読み直しが重すぎる");
+}
+
 console.log("link index tests passed");
