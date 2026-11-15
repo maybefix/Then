@@ -67,6 +67,9 @@ import {
   type PropertyQuery,
 } from "./properties/propertySearch";
 import { usePropertyValueIndex } from "./properties/usePropertyValueIndex";
+import { useLinkIndex } from "./links/useLinkIndex";
+import { linkRewriteMessage, rewriteLinksAfterPathChange as rewriteLinksInFiles } from "./links/linkRewrite";
+import type { LinkStamp } from "./links/linkIndex";
 import {
   CheckpointStudio,
   type CheckpointCurrentProjectFile,
@@ -167,7 +170,7 @@ import { ideaMigrationMessage, migrateIdeas, type ProfileIdeas } from "./ideaMig
 import { localIsoNow } from "./posts/postModel";
 import { ReferenceLayer } from "./components/references/ReferenceLayer";
 
-import { createProjectEntryActions } from "./projectEntryActions";
+import { createProjectEntryActions, type PathChange } from "./projectEntryActions";
 import { createWorkspaceTreeActions } from "./workspaceTreeActions";
 import { createProjectSearchActions } from "./projectSearchActions";
 import { createHeadingMoveActions } from "./headingMoveActions";
@@ -1603,6 +1606,20 @@ export default function App() {
     [patchActiveTab],
   );
 
+  // リンク索引（BINDER 3-1）。開いているタブは保存前の本文から読む。
+  const linkIndex = useLinkIndex({
+    enabled: isHydrated && isTauriRuntime(),
+    rootPath: projectFolder?.path ?? null,
+    treeKey: projectFolder,
+    openText: (path) => {
+      const tab = openTabsRef.current.find((item) => item.path && isSamePath(item.path, path));
+      if (!tab) return null;
+      return tab.id === activeTabIdRef.current ? activeMarkdownRef.current : tab.markdown;
+    },
+  });
+  const linkIndexSavedRef = useRef(linkIndex.noteSaved);
+  linkIndexSavedRef.current = linkIndex.noteSaved;
+
   const enqueueDocumentSave = useCallback((request: DocumentSaveRequest): Promise<TextDocument> => {
     return new Promise<TextDocument>((resolve, reject) => {
       const queues = documentSaveQueuesRef.current;
@@ -1664,6 +1681,7 @@ export default function App() {
               }),
             );
             setLastError("");
+            linkIndexSavedRef.current(savingRequest.path, document.content);
             savingRequest.waiters.forEach((waiter) => waiter.resolve(document));
           } catch (error) {
             if (isDocumentConflict(error)) {
@@ -6165,6 +6183,7 @@ export default function App() {
     openWorkspace,
     handleProjectFileSelect,
     jumpToEditorLine,
+    noteDocumentSaved: linkIndex.noteSaved,
   });
 
   searchResultOpenRef.current = handleProjectSearchResultOpen;
@@ -6258,7 +6277,75 @@ export default function App() {
       const payload: CanvasPathChangesEvent = { rootPath, changes };
       emit(CANVAS_PATH_CHANGES_EVENT, payload).catch(() => {});
     },
+    rewriteLinksAfterPathChange: (rootPath, changes, message) => {
+      if (!isTauriRuntime()) return;
+      setPendingLinkRewrites((current) => [...current, { rootPath, changes, message }]);
+    },
   });
+
+  // 改名・移動のあと、そのファイルを指すリンクを書き換える（BINDER 3-1）。タブの付け替えが画面に入ってから、
+  // 1件ずつ行う（表のタブは、そのときの本文の上でリンクの部分だけを差し替える）。
+  const [pendingLinkRewrites, setPendingLinkRewrites] = useState<
+    Array<{ rootPath: string; changes: PathChange[]; message: string }>
+  >([]);
+  const linkRewriteRunningRef = useRef(false);
+  const linkRewriteDepsRef = useRef({ setActiveMarkdown, enqueueDocumentSave, showToast, linkIndex });
+  linkRewriteDepsRef.current = { setActiveMarkdown, enqueueDocumentSave, showToast, linkIndex };
+  useEffect(() => {
+    const job = pendingLinkRewrites[0];
+    if (!job || linkRewriteRunningRef.current) return;
+    linkRewriteRunningRef.current = true;
+    const deps = linkRewriteDepsRef.current;
+    void (async () => {
+      try {
+        const index = await deps.linkIndex.current(job.rootPath);
+        if (!index) return;
+        const stampsAfter = await invoke<LinkStamp[]>("list_link_stamps", { rootPath: job.rootPath });
+        const result = await rewriteLinksInFiles({
+          index,
+          changes: job.changes,
+          stampsAfter,
+          openTabs: openTabsRef.current.flatMap((tab) =>
+            tab.path
+              ? [{
+                  id: tab.id,
+                  path: tab.path,
+                  text: tab.id === activeTabIdRef.current ? activeMarkdownRef.current : tab.markdown,
+                  isActive: tab.id === activeTabIdRef.current,
+                  inConflict: conflictTabIdsRef.current.has(tab.id),
+                }]
+              : [],
+          ),
+          readFile: async (path) => {
+            const document = await invoke<TextDocument>("read_text_file", { path });
+            return { content: document.content, contentHash: document.contentHash ?? null };
+          },
+          writeFile: async (path, content, expectedHash) =>
+            (await invoke<TextDocument>("save_text_file", { path, content, expectedHash })).content,
+          isConflict: isDocumentConflict,
+          applyToActiveTab: (_tab, text) => {
+            // 書き換えはこの文書の変更なので、開いてから打っていなくても自動保存に届ける（プロパティの編集と同じ）。
+            didMountEditorRef.current = true;
+            deps.setActiveMarkdown(text, null);
+          },
+          applyToBackgroundTab: async (tab, text) => {
+            setOpenTabs((current) =>
+              current.map((item) => (item.id === tab.id ? { ...item, markdown: text, saveStatus: "dirty" } : item)),
+            );
+            await deps.enqueueDocumentSave({ tabId: tab.id, path: tab.path, content: text });
+          },
+        });
+        const message = linkRewriteMessage(job.message, result);
+        if (message) deps.showToast(message);
+        if (result.rewritten) await deps.linkIndex.refresh();
+      } catch (error) {
+        setLastError(String(error));
+      } finally {
+        linkRewriteRunningRef.current = false;
+        setPendingLinkRewrites((current) => current.slice(1));
+      }
+    })();
+  }, [pendingLinkRewrites]);
 
   // 投稿 →「ノートにする」（BINDER 2-3）。別の作品のノートの札は、作品を切り替え終えてから開く。
   const [pendingNoteOpen, setPendingNoteOpen] = useState<{ workRoot: string; path: string } | null>(null);

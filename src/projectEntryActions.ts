@@ -151,6 +151,11 @@ export type ProjectEntryActionDeps = {
    * （BINDER 2-6）。
    */
   notifyCanvasPathChanges: (rootPath: string, changes: PathChange[]) => void;
+  /**
+   * 改名・移動のあと、そのファイルを指すリンクを書き換える（BINDER 3-1）。書き換えたら、通知を
+   * 「…し、Nファイルのリンクを書き換えました」に替える。
+   */
+  rewriteLinksAfterPathChange?: (rootPath: string, changes: PathChange[], message: string) => void;
 };
 
 /**
@@ -201,6 +206,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     setProjectProofreadIgnored,
     setClosedDocumentTabs,
     retargetPostNotes,
+    rewriteLinksAfterPathChange,
     notifyCanvasPathChanges,
   } = deps;
 
@@ -612,7 +618,9 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
       );
       projectAstBuildIdRef.current += 1;
       setProjectAst(null);
-      showToast(`「${entry.name}」をリネームしました`);
+      const message = `「${entry.name}」をリネームしました`;
+      showToast(message);
+      rewriteLinksAfterPathChange?.(projectFolder.path, [{ oldPath: entry.path, newPath: document.path }], message);
     } catch (error) {
       setLastError(String(error));
       showToast("名前を変更できませんでした");
@@ -788,7 +796,9 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
       });
       retargetPathOwners(projectFolder.path, [{ oldPath: reference.path, newPath: document.path }]);
       setLastError("");
-      showToast(`「${reference.name}」をリネームしました`);
+      const message = `「${reference.name}」をリネームしました`;
+      showToast(message);
+      rewriteLinksAfterPathChange?.(projectFolder.path, [{ oldPath: reference.path, newPath: document.path }], message);
     } catch (error) {
       setLastError(String(error));
       showToast("名前を変更できませんでした");
@@ -818,7 +828,9 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
       retargetPathOwners(projectFolder.path, [{ oldPath: result.oldPath, newPath: result.newPath }]);
       setFocusedFolderPath(result.newParentPath);
       setLastError("");
-      showToast(`「${reference.name}」を移動しました`);
+      const message = `「${reference.name}」を移動しました`;
+      showToast(message);
+      rewriteLinksAfterPathChange?.(projectFolder.path, [{ oldPath: result.oldPath, newPath: result.newPath }], message);
     } catch (error) {
       setLastError(String(error));
       showToast("移動できませんでした");
@@ -926,7 +938,9 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
       setProjectAst(null);
       setProjectFolder(result.projectFolder);
       setLastError("");
-      showToast(`「${sourceEntry.name}」を移動しました`);
+      const message = `「${sourceEntry.name}」を移動しました`;
+      showToast(message);
+      rewriteLinksAfterPathChange?.(projectFolder.path, [{ oldPath: result.oldPath, newPath: result.newPath }], message);
     } catch (error) {
       setLastError(String(error));
       showToast("移動できませんでした");
@@ -1063,7 +1077,9 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
       setProjectAst(null);
       setProjectFolder(result.projectFolder);
       setLastError("");
-      showToast(`${result.moves.length}件のファイルを移動しました`);
+      const message = `${result.moves.length}件のファイルを移動しました`;
+      showToast(message);
+      rewriteLinksAfterPathChange?.(projectFolder.path, result.moves, message);
     } catch (error) {
       setLastError(String(error));
       showToast("選択したファイルを移動できませんでした");

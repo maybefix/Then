@@ -55,6 +55,8 @@ export type ProjectSearchActionDeps = {
   openWorkspace: (path?: string) => Promise<boolean>;
   handleProjectFileSelect: (path: string) => Promise<void>;
   jumpToEditorLine: (line: number) => void;
+  /** 置換で書いたファイルのリンクを、リンク索引へ読み直させる（BINDER 3-1）。 */
+  noteDocumentSaved?: (path: string, content: string) => void;
 };
 
 /**
@@ -89,6 +91,7 @@ export function createProjectSearchActions(deps: ProjectSearchActionDeps) {
     openWorkspace,
     handleProjectFileSelect,
     jumpToEditorLine,
+    noteDocumentSaved,
   } = deps;
 
   const handleProjectSearchResultOpen = async (result: ProjectSearchResult) => {
@@ -260,6 +263,7 @@ export function createProjectSearchActions(deps: ProjectSearchActionDeps) {
           continue;
         }
         savedDocuments.push(document);
+        noteDocumentSaved?.(document.path, document.content);
         totalCount += result.count;
         setProjectAst((current) =>
           current && current.rootPath === projectFolder.path
