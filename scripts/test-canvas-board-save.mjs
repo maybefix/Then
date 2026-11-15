@@ -55,7 +55,7 @@ const canvasUrl = await compile("src/CanvasWindowApp.tsx", {
   react: pathToFileURL(require.resolve("react")).href,
   "react/jsx-runtime": pathToFileURL(require.resolve("react/jsx-runtime")).href,
   "@tauri-apps/api/core": url("export const invoke = (...args) => globalThis.canvasTestInvoke(...args);"),
-  "@tauri-apps/api/event": url("export const emit = async () => {}; export const emitTo = emit; export const listen = async () => () => {};"),
+  "@tauri-apps/api/event": url("export const emit = async () => {}; export const emitTo = emit; export const listen = async (event, handler) => { const list = (globalThis.canvasTestListeners ??= {})[event] ??= new Set(); list.add(handler); return () => list.delete(handler); };"),
   "./utils/fontStack": await compile("src/utils/fontStack.ts"),
   "./canvasAppearance": await compile("src/canvasAppearance.ts", {
     "./utils/fontStack": await compile("src/utils/fontStack.ts"),
@@ -237,4 +237,27 @@ assert.equal(shownText(), "A"); await edit("Strict A"); await select("B"); await
 assert.equal(textAt("project", "one", "a"), "Strict A");
 assert.equal(textAt("project", "one", "b"), "B");
 console.log("PASS StrictMode: effect setup/cleanup replay preserves board contents");
+
+// BINDER 2-6: 作品の中の改名・移動を受けると、持っているボード（と履歴）の資料カードを付け替えて保存する。
+strict = false; await mount(); await unmount();
+const ref = (id, sourcePath, kind, scope = "project") => ({ id, type: "reference", x: 0, y: 0, width: 200, height: 120, scope, sourcePath, name: sourcePath.split("/").pop(), kind });
+docs.get(key("project", "one", "a")).nodes.push(ref("r1", "素材/資料/地図.png", "image"), ref("r2", "素材/資料/年表/メモ.md", "markdown"), ref("r3", "本編.md", "markdown"));
+calls = [];
+root = createRoot(document.getElementById("root"));
+await render();
+const emitPathChanges = async (payload) => { await act(async () => { for (const handler of globalThis.canvasTestListeners["then-canvas-path-changes"] ?? []) handler({ payload }); await settle(); }); };
+await emitPathChanges({ rootPath: "two", changes: [{ oldPath: "素材/資料/地図.png", newPath: "素材/港.png" }] });
+await emitPathChanges({ rootPath: "one", changes: [{ oldPath: "素材/資料/地図.png", newPath: "素材/資料/港.png" }] });
+await emitPathChanges({ rootPath: "one", changes: [{ oldPath: "素材/資料", newPath: "素材/参考" }] });
+await emitPathChanges({ rootPath: "one", changes: [{ oldPath: "素材/参考", newPath: "素材/参考" }] });
+await unmount();
+const nodesOfA = docs.get(key("project", "one", "a")).nodes;
+const refOf = (id) => nodesOfA.find((node) => node.id === id);
+assert.deepEqual([refOf("r1").sourcePath, refOf("r1").name, refOf("r1").kind], ["素材/参考/港.png", "港.png", "image"]);
+assert.equal(refOf("r2").sourcePath, "素材/参考/年表/メモ.md", "フォルダの中の資料も付いていく");
+assert.equal(refOf("r3").sourcePath, "本編.md", "関係ない資料カードはそのまま");
+assert.equal(nodesOfA[0].text, "A", "テキストカードはそのまま");
+assert.equal(calls.some((c) => c.command === "save_canvas_board" && c.boardId !== "a"), false, "開いていないボードは保存しない（Rust が書き換える）");
+assert.equal(calls.some((c) => c.command === "save_canvas_board" && c.rootPath === "two"), false, "ほかの作品の知らせでは保存しない");
+console.log("PASS path changes: open board and history follow renames and moves inside the work");
 dom.window.close();
