@@ -790,6 +790,8 @@ export default function App() {
   const referenceLayoutLoadedRootRef = useRef<string | null>(null);
   // 資料を取り込んだ・消したあとでファイル一覧を読み直す（素材の段に出るため。BINDER 2-5）。定義より前の処理から呼ぶ。
   const refreshProjectFolderRef = useRef<() => Promise<unknown>>(async () => null);
+  // アプリ側の Idea を移した記録（BINDER 2-4）。起動の処理が置き換えるアプリ状態にも入れる。
+  const profileMigrationRef = useRef<AppState["profileSnippetsMigration"] | null>(null);
   // 読み込んだままのレイアウト。これと同じあいだは保存しない。
   const referenceLayoutOnDiskRef = useRef<ReferenceLayout | null>(null);
 
@@ -2577,11 +2579,10 @@ export default function App() {
       setLastError(String(failure.error));
     }
     if (profile && ideas.profileMigrated) {
-      setAppState((current) => ({
-        ...current,
-        profileSnippets: [],
-        profileSnippetsMigration: { library: profile.libraryRoot, at: localIsoNow() },
-      }));
+      const record = { library: profile.libraryRoot, at: localIsoNow() };
+      // 起動の処理は、移す前に読んだアプリ状態でまとめて置き換えるので、そこでも入れてもらう。
+      profileMigrationRef.current = record;
+      setAppState((current) => ({ ...current, profileSnippets: [], profileSnippetsMigration: record }));
     }
     const message = [plotMigrationMessage(summary), ideaMigrationMessage(ideas)].filter(Boolean).join("。");
     if (message) showToast(message);
@@ -2622,6 +2623,9 @@ export default function App() {
 
       const restoredState: AppState = {
         ...state,
+        ...(profileMigrationRef.current
+          ? { profileSnippets: [], profileSnippetsMigration: profileMigrationRef.current }
+          : {}),
         recentWorkspaces: recordOpenedWorkspace(state.recentWorkspaces, folder),
       };
       const workspaceKey = workspaceDocumentTabsKey(folder.path);

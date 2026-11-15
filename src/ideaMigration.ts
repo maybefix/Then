@@ -84,11 +84,14 @@ export function planFromThreads(threads: IdeaThread[], layouts: IdeaThreadLayout
         let fragmentId = fragment.id;
         for (let index = 2; usedIds.has(fragmentId); index += 1) fragmentId = `${fragment.id}#${index}`;
         usedIds.add(fragmentId);
+        // 投稿の時刻は秒まで。秒まで同じなら「直した」は付けない。
+        const at = isoAt(fragment.createdAt);
+        const edited = isoAt(fragment.updatedAt);
         plan.posts.push({
           fragmentId,
-          at: isoAt(fragment.createdAt),
+          at,
           body: fragment.body,
-          ...(fragment.updatedAt > fragment.createdAt ? { edited: isoAt(fragment.updatedAt) } : {}),
+          ...(fragment.updatedAt > fragment.createdAt && edited !== at ? { edited } : {}),
           filed: fragment.used,
           ...(fragment.originRef ? { origin: fragment.originRef } : {}),
         });

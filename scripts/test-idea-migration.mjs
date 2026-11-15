@@ -84,11 +84,13 @@ function fromView(view, { readTimes = false } = {}) {
       for (const item of thread.items) {
         if (item.type !== "idea") continue; // 決めてほしいこと 2
         const at = readTimes ? null : isoAt(item.createdAt);
+        // 秒まで同じなら「直した」は付けない（実機確認で見つけた。手順書 工程9）。
+        const edited = readTimes || !(item.updatedAt > item.createdAt) || isoAt(item.updatedAt) === at ? null : isoAt(item.updatedAt);
         posts.push({
           body: item.body,
           filed: item.used, // 決めてほしいこと 3
           at,
-          edited: !readTimes && item.updatedAt > item.createdAt ? isoAt(item.updatedAt) : null,
+          edited,
           origin: item.origin ?? null,
         });
       }
@@ -142,7 +144,8 @@ const workA = calls.find((call) => call.command === "migrate_project_ideas").arg
 assert.deepEqual(
   workA.posts.map((post) => [post.fragmentId, post.body, post.filed, Boolean(post.edited)]),
   [
-    ["a-i2", "使用済みの断片", true, true],
+    // 書いた 50 ミリ秒あとに直した断片。秒まで同じなので「直した」は付けない。
+    ["a-i2", "使用済みの断片", true, false],
     ["a-i1", "インボックスの一つ目", false, false],
   ],
 );

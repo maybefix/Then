@@ -94,6 +94,8 @@ function installMock({ library, workA, workB, skipStartupPortal, staleIdea, read
     recentWorkspaces: projects.map((project, index) => ({ ...project, lastOpenedAt: 2 - index })),
     settings: { skipStartupPortal },
     snippets: [thread("idea-inbox", "inbox", "インボックス", [["a-1", "作品Aのメモ"], ["stale-1", staleIdea]])],
+    // 全作品で共有していた Idea（BINDER 2-4）。起動時に最初のライブラリへ移し、アプリ状態から消して印を残す。
+    profileSnippets: [thread("idea-inbox", "inbox", "インボックス", [["p-1", "共有していたIdea"]])],
   };
   if (typewriterStartup) {
     Object.assign(state.settings, { theme: "sen-light", writingMode: "vertical-rl",
@@ -140,6 +142,14 @@ function installMock({ library, workA, workB, skipStartupPortal, staleIdea, read
       ? [{ localNames: ["YuMincho-Regular"], weight: 400, italic: false }] : [],
     journal_recovery_scan: () => [],
     load_library_property_types: () => ({}),
+    migrate_profile_snippets: ({ plan }) => {
+      window.__profileMigrations = (window.__profileMigrations ?? 0) + 1;
+      return { status: "migrated", posts: plan.posts.length, notes: [], moved: 0 };
+    },
+    save_app_state: ({ state: saved }) => {
+      window.__savedAppState = saved;
+      return null;
+    },
   };
   const answer = (command, args) => {
     if (saves[command]) {
@@ -336,6 +346,16 @@ try {
     await sleep(2500);
     const saves = await evaluate("window.__saves.splice(0)");
     assertOpenedUntouched("前回の執筆を続ける", saves, await stored(evaluate), WORK_A, "a");
+    // 起動の処理は移す前に読んだアプリ状態で置き換えるが、移した共有の Idea は戻さない（実機確認で見つけた）。
+    const profile = await evaluate(`(async () => {
+      await t.waitFor(() => window.__savedAppState?.profileSnippetsMigration, "saved app state with the migration record", 8000).catch(() => {});
+      const saved = window.__savedAppState;
+      return { runs: window.__profileMigrations ?? 0, record: saved?.profileSnippetsMigration ?? null,
+        fragments: (saved?.profileSnippets ?? []).flatMap((thread) => thread.fragments ?? []).map((fragment) => fragment.body) };
+    })()`);
+    expect.deepEqual(profile.runs, 1, "共有の Idea は起動時に1回移す");
+    expect.ok(profile.record?.library === LIBRARY, `移した印をアプリ状態に残す（${JSON.stringify(profile.record)}）`);
+    expect.deepEqual(profile.fragments, [], "移した共有の Idea はアプリ状態から消える");
     expect.deepEqual(pageErrors, [], "the page throws no errors");
     socket.close();
   }
