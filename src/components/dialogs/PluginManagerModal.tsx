@@ -11,6 +11,8 @@ type PluginManagerModalProps = {
   onInstall: () => void | Promise<void>;
   onReload: () => void | Promise<void>;
   onUninstall: (plugin: LoadedThenPlugin) => void | Promise<void>;
+  /** Hands focus back on close (the manuscript needs its own restorer to keep the caret). */
+  onRestoreFocus?: (previouslyFocused: HTMLElement) => void;
 };
 
 type BusyAction = "install" | "reload" | `uninstall:${string}`;
@@ -35,6 +37,7 @@ export function PluginManagerModal({
   onInstall,
   onReload,
   onUninstall,
+  onRestoreFocus,
 }: PluginManagerModalProps) {
   const [busyAction, setBusyAction] = useState<BusyAction | null>(null);
   const dialogRef = useRef<HTMLElement | null>(null);
@@ -43,6 +46,8 @@ export function PluginManagerModal({
   const busyActionRef = useRef(busyAction);
   onCloseRef.current = onClose;
   busyActionRef.current = busyAction;
+  const restoreFocusRef = useRef(onRestoreFocus);
+  restoreFocusRef.current = onRestoreFocus;
 
   useLayoutEffect(() => {
     const dialog = dialogRef.current;
@@ -103,7 +108,9 @@ export function PluginManagerModal({
     return () => {
       window.removeEventListener("keydown", handleKeyDown, true);
       document.removeEventListener("focusin", handleFocusIn);
-      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+      if (!previouslyFocused?.isConnected) return;
+      if (restoreFocusRef.current) restoreFocusRef.current(previouslyFocused);
+      else previouslyFocused.focus();
     };
   }, []);
 

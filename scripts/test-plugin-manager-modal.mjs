@@ -112,6 +112,28 @@ topmost.remove();
 await act(async () => { pressKey("Escape"); });
 assert.equal(closeCount, 1);
 assert.equal(document.activeElement, opener, "closing restores focus to the opener");
+
+// Opened from the manuscript: closing goes through the caller's restorer, which
+// keeps the caret (a bare focus() would put it at the start of the document).
+const restored = [];
+function RestoringHarness() {
+  const [open, setOpen] = useState(true);
+  return open ? createElement(PluginManagerModal, {
+    plugins: [plugin],
+    onClose: () => setOpen(false),
+    onInstall: () => {},
+    onReload: () => {},
+    onUninstall: () => {},
+    onRestoreFocus: (target) => {
+      restored.push(target);
+      target.focus();
+    },
+  }) : null;
+}
+opener.focus();
+await act(async () => { root.render(createElement(RestoringHarness, { key: "restore" })); });
+await act(async () => { pressKey("Escape"); });
+assert.deepEqual(restored, [opener], "closing hands focus back through the caller's restorer");
 await act(async () => { root.unmount(); });
 dom.window.close();
 console.log("plugin manager modal keyboard tests passed");

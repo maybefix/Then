@@ -7660,6 +7660,7 @@ export default function App() {
                 }
               }}
               onUninstall={handleUninstallPlugin}
+              onRestoreFocus={restoreFocusAfterCommandPalette}
             />
           )}
 
