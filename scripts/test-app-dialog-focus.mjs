@@ -20,6 +20,10 @@ const compiled = ts.transpileModule(source, {
   },
 });
 await writeFile(compiledPath, compiled.outputText);
+const quickPostPath = join(process.cwd(), ".tmp", `quick-post-focus-test-${process.pid}.mjs`);
+await writeFile(quickPostPath, ts.transpileModule(await readFile("src/components/posts/QuickPostModal.tsx", "utf8"), {
+  compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 },
+}).outputText);
 
 try {
   const dom = new JSDOM("<!doctype html><html><body><div id='editor' tabindex='0'>本文</div><button id='tree'>第二章.md</button><div id='root'></div></body></html>", {
@@ -33,6 +37,7 @@ try {
   const React = await import("react");
   const { createRoot } = await import("react-dom/client");
   const { AppDialogModal } = await import(pathToFileURL(compiledPath).href);
+  const { QuickPostModal } = await import(pathToFileURL(quickPostPath).href);
   const { act, createElement, useState } = React;
   const root = createRoot(document.getElementById("root"));
   const editor = document.getElementById("editor");
@@ -105,9 +110,33 @@ try {
   await pressEscape();
   assert.deepEqual(removed, [], "a previous element that left the page is not restored");
 
+  // 4. The post field (Ctrl+Alt+I, the palette's "アイデアに投稿…") hands focus back the same way.
+  const postRestored = [];
+  function PostHarness() {
+    const [open, setOpen] = useState(true);
+    return open
+      ? createElement(QuickPostModal, {
+          onPost: async () => true,
+          onClose: () => setOpen(false),
+          onRestoreFocus: (target) => {
+            postRestored.push(target);
+            target.focus();
+          },
+        })
+      : null;
+  }
+  editor.focus();
+  await act(async () => root.render(createElement(PostHarness, { key: "post" })));
+  assert.equal(document.activeElement, document.querySelector(".quickIdeaModal textarea"), "the post field takes focus");
+  await pressEscape();
+  assert.equal(document.querySelector(".quickIdeaModal"), null, "Escape closes the post field");
+  assert.deepEqual(postRestored, [editor], "closing the post field hands the manuscript back through the caller's restorer");
+  assert.equal(document.activeElement, editor);
+
   await act(async () => root.unmount());
   dom.window.close();
   console.log("app dialog focus tests passed");
 } finally {
   await unlink(compiledPath);
+  await unlink(quickPostPath);
 }
