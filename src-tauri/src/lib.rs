@@ -15,6 +15,7 @@ mod external_url;
 mod idea_migration;
 mod intermediate_draft;
 mod library;
+mod link_index;
 mod markdown_image;
 mod material_files;
 mod native_ime;
@@ -767,6 +768,9 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             pick_reference_files,
             create_reference_text_file,
             list_reference_candidates,
+            list_link_stamps,
+            read_link_index_cache,
+            write_link_index_cache,
             delete_imported_reference,
             read_reference_text,
             save_reference_text,
@@ -4002,6 +4006,30 @@ fn create_reference_text_file(
     std::fs::write(&path, "")
         .map_err(|error| format!("failed to create reference file: {error}"))?;
     reference_file_info(&root, &path, &scope)
+}
+
+/// リンク索引（BINDER 3-1）: 作品のファイルの更新日時と大きさ。中身は読まない。
+#[tauri::command(async)]
+fn list_link_stamps(root_path: String) -> Result<Vec<link_index::LinkStamp>, String> {
+    link_index::list_stamps(Path::new(&root_path))
+}
+
+fn link_index_cache_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_local_data_dir()
+        .map(|dir| dir.join("link-index"))
+        .map_err(|error| format!("failed to resolve app data folder: {error}"))
+}
+
+/// リンク索引（BINDER 3-1）の残しておいた結果。なければ None。
+#[tauri::command(async)]
+fn read_link_index_cache(app: tauri::AppHandle, root_path: String) -> Result<Option<String>, String> {
+    Ok(link_index::read_cache(&link_index_cache_dir(&app)?, Path::new(&root_path)))
+}
+
+#[tauri::command(async)]
+fn write_link_index_cache(app: tauri::AppHandle, root_path: String, content: String) -> Result<(), String> {
+    link_index::write_cache(&link_index_cache_dir(&app)?, Path::new(&root_path), &content)
 }
 
 #[tauri::command]
