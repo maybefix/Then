@@ -637,6 +637,11 @@ function normalizeProofreadSettings(value: unknown): ProofreadSettings {
   };
 }
 
+const isProfileSnippetsMigration = (value: unknown): value is { library: string; at: string } =>
+  Boolean(value) &&
+  typeof (value as { library?: unknown }).library === "string" &&
+  typeof (value as { at?: unknown }).at === "string";
+
 export function normalizeState(value: Partial<AppState> | null | undefined): AppState {
   const rawSettings = (value?.settings ?? {}) as Partial<EditorSettings> & {
     /** v0.6.1以前の保存形式。trueは左右ともホバー表示。 */
@@ -671,6 +676,9 @@ export function normalizeState(value: Partial<AppState> | null | undefined): App
       ? normalizeIdeaThreads(value.snippets)
       : profileSnippets,
     profileSnippets,
+    ...(isProfileSnippetsMigration(value?.profileSnippetsMigration)
+      ? { profileSnippetsMigration: value.profileSnippetsMigration }
+      : {}),
     settings: {
       ...defaultSettings,
       ...settings,

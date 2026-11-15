@@ -531,6 +531,8 @@ export type AppState = {
    */
   snippets: IdeaThread[];
   profileSnippets: IdeaThread[];
+  /** アプリ側の Idea を投稿とノートへ移した記録（BINDER 2-4）。あれば、もう移さない。 */
+  profileSnippetsMigration?: { library: string; at: string };
   settings: EditorSettings;
   /** 最後に表示していた、次回起動時にも復元可能な右サイドバーのタブ。 */
   rightSidebarTab: RestorableRightSidebarTab;

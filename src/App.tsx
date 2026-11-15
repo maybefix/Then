@@ -161,6 +161,8 @@ import {
   type CanvasWindowPayload,
 } from "./canvasTypes";
 import { migratePlotToNotes, plotMigrationMessage } from "./plotMigration";
+import { ideaMigrationMessage, migrateIdeas, type ProfileIdeas } from "./ideaMigration";
+import { localIsoNow } from "./posts/postModel";
 import { ReferenceLayer } from "./components/references/ReferenceLayer";
 import {
   alignIdeaLayoutToMode,
@@ -2817,18 +2819,31 @@ export default function App() {
   };
 
   /**
-   * Plot をノート「プロット（移行）」へ移してから開く（BINDER 1-6）。移したら true（ファイル一覧を読み直す）。
-   * 失敗しても作品は開く。次に開いたときにやり直す。
+   * Plot をノート「プロット（移行）」へ（BINDER 1-6）、Idea を投稿とノートへ、資料を素材フォルダへ（2-4・2-5）移して
+   * から開く。移したら true（ファイル一覧を読み直す）。Plot を先に移すので、ノート「プロット（移行）」の資料リンクも
+   * 書き換わる。失敗しても作品は開く。次に開いたときにやり直す。profile は起動時だけ渡す（アプリ側の Idea）。
    */
-  const migratePlotBeforeOpening = async (rootPaths: string[]) => {
+  const migratePlotBeforeOpening = async (rootPaths: string[], profile?: ProfileIdeas) => {
     const summary = await migratePlotToNotes(rootPaths);
     for (const failure of summary.failed) {
       console.error("plot migration failed", failure.rootPath, failure.error);
       setLastError(String(failure.error));
     }
-    const message = plotMigrationMessage(summary);
+    const ideas = await migrateIdeas(rootPaths, profile);
+    for (const failure of ideas.failed) {
+      console.error("idea migration failed", failure.rootPath, failure.error);
+      setLastError(String(failure.error));
+    }
+    if (profile && ideas.profileMigrated) {
+      setAppState((current) => ({
+        ...current,
+        profileSnippets: [],
+        profileSnippetsMigration: { library: profile.libraryRoot, at: localIsoNow() },
+      }));
+    }
+    const message = [plotMigrationMessage(summary), ideaMigrationMessage(ideas)].filter(Boolean).join("。");
     if (message) showToast(message);
-    return summary.migrated.length > 0;
+    return summary.migrated.length > 0 || ideas.migrated.length > 0 || ideas.profileMigrated;
   };
 
   const restoreWorkspaceFromState = async (
@@ -2842,12 +2857,15 @@ export default function App() {
       });
       // 旧版のワークスペースはそのまま開かず、取り込みへ誘導する。
       if (!folder.library) return "outsideLibrary";
-      // 起動時に、ライブラリ直下とライブラリの全作品の Plot をノートへ移す（BINDER 1-6、確認1の 1）。
+      // 起動時に、ライブラリ直下とライブラリの全作品の Plot・Idea・資料を移す（BINDER 1-6・2-4・2-5、確認1の 1）。
+      // アプリ側の Idea は、更新後に最初に開いたライブラリの投稿とノートへ移す（2-4）。
       const migrated = await migratePlotBeforeOpening([
         folder.library.path,
         ...folder.library.projects.map((project) => project.path),
         folder.path,
-      ]);
+      ], state.profileSnippetsMigration
+        ? undefined
+        : { libraryRoot: folder.library.path, threads: state.profileSnippets });
       if (migrated) {
         folder = await invoke<ProjectFolder>("list_project_text_files", { folderPath: folder.path });
       }
