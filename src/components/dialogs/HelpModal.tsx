@@ -1,8 +1,15 @@
 import { useModalFocus } from "./useModalFocus";
 import "./help.css";
 
-export function HelpModal({ onClose }: { onClose: () => void }) {
-  const dialogRef = useModalFocus(onClose);
+export function HelpModal({
+  onClose,
+  onRestoreFocus,
+}: {
+  onClose: () => void;
+  /** Hands focus back on close (the manuscript needs its own restorer to keep the caret). */
+  onRestoreFocus?: (previouslyFocused: HTMLElement) => void;
+}) {
+  const dialogRef = useModalFocus(onClose, undefined, onRestoreFocus);
 
   return (
     <div className="modalBackdrop" role="presentation">

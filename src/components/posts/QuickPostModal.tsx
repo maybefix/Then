@@ -4,6 +4,8 @@ import type { KeyboardEvent } from "react";
 type QuickPostModalProps = {
   onPost: (body: string) => Promise<boolean>;
   onClose: () => void;
+  /** Hands focus back on close (the manuscript needs its own restorer to keep the caret). */
+  onRestoreFocus?: (previouslyFocused: HTMLElement) => void;
 };
 
 function SendIcon() {
@@ -16,14 +18,23 @@ function SendIcon() {
 }
 
 /** Ctrl+Alt+I：右のペインを開かずに投稿する（BINDER 2-1）。見た目は以前の Idea の小窓と同じ。 */
-export function QuickPostModal({ onPost, onClose }: QuickPostModalProps) {
+export function QuickPostModal({ onPost, onClose, onRestoreFocus }: QuickPostModalProps) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composingRef = useRef(false);
+  const restoreFocusRef = useRef(onRestoreFocus);
+  restoreFocusRef.current = onRestoreFocus;
 
   useEffect(() => {
+    // 開く前の場所（本文など）を控え、閉じたらそこへ戻す。
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     textareaRef.current?.focus();
+    return () => {
+      if (!previouslyFocused?.isConnected) return;
+      if (restoreFocusRef.current) restoreFocusRef.current(previouslyFocused);
+      else previouslyFocused.focus();
+    };
   }, []);
 
   const submit = async () => {

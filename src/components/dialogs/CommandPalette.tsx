@@ -122,6 +122,10 @@ export function CommandPalette({ commands, onClose, restoreFocus = focusElement 
   const runCommand = (command: PaletteCommand | undefined) => {
     if (!command || command.disabledReason) return;
     closePalette("command");
+    // 開く前の場所へ先に戻してから走らせる。コマンドが開くダイアログは、そこを閉じたときの
+    // 戻り先として控える（パレットの入力欄は、そのときにはもう消えている）。
+    // コマンドが自分でフォーカスを動かすなら、そちらが後に勝つ。
+    if (previouslyFocused?.isConnected) restoreFocusRef.current(previouslyFocused);
     command.run();
   };
 

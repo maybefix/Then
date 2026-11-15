@@ -133,6 +133,24 @@ try {
       },
     }) : null;
   }
+  // A command that opens a dialog finds focus already back where the palette was
+  // opened, so the dialog can return there when it closes.
+  const focusAtRun = [];
+  const dialogCommand = { id: "dialog", label: "dialog", run: () => focusAtRun.push(document.activeElement) };
+  function DialogHarness() {
+    const [open, setOpen] = useState(true);
+    return open ? createElement(CommandPalette, {
+      commands: [dialogCommand],
+      onClose: () => setOpen(false),
+      restoreFocus: (target) => target.focus(),
+    }) : null;
+  }
+  editor.focus();
+  await act(async () => root.render(createElement(DialogHarness, { key: "dialog" })));
+  const dialogInput = document.querySelector(".commandPaletteInput");
+  await act(async () => dialogInput.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+  assert.deepEqual(focusAtRun, [editor], "a command runs with focus already back on the manuscript");
+
   editor.focus();
   await act(async () => root.render(createElement(RestoringHarness, { key: "restore" })));
   const restoreInput = document.querySelector(".commandPaletteInput");

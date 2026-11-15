@@ -703,6 +703,19 @@ for (const [oldName, answer, expected] of [
   app.commands.create_text_file_from_template = ({ folderPath, name }) => ({ path: `${folderPath}\\${name}`, name, content: "ひな形" });
   await actions().handleCreateProjectFile();
   assert.deepEqual(app.log[1].args, { folderPath: p("第一章"), name: "c2.txt", rootPath: ROOT, templateId: "t1" });
+  assert.deepEqual(app.appState.cursorPositions[p("第一章", "c2.txt")], { offset: 3, length: 3 },
+    "a file made from a template opens with the caret at the end of its text");
+}
+{
+  // 見出しだけの新しいファイルは、見出しの次の行から書き始める（見出しの前に入らない）。
+  const { app, actions } = setup();
+  app.createFileAnswer = { fileName: "第三章.md", templateId: null };
+  app.commands.create_text_file = ({ folderPath, name }) => ({ path: `${folderPath}\\${name}`, name, content: "# 第三章\n" });
+  await actions().handleCreateProjectFile();
+  assert.deepEqual(app.appState.cursorPositions[p("第三章.md")], { offset: 6, length: 6 },
+    "a new file opens with the caret after its heading line");
+  assert.deepEqual(Object.keys(app.appState.cursorPositions).filter((path) => path !== p("第三章.md")),
+    Object.keys(setup().app.appState.cursorPositions), "other files keep their caret positions");
 }
 {
   const { app, actions } = setup();

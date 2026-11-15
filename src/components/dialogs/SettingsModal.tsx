@@ -18,7 +18,8 @@ type SettingsModalProps = {
     key: Key,
     value: EditorSettings[Key],
   ) => void;
-
+  /** Hands focus back on close (the manuscript needs its own restorer to keep the caret). */
+  onRestoreFocus?: (previouslyFocused: HTMLElement) => void;
 };
 
 type SettingsTab = "appearance" | "body" | "files" | "canvas" | "export";
@@ -38,10 +39,10 @@ export function SettingsModal({
   onClose,
   onOpenThemePicker,
   onUpdateSettings,
-
+  onRestoreFocus,
 }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
-  const dialogRef = useModalFocus(onClose);
+  const dialogRef = useModalFocus(onClose, undefined, onRestoreFocus);
 
   const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     let nextIndex: number;
