@@ -6323,7 +6323,11 @@ export default function App() {
           writeFile: async (path, content, expectedHash) =>
             (await invoke<TextDocument>("save_text_file", { path, content, expectedHash })).content,
           isConflict: isDocumentConflict,
-          applyToActiveTab: (_tab, text) => deps.setActiveMarkdown(text, null),
+          applyToActiveTab: (_tab, text) => {
+            // 書き換えはこの文書の変更なので、開いてから打っていなくても自動保存に届ける（プロパティの編集と同じ）。
+            didMountEditorRef.current = true;
+            deps.setActiveMarkdown(text, null);
+          },
           applyToBackgroundTab: async (tab, text) => {
             setOpenTabs((current) =>
               current.map((item) => (item.id === tab.id ? { ...item, markdown: text, saveStatus: "dirty" } : item)),
