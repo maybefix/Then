@@ -70,6 +70,9 @@ pub(super) struct ProjectConfig {
     /// Plot をノートへ移した記録（BINDER 1-6）。2-5 がノートの本文のリンクを書き換えるときに場所を知るため。
     #[serde(default, rename = "plotMigration", skip_serializing_if = "Option::is_none")]
     pub(super) plot_migration: Option<PlotMigrationRecord>,
+    /// Idea を投稿・ノートへ移し、資料を素材フォルダへ移した記録（BINDER 2-4・2-5）。あれば移行は済んでいる。
+    #[serde(default, rename = "ideaMigration", skip_serializing_if = "Option::is_none")]
+    pub(super) idea_migration: Option<IdeaMigrationRecord>,
     /// 作品の固定の ID（BINDER 2-1）。投稿に書いた作品を記録する。フォルダを改名・移動しても変わらない。
     #[serde(default, rename = "workId", skip_serializing_if = "Option::is_none")]
     pub(super) work_id: Option<String>,
@@ -83,6 +86,52 @@ pub(super) struct PlotMigrationRecord {
     /// 作品のフォルダからのバックアップの相対パス。
     pub(super) backup_path: String,
     pub(super) migrated_at: i64,
+}
+
+/// Idea の移行の記録（BINDER 2-4・2-5、docs/BINDER_IDEA_MIGRATION_PLAN.md）。
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct IdeaMigrationRecord {
+    /// 作品のフォルダからのバックアップのフォルダ（`/` 区切り）。
+    pub(super) backup_path: String,
+    pub(super) migrated_at: i64,
+    /// 名前の付いたスレッドから作ったノート。
+    #[serde(default)]
+    pub(super) notes: Vec<IdeaMigrationNote>,
+    /// 投稿にした断片の数。
+    #[serde(default)]
+    pub(super) posts: usize,
+    /// 移した資料（元のパス → 移した先。どちらも作品のフォルダから）。
+    #[serde(default)]
+    pub(super) moved: Vec<IdeaMigrationMove>,
+    /// 断片が何になったか（Canvas の「元 Idea」と 4-5 のため）。
+    #[serde(default)]
+    pub(super) fragments: Vec<IdeaMigrationFragment>,
+    /// 資料を移したフォルダ（これからの取り込み先）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) references_folder: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct IdeaMigrationNote {
+    pub(super) thread_id: String,
+    pub(super) path: String,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub(super) struct IdeaMigrationMove {
+    pub(super) from: String,
+    pub(super) to: String,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub(super) struct IdeaMigrationFragment {
+    pub(super) id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) post: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) note: Option<String>,
 }
 
 impl ProjectConfig {
@@ -156,6 +205,7 @@ impl Default for ProjectConfig {
             export_front_matter: None,
             materials_folder: None,
             plot_migration: None,
+            idea_migration: None,
             work_id: None,
         }
     }

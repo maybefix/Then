@@ -12,6 +12,7 @@ mod checkpoint_store;
 mod close_gate;
 mod export_front_matter;
 mod external_url;
+mod idea_migration;
 mod intermediate_draft;
 mod library;
 mod markdown_image;
@@ -737,6 +738,8 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             load_project_plot_cards,
             save_project_plot_cards,
             plot_migration::migrate_project_plot_to_note,
+            idea_migration::migrate_project_ideas,
+            idea_migration::migrate_profile_snippets,
             post_stream::posts_load,
             post_stream::posts_signature,
             post_stream::posts_add,

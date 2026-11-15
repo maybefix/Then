@@ -67,7 +67,7 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
 }
 
 /// バックアップのファイル名に使う日時（UTC、`20261114-031500`）。
-fn backup_stamp(millis: i64) -> String {
+pub(super) fn backup_stamp(millis: i64) -> String {
     let seconds = millis.div_euclid(1_000);
     let (year, month, day) = civil_from_days(seconds.div_euclid(86_400));
     let in_day = seconds.rem_euclid(86_400);
@@ -135,7 +135,7 @@ pub(super) fn note_folder(root: &Path, materials_folder: Option<&str>) -> Result
 
 /// ノートを書く。同じ名前があれば `-2` … にする。ただし同じ中身のノートがすでにあれば、それを使う
 /// （前回、ノートを書いたあとで止まった場合に2本目を作らない）。返り値の2つ目は、今回書いたかどうか。
-fn write_note(folder: &Path, note_name: &str, note_text: &str) -> Result<(PathBuf, bool), String> {
+pub(super) fn write_note(folder: &Path, note_name: &str, note_text: &str) -> Result<(PathBuf, bool), String> {
     let file_name = normalize_text_file_name(&format!("{note_name}.md"))?;
     let stem = file_name.strip_suffix(".md").unwrap_or(&file_name).to_string();
     let mut index = 1;
