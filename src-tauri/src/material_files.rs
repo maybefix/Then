@@ -3,7 +3,11 @@
 //! 画像・PDF はファイルの一覧（`list_project_folder`、txt・md だけ）に入れない。改名・移動は素材フォルダの中だけで、
 //! 中身は読まず、並び順（`order`）も持たせない。改名・移動のあと、`.then/boards/*.canvas` の資料カードのパスを付け替える。
 
-use super::{atomic_file, library, project_state::load_project_config, reference_kind_for_path};
+use super::{
+    atomic_file, library,
+    project_state::{load_project_config, project_config_path, trusted_project_relative_path, ProjectConfig},
+    reference_kind_for_path,
+};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
@@ -41,19 +45,25 @@ pub(super) fn is_material_file(path: &Path) -> bool {
 }
 
 /// 作品の素材フォルダ（実際の綴りに直したもの）。ライブラリ直下と、素材フォルダのない作品は None。
-fn materials_folder(root: &Path) -> Option<PathBuf> {
+/// project.json の錠を持っているとき（移動）は、錠を取らずに読んだ設定を渡す。
+pub(super) fn materials_folder(root: &Path, config: &ProjectConfig) -> Option<PathBuf> {
     if library::is_library_root(root) {
         return None;
     }
-    let config = load_project_config(root).ok()?;
     let folder = root.join(config.materials_folder_name()?);
     folder.canonicalize().ok().filter(|path| path.is_dir())
 }
 
-/// `path` が素材フォルダそのものか、その中か。
+/// `path` が素材フォルダ `materials`（materials_folder の結果）そのものか、その中か。
+pub(super) fn is_in(materials: Option<&Path>, path: &Path) -> bool {
+    let Some(materials) = materials else { return false };
+    path.canonicalize().is_ok_and(|path| path.starts_with(materials))
+}
+
+/// 錠を持っていないときに、`path` が作品の素材フォルダの中かを見る（改名）。
 pub(super) fn is_in_materials(root: &Path, path: &Path) -> bool {
-    let Some(materials) = materials_folder(root) else { return false };
-    path.canonicalize().is_ok_and(|path| path.starts_with(&materials))
+    let Ok(config) = load_project_config(root) else { return false };
+    is_in(materials_folder(root, &config).as_deref(), path)
 }
 
 /// 画像・PDF の新しい名前。元の拡張子で終わらなければ、元の拡張子を足す（確認1の 2: 拡張子は変えない）。
@@ -88,6 +98,35 @@ pub(super) fn folder_has_material_files(folder: &Path) -> bool {
             is_material_file(&path)
         }
     })
+}
+
+/// 改名・移動の前に、元と先の作品からの相対パス（`/` 区切り）を出す。どちらも動かす前に呼ぶ（先の親フォルダはある）。
+/// 作品の外などで出せなければ None（ボードは付け替えない）。
+pub(super) fn relative_paths(root: &Path, old: &Path, new: &Path) -> Option<(String, String)> {
+    let root = root.canonicalize().ok()?;
+    let old = old.canonicalize().ok()?;
+    let new = new.parent()?.canonicalize().ok()?.join(new.file_name()?);
+    Some((
+        trusted_project_relative_path(&root, &old).ok()?,
+        trusted_project_relative_path(&root, &new).ok()?,
+    ))
+}
+
+/// ボードの付け替えに失敗したとき、`project.json` を改名・移動の前の中身に戻すための写し。
+pub(super) struct ConfigSnapshot(PathBuf, Option<Vec<u8>>);
+
+impl ConfigSnapshot {
+    pub(super) fn take(root: &Path) -> Self {
+        let path = project_config_path(root);
+        let bytes = std::fs::read(&path).ok();
+        Self(path, bytes)
+    }
+
+    pub(super) fn restore(self) {
+        if let Some(bytes) = self.1 {
+            let _ = atomic_file::write_replacing(&self.0, bytes);
+        }
+    }
 }
 
 /// 書き換えたボードの元の中身。失敗したら戻す。
