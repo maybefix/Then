@@ -318,4 +318,14 @@
 
 ### 「後」のテスト一式
 
-（結果をここに書く。）
+`21ca12d` で動かした。121本（足した `test:link-decorations` を含む）。**新しい失敗はなし。**
+
+| 区分 | 数 | テスト |
+|---|---|---|
+| 前も後も通る | 118 | 止めて知らせる約束の10本（binder-baseline、binder-tiers、materials、project-entry-actions、search、save-external-change、link-index、link-index-rust、app-dialog-focus、command-palette）はすべてここ |
+| 前も後も落ちる | 2 | `test:editor-text-edits`、`test:v058-bundle`（どちらも元から） |
+| 後で増えて通る | 1 | `test:link-decorations` |
+
+main chunk は 691,609 バイトから 700,565 バイトへ、8,956 バイト増えた（装飾・候補・押したときの処理）。`test:v058-bundle` は前から上限（500 kB）を超えて落ちている（4-4 の作業）。
+
+残っていたプロセス: QA の Then 0、QA の WebView2 0、テストの Edge 0、テストの node 0。
