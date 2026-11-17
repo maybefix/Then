@@ -127,6 +127,40 @@ export function suggestQueryAt(
 }
 
 /**
+ * What a left press on a link does (確認1の決定1B):
+ * - `open`: press it and it opens.
+ * - `caret`: the caret is already on that line, so the press only places the
+ *   caret, which is how the name is edited (Obsidian does the same once the
+ *   caret enters the line). Ctrl (Cmd) opens even then.
+ * - `none`: it was a drag, a double press or a press with text selected.
+ */
+export function linkPressAction(press: {
+  /** The caret's line before the press, and the line pressed. */
+  caretLine: number;
+  pressedLine: number;
+  ctrl: boolean;
+  /** How far the pointer moved between press and release, in pixels. */
+  moved: number;
+  /** Clicks in this series (2 for a double click). */
+  detail: number;
+  selectionEmpty: boolean;
+}): "open" | "caret" | "none" {
+  if (press.detail > 1 || press.moved > 3 || !press.selectionEmpty) return "none";
+  if (press.caretLine === press.pressedLine && !press.ctrl) return "caret";
+  return "open";
+}
+
+/**
+ * Whether what was just typed opens the name suggestions: the second `[` of
+ * `[[`, on a line where names count. Putting the caret after an old `[[`
+ * later does not open them.
+ */
+export function suggestOpensAfterInsert(insert: string, source: string, caret: number): boolean {
+  if (!insert.endsWith("[")) return false;
+  return source.slice(Math.max(0, caret - 2), caret) === "[[";
+}
+
+/**
  * The lookup the editor holds, with each name asked of the index only once.
  * Thrown away and made again whenever the index changes (its `version`).
  */

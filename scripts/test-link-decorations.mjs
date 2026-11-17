@@ -18,6 +18,7 @@ const bundled = await build({
 const {
   findLinks, findLinksInLine, LinkIndex,
   linkSpansInLine, namesCountedOn, linkDestination, linkOpenTarget, suggestNames, suggestQueryAt,
+  linkPressAction, suggestOpensAfterInsert, createLinkLookup,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`);
 
 // 1. 1行ずつの入口が、全文の規則と同じ結果を出す
@@ -123,6 +124,48 @@ const {
   assert.deepEqual(suggestQueryAt("@[[素材/地図", 8), null, "@[[パス]] では出さない");
   assert.deepEqual(suggestQueryAt("メモ [[汐見", 5), { from: 5, to: 5, query: "" },
     "名前の途中にカーソルがあるときは、その手前までで絞り込む");
+}
+
+// 6. 押したときの決まり（確認1の決定1B）
+{
+  const press = (over) => linkPressAction({
+    caretLine: 3, pressedLine: 7, ctrl: false, moved: 0, detail: 1, selectionEmpty: true, ...over,
+  });
+  assert.equal(press({}), "open", "別の行のリンクはクリックで開く");
+  assert.equal(press({ caretLine: 7 }), "caret", "カーソルがその行にあるときは、開かずにカーソルを置く");
+  assert.equal(press({ caretLine: 7, ctrl: true }), "open", "Ctrl を押していれば同じ行でも開く");
+  assert.equal(press({ moved: 12 }), "none", "押して引いたとき（文字を選ぶ）は開かない");
+  assert.equal(press({ detail: 2 }), "none", "ダブルクリックは開かない（語の選択）");
+  assert.equal(press({ selectionEmpty: false }), "none", "文字を選んでいるときは開かない");
+}
+
+// 7. 候補が開く打ち方（[[ を打ち終えた直後だけ）
+{
+  assert.equal(suggestOpensAfterInsert("[", "メモ [[", 5), true, "2つめの [ を打ったら開く");
+  assert.equal(suggestOpensAfterInsert("[[", "メモ [[", 5), true, "まとめて入っても開く");
+  assert.equal(suggestOpensAfterInsert("[", "メモ [", 4), false, "1つめの [ では開かない");
+  assert.equal(suggestOpensAfterInsert("汐", "メモ [[汐", 6), false, "名前を打っている途中では開き直さない");
+  assert.equal(suggestOpensAfterInsert("[", "メモ [[汐見]]", 5), true, "既存のリンクの前でも、[[ を打ち終えたら開く");
+}
+
+// 8. 引き口（同じ名前は1回しか索引に聞かない）
+{
+  const asked = [];
+  const fake = {
+    candidatesFor: (link) => { asked.push(link.target); return link.target === "灯台" ? ["C:/w/灯台.md"] : []; },
+    noteNames: () => [{ name: "灯台", path: "C:/w/灯台.md" }],
+    shortestName: () => null,
+  };
+  const lookup = createLinkLookup(fake, true);
+  assert.equal(lookup.isNote, true);
+  assert.equal(lookup.destination("name", "灯台"), "one");
+  assert.equal(lookup.destination("name", "灯台"), "one");
+  assert.equal(lookup.destination("name", "いない"), "none");
+  assert.deepEqual(asked, ["灯台", "いない"], "同じ名前は覚えておく");
+  assert.deepEqual(lookup.names("灯").map((item) => item.name), ["灯台"]);
+  const empty = createLinkLookup(null, false);
+  assert.equal(empty.destination("name", "灯台"), "unknown", "索引がまだなければ濃いまま描く");
+  assert.deepEqual(empty.names(""), []);
 }
 
 console.log("link decoration tests passed");

@@ -17,7 +17,14 @@ import {
 } from "./editor/manuscriptLayout";
 import { DEFAULT_MANUSCRIPT_SETTINGS } from "./types";
 import { indexRootDecorations } from "./editor/indexedDecorations";
-import { type LinkLookup, linkSpansInLine, namesCountedOn, suggestQueryAt } from "./editor/linkDecorations";
+import {
+  type LinkLookup,
+  linkPressAction,
+  linkSpansInLine,
+  namesCountedOn,
+  suggestOpensAfterInsert,
+  suggestQueryAt,
+} from "./editor/linkDecorations";
 import { LinkSuggest, type LinkSuggestAnchor } from "./components/editor/LinkSuggest";
 import { spliceRootDecorations } from "./editor/spliceRootDecorations";
 import Document from "@tiptap/extension-document";
@@ -3589,8 +3596,8 @@ export function VerticalTextEditor({
   const refreshLinkSuggestRef = useRef(refreshLinkSuggest);
   refreshLinkSuggestRef.current = refreshLinkSuggest;
   /** `[[` を打ち終えた直後だけ候補を開く（あとからカーソルを置いただけでは開かない）。 */
-  const armLinkSuggestRef = useRef<(() => void) | null>(null);
-  armLinkSuggestRef.current = () => {
+  const armLinkSuggestRef = useRef<((insert: string) => void) | null>(null);
+  armLinkSuggestRef.current = (insert: string) => {
     const editor = tiptapRef.current;
     const links = linkLookupRef.current;
     if (!editor || !links || !editor.state.selection.empty) return;
@@ -3600,7 +3607,7 @@ export function VerticalTextEditor({
     const lineStart = pmStartAtIndex(editor.state.doc, lineIndex);
     if (!line || lineStart === null || !namesCountedOn(links.isNote, line.source)) return;
     const caret = editor.state.selection.head - (lineStart + 1);
-    if (line.source.slice(Math.max(0, caret - 2), caret) !== "[[") return;
+    if (!suggestOpensAfterInsert(insert, line.source, caret)) return;
     linkSuggestOpenRef.current = true;
   };
   const startLinkSuggestRef = useRef<(() => void) | null>(null);
@@ -3666,9 +3673,7 @@ export function VerticalTextEditor({
       const editor = tiptapRef.current;
       const links = linkLookupRef.current;
       const activate = onLinkActivateRef.current;
-      if (!editor || !links || !activate || !start || event.button !== 0 || event.detail > 1) return;
-      if (Math.abs(event.clientX - start.x) > 3 || Math.abs(event.clientY - start.y) > 3) return;
-      if (!editor.state.selection.empty) return;
+      if (!editor || !links || !activate || !start || event.button !== 0) return;
       const element = (event.target as Element | null)?.closest<HTMLElement>(".mk-link[data-link-target]");
       if (!element || !host.contains(element)) return;
       const view = editor.view;
@@ -3678,7 +3683,15 @@ export function VerticalTextEditor({
       const line = astKey.getState(view.state)?.lines[lineIndex];
       const lineStart = pmStartAtIndex(view.state.doc, lineIndex);
       if (!line || lineStart === null) return;
-      if (start.line === lineIndex && !event.ctrlKey && !event.metaKey) return;
+      const action = linkPressAction({
+        caretLine: start.line,
+        pressedLine: lineIndex,
+        ctrl: event.ctrlKey || event.metaKey,
+        moved: Math.max(Math.abs(event.clientX - start.x), Math.abs(event.clientY - start.y)),
+        detail: event.detail,
+        selectionEmpty: editor.state.selection.empty,
+      });
+      if (action !== "open") return;
       const offset = at.pos - (lineStart + 1);
       const span = linkSpansInLine(line.source, namesCountedOn(links.isNote, line.source))
         .find((item) => offset >= item.from && offset <= item.to);
@@ -5337,7 +5350,7 @@ export function VerticalTextEditor({
         }
         requestVisibleWindowAfterEdit();
         // BINDER 3-2: `[[` を打ったら候補を出し、開いているあいだは打つたびに絞り込む。
-        if (change?.insert.endsWith("[") && !linkSuggestOpenRef.current) armLinkSuggestRef.current?.();
+        if (change && !linkSuggestOpenRef.current) armLinkSuggestRef.current?.(change.insert);
         refreshLinkSuggestRef.current();
         if (editorDisplayModeRef.current !== "paged") requestLineBreakMarks();
       },
