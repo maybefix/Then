@@ -150,10 +150,28 @@ export function linkPressAction(press: {
   return "open";
 }
 
+/** The steps of a transaction, as far as `typedTextOf` reads them. */
+type TypedNode = { isText: boolean; text?: string | null; lastChild: TypedNode | null };
+type TypedStep = { slice?: { content: { lastChild: TypedNode | null } } };
+
 /**
- * Whether what was just typed opens the name suggestions: the second `[` of
- * `[[`, on a line where names count. Putting the caret after an old `[[`
- * later does not open them.
+ * The last run of text a transaction put in (what was just typed or pasted),
+ * or "" when it only deleted. Read from the transaction itself, not from the
+ * editor's text splice, which covers whole changed lines and their line breaks.
+ */
+export function typedTextOf(tr: { steps: readonly unknown[] }): string {
+  for (let at = tr.steps.length - 1; at >= 0; at -= 1) {
+    let node = (tr.steps[at] as TypedStep).slice?.content.lastChild ?? null;
+    while (node && !node.isText) node = node.lastChild;
+    if (node) return node.text ?? "";
+  }
+  return "";
+}
+
+/**
+ * Whether what was just typed (`insert`, from `typedTextOf`) opens the name
+ * suggestions: the second `[` of `[[`, on a line where names count. Putting
+ * the caret after an old `[[` later does not open them.
  */
 export function suggestOpensAfterInsert(insert: string, source: string, caret: number): boolean {
   if (!insert.endsWith("[")) return false;

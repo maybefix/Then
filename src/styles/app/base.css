@@ -3050,15 +3050,23 @@ html:not([data-window-fullscreen="true"])
 }
 
 /* ノートと `//` の行の `[[ ]]` リンク（BINDER 3-2、docs/BINDER_LINK_SYNTAX_PLAN.md）。
-   色だけを変えるので、行の長さも組版も変わらない。行き先が1つに決まらない
-   （ない・2つ以上）リンクは薄くし、押しても開かない。色はテーマの変数から取る。 */
+   色と傍線だけを変えるので、行の長さも組版も変わらない。テーマによっては
+   アクセント色が地の文とほぼ同じ白や黒なので、色に頼らず線で見分けられるようにする。
+   行き先が1つに決まらない（ない・2つ以上）リンクは薄い色と破線にし、押しても開かない。
+   色はテーマの変数から取る。画像記法（点線）とは線の種類で分ける。 */
 .verticalTypewriterEditor .mk-link {
   color: var(--editor-link-color, var(--accent));
+  text-decoration: underline solid;
+  text-decoration-color: color-mix(in srgb, currentColor 70%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
   cursor: pointer;
 }
 
 .verticalTypewriterEditor .mk-link-missing {
   color: var(--editor-link-missing-color, var(--text-muted));
+  text-decoration-style: dashed;
+  text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
   cursor: text;
 }
 

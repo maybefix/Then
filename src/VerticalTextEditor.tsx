@@ -24,6 +24,7 @@ import {
   namesCountedOn,
   suggestOpensAfterInsert,
   suggestQueryAt,
+  typedTextOf,
 } from "./editor/linkDecorations";
 import { LinkSuggest, type LinkSuggestAnchor } from "./components/editor/LinkSuggest";
 import { spliceRootDecorations } from "./editor/spliceRootDecorations";
@@ -5331,7 +5332,7 @@ export function VerticalTextEditor({
         visualLayoutCache = null;
         requestLineBreakMarks();
       },
-      onUpdate: ({ editor: currentEditor }) => {
+      onUpdate: ({ editor: currentEditor, transaction }) => {
         cancelInitialAdjustment();
         const astState = astKey.getState(currentEditor.state);
         const next = astState?.text ?? docToText(currentEditor.state.doc);
@@ -5352,9 +5353,11 @@ export function VerticalTextEditor({
         requestVisibleWindowAfterEdit();
         // BINDER 3-2: `[[` を打ったら候補を出し、開いているあいだは打つたびに絞り込む。
         // 安い見分け（`[` を打ったか）を先に置く。この先は行の位置を数えるので、
-        // 1打ごとには走らせない。
-        if (change?.insert.endsWith("[") && !linkSuggestOpenRef.current) {
-          armLinkSuggestRef.current?.(change.insert);
+        // 1打ごとには走らせない。打った文字は transaction から読む（`change` は
+        // 変わった行の全体で、末尾に改行が付くため、`[` で終わるとは限らない）。
+        if (!linkSuggestOpenRef.current) {
+          const typed = typedTextOf(transaction);
+          if (typed.endsWith("[")) armLinkSuggestRef.current?.(typed);
         }
         refreshLinkSuggestRef.current();
         if (editorDisplayModeRef.current !== "paged") requestLineBreakMarks();
@@ -5694,6 +5697,12 @@ export function VerticalTextEditor({
             .setMeta(astKey, { refreshComposition: true } satisfies AstMeta)
             .setMeta("addToHistory", false),
         );
+        // BINDER 3-2: 日本語入力で `[[` を確定したときも候補を出す（確定までは出さない）。
+        const head = editor.state.selection.head;
+        if (!linkSuggestOpenRef.current && head >= 2 && editor.state.doc.textBetween(head - 2, head) === "[[") {
+          armLinkSuggestRef.current?.("[");
+          refreshLinkSuggestRef.current();
+        }
       });
       requestCenterCaret(false, "compositionend");
       requestPagedSelectionAfterReflow(editor);

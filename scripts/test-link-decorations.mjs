@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { build } from "esbuild";
+import { Schema } from "@tiptap/pm/model";
+import { EditorState } from "@tiptap/pm/state";
 
 // BINDER 3-2（docs/BINDER_LINK_SYNTAX_PLAN.md）のエディタ側のリンク。
 // 1行ずつ読む入口が全文の findLinks と同じ規則であること、装飾の範囲、行き先の
@@ -18,7 +20,7 @@ const bundled = await build({
 const {
   findLinks, findLinksInLine, LinkIndex,
   linkSpansInLine, namesCountedOn, linkDestination, linkOpenTarget, suggestNames, suggestQueryAt,
-  linkPressAction, suggestOpensAfterInsert, createLinkLookup,
+  linkPressAction, suggestOpensAfterInsert, typedTextOf, createLinkLookup,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`);
 
 // 1. 1行ずつの入口が、全文の規則と同じ結果を出す
@@ -146,6 +148,24 @@ const {
   assert.equal(suggestOpensAfterInsert("[", "メモ [", 4), false, "1つめの [ では開かない");
   assert.equal(suggestOpensAfterInsert("汐", "メモ [[汐", 6), false, "名前を打っている途中では開き直さない");
   assert.equal(suggestOpensAfterInsert("[", "メモ [[汐見]]", 5), true, "既存のリンクの前でも、[[ を打ち終えたら開く");
+}
+
+// 7b. 打った文字は transaction から読む。エディタの差分（変わった行の全体と改行）では
+// 最後の行の末尾でしか `[` で終わらず、候補が開かなかった（2026-11-17 の不具合）。
+{
+  const schema = new Schema({ nodes: { doc: { content: "paragraph+" }, paragraph: { content: "text*" }, text: {} } });
+  const p = (text) => schema.node("paragraph", null, text ? [schema.text(text)] : []);
+  const state = EditorState.create({ schema, doc: schema.node("doc", null, [p("// メモ と。"), p("次の行")]) });
+  // 1行目の「と」のあと（行の途中、下にも行がある）に [ を2回打つ
+  const at = 1 + "// メモ と".length;
+  const first = state.tr.insertText("[", at);
+  assert.equal(typedTextOf(first), "[");
+  const second = first.doc && state.apply(first).tr.insertText("[", at + 1);
+  assert.equal(typedTextOf(second), "[");
+  const line = second.doc.child(0).textContent;
+  assert.equal(suggestOpensAfterInsert(typedTextOf(second), line, "// メモ と[[".length), true, "行の途中で [[ を打っても開く");
+  assert.equal(typedTextOf(state.tr.delete(at - 1, at)), "", "消しただけなら何も打っていない");
+  assert.equal(typedTextOf(state.tr.insertText("灯台", at)), "灯台");
 }
 
 // 8. 引き口（同じ名前は1回しか索引に聞かない）
