@@ -973,7 +973,8 @@ function pushLinkDecos(
   contentStart: number,
   links: LinkLookup | null,
 ): void {
-  if (!links) return;
+  // 大半の行には `[[` がないので、`//` の行かどうか（正規表現）を調べる前に外す。
+  if (!links || !line.source.includes("[[")) return;
   for (const span of linkSpansInLine(line.source, namesCountedOn(links.isNote, line.source))) {
     const state = links.destination(span.kind, span.target);
     out.push(

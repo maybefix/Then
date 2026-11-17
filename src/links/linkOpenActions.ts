@@ -6,11 +6,10 @@
  *
  * 画面とファイルに触る処理はすべて deps に置き、ここには流れだけを置く
  * （投稿の「ノートにする」と同じ形。`src/posts/postNoteActions.ts`）。
- * 通知のボタンはあとで押されるので、値は呼ばれたときの deps から読む。
+ * deps は一度だけ作ればよい。どの口も、呼ばれたときの値を読む。
  */
-import type { MutableRefObject } from "react";
 import { linkOpenTarget } from "../editor/linkDecorations";
-import type { LinkIndex } from "./linkIndex";
+import { type LinkIndex, relativeTo } from "./linkIndex";
 
 /** エディタが渡してくる、押されたリンク。 */
 export type ActivatedLink = {
@@ -20,16 +19,12 @@ export type ActivatedLink = {
   rewriteTarget: (next: string) => void;
 };
 
-/** 本文に出ているタブと、その保存前の本文。 */
-export type LinkOpenTab = { id: string; path: string; markdown: string };
+/** ファイルを持つタブと、その保存前の本文。 */
+export type LinkOpenTab = { id: string; path: string; markdown: string; isActive: boolean };
 
 export type LinkOpenDeps = {
-  /** いま開いている作品のフォルダ。作品を開いていなければ null。 */
-  workRoot: () => string | null;
-  /** その作品の索引。まだ読めていなければ null。 */
-  index: (rootPath: string) => LinkIndex | null;
-  /** 作品のフォルダからのパス（一覧に出す文字）。 */
-  relativePath: (rootPath: string, path: string) => string;
+  /** いま開いている作品の索引。作品を開いていない・まだ読めていなければ null。 */
+  index: () => LinkIndex | null;
   requestOption: (options: {
     title: string;
     message: string;
@@ -38,19 +33,14 @@ export type LinkOpenDeps = {
   showToast: (message: string, action?: { label: string; onClick: () => void } | null) => void;
   /** そのファイルをタブで開く。 */
   openFile: (path: string) => Promise<void>;
-  /** 本文に出ているタブ（ファイルを持たないタブなら null）。 */
-  activeTab: () => LinkOpenTab | null;
-  /** 本文に出ているタブを、遅延保存を待たずに保存する。 */
-  saveActive: () => Promise<void>;
-  /** その id のタブ（閉じていれば null）。 */
-  openTab: (id: string) => { path: string; markdown: string; isActive: boolean } | null;
-  /** ディスクのファイルを読む（読んだときのハッシュつき）。 */
+  /** その id のタブ。id を省くと本文に出ているタブ。ファイルを持たない・閉じていれば null。 */
+  tab: (id?: string) => LinkOpenTab | null;
+  /** そのタブを、いまの本文で、遅延保存を待たずに保存する。 */
+  save: (tab: LinkOpenTab) => Promise<unknown>;
+  // ここから下は 3-1 の改名の書き換えと共通の口（App の documentWrite）。
   readFile: (path: string) => Promise<{ content: string; contentHash: string | null }>;
-  /** 読んだときのハッシュを付けてファイルへ書く。 */
   writeFile: (path: string, content: string, expectedHash: string | null) => Promise<unknown>;
-  /** 本文に出ているタブの本文を差し替える（自動保存に乗る）。 */
   applyToActiveTab: (tab: { id: string; path: string }, text: string) => void;
-  /** 裏のタブの本文を差し替えて、そのタブの保存に回す。 */
   applyToBackgroundTab: (tab: { id: string; path: string }, text: string) => Promise<void>;
 };
 
@@ -59,19 +49,18 @@ function optionId(action: "open" | "fix", index: number): string {
   return `${action}:${index}`;
 }
 
-export function createLinkOpenActions(depsRef: MutableRefObject<LinkOpenDeps>) {
+export function createLinkOpenActions(deps: LinkOpenDeps) {
   /**
    * 直す前の本文へ戻す。直したあとに書き足されていたり、外で書き換えられて
    * いれば戻さない（`after` は直した直後の本文）。
    */
   const undoFix = async (tab: LinkOpenTab, before: string, after: string, target: string) => {
-    const deps = depsRef.current;
     const restored = await (async () => {
-      const open = deps.openTab(tab.id);
+      const open = deps.tab(tab.id);
       if (open) {
         if (open.markdown !== after) return false;
-        if (open.isActive) deps.applyToActiveTab(tab, before);
-        else await deps.applyToBackgroundTab(tab, before);
+        if (open.isActive) deps.applyToActiveTab(open, before);
+        else await deps.applyToBackgroundTab(open, before);
         return true;
       }
       // タブを閉じていれば、読んだときのハッシュを付けてファイルへ書く（置換と同じ作法）。
@@ -89,10 +78,9 @@ export function createLinkOpenActions(depsRef: MutableRefObject<LinkOpenDeps>) {
 
   /** 押されたリンクを開く。行き先が決まらなければ選んでもらう。 */
   const activate = async (link: ActivatedLink) => {
-    const deps = depsRef.current;
-    const root = deps.workRoot();
-    if (!root) return;
-    const { path, choices } = linkOpenTarget(deps.index(root), link);
+    const index = deps.index();
+    if (!index) return;
+    const { path, choices } = linkOpenTarget(index, link);
     if (path) {
       await deps.openFile(path);
       return;
@@ -101,41 +89,36 @@ export function createLinkOpenActions(depsRef: MutableRefObject<LinkOpenDeps>) {
     const chosen = await deps.requestOption({
       title: "リンクの行き先",
       message: `[[${link.target}]]`,
-      options: choices.flatMap((choice, index) => [
+      options: choices.flatMap((choice, at) => [
         {
-          id: optionId("open", index),
+          id: optionId("open", at),
           label: `「${choice.name}」を開く`,
-          description: deps.relativePath(root, choice.path),
+          description: relativeTo(index.rootPath, choice.path) ?? choice.path,
         },
-        { id: optionId("fix", index), label: `リンクを「${choice.name}」に直して開く` },
+        { id: optionId("fix", at), label: `リンクを「${choice.name}」に直して開く` },
       ]),
     });
     if (!chosen) return;
     const [action, at] = chosen.split(":");
     const choice = choices[Number(at)];
     if (!choice) return;
-    const after = depsRef.current;
     let undo: (() => void) | null = null;
     if (action === "fix") {
-      const tab = after.activeTab();
-      const before = tab?.markdown ?? null;
+      const before = deps.tab();
       link.rewriteTarget(choice.name);
       // 直したらすぐ別のファイルを開くので、遅延保存（0.7秒）を待たずに書く。
       // 待つと、タブが入れ替わったところで取り消されて残らない。
-      await after.saveActive();
-      const fixed = after.activeTab();
-      if (tab && before !== null && fixed && fixed.id === tab.id && fixed.markdown !== before) {
-        undo = () => void undoFix(tab, before, fixed.markdown, link.target);
+      const fixed = deps.tab();
+      if (fixed) await deps.save(fixed).catch(() => undefined);
+      if (before && fixed && fixed.id === before.id && fixed.markdown !== before.markdown) {
+        undo = () => void undoFix(fixed, before.markdown, fixed.markdown, link.target);
       }
     }
-    await depsRef.current.openFile(choice.path);
+    await deps.openFile(choice.path);
     // 通知はファイルを開いたあとに出す。開いたときの通知が後から来て、
     // 「元に戻す」の通知を押し流してしまうため。
     if (undo) {
-      depsRef.current.showToast(`リンクを「${choice.name}」に直しました`, {
-        label: "元に戻す",
-        onClick: undo,
-      });
+      deps.showToast(`リンクを「${choice.name}」に直しました`, { label: "元に戻す", onClick: undo });
     }
   };
 

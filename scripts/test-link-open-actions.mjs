@@ -43,20 +43,17 @@ function makeDeps(index, { chooses = null, tabMarkdown = "// [[汐見]] のこ�
   let activeMarkdown = tabMarkdown;
   let tabOpen = true;
   const deps = {
-    workRoot: () => ROOT,
     index: () => index,
-    relativePath: (root, path) => path.slice(root.length + 1).split("\\").join("/"),
     requestOption: async (options) => {
       calls.options = options;
       return chooses;
     },
     showToast: (message, action) => { calls.order.push("toast"); calls.toasts.push({ message, action: action ?? null }); },
     openFile: async (path) => { calls.order.push("open"); calls.opened.push(path); },
-    activeTab: () => (tabOpen ? { id: "tab-1", path: p("第一章.md"), markdown: activeMarkdown } : null),
-    saveActive: async () => { calls.order.push("save"); calls.saved += 1; },
-    openTab: (id) => (tabOpen && id === "tab-1"
-      ? { path: p("第一章.md"), markdown: activeMarkdown, isActive: true }
+    tab: (id = "tab-1") => (tabOpen && id === "tab-1"
+      ? { id: "tab-1", path: p("第一章.md"), markdown: activeMarkdown, isActive: true }
       : null),
+    save: async (tab) => { calls.order.push("save"); calls.saved += 1; calls.savedText = tab.markdown; },
     readFile: async (path) => { calls.read.push(path); if (!file) throw new Error("no file"); return file; },
     writeFile: async (path, content) => { calls.wrote.push({ path, content }); },
     applyToActiveTab: (tab, text) => { calls.applied.push({ id: tab.id, text }); activeMarkdown = text; },
@@ -65,7 +62,7 @@ function makeDeps(index, { chooses = null, tabMarkdown = "// [[汐見]] のこ�
   return {
     calls,
     deps,
-    actions: createLinkOpenActions({ get current() { return deps; } }),
+    actions: createLinkOpenActions(deps),
     /** エディタが本文を書き換えたことにする。 */
     rewrite: (next) => { activeMarkdown = activeMarkdown.replace("[[汐見]]", `[[${next}]]`); },
     setMarkdown: (text) => { activeMarkdown = text; },
@@ -126,6 +123,7 @@ const index = await makeIndex();
   await h.actions.activate({ kind: "name", target: "汐見", rewriteTarget: (next) => h.rewrite(next) });
   assert.equal(h.markdown(), "// [[人物/汐見]] のこと");
   assert.equal(h.calls.saved, 1, "遅延保存を待たずに書く");
+  assert.equal(h.calls.savedText, "// [[人物/汐見]] のこと", "保存するのは直したあとの本文");
   assert.deepEqual(h.calls.opened, [p("素材/人物/汐見.md")]);
   assert.equal(h.calls.toasts[0].message, "リンクを「人物/汐見」に直しました");
   assert.equal(h.calls.toasts[0].action.label, "元に戻す");
