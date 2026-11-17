@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { build } from "esbuild";
-import { Schema } from "@tiptap/pm/model";
+import { Fragment, Schema, Slice } from "@tiptap/pm/model";
 import { EditorState } from "@tiptap/pm/state";
 
 // BINDER 3-2（docs/BINDER_LINK_SYNTAX_PLAN.md）のエディタ側のリンク。
@@ -166,6 +166,9 @@ const {
   assert.equal(suggestOpensAfterInsert(typedTextOf(second), line, "// メモ と[[".length), true, "行の途中で [[ を打っても開く");
   assert.equal(typedTextOf(state.tr.delete(at - 1, at)), "", "消しただけなら何も打っていない");
   assert.equal(typedTextOf(state.tr.insertText("灯台", at)), "灯台");
+  // 2行を貼り付けて [[ で終わったときも、最後の行の文字を読む
+  const pasted = new Slice(Fragment.from([p("前"), p("// [[")]), 1, 1);
+  assert.equal(typedTextOf(state.tr.replace(at, at, pasted)), "// [[");
 }
 
 // 8. 引き口（同じ名前は1回しか索引に聞かない）
