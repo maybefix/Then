@@ -6416,11 +6416,25 @@ export default function App() {
         const [action, at] = chosen.split(":");
         const choice = choices[Number(at)];
         if (!choice) return;
-        if (action === "fix") link.rewriteTarget(choice.name);
+        if (action === "fix") {
+          link.rewriteTarget(choice.name);
+          // 直したらすぐ別のファイルを開くので、遅延保存（0.7秒）を待たずに書く。
+          // 待つと、タブが入れ替わったところで取り消されて残らない。
+          const tab = openTabsRef.current.find((item) => item.id === activeTabIdRef.current);
+          const content = activeMarkdownRef.current;
+          if (tab?.path) {
+            await enqueueDocumentSave({
+              tabId: tab.id,
+              path: tab.path,
+              content,
+              journalPosition: journalPositionOf(tab.id, content),
+            }).catch(() => undefined);
+          }
+        }
         void handleProjectFileSelectRef.current(choice.path);
       })();
     },
-    [linkWorkRoot, peekLinkIndex, requestOption],
+    [enqueueDocumentSave, linkWorkRoot, peekLinkIndex, requestOption],
   );
   useEffect(() => {
     if (!pendingNoteOpen || !projectFolder || !isSamePath(projectFolder.path, pendingNoteOpen.workRoot)) return;
