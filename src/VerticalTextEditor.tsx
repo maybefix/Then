@@ -5350,7 +5350,11 @@ export function VerticalTextEditor({
         }
         requestVisibleWindowAfterEdit();
         // BINDER 3-2: `[[` を打ったら候補を出し、開いているあいだは打つたびに絞り込む。
-        if (change && !linkSuggestOpenRef.current) armLinkSuggestRef.current?.(change.insert);
+        // 安い見分け（`[` を打ったか）を先に置く。この先は行の位置を数えるので、
+        // 1打ごとには走らせない。
+        if (change?.insert.endsWith("[") && !linkSuggestOpenRef.current) {
+          armLinkSuggestRef.current?.(change.insert);
+        }
         refreshLinkSuggestRef.current();
         if (editorDisplayModeRef.current !== "paged") requestLineBreakMarks();
       },
