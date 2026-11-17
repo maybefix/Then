@@ -69,7 +69,8 @@ import {
 import { usePropertyValueIndex } from "./properties/usePropertyValueIndex";
 import { useLinkIndex } from "./links/useLinkIndex";
 import { linkRewriteMessage, rewriteLinksAfterPathChange as rewriteLinksInFiles } from "./links/linkRewrite";
-import type { LinkStamp } from "./links/linkIndex";
+import { type LinkStamp, relativeTo } from "./links/linkIndex";
+import { createLinkLookup, linkOpenTarget } from "./editor/linkDecorations";
 import {
   CheckpointStudio,
   type CheckpointCurrentProjectFile,
@@ -1801,6 +1802,17 @@ export default function App() {
   const documentMode = documentModeFor(currentFilePath, materialPaths);
   const editorSettings = useMemo(() => editorSettingsFor(settings, documentMode), [documentMode, settings]);
   const isNotePath = useCallback((path: string) => documentModeFor(path, materialPaths) === "note", [materialPaths]);
+  // BINDER 3-2: エディタに渡す「リンクの行き先の引き口」。索引が変わるたびに
+  // 作り直すので、そのときだけ色が付き直る（打鍵では作り直さない）。
+  const linkWorkRoot = projectFolder?.path ?? null;
+  const { peek: peekLinkIndex, version: linkIndexVersion } = linkIndex;
+  const linkLookup = useMemo(
+    () => {
+      void linkIndexVersion;
+      return linkWorkRoot ? createLinkLookup(peekLinkIndex(linkWorkRoot), documentMode === "note") : null;
+    },
+    [documentMode, linkIndexVersion, linkWorkRoot, peekLinkIndex],
+  );
   const isNewTabStartPage =
     activeTab?.kind === "scratch" && activeTab.name === newTabName && markdown.trim() === "";
   const activeWorkspaceRootPath = useMemo(() => {
@@ -6370,6 +6382,42 @@ export default function App() {
     trashFile: (path) => new Promise<boolean>((resolve) => setPendingNoteTrash({ path, resolve })),
   };
   const postNoteActions = useMemo(() => createPostNoteActions(postNoteDepsRef), []);
+  // BINDER 3-2: 本文のリンクを押したとき。行き先が1つなら開き、2つ以上なら
+  // どのファイルかを選んでもらう（そのとき本文を直すかも一緒に選ぶ）。
+  const handleLinkActivate = useCallback(
+    (link: { kind: "name" | "path"; target: string; rewriteTarget: (next: string) => void }) => {
+      const root = linkWorkRoot;
+      if (!root) return;
+      const index = peekLinkIndex(root);
+      const { path, choices } = linkOpenTarget(index, { kind: link.kind, target: link.target });
+      if (path) {
+        void handleProjectFileSelectRef.current(path);
+        return;
+      }
+      if (choices.length < 2) return;
+      void (async () => {
+        const chosen = await requestOption({
+          title: "リンクの行き先",
+          message: `[[${link.target}]]`,
+          options: choices.flatMap((choice, index) => [
+            {
+              id: `open:${index}`,
+              label: `「${choice.name}」を開く`,
+              description: relativeTo(root, choice.path) ?? choice.path,
+            },
+            { id: `fix:${index}`, label: `リンクを「${choice.name}」に直して開く` },
+          ]),
+        });
+        if (!chosen) return;
+        const [action, at] = chosen.split(":");
+        const choice = choices[Number(at)];
+        if (!choice) return;
+        if (action === "fix") link.rewriteTarget(choice.name);
+        void handleProjectFileSelectRef.current(choice.path);
+      })();
+    },
+    [linkWorkRoot, peekLinkIndex, requestOption],
+  );
   useEffect(() => {
     if (!pendingNoteOpen || !projectFolder || !isSamePath(projectFolder.path, pendingNoteOpen.workRoot)) return;
     setPendingNoteOpen(null);
@@ -7318,6 +7366,8 @@ export default function App() {
                               settings.manuscript.linesPerPage,
                               settings.manuscript.fontSize,
                             ].join("|")}
+                            linkLookup={linkLookup}
+                            onLinkActivate={handleLinkActivate}
                             manuscript={editorSettings.manuscript}
                             onManuscriptProgressChange={editorManuscriptProgress.setSnapshot}
                             initialSelectionOffset={initialSelectionOffset}

@@ -3049,6 +3049,19 @@ html:not([data-window-fullscreen="true"])
   display: none;
 }
 
+/* ノートと `//` の行の `[[ ]]` リンク（BINDER 3-2、docs/BINDER_LINK_SYNTAX_PLAN.md）。
+   色だけを変えるので、行の長さも組版も変わらない。行き先が1つに決まらない
+   （ない・2つ以上）リンクは薄くし、押しても開かない。色はテーマの変数から取る。 */
+.verticalTypewriterEditor .mk-link {
+  color: var(--editor-link-color, var(--accent));
+  cursor: pointer;
+}
+
+.verticalTypewriterEditor .mk-link-missing {
+  color: var(--editor-link-missing-color, var(--text-muted));
+  cursor: text;
+}
+
 /* コードブロック・行内コード（docs/CODE_BLOCK_SPEC.md）。本文と同じ組方向のまま
    等幅フォントと背景で区別する。長い行は本文と同じく折り返す。 */
 .verticalTypewriterEditor .pm-code,

@@ -15,6 +15,9 @@ export type LinkSpan = {
   target: string;
   from: number;
   to: number;
+  /** Just `target`, so rewriting it leaves `|shown` and `#heading` alone. */
+  targetFrom: number;
+  targetTo: number;
 };
 
 /**
@@ -50,6 +53,8 @@ export function linkSpansInLine(source: string, names: boolean): LinkSpan[] {
     target: link.target,
     from: link.fullFrom,
     to: link.fullTo,
+    targetFrom: link.from,
+    targetTo: link.to,
   }));
 }
 
