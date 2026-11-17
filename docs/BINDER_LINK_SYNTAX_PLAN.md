@@ -165,7 +165,14 @@
 
 ### 4-4. 今の自動テストの状態（「前」の一式）
 
-（「前」の一式の結果をここに書く。）
+`e546c4a` で動かした（`scratchpad/suite/suite-before.json`）。120本、うち2本が落ちた。main chunk は 691,609 バイト。残っていたプロセスは、QA の Then 0、QA の WebView2 0、テストの Edge 0、テストの node 0。
+
+| テスト | 落ちた理由 | 今回との関係 |
+|---|---|---|
+| `test:v058-bundle` | 一番大きい JavaScript の塊が 500 kB の上限を超えている（691,609 バイト） | 元からの失敗（3-1 の工程10でも同じ）。4-4 の作業。3-2 でさらに数キロバイト増える見込み |
+| `test:editor-text-edits` | `every icon draws its own picture` | 元からの失敗（3-1 の工程10でも同じ）。エディタの文字の編集とは別の、アイコンの絵の確認 |
+
+3-1 では時間切れで落ちていた `test:editor-selection` と `test:v070-manuscript-browser` は、今回はどちらも通った（一式の中の時間切れは回ごとに変わる）。止めて知らせる約束の10本（binder-baseline、binder-tiers、materials、project-entry-actions、search、save-external-change、link-index、link-index-rust、app-dialog-focus、command-palette）はすべて通っている。
 
 ## 工程5: 案
 
