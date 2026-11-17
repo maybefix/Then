@@ -70,7 +70,8 @@ import { usePropertyValueIndex } from "./properties/usePropertyValueIndex";
 import { useLinkIndex } from "./links/useLinkIndex";
 import { linkRewriteMessage, rewriteLinksAfterPathChange as rewriteLinksInFiles } from "./links/linkRewrite";
 import { type LinkStamp, relativeTo } from "./links/linkIndex";
-import { createLinkLookup, linkOpenTarget } from "./editor/linkDecorations";
+import { type ActivatedLink, type LinkOpenDeps, createLinkOpenActions } from "./links/linkOpenActions";
+import { useLinkLookup } from "./links/useLinkLookup";
 import {
   CheckpointStudio,
   type CheckpointCurrentProjectFile,
@@ -1802,17 +1803,9 @@ export default function App() {
   const documentMode = documentModeFor(currentFilePath, materialPaths);
   const editorSettings = useMemo(() => editorSettingsFor(settings, documentMode), [documentMode, settings]);
   const isNotePath = useCallback((path: string) => documentModeFor(path, materialPaths) === "note", [materialPaths]);
-  // BINDER 3-2: エディタに渡す「リンクの行き先の引き口」。索引が変わるたびに
-  // 作り直すので、そのときだけ色が付き直る（打鍵では作り直さない）。
+  // BINDER 3-2: エディタに渡す「リンクの行き先の引き口」。
   const linkWorkRoot = projectFolder?.path ?? null;
-  const { peek: peekLinkIndex, version: linkIndexVersion } = linkIndex;
-  const linkLookup = useMemo(
-    () => {
-      void linkIndexVersion;
-      return linkWorkRoot ? createLinkLookup(peekLinkIndex(linkWorkRoot), documentMode === "note") : null;
-    },
-    [documentMode, linkIndexVersion, linkWorkRoot, peekLinkIndex],
-  );
+  const linkLookup = useLinkLookup(linkIndex, linkWorkRoot, documentMode === "note");
   const isNewTabStartPage =
     activeTab?.kind === "scratch" && activeTab.name === newTabName && markdown.trim() === "";
   const activeWorkspaceRootPath = useMemo(() => {
@@ -6307,6 +6300,26 @@ export default function App() {
   const linkRewriteRunningRef = useRef(false);
   const linkRewriteDepsRef = useRef({ setActiveMarkdown, enqueueDocumentSave, showToast, linkIndex });
   linkRewriteDepsRef.current = { setActiveMarkdown, enqueueDocumentSave, showToast, linkIndex };
+  // 文書の本文を書く口（3-1 の改名の書き換えと、3-2 の「元に戻す」が使う）。
+  const documentWriteRef = useRef({
+    readFile: async (path: string) => {
+      const document = await invoke<TextDocument>("read_text_file", { path });
+      return { content: document.content, contentHash: document.contentHash ?? null };
+    },
+    writeFile: async (path: string, content: string, expectedHash: string | null) =>
+      (await invoke<TextDocument>("save_text_file", { path, content, expectedHash })).content,
+    applyToActiveTab: (_tab: { id: string; path: string }, text: string) => {
+      // 書き換えはこの文書の変更なので、開いてから打っていなくても自動保存に届ける（プロパティの編集と同じ）。
+      didMountEditorRef.current = true;
+      linkRewriteDepsRef.current.setActiveMarkdown(text, null);
+    },
+    applyToBackgroundTab: async (tab: { id: string; path: string }, text: string) => {
+      setOpenTabs((current) =>
+        current.map((item) => (item.id === tab.id ? { ...item, markdown: text, saveStatus: "dirty" } : item)),
+      );
+      await linkRewriteDepsRef.current.enqueueDocumentSave({ tabId: tab.id, path: tab.path, content: text });
+    },
+  });
   useEffect(() => {
     const job = pendingLinkRewrites[0];
     if (!job || linkRewriteRunningRef.current) return;
@@ -6332,24 +6345,8 @@ export default function App() {
                 }]
               : [],
           ),
-          readFile: async (path) => {
-            const document = await invoke<TextDocument>("read_text_file", { path });
-            return { content: document.content, contentHash: document.contentHash ?? null };
-          },
-          writeFile: async (path, content, expectedHash) =>
-            (await invoke<TextDocument>("save_text_file", { path, content, expectedHash })).content,
+          ...documentWriteRef.current,
           isConflict: isDocumentConflict,
-          applyToActiveTab: (_tab, text) => {
-            // 書き換えはこの文書の変更なので、開いてから打っていなくても自動保存に届ける（プロパティの編集と同じ）。
-            didMountEditorRef.current = true;
-            deps.setActiveMarkdown(text, null);
-          },
-          applyToBackgroundTab: async (tab, text) => {
-            setOpenTabs((current) =>
-              current.map((item) => (item.id === tab.id ? { ...item, markdown: text, saveStatus: "dirty" } : item)),
-            );
-            await deps.enqueueDocumentSave({ tabId: tab.id, path: tab.path, content: text });
-          },
         });
         const message = linkRewriteMessage(job.message, result);
         if (message) deps.showToast(message);
@@ -6386,55 +6383,43 @@ export default function App() {
     trashFile: (path) => new Promise<boolean>((resolve) => setPendingNoteTrash({ path, resolve })),
   };
   const postNoteActions = useMemo(() => createPostNoteActions(postNoteDepsRef), []);
-  // BINDER 3-2: 本文のリンクを押したとき。行き先が1つなら開き、2つ以上なら
-  // どのファイルかを選んでもらう（そのとき本文を直すかも一緒に選ぶ）。
-  const handleLinkActivate = useCallback(
-    (link: { kind: "name" | "path"; target: string; rewriteTarget: (next: string) => void }) => {
-      const root = linkWorkRoot;
-      if (!root) return;
-      const index = peekLinkIndex(root);
-      const { path, choices } = linkOpenTarget(index, { kind: link.kind, target: link.target });
-      if (path) {
-        void handleProjectFileSelectRef.current(path);
-        return;
-      }
-      if (choices.length < 2) return;
-      void (async () => {
-        const chosen = await requestOption({
-          title: "リンクの行き先",
-          message: `[[${link.target}]]`,
-          options: choices.flatMap((choice, index) => [
-            {
-              id: `open:${index}`,
-              label: `「${choice.name}」を開く`,
-              description: relativeTo(root, choice.path) ?? choice.path,
-            },
-            { id: `fix:${index}`, label: `リンクを「${choice.name}」に直して開く` },
-          ]),
-        });
-        if (!chosen) return;
-        const [action, at] = chosen.split(":");
-        const choice = choices[Number(at)];
-        if (!choice) return;
-        if (action === "fix") {
-          link.rewriteTarget(choice.name);
-          // 直したらすぐ別のファイルを開くので、遅延保存（0.7秒）を待たずに書く。
-          // 待つと、タブが入れ替わったところで取り消されて残らない。
-          const tab = openTabsRef.current.find((item) => item.id === activeTabIdRef.current);
-          const content = activeMarkdownRef.current;
-          if (tab?.path) {
-            await enqueueDocumentSave({
-              tabId: tab.id,
-              path: tab.path,
-              content,
-              journalPosition: journalPositionOf(tab.id, content),
-            }).catch(() => undefined);
-          }
-        }
-        void handleProjectFileSelectRef.current(choice.path);
-      })();
+  // BINDER 3-2: 本文のリンクを押したとき。流れは src/links/linkOpenActions.ts にあり、
+  // ここは画面とファイルに触る口だけを渡す。
+  const linkOpenDepsRef = useRef<LinkOpenDeps>(null as unknown as LinkOpenDeps);
+  linkOpenDepsRef.current = {
+    workRoot: () => linkWorkRoot,
+    index: (root) => linkIndex.peek(root),
+    relativePath: (root, path) => relativeTo(root, path) ?? path,
+    requestOption,
+    showToast,
+    openFile: (path) => handleProjectFileSelectRef.current(path),
+    activeTab: () => {
+      const tab = openTabsRef.current.find((item) => item.id === activeTabIdRef.current);
+      return tab?.path ? { id: tab.id, path: tab.path, markdown: activeMarkdownRef.current } : null;
     },
-    [enqueueDocumentSave, linkWorkRoot, peekLinkIndex, requestOption],
+    saveActive: async () => {
+      const tab = openTabsRef.current.find((item) => item.id === activeTabIdRef.current);
+      const content = activeMarkdownRef.current;
+      if (!tab?.path) return;
+      await enqueueDocumentSave({
+        tabId: tab.id,
+        path: tab.path,
+        content,
+        journalPosition: journalPositionOf(tab.id, content),
+      }).catch(() => undefined);
+    },
+    openTab: (id) => {
+      const tab = openTabsRef.current.find((item) => item.id === id && item.path);
+      if (!tab?.path) return null;
+      const isActive = tab.id === activeTabIdRef.current;
+      return { path: tab.path, markdown: isActive ? activeMarkdownRef.current : tab.markdown, isActive };
+    },
+    ...documentWriteRef.current,
+  };
+  const linkOpenActions = useMemo(() => createLinkOpenActions(linkOpenDepsRef), []);
+  const handleLinkActivate = useCallback(
+    (link: ActivatedLink) => void linkOpenActions.activate(link),
+    [linkOpenActions],
   );
   useEffect(() => {
     if (!pendingNoteOpen || !projectFolder || !isSamePath(projectFolder.path, pendingNoteOpen.workRoot)) return;

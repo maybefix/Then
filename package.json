@@ -50,6 +50,7 @@
     "test:material-files-rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- material_files::",
     "test:link-index": "node scripts/test-link-index.mjs",
     "test:link-decorations": "node scripts/test-link-decorations.mjs",
+    "test:link-open-actions": "node scripts/test-link-open-actions.mjs",
     "test:link-index-rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- link_index::",
     "test:app-dialog": "node scripts/test-app-dialog.mjs",
     "test:plugin-host": "node scripts/test-plugin-host.mjs",
