@@ -5697,9 +5697,12 @@ export function VerticalTextEditor({
             .setMeta(astKey, { refreshComposition: true } satisfies AstMeta)
             .setMeta("addToHistory", false),
         );
-        // BINDER 3-2: 日本語入力で `[[` を確定したときも候補を出す（確定までは出さない）。
+        // BINDER 3-2: 変換中は候補を隠すだけなので、確定したら確定した文字で出し直す。
+        // 日本語入力で `[[` を確定したときも、ここで候補を開く。
         const head = editor.state.selection.head;
-        if (!linkSuggestOpenRef.current && head >= 2 && editor.state.doc.textBetween(head - 2, head) === "[[") {
+        if (linkSuggestOpenRef.current) {
+          refreshLinkSuggestRef.current();
+        } else if (head >= 2 && editor.state.doc.textBetween(head - 2, head) === "[[") {
           armLinkSuggestRef.current?.("[");
           refreshLinkSuggestRef.current();
         }
