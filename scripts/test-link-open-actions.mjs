@@ -39,7 +39,7 @@ async function makeIndex() {
 
 /** 画面とファイルの代わり。呼ばれたことを記録する。 */
 function makeDeps(index, { chooses = null, tabMarkdown = "// [[汐見]] のこと", file = null } = {}) {
-  const calls = { opened: [], toasts: [], saved: 0, options: null, applied: [], wrote: [], read: [] };
+  const calls = { opened: [], toasts: [], saved: 0, options: null, applied: [], wrote: [], read: [], order: [] };
   let activeMarkdown = tabMarkdown;
   let tabOpen = true;
   const deps = {
@@ -50,10 +50,10 @@ function makeDeps(index, { chooses = null, tabMarkdown = "// [[汐見]] のこ�
       calls.options = options;
       return chooses;
     },
-    showToast: (message, action) => calls.toasts.push({ message, action: action ?? null }),
-    openFile: async (path) => { calls.opened.push(path); },
+    showToast: (message, action) => { calls.order.push("toast"); calls.toasts.push({ message, action: action ?? null }); },
+    openFile: async (path) => { calls.order.push("open"); calls.opened.push(path); },
     activeTab: () => (tabOpen ? { id: "tab-1", path: p("第一章.md"), markdown: activeMarkdown } : null),
-    saveActive: async () => { calls.saved += 1; },
+    saveActive: async () => { calls.order.push("save"); calls.saved += 1; },
     openTab: (id) => (tabOpen && id === "tab-1"
       ? { path: p("第一章.md"), markdown: activeMarkdown, isActive: true }
       : null),
@@ -129,6 +129,8 @@ const index = await makeIndex();
   assert.deepEqual(h.calls.opened, [p("素材/人物/汐見.md")]);
   assert.equal(h.calls.toasts[0].message, "リンクを「人物/汐見」に直しました");
   assert.equal(h.calls.toasts[0].action.label, "元に戻す");
+  assert.deepEqual(h.calls.order, ["save", "open", "toast"],
+    "通知はファイルを開いたあとに出す（開いたときの通知に押し流されないように）");
 
   // 6. 元に戻すと、直す前の本文に戻る
   h.calls.toasts[0].action.onClick();

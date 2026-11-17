@@ -115,6 +115,7 @@ export function createLinkOpenActions(depsRef: MutableRefObject<LinkOpenDeps>) {
     const choice = choices[Number(at)];
     if (!choice) return;
     const after = depsRef.current;
+    let undo: (() => void) | null = null;
     if (action === "fix") {
       const tab = after.activeTab();
       const before = tab?.markdown ?? null;
@@ -124,13 +125,18 @@ export function createLinkOpenActions(depsRef: MutableRefObject<LinkOpenDeps>) {
       await after.saveActive();
       const fixed = after.activeTab();
       if (tab && before !== null && fixed && fixed.id === tab.id && fixed.markdown !== before) {
-        after.showToast(`リンクを「${choice.name}」に直しました`, {
-          label: "元に戻す",
-          onClick: () => void undoFix(tab, before, fixed.markdown, link.target),
-        });
+        undo = () => void undoFix(tab, before, fixed.markdown, link.target);
       }
     }
     await depsRef.current.openFile(choice.path);
+    // 通知はファイルを開いたあとに出す。開いたときの通知が後から来て、
+    // 「元に戻す」の通知を押し流してしまうため。
+    if (undo) {
+      depsRef.current.showToast(`リンクを「${choice.name}」に直しました`, {
+        label: "元に戻す",
+        onClick: undo,
+      });
+    }
   };
 
   return { activate };
