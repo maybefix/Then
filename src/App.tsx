@@ -3890,7 +3890,7 @@ export default function App() {
     }
 
     const reservedThenShortcut = mod && (
-      (!event.altKey && !event.shiftKey && ["n", "f", "p", "b", "i", "0", "1", "2", "3", "4", "5", "6"].includes(key.toLowerCase())) ||
+      (!event.altKey && !event.shiftKey && ["n", "f", "p", "b", "i", "l", "0", "1", "2", "3", "4", "5", "6"].includes(key.toLowerCase())) ||
       (!event.altKey && event.code === "Slash") ||
       (!event.altKey && event.shiftKey && key.toLowerCase() === "s") ||
       (event.altKey && !event.shiftKey && ["i", "b"].includes(key.toLowerCase()))
@@ -3970,6 +3970,10 @@ export default function App() {
     } else if (event.code === "Slash") {
       event.preventDefault();
       applyLineCommentToggle();
+    } else if (key === "l" || key === "L") {
+      // Ctrl+L：ノートの名前の候補（BINDER 3-2）。かな入力では `[[` を打てないため。
+      event.preventDefault();
+      editorInstanceRef.current?.startLinkSuggest();
     }
   };
 

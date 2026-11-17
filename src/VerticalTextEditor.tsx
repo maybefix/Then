@@ -17,7 +17,8 @@ import {
 } from "./editor/manuscriptLayout";
 import { DEFAULT_MANUSCRIPT_SETTINGS } from "./types";
 import { indexRootDecorations } from "./editor/indexedDecorations";
-import { type LinkLookup, linkSpansInLine, namesCountedOn } from "./editor/linkDecorations";
+import { type LinkLookup, linkSpansInLine, namesCountedOn, suggestQueryAt } from "./editor/linkDecorations";
+import { LinkSuggest, type LinkSuggestAnchor } from "./components/editor/LinkSuggest";
 import { spliceRootDecorations } from "./editor/spliceRootDecorations";
 import Document from "@tiptap/extension-document";
 import History from "@tiptap/extension-history";
@@ -39,7 +40,7 @@ import {
   DecorationSet,
   type EditorView,
 } from "@tiptap/pm/view";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ImageHoverPreview } from "./components/editor/ImageHoverPreview";
 import {
   areDocumentIndexesEquivalent,
@@ -96,6 +97,8 @@ export type TextEditorHandle = {
   ) => { left: number; right: number; top: number; bottom: number } | null;
   scrollCaretIntoView: (offsetPercent: number) => void;
   isComposing: () => boolean;
+  /** BINDER 3-2: `[[]]` を入れて、ノートの名前の候補を出す（Ctrl+L）。 */
+  startLinkSuggest: () => void;
 };
 
 type VerticalTextEditorProps = {
@@ -3532,6 +3535,117 @@ export function VerticalTextEditor({
     requestVisualLinesRef.current?.();
   }, [showComments]);
 
+  // BINDER 3-2: ノートの名前の候補。`[[` を打つか Ctrl+L で開き、打つたびに
+  // 絞り込む。日本語入力の確定中は閉じたままにし、確定した文字で絞り込む。
+  const [linkSuggest, setLinkSuggest] = useState<{
+    items: Array<{ name: string; path: string }>;
+    from: number;
+    to: number;
+    anchor: LinkSuggestAnchor;
+  } | null>(null);
+  const linkSuggestOpenRef = useRef(false);
+  const closeLinkSuggest = useCallback(() => {
+    linkSuggestOpenRef.current = false;
+    setLinkSuggest((current) => (current ? null : current));
+  }, []);
+  const refreshLinkSuggest = useCallback(() => {
+    const editor = tiptapRef.current;
+    const links = linkLookupRef.current;
+    if (!editor || !links || !linkSuggestOpenRef.current) return;
+    if (isEditorComposing(editor, composingRef)) {
+      setLinkSuggest((current) => (current ? null : current));
+      return;
+    }
+    const { state } = editor;
+    if (!state.selection.empty) {
+      closeLinkSuggest();
+      return;
+    }
+    const lineIndex = activeLineIndex(state);
+    const line = astKey.getState(state)?.lines[lineIndex];
+    const lineStart = pmStartAtIndex(state.doc, lineIndex);
+    if (!line || lineStart === null || !namesCountedOn(links.isNote, line.source)) {
+      closeLinkSuggest();
+      return;
+    }
+    const query = suggestQueryAt(line.source, state.selection.head - (lineStart + 1));
+    if (!query) {
+      closeLinkSuggest();
+      return;
+    }
+    let coords: { left: number; right: number; top: number; bottom: number };
+    try {
+      coords = editor.view.coordsAtPos(state.selection.head);
+    } catch {
+      return;
+    }
+    setLinkSuggest({
+      items: links.names(query.query),
+      from: lineStart + 1 + query.from,
+      to: lineStart + 1 + query.to,
+      anchor: { ...coords, vertical: writingModeRef.current === "vertical-rl" },
+    });
+  }, [closeLinkSuggest]);
+  const refreshLinkSuggestRef = useRef(refreshLinkSuggest);
+  refreshLinkSuggestRef.current = refreshLinkSuggest;
+  /** `[[` を打ち終えた直後だけ候補を開く（あとからカーソルを置いただけでは開かない）。 */
+  const armLinkSuggestRef = useRef<(() => void) | null>(null);
+  armLinkSuggestRef.current = () => {
+    const editor = tiptapRef.current;
+    const links = linkLookupRef.current;
+    if (!editor || !links || !editor.state.selection.empty) return;
+    if (isEditorComposing(editor, composingRef)) return;
+    const lineIndex = activeLineIndex(editor.state);
+    const line = astKey.getState(editor.state)?.lines[lineIndex];
+    const lineStart = pmStartAtIndex(editor.state.doc, lineIndex);
+    if (!line || lineStart === null || !namesCountedOn(links.isNote, line.source)) return;
+    const caret = editor.state.selection.head - (lineStart + 1);
+    if (line.source.slice(Math.max(0, caret - 2), caret) !== "[[") return;
+    linkSuggestOpenRef.current = true;
+  };
+  const startLinkSuggestRef = useRef<(() => void) | null>(null);
+  startLinkSuggestRef.current = () => {
+    const editor = tiptapRef.current;
+    const links = linkLookupRef.current;
+    if (!editor || !links || isEditorComposing(editor, composingRef)) return;
+    const { state } = editor;
+    const lineIndex = activeLineIndex(state);
+    const line = astKey.getState(state)?.lines[lineIndex];
+    if (!line || !namesCountedOn(links.isNote, line.source)) return;
+    // すでに `[[` の中なら入れ直さず、そのまま候補を出す。
+    const lineStart = pmStartAtIndex(state.doc, lineIndex);
+    const inside = lineStart !== null &&
+      suggestQueryAt(line.source, state.selection.head - (lineStart + 1)) !== null;
+    linkSuggestOpenRef.current = true;
+    if (!inside) {
+      const at = state.selection.from;
+      const tr = state.tr.insertText("[[]]", at, state.selection.to);
+      tr.setSelection(TextSelection.create(tr.doc, at + 2));
+      editor.view.dispatch(tr);
+    }
+    refreshLinkSuggestRef.current();
+  };
+  const chooseLinkSuggest = useCallback((name: string) => {
+    const editor = tiptapRef.current;
+    const target = linkSuggest;
+    closeLinkSuggest();
+    if (!editor || !target) return;
+    const { state } = editor;
+    const to = Math.min(target.to, state.doc.content.size);
+    const after = state.doc.textBetween(to, Math.min(to + 2, state.doc.content.size));
+    const tr = state.tr.insertText(after === "]]" ? name : `${name}]]`, target.from, to);
+    const caret = target.from + name.length + 2;
+    tr.setSelection(TextSelection.create(tr.doc, Math.min(caret, tr.doc.content.size)));
+    editor.view.dispatch(tr);
+    editor.view.focus();
+  }, [closeLinkSuggest, linkSuggest]);
+
+  useEffect(() => {
+    // 別のアプリへ移ったら候補は閉じる（位置がずれたまま残らないように）。
+    window.addEventListener("blur", closeLinkSuggest);
+    return () => window.removeEventListener("blur", closeLinkSuggest);
+  }, [closeLinkSuggest]);
+
   // BINDER 3-2: リンクをクリックすると開く。カーソルがすでにその行にあるときは
   // 開かず、カーソルを置く（名前を直せるように）。Ctrl（Cmd）を押しながらなら
   // 同じ行でも開く。押して引いて文字を選んだときは開かない。
@@ -3882,6 +3996,7 @@ export function VerticalTextEditor({
         requestLineBreakMarksRef.current?.();
       },
       isComposing: () => isEditorComposing(tiptapRef.current, composingRef),
+      startLinkSuggest: () => startLinkSuggestRef.current?.(),
     }),
     [],
   );
@@ -5221,10 +5336,14 @@ export function VerticalTextEditor({
           requestPagedSelectionAfterReflow(currentEditor);
         }
         requestVisibleWindowAfterEdit();
+        // BINDER 3-2: `[[` を打ったら候補を出し、開いているあいだは打つたびに絞り込む。
+        if (change?.insert.endsWith("[") && !linkSuggestOpenRef.current) armLinkSuggestRef.current?.();
+        refreshLinkSuggestRef.current();
         if (editorDisplayModeRef.current !== "paged") requestLineBreakMarks();
       },
       onSelectionUpdate: () => {
         onSelectionChangeRef.current();
+        refreshLinkSuggestRef.current();
         // ドラッグ範囲選択中は寄せない（pointerup でまとめて判定する）。
         // キーボードでの選択（Shift+矢印など）はドラッグ外なので従来どおり追従する。
         if (!pointerDraggingRef.current) {
@@ -5835,6 +5954,14 @@ export function VerticalTextEditor({
       </div>
       <div ref={lineBreakLayerRef} className="visibleLineBreakLayer" aria-hidden="true" />
       <ImageHoverPreview hostRef={editorHostRef} documentPath={documentPath} />
+      {linkSuggest && (
+        <LinkSuggest
+          items={linkSuggest.items}
+          anchor={linkSuggest.anchor}
+          onChoose={chooseLinkSuggest}
+          onClose={closeLinkSuggest}
+        />
+      )}
       {editorDisplayMode === "continuous" && typewriterScroll && showTypewriterGuide && (
         <div className="verticalTypewriterGuide" />
       )}

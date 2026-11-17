@@ -33,6 +33,8 @@ export type LinkLookup = {
   /** The open file's role: a note counts `[[name]]` on every line. */
   isNote: boolean;
   destination: (kind: LinkKind, target: string) => LinkDestinationState;
+  /** The notes to offer while typing a name (3-2). */
+  names: (query: string) => Array<{ name: string; path: string }>;
 };
 
 /**
@@ -88,10 +90,15 @@ export function linkOpenTarget(
 
 /** The notes to offer for `query`, by the name itself or by its last part. */
 export function suggestNames(index: LinkIndex | null, query: string): Array<{ name: string; path: string }> {
-  if (!index) return [];
+  return filterNames(index ? index.noteNames() : [], query);
+}
+
+export function filterNames(
+  names: ReadonlyArray<{ name: string; path: string }>,
+  query: string,
+): Array<{ name: string; path: string }> {
   const key = query.trim().toLocaleLowerCase();
-  const names = index.noteNames();
-  if (!key) return names;
+  if (!key) return [...names];
   return names.filter((item) => {
     const name = item.name.toLocaleLowerCase();
     if (name.startsWith(key)) return true;
@@ -125,8 +132,13 @@ export function suggestQueryAt(
  */
 export function createLinkLookup(index: LinkIndex | null, isNote: boolean): LinkLookup {
   const known = new Map<string, LinkDestinationState>();
+  let noteNames: Array<{ name: string; path: string }> | null = null;
   return {
     isNote,
+    names: (query) => {
+      if (!noteNames) noteNames = index ? index.noteNames() : [];
+      return filterNames(noteNames, query);
+    },
     destination: (kind, target) => {
       const key = `${kind}:${target}`;
       const found = known.get(key);

@@ -3092,6 +3092,41 @@ html:not([data-window-fullscreen="true"])
   text-underline-offset: 0.2em;
 }
 
+/* ノートの名前の候補（BINDER 3-2）。本文の外に浮かべるので、組版には触らない。 */
+.linkSuggest {
+  position: fixed;
+  z-index: 45;
+  display: grid;
+  min-width: 140px;
+  max-width: 320px;
+  max-height: 240px;
+  padding: 3px;
+  overflow-y: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-panel-strong);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.32);
+  font-family: var(--ui-font-family);
+  font-size: 12px;
+  writing-mode: horizontal-tb;
+}
+
+.linkSuggestItem {
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: start;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.linkSuggestItem.isActive {
+  background: var(--accent-soft);
+}
+
 .imageHoverPreview {
   position: fixed;
   z-index: 40;
