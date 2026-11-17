@@ -19,6 +19,8 @@ export type LinkIndexHandle = {
   version: number;
   /** The index of `rootPath`, once it has been read at least once. */
   current: (rootPath: string) => Promise<LinkIndex | null>;
+  /** The index as it stands, without waiting; null until it has been read (3-2). */
+  peek: (rootPath: string) => LinkIndex | null;
   /** A save of `path` finished with `content`. */
   noteSaved: (path: string, content: string) => void;
   /** Reads the files again by their stamps (after this window wrote some). */
@@ -148,10 +150,15 @@ export function useLinkIndex({
     [refreshIndex],
   );
 
+  const peek = useCallback((root: string) => {
+    const index = indexRef.current;
+    return index && index.rootPath === root ? index : null;
+  }, []);
+
   const refresh = useCallback(async () => {
     const index = indexRef.current;
     if (index) await refreshIndex(index.rootPath).catch(() => undefined);
   }, [refreshIndex]);
 
-  return { version, current, noteSaved, refresh };
+  return { version, current, peek, noteSaved, refresh };
 }
