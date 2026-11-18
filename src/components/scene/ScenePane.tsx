@@ -3,17 +3,25 @@
 // shown tab's front matter, like the properties pane does, when the field is
 // committed (Enter or leaving it); the tab saves it with the body. Progress is
 // saved by the same call as the binder's progress mark.
-import { useEffect, useRef, useState } from "react";
+//
+// BINDER 3-3 adds the material list of a manuscript (front matter `materials`),
+// written the same way. The front matter is read only when its text changed,
+// not on every keystroke in the body (確認1の決定6).
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { SynopsisState } from "../../corkboard/synopsis";
 import { loadSynopsis, loadedSynopsis } from "../../corkboard/loadSynopsis";
 import { SYNOPSIS_KEY, propertyLabel } from "../../properties/propertyLabels";
+import { parseFrontMatter } from "../../utils/frontmatter";
 import {
   fileProgressLabels,
   fileProgressMarkers,
   fileProgressStatuses,
   type FileProgressStatus,
 } from "../../types";
+import { MaterialsSection, type SceneMaterials } from "./MaterialsSection";
 import "./scene.css";
+
+export type { SceneMaterials } from "./MaterialsSection";
 
 export type ScenePaneProps = {
   /** Changes when another tab is shown; a half-typed synopsis is dropped then. */
@@ -25,11 +33,13 @@ export type ScenePaneProps = {
   /** Progress of the shown manuscript; null when it has none (a material, a file outside a work, an untitled document). */
   progress: FileProgressStatus | null;
   onSetProgress: (status: FileProgressStatus) => void;
+  /** The material list's links (BINDER 3-3); null hides it (anything but a manuscript in a work). */
+  materials?: SceneMaterials | null;
   /** Escape: back to the body. */
   onExit: () => void;
 };
 
-export function ScenePane({ documentKey, markdown, onChangeMarkdown, progress, onSetProgress, onExit }: ScenePaneProps) {
+export function ScenePane({ documentKey, markdown, onChangeMarkdown, progress, onSetProgress, materials = null, onExit }: ScenePaneProps) {
   const [synopsisModule, setSynopsisModule] = useState(loadedSynopsis);
   const [draft, setDraft] = useState<{ key: string; text: string } | null>(null);
   const latest = useRef({ documentKey, markdown });
@@ -51,9 +61,16 @@ export function ScenePane({ documentKey, markdown, onChangeMarkdown, progress, o
     setDraft((current) => (current && current.key !== documentKey ? null : current));
   }, [documentKey]);
 
-  if (markdown === null) return <div className="scenePane" aria-label="この場面" />;
+  // Typing in the body changes only the body; the YAML is read again only when
+  // the front matter's text is different.
+  const metadata = markdown === null ? null : parseFrontMatter(markdown).metadata;
+  const state: SynopsisState | null = useMemo(
+    () => (synopsisModule && metadata !== null ? synopsisModule.readSynopsisFromMetadata(metadata) : null),
+    [metadata, synopsisModule],
+  );
 
-  const state: SynopsisState | null = synopsisModule ? synopsisModule.readSynopsis(markdown) : null;
+  if (markdown === null || metadata === null) return <div className="scenePane" aria-label="この場面" />;
+
   const editable = state?.kind === "text" || state?.kind === "none";
   const shown = state?.kind === "text" || state?.kind === "readonly" ? state.text : "";
   const value = draft && draft.key === documentKey ? draft.text : shown;
@@ -118,6 +135,15 @@ export function ScenePane({ documentKey, markdown, onChangeMarkdown, progress, o
             ))}
           </div>
         </section>
+      )}
+      {materials && (
+        <MaterialsSection
+          documentKey={documentKey}
+          metadata={metadata}
+          materials={materials}
+          latestMarkdown={() => latest.current.markdown}
+          onChangeMarkdown={onChangeMarkdown}
+        />
       )}
     </div>
   );

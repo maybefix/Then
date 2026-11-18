@@ -31,6 +31,15 @@ await build({
   external: ["react", "react/jsx-runtime", "yaml"],
 });
 const { ScenePane } = await import(`${pathToFileURL(path.join(dir, "scene-pane.mjs")).href}?${Date.now()}`);
+await build({
+  entryPoints: ["src/links/linkIndex.ts"],
+  outfile: path.join(dir, "link-index.mjs"),
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  external: ["yaml"],
+});
+const { LinkIndex } = await import(`${pathToFileURL(path.join(dir, "link-index.mjs")).href}?${Date.now()}`);
 
 const WITH = "---\r\nslug: a # 残す\r\nsynopsis: 書庫に眠っていた未発送の手紙。\r\ntags:\r\n  - x\r\n---\r\n\r\n　本文。\r\n";
 const WITHOUT = "本文だけ（概要なし）。\n";
@@ -180,6 +189,165 @@ test("進捗のない文書（素材など）は進捗の区画を出さない�
   assert.equal(empty.container.querySelector(".scenePane").children.length, 0);
   assert.equal(empty.container.textContent, "");
   empty.unmount();
+});
+
+// BINDER 3-3: 素材の欄。行き先は本物の索引（3-1）に聞く。
+const ROOT = "C:\\Novel";
+const p = (relative) => `${ROOT}\\${relative.split("/").join("\\")}`;
+async function workIndex() {
+  const files = ["素材/汐見.md", "素材/灯.md", "素材/人物/港.md", "素材/a#b.md", "素材/地図.png", "第一章/a.md"];
+  const index = new LinkIndex(ROOT);
+  await index.refresh(
+    files.map((relative) => ({
+      path: p(relative),
+      kind: /\.md$/.test(relative) ? "text" : "asset",
+      modifiedAt: 1,
+      size: 0,
+      role: relative.startsWith("素材") ? "material" : null,
+    })),
+    async () => "",
+  );
+  return index;
+}
+const MATERIALS = '---\r\nslug: a # 残す\r\nmaterials:\r\n  - "[[汐見]]"\r\n  - "[[消えたノート]]"\r\n  - 汐見メモ\r\ntags: [x]\r\n---\r\n\r\n　本文。\r\n';
+async function mountMaterials(overrides = {}) {
+  const opened = [];
+  const index = overrides.index === undefined ? await workIndex() : overrides.index;
+  const view = await mount({
+    markdown: MATERIALS,
+    materials: { index, version: 1, onOpen: (link) => opened.push(link) },
+    ...overrides,
+  });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+  return { ...view, opened, index };
+}
+const section = (container) => container.querySelector(".sceneMaterials");
+const rows = (container) => [...container.querySelectorAll(".sceneMaterial")].map((row) =>
+  `${row.dataset.linkState}:${row.querySelector(".sceneMaterialOpen").textContent}`);
+const addButton = (container) => container.querySelector(".sceneMaterialAdd");
+const pickerOptions = (container) => [...container.querySelectorAll(".sceneMaterialOption")].map((option) => option.textContent);
+const query = (container) => container.querySelector(".sceneMaterialQuery");
+const LIST = 'materials:\r\n  - "[[汐見]]"\r\n  - "[[消えたノート]]"\r\n  - 汐見メモ\r\n';
+
+test("素材の欄: 項目と数、行き先のない項目は薄く押せない、ただの文字は押せない", async () => {
+  const { container, unmount } = await mountMaterials();
+  assert.ok(section(container));
+  assert.equal(container.querySelector(".sceneSectionCount").textContent, "3");
+  assert.deepEqual(rows(container), ["one:汐見", "none:消えたノート", "text:汐見メモ"]);
+  const buttons = [...container.querySelectorAll(".sceneMaterialOpen")];
+  assert.deepEqual(buttons.map((button) => button.disabled), [false, true, true]);
+  assert.equal(section(container).hasAttribute("data-scene-materials-drop"), true);
+  assert.equal(container.querySelectorAll(".sceneMaterialRemove").length, 3);
+  unmount();
+});
+
+test("素材の欄は materials を渡したときだけ（原稿だけ、決定1）", async () => {
+  const { container, unmount } = await mount({ markdown: MATERIALS });
+  assert.equal(section(container), null);
+  unmount();
+});
+
+test("項目を押すと 3-2 と同じ流れで開く。「リンクを直して開く」は materials のその名前だけを直す", async () => {
+  const { container, calls, opened, unmount } = await mountMaterials();
+  await click(container.querySelector(".sceneMaterialOpen"));
+  assert.equal(opened.length, 1);
+  assert.equal(opened[0].kind, "name");
+  assert.equal(opened[0].target, "汐見");
+  await act(async () => opened[0].rewriteTarget("人物/汐見"));
+  assert.deepEqual(calls.change, [MATERIALS.replace('"[[汐見]]"', '"[[人物/汐見]]"')]);
+  unmount();
+});
+
+test("「＋」: 入っていないノートだけ。# を含む名前・画像・原稿は出さない。打つと絞り込み、Enter で足す", async () => {
+  const { container, calls, unmount } = await mountMaterials();
+  assert.equal(addButton(container).disabled, false);
+  await click(addButton(container));
+  assert.deepEqual(pickerOptions(container), ["港", "灯"]);
+  await setValue(query(container), "灯");
+  assert.deepEqual(pickerOptions(container), ["灯"]);
+  await key(query(container), "Enter", { isComposing: true });
+  assert.deepEqual(calls.change, [], "Enter while composing does not add");
+  await key(query(container), "Enter");
+  assert.deepEqual(calls.change, [MATERIALS.replace(LIST, `${LIST}  - "[[灯]]"\r\n`)]);
+  assert.equal(query(container), null, "the picker closes after adding");
+  unmount();
+});
+
+test("「＋」: ↑↓で選び、Esc で閉じる。押しても足せる", async () => {
+  const { container, calls, unmount } = await mountMaterials();
+  await click(addButton(container));
+  await key(query(container), "ArrowDown");
+  assert.equal(container.querySelector(".sceneMaterialOption.isActive").textContent, "灯");
+  await key(query(container), "Escape");
+  assert.equal(query(container), null);
+  assert.equal(calls.exit, 0, "Escape in the picker does not leave the pane");
+  await click(addButton(container));
+  await click(container.querySelectorAll(".sceneMaterialOption")[0]);
+  assert.deepEqual(calls.change, [MATERIALS.replace(LIST, `${LIST}  - "[[港]]"\r\n`)]);
+  unmount();
+});
+
+test("「＋」: 足せるノートがなければ押せない。索引がまだなければ一覧は空", async () => {
+  const all = await mountMaterials({ markdown: '---\nmaterials: ["[[汐見]]", "[[灯]]", "[[港]]"]\n---\n本文' });
+  assert.equal(addButton(all.container).disabled, true);
+  all.unmount();
+  const noIndex = await mountMaterials({ index: null });
+  assert.deepEqual(rows(noIndex.container), ["unknown:汐見", "unknown:消えたノート", "text:汐見メモ"]);
+  assert.equal(addButton(noIndex.container).disabled, true);
+  noIndex.unmount();
+});
+
+test("「×」: その項目だけ外す。最後の1つなら materials: [] を残す（決定3）", async () => {
+  const { container, calls, unmount } = await mountMaterials();
+  await click(container.querySelectorAll(".sceneMaterialRemove")[1]);
+  assert.deepEqual(calls.change, [MATERIALS.replace('  - "[[消えたノート]]"\r\n', "")]);
+  unmount();
+  const last = await mountMaterials({ markdown: '---\nslug: a\nmaterials:\n  - "[[汐見]]"\n---\n本文' });
+  await click(last.container.querySelector(".sceneMaterialRemove"));
+  assert.deepEqual(last.calls.change, ["---\nslug: a\nmaterials: []\n---\n本文"]);
+  last.unmount();
+});
+
+test("バインダーから落としたノートを足す。原稿・入っているノートは足さない", async () => {
+  const { container, calls, unmount } = await mountMaterials();
+  await act(async () => section(container).dispatchEvent(new window.CustomEvent("then-materials-drop", {
+    detail: { paths: [p("第一章/a.md"), p("素材/汐見.md"), p("素材/人物/港.md"), p("素材/灯.md")] },
+  })));
+  assert.deepEqual(calls.change, [MATERIALS.replace(LIST, `${LIST}  - "[[港]]"\r\n  - "[[灯]]"\r\n`)]);
+  unmount();
+});
+
+test("素材のない原稿に足すとキーを足す。フロントマターのない原稿には作る", async () => {
+  const { container, calls, unmount } = await mountMaterials({ markdown: WITHOUT });
+  assert.equal(container.querySelector(".sceneSectionCount").textContent, "0");
+  assert.equal(container.querySelectorAll(".sceneMaterial").length, 0);
+  await click(addButton(container));
+  await key(query(container), "Enter");
+  assert.deepEqual(calls.change, ['---\nmaterials:\n  - "[[港]]"\n---\n本文だけ（概要なし）。\n']);
+  unmount();
+});
+
+test("書けない形は読むだけ（決定5）: 開けるが、＋・×・落とす先はない", async () => {
+  const { container, opened, unmount } = await mountMaterials({ markdown: "---\nmaterials:\n  - [[汐見]]\n---\n本文" });
+  assert.deepEqual(rows(container), ["one:汐見"]);
+  assert.equal(addButton(container), null);
+  assert.equal(container.querySelectorAll(".sceneMaterialRemove").length, 0);
+  assert.equal(section(container).hasAttribute("data-scene-materials-drop"), false);
+  await click(container.querySelector(".sceneMaterialOpen"));
+  assert.equal(opened.length, 1);
+  unmount();
+  const broken = await mountMaterials({ markdown: "---\nmaterials: [oops\n---\n本文" });
+  assert.equal(section(broken.container), null);
+  broken.unmount();
+});
+
+test("本文だけ変わったときは同じ表示のまま。フロントマターが変われば読み直す", async () => {
+  const { container, render, unmount } = await mountMaterials();
+  await render({ markdown: MATERIALS.replace("本文。", "本文が増えた。") });
+  assert.deepEqual(rows(container), ["one:汐見", "none:消えたノート", "text:汐見メモ"]);
+  await render({ markdown: MATERIALS.replace("  - 汐見メモ\r\n", "") });
+  assert.deepEqual(rows(container), ["one:汐見", "none:消えたノート"]);
+  unmount();
 });
 
 let failed = 0;

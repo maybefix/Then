@@ -19,7 +19,15 @@ export type SynopsisState =
 export function readSynopsis(markdown: string): SynopsisState {
   const parts = parseFrontMatter(markdown);
   if (!parts.hasFrontMatter) return { kind: "none" };
-  const sheet = readProperties(parts.metadata);
+  return readSynopsisFromMetadata(parts.metadata);
+}
+
+/**
+ * The synopsis of a front matter's text. A screen that is drawn on every
+ * keystroke reads it only when the front matter changed (BINDER 3-3 の決定6).
+ */
+export function readSynopsisFromMetadata(metadata: string): SynopsisState {
+  const sheet = readProperties(metadata);
   if (sheet.errors.length > 0) return { kind: "error" };
   const row = sheet.rows.find((candidate) => candidate.key === SYNOPSIS_KEY);
   if (!row) return { kind: "none" };
