@@ -36,6 +36,8 @@ import {
   getSidebarHeadingCharCount,
 } from "./sidebarMetrics";
 import { orderRootEntriesByTier, splitBinderTiers } from "./binderTiers";
+import { findProjectEntry } from "../../utils/projectTree";
+import { MATERIALS_DROP_ATTRIBUTE, MATERIALS_DROP_EVENT, type MaterialsDropDetail } from "../scene/materialsDrop";
 
 type WorkspaceSidebarProps = {
   projectFolder: ProjectFolder | null;
@@ -199,6 +201,8 @@ type PointerDragState = {
   isDragging: boolean;
   /** 素材の段の画像・PDF を動かしているとき（BINDER 2-6）。素材の中のフォルダへだけ落とせる。 */
   reference?: MaterialReference;
+  /** 動かしているのがノート（素材のテキストファイル）だけのとき。「この場面」の素材の欄へも落とせる（BINDER 3-3）。 */
+  notes?: boolean;
 };
 
 type TreeDropTarget =
@@ -902,6 +906,8 @@ export function WorkspaceSidebar({
   const navigationHeadingSelectionRef = useRef<NavigationHeadingSelection | null>(null);
   const lastHeadingDragOverRef = useRef("");
   const dropTargetRef = useRef<TreeDropTarget>(null);
+  // 「この場面」の素材の欄（ツリーの外）。ドラッグ中に上にあるあいだだけ強調する（BINDER 3-3）。
+  const materialsDropRef = useRef<HTMLElement | null>(null);
   const suppressNextClickRef = useRef(false);
   const selectedFilePathsRef = useRef(selectedFilePaths);
   const replaceSelectedFilePaths = (paths: Iterable<string>) => {
@@ -1019,11 +1025,20 @@ export function WorkspaceSidebar({
     setDraggingEntryPaths(new Set());
     dropTargetRef.current = null;
     setDropTarget(null);
+    updateMaterialsDrop(null);
   };
 
   const updateDropTarget = (nextDropTarget: TreeDropTarget) => {
     dropTargetRef.current = nextDropTarget;
     setDropTarget(nextDropTarget);
+  };
+
+  const updateMaterialsDrop = (next: HTMLElement | null) => {
+    const current = materialsDropRef.current;
+    if (current === next) return;
+    current?.removeAttribute("data-drop-active");
+    next?.setAttribute("data-drop-active", "true");
+    materialsDropRef.current = next;
   };
 
   const updateDropTargetFromPoint = (
@@ -1056,6 +1071,14 @@ export function WorkspaceSidebar({
           ? { kind: "moveInto", folderPath, entryPath: folderPath }
           : null,
       );
+      return;
+    }
+    // ノートだけを「この場面」の素材の欄へ落とすと、素材リストに足す（BINDER 3-3）。ツリーの外なので、
+    // ツリーの中の判定には当たらない。
+    const materialsDrop = dragState.notes ? element?.closest<HTMLElement>(`[${MATERIALS_DROP_ATTRIBUTE}]`) ?? null : null;
+    updateMaterialsDrop(materialsDrop);
+    if (materialsDrop) {
+      updateDropTarget(null);
       return;
     }
     if (sectionHeader) {
@@ -1187,6 +1210,12 @@ export function WorkspaceSidebar({
       startX: event.clientX,
       startY: event.clientY,
       isDragging: false,
+      notes:
+        !isFolder && projectFolder !== null &&
+        entryPaths.every((path) => {
+          const entry = findProjectEntry(projectFolder.children, path);
+          return entry?.kind === "file" && entry.role === "material";
+        }),
     };
     // Capture immediately so an ordinary drag keeps delivering pointer events
     // after the cursor leaves the narrow source row. Waiting for the first
@@ -1249,7 +1278,12 @@ export function WorkspaceSidebar({
         suppressNextClickRef.current = false;
       }, 0);
       const activeDropTarget = dropTargetRef.current;
-      if (dragState.reference) {
+      const materialsDrop = materialsDropRef.current;
+      if (materialsDrop) {
+        materialsDrop.dispatchEvent(
+          new CustomEvent<MaterialsDropDetail>(MATERIALS_DROP_EVENT, { detail: { paths: dragState.entryPaths } }),
+        );
+      } else if (dragState.reference) {
         if (activeDropTarget?.kind === "moveInto") onMoveReference?.(dragState.reference, activeDropTarget.folderPath);
       } else if (activeDropTarget?.kind === "reorder") {
         const isSameParent =

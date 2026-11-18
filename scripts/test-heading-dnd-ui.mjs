@@ -24,8 +24,18 @@ const binderTiersUrl = `data:text/javascript;base64,${Buffer.from(
     compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
   }).outputText,
 ).toString("base64")}`;
+// ツリーの項目を引く処理（projectTree.ts）と、素材の欄へ落とす目印（BINDER 3-3、materialsDrop.ts）も型の import だけ。
+const moduleUrl = async (file) => `data:text/javascript;base64,${Buffer.from(
+  ts.transpileModule(await readFile(file, "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText,
+).toString("base64")}`;
+const projectTreeUrl = await moduleUrl("src/utils/projectTree.ts");
+const materialsDropUrl = await moduleUrl("src/components/scene/materialsDrop.ts");
 sidebarSource = sidebarSource
   .replace('from "./binderTiers"', `from "${binderTiersUrl}"`)
+  .replace('from "../../utils/projectTree"', `from "${projectTreeUrl}"`)
+  .replace('from "../scene/materialsDrop"', `from "${materialsDropUrl}"`)
   .replace('from "react"', `from "${reactUrl}"`)
   .replace('from "react-dom"', `from "${reactDomUrl}"`)
   .replace(

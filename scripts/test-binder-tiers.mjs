@@ -109,7 +109,7 @@ globalThis.window = dom.window;
 globalThis.document = dom.window.document;
 Object.defineProperty(globalThis, "navigator", { configurable: true, value: dom.window.navigator });
 Object.defineProperty(globalThis, "localStorage", { configurable: true, value: dom.window.localStorage });
-for (const name of ["HTMLElement", "Element", "Node", "MouseEvent", "Event", "KeyboardEvent", "getComputedStyle"]) {
+for (const name of ["HTMLElement", "Element", "Node", "MouseEvent", "Event", "CustomEvent", "KeyboardEvent", "getComputedStyle"]) {
   globalThis[name] = name === "getComputedStyle" ? dom.window.getComputedStyle.bind(dom.window) : dom.window[name];
 }
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
@@ -344,6 +344,45 @@ async function choose(target, label) {
   takeCalls();
   await drag(row(view.container, "資料/人物.md"), row(view.container, "第一章"), 10);
   assert.deepEqual(takeCalls(), [["onMoveEntry", ["本編.md", "資料/人物.md"], "第一章"]]);
+
+  // 「この場面」の素材の欄（ツリーの外）へは、ノートだけを落とせる（BINDER 3-3）。ツリーの移動・並べ替えは呼ばない。
+  {
+    const zone = document.createElement("section");
+    zone.setAttribute("data-scene-materials-drop", "");
+    const dropped = [];
+    zone.addEventListener("then-materials-drop", (event) => dropped.push(event.detail.paths.map(rel)));
+    document.querySelector(".appShell").append(zone);
+    await click(row(view.container, "資料/人物.md").querySelector(".fileTreeItemPrimary"));
+    await click(row(view.container, "本編.md").querySelector(".fileTreeItemPrimary"), { ctrlKey: true });
+    takeCalls();
+    await drag(row(view.container, "資料/人物.md"), zone);
+    assert.deepEqual(dropped, [], "原稿を含む選択は落とせない");
+    assert.deepEqual(takeCalls(), [], "ツリーの外なので、移動もしない");
+    await click(row(view.container, "資料/人物.md").querySelector(".fileTreeItemPrimary"));
+    takeCalls();
+    const button = row(view.container, "資料/人物.md").querySelector(".treeItemPrimary");
+    zone.getBoundingClientRect = rowRect;
+    pointerTarget = zone;
+    await act(async () => {
+      button.dispatchEvent(pointerEvent("pointerdown", pointerId, 0));
+      button.dispatchEvent(pointerEvent("pointermove", pointerId, 10));
+    });
+    assert.equal(zone.getAttribute("data-drop-active"), "true", "ノートを載せているあいだ欄を強調する");
+    const releaseOn = row(view.container, "資料/人物.md").querySelector(".treeItemPrimary");
+    assert.equal(releaseOn, button, "the row was not drawn again while dragging");
+    await act(async () => releaseOn.dispatchEvent(pointerEvent("pointerup", pointerId, 10)));
+    pointerId += 1;
+    pointerTarget = null;
+    assert.equal(zone.hasAttribute("data-drop-active"), false, "落としたら強調を外す");
+    assert.deepEqual(dropped, [["資料/人物.md"]], "落としたノートを欄へ知らせる");
+    assert.deepEqual(takeCalls(), [], "ツリーの移動・並べ替えは呼ばない");
+    await drag(row(view.container, "本編.md"), zone);
+    await drag(row(view.container, "資料/年表"), zone);
+    assert.deepEqual(dropped, [["資料/人物.md"]], "原稿・フォルダは落とせない");
+    assert.equal(zone.hasAttribute("data-drop-active"), false);
+    assert.deepEqual(takeCalls(), []);
+    zone.remove();
+  }
 
   // メニュー。
   assert.deepEqual(await menuLabels(header(view.container, "manuscript")), ["ファイルを追加", "フォルダを追加"]);
