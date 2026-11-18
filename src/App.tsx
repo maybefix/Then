@@ -7004,6 +7004,10 @@ export default function App() {
     onSetProgress: (status: FileProgressStatus) => {
       if (sceneProgressPath) handleSetFileProgress(sceneProgressPath, status);
     },
+    // 素材（BINDER 3-3）: 進捗と同じく、作品の中の原稿だけ。行き先は索引（3-1）、押したら 3-2 と同じ流れで開く。
+    materials: sceneProgressPath
+      ? { index: linkIndex.peek(), version: linkIndex.version, onOpen: linkOpenActions.activate }
+      : null,
   };
 
   return (
