@@ -153,19 +153,29 @@ function manuscript(chars, seed = 42) {
  * of which is the long manuscript being typed into. Typing then also drives the
  * project AST and the sidebar's per-file and per-folder counts.
  */
-function installProjectMock({ chars, manuscriptSource, manuscriptText = null, settings = {} }) {
+function installProjectMock({ chars, manuscriptSource, manuscriptText = null, settings = {}, rightPane = null }) {
   const make = new Function(`return (${manuscriptSource})`)();
   const root = "C:/bench/library/work";
   const files = new Map();
+  // --right-pane: the right pane open on that tab. With it, 「資料」 is the materials
+  // folder and the manuscript has a synopsis and a material list (BINDER 3-3), so
+  // 「この場面」 has something to read.
+  const frontMatter = rightPane
+    ? "---\nsynopsis: 書庫に眠っていた未発送の手紙。\nmaterials:\n  - \"[[資料1]]\"\n  - \"[[資料2]]\"\n  - \"[[消えた資料]]\"\n---\n"
+    : "";
   const children = ["本編", "設定", "資料"].map((folder, folderIndex) => ({
     path: `${root}/${folder}`,
     name: folder,
     kind: "folder",
+    ...(rightPane && folder === "資料" ? { role: "material" } : {}),
     children: Array.from({ length: 8 }, (_, fileIndex) => {
       const name = folderIndex === 0 && fileIndex === 0 ? "第一部.md" : `${folder}${fileIndex + 1}.md`;
       const path = `${root}/${folder}/${name}`;
-      files.set(path, folderIndex === 0 && fileIndex === 0 ? (manuscriptText ?? make(chars)) : make(3000 + fileIndex * 700, 7 + fileIndex));
-      return { path, name, kind: "file", children: [], fileId: path, contentHash: null, modifiedAt: 1 };
+      files.set(path, folderIndex === 0 && fileIndex === 0 ? frontMatter + (manuscriptText ?? make(chars)) : make(3000 + fileIndex * 700, 7 + fileIndex));
+      return {
+        path, name, kind: "file", children: [], fileId: path, contentHash: null, modifiedAt: 1,
+        ...(rightPane && folder === "資料" ? { role: "material" } : {}),
+      };
     }),
   }));
   const folder = {
@@ -178,9 +188,13 @@ function installProjectMock({ chars, manuscriptSource, manuscriptText = null, se
     lastWorkspacePath: root,
     lastFilePath: `${root}/本編/第一部.md`,
     settings: { skipStartupPortal: true, ...settings },
+    ...(rightPane ? { rightSidebarTab: rightPane, rightSidebarCollapsed: false } : {}),
   };
   const responses = {
     load_app_state: () => state,
+    list_link_stamps: () => children.flatMap((entry) => entry.children).map((entry) => ({
+      path: entry.path, kind: "text", modifiedAt: 1, size: files.get(entry.path).length, role: entry.role ?? null,
+    })),
     list_project_text_files: () => folder,
     read_text_file: ({ path }) => ({ path, name: path.split("/").pop(), content: files.get(path) ?? "", fileId: path, contentHash: null }),
     load_project_file_progress: () => ({ fileProgress: {}, revision: 0, migratedCount: 0, contentHash: "", rebased: false }),
@@ -348,7 +362,7 @@ try {
   };
   if (PROJECT) {
     await page.send("Page.addScriptToEvaluateOnNewDocument", {
-      source: `(${installProjectMock})(${JSON.stringify({ chars: CHARS, manuscriptSource: manuscript.toString(), manuscriptText: MANUSCRIPT_TEXT, settings: flag("typewriter") ? {
+      source: `(${installProjectMock})(${JSON.stringify({ chars: CHARS, manuscriptSource: manuscript.toString(), manuscriptText: MANUSCRIPT_TEXT, rightPane: option("right-pane", null), settings: flag("typewriter") ? {
         typewriterScroll: true, editorDisplayMode: "continuous",
         writingMode: option("writing-mode", "vertical-rl"),
         showLineNumbers: flag("line-numbers"), highlightCurrentLine: flag("highlight-line"),
@@ -393,6 +407,13 @@ try {
         await new Promise((resolve) => setTimeout(resolve, 2500));
         return Boolean(document.querySelector(".ProseMirror"));
       })()`);
+  if (opened && option("right-pane", null)) {
+    // What the right pane shows while typing (「この場面」: the synopsis, and the materials since BINDER 3-3).
+    console.log(`right pane: ${await evaluate(`JSON.stringify({
+      synopsis: document.querySelector(".scenePane textarea")?.value ?? null,
+      materials: [...document.querySelectorAll(".sceneMaterial")].map((row) => row.dataset.linkState + ":" + row.textContent),
+    })`)}`);
+  }
   if (!opened) {
     const unknown = PROJECT ? await evaluate("[...(window.__benchUnknownCommands ?? [])].join(', ')") : "";
     const text = await evaluate("document.body.innerText.slice(0, 300) + ' | editor chars: ' + (document.querySelector('.ProseMirror')?.textContent.length ?? 'none')");
