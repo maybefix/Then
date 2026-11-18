@@ -27,7 +27,6 @@ import {
   typedTextOf,
 } from "./editor/linkDecorations";
 import { LinkSuggest, type LinkSuggestAnchor, suggestAnchor } from "./components/editor/LinkSuggest";
-import { linkSuggestDebug, watchInputEvents } from "./editor/linkSuggestDebug";
 import { spliceRootDecorations } from "./editor/spliceRootDecorations";
 import Document from "@tiptap/extension-document";
 import History from "@tiptap/extension-history";
@@ -3554,15 +3553,6 @@ export function VerticalTextEditor({
     anchor: LinkSuggestAnchor;
   } | null>(null);
   const linkSuggestOpenRef = useRef(false);
-  /** 調べもの用の記録（linkSuggestDebug）に添える、カーソルのまわりの様子。 */
-  const linkDebugCaret = (editor: Editor) => {
-    const { head, empty } = editor.state.selection;
-    return {
-      head, empty, open: linkSuggestOpenRef.current, composing: isEditorComposing(editor, composingRef),
-      viewComposing: editor.view.composing, before: editor.state.doc.textBetween(Math.max(0, head - 8), head, "/"),
-      hasLookup: Boolean(linkLookupRef.current), isNote: linkLookupRef.current?.isNote,
-    };
-  };
   const closeLinkSuggest = useCallback(() => {
     linkSuggestOpenRef.current = false;
     setLinkSuggest((current) => (current ? null : current));
@@ -3571,9 +3561,7 @@ export function VerticalTextEditor({
     const editor = tiptapRef.current;
     const links = linkLookupRef.current;
     if (!editor || !links || !linkSuggestOpenRef.current) return;
-    linkSuggestDebug?.("refresh", linkDebugCaret(editor));
     if (isEditorComposing(editor, composingRef)) {
-      linkSuggestDebug?.("refresh.hide-composing");
       setLinkSuggest((current) => (current ? null : current));
       return;
     }
@@ -3586,12 +3574,10 @@ export function VerticalTextEditor({
     const line = astKey.getState(state)?.lines[lineIndex];
     const lineStart = pmStartAtIndex(state.doc, lineIndex);
     if (!line || lineStart === null || !namesCountedOn(links.isNote, line.source)) {
-      linkSuggestDebug?.("refresh.close-line", { line: line?.source, lineStart });
       closeLinkSuggest();
       return;
     }
     const query = suggestQueryAt(line.source, state.selection.head - (lineStart + 1));
-    linkSuggestDebug?.("refresh.query", { line: line.source, caret: state.selection.head - (lineStart + 1), query });
     if (!query) {
       closeLinkSuggest();
       return;
@@ -3616,7 +3602,6 @@ export function VerticalTextEditor({
   armLinkSuggestRef.current = (insert: string) => {
     const editor = tiptapRef.current;
     const links = linkLookupRef.current;
-    if (editor) linkSuggestDebug?.("arm", { insert, ...linkDebugCaret(editor) });
     if (!editor || !links || !editor.state.selection.empty) return;
     if (isEditorComposing(editor, composingRef)) return;
     const lineIndex = activeLineIndex(editor.state);
@@ -3624,7 +3609,6 @@ export function VerticalTextEditor({
     const lineStart = pmStartAtIndex(editor.state.doc, lineIndex);
     if (!line || lineStart === null || !namesCountedOn(links.isNote, line.source)) return;
     const caret = editor.state.selection.head - (lineStart + 1);
-    linkSuggestDebug?.("arm.check", { line: line.source, caret, opens: suggestOpensAfterInsert(insert, line.source, caret) });
     if (!suggestOpensAfterInsert(insert, line.source, caret)) return;
     linkSuggestOpenRef.current = true;
   };
@@ -5371,7 +5355,6 @@ export function VerticalTextEditor({
         // 安い見分け（`[` を打ったか）を先に置く。この先は行の位置を数えるので、
         // 1打ごとには走らせない。打った文字は transaction から読む（`change` は
         // 変わった行の全体で、末尾に改行が付くため、`[` で終わるとは限らない）。
-        linkSuggestDebug?.("update", { typed: typedTextOf(transaction), steps: transaction.steps.length, ...linkDebugCaret(currentEditor) });
         if (!linkSuggestOpenRef.current) {
           const typed = typedTextOf(transaction);
           if (typed.endsWith("[")) armLinkSuggestRef.current?.(typed);
@@ -5717,7 +5700,6 @@ export function VerticalTextEditor({
         // BINDER 3-2: 変換中は候補を隠すだけなので、確定したら確定した文字で出し直す。
         // 日本語入力で `[[` を確定したときも、ここで候補を開く。
         const head = editor.state.selection.head;
-        linkSuggestDebug?.("compositionend.frame", linkDebugCaret(editor));
         if (linkSuggestOpenRef.current) {
           refreshLinkSuggestRef.current();
         } else if (head >= 2 && editor.state.doc.textBetween(head - 2, head) === "[[") {
@@ -5842,7 +5824,6 @@ export function VerticalTextEditor({
       requestLineBreakMarks();
     });
 
-    const unwatchInputEvents = watchInputEvents(editor.view.dom);
     const uninstallNativeIme = installNativeImeExperiment(editor, shellRef.current!, {
       start: handleCompositionStart,
       update: () => {
@@ -5855,7 +5836,6 @@ export function VerticalTextEditor({
 
     return () => {
       uninstallNativeIme();
-      unwatchInputEvents();
       scroller.removeEventListener("wheel", handleWheel);
       scroller.removeEventListener("mousedown", handleMouseDown);
       editor.view.dom.removeEventListener("pointerdown", handlePointerDown, { capture: true });
