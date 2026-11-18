@@ -205,8 +205,10 @@
   cursor: default;
 }
 
-/* No destination (the note was deleted, or never existed): faint, as in the body (3-2). */
-.sceneMaterial[data-link-state="none"] .sceneMaterialOpen {
+/* No destination (the note was deleted, or never existed), or more than one:
+   faint and dashed, as links are drawn in the body (3-2). More than one still opens (to choose). */
+.sceneMaterial[data-link-state="none"] .sceneMaterialOpen,
+.sceneMaterial[data-link-state="many"] .sceneMaterialOpen {
   color: var(--text-muted);
   text-decoration: underline dashed;
   text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
@@ -246,10 +248,19 @@
   font-size: 12.5px;
 }
 
+/* The notes that can be added, framed apart from the items already in the list. */
 .sceneMaterialOptions {
   display: grid;
   max-height: 200px;
+  padding: 3px;
   overflow-y: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-panel-strong);
+}
+
+.sceneMaterialOptions:empty {
+  display: none;
 }
 
 .sceneMaterialOption.isActive {
