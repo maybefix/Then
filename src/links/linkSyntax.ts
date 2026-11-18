@@ -83,6 +83,18 @@ export function findLinksInLine(line: string, names: boolean): FoundLink[] {
   return out;
 }
 
+/**
+ * Whether `[[name]]` reads back as a link to exactly `name` (BINDER 3-3). Names
+ * holding `|` or `#`, or brackets where they close the link early, do not, so
+ * a link written with them would point somewhere else.
+ */
+export function canWriteNameLink(name: string): boolean {
+  const written = `${OPEN}${name}${CLOSE}`;
+  const links = findLinksInLine(written, true);
+  return links.length === 1 && links[0].kind === "name" && links[0].target === name &&
+    links[0].fullFrom === 0 && links[0].fullTo === written.length;
+}
+
 /** Links of `text`, in order. `isNote` is the file's role (material = note). */
 export function findLinks(text: string, isNote: boolean): FoundLink[] {
   const links: FoundLink[] = [];
