@@ -268,6 +268,47 @@ export class LinkIndex {
   }
 
   /**
+   * Every file a link could mean (3-2). None: nowhere. More than one: not
+   * decided (4A), and the editor asks which one.
+   */
+  candidatesFor(link: IndexedLink): string[] {
+    if (link.kind === "path") {
+      const path = this.table.resolvePath(link.target);
+      return path ? [path] : [];
+    }
+    return this.table.candidates(link.target);
+  }
+
+  /**
+   * The shortest `[[name]]` that means `path` alone: the file name, else as
+   * many folders as it takes (`人物/汐見`). Null when even the whole path
+   * does not come back to it.
+   */
+  shortestName(path: string): string | null {
+    const relative = relativeTo(this.rootPath, path);
+    if (!relative) return null;
+    const parts = stem(relative).split("/");
+    for (let take = 1; take <= parts.length; take += 1) {
+      const candidate = parts.slice(parts.length - take).join("/");
+      const resolved = this.table.resolveName(candidate);
+      if (resolved && comparable(resolved) === comparable(path)) return candidate;
+    }
+    return null;
+  }
+
+  /** The names to suggest while typing `[[` (3-2): the notes of this work. */
+  noteNames(): Array<{ name: string; path: string }> {
+    const names: Array<{ name: string; path: string }> = [];
+    for (const stamp of this.stamps) {
+      if (stamp.kind !== "text" || (stamp.role ?? null) !== "material") continue;
+      const name = this.shortestName(stamp.path);
+      if (name) names.push({ name, path: stamp.path });
+    }
+    names.sort((left, right) => left.name.localeCompare(right.name, "ja"));
+    return names;
+  }
+
+  /**
    * Files that hold a link to something `changes` moved, decided on the files
    * as they were before. `stampsAfter` lists the files after the change.
    */
@@ -275,7 +316,8 @@ export class LinkIndex {
     const { rewrite } = this.planRewrite(changes, stampsAfter);
     const result: string[] = [];
     for (const file of this.files.values()) {
-      if (file.links.some((link) => rewrite({ kind: link.kind, target: link.target, from: 0, to: 0 }) !== null)) {
+      if (file.links.some((link) =>
+        rewrite({ kind: link.kind, target: link.target, from: 0, to: 0, fullFrom: 0, fullTo: 0 }) !== null)) {
         result.push(applyChanges(file.path, changes));
       }
     }

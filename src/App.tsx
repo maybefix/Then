@@ -70,6 +70,9 @@ import { usePropertyValueIndex } from "./properties/usePropertyValueIndex";
 import { useLinkIndex } from "./links/useLinkIndex";
 import { linkRewriteMessage, rewriteLinksAfterPathChange as rewriteLinksInFiles } from "./links/linkRewrite";
 import type { LinkStamp } from "./links/linkIndex";
+import { readLinkFile, writeLinkFile } from "./links/linkFiles";
+import { createLinkOpenActions } from "./links/linkOpenActions";
+import { useLinkLookup } from "./links/useLinkLookup";
 import {
   CheckpointStudio,
   type CheckpointCurrentProjectFile,
@@ -1801,6 +1804,8 @@ export default function App() {
   const documentMode = documentModeFor(currentFilePath, materialPaths);
   const editorSettings = useMemo(() => editorSettingsFor(settings, documentMode), [documentMode, settings]);
   const isNotePath = useCallback((path: string) => documentModeFor(path, materialPaths) === "note", [materialPaths]);
+  // BINDER 3-2: エディタに渡す「リンクの行き先の引き口」。
+  const linkLookup = useLinkLookup(linkIndex, projectFolder?.path ?? null, documentMode === "note");
   const isNewTabStartPage =
     activeTab?.kind === "scratch" && activeTab.name === newTabName && markdown.trim() === "";
   const activeWorkspaceRootPath = useMemo(() => {
@@ -3878,7 +3883,7 @@ export default function App() {
     }
 
     const reservedThenShortcut = mod && (
-      (!event.altKey && !event.shiftKey && ["n", "f", "p", "b", "i", "0", "1", "2", "3", "4", "5", "6"].includes(key.toLowerCase())) ||
+      (!event.altKey && !event.shiftKey && ["n", "f", "p", "b", "i", "l", "0", "1", "2", "3", "4", "5", "6"].includes(key.toLowerCase())) ||
       (!event.altKey && event.code === "Slash") ||
       (!event.altKey && event.shiftKey && key.toLowerCase() === "s") ||
       (event.altKey && !event.shiftKey && ["i", "b"].includes(key.toLowerCase()))
@@ -3958,6 +3963,10 @@ export default function App() {
     } else if (event.code === "Slash") {
       event.preventDefault();
       applyLineCommentToggle();
+    } else if (key === "l" || key === "L") {
+      // Ctrl+L：ノートの名前の候補（BINDER 3-2）。かな入力では `[[` を打てないため。
+      event.preventDefault();
+      editorInstanceRef.current?.startLinkSuggest();
     }
   };
 
@@ -6289,8 +6298,25 @@ export default function App() {
     Array<{ rootPath: string; changes: PathChange[]; message: string }>
   >([]);
   const linkRewriteRunningRef = useRef(false);
-  const linkRewriteDepsRef = useRef({ setActiveMarkdown, enqueueDocumentSave, showToast, linkIndex });
-  linkRewriteDepsRef.current = { setActiveMarkdown, enqueueDocumentSave, showToast, linkIndex };
+  const linkRewriteDeps = { setActiveMarkdown, enqueueDocumentSave, showToast, linkIndex, requestOption };
+  const linkRewriteDepsRef = useRef(linkRewriteDeps);
+  linkRewriteDepsRef.current = linkRewriteDeps;
+  // 文書の本文を書く口（3-1 の改名の書き換えと、3-2 の「元に戻す」が使う）。
+  const documentWrite = useMemo(() => ({
+    readFile: readLinkFile,
+    writeFile: writeLinkFile,
+    applyToActiveTab: (_tab: { id: string; path: string }, text: string) => {
+      // 書き換えはこの文書の変更なので、開いてから打っていなくても自動保存に届ける（プロパティの編集と同じ）。
+      didMountEditorRef.current = true;
+      linkRewriteDepsRef.current.setActiveMarkdown(text, null);
+    },
+    applyToBackgroundTab: async (tab: { id: string; path: string }, text: string) => {
+      setOpenTabs((current) =>
+        current.map((item) => (item.id === tab.id ? { ...item, markdown: text, saveStatus: "dirty" } : item)),
+      );
+      await linkRewriteDepsRef.current.enqueueDocumentSave({ tabId: tab.id, path: tab.path, content: text });
+    },
+  }), []);
   useEffect(() => {
     const job = pendingLinkRewrites[0];
     if (!job || linkRewriteRunningRef.current) return;
@@ -6316,24 +6342,8 @@ export default function App() {
                 }]
               : [],
           ),
-          readFile: async (path) => {
-            const document = await invoke<TextDocument>("read_text_file", { path });
-            return { content: document.content, contentHash: document.contentHash ?? null };
-          },
-          writeFile: async (path, content, expectedHash) =>
-            (await invoke<TextDocument>("save_text_file", { path, content, expectedHash })).content,
+          ...documentWrite,
           isConflict: isDocumentConflict,
-          applyToActiveTab: (_tab, text) => {
-            // 書き換えはこの文書の変更なので、開いてから打っていなくても自動保存に届ける（プロパティの編集と同じ）。
-            didMountEditorRef.current = true;
-            deps.setActiveMarkdown(text, null);
-          },
-          applyToBackgroundTab: async (tab, text) => {
-            setOpenTabs((current) =>
-              current.map((item) => (item.id === tab.id ? { ...item, markdown: text, saveStatus: "dirty" } : item)),
-            );
-            await deps.enqueueDocumentSave({ tabId: tab.id, path: tab.path, content: text });
-          },
         });
         const message = linkRewriteMessage(job.message, result);
         if (message) deps.showToast(message);
@@ -6345,7 +6355,7 @@ export default function App() {
         setPendingLinkRewrites((current) => current.slice(1));
       }
     })();
-  }, [pendingLinkRewrites]);
+  }, [documentWrite, pendingLinkRewrites]);
 
   // 投稿 →「ノートにする」（BINDER 2-3）。別の作品のノートの札は、作品を切り替え終えてから開く。
   const [pendingNoteOpen, setPendingNoteOpen] = useState<{ workRoot: string; path: string } | null>(null);
@@ -6370,6 +6380,22 @@ export default function App() {
     trashFile: (path) => new Promise<boolean>((resolve) => setPendingNoteTrash({ path, resolve })),
   };
   const postNoteActions = useMemo(() => createPostNoteActions(postNoteDepsRef), []);
+  // BINDER 3-2: 本文のリンクを押したときの流れ（src/links/linkOpenActions.ts）へ、画面とファイルの口を渡す。
+  const linkOpenActions = useMemo(() => createLinkOpenActions({
+    index: () => linkRewriteDepsRef.current.linkIndex.peek(),
+    requestOption: (options) => linkRewriteDepsRef.current.requestOption(options),
+    showToast: (message, action) => linkRewriteDepsRef.current.showToast(message, action),
+    openFile: (path) => handleProjectFileSelectRef.current(path),
+    tab: (id = activeTabIdRef.current ?? undefined) => {
+      const tab = openTabsRef.current.find((item) => item.id === id);
+      const isActive = tab?.id === activeTabIdRef.current;
+      return tab?.path ? { id: tab.id, path: tab.path, isActive, markdown: isActive ? activeMarkdownRef.current : tab.markdown } : null;
+    },
+    save: (tab) => linkRewriteDepsRef.current.enqueueDocumentSave({
+      tabId: tab.id, path: tab.path, content: tab.markdown, journalPosition: journalPositionOf(tab.id, tab.markdown),
+    }),
+    ...documentWrite,
+  }), [documentWrite]);
   useEffect(() => {
     if (!pendingNoteOpen || !projectFolder || !isSamePath(projectFolder.path, pendingNoteOpen.workRoot)) return;
     setPendingNoteOpen(null);
@@ -7318,6 +7344,8 @@ export default function App() {
                               settings.manuscript.linesPerPage,
                               settings.manuscript.fontSize,
                             ].join("|")}
+                            linkLookup={linkLookup}
+                            onLinkActivate={linkOpenActions.activate}
                             manuscript={editorSettings.manuscript}
                             onManuscriptProgressChange={editorManuscriptProgress.setSnapshot}
                             initialSelectionOffset={initialSelectionOffset}

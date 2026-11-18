@@ -17,6 +17,16 @@ import {
 } from "./editor/manuscriptLayout";
 import { DEFAULT_MANUSCRIPT_SETTINGS } from "./types";
 import { indexRootDecorations } from "./editor/indexedDecorations";
+import {
+  type LinkLookup,
+  linkPressAction,
+  linkSpansInLine,
+  namesCountedOn,
+  suggestOpensAfterInsert,
+  suggestQueryAt,
+  typedTextOf,
+} from "./editor/linkDecorations";
+import { LinkSuggest, type LinkSuggestAnchor, suggestAnchor } from "./components/editor/LinkSuggest";
 import { spliceRootDecorations } from "./editor/spliceRootDecorations";
 import Document from "@tiptap/extension-document";
 import History from "@tiptap/extension-history";
@@ -38,7 +48,7 @@ import {
   DecorationSet,
   type EditorView,
 } from "@tiptap/pm/view";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ImageHoverPreview } from "./components/editor/ImageHoverPreview";
 import {
   areDocumentIndexesEquivalent,
@@ -95,6 +105,8 @@ export type TextEditorHandle = {
   ) => { left: number; right: number; top: number; bottom: number } | null;
   scrollCaretIntoView: (offsetPercent: number) => void;
   isComposing: () => boolean;
+  /** BINDER 3-2: `[[]]` を入れて、ノートの名前の候補を出す（Ctrl+L）。 */
+  startLinkSuggest: () => void;
 };
 
 type VerticalTextEditorProps = {
@@ -144,6 +156,20 @@ type VerticalTextEditorProps = {
   manuscript?: ManuscriptSettings;
   /** 原稿用紙モードの進み具合。モードを外すと null。 */
   onManuscriptProgressChange?: (progress: ManuscriptProgress | null) => void;
+  /**
+   * BINDER 3-2: `[[ ]]` の描き方と行き先の引き口。索引が変わるたびに新しい値を
+   * 渡すと色を付け直す。null ならリンクを特別扱いしない。
+   */
+  linkLookup?: LinkLookup | null;
+  /**
+   * リンクを押したとき。行き先を決めて開くのは呼び出し側。`rewriteTarget` は
+   * 括弧の中の名前だけを書き換える（`|表示名` と `#見出し` は残す）。
+   */
+  onLinkActivate?: (link: {
+    kind: "name" | "path";
+    target: string;
+    rewriteTarget: (next: string) => void;
+  }) => void;
 };
 
 type AstPluginState = {
@@ -168,6 +194,8 @@ type AstPluginState = {
   commentsHidden: boolean;
   /** 原稿用紙モードの欧文ラン揃え。null なら付けない。 */
   latin: ManuscriptLatinContext | null;
+  /** BINDER 3-2: `[[ ]]` の描き方と行き先。null ならただの文字として扱う。 */
+  links: LinkLookup | null;
 };
 
 type ManuscriptFontKey = RunFontKey;
@@ -197,6 +225,8 @@ type AstMeta = {
   commentsHidden?: boolean;
   /** 欧文ラン揃えの切替。キーがあれば値（null を含む）へ置き換える。 */
   latin?: ManuscriptLatinContext | null;
+  /** リンクの行き先の引き口。キーがあれば値（null を含む）へ置き換える（BINDER 3-2）。 */
+  links?: LinkLookup | null;
 };
 
 type EditorViewWithInput = EditorView & {
@@ -932,6 +962,32 @@ function pushImageDecos(out: Decoration[], line: LineNode, contentStart: number)
   }
 }
 
+/**
+ * BINDER 3-2: the `[[name]]` and `@[[path]]` of one line, coloured; faint when
+ * no single file fits. Which links count is read from the line itself, by the
+ * same rule the index uses (`namesCountedOn`), so what is drawn and what is
+ * indexed never part ways. Only the colour changes, so the layout does not.
+ */
+function pushLinkDecos(
+  out: Decoration[],
+  line: LineNode,
+  contentStart: number,
+  links: LinkLookup | null,
+): void {
+  // 大半の行には `[[` がないので、`//` の行かどうか（正規表現）を調べる前に外す。
+  if (!links || !line.source.includes("[[")) return;
+  for (const span of linkSpansInLine(line.source, namesCountedOn(links.isNote, line.source))) {
+    const state = links.destination(span.kind, span.target);
+    out.push(
+      Decoration.inline(contentStart + span.from, contentStart + span.to, {
+        class: state === "none" || state === "many" ? "mk-link mk-link-missing" : "mk-link",
+        "data-link-kind": span.kind,
+        "data-link-target": span.target,
+      }),
+    );
+  }
+}
+
 function pushLineDecos(
   out: Decoration[],
   lines: LineNode[],
@@ -941,6 +997,7 @@ function pushLineDecos(
   active: boolean,
   latin: ManuscriptLatinContext | null,
   layoutOnly = false,
+  links: LinkLookup | null = null,
 ): void {
   const line = lines[index];
   if (!line || line.kind === "comment" || line.kind === "code") return;
@@ -981,6 +1038,8 @@ function pushLineDecos(
   pushBreakableDecos(out, line, contentStart);
   pushJapaneseQuoteDecos(out, line, contentStart);
   pushImageDecos(out, line, contentStart);
+  // キャレットのある行でも色は付ける（隠す文字がないため）。
+  pushLinkDecos(out, line, contentStart, links);
   if (latin) {
     pushManuscriptLatinDecos(out, line, contentStart, latin, active);
     pushManuscriptHangingDecos(out, line, contentStart, active);
@@ -1523,6 +1582,7 @@ function pushStructureDecos(
   lines: readonly LineNode[],
   activeIndex: number,
   commentsHidden: boolean,
+  links: LinkLookup | null,
 ): void {
   if (!lines.some((line) => line.kind === "comment" || line.kind === "code")) return;
   // The comment group holding the caret stays open so it can be read and edited.
@@ -1535,9 +1595,12 @@ function pushStructureDecos(
       out.push(Decoration.node(start, start + node.nodeSize, {
         class: hidden ? "pm-line pm-comment pm-comment-hidden" : "pm-line pm-comment",
       }));
+      // コメント行のリンクは全文で付ける（装飾の貼り替えはこの行を触らないため）。
+      pushLinkDecos(out, line, start + 1, links);
       return;
     }
     if (line?.kind !== "code") return;
+    pushLinkDecos(out, line, start + 1, links);
     const classes = ["pm-line", "pm-code"];
     if (line.codeFence) {
       classes.push("pm-code-fence", insideCode ? "pm-code-end" : "pm-code-start");
@@ -1737,12 +1800,13 @@ function buildWindowDecos(
   fullDecorations: boolean,
   commentsHidden: boolean,
   latin: ManuscriptLatinContext | null,
+  links: LinkLookup | null,
 ): DecorationSet {
   const out: Decoration[] = [];
   const count = Math.min(doc.childCount, lines.length);
   // Comment lines are styled (and folded) across the whole document, not only
   // inside the decoration window, so hiding never depends on the scroll position.
-  pushStructureDecos(out, doc, lines, activeIndex, commentsHidden);
+  pushStructureDecos(out, doc, lines, activeIndex, commentsHidden, links);
   // Keep table geometry stable outside the decoration window as well: moving
   // the caret or scrolling must never replace the grid with raw paragraphs.
   if (tableRows.size) doc.forEach((node, start, index) => {
@@ -1755,7 +1819,7 @@ function buildWindowDecos(
   if (fullDecorations) {
     doc.forEach((node, nodeStart, i) => {
       if (i >= count || tableRows.has(i)) return;
-      pushLineDecos(out, lines, i, nodeStart, node, i === activeIndex, latin, !inRanges(ranges, i));
+      pushLineDecos(out, lines, i, nodeStart, node, i === activeIndex, latin, !inRanges(ranges, i), links);
     });
     return DecorationSet.create(doc, out);
   }
@@ -1766,7 +1830,7 @@ function buildWindowDecos(
 
     for (let i = range.from; i < Math.min(count, range.to); i += 1) {
       const node = doc.child(i);
-      if (!tableRows.has(i)) pushLineDecos(out, lines, i, nodeStart, node, i === activeIndex, latin);
+      if (!tableRows.has(i)) pushLineDecos(out, lines, i, nodeStart, node, i === activeIndex, latin, false, links);
       nodeStart += node.nodeSize;
     }
   }
@@ -1807,6 +1871,7 @@ function patchWindowDecos(
   activeIndex: number,
   visibleCenter: number,
   latin: ManuscriptLatinContext | null,
+  links: LinkLookup | null,
 ): DecorationSet | null {
   if (lines.length !== doc.childCount) return null;
   const isStructure = (line: LineNode | undefined) => line?.kind === "comment" || line?.kind === "code";
@@ -1871,8 +1936,8 @@ function patchWindowDecos(
     removed.push(...set.find(start + 1, start + node.nodeSize - 1));
     const row = tableRows.get(index);
     if (row) pushTableRowDecos(added, node, start, row, index === activeIndex);
-    else if (inRanges(newRanges, index)) pushLineDecos(added, lines, index, start, node, index === activeIndex, latin);
-    else if (previous.fullDecorations) pushLineDecos(added, lines, index, start, node, false, latin, true);
+    else if (inRanges(newRanges, index)) pushLineDecos(added, lines, index, start, node, index === activeIndex, latin, false, links);
+    else if (previous.fullDecorations) pushLineDecos(added, lines, index, start, node, false, latin, true, links);
   });
   if (removed.length) set = set.remove(removed);
   if (added.length) set = set.add(doc, added);
@@ -1902,19 +1967,21 @@ function windowDecosWithShadow(
   commentsHidden: boolean,
   forceRebuild: boolean,
   latin: ManuscriptLatinContext | null,
+  links: LinkLookup | null,
 ): DecorationSet {
   const rebuild = () =>
-    buildWindowDecos(doc, lines, tableRows, activeIndex, visibleCenter, fullDecorations, commentsHidden, latin);
+    buildWindowDecos(doc, lines, tableRows, activeIndex, visibleCenter, fullDecorations, commentsHidden, latin, links);
   if (
     forceRebuild ||
     previous.decoWindow.rebuild ||
     latin !== previous.latin ||
+    links !== previous.links ||
     fullDecorations !== previous.fullDecorations ||
     commentsHidden !== previous.commentsHidden
   ) {
     return rebuild();
   }
-  const patched = patchWindowDecos(previous, doc, mapping, diff, lines, tableRows, activeIndex, visibleCenter, latin);
+  const patched = patchWindowDecos(previous, doc, mapping, diff, lines, tableRows, activeIndex, visibleCenter, latin, links);
   if (!patched) return rebuild();
   if (!import.meta.env.DEV) return patched;
 
@@ -1981,7 +2048,8 @@ function makeAstState(state: EditorState): AstPluginState {
     tableRows,
     decoWindow: { activeIndex, visibleCenter: activeIndex, stale: null, rebuild: false },
     latin: null,
-    decoSet: buildWindowDecos(state.doc, lines, tableRows, activeIndex, activeIndex, false, false, null),
+    links: null,
+    decoSet: buildWindowDecos(state.doc, lines, tableRows, activeIndex, activeIndex, false, false, null, null),
   };
 }
 
@@ -2084,6 +2152,7 @@ function applyAst(
       ? meta.commentsHidden
       : value.commentsHidden;
   const latin = meta && "latin" in meta ? meta.latin ?? null : value.latin;
+  const links = meta && "links" in meta ? meta.links ?? null : value.links;
 
   if (typeof meta?.visibleCenter === "number") {
     visibleCenter = Math.max(0, Math.min(newState.doc.childCount - 1, meta.visibleCenter));
@@ -2098,7 +2167,8 @@ function applyAst(
       visibleCenter === value.visibleCenter &&
       fullDecorations === value.fullDecorations &&
       commentsHidden === value.commentsHidden &&
-      latin === value.latin
+      latin === value.latin &&
+      links === value.links
     ) {
       return value;
     }
@@ -2110,6 +2180,7 @@ function applyAst(
       fullDecorations,
       commentsHidden,
       latin,
+      links,
       decoWindow: { activeIndex, visibleCenter, stale: null, rebuild: false },
       decoSet: windowDecosWithShadow(
         value,
@@ -2124,6 +2195,7 @@ function applyAst(
         commentsHidden,
         meta?.rebuild === true,
         latin,
+        links,
       ),
     };
   }
@@ -2149,6 +2221,7 @@ function applyAst(
       fullDecorations,
       commentsHidden,
       latin,
+      links,
       tableRows: tables.rows,
       decoWindow: {
         ...value.decoWindow,
@@ -2173,6 +2246,7 @@ function applyAst(
     fullDecorations,
     commentsHidden,
     latin,
+    links,
     tableRows: tables.rows,
     decoWindow: { activeIndex, visibleCenter, stale: null, rebuild: false },
     decoSet: windowDecosWithShadow(
@@ -2188,6 +2262,7 @@ function applyAst(
       commentsHidden,
       meta?.rebuild === true || rolesChangedOutside || tables.changed,
       latin,
+      links,
     ),
   };
 }
@@ -2785,6 +2860,8 @@ export function VerticalTextEditor({
   onPageMetricsChange,
   manuscript = DEFAULT_MANUSCRIPT_SETTINGS,
   onManuscriptProgressChange,
+  linkLookup = null,
+  onLinkActivate,
 }: VerticalTextEditorProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
@@ -2823,6 +2900,9 @@ export function VerticalTextEditor({
   const showLineBreakMarksRef = useRef(showLineBreakMarks);
   const showLineNumbersRef = useRef(showLineNumbers);
   const showCommentsRef = useRef(showComments);
+  const linkLookupRef = useRef(linkLookup);
+  const onLinkActivateRef = useRef(onLinkActivate);
+  onLinkActivateRef.current = onLinkActivate;
   const highlightCurrentLineRef = useRef(highlightCurrentLine);
   const manuscriptActive = manuscript.layoutMode === "manuscript";
   const manuscriptRef = useRef(manuscript);
@@ -3464,6 +3544,200 @@ export function VerticalTextEditor({
     requestVisualLinesRef.current?.();
   }, [showComments]);
 
+  // BINDER 3-2: ノートの名前の候補。`[[` を打つか Ctrl+L で開き、打つたびに
+  // 絞り込む。日本語入力の確定中は閉じたままにし、確定した文字で絞り込む。
+  const [linkSuggest, setLinkSuggest] = useState<{
+    items: Array<{ name: string; path: string }>;
+    from: number;
+    to: number;
+    anchor: LinkSuggestAnchor;
+  } | null>(null);
+  const linkSuggestOpenRef = useRef(false);
+  const closeLinkSuggest = useCallback(() => {
+    linkSuggestOpenRef.current = false;
+    setLinkSuggest((current) => (current ? null : current));
+  }, []);
+  const refreshLinkSuggest = useCallback(() => {
+    const editor = tiptapRef.current;
+    const links = linkLookupRef.current;
+    if (!editor || !links || !linkSuggestOpenRef.current) return;
+    if (isEditorComposing(editor, composingRef)) {
+      setLinkSuggest((current) => (current ? null : current));
+      return;
+    }
+    const { state } = editor;
+    if (!state.selection.empty) {
+      closeLinkSuggest();
+      return;
+    }
+    const lineIndex = activeLineIndex(state);
+    const line = astKey.getState(state)?.lines[lineIndex];
+    const lineStart = pmStartAtIndex(state.doc, lineIndex);
+    if (!line || lineStart === null || !namesCountedOn(links.isNote, line.source)) {
+      closeLinkSuggest();
+      return;
+    }
+    const query = suggestQueryAt(line.source, state.selection.head - (lineStart + 1));
+    if (!query) {
+      closeLinkSuggest();
+      return;
+    }
+    let coords: { left: number; right: number; top: number; bottom: number };
+    try {
+      coords = editor.view.coordsAtPos(state.selection.head);
+    } catch {
+      return;
+    }
+    setLinkSuggest({
+      items: links.names(query.query),
+      from: lineStart + 1 + query.from,
+      to: lineStart + 1 + query.to,
+      anchor: suggestAnchor(coords, writingModeRef.current === "vertical-rl"),
+    });
+  }, [closeLinkSuggest]);
+  const refreshLinkSuggestRef = useRef(refreshLinkSuggest);
+  refreshLinkSuggestRef.current = refreshLinkSuggest;
+  /** `[[` を打ち終えた直後だけ候補を開く（あとからカーソルを置いただけでは開かない）。 */
+  const armLinkSuggestRef = useRef<((insert: string) => void) | null>(null);
+  armLinkSuggestRef.current = (insert: string) => {
+    const editor = tiptapRef.current;
+    const links = linkLookupRef.current;
+    if (!editor || !links || !editor.state.selection.empty) return;
+    if (isEditorComposing(editor, composingRef)) return;
+    const lineIndex = activeLineIndex(editor.state);
+    const line = astKey.getState(editor.state)?.lines[lineIndex];
+    const lineStart = pmStartAtIndex(editor.state.doc, lineIndex);
+    if (!line || lineStart === null || !namesCountedOn(links.isNote, line.source)) return;
+    const caret = editor.state.selection.head - (lineStart + 1);
+    if (!suggestOpensAfterInsert(insert, line.source, caret)) return;
+    linkSuggestOpenRef.current = true;
+  };
+  const startLinkSuggestRef = useRef<(() => void) | null>(null);
+  startLinkSuggestRef.current = () => {
+    const editor = tiptapRef.current;
+    const links = linkLookupRef.current;
+    if (!editor || !links || isEditorComposing(editor, composingRef)) return;
+    const { state } = editor;
+    const lineIndex = activeLineIndex(state);
+    const line = astKey.getState(state)?.lines[lineIndex];
+    if (!line || !namesCountedOn(links.isNote, line.source)) return;
+    // すでに `[[` の中なら入れ直さず、そのまま候補を出す。
+    const lineStart = pmStartAtIndex(state.doc, lineIndex);
+    const inside = lineStart !== null &&
+      suggestQueryAt(line.source, state.selection.head - (lineStart + 1)) !== null;
+    linkSuggestOpenRef.current = true;
+    if (!inside) {
+      const at = state.selection.from;
+      const tr = state.tr.insertText("[[]]", at, state.selection.to);
+      tr.setSelection(TextSelection.create(tr.doc, at + 2));
+      editor.view.dispatch(tr);
+    }
+    refreshLinkSuggestRef.current();
+  };
+  const chooseLinkSuggest = useCallback((name: string) => {
+    const editor = tiptapRef.current;
+    const target = linkSuggest;
+    closeLinkSuggest();
+    if (!editor || !target) return;
+    const { state } = editor;
+    const to = Math.min(target.to, state.doc.content.size);
+    const after = state.doc.textBetween(to, Math.min(to + 2, state.doc.content.size));
+    const tr = state.tr.insertText(after === "]]" ? name : `${name}]]`, target.from, to);
+    const caret = target.from + name.length + 2;
+    tr.setSelection(TextSelection.create(tr.doc, Math.min(caret, tr.doc.content.size)));
+    editor.view.dispatch(tr);
+    editor.view.focus();
+  }, [closeLinkSuggest, linkSuggest]);
+
+  useEffect(() => {
+    // 別のアプリへ移ったら候補は閉じる（位置がずれたまま残らないように）。
+    window.addEventListener("blur", closeLinkSuggest);
+    return () => window.removeEventListener("blur", closeLinkSuggest);
+  }, [closeLinkSuggest]);
+
+  // BINDER 3-2: リンクをクリックすると開く。カーソルがすでにその行にあるときは
+  // 開かず、カーソルを置く（名前を直せるように）。Ctrl（Cmd）を押しながらなら
+  // 同じ行でも開く。押して引いて文字を選んだときは開かない。
+  useEffect(() => {
+    const host = editorHostRef.current;
+    if (!host) return;
+    let press: { x: number; y: number; line: number } | null = null;
+    const onPointerDown = (event: PointerEvent) => {
+      const editor = tiptapRef.current;
+      // PM がキャレットを動かす前の行を覚えておく（mousedown より先に来る）。
+      press = editor && event.button === 0
+        ? { x: event.clientX, y: event.clientY, line: activeLineIndex(editor.state) }
+        : null;
+    };
+    const onClick = (event: MouseEvent) => {
+      const start = press;
+      press = null;
+      const editor = tiptapRef.current;
+      const links = linkLookupRef.current;
+      const activate = onLinkActivateRef.current;
+      if (!editor || !links || !activate || !start || event.button !== 0) return;
+      const element = (event.target as Element | null)?.closest<HTMLElement>(".mk-link[data-link-target]");
+      if (!element || !host.contains(element)) return;
+      const view = editor.view;
+      const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
+      if (!at) return;
+      const lineIndex = view.state.doc.resolve(Math.min(at.pos, view.state.doc.content.size)).index(0);
+      const line = astKey.getState(view.state)?.lines[lineIndex];
+      const lineStart = pmStartAtIndex(view.state.doc, lineIndex);
+      if (!line || lineStart === null) return;
+      const action = linkPressAction({
+        caretLine: start.line,
+        pressedLine: lineIndex,
+        ctrl: event.ctrlKey || event.metaKey,
+        moved: Math.max(Math.abs(event.clientX - start.x), Math.abs(event.clientY - start.y)),
+        detail: event.detail,
+        selectionEmpty: editor.state.selection.empty,
+      });
+      if (action !== "open") return;
+      const offset = at.pos - (lineStart + 1);
+      const span = linkSpansInLine(line.source, namesCountedOn(links.isNote, line.source))
+        .find((item) => offset >= item.from && offset <= item.to);
+      if (!span) return;
+      event.preventDefault();
+      activate({
+        kind: span.kind,
+        target: span.target,
+        rewriteTarget: (next) => {
+          const current = tiptapRef.current;
+          if (!current || next === span.target) return;
+          const start = pmStartAtIndex(current.state.doc, lineIndex);
+          if (start === null) return;
+          const from = start + 1 + span.targetFrom;
+          const to = start + 1 + span.targetTo;
+          // 本文が動いていたら書き換えない（押してから選ぶまでに打たれた場合）。
+          if (to > current.state.doc.content.size) return;
+          if (current.state.doc.textBetween(from, to) !== span.target) return;
+          current.view.dispatch(current.state.tr.insertText(next, from, to));
+        },
+      });
+    };
+    host.addEventListener("pointerdown", onPointerDown);
+    host.addEventListener("click", onClick);
+    return () => {
+      host.removeEventListener("pointerdown", onPointerDown);
+      host.removeEventListener("click", onClick);
+    };
+  }, []);
+
+  // BINDER 3-2: リンクの行き先は、索引が変わったとき（保存でリンクが増減した・
+  // 改名した・アプリに戻って読み直した）だけ付け直す。打鍵では起きない。
+  useEffect(() => {
+    linkLookupRef.current = linkLookup;
+    const editor = tiptapRef.current;
+    if (!editor) return;
+    if (astKey.getState(editor.state)?.links === linkLookup) return;
+    editor.view.dispatch(
+      editor.state.tr
+        .setMeta(astKey, { rebuild: true, links: linkLookup } satisfies AstMeta)
+        .setMeta("addToHistory", false),
+    );
+  }, [linkLookup]);
+
   // 行番号は全行の実際の組版から番号を振るので、装飾窓の外の段落も記法を
   // 整形した姿で組んでおく（pushLayoutOnlyLineDecos）。原稿用紙の枚数は全文
   // 装飾を要求しない。窓の外で記法を含む段落だけ、隠し要素で整形後の行数を
@@ -3737,6 +4011,7 @@ export function VerticalTextEditor({
         requestLineBreakMarksRef.current?.();
       },
       isComposing: () => isEditorComposing(tiptapRef.current, composingRef),
+      startLinkSuggest: () => startLinkSuggestRef.current?.(),
     }),
     [],
   );
@@ -5057,7 +5332,7 @@ export function VerticalTextEditor({
         visualLayoutCache = null;
         requestLineBreakMarks();
       },
-      onUpdate: ({ editor: currentEditor }) => {
+      onUpdate: ({ editor: currentEditor, transaction }) => {
         cancelInitialAdjustment();
         const astState = astKey.getState(currentEditor.state);
         const next = astState?.text ?? docToText(currentEditor.state.doc);
@@ -5076,10 +5351,20 @@ export function VerticalTextEditor({
           requestPagedSelectionAfterReflow(currentEditor);
         }
         requestVisibleWindowAfterEdit();
+        // BINDER 3-2: `[[` を打ったら候補を出し、開いているあいだは打つたびに絞り込む。
+        // 安い見分け（`[` を打ったか）を先に置く。この先は行の位置を数えるので、
+        // 1打ごとには走らせない。打った文字は transaction から読む（`change` は
+        // 変わった行の全体で、末尾に改行が付くため、`[` で終わるとは限らない）。
+        if (!linkSuggestOpenRef.current) {
+          const typed = typedTextOf(transaction);
+          if (typed.endsWith("[")) armLinkSuggestRef.current?.(typed);
+        }
+        refreshLinkSuggestRef.current();
         if (editorDisplayModeRef.current !== "paged") requestLineBreakMarks();
       },
       onSelectionUpdate: () => {
         onSelectionChangeRef.current();
+        refreshLinkSuggestRef.current();
         // ドラッグ範囲選択中は寄せない（pointerup でまとめて判定する）。
         // キーボードでの選択（Shift+矢印など）はドラッグ外なので従来どおり追従する。
         if (!pointerDraggingRef.current) {
@@ -5094,13 +5379,14 @@ export function VerticalTextEditor({
     tiptapRef.current = editor;
     observedVisualState = editor.state;
     hideSelectionFromReact(editor.view.dom);
-    if (showLineNumbersRef.current || !showCommentsRef.current) {
+    if (showLineNumbersRef.current || !showCommentsRef.current || linkLookupRef.current) {
       editor.view.dispatch(
         editor.state.tr
           .setMeta(astKey, {
             rebuild: true,
             fullDecorations: showLineNumbersRef.current,
             commentsHidden: !showCommentsRef.current,
+            links: linkLookupRef.current,
           } satisfies AstMeta)
           .setMeta("addToHistory", false),
       );
@@ -5411,6 +5697,15 @@ export function VerticalTextEditor({
             .setMeta(astKey, { refreshComposition: true } satisfies AstMeta)
             .setMeta("addToHistory", false),
         );
+        // BINDER 3-2: 変換中は候補を隠すだけなので、確定したら確定した文字で出し直す。
+        // 日本語入力で `[[` を確定したときも、ここで候補を開く。
+        const head = editor.state.selection.head;
+        if (linkSuggestOpenRef.current) {
+          refreshLinkSuggestRef.current();
+        } else if (head >= 2 && editor.state.doc.textBetween(head - 2, head) === "[[") {
+          armLinkSuggestRef.current?.("[");
+          refreshLinkSuggestRef.current();
+        }
       });
       requestCenterCaret(false, "compositionend");
       requestPagedSelectionAfterReflow(editor);
@@ -5689,6 +5984,14 @@ export function VerticalTextEditor({
       </div>
       <div ref={lineBreakLayerRef} className="visibleLineBreakLayer" aria-hidden="true" />
       <ImageHoverPreview hostRef={editorHostRef} documentPath={documentPath} />
+      {linkSuggest && (
+        <LinkSuggest
+          items={linkSuggest.items}
+          anchor={linkSuggest.anchor}
+          onChoose={chooseLinkSuggest}
+          onClose={closeLinkSuggest}
+        />
+      )}
       {editorDisplayMode === "continuous" && typewriterScroll && showTypewriterGuide && (
         <div className="verticalTypewriterGuide" />
       )}
