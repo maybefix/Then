@@ -191,4 +191,23 @@ const {
   assert.deepEqual(empty.names(""), []);
 }
 
+// 9. 候補の一覧の位置。エディタの coordsAtPos は DOMRect を返すことがあり、その辺は
+// prototype の getter なので `{ ...rect }` では写らない。写らないと位置が付かず、一覧が
+// 窓の下へ出て見えなかった（2026-11-18、実機の記録で分かった）。
+{
+  const suggest = await build({
+    stdin: { contents: 'export { suggestAnchor, placement } from "./src/components/editor/LinkSuggest.tsx";', resolveDir: process.cwd(), loader: "tsx" },
+    bundle: true, format: "esm", platform: "node", write: false, jsx: "automatic",
+  });
+  const { suggestAnchor, placement } = await import(`data:text/javascript;base64,${Buffer.from(suggest.outputFiles[0].text).toString("base64")}`);
+  class Rect { get left() { return 500; } get top() { return 200; } get right() { return 520; } get bottom() { return 220; } }
+  const anchor = suggestAnchor(new Rect(), true);
+  assert.deepEqual(anchor, { left: 500, top: 200, right: 520, bottom: 220, vertical: true });
+  globalThis.window = { innerWidth: 1000, innerHeight: 700 };
+  const style = placement(anchor);
+  for (const value of Object.values(style)) assert.ok(Number.isFinite(value), "位置はすべて数になる");
+  assert.ok("top" in style && ("left" in style || "right" in style));
+  delete globalThis.window;
+}
+
 console.log("link decoration tests passed");

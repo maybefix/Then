@@ -26,7 +26,7 @@ import {
   suggestQueryAt,
   typedTextOf,
 } from "./editor/linkDecorations";
-import { LinkSuggest, type LinkSuggestAnchor } from "./components/editor/LinkSuggest";
+import { LinkSuggest, type LinkSuggestAnchor, suggestAnchor } from "./components/editor/LinkSuggest";
 import { linkSuggestDebug, watchInputEvents } from "./editor/linkSuggestDebug";
 import { spliceRootDecorations } from "./editor/spliceRootDecorations";
 import Document from "@tiptap/extension-document";
@@ -3606,7 +3606,7 @@ export function VerticalTextEditor({
       items: links.names(query.query),
       from: lineStart + 1 + query.from,
       to: lineStart + 1 + query.to,
-      anchor: { ...coords, vertical: writingModeRef.current === "vertical-rl" },
+      anchor: suggestAnchor(coords, writingModeRef.current === "vertical-rl"),
     });
   }, [closeLinkSuggest]);
   const refreshLinkSuggestRef = useRef(refreshLinkSuggest);

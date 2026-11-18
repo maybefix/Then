@@ -16,7 +16,19 @@ export type LinkSuggestAnchor = {
   vertical: boolean;
 };
 
-function placement(anchor: LinkSuggestAnchor): CSSProperties {
+/**
+ * The caret's box as the list's anchor. The editor's `coordsAtPos` can return a
+ * DOMRect, whose sides are getters on the prototype: spreading it (`{ ...rect }`)
+ * copies nothing, the list got no position and sat below the window.
+ */
+export function suggestAnchor(
+  rect: { left: number; top: number; right: number; bottom: number },
+  vertical: boolean,
+): LinkSuggestAnchor {
+  return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, vertical };
+}
+
+export function placement(anchor: LinkSuggestAnchor): CSSProperties {
   const width = window.innerWidth;
   const height = window.innerHeight;
   if (anchor.vertical) {
