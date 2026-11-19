@@ -174,9 +174,7 @@ function installProjectMock({ chars, manuscriptSource, manuscriptText = null, se
       const path = `${root}/${folder}/${name}`;
       files.set(path, folderIndex === 0 && fileIndex === 0
         ? frontMatter + (manuscriptText ?? make(chars))
-        : make(3000 + fileIndex * 700, 7 + fileIndex) + (rightPane && folder === "資料" && fileIndex < 2 ? "
-[[第一部]]
-" : ""));
+        : make(3000 + fileIndex * 700, 7 + fileIndex) + (rightPane && folder === "資料" && fileIndex < 2 ? "\n[[第一部]]\n" : ""));
       return {
         path, name, kind: "file", children: [], fileId: path, contentHash: null, modifiedAt: 1,
         ...(rightPane && folder === "資料" ? { role: "material" } : {}),
