@@ -182,6 +182,12 @@ export class LinkIndex {
   private roles = new Map<string, "material" | null>();
   private table: TargetTable;
   private changes = 0;
+  /**
+   * How many times each file's text was taken in (BINDER 3-5). A refresh notes
+   * it before reading a file from disk and drops what it read when a save took
+   * in newer text meanwhile.
+   */
+  private generations = new Map<string, number>();
 
   /**
    * Goes up whenever what the index holds (links or destinations) changes, by
@@ -250,8 +256,12 @@ export class LinkIndex {
     readText: (path: string) => Promise<string | null>,
     override?: (path: string) => string | null,
   ): Promise<{ read: number; changed: boolean }> {
+    // A file whose role alone changed (moved into or out of the materials
+    // folder) changes the notes, so it is a change too (BINDER 3-5).
     let changed = this.stamps.length !== stamps.length ||
-      stamps.some((stamp, index) => comparable(stamp.path) !== comparable(this.stamps[index]?.path ?? ""));
+      stamps.some((stamp, index) =>
+        comparable(stamp.path) !== comparable(this.stamps[index]?.path ?? "") ||
+        (stamp.role ?? null) !== (this.stamps[index]?.role ?? null));
     this.stamps = [...stamps];
     this.roles = new Map(stamps.map((stamp) => [comparable(stamp.path), stamp.role ?? null]));
     this.table = new TargetTable(this.rootPath, stamps.map((stamp) => stamp.path));
@@ -268,9 +278,12 @@ export class LinkIndex {
         continue;
       }
       if (known && known.modifiedAt !== null && known.modifiedAt === stamp.modifiedAt && known.size === stamp.size) continue;
+      const generation = this.generations.get(key) ?? 0;
       const text = await readText(stamp.path);
       read += 1;
       if (text === null) continue;
+      // A save finished while this was read: its text is newer than the disk's.
+      if ((this.generations.get(key) ?? 0) !== generation) continue;
       if (this.setFileText(stamp.path, text, stamp.modifiedAt, stamp.size)) changed = true;
     }
     for (const key of [...this.files.keys()]) {
@@ -289,6 +302,7 @@ export class LinkIndex {
    */
   setFileText(path: string, text: string, modifiedAt: number | null = null, size: number | null = null): boolean {
     const key = comparable(path);
+    this.generations.set(key, (this.generations.get(key) ?? 0) + 1);
     const links = findLinks(text, this.isNote(path)).map(({ kind, target, place }) => ({ kind, target, place }));
     const known = this.files.get(key);
     const same = !!known && known.links.length === links.length &&
