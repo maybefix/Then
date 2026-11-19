@@ -416,4 +416,56 @@ async function rewriteAfter(files, change, path) {
   assert.deepEqual(summary("素材/人物/A.md")[0].places, ["property:materials=1"]);
 }
 
+// 7. 索引の今の不具合2つ（BINDER 3-5 の決定7。docs/BINDER_NOTE_MENTIONS_PLAN.md）
+{
+  const ROLE_ROOT = "C:\\Roles";
+  const at = (relative) => `${ROLE_ROOT}\\${relative.split("/").join("\\")}`;
+  const texts = { "素材/汐見.md": "# 汐見", "第一章.md": "// [[汐見]]" };
+  const stampsWith = (role) => Object.keys(texts).map((relative) => ({
+    path: at(relative),
+    kind: "text",
+    modifiedAt: 1,
+    size: texts[relative].length,
+    role: relative.startsWith("素材/") ? role : null,
+  }));
+  const readText = async (path) => texts[Object.keys(texts).find((relative) => at(relative) === path)] ?? null;
+
+  // ① ファイルの並びは同じで、役割だけが変わった（素材のフォルダにした）: 変わったと言い、revision も上がる
+  const index = new LinkIndex(ROLE_ROOT);
+  await index.refresh(stampsWith(null), readText);
+  assert.deepEqual(index.noteNames(), []);
+  const before = index.revision;
+  const result = await index.refresh(stampsWith("material"), readText);
+  assert.deepEqual(index.noteNames().map((note) => note.name), ["汐見"]);
+  assert.equal(result.changed, true, "役割だけが変わっても、変わったと言う");
+  assert.ok(index.revision > before, "役割だけが変わっても、revision が上がる（画面に知らせる）");
+  // 役割も同じなら、変わったとは言わない
+  const still = index.revision;
+  assert.equal((await index.refresh(stampsWith("material"), readText)).changed, false);
+  assert.equal(index.revision, still);
+
+  // ② ディスクから読んでいる途中に保存が終わったら、あとから届いた古い本文で上書きしない
+  const racing = new LinkIndex(ROLE_ROOT);
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  const running = racing.refresh(stampsWith("material"), async (path) => {
+    if (path === at("第一章.md")) {
+      await gate;
+      return "古い本文（リンクなし）";
+    }
+    return readText(path);
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(racing.setFileText(at("第一章.md"), "// [[汐見]] 保存した本文"), true);
+  release();
+  await running;
+  assert.deepEqual(
+    racing.linksFrom(at("第一章.md")).map((link) => link.target),
+    ["汐見"],
+    "保存した本文のリンクが残る（読み込みの途中の保存を古い本文が上書きしない）",
+  );
+  // 次の refresh では、保存のあとなのでディスクから読み直す（今と同じ）
+  assert.equal((await racing.refresh(stampsWith("material"), readText)).read, 1);
+}
+
 console.log("link index tests passed");
