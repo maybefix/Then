@@ -181,6 +181,16 @@ export class LinkIndex {
   private stamps: LinkStamp[] = [];
   private roles = new Map<string, "material" | null>();
   private table: TargetTable;
+  private changes = 0;
+
+  /**
+   * Goes up whenever what the index holds (links or destinations) changes, by
+   * any path: a refresh, a save, or a rename's rewrite calling setFileText
+   * directly (BINDER 3-4). The screen compares it to tell when to draw again.
+   */
+  get revision(): number {
+    return this.changes;
+  }
 
   constructor(rootPath: string) {
     this.rootPath = rootPath;
@@ -269,6 +279,7 @@ export class LinkIndex {
         changed = true;
       }
     }
+    if (changed) this.changes += 1;
     return { read, changed };
   }
 
@@ -284,6 +295,7 @@ export class LinkIndex {
       known.links.every((link, index) =>
         link.kind === links[index].kind && link.target === links[index].target && samePlace(link.place, links[index].place));
     this.files.set(key, { path: known?.path ?? path, modifiedAt, size, links: same ? known!.links : links });
+    if (!same) this.changes += 1;
     return !same;
   }
 
