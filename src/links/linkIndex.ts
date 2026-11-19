@@ -5,7 +5,7 @@
 // with no destination and restoring it brings them back. What is kept on disk
 // between runs (the cache) holds only each file's stamp and its links; a file
 // whose modification time or size changed is read again.
-import { type FoundLink, type LinkKind, findLinks, rewriteLinks } from "./linkSyntax";
+import { type FoundLink, type LinkKind, type LinkPlace, findLinks, rewriteLinks } from "./linkSyntax";
 
 export type LinkStamp = {
   path: string;
@@ -17,12 +17,33 @@ export type LinkStamp = {
 
 export type IndexedLink = { kind: LinkKind; target: string };
 
+/** A link as the index keeps it: also where it was written (BINDER 3-4). */
+export type StoredLink = IndexedLink & { place: LinkPlace };
+
 type IndexedFile = {
   path: string;
   /** Stamp the links were read at; null after a save (read again next time). */
   modifiedAt: number | null;
   size: number | null;
-  links: IndexedLink[];
+  links: StoredLink[];
+};
+
+/** How many links of one file were written in one place (BINDER 3-4). */
+export type PlaceCount = { place: LinkPlace; count: number };
+
+/** A file that links to a file, with where (BINDER 3-4). */
+export type BacklinkDetail = {
+  path: string;
+  /** Links that go to the file. */
+  count: number;
+  /** `count` by place, in the order they first appear in the file. */
+  places: PlaceCount[];
+  /**
+   * Name links that could mean the file but also another one (4A: not decided,
+   * so not in `count`), with the names as written.
+   */
+  undecided: number;
+  undecidedNames: string[];
 };
 
 export type LinkPathChange = { oldPath: string; newPath: string };
@@ -33,12 +54,32 @@ export type LinkRewritePlan = {
   isNote: (path: string) => boolean;
 };
 
-const CACHE_VERSION = 1;
+// 2 (BINDER 3-4): each link also keeps its place. A cache of version 1 is
+// dropped, so every file is read once again.
+const CACHE_VERSION = 2;
+
+/** Place codes in the cache: 0 body, 1 comment, 2 property (its key follows; "" for none). */
+type CachedLink = [0 | 1, string, 0 | 1 | 2, string?];
 
 type CacheFile = {
   version: number;
-  files: Record<string, { m: number | null; s: number | null; l: Array<[0 | 1, string]> }>;
+  files: Record<string, { m: number | null; s: number | null; l: CachedLink[] }>;
 };
+
+function placeToCache(place: LinkPlace): [0 | 1 | 2, string?] {
+  if (place.in === "property") return [2, place.key ?? ""];
+  return [place.in === "comment" ? 1 : 0];
+}
+
+function placeFromCache(code: unknown, key: unknown): LinkPlace {
+  if (code === 2) return { in: "property", key: typeof key === "string" && key ? key : null };
+  return code === 1 ? { in: "comment" } : { in: "body" };
+}
+
+function samePlace(left: LinkPlace, right: LinkPlace): boolean {
+  if (left.in !== right.in) return false;
+  return left.in !== "property" || left.key === (right as { key: string | null }).key;
+}
 
 function normalizeSlashes(path: string): string {
   return path.replace(/[\\/]+/g, "/").replace(/\/+$/, "");
@@ -140,6 +181,16 @@ export class LinkIndex {
   private stamps: LinkStamp[] = [];
   private roles = new Map<string, "material" | null>();
   private table: TargetTable;
+  private changes = 0;
+
+  /**
+   * Goes up whenever what the index holds (links or destinations) changes, by
+   * any path: a refresh, a save, or a rename's rewrite calling setFileText
+   * directly (BINDER 3-4). The screen compares it to tell when to draw again.
+   */
+  get revision(): number {
+    return this.changes;
+  }
 
   constructor(rootPath: string) {
     this.rootPath = rootPath;
@@ -163,7 +214,11 @@ export class LinkIndex {
           path,
           modifiedAt: entry.m,
           size: entry.s,
-          links: entry.l.map(([kind, target]) => ({ kind: kind === 0 ? "path" : "name", target })),
+          links: entry.l.map(([kind, target, place, key]) => ({
+            kind: kind === 0 ? "path" : "name",
+            target,
+            place: placeFromCache(place, key),
+          })),
         });
       }
     } catch {
@@ -179,7 +234,7 @@ export class LinkIndex {
       files[relative] = {
         m: file.modifiedAt,
         s: file.size,
-        l: file.links.map((link) => [link.kind === "path" ? 0 : 1, link.target]),
+        l: file.links.map((link): CachedLink => [link.kind === "path" ? 0 : 1, link.target, ...placeToCache(link.place)]),
       };
     }
     return JSON.stringify({ version: CACHE_VERSION, files } satisfies CacheFile);
@@ -224,6 +279,7 @@ export class LinkIndex {
         changed = true;
       }
     }
+    if (changed) this.changes += 1;
     return { read, changed };
   }
 
@@ -233,16 +289,18 @@ export class LinkIndex {
    */
   setFileText(path: string, text: string, modifiedAt: number | null = null, size: number | null = null): boolean {
     const key = comparable(path);
-    const links = findLinks(text, this.isNote(path)).map(({ kind, target }) => ({ kind, target }));
+    const links = findLinks(text, this.isNote(path)).map(({ kind, target, place }) => ({ kind, target, place }));
     const known = this.files.get(key);
     const same = !!known && known.links.length === links.length &&
-      known.links.every((link, index) => link.kind === links[index].kind && link.target === links[index].target);
+      known.links.every((link, index) =>
+        link.kind === links[index].kind && link.target === links[index].target && samePlace(link.place, links[index].place));
     this.files.set(key, { path: known?.path ?? path, modifiedAt, size, links: same ? known!.links : links });
+    if (!same) this.changes += 1;
     return !same;
   }
 
   /** The links `path` writes, with where each goes (null: nowhere, or more than one file). */
-  linksFrom(path: string): Array<IndexedLink & { resolved: string | null }> {
+  linksFrom(path: string): Array<StoredLink & { resolved: string | null }> {
     const file = this.files.get(comparable(path));
     return (file?.links ?? []).map((link) => ({ ...link, resolved: this.table.resolve(link) }));
   }
@@ -258,6 +316,51 @@ export class LinkIndex {
         if (resolved && comparable(resolved) === key) count += 1;
       }
       if (count) result.push({ path: file.path, count });
+    }
+    return result;
+  }
+
+  /**
+   * Files that link to `path`, with where the links were written and the name
+   * links that could mean `path` but are not decided (BINDER 3-4). Files with
+   * neither are left out. Same order as `backlinksTo`.
+   */
+  backlinkDetails(path: string): BacklinkDetail[] {
+    const key = comparable(path);
+    const result: BacklinkDetail[] = [];
+    // A name is looked up once per call, however many files write it.
+    const undecidedByName = new Map<string, boolean>();
+    const undecided = (target: string) => {
+      const name = normalizeSlashes(target.trim()).toLocaleLowerCase();
+      let known = undecidedByName.get(name);
+      if (known === undefined) {
+        const found = this.table.candidates(target);
+        known = found.length > 1 && found.some((candidate) => comparable(candidate) === key);
+        undecidedByName.set(name, known);
+      }
+      return known;
+    };
+    for (const file of this.files.values()) {
+      let count = 0;
+      const places: PlaceCount[] = [];
+      let undecidedCount = 0;
+      const undecidedNames: string[] = [];
+      for (const link of file.links) {
+        const resolved = this.table.resolve(link);
+        if (resolved) {
+          if (comparable(resolved) !== key) continue;
+          count += 1;
+          const known = places.find((entry) => samePlace(entry.place, link.place));
+          if (known) known.count += 1;
+          else places.push({ place: link.place, count: 1 });
+        } else if (link.kind === "name" && undecided(link.target)) {
+          undecidedCount += 1;
+          if (!undecidedNames.includes(link.target)) undecidedNames.push(link.target);
+        }
+      }
+      if (count || undecidedCount) {
+        result.push({ path: file.path, count, places, undecided: undecidedCount, undecidedNames });
+      }
     }
     return result;
   }

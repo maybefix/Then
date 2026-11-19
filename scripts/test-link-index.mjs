@@ -330,4 +330,90 @@ async function rewriteAfter(files, change, path) {
   assert.ok(saveMs < 50, "保存1回の読み直しが重すぎる");
 }
 
+// 5. どこで書いたリンクか（BINDER 3-4）。数える規則は変えず、場所を添えるだけ
+{
+  const manuscript = [
+    "﻿---",
+    'synopsis: "[[汐見]]が窓口に立つ"',
+    "materials:",
+    '  - "[[汐見]]"',
+    '  - "[[灯台]]"',
+    '"quoted key": "[[港]]"',
+    "---",
+    "本文の [[汐見]] は数えない。@[[素材/灯台.md]] は数える。",
+    "// [[汐見]] の台詞",
+    "  // [[汐見|しおみ]] もう一度",
+  ].join("\r\n");
+  const places = (text, isNote) => findLinks(text, isNote).map((link) =>
+    `${link.target}@${link.place.in}${link.place.in === "property" ? `:${link.place.key}` : ""}`);
+  assert.deepEqual(places(manuscript, false), [
+    "汐見@property:synopsis",
+    "汐見@property:materials",
+    "灯台@property:materials",
+    "港@property:quoted key",
+    "素材/灯台.md@body",
+    "汐見@comment",
+    "汐見@comment",
+  ]);
+  // 位置と並びは場所を足す前と同じ（書き換え・装飾が使う）
+  assert.deepEqual(
+    findLinks(manuscript, false).map((link) => manuscript.slice(link.from, link.to)),
+    ["汐見", "汐見", "灯台", "港", "素材/灯台.md", "汐見", "汐見"],
+  );
+  assert.deepEqual(places("[[汐見]]\n// [[灯台]]", true), ["汐見@body", "灯台@comment"], "ノートでも // の行はコメント");
+  // 一番上のキーより前の行（キーが見つからない）
+  assert.deepEqual(places("---\n# [[汐見]]\ntitle: x\n---\n本文", false), ["汐見@property:null"]);
+
+  const work = makeWork({
+    "第一章.md": manuscript,
+    "第二章.md": "// [[人物/A]] と [[A]]",
+    "素材/汐見.md": "# 汐見",
+    "素材/灯台.md": "[[汐見]] [[汐見]] [[A]]",
+    "素材/人物/A.md": "a",
+    "素材/別/A.md": "b",
+  });
+  const index = new LinkIndex(ROOT);
+  await index.refresh(work.stamps(), work.readText);
+  const summary = (path) => index.backlinkDetails(p(path)).map((item) => ({
+    path: item.path.slice(ROOT.length + 1),
+    count: item.count,
+    places: item.places.map(({ place, count }) => `${place.in}${place.in === "property" ? `:${place.key}` : ""}=${count}`),
+    undecided: item.undecided,
+    names: item.undecidedNames,
+  }));
+  assert.deepEqual(summary("素材/汐見.md"), [
+    { path: "第一章.md", count: 4, places: ["property:synopsis=1", "property:materials=1", "comment=2"], undecided: 0, names: [] },
+    { path: "素材\\灯台.md", count: 2, places: ["body=2"], undecided: 0, names: [] },
+  ]);
+  // backlinksTo の答えは今までどおり
+  assert.deepEqual(index.backlinksTo(p("素材/汐見.md")).map((item) => item.count), [4, 2]);
+  // 同じ名前が2つ: 決まったリンクとは別に、決まっていないリンクとして両方に出る
+  assert.deepEqual(summary("素材/人物/A.md"), [
+    { path: "第二章.md", count: 1, places: ["comment=1"], undecided: 1, names: ["A"] },
+    { path: "素材\\灯台.md", count: 0, places: [], undecided: 1, names: ["A"] },
+  ]);
+  assert.deepEqual(summary("素材/別/A.md").map((item) => [item.path, item.count, item.undecided]), [
+    ["第二章.md", 0, 1],
+    ["素材\\灯台.md", 0, 1],
+  ]);
+
+  // 場所も索引のファイルに残り、形の古い（版 1 の）索引は捨てて全部読む
+  const again = new LinkIndex(ROOT);
+  again.loadCache(index.toCache());
+  assert.equal((await again.refresh(work.stamps(), work.readText)).read, 0);
+  assert.deepEqual(again.backlinkDetails(p("素材/汐見.md")), index.backlinkDetails(p("素材/汐見.md")));
+  const old = JSON.parse(index.toCache());
+  old.version = 1;
+  for (const entry of Object.values(old.files)) entry.l = entry.l.map(([kind, target]) => [kind, target]);
+  const fromOld = new LinkIndex(ROOT);
+  fromOld.loadCache(JSON.stringify(old));
+  assert.equal((await fromOld.refresh(work.stamps(), work.readText)).read, 6, "版 1 の索引は捨てて全部読む");
+  assert.deepEqual(fromOld.backlinkDetails(p("素材/汐見.md")), index.backlinkDetails(p("素材/汐見.md")));
+
+  // 保存のあと: リンクが同じでも場所が変われば変わったと言う
+  assert.equal(index.setFileText(p("第二章.md"), "// [[人物/A]] と [[A]]"), false);
+  assert.equal(index.setFileText(p("第二章.md"), '---\nmaterials: "[[人物/A]]"\n---\n// [[A]]'), true);
+  assert.deepEqual(summary("素材/人物/A.md")[0].places, ["property:materials=1"]);
+}
+
 console.log("link index tests passed");

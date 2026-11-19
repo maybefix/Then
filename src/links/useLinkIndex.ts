@@ -47,6 +47,18 @@ export function useLinkIndex({
   const loadingRef = useRef<Promise<void> | null>(null);
   const writeTimerRef = useRef<number | null>(null);
   const [version, setVersion] = useState(0);
+  /** The index and its revision the screen last drew with (BINDER 3-4). */
+  const publishedRef = useRef<{ index: LinkIndex | null; revision: number }>({ index: null, revision: -1 });
+  /**
+   * Tells the screen when the index changed by any path since it last drew:
+   * a refresh, a save, or a rename's rewrite that wrote into the index directly.
+   */
+  const publish = useCallback((index: LinkIndex) => {
+    const published = publishedRef.current;
+    if (published.index === index && published.revision === index.revision) return;
+    publishedRef.current = { index, revision: index.revision };
+    setVersion((current) => current + 1);
+  }, []);
   const openTextRef = useRef(openText);
   openTextRef.current = openText;
   const rootPathRef = useRef(rootPath);
@@ -71,13 +83,12 @@ export function useLinkIndex({
     (root: string): Promise<void> => {
       const run = async () => {
         let index = indexRef.current;
-        let changed = false;
+        // A new index is told to the screen by publish (it is not the one last drawn).
         if (!index || index.rootPath !== root) {
           if (index) flushCache();
           index = new LinkIndex(root);
           index.loadCache(await invoke<string | null>("read_link_index_cache", { rootPath: root }).catch(() => null));
           indexRef.current = index;
-          changed = true;
         }
         const stamps = await invoke<LinkStamp[]>("list_link_stamps", { rootPath: root });
         if (indexRef.current !== index) return;
@@ -94,7 +105,7 @@ export function useLinkIndex({
         );
         if (indexRef.current !== index) return;
         if (result.read > 0 || result.changed) scheduleCacheWrite();
-        if (result.changed || changed) setVersion((current) => current + 1);
+        publish(index);
       };
       // One refresh at a time; a later one starts when the earlier one ends.
       const previous = loadingRef.current ?? Promise.resolve();
@@ -105,7 +116,7 @@ export function useLinkIndex({
       }).catch(() => undefined);
       return next;
     },
-    [flushCache, scheduleCacheWrite],
+    [flushCache, publish, scheduleCacheWrite],
   );
 
   useEffect(() => {
@@ -139,9 +150,9 @@ export function useLinkIndex({
       if (!index || !relativeTo(index.rootPath, path)) return;
       if (!index.setFileText(path, content)) return;
       scheduleCacheWrite();
-      setVersion((current) => current + 1);
+      publish(index);
     },
-    [scheduleCacheWrite],
+    [publish, scheduleCacheWrite],
   );
 
   const current = useCallback(

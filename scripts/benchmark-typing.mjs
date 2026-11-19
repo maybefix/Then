@@ -159,7 +159,8 @@ function installProjectMock({ chars, manuscriptSource, manuscriptText = null, se
   const files = new Map();
   // --right-pane: the right pane open on that tab. With it, 「資料」 is the materials
   // folder and the manuscript has a synopsis and a material list (BINDER 3-3), so
-  // 「この場面」 has something to read.
+  // 「この場面」 has something to read. Two of its notes link to the manuscript and a board
+  // holds a card of it, so 「つながり」 (BINDER 3-4) has something to show too.
   const frontMatter = rightPane
     ? "---\nsynopsis: 書庫に眠っていた未発送の手紙。\nmaterials:\n  - \"[[資料1]]\"\n  - \"[[資料2]]\"\n  - \"[[消えた資料]]\"\n---\n"
     : "";
@@ -171,7 +172,9 @@ function installProjectMock({ chars, manuscriptSource, manuscriptText = null, se
     children: Array.from({ length: 8 }, (_, fileIndex) => {
       const name = folderIndex === 0 && fileIndex === 0 ? "第一部.md" : `${folder}${fileIndex + 1}.md`;
       const path = `${root}/${folder}/${name}`;
-      files.set(path, folderIndex === 0 && fileIndex === 0 ? frontMatter + (manuscriptText ?? make(chars)) : make(3000 + fileIndex * 700, 7 + fileIndex));
+      files.set(path, folderIndex === 0 && fileIndex === 0
+        ? frontMatter + (manuscriptText ?? make(chars))
+        : make(3000 + fileIndex * 700, 7 + fileIndex) + (rightPane && folder === "資料" && fileIndex < 2 ? "\n[[第一部]]\n" : ""));
       return {
         path, name, kind: "file", children: [], fileId: path, contentHash: null, modifiedAt: 1,
         ...(rightPane && folder === "資料" ? { role: "material" } : {}),
@@ -196,6 +199,7 @@ function installProjectMock({ chars, manuscriptSource, manuscriptText = null, se
       path: entry.path, kind: "text", modifiedAt: 1, size: files.get(entry.path).length, role: entry.role ?? null,
     })),
     list_project_text_files: () => folder,
+    list_board_references: () => (rightPane ? [{ id: "board", name: "ボード", references: [{ nodeId: "n1", sourcePath: "本編/第一部.md" }] }] : []),
     read_text_file: ({ path }) => ({ path, name: path.split("/").pop(), content: files.get(path) ?? "", fileId: path, contentHash: null }),
     load_project_file_progress: () => ({ fileProgress: {}, revision: 0, migratedCount: 0, contentHash: "", rebased: false }),
     load_project_checkpoints: () => ({ snapshots: [], warnings: [], migratedCount: 0, migrationComplete: true }),
@@ -412,6 +416,7 @@ try {
     console.log(`right pane: ${await evaluate(`JSON.stringify({
       synopsis: document.querySelector(".scenePane textarea")?.value ?? null,
       materials: [...document.querySelectorAll(".sceneMaterial")].map((row) => row.dataset.linkState + ":" + row.textContent),
+      connections: [...document.querySelectorAll(".connectionsSection")].map((section) => section.textContent),
     })`)}`);
   }
   if (!opened) {

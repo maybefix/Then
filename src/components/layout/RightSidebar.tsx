@@ -21,6 +21,7 @@ import { PluginIcon } from "../plugins/PluginIcon";
 import ProofreadPane from "../proofread/ProofreadPane";
 import { PropertiesPanel } from "../properties/PropertiesPanel";
 import { ScenePane, type ScenePaneProps } from "../scene/ScenePane";
+import { ConnectionsPane, type ConnectionsPaneProps } from "../connections/ConnectionsPane";
 import { AppIcon } from "./AppIcon";
 import { RightPaneSwitcher, type RightPaneSwitcherItem } from "./RightPaneSwitcher";
 
@@ -40,6 +41,16 @@ const rightSidebarBuiltinTabs: Array<{ id: string; label: string; icon: ReactNod
         <rect x="5" y="3" width="14" height="18" rx="1" />
         <path d="M5 8h14" />
         <path d="M9 12h6M9 16h4" />
+      </svg>
+    ),
+  },
+  {
+    id: "connections",
+    label: "つながり",
+    icon: (
+      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+        <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" />
+        <path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
       </svg>
     ),
   },
@@ -109,6 +120,10 @@ export type RightSidebarProps = {
   documentKey: string;
   /** 「この場面」に渡す、表示中の文書と進捗（BINDER 1-7）。 */
   scene: Omit<ScenePaneProps, "documentKey" | "onExit">;
+  /** 「つながり」に渡す、表示中の文書のリンク元・元の投稿・置かれているボード（BINDER 3-4）。 */
+  connections: ConnectionsPaneProps;
+  /** 「つながり」の元の投稿から、その投稿まで送る（BINDER 3-4）。 */
+  postReveal: { id: string; nonce: number } | null;
   frontMatter: FrontMatterParts;
   updateFrontMatter: (metadata: string) => void;
   handleClearFrontMatter: () => Promise<void>;
@@ -148,7 +163,7 @@ export function RightSidebar(props: RightSidebarProps) {
     rightSidebarTab, setRightSidebarTab,
     openIdeaCanvasBoard, setIsRightSidebarWide, setIsRightSidebarCollapsed, setSidebarPluginRuntimeAnchor,
     isDockedPluginRuntimeVisible, hasOpenedDraft, projectFolder, draftCanvasContext, setDraftSelectRequest,
-    activePluginView, documentKey, scene, frontMatter, updateFrontMatter, handleClearFrontMatter,
+    activePluginView, documentKey, scene, connections, postReveal, frontMatter, updateFrontMatter, handleClearFrontMatter,
     propertyTypeSettings, rememberPropertyType, returnFocusFromProperties, loadPropertySets, searchByProperty,
     editorText, settings, updateSettings, revealEditorRange, replaceEditorRange, projectProofreadTerms,
     appState, setProjectProofreadTerms, setAppState, exportProofreadDictionary, importProofreadDictionary,
@@ -247,6 +262,8 @@ export function RightSidebar(props: RightSidebarProps) {
             <div className="pluginViewBody" aria-label={activePluginView.title} />
           ) : rightSidebarTab === "scene" ? (
             <ScenePane documentKey={documentKey} {...scene} onExit={returnFocusFromProperties} />
+          ) : rightSidebarTab === "connections" ? (
+            <ConnectionsPane {...connections} />
           ) : rightSidebarTab === "properties" ? (
             <PropertiesPanel
               documentKey={documentKey}
@@ -316,6 +333,7 @@ export function RightSidebar(props: RightSidebarProps) {
               // ライブラリ直下（作品を開いていない）では素材の区分がないので出さない（確認1の 1）。
               onMakeNote={postStream.work ? (post) => void postNoteActions.makeNote(post) : undefined}
               onOpenNote={(post) => void postNoteActions.openNote(post)}
+              reveal={postReveal}
             />
           )}
         </div>

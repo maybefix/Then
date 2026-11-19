@@ -11,6 +11,11 @@
 //   of a manuscript (BINDER 3.2), and in the front matter of either.
 //
 // This is the one place the rules live; the editor (3-2) uses the same scan.
+//
+// BINDER 3-4: findLinks also says where each link was written (its place): a
+// property of the front matter (with its key), a `//` comment line, or the
+// body. The rule already tells these apart to decide what counts; the place
+// keeps that answer instead of dropping it.
 import { isSlashCommentLine } from "../editor/ast/documentAst";
 import { parseFrontMatter } from "../utils/frontmatter";
 
@@ -27,6 +32,17 @@ export type FoundLink = {
   fullFrom: number;
   fullTo: number;
 };
+
+/** Where a link was written (BINDER 3-4). */
+export type LinkPlace =
+  /** The front matter; `key` is the top-level property its line belongs to (null: none found). */
+  | { in: "property"; key: string | null }
+  /** A `//` comment line. */
+  | { in: "comment" }
+  /** Any other line (every line of a note; `@[[path]]` anywhere). */
+  | { in: "body" };
+
+export type PlacedLink = FoundLink & { place: LinkPlace };
 
 const OPEN = "[[";
 const CLOSE = "]]";
@@ -95,9 +111,32 @@ export function canWriteNameLink(name: string): boolean {
     links[0].fullFrom === 0 && links[0].fullTo === written.length;
 }
 
-/** Links of `text`, in order. `isNote` is the file's role (material = note). */
-export function findLinks(text: string, isNote: boolean): FoundLink[] {
-  const links: FoundLink[] = [];
+/** A top-level key line of YAML (`key:` or `"key":`; not indented, not a list item or a comment). */
+const TOP_LEVEL_KEY = /^(?:"([^"]+)"|'([^']+)'|([^\s#\-"'][^:]*?))\s*:(?:\s|$)/;
+
+/**
+ * The top-level property the front matter line starting at `lineStart`
+ * belongs to: that line's key, else the nearest key line above it.
+ */
+function propertyKeyAt(text: string, lineStart: number): string | null {
+  let start = lineStart;
+  for (;;) {
+    const end = text.indexOf("\n", start);
+    const line = text.slice(start, end < 0 ? text.length : end).replace(/\r$/, "").replace(/^﻿/, "");
+    if (line.startsWith("---")) return null;
+    const match = TOP_LEVEL_KEY.exec(line);
+    if (match) return (match[1] ?? match[2] ?? match[3]).trim();
+    if (start === 0) return null;
+    start = text.lastIndexOf("\n", start - 2) + 1;
+  }
+}
+
+/**
+ * Links of `text`, in order, each with where it was written. `isNote` is the
+ * file's role (material = note).
+ */
+export function findLinks(text: string, isNote: boolean): PlacedLink[] {
+  const links: PlacedLink[] = [];
   if (!text.includes(OPEN)) return links;
   const metadataEnd = frontMatterEnd(text);
   // Only the lines that hold an opener are cut out and classified.
@@ -108,9 +147,17 @@ export function findLinks(text: string, isNote: boolean): FoundLink[] {
     const lineStart = open === 0 ? 0 : text.lastIndexOf("\n", open - 1) + 1;
     const nextBreak = text.indexOf("\n", open);
     const lineEnd = nextBreak < 0 ? text.length : nextBreak;
-    const names = isNote || lineStart < metadataEnd ||
-      isSlashCommentLine(text.slice(lineStart, lineEnd).replace(/\r$/, ""));
-    scanLine(text, lineStart, lineEnd, names, links);
+    const inMetadata = lineStart < metadataEnd;
+    const isComment = !inMetadata && isSlashCommentLine(text.slice(lineStart, lineEnd).replace(/\r$/, ""));
+    const names = isNote || inMetadata || isComment;
+    const found: FoundLink[] = [];
+    scanLine(text, lineStart, lineEnd, names, found);
+    if (found.length) {
+      const place: LinkPlace = inMetadata
+        ? { in: "property", key: propertyKeyAt(text, lineStart) }
+        : isComment ? { in: "comment" } : { in: "body" };
+      for (const link of found) links.push({ ...link, place });
+    }
     search = lineEnd + 1;
   }
   return links;

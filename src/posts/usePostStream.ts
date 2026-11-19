@@ -13,6 +13,9 @@ import {
 
 const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
 
+/** 読めていないあいだの投稿。描くたびに新しい配列にしない（「つながり」がこれで組み立て直すかを決める。BINDER 3-4）。 */
+const NO_POSTS: Post[] = [];
+
 type ToastAction = { label: string; onClick: () => void };
 
 export type PostStream = {
@@ -214,7 +217,7 @@ export function usePostStream(scopePath: string | null, { showToast }: Options):
   return {
     scoped: Boolean(scopePath),
     available: Boolean(scopePath) && snapshot !== null,
-    posts: snapshot?.posts ?? [],
+    posts: snapshot?.posts ?? NO_POSTS,
     work: snapshot?.work,
     add,
     editBody,

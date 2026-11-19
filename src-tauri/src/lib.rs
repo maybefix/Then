@@ -769,6 +769,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             create_reference_text_file,
             list_reference_candidates,
             list_link_stamps,
+            list_board_references,
             read_link_index_cache,
             write_link_index_cache,
             delete_imported_reference,
@@ -4012,6 +4013,12 @@ fn create_reference_text_file(
 #[tauri::command(async)]
 fn list_link_stamps(root_path: String) -> Result<Vec<link_index::LinkStamp>, String> {
     link_index::list_stamps(Path::new(&root_path))
+}
+
+/// つながり（BINDER 3-4）: 作品のボードの資料カードの一覧。読むだけ。
+#[tauri::command(async)]
+fn list_board_references(root_path: String) -> Vec<link_index::BoardReferences> {
+    link_index::board_references(Path::new(&root_path))
 }
 
 fn link_index_cache_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {

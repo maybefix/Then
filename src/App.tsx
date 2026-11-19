@@ -73,6 +73,8 @@ import type { LinkStamp } from "./links/linkIndex";
 import { readLinkFile, writeLinkFile } from "./links/linkFiles";
 import { createLinkOpenActions } from "./links/linkOpenActions";
 import { useLinkLookup } from "./links/useLinkLookup";
+import { useBoardReferences } from "./links/useBoardReferences";
+import type { Post } from "./posts/postModel";
 import {
   CheckpointStudio,
   type CheckpointCurrentProjectFile,
@@ -3413,6 +3415,14 @@ export default function App() {
   const setPostFilter = useCallback((filter: PostFilter) => {
     setAppState((current) => (current.postFilter === filter ? current : { ...current, postFilter: filter }));
   }, []);
+  // 「つながり」（BINDER 3-4）の元の投稿から、アイデアのペインのその投稿まで送る。
+  const [postReveal, setPostReveal] = useState<{ id: string; nonce: number } | null>(null);
+  // 「つながり」の置かれているボード。ペインを出しているあいだだけ読む。
+  const boardReferences = useBoardReferences(
+    projectFolder?.path ?? null,
+    rightSidebarTab === "connections" && !isRightSidebarCollapsed && appMode !== "plugin",
+    projectFolder,
+  );
 
   const refreshPortableProjectState = useCallback(
     async (rootPath: string, source: "focus" | "checkpoint") => {
@@ -7010,6 +7020,31 @@ export default function App() {
       : null,
   };
 
+  // 「つながり」（BINDER 3-4）: 本文に出ている作品の中の文書を、どこが指しているか。読むだけ。
+  // 打鍵では中身が変わらないので、索引の version・文書・投稿・ボードが変わったときだけ作り直す。
+  const connectionsPath = scene.markdown !== null && sceneEntry?.kind === "file" ? sceneEntry.path : null;
+  const connectionsIsNote = sceneEntry?.kind === "file" && sceneEntry.role === "material";
+  const connectionsActionsRef = useRef({ openIdeaCanvasBoard, setRightSidebarTab, setPostFilter });
+  connectionsActionsRef.current = { openIdeaCanvasBoard, setRightSidebarTab, setPostFilter };
+  const connections = useMemo(() => ({
+    index: linkIndex.peek(),
+    version: linkIndex.version,
+    document: connectionsPath ? { path: connectionsPath, isNote: connectionsIsNote } : null,
+    posts: postStream.posts,
+    boards: boardReferences,
+    onOpenFile: (path: string) => void handleProjectFileSelectRef.current(path),
+    onOpenBoard: (boardId: string, nodeId: string) =>
+      void connectionsActionsRef.current.openIdeaCanvasBoard("project", boardId, nodeId),
+    onOpenPost: (post: Post) => {
+      const actions = connectionsActionsRef.current;
+      // ノートにした投稿は受信箱から外れているので「すべて」で見せる（確認1の決定5）。
+      actions.setPostFilter("all");
+      actions.setRightSidebarTab("idea");
+      setPostReveal({ id: post.id, nonce: Date.now() });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [linkIndex.version, linkIndex.peek, projectFolder?.path, connectionsPath, connectionsIsNote, postStream.posts, boardReferences]);
+
   return (
       <main
         ref={appShellRef}
@@ -7559,7 +7594,7 @@ export default function App() {
                 isRightSidebarWide, isRightSidebarCollapsed, appMode, isEditorFocusMode, pluginViews,
                 loadedPlugins, rightSidebarTab, setRightSidebarTab, openIdeaCanvasBoard, setIsRightSidebarWide, setIsRightSidebarCollapsed,
                 setSidebarPluginRuntimeAnchor, isDockedPluginRuntimeVisible, hasOpenedDraft, projectFolder,
-                draftCanvasContext, setDraftSelectRequest, activePluginView, documentKey, scene, frontMatter,
+                draftCanvasContext, setDraftSelectRequest, activePluginView, documentKey, scene, connections, postReveal, frontMatter,
                 updateFrontMatter, handleClearFrontMatter, propertyTypeSettings, rememberPropertyType,
                 returnFocusFromProperties, loadPropertySets, searchByProperty, editorText, settings,
                 updateSettings, revealEditorRange, replaceEditorRange, projectProofreadTerms, appState,

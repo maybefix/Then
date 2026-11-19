@@ -49,6 +49,8 @@ const values = {
   hasOpenedDraft: false,
   projectFolder: null,
   scene: { markdown: "---\nsynopsis: 書庫の手紙。\n---\n本文", onChangeMarkdown: () => {}, progress: "writing", onSetProgress: () => {} },
+  connections: { index: null, version: 0, document: null, posts: [], boards: [], onOpenFile: () => {}, onOpenPost: () => {}, onOpenBoard: () => {} },
+  postReveal: null,
   draftCanvasContext: null,
   activePluginView: null,
   documentKey: "doc",
@@ -80,6 +82,7 @@ const panes = {
   proof: /class="proofPane"/,
   properties: /class="propertiesPanel"/,
   scene: /class="scenePane"/,
+  connections: /class="connectionsPane"/,
 };
 for (const [tab, marker] of Object.entries(panes)) {
   const html = render({ rightSidebarTab: tab });
@@ -146,6 +149,7 @@ assert.doesNotMatch(render(), /visiblePluginRuntimeAnchor/, "no plugin: the runt
   assert.equal(state.normalizeRightSidebarTab("ai"), "idea", "a stored AI tab returns to idea");
   assert.equal(state.normalizeRightSidebarTab("plot"), "idea", "a stored plot tab returns to idea (BINDER 1-6)");
   assert.equal(state.normalizeRightSidebarTab("scene"), "scene", "a stored この場面 comes back (BINDER 1-7)");
+  assert.equal(state.normalizeRightSidebarTab("connections"), "connections", "a stored つながり comes back (BINDER 3-4)");
   for (const name of ["normalizeRightSidebarCollapsed", "normalizeRightSidebarWide"]) {
     assert.equal(typeof state[name], "function", `${name} reads the stored value back`);
     assert.equal(state[name](true), true, name);
@@ -219,7 +223,7 @@ export function RightPaneSwitcher({ items, activeId }) {
     return renderToStaticMarkup(createElement(ListedSidebar, props));
   };
   const panes = [...renderListed().matchAll(/<li data-id="([^"]+)">([^<]*)<\/li>/g)].map((match) => `${match[1]}:${match[2]}`);
-  assert.deepEqual(panes, ["scene:この場面", "idea:アイデア", "proof:校正", "draft:中間稿", "properties:プロパティ", "plugin:demo:notes:メモ帳"], "the panes offered, in order (BINDER 1-7: この場面 first)");
+  assert.deepEqual(panes, ["scene:この場面", "connections:つながり", "idea:アイデア", "proof:校正", "draft:中間稿", "properties:プロパティ", "plugin:demo:notes:メモ帳"], "the panes offered, in order (BINDER 1-7: この場面 first; 3-4: つながり next)");
 }
 
 console.log("right sidebar tests passed");

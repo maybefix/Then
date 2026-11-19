@@ -25,7 +25,11 @@ type PostStreamPaneProps = {
   onMakeNote?: (post: Post) => void;
   /** 札を押してノートを開く。 */
   onOpenNote?: (post: Post) => void;
+  /** その投稿まで送り、しばらく目立たせる（「つながり」の元の投稿を押したとき。BINDER 3-4）。nonce が変わるたびに。 */
+  reveal?: { id: string; nonce: number } | null;
 };
+
+const REVEAL_MS = 2400;
 
 function PlusIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>;
@@ -46,7 +50,7 @@ function MoreIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="18" cy="12" r="1" /></svg>;
 }
 
-export function PostStreamPane({ stream, filter, onFilterChange, onMakeNote, onOpenNote }: PostStreamPaneProps) {
+export function PostStreamPane({ stream, filter, onFilterChange, onMakeNote, onOpenNote, reveal = null }: PostStreamPaneProps) {
   const { scoped, available, posts, work, add, editBody, setFiled, remove, refresh } = stream;
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -82,6 +86,25 @@ export function PostStreamPane({ stream, filter, onFilterChange, onMakeNote, onO
     [effectiveFilter, posts, work],
   );
   const inboxCount = useMemo(() => countInbox(posts), [posts]);
+
+  // 「つながり」から: 頼まれた投稿が並んだら、そこまで送って目立たせる（一度だけ）。
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const revealedRef = useRef<number | null>(null);
+  const [revealedId, setRevealedId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!reveal || revealedRef.current === reveal.nonce) return;
+    const element = [...(scrollRef.current?.querySelectorAll<HTMLElement>("[data-post-id]") ?? [])]
+      .find((candidate) => candidate.dataset.postId === reveal.id);
+    if (!element) return;
+    revealedRef.current = reveal.nonce;
+    element.scrollIntoView({ block: "center" });
+    setRevealedId(reveal.id);
+  }, [days, reveal]);
+  useEffect(() => {
+    if (!revealedId) return;
+    const timer = window.setTimeout(() => setRevealedId(null), REVEAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [revealedId, reveal?.nonce]);
 
   const submitOnEnter = (event: KeyboardEvent<HTMLTextAreaElement>, action: () => void) => {
     if (event.key !== "Enter" || event.shiftKey || composingRef.current || event.nativeEvent.isComposing) return;
@@ -137,7 +160,7 @@ export function PostStreamPane({ stream, filter, onFilterChange, onMakeNote, onO
     return (
       <article
         key={entry.id}
-        className={`ideaFragment postItem ${depth > 0 ? "isReply" : ""} ${context ? "isContext" : ""}`}
+        className={`ideaFragment postItem ${depth > 0 ? "isReply" : ""} ${context ? "isContext" : ""} ${revealedId === entry.id ? "isRevealed" : ""}`}
         style={depth > 0 ? { marginLeft: `${Math.min(depth, 3) * 16}px` } : undefined}
         data-post-id={entry.id}
       >
@@ -247,7 +270,7 @@ export function PostStreamPane({ stream, filter, onFilterChange, onMakeNote, onO
         </div>
         {chips}
       </div>
-      <div className="ideaScroll postScroll">
+      <div ref={scrollRef} className="ideaScroll postScroll">
         {days.map((day) => (
           <section key={day.key || "unknown"} className="postDay" aria-label={dayLabel(day.key) || undefined}>
             {dayLabel(day.key) && <h3 className="postDayLabel">{dayLabel(day.key)}</h3>}
