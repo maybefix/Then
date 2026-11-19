@@ -274,4 +274,76 @@ const button = (container, title, at) =>
   await act(async () => root.unmount());
 }
 
+// 8. 改名のあとのリンクの書き換え（3-1）は索引の setFileText を直接呼ぶ。そのあとの refresh は、
+//    ファイルを読んでも索引と同じなので「変わっていない」と言うが、画面（version）には知らせる。
+//    知らせないと、「つながり」やリンクの薄い表示が、次に何かが変わるまで古いまま（3-4 の実機確認で見つけた）。
+{
+  const disk = new Map([
+    [p("素材/汐見.md"), "# 汐見"],
+    [p("素材/灯.md"), "[[汐見]] と話す"],
+  ]);
+  const times = new Map([[p("素材/汐見.md"), 1], [p("素材/灯.md"), 1]]);
+  globalThis.__qaInvoke = async (command, args) => {
+    if (command === "read_link_index_cache" || command === "write_link_index_cache") return null;
+    if (command === "list_link_stamps") {
+      return [...disk.keys()].sort().map((path) => ({ path, kind: "text", modifiedAt: times.get(path), size: disk.get(path).length, role: "material" }));
+    }
+    if (command === "read_text_file") return { content: disk.get(args.path) };
+    throw new Error(`unexpected ${command}`);
+  };
+  const stubbed = path.join(dir, "use-link-index.mjs");
+  await build({
+    entryPoints: ["src/links/useLinkIndex.ts"],
+    outfile: stubbed,
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    external: ["react"],
+    logLevel: "error",
+    plugins: [{
+      name: "stub-tauri",
+      setup(pluginBuild) {
+        pluginBuild.onResolve({ filter: /^@tauri-apps\/api\/core$/ }, () => ({ path: "tauri-core", namespace: "stub" }));
+        pluginBuild.onLoad({ filter: /.*/, namespace: "stub" }, () => ({
+          contents: "export const invoke = (command, args) => globalThis.__qaInvoke(command, args);",
+          loader: "js",
+        }));
+      },
+    }],
+  });
+  const { useLinkIndex } = await import(`${pathToFileURL(stubbed).href}?${Date.now()}`);
+  let handle = null;
+  const Probe = () => {
+    handle = useLinkIndex({ enabled: true, rootPath: ROOT, treeKey: 1, openText: () => null });
+    return null;
+  };
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  await act(async () => root.render(React.createElement(Probe)));
+  await act(async () => { await handle.current(ROOT); });
+  const index = handle.peek(ROOT);
+  assert.ok(index, "索引を読んだ");
+  assert.deepEqual(index.backlinksTo(p("素材/汐見.md")).map((item) => item.path), [p("素材/灯.md")]);
+  const before = handle.version;
+
+  // 改名の書き換え: ファイルを書き、索引にも直接入れる（rewriteLinksAfterPathChange と同じ）
+  disk.set(p("素材/灯.md"), "[[灯台]] と話す");
+  times.set(p("素材/灯.md"), 2);
+  disk.set(p("素材/灯台.md"), "# 灯台");
+  times.set(p("素材/灯台.md"), 2);
+  await act(async () => { await handle.refresh(); });
+  const listed = handle.version;
+  index.setFileText(p("素材/灯.md"), "[[汐見]] と [[灯台]] と話す");
+  disk.set(p("素材/灯.md"), "[[汐見]] と [[灯台]] と話す");
+  times.set(p("素材/灯.md"), 3);
+  await act(async () => { await handle.refresh(); });
+  assert.ok(listed > before, "一覧が変われば知らせる（今まで通り）");
+  assert.ok(handle.version > listed, "索引を直接変えたあとの refresh でも、画面に知らせる");
+  // 何も変わらなければ知らせない
+  const settled = handle.version;
+  await act(async () => { await handle.refresh(); });
+  assert.equal(handle.version, settled, "何も変わらなければ知らせない");
+  await act(async () => root.unmount());
+}
+
 console.log("connections tests passed");
