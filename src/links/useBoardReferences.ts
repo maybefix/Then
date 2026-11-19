@@ -20,7 +20,7 @@ export function useBoardReferences(rootPath: string | null, active: boolean, tre
     const read = () => {
       void invoke<BoardReferences[]>("list_board_references", { rootPath })
         .then((boards) => {
-          if (cancelled) return;
+          if (cancelled || !Array.isArray(boards)) return;
           setState((current) =>
             current && current.root === rootPath && JSON.stringify(current.boards) === JSON.stringify(boards)
               ? current
