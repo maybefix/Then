@@ -18,6 +18,13 @@
   opacity: 0.55;
 }
 
+/* 「つながり」の元の投稿から送ってきた投稿（BINDER 3-4）。少しのあいだだけ。 */
+.postItem.isRevealed {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+  background: var(--accent-soft);
+}
+
 .postHead {
   display: flex;
   min-width: 0;

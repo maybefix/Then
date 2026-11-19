@@ -158,7 +158,8 @@ export function arrangePosts(posts: Post[], filter: PostFilter, work: PostWork |
   return rows;
 }
 
-function dayKey(at: string): string {
+/** 日の区切りのキー（地方時の年-月-日）。 */
+export function dayKey(at: string): string {
   const date = new Date(at);
   if (Number.isNaN(date.getTime())) return "";
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;

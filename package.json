@@ -86,6 +86,7 @@
     "test:synopsis-actions": "node scripts/test-synopsis-actions.mjs",
     "test:corkboard": "node scripts/test-corkboard.mjs",
     "test:scene-pane": "node scripts/test-scene-pane.mjs",
+    "test:connections": "node scripts/test-connections.mjs",
     "test:post-stream": "node scripts/test-post-stream.mjs",
     "test:note-mode": "node scripts/test-note-mode.mjs",
     "test:post-stream-rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- post_stream:: atomic_file::",

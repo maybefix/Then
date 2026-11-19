@@ -1,0 +1,106 @@
+/* 「つながり」(BINDER 3-4). Same container and rows as 「この場面」 and its
+   material list (scene.css); colours from the theme variables only. */
+.connectionsPane {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 4px 10px 12px;
+  color: var(--text-secondary);
+  font-family: var(--ui-font-family);
+}
+
+.connectionsSection + .connectionsSection {
+  margin-top: 10px;
+}
+
+.connectionsSectionHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.connectionsSectionTitle {
+  margin: 0;
+  padding: 8px 2px 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.connectionsSectionCount {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.connectionsList {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.connectionsItem {
+  min-width: 0;
+  border-radius: 5px;
+}
+
+.connectionsItem:hover {
+  background: var(--bg-tertiary);
+}
+
+.connectionsOpen {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: start;
+}
+
+.connectionsOpen svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.connectionsText {
+  display: grid;
+  min-width: 0;
+}
+
+.connectionsName,
+.connectionsSub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connectionsSub {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+/* A name link that could mean this document or another one (4A): faint and
+   dashed, as such links are drawn in the body (3-2). Not counted. */
+.connectionsItem[data-undecided="true"] .connectionsName {
+  color: var(--text-muted);
+  text-decoration: underline dashed;
+  text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+  text-underline-offset: 0.2em;
+}
