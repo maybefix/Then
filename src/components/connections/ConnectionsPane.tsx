@@ -12,7 +12,7 @@ import type { LinkIndex } from "../../links/linkIndex";
 import {
   buildConnections,
   decidedCount,
-  placeSummary,
+  fileSummary,
   type BoardReferences,
   type ConnectionFile,
 } from "../../links/connections";
@@ -63,16 +63,20 @@ function FileList({ files, onOpen }: { files: ConnectionFile[]; onOpen: (path: s
   return (
     <ul className="connectionsList">
       {files.map((file) => {
-        const sub = file.undecided
-          ? file.undecidedNames.map((name) => `[[${name}]]`).join(" ")
-          : placeSummary(file.places);
+        const sub = fileSummary(file);
         return (
           <li key={file.path} className="connectionsItem" data-undecided={file.undecided ? "true" : undefined}>
             <button type="button" className="connectionsOpen" title={file.relative} onClick={() => onOpen(file.path)}>
               {file.isNote ? <NoteIcon /> : <ManuscriptIcon />}
               <span className="connectionsText">
                 <span className="connectionsName">{file.name}</span>
-                {sub && <span className="connectionsSub">{sub}</span>}
+                {(sub.decided || sub.undecided) && (
+                  <span className="connectionsSub">
+                    {sub.decided}
+                    {sub.decided && sub.undecided ? " · " : ""}
+                    {sub.undecided && <span className="connectionsUndecided">{sub.undecided}</span>}
+                  </span>
+                )}
               </span>
             </button>
           </li>

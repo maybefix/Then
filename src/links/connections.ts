@@ -31,6 +31,18 @@ export type ConnectionFile = {
    */
   undecided: boolean;
   undecidedNames: string[];
+  /**
+   * How many times the manuscript writes the note's name without `[[ ]]`
+   * (BINDER 3-5). Counted with the body (「本文 N か所」).
+   */
+  mentions: number;
+  /**
+   * The same when the name means more than one file (決定3c): shown apart and
+   * faint, not counted (決定6).
+   */
+  undecidedMentions: number;
+  /** The name looked for, when either count is above 0. */
+  mentionName: string | null;
 };
 
 export type ConnectionBoard = { id: string; name: string; nodeId: string; cards: number };
@@ -90,9 +102,43 @@ export function buildConnections({
       places: detail.places,
       undecided: detail.count === 0,
       undecidedNames: detail.undecidedNames,
+      mentions: 0,
+      undecidedMentions: 0,
+      mentionName: null,
     };
     if (isNote && !file.isNote) manuscripts.push(file);
     else sources.push(file);
+  }
+
+  // The note's name written without `[[ ]]` (BINDER 3-5): added to the
+  // manuscript's line, or a line of its own when that is all it writes.
+  const mentioned = isNote ? index.mentionsOf(path) : null;
+  for (const { path: from, count } of mentioned?.files ?? []) {
+    let file = manuscripts.find((entry) => comparable(entry.path) === comparable(from));
+    if (!file) {
+      const relativeFrom = (relativeTo(index.rootPath, from) ?? from).replace(/\\/g, "/");
+      file = {
+        path: from,
+        name: fileName(relativeFrom),
+        isNote: false,
+        relative: relativeFrom,
+        count: 0,
+        places: [],
+        undecided: true,
+        undecidedNames: [],
+        mentions: 0,
+        undecidedMentions: 0,
+        mentionName: null,
+      };
+      manuscripts.push(file);
+    }
+    file.mentionName = mentioned!.name;
+    if (mentioned!.undecided) {
+      file.undecidedMentions = count;
+    } else {
+      file.mentions = count;
+      file.undecided = false;
+    }
   }
   manuscripts.sort(decidedFirst);
   sources.sort(decidedFirst);
@@ -121,16 +167,40 @@ export function buildConnections({
  * Properties go by their shown name (`materials` is 「素材」); comment lines and
  * the body by how many.
  */
-export function placeSummary(places: readonly PlaceCount[]): string {
-  return places
+export function placeSummary(places: readonly PlaceCount[], mentions = 0): string {
+  // The note's name written without `[[ ]]` goes with the body's links
+  // (`@[[path]]`) into one 「本文 N か所」 (BINDER 3-5).
+  const hasBody = places.some(({ place }) => place.in === "body");
+  const all: PlaceCount[] = hasBody || mentions === 0
+    ? [...places]
+    : [...places, { place: { in: "body" }, count: 0 }];
+  return all
     .map(({ place, count }) => {
       if (place.in === "property") {
         const label = place.key === null ? "プロパティ" : propertyLabel(place.key) ?? place.key;
         return count > 1 ? `${label} ${count}か所` : label;
       }
-      return `${place.in === "comment" ? "コメント" : "本文"} ${count}か所`;
+      if (place.in === "comment") return `コメント ${count}か所`;
+      return `本文 ${count + mentions}か所`;
     })
     .join(" · ");
+}
+
+/**
+ * The line under a file's name in the pane. `undecided` is the part shown
+ * faint: links and names that could mean this note or another one (決定6).
+ * A name written without `[[ ]]` shows as 「汐見」, not as a link.
+ */
+export function fileSummary(file: ConnectionFile): { decided: string; undecided: string } {
+  const name = file.undecidedMentions > 0 && file.mentionName !== null
+    ? `「${file.mentionName}」${file.undecidedMentions}か所`
+    : "";
+  if (file.undecided) {
+    return { decided: "", undecided: [...file.undecidedNames.map((link) => `[[${link}]]`), ...(name ? [name] : [])].join(" ") };
+  }
+  // A line with decided links shows only those, as in 3-4; a name written
+  // without `[[ ]]` that is not decided follows them, faint.
+  return { decided: placeSummary(file.places, file.mentions), undecided: name };
 }
 
 /** The number a section's heading shows: decided links only (決定6). */

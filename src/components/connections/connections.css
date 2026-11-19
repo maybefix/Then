@@ -98,7 +98,8 @@
 
 /* A name link that could mean this document or another one (4A): faint and
    dashed, as such links are drawn in the body (3-2). Not counted. */
-.connectionsItem[data-undecided="true"] .connectionsName {
+.connectionsItem[data-undecided="true"] .connectionsName,
+.connectionsUndecided {
   color: var(--text-muted);
   text-decoration: underline dashed;
   text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
