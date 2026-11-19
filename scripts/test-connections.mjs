@@ -257,4 +257,21 @@ const button = (container, title, at) =>
   await act(async () => root.unmount());
 }
 
+// 7. 投稿を読めていないあいだも、投稿の一覧は描くたびに同じ配列（「つながり」はこれで組み立て直すかを決める）
+{
+  const { usePostStream } = await bundle("src/posts/usePostStream.ts", "use-post-stream.mjs");
+  const seen = [];
+  const Probe = () => {
+    seen.push(usePostStream(null, { showToast: () => {} }).posts);
+    return null;
+  };
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  await act(async () => root.render(React.createElement(Probe)));
+  await act(async () => root.render(React.createElement(Probe)));
+  assert.ok(seen.length >= 2);
+  assert.ok(seen.every((posts) => posts === seen[0]), "読めていないときの空の一覧は同じ配列");
+  await act(async () => root.unmount());
+}
+
 console.log("connections tests passed");
