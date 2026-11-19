@@ -78,6 +78,90 @@ pub fn list_stamps(root: &Path) -> Result<Vec<LinkStamp>, String> {
     Ok(stamps)
 }
 
+/// ボードの資料カード1枚（BINDER 3-4）。`source_path` は作品からの相対パス（`/` 区切り）。
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardReference {
+    pub node_id: String,
+    pub source_path: String,
+}
+
+/// 作品のボード1枚と、その資料カード（BINDER 3-4）。
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardReferences {
+    pub id: String,
+    pub name: String,
+    pub references: Vec<BoardReference>,
+}
+
+/// 作品の `.then/boards/*.canvas` のうち、作品の中のファイルを指す資料カード（`type: "reference"`、
+/// `scope` が `project` かないもの。2-6 の付け替えと同じ範囲）を持つボード。並びはボードの一覧と同じ
+/// （並べ替えた順、なければ新しい順）。読むだけで、どのファイルにも書かない。壊れたボードは飛ばす。
+pub fn board_references(root: &Path) -> Vec<BoardReferences> {
+    let folder = super::project_canvas_boards_dir(root);
+    let Ok(entries) = std::fs::read_dir(&folder) else { return Vec::new() };
+    let mut boards: Vec<(BoardReferences, i64)> = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let is_board = path.is_file()
+            && path
+                .extension()
+                .and_then(|value| value.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("canvas"));
+        if !is_board {
+            continue;
+        }
+        let Some(id) = path.file_stem().and_then(|value| value.to_str()).map(str::to_string) else { continue };
+        let Ok(content) = std::fs::read_to_string(&path) else { continue };
+        let Ok(board) = serde_json::from_str::<serde_json::Value>(&content) else { continue };
+        let references: Vec<BoardReference> = board
+            .get("nodes")
+            .and_then(serde_json::Value::as_array)
+            .map(|nodes| {
+                nodes
+                    .iter()
+                    .filter(|node| {
+                        node.get("type").and_then(serde_json::Value::as_str) == Some("reference")
+                            && node
+                                .get("scope")
+                                .and_then(serde_json::Value::as_str)
+                                .is_none_or(|scope| scope == "project")
+                    })
+                    .filter_map(|node| {
+                        let node_id = node.get("id")?.as_str()?.to_string();
+                        let source_path = node.get("sourcePath")?.as_str()?.replace('\\', "/");
+                        (!source_path.is_empty()).then_some(BoardReference { node_id, source_path })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        if references.is_empty() {
+            continue;
+        }
+        let name = board
+            .pointer("/then/name")
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(&id)
+            .to_string();
+        let updated_at = board.pointer("/then/updatedAt").and_then(serde_json::Value::as_i64).unwrap_or(0);
+        boards.push((BoardReferences { id, name, references }, updated_at));
+    }
+    let order = super::read_canvas_board_order(&folder);
+    boards.sort_by(|(left, left_updated), (right, right_updated)| {
+        let left_position = order.iter().position(|id| id == &left.id);
+        let right_position = order.iter().position(|id| id == &right.id);
+        match (left_position, right_position) {
+            (Some(left_position), Some(right_position)) => left_position.cmp(&right_position),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => right_updated.cmp(left_updated).then_with(|| left.id.cmp(&right.id)),
+        }
+    });
+    boards.into_iter().map(|(board, _)| board).collect()
+}
+
 /// 作品ごとの索引のファイル。作品のパスの綴りの大小は区別しない（Windows）。
 pub fn cache_path(cache_dir: &Path, root: &Path) -> PathBuf {
     let key = content_hash(root.to_string_lossy().to_lowercase().as_bytes());
@@ -162,5 +246,63 @@ mod tests {
         assert_eq!(read_cache(&cache, &PathBuf::from(r"c:\books\作品A")).as_deref(), Some("{\"version\":1}"));
         assert_eq!(read_cache(&cache, &PathBuf::from(r"C:\Books\作品B")), None);
         std::fs::remove_dir_all(cache).unwrap();
+    }
+
+    #[test]
+    fn board_references_list_work_reference_cards_without_writing() {
+        let root = temp_dir("boards");
+        assert_eq!(board_references(&root), Vec::new(), "ボードのフォルダがなければ空");
+        let boards = root.join(".then").join("boards");
+        std::fs::create_dir_all(&boards).unwrap();
+        let write = |id: &str, text: &str| std::fs::write(boards.join(format!("{id}.canvas")), text).unwrap();
+        write(
+            "main",
+            r#"{"nodes":[
+                {"id":"r1","type":"reference","scope":"project","sourcePath":"素材\\資料\\汐見.md"},
+                {"id":"r2","type":"reference","sourcePath":"素材/灯.md"},
+                {"id":"g","type":"reference","scope":"global","sourcePath":"素材/灯.md"},
+                {"id":"t","type":"text","text":"[[汐見]]"},
+                {"id":"e","type":"reference","scope":"project","sourcePath":""}
+            ],"edges":[],"then":{"name":"潮待ち郵便局","updatedAt":5}}"#,
+        );
+        write("older", r#"{"nodes":[{"id":"x","type":"reference","sourcePath":"素材/灯.md"}],"then":{"updatedAt":1}}"#);
+        write("none", r#"{"nodes":[{"id":"t","type":"text","text":"x"}],"then":{"name":"カードだけ"}}"#);
+        write("broken", "{");
+        std::fs::write(super::super::canvas_board_order_path(&boards), "[]").unwrap();
+        let before: Vec<(PathBuf, Vec<u8>)> = std::fs::read_dir(&boards)
+            .unwrap()
+            .flatten()
+            .map(|entry| (entry.path(), std::fs::read(entry.path()).unwrap()))
+            .collect();
+
+        let found = board_references(&root);
+        assert_eq!(
+            found,
+            vec![
+                BoardReferences {
+                    id: "main".to_string(),
+                    name: "潮待ち郵便局".to_string(),
+                    references: vec![
+                        BoardReference { node_id: "r1".to_string(), source_path: "素材/資料/汐見.md".to_string() },
+                        BoardReference { node_id: "r2".to_string(), source_path: "素材/灯.md".to_string() },
+                    ],
+                },
+                BoardReferences {
+                    id: "older".to_string(),
+                    name: "older".to_string(),
+                    references: vec![BoardReference { node_id: "x".to_string(), source_path: "素材/灯.md".to_string() }],
+                },
+            ],
+            "作品の資料カードを持つボードだけ。共通の資料・テキスト・空のパス・壊れたボードは飛ばし、並びは新しい順"
+        );
+        for (path, bytes) in before {
+            assert_eq!(std::fs::read(&path).unwrap(), bytes, "読むだけで書かない: {}", path.display());
+        }
+
+        // 並べ替えた順があれば、その順
+        std::fs::write(super::super::canvas_board_order_path(&boards), r#"["older","main"]"#).unwrap();
+        let ids: Vec<String> = board_references(&root).into_iter().map(|board| board.id).collect();
+        assert_eq!(ids, vec!["older".to_string(), "main".to_string()]);
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
