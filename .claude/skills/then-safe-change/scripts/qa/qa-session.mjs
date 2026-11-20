@@ -9,7 +9,7 @@
 import { spawn } from "node:child_process";
 import http from "node:http";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { countLeftovers, formatLeftovers, stopLeftovers } from "../lib/processes.mjs";
 
 const [identifier, ...rest] = process.argv.slice(2);
@@ -24,6 +24,26 @@ const { guardBrowser, stopBrowser } = await import(pathToFileURL(path.resolve("s
 const debugPort = 9600 + Math.floor(Math.random() * 150);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// QA のあいだ画面を消さない手助け（keep-screen.ps1）。スクリーンセーバーが出ていると OS の入力と
+// 撮影が拒まれるため。設定は変えず、このプロセスが終われば手助けも止まる。
+const keepScreen = spawn("powershell", [
+  "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+  "-File", fileURLToPath(new URL("./keep-screen.ps1", import.meta.url)),
+  "-ParentPid", String(process.pid), "-MaxMinutes", "50",
+], { stdio: ["ignore", "pipe", "inherit"] });
+const screenState = await new Promise((resolve) => {
+  let text = "";
+  keepScreen.stdout.on("data", (chunk) => {
+    text += chunk;
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    if (lines.some((line) => ["keeping", "locked", "screensaver-still-running"].includes(line))) resolve(lines.join(", "));
+  });
+  keepScreen.once("exit", () => resolve(text.trim().split(/\r?\n/).join(", ") || "keep-screen exited"));
+  setTimeout(() => resolve("keep-screen: no answer"), 15_000);
+});
+const stopKeepScreen = () => { try { keepScreen.kill(); } catch {} };
+process.once("exit", stopKeepScreen);
+
 const app = spawn(exe, [], {
   stdio: "ignore",
   env: { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${debugPort} --remote-allow-origins=*` },
@@ -31,7 +51,7 @@ const app = spawn(exe, [], {
 guardBrowser(app, null);
 const leftoverOptions = { exe, identifier };
 // 止めるのは QA の Then と WebView2 だけ（同時に動いているテストには触れない）。
-const QA_KINDS = ["qaThen", "qaWebView"];
+const QA_KINDS = ["qaThen", "qaWebView", "qaKeepScreen"];
 // shutdown() が済んでいれば、終わりぎわにもう一度 PowerShell を動かさない（終了が遅れ、
 // 直後の qa-cleanup.mjs に残り物と見なされて止められるため）。
 let shutDown = false;
@@ -45,6 +65,7 @@ let server = null;
 async function shutdown(reason) {
   try { page?.close(); } catch {}
   await stopBrowser(app, null);
+  stopKeepScreen();
   stopLeftovers(leftoverOptions, undefined, QA_KINDS);
   await sleep(1500);
   const leftovers = countLeftovers(leftoverOptions);
@@ -144,4 +165,4 @@ server = http.createServer(async (req, res) => {
     reply(500, { error: String(error) });
   }
 });
-server.listen(port, "127.0.0.1", () => console.log(`qa-session ready on ${port} (app pid ${app.pid}, debug port ${debugPort}, exe ${exe})`));
+server.listen(port, "127.0.0.1", () => console.log(`qa-session ready on ${port} (app pid ${app.pid}, debug port ${debugPort}, exe ${exe}; screen: ${screenState})`));

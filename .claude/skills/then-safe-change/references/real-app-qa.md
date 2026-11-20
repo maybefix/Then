@@ -27,6 +27,7 @@
    ```bash
    node <skill>/scripts/qa/qa-session.mjs local.then.qa.<topic> --port 47811
    ```
+   qa-session は、動いているあいだ `keep-screen.ps1` で画面を消さない（設定は変えない）。スクリーンセーバーが出ていると、OS の入力（SendInput）は拒まれ、撮影（CopyFromScreen）は「ハンドルが無効」で失敗するため（2026-11-20 に確かめた）。起動時にスクリーンセーバーが出ていれば、パスワードのいらない設定でロックもされていないときだけ閉じる。ready の行の `screen:` が `keeping` なら OS の入力と撮影が使える。`locked` などなら使えないので、CDP で代え、そう報告に書く。
 4. **手助けを読み込み、起動画面を抜ける**:
    ```bash
    Q="node <skill>/scripts/qa/q.mjs"
@@ -112,4 +113,4 @@ node <skill>/scripts/qa/qa-cleanup.mjs local.then.qa.<topic> --library <qa>/lib
 git status --short
 ```
 
-`qa-cleanup.mjs` は、QA の Then・WebView2・テストの node と Edge が残っていれば止め、`%APPDATA%\<identifier>` と `%LOCALAPPDATA%\<identifier>` と一時ライブラリを消して、残りの数を出す。全部が0で、`git status` に意図しない変更（`src-tauri/Cargo.toml` の改行など）がないことを確かめてから、報告に書く。
+`qa-cleanup.mjs` は、QA の Then・WebView2・画面を消さない手助け（keep-screen）・テストの node と Edge が残っていれば止め、`%APPDATA%\<identifier>` と `%LOCALAPPDATA%\<identifier>` と一時ライブラリを消して、残りの数を出す。全部が0で、`git status` に意図しない変更（`src-tauri/Cargo.toml` の改行など）がないことを確かめてから、報告に書く。
