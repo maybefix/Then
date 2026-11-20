@@ -118,6 +118,8 @@ node .claude/skills/then-safe-change/scripts/suite.mjs compare <scratchpad>/suit
 | `<skill>/scripts/qa/qa-build.mjs` | QA 用アプリの build（Cargo.toml の改行の書き換えも戻す） |
 | `<skill>/scripts/qa/qa-seed.mjs` | 一時ライブラリと QA アプリのアプリ状態を作る |
 | `<skill>/scripts/qa/qa-session.mjs` | QA アプリを起動し、HTTP で操作を受け付ける（バックグラウンドで動かす） |
+| `<skill>/scripts/qa/keep-screen.ps1` | QA のあいだ画面を消さない（qa-session が自動で動かす。スクリーンセーバーが出ていると OS の入力と撮影ができない） |
+| `<skill>/scripts/qa/osinput.ps1` | OS の入力（クリック・文字・キー）と、Then の窓だけの撮影 |
 | `<skill>/scripts/qa/q.mjs` | 操作を1つ送る（eval / type / key / click / stop） |
 | `<skill>/scripts/qa/qa-page.js` | 画面の中で使う手助けの関数（`window.qa`） |
 | `<skill>/scripts/qa/qa-cleanup.mjs` | 片付けと、残っているプロセスの数え上げ |

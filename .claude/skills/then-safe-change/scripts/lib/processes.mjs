@@ -17,11 +17,13 @@ function filters({ exe, identifier } = {}) {
     qaThen: exe ? `$_.ExecutablePath -eq '${quote(exe)}'` : "$false",
     qaWebView: identifier ? `$_.Name -eq 'msedgewebview2.exe' -and $_.CommandLine -like '*${quote(identifier)}*'` : "$false",
     testEdge: "($_.Name -eq 'msedge.exe' -or $_.Name -eq 'chrome.exe') -and ($_.CommandLine -like '*\\then-*' -or $_.CommandLine -like '*remote-debugging-port*')",
+    // $PID: 数えている PowerShell 自身のコマンドラインにもこの文字列が入るため除く。
+    qaKeepScreen: "$_.Name -eq 'powershell.exe' -and $_.CommandLine -like '*keep-screen.ps1*' -and $_.ProcessId -ne $PID",
     testNode: "$_.Name -eq 'node.exe' -and ($_.CommandLine -like '*scripts*test-*' -or $_.CommandLine -like '*qa-session*' -or $_.CommandLine -like '*verify-export*' -or $_.CommandLine -like '*investigate-*')",
   };
 }
 
-/** { qaThen, qaWebView, testEdge, testNode } の数。exclude には呼び出し元自身の pid を入れる。 */
+/** { qaThen, qaWebView, qaKeepScreen, testEdge, testNode } の数。exclude には呼び出し元自身の pid を入れる。 */
 export function countLeftovers(options = {}, exclude = [process.pid, process.ppid]) {
   const found = {};
   for (const [key, filter] of Object.entries(filters(options))) {
@@ -31,7 +33,7 @@ export function countLeftovers(options = {}, exclude = [process.pid, process.ppi
   return found;
 }
 
-/** 指定した種類（既定は4種類すべて）を止める。止めた数を返す。 */
+/** 指定した種類（既定はすべて）を止める。止めた数を返す。 */
 export function stopLeftovers(options = {}, exclude = [process.pid, process.ppid], kinds = null) {
   const all = Object.entries(filters(options))
     .filter(([key]) => !kinds || kinds.includes(key))
@@ -44,5 +46,5 @@ export function stopLeftovers(options = {}, exclude = [process.pid, process.ppid
 }
 
 export function formatLeftovers(found) {
-  return `QA Then ${found.qaThen}, QA WebView2 ${found.qaWebView}, test Edge ${found.testEdge}, test node ${found.testNode}`;
+  return `QA Then ${found.qaThen}, QA WebView2 ${found.qaWebView}, QA keep-screen ${found.qaKeepScreen}, test Edge ${found.testEdge}, test node ${found.testNode}`;
 }
