@@ -152,9 +152,16 @@ assert.deepEqual(Object.keys(trashIn()), ["3000100--d"]);
 assert.equal(orderIn().at(-1), "c-3");
 assert.equal(new Set(orderIn()).size, orderIn().length);
 await assert.rejects(store.restoreTrashedBoard("project", "one", "3000000--c"), /trashed canvas board does not exist/);
+await store.saveBoard("project", "one", "d", board("後から作った d", 1));
 const restoredD = await store.restoreTrashedBoard("project", "one", "3000100--d");
-assert.equal(restoredD.id, "d", "空いていれば元の ID で戻す");
-assert.equal(localStorage.getItem(draftKey("d")), null, "中間稿がなければ作らない");
+assert.equal(restoredD.id, "d-2", "同じ ID が1つだけなら -2");
+assert.equal(boardsIn().d.then.name, "後から作った d");
+assert.equal(localStorage.getItem(draftKey("d-2")), null, "中間稿がなければ作らない");
+now = 4_000_000;
+await store.trashBoard("project", "one", second.id);
+const restoredSecond = await store.restoreTrashedBoard("project", "one", `4000000--${second.id}`);
+assert.equal(restoredSecond.id, second.id, "空いていれば元の ID で戻す");
+assert.equal(boardsIn()[second.id].then.name, "二つ目");
 
 // 順番待ちの実体も、ブラウザでは localStorage に書く。
 store.canvasBoardSaveQueue.enqueue({ scope: "project", rootPath: "one", boardId: first.id }, board("順番待ちから", 7));
