@@ -1433,7 +1433,6 @@
 }
 
 @media (max-width: 1120px) {
-  .canvasToolGroup button span,
   .canvasPrimaryAction span {
     display: none;
   }

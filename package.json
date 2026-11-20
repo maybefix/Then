@@ -24,6 +24,7 @@
     "test:checkpoint-ui": "node scripts/test-checkpoint-ui.mjs",
     "test:canvas-save": "node scripts/test-canvas-board-save.mjs",
     "test:canvas-store": "node scripts/test-canvas-board-store.mjs",
+    "test:canvas-palette-labels": "node scripts/test-canvas-palette-labels.mjs",
     "test:v063-draft": "node scripts/test-v063-intermediate-draft.mjs",
     "test:v064-canvas": "node scripts/test-v064-canvas-weje.mjs",
     "test:v065-shell": "node scripts/test-v065-native-shell.mjs",
