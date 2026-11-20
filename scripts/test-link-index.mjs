@@ -416,4 +416,207 @@ async function rewriteAfter(files, change, path) {
   assert.deepEqual(summary("素材/人物/A.md")[0].places, ["property:materials=1"]);
 }
 
+// 7. 索引の今の不具合2つ（BINDER 3-5 の決定7。docs/BINDER_NOTE_MENTIONS_PLAN.md）
+{
+  const ROLE_ROOT = "C:\\Roles";
+  const at = (relative) => `${ROLE_ROOT}\\${relative.split("/").join("\\")}`;
+  const texts = { "素材/汐見.md": "# 汐見", "第一章.md": "// [[汐見]]" };
+  const stampsWith = (role) => Object.keys(texts).map((relative) => ({
+    path: at(relative),
+    kind: "text",
+    modifiedAt: 1,
+    size: texts[relative].length,
+    role: relative.startsWith("素材/") ? role : null,
+  }));
+  const readText = async (path) => texts[Object.keys(texts).find((relative) => at(relative) === path)] ?? null;
+
+  // ① ファイルの並びは同じで、役割だけが変わった（素材のフォルダにした）: 変わったと言い、revision も上がる
+  const index = new LinkIndex(ROLE_ROOT);
+  await index.refresh(stampsWith(null), readText);
+  assert.deepEqual(index.noteNames(), []);
+  const before = index.revision;
+  const result = await index.refresh(stampsWith("material"), readText);
+  assert.deepEqual(index.noteNames().map((note) => note.name), ["汐見"]);
+  assert.equal(result.changed, true, "役割だけが変わっても、変わったと言う");
+  assert.ok(index.revision > before, "役割だけが変わっても、revision が上がる（画面に知らせる）");
+  // 役割も同じなら、変わったとは言わない
+  const still = index.revision;
+  assert.equal((await index.refresh(stampsWith("material"), readText)).changed, false);
+  assert.equal(index.revision, still);
+
+  // ② ディスクから読んでいる途中に保存が終わったら、あとから届いた古い本文で上書きしない
+  const racing = new LinkIndex(ROLE_ROOT);
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  const running = racing.refresh(stampsWith("material"), async (path) => {
+    if (path === at("第一章.md")) {
+      await gate;
+      return "古い本文（リンクなし）";
+    }
+    return readText(path);
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(racing.setFileText(at("第一章.md"), "// [[汐見]] 保存した本文"), true);
+  release();
+  await running;
+  assert.deepEqual(
+    racing.linksFrom(at("第一章.md")).map((link) => link.target),
+    ["汐見"],
+    "保存した本文のリンクが残る（読み込みの途中の保存を古い本文が上書きしない）",
+  );
+  // 次の refresh では、保存のあとなのでディスクから読み直す（今と同じ）
+  assert.equal((await racing.refresh(stampsWith("material"), readText)).read, 1);
+}
+
+// 8. 素の名前の数（BINDER 3-5。docs/BINDER_NOTE_MENTIONS_PLAN.md の決定1 A′）
+{
+  const M_ROOT = "C:\\Mentions";
+  const at = (relative) => `${M_ROOT}\\${relative.split("/").join("\\")}`;
+  const texts = {
+    "第一章.md": "---\nmaterials: [\"[[汐見]]\"]\n---\n汐見は札を裏返した。汐見ミナが来た。\n// 汐見のメモ",
+    "第二章.md": "灯台で汐見と会う。",
+    "素材/汐見.md": "# 汐見\n汐見は港の郵便局員。",
+  };
+  const notes = new Set(["素材/汐見.md"]);
+  let reads = [];
+  const stamps = () => Object.keys(texts).sort().map((relative) => ({
+    path: at(relative),
+    kind: "text",
+    modifiedAt: 1,
+    size: texts[relative].length,
+    role: notes.has(relative) || relative.startsWith("素材/") ? "material" : null,
+  }));
+  const readText = async (path) => {
+    const relative = Object.keys(texts).find((candidate) => at(candidate) === path);
+    reads.push(relative);
+    return relative === undefined ? null : texts[relative];
+  };
+  const of = (index, relative) => {
+    const found = index.mentionsOf(at(relative));
+    return found && {
+      name: found.name,
+      undecided: found.undecided,
+      files: Object.fromEntries(found.files.map((file) => [file.path.slice(M_ROOT.length + 1), file.count])),
+    };
+  };
+
+  const index = new LinkIndex(M_ROOT);
+  await index.refresh(stamps(), readText);
+  assert.deepEqual(of(index, "素材/汐見.md"), {
+    name: "汐見",
+    undecided: false,
+    files: { "第一章.md": 2, "第二章.md": 1 },
+  }, "本文の行だけ数え（フロントマター・コメントは数えない）、ノートの本文は数えない。汐見ミナの中の汐見も、汐見ミナのノートがなければ数える");
+  assert.equal(index.mentionsOf(at("第一章.md")), null, "原稿には素の名前の欄がない");
+
+  // 保存で数が変わる: 変わったと言い、revision が上がる。同じなら上がらない
+  let revision = index.revision;
+  assert.equal(index.setFileText(at("第二章.md"), "灯台で汐見と会う。汐見は笑った。"), true);
+  assert.ok(index.revision > revision);
+  assert.equal(of(index, "素材/汐見.md").files["第二章.md"], 2);
+  revision = index.revision;
+  assert.equal(index.setFileText(at("第二章.md"), "灯台で汐見と会う。汐見は泣いた。"), false, "リンクも数も同じ");
+  assert.equal(index.revision, revision);
+  texts["第二章.md"] = "灯台で汐見と会う。汐見は泣いた。";
+
+  // 名前の組が変わる（ノート「汐見ミナ」を作る）: 持っている本文で数え直し、ディスクは読まない
+  texts["素材/汐見ミナ.md"] = "# 汐見ミナ";
+  reads = [];
+  revision = index.revision;
+  let result = await index.refresh(stamps(), readText);
+  assert.deepEqual(reads.sort(), ["第二章.md", "素材/汐見ミナ.md"].sort(),
+    "新しいノートと保存したあとの原稿（3-1 のまま）だけ読み、第一章は持っている本文で数え直す");
+  assert.equal(result.changed, true);
+  assert.ok(index.revision > revision);
+  assert.deepEqual(of(index, "素材/汐見.md").files, { "第一章.md": 1, "第二章.md": 2 }, "汐見ミナの箇所は汐見から外れる");
+  assert.deepEqual(of(index, "素材/汐見ミナ.md").files, { "第一章.md": 1 });
+
+  // 索引のファイル（版 3）から戻すと数も戻り、何も読まない
+  const cached = index.toCache();
+  assert.equal(JSON.parse(cached).version, 3);
+  const again = new LinkIndex(M_ROOT);
+  again.loadCache(cached);
+  reads = [];
+  assert.equal((await again.refresh(stamps(), readText)).read, 0);
+  assert.deepEqual(of(again, "素材/汐見.md"), of(index, "素材/汐見.md"));
+
+  // 本文を持っていない（索引のファイルから戻した）ときに名前の組が変わる: 原稿をディスクから読む。
+  // 読めなかった原稿は数えていないことになり、次の refresh でもう一度読む
+  delete texts["素材/汐見ミナ.md"];
+  const failing = new Set(["第二章.md"]);
+  const flaky = async (path) => {
+    const relative = Object.keys(texts).find((candidate) => at(candidate) === path);
+    reads.push(relative);
+    return failing.has(relative) ? null : texts[relative];
+  };
+  reads = [];
+  await again.refresh(stamps(), flaky);
+  assert.deepEqual(reads.sort(), ["第一章.md", "第二章.md"]);
+  assert.deepEqual(of(again, "素材/汐見.md").files, { "第一章.md": 2, "第二章.md": 2 });
+  failing.clear();
+  reads = [];
+  await again.refresh(stamps(), flaky);
+  assert.deepEqual(reads, ["第二章.md"], "読めなかった原稿だけもう一度読む");
+  reads = [];
+  await again.refresh(stamps(), flaky);
+  assert.deepEqual(reads, [], "数え終えたら読まない");
+
+  // 同じ名前のノートが増えただけ（探す名前は同じ）: 数え直さず、行き先が決まらなくなる
+  texts["素材/地名/汐見.md"] = "# 地名の汐見";
+  reads = [];
+  await index.refresh(stamps(), readText);
+  assert.deepEqual(reads, ["素材/地名/汐見.md"]);
+  assert.equal(of(index, "素材/汐見.md").undecided, true);
+  assert.equal(of(index, "素材/地名/汐見.md").undecided, true);
+  assert.deepEqual(of(index, "素材/地名/汐見.md").files, of(index, "素材/汐見.md").files);
+  delete texts["素材/地名/汐見.md"];
+  await index.refresh(stamps(), readText);
+  assert.equal(of(index, "素材/汐見.md").undecided, false);
+
+  // ノートと同じ名前の原稿があるときも、行き先は決まらない（[[ ]] と同じ）
+  texts["汐見.md"] = "原稿の汐見";
+  await index.refresh(stamps(), readText);
+  assert.equal(of(index, "素材/汐見.md").undecided, true);
+  delete texts["汐見.md"];
+  await index.refresh(stamps(), readText);
+
+  // 開いているタブの保存前の本文で数えた結果は、更新日時なしで残し、次の起動ではディスクから読む
+  await index.refresh(stamps(), readText, (path) => (path === at("第二章.md") ? "汐見" : null));
+  assert.equal(of(index, "素材/汐見.md").files["第二章.md"], 1);
+  const opened = new LinkIndex(M_ROOT);
+  opened.loadCache(index.toCache());
+  reads = [];
+  await opened.refresh(stamps(), readText);
+  assert.deepEqual(reads, ["第二章.md"]);
+  assert.equal(of(opened, "素材/汐見.md").files["第二章.md"], 2);
+
+  // 原稿がノートになる（素材のフォルダへ移す）と数から外れ、ノートが原稿になると数える
+  notes.add("第二章.md");
+  revision = index.revision;
+  await index.refresh(stamps(), readText);
+  assert.deepEqual(of(index, "素材/汐見.md").files, { "第一章.md": 2 });
+  assert.ok(index.revision > revision);
+  notes.delete("第二章.md");
+  await index.refresh(stamps(), readText);
+  assert.deepEqual(of(index, "素材/汐見.md").files, { "第一章.md": 2, "第二章.md": 2 });
+
+  // 改名（汐見 → 汐見ミナ）: 本文の素の名前は書き換わらないので、新しい名前で数え直す
+  texts["素材/汐見ミナ.md"] = texts["素材/汐見.md"];
+  delete texts["素材/汐見.md"];
+  await index.refresh(stamps(), readText);
+  assert.deepEqual(of(index, "素材/汐見ミナ.md").files, { "第一章.md": 1 });
+
+  // 1文字の名前は探さない
+  texts["素材/灯.md"] = "# 灯";
+  await index.refresh(stamps(), readText);
+  assert.equal(index.mentionsOf(at("素材/灯.md")), null);
+
+  // 版 2 の索引は捨てて全部読む
+  const old = JSON.parse(index.toCache());
+  old.version = 2;
+  const fromOld = new LinkIndex(M_ROOT);
+  fromOld.loadCache(JSON.stringify(old));
+  assert.equal((await fromOld.refresh(stamps(), readText)).read, Object.keys(texts).length, "版 2 の索引は捨てて全部読む");
+}
+
 console.log("link index tests passed");

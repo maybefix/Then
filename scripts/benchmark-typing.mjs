@@ -161,8 +161,10 @@ function installProjectMock({ chars, manuscriptSource, manuscriptText = null, se
   // folder and the manuscript has a synopsis and a material list (BINDER 3-3), so
   // 「この場面」 has something to read. Two of its notes link to the manuscript and a board
   // holds a card of it, so 「つながり」 (BINDER 3-4) has something to show too.
+  // The manuscripts also write the notes' names without `[[ ]]` (BINDER 3-5),
+  // so the index counts them when it reads and saves.
   const frontMatter = rightPane
-    ? "---\nsynopsis: 書庫に眠っていた未発送の手紙。\nmaterials:\n  - \"[[資料1]]\"\n  - \"[[資料2]]\"\n  - \"[[消えた資料]]\"\n---\n"
+    ? "---\nsynopsis: 書庫に眠っていた未発送の手紙。\nmaterials:\n  - \"[[資料1]]\"\n  - \"[[資料2]]\"\n  - \"[[消えた資料]]\"\n---\n資料1と資料3を机に並べた。\n"
     : "";
   const children = ["本編", "設定", "資料"].map((folder, folderIndex) => ({
     path: `${root}/${folder}`,
@@ -174,7 +176,8 @@ function installProjectMock({ chars, manuscriptSource, manuscriptText = null, se
       const path = `${root}/${folder}/${name}`;
       files.set(path, folderIndex === 0 && fileIndex === 0
         ? frontMatter + (manuscriptText ?? make(chars))
-        : make(3000 + fileIndex * 700, 7 + fileIndex) + (rightPane && folder === "資料" && fileIndex < 2 ? "\n[[第一部]]\n" : ""));
+        : make(3000 + fileIndex * 700, 7 + fileIndex) + (rightPane && folder === "資料" && fileIndex < 2 ? "\n[[第一部]]\n" : "") +
+          (rightPane && folder !== "資料" ? `\n資料${fileIndex + 1}を読み返す。\n` : ""));
       return {
         path, name, kind: "file", children: [], fileId: path, contentHash: null, modifiedAt: 1,
         ...(rightPane && folder === "資料" ? { role: "material" } : {}),

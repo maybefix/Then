@@ -5,7 +5,9 @@
 // with no destination and restoring it brings them back. What is kept on disk
 // between runs (the cache) holds only each file's stamp and its links; a file
 // whose modification time or size changed is read again.
+import { hash16 } from "../editor/ast/documentAst";
 import { type FoundLink, type LinkKind, type LinkPlace, findLinks, rewriteLinks } from "./linkSyntax";
+import { canMention, countMentions, mentionKey, prepareMentionText } from "./noteMentions";
 
 export type LinkStamp = {
   path: string;
@@ -26,6 +28,25 @@ type IndexedFile = {
   modifiedAt: number | null;
   size: number | null;
   links: StoredLink[];
+  /**
+   * Note names written in a manuscript without `[[ ]]`, by `mentionKey` (BINDER
+   * 3-5). Empty for a note.
+   */
+  mentions: Array<[string, number]>;
+  /** The names `mentions` was counted for (their mark); null: not counted yet. */
+  mentionsFor: string | null;
+};
+
+/** Manuscripts that write a note's name without `[[ ]]` (BINDER 3-5). */
+export type NoteMentions = {
+  /** The name looked for: the note's file name without the extension. */
+  name: string;
+  /**
+   * The name means more than one file (two notes, or a note and a manuscript):
+   * shown faint and not counted (確認1の決定3c).
+   */
+  undecided: boolean;
+  files: Array<{ path: string; count: number }>;
 };
 
 /** How many links of one file were written in one place (BINDER 3-4). */
@@ -56,15 +77,30 @@ export type LinkRewritePlan = {
 
 // 2 (BINDER 3-4): each link also keeps its place. A cache of version 1 is
 // dropped, so every file is read once again.
-const CACHE_VERSION = 2;
+// 3 (BINDER 3-5): each manuscript also keeps how many times it writes each note
+// name, and for which names. A cache of version 2 is dropped likewise.
+const CACHE_VERSION = 3;
 
 /** Place codes in the cache: 0 body, 1 comment, 2 property (its key follows; "" for none). */
 type CachedLink = [0 | 1, string, 0 | 1 | 2, string?];
 
 type CacheFile = {
   version: number;
-  files: Record<string, { m: number | null; s: number | null; l: CachedLink[] }>;
+  files: Record<string, {
+    m: number | null;
+    s: number | null;
+    l: CachedLink[];
+    /** Note names and how many times (BINDER 3-5). */
+    n?: Array<[string, number]>;
+    /** The mark of the names `n` was counted for. */
+    g?: string | null;
+  }>;
 };
+
+function sameMentions(left: ReadonlyArray<[string, number]>, right: ReadonlyArray<[string, number]>): boolean {
+  return left.length === right.length &&
+    left.every(([key, count], index) => key === right[index][0] && count === right[index][1]);
+}
 
 function placeToCache(place: LinkPlace): [0 | 1 | 2, string?] {
   if (place.in === "property") return [2, place.key ?? ""];
@@ -127,6 +163,11 @@ function stem(relative: string): string {
   return relative.replace(TEXT_EXTENSION, "");
 }
 
+/** A file's name without its folders and the text extension. */
+function fileStem(path: string): string {
+  return stem(normalizeSlashes(path).split("/").pop() ?? "");
+}
+
 /** Where links go, for one set of files. */
 class TargetTable {
   private readonly byRelative = new Map<string, string>();
@@ -182,6 +223,21 @@ export class LinkIndex {
   private roles = new Map<string, "material" | null>();
   private table: TargetTable;
   private changes = 0;
+  /**
+   * How many times each file's text was taken in (BINDER 3-5). A refresh notes
+   * it before reading a file from disk and drops what it read when a save took
+   * in newer text meanwhile.
+   */
+  private generations = new Map<string, number>();
+  /**
+   * Each manuscript's body as the names are looked for in it, once the index
+   * has taken its text in (BINDER 3-5, 決定1 A′). Kept in memory only, so a
+   * change of the names counts again without reading the file.
+   */
+  private prepared = new Map<string, string>();
+  /** The names looked for now (the notes' file names), and their mark. */
+  private names: string[] = [];
+  private namesMark = "";
 
   /**
    * Goes up whenever what the index holds (links or destinations) changes, by
@@ -195,6 +251,7 @@ export class LinkIndex {
   constructor(rootPath: string) {
     this.rootPath = rootPath;
     this.table = new TargetTable(rootPath, []);
+    this.updateNames();
   }
 
   isNote(path: string): boolean {
@@ -219,6 +276,8 @@ export class LinkIndex {
             target,
             place: placeFromCache(place, key),
           })),
+          mentions: Array.isArray(entry.n) ? entry.n : [],
+          mentionsFor: typeof entry.g === "string" ? entry.g : null,
         });
       }
     } catch {
@@ -235,6 +294,8 @@ export class LinkIndex {
         m: file.modifiedAt,
         s: file.size,
         l: file.links.map((link): CachedLink => [link.kind === "path" ? 0 : 1, link.target, ...placeToCache(link.place)]),
+        ...(file.mentions.length ? { n: file.mentions } : {}),
+        ...(file.mentionsFor !== null ? { g: file.mentionsFor } : {}),
       };
     }
     return JSON.stringify({ version: CACHE_VERSION, files } satisfies CacheFile);
@@ -250,11 +311,16 @@ export class LinkIndex {
     readText: (path: string) => Promise<string | null>,
     override?: (path: string) => string | null,
   ): Promise<{ read: number; changed: boolean }> {
+    // A file whose role alone changed (moved into or out of the materials
+    // folder) changes the notes, so it is a change too (BINDER 3-5).
     let changed = this.stamps.length !== stamps.length ||
-      stamps.some((stamp, index) => comparable(stamp.path) !== comparable(this.stamps[index]?.path ?? ""));
+      stamps.some((stamp, index) =>
+        comparable(stamp.path) !== comparable(this.stamps[index]?.path ?? "") ||
+        (stamp.role ?? null) !== (this.stamps[index]?.role ?? null));
     this.stamps = [...stamps];
     this.roles = new Map(stamps.map((stamp) => [comparable(stamp.path), stamp.role ?? null]));
     this.table = new TargetTable(this.rootPath, stamps.map((stamp) => stamp.path));
+    this.updateNames();
     const textKeys = new Set<string>();
     let read = 0;
     for (const stamp of stamps) {
@@ -267,15 +333,37 @@ export class LinkIndex {
         if (this.setFileText(stamp.path, open, null, null)) changed = true;
         continue;
       }
-      if (known && known.modifiedAt !== null && known.modifiedAt === stamp.modifiedAt && known.size === stamp.size) continue;
+      if (known && known.modifiedAt !== null && known.modifiedAt === stamp.modifiedAt && known.size === stamp.size) {
+        // The text is the same; the names looked for may not be (BINDER 3-5).
+        if (this.isNote(stamp.path)) {
+          if (known.mentions.length) {
+            this.files.set(key, { ...known, mentions: [], mentionsFor: null });
+            changed = true;
+          }
+          this.prepared.delete(key);
+          continue;
+        }
+        if (known.mentionsFor === this.namesMark) continue;
+        const prepared = this.prepared.get(key);
+        if (prepared !== undefined) {
+          if (this.recount(key, known, prepared)) changed = true;
+          continue;
+        }
+        // Not taken in since the app started: read it to count the new names.
+        // A read that fails leaves it uncounted, so the next refresh tries again.
+      }
+      const generation = this.generations.get(key) ?? 0;
       const text = await readText(stamp.path);
       read += 1;
       if (text === null) continue;
+      // A save finished while this was read: its text is newer than the disk's.
+      if ((this.generations.get(key) ?? 0) !== generation) continue;
       if (this.setFileText(stamp.path, text, stamp.modifiedAt, stamp.size)) changed = true;
     }
     for (const key of [...this.files.keys()]) {
       if (!textKeys.has(key)) {
         this.files.delete(key);
+        this.prepared.delete(key);
         changed = true;
       }
     }
@@ -283,20 +371,79 @@ export class LinkIndex {
     return { read, changed };
   }
 
+  /** The names looked for: the notes' file names, one per key (BINDER 3-5). */
+  private updateNames(): void {
+    const byKey = new Map<string, string>();
+    for (const stamp of this.stamps) {
+      if (stamp.kind !== "text" || (stamp.role ?? null) !== "material") continue;
+      const name = fileStem(stamp.path);
+      if (!canMention(name)) continue;
+      const key = mentionKey(name);
+      if (!byKey.has(key)) byKey.set(key, name);
+    }
+    const keys = [...byKey.keys()].sort();
+    this.names = keys.map((key) => byKey.get(key)!);
+    this.namesMark = hash16(keys.join("\n"));
+  }
+
+  /** Counts a manuscript again for the names of now. Returns whether the counts changed. */
+  private recount(key: string, known: IndexedFile, prepared: string): boolean {
+    const mentions = countMentions(prepared, this.names);
+    const same = sameMentions(known.mentions, mentions);
+    this.files.set(key, { ...known, mentions: same ? known.mentions : mentions, mentionsFor: this.namesMark });
+    return !same;
+  }
+
   /**
-   * Reads the links of one file from its text (after a save). Returns whether
-   * they changed. The stamp is forgotten, so the next refresh reads the file.
+   * Reads the links of one file from its text (after a save), and for a
+   * manuscript the note names it writes (BINDER 3-5). Returns whether either
+   * changed. The stamp is forgotten, so the next refresh reads the file.
    */
   setFileText(path: string, text: string, modifiedAt: number | null = null, size: number | null = null): boolean {
     const key = comparable(path);
-    const links = findLinks(text, this.isNote(path)).map(({ kind, target, place }) => ({ kind, target, place }));
+    this.generations.set(key, (this.generations.get(key) ?? 0) + 1);
+    const isNote = this.isNote(path);
+    const links = findLinks(text, isNote).map(({ kind, target, place }) => ({ kind, target, place }));
+    const prepared = isNote ? null : prepareMentionText(text);
+    if (prepared === null) this.prepared.delete(key);
+    else this.prepared.set(key, prepared);
+    const mentions = prepared === null ? [] : countMentions(prepared, this.names);
     const known = this.files.get(key);
-    const same = !!known && known.links.length === links.length &&
+    const sameLinks = !!known && known.links.length === links.length &&
       known.links.every((link, index) =>
         link.kind === links[index].kind && link.target === links[index].target && samePlace(link.place, links[index].place));
-    this.files.set(key, { path: known?.path ?? path, modifiedAt, size, links: same ? known!.links : links });
-    if (!same) this.changes += 1;
-    return !same;
+    const sameCounts = !!known && sameMentions(known.mentions, mentions);
+    this.files.set(key, {
+      path: known?.path ?? path,
+      modifiedAt,
+      size,
+      links: sameLinks ? known!.links : links,
+      mentions: sameCounts ? known!.mentions : mentions,
+      mentionsFor: prepared === null ? null : this.namesMark,
+    });
+    const changed = !sameLinks || !sameCounts;
+    if (changed) this.changes += 1;
+    return changed;
+  }
+
+  /**
+   * The manuscripts that write `path`'s name without `[[ ]]` (BINDER 3-5), or
+   * null when it is not a note or its name is not looked for (one character).
+   */
+  mentionsOf(path: string): NoteMentions | null {
+    if (!this.isNote(path)) return null;
+    const name = fileStem(path);
+    if (!canMention(name)) return null;
+    const key = mentionKey(name);
+    const candidates = this.table.candidates(name);
+    if (!candidates.some((candidate) => comparable(candidate) === comparable(path))) return null;
+    const files: NoteMentions["files"] = [];
+    for (const file of this.files.values()) {
+      if (comparable(file.path) === comparable(path)) continue;
+      const found = file.mentions.find(([written]) => written === key);
+      if (found) files.push({ path: file.path, count: found[1] });
+    }
+    return { name, undecided: candidates.length > 1, files };
   }
 
   /** The links `path` writes, with where each goes (null: nowhere, or more than one file). */

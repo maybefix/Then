@@ -37,7 +37,7 @@ const bundle = async (entry, name) => {
   return import(`${pathToFileURL(path.join(dir, name)).href}?${Date.now()}`);
 };
 const { LinkIndex } = await bundle("src/links/linkIndex.ts", "link-index.mjs");
-const { buildConnections, placeSummary, decidedCount } = await bundle("src/links/connections.ts", "connections.mjs");
+const { buildConnections, placeSummary, decidedCount, fileSummary } = await bundle("src/links/connections.ts", "connections.mjs");
 const { ConnectionsPane } = await bundle("src/components/connections/ConnectionsPane.tsx", "pane.mjs");
 const { PostStreamPane } = await bundle("src/components/posts/PostStreamPane.tsx", "posts.mjs");
 const { dayKey, dayLabel, timeLabel } = await bundle("src/posts/postModel.ts", "post-model.mjs");
@@ -101,13 +101,15 @@ const boards = [
   const result = buildConnections({ index, path: p("素材/人物/汐見.md"), isNote: true, posts, boards });
   assert.equal(result.kind, "note");
   assert.deepEqual(
-    result.manuscripts.map((file) => [file.name, file.count, placeSummary(file.places)]),
+    result.manuscripts.map((file) => [file.name, file.count, file.mentions, placeSummary(file.places, file.mentions)]),
     [
-      ["最後の集荷", 1, "コメント 1か所"],
-      ["届かなかった手紙", 4, "概要 · 素材 · コメント 2か所"],
+      ["最後の集荷", 1, 0, "コメント 1か所"],
+      ["素の名前だけ", 0, 1, "本文 1か所"],
+      ["届かなかった手紙", 4, 1, "概要 · 素材 · コメント 2か所 · 本文 1か所"],
     ],
-    "原稿に登場: [[ ]] で指す原稿だけ（素の名前だけの原稿は 3-5）、経路を添える。並びはパスの順",
+    "原稿に登場: [[ ]] で指す原稿と、素の名前だけで出てくる原稿（BINDER 3-5）。経路を添え、素の名前は「本文」に足す。並びはパスの順",
   );
+  assert.equal(decidedCount(result.manuscripts), 3, "素の名前だけの原稿も、行き先が決まっていれば数に入る");
   assert.deepEqual(result.sources.map((file) => [file.name, file.count, file.isNote]), [
     ["手紙と伏線", 2, true],
     ["灯", 1, true],
@@ -176,10 +178,11 @@ const button = (container, title, at) =>
 {
   detailCalls = 0;
   const view = await mount({});
-  assert.deepEqual(sections(view.container), ["原稿に登場 2", "リンク元 2", "元の投稿 2", "置かれているボード 2"]);
+  assert.deepEqual(sections(view.container), ["原稿に登場 3", "リンク元 2", "元の投稿 2", "置かれているボード 2"]);
   assert.deepEqual(items(view.container, "原稿に登場"), [
     "最後の集荷 / コメント 1か所",
-    "届かなかった手紙 / 概要 · 素材 · コメント 2か所",
+    "素の名前だけ / 本文 1か所",
+    "届かなかった手紙 / 概要 · 素材 · コメント 2か所 · 本文 1か所",
   ]);
   const day = dayLabel(dayKey("2026-11-18T21:50:00+09:00"));
   assert.deepEqual(items(view.container, "元の投稿"), [
@@ -345,5 +348,54 @@ const button = (container, title, at) =>
   assert.equal(handle.version, settled, "何も変わらなければ知らせない");
   await act(async () => root.unmount());
 }
+
+// 素の名前の行き先が決まらないとき（BINDER 3-5 の決定3c・6）
+{
+  const MROOT = "C:\\Harbor";
+  const at = (relative) => `${MROOT}\\${relative.split("/").join("\\")}`;
+  const texts = {
+    "第二部/甲.md": '---\nmaterials: ["[[人物/港守]]"]\n---\n港守が来た。港守が去った。\n@[[素材/地名/港守.md]] へ向かう。',
+    "第二部/乙.md": "港守だけ。",
+    "素材/人物/港守.md": "# 人の港守",
+    "素材/地名/港守.md": "# 地名の港守",
+  };
+  const harbor = new LinkIndex(MROOT);
+  await harbor.refresh(
+    Object.keys(texts).sort().map((relative) => ({
+      path: at(relative),
+      kind: "text",
+      modifiedAt: 1,
+      size: texts[relative].length,
+      role: relative.startsWith("素材/") ? "material" : null,
+    })),
+    async (path) => texts[Object.keys(texts).find((relative) => at(relative) === path)] ?? null,
+  );
+  const summary = (relative) =>
+    buildConnections({ index: harbor, path: at(relative), isNote: true, posts: [], boards: [] }).manuscripts
+      .map((file) => [file.name, file.undecided, file.mentions, file.undecidedMentions, fileSummary(file)]);
+  assert.deepEqual(summary("素材/人物/港守.md"), [
+    ["甲", false, 0, 2, { decided: "素材", undecided: "「港守」2か所" }],
+    ["乙", true, 0, 1, { decided: "", undecided: "「港守」1か所" }],
+  ], "決まった経路の行は数に入れ、決まらない素の名前は別に薄く。素の名前しかない行は行ごと薄く、[[ ]] とは出さない");
+  assert.deepEqual(summary("素材/地名/港守.md"), [
+    ["甲", false, 0, 2, { decided: "本文 1か所", undecided: "「港守」2か所" }],
+    ["乙", true, 0, 1, { decided: "", undecided: "「港守」1か所" }],
+  ], "@[[パス]] の中の名前は素の名前に数えない。決まらない素の名前は「本文」に足さない");
+
+  const view = await mount({ index: harbor, document: { path: at("素材/人物/港守.md"), isNote: true }, posts: [], boards: [] });
+  assert.deepEqual(sections(view.container)[0], "原稿に登場 1", "行き先の決まらない素の名前だけの原稿は数えない");
+  assert.deepEqual(items(view.container, "原稿に登場"), ["甲 / 素材 · 「港守」2か所", "乙 / 「港守」1か所"]);
+  const rows = [...view.container.querySelector('section[aria-label="原稿に登場"]').querySelectorAll(".connectionsItem")];
+  assert.deepEqual(rows.map((row) => [row.dataset.undecided ?? null, row.querySelector(".connectionsUndecided")?.textContent ?? null]), [
+    [null, "「港守」2か所"],
+    ["true", "「港守」1か所"],
+  ], "決まらない部分だけが薄い字（connectionsUndecided）");
+  await act(async () => view.root.unmount());
+}
+
+// 経路の書き方: 素の名前は本文のリンク（@[[パス]]）と1つの「本文」にまとめる
+assert.equal(placeSummary([{ place: { in: "body" }, count: 1 }], 2), "本文 3か所");
+assert.equal(placeSummary([{ place: { in: "property", key: "materials" }, count: 1 }], 6), "素材 · 本文 6か所");
+assert.equal(placeSummary([], 0), "");
 
 console.log("connections tests passed");
