@@ -16,7 +16,7 @@
 | 4 | 影響範囲 | 済み |
 | 5 | 案 | 済み |
 | 6 | 人の確認（確認1） | 済み（2026-11-21） |
-| 7 | 実施 | |
+| 7 | 実施 | 済み |
 | 8 | 自動テスト | |
 | 9 | 実機確認 | |
 | 10 | 完了（確認2） | |
@@ -382,3 +382,36 @@ src/canvasBoardStore.ts
 3. `saveBoard` も書き出す。
 4. 癖は直さず手順書に残す。癖1〜3 は `BINDER_REBUILD_PLAN.md` の 4-2 の行に、4-2 で扱う候補として一言添える。KNOWN_ISSUES には書かない。
 5. 癖1（閉じる前の 0.5 秒）は、分離の後の QA 用アプリで確かめる。
+
+---
+
+## 工程7: 実施
+
+| コミット | 内容 |
+|---|---|
+| `1558474` | 保存の層を `src/canvasBoardStore.ts` へ移す。`test:canvas-save` の読み込みの差し替え表に `./canvasBoardStore` を足す |
+| `3781223` | 回帰テスト `test:canvas-store` を足す |
+| `ce20b79` | 回帰テストを強める（工程8の「効くことの確かめ」で見つけた抜け） |
+
+- 行数: `CanvasWindowApp.tsx` 3,594 → 3,336 行（行番号で数えた数）。`src/canvasBoardStore.ts` は 287 行。
+- 移し方: `move-lines.mjs` で5つの塊（72行、80〜95行、172行、187〜432行、599〜601行。`998356e` の時点の行番号）を移した。
+- 元と同じであることの確かめ: `verify-move.mjs` で、消えた 247 行のうち、移した先にない行（lost）は 0。CanvasWindowApp.tsx に足したのは `./canvasBoardStore` からの import の13行だけ。
+- 違う点: 移した先で `export` を付けた（`TrashedCanvasBoardSummary`・`isTauriRuntime`・`listBoards`・`createBoard`・`loadBoard`・`saveBoard`・`canvasBoardSaveQueue`・`reorderBoards`・`trashBoard`・`listTrashedBoards`・`restoreTrashedBoard`・`boardName`）。移した先の先頭に import とコメント2行を足した。CanvasWindowApp.tsx で使わなくなった import（`createCanvasDocument`・`draftBoardKey`・`prepareDraftBoardTrash`・`CanvasBoardSaveQueue`）を外した。
+- 確かめたこと: `npx tsc --noEmit`、`test:canvas-save`（10本の PASS がすべて出る）、`test:performance`、`test:v063-draft`、`npm run build`（メインの塊は前と同じ 721,150 バイト。Canvas は別の塊）。
+
+## 工程8: 自動テスト
+
+### 足した回帰テスト `test:canvas-store`（`scripts/test-canvas-board-store.mjs`）
+
+- Tauri のとき: 8つの関数と順番待ちの実体が、どの命令をどの引数で呼ぶかを、順番ごと確かめる。ゴミ箱へ入れるときは、中間稿の後始末が先。localStorage には書かない。
+- ブラウザのとき: 作る・一覧（並び順のあるものが先、ないものは直した時刻の新しい順）・読む（ないボードは空のボード。癖8）・作品ごとのキー（作品がなければ `unbound`）・並べ替え・ゴミ箱へ（中間稿も移り、並び順から外れる。ないボードはエラー）・ゴミ箱の一覧（消した時刻の新しい順）・戻す（同じ ID が1つなら `-2`、2つなら `-3`、空いていれば元の ID。中間稿も新しい ID で戻る。並び順の最後に付く）・順番待ち・`boardName`。
+
+### 効くことの確かめ
+
+コミットしてから、移した処理にわざと不具合を入れ、`git checkout -- src/canvasBoardStore.ts` で戻した。
+
+| 入れた不具合 | `test:canvas-store` | `test:canvas-save` |
+|---|---|---|
+| 並び順の比べ方を逆にする | 落ちた（「並び順にあるものが先…」） | — |
+| 復元のときの付け直しを1つ先から数える | 1回目は**通ってしまった**。「c と c-2 があるとき c-3」の場合しか試しておらず、答えが同じになるため。「同じ ID が1つだけなら -2」を足して（`ce20b79`）、落ちることを確かめた | — |
+| 保存の命令の引数に余計な項目を足す | 落ちた（命令の引数の比べ） | 通った（10本とも PASS）。元のテストは保存の中身しか見ていない |
