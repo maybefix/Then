@@ -71,6 +71,13 @@ const canvasUrl = await compile("src/CanvasWindowApp.tsx", {
   "./utils/libraryTransfer": url("export const boardReferencePaths = () => []; export const rewriteBoard = (board) => board;"),
   "./ideaReferenceModel": url("export const normalizedReferenceKey = (path) => path;"),
   "./canvasBoardSaveQueue": queueUrl,
+  "./canvasBoardStore": await compile("src/canvasBoardStore.ts", {
+    "@tauri-apps/api/core": url("export const invoke = (...args) => globalThis.canvasTestInvoke(...args);"),
+    "./canvasTypes": await compile("src/canvasTypes.ts"),
+    "./intermediateDraft": await compile("src/intermediateDraft.ts"),
+    "./intermediateDraftStore": url("export const prepareDraftBoardTrash = async () => {}; export const flushDraftBoard = async () => {};"),
+    "./canvasBoardSaveQueue": queueUrl,
+  }),
 });
 const { default: Canvas } = await import(canvasUrl);
 window.__TAURI_INTERNALS__ = {};

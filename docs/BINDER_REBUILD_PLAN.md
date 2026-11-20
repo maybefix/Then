@@ -219,8 +219,8 @@
 
 | # | 作業 |
 | --- | --- |
-| 4-1 | Canvas の保存部分を切り出す（責務分離） |
-| 4-2 | `file` ノードの表示と、参照先ファイルへの書き戻し。ノートはタブで開いている間カードを表示だけにし、原稿のカードは概要を映して、開いているタブへ反映する（3.9） |
+| 4-1 | Canvas の保存部分を切り出す（責務分離）（2026-11-21 実施。ボードを読み書きする層（Tauri の命令8つ、ブラウザで動かすときの localStorage、保存の順番待ちの実体）を中身を変えずに `src/canvasBoardStore.ts` へ移した。遅延保存の時計・世代・書く先の固定は `CanvasWindowApp.tsx` に残した。回帰テスト `test:canvas-store` を足した。[CANVAS_SAVE_SEPARATION_PLAN.md](CANVAS_SAVE_SEPARATION_PLAN.md)） |
+| 4-2 | `file` ノードの表示と、参照先ファイルへの書き戻し。ノートはタブで開いている間カードを表示だけにし、原稿のカードは概要を映して、開いているタブへ反映する（3.9）。書き戻しの順番待ちは `src/canvasBoardStore.ts` に並べる。4-1 で見つけた Canvas の保存の癖（閉じる前の 0.5 秒の変更が消える〔実機で確かめた〕、埋め込みと別ウィンドウで後から書いたほうが勝つ、外の変更を上書きする）は、書き戻しでも同じ形で起きるので、ここで一緒に決める（CANVAS_SAVE_SEPARATION_PLAN.md の工程2の5） |
 | 4-3 | Canvas を中央の表示の一つにする（既存のウィンドウ内表示を土台に） |
 | 4-4 | 「この順で原稿を作る」（中間稿の並べ替え画面を流用。「カードごと」はカードの文章を概要にしてカードを原稿の参照へ置き換え、「1本につなげる」はカードを残して `sourceCards` を記録する。3.4） |
 | 4-4b | 中間稿の退役。既存の中間稿は、ボードごとに最新版を素材のノート「（ボード名）の中間稿」へ移し、`.then/boards/.intermediate-drafts/` はバックアップ後に消す。[USER_MANUAL.md](USER_MANUAL.md) の「中間稿」の節と [CANVAS_INTERMEDIATE_DRAFT_DESIGN.md](CANVAS_INTERMEDIATE_DRAFT_DESIGN.md) を更新する |
