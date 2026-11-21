@@ -185,6 +185,11 @@ export class CanvasBoardConflictError extends Error {
     super(message);
     this.name = "CanvasBoardConflictError";
   }
+
+  // Canvas は保存の失敗を String(error) で状態の欄に出す。型の名前は出さない（BINDER 4-3 の実機確認）。
+  toString() {
+    return this.message;
+  }
 }
 
 let boardConflictListener: ((target: CanvasBoardTarget) => void) | null = null;

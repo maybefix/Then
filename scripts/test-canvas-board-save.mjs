@@ -319,6 +319,9 @@ console.log("PASS path changes: open board and history follow renames and moves 
   assert.ok(modal(), "選ぶ画面が出る");
   assert.match(modal().textContent, /ほかのアプリでファイルが変更されました/);
   assert.match(modal().textContent, /「A」/);
+  const statusText = document.querySelector(".canvasSaveStatus")?.textContent ?? "";
+  assert.doesNotMatch(statusText, /CanvasBoardConflictError|document content conflict/, "状態の欄には、型の名前や内部の印を出さない");
+  assert.match(statusText, /外部で変更されたため保存しませんでした/);
   await choose("ファイルの内容を読み込む");
   assert.equal(modal(), null);
   assert.equal(shownText(), "外で直した", "読み込むと、ファイルの中身を出す");
