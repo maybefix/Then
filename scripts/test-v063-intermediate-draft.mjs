@@ -30,11 +30,16 @@ const storeUrl = await compile("src/intermediateDraftStore.ts", {
   "@tauri-apps/api/core": invokeUrl, "./canvasTypes": canvasUrl, "./intermediateDraft": draftUrl,
 });
 const store = await import(storeUrl);
+const orderListUrl = await compile("src/components/canvas/DraftOrderList.tsx", {
+  react: pathToFileURL(require.resolve("react")).href,
+  "react/jsx-runtime": pathToFileURL(require.resolve("react/jsx-runtime")).href,
+  "../../intermediateDraft": draftUrl,
+});
 const paneUrl = await compile("src/components/canvas/IntermediateDraftPane.tsx", {
   react: pathToFileURL(require.resolve("react")).href,
   "react/jsx-runtime": pathToFileURL(require.resolve("react/jsx-runtime")).href,
   "@tauri-apps/api/core": invokeUrl,
-  "../../intermediateDraft": draftUrl, "../../intermediateDraftStore": storeUrl,
+  "../../intermediateDraft": draftUrl, "../../intermediateDraftStore": storeUrl, "./DraftOrderList": orderListUrl,
 });
 const { default: Pane } = await import(paneUrl);
 const node = (id, text, y) => ({ id, text, y, x: 0, type: "text", width: 100, height: 100 });
