@@ -15,8 +15,8 @@
 | 4 | 影響範囲 | 済み |
 | 5 | 案 | 済み |
 | 6 | 人の確認（確認1） | 済み（2026-11-21） |
-| 7 | 実施 | |
-| 8 | 自動テスト | |
+| 7 | 実施 | 済み（2026-11-21） |
+| 8 | 自動テスト | 済み |
 | 9 | 実機確認 | |
 | 10 | 完了（確認2） | |
 
@@ -354,7 +354,62 @@
 
 ## 工程7: 実施
 
+| コミット | 中身 |
+|---|---|
+| `dbc6c21`・`33c5216` | Rust の移行 `migrate_intermediate_drafts`（`src-tauri/src/intermediate_draft_migration.rs`）とテスト9本。`idea_migration.rs` の `copy_verified`・`copy_tree_verified` を共用にした |
+| `4080a3c` | 画面の側の移行（`src/intermediateDraftMigration.ts`）と、`migratePlotBeforeOpening` への組み込み（Plot → Idea → 中間稿、通知は1つ）。`test:draft-migration`・`test:draft-migration-rust` |
+| `dab5dd9` | 中間稿の画面と保存を消す（App・CanvasWindowApp・RightSidebar・canvasBoardStore・rightSidebarState）。4-4 の並べ方を `canvasToManuscript.ts`、一覧を `ManuscriptOrderList.tsx`、CSS を canvas.css へ移す。`draftCanvasReadyRef` → `boardReadyRef`。テストの差し替え表を直し、`test:v063-draft` の並べ方の部分を `test:canvas-card-order` へ移す |
+| `e8d135f` | Rust の中間稿の命令と `intermediate_draft.rs` を消す。ボードのゴミ箱・戻すは `.canvas` だけを動かす（`trash_canvas_board_in`・`restore_canvas_board_in` に分けてテストを足す） |
+| `a9266a0` | 文書（USER_MANUAL・RELEASE_NOTES_NEXT・CANVAS_INTERMEDIATE_DRAFT_DESIGN・BINDER_REBUILD_PLAN・KNOWN_ISSUES） |
+
+行数: `src`・`src-tauri` で 906 行足して 1,185 行消した（テストの移した分を含む）。
+
+### 「この順で原稿を作る」の見た目が変わらないことの確かめ方
+
+ヘッドレスの Edge で、画面（3行・1行は除外・作る先の選択）を描き、画面の中の84要素の計算された CSS（40項目）と位置・大きさを改名の前後で比べた。最初の比べで「作る先」の選択欄の高さだけが 30px → 32px に変わった（前は `intermediateDraft.css` があとから読まれ、`.intermediateDraftPane select` の 30px が canvas.css の 32px に勝っていた）。canvas.css に `.canvasManuscriptModal select { height: 30px; }` を足し、もう一度比べて違いが0になった。比べたのは止まっている状態だけで、マウスを載せたとき・フォーカスのときの見た目は、規則をそのまま写したことで確かめた（見込み）。
+
+### 前と違う点
+
+- 一覧の行の抜粋は、押せるボタンにならない（ペインのときだけ押せた。4-4 の画面ではもとから押せない）。
+- 一覧のドラッグのデータの種類を `application/x-then-draft-card` から `application/x-then-manuscript-card` にした（画面の中だけで使う）。
+
 ## 工程8: 自動テスト
+
+### 足した回帰テストと、効くことの確かめ方
+
+| テスト | 見ているもの |
+|---|---|
+| `test:draft-migration-rust`（9本） | 最新版でノートを作る・バックアップの中身・中間稿を消す・2回目は何もしない／名前が重なれば -2、同じ中身なら作らない／素材フォルダがなければ作る（普通のフォルダ「素材」があれば「素材-2」）／消えたボード・ゴミ箱のボード・空の本文／一時保存が勝つ・バックアップに残る／壊れた history.json は最大の v<版>.txt／ノートや project.json を書けないとき中間稿を残し、作ったものを消す／移すものがなければ何も書かない／名前に使えない文字 |
+| `test:draft-migration` | 一時保存をその作品の分だけ拾う・最新版の本文・読めないものも渡す／移せたらキーを消し、失敗したら残す・同じパスは1回・失敗がほかを止めない／通知の文／起動時の移行の並び |
+| `test:canvas-card-order` | もとの `test:v063-draft` の並べ方（矢印・同じ位置・分かれ・合流・重なる線・輪・空のカード・ボードを変えない）と並べ替え・除外、4-4 の初期の並び |
+| `tests::board_trash_and_restore_move_only_the_board`（Rust） | ゴミ箱へ移す・戻すで `.canvas` だけが動き、`.draft` も `.intermediate-drafts` もできない。同じ ID があれば新しい ID、並び順の最後 |
+| `test:canvas-to-manuscript` に足したもの | Canvas に「稿」のボタンがない。一覧の行の抜粋は押せない |
+| `test:right-sidebar`・`test:v065-shell`・`test:stored-state-model` | タブの一覧に「中間稿」がない。保存された `"draft"` は「アイデア」で開く |
+
+効くことの確かめ（どれもコミットしてから入れ、`git checkout` で戻した）:
+
+| 入れた不具合 | 落ちたテスト |
+|---|---|
+| ノートを書く前に `.intermediate-drafts` を消す | `a_failure_keeps_the_drafts_and_removes_what_this_run_made` |
+| 最新版でなく最初の版を使う（`max_by_key` → `min_by_key`） | `latest_version_becomes_a_note…`・`missing_and_trashed_boards_and_empty_text` |
+| Rust を呼ぶ前に一時保存のキーを消す | `test:draft-migration`「失敗した作品の一時保存は残る」 |
+| ゴミ箱へ移すときに `.draft` を作る | `board_trash_and_restore_move_only_the_board` |
+
+### 前後の比較
+
+「後」の一式は `a9266a0` で 132 本（build 成功、main の塊 725,838 バイト。前は 725,002）。
+
+| 分類 | テスト |
+|---|---|
+| 両方で通った | 123 本 |
+| 両方で失敗（元から） | `test:editor-text-edits`（アイコンの確かめ）、`test:v058-bundle`（塊が 500 kB を超えている） |
+| 後だけ失敗 | `test:editor-selection`（一式の中で時間切れ）。単独で2回動かして2回とも通った。今回の変更と関係する部分（Canvas・右サイドバー・移行）を通らないテストなので、一式の中でだけ止まったものとして扱う |
+| 後で通った | `test:window-controls`・`test:tree-row-contrast`・`test:save-on-work-switch`（前の一式でだけ止まった） |
+| 前だけ | `test:v063-draft`（消した。並べ方の部分は `test:canvas-card-order` へ） |
+| 後だけ | `test:canvas-card-order`・`test:draft-migration`・`test:draft-migration-rust`（どれも通った） |
+
+残ったプロセス: QA Then 0、QA WebView2 0、keep-screen 0、テストの Edge 0、テストの node 0。
+
 
 ## 工程9: 実機確認
 
