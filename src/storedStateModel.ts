@@ -45,7 +45,11 @@ import {
   isReferenceBinderCard,
 } from "./types";
 import { quoteCssFontFamily, unquoteSingleCssFontFamily } from "./utils/fontStack";
-import { normalizeLeftSidebarCollapsed, normalizeLeftSidebarView } from "./utils/leftSidebarState";
+import {
+  normalizeCanvasLeftSidebarCollapsed,
+  normalizeLeftSidebarCollapsed,
+  normalizeLeftSidebarView,
+} from "./utils/leftSidebarState";
 import {
   normalizeRightSidebarCollapsed,
   normalizeRightSidebarTab,
@@ -181,6 +185,7 @@ export function createDefaultState(): AppState {
     rightSidebarWide: false,
     leftSidebarView: "files",
     leftSidebarCollapsed: false,
+    canvasLeftSidebarCollapsed: true,
     lastWorkspacePath: null,
     lastFilePath: null,
     recentWorkspaces: [],
@@ -857,6 +862,7 @@ export function normalizeState(value: Partial<AppState> | null | undefined): App
     rightSidebarWide: normalizeRightSidebarWide(value?.rightSidebarWide),
     leftSidebarView: normalizeLeftSidebarView(value?.leftSidebarView),
     leftSidebarCollapsed: normalizeLeftSidebarCollapsed(value?.leftSidebarCollapsed),
+    canvasLeftSidebarCollapsed: normalizeCanvasLeftSidebarCollapsed(value?.canvasLeftSidebarCollapsed),
     lastWorkspacePath:
       typeof value?.lastWorkspacePath === "string" ? value.lastWorkspacePath : null,
     lastFilePath: typeof value?.lastFilePath === "string" ? value.lastFilePath : null,

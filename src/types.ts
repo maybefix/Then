@@ -547,6 +547,8 @@ export type AppState = {
   leftSidebarView: LeftSidebarView;
   /** 左サイドバーを畳んでいたか。次回起動時に復元する。 */
   leftSidebarCollapsed: boolean;
+  /** Canvas の画面で左サイドバーを畳んでいたか。本文・コルクボードとは別に覚え、既定は畳む（BINDER 4-3）。 */
+  canvasLeftSidebarCollapsed: boolean;
   lastWorkspacePath: string | null;
   lastFilePath: string | null;
   recentWorkspaces: WorkspaceRecord[];

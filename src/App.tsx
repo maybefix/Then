@@ -36,7 +36,7 @@ import { buildAppShellAppearance } from "./appShellStyle";
 import { canvasAppearanceSettings } from "./canvasAppearance";
 import { EditorContextMenu, type EditorContextMenuState } from "./components/editor/EditorContextMenu";
 import { isRestorableRightSidebarTab } from "./utils/rightSidebarState";
-import type { LeftSidebarView } from "./utils/leftSidebarState";
+import { isLeftSidebarCollapsedIn, type LeftSidebarView } from "./utils/leftSidebarState";
 import {
   getBreadcrumbLayout,
   isBreadcrumbTrailItemVisible,
@@ -1045,6 +1045,8 @@ export default function App() {
     chooseAppDialog,
   } = useAppDialog();
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsedState] = useState(false);
+  // Canvas の画面の左サイドバーは、本文・コルクボードと別に覚え、既定は畳む（BINDER 4-3）。
+  const [isCanvasLeftSidebarCollapsed, setIsCanvasLeftSidebarCollapsedState] = useState(true);
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsedState] = useState(false);
   const [isRightSidebarWide, setIsRightSidebarWideState] = useState(false);
   const [isEditorFocusMode, setIsEditorFocusMode] = useState(false);
@@ -1105,6 +1107,14 @@ export default function App() {
     setIsLeftSidebarCollapsedState(collapsed);
     setAppState((current) =>
       current.leftSidebarCollapsed === collapsed ? current : { ...current, leftSidebarCollapsed: collapsed },
+    );
+  }, []);
+  const setIsCanvasLeftSidebarCollapsed = useCallback((collapsed: boolean) => {
+    setIsCanvasLeftSidebarCollapsedState(collapsed);
+    setAppState((current) =>
+      current.canvasLeftSidebarCollapsed === collapsed
+        ? current
+        : { ...current, canvasLeftSidebarCollapsed: collapsed },
     );
   }, []);
   const [draftCanvasContext, setDraftCanvasContext] = useState<DraftCanvasContext | null>(null);
@@ -2856,6 +2866,7 @@ export default function App() {
         setIsRightSidebarWideState(state.rightSidebarWide);
         setLeftSidebarViewState(state.leftSidebarView);
         setIsLeftSidebarCollapsedState(state.leftSidebarCollapsed);
+        setIsCanvasLeftSidebarCollapsedState(state.canvasLeftSidebarCollapsed);
 
         if (
           isTauriRuntime() &&
@@ -6593,18 +6604,29 @@ export default function App() {
   };
   // A file, heading or search result picked in the left sidebar opens in the
   // body, as it does from the body.
+  // The Canvas shows the binder too and follows the same rule (BINDER 4-3).
   const selectBinderFile = (path: string) => {
-    if (appMode === "corkboard") return openFromCorkboard(path);
+    if (appMode === "corkboard" || appMode === "canvas") return openFromCorkboard(path);
     return handleProjectFileSelect(path);
   };
   const openSearchResultInBody: typeof handleProjectSearchResultOpen = (result) => {
-    if (appMode === "corkboard") setAppMode("write");
+    if (appMode === "corkboard" || appMode === "canvas") setAppMode("write");
     return handleProjectSearchResultOpen(result);
   };
   const jumpToProjectOutlineInBody: typeof handleProjectOutlineJump = (path, item) => {
-    if (appMode === "corkboard") setAppMode("write");
+    if (appMode === "corkboard" || appMode === "canvas") setAppMode("write");
     return handleProjectOutlineJump(path, item);
   };
+  // In the Canvas the binder keeps its own open state, folded at first, so the
+  // cards keep their room (BINDER 4-3).
+  const isModeLeftSidebarCollapsed = isLeftSidebarCollapsedIn(appMode, {
+    collapsed: isLeftSidebarCollapsed,
+    canvasCollapsed: isCanvasLeftSidebarCollapsed,
+    hoverSidebar: settings.sidebarHoverMode === "both" || settings.sidebarHoverMode === "left",
+  });
+  const setIsModeLeftSidebarCollapsed = appMode === "canvas"
+    ? setIsCanvasLeftSidebarCollapsed
+    : setIsLeftSidebarCollapsed;
 
   const corkboardCharCountOf = (path: string): number | null => {
     const file = getProjectAstFile(projectAst, path);
@@ -7297,7 +7319,7 @@ export default function App() {
                 canRegisterTemplate: !(isNewTabStartPage || activeTab?.kind === "empty"),
               }}
             />
-            {isLeftSidebarCollapsed && (appMode === "write" || appMode === "corkboard") && (
+            {isModeLeftSidebarCollapsed && (appMode === "write" || appMode === "corkboard" || appMode === "canvas") && (
               <button
                 className="iconButton"
                 type="button"
@@ -7305,7 +7327,7 @@ export default function App() {
                 aria-hidden={isEditorFocusMode}
                 tabIndex={isEditorFocusMode ? -1 : 0}
                 title="左サイドバーを表示"
-                onClick={() => setIsLeftSidebarCollapsed(false)}
+                onClick={() => setIsModeLeftSidebarCollapsed(false)}
               >
                 <AppIcon name="panelLeft" className="topbarSvgIcon" />
               </button>
@@ -7368,7 +7390,9 @@ export default function App() {
           >
             <LeftSidebar
               {...{
-                appMode, isLeftSidebarCollapsed, isEditorFocusMode, leftSidebarView, setIsLeftSidebarCollapsed,
+                appMode, isEditorFocusMode, leftSidebarView,
+                isLeftSidebarCollapsed: isModeLeftSidebarCollapsed,
+                setIsLeftSidebarCollapsed: setIsModeLeftSidebarCollapsed,
                 setLeftSidebarView, handleNewDocument, projectFolder, handleCreateProjectFolder,
                 focusedFolderPath, handleOpenProjectFolder, referenceLayout,
                 sortedReferenceCandidates, focusReferenceCard, closeReferenceCard, pinReferenceCard,

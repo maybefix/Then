@@ -216,8 +216,15 @@ const expectCalls = (label, action, expected) => {
     assert.equal(button(collapsed, label).props["aria-pressed"], false, `${label} is not pressed while collapsed`);
     assert.doesNotMatch(button(collapsed, label).props.className, /activeWorkspaceActivityButton/);
   }
-  for (const appMode of ["canvas", "export", "checkpoint"]) {
+  for (const appMode of ["export", "checkpoint"]) {
     assert.match(render({ appMode }).props.className, /modeHiddenPane/, `${appMode} hides the left cluster`);
+  }
+  // BINDER 4-3: コルクボードと同じく、Canvas でもバインダーを出す（ノート・原稿をボードへドラッグするため）。
+  for (const appMode of ["corkboard", "canvas"]) {
+    const shown = render({ appMode });
+    assert.doesNotMatch(shown.props.className, /modeHiddenPane/, `${appMode} shows the left cluster`);
+    assert.equal(shown.props["aria-hidden"], false);
+    assert.equal("inert" in shown.props, false);
   }
   const plugin = render({ appMode: "plugin" });
   assert.doesNotMatch(plugin.props.className, /modeHiddenPane/);
@@ -426,6 +433,21 @@ const expectCalls = (label, action, expected) => {
   for (const value of [undefined, null, false, "true", 1]) {
     assert.equal(state.normalizeLeftSidebarCollapsed(value), false, `collapsed ${JSON.stringify(value)}`);
   }
+  // BINDER 4-3: Canvas の畳みは別に覚え、古い状態（項目なし）では畳んだ状態として読む。
+  assert.equal(state.normalizeCanvasLeftSidebarCollapsed(false), false);
+  for (const value of [undefined, null, true, "false", 0]) {
+    assert.equal(state.normalizeCanvasLeftSidebarCollapsed(value), true, `canvas collapsed ${JSON.stringify(value)}`);
+  }
+  // 画面ごとの畳み: Canvas は Canvas の値、ほかは本文の値。ホバー表示の設定では Canvas でも畳まない（重ねて出す）。
+  const collapsedIn = (appMode, collapsed, canvasCollapsed, hoverSidebar) =>
+    state.isLeftSidebarCollapsedIn(appMode, { collapsed, canvasCollapsed, hoverSidebar });
+  for (const appMode of ["write", "corkboard", "plugin"]) {
+    assert.equal(collapsedIn(appMode, true, false, false), true, `${appMode} uses the body's state`);
+    assert.equal(collapsedIn(appMode, false, true, false), false, `${appMode} ignores the Canvas state`);
+  }
+  assert.equal(collapsedIn("canvas", false, true, false), true, "the Canvas uses its own state");
+  assert.equal(collapsedIn("canvas", true, false, false), false, "the Canvas ignores the body's state");
+  assert.equal(collapsedIn("canvas", false, true, true), false, "with the hover setting the Canvas binder floats instead");
 
   // App が、読み込み・起動時の復元・変えたときの保存をつないでいること（App は大きく node で組めないので、ソースで見る）。
   // 保存状態の正規化（normalizeState）は storedStateModel.ts へ移した。
@@ -442,6 +464,10 @@ const expectCalls = (label, action, expected) => {
   // 画面の値を直接書くのは、保存もする関数と起動時の復元の2か所だけ（ほかの変更は全部、保存する関数を通る）。
   assert.equal(app.match(/setLeftSidebarViewState\(/g)?.length, 2, "only the saving setter and the restore set the view");
   assert.equal(app.match(/setIsLeftSidebarCollapsedState\(/g)?.length, 2, "only the saving setter and the restore set the collapse");
+  assert.match(app, /canvasLeftSidebarCollapsed: normalizeCanvasLeftSidebarCollapsed\(value\?\.canvasLeftSidebarCollapsed\)/);
+  assert.match(app, /setIsCanvasLeftSidebarCollapsedState\(state\.canvasLeftSidebarCollapsed\)/);
+  assert.match(app, /current\.canvasLeftSidebarCollapsed === collapsed/);
+  assert.equal(app.match(/setIsCanvasLeftSidebarCollapsedState\(/g)?.length, 2, "only the saving setter and the restore set the Canvas collapse");
 }
 
 console.log("left sidebar tests passed");

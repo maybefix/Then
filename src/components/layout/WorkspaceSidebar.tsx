@@ -38,7 +38,12 @@ import {
 import { orderRootEntriesByTier, splitBinderTiers } from "./binderTiers";
 import { findProjectEntry } from "../../utils/projectTree";
 import { MATERIALS_DROP_ATTRIBUTE, MATERIALS_DROP_EVENT, type MaterialsDropDetail } from "../scene/materialsDrop";
-import { CANVAS_FILE_DROP_ATTRIBUTE, CANVAS_FILE_DROP_EVENT, type CanvasFileDropDetail } from "../../canvasFileDrop";
+import {
+  BINDER_DRAG_ON_CANVAS_ATTRIBUTE,
+  CANVAS_FILE_DROP_ATTRIBUTE,
+  CANVAS_FILE_DROP_EVENT,
+  type CanvasFileDropDetail,
+} from "../../canvasFileDrop";
 
 type WorkspaceSidebarProps = {
   projectFolder: ProjectFolder | null;
@@ -1025,6 +1030,7 @@ export function WorkspaceSidebar({
     ) {
       dragState.captureTarget.releasePointerCapture(dragState.pointerId);
     }
+    dragState?.captureTarget.closest(".leftWorkspaceCluster")?.removeAttribute(BINDER_DRAG_ON_CANVAS_ATTRIBUTE);
     pointerDragRef.current = null;
     setDraggingEntryPaths(new Set());
     dropTargetRef.current = null;
@@ -1043,6 +1049,13 @@ export function WorkspaceSidebar({
     current?.removeAttribute("data-drop-active");
     next?.setAttribute("data-drop-active", "true");
     materialsDropRef.current = next;
+    // Once a row is over the Canvas, a binder floating over it (the left hover
+    // setting) steps aside until the drag ends, so the whole board takes the drop.
+    // The row holds the pointer capture, which would otherwise keep it hovered (BINDER 4-3).
+    if (next?.hasAttribute(CANVAS_FILE_DROP_ATTRIBUTE)) {
+      pointerDragRef.current?.captureTarget.closest(".leftWorkspaceCluster")
+        ?.setAttribute(BINDER_DRAG_ON_CANVAS_ATTRIBUTE, "true");
+    }
   };
 
   const updateDropTargetFromPoint = (

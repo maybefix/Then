@@ -4,6 +4,8 @@
 // event, as it does for 「この場面」's 「素材」 section (materialsDrop.ts).
 export const CANVAS_FILE_DROP_ATTRIBUTE = "data-canvas-file-drop";
 export const CANVAS_FILE_DROP_EVENT = "then-canvas-file-drop";
+/** Set on the left cluster while a binder row being dragged is over the Canvas (BINDER 4-3). */
+export const BINDER_DRAG_ON_CANVAS_ATTRIBUTE = "data-binder-drag-on-canvas";
 
 /** paths are the files' absolute paths; clientX/clientY is where they were dropped. */
 export type CanvasFileDropDetail = { paths: string[]; clientX: number; clientY: number };

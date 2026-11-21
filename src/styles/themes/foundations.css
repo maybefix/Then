@@ -81,7 +81,7 @@
    フローから外して本文領域へ幅を渡す。レールかペインにポインタを乗せるか、
    キーボードフォーカスで一時表示する。 */
 .appShell[data-zone-mode="true"][data-zone-left="true"]
-  .workspace:is([data-app-mode="write"], [data-app-mode="plugin"])
+  .workspace:is([data-app-mode="write"], [data-app-mode="plugin"], [data-app-mode="canvas"])
   > .leftWorkspaceCluster {
   position: relative;
   z-index: 70;
@@ -89,7 +89,7 @@
 }
 
 .appShell[data-zone-mode="true"][data-zone-left="true"]
-  .workspace:is([data-app-mode="write"], [data-app-mode="plugin"])
+  .workspace:is([data-app-mode="write"], [data-app-mode="plugin"], [data-app-mode="canvas"])
   > .leftWorkspaceCluster
   > .workspaceSidebar {
   position: absolute;
@@ -108,7 +108,7 @@
 }
 
 .appShell[data-zone-mode="true"][data-zone-left="true"]
-  .workspace[data-app-mode="write"]
+  .workspace:is([data-app-mode="write"], [data-app-mode="canvas"])
   > .leftWorkspaceCluster:is(:hover, :focus-within)
   > .workspaceSidebar {
   box-shadow: 18px 0 36px rgba(0, 0, 0, 0.32);
@@ -117,6 +117,18 @@
   transform: translateX(0);
   visibility: visible;
   transition-delay: 0s;
+}
+
+/* A binder row dragged onto the Canvas keeps the pointer captured, so the
+   floating binder would stay hovered over the board. Once the drag reaches the
+   board, the binder steps aside until the drag ends (BINDER 4-3). */
+.appShell[data-zone-mode="true"][data-zone-left="true"]
+  .workspace[data-app-mode="canvas"]
+  > .leftWorkspaceCluster[data-binder-drag-on-canvas="true"]
+  > .workspaceSidebar {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
 }
 
 /* ホバー表示（右）: ペインごとフローから外し、画面端に残した7pxのホバー領域、

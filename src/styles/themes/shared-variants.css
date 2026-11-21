@@ -135,7 +135,7 @@
   [data-theme^="shaping-"],
   [data-theme^="promise-"]
 )[data-zone-mode="true"][data-zone-left="true"]
-  .workspace:is([data-app-mode="write"], [data-app-mode="plugin"])
+  .workspace:is([data-app-mode="write"], [data-app-mode="plugin"], [data-app-mode="canvas"])
   > .leftWorkspaceCluster
   > .workspaceSidebar {
   border-radius: var(--radius-card);
