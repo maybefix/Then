@@ -335,7 +335,69 @@ Canvas（Idea Board）を、本文・コルクボードと並ぶ「中央の表�
 
 ## 工程7: 実施
 
+| コミット | 内容 |
+|---|---|
+| `fd322ac` | Canvas の画面でも左サイドバーを出す（1-B）。開閉は `appState.canvasLeftSidebarCollapsed`（既定は畳む）。ホバー表示の設定では Canvas でもホバー表示にし、行のドラッグが Canvas に入ったらバインダーを隠す。上の帯の「左サイドバーを表示」、バインダーで開いたら本文へ |
+| `cb0f1c6` | バインダーの素材の画像・PDF を Canvas へ落とすと資料のカード（5-A） |
+| `f342fdf` | ボードの保存に `expected_hash`（3-A） |
+| `4414635` | キャンバスはいつも中央に出し、別ウィンドウは「別ウィンドウで開く」で移す（2-A・4-A）。設定「キャンバスを別ウィンドウで開く」をなくした |
+
+本体（`src`・`src-tauri`）は 15 ファイル、476 行足して 52 行消した。テストは 7 ファイル、326 行足して 11 行消した。
+
+### 本体で変えたこと
+
+| ファイル | 変えたこと |
+|---|---|
+| `src/components/layout/LeftSidebar.tsx` | 隠す条件から canvas を外した（`test:v061-plugins` が読む並び `appMode !== "write" && appMode !== "plugin"` は残した） |
+| `src/utils/leftSidebarState.ts` | Canvas の開閉の読み込み（`normalizeCanvasLeftSidebarCollapsed`。古い状態は畳む）と、画面ごとの開閉（`isLeftSidebarCollapsedIn`。Canvas は Canvas の値、ホバー表示の設定では畳まない） |
+| `src/App.tsx` | Canvas の開閉の状態と保存。左サイドバーと上の帯のボタンに画面ごとの開閉を渡す。バインダーで開いたら本文へ（`selectBinderFile` ほか2つに canvas を足した）。`openIdeaCanvasBoard` は中央に開き、別ウィンドウが開いていればそちらで開く。メニューの「キャンバス」は別ウィンドウがあれば前に出す。中央から別ウィンドウへ移す。`test:breadcrumb` の目印（`updateLayout` から `sortedReferenceCandidates`）のあいだには足していない |
+| `src/canvasWindowPlace.ts`（新） | メニューの「キャンバス」の判断（`chooseCanvasMode`）と、別ウィンドウへ移す手順（`moveCanvasToWindow`: 本文へ戻す → 外れるのを待つ → ボードと書き戻しを書き切る → 開く。ボードが書けなければ中央へ戻す） |
+| `src/components/layout/WorkspaceSidebar.tsx` | 画像・PDF の行も Canvas の落とし先へ送る。ドラッグが Canvas に入ったら左の群に `data-binder-drag-on-canvas` を付け、離すと外す |
+| `src/styles/themes/foundations.css`・`shared-variants.css` | ホバー表示の左の規則に canvas を足した。`data-binder-drag-on-canvas` の間はバインダーを隠す |
+| `src/CanvasWindowApp.tsx` | 落とされた画像・PDF は資料のカード。直すボードはハッシュと一緒に読む。外の変更の選ぶ画面（ボード用）。改名・移動の知らせでハッシュを取り直す印。中央のときのツールバーの「別ウィンドウで開く」 |
+| `src/canvasBoardStore.ts`・`canvasBoardSaveQueue.ts` | ボードごとの基準のハッシュ、`loadBoardForEditing`、断られたときの知らせ、上書き・読み込み、順番待ちの `discard`、`isCanvasWindowOpen` |
+| `src-tauri/src/lib.rs` | `save_canvas_board` の `expected_hash` と書いたあとのハッシュ、`load_canvas_board_with_hash`、`canvas_board_hash`、`is_canvas_window_open`、`focus_canvas_window` |
+| `src/types.ts`・`storedStateModel.ts`・`components/dialogs/CanvasSettings.tsx`・`docs/USER_MANUAL.md` | `canvasOpensInWindow` をなくし、`canvasLeftSidebarCollapsed` を足した。手引きの Canvas の節を書き直した |
+
+### 実施の途中で気づいたこと
+
+- 新しい部品の名前に、すでにある `src/canvasPlacement.ts`（カードの追加位置の計算）を選んで上書きしかけた。コミットの前に気づいて `git checkout` で戻し、`src/canvasWindowPlace.ts` にした。
+- `test:heading-dnd-ui` の中では、`CustomEvent` が node のもので、jsdom の要素に送ると例外になり、ドラッグの離しが届かなかった（本物の画面では起きない）。テストに jsdom の `CustomEvent` を入れた。
+
 ## 工程8: 自動テスト
+
+### 足したテストと、期待を変えたテスト
+
+| テスト | 内容 |
+|---|---|
+| `test:left-sidebar` | canvas で左の群を出す（期待を変えた。確認1で了承）。Canvas の開閉の読み込みと、画面ごとの開閉。App が Canvas の開閉を保存・復元すること |
+| `test:heading-dnd-ui` | 本物のバインダーから、Canvas の落とし先の上でノートと画像の行を離すと、パスと位置が届く。ドラッグ中は左の群に印が付き、離すと外れる。画像は素材のフォルダへ移さない |
+| `test:canvas-file-nodes` | 落とされた原稿はファイルのカード、画像は資料のカード。入れ物を新しい命令に合わせた |
+| `test:canvas-save` | 外の変更の4項目（読み込む／上書きする／閉じる直前に断られた保存を次に開いたときに選ぶ／改名・移動のあとは止まらない）。「別ウィンドウで開く」が中央のときだけ出て、今のボードを渡す |
+| `test:canvas-store` | `save_canvas_board` の引数に `expectedHash` を足した（期待を変えた。確認1で了承） |
+| `test:canvas-window-place`（新） | メニューの「キャンバス」の判断。別ウィンドウへ移すとき、本物の保存の順番待ちで、中央で待っていた保存を書き切ってから開くこと。ボードが書けなければ開かずに中央へ戻すこと |
+| Rust `canvas_board_save_writes_only_over_the_board_it_read` | 同じファイルなら書ける、ハッシュなしは今までどおり、外で書き換えた・消したなら断る |
+
+### 足したテストが効くこと
+
+直した処理に不具合を10個入れ、それぞれテストが落ちることを確かめてから `git checkout` で戻した（道具は scratchpad の `mutate.cjs`、`spawnSync` の `maxBuffer` は 256 MB）。
+
+| 入れた不具合 | 気づいたテスト |
+|---|---|
+| Canvas で左の群を隠したまま | `test:left-sidebar` |
+| Canvas が本文の開閉の値を使う | `test:left-sidebar` |
+| 画像の行を Canvas へ送らない | `test:heading-dnd-ui` |
+| ホバー表示を隠す印を付けない | `test:heading-dnd-ui` |
+| 落とされた画像をファイルのカードにする | `test:canvas-file-nodes` |
+| 保存に読んだときのハッシュを送らない | `test:canvas-save` |
+| 改名・移動のあとにハッシュを取り直さない | `test:canvas-save` |
+| 「読み込む」で待っている保存を捨てない | `test:canvas-save` |
+| 書き切るのを待たずに別ウィンドウを開く | `test:canvas-window-place` |
+| 別ウィンドウがあっても中央に出す | `test:canvas-window-place` |
+
+### 前後の比較
+
+「後」の一式（`4414635`）: `npm run build` は成功（いちばん大きい JavaScript は 722,608 バイト、前は 721,424）。129本（1本増えた）のうち、両方で通ったもの 122、両方で落ちたもの 3（`test:editor-selection`・`test:editor-text-edits`・`test:v058-bundle`。4-4 の元からの失敗と同じ理由）、新しい失敗 0、新しく通ったもの 3（「前」で一式の中でだけ止まった `test:window-controls`・`test:tree-row-contrast`・`test:note-mode`）、増えたもの 1（`test:canvas-window-place`、通った）。終わったあとに残ったプロセスは全部 0。
 
 ## 工程9: 実機確認
 
