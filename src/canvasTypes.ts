@@ -168,6 +168,8 @@ export type CanvasLiveDataEvent = {
   projectFiles?: CanvasProjectFile[];
   /** タブで開いているファイル（作品からの相対パス）。ノートのカードはそのあいだ表示だけ。 */
   openTabPaths?: string[];
+  /** 「この順で原稿を作る」の作る先に選べるフォルダ（BINDER 4-4）。 */
+  manuscriptFolders?: CanvasManuscriptFolders;
 };
 
 /** 作品のノート・原稿の1つ。path は作品からの相対パス（`/` 区切り）。 */
@@ -214,6 +216,40 @@ export type CanvasFileWriteEvent = { requestId: string; request: CanvasFileWrite
 /** メイン画面 → 別ウィンドウのキャンバス。error は書けなかった理由。 */
 export const CANVAS_FILE_WRITE_RESULT_EVENT = "then-canvas-file-write-result";
 export type CanvasFileWriteResultEvent = { requestId: string; result?: CanvasFileWriteResult; error?: string };
+
+/**
+ * 「この順で原稿を作る」（BINDER 4-4）。キャンバス → メイン画面の頼み。原稿を作り、書き、ゴミ箱へ移すのはメイン画面だけ。
+ * パスは作品からの相対パス（`/` 区切り。作品の直下は ""）。
+ */
+export type CanvasManuscriptRequest =
+  /** カード1枚を原稿1本に。conversionId は、あとで元に戻すときの目印。 */
+  | { kind: "cards"; rootPath: string; folder: string; conversionId: string; cards: { id: string; name: string; text: string }[] }
+  /** 一覧の順につないだ原稿を1本。 */
+  | { kind: "joined"; rootPath: string; folder: string; name: string; boardName: string; cards: { id: string; title?: string; text: string }[] }
+  /** Canvas で置き換えを戻した。作ったままの原稿をゴミ箱へ移してもらう。 */
+  | { kind: "undo"; rootPath: string; conversionId: string };
+
+export type CanvasManuscriptResult =
+  /** made: 作れた原稿（カードの ID と原稿のパス）。failed: 作れなかったカードの ID。 */
+  | { kind: "cards"; made: { id: string; path: string }[]; failed: string[] }
+  | { kind: "joined"; path: string }
+  /** done: 今回ゴミ箱へ移す処理をした（false なら、通知からすでに戻していた）。kept: 書き足してあったので残した数。 */
+  | { kind: "undo"; done: boolean; trashed: number; kept: number };
+
+/** 作る先に選べる原稿のフォルダと、その初期値（コルクボードと同じ決め方）。 */
+export type CanvasManuscriptFolders = { folders: { path: string; label: string }[]; current: string };
+
+/** 別ウィンドウのキャンバス → メイン画面。 */
+export const CANVAS_MANUSCRIPT_EVENT = "then-canvas-manuscript";
+export type CanvasManuscriptEvent = { requestId: string; request: CanvasManuscriptRequest };
+/** メイン画面 → 別ウィンドウのキャンバス。error はできなかった理由。 */
+export const CANVAS_MANUSCRIPT_RESULT_EVENT = "then-canvas-manuscript-result";
+export type CanvasManuscriptResultEvent = { requestId: string; result?: CanvasManuscriptResult; error?: string };
+/** メイン画面 → 別ウィンドウのキャンバス: 通知の「元に戻す」で、置き換えを外してもらう。 */
+export const CANVAS_MANUSCRIPT_REVERT_EVENT = "then-canvas-manuscript-revert";
+export type CanvasManuscriptRevertEvent = { requestId: string; conversionId: string };
+export const CANVAS_MANUSCRIPT_REVERT_RESULT_EVENT = "then-canvas-manuscript-revert-result";
+export type CanvasManuscriptRevertResultEvent = { requestId: string; reverted: boolean };
 
 /** 閉じる前に、別ウィンドウのキャンバスへ待っている保存を書き切ってもらう（BINDER 4-2 の確認1の 1）。 */
 export const CANVAS_FLUSH_EVENT = "then-canvas-flush";
@@ -315,6 +351,7 @@ export type CanvasWindowPayload = {
   canvasDefaultFontSource: CanvasNodeFontSource;
   referenceFiles?: ReferenceFileInfo[];
   projectFiles?: CanvasProjectFile[];
+  manuscriptFolders?: CanvasManuscriptFolders;
   openTabPaths?: string[];
   /** メイン画面の右サイドバー表示状態。別ウィンドウのサイドパネルへ引き継ぐ。 */
   rightSidebarVisible?: boolean;

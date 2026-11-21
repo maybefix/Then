@@ -37,6 +37,7 @@ const stubs = {
     export const emitTo = async (target, event, payload) => globalThis.fileTest.emit(event, payload, target);`),
   "./components/references/ReferenceLayer": stub("export const ReferenceReadOnlyPreview = () => null;"),
   "./components/canvas/IntermediateDraftPane": stub("export default () => null;"),
+  "./components/canvas/CanvasToManuscriptDialog": stub("export default () => null;"),
   "./intermediateDraftStore": stub("export const prepareDraftBoardTrash = async () => {}; export const flushDraftBoard = async () => {};"),
 };
 const external = ["react", "react-dom", "react-dom/client", "react/jsx-runtime"];

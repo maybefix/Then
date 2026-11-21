@@ -25,6 +25,10 @@ import {
   CANVAS_FLUSH_DONE_EVENT,
   CANVAS_FLUSH_EVENT,
   CANVAS_LIVE_DATA_EVENT,
+  CANVAS_MANUSCRIPT_EVENT,
+  CANVAS_MANUSCRIPT_RESULT_EVENT,
+  CANVAS_MANUSCRIPT_REVERT_EVENT,
+  CANVAS_MANUSCRIPT_REVERT_RESULT_EVENT,
   CANVAS_PATH_CHANGES_EVENT,
   createCanvasEdge,
   createCanvasFileNode,
@@ -51,6 +55,13 @@ import {
   type CanvasEdge,
   type CanvasGroupNode,
   type CanvasLiveDataEvent,
+  type CanvasManuscriptEvent,
+  type CanvasManuscriptFolders,
+  type CanvasManuscriptRequest,
+  type CanvasManuscriptResult,
+  type CanvasManuscriptResultEvent,
+  type CanvasManuscriptRevertEvent,
+  type CanvasManuscriptRevertResultEvent,
   type CanvasNode,
   type CanvasReferenceNode,
   type CanvasScope,
@@ -66,7 +77,18 @@ import type { SynopsisState } from "./corkboard/synopsis";
 import { CANVAS_FILE_DROP_ATTRIBUTE, CANVAS_FILE_DROP_EVENT, type CanvasFileDropDetail } from "./canvasFileDrop";
 import { ReferenceReadOnlyPreview } from "./components/references/ReferenceLayer";
 import IntermediateDraftPane from "./components/canvas/IntermediateDraftPane";
-import { type DraftCanvasContext, type DraftHistory } from "./intermediateDraft";
+import CanvasToManuscriptDialog from "./components/canvas/CanvasToManuscriptDialog";
+import { type DraftCanvasContext, type DraftCapture, type DraftHistory } from "./intermediateDraft";
+import {
+  captureManuscriptCards,
+  cardManuscriptName,
+  convertCardsToFiles,
+  crossesConversion,
+  manuscriptSourceCards,
+  orderedManuscriptCards,
+  revertCardConversion,
+  type CardConversion,
+} from "./canvasToManuscript";
 import { flushDraftBoard } from "./intermediateDraftStore";
 import {
   boardFilePaths,
@@ -310,6 +332,40 @@ function requestFileWriteFromMain(request: CanvasFileWriteRequest) {
         }
         dispose = unlisten;
         return emitTo("main", CANVAS_FILE_WRITE_EVENT, { requestId, request } satisfies CanvasFileWriteEvent);
+      })
+      .catch((error) => finish(() => reject(error)));
+  });
+}
+
+/** 別ウィンドウのキャンバスから、「この順で原稿を作る」をメイン画面に頼む（BINDER 4-4）。 */
+function requestManuscriptFromMain(request: CanvasManuscriptRequest) {
+  return new Promise<CanvasManuscriptResult>((resolve, reject) => {
+    const requestId = nextCanvasId("manuscript");
+    let finished = false;
+    let dispose: (() => void) | null = null;
+    const finish = (settle: () => void) => {
+      if (finished) return;
+      finished = true;
+      window.clearTimeout(timer);
+      dispose?.();
+      settle();
+    };
+    const timer = window.setTimeout(
+      () => finish(() => reject(new Error("メイン画面から答えがありませんでした"))),
+      60_000,
+    );
+    listen<CanvasManuscriptResultEvent>(CANVAS_MANUSCRIPT_RESULT_EVENT, (event) => {
+      if (event.payload.requestId !== requestId) return;
+      const { result, error } = event.payload;
+      finish(() => (result ? resolve(result) : reject(new Error(error ?? "原稿を作れませんでした"))));
+    })
+      .then((unlisten) => {
+        if (finished) {
+          unlisten();
+          return;
+        }
+        dispose = unlisten;
+        return emitTo("main", CANVAS_MANUSCRIPT_EVENT, { requestId, request } satisfies CanvasManuscriptEvent);
       })
       .catch((error) => finish(() => reject(error)));
   });
@@ -580,7 +636,8 @@ function CanvasGlyph({
     | "grip"
     | "chevronUp"
     | "chevronDown"
-    | "window";
+    | "window"
+    | "manuscript";
 }) {
   const common = { viewBox: "0 0 24 24", "aria-hidden": true, focusable: false };
   switch (name) {
@@ -671,6 +728,16 @@ function CanvasGlyph({
           <path d="M20 20v-6h-6" />
           <path d="M20 10a8 8 0 0 0-13.5-4.5L4 8" />
           <path d="M4 14a8 8 0 0 0 13.5 4.5L20 16" />
+        </svg>
+      );
+    case "manuscript":
+      return (
+        <svg {...common}>
+          <path d="M7 3h7l4 4v14H7Z" />
+          <path d="M14 3v4h4" />
+          <path d="M10 11h5" />
+          <path d="M10 14.5h5" />
+          <path d="M10 18h3" />
         </svg>
       );
     case "send":
@@ -868,6 +935,12 @@ type CanvasWindowAppProps = {
   onOpenDraft?: () => void;
   /** embedded 時に、このボードを別ウィンドウへ移す（メイン画面は本文へ戻る。BINDER 4-3）。 */
   onOpenInWindow?: (boardId: string | null) => void;
+  /** embedded 時の「この順で原稿を作る」の作る先（BINDER 4-4）。 */
+  liveManuscriptFolders?: CanvasManuscriptFolders;
+  /** embedded 時に、原稿を作る・ゴミ箱へ移すのをメイン画面に頼む。 */
+  onManuscriptRequest?: (request: CanvasManuscriptRequest) => Promise<CanvasManuscriptResult>;
+  /** embedded 時に、通知の「元に戻す」で置き換えを外す処理をメイン画面へ渡す（null で外す）。 */
+  onRegisterManuscriptRevert?: (revert: ((conversionId: string) => boolean) | null) => void;
 };
 
 export default function CanvasWindowApp({
@@ -883,6 +956,9 @@ export default function CanvasWindowApp({
   onDraftSelectionConsumed,
   onOpenDraft,
   onOpenInWindow,
+  liveManuscriptFolders,
+  onManuscriptRequest,
+  onRegisterManuscriptRevert,
 }: CanvasWindowAppProps = {}) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
@@ -951,6 +1027,12 @@ export default function CanvasWindowApp({
   // 別ウィンドウ表示のときだけ使う資料のサイドパネル。
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(true);
   const [isDraftPanelOpen, setIsDraftPanelOpen] = useState(false);
+  // 「この順で原稿を作る」（BINDER 4-4）。並べ替えの画面と、「カードごと」で置き換えた回（元に戻すときに使う）。
+  const [manuscriptDialog, setManuscriptDialog] = useState<{ cards: CanvasTextNode[]; capture: DraftCapture } | null>(null);
+  const [isManuscriptBusy, setIsManuscriptBusy] = useState(false);
+  const conversionsRef = useRef(new Map<string, CardConversion & { undone: boolean }>());
+  const manuscriptUndoRef = useRef<(conversionId: string) => void>(() => {});
+  const activeBoardIdRef = useRef<string | null>(null);
   /**
    * メイン画面から届く資料の最新一覧（別ウィンドウ用）。payload と違い
    * ボードの再読込を伴わないため、資料の追加が開いたままのウィンドウにも
@@ -1041,6 +1123,10 @@ export default function CanvasWindowApp({
     (payload?.rootPath ? livePanelData?.openTabPaths : undefined) ??
     payload?.openTabPaths ??
     EMPTY_PATHS;
+  const manuscriptFolders =
+    liveManuscriptFolders ??
+    (payload?.rootPath ? livePanelData?.manuscriptFolders : undefined) ??
+    payload?.manuscriptFolders;
   const projectFileRoles = useMemo(
     () => new Map(projectFiles.map((file) => [canvasFileKey(file.path), file.role] as const)),
     [projectFiles],
@@ -1184,8 +1270,19 @@ export default function CanvasWindowApp({
     }
     stack.redo.push(current);
     editSessionRef.current = null;
-    boardRef.current = previous;
-    setBoard(previous);
+    // 「カードごと」の置き換えをまたいで戻したら、履歴の写しも含めて置き換えを外し、メイン画面に原稿を
+    // ゴミ箱へ移してもらう（BINDER 4-4 の確認1の 2）。やり直しても、消した原稿を指すカードには戻らない。
+    let next = previous;
+    for (const conversion of conversionsRef.current.values()) {
+      if (conversion.undone || !crossesConversion(current, previous, conversion)) continue;
+      conversion.undone = true;
+      next = revertCardConversion(next, conversion);
+      stack.undo = stack.undo.map((item) => revertCardConversion(item, conversion));
+      stack.redo = stack.redo.map((item) => revertCardConversion(item, conversion));
+      manuscriptUndoRef.current(conversion.id);
+    }
+    boardRef.current = next;
+    setBoard(next);
     setCanUndo(stack.undo.length > 0);
     setCanRedo(true);
   }, []);
@@ -2910,6 +3007,130 @@ export default function CanvasWindowApp({
     }
   };
 
+  // ===== 「この順で原稿を作る」（BINDER 4-4、docs/BINDER_CANVAS_TO_MANUSCRIPT_PLAN.md） =====
+  activeBoardIdRef.current = activeBoardId;
+  const manuscriptCards = useMemo(
+    () => (board ? manuscriptSourceCards(board, selectedIds) : []),
+    [board, selectedIds],
+  );
+  const onManuscriptRequestRef = useRef(onManuscriptRequest);
+  onManuscriptRequestRef.current = onManuscriptRequest;
+  const canRequestManuscript = Boolean(onManuscriptRequest) || (!embedded && isTauriRuntime());
+  const requestManuscript = useCallback((request: CanvasManuscriptRequest) => {
+    const handle = onManuscriptRequestRef.current;
+    if (handle) return handle(request);
+    if (!embedded && isTauriRuntime()) return requestManuscriptFromMain(request);
+    return Promise.reject(new Error("原稿を作れません"));
+  }, [embedded]);
+  manuscriptUndoRef.current = (conversionId) => {
+    if (!rootPath) return;
+    void requestManuscript({ kind: "undo", rootPath, conversionId })
+      .then((result) => {
+        if (result.kind !== "undo" || !result.done) return;
+        setStatus(result.kept > 0
+          ? `カードを元に戻しました（原稿 ${result.kept} 本は書き足してあるので残しました）`
+          : `カードを元に戻し、原稿 ${result.trashed} 本をゴミ箱へ移しました`);
+      })
+      .catch((error) => setStatus(`原稿をゴミ箱へ移せませんでした: ${String(error)}`));
+  };
+  /** 通知の「元に戻す」から。このボードを開いていて、まだ戻していなければ、置き換えを外す。 */
+  const revertConversionFromMain = useCallback((conversionId: string) => {
+    const conversion = conversionsRef.current.get(conversionId);
+    const current = boardRef.current;
+    if (!conversion || conversion.undone || !current || conversion.boardId !== activeBoardIdRef.current) return false;
+    conversion.undone = true;
+    const stack = historyRef.current;
+    stack.undo = stack.undo.map((item) => revertCardConversion(item, conversion));
+    stack.redo = stack.redo.map((item) => revertCardConversion(item, conversion));
+    const next = revertCardConversion(current, conversion);
+    if (next !== current) patchBoard(() => next);
+    return true;
+  }, [patchBoard]);
+  useEffect(() => {
+    if (!onRegisterManuscriptRevert) return;
+    onRegisterManuscriptRevert(revertConversionFromMain);
+    return () => onRegisterManuscriptRevert(null);
+  }, [onRegisterManuscriptRevert, revertConversionFromMain]);
+  useEffect(() => {
+    if (embedded || !isTauriRuntime()) return;
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void listen<CanvasManuscriptRevertEvent>(CANVAS_MANUSCRIPT_REVERT_EVENT, (event) => {
+      const { requestId, conversionId } = event.payload;
+      const reverted = revertConversionFromMain(conversionId);
+      emitTo("main", CANVAS_MANUSCRIPT_REVERT_RESULT_EVENT, { requestId, reverted } satisfies CanvasManuscriptRevertResultEvent)
+        .catch(() => {});
+    }).then((dispose) => {
+      if (disposed) dispose();
+      else unlisten = dispose;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [embedded, revertConversionFromMain]);
+
+  const openManuscriptDialog = () => {
+    if (!board || manuscriptCards.length === 0) return;
+    setManuscriptDialog({ cards: manuscriptCards, capture: captureManuscriptCards(board, manuscriptCards) });
+  };
+  const createCardManuscripts = async (folder: string) => {
+    if (!manuscriptDialog || !rootPath || !activeBoardId) return;
+    const cards = orderedManuscriptCards(manuscriptDialog.capture, manuscriptDialog.cards);
+    if (cards.length === 0) return;
+    const boardId = activeBoardId;
+    const conversionId = nextCanvasId("conversion");
+    setIsManuscriptBusy(true);
+    try {
+      const result = await requestManuscript({
+        kind: "cards", rootPath, folder, conversionId,
+        cards: cards.map((card) => ({ id: card.id, name: cardManuscriptName(card), text: card.text })),
+      });
+      if (result.kind !== "cards") throw new Error("原稿を作れませんでした");
+      const made = result.made.map((item) => ({ id: item.id, file: item.path }));
+      const current = boardRef.current;
+      if (made.length && current && activeBoardIdRef.current === boardId) {
+        const converted = convertCardsToFiles(current, made);
+        if (converted.cards.length) {
+          pushHistory();
+          patchBoard((latest) => convertCardsToFiles(latest, made).board);
+          conversionsRef.current.set(conversionId, {
+            id: conversionId, boardId, cards: converted.cards, detached: converted.detached, undone: false,
+          });
+          setSelectedIds(new Set(converted.cards.map((card) => card.original.id)));
+          setSelectedEdgeId(null);
+        }
+      }
+      setStatus(result.failed.length
+        ? `原稿を ${made.length} 本作りました（${result.failed.length} 枚は原稿にできませんでした）`
+        : `原稿を ${made.length} 本作りました`);
+      setManuscriptDialog(null);
+    } catch (error) {
+      setStatus(`原稿を作れませんでした: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsManuscriptBusy(false);
+    }
+  };
+  const createJoinedManuscript = async (folder: string, name: string) => {
+    if (!manuscriptDialog || !rootPath || !board) return;
+    const cards = orderedManuscriptCards(manuscriptDialog.capture, manuscriptDialog.cards);
+    if (cards.length === 0) return;
+    setIsManuscriptBusy(true);
+    try {
+      const result = await requestManuscript({
+        kind: "joined", rootPath, folder, name, boardName: boardName(board),
+        cards: cards.map((card) => ({ id: card.id, title: card.title, text: card.text })),
+      });
+      if (result.kind !== "joined") throw new Error("原稿を作れませんでした");
+      setStatus(`原稿「${canvasFileTitle(result.path)}」を作りました`);
+      setManuscriptDialog(null);
+    } catch (error) {
+      setStatus(`原稿を作れませんでした: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsManuscriptBusy(false);
+    }
+  };
+
   const renderEdge = (edge: CanvasEdge) => {
     if (!board) return null;
     const from = board.nodes.find((node) => node.id === edge.fromNode);
@@ -3718,6 +3939,15 @@ export default function CanvasWindowApp({
                   >
                     <CanvasGlyph name="send" />
                   </button>
+                  <button
+                    type="button"
+                    title="この順で原稿を作る"
+                    aria-label="この順で原稿を作る"
+                    disabled={manuscriptCards.length === 0 || !rootPath || scope !== "project" || !canRequestManuscript}
+                    onClick={openManuscriptDialog}
+                  >
+                    <CanvasGlyph name="manuscript" />
+                  </button>
                   <span className="canvasFloatingBarDivider" aria-hidden="true" />
                   <button
                     className="dangerCanvasButton"
@@ -3792,6 +4022,19 @@ export default function CanvasWindowApp({
           />
         )}
       </section>
+      {manuscriptDialog && (
+        <CanvasToManuscriptDialog
+          capture={manuscriptDialog.capture}
+          cards={manuscriptDialog.cards}
+          folders={manuscriptFolders}
+          boardName={board ? boardName(board) : ""}
+          busy={isManuscriptBusy}
+          onChange={(capture) => setManuscriptDialog((current) => (current ? { ...current, capture } : current))}
+          onCancel={() => setManuscriptDialog(null)}
+          onCreateCards={(folder) => void createCardManuscripts(folder)}
+          onCreateJoined={(folder, name) => void createJoinedManuscript(folder, name)}
+        />
+      )}
       {isRenameModalOpen && (
         <div className="canvasModalBackdrop" role="presentation">
           <form className="canvasRenameModal" onSubmit={submitRename}>
