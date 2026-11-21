@@ -14,6 +14,7 @@ mod export_front_matter;
 mod external_url;
 mod idea_migration;
 mod intermediate_draft;
+mod intermediate_draft_migration;
 mod library;
 mod link_index;
 mod markdown_image;
@@ -743,6 +744,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             plot_migration::migrate_project_plot_to_note,
             idea_migration::migrate_project_ideas,
             idea_migration::migrate_profile_snippets,
+            intermediate_draft_migration::migrate_intermediate_drafts,
             post_stream::posts_load,
             post_stream::posts_signature,
             post_stream::posts_add,

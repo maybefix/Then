@@ -246,7 +246,7 @@ impl Undo {
     }
 }
 
-fn copy_verified(from: &Path, to: &Path) -> Result<(), String> {
+pub(super) fn copy_verified(from: &Path, to: &Path) -> Result<(), String> {
     if let Some(parent) = to.parent() {
         std::fs::create_dir_all(parent).map_err(|error| format!("failed to create backup folder: {error}"))?;
     }
@@ -258,7 +258,7 @@ fn copy_verified(from: &Path, to: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn copy_tree_verified(from: &Path, to: &Path) -> Result<(), String> {
+pub(super) fn copy_tree_verified(from: &Path, to: &Path) -> Result<(), String> {
     if !from.is_dir() {
         return Ok(());
     }
