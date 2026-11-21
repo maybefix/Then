@@ -296,7 +296,6 @@ import { createLoadedExportSource } from "./export/exportSource";
 import CanvasWindowApp from "./CanvasWindowApp";
 import { canvasBoardSaveQueue, canvasFileWriteQueue, isCanvasWindowOpen } from "./canvasBoardStore";
 import { chooseCanvasMode, moveCanvasToWindow as moveCanvasToWindowWith } from "./canvasWindowPlace";
-import type { DraftCanvasContext } from "./intermediateDraft";
 import { LinkedExportScreen } from "./components/export/LinkedExportScreen";
 import { ThenPluginRuntimeHost } from "./plugins/PluginRuntimeHost";
 import { PluginIcon } from "./components/plugins/PluginIcon";
@@ -1160,10 +1159,6 @@ export default function App() {
         : { ...current, canvasLeftSidebarCollapsed: collapsed },
     );
   }, []);
-  const [draftCanvasContext, setDraftCanvasContext] = useState<DraftCanvasContext | null>(null);
-  const [draftSelectRequest, setDraftSelectRequest] = useState<{ id: string; nonce: number } | null>(null);
-  const [hasOpenedDraft, setHasOpenedDraft] = useState(false);
-  useEffect(() => { if (rightSidebarTab === "draft") setHasOpenedDraft(true); }, [rightSidebarTab]);
   const {
     pluginRuntimeHostRef,
     pluginAnchorsRef,
@@ -6281,8 +6276,6 @@ export default function App() {
   const projectPathForModeReset = projectFolder?.path ?? null;
   useEffect(() => {
     setCanvasEmbedPayload(null);
-    setDraftCanvasContext(null);
-    setDraftSelectRequest(null);
     setExportEmbedPayload(null);
     setAppMode("write");
   }, [projectPathForModeReset]);
@@ -7868,10 +7861,6 @@ export default function App() {
                 <CanvasWindowApp
                   embedded
                   embeddedPayload={canvasEmbedPayload}
-                  onDraftCanvasChange={setDraftCanvasContext}
-                  draftSelectRequest={draftSelectRequest}
-                  onDraftSelectionConsumed={(nonce) => setDraftSelectRequest((current) => current?.nonce === nonce ? null : current)}
-                  onOpenDraft={() => { setRightSidebarTab("draft"); setIsRightSidebarCollapsed(false); }}
 
                   liveReferenceFiles={
                     projectFolder ? sortedReferenceCandidates : []
@@ -7907,8 +7896,8 @@ export default function App() {
               {...{
                 isRightSidebarWide, isRightSidebarCollapsed, appMode, isEditorFocusMode, pluginViews,
                 loadedPlugins, rightSidebarTab, setRightSidebarTab, openIdeaCanvasBoard, setIsRightSidebarWide, setIsRightSidebarCollapsed,
-                setSidebarPluginRuntimeAnchor, isDockedPluginRuntimeVisible, hasOpenedDraft, projectFolder,
-                draftCanvasContext, setDraftSelectRequest, activePluginView, documentKey, scene, connections, postReveal, frontMatter,
+                setSidebarPluginRuntimeAnchor, isDockedPluginRuntimeVisible, projectFolder,
+                activePluginView, documentKey, scene, connections, postReveal, frontMatter,
                 updateFrontMatter, handleClearFrontMatter, propertyTypeSettings, rememberPropertyType,
                 returnFocusFromProperties, loadPropertySets, searchByProperty, editorText, settings,
                 updateSettings, revealEditorRange, replaceEditorRange, projectProofreadTerms, appState,

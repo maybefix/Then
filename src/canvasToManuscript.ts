@@ -1,6 +1,6 @@
 /**
  * 「この順で原稿を作る」（BINDER 4-4、docs/BINDER_CANVAS_TO_MANUSCRIPT_PLAN.md）の、ボードの側の処理。
- * 選んだカードの取り出しと並べ方（中間稿の captureDraft を流用）、カードの名前、カードとファイルのカードの
+ * 選んだカードの取り出しと並べ方（もとは中間稿の並べ方。4-4b でここへ移した）、カードの名前、カードとファイルのカードの
  * 置き換えと、その取り消し。YAML は読まない（原稿の中身は canvasManuscriptContent.ts）。
  */
 import type {
@@ -10,8 +10,61 @@ import type {
   CanvasTextNode,
   JsonCanvasDocument,
 } from "./canvasTypes";
-import { captureDraft, type DraftCapture } from "./intermediateDraft";
 import { noteNameFromBody } from "./posts/postModel";
+
+/** 並べ替えの一覧の中身。カードの写し・順序・除外。 */
+export type CardOrder = {
+  capturedAt: number;
+  boardUpdatedAt: number;
+  cards: { id: string; text: string }[];
+  order: string[];
+  excluded?: string[];
+};
+
+/** テキストカードの初期の並び。矢印の線でつながった順で、輪になっていたら位置（上 → 左）の早いカードで切る。 */
+export function captureCardOrder(board: JsonCanvasDocument, now = Date.now()): CardOrder {
+  const cards = board.nodes.filter((node): node is CanvasTextNode => node.type === "text")
+    .slice().sort((a, b) => a.y - b.y || a.x - b.x || a.id.localeCompare(b.id));
+  const remaining = new Set(cards.map((card) => card.id));
+  const incoming = new Map(cards.map((card) => [card.id, new Set<string>()]));
+  const outgoing = new Map(cards.map((card) => [card.id, new Set<string>()]));
+  for (const edge of board.edges) {
+    if ((edge.connector && edge.connector !== "arrow") || edge.fromNode === edge.toNode) continue;
+    if (!remaining.has(edge.fromNode) || !remaining.has(edge.toNode)) continue;
+    incoming.get(edge.toNode)!.add(edge.fromNode);
+    outgoing.get(edge.fromNode)!.add(edge.toNode);
+  }
+  const order: string[] = [];
+  while (remaining.size) {
+    const id = cards.find((card) => remaining.has(card.id) && incoming.get(card.id)!.size === 0)?.id
+      ?? cards.find((card) => remaining.has(card.id))!.id;
+    order.push(id);
+    remaining.delete(id);
+    for (const target of outgoing.get(id)!) incoming.get(target)!.delete(id);
+  }
+  return {
+    capturedAt: now, boardUpdatedAt: board.then?.updatedAt ?? now,
+    cards: cards.map(({ id, text }) => ({ id, text })), order, excluded: [],
+  };
+}
+
+/** `id` のカードを `target` の位置へ動かす。 */
+export function moveOrderedCard(capture: CardOrder, id: string, target: string): CardOrder {
+  const order = [...capture.order];
+  const from = order.indexOf(id), to = order.indexOf(target);
+  if (from < 0 || to < 0 || from === to) return capture;
+  order.splice(from, 1);
+  order.splice(to, 0, id);
+  return { ...capture, order };
+}
+
+/** 除外と、除外から戻すのを切り替える。 */
+export function toggleOrderedCard(capture: CardOrder, id: string): CardOrder {
+  if (!capture.cards.some((card) => card.id === id)) return capture;
+  const excluded = new Set(capture.excluded ?? []);
+  if (excluded.has(id)) excluded.delete(id); else excluded.add(id);
+  return { ...capture, excluded: [...excluded] };
+}
 
 const isText = (node: CanvasNode): node is CanvasTextNode => node.type === "text";
 const isGroup = (node: CanvasNode): node is CanvasGroupNode => node.type === "group";
@@ -45,13 +98,13 @@ export function cardManuscriptName(card: Pick<CanvasTextNode, "title" | "text">)
 }
 
 /** 選んだカードの初期の並び（矢印 → 上・左）。名前を付けられない空のカードは、最初から除外にする。 */
-export function captureManuscriptCards(board: JsonCanvasDocument, cards: CanvasTextNode[]): DraftCapture {
-  const capture = captureDraft({ ...board, nodes: cards });
+export function captureManuscriptCards(board: JsonCanvasDocument, cards: CanvasTextNode[]): CardOrder {
+  const capture = captureCardOrder({ ...board, nodes: cards });
   return { ...capture, excluded: cards.filter((card) => !cardManuscriptName(card)).map((card) => card.id) };
 }
 
 /** 一覧の順で、除外していないカード。 */
-export function orderedManuscriptCards(capture: DraftCapture, cards: CanvasTextNode[]): CanvasTextNode[] {
+export function orderedManuscriptCards(capture: CardOrder, cards: CanvasTextNode[]): CanvasTextNode[] {
   const byId = new Map(cards.map((card) => [card.id, card]));
   const excluded = new Set(capture.excluded ?? []);
   return capture.order.filter((id) => !excluded.has(id)).flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));

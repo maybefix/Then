@@ -9,8 +9,6 @@ import {
   type CanvasScope,
   type JsonCanvasDocument,
 } from "./canvasTypes";
-import { draftBoardKey, type DraftHistory } from "./intermediateDraft";
-import { prepareDraftBoardTrash } from "./intermediateDraftStore";
 import { CanvasBoardSaveQueue, canvasBoardTargetKey, type CanvasBoardTarget } from "./canvasBoardSaveQueue";
 import { CanvasFileWriteQueue } from "./canvasFileWriteQueue";
 
@@ -33,7 +31,6 @@ type LocalTrashedCanvasBoard = {
   boardId: string;
   board: JsonCanvasDocument;
   deletedAt: number;
-  draft?: DraftHistory;
 };
 
 export const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
@@ -304,7 +301,6 @@ export async function reorderBoards(
 }
 
 export async function trashBoard(scope: CanvasScope, rootPath: string | null, boardId: string) {
-  await prepareDraftBoardTrash({ scope, rootPath, boardId });
   if (isTauriRuntime()) {
     await invoke("trash_canvas_board", { scope, rootPath, boardId });
     return;
@@ -315,13 +311,10 @@ export async function trashBoard(scope: CanvasScope, rootPath: string | null, bo
   const deletedAt = Date.now();
   const trashId = `${deletedAt}--${boardId}`;
   const trash = readLocalBoardTrash(scope, rootPath);
-  const draftKey = `then.draft.${draftBoardKey({ scope, rootPath, boardId })}`;
-  const draft = JSON.parse(localStorage.getItem(draftKey) ?? "null") as DraftHistory | null;
-  trash[trashId] = { boardId, board, deletedAt, draft: draft ?? undefined };
+  trash[trashId] = { boardId, board, deletedAt };
   writeLocalBoardTrash(scope, rootPath, trash);
   delete boards[boardId];
   writeLocalBoards(scope, rootPath, boards);
-  localStorage.removeItem(draftKey);
   writeLocalBoardOrder(
     scope,
     rootPath,
@@ -373,10 +366,6 @@ export async function restoreTrashedBoard(
     suffix += 1;
   }
   boards[boardId] = item.board;
-  if (item.draft) {
-    localStorage.setItem(`then.draft.${draftBoardKey({ scope, rootPath, boardId })}`,
-      JSON.stringify({ ...item.draft, boardId }));
-  }
   delete trash[trashId];
   writeLocalBoards(scope, rootPath, boards);
   writeLocalBoardTrash(scope, rootPath, trash);

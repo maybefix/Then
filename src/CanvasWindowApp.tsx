@@ -76,9 +76,7 @@ import { parseFrontMatter } from "./utils/frontmatter";
 import type { SynopsisState } from "./corkboard/synopsis";
 import { CANVAS_FILE_DROP_ATTRIBUTE, CANVAS_FILE_DROP_EVENT, type CanvasFileDropDetail } from "./canvasFileDrop";
 import { ReferenceReadOnlyPreview } from "./components/references/ReferenceLayer";
-import IntermediateDraftPane from "./components/canvas/IntermediateDraftPane";
 import CanvasToManuscriptDialog from "./components/canvas/CanvasToManuscriptDialog";
-import { type DraftCanvasContext, type DraftCapture, type DraftHistory } from "./intermediateDraft";
 import {
   captureManuscriptCards,
   cardManuscriptName,
@@ -88,8 +86,8 @@ import {
   orderedManuscriptCards,
   revertCardConversion,
   type CardConversion,
+  type CardOrder,
 } from "./canvasToManuscript";
-import { flushDraftBoard } from "./intermediateDraftStore";
 import {
   boardFilePaths,
   boardReferencePaths,
@@ -929,10 +927,6 @@ type CanvasWindowAppProps = {
   onWriteFile?: (request: CanvasFileWriteRequest) => Promise<CanvasFileWriteResult>;
   /** embedded 時に、ファイルのカードのファイルをタブで開く（作品からの相対パス）。 */
   onOpenFile?: (path: string) => void;
-  onDraftCanvasChange?: (context: DraftCanvasContext | null) => void;
-  draftSelectRequest?: { id: string; nonce: number } | null;
-  onDraftSelectionConsumed?: (nonce: number) => void;
-  onOpenDraft?: () => void;
   /** embedded 時に、このボードを別ウィンドウへ移す（メイン画面は本文へ戻る。BINDER 4-3）。 */
   onOpenInWindow?: (boardId: string | null) => void;
   /** embedded 時の「この順で原稿を作る」の作る先（BINDER 4-4）。 */
@@ -951,10 +945,6 @@ export default function CanvasWindowApp({
   liveOpenTabPaths,
   onWriteFile,
   onOpenFile,
-  onDraftCanvasChange,
-  draftSelectRequest,
-  onDraftSelectionConsumed,
-  onOpenDraft,
   onOpenInWindow,
   liveManuscriptFolders,
   onManuscriptRequest,
@@ -969,7 +959,7 @@ export default function CanvasWindowApp({
   const boardOrderSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const suppressNextSaveRef = useRef(false);
   const boardRef = useRef<JsonCanvasDocument | null>(null);
-  const draftCanvasReadyRef = useRef(false);
+  const boardReadyRef = useRef(false);
   const historyRef = useRef<{ undo: JsonCanvasDocument[]; redo: JsonCanvasDocument[] }>({
     undo: [],
     redo: [],
@@ -1026,9 +1016,8 @@ export default function CanvasWindowApp({
   const [isTrashLoading, setIsTrashLoading] = useState(false);
   // 別ウィンドウ表示のときだけ使う資料のサイドパネル。
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(true);
-  const [isDraftPanelOpen, setIsDraftPanelOpen] = useState(false);
   // 「この順で原稿を作る」（BINDER 4-4）。並べ替えの画面と、「カードごと」で置き換えた回（元に戻すときに使う）。
-  const [manuscriptDialog, setManuscriptDialog] = useState<{ cards: CanvasTextNode[]; capture: DraftCapture } | null>(null);
+  const [manuscriptDialog, setManuscriptDialog] = useState<{ cards: CanvasTextNode[]; capture: CardOrder } | null>(null);
   const [isManuscriptBusy, setIsManuscriptBusy] = useState(false);
   const conversionsRef = useRef(new Map<string, CardConversion & { undone: boolean }>());
   const manuscriptUndoRef = useRef<(conversionId: string) => void>(() => {});
@@ -1053,24 +1042,6 @@ export default function CanvasWindowApp({
   }, [zoom]);
 
   const rootPath = payload?.rootPath ?? null;
-  useEffect(() => {
-    onDraftCanvasChange?.(board && activeBoardId && draftCanvasReadyRef.current && status !== "読み込み中"
-      ? { boardId: activeBoardId, scope, rootPath, board, selectedIds: [...selectedIds] } : null);
-  }, [board, activeBoardId, scope, rootPath, selectedIds, status, onDraftCanvasChange]);
-  const selectDraftNode = useCallback((id: string) => {
-    const node = boardRef.current?.nodes.find((item) => item.id === id);
-    if (!node) return;
-    setSelectedIds(new Set([id]));
-    setSelectedEdgeId(null);
-    const viewport = viewportRef.current;
-    if (viewport) setPan({ x: viewport.clientWidth / 2 - (node.x + node.width / 2) * zoom,
-      y: viewport.clientHeight / 2 - (node.y + node.height / 2) * zoom });
-  }, [zoom]);
-  useEffect(() => {
-    if (!draftSelectRequest) return;
-    selectDraftNode(draftSelectRequest.id);
-    onDraftSelectionConsumed?.(draftSelectRequest.nonce);
-  }, [draftSelectRequest, selectDraftNode, onDraftSelectionConsumed]);
   const selectedNodes = useMemo(
     () => board?.nodes.filter((node) => selectedIds.has(node.id)) ?? [],
     [board, selectedIds],
@@ -1214,7 +1185,7 @@ export default function CanvasWindowApp({
   const defaultCanvasFontSource = payload?.canvasDefaultFontSource ?? "ui";
 
   const patchBoard = useCallback((updater: (current: JsonCanvasDocument) => JsonCanvasDocument) => {
-    if (!draftCanvasReadyRef.current) return;
+    if (!boardReadyRef.current) return;
     setBoard((current) => {
       if (!current) return current;
       const next = updater(current);
@@ -1260,7 +1231,7 @@ export default function CanvasWindowApp({
   }, []);
 
   const undoBoard = useCallback(() => {
-    if (!draftCanvasReadyRef.current) return;
+    if (!boardReadyRef.current) return;
     const stack = historyRef.current;
     const previous = stack.undo.pop();
     const current = boardRef.current;
@@ -1288,7 +1259,7 @@ export default function CanvasWindowApp({
   }, []);
 
   const redoBoard = useCallback(() => {
-    if (!draftCanvasReadyRef.current) return;
+    if (!boardReadyRef.current) return;
     const stack = historyRef.current;
     const next = stack.redo.pop();
     const current = boardRef.current;
@@ -1490,7 +1461,7 @@ export default function CanvasWindowApp({
     async (nextScope: CanvasScope, preferredBoardId?: string, selectNodeId?: string) => {
       if (!payload) return;
       const generation = ++boardLoadGenerationRef.current;
-      draftCanvasReadyRef.current = false;
+      boardReadyRef.current = false;
       if (saveTimerRef.current) {
         window.clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
@@ -1533,7 +1504,7 @@ export default function CanvasWindowApp({
         setScope(nextScope);
         setActiveBoardId(nextBoard.id);
         suppressNextSaveRef.current = true;
-        draftCanvasReadyRef.current = true;
+        boardReadyRef.current = true;
         setBoard(document);
         setSelectedIds(selectNodeId ? new Set([selectNodeId]) : new Set());
         clearHistory();
@@ -1924,7 +1895,7 @@ export default function CanvasWindowApp({
   useEffect(() => {
     if (!board || !activeBoardId || !payload) return;
     const target = loadedBoardTargetRef.current;
-    if (!draftCanvasReadyRef.current || !target || canvasBoardTargetKey(target) !==
+    if (!boardReadyRef.current || !target || canvasBoardTargetKey(target) !==
       canvasBoardTargetKey({ scope, rootPath: payload.rootPath, boardId: activeBoardId })) return;
     if (suppressNextSaveRef.current) {
       suppressNextSaveRef.current = false;
@@ -1963,7 +1934,7 @@ export default function CanvasWindowApp({
   useEffect(() => {
     return () => {
       ++boardLoadGenerationRef.current;
-      draftCanvasReadyRef.current = false;
+      boardReadyRef.current = false;
       void boardSaveQueue.flush().catch(() => {});
       // カードで直したノート・原稿も、待たずに書き戻す（BINDER 4-2）。
       if (fileWriteTimerRef.current) window.clearTimeout(fileWriteTimerRef.current);
@@ -2249,7 +2220,7 @@ export default function CanvasWindowApp({
     }
   };
 
-  /** ボード本体・参照している資料・中間稿を送り先へ写す。移動ならボードを元のゴミ箱へ入れる。 */
+  /** ボード本体と参照している資料を送り先へ写す。移動ならボードを元のゴミ箱へ入れる。 */
   const submitTransfer = async (event: FormEvent) => {
     event.preventDefault();
     if (!transferTarget || !payload?.rootPath || isTransferring) return;
@@ -2263,7 +2234,6 @@ export default function CanvasWindowApp({
       await boardSaveQueue.flush();
       // 送るカードには、ノート・原稿の今の中身を入れる（BINDER 4-2）。
       await canvasFileWriteQueue.flush().catch(() => {});
-      await flushDraftBoard({ scope, rootPath, boardId: source.id });
       const loaded = normalizeCanvasDocument(
         await loadBoard(scope, rootPath, source.id),
         source.name,
@@ -2313,21 +2283,6 @@ export default function CanvasWindowApp({
         boardId: created.id,
         board: serializeCanvasDocument(rewriteBoard(document, rewrite)),
       });
-      const draft = await invoke<DraftHistory>("load_intermediate_draft", {
-        scope,
-        rootPath,
-        boardId: source.id,
-      });
-      if (draft.versions.length) {
-        await invoke("save_intermediate_draft", {
-          scope: "project",
-          rootPath: destination.path,
-          boardId: created.id,
-          history: { ...draft, boardId: created.id, revision: 0 },
-          expectedRevision: 0,
-        });
-      }
-
       const move = transferForm.mode === "move";
       setTransferTarget(null);
       if (move) {
@@ -2361,7 +2316,7 @@ export default function CanvasWindowApp({
         window.clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
       }
-      draftCanvasReadyRef.current = false;
+      boardReadyRef.current = false;
       ++boardLoadGenerationRef.current;
     }
 
@@ -3396,11 +3351,6 @@ export default function CanvasWindowApp({
           >
             <CanvasGlyph name="fit" />
           </button>
-          <button type="button" className="canvasIconButton" title="中間稿" aria-label="中間稿を開く"
-            onClick={() => {
-              if (embedded) onOpenDraft?.();
-              else { setIsDraftPanelOpen((value) => !value); setIsSidePanelOpen(false); }
-            }}>稿</button>
           {embedded && onOpenInWindow && (
             <button
               className="canvasIconButton"
@@ -3419,7 +3369,7 @@ export default function CanvasWindowApp({
               title="Idea・資料パネル"
               aria-label="Idea・資料パネル"
               aria-expanded={isSidePanelOpen}
-              onClick={() => { setIsSidePanelOpen((value) => !value); setIsDraftPanelOpen(false); }}
+              onClick={() => setIsSidePanelOpen((value) => !value)}
             >
               <CanvasGlyph name="panel" />
             </button>
@@ -3461,7 +3411,7 @@ export default function CanvasWindowApp({
 
       <section
         className={`canvasWorkspace ${
-          !embedded && isDraftPanelOpen ? "hasCanvasDraftPanel" : !embedded && isSidePanelOpen ? "hasCanvasSidePanel" : ""
+          !embedded && isSidePanelOpen ? "hasCanvasSidePanel" : ""
         }`}
       >
         <div
@@ -4004,14 +3954,6 @@ export default function CanvasWindowApp({
             </button>
           </div>
         </div>
-        {!embedded && isDraftPanelOpen && (
-          <aside className="canvasDraftSidebar">
-            <IntermediateDraftPane rootPath={rootPath}
-              liveCanvas={board && activeBoardId && draftCanvasReadyRef.current && status !== "読み込み中" ? { boardId: activeBoardId, scope, rootPath, board, selectedIds: [...selectedIds] } : null}
-              onSelectNode={selectDraftNode}
-              onOpenCanvas={(nextScope, boardId) => { void loadBoardList(nextScope, boardId); }} />
-          </aside>
-        )}
         {!embedded && isSidePanelOpen && (
           <CanvasSidePanel
             referenceFiles={referenceFiles}
@@ -4143,7 +4085,6 @@ export default function CanvasWindowApp({
                 </select>
               </label>
             )}
-            <p className="canvasTransferNote">中間稿もボードと一緒に送ります。</p>
             <footer>
               <button type="button" onClick={() => setTransferTarget(null)}>
                 キャンセル

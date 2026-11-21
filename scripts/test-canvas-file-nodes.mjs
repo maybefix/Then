@@ -36,9 +36,7 @@ const stubs = {
     export const emit = async (event, payload) => globalThis.fileTest.emit(event, payload);
     export const emitTo = async (target, event, payload) => globalThis.fileTest.emit(event, payload, target);`),
   "./components/references/ReferenceLayer": stub("export const ReferenceReadOnlyPreview = () => null;"),
-  "./components/canvas/IntermediateDraftPane": stub("export default () => null;"),
   "./components/canvas/CanvasToManuscriptDialog": stub("export default () => null;"),
-  "./intermediateDraftStore": stub("export const prepareDraftBoardTrash = async () => {}; export const flushDraftBoard = async () => {};"),
 };
 const external = ["react", "react-dom", "react-dom/client", "react/jsx-runtime"];
 const entry = `
@@ -105,7 +103,6 @@ globalThis.fileTest = {
       return documentOf(args.path);
     }
     if (command === "library_transfer_destinations") return [{ path: "/other", label: "作品B" }];
-    if (command === "load_intermediate_draft") return { versions: [] };
     if (command === "focus_source_in_main" || command === "finish_canvas_close_preparation") return;
     throw new Error(`Unexpected command ${command}`);
   },

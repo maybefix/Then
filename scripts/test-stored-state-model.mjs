@@ -95,6 +95,7 @@ for (const theme of ["aplil-light", "aplil-dark", "blossom-light", "blossom-dark
   const withPlotFont = normalizeState({ ...before, settings: { ...before.settings, plotFontSource: "ui" } });
   assert.equal("plotFontSource" in withPlotFont.settings, false, "the removed plot font setting is dropped (BINDER 1-6)");
   assert.equal(normalizeState({ ...before, rightSidebarTab: "plot" }).rightSidebarTab, "idea", "a stored plot tab opens the idea pane");
+  assert.equal(normalizeState({ ...before, rightSidebarTab: "draft" }).rightSidebarTab, "idea", "a stored intermediate draft tab opens the idea pane (BINDER 4-4b)");
   assert.deepEqual(normalizeState(JSON.parse(JSON.stringify(after))), after, "the migrated state survives another save and load");
   assert.equal(legacy.settings.ai.provider, "openAi", "migration leaves its input untouched");
 }

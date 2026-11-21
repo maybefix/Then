@@ -46,12 +46,10 @@ const values = {
   loadedPlugins: [],
   rightSidebarTab: "idea",
   isDockedPluginRuntimeVisible: false,
-  hasOpenedDraft: false,
   projectFolder: null,
   scene: { markdown: "---\nsynopsis: 書庫の手紙。\n---\n本文", onChangeMarkdown: () => {}, progress: "writing", onSetProgress: () => {} },
   connections: { index: null, version: 0, document: null, posts: [], boards: [], onOpenFile: () => {}, onOpenPost: () => {}, onOpenBoard: () => {} },
   postReveal: null,
-  draftCanvasContext: null,
   activePluginView: null,
   documentKey: "doc",
   frontMatter: { hasFrontMatter: false, metadata: "", body: "" },
@@ -116,7 +114,7 @@ assert.doesNotMatch(render(), /aria-label="補助ペイン：AI"|class="aiPane"/
 const open = render();
 assert.match(open, /<aside class="rightSidebar " aria-label="補助ペイン" aria-hidden="false">/, "open: the sidebar is visible and not inert");
 assert.match(open, /aria-label="ペイン幅を拡張"/);
-assert.doesNotMatch(open, /draftPaneHost/, "the draft pane is not mounted before it is opened");
+assert.doesNotMatch(open, /draftPaneHost|中間稿/, "the intermediate draft pane is gone (BINDER 4-4b)");
 
 const collapsed = render({ isRightSidebarCollapsed: true });
 assert.match(collapsed, /class="rightSidebar  collapsedRightSidebar"[^>]*aria-hidden="true"[^>]*inert=""/, "collapsed: hidden and inert");
@@ -127,10 +125,6 @@ const wide = render({ isRightSidebarWide: true });
 assert.match(wide, /class="rightSidebar wideRightSidebar"/);
 assert.match(wide, /aria-label="ペイン幅を戻す"/);
 
-const draft = render({ rightSidebarTab: "draft", hasOpenedDraft: true });
-assert.match(draft, /<div class="draftPaneHost">/, "draft: the draft pane is shown");
-assert.doesNotMatch(draft, new RegExp(Object.values(panes).map((re) => re.source).join("|")), "draft: no other pane");
-assert.match(render({ rightSidebarTab: "idea", hasOpenedDraft: true }), /<div class="draftPaneHost" hidden="">/, "the opened draft pane stays mounted but hidden");
 
 const pluginView = values.pluginViews[0];
 const plugin = render({ rightSidebarTab: "plugin:demo:notes", activePluginView: pluginView, isDockedPluginRuntimeVisible: true });
@@ -223,7 +217,7 @@ export function RightPaneSwitcher({ items, activeId }) {
     return renderToStaticMarkup(createElement(ListedSidebar, props));
   };
   const panes = [...renderListed().matchAll(/<li data-id="([^"]+)">([^<]*)<\/li>/g)].map((match) => `${match[1]}:${match[2]}`);
-  assert.deepEqual(panes, ["scene:この場面", "connections:つながり", "idea:アイデア", "proof:校正", "draft:中間稿", "properties:プロパティ", "plugin:demo:notes:メモ帳"], "the panes offered, in order (BINDER 1-7: この場面 first; 3-4: つながり next)");
+  assert.deepEqual(panes, ["scene:この場面", "connections:つながり", "idea:アイデア", "proof:校正", "properties:プロパティ", "plugin:demo:notes:メモ帳"], "the panes offered, in order (BINDER 1-7: この場面 first; 3-4: つながり next; 4-4b: no 中間稿)");
 }
 
 console.log("right sidebar tests passed");

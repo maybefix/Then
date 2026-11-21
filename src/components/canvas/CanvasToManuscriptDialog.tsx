@@ -1,21 +1,19 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { CanvasManuscriptFolders, CanvasTextNode } from "../../canvasTypes";
-import { cardManuscriptName } from "../../canvasToManuscript";
-import type { DraftCapture } from "../../intermediateDraft";
-import DraftOrderList from "./DraftOrderList";
-import "./intermediateDraft.css";
+import { cardManuscriptName, type CardOrder } from "../../canvasToManuscript";
+import ManuscriptOrderList from "./ManuscriptOrderList";
 
 /**
- * 「この順で原稿を作る」の並べ替えの画面（BINDER 4-4）。一覧は中間稿と同じ DraftOrderList。
+ * 「この順で原稿を作る」の並べ替えの画面（BINDER 4-4）。一覧は ManuscriptOrderList。
  * 作る先のフォルダを選び、「カードごとに原稿を作る」か「1本の原稿につなげる」（名前を聞いてから作る）。
  */
 type Props = {
-  capture: DraftCapture;
+  capture: CardOrder;
   cards: CanvasTextNode[];
   folders: CanvasManuscriptFolders | undefined;
   boardName: string;
   busy: boolean;
-  onChange: (next: DraftCapture) => void;
+  onChange: (next: CardOrder) => void;
   onCancel: () => void;
   onCreateCards: (folder: string) => void;
   onCreateJoined: (folder: string, name: string) => void;
@@ -43,7 +41,7 @@ export default function CanvasToManuscriptDialog({
     if (name && !busy) onCreateJoined(folder, name);
   };
   return <div className="canvasModalBackdrop" role="presentation">
-    <section ref={sectionRef} tabIndex={-1} className="canvasManuscriptModal intermediateDraftPane" role="dialog"
+    <section ref={sectionRef} tabIndex={-1} className="canvasManuscriptModal" role="dialog"
       aria-modal="true" aria-label="この順で原稿を作る"
       onKeyDown={(event) => {
         event.stopPropagation();
@@ -53,7 +51,7 @@ export default function CanvasToManuscriptDialog({
         <h2>この順で原稿を作る</h2>
         <button type="button" aria-label="閉じる" disabled={busy} onClick={onCancel}>×</button>
       </header>
-      <DraftOrderList capture={capture} texts={texts} editable={!busy && joinedName === null} onChange={onChange}
+      <ManuscriptOrderList capture={capture} texts={texts} editable={!busy && joinedName === null} onChange={onChange}
         excludeLabel="原稿から除外" includeLabel="原稿に戻す"
         nameOf={(id) => { const card = byId.get(id); return card ? cardManuscriptName(card) : ""; }} />
       <label>
@@ -68,7 +66,7 @@ export default function CanvasToManuscriptDialog({
           <button type="button" disabled={busy || count === 0} onClick={() => setJoinedName(manuscriptFileName(boardName))}>
             1本の原稿につなげる
           </button>
-          <button type="button" className="draftPrimary" disabled={busy || count === 0} onClick={() => onCreateCards(folder)}>
+          <button type="button" className="manuscriptOrderPrimary" disabled={busy || count === 0} onClick={() => onCreateCards(folder)}>
             カードごとに原稿を作る
           </button>
         </span>

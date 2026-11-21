@@ -1622,12 +1622,6 @@
   color: var(--on-accent);
 }
 
-.canvasTransferNote {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
 .canvasDeleteModal p {
   margin: 0;
   color: var(--text-secondary);
@@ -1708,23 +1702,68 @@
   flex: 0 0 auto;
 }
 
-/* 「この順で原稿を作る」の並べ替えの画面（BINDER 4-4）。一覧の見た目は intermediateDraft.css。 */
-.canvasManuscriptModal.intermediateDraftPane {
-  width: min(560px, calc(100vw - 40px));
-  height: auto;
-  max-height: min(720px, calc(100vh - 40px));
-  flex: 0 1 auto;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--canvas-toolbar-border);
-  border-radius: var(--canvas-radius-card);
-  background: var(--canvas-inspector-bg);
-  box-shadow: 0 22px 60px var(--canvas-shadow);
+/* 「この順で原稿を作る」の並べ替えの画面（BINDER 4-4。一覧はもとは中間稿のもので、4-4b でここへ移した）。 */
+.canvasManuscriptModal {
+  display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden;
+  width: min(560px, calc(100vw - 40px)); height: auto; max-height: min(720px, calc(100vh - 40px)); flex: 0 1 auto;
+  gap: 12px; padding: 14px; border: 1px solid var(--canvas-toolbar-border); border-radius: var(--canvas-radius-card);
+  background: var(--canvas-inspector-bg); box-shadow: 0 22px 60px var(--canvas-shadow);
+  color: var(--text-primary); font-size: 12px;
 }
-
-.canvasManuscriptModal.intermediateDraftPane:focus {
-  outline: none;
+.canvasManuscriptModal:focus { outline: none; }
+.canvasManuscriptModal button, .canvasManuscriptModal select {
+  min-width: 0; height: 30px; border: 0.5px solid var(--border-subtle); border-radius: 6px;
+  background: var(--bg-panel-strong); color: var(--text-primary); font: inherit;
 }
+.canvasManuscriptModal button { cursor: pointer; transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease; }
+.canvasManuscriptModal button:hover:not(:disabled) { border-color: var(--border-strong, var(--border-subtle)); background: var(--bg-hover, var(--bg-tertiary)); }
+.canvasManuscriptModal button:disabled { cursor: default; opacity: 0.38; }
+.canvasManuscriptModal button:focus-visible, .canvasManuscriptModal select:focus-visible {
+  outline: none; border-color: var(--accent-border, var(--accent)); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.manuscriptOrderIcon {
+  width: 15px; height: 15px; flex: 0 0 auto; stroke: currentColor; stroke-width: 1.35;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.manuscriptOrderList {
+  min-height: 0; flex: 1 1 auto; margin: 0; padding: 0 2px 4px; overflow: auto;
+  overscroll-behavior: contain; list-style: none;
+}
+.manuscriptOrderList li {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 9px; padding: 10px 7px;
+  border: 0.5px solid var(--border-subtle); border-radius: 10px; background: var(--bg-secondary, var(--bg-panel));
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.manuscriptOrderList li:hover { background: var(--bg-panel-strong); }
+.manuscriptOrderList li.isExcluded { background: transparent; }
+.manuscriptOrderList li.isExcluded .manuscriptOrderNumber, .manuscriptOrderList li.isExcluded .manuscriptOrderExcerpt { color: var(--text-muted); opacity: 0.55; }
+.manuscriptOrderNumber { min-width: 14px; color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; text-align: center; }
+.canvasManuscriptModal .manuscriptOrderHandle {
+  display: grid; width: 22px; height: 28px; flex: 0 0 22px; place-items: center; padding: 0;
+  border: 0; background: transparent; color: var(--text-faint, var(--text-muted)); cursor: grab;
+}
+.canvasManuscriptModal .manuscriptOrderExcerpt {
+  display: -webkit-box; height: auto; flex: 1 1 auto; padding: 1px 2px; overflow: hidden;
+  border: 0; background: transparent; color: var(--text-primary); line-height: 1.65; text-align: left;
+  overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+}
+.canvasManuscriptModal .manuscriptOrderExclude {
+  display: grid; width: 24px; height: 24px; flex: 0 0 24px; place-items: center; padding: 0;
+  border: 0; background: transparent; color: var(--text-muted);
+}
+.canvasManuscriptModal .manuscriptOrderExclude:hover:not(:disabled) { border-color: transparent; background: var(--bg-hover, var(--bg-tertiary)); color: var(--text-primary); }
+.manuscriptOrderList li.isExcluded .manuscriptOrderExclude { color: var(--accent-strong); }
+.manuscriptOrderMove { display: flex; flex: 0 0 22px; flex-direction: column; gap: 2px; }
+.canvasManuscriptModal .manuscriptOrderMove button {
+  display: grid; width: 22px; height: 22px; place-items: center; padding: 0; border: 0;
+  background: transparent; color: var(--text-secondary);
+}
+.manuscriptOrderMove .manuscriptOrderIcon { width: 13px; height: 13px; }
+.manuscriptOrderEmpty { color: var(--text-muted); }
+.canvasManuscriptModal .manuscriptOrderPrimary {
+  height: 34px; border: 0; border-radius: 7px; background: var(--accent); color: var(--on-accent, #fff); font-weight: 650;
+}
+.canvasManuscriptModal .manuscriptOrderPrimary:hover:not(:disabled) { border-color: transparent; background: var(--accent-strong); }
 
 .canvasManuscriptModal header,
 .canvasManuscriptModal footer,
@@ -1748,11 +1787,11 @@
   font-size: 18px;
 }
 
-.canvasManuscriptModal .draftOrderList {
+.canvasManuscriptModal .manuscriptOrderList {
   min-height: 96px;
 }
 
-.canvasManuscriptModal .draftCardName {
+.canvasManuscriptModal .manuscriptOrderName {
   display: block;
   font-weight: 650;
 }
@@ -1775,6 +1814,11 @@
   font: inherit;
 }
 
+/* 選ぶ欄は、上の一覧のボタンと同じ高さ（もとは中間稿の CSS の高さが勝っていた）。 */
+.canvasManuscriptModal select {
+  height: 30px;
+}
+
 .canvasManuscriptModal footer button {
   padding: 0 12px;
 }
@@ -1784,7 +1828,7 @@
   gap: 12px;
 }
 
-.canvasManuscriptModal footer button.draftPrimary,
+.canvasManuscriptModal footer button.manuscriptOrderPrimary,
 .canvasManuscriptModal footer button[type="submit"] {
   border-color: transparent;
   background: var(--accent);

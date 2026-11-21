@@ -1,5 +1,4 @@
 import type { Dispatch, ReactNode, SetStateAction } from "react";
-import type { DraftCanvasContext } from "../../intermediateDraft";
 import type { LoadedThenPlugin, ThenPluginView } from "../../plugins/types";
 import type { ProofreadTerm } from "../../proofread/terms";
 import type { PropertyType, PropertyTypeSettings } from "../../properties/propertyModel";
@@ -16,7 +15,6 @@ import type { FrontMatterParts } from "../../utils/frontmatter";
 import { PostStreamPane } from "../posts/PostStreamPane";
 import type { Post, PostFilter } from "../../posts/postModel";
 import type { PostStream } from "../../posts/usePostStream";
-import IntermediateDraftPane from "../canvas/IntermediateDraftPane";
 import { PluginIcon } from "../plugins/PluginIcon";
 import ProofreadPane from "../proofread/ProofreadPane";
 import { PropertiesPanel } from "../properties/PropertiesPanel";
@@ -77,16 +75,6 @@ const rightSidebarBuiltinTabs: Array<{ id: string; label: string; icon: ReactNod
     ),
   },
   {
-    id: "draft",
-    label: "中間稿",
-    icon: (
-      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-        <path d="M8 3h9l3 3v13H8Z" />
-        <path d="M4 7v15h12M11 8h6M11 12h6M11 16h4" />
-      </svg>
-    ),
-  },
-  {
     id: "properties",
     label: "プロパティ",
     icon: (
@@ -112,10 +100,7 @@ export type RightSidebarProps = {
   setIsRightSidebarCollapsed: (collapsed: boolean) => void;
   setSidebarPluginRuntimeAnchor: Dispatch<SetStateAction<HTMLDivElement | null>>;
   isDockedPluginRuntimeVisible: boolean;
-  hasOpenedDraft: boolean;
   projectFolder: ProjectFolder | null;
-  draftCanvasContext: DraftCanvasContext | null;
-  setDraftSelectRequest: Dispatch<SetStateAction<{ id: string; nonce: number } | null>>;
   activePluginView: ThenPluginView | null;
   documentKey: string;
   /** 「この場面」に渡す、表示中の文書と進捗（BINDER 1-7）。 */
@@ -162,7 +147,7 @@ export function RightSidebar(props: RightSidebarProps) {
     isRightSidebarWide, isRightSidebarCollapsed, appMode, isEditorFocusMode, pluginViews, loadedPlugins,
     rightSidebarTab, setRightSidebarTab,
     openIdeaCanvasBoard, setIsRightSidebarWide, setIsRightSidebarCollapsed, setSidebarPluginRuntimeAnchor,
-    isDockedPluginRuntimeVisible, hasOpenedDraft, projectFolder, draftCanvasContext, setDraftSelectRequest,
+    isDockedPluginRuntimeVisible, projectFolder,
     activePluginView, documentKey, scene, connections, postReveal, frontMatter, updateFrontMatter, handleClearFrontMatter,
     propertyTypeSettings, rememberPropertyType, returnFocusFromProperties, loadPropertySets, searchByProperty,
     editorText, settings, updateSettings, revealEditorRange, replaceEditorRange, projectProofreadTerms,
@@ -252,13 +237,7 @@ export function RightSidebar(props: RightSidebarProps) {
             className={`pluginRuntimeAnchor${isDockedPluginRuntimeVisible ? " visiblePluginRuntimeAnchor" : ""}`}
             aria-hidden="true"
           />
-          {hasOpenedDraft && <div className="draftPaneHost" hidden={rightSidebarTab !== "draft"}>
-            <IntermediateDraftPane key={projectFolder?.path ?? "no-project"} rootPath={projectFolder?.path ?? null}
-              liveCanvas={appMode === "canvas" ? draftCanvasContext : null}
-              onOpenCanvas={(scope, boardId) => void openIdeaCanvasBoard(scope, boardId)}
-              onSelectNode={(id) => setDraftSelectRequest({ id, nonce: Date.now() })} />
-          </div>}
-          {rightSidebarTab === "draft" ? null : activePluginView ? (
+          {activePluginView ? (
             <div className="pluginViewBody" aria-label={activePluginView.title} />
           ) : rightSidebarTab === "scene" ? (
             <ScenePane documentKey={documentKey} {...scene} onExit={returnFocusFromProperties} />
