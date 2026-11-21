@@ -119,12 +119,154 @@ test("カードごとの原稿: 見出しと概要。概要はコルクボード
 });
 
 test("1本の原稿: 空行で区切り、タイトルは ## 見出し。元のカードを一覧の順で書く", () => {
-  const refs = [content.sourceCardRef("潮待ち#1", "a1"), content.sourceCardRef("潮待ち#1", "b2")];
+  const refs = [content.sourceCardRef("潮待ち#1", "a1"), content.sourceCardRef("潮待ち #1", "b2")];
   const file = content.joinedManuscript("第一章", [{ title: "港", text: "朝。\n\n波。" }, { text: "夜。" }, { title: "", text: "  " }], refs);
   const parts = parseFrontMatter(file);
   assert.equal(parts.body, "# 第一章\n\n## 港\n\n朝。\n\n波。\n\n夜。\n");
   const row = readProperties(parts.metadata).rows.find((item) => item.key === "sourceCards");
-  assert.deepEqual(row.value, ["潮待ち#1#a1", "潮待ち#1#b2"]);
+  assert.deepEqual(row.value, ["潮待ち#1#a1", "潮待ち #1#b2"], "ボード名に # や空白があっても、そのまま読める");
+});
+
+// ---- メイン画面の処理（canvasManuscriptActions.ts）を、入れ物の deps で動かす ----
+const { createCanvasManuscriptActions } = await bundle("src/canvasManuscriptActions.ts", "actions.mjs");
+const ROOT = "/work";
+const hashOf = (value) => `h${[...value].reduce((sum, ch) => (sum * 31 + ch.codePointAt(0)) >>> 0, 7)}`;
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+function host({ failOn = null } = {}) {
+  const files = new Map([["/work/第一章/既存.txt", "# 既存\n"]]);
+  const log = { orders: [], toasts: [], trashed: [], opened: [], refreshed: 0, reverts: [] };
+  const state = { dirty: new Set(), active: "/work/第一章/既存.txt", revert: true };
+  const doc = (filePath) => ({ path: filePath, name: filePath.split("/").pop(), content: files.get(filePath), contentHash: hashOf(files.get(filePath)) });
+  const tree = () => ({
+    path: ROOT, name: "作品", children: [{
+      path: "/work/第一章", name: "第一章", kind: "folder",
+      children: [...files.keys()].filter((filePath) => filePath.startsWith("/work/第一章/"))
+        .map((filePath) => ({ path: filePath, name: filePath.split("/").pop(), kind: "file", children: [] })),
+    }],
+  });
+  const deps = {
+    projectFolder: tree(),
+    absolutePath: (root, relative) => `${root}/${relative}`,
+    createFile: async (folder, name) => {
+      if (failOn && name === failOn) throw new Error("disk full");
+      const stem = name.replace(/\.(txt|md)$/i, "");
+      let filePath = `${folder}/${stem}.txt`;
+      for (let index = 2; files.has(filePath); index += 1) filePath = `${folder}/${stem}-${index}.txt`;
+      files.set(filePath, `# ${filePath.split("/").pop().replace(/\.txt$/, "")}\n`);
+      return doc(filePath);
+    },
+    saveFile: async (filePath, value, expected) => {
+      if (hashOf(files.get(filePath)) !== expected) throw new Error("conflict");
+      files.set(filePath, value);
+      return doc(filePath);
+    },
+    readFile: async (filePath) => {
+      if (!files.has(filePath)) throw new Error("not found");
+      return doc(filePath);
+    },
+    saveOrder: async (root, folder, paths) => { log.orders.push({ root, folder, paths }); },
+    refreshProjectFolder: async () => { log.refreshed += 1; deps.projectFolder = tree(); return deps.projectFolder; },
+    openFile: async (filePath) => { log.opened.push(filePath); state.active = filePath; },
+    activeFilePath: () => state.active,
+    isFileDirty: (filePath) => state.dirty.has(filePath),
+    trashFile: async (filePath) => { log.trashed.push(filePath); files.delete(filePath); return true; },
+    showToast: (message, action) => log.toasts.push({ message, action }),
+    revertOnCanvas: async (id) => { log.reverts.push(id); return state.revert; },
+  };
+  return { files, log, state, actions: createCanvasManuscriptActions({ current: deps }) };
+}
+const cardsRequest = (cards, conversionId = "v1") => ({ kind: "cards", rootPath: ROOT, folder: "第一章", conversionId, cards });
+
+test("メイン画面: カードごとに原稿を作り、中身を書き、フォルダの後ろに一覧の順で並べる", async () => {
+  const { files, log, actions } = host();
+  const result = await actions.handle(cardsRequest([
+    { id: "a", name: "港", text: "朝。\n\n波。" }, { id: "b", name: "既存", text: "" }, { id: "c", name: "港", text: "夜" },
+  ]));
+  assert.deepEqual(result, { kind: "cards", failed: [], made: [
+    { id: "a", path: "第一章/港.txt" }, { id: "b", path: "第一章/既存-2.txt" }, { id: "c", path: "第一章/港-2.txt" }] });
+  assert.equal(files.get("/work/第一章/港.txt"), "---\nsynopsis: 朝。　波。\n---\n# 港\n");
+  assert.equal(files.get("/work/第一章/既存-2.txt"), "# 既存\n", "同じ名前は「-2」、見出しはカードの名前");
+  assert.equal(files.get("/work/第一章/港-2.txt"), "---\nsynopsis: 夜\n---\n# 港\n");
+  assert.deepEqual(log.orders, [{ root: ROOT, folder: "/work/第一章",
+    paths: ["/work/第一章/既存.txt", "/work/第一章/港.txt", "/work/第一章/既存-2.txt", "/work/第一章/港-2.txt"] }]);
+  assert.ok(log.refreshed >= 1);
+  assert.equal(log.toasts.at(-1).message, "原稿を 3 本作りました");
+  assert.equal(log.toasts.at(-1).action.label, "元に戻す");
+  assert.deepEqual(log.opened, [], "カードごとでは原稿を開かない");
+});
+
+test("メイン画面: 途中で作れなかったカードは failed にし、作れた分だけ返す", async () => {
+  const { files, log, actions } = host({ failOn: "壊" });
+  const result = await actions.handle(cardsRequest([{ id: "a", name: "一", text: "" }, { id: "x", name: "壊", text: "" }, { id: "b", name: "二", text: "" }]));
+  assert.deepEqual(result.failed, ["x"]);
+  assert.deepEqual(result.made.map((item) => item.id), ["a", "b"]);
+  assert.equal([...files.keys()].filter((filePath) => filePath.includes("壊")).length, 0);
+  assert.equal(log.toasts.at(-1).message, "原稿を 2 本作りました");
+});
+
+test("メイン画面: Ctrl+Z から。作ったままの原稿だけゴミ箱へ。2回目と通知からは何もしない", async () => {
+  const { files, log, state, actions } = host();
+  await actions.handle(cardsRequest([{ id: "a", name: "一", text: "" }, { id: "b", name: "二", text: "" }, { id: "c", name: "三", text: "" }]));
+  files.set("/work/第一章/二.txt", "# 二\n書き足した\n");
+  state.dirty.add("/work/第一章/三.txt");
+  const undo = await actions.handle({ kind: "undo", rootPath: ROOT, conversionId: "v1" });
+  assert.deepEqual(undo, { kind: "undo", done: true, trashed: 1, kept: 2 });
+  assert.deepEqual(log.trashed, ["/work/第一章/一.txt"]);
+  assert.match(log.toasts.at(-1).message, /原稿 2 本は書き足してあるので残しました/);
+  assert.deepEqual(await actions.handle({ kind: "undo", rootPath: ROOT, conversionId: "v1" }), { kind: "undo", done: false, trashed: 0, kept: 0 });
+  log.toasts.find((item) => item.action).action.onClick();
+  await tick();
+  assert.deepEqual(log.reverts, [], "Canvas で戻したあとの通知の「元に戻す」は、キャンバスに頼まない");
+  assert.deepEqual(log.trashed, ["/work/第一章/一.txt"]);
+});
+
+test("メイン画面: 通知から。キャンバスで外せたときだけゴミ箱へ。外せなければ何も消さない", async () => {
+  const { log, state, actions } = host();
+  await actions.handle(cardsRequest([{ id: "a", name: "一", text: "" }]));
+  state.revert = false;
+  log.toasts.at(-1).action.onClick();
+  await tick();
+  assert.deepEqual(log.reverts, ["v1"]);
+  assert.deepEqual(log.trashed, []);
+  assert.equal(log.toasts.at(-1).message, "Canvas でそのボードを開いていないため、元に戻せませんでした");
+  state.revert = true;
+  log.toasts.find((item) => item.action).action.onClick();
+  await tick();
+  assert.deepEqual(log.trashed, ["/work/第一章/一.txt"], "外せなかったあとは、もう一度押せる");
+  assert.equal(log.toasts.at(-1).message, "カードを元に戻し、原稿 1 本をゴミ箱へ移しました");
+  assert.deepEqual(await actions.handle({ kind: "undo", rootPath: ROOT, conversionId: "v1" }), { kind: "undo", done: false, trashed: 0, kept: 0 },
+    "通知から戻したあとの Ctrl+Z では、もう消さない");
+});
+
+test("メイン画面: 1本につなげる。原稿を開き、通知の「元に戻す」で作る前のファイルへ戻ってからゴミ箱へ", async () => {
+  const { files, log, actions } = host();
+  const result = await actions.handle({ kind: "joined", rootPath: ROOT, folder: "第一章", name: "第一章の稿", boardName: "潮待ち",
+    cards: [{ id: "a1", title: "港", text: "朝。" }, { id: "b2", text: "夜。" }] });
+  assert.deepEqual(result, { kind: "joined", path: "第一章/第一章の稿.txt" });
+  assert.equal(files.get("/work/第一章/第一章の稿.txt"),
+    "---\nsourceCards:\n  - 潮待ち#a1\n  - 潮待ち#b2\n---\n# 第一章の稿\n\n## 港\n\n朝。\n\n夜。\n");
+  assert.deepEqual(log.opened, ["/work/第一章/第一章の稿.txt"]);
+  assert.equal(log.toasts.at(-1).message, "原稿「第一章の稿」を作りました");
+  log.toasts.at(-1).action.onClick();
+  await tick();
+  assert.deepEqual(log.opened, ["/work/第一章/第一章の稿.txt", "/work/第一章/既存.txt"]);
+  assert.deepEqual(log.trashed, ["/work/第一章/第一章の稿.txt"]);
+  assert.equal(log.toasts.at(-1).message, "原稿「第一章の稿」をゴミ箱へ移しました");
+});
+
+test("メイン画面: 1本の原稿に書き足してあれば、通知の「元に戻す」でも残す", async () => {
+  const { files, log, actions } = host();
+  await actions.handle({ kind: "joined", rootPath: ROOT, folder: "", name: "稿", boardName: "B", cards: [{ id: "a", text: "x" }] });
+  files.set("/work/稿.txt", `${files.get("/work/稿.txt")}書き足し\n`);
+  log.toasts.at(-1).action.onClick();
+  await tick();
+  assert.deepEqual(log.trashed, []);
+  assert.equal(log.toasts.at(-1).message, "原稿「稿」は書き足してあるので残しました");
+});
+
+test("メイン画面: 開いていない作品の頼みは断る", async () => {
+  const { actions } = host();
+  await assert.rejects(actions.handle({ ...cardsRequest([]), rootPath: "/other" }), /この作品を開いていない/);
 });
 
 let failed = 0;
