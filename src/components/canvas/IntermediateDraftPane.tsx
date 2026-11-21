@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { CanvasBoardSummary, CanvasScope } from "../../canvasTypes";
-import { captureDraft, draftBoardKey, generateDraft, moveDraftCard, toggleDraftCard,
+import { captureDraft, draftBoardKey, generateDraft,
   type DraftBoard, type DraftCanvasContext, type DraftCapture } from "../../intermediateDraft";
 import { getDraftSession, listDraftBoards, loadDraftBoard } from "../../intermediateDraftStore";
+import DraftOrderList from "./DraftOrderList";
 import "./intermediateDraft.css";
 
 type Props = {
@@ -81,7 +82,6 @@ function DraftEditor({ target, liveCanvas, onSelectNode }: {
   const [capture, setCapture] = useState<DraftCapture | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const [tab, setTab] = useState<"order" | "text">("order");
-  const dragged = useRef<string | null>(null);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -135,9 +135,6 @@ function DraftEditor({ target, liveCanvas, onSelectNode }: {
   const editCapture = (change: (source: DraftCapture) => DraftCapture) => {
     setCapture((current) => current ? change(current) : null);
   };
-  const move = (id: string, targetId: string) => {
-    editCapture((source) => moveDraftCard(source, id, targetId));
-  };
   const copy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -181,33 +178,11 @@ function DraftEditor({ target, liveCanvas, onSelectNode }: {
     </div>
     {capture && <p className="draftCaptureNotice" role="status">Canvasから取得したカードを編集中です。版を切り替えても、生成前の並べ替え・除外は保持されます。</p>}
     {tab === "order" ? <>
-      <ol className="draftOrderList" aria-label="カード順">
-        {shownCapture?.order.map((id, index) => <li key={id}
-          className={`${(liveCanvas ? liveCanvas.selectedIds.includes(id) : selectedCard === id) ? "isSelected" : ""}${excluded.has(id) ? " isExcluded" : ""}`.trim()}
-          onDragOver={(event) => { if (canEditOrder && dragged.current) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }}
-          onDrop={(event) => { if (canEditOrder && dragged.current) { event.preventDefault(); event.stopPropagation(); move(dragged.current, id); dragged.current = null; } }}>
-          <button type="button" className="draftDragHandle" aria-label={`カード${index + 1}をドラッグで移動`}
-            disabled={!canEditOrder} draggable={canEditOrder}
-            onDragStart={(event) => { if (!canEditOrder) return; dragged.current = id; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-then-draft-card", id); }}
-            onDragEnd={() => { dragged.current = null; }}><GripIcon /></button>
-          <span className="draftOrderNumber">{index + 1}</span>
-          <button type="button" className="draftExcerpt" onClick={() => { setSelectedCard(id); onSelectNode?.(id); }}
-            title={cards.get(id) || "空のカード"}>{cards.get(id)?.replace(/\s+/g, " ").slice(0, 160) || "空のカード"}</button>
-          {canEditOrder && <button type="button" className="draftExcludeButton"
-            aria-label={`カード${index + 1}を${excluded.has(id) ? "中間稿に戻す" : "中間稿から除外"}`}
-            title={excluded.has(id) ? "中間稿に戻す" : "中間稿から除外"}
-            onClick={() => editCapture((source) => toggleDraftCard(source, id))}>
-            <ExcludeIcon restore={excluded.has(id)} />
-          </button>}
-          {canEditOrder && <div className="draftMoveActions">
-            <button type="button" aria-label={`カード${index + 1}を上へ`} disabled={index === 0}
-              onClick={() => move(id, shownCapture.order[index - 1])}><ChevronIcon direction="up" /></button>
-            <button type="button" aria-label={`カード${index + 1}を下へ`} disabled={index === shownCapture.order.length - 1}
-              onClick={() => move(id, shownCapture.order[index + 1])}><ChevronIcon direction="down" /></button>
-          </div>}
-        </li>)}
-        {!shownCapture?.order.length && <li className="draftEmpty">テキストカードがありません。</li>}
-      </ol>
+      <DraftOrderList capture={shownCapture} texts={cards} editable={canEditOrder}
+        onChange={(next) => editCapture(() => next)}
+        excludeLabel="中間稿から除外" includeLabel="中間稿に戻す"
+        isSelected={(id) => (liveCanvas ? liveCanvas.selectedIds.includes(id) : selectedCard === id)}
+        onSelect={(id) => { setSelectedCard(id); onSelectNode?.(id); }} />
       {!capture && latest && <p className="draftHint">順序や除外を変更するには、Canvasから再取得してください。</p>}
       {capture && <div className="draftGenerateActions">
         <button className="draftPrimary" type="button"
@@ -255,18 +230,9 @@ function OpenIcon() {
 function RefreshIcon() {
   return <DraftIcon><path d="M13 4.8V2.5m0 0h-2.3M13 2.5A5.5 5.5 0 1 0 13.4 9" /></DraftIcon>;
 }
-function GripIcon() {
-  return <DraftIcon><circle cx="5.5" cy="4" r=".8" fill="currentColor" stroke="none"/><circle cx="10.5" cy="4" r=".8" fill="currentColor" stroke="none"/><circle cx="5.5" cy="8" r=".8" fill="currentColor" stroke="none"/><circle cx="10.5" cy="8" r=".8" fill="currentColor" stroke="none"/><circle cx="5.5" cy="12" r=".8" fill="currentColor" stroke="none"/><circle cx="10.5" cy="12" r=".8" fill="currentColor" stroke="none"/></DraftIcon>;
-}
-function ChevronIcon({ direction }: { direction: "up" | "down" }) {
-  return <DraftIcon><path d={direction === "up" ? "m4.5 9.5 3.5-3 3.5 3" : "m4.5 6.5 3.5 3 3.5-3"} /></DraftIcon>;
-}
 function CopyIcon() {
   return <DraftIcon><rect x="5.5" y="5.5" width="7.5" height="7.5" rx="1.3"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5" /></DraftIcon>;
 }
 function DownloadIcon() {
   return <DraftIcon><path d="M8 2.5v7m-2.8-2.7L8 9.7l2.8-2.9M3 12.5h10" /></DraftIcon>;
-}
-function ExcludeIcon({ restore }: { restore: boolean }) {
-  return <DraftIcon><circle cx="8" cy="8" r="5.25"/><path d="M5.5 8h5" />{restore && <path d="M8 5.5v5" />}</DraftIcon>;
 }

@@ -1707,3 +1707,87 @@
   min-width: 58px;
   flex: 0 0 auto;
 }
+
+/* 「この順で原稿を作る」の並べ替えの画面（BINDER 4-4）。一覧の見た目は intermediateDraft.css。 */
+.canvasManuscriptModal.intermediateDraftPane {
+  width: min(560px, calc(100vw - 40px));
+  height: auto;
+  max-height: min(720px, calc(100vh - 40px));
+  flex: 0 1 auto;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--canvas-toolbar-border);
+  border-radius: var(--canvas-radius-card);
+  background: var(--canvas-inspector-bg);
+  box-shadow: 0 22px 60px var(--canvas-shadow);
+}
+
+.canvasManuscriptModal.intermediateDraftPane:focus {
+  outline: none;
+}
+
+.canvasManuscriptModal header,
+.canvasManuscriptModal footer,
+.canvasManuscriptActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.canvasManuscriptModal h2 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.canvasManuscriptModal header button {
+  width: 30px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 18px;
+}
+
+.canvasManuscriptModal .draftOrderList {
+  min-height: 96px;
+}
+
+.canvasManuscriptModal .draftCardName {
+  display: block;
+  font-weight: 650;
+}
+
+.canvasManuscriptModal label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+}
+
+.canvasManuscriptModal select,
+.canvasManuscriptModal input {
+  height: 32px;
+  min-width: 0;
+  padding: 0 9px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-panel-strong);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.canvasManuscriptModal footer button {
+  padding: 0 12px;
+}
+
+.canvasManuscriptJoined {
+  display: grid;
+  gap: 12px;
+}
+
+.canvasManuscriptModal footer button.draftPrimary,
+.canvasManuscriptModal footer button[type="submit"] {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--on-accent, #fff);
+  font-weight: 650;
+}

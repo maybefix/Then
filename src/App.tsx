@@ -170,12 +170,22 @@ import {
   CANVAS_FILE_WRITE_RESULT_EVENT,
   CANVAS_FLUSH_DONE_EVENT,
   CANVAS_FLUSH_EVENT,
+  CANVAS_MANUSCRIPT_EVENT,
+  CANVAS_MANUSCRIPT_RESULT_EVENT,
+  CANVAS_MANUSCRIPT_REVERT_EVENT,
+  CANVAS_MANUSCRIPT_REVERT_RESULT_EVENT,
   type CanvasFileSavedEvent,
   type CanvasFileWriteEvent,
   type CanvasFileWriteRequest,
   type CanvasFileWriteResultEvent,
   type CanvasFlushEvent,
   type CanvasLiveDataEvent,
+  type CanvasManuscriptEvent,
+  type CanvasManuscriptFolders,
+  type CanvasManuscriptRequest,
+  type CanvasManuscriptResultEvent,
+  type CanvasManuscriptRevertEvent,
+  type CanvasManuscriptRevertResultEvent,
   type CanvasPathChangesEvent,
   type CanvasProjectFile,
   type CanvasScope,
@@ -222,6 +232,7 @@ import { QuickPostModal } from "./components/posts/QuickPostModal";
 import { countInbox, type PostFilter } from "./posts/postModel";
 import { usePostStream } from "./posts/usePostStream";
 import { createPostNoteActions, type PostNoteDeps } from "./posts/postNoteActions";
+import { createCanvasManuscriptActions, type CanvasManuscriptDeps } from "./canvasManuscriptActions";
 import { StatusBar } from "./components/status/StatusBar";
 import { useCheckpointStatusInfo } from "./components/status/useCheckpointStatusInfo";
 import type {
@@ -316,6 +327,35 @@ const loadSynopsisWriter = () => import("./corkboard/synopsisWriter");
 function joinCanvasFilePath(rootPath: string, relative: string): string {
   const separator = rootPath.includes("\\") ? "\\" : "/";
   return `${rootPath.replace(/[\\/]+$/, "")}${separator}${relative.split("/").join(separator)}`;
+}
+
+/** 別ウィンドウのキャンバスに、「この順で原稿を作る」の置き換えを外してもらう（BINDER 4-4）。答えがなければ外せなかったとする。 */
+function revertManuscriptInCanvasWindow(conversionId: string) {
+  return new Promise<boolean>((resolve) => {
+    const requestId = `revert-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    let finished = false;
+    let dispose: (() => void) | null = null;
+    const finish = (reverted: boolean) => {
+      if (finished) return;
+      finished = true;
+      window.clearTimeout(timer);
+      dispose?.();
+      resolve(reverted);
+    };
+    const timer = window.setTimeout(() => finish(false), 3000);
+    listen<CanvasManuscriptRevertResultEvent>(CANVAS_MANUSCRIPT_REVERT_RESULT_EVENT, (event) => {
+      if (event.payload.requestId === requestId) finish(event.payload.reverted);
+    })
+      .then((unlisten) => {
+        if (finished) {
+          unlisten();
+          return;
+        }
+        dispose = unlisten;
+        return emitTo("idea-canvas", CANVAS_MANUSCRIPT_REVERT_EVENT, { requestId, conversionId } satisfies CanvasManuscriptRevertEvent);
+      })
+      .catch(() => finish(false));
+  });
 }
 
 /**
@@ -2419,6 +2459,29 @@ export default function App() {
     () => (canvasOpenTabPathKey ? canvasOpenTabPathKey.split("\n") : []),
     [canvasOpenTabPathKey],
   );
+  // 「この順で原稿を作る」の作る先（BINDER 4-4）。原稿のフォルダだけで、初期値はコルクボードと同じ決め方
+  // （バインダーで選んでいるフォルダ → 開いている原稿のフォルダ → 作品の直下）。
+  const canvasManuscriptFolders = useMemo<CanvasManuscriptFolders | undefined>(() => {
+    if (!projectFolder) return undefined;
+    const folders: CanvasManuscriptFolders["folders"] = [{ path: "", label: projectFolder.name }];
+    const walk = (entries: ProjectEntry[]) => {
+      for (const entry of entries) {
+        if (entry.kind !== "folder" || entry.role === "material") continue;
+        const path = toProjectRelativePath(projectFolder.path, entry.path);
+        folders.push({ path, label: `${projectFolder.name}/${path}` });
+        walk(entry.children);
+      }
+    };
+    walk(projectFolder.children);
+    const manuscriptFolder = (path: string | null) => {
+      if (!path) return null;
+      const relative = isSamePath(path, projectFolder.path) ? "" : toProjectRelativePath(projectFolder.path, path);
+      return folders.some((folder) => folder.path === relative) ? relative : null;
+    };
+    const current = manuscriptFolder(focusedFolderPath)
+      ?? manuscriptFolder(currentFilePath ? getParentPath(currentFilePath) : null) ?? "";
+    return { folders, current };
+  }, [projectFolder, focusedFolderPath, currentFilePath]);
 
   useEffect(() => {
     if (!projectFolder) {
@@ -3726,6 +3789,7 @@ export default function App() {
       referenceFiles: projectFolder ? sortedReferenceCandidates : [],
       projectFiles: canvasProjectFiles,
       openTabPaths: canvasOpenTabPaths,
+      manuscriptFolders: canvasManuscriptFolders,
       rightSidebarVisible: !isRightSidebarCollapsed,
     };
 
@@ -6224,13 +6288,14 @@ export default function App() {
         referenceFiles: projectFolder ? sortedReferenceCandidates : [],
         projectFiles: canvasProjectFiles,
         openTabPaths: canvasOpenTabPaths,
+        manuscriptFolders: canvasManuscriptFolders,
       };
       emitTo("idea-canvas", CANVAS_LIVE_DATA_EVENT, payload).catch(() => {
         // 対象ウィンドウが無い・閉じた直後などは黙って捨てる
       });
     }, 400);
     return () => window.clearTimeout(timer);
-  }, [sortedReferenceCandidates, projectFolder, canvasProjectFiles, canvasOpenTabPaths]);
+  }, [sortedReferenceCandidates, projectFolder, canvasProjectFiles, canvasOpenTabPaths, canvasManuscriptFolders]);
 
   // キャンバスのカードからノート・原稿へ書き戻す（BINDER 4-2）。ファイルへ書くのはメイン画面だけ。
   const writeCanvasFileRef = useRef<(request: CanvasFileWriteRequest) => ReturnType<typeof writeCanvasFileFromMain>>(
@@ -6538,6 +6603,48 @@ export default function App() {
     trashFile: (path) => new Promise<boolean>((resolve) => setPendingNoteTrash({ path, resolve })),
   };
   const postNoteActions = useMemo(() => createPostNoteActions(postNoteDepsRef), []);
+  // Canvas の「この順で原稿を作る」（BINDER 4-4）。原稿を作り、書き、ゴミ箱へ移すのはメイン画面だけ。
+  // 通知の「元に戻す」は、開いているキャンバス（埋め込みなら登録された処理、別ウィンドウなら知らせ）に置き換えを外してもらう。
+  const canvasManuscriptRevertRef = useRef<((conversionId: string) => boolean) | null>(null);
+  const canvasManuscriptDepsRef = useRef<CanvasManuscriptDeps>(null as unknown as CanvasManuscriptDeps);
+  canvasManuscriptDepsRef.current = {
+    projectFolder,
+    absolutePath: joinCanvasFilePath,
+    createFile: (folderPath, name) => invoke<TextDocument>("create_text_file", { folderPath, name }),
+    saveFile: (path, content, expectedHash) => invoke<TextDocument>("save_text_file", { path, content, expectedHash }),
+    readFile: (path) => invoke<TextDocument>("read_text_file", { path }),
+    saveOrder: async (rootPath, folderPath, orderedPaths) => {
+      await invoke<ProjectFolder>("reorder_project_entries", { rootPath, folderPath, orderedPaths });
+    },
+    refreshProjectFolder,
+    openFile: (path) => openFromCorkboard(path),
+    activeFilePath: () => currentFilePath,
+    isFileDirty: postNoteDepsRef.current.isFileDirty,
+    trashFile: postNoteDepsRef.current.trashFile,
+    showToast,
+    revertOnCanvas: async (conversionId) => {
+      if (canvasManuscriptRevertRef.current?.(conversionId)) return true;
+      if (!isTauriRuntime()) return false;
+      return revertManuscriptInCanvasWindow(conversionId);
+    },
+  };
+  const canvasManuscriptActions = useMemo(() => createCanvasManuscriptActions(canvasManuscriptDepsRef), []);
+  // 別ウィンドウのキャンバスからの頼み。
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    return manageAsyncRegistration(
+      listen<CanvasManuscriptEvent>(CANVAS_MANUSCRIPT_EVENT, (event) => {
+        const { requestId, request } = event.payload;
+        const answer = (body: CanvasManuscriptResultEvent) =>
+          emitTo("idea-canvas", CANVAS_MANUSCRIPT_RESULT_EVENT, body).catch(() => {});
+        void canvasManuscriptActions.handle(request)
+          .then((result) => answer({ requestId, result }))
+          .catch((error) => answer({ requestId, error: error instanceof Error ? error.message : String(error) }));
+      }),
+      (error) => setLastError(String(error)),
+    );
+  }, [canvasManuscriptActions]);
+  const handleCanvasManuscriptRequest = (request: CanvasManuscriptRequest) => canvasManuscriptActions.handle(request);
   // BINDER 3-2: 本文のリンクを押したときの流れ（src/links/linkOpenActions.ts）へ、画面とファイルの口を渡す。
   const linkOpenActions = useMemo(() => createLinkOpenActions({
     index: () => linkRewriteDepsRef.current.linkIndex.peek(),
@@ -7763,6 +7870,9 @@ export default function App() {
                   }
                   liveProjectFiles={canvasProjectFiles}
                   liveOpenTabPaths={canvasOpenTabPaths}
+                  liveManuscriptFolders={canvasManuscriptFolders}
+                  onManuscriptRequest={handleCanvasManuscriptRequest}
+                  onRegisterManuscriptRevert={(revert) => { canvasManuscriptRevertRef.current = revert; }}
                   onWriteFile={(request) => writeCanvasFileRef.current(request)}
                   onOpenFile={(path) => {
                     if (projectFolder) void openFromCorkboard(joinCanvasFilePath(projectFolder.path, path));
