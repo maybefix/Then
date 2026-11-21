@@ -206,7 +206,15 @@ Canvas で選んだカードを、並べ替えの画面で順序を決めてか�
 
 ### 4-4. 今の自動テストの状態（「前」の一式の結果）
 
-（「前」の一式が終わってから書く）
+「前」の一式（`dbd05ee`、2026-11-21）: `npm run build` は成功（いちばん大きい JavaScript は 722,608 バイト）。129本のうち、126本が通り、3本が元から失敗した。終わったあとに残ったプロセスは全部 0。
+
+| テスト | 結果 | 理由 |
+|---|---|---|
+| `test:editor-selection` | 10分で打ち切り | 一式の中で止まった（4-2・4-3 の「前」「後」でも同じ） |
+| `test:editor-text-edits` | 失敗 | 「every icon draws its own picture」。アイコンの確かめで、Canvas とは別（4-2・4-3 と同じ） |
+| `test:v058-bundle` | 失敗 | 元から 500 kB の上限を超えている（722,608 バイト） |
+
+関係するテスト（`test:v063-draft`・`test:canvas-save`・`test:canvas-store`・`test:canvas-file-nodes`・`test:canvas-window-place`・`test:canvas-palette-labels`・`test:v064-canvas`・`test:corkboard`・`test:synopsis-actions`・`test:synopsis-baseline`・`test:properties-ui`・`test:frontmatter`・`test:heading-dnd-ui`・`test:left-sidebar`・`test:right-sidebar`）は全部通った。
 
 ## 工程5: 案
 
