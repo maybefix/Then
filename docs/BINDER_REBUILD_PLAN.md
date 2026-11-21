@@ -19,7 +19,7 @@
 | Idea（スレッド・断片） | `project.json` の `ideaThreads`（「全作品で共有」設定時はアプリ側） | Canvas へコピー |
 | Idea Board（Canvas） | `.then/boards/*.canvas` | Idea・Plot へコピー |
 | Plot（章・セクション） | `load_project_plot_cards`（`src-tauri/src/lib.rs`）で読む `PlotCard` | 原稿ファイルとつながりがない |
-| 中間稿 | `.then/boards/.intermediate-drafts/` | Canvas のスナップショット。本文へは手でコピペ |
+| 中間稿 | `.then/boards/.intermediate-drafts/` | Canvas のスナップショット。本文へは手でコピペ（4-4b で退役。最新版を素材のノートへ移した） |
 | 原稿ツリー | 作品フォルダの `.md` | どこからも参照されない |
 
 [IDEA_CANVAS_REQUIREMENTS.md](IDEA_CANVAS_REQUIREMENTS.md) で「送信はコピー、同期しない」と決めたため、素材を一段先へ送るたびに元とのつながりが切れる。
@@ -87,7 +87,7 @@
     - カードはテキストのまま残す。1本の原稿に何枚ものカードが入るため、置き換える先がないから。
     - 原稿には、どのカードから作ったかだけを記録する（フロントマターの `sourceCards`。値は `"ボード名#カードID"` のリスト。表示名は「元のカード」）。
   - 作った原稿は通常の原稿として書き直す。版はチェックポイントで残し、中間稿専用の保存と版管理（`.then/boards/.intermediate-drafts/`、`save_intermediate_draft`）はなくす。
-  - 右サイドバーの「中間稿」ペインと、Canvas の「稿」ボタンはなくす。
+  - 右サイドバーの「中間稿」ペインと、Canvas の「稿」ボタンはなくす。（2026-11-21、4-4b で実施）
   - 決定時の利用状況: 中間稿があるのはテスト用の作品の2件だけで、どちらも版は1つ。関連コードは約530行（`IntermediateDraftPane.tsx`、`intermediateDraft.ts`、`intermediateDraftStore.ts`）。
 
 ### 3.5 Plot
@@ -223,7 +223,7 @@
 | 4-2 | `file` ノードの表示と、参照先ファイルへの書き戻し。ノートはタブで開いている間カードを表示だけにし、原稿のカードは概要を映して、開いているタブへ反映する（3.9）。書き戻しの順番待ちは `src/canvasBoardStore.ts` に並べる。4-1 で見つけた Canvas の保存の癖（閉じる前の 0.5 秒の変更が消える〔実機で確かめた〕、埋め込みと別ウィンドウで後から書いたほうが勝つ、外の変更を上書きする）は、書き戻しでも同じ形で起きるので、ここで一緒に決める（CANVAS_SAVE_SEPARATION_PLAN.md の工程2の5）（2026-11-21 実施。ノート・原稿を指すカード（JSON Canvas の `file` ノード）を足した。ノートは本文、原稿は概要を映し、カードで直すとメイン画面が読んだときのハッシュを付けて書き戻す。ノートをタブで開いている間は表示だけ、原稿の概要は開いているタブへ。別ウィンドウでも同じ。書き戻しの順番待ち `canvasFileWriteQueue` を `canvasBoardStore.ts` に並べた。閉じる直前 0.5 秒の変更が消える癖と、知らない種類のカードが消える癖を直した。後勝ちと外の変更は 4-3 へ。バインダーから Canvas へ置く入口は、Canvas の画面でバインダーが隠れるため今は使えない。コードは残し、Canvas で左サイドバーを使うようにするときに生かす。[BINDER_FILE_NODES_PLAN.md](BINDER_FILE_NODES_PLAN.md)） |
 | 4-3 | Canvas を中央の表示の一つにする（既存のウィンドウ内表示を土台に）（2026-11-21 実施。Canvas の画面でも左のバインダーを出す（開閉は Canvas だけで覚え、既定は畳む。ホバー表示の設定にも従う）。バインダーのノート・原稿・素材の画像・PDF を Canvas へドラッグして置ける。キャンバスはいつも中央に出し、別ウィンドウはツールバーの「別ウィンドウで開く」で移す。同じボードを2か所で開かないので後勝ちは起きない。設定「キャンバスを別ウィンドウで開く」はなくした。ボードの保存に `expected_hash` を付け、外の変更は選ぶ画面で選ばせる。[BINDER_CANVAS_CENTER_VIEW_PLAN.md](BINDER_CANVAS_CENTER_VIEW_PLAN.md)） |
 | 4-4 | 「この順で原稿を作る」（中間稿の並べ替え画面を流用。「カードごと」はカードの文章を概要にしてカードを原稿の参照へ置き換え、「1本につなげる」はカードを残して `sourceCards` を記録する。3.4）（2026-11-21 実施。選んだカードのツールバーから、Canvas の上に中間稿と同じ一覧の並べ替えの画面を出す。初期の順序は矢印 → 上・左、空のカードは除外。作る先は原稿のフォルダから選び、初期値はコルクボードと同じ決め方。カードごと: 名前はタイトル → 書き出し、同じ名前は「-2」、概要は改行を全角の空白に、同じ ID・位置・色のファイルのカードへ置き換え、スレッドの子は外す。Canvas の Ctrl+Z と通知の「元に戻す」のどちらからでも一度だけ戻せ、作ったままの原稿はゴミ箱へ。1本: 空行でつなぎ、タイトルは `## `、原稿を開く。作った原稿は作る先の後ろに一覧の順で並ぶ。原稿を作るのはメイン画面で、別ウィンドウからは知らせで頼む。グループは中のカードに広げ、ファイル・資料のカードは入れない。中間稿の画面と保存は 4-4b まで残す。[BINDER_CANVAS_TO_MANUSCRIPT_PLAN.md](BINDER_CANVAS_TO_MANUSCRIPT_PLAN.md)） |
-| 4-4b | 中間稿の退役。既存の中間稿は、ボードごとに最新版を素材のノート「（ボード名）の中間稿」へ移し、`.then/boards/.intermediate-drafts/` はバックアップ後に消す。[USER_MANUAL.md](USER_MANUAL.md) の「中間稿」の節と [CANVAS_INTERMEDIATE_DRAFT_DESIGN.md](CANVAS_INTERMEDIATE_DRAFT_DESIGN.md) を更新する |
+| 4-4b | 中間稿の退役。既存の中間稿は、ボードごとに最新版を素材のノート「（ボード名）の中間稿」へ移し、`.then/boards/.intermediate-drafts/` はバックアップ後に消す。[USER_MANUAL.md](USER_MANUAL.md) の「中間稿」の節と [CANVAS_INTERMEDIATE_DRAFT_DESIGN.md](CANVAS_INTERMEDIATE_DRAFT_DESIGN.md) を更新する（2026-11-21 実施。起動時と作品を開いたときに Plot・Idea のあとで自動で移す。ノートは最新版の本文だけで、名前が重なれば「-2」、素材フォルダがなければ「素材」を作る。ボードが消えた中間稿・ゴミ箱のボードの中間稿も移し、終了前の一時保存が保存版と違えばそちらを使う。元の中間稿は `.then/backups/intermediate-drafts-<日時>/` に写してから消す。ボードのゴミ箱・戻す・送るは中間稿を動かさない。保存済みのタブ「中間稿」は「アイデア」で開く。4-4 の並べ替えの一覧は `canvasToManuscript.ts`・`ManuscriptOrderList.tsx` へ移し、一覧の行からカードを選ぶ操作はなくした。[BINDER_INTERMEDIATE_DRAFT_RETIRE_PLAN.md](BINDER_INTERMEDIATE_DRAFT_RETIRE_PLAN.md)） |
 | 4-5 | 既存の Canvas のコピーカードを参照へ置き換える移行（`OriginRef` を手がかりに） |
 
 ## 5. 決めること
