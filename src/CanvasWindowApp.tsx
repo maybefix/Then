@@ -1730,14 +1730,21 @@ export default function CanvasWindowApp({
   };
 
   // バインダーのノート・原稿の行を、埋め込みのキャンバスへ落とした（WorkspaceSidebar のポインタのドラッグ）。
+  // 素材の画像・PDF の行は、「資料を追加」で置くのと同じ資料のカードにする（BINDER 4-3）。
   const fileDropRef = useRef<(detail: CanvasFileDropDetail) => void>(() => {});
   fileDropRef.current = (detail) => {
     if (!rootPath) return;
-    const paths = detail.paths.flatMap((path) => {
+    const point = screenToWorld(detail.clientX, detail.clientY);
+    const paths: string[] = [];
+    for (const path of detail.paths) {
       const relative = canvasRelativePath(rootPath, path);
-      return relative ? [relative] : [];
-    });
-    insertFileNodesAt(paths, screenToWorld(detail.clientX, detail.clientY));
+      if (!relative) continue;
+      const reference = referenceFiles.find((file) =>
+        (file.kind === "image" || file.kind === "pdf") && canvasFileKey(file.sourcePath) === canvasFileKey(relative));
+      if (reference) void insertReferenceNodeAt(reference, point);
+      else paths.push(relative);
+    }
+    insertFileNodesAt(paths, point);
   };
   useEffect(() => {
     const viewport = viewportRef.current;

@@ -104,6 +104,7 @@ globalThis.HTMLElement = dom.window.HTMLElement;
 globalThis.Element = dom.window.Element;
 globalThis.MouseEvent = dom.window.MouseEvent;
 globalThis.Event = dom.window.Event;
+globalThis.CustomEvent = dom.window.CustomEvent;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.__headingLogs = [];
 globalThis.__folderSelectCalls = 0;
@@ -155,7 +156,7 @@ function astFile(path, name, outline) {
   };
 }
 
-function Harness({ activeOutlineIds = new Set() } = {}) {
+function Harness({ activeOutlineIds = new Set(), folder = projectFolder, extra = {} } = {}) {
   const [moved, setMoved] = React.useState(false);
   const [collapsedFolders, setCollapsedFolders] = React.useState(new Set());
   const [collapsedOutlinePaths, setCollapsedOutlinePaths] = React.useState(new Set());
@@ -180,7 +181,7 @@ function Harness({ activeOutlineIds = new Set() } = {}) {
     updatedAt: Date.now(),
   };
   return React.createElement(WorkspaceSidebar, {
-    projectFolder,
+    projectFolder: folder,
     currentFilePath: pathA,
     currentFileName: "a.md",
     currentFileCharCount: 40,
@@ -277,6 +278,7 @@ function Harness({ activeOutlineIds = new Set() } = {}) {
     onRestoreSnapshot() {},
     onDeleteSnapshot() {},
     onCollapse() {},
+    ...extra,
   });
 }
 
@@ -706,6 +708,70 @@ assert.deepEqual(
   ],
   "Ctrl+pointerdown followed immediately by drag must use the additive selection",
 );
+// BINDER 4-3: Canvas の画面のバインダーから、ノートと素材の画像を埋め込みの Canvas へ落とす。
+// Canvas の落とし先（data-canvas-file-drop）の上で離すと、その要素へ CANVAS_FILE_DROP_EVENT が届き、
+// 左の群には、ドラッグが Canvas に入ったという印（ホバー表示のバインダーを隠す）が付き、離すと外れる。
+{
+  const materialsPath = "C:\\fixture\\素材";
+  const notePath = materialsPath + "\\note.md";
+  const imagePath = materialsPath + "\\map.png";
+  const canvasFolder = {
+    ...projectFolder,
+    children: [
+      ...projectFolder.children,
+      { path: materialsPath, name: "素材", kind: "folder", role: "material", children: [
+        { path: notePath, name: "note.md", kind: "file", role: "material", children: [] },
+      ] },
+    ],
+  };
+  const movedReferences = [];
+  const cluster = document.createElement("div");
+  cluster.className = "leftWorkspaceCluster";
+  const canvasHost = document.createElement("div");
+  canvasHost.setAttribute("data-canvas-file-drop", "");
+  const drops = [];
+  canvasHost.addEventListener("then-canvas-file-drop", (event) => drops.push(event.detail));
+  document.body.append(cluster, canvasHost);
+  const canvasRoot = createRoot(cluster);
+  await act(async () => {
+    canvasRoot.render(React.createElement(Harness, {
+      folder: canvasFolder,
+      extra: {
+        materialReferences: [{ path: imagePath, sourcePath: "素材/map.png", name: "map.png", kind: "image" }],
+        onMoveReference(reference, folderPath) { movedReferences.push([reference.path, folderPath]); },
+      },
+    }));
+  });
+  const rowButton = (entryPath) => {
+    const row = [...cluster.querySelectorAll("[data-tree-entry-path]")]
+      .find((element) => element.getAttribute("data-tree-entry-path") === entryPath);
+    assert.ok(row, `the binder shows ${entryPath}`);
+    return row.querySelector("button") ?? row;
+  };
+  for (const [label, entryPath, pointerId] of [["note", notePath, 41], ["image", imagePath, 42]]) {
+    const source = rowButton(entryPath);
+    treePointerTarget = canvasHost;
+    await act(async () => {
+      source.dispatchEvent(pointerEvent("pointerdown", pointerId, 10, 10));
+      source.dispatchEvent(pointerEvent("pointermove", pointerId, 400, 300));
+    });
+    assert.equal(cluster.getAttribute("data-binder-drag-on-canvas"), "true",
+      `dragging the ${label} onto the Canvas marks the left cluster`);
+    assert.equal(canvasHost.getAttribute("data-drop-active"), "true", `the Canvas shows it takes the ${label}`);
+    await act(async () => {
+      source.dispatchEvent(pointerEvent("pointerup", pointerId, 400, 300));
+    });
+    assert.equal(cluster.hasAttribute("data-binder-drag-on-canvas"), false, `dropping the ${label} clears the mark`);
+    assert.deepEqual(drops.at(-1), { paths: [entryPath], clientX: 400, clientY: 300 },
+      `the ${label} reaches the Canvas with where it was dropped`);
+  }
+  assert.equal(drops.length, 2);
+  assert.deepEqual(movedReferences, [], "dropping an image on the Canvas does not move it");
+  await act(async () => canvasRoot.unmount());
+  cluster.remove();
+  canvasHost.remove();
+}
+
 console.log(JSON.stringify({ stages, domOrder, logs: globalThis.__headingLogs }, null, 2));
 await act(async () => root.unmount());
 dom.window.close();
