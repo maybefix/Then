@@ -1034,7 +1034,8 @@
   grid-template-rows: auto auto minmax(0, 1fr);
   gap: 6px;
   padding: 10px;
-  background: var(--bg-panel-strong);
+  /* 下のカードが透けないよう、テキストカードと同じ地にする。 */
+  background: var(--canvas-node-bg);
 }
 
 .canvasFileNode header {

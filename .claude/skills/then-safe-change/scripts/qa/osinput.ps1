@@ -58,8 +58,9 @@ function Origin { $p = New-Object Os+POINT; [Os]::ClientToScreen($hwnd, [ref]$p)
 $sent = 0
 if ($Info) { $o = Origin; "client origin $($o.X),$($o.Y); foreground=$([Os]::GetForegroundWindow() -eq $hwnd)" }
 if ($Focus) {
-  # Windows lets a process take the foreground only right after it sent input: tap ALT first.
-  [Os]::Key(0x12, 0, 0, $false) | Out-Null; [Os]::Key(0x12, 0, 0, $true) | Out-Null
+  # Windows lets a process take the foreground only right after it sent input: tap a key first.
+  # F24, not ALT: a lone ALT tap opened Then's window menu, which holds the page until it closes (2026-11-21).
+  [Os]::Key(0x87, 0, 0, $false) | Out-Null; [Os]::Key(0x87, 0, 0, $true) | Out-Null
   [Os]::ShowWindow($hwnd, 9) | Out-Null; [Os]::SetForegroundWindow($hwnd) | Out-Null; Start-Sleep -Milliseconds 300; "foreground=$([Os]::GetForegroundWindow() -eq $hwnd)" }
 if ($ClickCss) {
   $c = $ClickCss.Split(","); $o = Origin
@@ -89,7 +90,7 @@ if ($Text) {
   "typed $($Text.Length) chars sent=$sent"
 }
 if ($Keys) {
-  $map = @{ END = 0x23; HOME = 0x24; RETURN = 0x0D; ESCAPE = 0x1B; BACK = 0x08; DELETE = 0x2E; S = 0x53; CTRL = 0x11; SHIFT = 0x10 }
+  $map = @{ END = 0x23; HOME = 0x24; RETURN = 0x0D; ESCAPE = 0x1B; BACK = 0x08; DELETE = 0x2E; S = 0x53; CTRL = 0x11; SHIFT = 0x10; ALT = 0x12; F4 = 0x73 }
   foreach ($k in $Keys.Split(",")) {
     $parts = $k.Split("+"); $mods = $parts[0..($parts.Length - 2)] | Where-Object { $_ -and $parts.Length -gt 1 }; $main = $parts[-1]
     foreach ($m in $mods) { $sent += [Os]::Key([uint16]$map[$m], 0, 0, $false) }
