@@ -17,6 +17,13 @@ Object.assign(globalThis, {
   CSS: { escape: (value) => String(value).replace(/[^a-zA-Z0-9_-]/g, "\\$&") },
   IS_REACT_ACT_ENVIRONMENT: true,
 });
+// 0.5 秒の遅延保存は本物の時計で待つので、React は act の外の更新を警告する。警告には束ねたコードの
+// data: URL がまるごと付き、出力が膨らむので、その警告だけは出さない（ほかのエラーはそのまま出す）。
+const consoleError = console.error;
+console.error = (...args) => {
+  if (typeof args[0] === "string" && args[0].includes("not wrapped in act")) return;
+  consoleError(...args);
+};
 const { default: React, act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 
