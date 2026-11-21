@@ -87,7 +87,12 @@ globalThis.fileTest = {
         .map(([id, doc]) => ({ id: JSON.parse(id)[1], name: doc.then.name, scope: "project", nodeCount: doc.nodes.length, edgeCount: 0 }));
     }
     if (command === "load_canvas_board") return structuredClone(docs.get(boardKey(args.rootPath, args.boardId)));
-    if (command === "save_canvas_board") { docs.set(boardKey(args.rootPath, args.boardId), structuredClone(args.board)); return; }
+    // ボードのハッシュ（BINDER 4-3）は test:canvas-save と test:canvas-store で確かめる。ここでは比べない。
+    if (command === "load_canvas_board_with_hash") {
+      return { board: structuredClone(docs.get(boardKey(args.rootPath, args.boardId))), hash: null };
+    }
+    if (command === "canvas_board_hash") return null;
+    if (command === "save_canvas_board") { docs.set(boardKey(args.rootPath, args.boardId), structuredClone(args.board)); return null; }
     if (command === "create_canvas_board") {
       const id = `created-${docs.size}`;
       docs.set(boardKey(args.rootPath, id), { nodes: [], edges: [], then: { version: 1, name: args.name } });
@@ -395,7 +400,7 @@ await click('[aria-label="ボードを切り替え"]');
 await click('.canvasBoardSelectButton[title="B"]');
 await act(async () => { await sleep(20); });
 assert.equal(files.get(abs(NOTE)), "---\ntags: [人物]\n---\n切り替え前", "切り替える前に書き戻す");
-const loadB = calls.findIndex((call) => call.command === "load_canvas_board" && call.boardId === "b");
+const loadB = calls.findIndex((call) => call.command === "load_canvas_board_with_hash" && call.boardId === "b");
 assert.ok(loadB > calls.findIndex((call) => call.command === "read_text_file") && writeRequests.length === 1);
 assert.equal(shown("fb"), "切り替え前", "次のボードの同じファイルのカードは、書いたあとの中身を出す");
 await unmount();

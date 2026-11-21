@@ -66,13 +66,13 @@ assert.deepEqual(events, [
   ["list_canvas_boards", { scope: "project", rootPath: "one" }],
   ["create_canvas_board", { scope: "project", rootPath: "one", name: "新しい" }],
   ["load_canvas_board", { scope: "project", rootPath: "one", boardId: "a" }],
-  ["save_canvas_board", { scope: "project", rootPath: "one", boardId: "a", board: doc }],
+  ["save_canvas_board", { scope: "project", rootPath: "one", boardId: "a", board: doc, expectedHash: null }],
   ["reorder_canvas_boards", { scope: "project", rootPath: "one", boardIds: ["b", "a"] }],
   ["prepareDraftBoardTrash", { scope: "project", rootPath: "one", boardId: "a" }],
   ["trash_canvas_board", { scope: "project", rootPath: "one", boardId: "a" }],
   ["list_trashed_canvas_boards", { scope: "project", rootPath: "one" }],
   ["restore_canvas_board", { scope: "project", rootPath: "one", trashId: "t" }],
-  ["save_canvas_board", { scope: "project", rootPath: "two", boardId: "q", board: doc }],
+  ["save_canvas_board", { scope: "project", rootPath: "two", boardId: "q", board: doc, expectedHash: null }],
 ]);
 assert.equal(localStorage.length, 0, "Tauri の中では localStorage に書かない");
 console.log("PASS tauri: each store function sends its command with the same arguments; trash prepares the draft first; the queue writes with save_canvas_board");

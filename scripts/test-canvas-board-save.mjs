@@ -92,6 +92,8 @@ const { default: Canvas } = await import(canvasUrl);
 window.__TAURI_INTERNALS__ = {};
 let docs, calls, loadGate, writeGate, failingWrite;
 const key = (scope, rootPath, boardId) => JSON.stringify([scope, rootPath, boardId]);
+let versions = new Map();
+const boardHash = (k) => (docs.has(k) ? `v${versions.get(k) ?? 0}` : null);
 globalThis.canvasTestInvoke = async (command, args) => {
   calls.push({ command, ...structuredClone(args) });
   const k = key(args.scope, args.rootPath, args.boardId);
@@ -102,10 +104,21 @@ globalThis.canvasTestInvoke = async (command, args) => {
     if (loadGate?.key === k) await loadGate.promise;
     return structuredClone(docs.get(k));
   }
+  // BINDER 4-3: ボードのファイルのハッシュ。書くたび・外で書き換えるたびに版が進む。
+  if (command === "load_canvas_board_with_hash") {
+    if (loadGate?.key === k) await loadGate.promise;
+    return { board: structuredClone(docs.get(k)), hash: boardHash(k) };
+  }
+  if (command === "canvas_board_hash") return boardHash(k);
   if (command === "save_canvas_board") {
     if (failingWrite) throw Error("disk full");
     if (writeGate) await writeGate.promise;
-    docs.set(k, structuredClone(args.board)); return;
+    if (args.expectedHash && args.expectedHash !== boardHash(k)) {
+      throw Error("document content conflict: ボードのファイルが外部で変更されたため保存しませんでした");
+    }
+    docs.set(k, structuredClone(args.board));
+    versions.set(k, (versions.get(k) ?? 0) + 1);
+    return boardHash(k);
   }
   if (command === "trash_canvas_board") { docs.delete(k); return; }
   throw Error(`Unexpected command ${command}`);
@@ -115,7 +128,7 @@ let root, payload, strict = false;
 async function mount() {
   docs = new Map([[key("project", "one", "a"), board("A")], [key("project", "one", "b"), board("B")],
     [key("project", "one", "c"), board("C")], [key("project", "two", "a"), board("Other")]]);
-  calls = []; loadGate = null; writeGate = null; failingWrite = false;
+  calls = []; loadGate = null; writeGate = null; failingWrite = false; versions = new Map();
   payload = { requestId: "test", scope: "project", rootPath: "one", boardId: "a", workspaceName: "Test",
     theme: "light", uiFontScale: 1, referenceFiles: [] };
   root = createRoot(document.getElementById("root"));
@@ -276,4 +289,90 @@ assert.equal(nodesOfA[0].text, "A", "テキストカードはそのまま");
 assert.equal(calls.some((c) => c.command === "save_canvas_board" && c.boardId !== "a"), false, "開いていないボードは保存しない（Rust が書き換える）");
 assert.equal(calls.some((c) => c.command === "save_canvas_board" && c.rootPath === "two"), false, "ほかの作品の知らせでは保存しない");
 console.log("PASS path changes: open board and history follow renames and moves inside the work");
+
+// ---- BINDER 4-3（確認1の 3）: 外で書き換えられたボードは上書きせず、選ばせる ----
+{
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const waitSave = () => act(async () => { await sleep(650); });
+  const outside = (id, text) => {
+    const k = key("project", "one", id);
+    docs.get(k).nodes[0].text = text;
+    versions.set(k, (versions.get(k) ?? 0) + 1000);
+  };
+  const modal = () => document.querySelector('[aria-labelledby="canvas-board-conflict-title"]');
+  const choose = async (label) => {
+    const button = [...(modal()?.querySelectorAll("button") ?? [])].find((item) => item.textContent.includes(label));
+    assert.ok(button, label);
+    await act(async () => { button.click(); await settle(); });
+    await act(async () => { await settle(); await settle(); });
+  };
+
+  // 読み込む: 待っている保存を捨て、ファイルの中身を出す。そのあとはそのファイルの上に書ける。
+  await mount();
+  const loadCall = calls.find((c) => c.command === "load_canvas_board_with_hash" && c.boardId === "a");
+  assert.ok(loadCall, "直すボードは、ハッシュと一緒に読む");
+  outside("a", "外で直した");
+  await edit("Then で直した");
+  await waitSave();
+  assert.equal(textAt("project", "one", "a"), "外で直した", "外で書き換えたボードは上書きしない");
+  assert.equal(calls.filter((c) => c.command === "save_canvas_board").at(-1).expectedHash, "v0", "読んだときのハッシュを送る");
+  assert.ok(modal(), "選ぶ画面が出る");
+  assert.match(modal().textContent, /ほかのアプリでファイルが変更されました/);
+  assert.match(modal().textContent, /「A」/);
+  await choose("ファイルの内容を読み込む");
+  assert.equal(modal(), null);
+  assert.equal(shownText(), "外で直した", "読み込むと、ファイルの中身を出す");
+  await edit("読み込んだあとに直す");
+  await waitSave();
+  assert.equal(textAt("project", "one", "a"), "読み込んだあとに直す", "読み直したあとは、そのファイルの上に書ける");
+  assert.equal(modal(), null);
+  await unmount();
+
+  // 上書きする: 画面の中身で書く。次の保存は、書いたあとのハッシュで確かめる。
+  await mount();
+  outside("a", "外で直した2");
+  await edit("上書きする中身");
+  await waitSave();
+  assert.ok(modal());
+  await choose("この内容で上書きする");
+  assert.equal(modal(), null);
+  assert.equal(textAt("project", "one", "a"), "上書きする中身", "上書きすると、画面の中身で書く");
+  await edit("上書きのあとに直す");
+  await waitSave();
+  assert.equal(textAt("project", "one", "a"), "上書きのあとに直す");
+  assert.equal(modal(), null, "上書きのあとの保存は止まらない");
+  await unmount();
+
+  // 閉じる直前の書き切りが断られたら、次に開いたときに選ぶ画面を出す（断られた保存は残っている）。
+  await mount();
+  await edit("閉じる直前");
+  outside("a", "外で直した3");
+  await unmount();
+  assert.equal(textAt("project", "one", "a"), "外で直した3", "閉じるときも上書きしない");
+  root = createRoot(document.getElementById("root"));
+  await render();
+  await act(async () => { await settle(); await settle(); });
+  assert.ok(modal(), "次に開いたときに選ぶ画面が出る");
+  await choose("この内容で上書きする");
+  await act(async () => { await settle(); await settle(); });
+  assert.equal(textAt("project", "one", "a"), "閉じる直前", "閉じる直前の変更を選んで書ける");
+  await unmount();
+
+  // Then 自身がボードを書き換えた（改名・移動）あとは、取り直したハッシュで書く。外の変更と取り違えない。
+  await mount(); await unmount();
+  docs.get(key("project", "one", "a")).nodes.push(ref("r9", "素材/旧.png", "image"));
+  root = createRoot(document.getElementById("root"));
+  await render();
+  const k = key("project", "one", "a");
+  docs.get(k).nodes.find((node) => node.id === "r9").sourcePath = "素材/新.png";
+  versions.set(k, (versions.get(k) ?? 0) + 1); // Rust の retarget_boards が書いた
+  await emitPathChanges({ rootPath: "one", changes: [{ oldPath: "素材/旧.png", newPath: "素材/新.png" }] });
+  await edit("改名のあとに直す");
+  await waitSave();
+  assert.equal(modal(), null, "改名・移動のあとは選ぶ画面を出さない");
+  assert.equal(textAt("project", "one", "a"), "改名のあとに直す");
+  assert.ok(calls.some((c) => c.command === "canvas_board_hash" && c.boardId === "a"), "書く前にハッシュを取り直す");
+  await unmount();
+}
+console.log("PASS outside changes: a board changed outside is not written over; reload or overwrite; close-time refusals are asked next time; renames are not taken for outside changes");
 dom.window.close();

@@ -82,12 +82,17 @@ import {
   canvasBoardSaveQueue,
   canvasFileWriteQueue,
   createBoard,
+  discardCanvasBoardSave,
   isTauriRuntime,
   listBoards,
   listTrashedBoards,
   loadBoard,
+  loadBoardForEditing,
+  markCanvasBoardHashStale,
+  overwriteCanvasBoard,
   reorderBoards,
   restoreTrashedBoard,
+  setCanvasBoardConflictListener,
   setCanvasFileWriteTransport,
   trashBoard,
   type TrashedCanvasBoardSummary,
@@ -1410,7 +1415,7 @@ export default function CanvasWindowApp({
         }
         const nextBoard =
           summaries.find((item) => item.id === preferredBoardId) ?? summaries[0];
-        const rawBoard = await loadBoard(nextScope, payload.rootPath, nextBoard.id);
+        const rawBoard = await loadBoardForEditing(nextScope, payload.rootPath, nextBoard.id);
         if (generation !== boardLoadGenerationRef.current) return;
         const document = normalizeCanvasDocument(rawBoard, nextBoard.name, nextScope);
         loadedBoardTargetRef.current = { scope: nextScope, rootPath: payload.rootPath, boardId: nextBoard.id };
@@ -1430,6 +1435,15 @@ export default function CanvasWindowApp({
     },
     [payload, clearHistory, boardSaveQueue, setThreadDropTarget],
   );
+
+  // ---- ボードの外の変更（BINDER 4-3、確認1の 3） ----
+  // ボードの保存が「外で書き換えられた」と断られたら、選ぶまで書かない（断られた保存は順番待ちに残る）。
+  // 先に登録しておき、開いたときに前の画面の書き切りが断られた場合も、ここで選ばせる。
+  const [boardConflict, setBoardConflict] = useState<CanvasBoardTarget | null>(null);
+  useEffect(() => {
+    setCanvasBoardConflictListener((target) => setBoardConflict(target));
+    return () => setCanvasBoardConflictListener(null);
+  }, []);
 
   useEffect(() => {
     if (embedded) {
@@ -1488,6 +1502,11 @@ export default function CanvasWindowApp({
       const { rootPath, changes } = event.payload;
       if (normalizedReferenceKey(rootPath) !== normalizedReferenceKey(payloadRootPath)) return;
       const retarget = (document: JsonCanvasDocument) => retargetCanvasReferenceNodes(document, changes) ?? document;
+      // Rust が書き換えたボードは、次に書く前にハッシュを取り直す（外の変更と取り違えない。BINDER 4-3）。
+      const loadedTarget = loadedBoardTargetRef.current;
+      if (loadedTarget && boardRef.current && retargetCanvasReferenceNodes(boardRef.current, changes)) {
+        markCanvasBoardHashStale(loadedTarget);
+      }
       const stack = historyRef.current;
       stack.undo = stack.undo.map(retarget);
       stack.redo = stack.redo.map(retarget);
@@ -1658,6 +1677,23 @@ export default function CanvasWindowApp({
       fileWriteTimerRef.current = null;
       void flushFileWrites();
     }, 500);
+  };
+
+  const resolveBoardConflict = (choice: "reload" | "overwrite") => {
+    const target = boardConflict;
+    if (!target) return;
+    setBoardConflict(null);
+    if (choice === "reload") {
+      // 「ファイルの内容を読み込む」: 待っている保存を捨てて、ファイルから読み直す。
+      discardCanvasBoardSave(target);
+      void loadBoardList(target.scope, target.boardId);
+      return;
+    }
+    // 「この内容で上書きする」: 今のファイルを読んだことにして、画面の中身で書く。
+    setStatus("保存中");
+    void overwriteCanvasBoard(target)
+      .then(() => setStatus(`保存済み ${formatSaveTime(Date.now())}`))
+      .catch((error) => setStatus(String(error)));
   };
 
   const resolveFileConflict = (choice: "reload" | "overwrite") => {
@@ -3881,6 +3917,32 @@ export default function CanvasWindowApp({
                 onClick={() => void confirmDeleteBoard()}
               >
                 ゴミ箱へ移動
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
+      {boardConflict && !fileConflict && (
+        <div className="canvasModalBackdrop" role="presentation">
+          <section
+            className="canvasRenameModal canvasFileConflictModal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="canvas-board-conflict-title"
+            aria-describedby="canvas-board-conflict-description"
+          >
+            <header>
+              <h2 id="canvas-board-conflict-title">ほかのアプリでファイルが変更されました</h2>
+            </header>
+            <p id="canvas-board-conflict-description">
+              「{boards.find((item) => item.id === boardConflict.boardId)?.name ?? boardConflict.boardId}」
+            </p>
+            <footer>
+              <button type="button" onClick={() => resolveBoardConflict("reload")}>
+                ファイルの内容を読み込む
+              </button>
+              <button type="button" onClick={() => resolveBoardConflict("overwrite")}>
+                この内容で上書きする
               </button>
             </footer>
           </section>
