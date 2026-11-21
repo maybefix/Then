@@ -1722,6 +1722,10 @@
   box-shadow: 0 22px 60px var(--canvas-shadow);
 }
 
+.canvasManuscriptModal.intermediateDraftPane:focus {
+  outline: none;
+}
+
 .canvasManuscriptModal header,
 .canvasManuscriptModal footer,
 .canvasManuscriptActions {

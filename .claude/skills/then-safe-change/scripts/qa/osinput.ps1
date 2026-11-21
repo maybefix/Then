@@ -95,7 +95,8 @@ if ($Text) {
   "typed $($Text.Length) chars sent=$sent"
 }
 if ($Keys) {
-  $map = @{ END = 0x23; HOME = 0x24; RETURN = 0x0D; ESCAPE = 0x1B; BACK = 0x08; DELETE = 0x2E; S = 0x53; CTRL = 0x11; SHIFT = 0x10; ALT = 0x12; F4 = 0x73 }
+  $map = @{ END = 0x23; HOME = 0x24; RETURN = 0x0D; ESCAPE = 0x1B; BACK = 0x08; DELETE = 0x2E; S = 0x53; CTRL = 0x11; SHIFT = 0x10; ALT = 0x12; F4 = 0x73; TAB = 0x09 }
+  foreach ($c in [char[]]"ABCDEFGHIJKLMNOPQRSTUVWXYZ") { $map[[string]$c] = [int]$c }  # 英字は仮想キーの番号が文字コードと同じ
   foreach ($k in $Keys.Split(",")) {
     $parts = $k.Split("+"); $mods = $parts[0..($parts.Length - 2)] | Where-Object { $_ -and $parts.Length -gt 1 }; $main = $parts[-1]
     foreach ($m in $mods) { $sent += [Os]::Key([uint16]$map[$m], 0, 0, $false) }

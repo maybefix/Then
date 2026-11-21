@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { CanvasManuscriptFolders, CanvasTextNode } from "../../canvasTypes";
 import { cardManuscriptName } from "../../canvasToManuscript";
 import type { DraftCapture } from "../../intermediateDraft";
@@ -29,6 +29,9 @@ export default function CanvasToManuscriptDialog({
 }: Props) {
   const [folder, setFolder] = useState(folders?.current ?? "");
   const [joinedName, setJoinedName] = useState<string | null>(null);
+  // 開いたらフォーカスを画面の中へ移す。外（body）のままだと、Escape と画面の中のキーが Canvas の操作に届く。
+  const sectionRef = useRef<HTMLElement | null>(null);
+  useEffect(() => { sectionRef.current?.focus({ preventScroll: true }); }, []);
   const byId = new Map(cards.map((card) => [card.id, card]));
   const texts = new Map(cards.map((card) => [card.id, card.text]));
   const excluded = new Set(capture.excluded ?? []);
@@ -40,7 +43,7 @@ export default function CanvasToManuscriptDialog({
     if (name && !busy) onCreateJoined(folder, name);
   };
   return <div className="canvasModalBackdrop" role="presentation">
-    <section className="canvasManuscriptModal intermediateDraftPane" role="dialog"
+    <section ref={sectionRef} tabIndex={-1} className="canvasManuscriptModal intermediateDraftPane" role="dialog"
       aria-modal="true" aria-label="この順で原稿を作る"
       onKeyDown={(event) => {
         event.stopPropagation();

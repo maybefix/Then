@@ -224,7 +224,8 @@ console.log("PASS toast undo: the registered revert restores once, history copie
 // ---- 4. 1本につなげる。名前はボード名から。ボードは変わらない。Escape で閉じる ----
 await select(["a", "b"]);
 await click(button("この順で原稿を作る"));
-await act(async () => { dialog().dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await settle(); });
+assert.equal(document.activeElement, dialog(), "開いたらフォーカスは画面の中");
+await act(async () => { document.activeElement.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await settle(); });
 assert.equal(dialog(), null, "Escape で閉じる");
 await click(button("この順で原稿を作る"));
 await click(buttonWithText("1本の原稿につなげる"));
