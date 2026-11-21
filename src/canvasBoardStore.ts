@@ -262,6 +262,12 @@ export async function saveBoard(
 // The next instance must wait for the same queue before loading its board.
 export const canvasBoardSaveQueue = new CanvasBoardSaveQueue(saveBoard);
 
+/** 別ウィンドウの Canvas が開いているか（同じボードを2か所で開かないため。BINDER 4-3）。 */
+export async function isCanvasWindowOpen() {
+  if (!isTauriRuntime()) return false;
+  return invoke<boolean>("is_canvas_window_open").catch(() => false);
+}
+
 export type CanvasFileWriteTransport = (request: CanvasFileWriteRequest) => Promise<CanvasFileWriteResult>;
 
 let canvasFileWriteTransport: CanvasFileWriteTransport | null = null;

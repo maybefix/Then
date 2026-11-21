@@ -579,7 +579,8 @@ function CanvasGlyph({
     | "panel"
     | "grip"
     | "chevronUp"
-    | "chevronDown";
+    | "chevronDown"
+    | "window";
 }) {
   const common = { viewBox: "0 0 24 24", "aria-hidden": true, focusable: false };
   switch (name) {
@@ -744,6 +745,14 @@ function CanvasGlyph({
           <path d="M17 12h1" />
         </svg>
       );
+    case "window":
+      return (
+        <svg {...common}>
+          <rect x="3.5" y="7.5" width="12" height="12" rx="2" />
+          <path d="M11 4h9v9" />
+          <path d="m20 4-8.5 8.5" />
+        </svg>
+      );
     default:
       return (
         <svg {...common}>
@@ -857,6 +866,8 @@ type CanvasWindowAppProps = {
   draftSelectRequest?: { id: string; nonce: number } | null;
   onDraftSelectionConsumed?: (nonce: number) => void;
   onOpenDraft?: () => void;
+  /** embedded 時に、このボードを別ウィンドウへ移す（メイン画面は本文へ戻る。BINDER 4-3）。 */
+  onOpenInWindow?: (boardId: string | null) => void;
 };
 
 export default function CanvasWindowApp({
@@ -871,6 +882,7 @@ export default function CanvasWindowApp({
   draftSelectRequest,
   onDraftSelectionConsumed,
   onOpenDraft,
+  onOpenInWindow,
 }: CanvasWindowAppProps = {}) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
@@ -3168,6 +3180,17 @@ export default function CanvasWindowApp({
               if (embedded) onOpenDraft?.();
               else { setIsDraftPanelOpen((value) => !value); setIsSidePanelOpen(false); }
             }}>稿</button>
+          {embedded && onOpenInWindow && (
+            <button
+              className="canvasIconButton"
+              type="button"
+              title="別ウィンドウで開く"
+              aria-label="別ウィンドウで開く"
+              onClick={() => onOpenInWindow(activeBoardId)}
+            >
+              <CanvasGlyph name="window" />
+            </button>
+          )}
           {!embedded && (
             <button
               className={`canvasIconButton ${isSidePanelOpen ? "isActive" : ""}`}

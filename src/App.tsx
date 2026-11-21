@@ -282,6 +282,8 @@ import {
 import type { LoadedExportSource } from "./export/types";
 import { createLoadedExportSource } from "./export/exportSource";
 import CanvasWindowApp from "./CanvasWindowApp";
+import { canvasBoardSaveQueue, canvasFileWriteQueue, isCanvasWindowOpen } from "./canvasBoardStore";
+import { chooseCanvasMode, moveCanvasToWindow as moveCanvasToWindowWith } from "./canvasWindowPlace";
 import type { DraftCanvasContext } from "./intermediateDraft";
 import { LinkedExportScreen } from "./components/export/LinkedExportScreen";
 import { ThenPluginRuntimeHost } from "./plugins/PluginRuntimeHost";
@@ -3700,6 +3702,7 @@ export default function App() {
     scope: CanvasScope = "project",
     boardId?: string,
     selectNodeId?: string,
+    place: "center" | "window" = "center",
   ) => {
     if (scope !== "project") {
       showToast("共通Canvasは廃止されました");
@@ -3726,8 +3729,9 @@ export default function App() {
       rightSidebarVisible: !isRightSidebarCollapsed,
     };
 
-    if (!settings.canvasOpensInWindow) {
-      // メイン画面のキャンバスモードとして開く。
+    // キャンバスはメイン画面の中央に開く。別ウィンドウが開いていれば、同じボードを2か所で直さないよう、
+    // そちらで開く（BINDER 4-3、確認1の 2・4）。
+    if (place === "center" && !(await isCanvasWindowOpen())) {
       setCanvasEmbedPayload(payload);
       setAppMode("canvas");
       return;
@@ -3745,6 +3749,18 @@ export default function App() {
       showToast("Idea Board を開けませんでした");
     }
   };
+
+  /** 中央のキャンバスを別ウィンドウへ移す。待っている保存を書き切ってから開き、メイン画面は本文へ戻る（BINDER 4-3）。 */
+  const moveCanvasToWindow = (boardId: string | null) =>
+    moveCanvasToWindowWith({
+      showBody: () => setAppMode("write"),
+      afterUnmount: () => new Promise((resolve) => window.setTimeout(resolve, 0)),
+      flushBoards: () => canvasBoardSaveQueue.flush(),
+      flushFileWrites: () => canvasFileWriteQueue.flush(),
+      showCanvas: () => setAppMode("canvas"),
+      forgetCenter: () => setCanvasEmbedPayload(null),
+      openWindow: (id) => openIdeaCanvasBoard("project", id ?? undefined, undefined, "window"),
+    }, boardId);
 
   const closeEditorContextMenu = () => {
     setEditorContextMenu(null);
@@ -5435,12 +5451,18 @@ export default function App() {
       return;
     }
     if (mode === "canvas") {
-      if (!settings.canvasOpensInWindow && canvasEmbedPayload) {
-        // 前回のボード表示を保ったまま戻る。
-        setAppMode("canvas");
-        return;
-      }
-      void openIdeaCanvasBoard("project");
+      void (async () => {
+        const choice = chooseCanvasMode({ windowOpen: await isCanvasWindowOpen(), hasCenterBoard: Boolean(canvasEmbedPayload) });
+        // 別ウィンドウが開いていれば、そちらを前に出す（BINDER 4-3）。
+        if (choice === "focus-window") {
+          await invoke("focus_canvas_window").catch((error) => setLastError(String(error)));
+        } else if (choice === "resume-center") {
+          // 前回のボード表示を保ったまま戻る。
+          setAppMode("canvas");
+        } else {
+          await openIdeaCanvasBoard("project");
+        }
+      })();
       return;
     }
     void handleOpenLinkedExport();
@@ -5479,10 +5501,10 @@ export default function App() {
     {
       key: "canvas",
       label: "キャンバス",
-      title: settings.canvasOpensInWindow ? "キャンバスを別ウィンドウで開く" : "キャンバスモード",
+      title: "キャンバスモード",
       icon: <AppIcon name="canvas" className="modeSwitcherIcon" />,
       isActive: appMode === "canvas",
-      opensInWindow: settings.canvasOpensInWindow,
+      opensInWindow: false,
       select: () => switchAppMode("canvas"),
     },
     {
@@ -7745,6 +7767,7 @@ export default function App() {
                   onOpenFile={(path) => {
                     if (projectFolder) void openFromCorkboard(joinCanvasFilePath(projectFolder.path, path));
                   }}
+                  onOpenInWindow={isTauriRuntime() ? (boardId) => void moveCanvasToWindow(boardId) : undefined}
                 />
               </div>
             )}

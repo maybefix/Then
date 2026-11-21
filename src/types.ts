@@ -438,8 +438,6 @@ export type EditorSettings = {
   headingFontSource: HeadingFontSource;
   /** headingFontSource === "custom" のときに見出し・太字へ適用するフォント。 */
   headingFontFamily: string;
-  /** キャンバスをメイン画面のモードではなく別ウィンドウで開くか。 */
-  canvasOpensInWindow: boolean;
   /** エクスポートをメイン画面のモードではなく別ウィンドウで開くか。 */
   exportOpensInWindow: boolean;
   /** 校正ペインのしきい値と、外しているルール。 */

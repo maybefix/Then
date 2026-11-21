@@ -781,6 +781,8 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             create_canvas_board,
             load_canvas_board,
             load_canvas_board_with_hash,
+            is_canvas_window_open,
+            focus_canvas_window,
             canvas_board_hash,
             save_canvas_board,
             intermediate_draft::load_intermediate_draft,
@@ -5568,6 +5570,24 @@ fn watch_canvas_window_close(window: &tauri::WebviewWindow) {
             }
         }
     });
+}
+
+/// Whether the separate Canvas window is open. The main window then opens
+/// boards there instead of in the centre, so one board is never edited in two
+/// places at once (BINDER 4-3).
+#[tauri::command]
+fn is_canvas_window_open(app: tauri::AppHandle) -> bool {
+    app.get_webview_window("idea-canvas").is_some()
+}
+
+/// Brings the separate Canvas window to the front, keeping its board.
+#[tauri::command]
+fn focus_canvas_window(app: tauri::AppHandle) -> Result<bool, String> {
+    let Some(window) = app.get_webview_window("idea-canvas") else { return Ok(false) };
+    let _ = window.unminimize();
+    window.show().map_err(|error| format!("Canvas画面を表示できませんでした: {error}"))?;
+    window.set_focus().map_err(|error| format!("Canvas画面を前面に移動できませんでした: {error}"))?;
+    Ok(true)
 }
 
 /// The Canvas window has written what it was holding; it may close.

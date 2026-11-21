@@ -124,7 +124,7 @@ globalThis.canvasTestInvoke = async (command, args) => {
   throw Error(`Unexpected command ${command}`);
 };
 const settle = async () => { await new Promise(resolve => setTimeout(resolve, 0)); };
-let root, payload, strict = false;
+let root, payload, strict = false, extraProps = {};
 async function mount() {
   docs = new Map([[key("project", "one", "a"), board("A")], [key("project", "one", "b"), board("B")],
     [key("project", "one", "c"), board("C")], [key("project", "two", "a"), board("Other")]]);
@@ -136,7 +136,7 @@ async function mount() {
 }
 async function render() {
   await act(async () => {
-    const canvas = React.createElement(Canvas, { embedded: true, embeddedPayload: payload });
+    const canvas = React.createElement(Canvas, { embedded: true, embeddedPayload: payload, ...extraProps });
     root.render(strict ? React.createElement(React.StrictMode, null, canvas) : canvas);
     await settle();
   });
@@ -375,4 +375,20 @@ console.log("PASS path changes: open board and history follow renames and moves 
   await unmount();
 }
 console.log("PASS outside changes: a board changed outside is not written over; reload or overwrite; close-time refusals are asked next time; renames are not taken for outside changes");
+
+// ---- BINDER 4-3（確認1の 4）: 中央の Canvas の「別ウィンドウで開く」 ----
+{
+  await mount();
+  assert.equal(document.querySelector('[aria-label="別ウィンドウで開く"]'), null, "移す先がなければボタンを出さない");
+  await unmount();
+  const moved = [];
+  extraProps = { onOpenInWindow: (boardId) => moved.push(boardId) };
+  await mount();
+  await select("B");
+  await click('[aria-label="別ウィンドウで開く"]');
+  assert.deepEqual(moved, ["b"], "今のボードを別ウィンドウへ移す");
+  await unmount();
+  extraProps = {};
+}
+console.log("PASS open in window: the centre Canvas hands its board to the window");
 dom.window.close();

@@ -165,7 +165,6 @@ const defaultSettings: EditorSettings = {
   checkpointSectionCollapsed: false,
   showCheckpointSection: true,
   showCheckpointStatus: true,
-  canvasOpensInWindow: false,
   exportOpensInWindow: false,
   proofread: { ...DEFAULT_PROOFREAD_OPTIONS, disabledRules: [] },
 };
@@ -846,10 +845,6 @@ export function normalizeState(value: Partial<AppState> | null | undefined): App
         settings.headingFontFamily,
         defaultSettings.headingFontFamily,
       ),
-      canvasOpensInWindow:
-        typeof settings.canvasOpensInWindow === "boolean"
-          ? settings.canvasOpensInWindow
-          : defaultSettings.canvasOpensInWindow,
       exportOpensInWindow:
         typeof settings.exportOpensInWindow === "boolean"
           ? settings.exportOpensInWindow
