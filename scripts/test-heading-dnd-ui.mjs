@@ -32,10 +32,13 @@ const moduleUrl = async (file) => `data:text/javascript;base64,${Buffer.from(
 ).toString("base64")}`;
 const projectTreeUrl = await moduleUrl("src/utils/projectTree.ts");
 const materialsDropUrl = await moduleUrl("src/components/scene/materialsDrop.ts");
+// キャンバスへ落とす目印（BINDER 4-2、canvasFileDrop.ts）。
+const canvasFileDropUrl = await moduleUrl("src/canvasFileDrop.ts");
 sidebarSource = sidebarSource
   .replace('from "./binderTiers"', `from "${binderTiersUrl}"`)
   .replace('from "../../utils/projectTree"', `from "${projectTreeUrl}"`)
   .replace('from "../scene/materialsDrop"', `from "${materialsDropUrl}"`)
+  .replace('from "../../canvasFileDrop"', `from "${canvasFileDropUrl}"`)
   .replace('from "react"', `from "${reactUrl}"`)
   .replace('from "react-dom"', `from "${reactDomUrl}"`)
   .replace(

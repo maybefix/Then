@@ -15,8 +15,8 @@ Canvas に、ノートと原稿を**指す**カード（JSON Canvas の `file` �
 | 3 | 依存関係 | 済み |
 | 4 | 影響範囲 | 済み |
 | 5 | 案 | 済み |
-| 6 | 人の確認（確認1） | 待ち |
-| 7 | 実施 | |
+| 6 | 人の確認（確認1） | 済み（2026-11-21、7つとも勧めのとおり） |
+| 7 | 実施 | 済み |
 | 8 | 自動テスト | |
 | 9 | 実機確認 | |
 | 10 | 完了（確認2） | |
@@ -381,3 +381,34 @@ QA 用アプリ `src-tauri/target/release/Then.exe`（identifier `local.then.qa.
 | 5 | 送るときのファイルのカードは、テキストカードに変えて送る |
 | 6 | 既存の素材の md・txt の資料カードは今回は変えない（4-5） |
 | 7 | 先に `osinput.ps1` へドラッグ・ダブルクリック・題名で探した窓の撮影を足す |
+---
+
+## 工程7: 実施
+
+コミットは5つ（`cd1b39a`〜`61083b2`）。
+
+| コミット | 中身 |
+|---|---|
+| `cd1b39a` | 実機確認の道具 `osinput.ps1` に、ダブルクリック（`-DblClickCss`）、ドラッグ（`-DragCss`、20歩に分けて動かす）、窓の配置（`-Move`）、題名で探す窓（`-Title`。`FindWindow` に `[NullString]::Value`）を足した。`references/real-app-qa.md` にも書いた |
+| `52fe81c` | Rust。改名・移動の付け替え（`retarget_board`）と、「つながり」の「置かれているボード」（`board_references`）に、ファイルのカードの `file` を足した。テストも足した |
+| `775319d` | 本体。下の表 |
+| `acec53f`・`61083b2` | 回帰テスト `test:canvas-file-nodes` と、ほかのテストの足し分（工程8） |
+
+### 本体で変えたこと
+
+| ファイル | 変えたこと |
+|---|---|
+| `src/canvasTypes.ts` | `CanvasFileNode`（`type: "file"`、`file`、`subpath`）と、その正規化・付け替え。知らない種類のカードと、それにつながる線は `foreign` に取っておき、保存の形 `serializeCanvasDocument` で後ろに戻す（癖12）。知らせの型（`then-canvas-file-saved`・`then-canvas-file-write`・`-result`・`then-canvas-flush`・`-done`）と、別ウィンドウへ渡すノート・原稿の一覧とタブで開いているファイル |
+| `src/canvasFileWriteQueue.ts`（新） | 書き戻しの順番待ち。同じファイル・同じ種類は新しい中身で置き換え、1つずつ書く。書けたら、同じファイルのまだ書いていない分の基準を新しい中身とハッシュにする。命令の失敗は残し、外の変更は書かずに知らせる。聞く Canvas がいないあいだの外の変更は、次に聞いた Canvas に渡す |
+| `src/canvasBoardStore.ts` | 書き戻しの順番待ちの実体 `canvasFileWriteQueue` を `canvasBoardSaveQueue` と並べて置いた。書く相手（埋め込みはメイン画面の書き込み口、別ウィンドウは知らせ）は `setCanvasFileWriteTransport` で Canvas が置く。ボードの保存は `serializeCanvasDocument` を通す |
+| `src/canvasFileWriter.ts`（新） | メイン画面の書き込み口。概要は `synopsisWriter.ts` の `saveSynopsis` をそのまま使う。本文は、タブで開いていれば書かずに `open-in-tab` を返し、開いていなければ読んだときのフロントマターを残して本文だけ差し替え、ハッシュを付けて `save_text_file` で書く。書けたらリンク索引と全部の窓へ知らせる |
+| `src/App.tsx` | 作品のノート・原稿の一覧とタブで開いているファイルを、埋め込みには props、別ウィンドウには `CANVAS_LIVE_DATA_EVENT` で渡す。タブの保存が終わったら `then-canvas-file-saved` を送る。別ウィンドウからの書き戻しの頼みを受けて答える。閉じる前の処理で、別ウィンドウの Canvas にも書き切ってもらい、1.5 秒まで待つ。`test:breadcrumb` の目印（`const sortedReferenceCandidates`）の手前には足していない |
+| `src/CanvasWindowApp.tsx` | ファイルのカードの描画（見出しの「ノート」「原稿」と「開く」、題、本文・概要）、読み込み、ダブルクリックで直す（タブで開いているノートはタブへ移る）、0.5 秒止まったら書き戻す、外の変更の選ぶ画面、置く入口（「資料を追加」の一覧と別ウィンドウの横のパネルにノートと原稿を足した。埋め込みはバインダーからのドラッグも）、書き切りの4か所、閉じる前の書き切りへの登録（ボードと書き戻しの両方）、別ウィンドウの `then-canvas-flush` への答え、送るときのテキストカードへの変換 |
+| `src/canvasFileDrop.ts`（新）・`src/components/layout/WorkspaceSidebar.tsx` | バインダーのノート・原稿の行を、埋め込みの Canvas の上へドラッグして落とす（3-3 の素材の欄と同じ、`elementFromPoint` と知らせ） |
+| `src/utils/libraryTransfer.ts` | `boardFilePaths`・`fileCardsToTextCards`（送るときにファイルのカードを、見えていた中身のテキストカードにする） |
+| `src-tauri/src/lib.rs` | 別ウィンドウの Canvas の閉じる待ち。自分の閉じるボタンで閉じるときに、窓へ `then-canvas-flush` を送り、答え（`finish_canvas_close_preparation`）か 1.5 秒を待ってから消す（癖13）。窓ごとに待ちを作り直す |
+| `src/components/canvas/canvas.css` | ファイルのカードの見た目と、ドラッグ中の強調 |
+
+### 実施の途中で直したこと
+
+- 書けた結果をもとに次の書き戻しの基準を付け替える仕組みを、最初は「書く前のハッシュ → 書いたあとの中身」の表で順番待ちに持たせた。これだと、ファイルが前と同じ中身に戻ったとき（外のアプリで元に戻したときなど）に、古い付け替えが効いて、外の変更と取り違える。テストで見つかったので、表はやめた。Canvas が書けた結果を同じ処理の流れの中で読んだ中身（ref）に入れ、次の編集はその中身を基準にする。書いている途中に入った編集は、順番待ちが書けたあとで基準を付け替える。
