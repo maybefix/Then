@@ -1021,6 +1021,101 @@
   flex: 0 0 auto;
 }
 
+/* バインダーのノート・原稿の行を、埋め込みのキャンバスの上へドラッグしているあいだ（BINDER 4-2）。 */
+.canvasViewport[data-drop-active="true"] {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* ノート・原稿のファイルのカード（BINDER 4-2）。資料カードと同じ枠で、本文・概要を出す。 */
+.canvasFileNode {
+  z-index: 2;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 6px;
+  padding: 10px;
+  /* 下のカードが透けないよう、テキストカードと同じ地にする。 */
+  background: var(--canvas-node-bg);
+}
+
+.canvasFileNode header {
+  display: flex;
+  min-width: 0;
+  min-height: 20px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.canvasFileNode header span {
+  color: var(--accent-strong);
+}
+
+.canvasFileOpenButton {
+  flex: 0 0 auto;
+  min-height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--canvas-radius-control);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.canvasFileOpenButton:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.canvasFileTitle {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvasFileNode textarea,
+.canvasFileText {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--canvas-node-font-family, var(--ui-font-family));
+  font-size: 13px;
+  line-height: 1.6;
+  overflow: auto;
+  overflow-wrap: break-word;
+}
+
+.canvasFileText {
+  white-space: pre-wrap;
+  user-select: none;
+}
+
+.canvasFileNode textarea {
+  resize: none;
+  cursor: text;
+}
+
+.canvasFileNode.isOpenInTab .canvasFileText {
+  color: var(--text-secondary);
+}
+
+.canvasFileNode.isMissing .canvasFileTitle {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
 .canvasReferencePreview {
   min-width: 0;
   min-height: 0;

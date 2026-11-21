@@ -18,9 +18,16 @@ import { withIdeographicSpaceFont } from "./utils/fontStack";
 import { buildCanvasThemeStyle, canvasAppearanceAttributes } from "./canvasAppearance";
 import {
   CANVAS_COPY_TO_POST_EVENT,
+  CANVAS_FILE_DRAG_MIME,
+  CANVAS_FILE_SAVED_EVENT,
+  CANVAS_FILE_WRITE_EVENT,
+  CANVAS_FILE_WRITE_RESULT_EVENT,
+  CANVAS_FLUSH_DONE_EVENT,
+  CANVAS_FLUSH_EVENT,
   CANVAS_LIVE_DATA_EVENT,
   CANVAS_PATH_CHANGES_EVENT,
   createCanvasEdge,
+  createCanvasFileNode,
   createCanvasGroupNode,
   createCanvasReferenceNode,
   createCanvasTextNode,
@@ -28,7 +35,16 @@ import {
   normalizeCanvasDocument,
   REFERENCE_FILE_DRAG_MIME,
   retargetCanvasReferenceNodes,
+  serializeCanvasDocument,
   type CanvasBoardSummary,
+  type CanvasFileNode,
+  type CanvasFileSavedEvent,
+  type CanvasFileWriteEvent,
+  type CanvasFileWriteRequest,
+  type CanvasFileWriteResult,
+  type CanvasFileWriteResultEvent,
+  type CanvasFlushEvent,
+  type CanvasProjectFile,
   type CanvasPathChangesEvent,
   type CanvasCopyToPostRequest,
   type CanvasEdgeConnector,
@@ -42,17 +58,29 @@ import {
   type CanvasWindowPayload,
   type JsonCanvasDocument,
 } from "./canvasTypes";
-import type { CanvasNodeFontSource, ReferenceFileInfo, WritingMode } from "./types";
+import type { CanvasNodeFontSource, ReferenceFileInfo, TextDocument, WritingMode } from "./types";
+import { canvasFileWriteKey, type CanvasFileWriteOutcome } from "./canvasFileWriteQueue";
+import { flushPendingSaves, setPendingSave } from "./pendingSaves";
+import { parseFrontMatter } from "./utils/frontmatter";
+import type { SynopsisState } from "./corkboard/synopsis";
+import { CANVAS_FILE_DROP_ATTRIBUTE, CANVAS_FILE_DROP_EVENT, type CanvasFileDropDetail } from "./canvasFileDrop";
 import { ReferenceReadOnlyPreview } from "./components/references/ReferenceLayer";
 import IntermediateDraftPane from "./components/canvas/IntermediateDraftPane";
 import { type DraftCanvasContext, type DraftHistory } from "./intermediateDraft";
 import { flushDraftBoard } from "./intermediateDraftStore";
-import { boardReferencePaths, rewriteBoard, type ReferenceRewrite } from "./utils/libraryTransfer";
+import {
+  boardFilePaths,
+  boardReferencePaths,
+  fileCardsToTextCards,
+  rewriteBoard,
+  type ReferenceRewrite,
+} from "./utils/libraryTransfer";
 import { normalizedReferenceKey } from "./ideaReferenceModel";
 import { canvasBoardTargetKey, type CanvasBoardTarget } from "./canvasBoardSaveQueue";
 import {
   boardName,
   canvasBoardSaveQueue,
+  canvasFileWriteQueue,
   createBoard,
   isTauriRuntime,
   listBoards,
@@ -60,6 +88,7 @@ import {
   loadBoard,
   reorderBoards,
   restoreTrashedBoard,
+  setCanvasFileWriteTransport,
   trashBoard,
   type TrashedCanvasBoardSummary,
 } from "./canvasBoardStore";
@@ -186,6 +215,134 @@ function isGroupNode(node: CanvasNode): node is CanvasGroupNode {
 
 function isReferenceNode(node: CanvasNode): node is CanvasReferenceNode {
   return node.type === "reference";
+}
+
+const EMPTY_PROJECT_FILES: CanvasProjectFile[] = [];
+const EMPTY_PATHS: string[] = [];
+
+function isFileNode(node: CanvasNode): node is CanvasFileNode {
+  return node.type === "file";
+}
+
+// ---- ノート・原稿のファイルのカード（BINDER 4-2） ----
+
+const canvasFileKey = (path: string) => path.replace(/\\/g, "/").toLocaleLowerCase();
+
+function canvasFileTitle(path: string) {
+  return (path.split("/").pop() ?? path).replace(/\.(md|txt)$/i, "");
+}
+
+/** 作品のフォルダと、そこからの相対パス（`/` 区切り）をつなぐ。区切りは作品のフォルダに合わせる。 */
+function joinCanvasFilePath(rootPath: string, relative: string) {
+  const separator = rootPath.includes("\\") ? "\\" : "/";
+  return `${rootPath.replace(/[\\/]+$/, "")}${separator}${relative.split("/").join(separator)}`;
+}
+
+/** 絶対パスを作品からの相対パスにする。作品の外なら null。 */
+function canvasRelativePath(rootPath: string, path: string) {
+  const root = rootPath.replace(/[\\/]+/g, "/").replace(/\/+$/, "");
+  const normalized = path.replace(/[\\/]+/g, "/");
+  return normalized.toLocaleLowerCase().startsWith(`${root.toLocaleLowerCase()}/`)
+    ? normalized.slice(root.length + 1)
+    : null;
+}
+
+/** カードが読んだファイル。中身はボードに書かず、開くたびに読む。 */
+type CanvasFileState =
+  | { status: "loading" }
+  | { status: "missing" }
+  | { status: "loaded"; content: string; contentHash: string | null; synopsis: SynopsisState };
+
+let readSynopsisNow: ((markdown: string) => SynopsisState) | null = null;
+
+/** 概要を読む部品を読み込み済みなら、その場で読む。まだなら null。 */
+function loadedCanvasFileNow(content: string, contentHash: string | null): CanvasFileState | null {
+  return readSynopsisNow ? { status: "loaded", content, contentHash, synopsis: readSynopsisNow(content) } : null;
+}
+
+async function loadedCanvasFile(content: string, contentHash: string | null): Promise<CanvasFileState> {
+  // 概要の読み取りは YAML を読む部品を使うので、使うときに読み込む（コルクボードと同じ）。
+  if (!readSynopsisNow) readSynopsisNow = (await import("./corkboard/synopsis")).readSynopsis;
+  return loadedCanvasFileNow(content, contentHash)!;
+}
+
+async function readCanvasFile(rootPath: string, path: string): Promise<CanvasFileState> {
+  if (!isTauriRuntime()) return { status: "missing" };
+  try {
+    const document = await invoke<TextDocument>("read_text_file", { path: joinCanvasFilePath(rootPath, path) });
+    return loadedCanvasFile(document.content, document.contentHash ?? null);
+  } catch {
+    return { status: "missing" };
+  }
+}
+
+/** 別ウィンドウのキャンバスは、書き戻しをメイン画面に頼み、答えを待つ。 */
+function requestFileWriteFromMain(request: CanvasFileWriteRequest) {
+  return new Promise<CanvasFileWriteResult>((resolve, reject) => {
+    const requestId = nextCanvasId("write");
+    let finished = false;
+    let dispose: (() => void) | null = null;
+    const finish = (settle: () => void) => {
+      if (finished) return;
+      finished = true;
+      window.clearTimeout(timer);
+      dispose?.();
+      settle();
+    };
+    const timer = window.setTimeout(
+      () => finish(() => reject(new Error("メイン画面から答えがないため、書き戻せませんでした"))),
+      10_000,
+    );
+    listen<CanvasFileWriteResultEvent>(CANVAS_FILE_WRITE_RESULT_EVENT, (event) => {
+      if (event.payload.requestId !== requestId) return;
+      const { result, error } = event.payload;
+      finish(() => (result ? resolve(result) : reject(new Error(error ?? "書き戻せませんでした"))));
+    })
+      .then((unlisten) => {
+        if (finished) {
+          unlisten();
+          return;
+        }
+        dispose = unlisten;
+        return emitTo("main", CANVAS_FILE_WRITE_EVENT, { requestId, request } satisfies CanvasFileWriteEvent);
+      })
+      .catch((error) => finish(() => reject(error)));
+  });
+}
+
+type CanvasInsertItem =
+  | { kind: "reference"; key: string; file: ReferenceFileInfo }
+  | { kind: "file"; key: string; file: CanvasProjectFile };
+
+function canvasInsertItemLabel(item: CanvasInsertItem) {
+  if (item.kind === "reference") return referenceKindLabel(item.file.kind);
+  return item.file.role === "note" ? "ノート" : "原稿";
+}
+
+function canvasInsertItemName(item: CanvasInsertItem) {
+  return item.kind === "reference" ? item.file.name : canvasFileTitle(item.file.path);
+}
+
+function canvasInsertItemPath(item: CanvasInsertItem) {
+  return item.kind === "reference" ? item.file.sourcePath : item.file.path;
+}
+
+/** 資料のあとに、ノート、原稿の順で並べる。 */
+function canvasInsertItems(referenceFiles: ReferenceFileInfo[], projectFiles: CanvasProjectFile[], query: string) {
+  const normalized = query.trim().toLocaleLowerCase();
+  const items: CanvasInsertItem[] = [
+    ...referenceFiles.map((file) => ({ kind: "reference" as const, key: `r:${file.sourcePath}`, file })),
+    ...projectFiles
+      .filter((file) => file.role === "note")
+      .map((file) => ({ kind: "file" as const, key: `f:${file.path}`, file })),
+    ...projectFiles
+      .filter((file) => file.role === "manuscript")
+      .map((file) => ({ kind: "file" as const, key: `f:${file.path}`, file })),
+  ];
+  if (!normalized) return items;
+  return items.filter((item) =>
+    `${canvasInsertItemName(item)} ${canvasInsertItemPath(item)}`.toLocaleLowerCase().includes(normalized),
+  );
 }
 
 function nodeCenter(node: CanvasNode): Point {
@@ -597,21 +754,19 @@ function CanvasGlyph({
  */
 function CanvasSidePanel({
   referenceFiles,
+  projectFiles,
   onInsertReference,
+  onInsertFile,
   onClose,
 }: {
   referenceFiles: ReferenceFileInfo[];
+  projectFiles: CanvasProjectFile[];
   onInsertReference: (file: ReferenceFileInfo) => void;
+  onInsertFile: (path: string) => void;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
-  const normalized = query.trim().toLocaleLowerCase();
-
-  const visibleFiles = referenceFiles.filter((file) =>
-    normalized
-      ? `${file.name} ${file.sourcePath}`.toLocaleLowerCase().includes(normalized)
-      : true,
-  );
+  const visibleFiles = canvasInsertItems(referenceFiles, projectFiles, query);
 
   return (
     <aside className="canvasSidePanel" aria-label="資料">
@@ -643,22 +798,28 @@ function CanvasSidePanel({
         {visibleFiles.length === 0 ? (
           <p className="canvasSidePanelEmpty">資料がありません</p>
         ) : (
-          visibleFiles.map((file) => (
+          visibleFiles.map((item) => (
             <button
               className="canvasSidePanelItem canvasSidePanelFile"
-              key={file.sourcePath}
+              key={item.key}
               type="button"
               draggable
-              title={`${file.sourcePath}\nドラッグまたはクリックでキャンバスへ追加`}
+              title={`${canvasInsertItemPath(item)}\nドラッグまたはクリックでキャンバスへ追加`}
               onDragStart={(event) => {
                 event.dataTransfer.effectAllowed = "copy";
-                event.dataTransfer.setData(REFERENCE_FILE_DRAG_MIME, JSON.stringify(file));
-                event.dataTransfer.setData("text/plain", file.name);
+                if (item.kind === "reference") {
+                  event.dataTransfer.setData(REFERENCE_FILE_DRAG_MIME, JSON.stringify(item.file));
+                } else {
+                  event.dataTransfer.setData(CANVAS_FILE_DRAG_MIME, item.file.path);
+                }
+                event.dataTransfer.setData("text/plain", canvasInsertItemName(item));
               }}
-              onClick={() => onInsertReference(file)}
+              onClick={() =>
+                item.kind === "reference" ? onInsertReference(item.file) : onInsertFile(item.file.path)
+              }
             >
-              <span>{referenceKindLabel(file.kind)}</span>
-              <strong>{file.name}</strong>
+              <span>{canvasInsertItemLabel(item)}</span>
+              <strong>{canvasInsertItemName(item)}</strong>
             </button>
           ))
         )}
@@ -680,6 +841,13 @@ type CanvasWindowAppProps = {
 
   /** embedded 時に資料メニューへ反映する最新の資料一覧。 */
   liveReferenceFiles?: ReferenceFileInfo[];
+  /** embedded 時の、作品のノート・原稿と、タブで開いているファイル（BINDER 4-2）。 */
+  liveProjectFiles?: CanvasProjectFile[];
+  liveOpenTabPaths?: string[];
+  /** embedded 時に、カードで直した中身をメイン画面に書いてもらう。 */
+  onWriteFile?: (request: CanvasFileWriteRequest) => Promise<CanvasFileWriteResult>;
+  /** embedded 時に、ファイルのカードのファイルをタブで開く（作品からの相対パス）。 */
+  onOpenFile?: (path: string) => void;
   onDraftCanvasChange?: (context: DraftCanvasContext | null) => void;
   draftSelectRequest?: { id: string; nonce: number } | null;
   onDraftSelectionConsumed?: (nonce: number) => void;
@@ -690,6 +858,10 @@ export default function CanvasWindowApp({
   embedded = false,
   embeddedPayload = null,
   liveReferenceFiles,
+  liveProjectFiles,
+  liveOpenTabPaths,
+  onWriteFile,
+  onOpenFile,
   onDraftCanvasChange,
   draftSelectRequest,
   onDraftSelectionConsumed,
@@ -841,13 +1013,27 @@ export default function CanvasWindowApp({
     payload?.referenceFiles ??
     [];
 
-  const filteredReferenceFiles = useMemo(() => {
-    const normalized = referenceQuery.trim().toLocaleLowerCase();
-    if (!normalized) return referenceFiles;
-    return referenceFiles.filter((file) =>
-      `${file.name} ${file.sourcePath}`.toLocaleLowerCase().includes(normalized),
-    );
-  }, [referenceFiles, referenceQuery]);
+  // ノート・原稿のファイルのカード（BINDER 4-2）。優先順は資料の一覧と同じ。
+  const projectFiles =
+    liveProjectFiles ??
+    (payload?.rootPath ? livePanelData?.projectFiles : undefined) ??
+    payload?.projectFiles ??
+    EMPTY_PROJECT_FILES;
+  const openTabPaths =
+    liveOpenTabPaths ??
+    (payload?.rootPath ? livePanelData?.openTabPaths : undefined) ??
+    payload?.openTabPaths ??
+    EMPTY_PATHS;
+  const projectFileRoles = useMemo(
+    () => new Map(projectFiles.map((file) => [canvasFileKey(file.path), file.role] as const)),
+    [projectFiles],
+  );
+  const openTabKeys = useMemo(() => new Set(openTabPaths.map(canvasFileKey)), [openTabPaths]);
+
+  const filteredInsertItems = useMemo(
+    () => canvasInsertItems(referenceFiles, projectFiles, referenceQuery),
+    [referenceFiles, projectFiles, referenceQuery],
+  );
   const textNodesForPosts = useMemo(() => {
     if (!board) return [];
     const selectedGroup = selectedNodes.length === 1 ? selectedNodes[0] : null;
@@ -1125,9 +1311,38 @@ export default function CanvasWindowApp({
     setReferenceQuery("");
   };
 
+  /** ノート・原稿を指すファイルのカードを置く（BINDER 4-2）。paths は作品からの相対パス。 */
+  const insertFileNodesAt = (paths: string[], point: Point) => {
+    if (!board || paths.length === 0) return;
+    const width = 300;
+    const height = 240;
+    const nodes = paths.map((path, index) =>
+      createCanvasFileNode(path, {
+        x: Math.max(0, point.x - width / 2 + index * 36),
+        y: Math.max(0, point.y - height / 2 + index * 36),
+        width,
+        height,
+      }),
+    );
+    pushHistory();
+    patchBoard((current) => ({ ...current, nodes: [...current.nodes, ...nodes] }));
+    setSelectedIds(new Set(nodes.map((node) => node.id)));
+    setSelectedEdgeId(null);
+  };
+
+  const insertFileNodeAt = (path: string, point: Point) => insertFileNodesAt([path], point);
+
+  const addFileNode = (path: string) => {
+    insertFileNodeAt(path, viewportCenterWorld());
+    setTool("select");
+    setIsReferenceMenuOpen(false);
+    setReferenceQuery("");
+  };
+
   // 左の資料／サイドパネル（別ウィンドウ）から資料をドラッグしてキャンバスへ落とす。
   const canAcceptCanvasDrop = (event: ReactDragEvent<HTMLDivElement>) =>
-    event.dataTransfer.types.includes(REFERENCE_FILE_DRAG_MIME);
+    event.dataTransfer.types.includes(REFERENCE_FILE_DRAG_MIME) ||
+    event.dataTransfer.types.includes(CANVAS_FILE_DRAG_MIME);
 
   const handleViewportDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
     if (!canAcceptCanvasDrop(event)) return;
@@ -1140,6 +1355,11 @@ export default function CanvasWindowApp({
     event.preventDefault();
     event.stopPropagation();
     const point = screenToWorld(event.clientX, event.clientY);
+    const filePath = event.dataTransfer.getData(CANVAS_FILE_DRAG_MIME);
+    if (filePath) {
+      insertFileNodeAt(filePath, point);
+      return;
+    }
     try {
       const file = JSON.parse(
         event.dataTransfer.getData(REFERENCE_FILE_DRAG_MIME),
@@ -1169,6 +1389,9 @@ export default function CanvasWindowApp({
       setThreadDropTarget(null);
       try {
         await boardSaveQueue.flush();
+        // カードで直したノート・原稿も書き切ってから次のボードを読む（同じファイルのカードがあれば新しい中身で出す）。
+        // 書き戻しの失敗（外の変更など）はボードの切り替えとは関係がないので、切り替えは止めない（BINDER 4-2）。
+        await canvasFileWriteQueue.flush().catch(() => {});
         if (generation !== boardLoadGenerationRef.current) return;
         const summaries = await listBoards(nextScope, payload.rootPath);
         if (generation !== boardLoadGenerationRef.current) return;
@@ -1285,6 +1508,266 @@ export default function CanvasWindowApp({
     };
   }, [payloadRootPath]);
 
+  // ---- ファイルのカードの中身と書き戻し（BINDER 4-2） ----
+  // ファイルへ書くのはメイン画面だけ。埋め込みはメイン画面の書き込み口を、別ウィンドウは知らせで頼む。
+  const onWriteFileRef = useRef(onWriteFile);
+  onWriteFileRef.current = onWriteFile;
+  useEffect(() => {
+    if (embedded) {
+      setCanvasFileWriteTransport((request) => {
+        const write = onWriteFileRef.current;
+        return write ? write(request) : Promise.reject(new Error("ファイルへ書き戻す相手がいません"));
+      });
+    } else if (isTauriRuntime()) {
+      setCanvasFileWriteTransport(requestFileWriteFromMain);
+    }
+  }, [embedded]);
+
+  const [fileStates, setFileStates] = useState<Map<string, CanvasFileState>>(() => new Map());
+  const fileStatesRef = useRef(fileStates);
+  /** 書き戻す前・書いている途中の、カードで直した中身。canvasFileWriteKey ごと。 */
+  const [fileDrafts, setFileDrafts] = useState<Map<string, string>>(() => new Map());
+  const [fileConflict, setFileConflict] = useState<CanvasFileWriteOutcome | null>(null);
+  const fileWriteTimerRef = useRef<number | null>(null);
+  const fileRootRef = useRef(rootPath);
+  fileRootRef.current = rootPath;
+
+  // 読んだ中身は ref がもと。書けた結果をその場で ref に入れ、次の編集がすぐ新しいハッシュを基準にできるようにする。
+  const updateFileStates = useCallback((mutate: (next: Map<string, CanvasFileState>) => void) => {
+    const next = new Map(fileStatesRef.current);
+    mutate(next);
+    fileStatesRef.current = next;
+    setFileStates(next);
+  }, []);
+
+  /** 書き戻しが済んだ（待っている分がない）カードの、直した中身を捨てる。text を渡すと、それと同じときだけ。 */
+  const settleFileDraft = useCallback((key: string, text?: string) => {
+    setFileDrafts((current) => {
+      if (!current.has(key) || canvasFileWriteQueue.has(key)) return current;
+      if (text !== undefined && current.get(key) !== text) return current;
+      const next = new Map(current);
+      next.delete(key);
+      return next;
+    });
+  }, []);
+
+  const applyFileContent = useCallback(
+    async (fileRoot: string, path: string, content: string, contentHash: string | null) => {
+      const state = loadedCanvasFileNow(content, contentHash) ?? (await loadedCanvasFile(content, contentHash));
+      if (normalizedReferenceKey(fileRoot) !== normalizedReferenceKey(fileRootRef.current ?? "")) return;
+      updateFileStates((next) => next.set(canvasFileKey(path), state));
+    },
+    [updateFileStates],
+  );
+
+  // 作品が変わったら、読んだ中身と直しかけの中身を捨てる。
+  useEffect(() => {
+    fileStatesRef.current = new Map();
+    setFileStates(fileStatesRef.current);
+    setFileDrafts(new Map());
+    setFileConflict(null);
+  }, [rootPath]);
+
+  // ボードのファイルのカードが指すファイルを読む。消えていたファイルが一覧に戻ったら読み直す。
+  const fileNodePathsKey = useMemo(
+    () => [...new Set((board?.nodes ?? []).filter(isFileNode).map((node) => node.file))].join("\n"),
+    [board],
+  );
+  useEffect(() => {
+    if (!rootPath || !fileNodePathsKey) return;
+    const toRead = fileNodePathsKey.split("\n").filter((path) => {
+      const state = fileStatesRef.current.get(canvasFileKey(path));
+      return !state || (state.status === "missing" && projectFileRoles.has(canvasFileKey(path)));
+    });
+    if (toRead.length === 0) return;
+    updateFileStates((next) => toRead.forEach((path) => next.set(canvasFileKey(path), { status: "loading" })));
+    for (const path of toRead) {
+      void readCanvasFile(rootPath, path).then((state) => {
+        if (fileRootRef.current !== rootPath) return;
+        updateFileStates((next) => next.set(canvasFileKey(path), state));
+      });
+    }
+  }, [rootPath, fileNodePathsKey, projectFileRoles, updateFileStates]);
+
+  // 書き戻しの結果。
+  useEffect(() => {
+    return canvasFileWriteQueue.subscribe(({ request, result }) => {
+      if (normalizedReferenceKey(request.rootPath) !== normalizedReferenceKey(fileRootRef.current ?? "")) return;
+      const key = canvasFileWriteKey(request);
+      if (result.status === "saved") {
+        void applyFileContent(request.rootPath, request.path, result.content, result.contentHash)
+          .then(() => settleFileDraft(key, request.text));
+      } else if (result.status === "conflict") {
+        setFileConflict({ request, result });
+      } else if (result.status === "open-in-tab") {
+        settleFileDraft(key);
+        setStatus("タブで開いているノートには書き戻しません");
+      } else if (result.status === "unchanged") {
+        settleFileDraft(key, request.text);
+      }
+      // "tab": 原稿のタブへ入れた。タブが保存したら（then-canvas-file-saved）直した中身を捨てる。
+    });
+  }, [applyFileContent, settleFileDraft]);
+
+  // タブの保存・ほかのキャンバスからの書き戻しで、ファイルが新しくなった。
+  useEffect(() => {
+    if (!isTauriRuntime() || !payloadRootPath) return;
+    let disposed = false;
+    let dispose: (() => void) | undefined;
+    void listen<CanvasFileSavedEvent>(CANVAS_FILE_SAVED_EVENT, (event) => {
+      const { rootPath: savedRoot, path, content, contentHash } = event.payload;
+      if (normalizedReferenceKey(savedRoot) !== normalizedReferenceKey(payloadRootPath)) return;
+      if (!fileStatesRef.current.has(canvasFileKey(path))) return;
+      void applyFileContent(savedRoot, path, content, contentHash).then(() => {
+        for (const kind of ["body", "synopsis"] as const) {
+          settleFileDraft(canvasFileWriteKey({ rootPath: savedRoot, path, kind }));
+        }
+      });
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else dispose = unlisten;
+    });
+    return () => {
+      disposed = true;
+      dispose?.();
+    };
+  }, [payloadRootPath, applyFileContent, settleFileDraft]);
+
+  const flushFileWrites = useCallback(
+    () => canvasFileWriteQueue.flush().catch((error) => setStatus(String(error))),
+    [],
+  );
+
+  /** カードで直した本文・概要を、0.5 秒止まったら書き戻す。閉じる前なら待たずに書く。 */
+  const editFileCard = (node: CanvasFileNode, kind: CanvasFileWriteRequest["kind"], text: string) => {
+    const state = fileStatesRef.current.get(canvasFileKey(node.file));
+    if (!rootPath || state?.status !== "loaded") return;
+    const request: CanvasFileWriteRequest = {
+      rootPath,
+      path: node.file,
+      kind,
+      text,
+      base: { content: state.content, contentHash: state.contentHash },
+    };
+    const key = canvasFileWriteKey(request);
+    setFileDrafts((current) => new Map(current).set(key, text));
+    canvasFileWriteQueue.enqueue(request);
+    setPendingSave("canvas-file-writes", () => canvasFileWriteQueue.flush());
+    if (fileWriteTimerRef.current) window.clearTimeout(fileWriteTimerRef.current);
+    fileWriteTimerRef.current = window.setTimeout(() => {
+      fileWriteTimerRef.current = null;
+      void flushFileWrites();
+    }, 500);
+  };
+
+  const resolveFileConflict = (choice: "reload" | "overwrite") => {
+    const conflict = fileConflict;
+    if (!conflict || conflict.result.status !== "conflict") return;
+    setFileConflict(null);
+    const { request, result } = conflict;
+    const key = canvasFileWriteKey(request);
+    if (choice === "reload") {
+      void applyFileContent(request.rootPath, request.path, result.content, result.contentHash).then(() => {
+        setFileDrafts((current) => {
+          if (!current.has(key)) return current;
+          const next = new Map(current);
+          next.delete(key);
+          return next;
+        });
+      });
+      return;
+    }
+    // 「この内容で上書きする」: 今のファイルの上に書く（フロントマターやほかの欄は、今のファイルのものを残す）。
+    void applyFileContent(request.rootPath, request.path, result.content, result.contentHash);
+    canvasFileWriteQueue.enqueue({ ...request, base: { content: result.content, contentHash: result.contentHash } });
+    void flushFileWrites();
+  };
+
+  /** ファイルのカードの見出し・本文と、直せるか。 */
+  const fileCardView = (node: CanvasFileNode) => {
+    const key = canvasFileKey(node.file);
+    const role = projectFileRoles.get(key);
+    const state = fileStates.get(key);
+    const missing = !role || state?.status === "missing";
+    const loaded = !missing && state?.status === "loaded" ? state : null;
+    const openInTab = openTabKeys.has(key);
+    const kind: CanvasFileWriteRequest["kind"] = role === "manuscript" ? "synopsis" : "body";
+    let text = "";
+    let editable = false;
+    if (loaded) {
+      if (kind === "body") {
+        text = parseFrontMatter(loaded.content).body;
+        editable = !openInTab;
+      } else {
+        const synopsis = loaded.synopsis;
+        text = synopsis.kind === "text" || synopsis.kind === "readonly" ? synopsis.text : "";
+        editable = synopsis.kind === "text" || synopsis.kind === "none";
+      }
+    }
+    const draft = rootPath ? fileDrafts.get(canvasFileWriteKey({ rootPath, path: node.file, kind })) : undefined;
+    return {
+      role,
+      kind,
+      missing,
+      loaded: Boolean(loaded),
+      openInTab,
+      editable,
+      title: canvasFileTitle(node.file),
+      text: draft ?? text,
+    };
+  };
+
+  const openFileInTab = (path: string) => {
+    if (!rootPath) return;
+    if (embedded) {
+      onOpenFile?.(path);
+      return;
+    }
+    if (!isTauriRuntime()) return;
+    void invoke("focus_source_in_main", { path: joinCanvasFilePath(rootPath, path) }).catch((error) =>
+      setStatus(String(error)),
+    );
+  };
+
+  // バインダーのノート・原稿の行を、埋め込みのキャンバスへ落とした（WorkspaceSidebar のポインタのドラッグ）。
+  const fileDropRef = useRef<(detail: CanvasFileDropDetail) => void>(() => {});
+  fileDropRef.current = (detail) => {
+    if (!rootPath) return;
+    const paths = detail.paths.flatMap((path) => {
+      const relative = canvasRelativePath(rootPath, path);
+      return relative ? [relative] : [];
+    });
+    insertFileNodesAt(paths, screenToWorld(detail.clientX, detail.clientY));
+  };
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!embedded || !viewport) return;
+    const onDrop = (event: Event) => fileDropRef.current((event as CustomEvent<CanvasFileDropDetail>).detail);
+    viewport.addEventListener(CANVAS_FILE_DROP_EVENT, onDrop);
+    return () => viewport.removeEventListener(CANVAS_FILE_DROP_EVENT, onDrop);
+  }, [embedded, board === null]);
+
+  // メイン画面が閉じる前・この窓が閉じる前に、待っている保存と書き戻しを書き切る（別ウィンドウ）。
+  useEffect(() => {
+    if (embedded || !isTauriRuntime()) return;
+    let disposed = false;
+    let dispose: (() => void) | undefined;
+    void listen<CanvasFlushEvent>(CANVAS_FLUSH_EVENT, (event) => {
+      const { requestId } = event.payload;
+      void flushPendingSaves().finally(() => {
+        emitTo("main", CANVAS_FLUSH_DONE_EVENT, { requestId } satisfies CanvasFlushEvent).catch(() => {});
+        invoke("finish_canvas_close_preparation").catch(() => {});
+      });
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else dispose = unlisten;
+    });
+    return () => {
+      disposed = true;
+      dispose?.();
+    };
+  }, [embedded]);
+
 
   useEffect(() => {
     if (!board || !activeBoardId || !payload) return;
@@ -1298,6 +1781,8 @@ export default function CanvasWindowApp({
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     setStatus("保存中");
     boardSaveQueue.enqueue(target, board);
+    // 0.5 秒を待たずに閉じても書かれるように、閉じる前の書き切りに載せる（BINDER 4-2 の確認1の 1）。
+    setPendingSave("canvas-board", () => boardSaveQueue.flush());
     const generation = boardLoadGenerationRef.current;
     saveTimerRef.current = window.setTimeout(() => {
       saveTimerRef.current = null;
@@ -1328,6 +1813,10 @@ export default function CanvasWindowApp({
       ++boardLoadGenerationRef.current;
       draftCanvasReadyRef.current = false;
       void boardSaveQueue.flush().catch(() => {});
+      // カードで直したノート・原稿も、待たずに書き戻す（BINDER 4-2）。
+      if (fileWriteTimerRef.current) window.clearTimeout(fileWriteTimerRef.current);
+      fileWriteTimerRef.current = null;
+      void canvasFileWriteQueue.flush().catch(() => {});
     };
   }, [boardSaveQueue]);
 
@@ -1620,12 +2109,30 @@ export default function CanvasWindowApp({
     setStatus("ボードを送っています");
     try {
       await boardSaveQueue.flush();
+      // 送るカードには、ノート・原稿の今の中身を入れる（BINDER 4-2）。
+      await canvasFileWriteQueue.flush().catch(() => {});
       await flushDraftBoard({ scope, rootPath, boardId: source.id });
-      const document = normalizeCanvasDocument(
+      const loaded = normalizeCanvasDocument(
         await loadBoard(scope, rootPath, source.id),
         source.name,
         scope,
       );
+      // 送り先の作品には同じノート・原稿がないので、ファイルのカードは見えていた中身のテキストカードにして送る。
+      const shown = new Map<string, { title: string; text: string }>();
+      for (const path of boardFilePaths(loaded)) {
+        const state = await readCanvasFile(rootPath, path);
+        if (state.status !== "loaded") continue;
+        const role = projectFileRoles.get(canvasFileKey(path));
+        const synopsis = state.synopsis;
+        shown.set(normalizedReferenceKey(path), {
+          title: canvasFileTitle(path),
+          text:
+            role === "manuscript"
+              ? synopsis.kind === "text" || synopsis.kind === "readonly" ? synopsis.text : ""
+              : parseFrontMatter(state.content).body,
+        });
+      }
+      const document = fileCardsToTextCards(loaded, shown);
       const referencedPaths = boardReferencePaths(document);
       const rewrite: ReferenceRewrite = { copied: new Map(), dropped: new Set() };
       if (referencedPaths.length && transferForm.references === "copy") {
@@ -1652,7 +2159,7 @@ export default function CanvasWindowApp({
         scope: "project",
         rootPath: destination.path,
         boardId: created.id,
-        board: rewriteBoard(document, rewrite),
+        board: serializeCanvasDocument(rewriteBoard(document, rewrite)),
       });
       const draft = await invoke<DraftHistory>("load_intermediate_draft", {
         scope,
@@ -1709,6 +2216,8 @@ export default function CanvasWindowApp({
     try {
       await boardOrderSaveQueueRef.current.catch(() => {});
       await boardSaveQueue.flush();
+      // ボードを消しても、カードで直したノート・原稿の文章は捨てない（BINDER 4-2）。
+      await canvasFileWriteQueue.flush().catch(() => {});
       setStatus("ボードをゴミ箱へ移動中");
       await trashBoard(scope, payload.rootPath, target.id);
       const summaries = await listBoards(scope, payload.rootPath);
@@ -1825,6 +2334,24 @@ export default function CanvasWindowApp({
     event.preventDefault();
     event.stopPropagation();
     beginTextEditing(node.id);
+  };
+
+  /** ノートは本文、原稿は概要を直す。タブで開いているノートは、そのタブへ移る（BINDER 4-2）。 */
+  const handleFileNodeDoubleClick = (node: CanvasFileNode, event: ReactMouseEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const view = fileCardView(node);
+    if (view.missing) return;
+    if (view.kind === "body" && view.openInTab) {
+      openFileInTab(node.file);
+      return;
+    }
+    if (!view.editable) return;
+    setTool("select");
+    setSelectedEdgeId(null);
+    setSelectedIds(new Set([node.id]));
+    setEditingNodeId(node.id);
+    setPendingFocusNodeId(node.id);
   };
 
   const handleNodePointerDown = (node: CanvasNode, event: ReactPointerEvent) => {
@@ -2378,6 +2905,7 @@ export default function CanvasWindowApp({
 
   const groups = board?.nodes.filter(isGroupNode) ?? [];
   const referenceNodes = board?.nodes.filter(isReferenceNode) ?? [];
+  const fileNodes = board?.nodes.filter(isFileNode) ?? [];
   const allTextNodes = board?.nodes.filter(isTextNode) ?? [];
   const textNodes = allTextNodes.filter((node) => !hiddenThreadIds.has(node.id));
 
@@ -2546,7 +3074,7 @@ export default function CanvasWindowApp({
               title="資料を追加"
               aria-label="資料を追加"
               aria-expanded={isReferenceMenuOpen}
-              disabled={referenceFiles.length === 0}
+              disabled={referenceFiles.length === 0 && projectFiles.length === 0}
               onClick={() => setIsReferenceMenuOpen((value) => !value)}
             >
               <CanvasGlyph name="reference" />
@@ -2561,19 +3089,21 @@ export default function CanvasWindowApp({
                   onChange={(event) => setReferenceQuery(event.target.value)}
                 />
                 <div className="canvasReferenceList">
-                  {filteredReferenceFiles.length === 0 ? (
+                  {filteredInsertItems.length === 0 ? (
                     <p>該当する資料はありません</p>
                   ) : (
-                    filteredReferenceFiles.slice(0, 40).map((file) => (
+                    filteredInsertItems.slice(0, 40).map((item) => (
                       <button
-                        key={file.sourcePath}
+                        key={item.key}
                         type="button"
-                        title={file.sourcePath}
-                        onClick={() => addReferenceNode(file)}
+                        title={canvasInsertItemPath(item)}
+                        onClick={() =>
+                          item.kind === "reference" ? addReferenceNode(item.file) : addFileNode(item.file.path)
+                        }
                       >
-                        <span>{referenceKindLabel(file.kind)}</span>
-                        <strong>{file.name}</strong>
-                        <small>{file.sourcePath}</small>
+                        <span>{canvasInsertItemLabel(item)}</span>
+                        <strong>{canvasInsertItemName(item)}</strong>
+                        <small>{canvasInsertItemPath(item)}</small>
                       </button>
                     ))
                   )}
@@ -2650,6 +3180,7 @@ export default function CanvasWindowApp({
         <div
           ref={viewportRef}
           className={`canvasViewport canvasViewport-${tool}`}
+          {...(embedded && board ? { [CANVAS_FILE_DROP_ATTRIBUTE]: "" } : {})}
           onPointerDown={handleViewportPointerDown}
           onDoubleClick={handleViewportDoubleClick}
           onPointerMove={handleViewportPointerMove}
@@ -2766,6 +3297,77 @@ export default function CanvasWindowApp({
                 ))}
               </article>
             ))}
+            {fileNodes.map((node) => {
+              const view = fileCardView(node);
+              const isEditing = editingNodeId === node.id && view.editable;
+              return (
+                <article
+                  key={node.id}
+                  className={`canvasNode canvasFileNode ${
+                    selectedIds.has(node.id) ? "isSelected" : ""
+                  } ${selectedGroupChildIds.has(node.id) ? "isInSelectedGroup" : ""} ${
+                    edgeFromId === node.id ? "isEdgeSource" : ""
+                  } ${isEditing ? "isEditing" : ""} ${view.missing ? "isMissing" : ""} ${
+                    view.kind === "body" && view.openInTab ? "isOpenInTab" : ""
+                  }`}
+                  style={{ left: node.x, top: node.y, width: node.width, height: node.height }}
+                  data-node-id={node.id}
+                  data-color={node.color || undefined}
+                  data-file-role={view.role}
+                  onPointerDown={(event) => handleNodePointerDown(node, event)}
+                  onDoubleClick={(event) => handleFileNodeDoubleClick(node, event)}
+                  onBlur={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                      setEditingNodeId((current) => current === node.id ? null : current);
+                    }
+                  }}
+                >
+                  <header>
+                    <span>{view.missing ? "" : view.role === "note" ? "ノート" : "原稿"}</span>
+                    {!view.missing && (
+                      <button
+                        className="canvasFileOpenButton"
+                        type="button"
+                        title={node.file}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onDoubleClick={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openFileInTab(node.file);
+                        }}
+                      >
+                        開く
+                      </button>
+                    )}
+                  </header>
+                  <strong className="canvasFileTitle" title={node.file}>
+                    {view.title}
+                  </strong>
+                  {isEditing ? (
+                    <textarea
+                      value={view.text}
+                      spellCheck={false}
+                      aria-label={view.kind === "body" ? "ノートの本文" : "概要"}
+                      onFocus={() => handleNodeFocus(node.id)}
+                      onChange={(event) => editFileCard(node, view.kind, event.target.value)}
+                      onWheel={(event) => event.stopPropagation()}
+                    />
+                  ) : (
+                    <div className="canvasFileText" onWheel={(event) => event.stopPropagation()}>
+                      {view.text}
+                    </div>
+                  )}
+                  {CANVAS_RESIZE_CORNERS.map((corner) => (
+                    <span
+                      key={corner}
+                      className={`canvasResizeHandle canvasResizeHandle-${corner}`}
+                      aria-hidden="true"
+                      onPointerDown={(event) => startResize(node, corner, event)}
+                    />
+                  ))}
+                </article>
+              );
+            })}
             {textNodes.map((node) => (
               <article
                 key={node.id}
@@ -3117,7 +3719,9 @@ export default function CanvasWindowApp({
         {!embedded && isSidePanelOpen && (
           <CanvasSidePanel
             referenceFiles={referenceFiles}
+            projectFiles={projectFiles}
             onInsertReference={(file) => void insertReferenceNodeAt(file, viewportCenterWorld())}
+            onInsertFile={(path) => insertFileNodeAt(path, viewportCenterWorld())}
             onClose={() => setIsSidePanelOpen(false)}
           />
         )}
@@ -3270,6 +3874,32 @@ export default function CanvasWindowApp({
                 onClick={() => void confirmDeleteBoard()}
               >
                 ゴミ箱へ移動
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
+      {fileConflict && (
+        <div className="canvasModalBackdrop" role="presentation">
+          <section
+            className="canvasRenameModal canvasFileConflictModal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="canvas-file-conflict-title"
+            aria-describedby="canvas-file-conflict-description"
+          >
+            <header>
+              <h2 id="canvas-file-conflict-title">ほかのアプリでファイルが変更されました</h2>
+            </header>
+            <p id="canvas-file-conflict-description" title={fileConflict.request.path}>
+              「{canvasFileTitle(fileConflict.request.path)}」
+            </p>
+            <footer>
+              <button type="button" onClick={() => resolveFileConflict("reload")}>
+                ファイルの内容を読み込む
+              </button>
+              <button type="button" onClick={() => resolveFileConflict("overwrite")}>
+                この内容で上書きする
               </button>
             </footer>
           </section>

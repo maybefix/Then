@@ -26,6 +26,7 @@ const store = await import(await compile("src/canvasBoardStore.ts", {
   "./intermediateDraft": draftUrl,
   "./intermediateDraftStore": url("export const prepareDraftBoardTrash = async (target) => { globalThis.storeTestEvents.push(['prepareDraftBoardTrash', target]); };"),
   "./canvasBoardSaveQueue": await compile("src/canvasBoardSaveQueue.ts"),
+  "./canvasFileWriteQueue": await compile("src/canvasFileWriteQueue.ts"),
 }));
 
 const board = (name, updatedAt, nodes = 0) => ({

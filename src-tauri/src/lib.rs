@@ -676,6 +676,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             load_app_state,
             save_app_state,
             finish_close_preparation,
+            finish_canvas_close_preparation,
             get_system_fonts,
             get_font_faces,
             open_text_file_dialog,
@@ -1414,6 +1415,7 @@ async fn open_canvas_window(
     .build()
     .map(|window| {
         disable_webview_native_ui(&window);
+        watch_canvas_window_close(&window);
         window
     })
     .map_err(|error| format!("Canvas画面を開けませんでした: {error}"))?;
@@ -5471,6 +5473,51 @@ static MAIN_CLOSE_GATE: close_gate::CloseGate = close_gate::CloseGate::new();
 #[tauri::command]
 fn finish_close_preparation() {
     MAIN_CLOSE_GATE.mark_ready();
+}
+
+/// The Canvas window's own close (BINDER 4-2, quirk 13): it writes its board and
+/// card write-backs before it goes. One gate per window: a reopened window starts open.
+static CANVAS_CLOSE_GATE: Mutex<Option<std::sync::Arc<close_gate::CloseGate>>> = Mutex::new(None);
+const CANVAS_CLOSE_PREPARATION_TIMEOUT: Duration = Duration::from_millis(1500);
+
+fn watch_canvas_window_close(window: &tauri::WebviewWindow) {
+    let gate = std::sync::Arc::new(close_gate::CloseGate::new());
+    if let Ok(mut slot) = CANVAS_CLOSE_GATE.lock() {
+        *slot = Some(gate.clone());
+    }
+    let window_for_events = window.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            match gate.request() {
+                close_gate::CloseDecision::StartWaiting => {
+                    api.prevent_close();
+                    let _ = window_for_events.emit_to(
+                        "idea-canvas",
+                        "then-canvas-flush",
+                        serde_json::json!({ "requestId": "close" }),
+                    );
+                    let gate = gate.clone();
+                    let window = window_for_events.clone();
+                    std::thread::spawn(move || {
+                        gate.wait_then_close(CANVAS_CLOSE_PREPARATION_TIMEOUT);
+                        let _ = window.destroy();
+                    });
+                }
+                close_gate::CloseDecision::KeepWaiting => api.prevent_close(),
+                close_gate::CloseDecision::Allow => {}
+            }
+        }
+    });
+}
+
+/// The Canvas window has written what it was holding; it may close.
+#[tauri::command]
+fn finish_canvas_close_preparation() {
+    if let Ok(slot) = CANVAS_CLOSE_GATE.lock() {
+        if let Some(gate) = slot.as_ref() {
+            gate.mark_ready();
+        }
+    }
 }
 
 #[tauri::command]

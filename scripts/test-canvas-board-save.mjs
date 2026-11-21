@@ -51,6 +51,8 @@ fail = false; await retryQueue.flush();
 assert.equal(recovered[3].then.name, "unsaved");
 console.log("PASS queue: immutable destinations and snapshots, serialized edits, separate projects, retry after failure");
 
+const fileQueueUrl = await compile("src/canvasFileWriteQueue.ts");
+const pendingSavesUrl = await compile("src/pendingSaves.ts");
 const canvasUrl = await compile("src/CanvasWindowApp.tsx", {
   react: pathToFileURL(require.resolve("react")).href,
   "react/jsx-runtime": pathToFileURL(require.resolve("react/jsx-runtime")).href,
@@ -68,15 +70,22 @@ const canvasUrl = await compile("src/CanvasWindowApp.tsx", {
   "./components/canvas/IntermediateDraftPane": url("export default () => null;"),
   "./intermediateDraft": await compile("src/intermediateDraft.ts"),
   "./intermediateDraftStore": url("export const prepareDraftBoardTrash = async () => {}; export const flushDraftBoard = async () => {};"),
-  "./utils/libraryTransfer": url("export const boardReferencePaths = () => []; export const rewriteBoard = (board) => board;"),
+  "./utils/libraryTransfer": url("export const boardReferencePaths = () => []; export const rewriteBoard = (board) => board; export const boardFilePaths = () => []; export const fileCardsToTextCards = (board) => board;"),
   "./ideaReferenceModel": url("export const normalizedReferenceKey = (path) => path;"),
   "./canvasBoardSaveQueue": queueUrl,
+  // ファイルのカード（BINDER 4-2）の部品。このテストはボードの保存だけを見るので、概要の読み取りは空にする。
+  "./canvasFileWriteQueue": fileQueueUrl,
+  "./pendingSaves": pendingSavesUrl,
+  "./utils/frontmatter": await compile("src/utils/frontmatter.ts"),
+  "./corkboard/synopsis": url("export const readSynopsis = () => ({ kind: 'none' });"),
+  "./canvasFileDrop": await compile("src/canvasFileDrop.ts"),
   "./canvasBoardStore": await compile("src/canvasBoardStore.ts", {
     "@tauri-apps/api/core": url("export const invoke = (...args) => globalThis.canvasTestInvoke(...args);"),
     "./canvasTypes": await compile("src/canvasTypes.ts"),
     "./intermediateDraft": await compile("src/intermediateDraft.ts"),
     "./intermediateDraftStore": url("export const prepareDraftBoardTrash = async () => {}; export const flushDraftBoard = async () => {};"),
     "./canvasBoardSaveQueue": queueUrl,
+    "./canvasFileWriteQueue": fileQueueUrl,
   }),
 });
 const { default: Canvas } = await import(canvasUrl);

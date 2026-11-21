@@ -82,10 +82,15 @@
 - **ドラッグ**: CDP でのドラッグは難しいので、ページの中で `new DataTransfer()` を作り、`dragstart` → `dragover` → `drop` → `dragend` の `DragEvent` を順に `dispatchEvent` する。`dragover` の `defaultPrevented` で受け付けたかが、`dataTransfer.types` と `getData()` で中身が分かる。
 - **待つ**: `await qa.waitFor(() => 条件, ミリ秒, "何を")`。決め打ちの待ち時間より速く確実。
 - **OS の入力と撮影**（「実機で、OS の入力で」と頼まれたとき）: `powershell -NoProfile -File <skill>/scripts/qa/osinput.ps1` に、1回に1つの動作を渡す。pid は qa-session の ready の行の `app pid`。
-  - `-WindowPid <pid> -Focus`: 先に Alt を1回送ってから、Then を最前面に出す。裏のプロセスからは、そうしないと前に出せない。
+  - `-WindowPid <pid> -Focus`: 先に F24 を1回送ってから、Then を最前面に出す。裏のプロセスからは、そうしないと前に出せない（Alt だと窓のシステムメニューが開き、閉じるまで画面の処理と CDP の評価が止まる。2026-11-21）。
+  - 1回の呼び出しの中では、クリック → ダブルクリック → ドラッグ → 窓の配置 → 文字 → キーの順に動く。`-Text "直" -Keys "ALT+F4"` で、打ってすぐ閉じられる（閉じる直前の保存を確かめるとき）。
   - `-WindowPid <pid> -ClickCss "x,y" -Dpr 1.25`: CSS の座標（`getBoundingClientRect`）に、窓の内側の原点を足し、`devicePixelRatio` を掛けた位置をクリックする。
   - `-Text "文字"`（Unicode。IME は通らない）。
   - `-Keys "CTRL+S,END"`。
+  - `-WindowPid <pid> -DblClickCss "x,y" -Dpr 1.25`: ダブルクリック。
+  - `-WindowPid <pid> -DragCss "x1,y1;x2,y2" -Dpr 1.25`: 1点目で押し、20歩に分けて動かし、2点目で離す（ポインタで動かすドラッグ。バインダーの行、カード）。
+  - `-WindowPid <pid> -Move "x,y,w,h"`: 窓の位置と大きさを決める（物理 px）。QA の窓の大きさは起動ごとに違うので、座標を測る前に揃える。
+  - `-Title "Then - Idea Board"`: `-WindowPid` の代わりに、題名がちょうど一致する窓を相手にする（別ウィンドウの Canvas）。どの動作とも組み合わせられる。見つからなければ exit 4。
   - `-WindowPid <pid> -Shot <png>`: Then の窓だけを撮る。Then が最前面でなければ撮らない（exit 3）。全画面は撮らない。ほかの窓（開いているメモ帳など）の中身が写るため。
   - 結果は「OS の入力」「撮影」と書き、CDP で読んだ値と分けて報告する。
 
