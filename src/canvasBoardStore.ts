@@ -2,13 +2,17 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   createCanvasDocument,
   normalizeCanvasDocument,
+  serializeCanvasDocument,
   type CanvasBoardSummary,
+  type CanvasFileWriteRequest,
+  type CanvasFileWriteResult,
   type CanvasScope,
   type JsonCanvasDocument,
 } from "./canvasTypes";
 import { draftBoardKey, type DraftHistory } from "./intermediateDraft";
 import { prepareDraftBoardTrash } from "./intermediateDraftStore";
 import { CanvasBoardSaveQueue } from "./canvasBoardSaveQueue";
+import { CanvasFileWriteQueue } from "./canvasFileWriteQueue";
 
 // Canvas のボードを読み書きする層。Tauri の中では Rust の命令を呼び、ブラウザで動かすときは localStorage に書く。
 // 遅延保存の時計や、どのボードへ書くかの判断は CanvasWindowApp.tsx が持つ。
@@ -67,7 +71,10 @@ function writeLocalBoards(
   rootPath: string | null,
   boards: Record<string, JsonCanvasDocument>,
 ) {
-  window.localStorage.setItem(localStorageKey(scope, rootPath), JSON.stringify(boards));
+  const stored = Object.fromEntries(
+    Object.entries(boards).map(([id, board]) => [id, serializeCanvasDocument(board)]),
+  );
+  window.localStorage.setItem(localStorageKey(scope, rootPath), JSON.stringify(stored));
 }
 
 function readLocalBoardOrder(scope: CanvasScope, rootPath: string | null): string[] {
@@ -172,8 +179,10 @@ export async function saveBoard(
   boardId: string,
   board: JsonCanvasDocument,
 ) {
+  // Then が読めないカード（Obsidian の link など）を、読んだときのまま書き戻す。
+  const stored = serializeCanvasDocument(board);
   if (isTauriRuntime()) {
-    await invoke("save_canvas_board", { scope, rootPath, boardId, board });
+    await invoke("save_canvas_board", { scope, rootPath, boardId, board: stored });
     return;
   }
   const boards = readLocalBoards(scope, rootPath);
@@ -184,6 +193,24 @@ export async function saveBoard(
 // Mode changes can remount Canvas while a native save is still in flight.
 // The next instance must wait for the same queue before loading its board.
 export const canvasBoardSaveQueue = new CanvasBoardSaveQueue(saveBoard);
+
+export type CanvasFileWriteTransport = (request: CanvasFileWriteRequest) => Promise<CanvasFileWriteResult>;
+
+let canvasFileWriteTransport: CanvasFileWriteTransport | null = null;
+
+/**
+ * ファイルへ書くのはメイン画面だけ（BINDER 4-2）。埋め込みの Canvas はメイン画面の書き込み口を、別ウィンドウは
+ * 知らせで頼む道を、開いたときにここへ置く。
+ */
+export function setCanvasFileWriteTransport(transport: CanvasFileWriteTransport) {
+  canvasFileWriteTransport = transport;
+}
+
+// カードからノート・原稿へ書き戻す順番待ち。ボードの順番待ちと同じく窓ごとに1つ。
+export const canvasFileWriteQueue = new CanvasFileWriteQueue((request) => {
+  if (!canvasFileWriteTransport) return Promise.reject(new Error("ファイルへ書き戻す相手がいません"));
+  return canvasFileWriteTransport(request);
+});
 
 export async function reorderBoards(
   scope: CanvasScope,

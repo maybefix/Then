@@ -38,6 +38,7 @@ import {
 import { orderRootEntriesByTier, splitBinderTiers } from "./binderTiers";
 import { findProjectEntry } from "../../utils/projectTree";
 import { MATERIALS_DROP_ATTRIBUTE, MATERIALS_DROP_EVENT, type MaterialsDropDetail } from "../scene/materialsDrop";
+import { CANVAS_FILE_DROP_ATTRIBUTE, CANVAS_FILE_DROP_EVENT, type CanvasFileDropDetail } from "../../canvasFileDrop";
 
 type WorkspaceSidebarProps = {
   projectFolder: ProjectFolder | null;
@@ -203,6 +204,8 @@ type PointerDragState = {
   reference?: MaterialReference;
   /** 動かしているのがノート（素材のテキストファイル）だけのとき。「この場面」の素材の欄へも落とせる（BINDER 3-3）。 */
   notes?: boolean;
+  /** 動かしているのがノート・原稿（テキストファイル）だけのとき。埋め込みのキャンバスへも落とせる（BINDER 4-2）。 */
+  files?: boolean;
 };
 
 type TreeDropTarget =
@@ -906,7 +909,8 @@ export function WorkspaceSidebar({
   const navigationHeadingSelectionRef = useRef<NavigationHeadingSelection | null>(null);
   const lastHeadingDragOverRef = useRef("");
   const dropTargetRef = useRef<TreeDropTarget>(null);
-  // 「この場面」の素材の欄（ツリーの外）。ドラッグ中に上にあるあいだだけ強調する（BINDER 3-3）。
+  // 「この場面」の素材の欄（BINDER 3-3）と埋め込みのキャンバス（BINDER 4-2）。どちらもツリーの外。
+  // ドラッグ中に上にあるあいだだけ強調する。
   const materialsDropRef = useRef<HTMLElement | null>(null);
   const suppressNextClickRef = useRef(false);
   const selectedFilePathsRef = useRef(selectedFilePaths);
@@ -1075,7 +1079,11 @@ export function WorkspaceSidebar({
     }
     // ノートだけを「この場面」の素材の欄へ落とすと、素材リストに足す（BINDER 3-3）。ツリーの外なので、
     // ツリーの中の判定には当たらない。
-    const materialsDrop = dragState.notes ? element?.closest<HTMLElement>(`[${MATERIALS_DROP_ATTRIBUTE}]`) ?? null : null;
+    // ノート・原稿を埋め込みのキャンバスへ落とすと、ファイルのカードを置く（BINDER 4-2）。
+    const materialsDrop =
+      (dragState.notes ? element?.closest<HTMLElement>(`[${MATERIALS_DROP_ATTRIBUTE}]`) : null) ??
+      (dragState.files ? element?.closest<HTMLElement>(`[${CANVAS_FILE_DROP_ATTRIBUTE}]`) : null) ??
+      null;
     updateMaterialsDrop(materialsDrop);
     if (materialsDrop) {
       updateDropTarget(null);
@@ -1216,6 +1224,12 @@ export function WorkspaceSidebar({
           const entry = findProjectEntry(projectFolder.children, path);
           return entry?.kind === "file" && entry.role === "material";
         }),
+      files:
+        !isFolder && projectFolder !== null &&
+        entryPaths.every((path) => {
+          const entry = findProjectEntry(projectFolder.children, path);
+          return entry?.kind === "file" && /\.(md|txt)$/i.test(path);
+        }),
     };
     // Capture immediately so an ordinary drag keeps delivering pointer events
     // after the cursor leaves the narrow source row. Waiting for the first
@@ -1279,7 +1293,13 @@ export function WorkspaceSidebar({
       }, 0);
       const activeDropTarget = dropTargetRef.current;
       const materialsDrop = materialsDropRef.current;
-      if (materialsDrop) {
+      if (materialsDrop?.hasAttribute(CANVAS_FILE_DROP_ATTRIBUTE)) {
+        materialsDrop.dispatchEvent(
+          new CustomEvent<CanvasFileDropDetail>(CANVAS_FILE_DROP_EVENT, {
+            detail: { paths: dragState.entryPaths, clientX: event.clientX, clientY: event.clientY },
+          }),
+        );
+      } else if (materialsDrop) {
         materialsDrop.dispatchEvent(
           new CustomEvent<MaterialsDropDetail>(MATERIALS_DROP_EVENT, { detail: { paths: dragState.entryPaths } }),
         );

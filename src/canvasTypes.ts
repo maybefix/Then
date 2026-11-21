@@ -65,7 +65,34 @@ export type CanvasReferenceNode = {
   color?: string;
 };
 
-export type CanvasNode = CanvasTextNode | CanvasGroupNode | CanvasReferenceNode;
+/**
+ * ノート・原稿を指すカード（JSON Canvas の file ノード、BINDER 4-2）。ファイルの場所だけを持ち、中身はボードに書かない。
+ * ノートか原稿かも書かず、開くたびに作品のファイル一覧から決める。
+ */
+export type CanvasFileNode = {
+  id: string;
+  type: "file";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** 作品からの相対パス（`/` 区切り）。 */
+  file: string;
+  /** JSON Canvas の見出しへの飛び先。Then は使わないが、読んだものはそのまま書き戻す。 */
+  subpath?: string;
+  color?: string;
+};
+
+export type CanvasNode = CanvasTextNode | CanvasGroupNode | CanvasReferenceNode | CanvasFileNode;
+
+/**
+ * Then が読めない種類のカード（Obsidian の link など）と、それにつながる線。画面には出さず、保存のときに
+ * そのまま書き戻す（BINDER 4-2 の確認1の 4）。
+ */
+export type CanvasForeignItems = {
+  nodes: Record<string, unknown>[];
+  edges: Record<string, unknown>[];
+};
 
 export type CanvasEdgeConnector = "line" | "arrow" | "bidirectional" | "dashed";
 
@@ -92,7 +119,26 @@ export type JsonCanvasDocument = {
   nodes: CanvasNode[];
   edges: CanvasEdge[];
   then?: ThenCanvasMeta;
+  /** ファイルには書かない。保存の前に serializeCanvasDocument で nodes・edges へ戻す。 */
+  foreign?: CanvasForeignItems;
 };
+
+/** 保存する形。Then が読めないカードと線を、読んだときのまま後ろに戻す。 */
+export function serializeCanvasDocument(board: JsonCanvasDocument): {
+  nodes: unknown[];
+  edges: unknown[];
+  then?: ThenCanvasMeta;
+} {
+  const { foreign, ...rest } = board;
+  if (!foreign || (foreign.nodes.length === 0 && foreign.edges.length === 0)) return rest;
+  const ids = new Set<unknown>([...rest.nodes.map((node) => node.id), ...foreign.nodes.map((node) => node.id)]);
+  return {
+    ...rest,
+    nodes: [...rest.nodes, ...foreign.nodes],
+    // 線の片方のカードを Then で消したら、その線も残さない。
+    edges: [...rest.edges, ...foreign.edges.filter((edge) => ids.has(edge.fromNode) && ids.has(edge.toNode))],
+  };
+}
 
 export type CanvasBoardSummary = {
   id: string;
@@ -107,6 +153,9 @@ export type CanvasBoardSummary = {
 /** サイドバー→キャンバスの HTML5 DnD で使う MIME。 */
 export const REFERENCE_FILE_DRAG_MIME = "application/x-then-reference-file";
 
+/** 別ウィンドウのサイドパネル→キャンバスで、ノート・原稿（作品からの相対パス）を運ぶ MIME。 */
+export const CANVAS_FILE_DRAG_MIME = "application/x-then-canvas-file";
+
 /**
  * メイン画面 → 別ウィンドウキャンバスへ資料の最新一覧だけを届けるイベント。
  * then-canvas-payload と違いボードの再読込（選択・undo履歴のリセット）を起こさない。
@@ -115,7 +164,61 @@ export const CANVAS_LIVE_DATA_EVENT = "then-canvas-live-data";
 
 export type CanvasLiveDataEvent = {
   referenceFiles: ReferenceFileInfo[];
+  /** 作品のノートと原稿（ファイルのカードの中身と、置く一覧に使う）。 */
+  projectFiles?: CanvasProjectFile[];
+  /** タブで開いているファイル（作品からの相対パス）。ノートのカードはそのあいだ表示だけ。 */
+  openTabPaths?: string[];
 };
+
+/** 作品のノート・原稿の1つ。path は作品からの相対パス（`/` 区切り）。 */
+export type CanvasProjectFile = { path: string; role: "note" | "manuscript" };
+
+/**
+ * メイン画面 → すべてのキャンバスへ、作品のファイルが保存されたことを知らせる（タブの保存、カードからの書き戻し）。
+ * ファイルのカードは表示を新しくする。path は作品からの相対パス。
+ */
+export const CANVAS_FILE_SAVED_EVENT = "then-canvas-file-saved";
+
+export type CanvasFileSavedEvent = {
+  rootPath: string;
+  path: string;
+  content: string;
+  contentHash: string | null;
+};
+
+/** キャンバスがカードで直した中身を、メイン画面に書いてもらう頼み（ファイルへ書くのはメイン画面だけ）。 */
+export type CanvasFileWriteRequest = {
+  rootPath: string;
+  /** 作品からの相対パス。 */
+  path: string;
+  /** body: ノートの本文（フロントマターは base のまま残す）。synopsis: 原稿の概要。 */
+  kind: "body" | "synopsis";
+  text: string;
+  /** キャンバスが読んだときのファイル。書く前に、ファイルがまだこの中身かをハッシュで確かめる。 */
+  base: { content: string; contentHash: string | null };
+};
+
+export type CanvasFileWriteResult =
+  | { status: "saved"; content: string; contentHash: string | null }
+  /** 原稿がタブで開いていたので、そのタブのフロントマターへ入れた（ファイルへはタブの保存が書く）。 */
+  | { status: "tab" }
+  | { status: "unchanged" }
+  /** ノートがタブで開いていたので書かなかった。 */
+  | { status: "open-in-tab" }
+  /** 読んだあとで外で変わっていた。書いていない。content はファイルの今の中身。 */
+  | { status: "conflict"; content: string; contentHash: string | null };
+
+/** 別ウィンドウのキャンバス → メイン画面。 */
+export const CANVAS_FILE_WRITE_EVENT = "then-canvas-file-write";
+export type CanvasFileWriteEvent = { requestId: string; request: CanvasFileWriteRequest };
+/** メイン画面 → 別ウィンドウのキャンバス。error は書けなかった理由。 */
+export const CANVAS_FILE_WRITE_RESULT_EVENT = "then-canvas-file-write-result";
+export type CanvasFileWriteResultEvent = { requestId: string; result?: CanvasFileWriteResult; error?: string };
+
+/** 閉じる前に、別ウィンドウのキャンバスへ待っている保存を書き切ってもらう（BINDER 4-2 の確認1の 1）。 */
+export const CANVAS_FLUSH_EVENT = "then-canvas-flush";
+export const CANVAS_FLUSH_DONE_EVENT = "then-canvas-flush-done";
+export type CanvasFlushEvent = { requestId: string };
 
 /** キャンバス → メイン画面へ、選んだカードを投稿にしてもらうイベント（BINDER 2-4、確認1の 8）。 */
 export const CANVAS_COPY_TO_POST_EVENT = "then-canvas-copy-to-post";
@@ -148,8 +251,20 @@ function canvasReferenceKind(path: string): ReferenceKind {
   return "unknown";
 }
 
+function retargetCanvasPath(path: string, changes: CanvasPathChange[]) {
+  const original = path.replace(/\\/g, "/");
+  let next = original;
+  for (const change of changes) {
+    if (!change.oldPath || !change.newPath) continue;
+    if (next === change.oldPath) next = change.newPath;
+    else if (next.startsWith(`${change.oldPath}/`)) next = `${change.newPath}${next.slice(change.oldPath.length)}`;
+  }
+  return next === original ? path : next;
+}
+
 /**
- * ボードの作品の資料カードを、改名・移動に合わせて付け替える（パス・名前・種類。フォルダなら中のものすべて）。
+ * ボードの作品の資料カードとファイルのカードを、改名・移動に合わせて付け替える（資料カードはパス・名前・種類、
+ * ファイルのカードはパスだけ。フォルダなら中のものすべて）。
  * 同じ付け替えを2回しても結果は同じ。変わるカードがなければ null。
  */
 export function retargetCanvasReferenceNodes(
@@ -158,6 +273,12 @@ export function retargetCanvasReferenceNodes(
 ): JsonCanvasDocument | null {
   let changed = false;
   const nodes = board.nodes.map((node) => {
+    if (node.type === "file") {
+      const file = retargetCanvasPath(node.file, changes);
+      if (file === node.file) return node;
+      changed = true;
+      return { ...node, file };
+    }
     if (node.type !== "reference" || node.scope !== "project") return node;
     let sourcePath = node.sourcePath.replace(/\\/g, "/");
     for (const change of changes) {
@@ -193,6 +314,8 @@ export type CanvasWindowPayload = {
   canvasDefaultWritingMode: WritingMode;
   canvasDefaultFontSource: CanvasNodeFontSource;
   referenceFiles?: ReferenceFileInfo[];
+  projectFiles?: CanvasProjectFile[];
+  openTabPaths?: string[];
   /** メイン画面の右サイドバー表示状態。別ウィンドウのサイドパネルへ引き継ぐ。 */
   rightSidebarVisible?: boolean;
 };
@@ -280,6 +403,22 @@ export function createCanvasReferenceNode(
       kind: file.kind,
     size: file.size,
     imported: file.imported,
+    color: options.color,
+  };
+}
+
+export function createCanvasFileNode(
+  file: string,
+  options: Partial<Omit<CanvasFileNode, "id" | "type" | "file">> = {},
+): CanvasFileNode {
+  return {
+    id: nextCanvasId("file"),
+    type: "file",
+    x: options.x ?? 140,
+    y: options.y ?? 140,
+    width: options.width ?? 300,
+    height: options.height ?? 240,
+    file,
     color: options.color,
   };
 }
@@ -383,6 +522,22 @@ function normalizeNode(value: unknown): CanvasNode | null {
     };
   }
 
+  if (node.type === "file") {
+    const fileNode = node as Partial<CanvasFileNode>;
+    if (typeof fileNode.file !== "string" || !fileNode.file.trim()) return null;
+    return {
+      id,
+      type: "file",
+      x,
+      y,
+      width,
+      height,
+      file: fileNode.file.replace(/\\/g, "/"),
+      subpath: typeof fileNode.subpath === "string" ? fileNode.subpath : undefined,
+      color,
+    };
+  }
+
   if (node.type === "text") {
     const textNode = node as Partial<CanvasTextNode>;
     const writingMode =
@@ -422,6 +577,16 @@ function normalizeNode(value: unknown): CanvasNode | null {
   return null;
 }
 
+const KNOWN_NODE_TYPES = new Set(["text", "group", "reference", "file"]);
+
+/** id と種類があり、その種類を Then が知らないカード。 */
+function isForeignNode(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object") return false;
+  const node = value as { id?: unknown; type?: unknown };
+  return typeof node.id === "string" && node.id !== "" &&
+    typeof node.type === "string" && !KNOWN_NODE_TYPES.has(node.type);
+}
+
 function normalizeEdge(value: unknown, nodeIds: Set<string>): CanvasEdge | null {
   if (!value || typeof value !== "object") return null;
   const edge = value as Partial<CanvasEdge>;
@@ -452,8 +617,11 @@ export function normalizeCanvasDocument(
   _fallbackScope: CanvasScope = "project",
 ): JsonCanvasDocument {
   const source = value && typeof value === "object" ? (value as Partial<JsonCanvasDocument>) : {};
+  // Then が読めない種類のカードは、捨てずに取っておく（保存で書き戻す）。
+  const foreignNodes = Array.isArray(source.nodes) ? source.nodes.filter(isForeignNode) : [];
   const nodes = Array.isArray(source.nodes)
     ? source.nodes
+        .filter((node) => !isForeignNode(node))
         .map(normalizeNode)
         .filter((node): node is CanvasNode => Boolean(node))
         .filter((node) => node.type !== "reference" || node.scope !== "global")
@@ -477,10 +645,21 @@ export function normalizeCanvasDocument(
     }
     return node;
   });
-  const nodeIds = new Set(sanitizedNodes.map((node) => node.id));
+  const nodeIds = new Set<unknown>(sanitizedNodes.map((node) => node.id));
+  const foreignIds = new Set<unknown>(foreignNodes.map((node) => node.id));
+  // 読めないカードにつながる線も、両端があれば取っておく。
+  const isForeignEdge = (edge: unknown): edge is Record<string, unknown> => {
+    if (!edge || typeof edge !== "object") return false;
+    const { fromNode, toNode } = edge as { fromNode?: unknown; toNode?: unknown };
+    return (foreignIds.has(fromNode) || foreignIds.has(toNode)) &&
+      (foreignIds.has(fromNode) || nodeIds.has(fromNode)) &&
+      (foreignIds.has(toNode) || nodeIds.has(toNode));
+  };
+  const foreignEdges = Array.isArray(source.edges) ? source.edges.filter(isForeignEdge) : [];
   const edges = Array.isArray(source.edges)
     ? source.edges
-        .map((edge) => normalizeEdge(edge, nodeIds))
+        .filter((edge) => !isForeignEdge(edge))
+        .map((edge) => normalizeEdge(edge, nodeIds as Set<string>))
         .filter((edge): edge is CanvasEdge => Boolean(edge))
     : [];
 
@@ -489,6 +668,7 @@ export function normalizeCanvasDocument(
   return {
     nodes: sanitizedNodes,
     edges,
+    ...(foreignNodes.length > 0 ? { foreign: { nodes: foreignNodes, edges: foreignEdges } } : {}),
     then: {
       version: 1,
       name:

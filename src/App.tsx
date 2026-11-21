@@ -15,7 +15,7 @@ import {
   type RecoveryItem,
 } from "./editor/saveJournal";
 import { emit, emitTo, listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, Window as TauriWindow } from "@tauri-apps/api/window";
 import {
   ChangeEvent,
   DragEvent,
@@ -165,8 +165,19 @@ import {
   CANVAS_LIVE_DATA_EVENT,
   CANVAS_PATH_CHANGES_EVENT,
   type CanvasCopyToPostRequest,
+  CANVAS_FILE_SAVED_EVENT,
+  CANVAS_FILE_WRITE_EVENT,
+  CANVAS_FILE_WRITE_RESULT_EVENT,
+  CANVAS_FLUSH_DONE_EVENT,
+  CANVAS_FLUSH_EVENT,
+  type CanvasFileSavedEvent,
+  type CanvasFileWriteEvent,
+  type CanvasFileWriteRequest,
+  type CanvasFileWriteResultEvent,
+  type CanvasFlushEvent,
   type CanvasLiveDataEvent,
   type CanvasPathChangesEvent,
+  type CanvasProjectFile,
   type CanvasScope,
   type CanvasWindowPayload,
 } from "./canvasTypes";
@@ -298,6 +309,59 @@ type AppMode = "write" | "corkboard" | "canvas" | "export" | "checkpoint" | "plu
 // The synopsis writer loads the YAML parser, so it stays out of the main bundle
 // until a synopsis is written (the corkboard reads it the same way). BINDER 1-5.
 const loadSynopsisWriter = () => import("./corkboard/synopsisWriter");
+
+/** 作品のフォルダと、そこからの相対パス（`/` 区切り）をつなぐ。区切りは作品のフォルダに合わせる。 */
+function joinCanvasFilePath(rootPath: string, relative: string): string {
+  const separator = rootPath.includes("\\") ? "\\" : "/";
+  return `${rootPath.replace(/[\\/]+$/, "")}${separator}${relative.split("/").join(separator)}`;
+}
+
+/**
+ * 別ウィンドウのキャンバスに、待っている保存と書き戻しを書き切ってもらい、答えか timeoutMs を待つ。
+ * 書き戻しはメイン画面が書くので、メイン画面が閉じる前に済ませる（BINDER 4-2 の確認1の 1）。
+ */
+async function flushCanvasWindow(timeoutMs: number) {
+  if (!isTauriRuntime()) return;
+  const canvas = await TauriWindow.getByLabel("idea-canvas").catch(() => null);
+  if (!canvas) return;
+  const requestId = `close-${Date.now()}`;
+  await new Promise<void>((resolve) => {
+    let finished = false;
+    let dispose: (() => void) | null = null;
+    const done = () => {
+      if (finished) return;
+      finished = true;
+      window.clearTimeout(timer);
+      dispose?.();
+      resolve();
+    };
+    const timer = window.setTimeout(done, timeoutMs);
+    listen<CanvasFlushEvent>(CANVAS_FLUSH_DONE_EVENT, (event) => {
+      if (event.payload.requestId === requestId) done();
+    })
+      .then((unlisten) => {
+        if (finished) {
+          unlisten();
+          return;
+        }
+        dispose = unlisten;
+        return emitTo("idea-canvas", CANVAS_FLUSH_EVENT, { requestId } satisfies CanvasFlushEvent);
+      })
+      .catch(done);
+  });
+}
+
+/** 作品のファイルが保存されたことを、開いているキャンバス（埋め込み・別ウィンドウ）へ知らせる（BINDER 4-2）。 */
+function emitCanvasFileSaved(rootPath: string, path: string, document: TextDocument) {
+  if (!isTauriRuntime()) return;
+  const payload: CanvasFileSavedEvent = {
+    rootPath,
+    path: toProjectRelativePath(rootPath, path),
+    content: document.content,
+    contentHash: document.contentHash ?? null,
+  };
+  emit(CANVAS_FILE_SAVED_EVENT, payload).catch(() => {});
+}
 type ToastAction = {
   label: string;
   onClick: () => void;
@@ -1687,6 +1751,10 @@ export default function App() {
             );
             setLastError("");
             linkIndexSavedRef.current(savingRequest.path, document.content);
+            const savedRoot = openProjectPathRef.current;
+            if (savedRoot && isPathInsideFolder(savingRequest.path, savedRoot)) {
+              emitCanvasFileSaved(savedRoot, savingRequest.path, document);
+            }
             savingRequest.waiters.forEach((waiter) => waiter.resolve(document));
           } catch (error) {
             if (isDocumentConflict(error)) {
@@ -2319,6 +2387,26 @@ export default function App() {
         return left.sourcePath.localeCompare(right.sourcePath);
       });
   }, [projectFolder, referenceCandidates, referenceLayout.recent]);
+  // キャンバスのファイルのカード（BINDER 4-2）に渡す、作品のノート・原稿と、タブで開いているファイル。
+  const canvasProjectFiles = useMemo<CanvasProjectFile[]>(
+    () =>
+      projectFolder
+        ? collectProjectTextFiles(projectFolder)
+            .filter((file) => /\.(md|txt)$/i.test(file.path))
+            .map((file) => ({
+              path: toProjectRelativePath(projectFolder.path, file.path),
+              role: file.role === "material" ? "note" : "manuscript",
+            }))
+        : [],
+    [projectFolder],
+  );
+  const canvasOpenTabPathKey = projectFolder
+    ? openTabs.flatMap((tab) => (tab.path ? [toProjectRelativePath(projectFolder.path, tab.path)] : [])).join("\n")
+    : "";
+  const canvasOpenTabPaths = useMemo(
+    () => (canvasOpenTabPathKey ? canvasOpenTabPathKey.split("\n") : []),
+    [canvasOpenTabPathKey],
+  );
 
   useEffect(() => {
     if (!projectFolder) {
@@ -3622,6 +3710,8 @@ export default function App() {
       canvasDefaultWritingMode: settings.canvasDefaultWritingMode,
       canvasDefaultFontSource: settings.canvasDefaultFontSource,
       referenceFiles: projectFolder ? sortedReferenceCandidates : [],
+      projectFiles: canvasProjectFiles,
+      openTabPaths: canvasOpenTabPaths,
       rightSidebarVisible: !isRightSidebarCollapsed,
     };
 
@@ -6074,7 +6164,9 @@ export default function App() {
     if (!isTauriRuntime()) return;
     return manageAsyncRegistration(
       listen("then-before-close", () => {
-        void flushPendingSaves().finally(() => invoke("finish_close_preparation"));
+        // 別ウィンドウのキャンバスの保存と書き戻しも、メイン画面が閉じる前に書き切ってもらう（BINDER 4-2）。
+        void Promise.allSettled([flushPendingSaves(), flushCanvasWindow(1500)])
+          .finally(() => invoke("finish_close_preparation"));
       }),
       (error) => setLastError(String(error)),
     );
@@ -6097,13 +6189,36 @@ export default function App() {
     const timer = window.setTimeout(() => {
       const payload: CanvasLiveDataEvent = {
         referenceFiles: projectFolder ? sortedReferenceCandidates : [],
+        projectFiles: canvasProjectFiles,
+        openTabPaths: canvasOpenTabPaths,
       };
       emitTo("idea-canvas", CANVAS_LIVE_DATA_EVENT, payload).catch(() => {
         // 対象ウィンドウが無い・閉じた直後などは黙って捨てる
       });
     }, 400);
     return () => window.clearTimeout(timer);
-  }, [sortedReferenceCandidates, projectFolder]);
+  }, [sortedReferenceCandidates, projectFolder, canvasProjectFiles, canvasOpenTabPaths]);
+
+  // キャンバスのカードからノート・原稿へ書き戻す（BINDER 4-2）。ファイルへ書くのはメイン画面だけ。
+  const writeCanvasFileRef = useRef<(request: CanvasFileWriteRequest) => ReturnType<typeof writeCanvasFileFromMain>>(
+    () => Promise.reject(new Error("not ready")),
+  );
+  writeCanvasFileRef.current = (request) => writeCanvasFileFromMain(request);
+  // 別ウィンドウのキャンバスからの頼み。
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    return manageAsyncRegistration(
+      listen<CanvasFileWriteEvent>(CANVAS_FILE_WRITE_EVENT, (event) => {
+        const { requestId, request } = event.payload;
+        const answer = (body: CanvasFileWriteResultEvent) =>
+          emitTo("idea-canvas", CANVAS_FILE_WRITE_RESULT_EVENT, body).catch(() => {});
+        void writeCanvasFileRef.current(request)
+          .then((result) => answer({ requestId, result }))
+          .catch((error) => answer({ requestId, error: error instanceof Error ? error.message : String(error) }));
+      }),
+      (error) => setLastError(String(error)),
+    );
+  }, []);
 
   const jumpToEditorLine = (line: number) => {
     const targetLine = Math.max(1, line);
@@ -6560,6 +6675,34 @@ export default function App() {
       setLastError(conflictFreeMessage(error));
       showToast(error instanceof Error ? error.message : String(error));
     }
+  };
+
+  // キャンバスのカードの書き戻し（BINDER 4-2）。概要はコルクボードと同じ書き込み口、本文は canvasFileWriter.ts。
+  const writeCanvasFileFromMain = async (request: CanvasFileWriteRequest) => {
+    const { writeCanvasFile } = await import("./canvasFileWriter");
+    return writeCanvasFile(
+      {
+        isActiveTab: (target: string) => {
+          const tab = openTabWithPath(target);
+          return tab !== null && tab.id === activeTabIdRef.current;
+        },
+        openTabMarkdown: (target: string) => {
+          const tab = openTabWithPath(target);
+          if (!tab) return null;
+          return tab.id === activeTabIdRef.current ? activeMarkdownRef.current : tab.markdown;
+        },
+        updateActiveMarkdown: (nextMarkdown: string) => updateFrontMatter(parseFrontMatter(nextMarkdown).metadata),
+        updateBackgroundTab: updateBackgroundTabMarkdown,
+        readFile: (target: string) => invoke<TextDocument>("read_text_file", { path: target }),
+        saveFile: (target: string, content: string, expectedHash: string | null) =>
+          invoke<TextDocument>("save_text_file", { path: target, content, expectedHash }),
+        isConflict: isDocumentConflict,
+        absolutePath: joinCanvasFilePath,
+        noteSaved: (target, content) => linkIndexSavedRef.current(target, content),
+        fileSaved: (rootPath, path, document) => emitCanvasFileSaved(rootPath, path, document),
+      },
+      request,
+    );
   };
 
   const { handleHeadingMove, handleHeadingExtract } = createHeadingMoveActions({
@@ -7572,6 +7715,12 @@ export default function App() {
                   liveReferenceFiles={
                     projectFolder ? sortedReferenceCandidates : []
                   }
+                  liveProjectFiles={canvasProjectFiles}
+                  liveOpenTabPaths={canvasOpenTabPaths}
+                  onWriteFile={(request) => writeCanvasFileRef.current(request)}
+                  onOpenFile={(path) => {
+                    if (projectFolder) void openFromCorkboard(joinCanvasFilePath(projectFolder.path, path));
+                  }}
                 />
               </div>
             )}

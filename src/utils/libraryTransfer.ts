@@ -57,3 +57,38 @@ export function rewriteBoard(board: JsonCanvasDocument, rewrite: ReferenceRewrit
   const edges = board.edges.filter((edge) => !removed.has(edge.fromNode) && !removed.has(edge.toNode));
   return { ...board, nodes, edges };
 }
+
+/** The work's notes and manuscripts that the board's file cards point at (BINDER 4-2). */
+export function boardFilePaths(board: JsonCanvasDocument): string[] {
+  return uniqueReferencePaths(board.nodes.flatMap((node) => (node.type === "file" ? [node.file] : [])));
+}
+
+/**
+ * The destination work has none of these notes or manuscripts, so each file
+ * card goes as a text card holding what it showed: the title, and the note's
+ * body or the manuscript's synopsis (BINDER 4-2 の確認1の 5). `shown` is keyed
+ * by normalizedReferenceKey(path); a card whose file could not be read keeps
+ * just its title.
+ */
+export function fileCardsToTextCards(
+  board: JsonCanvasDocument,
+  shown: Map<string, { title: string; text: string }>,
+): JsonCanvasDocument {
+  const nodes = board.nodes.map<CanvasNode>((node) => {
+    if (node.type !== "file") return node;
+    const card = shown.get(normalizedReferenceKey(node.file));
+    const title = card?.title ?? node.file.split("/").pop()?.replace(/\.(md|txt)$/i, "") ?? node.file;
+    return {
+      id: node.id,
+      type: "text",
+      x: node.x,
+      y: node.y,
+      width: node.width,
+      height: node.height,
+      title,
+      text: card?.text ?? "",
+      color: node.color,
+    };
+  });
+  return { ...board, nodes };
+}
