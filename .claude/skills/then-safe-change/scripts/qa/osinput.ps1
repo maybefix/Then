@@ -5,7 +5,12 @@
 #   -Text "..."                                 type Unicode text
 #   -Keys "CTRL+S,END,RETURN"                   virtual keys, CTRL+ / SHIFT+ prefixes
 #   -Pid <pid> -Shot <png>                      capture the Then window only, and only if it is the foreground window
-param([int]$WindowPid = 0, [switch]$Info, [switch]$Focus, [string]$ClickCss = "", [double]$Dpr = 1, [string]$Text = "", [string]$Keys = "", [string]$Shot = "")
+#   -Pid <pid> -DblClickCss "x,y" -Dpr 1.25     double click at CSS px
+#   -Pid <pid> -DragCss "x1,y1;x2,y2" -Dpr 1.25  press at the first point, move there in steps, release at the second
+#   -Pid <pid> -Move "x,y,w,h"                   place and size the window (physical px)
+#   -Title "Then - Idea Board" ...               target the top-level window with this exact title instead of the main window
+#                                               (all actions above work with -Title in place of -Pid)
+param([int]$WindowPid = 0, [string]$Title = "", [switch]$Info, [switch]$Focus, [string]$ClickCss = "", [string]$DblClickCss = "", [string]$DragCss = "", [string]$Move = "", [double]$Dpr = 1, [string]$Text = "", [string]$Keys = "", [string]$Shot = "")
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
@@ -24,6 +29,13 @@ public static class Os {
   [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref POINT p);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
+  [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int hgt, bool repaint);
+  public static uint Button(int x, int y, uint flags) {
+    SetCursorPos(x, y);
+    var d = new INPUT { type = 0 }; d.u.mi.dwFlags = flags;
+    return Send(new[] { d });
+  }
   static uint Send(INPUT[] a) { return SendInput((uint)a.Length, a, Marshal.SizeOf(typeof(INPUT))); }
   public static uint Click(int x, int y) {
     SetCursorPos(x, y);
@@ -40,6 +52,8 @@ public static class Os {
 [Os]::SetProcessDPIAware() | Out-Null
 $hwnd = [IntPtr]::Zero
 if ($WindowPid -ne 0) { $hwnd = (Get-Process -Id $WindowPid).MainWindowHandle }
+# FindWindow needs a real null class name: PowerShell turns $null into "" for string parameters.
+if ($Title) { $hwnd = [Os]::FindWindow([NullString]::Value, $Title); if ($hwnd -eq [IntPtr]::Zero) { "window not found: $Title"; exit 4 } }
 function Origin { $p = New-Object Os+POINT; [Os]::ClientToScreen($hwnd, [ref]$p) | Out-Null; $p }
 $sent = 0
 if ($Info) { $o = Origin; "client origin $($o.X),$($o.Y); foreground=$([Os]::GetForegroundWindow() -eq $hwnd)" }
@@ -51,6 +65,24 @@ if ($ClickCss) {
   $c = $ClickCss.Split(","); $o = Origin
   $x = [int]($o.X + [double]$c[0] * $Dpr); $y = [int]($o.Y + [double]$c[1] * $Dpr)
   $sent = [Os]::Click($x, $y); "click screen $x,$y sent=$sent"
+}
+if ($DblClickCss) {
+  $c = $DblClickCss.Split(","); $o = Origin
+  $x = [int]($o.X + [double]$c[0] * $Dpr); $y = [int]($o.Y + [double]$c[1] * $Dpr)
+  $sent = [Os]::Click($x, $y); Start-Sleep -Milliseconds 80; $sent += [Os]::Click($x, $y); "double click screen $x,$y sent=$sent"
+}
+if ($DragCss) {
+  $pts = $DragCss.Split(";"); $a = $pts[0].Split(","); $b = $pts[1].Split(","); $o = Origin
+  $x1 = [int]($o.X + [double]$a[0] * $Dpr); $y1 = [int]($o.Y + [double]$a[1] * $Dpr)
+  $x2 = [int]($o.X + [double]$b[0] * $Dpr); $y2 = [int]($o.Y + [double]$b[1] * $Dpr)
+  $sent = [Os]::Button($x1, $y1, 2); Start-Sleep -Milliseconds 120
+  # Move in steps so pointermove thresholds and hover targets see the path, not a jump.
+  for ($i = 1; $i -le 20; $i++) { $sent += [Os]::Button([int]($x1 + ($x2 - $x1) * $i / 20), [int]($y1 + ($y2 - $y1) * $i / 20), 1); Start-Sleep -Milliseconds 25 }
+  Start-Sleep -Milliseconds 150; $sent += [Os]::Button($x2, $y2, 4); "drag screen $x1,$y1 -> $x2,$y2 sent=$sent"
+}
+if ($Move) {
+  $m = $Move.Split(","); [Os]::MoveWindow($hwnd, [int]$m[0], [int]$m[1], [int]$m[2], [int]$m[3], $true) | Out-Null; Start-Sleep -Milliseconds 300
+  $r = New-Object Os+RECT; [Os]::GetWindowRect($hwnd, [ref]$r) | Out-Null; "window $($r.Left),$($r.Top) $($r.Right - $r.Left)x$($r.Bottom - $r.Top)"
 }
 if ($Text) {
   foreach ($ch in $Text.ToCharArray()) { $sent += [Os]::Key(0, [uint16][char]$ch, 4, $false); $sent += [Os]::Key(0, [uint16][char]$ch, 4, $true); Start-Sleep -Milliseconds 30 }
