@@ -121,16 +121,22 @@ pub fn board_references(root: &Path) -> Vec<BoardReferences> {
             .map(|nodes| {
                 nodes
                     .iter()
-                    .filter(|node| {
-                        node.get("type").and_then(serde_json::Value::as_str) == Some("reference")
-                            && node
-                                .get("scope")
-                                .and_then(serde_json::Value::as_str)
-                                .is_none_or(|scope| scope == "project")
-                    })
                     .filter_map(|node| {
                         let node_id = node.get("id")?.as_str()?.to_string();
-                        let source_path = node.get("sourcePath")?.as_str()?.replace('\\', "/");
+                        // 資料カードは `sourcePath`、ノート・原稿のファイルのカード（BINDER 4-2）は `file`。
+                        let source_path = match node.get("type")?.as_str()? {
+                            "reference"
+                                if node
+                                    .get("scope")
+                                    .and_then(serde_json::Value::as_str)
+                                    .is_none_or(|scope| scope == "project") =>
+                            {
+                                node.get("sourcePath")?.as_str()?
+                            }
+                            "file" => node.get("file")?.as_str()?,
+                            _ => return None,
+                        }
+                        .replace('\\', "/");
                         (!source_path.is_empty()).then_some(BoardReference { node_id, source_path })
                     })
                     .collect()
@@ -262,7 +268,9 @@ mod tests {
                 {"id":"r2","type":"reference","sourcePath":"素材/灯.md"},
                 {"id":"g","type":"reference","scope":"global","sourcePath":"素材/灯.md"},
                 {"id":"t","type":"text","text":"[[汐見]]"},
-                {"id":"e","type":"reference","scope":"project","sourcePath":""}
+                {"id":"e","type":"reference","scope":"project","sourcePath":""},
+                {"id":"f1","type":"file","file":"素材\\汐見.md"},
+                {"id":"l","type":"link","url":"https://example.com"}
             ],"edges":[],"then":{"name":"潮待ち郵便局","updatedAt":5}}"#,
         );
         write("older", r#"{"nodes":[{"id":"x","type":"reference","sourcePath":"素材/灯.md"}],"then":{"updatedAt":1}}"#);
@@ -285,6 +293,7 @@ mod tests {
                     references: vec![
                         BoardReference { node_id: "r1".to_string(), source_path: "素材/資料/汐見.md".to_string() },
                         BoardReference { node_id: "r2".to_string(), source_path: "素材/灯.md".to_string() },
+                        BoardReference { node_id: "f1".to_string(), source_path: "素材/汐見.md".to_string() },
                     ],
                 },
                 BoardReferences {

@@ -157,6 +157,14 @@ fn retarget_board(board: &mut Value, old: &str, new: &str) -> bool {
     let Some(nodes) = board.get_mut("nodes").and_then(Value::as_array_mut) else { return false };
     let mut changed = false;
     for node in nodes.iter_mut() {
+        // ノート・原稿を指すファイルのカード（BINDER 4-2）は `file` だけを持つ。
+        if node.get("type").and_then(Value::as_str) == Some("file") {
+            if let Some(next) = node.get("file").and_then(Value::as_str).and_then(|path| retarget(path, old, new)) {
+                node["file"] = Value::String(next);
+                changed = true;
+            }
+            continue;
+        }
         if node.get("type").and_then(Value::as_str) != Some("reference")
             || node.get("scope").and_then(Value::as_str).is_some_and(|scope| scope != "project")
         {

@@ -65,7 +65,10 @@ fn temp_work(label: &str) -> TempWork {
             reference("r2", "素材/資料/メモ.md", "markdown"),
             { "id": "g1", "type": "reference", "x": 0, "y": 0, "width": 1, "height": 1,
               "scope": "global", "sourcePath": "素材/資料/地図.png", "name": "地図.png", "kind": "image" },
-            { "id": "t1", "type": "text", "x": 0, "y": 0, "width": 1, "height": 1, "text": "素材/資料/地図.png" }
+            { "id": "t1", "type": "text", "x": 0, "y": 0, "width": 1, "height": 1, "text": "素材/資料/地図.png" },
+            // ノート・原稿を指すファイルのカード（BINDER 4-2）。
+            { "id": "f1", "type": "file", "x": 0, "y": 0, "width": 1, "height": 1, "file": "素材/資料/メモ.md" },
+            { "id": "f2", "type": "file", "x": 0, "y": 0, "width": 1, "height": 1, "file": "第一章/本文.md" }
         ],
         "edges": [],
         "then": { "version": 1, "name": "A" }
@@ -193,6 +196,8 @@ fn board_reference_cards_follow_image_text_and_folder_changes() {
     rename_project_entry(work.s("素材/資料/メモ.md"), "覚え書き.md".into()).unwrap();
     assert_eq!(node(&work.board("a"), "r2")["sourcePath"], "素材/資料/覚え書き.md");
     assert_eq!(node(&work.board("a"), "r2")["name"], "覚え書き.md");
+    assert_eq!(node(&work.board("a"), "f1")["file"], "素材/資料/覚え書き.md", "ファイルのカードも付いていく");
+    assert!(node(&work.board("a"), "f1").get("name").is_none(), "ファイルのカードには名前を書き足さない");
 
     // フォルダの改名で、中の資料がすべて付いていく。
     rename_project_entry(work.s("素材/資料"), "参考".into()).unwrap();
@@ -209,6 +214,11 @@ fn board_reference_cards_follow_image_text_and_folder_changes() {
     // md を原稿の段へ移しても付いていく（資料の候補から外れるが、パスは正しい）。
     move_project_entry(work.root(), work.s("素材/年表/参考/覚え書き.md"), work.root(), None, None).unwrap();
     assert_eq!(node(&work.board("a"), "r2")["sourcePath"], "覚え書き.md");
+    assert_eq!(node(&work.board("a"), "f1")["file"], "覚え書き.md");
+
+    // 原稿のフォルダの改名で、原稿のファイルのカードが付いていく。
+    rename_project_entry(work.s("第一章"), "第1章".into()).unwrap();
+    assert_eq!(node(&work.board("a"), "f2")["file"], "第1章/本文.md");
 
     assert_eq!(work.bytes(".then/boards/c.canvas"), untouched, "変わらないボードは書かない");
 }
