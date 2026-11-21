@@ -233,7 +233,6 @@ pub(super) fn migrate_drafts(root: &Path, recoveries: &[DraftRecovery]) -> Resul
         })
         .collect();
 
-    let mut created_folder: Option<String> = None;
     let mut written: Vec<PathBuf> = Vec::new();
     let undo = |written: &[PathBuf], created: &Option<String>| {
         for note in written {
@@ -245,8 +244,7 @@ pub(super) fn migrate_drafts(root: &Path, recoveries: &[DraftRecovery]) -> Resul
     };
     let mut notes = Vec::new();
     if !texts.is_empty() {
-        let (folder, created) = note_folder(root, config.materials_folder_name())?;
-        created_folder = created;
+        let (folder, created_folder) = note_folder(root, config.materials_folder_name())?;
         for (name, text) in &texts {
             match checkpoint("note").and_then(|_| write_note(&folder, name, text)) {
                 Ok((path, wrote)) => {
