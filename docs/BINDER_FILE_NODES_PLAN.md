@@ -19,7 +19,7 @@ Canvas に、ノートと原稿を**指す**カード（JSON Canvas の `file` �
 | 7 | 実施 | 済み |
 | 8 | 自動テスト | 済み |
 | 9 | 実機確認 | 済み |
-| 10 | 完了（確認2） | 待ち |
+| 10 | 完了（確認2） | 済み（2026-11-21） |
 
 ---
 
@@ -464,7 +464,7 @@ QA 用アプリ（`src-tauri/target/release/Then.exe`、identifier `local.then.q
 
 ### 見つけたこと
 
-1. **Canvas の画面ではバインダーが隠れる**（`src/components/layout/LeftSidebar.tsx` 176行。本文とコルクボードだけで出す）。そのため、案で入口にしたバインダーから埋め込みの Canvas へのドラッグ（`WorkspaceSidebar.tsx` と `canvasFileDrop.ts`）は、今の画面では使えない。確認2で扱いを決める。
+1. **Canvas の画面ではバインダーが隠れる**（`src/components/layout/LeftSidebar.tsx` 176行。本文とコルクボードだけで出す）。そのため、案で入口にしたバインダーから埋め込みの Canvas へのドラッグ（`WorkspaceSidebar.tsx` と `canvasFileDrop.ts`）は、今の画面では使えない。確認2（2026-11-21）で、コードは残し、Canvas でも左サイドバーを使うようにするときに入口として生かすと決めた（Canvas の画面でバインダーを出すと、カードを並べる場所が狭くなるため、今回は出さない）。
 2. 実機確認の道具 `osinput.ps1 -Focus` が前面に出すために送っていた Alt で、窓のシステムメニューが開き、閉じるまで画面の処理と CDP の評価が止まった。前面に出すための入力を F24 に変え、Alt+F4 を送れるようにした（`references/real-app-qa.md` にも書いた）。
 3. ファイルのカードの地の色を、テキストカードと同じ `--canvas-node-bg` にそろえた（撮影で、選んだカードの下が透けて見えたため。選んだカードが少し透けるのはテキストカードも同じ既存の作りで、そのまま）。この CSS の変更のあとの build はしておらず、実機では確かめていない。
 
@@ -474,4 +474,4 @@ QA 用アプリ（`src-tauri/target/release/Then.exe`、identifier `local.then.q
 
 - 残っているプロセス: QA Then 0、QA WebView2 0、keep-screen 0、テストの Edge 0、テストの node 0。
 - `src-tauri/target/release/Then.exe` は、この作業の QA 用（`2b81c01`、identifier `local.then.qa.linksyntax1117`）で上書きされている。
-- 残っている別の作業: バインダーから Canvas へ置く入口（見つけたこと 1）、ボードの後勝ちと外の変更（4-3）、既存の文章の資料カードの置き換え（4-5）。
+- 残っている別の作業: Canvas で左サイドバーを使えるようにし、バインダーから置く入口（見つけたこと 1。コードは入っている）を生かす、ボードの後勝ちと外の変更（4-3）、既存の文章の資料カードの置き換え（4-5）。
