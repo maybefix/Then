@@ -100,6 +100,8 @@
     "test:plot-migration-rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- plot_migration::",
     "test:idea-migration": "node scripts/test-idea-migration.mjs",
     "test:idea-migration-rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- idea_migration::",
+    "test:draft-migration": "node scripts/test-intermediate-draft-migration.mjs",
+    "test:draft-migration-rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- intermediate_draft_migration::",
     "test:property-type-store": "node scripts/test-property-type-store.mjs",
     "test:property-search": "node scripts/test-property-search.mjs",
     "test:markdown-table-ime": "node scripts/test-markdown-table-ime.mjs",
