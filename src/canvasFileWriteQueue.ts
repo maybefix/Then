@@ -27,21 +27,12 @@ export class CanvasFileWriteQueue {
   constructor(private write: (request: CanvasFileWriteRequest) => Promise<CanvasFileWriteResult>) {}
 
   /**
-   * 書けたファイルの、書く前のハッシュ → 書いたあとの中身。Canvas が書けた結果を受け取る前に次の編集を入れても、
-   * 古い基準のまま書いて外の変更と取り違えないようにする。
+   * 同じファイル・同じ種類で、まだ書いていないものがあれば、新しい中身で置き換える。
+   * base は Canvas が持っている読んだときのファイル。書けた結果は、同じ流れの中で聞き手（Canvas）に渡すので、
+   * 次の編集は書けたあとの中身を base にして入る。
    */
-  private written = new Map<string, Map<string | null, CanvasFileWriteRequest["base"]>>();
-
-  /** 同じファイル・同じ種類で、まだ書いていないものがあれば、新しい中身で置き換える。 */
   enqueue(request: CanvasFileWriteRequest) {
-    const next = structuredClone(request);
-    const chain = this.written.get(fileKey(next));
-    for (let step = 0; chain && step < 32; step++) {
-      const newer = chain.get(next.base.contentHash);
-      if (!newer) break;
-      next.base = newer;
-    }
-    this.pending.set(canvasFileWriteKey(next), next);
+    this.pending.set(canvasFileWriteKey(request), structuredClone(request));
   }
 
   has(key: string) {
@@ -73,10 +64,8 @@ export class CanvasFileWriteQueue {
         if (this.pending.get(key) === request) this.pending.delete(key);
         if (result.status === "saved") {
           // 書けたファイルの新しい中身とハッシュを、同じファイルのまだ書いていない分の基準にする。
+          // （書いている途中に入った編集も、ここで書けたあとの中身へつなぐ。）
           const base = { content: result.content, contentHash: result.contentHash };
-          const chain = this.written.get(fileKey(request)) ?? new Map();
-          chain.set(request.base.contentHash, base);
-          this.written.set(fileKey(request), chain);
           for (const [otherKey, other] of this.pending) {
             if (sameFile(other, request)) this.pending.set(otherKey, { ...other, base });
           }

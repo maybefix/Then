@@ -253,10 +253,17 @@ type CanvasFileState =
   | { status: "missing" }
   | { status: "loaded"; content: string; contentHash: string | null; synopsis: SynopsisState };
 
+let readSynopsisNow: ((markdown: string) => SynopsisState) | null = null;
+
+/** 概要を読む部品を読み込み済みなら、その場で読む。まだなら null。 */
+function loadedCanvasFileNow(content: string, contentHash: string | null): CanvasFileState | null {
+  return readSynopsisNow ? { status: "loaded", content, contentHash, synopsis: readSynopsisNow(content) } : null;
+}
+
 async function loadedCanvasFile(content: string, contentHash: string | null): Promise<CanvasFileState> {
   // 概要の読み取りは YAML を読む部品を使うので、使うときに読み込む（コルクボードと同じ）。
-  const { readSynopsis } = await import("./corkboard/synopsis");
-  return { status: "loaded", content, contentHash, synopsis: readSynopsis(content) };
+  if (!readSynopsisNow) readSynopsisNow = (await import("./corkboard/synopsis")).readSynopsis;
+  return loadedCanvasFileNow(content, contentHash)!;
 }
 
 async function readCanvasFile(rootPath: string, path: string): Promise<CanvasFileState> {
@@ -1525,13 +1532,12 @@ export default function CanvasWindowApp({
   const fileRootRef = useRef(rootPath);
   fileRootRef.current = rootPath;
 
+  // 読んだ中身は ref がもと。書けた結果をその場で ref に入れ、次の編集がすぐ新しいハッシュを基準にできるようにする。
   const updateFileStates = useCallback((mutate: (next: Map<string, CanvasFileState>) => void) => {
-    setFileStates((current) => {
-      const next = new Map(current);
-      mutate(next);
-      fileStatesRef.current = next;
-      return next;
-    });
+    const next = new Map(fileStatesRef.current);
+    mutate(next);
+    fileStatesRef.current = next;
+    setFileStates(next);
   }, []);
 
   /** 書き戻しが済んだ（待っている分がない）カードの、直した中身を捨てる。text を渡すと、それと同じときだけ。 */
@@ -1547,7 +1553,7 @@ export default function CanvasWindowApp({
 
   const applyFileContent = useCallback(
     async (fileRoot: string, path: string, content: string, contentHash: string | null) => {
-      const state = await loadedCanvasFile(content, contentHash);
+      const state = loadedCanvasFileNow(content, contentHash) ?? (await loadedCanvasFile(content, contentHash));
       if (normalizedReferenceKey(fileRoot) !== normalizedReferenceKey(fileRootRef.current ?? "")) return;
       updateFileStates((next) => next.set(canvasFileKey(path), state));
     },

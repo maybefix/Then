@@ -66,6 +66,35 @@ assert.deepEqual(legacyGlobalReference.nodes.map((item) => item.id), ["project-r
 assert.deepEqual(legacyGlobalReference.edges, []);
 assert.equal(legacyGlobalReference.then.scope, "project");
 
+// BINDER 4-2: ファイルのカードを読み、知らない種類のカードと、それにつながる線は捨てずに保存で戻す。
+const withFiles = canvasTypes.normalizeCanvasDocument({
+  nodes: [
+    { id: "f", type: "file", file: "素材\\汐見.md", subpath: "#見出し", x: 1, y: 2, width: 300, height: 200 },
+    { id: "empty-file", type: "file", file: "" },
+    { id: "l", type: "link", url: "https://example.com", x: 5, y: 6, width: 100, height: 50 },
+    { id: "t", type: "text", text: "x" },
+  ],
+  edges: [
+    { id: "f-l", fromNode: "f", toNode: "l" },
+    { id: "f-t", fromNode: "f", toNode: "t" },
+    { id: "l-missing", fromNode: "l", toNode: "nowhere" },
+  ],
+});
+assert.deepEqual(withFiles.nodes.map((item) => [item.id, item.type]), [["f", "file"], ["t", "text"]]);
+assert.equal(withFiles.nodes[0].file, "素材/汐見.md", "区切りは / にそろえる");
+assert.equal(withFiles.nodes[0].subpath, "#見出し");
+assert.deepEqual(withFiles.edges.map((item) => item.id), ["f-t"]);
+const stored = canvasTypes.serializeCanvasDocument(withFiles);
+assert.deepEqual(stored.nodes.map((item) => item.id), ["f", "t", "l"]);
+assert.deepEqual(stored.nodes[2], { id: "l", type: "link", url: "https://example.com", x: 5, y: 6, width: 100, height: 50 });
+assert.deepEqual(stored.edges.map((item) => item.id), ["f-t", "f-l"], "端のない線は戻さない");
+const withoutF = canvasTypes.serializeCanvasDocument({ ...withFiles, nodes: withFiles.nodes.filter((item) => item.id !== "f") });
+assert.equal(withoutF.edges.some((item) => item.id === "f-l"), false, "Then で消したカードと読めないカードの線は戻さない");
+assert.equal("foreign" in stored, false, "保存する形に foreign は入らない");
+const renamed = canvasTypes.retargetCanvasReferenceNodes(withFiles, [{ oldPath: "素材", newPath: "資料集" }]);
+assert.equal(renamed.nodes[0].file, "資料集/汐見.md", "フォルダの改名でファイルのカードも付いていく");
+assert.equal(canvasTypes.retargetCanvasReferenceNodes(withFiles, [{ oldPath: "別", newPath: "x" }]), null);
+
 const tree = document([
   node("root", 0, 0, { threadCollapsed: true }),
   node("moving", 500, 500),
