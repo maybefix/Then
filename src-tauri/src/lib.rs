@@ -780,6 +780,10 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             list_canvas_boards,
             create_canvas_board,
             load_canvas_board,
+            load_canvas_board_with_hash,
+            is_canvas_window_open,
+            focus_canvas_window,
+            canvas_board_hash,
             save_canvas_board,
             intermediate_draft::load_intermediate_draft,
             intermediate_draft::save_intermediate_draft,
@@ -3772,6 +3776,59 @@ fn load_canvas_board(
     Ok(board)
 }
 
+/// The board the Canvas edits, with the hash of the file as it is on disk
+/// afterwards (BINDER 4-3). The Canvas sends it back as save_canvas_board's
+/// expected_hash, so a board changed outside is not written over.
+#[tauri::command]
+fn load_canvas_board_with_hash(
+    app: tauri::AppHandle,
+    scope: String,
+    root_path: Option<String>,
+    board_id: String,
+) -> Result<serde_json::Value, String> {
+    let board = load_canvas_board(app.clone(), scope.clone(), root_path.clone(), board_id.clone())?;
+    let hash = canvas_board_hash(app, scope, root_path, board_id)?;
+    Ok(serde_json::json!({ "board": board, "hash": hash }))
+}
+
+/// The hash of the board file now, or null if there is none. Taken again after
+/// Then itself rewrites boards (renames and moves) and before overwriting.
+#[tauri::command]
+fn canvas_board_hash(
+    app: tauri::AppHandle,
+    scope: String,
+    root_path: Option<String>,
+    board_id: String,
+) -> Result<Option<String>, String> {
+    let dir = canvas_boards_dir(&app, &scope, root_path)?;
+    let path = canvas_board_path(&dir, &board_id)?;
+    read_canvas_board_hash(&path)
+}
+
+fn read_canvas_board_hash(path: &Path) -> Result<Option<String>, String> {
+    match std::fs::read(path) {
+        Ok(bytes) => Ok(Some(content_hash(&bytes))),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("failed to read canvas board: {error}")),
+    }
+}
+
+/// Writes only over the file the caller read (expected_hash, same rule as
+/// save_text_file). No expected hash means nothing to compare.
+fn check_canvas_board_unchanged(path: &Path, expected_hash: Option<&str>) -> Result<(), String> {
+    let Some(expected) = save_journal::parse_hash(expected_hash) else { return Ok(()) };
+    let current = std::fs::read(path).map_err(|_| {
+        format!("{}: ボードのファイルが見つからないため保存しませんでした", save_journal::CONFLICT)
+    })?;
+    if Sha256::digest(&current).as_slice() != expected {
+        return Err(format!(
+            "{}: ボードのファイルが外部で変更されたため保存しませんでした",
+            save_journal::CONFLICT
+        ));
+    }
+    Ok(())
+}
+
 #[tauri::command(async)]
 fn save_canvas_board(
     app: tauri::AppHandle,
@@ -3779,11 +3836,13 @@ fn save_canvas_board(
     root_path: Option<String>,
     board_id: String,
     mut board: serde_json::Value,
-) -> Result<(), String> {
+    expected_hash: Option<String>,
+) -> Result<String, String> {
     let dir = canvas_boards_dir(&app, &scope, root_path)?;
     std::fs::create_dir_all(&dir)
         .map_err(|error| format!("failed to create canvas board directory: {error}"))?;
     let path = canvas_board_path(&dir, &board_id)?;
+    check_canvas_board_unchanged(&path, expected_hash.as_deref())?;
     purge_global_reference_nodes(&mut board);
     stamp_canvas_board(&mut board, &scope)?;
     write_canvas_board_file(&path, &board)
@@ -4827,7 +4886,8 @@ fn stamp_canvas_board(board: &mut serde_json::Value, scope: &str) -> Result<(), 
     Ok(())
 }
 
-fn write_canvas_board_file(path: &Path, board: &serde_json::Value) -> Result<(), String> {
+/// Returns the hash of the written file (BINDER 4-3).
+fn write_canvas_board_file(path: &Path, board: &serde_json::Value) -> Result<String, String> {
     let parent = path
         .parent()
         .ok_or_else(|| "canvas board directory does not exist".to_string())?;
@@ -4835,7 +4895,9 @@ fn write_canvas_board_file(path: &Path, board: &serde_json::Value) -> Result<(),
         .map_err(|error| format!("failed to create canvas board directory: {error}"))?;
     let content = serde_json::to_string_pretty(board)
         .map_err(|error| format!("failed to serialize canvas board: {error}"))?;
-    atomic_file::write_replacing(path, content).map_err(|error| format!("failed to write canvas board: {error}"))
+    let hash = content_hash(content.as_bytes());
+    atomic_file::write_replacing(path, content).map_err(|error| format!("failed to write canvas board: {error}"))?;
+    Ok(hash)
 }
 
 fn purge_global_reference_nodes(board: &mut serde_json::Value) -> bool {
@@ -5510,6 +5572,24 @@ fn watch_canvas_window_close(window: &tauri::WebviewWindow) {
     });
 }
 
+/// Whether the separate Canvas window is open. The main window then opens
+/// boards there instead of in the centre, so one board is never edited in two
+/// places at once (BINDER 4-3).
+#[tauri::command]
+fn is_canvas_window_open(app: tauri::AppHandle) -> bool {
+    app.get_webview_window("idea-canvas").is_some()
+}
+
+/// Brings the separate Canvas window to the front, keeping its board.
+#[tauri::command]
+fn focus_canvas_window(app: tauri::AppHandle) -> Result<bool, String> {
+    let Some(window) = app.get_webview_window("idea-canvas") else { return Ok(false) };
+    let _ = window.unminimize();
+    window.show().map_err(|error| format!("Canvas画面を表示できませんでした: {error}"))?;
+    window.set_focus().map_err(|error| format!("Canvas画面を前面に移動できませんでした: {error}"))?;
+    Ok(true)
+}
+
 /// The Canvas window has written what it was holding; it may close.
 #[tauri::command]
 fn finish_canvas_close_preparation() {
@@ -5832,6 +5912,37 @@ mod tests {
         assert_eq!(saved.expect("matching hash saves").content, "置換");
         assert!(unchecked.is_ok(), "no hash: written as before");
         assert_eq!(last, "確かめない");
+    }
+
+    #[test]
+    fn canvas_board_save_writes_only_over_the_board_it_read() {
+        // BINDER 4-3: the Canvas sends the hash of the board as it read or last wrote it.
+        let dir = std::env::temp_dir().join(format!(
+            "then-canvas-hash-test-{}-{}",
+            std::process::id(),
+            super::now_millis()
+        ));
+        std::fs::create_dir_all(&dir).expect("create board dir");
+        let path = dir.join("board.canvas");
+        let board = serde_json::json!({ "nodes": [], "edges": [] });
+
+        assert_eq!(super::read_canvas_board_hash(&path).expect("no file"), None);
+        let written = super::write_canvas_board_file(&path, &board).expect("write board");
+        assert_eq!(super::read_canvas_board_hash(&path).expect("read hash"), Some(written.clone()),
+            "the returned hash is the file's");
+        assert!(super::check_canvas_board_unchanged(&path, Some(&written)).is_ok(), "same file: may write");
+        assert!(super::check_canvas_board_unchanged(&path, None).is_ok(), "no hash: written as before");
+
+        std::fs::write(&path, b"{\"nodes\":[{\"id\":\"outside\"}],\"edges\":[]}").expect("outside edit");
+        let refused = super::check_canvas_board_unchanged(&path, Some(&written));
+        assert!(refused.as_ref().err().is_some_and(|error| error.starts_with(super::save_journal::CONFLICT)),
+            "changed outside: refused as a conflict");
+
+        std::fs::remove_file(&path).expect("remove board");
+        let missing = super::check_canvas_board_unchanged(&path, Some(&written));
+        assert!(missing.as_ref().err().is_some_and(|error| error.starts_with(super::save_journal::CONFLICT)),
+            "gone outside: refused as a conflict");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

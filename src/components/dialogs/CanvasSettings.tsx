@@ -34,16 +34,6 @@ export function CanvasSettings({ settings, onUpdateSettings }: SettingsPanelProp
           <option value="editor">本文フォント</option>
         </select>
       </label>
-      <label className="checkSetting">
-        <input
-          checked={settings.canvasOpensInWindow}
-          type="checkbox"
-          onChange={(event) =>
-            onUpdateSettings("canvasOpensInWindow", event.target.checked)
-          }
-        />
-        <span>キャンバスを別ウィンドウで開く</span>
-      </label>
     </>
   );
 }

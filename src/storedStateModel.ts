@@ -45,7 +45,11 @@ import {
   isReferenceBinderCard,
 } from "./types";
 import { quoteCssFontFamily, unquoteSingleCssFontFamily } from "./utils/fontStack";
-import { normalizeLeftSidebarCollapsed, normalizeLeftSidebarView } from "./utils/leftSidebarState";
+import {
+  normalizeCanvasLeftSidebarCollapsed,
+  normalizeLeftSidebarCollapsed,
+  normalizeLeftSidebarView,
+} from "./utils/leftSidebarState";
 import {
   normalizeRightSidebarCollapsed,
   normalizeRightSidebarTab,
@@ -161,7 +165,6 @@ const defaultSettings: EditorSettings = {
   checkpointSectionCollapsed: false,
   showCheckpointSection: true,
   showCheckpointStatus: true,
-  canvasOpensInWindow: false,
   exportOpensInWindow: false,
   proofread: { ...DEFAULT_PROOFREAD_OPTIONS, disabledRules: [] },
 };
@@ -181,6 +184,7 @@ export function createDefaultState(): AppState {
     rightSidebarWide: false,
     leftSidebarView: "files",
     leftSidebarCollapsed: false,
+    canvasLeftSidebarCollapsed: true,
     lastWorkspacePath: null,
     lastFilePath: null,
     recentWorkspaces: [],
@@ -841,10 +845,6 @@ export function normalizeState(value: Partial<AppState> | null | undefined): App
         settings.headingFontFamily,
         defaultSettings.headingFontFamily,
       ),
-      canvasOpensInWindow:
-        typeof settings.canvasOpensInWindow === "boolean"
-          ? settings.canvasOpensInWindow
-          : defaultSettings.canvasOpensInWindow,
       exportOpensInWindow:
         typeof settings.exportOpensInWindow === "boolean"
           ? settings.exportOpensInWindow
@@ -857,6 +857,7 @@ export function normalizeState(value: Partial<AppState> | null | undefined): App
     rightSidebarWide: normalizeRightSidebarWide(value?.rightSidebarWide),
     leftSidebarView: normalizeLeftSidebarView(value?.leftSidebarView),
     leftSidebarCollapsed: normalizeLeftSidebarCollapsed(value?.leftSidebarCollapsed),
+    canvasLeftSidebarCollapsed: normalizeCanvasLeftSidebarCollapsed(value?.canvasLeftSidebarCollapsed),
     lastWorkspacePath:
       typeof value?.lastWorkspacePath === "string" ? value.lastWorkspacePath : null,
     lastFilePath: typeof value?.lastFilePath === "string" ? value.lastFilePath : null,

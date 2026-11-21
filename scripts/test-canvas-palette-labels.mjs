@@ -31,8 +31,19 @@ window.paletteLabels = () => [...document.querySelectorAll('[aria-label="作成�
   const hit = rect && rect.width > 0 ? document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2) : null;
   return { text: label?.textContent ?? "", display: label ? getComputedStyle(label).display : "missing",
     width: rect?.width ?? 0, height: rect?.height ?? 0, onTop: !!hit && (hit === label || label.contains(hit)),
-    insideButton: !!rect && (b => rect.left >= b.left - 0.5 && rect.right <= b.right + 0.5 && rect.top >= b.top - 0.5 && rect.bottom <= b.bottom + 0.5)(button.getBoundingClientRect()) };
+    insideButton: !!rect && (b => rect.left >= b.left - 0.5 && rect.right <= b.right + 0.5 && rect.top >= b.top - 0.5 && rect.bottom <= b.bottom + 0.5)(button.getBoundingClientRect()),
+    // 文字の両端も、ほかの部品の下に入っていない（BINDER 4-3: 右端が拡大率の帯の下に入っていた）。
+    endsOnTop: !!rect && rect.width > 0 && [rect.left + 1, rect.right - 1].every((x) => { const h = document.elementFromPoint(x, rect.top + rect.height / 2); return !!h && (h === label || label.contains(h)); }) };
 });
+// 作成パレットと、下の左右の隅の部品（保存の状態・拡大率の帯）が重ならない。
+window.paletteClear = () => {
+  const palette = document.querySelector('[aria-label="作成ツール"]').getBoundingClientRect();
+  return [...document.querySelectorAll(".canvasCorner")].map((corner) => {
+    const r = corner.getBoundingClientRect();
+    const overlap = !(r.right <= palette.left || r.left >= palette.right || r.bottom <= palette.top || r.top >= palette.bottom);
+    return { corner: corner.className, overlap };
+  });
+};
 `);
 // Vite の「?url」の import（pdf.js の worker）は、このテストでは使わないので空の URL にする。
 const viteUrlImports = { name: "vite-url", setup(build) {
@@ -87,7 +98,8 @@ try {
   for (let i = 0; i < 80; i++) { if (await evaluate('document.querySelectorAll(\'[aria-label="作成ツール"] button\').length === 4')) break; await sleep(100); }
   await evaluate("document.fonts.ready.then(() => true)");
   // 1280: 前から文字が出ていた幅。960: QA の窓の幅。820: 別ウィンドウの最小の幅。
-  for (const [width, height] of [[1280, 800], [1120, 760], [960, 680], [820, 560]]) {
+  // 724: 狭いときの置き方に切り替わる幅（720px）のすぐ上。602: QA の窓（CSS 1266px）で左サイドバーと右のペインを開いたときの Canvas の幅（BINDER 4-3）。520: それより狭いとき。
+  for (const [width, height] of [[1280, 800], [1120, 760], [960, 680], [820, 560], [724, 600], [602, 680], [520, 560]]) {
     await viewport(width, height);
     await sleep(150);
     const labels = await evaluate("paletteLabels()");
@@ -97,9 +109,13 @@ try {
       assert.ok(label.width > 0 && label.height > 0, `${width}px: 「${label.text}」の文字に大きさがない`);
       assert.ok(label.onTop, `${width}px: 「${label.text}」の文字がほかの部品に隠れている`);
       assert.ok(label.insideButton, `${width}px: 「${label.text}」の文字がボタンからはみ出している`);
+      assert.ok(label.endsOnTop, `${width}px: 「${label.text}」の文字の端がほかの部品に隠れている`);
+    }
+    for (const corner of await evaluate("paletteClear()")) {
+      assert.equal(corner.overlap, false, `${width}px: 作成パレットが ${corner.corner} と重なっている`);
     }
   }
-  console.log("PASS canvas palette labels: shown inside their buttons at 1280, 1120, 960 and 820 px windows");
+  console.log("PASS canvas palette labels: shown inside their buttons, clear of the corners, at 1280, 1120, 960, 820, 724, 602 and 520 px");
 } finally {
   socket?.close();
   await stopBrowser(browser, profile);

@@ -11,7 +11,7 @@ import {
 } from "./canvasTypes";
 import { draftBoardKey, type DraftHistory } from "./intermediateDraft";
 import { prepareDraftBoardTrash } from "./intermediateDraftStore";
-import { CanvasBoardSaveQueue } from "./canvasBoardSaveQueue";
+import { CanvasBoardSaveQueue, canvasBoardTargetKey, type CanvasBoardTarget } from "./canvasBoardSaveQueue";
 import { CanvasFileWriteQueue } from "./canvasFileWriteQueue";
 
 // Canvas のボードを読み書きする層。Tauri の中では Rust の命令を呼び、ブラウザで動かすときは localStorage に書く。
@@ -173,6 +173,70 @@ export async function loadBoard(scope: CanvasScope, rootPath: string | null, boa
   return readLocalBoards(scope, rootPath)[boardId] ?? createCanvasDocument("Idea Board", scope);
 }
 
+// ---- 外の変更を上書きしない（BINDER 4-3、確認1の 3） ----
+// ボードごとに、読んだとき（または前回書いたとき）のファイルのハッシュを持ち、保存のときに送る。違えば Rust は
+// 書かずに断る。Then 自身がボードを書き換えたあと（改名・移動）は「取り直す」印を付け、次の保存の前に読み直す。
+const boardHashes = new Map<string, string | null>();
+const staleBoardHashes = new Set<string>();
+
+/** 外の変更で保存を断られた。断られた保存は順番待ちに残る。 */
+export class CanvasBoardConflictError extends Error {
+  constructor(readonly target: CanvasBoardTarget, message: string) {
+    super(message);
+    this.name = "CanvasBoardConflictError";
+  }
+
+  // Canvas は保存の失敗を String(error) で状態の欄に出す。型の名前は出さない（BINDER 4-3 の実機確認）。
+  toString() {
+    return this.message;
+  }
+}
+
+let boardConflictListener: ((target: CanvasBoardTarget) => void) | null = null;
+/** 保存が外の変更で断られたときに知らせてもらう相手（開いている Canvas）。 */
+export function setCanvasBoardConflictListener(listener: ((target: CanvasBoardTarget) => void) | null) {
+  boardConflictListener = listener;
+}
+
+const isSaveConflict = (error: unknown) => String(error).includes("document content conflict");
+
+/** Canvas が直すボードを読む。読んだファイルのハッシュを覚える。 */
+export async function loadBoardForEditing(scope: CanvasScope, rootPath: string | null, boardId: string) {
+  if (!isTauriRuntime()) return loadBoard(scope, rootPath, boardId);
+  const key = canvasBoardTargetKey({ scope, rootPath, boardId });
+  const loaded = await invoke<{ board: unknown; hash: string | null }>("load_canvas_board_with_hash", {
+    scope, rootPath, boardId,
+  });
+  boardHashes.set(key, loaded.hash);
+  staleBoardHashes.delete(key);
+  return loaded.board;
+}
+
+/** Then がボードのファイルを書き換えた（改名・移動）。次に書く前に、ファイルのハッシュを取り直す。 */
+export function markCanvasBoardHashStale(target: CanvasBoardTarget) {
+  staleBoardHashes.add(canvasBoardTargetKey(target));
+}
+
+async function expectedBoardHash(target: CanvasBoardTarget) {
+  const key = canvasBoardTargetKey(target);
+  if (staleBoardHashes.has(key)) {
+    boardHashes.set(key, await invoke<string | null>("canvas_board_hash", { ...target }));
+    staleBoardHashes.delete(key);
+  }
+  return boardHashes.get(key) ?? null;
+}
+
+/** 「この内容で上書きする」: 今のファイルを読んだことにして、待っている保存を書く。 */
+export async function overwriteCanvasBoard(target: CanvasBoardTarget) {
+  markCanvasBoardHashStale(target);
+  await canvasBoardSaveQueue.flush();
+}
+
+/** 「ファイルの内容を読み込む」: 待っている保存を捨てる。読み直すのは Canvas。 */
+export function discardCanvasBoardSave(target: CanvasBoardTarget) {
+  canvasBoardSaveQueue.discard(target);
+}
+
 export async function saveBoard(
   scope: CanvasScope,
   rootPath: string | null,
@@ -182,7 +246,16 @@ export async function saveBoard(
   // Then が読めないカード（Obsidian の link など）を、読んだときのまま書き戻す。
   const stored = serializeCanvasDocument(board);
   if (isTauriRuntime()) {
-    await invoke("save_canvas_board", { scope, rootPath, boardId, board: stored });
+    const target = { scope, rootPath, boardId };
+    const expectedHash = await expectedBoardHash(target);
+    try {
+      const hash = await invoke<string>("save_canvas_board", { scope, rootPath, boardId, board: stored, expectedHash });
+      boardHashes.set(canvasBoardTargetKey(target), hash ?? null);
+    } catch (error) {
+      if (!isSaveConflict(error)) throw error;
+      boardConflictListener?.(target);
+      throw new CanvasBoardConflictError(target, String(error).replace(/^(Error: )?document content conflict: /, ""));
+    }
     return;
   }
   const boards = readLocalBoards(scope, rootPath);
@@ -193,6 +266,12 @@ export async function saveBoard(
 // Mode changes can remount Canvas while a native save is still in flight.
 // The next instance must wait for the same queue before loading its board.
 export const canvasBoardSaveQueue = new CanvasBoardSaveQueue(saveBoard);
+
+/** 別ウィンドウの Canvas が開いているか（同じボードを2か所で開かないため。BINDER 4-3）。 */
+export async function isCanvasWindowOpen() {
+  if (!isTauriRuntime()) return false;
+  return invoke<boolean>("is_canvas_window_open").catch(() => false);
+}
 
 export type CanvasFileWriteTransport = (request: CanvasFileWriteRequest) => Promise<CanvasFileWriteResult>;
 

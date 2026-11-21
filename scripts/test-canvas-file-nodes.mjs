@@ -87,7 +87,12 @@ globalThis.fileTest = {
         .map(([id, doc]) => ({ id: JSON.parse(id)[1], name: doc.then.name, scope: "project", nodeCount: doc.nodes.length, edgeCount: 0 }));
     }
     if (command === "load_canvas_board") return structuredClone(docs.get(boardKey(args.rootPath, args.boardId)));
-    if (command === "save_canvas_board") { docs.set(boardKey(args.rootPath, args.boardId), structuredClone(args.board)); return; }
+    // ボードのハッシュ（BINDER 4-3）は test:canvas-save と test:canvas-store で確かめる。ここでは比べない。
+    if (command === "load_canvas_board_with_hash") {
+      return { board: structuredClone(docs.get(boardKey(args.rootPath, args.boardId))), hash: null };
+    }
+    if (command === "canvas_board_hash") return null;
+    if (command === "save_canvas_board") { docs.set(boardKey(args.rootPath, args.boardId), structuredClone(args.board)); return null; }
     if (command === "create_canvas_board") {
       const id = `created-${docs.size}`;
       docs.set(boardKey(args.rootPath, id), { nodes: [], edges: [], then: { version: 1, name: args.name } });
@@ -150,6 +155,9 @@ const projectFiles = [
   { path: LAMP, role: "note" },
   { path: SCENE, role: "manuscript" },
 ];
+// 素材の画像（BINDER 4-3: バインダーから Canvas へ落とすと資料のカードになる）。
+const MAP = "素材/地図.png";
+const referenceFiles = [{ scope: "project", sourcePath: MAP, name: "地図.png", kind: "image", size: 1, imported: false }];
 const fileNode = (id, file, x = 0) => ({ id, type: "file", file, x, y: 0, width: 300, height: 240 });
 const boardA = () => ({
   nodes: [
@@ -183,6 +191,7 @@ async function mount({ embedded = true } = {}) {
     theme: "light", uiFontScale: 1, referenceFiles: [], projectFiles, openTabPaths: [] };
   props = embedded
     ? { embedded: true, embeddedPayload: payload, liveProjectFiles: projectFiles, liveOpenTabPaths: [],
+      liveReferenceFiles: referenceFiles,
       onWriteFile, onOpenFile: (file) => openedFiles.push(file) }
     : {};
   if (!embedded) globalThis.fileTest.windowPayload = payload;
@@ -245,6 +254,28 @@ assert.ok(savedBoard().nodes.some((node) => node.id === "gone"), "消えたフ�
 await act(async () => { await sleep(20); });
 assert.equal(shown(added.id), "灯の本文\n", "置いたカードはファイルを読んで出す");
 console.log("PASS show: note body, manuscript synopsis, missing file; placing writes only the location; unknown cards survive");
+
+// ---- 1b. バインダーの行を落とす（BINDER 4-3）: ノートはファイルのカード、素材の画像は資料のカード ----
+{
+  const viewport = document.querySelector(".canvasViewport");
+  assert.ok(viewport.hasAttribute("data-canvas-file-drop"), "埋め込みの Canvas はバインダーの行を受ける");
+  const beforeIds = new Set(savedBoard().nodes.map((node) => node.id));
+  await act(async () => {
+    viewport.dispatchEvent(new dom.window.CustomEvent("then-canvas-file-drop", {
+      detail: { paths: [abs(SCENE), abs(MAP)], clientX: 300, clientY: 200 },
+    }));
+    await settle();
+  });
+  await act(async () => { await sleep(650); });
+  const nodes = savedBoard().nodes;
+  assert.equal(nodes.length, beforeIds.size + 2, "落とした2つの行が、それぞれカードになる");
+  const dropped = nodes.filter((node) => !beforeIds.has(node.id));
+  assert.ok(dropped.some((node) => node.type === "file" && node.file === SCENE), "原稿はファイルのカード");
+  const picture = dropped.find((node) => node.type !== "file");
+  assert.ok(picture && JSON.stringify(picture).includes(MAP), "素材の画像は資料のカード");
+  assert.equal(dropped.some((node) => node.type === "file" && node.file === MAP), false, "画像をファイルのカードにはしない");
+}
+console.log("PASS binder drop: a note or manuscript becomes a file card, a material image a reference card");
 
 // ---- 2. ノートの本文の書き戻し ----
 await dblclick("f1");
@@ -369,7 +400,7 @@ await click('[aria-label="ボードを切り替え"]');
 await click('.canvasBoardSelectButton[title="B"]');
 await act(async () => { await sleep(20); });
 assert.equal(files.get(abs(NOTE)), "---\ntags: [人物]\n---\n切り替え前", "切り替える前に書き戻す");
-const loadB = calls.findIndex((call) => call.command === "load_canvas_board" && call.boardId === "b");
+const loadB = calls.findIndex((call) => call.command === "load_canvas_board_with_hash" && call.boardId === "b");
 assert.ok(loadB > calls.findIndex((call) => call.command === "read_text_file") && writeRequests.length === 1);
 assert.equal(shown("fb"), "切り替え前", "次のボードの同じファイルのカードは、書いたあとの中身を出す");
 await unmount();

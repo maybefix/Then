@@ -7,6 +7,7 @@
 #   -Pid <pid> -Shot <png>                      capture the Then window only, and only if it is the foreground window
 #   -Pid <pid> -DblClickCss "x,y" -Dpr 1.25     double click at CSS px
 #   -Pid <pid> -DragCss "x1,y1;x2,y2" -Dpr 1.25  press at the first point, move there in steps, release at the second
+#                                               (more points "x1,y1;x2,y2;x3,y3" move through each in turn, release at the last)
 #   -Pid <pid> -Move "x,y,w,h"                   place and size the window (physical px)
 #   -Title "Then - Idea Board" ...               target the top-level window with this exact title instead of the main window
 #                                               (all actions above work with -Title in place of -Pid)
@@ -73,12 +74,16 @@ if ($DblClickCss) {
   $sent = [Os]::Click($x, $y); Start-Sleep -Milliseconds 80; $sent += [Os]::Click($x, $y); "double click screen $x,$y sent=$sent"
 }
 if ($DragCss) {
-  $pts = $DragCss.Split(";"); $a = $pts[0].Split(","); $b = $pts[1].Split(","); $o = Origin
-  $x1 = [int]($o.X + [double]$a[0] * $Dpr); $y1 = [int]($o.Y + [double]$a[1] * $Dpr)
-  $x2 = [int]($o.X + [double]$b[0] * $Dpr); $y2 = [int]($o.Y + [double]$b[1] * $Dpr)
+  $o = Origin
+  $screen = @($DragCss.Split(";") | ForEach-Object { $p = $_.Split(","); ,@([int]($o.X + [double]$p[0] * $Dpr), [int]($o.Y + [double]$p[1] * $Dpr)) })
+  $x1 = $screen[0][0]; $y1 = $screen[0][1]
   $sent = [Os]::Button($x1, $y1, 2); Start-Sleep -Milliseconds 120
   # Move in steps so pointermove thresholds and hover targets see the path, not a jump.
-  for ($i = 1; $i -le 20; $i++) { $sent += [Os]::Button([int]($x1 + ($x2 - $x1) * $i / 20), [int]($y1 + ($y2 - $y1) * $i / 20), 1); Start-Sleep -Milliseconds 25 }
+  for ($s = 1; $s -lt $screen.Count; $s++) {
+    $fx = $screen[$s - 1][0]; $fy = $screen[$s - 1][1]; $tx = $screen[$s][0]; $ty = $screen[$s][1]
+    for ($i = 1; $i -le 20; $i++) { $sent += [Os]::Button([int]($fx + ($tx - $fx) * $i / 20), [int]($fy + ($ty - $fy) * $i / 20), 1); Start-Sleep -Milliseconds 25 }
+  }
+  $x2 = $screen[-1][0]; $y2 = $screen[-1][1]
   Start-Sleep -Milliseconds 150; $sent += [Os]::Button($x2, $y2, 4); "drag screen $x1,$y1 -> $x2,$y2 sent=$sent"
 }
 if ($Move) {

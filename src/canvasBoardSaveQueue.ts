@@ -16,6 +16,11 @@ export class CanvasBoardSaveQueue {
     this.pending.set(canvasBoardTargetKey(target), { ...target, board: structuredClone(board) });
   }
 
+  /** Drop the waiting snapshot of a board (its file is read again instead; BINDER 4-3). */
+  discard(target: CanvasBoardTarget) {
+    this.pending.delete(canvasBoardTargetKey(target));
+  }
+
   flush(): Promise<void> {
     if (this.saving) return this.saving;
     this.saving = (async () => {

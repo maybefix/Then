@@ -82,12 +82,17 @@ import {
   canvasBoardSaveQueue,
   canvasFileWriteQueue,
   createBoard,
+  discardCanvasBoardSave,
   isTauriRuntime,
   listBoards,
   listTrashedBoards,
   loadBoard,
+  loadBoardForEditing,
+  markCanvasBoardHashStale,
+  overwriteCanvasBoard,
   reorderBoards,
   restoreTrashedBoard,
+  setCanvasBoardConflictListener,
   setCanvasFileWriteTransport,
   trashBoard,
   type TrashedCanvasBoardSummary,
@@ -574,7 +579,8 @@ function CanvasGlyph({
     | "panel"
     | "grip"
     | "chevronUp"
-    | "chevronDown";
+    | "chevronDown"
+    | "window";
 }) {
   const common = { viewBox: "0 0 24 24", "aria-hidden": true, focusable: false };
   switch (name) {
@@ -739,6 +745,14 @@ function CanvasGlyph({
           <path d="M17 12h1" />
         </svg>
       );
+    case "window":
+      return (
+        <svg {...common}>
+          <rect x="3.5" y="7.5" width="12" height="12" rx="2" />
+          <path d="M11 4h9v9" />
+          <path d="m20 4-8.5 8.5" />
+        </svg>
+      );
     default:
       return (
         <svg {...common}>
@@ -852,6 +866,8 @@ type CanvasWindowAppProps = {
   draftSelectRequest?: { id: string; nonce: number } | null;
   onDraftSelectionConsumed?: (nonce: number) => void;
   onOpenDraft?: () => void;
+  /** embedded 時に、このボードを別ウィンドウへ移す（メイン画面は本文へ戻る。BINDER 4-3）。 */
+  onOpenInWindow?: (boardId: string | null) => void;
 };
 
 export default function CanvasWindowApp({
@@ -866,6 +882,7 @@ export default function CanvasWindowApp({
   draftSelectRequest,
   onDraftSelectionConsumed,
   onOpenDraft,
+  onOpenInWindow,
 }: CanvasWindowAppProps = {}) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
@@ -1410,7 +1427,7 @@ export default function CanvasWindowApp({
         }
         const nextBoard =
           summaries.find((item) => item.id === preferredBoardId) ?? summaries[0];
-        const rawBoard = await loadBoard(nextScope, payload.rootPath, nextBoard.id);
+        const rawBoard = await loadBoardForEditing(nextScope, payload.rootPath, nextBoard.id);
         if (generation !== boardLoadGenerationRef.current) return;
         const document = normalizeCanvasDocument(rawBoard, nextBoard.name, nextScope);
         loadedBoardTargetRef.current = { scope: nextScope, rootPath: payload.rootPath, boardId: nextBoard.id };
@@ -1430,6 +1447,15 @@ export default function CanvasWindowApp({
     },
     [payload, clearHistory, boardSaveQueue, setThreadDropTarget],
   );
+
+  // ---- ボードの外の変更（BINDER 4-3、確認1の 3） ----
+  // ボードの保存が「外で書き換えられた」と断られたら、選ぶまで書かない（断られた保存は順番待ちに残る）。
+  // 先に登録しておき、開いたときに前の画面の書き切りが断られた場合も、ここで選ばせる。
+  const [boardConflict, setBoardConflict] = useState<CanvasBoardTarget | null>(null);
+  useEffect(() => {
+    setCanvasBoardConflictListener((target) => setBoardConflict(target));
+    return () => setCanvasBoardConflictListener(null);
+  }, []);
 
   useEffect(() => {
     if (embedded) {
@@ -1488,6 +1514,11 @@ export default function CanvasWindowApp({
       const { rootPath, changes } = event.payload;
       if (normalizedReferenceKey(rootPath) !== normalizedReferenceKey(payloadRootPath)) return;
       const retarget = (document: JsonCanvasDocument) => retargetCanvasReferenceNodes(document, changes) ?? document;
+      // Rust が書き換えたボードは、次に書く前にハッシュを取り直す（外の変更と取り違えない。BINDER 4-3）。
+      const loadedTarget = loadedBoardTargetRef.current;
+      if (loadedTarget && boardRef.current && retargetCanvasReferenceNodes(boardRef.current, changes)) {
+        markCanvasBoardHashStale(loadedTarget);
+      }
       const stack = historyRef.current;
       stack.undo = stack.undo.map(retarget);
       stack.redo = stack.redo.map(retarget);
@@ -1660,6 +1691,23 @@ export default function CanvasWindowApp({
     }, 500);
   };
 
+  const resolveBoardConflict = (choice: "reload" | "overwrite") => {
+    const target = boardConflict;
+    if (!target) return;
+    setBoardConflict(null);
+    if (choice === "reload") {
+      // 「ファイルの内容を読み込む」: 待っている保存を捨てて、ファイルから読み直す。
+      discardCanvasBoardSave(target);
+      void loadBoardList(target.scope, target.boardId);
+      return;
+    }
+    // 「この内容で上書きする」: 今のファイルを読んだことにして、画面の中身で書く。
+    setStatus("保存中");
+    void overwriteCanvasBoard(target)
+      .then(() => setStatus(`保存済み ${formatSaveTime(Date.now())}`))
+      .catch((error) => setStatus(String(error)));
+  };
+
   const resolveFileConflict = (choice: "reload" | "overwrite") => {
     const conflict = fileConflict;
     if (!conflict || conflict.result.status !== "conflict") return;
@@ -1730,14 +1778,21 @@ export default function CanvasWindowApp({
   };
 
   // バインダーのノート・原稿の行を、埋め込みのキャンバスへ落とした（WorkspaceSidebar のポインタのドラッグ）。
+  // 素材の画像・PDF の行は、「資料を追加」で置くのと同じ資料のカードにする（BINDER 4-3）。
   const fileDropRef = useRef<(detail: CanvasFileDropDetail) => void>(() => {});
   fileDropRef.current = (detail) => {
     if (!rootPath) return;
-    const paths = detail.paths.flatMap((path) => {
+    const point = screenToWorld(detail.clientX, detail.clientY);
+    const paths: string[] = [];
+    for (const path of detail.paths) {
       const relative = canvasRelativePath(rootPath, path);
-      return relative ? [relative] : [];
-    });
-    insertFileNodesAt(paths, screenToWorld(detail.clientX, detail.clientY));
+      if (!relative) continue;
+      const reference = referenceFiles.find((file) =>
+        (file.kind === "image" || file.kind === "pdf") && canvasFileKey(file.sourcePath) === canvasFileKey(relative));
+      if (reference) void insertReferenceNodeAt(reference, point);
+      else paths.push(relative);
+    }
+    insertFileNodesAt(paths, point);
   };
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -3125,6 +3180,17 @@ export default function CanvasWindowApp({
               if (embedded) onOpenDraft?.();
               else { setIsDraftPanelOpen((value) => !value); setIsSidePanelOpen(false); }
             }}>稿</button>
+          {embedded && onOpenInWindow && (
+            <button
+              className="canvasIconButton"
+              type="button"
+              title="別ウィンドウで開く"
+              aria-label="別ウィンドウで開く"
+              onClick={() => onOpenInWindow(activeBoardId)}
+            >
+              <CanvasGlyph name="window" />
+            </button>
+          )}
           {!embedded && (
             <button
               className={`canvasIconButton ${isSidePanelOpen ? "isActive" : ""}`}
@@ -3874,6 +3940,32 @@ export default function CanvasWindowApp({
                 onClick={() => void confirmDeleteBoard()}
               >
                 ゴミ箱へ移動
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
+      {boardConflict && !fileConflict && (
+        <div className="canvasModalBackdrop" role="presentation">
+          <section
+            className="canvasRenameModal canvasFileConflictModal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="canvas-board-conflict-title"
+            aria-describedby="canvas-board-conflict-description"
+          >
+            <header>
+              <h2 id="canvas-board-conflict-title">ほかのアプリでファイルが変更されました</h2>
+            </header>
+            <p id="canvas-board-conflict-description">
+              「{boards.find((item) => item.id === boardConflict.boardId)?.name ?? boardConflict.boardId}」
+            </p>
+            <footer>
+              <button type="button" onClick={() => resolveBoardConflict("reload")}>
+                ファイルの内容を読み込む
+              </button>
+              <button type="button" onClick={() => resolveBoardConflict("overwrite")}>
+                この内容で上書きする
               </button>
             </footer>
           </section>

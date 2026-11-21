@@ -438,8 +438,6 @@ export type EditorSettings = {
   headingFontSource: HeadingFontSource;
   /** headingFontSource === "custom" のときに見出し・太字へ適用するフォント。 */
   headingFontFamily: string;
-  /** キャンバスをメイン画面のモードではなく別ウィンドウで開くか。 */
-  canvasOpensInWindow: boolean;
   /** エクスポートをメイン画面のモードではなく別ウィンドウで開くか。 */
   exportOpensInWindow: boolean;
   /** 校正ペインのしきい値と、外しているルール。 */
@@ -547,6 +545,8 @@ export type AppState = {
   leftSidebarView: LeftSidebarView;
   /** 左サイドバーを畳んでいたか。次回起動時に復元する。 */
   leftSidebarCollapsed: boolean;
+  /** Canvas の画面で左サイドバーを畳んでいたか。本文・コルクボードとは別に覚え、既定は畳む（BINDER 4-3）。 */
+  canvasLeftSidebarCollapsed: boolean;
   lastWorkspacePath: string | null;
   lastFilePath: string | null;
   recentWorkspaces: WorkspaceRecord[];

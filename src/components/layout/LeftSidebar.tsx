@@ -173,7 +173,10 @@ export function LeftSidebar(props: LeftSidebarProps) {
     <div
       className={`leftWorkspaceCluster ${
         // The corkboard shows the binder too: its folder is chosen there (BINDER 1-5).
-        appMode !== "write" && appMode !== "plugin" && appMode !== "corkboard" ? "modeHiddenPane" : ""
+        // So does the Canvas: notes and manuscripts are dragged from it onto the board (BINDER 4-3).
+        appMode !== "write" && appMode !== "plugin" && appMode !== "corkboard" && appMode !== "canvas"
+          ? "modeHiddenPane"
+          : ""
       }`}
       data-sidebar-collapsed={isLeftSidebarCollapsed}
       aria-hidden={isEditorFocusMode || appMode === "plugin"}

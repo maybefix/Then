@@ -650,6 +650,8 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  /* 下の作成パレットの置き方を、窓ではなく Canvas の幅で決める（BINDER 4-3）。 */
+  container: canvas-viewport / inline-size;
   background-color: var(--canvas-board-bg);
   background-image:
     linear-gradient(var(--canvas-grid-major) 1px, transparent 1px),
@@ -687,6 +689,15 @@
 
 .canvasCreationPalette button {
   height: 40px;
+}
+
+/* Canvas が狭いと（左サイドバーと右のペインを開いたときなど）、真ん中のパレットが右下の拡大率の帯や
+   左下の保存の状態と重なり、「接続線」の文字が帯の下に入っていた。狭いときは、隅の部品の列より上に置く
+   （BINDER 4-3 の実機確認）。 */
+@container canvas-viewport (max-width: 720px) {
+  .canvasCreationPalette {
+    bottom: 58px;
+  }
 }
 
 .canvasWorld {
