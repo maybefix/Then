@@ -1,6 +1,6 @@
 // Canvas のボードを読み書きする層（src/canvasBoardStore.ts）を実際に動かす回帰テスト。
 // Tauri の中では、どの命令をどの引数で呼ぶか。ブラウザで動かすときは、localStorage の
-// ボード・並び順・ゴミ箱（中間稿も一緒）がどう変わるか。BINDER 4-1 で CanvasWindowApp.tsx から移した。
+// ボード・並び順・ゴミ箱（4-4b からはボードだけ。中間稿はもう一緒に動かさない）がどう変わるか。BINDER 4-1 で CanvasWindowApp.tsx から移した。
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import ts from "typescript";
@@ -18,13 +18,9 @@ async function compile(path, replacements = {}) {
   return url(source);
 }
 
-const draftUrl = await compile("src/intermediateDraft.ts");
-const { draftBoardKey } = await import(draftUrl);
 const store = await import(await compile("src/canvasBoardStore.ts", {
   "@tauri-apps/api/core": url("export const invoke = (...args) => globalThis.storeTestInvoke(...args);"),
   "./canvasTypes": await compile("src/canvasTypes.ts"),
-  "./intermediateDraft": draftUrl,
-  "./intermediateDraftStore": url("export const prepareDraftBoardTrash = async (target) => { globalThis.storeTestEvents.push(['prepareDraftBoardTrash', target]); };"),
   "./canvasBoardSaveQueue": await compile("src/canvasBoardSaveQueue.ts"),
   "./canvasFileWriteQueue": await compile("src/canvasFileWriteQueue.ts"),
 }));
@@ -68,14 +64,13 @@ assert.deepEqual(events, [
   ["load_canvas_board", { scope: "project", rootPath: "one", boardId: "a" }],
   ["save_canvas_board", { scope: "project", rootPath: "one", boardId: "a", board: doc, expectedHash: null }],
   ["reorder_canvas_boards", { scope: "project", rootPath: "one", boardIds: ["b", "a"] }],
-  ["prepareDraftBoardTrash", { scope: "project", rootPath: "one", boardId: "a" }],
   ["trash_canvas_board", { scope: "project", rootPath: "one", boardId: "a" }],
   ["list_trashed_canvas_boards", { scope: "project", rootPath: "one" }],
   ["restore_canvas_board", { scope: "project", rootPath: "one", trashId: "t" }],
   ["save_canvas_board", { scope: "project", rootPath: "two", boardId: "q", board: doc, expectedHash: null }],
 ]);
 assert.equal(localStorage.length, 0, "Tauri の中では localStorage に書かない");
-console.log("PASS tauri: each store function sends its command with the same arguments; trash prepares the draft first; the queue writes with save_canvas_board");
+console.log("PASS tauri: each store function sends its command with the same arguments; the queue writes with save_canvas_board");
 
 // ---- ブラウザで動かすとき: localStorage ----
 delete window.__TAURI_INTERNALS__;
@@ -120,16 +115,16 @@ assert.deepEqual(await names(), ["三つ目", "一つ目", "四つ目", "二つ�
 const summary = (await store.listBoards("project", "one"))[0];
 assert.deepEqual(summary, { id: "c", name: "三つ目", path: "c", scope: "project", updatedAt: 500, nodeCount: 2, edgeCount: 0 });
 
-const draftKey = (boardId) => `then.draft.${draftBoardKey({ scope: "project", rootPath: "one", boardId })}`;
-localStorage.setItem(draftKey("c"), JSON.stringify({ boardId: "c", versions: [{ text: "稿" }] }));
+// 中間稿（4-4b でなくなった）の写しは、もうゴミ箱へ入れも戻しもしない。
+localStorage.setItem("then.draft.old", JSON.stringify({ boardId: "c", versions: [{ text: "稿" }] }));
 now = 3_000_000;
 await store.trashBoard("project", "one", "c");
-assert.deepEqual(events, [["prepareDraftBoardTrash", { scope: "project", rootPath: "one", boardId: "c" }]]);
+assert.deepEqual(events, [], "ゴミ箱へ入れる前に、ほかの処理を呼ばない");
 assert.equal(boardsIn().c, undefined);
 assert.deepEqual(orderIn(), [first.id], "ゴミ箱へ入れたボードは並び順から外れる");
-assert.equal(localStorage.getItem(draftKey("c")), null, "中間稿もゴミ箱へ移る");
+assert.notEqual(localStorage.getItem("then.draft.old"), null, "ボードと関係のないキーには触らない");
 assert.deepEqual(Object.keys(trashIn()), [`${now}--c`]);
-assert.deepEqual(trashIn()[`${now}--c`].draft, { boardId: "c", versions: [{ text: "稿" }] });
+assert.deepEqual(Object.keys(trashIn()[`${now}--c`]).sort(), ["board", "boardId", "deletedAt"], "ゴミ箱の項目はボードだけ");
 now = 3_000_100;
 await store.trashBoard("project", "one", "d");
 await assert.rejects(store.trashBoard("project", "one", "none"), /canvas board does not exist/);
@@ -140,7 +135,7 @@ assert.deepEqual(trashed.map((item) => [item.trashId, item.boardId, item.name, i
   ["3000000--c", "c", "三つ目", 3_000_000, 2],
 ], "消した時刻の新しい順");
 
-// 同じ ID のボードがあれば -2、-3 と付け直し、中間稿も新しい ID で戻す。並び順の最後に付く。
+// 同じ ID のボードがあれば -2、-3 と付け直して戻す。並び順の最後に付く。
 await store.saveBoard("project", "one", "c", board("後から作った c", 1));
 await store.saveBoard("project", "one", "c-2", board("後から作った c-2", 1));
 const restored = await store.restoreTrashedBoard("project", "one", "3000000--c");
@@ -148,7 +143,7 @@ assert.equal(restored.id, "c-3");
 assert.equal(restored.name, "三つ目");
 assert.equal(boardsIn()["c-3"].then.name, "三つ目");
 assert.equal(boardsIn().c.then.name, "後から作った c", "同じ ID のボードは上書きしない");
-assert.deepEqual(JSON.parse(localStorage.getItem(draftKey("c-3"))), { boardId: "c-3", versions: [{ text: "稿" }] });
+assert.deepEqual(Object.keys(localStorage).filter((key) => key.startsWith("then.draft.")), ["then.draft.old"], "戻しても中間稿は作らない");
 assert.deepEqual(Object.keys(trashIn()), ["3000100--d"]);
 assert.equal(orderIn().at(-1), "c-3");
 assert.equal(new Set(orderIn()).size, orderIn().length);
@@ -157,7 +152,6 @@ await store.saveBoard("project", "one", "d", board("後から作った d", 1));
 const restoredD = await store.restoreTrashedBoard("project", "one", "3000100--d");
 assert.equal(restoredD.id, "d-2", "同じ ID が1つだけなら -2");
 assert.equal(boardsIn().d.then.name, "後から作った d");
-assert.equal(localStorage.getItem(draftKey("d-2")), null, "中間稿がなければ作らない");
 now = 4_000_000;
 await store.trashBoard("project", "one", second.id);
 const restoredSecond = await store.restoreTrashedBoard("project", "one", `4000000--${second.id}`);
@@ -173,5 +167,5 @@ assert.equal(store.boardName(null), "Idea Board");
 assert.equal(store.boardName(board("  ", 1)), "Idea Board");
 assert.equal(store.boardName(board(" 名前 ", 1)), "名前");
 Date.now = realNow;
-console.log("PASS browser: create, list order, load (missing → empty), save per work, reorder, trash with draft, trashed list, restore with renamed id and draft, queue, boardName");
+console.log("PASS browser: create, list order, load (missing → empty), save per work, reorder, trash (board only), trashed list, restore with renamed id, queue, boardName");
 dom.window.close();

@@ -1,7 +1,16 @@
 # Canvas 中間稿：要件と画面設計
 
 作成日: 2026-09-14
-状態: v0.6.3で実装済み
+状態: 退役（BINDER 4-4b、2026-11-21）。v0.6.3で実装し、「この順で原稿を作る」（BINDER 4-4）に統合した
+
+## 0. 退役（BINDER 4-4b）
+
+この文書は、v0.6.3〜4-4 の中間稿の記録として残す。いまの Then には中間稿の画面も保存もない。
+
+- 決定: [BINDER_REBUILD_PLAN.md](BINDER_REBUILD_PLAN.md) の 3.4（D-6）。カードを並べ替えて文章にするのは「この順で原稿を作る」→「1本の原稿につなげる」で、できた文章は通常の原稿になり、版はチェックポイントで残す。
+- なくしたもの: 右サイドバーの「中間稿」ペイン、Canvas の「稿」ボタンと別ウィンドウの横のパネル、中間稿専用の保存と版管理（`.then/boards/.intermediate-drafts/`、`save_intermediate_draft`／`load_intermediate_draft`）、ボードのゴミ箱・戻す・送るで中間稿を一緒に動かす処理。
+- 残したもの: 並べ替えの一覧（矢印から初期の順序を決め、カードを除外して並べ替える）。いまは「この順で原稿を作る」の画面の一部で、並べ方は `src/canvasToManuscript.ts` の `captureCardOrder`、一覧は `src/components/canvas/ManuscriptOrderList.tsx`。一覧の行を押してキャンバスのカードを選ぶ操作はなくした。
+- 既存の中間稿: 作品を開いたときに、ボードごとに最新版を素材のノート「（ボード名）の中間稿」へ移し、元の中間稿（過去の版を含む）は `.then/backups/intermediate-drafts-<日時>/` に写してから消す（`src-tauri/src/intermediate_draft_migration.rs`）。手順と結果は [BINDER_INTERMEDIATE_DRAFT_RETIRE_PLAN.md](BINDER_INTERMEDIATE_DRAFT_RETIRE_PLAN.md)。
 
 ## 1. 目的
 

@@ -32,8 +32,6 @@ const stubs = {
     export const emit = async () => {};
     export const emitTo = async () => {};`),
   "./components/references/ReferenceLayer": stub("export const ReferenceReadOnlyPreview = () => null;"),
-  "./components/canvas/IntermediateDraftPane": stub("export default () => null;"),
-  "./intermediateDraftStore": stub("export const prepareDraftBoardTrash = async () => {}; export const flushDraftBoard = async () => {};"),
 };
 const external = ["react", "react-dom", "react-dom/client", "react/jsx-runtime"];
 const bundled = await build({
@@ -68,7 +66,6 @@ globalThis.manuscriptTest = {
       return { path: args.path, name: args.path, content, contentHash: "h" };
     }
     if (command === "library_transfer_destinations") return [];
-    if (command === "load_intermediate_draft") return { versions: [] };
     if (command === "focus_source_in_main" || command === "finish_canvas_close_preparation") return;
     throw new Error(`Unexpected command ${command}`);
   },
@@ -139,7 +136,7 @@ async function key(keyName, options = {}) {
 const button = (label) => document.querySelector(`[aria-label="${label}"]`);
 const buttonWithText = (label) => [...document.querySelectorAll("button")].find((item) => item.textContent.trim() === label);
 const dialog = () => document.querySelector('[role="dialog"][aria-label="この順で原稿を作る"]');
-const rows = () => [...dialog().querySelectorAll(".draftOrderList li")];
+const rows = () => [...dialog().querySelectorAll(".manuscriptOrderList li")];
 const waitSave = () => act(async () => { await sleep(650); });
 const status = () => document.querySelector(".canvasSaveStatus")?.textContent ?? "";
 let made = 0;
@@ -154,18 +151,22 @@ const respondCards = (request) => {
 
 // ---- 1. ボタン、並べ替えの画面、カードごと ----
 await mount(respondCards);
+// 中間稿は 4-4b でなくなった。Canvas に「稿」のボタンはない。
+assert.equal(button("中間稿を開く"), null);
+assert.equal(buttonWithText("稿"), undefined);
 await select(["f"]);
 assert.equal(button("この順で原稿を作る").disabled, true, "ファイルのカードだけを選んでいると押せない");
 await select(["a", "b", "c", "f"]);
 assert.equal(button("この順で原稿を作る").disabled, false);
 await click(button("この順で原稿を作る"));
 assert.ok(dialog(), "並べ替えの画面が出る");
-assert.deepEqual(rows().map((row) => row.querySelector(".draftCardName")?.textContent ?? ""), ["夜の場面。", "港", ""],
+assert.deepEqual(rows().map((row) => row.querySelector(".manuscriptOrderName")?.textContent ?? ""), ["夜の場面。", "港", ""],
   "初期の順序は矢印（b → a）、名前はタイトル → 書き出し。ファイルのカードは入らない");
 assert.ok(rows()[2].classList.contains("isExcluded"), "空のカードは最初から除外");
+assert.equal(dialog().querySelector(".manuscriptOrderExcerpt").tagName, "SPAN", "一覧の行を押してキャンバスのカードを選ぶことはしない（4-4b）");
 assert.equal(dialog().querySelector("select").value, "第一章", "作る先の初期値はメイン画面が決めたフォルダ");
 await click(button("カード2を上へ"));
-assert.deepEqual(rows().map((row) => row.querySelector(".draftCardName")?.textContent ?? ""), ["港", "夜の場面。", ""]);
+assert.deepEqual(rows().map((row) => row.querySelector(".manuscriptOrderName")?.textContent ?? ""), ["港", "夜の場面。", ""]);
 await act(async () => {
   dialog().dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
   await settle();

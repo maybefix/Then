@@ -193,6 +193,7 @@ import {
 } from "./canvasTypes";
 import { migratePlotToNotes, plotMigrationMessage } from "./plotMigration";
 import { ideaMigrationMessage, migrateIdeas, type ProfileIdeas } from "./ideaMigration";
+import { draftMigrationMessage, migrateIntermediateDrafts } from "./intermediateDraftMigration";
 import { localIsoNow } from "./posts/postModel";
 import { ReferenceLayer } from "./components/references/ReferenceLayer";
 
@@ -295,7 +296,6 @@ import { createLoadedExportSource } from "./export/exportSource";
 import CanvasWindowApp from "./CanvasWindowApp";
 import { canvasBoardSaveQueue, canvasFileWriteQueue, isCanvasWindowOpen } from "./canvasBoardStore";
 import { chooseCanvasMode, moveCanvasToWindow as moveCanvasToWindowWith } from "./canvasWindowPlace";
-import type { DraftCanvasContext } from "./intermediateDraft";
 import { LinkedExportScreen } from "./components/export/LinkedExportScreen";
 import { ThenPluginRuntimeHost } from "./plugins/PluginRuntimeHost";
 import { PluginIcon } from "./components/plugins/PluginIcon";
@@ -1159,10 +1159,6 @@ export default function App() {
         : { ...current, canvasLeftSidebarCollapsed: collapsed },
     );
   }, []);
-  const [draftCanvasContext, setDraftCanvasContext] = useState<DraftCanvasContext | null>(null);
-  const [draftSelectRequest, setDraftSelectRequest] = useState<{ id: string; nonce: number } | null>(null);
-  const [hasOpenedDraft, setHasOpenedDraft] = useState(false);
-  useEffect(() => { if (rightSidebarTab === "draft") setHasOpenedDraft(true); }, [rightSidebarTab]);
   const {
     pluginRuntimeHostRef,
     pluginAnchorsRef,
@@ -2753,8 +2749,8 @@ export default function App() {
   };
 
   /**
-   * Plot をノート「プロット（移行）」へ（BINDER 1-6）、Idea を投稿とノートへ、資料を素材フォルダへ（2-4・2-5）移して
-   * から開く。移したら true（ファイル一覧を読み直す）。Plot を先に移すので、ノート「プロット（移行）」の資料リンクも
+   * Plot をノート「プロット（移行）」へ（BINDER 1-6）、Idea を投稿とノートへ、資料を素材フォルダへ（2-4・2-5）、
+   * 中間稿をノート「（ボード名）の中間稿」へ（4-4b）移してから開く。移したら true（ファイル一覧を読み直す）。Plot を先に移すので、ノート「プロット（移行）」の資料リンクも
    * 書き換わる。失敗しても作品は開く。次に開いたときにやり直す。profile は起動時だけ渡す（アプリ側の Idea）。
    */
   const migratePlotBeforeOpening = async (rootPaths: string[], profile?: ProfileIdeas) => {
@@ -2774,9 +2770,16 @@ export default function App() {
       profileMigrationRef.current = record;
       setAppState((current) => ({ ...current, profileSnippets: [], profileSnippetsMigration: record }));
     }
-    const message = [plotMigrationMessage(summary), ideaMigrationMessage(ideas)].filter(Boolean).join("。");
+    // 中間稿は最新版を素材のノート「（ボード名）の中間稿」へ移す（4-4b）。
+    const drafts = await migrateIntermediateDrafts(rootPaths);
+    for (const failure of drafts.failed) {
+      console.error("intermediate draft migration failed", failure.rootPath, failure.error);
+      setLastError(String(failure.error));
+    }
+    const message = [plotMigrationMessage(summary), ideaMigrationMessage(ideas), draftMigrationMessage(drafts)]
+      .filter(Boolean).join("。");
     if (message) showToast(message);
-    return summary.migrated.length > 0 || ideas.migrated.length > 0 || ideas.profileMigrated;
+    return summary.migrated.length > 0 || ideas.migrated.length > 0 || ideas.profileMigrated || drafts.migrated.length > 0;
   };
 
   const restoreWorkspaceFromState = async (
@@ -6273,8 +6276,6 @@ export default function App() {
   const projectPathForModeReset = projectFolder?.path ?? null;
   useEffect(() => {
     setCanvasEmbedPayload(null);
-    setDraftCanvasContext(null);
-    setDraftSelectRequest(null);
     setExportEmbedPayload(null);
     setAppMode("write");
   }, [projectPathForModeReset]);
@@ -7860,10 +7861,6 @@ export default function App() {
                 <CanvasWindowApp
                   embedded
                   embeddedPayload={canvasEmbedPayload}
-                  onDraftCanvasChange={setDraftCanvasContext}
-                  draftSelectRequest={draftSelectRequest}
-                  onDraftSelectionConsumed={(nonce) => setDraftSelectRequest((current) => current?.nonce === nonce ? null : current)}
-                  onOpenDraft={() => { setRightSidebarTab("draft"); setIsRightSidebarCollapsed(false); }}
 
                   liveReferenceFiles={
                     projectFolder ? sortedReferenceCandidates : []
@@ -7899,8 +7896,8 @@ export default function App() {
               {...{
                 isRightSidebarWide, isRightSidebarCollapsed, appMode, isEditorFocusMode, pluginViews,
                 loadedPlugins, rightSidebarTab, setRightSidebarTab, openIdeaCanvasBoard, setIsRightSidebarWide, setIsRightSidebarCollapsed,
-                setSidebarPluginRuntimeAnchor, isDockedPluginRuntimeVisible, hasOpenedDraft, projectFolder,
-                draftCanvasContext, setDraftSelectRequest, activePluginView, documentKey, scene, connections, postReveal, frontMatter,
+                setSidebarPluginRuntimeAnchor, isDockedPluginRuntimeVisible, projectFolder,
+                activePluginView, documentKey, scene, connections, postReveal, frontMatter,
                 updateFrontMatter, handleClearFrontMatter, propertyTypeSettings, rememberPropertyType,
                 returnFocusFromProperties, loadPropertySets, searchByProperty, editorText, settings,
                 updateSettings, revealEditorRange, replaceEditorRange, projectProofreadTerms, appState,

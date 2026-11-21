@@ -13,7 +13,7 @@ mod close_gate;
 mod export_front_matter;
 mod external_url;
 mod idea_migration;
-mod intermediate_draft;
+mod intermediate_draft_migration;
 mod library;
 mod link_index;
 mod markdown_image;
@@ -743,6 +743,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             plot_migration::migrate_project_plot_to_note,
             idea_migration::migrate_project_ideas,
             idea_migration::migrate_profile_snippets,
+            intermediate_draft_migration::migrate_intermediate_drafts,
             post_stream::posts_load,
             post_stream::posts_signature,
             post_stream::posts_add,
@@ -785,8 +786,6 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             focus_canvas_window,
             canvas_board_hash,
             save_canvas_board,
-            intermediate_draft::load_intermediate_draft,
-            intermediate_draft::save_intermediate_draft,
             reorder_canvas_boards,
             trash_canvas_board,
             list_trashed_canvas_boards,
@@ -3888,24 +3887,25 @@ fn trash_canvas_board(
     board_id: String,
 ) -> Result<(), String> {
     let dir = canvas_boards_dir(&app, &scope, root_path)?;
-    let path = canvas_board_path(&dir, &board_id)?;
+    trash_canvas_board_in(&dir, &board_id)
+}
+
+/// ボードの `.canvas` を `.trash/<日時>--<ID>.canvas` へ移し、並び順から外す（4-4b からは中間稿を一緒に動かさない）。
+fn trash_canvas_board_in(dir: &Path, board_id: &str) -> Result<(), String> {
+    let path = canvas_board_path(dir, board_id)?;
     if !path.is_file() {
         return Err("canvas board does not exist".to_string());
     }
-    let trash_dir = canvas_board_trash_dir(&dir);
+    let trash_dir = canvas_board_trash_dir(dir);
     std::fs::create_dir_all(&trash_dir)
         .map_err(|error| format!("failed to create canvas board trash: {error}"))?;
-    let trash_path = unique_trashed_canvas_board_path(&trash_dir, &board_id);
-    intermediate_draft::move_board_with_draft(
-        &path, &trash_path,
-        &dir.join(".intermediate-drafts").join(&board_id),
-        &trash_path.with_extension("draft"),
-    )?;
-    let order: Vec<String> = read_canvas_board_order(&dir)
+    let trash_path = unique_trashed_canvas_board_path(&trash_dir, board_id);
+    std::fs::rename(&path, &trash_path).map_err(|error| error.to_string())?;
+    let order: Vec<String> = read_canvas_board_order(dir)
         .into_iter()
-        .filter(|id| id != &board_id)
+        .filter(|id| id != board_id)
         .collect();
-    let _ = write_canvas_board_order(&dir, &order);
+    let _ = write_canvas_board_order(dir, &order);
     Ok(())
 }
 
@@ -3964,7 +3964,13 @@ fn restore_canvas_board(
     trash_id: String,
 ) -> Result<CanvasBoardSummary, String> {
     let dir = canvas_boards_dir(&app, &scope, root_path)?;
-    let trash_path = trashed_canvas_board_path(&canvas_board_trash_dir(&dir), &trash_id)?;
+    restore_canvas_board_in(&dir, &scope, &trash_id)
+}
+
+/// ゴミ箱のボードを戻す。同じ ID のボードがあれば名前から新しい ID を付け、並び順の最後に足す。
+fn restore_canvas_board_in(dir: &Path, scope: &str, trash_id: &str) -> Result<CanvasBoardSummary, String> {
+    let dir = dir.to_path_buf();
+    let trash_path = trashed_canvas_board_path(&canvas_board_trash_dir(&dir), trash_id)?;
     if !trash_path.is_file() {
         return Err("trashed canvas board does not exist".to_string());
     }
@@ -3992,11 +3998,7 @@ fn restore_canvas_board(
         .and_then(|value| value.to_str())
         .ok_or_else(|| "restored canvas board id is invalid".to_string())?
         .to_string();
-    intermediate_draft::move_board_with_draft(
-        &trash_path, &restored_path,
-        &trash_path.with_extension("draft"),
-        &dir.join(".intermediate-drafts").join(&restored_id),
-    )?;
+    std::fs::rename(&trash_path, &restored_path).map_err(|error| error.to_string())?;
     let mut order: Vec<String> = current_boards.into_iter().map(|board| board.id).collect();
     order.push(restored_id);
     let _ = write_canvas_board_order(&dir, &order);
@@ -6159,5 +6161,37 @@ mod tests {
 
         std::fs::remove_file(&renamed).expect("remove test file");
         std::fs::remove_dir(&test_dir).expect("remove test directory");
+    }
+
+    /// ボードをゴミ箱へ移して戻す。動くのは `.canvas` だけで、中間稿（4-4b でなくなった）の `.draft` は作らない。
+    #[test]
+    fn board_trash_and_restore_move_only_the_board() {
+        let dir = std::env::temp_dir().join(format!("then-board-trash-test-{}-{}", std::process::id(), super::now_millis()));
+        std::fs::create_dir_all(&dir).expect("create boards directory");
+        let board = r#"{"nodes":[],"edges":[],"then":{"name":"港"}}"#;
+        std::fs::write(dir.join("harbor.canvas"), board).expect("write board");
+        std::fs::write(dir.join("other.canvas"), r#"{"nodes":[],"edges":[],"then":{"name":"別"}}"#).expect("write board");
+        super::write_canvas_board_order(&dir, &["harbor".to_string(), "other".to_string()]).expect("write order");
+
+        super::trash_canvas_board_in(&dir, "harbor").expect("trash board");
+        assert!(!dir.join("harbor.canvas").exists());
+        assert_eq!(super::read_canvas_board_order(&dir), vec!["other".to_string()]);
+        let trash = super::canvas_board_trash_dir(&dir);
+        let entries: Vec<String> = std::fs::read_dir(&trash).expect("read trash").map(|entry| entry.expect("entry").file_name().to_string_lossy().to_string()).collect();
+        assert_eq!(entries.len(), 1, "ゴミ箱にはボードだけが入る: {entries:?}");
+        assert!(entries[0].ends_with("--harbor.canvas"));
+        assert!(!dir.join(".intermediate-drafts").exists());
+
+        // 同じ ID のボードができていたら、名前から新しい ID を付けて戻す。
+        std::fs::write(dir.join("harbor.canvas"), r#"{"nodes":[],"edges":[],"then":{"name":"新しい港"}}"#).expect("write board");
+        let trash_id = entries[0].trim_end_matches(".canvas").to_string();
+        let restored = super::restore_canvas_board_in(&dir, "project", &trash_id).expect("restore board");
+        assert_ne!(restored.id, "harbor");
+        assert_eq!(std::fs::read_to_string(dir.join(format!("{}.canvas", restored.id))).expect("read restored"), board);
+        assert_eq!(super::read_canvas_board_order(&dir).last(), Some(&restored.id));
+        assert_eq!(std::fs::read_dir(&trash).expect("read trash").count(), 0);
+        assert!(!dir.join(".intermediate-drafts").exists(), "戻しても中間稿は作らない");
+        assert!(super::restore_canvas_board_in(&dir, "project", &trash_id).is_err(), "同じものは2回戻せない");
+        std::fs::remove_dir_all(&dir).expect("remove test directory");
     }
 }
