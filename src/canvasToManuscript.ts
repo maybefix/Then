@@ -7,6 +7,7 @@ import type {
   CanvasFileNode,
   CanvasGroupNode,
   CanvasNode,
+  CanvasPostNode,
   CanvasTextNode,
   JsonCanvasDocument,
 } from "./canvasTypes";
@@ -110,39 +111,48 @@ export function orderedManuscriptCards(capture: CardOrder, cards: CanvasTextNode
   return capture.order.filter((id) => !excluded.has(id)).flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
 }
 
-/** 「カードごと」で置き換えた1回分。元に戻すときに使う。 */
+/** 置き換えたカード1枚の元の姿と、置き換え先（原稿は作品からの相対パス、投稿は投稿の ID）。 */
+export type ConvertedCard =
+  | { original: CanvasTextNode; file: string }
+  | { original: CanvasTextNode; post: string };
+
+/** 「カードごと」（原稿）・「投稿にする」で置き換えた1回分。元に戻すときに使う。 */
 export type CardConversion = {
   id: string;
   boardId: string;
-  /** 置き換えたカードの元の姿と、置き換え先の原稿（作品からの相対パス）。 */
-  cards: { original: CanvasTextNode; file: string }[];
+  cards: ConvertedCard[];
   /** 置き換えたカードの下にあったスレッドの子（その場に残してスレッドから外した）。 */
   detached: { id: string; threadParentId: string; threadOrder?: number }[];
 };
 
+/** そのカードが、置き換えたときのままの置き換え先か（ID が同じで、同じ原稿・投稿を指す）。 */
+function isConvertedNode(node: CanvasNode | undefined, card: ConvertedCard): boolean {
+  if (!node || node.id !== card.original.id) return false;
+  if ("file" in card) return node.type === "file" && node.file === card.file;
+  return node.type === "post" && node.post === card.post;
+}
+
+type ConvertResult = { board: JsonCanvasDocument; cards: ConvertedCard[]; detached: CardConversion["detached"] };
+/** テキストカード1枚から、置き換えの記録と置き換え先のカードを作る。 */
+type Replace = (node: CanvasTextNode) => { card: ConvertedCard; next: CanvasFileNode | CanvasPostNode };
+
 /**
- * カードを、作った原稿を指すファイルのカードに置き換える。ID・位置・大きさ・色はそのまま（線も残る）。
+ * カードを、置き換え先のカードに置き換える。ID・位置・大きさ・色はそのまま（線も残る）。
  * 置き換えたカードを親にしていたスレッドの子は、その場に残してスレッドから外す（4-4 の確認1の 4、癖1）。
  */
-export function convertCardsToFiles(
-  board: JsonCanvasDocument,
-  made: { id: string; file: string }[],
-): { board: JsonCanvasDocument; cards: CardConversion["cards"]; detached: CardConversion["detached"] } {
-  const files = new Map(made.map((item) => [item.id, item.file]));
-  const cards: CardConversion["cards"] = [];
+function convertCards(board: JsonCanvasDocument, targets: Map<string, Replace>): ConvertResult {
+  const cards: ConvertedCard[] = [];
   const detached: CardConversion["detached"] = [];
   const nodes = board.nodes.map((node): CanvasNode => {
     if (!isText(node)) return node;
-    const file = files.get(node.id);
-    if (file !== undefined) {
-      cards.push({ original: node, file });
-      const next: CanvasFileNode = {
-        id: node.id, type: "file", x: node.x, y: node.y, width: node.width, height: node.height, file,
-      };
+    const replace = targets.get(node.id);
+    if (replace) {
+      const { card, next } = replace(node);
+      cards.push(card);
       if (node.color) next.color = node.color;
       return next;
     }
-    if (node.threadParentId && files.has(node.threadParentId)) {
+    if (node.threadParentId && targets.has(node.threadParentId)) {
       detached.push({ id: node.id, threadParentId: node.threadParentId, threadOrder: node.threadOrder });
       const { threadParentId: _parent, threadOrder: _order, ...rest } = node;
       return rest;
@@ -152,8 +162,24 @@ export function convertCardsToFiles(
   return { board: cards.length ? { ...board, nodes } : board, cards, detached };
 }
 
+/** カードを、作った原稿を指すファイルのカードに置き換える（4-4）。 */
+export function convertCardsToFiles(board: JsonCanvasDocument, made: { id: string; file: string }[]): ConvertResult {
+  return convertCards(board, new Map(made.map(({ id, file }): [string, Replace] => [id, (node) => ({
+    card: { original: node, file },
+    next: { id: node.id, type: "file", x: node.x, y: node.y, width: node.width, height: node.height, file },
+  })])));
+}
+
+/** カードを、作った投稿を指す投稿のカードに置き換える（「投稿にする」、docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md）。 */
+export function convertCardsToPosts(board: JsonCanvasDocument, made: { id: string; post: string }[]): ConvertResult {
+  return convertCards(board, new Map(made.map(({ id, post }): [string, Replace] => [id, (node) => ({
+    card: { original: node, post },
+    next: { id: node.id, type: "post", x: node.x, y: node.y, width: node.width, height: node.height, post },
+  })])));
+}
+
 /**
- * 置き換えを外す。ファイルのカードのうち、ID と指す原稿が置き換えたときのままのものだけを元のテキストカードに戻す
+ * 置き換えを外す。置き換え先のカードのうち、ID と指す先が置き換えたときのままのものだけを元のテキストカードに戻す
  * （位置・大きさ・色は今のカードのもの）。外したスレッドの子は、まだスレッドの外にいて、親がテキストに戻ったら付け直す。
  * 変わるところがなければ、同じボードを返す。
  */
@@ -163,11 +189,12 @@ export function revertCardConversion(board: JsonCanvasDocument, conversion: Card
   let changed = false;
   const nodes = board.nodes.map((node): CanvasNode => {
     const card = originals.get(node.id);
-    if (!card || node.type !== "file" || node.file !== card.file) return node;
+    if (!card || !isConvertedNode(node, card)) return node;
     changed = true;
     restored.add(node.id);
     const next: CanvasTextNode = { ...card.original, x: node.x, y: node.y, width: node.width, height: node.height };
-    if (node.color) next.color = node.color;
+    const color = (node as { color?: string }).color;
+    if (color) next.color = color;
     else delete next.color;
     return next;
   });
@@ -183,15 +210,15 @@ export function revertCardConversion(board: JsonCanvasDocument, conversion: Card
   return changed ? { ...board, nodes: relinked } : board;
 }
 
-/** 履歴の1段を戻したとき、その段が置き換えをまたいだか（今はファイルのカード、戻した先は元のテキストカード）。 */
+/** 履歴の1段を戻したとき、その段が置き換えをまたいだか（今は置き換え先のカード、戻した先は元のテキストカード）。 */
 export function crossesConversion(
   current: JsonCanvasDocument,
   previous: JsonCanvasDocument,
   conversion: CardConversion,
 ): boolean {
-  return conversion.cards.some(({ original, file }) => {
-    const now = current.nodes.find((node) => node.id === original.id);
-    const before = previous.nodes.find((node) => node.id === original.id);
-    return now?.type === "file" && now.file === file && before?.type === "text";
+  return conversion.cards.some((card) => {
+    const now = current.nodes.find((node) => node.id === card.original.id);
+    const before = previous.nodes.find((node) => node.id === card.original.id);
+    return isConvertedNode(now, card) && before?.type === "text";
   });
 }

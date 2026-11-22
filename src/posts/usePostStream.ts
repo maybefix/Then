@@ -27,6 +27,13 @@ export type PostStream = {
   posts: Post[];
   work: PostWork | undefined;
   add: (body: string, replyTo?: string) => Promise<boolean>;
+  /**
+   * Canvas の「投稿にする」（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md）。投稿を1件書いて、書いた投稿を返す。
+   * 通知は出さない。書けなければ投げる。
+   */
+  create: (body: string) => Promise<Post>;
+  /** 「投稿にする」の元に戻す。作ったときのまま（行のハッシュが同じ）なら消す。通知は出さない。 */
+  discard: (id: string, hash: string) => Promise<"deleted" | "kept" | "missing">;
   /** 直せなかった（外で直されていた）ときは偽。 */
   editBody: (post: Post, body: string) => Promise<boolean>;
   /**
@@ -59,6 +66,8 @@ export function usePostStream(scopePath: string | null, { showToast }: Options):
   const scopeRef = useRef(scopePath);
   scopeRef.current = scopePath;
   const signatureRef = useRef<string | null>(null);
+  /** いま持っている投稿（作った投稿を、書く前の一覧との差で見つける）。 */
+  const postsRef = useRef<Post[]>(NO_POSTS);
   /** ノートの札があるか。あれば、投稿のファイルが同じでも読み直す（ノートの側が消えた・移ったかを見るため。2-3）。 */
   const hasNotesRef = useRef(false);
   /** 最初の読み込みが失敗したか。失敗したときだけ、読み直しの要求で読み込みをやり直す。 */
@@ -70,6 +79,7 @@ export function usePostStream(scopePath: string | null, { showToast }: Options):
     if (scopeRef.current !== scope) return;
     signatureRef.current = next.signature;
     hasNotesRef.current = next.posts.some((post) => post.note);
+    postsRef.current = next.posts;
     setSnapshot(next);
   }, []);
 
@@ -148,6 +158,36 @@ export function usePostStream(scopePath: string | null, { showToast }: Options):
     if (next) accept(scope, next);
     return Boolean(next);
   }, [accept, run]);
+
+  const create = useCallback(async (body: string): Promise<Post> => {
+    const scope = scopeRef.current;
+    const text = body.trim();
+    if (!scope || !isTauriRuntime()) throw new Error("投稿を書く場所がありません");
+    if (!text) throw new Error("投稿が空です");
+    const known = new Set(postsRef.current.map((post) => post.id));
+    const next = await invoke<PostsSnapshot>("posts_add", { scopePath: scope, at: localIsoNow(), body: text, replyTo: null });
+    accept(scope, next);
+    // 投稿の ID は Rust が作る。書く前の一覧になかった、同じ本文の投稿が、いま書いたもの。
+    const made = [...next.posts].reverse().find((post) => !known.has(post.id) && post.body === text);
+    if (!made) throw new Error("書いた投稿が見つかりません");
+    return made;
+  }, [accept]);
+
+  const discard = useCallback(async (id: string, hash: string): Promise<"deleted" | "kept" | "missing"> => {
+    const scope = scopeRef.current;
+    if (!scope || !isTauriRuntime()) return "kept";
+    try {
+      const deleted = await invoke<DeletedPost>("posts_delete", { scopePath: scope, id, expectedHash: hash });
+      accept(scope, deleted.snapshot);
+      return "deleted";
+    } catch (error) {
+      if (!isPostConflict(error)) throw error;
+      // 外で直されたか、もうない。読み直して、どちらかを見分ける。
+      const current = await invoke<PostsSnapshot>("posts_load", { scopePath: scope }).catch(() => null);
+      if (current) accept(scope, current);
+      return current && !current.posts.some((post) => post.id === id) ? "missing" : "kept";
+    }
+  }, [accept]);
 
   const editBody = useCallback(async (post: Post, body: string) => {
     const scope = scopeRef.current;
@@ -246,6 +286,8 @@ export function usePostStream(scopePath: string | null, { showToast }: Options):
     posts: snapshot?.posts ?? NO_POSTS,
     work: snapshot?.work,
     add,
+    create,
+    discard,
     editBody,
     writeBody,
     setFiled,

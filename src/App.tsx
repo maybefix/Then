@@ -162,10 +162,13 @@ import {
 } from "./search/editorFindReplace";
 import {
   CANVAS_COPY_TO_POST_EVENT,
+  CANVAS_COPY_TO_POST_RESULT_EVENT,
   CANVAS_LIVE_DATA_EVENT,
   CANVAS_BOARDS_REWRITTEN_EVENT,
   CANVAS_PATH_CHANGES_EVENT,
+  type CanvasCopyToPostEvent,
   type CanvasCopyToPostRequest,
+  type CanvasCopyToPostResultEvent,
   CANVAS_FILE_SAVED_EVENT,
   CANVAS_FILE_WRITE_EVENT,
   CANVAS_OPEN_POST_EVENT,
@@ -246,6 +249,7 @@ import { countInbox, type PostFilter } from "./posts/postModel";
 import { usePostStream } from "./posts/usePostStream";
 import { createPostNoteActions, type PostNoteDeps } from "./posts/postNoteActions";
 import { createCanvasManuscriptActions, type CanvasManuscriptDeps } from "./canvasManuscriptActions";
+import { createCanvasPostActions, type CanvasPostDeps } from "./canvasPostActions";
 import { StatusBar } from "./components/status/StatusBar";
 import { useCheckpointStatusInfo } from "./components/status/useCheckpointStatusInfo";
 import type {
@@ -3583,26 +3587,6 @@ export default function App() {
   useEffect(() => {
     if (!postStream.available) setIsQuickIdeaModalOpen(false);
   }, [postStream.available]);
-  // Canvas の「投稿にする」（BINDER 2-4、確認1の 8）。カード1枚ずつを、今の作品の投稿にする。
-  const addPostRef = useRef(postStream.add);
-  addPostRef.current = postStream.add;
-  useEffect(() => {
-    if (!isTauriRuntime()) return;
-    let unlisten: (() => void) | null = null;
-    let disposed = false;
-    void listen<CanvasCopyToPostRequest>(CANVAS_COPY_TO_POST_EVENT, async (event) => {
-      for (const body of event.payload.bodies) {
-        if (!(await addPostRef.current(body))) break;
-      }
-    }).then((dispose) => {
-      if (disposed) dispose();
-      else unlisten = dispose;
-    });
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, []);
   const postFilter = appState.postFilter;
   const setPostFilter = useCallback((filter: PostFilter) => {
     setAppState((current) => (current.postFilter === filter ? current : { ...current, postFilter: filter }));
@@ -6730,6 +6714,33 @@ export default function App() {
     );
   }, [canvasManuscriptActions]);
   const handleCanvasManuscriptRequest = (request: CanvasManuscriptRequest) => canvasManuscriptActions.handle(request);
+  // Canvas の「投稿にする」（BINDER 2-4、docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md）。カード1枚ずつを、今のフォルダの投稿にし、
+  // 書けた投稿の ID を返す（Canvas がそのカードを投稿のカードに置き換える）。通知の「元に戻す」は原稿と同じ口で外してもらう。
+  const canvasPostDepsRef = useRef<CanvasPostDeps>(null as unknown as CanvasPostDeps);
+  canvasPostDepsRef.current = {
+    scopePath: projectFolder?.path ?? null,
+    createPost: postStream.create,
+    discardPost: postStream.discard,
+    showToast,
+    revertOnCanvas: canvasManuscriptDepsRef.current.revertOnCanvas,
+  };
+  const canvasPostActions = useMemo(() => createCanvasPostActions(canvasPostDepsRef), []);
+  // 別ウィンドウのキャンバスからの頼み。
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    return manageAsyncRegistration(
+      listen<CanvasCopyToPostEvent>(CANVAS_COPY_TO_POST_EVENT, (event) => {
+        const { requestId, request } = event.payload;
+        const answer = (body: CanvasCopyToPostResultEvent) =>
+          emitTo("idea-canvas", CANVAS_COPY_TO_POST_RESULT_EVENT, body).catch(() => {});
+        void canvasPostActions.handle(request)
+          .then((result) => answer({ requestId, result }))
+          .catch((error) => answer({ requestId, error: error instanceof Error ? error.message : String(error) }));
+      }),
+      (error) => setLastError(String(error)),
+    );
+  }, [canvasPostActions]);
+  const handleCanvasCopyToPostRequest = (request: CanvasCopyToPostRequest) => canvasPostActions.handle(request);
   // BINDER 3-2: 本文のリンクを押したときの流れ（src/links/linkOpenActions.ts）へ、画面とファイルの口を渡す。
   const linkOpenActions = useMemo(() => createLinkOpenActions({
     index: () => linkRewriteDepsRef.current.linkIndex.peek(),
@@ -7953,6 +7964,7 @@ export default function App() {
                   liveOpenTabPaths={canvasOpenTabPaths}
                   liveManuscriptFolders={canvasManuscriptFolders}
                   onManuscriptRequest={handleCanvasManuscriptRequest}
+                  onCopyToPostRequest={handleCanvasCopyToPostRequest}
                   onRegisterManuscriptRevert={(revert) => { canvasManuscriptRevertRef.current = revert; }}
                   onWriteFile={(request) => writeCanvasFileRef.current(request)}
                   livePosts={canvasPosts}

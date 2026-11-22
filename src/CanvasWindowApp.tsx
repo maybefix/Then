@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { emit, emitTo, listen } from "@tauri-apps/api/event";
+import { emitTo, listen } from "@tauri-apps/api/event";
 import {
   useCallback,
   useEffect,
@@ -18,6 +18,7 @@ import { withIdeographicSpaceFont } from "./utils/fontStack";
 import { buildCanvasThemeStyle, canvasAppearanceAttributes } from "./canvasAppearance";
 import {
   CANVAS_COPY_TO_POST_EVENT,
+  CANVAS_COPY_TO_POST_RESULT_EVENT,
   CANVAS_FILE_DRAG_MIME,
   CANVAS_FILE_SAVED_EVENT,
   CANVAS_FILE_WRITE_EVENT,
@@ -57,7 +58,10 @@ import {
   type CanvasProjectFile,
   type CanvasBoardsRewrittenEvent,
   type CanvasPathChangesEvent,
+  type CanvasCopyToPostEvent,
   type CanvasCopyToPostRequest,
+  type CanvasCopyToPostResult,
+  type CanvasCopyToPostResultEvent,
   type CanvasEdgeConnector,
   type CanvasEdge,
   type CanvasGroupNode,
@@ -97,6 +101,7 @@ import {
   captureManuscriptCards,
   cardManuscriptName,
   convertCardsToFiles,
+  convertCardsToPosts,
   crossesConversion,
   manuscriptSourceCards,
   orderedManuscriptCards,
@@ -400,6 +405,40 @@ async function openPostInMain(id: string, target: CanvasOpenPostEvent["target"])
   await invoke("focus_main_window");
 }
 
+/** 別ウィンドウのキャンバスから、「投稿にする」をメイン画面に頼み、答えを待つ（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md）。 */
+function requestCopyToPostFromMain(request: CanvasCopyToPostRequest) {
+  return new Promise<CanvasCopyToPostResult>((resolve, reject) => {
+    const requestId = nextCanvasId("copy-to-post");
+    let finished = false;
+    let dispose: (() => void) | null = null;
+    const finish = (settle: () => void) => {
+      if (finished) return;
+      finished = true;
+      window.clearTimeout(timer);
+      dispose?.();
+      settle();
+    };
+    const timer = window.setTimeout(
+      () => finish(() => reject(new Error("メイン画面から答えがありませんでした"))),
+      60_000,
+    );
+    listen<CanvasCopyToPostResultEvent>(CANVAS_COPY_TO_POST_RESULT_EVENT, (event) => {
+      if (event.payload.requestId !== requestId) return;
+      const { result, error } = event.payload;
+      finish(() => (result ? resolve(result) : reject(new Error(error ?? "投稿にできませんでした"))));
+    })
+      .then((unlisten) => {
+        if (finished) {
+          unlisten();
+          return;
+        }
+        dispose = unlisten;
+        return emitTo("main", CANVAS_COPY_TO_POST_EVENT, { requestId, request } satisfies CanvasCopyToPostEvent);
+      })
+      .catch((error) => finish(() => reject(error)));
+  });
+}
+
 /** 別ウィンドウのキャンバスから、「この順で原稿を作る」をメイン画面に頼む（BINDER 4-4）。 */
 function requestManuscriptFromMain(request: CanvasManuscriptRequest) {
   return new Promise<CanvasManuscriptResult>((resolve, reject) => {
@@ -649,14 +688,6 @@ function formatCanvasReferenceSize(size: number | undefined) {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
-}
-
-async function emitMainWindow<T>(event: string, payload: T) {
-  try {
-    await emitTo<T>("main", event, payload);
-  } catch {
-    await emit<T>(event, payload);
-  }
 }
 
 function formatSaveTime(timestamp: number) {
@@ -1045,6 +1076,8 @@ type CanvasWindowAppProps = {
   onWritePost?: (request: CanvasPostWriteRequest) => Promise<CanvasPostWriteResult>;
   /** embedded 時に、「アイデア」のペインでその投稿を出す（post）・投稿のノートを開く（note）。 */
   onOpenPost?: (id: string, target: CanvasOpenPostEvent["target"]) => void;
+  /** embedded 時に、「投稿にする」で投稿を書く・消すのをメイン画面に頼む（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md）。 */
+  onCopyToPostRequest?: (request: CanvasCopyToPostRequest) => Promise<CanvasCopyToPostResult>;
 };
 
 export default function CanvasWindowApp({
@@ -1062,6 +1095,7 @@ export default function CanvasWindowApp({
   livePosts,
   onWritePost,
   onOpenPost,
+  onCopyToPostRequest,
 }: CanvasWindowAppProps = {}) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
@@ -1104,7 +1138,12 @@ export default function CanvasWindowApp({
   const [zoom, setZoom] = useState(1);
   const panRef = useRef(pan);
   const zoomRef = useRef(zoom);
-  const [status, setStatus] = useState("読み込み中");
+  // 状態の欄（KNOWN_ISSUES 2026-11-21、docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md の K8）。保存と読み込みが書く「保存の状態」と、
+  // 操作の知らせ（setStatus）を分ける。知らせは、次に利用者がボードを変える（pushHistory・元に戻す・やり直し）まで、
+  // 保存の状態より先に出す。知らせを出した操作そのものの保存では上書きされない。
+  const [saveState, setSaveState] = useState("読み込み中");
+  const [notice, setStatus] = useState<string | null>(null);
+  const status = notice ?? saveState;
   const [isBoardMenuOpen, setIsBoardMenuOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isStyleOpen, setIsStyleOpen] = useState(false);
@@ -1132,8 +1171,10 @@ export default function CanvasWindowApp({
   // 「この順で原稿を作る」（BINDER 4-4）。並べ替えの画面と、「カードごと」で置き換えた回（元に戻すときに使う）。
   const [manuscriptDialog, setManuscriptDialog] = useState<{ cards: CanvasTextNode[]; capture: CardOrder } | null>(null);
   const [isManuscriptBusy, setIsManuscriptBusy] = useState(false);
-  const conversionsRef = useRef(new Map<string, CardConversion & { undone: boolean }>());
+  // kind: 原稿のカードへの置き換え（file、4-4）か、「投稿にする」の投稿のカードへの置き換え（post）か。
+  const conversionsRef = useRef(new Map<string, CardConversion & { undone: boolean; kind: "file" | "post" }>());
   const manuscriptUndoRef = useRef<(conversionId: string) => void>(() => {});
+  const copyToPostUndoRef = useRef<(conversionId: string) => void>(() => {});
   const activeBoardIdRef = useRef<string | null>(null);
   /**
    * メイン画面から届く資料の最新一覧（別ウィンドウ用）。payload と違い
@@ -1228,19 +1269,11 @@ export default function CanvasWindowApp({
     () => canvasInsertItems(referenceFiles, projectFiles, posts, referenceQuery),
     [referenceFiles, projectFiles, posts, referenceQuery],
   );
-  const textNodesForPosts = useMemo(() => {
-    if (!board) return [];
-    const selectedGroup = selectedNodes.length === 1 ? selectedNodes[0] : null;
-    if (selectedGroup && isGroupNode(selectedGroup)) {
-      return sortCanvasItems(
-        board.nodes.filter(
-          (node): node is CanvasTextNode =>
-            isTextNode(node) && isNodeInsideGroup(node, selectedGroup),
-        ),
-      );
-    }
-    return sortCanvasItems(selectedNodes.filter(isTextNode));
-  }, [board, selectedNodes]);
+  // 「投稿にする」の対象: 選んだカードと、選んだグループの中のカードの和（「この順で原稿を作る」「表示設定」と同じ。K5）。
+  const textNodesForPosts = useMemo(
+    () => (board ? sortCanvasItems(manuscriptSourceCards(board, selectedIds)) : []),
+    [board, selectedIds],
+  );
   const selectedTextNodesForStyle = useMemo(() => {
     if (!board) return [];
     const next = new Map<string, CanvasTextNode>();
@@ -1335,6 +1368,7 @@ export default function CanvasWindowApp({
     if (!current) return;
     if (sessionKey && editSessionRef.current === sessionKey) return;
     editSessionRef.current = sessionKey ?? null;
+    setStatus(null);
     const stack = historyRef.current;
     stack.undo.push(current);
     if (stack.undo.length > HISTORY_LIMIT) stack.undo.shift();
@@ -1361,8 +1395,9 @@ export default function CanvasWindowApp({
     }
     stack.redo.push(current);
     editSessionRef.current = null;
-    // 「カードごと」の置き換えをまたいで戻したら、履歴の写しも含めて置き換えを外し、メイン画面に原稿を
-    // ゴミ箱へ移してもらう（BINDER 4-4 の確認1の 2）。やり直しても、消した原稿を指すカードには戻らない。
+    setStatus(null);
+    // 「カードごと」・「投稿にする」の置き換えをまたいで戻したら、履歴の写しも含めて置き換えを外し、メイン画面に原稿を
+    // ゴミ箱へ移して・投稿を消してもらう（BINDER 4-4 の確認1の 2）。やり直しても、消した原稿・投稿を指すカードには戻らない。
     let next = previous;
     for (const conversion of conversionsRef.current.values()) {
       if (conversion.undone || !crossesConversion(current, previous, conversion)) continue;
@@ -1370,7 +1405,7 @@ export default function CanvasWindowApp({
       next = revertCardConversion(next, conversion);
       stack.undo = stack.undo.map((item) => revertCardConversion(item, conversion));
       stack.redo = stack.redo.map((item) => revertCardConversion(item, conversion));
-      manuscriptUndoRef.current(conversion.id);
+      (conversion.kind === "post" ? copyToPostUndoRef : manuscriptUndoRef).current(conversion.id);
     }
     boardRef.current = next;
     setBoard(next);
@@ -1389,6 +1424,7 @@ export default function CanvasWindowApp({
     }
     stack.undo.push(current);
     editSessionRef.current = null;
+    setStatus(null);
     boardRef.current = next;
     setBoard(next);
     setCanRedo(stack.redo.length > 0);
@@ -1616,7 +1652,7 @@ export default function CanvasWindowApp({
         window.clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
       }
-      setStatus("読み込み中");
+      setSaveState("読み込み中");
       setEdgeFromId(null);
       setEdgeCursor(null);
       setSelectedEdgeId(null);
@@ -1640,7 +1676,7 @@ export default function CanvasWindowApp({
           setBoard(null);
           setSelectedIds(new Set());
           clearHistory();
-          setStatus("ボードがありません");
+          setSaveState("ボードがありません");
           return;
         }
         const nextBoard =
@@ -1658,7 +1694,7 @@ export default function CanvasWindowApp({
         setBoard(document);
         setSelectedIds(selectNodeId ? new Set([selectNodeId]) : new Set());
         clearHistory();
-        setStatus("保存済み");
+        setSaveState("保存済み");
       } catch (error) {
         if (generation === boardLoadGenerationRef.current) setStatus(String(error));
       }
@@ -1942,9 +1978,9 @@ export default function CanvasWindowApp({
       return;
     }
     // 「この内容で上書きする」: 今のファイルを読んだことにして、画面の中身で書く。
-    setStatus("保存中");
+    setSaveState("保存中");
     void overwriteCanvasBoard(target)
-      .then(() => setStatus(`保存済み ${formatSaveTime(Date.now())}`))
+      .then(() => setSaveState(`保存済み ${formatSaveTime(Date.now())}`))
       .catch((error) => setStatus(String(error)));
   };
 
@@ -2218,7 +2254,7 @@ export default function CanvasWindowApp({
       return;
     }
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-    setStatus("保存中");
+    setSaveState("保存中");
     boardSaveQueue.enqueue(target, board);
     // 0.5 秒を待たずに閉じても書かれるように、閉じる前の書き切りに載せる（BINDER 4-2 の確認1の 1）。
     setPendingSave("canvas-board", () => boardSaveQueue.flush());
@@ -2231,7 +2267,7 @@ export default function CanvasWindowApp({
           const summaries = await listBoards(target.scope, target.rootPath);
           if (generation !== boardLoadGenerationRef.current) return;
           setBoards(summaries);
-          setStatus(`保存済み ${formatSaveTime(Date.now())}`);
+          setSaveState(`保存済み ${formatSaveTime(Date.now())}`);
         })
         .catch((error) => {
           if (generation === boardLoadGenerationRef.current) setStatus(String(error));
@@ -3276,21 +3312,62 @@ export default function CanvasWindowApp({
     setPan(nextPan);
   };
 
-  /** 選んだカード（グループなら中のカード）を1枚ずつ投稿にする（BINDER 2-4、確認1の 8）。 */
+  const onCopyToPostRequestRef = useRef(onCopyToPostRequest);
+  onCopyToPostRequestRef.current = onCopyToPostRequest;
+  const requestCopyToPost = useCallback((request: CanvasCopyToPostRequest) => {
+    const handle = onCopyToPostRequestRef.current;
+    if (handle) return handle(request);
+    if (!embedded && isTauriRuntime()) return requestCopyToPostFromMain(request);
+    return Promise.reject(new Error("投稿にできません"));
+  }, [embedded]);
+  copyToPostUndoRef.current = (conversionId) => {
+    if (!rootPath) return;
+    void requestCopyToPost({ kind: "undo", rootPath, conversionId })
+      .then((result) => {
+        if (result.kind !== "undo" || !result.done) return;
+        setStatus(result.kept > 0
+          ? `カードを元に戻しました（投稿 ${result.kept} 件は直してあるので残しました）`
+          : `カードを元に戻し、投稿 ${result.deleted} 件を消しました`);
+      })
+      .catch((error) => setStatus(`投稿を消せませんでした: ${error instanceof Error ? error.message : String(error)}`));
+  };
+
+  /**
+   * 選んだカード（と選んだグループの中のカード）を1枚ずつ投稿にし、書けたカードをその投稿のカードに置き換える
+   * （BINDER 2-4、docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md）。タイトルは本文の1行目に入れる。置き換えは 4-4 と同じく、
+   * ID・位置・大きさ・色を保ち、スレッドの子はその場で外す。待っているあいだにボードを替えたら置き換えない。
+   */
   const postSelectedCards = async () => {
-    if (!board || !activeBoardId || textNodesForPosts.length === 0) return;
-    const bodies = textNodesForPosts
-      .map((node) => textForNode(node))
-      .filter((text) => text.trim().length > 0);
-    if (bodies.length === 0) return;
-    const request: CanvasCopyToPostRequest = { bodies };
+    if (!board || !activeBoardId || !rootPath || textNodesForPosts.length === 0) return;
+    const cards = textNodesForPosts
+      .map((node) => ({ id: node.id, text: [node.title?.trim() ?? "", textForNode(node).trim()].filter(Boolean).join("\n") }))
+      .filter((card) => card.text.length > 0);
+    if (cards.length === 0) return;
+    const boardId = activeBoardId;
+    const conversionId = nextCanvasId("conversion");
     try {
-      if (isTauriRuntime()) {
-        await emitMainWindow(CANVAS_COPY_TO_POST_EVENT, request);
+      const result = await requestCopyToPost({ kind: "cards", rootPath, conversionId, cards });
+      if (result.kind !== "cards") throw new Error("投稿にできませんでした");
+      const current = boardRef.current;
+      if (result.made.length && current && activeBoardIdRef.current === boardId) {
+        const converted = convertCardsToPosts(current, result.made);
+        if (converted.cards.length) {
+          pushHistory();
+          patchBoard((latest) => convertCardsToPosts(latest, result.made).board);
+          conversionsRef.current.set(conversionId, {
+            id: conversionId, boardId, cards: converted.cards, detached: converted.detached, undone: false, kind: "post",
+          });
+          setSelectedIds(new Set(converted.cards.map((card) => card.original.id)));
+          setSelectedEdgeId(null);
+        }
       }
-      setStatus(`${bodies.length}件を投稿にしました`);
+      setStatus(result.made.length === 0
+        ? "投稿にできませんでした"
+        : result.failed.length
+          ? `${result.made.length}件を投稿にしました（${result.failed.length}件は投稿にできませんでした）`
+          : `${result.made.length}件を投稿にしました`);
     } catch (error) {
-      setStatus(`投稿にできませんでした: ${String(error)}`);
+      setStatus(`投稿にできませんでした: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -3382,7 +3459,7 @@ export default function CanvasWindowApp({
           pushHistory();
           patchBoard((latest) => convertCardsToFiles(latest, made).board);
           conversionsRef.current.set(conversionId, {
-            id: conversionId, boardId, cards: converted.cards, detached: converted.detached, undone: false,
+            id: conversionId, boardId, cards: converted.cards, detached: converted.detached, undone: false, kind: "file",
           });
           setSelectedIds(new Set(converted.cards.map((card) => card.original.id)));
           setSelectedEdgeId(null);

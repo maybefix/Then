@@ -41,8 +41,10 @@ await build({
       import { usePostStream } from "./src/posts/usePostStream";
       import { createPostNoteActions } from "./src/posts/postNoteActions";
       export * from "./src/posts/postModel";
-      export function Harness({ scope, initialFilter = "inbox", onFilter, showToast, noteDeps }) {
+      export { createCanvasPostActions } from "./src/canvasPostActions";
+      export function Harness({ scope, initialFilter = "inbox", onFilter, showToast, noteDeps, onStream }) {
         const stream = usePostStream(scope, { showToast });
+        onStream?.(stream);
         const [filter, setFilter] = useState(initialFilter);
         // App と同じく、描画のたびに deps を入れ替える（BINDER 2-3）。
         const depsRef = useRef(null);
@@ -68,7 +70,7 @@ await build({
   plugins: [tauriStub],
 });
 const model = await import(`${pathToFileURL(path.join(dir, "post-stream.mjs")).href}?${Date.now()}`);
-const { Harness, arrangePosts, groupByDay, dayLabel, localIsoNow, normalizePostFilter, countInbox, noteThread, noteNameFromBody, noteTextFor, joinWorkPath, noteLabel } = model;
+const { Harness, createCanvasPostActions, arrangePosts, groupByDay, dayLabel, localIsoNow, normalizePostFilter, countInbox, noteThread, noteNameFromBody, noteTextFor, joinWorkPath, noteLabel } = model;
 
 const cases = [];
 const test = (name, fn) => cases.push([name, fn]);
@@ -609,6 +611,85 @@ test("ノートの札があれば、投稿のファイルが同じでもアプ�
   assert.equal(loads(), before + 1);
   assert.ok(item(container, "札").querySelector(".postNoteTag").classList.contains("isMissing"));
   unmount();
+});
+
+// ---- Canvas の「投稿にする」（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md） ----
+test("「投稿にする」の create は書いた投稿（ID とハッシュ）を返し、通知を出さない。書けなければ投げる", async () => {
+  const backend = fakeBackend({ initial: [{ id: "p1", at: "2026-11-14T09:00:00+09:00", body: "潮の匂い", work: A }] });
+  let stream;
+  const { toasts, unmount } = await mount({ onStream: (value) => { stream = value; } });
+  let made;
+  await act(async () => { made = await stream.create("  潮の匂い  "); });
+  await settle();
+  assert.equal(made.id, "p-new-1", "同じ本文の投稿がすでにあっても、いま書いた投稿を返す");
+  assert.equal(made.body, "潮の匂い");
+  assert.equal(made.hash, stream.posts.find((entry) => entry.id === "p-new-1").hash, "ハッシュは一覧の行と同じ");
+  assert.equal(toasts.length, 0, "通知は出さない（Canvas とメイン画面の部品が出す）");
+  globalThis.__invoke = async () => { throw new Error("disk full"); };
+  await assert.rejects(() => stream.create("二件目"), /disk full/);
+  await assert.rejects(() => stream.create("   "), /空/);
+  unmount();
+});
+
+test("「投稿にする」の元に戻す discard は、作ったときのままなら消し、外で直されていれば残し、もうなければ missing", async () => {
+  const backend = fakeBackend({ initial: [] });
+  let stream;
+  const { toasts, unmount } = await mount({ onStream: (value) => { stream = value; } });
+  const made = [];
+  for (const body of ["一", "二", "三"]) await act(async () => { made.push(await stream.create(body)); });
+  backend.editOutside(made[1].id, "二（直した）");
+  backend.lines().splice(2, 1);
+  const results = [];
+  for (const post of made) await act(async () => { results.push(await stream.discard(post.id, post.hash)); });
+  await settle();
+  assert.deepEqual(results, ["deleted", "kept", "missing"]);
+  assert.deepEqual(backend.lines().map((entry) => entry.body), ["二（直した）"], "直した投稿だけが残る");
+  assert.equal(toasts.length, 0, "消しても「投稿を削除しました」は出さない");
+  unmount();
+});
+
+test("メイン画面の「投稿にする」: カードごとに投稿の ID を返し、書けなかったカードを分け、通知の「元に戻す」は一度だけ働く", async () => {
+  const toasts = [];
+  const created = [];
+  const discarded = [];
+  let reverted = true;
+  const depsRef = { current: {
+    scopePath: "C:/lib/作品A",
+    createPost: async (body) => {
+      if (body === "だめ") throw new Error("disk full");
+      created.push(body);
+      return { id: `p-${created.length}`, hash: `h-${created.length}`, body };
+    },
+    discardPost: async (id, hash) => { discarded.push([id, hash]); return id === "p-2" ? "kept" : "deleted"; },
+    showToast: (message, action) => toasts.push({ message, action }),
+    revertOnCanvas: async () => reverted,
+  } };
+  const actions = createCanvasPostActions(depsRef);
+  await assert.rejects(() => actions.handle({ kind: "cards", rootPath: "C:/lib/作品B", conversionId: "v0", cards: [] }), /開いていない/);
+  const result = await actions.handle({ kind: "cards", rootPath: "C:/lib/作品A", conversionId: "v1",
+    cards: [{ id: "a", text: "一" }, { id: "b", text: "だめ" }, { id: "c", text: "三" }] });
+  assert.deepEqual(result, { kind: "cards", made: [{ id: "a", post: "p-1" }, { id: "c", post: "p-2" }], failed: ["b"] });
+  assert.equal(toasts.at(-1).message, "2件を投稿にしました（1件は投稿にできませんでした）");
+  assert.equal(toasts.at(-1).action.label, "元に戻す");
+  reverted = false;
+  toasts.at(-1).action.onClick();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(toasts.at(-1).message, "Canvas でそのボードを開いていないため、元に戻せませんでした");
+  assert.deepEqual(discarded, [], "Canvas で戻せなければ消さない");
+  reverted = true;
+  toasts.at(-2).action.onClick();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepEqual(discarded, [["p-1", "h-1"], ["p-2", "h-2"]], "作ったときのハッシュで消すのを頼む");
+  assert.equal(toasts.at(-1).message, "カードを元に戻しました（投稿 1 件は直してあるので残しました）");
+  assert.deepEqual(await actions.handle({ kind: "undo", rootPath: "C:/lib/作品A", conversionId: "v1" }),
+    { kind: "undo", done: false, deleted: 0, kept: 0 }, "通知から戻したあとの Ctrl+Z は何もしない");
+  await assert.rejects(() => actions.handle({ kind: "cards", rootPath: "C:/lib/作品A", conversionId: "v2", cards: [{ id: "x", text: "だめ" }] }),
+    /disk full/, "1件も書けなければ断る");
+  await actions.handle({ kind: "cards", rootPath: "C:/lib/作品A", conversionId: "v3", cards: [{ id: "y", text: "四" }] });
+  assert.equal(toasts.at(-1).message, "1件を投稿にしました");
+  assert.deepEqual(await actions.handle({ kind: "undo", rootPath: "C:/lib/作品A", conversionId: "v3" }),
+    { kind: "undo", done: true, deleted: 1, kept: 0 });
+  assert.equal(toasts.at(-1).message, "カードを元に戻し、投稿 1 件を消しました");
 });
 
 let failed = 0;
