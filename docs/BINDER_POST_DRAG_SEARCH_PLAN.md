@@ -271,7 +271,44 @@
 
 ## 工程7: 実施
 
+| コミット | 中身 |
+|---|---|
+| `80e6cb6` | 回帰テスト `test:editor-post-drop`（新規。Edge で本物の `VerticalTextEditor` を描き、投稿の ID を運ぶ drop を送る）を先に書き、今のコードで落ちることを確かめた（drop を受けない・名前の文が入る）。ふつうの文の drop は今のコードでも縦書きで落とした位置に入った |
+| `896187c` | U6。エディタの `editorProps.handleDrop` が `CANVAS_POST_DRAG_MIME` を見つけたら、App から渡された `postBodyForDrop` で本文を引き、貼り付けと同じ1行1段落の Slice（`plainTextSlice`。`clipboardTextParser` の中身を関数にしただけ）にして、`posAtCoords` の位置（`dropPoint`）に入れる。`closeHistory` で履歴を区切り、カーソルを入れた文の後ろに置く。変換中・見つからない投稿は何も入れずに受け取る。App は投稿の一覧を `ref` で持ち、関数は作り直さない。K1: 別ウィンドウのサイドパネルの項目は `text/plain` を付けない |
+| `7eaf25d` | U9。`postModel` に `postMatchesQuery`・`queryRanges` と、`arrangePosts` の4つめの引数（絞り込みと「かつ」の条件）。ペインの絞り込みの並びに検索欄、当たった文字の印（`CSS.highlights`）、一度当たった投稿を検索の文字を変えるまで残す、投稿したら・送られてきたら・畳んだら・作品を切り替えたら空にする。`RightSidebar` からペインが出ているかを渡す |
+| `d486f84` | 狭いペイン。投稿の下の段に `flex-wrap: wrap`、ボタンは `margin-left: auto` で次の行の右に寄せる（`posts.css` だけ。`ideaPlot.css`・`base.css` は触らない） |
+| `058600c` | `test:editor-post-drop` の D3 を、打った文字のすぐ後ろへ落とす場面にした（工程8で、履歴を区切らない不具合を見逃したため） |
+
+- 変えた行（`eacaed9..058600c` のコードとテスト）: 12 ファイル、+687 / −25。うちコードは `VerticalTextEditor.tsx` +46/−10、`PostStreamPane.tsx` +82/−7、`postModel.ts` +33/−2、`posts.css` +62/−1、`App.tsx` +8、`CanvasWindowApp.tsx` +2/−1、`RightSidebar.tsx` +1（git の `--numstat`）。Rust は変えていない。
+- 見込みとの違い:
+  - 狭いペインの確かめは、jsdom では幅を測れないので、`test:editor-post-drop` の Edge のページに、本物の `PostStreamPane` と CSS を 300 px と 420 px の幅で描く場面を足した。
+  - ペインを畳んだら検索欄を空にするため、`PostStreamPane` に `open` を足した（右のペインは畳んでも描いたままなので）。
+  - `markSearchHits` は、`CSS.highlights` がないところ（jsdom）では何もしない。
+
 ## 工程8: 自動テスト
+
+### 足した回帰テストと、効くことの確かめ方
+
+- `test:editor-post-drop`（新規、縦書き・横書きで各8場面と、狭いペインの2場面）: D1（落とした位置に写し、複数行は行に分かれる）、D2（カーソルは後ろで選ばれない、続けて打っても消えない）、D3（打った文字のすぐ後ろへ落としても Ctrl+Z 1回で入れた文だけが消える）、D6（変換中）、見つからない投稿、K1（名前の `text/plain` が付いていても写し）、D10（見出しの形式だけなら何も入らない）、ふつうの文の drop は今のまま、N1（300 px で作品名と札が切れず、ボタンは次の行の右）、N3（420 px では1行）。
+- `test:post-stream`（30 → 34本）: 検索の関数（大文字小文字・作品名では当たらない・範囲・返信先を添える）、S1〜S3・S6（絞り込みの中・すべて・作品名・Esc と変換中の Esc）、S4・S5（投稿したら空・直した行は残る・検索を変えたら消える）、S7（送られたら空にして目立たせる）と畳んだら空。D5 の文言を U6 に合わせて直した（確かめる中身は同じ）。
+- `test:canvas-post-cards`: K1（別ウィンドウのサイドパネルの項目は、投稿の ID だけを運ぶ）。
+- わざと入れた不具合（すべてコミットしてから入れ、テストが落ちることを見て、`git checkout` で戻した）:
+
+| 入れた不具合 | 結果 |
+|---|---|
+| 落とした位置でなくカーソルの位置に入れる | `test:editor-post-drop` が落ちた |
+| 履歴を区切らない | **1回目は通ってしまった**（D3 は離れた所で打っていて、離れた変更はもともと別の1回になる）。D3 を打った文字のすぐ後ろへ落とす場面にして（`058600c`）、落ちることを確かめた |
+| 入れたあとカーソルを置かない | `test:editor-post-drop` が落ちた |
+| 変換中でも入れる | `test:editor-post-drop` が落ちた |
+| 直した行を残さない | `test:post-stream` が落ちた |
+| 投稿しても検索欄を空にしない | `test:post-stream` が落ちた |
+| 大文字小文字を区別する | `test:post-stream` が落ちた |
+| 下の段を折り返さない | `test:editor-post-drop` が落ちた |
+| サイドパネルが名前を `text/plain` に付ける（K1） | `test:canvas-post-cards` が落ちた |
+
+### 前後の比較
+
+（「後」の一式が終わってから書く）
 
 ## 工程9: 実機確認
 
