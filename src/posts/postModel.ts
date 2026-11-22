@@ -112,13 +112,44 @@ export type PostRow = {
 export type PostDay = { key: string; rows: PostRow[] };
 
 /**
+ * U9（docs/BINDER_POST_DRAG_SEARCH_PLAN.md）: 本文に検索の文字を含むか。大文字小文字は区別しない。
+ * 空白だけの検索は、すべてに当たる。
+ */
+export function postMatchesQuery(post: Post, query: string): boolean {
+  if (!query.trim()) return true;
+  return post.body.toLocaleLowerCase().includes(query.toLocaleLowerCase());
+}
+
+/** 本文の中で検索の文字に当たる範囲（文字の位置。大文字小文字は区別しない）。当たった所の印に使う。 */
+export function queryRanges(text: string, query: string): { from: number; to: number }[] {
+  if (!query.trim()) return [];
+  const haystack = text.toLocaleLowerCase();
+  const needle = query.toLocaleLowerCase();
+  // 小文字にして長さが変わる文字（ごく一部）があるときは、位置がずれるので印を付けない。
+  if (haystack.length !== text.length) return [];
+  const ranges: { from: number; to: number }[] = [];
+  for (let at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + needle.length)) {
+    ranges.push({ from: at, to: at + needle.length });
+  }
+  return ranges;
+}
+
+/**
  * 絞り込んだ投稿を、返信を返信先の下に並べた行にする。流れの先頭は新しい順、返信は古い順（会話の順）。
  * 返信が絞り込みに残っていれば、返信先も薄く出す。返信先がファイルにない返信は、先頭として出す。
+ * `match` があれば、絞り込みに加えて、それにも当たる投稿だけを残す（U9 の検索）。
  */
-export function arrangePosts(posts: Post[], filter: PostFilter, work: PostWork | undefined): PostRow[] {
+export function arrangePosts(
+  posts: Post[],
+  filter: PostFilter,
+  work: PostWork | undefined,
+  match?: (post: Post) => boolean,
+): PostRow[] {
   const byId = new Map(posts.map((post) => [post.id, post]));
   const parentOf = (post: Post) => (post.replyTo && post.replyTo !== post.id ? byId.get(post.replyTo) : undefined);
-  const matched = new Set(posts.filter((post) => matchesFilter(post, filter, work)).map((post) => post.id));
+  const matched = new Set(posts
+    .filter((post) => matchesFilter(post, filter, work) && (!match || match(post)))
+    .map((post) => post.id));
   const shown = new Set<string>();
   for (const post of posts) {
     if (!matched.has(post.id)) continue;
