@@ -25,6 +25,17 @@
   background: var(--accent-soft);
 }
 
+/* 狭いペインで左（時刻・作品名・札）が入りきらないときだけ、操作のボタンを次の行の右へ下げる
+   （docs/BINDER_POST_DRAG_SEARCH_PLAN.md の 4）。広ければ今のまま1行。 */
+.postStreamPane .postFoot {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
+.postStreamPane .postFoot > .ideaFragmentBtns {
+  margin-left: auto;
+}
+
 .postHead {
   display: flex;
   min-width: 0;

@@ -2,6 +2,8 @@ import React, { useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import { VerticalTextEditor, type TextEditorHandle } from "../../src/VerticalTextEditor";
 import { CANVAS_POST_DRAG_MIME } from "../../src/canvasTypes";
+import { PostStreamPane } from "../../src/components/posts/PostStreamPane";
+import type { PostStream } from "../../src/posts/usePostStream";
 import { DEFAULT_MANUSCRIPT_SETTINGS, type WritingMode } from "../../src/types";
 import "../../src/App.css";
 import "../../src/styles/themes/index.css";
@@ -75,7 +77,41 @@ function Harness() {
   </main>;
 }
 
+// 狭いペイン（docs/BINDER_POST_DRAG_SEARCH_PLAN.md の 4）: 本物の PostStreamPane と CSS を、ペインの幅で描く。
+function PaneHarness({ width }: { width: number }) {
+  const work = { id: "w-a", name: "作品A" };
+  const stream = {
+    scoped: true, available: true, work,
+    posts: [{ id: "p2", at: "2026-11-22T07:13:00+09:00", body: "港で拾った言葉", work: { id: "w-b", name: "作品B" },
+      filed: false, noted: false, hash: "h" }],
+    add: async () => true, editBody: async () => true, setFiled: async () => {}, remove: async () => {}, refresh: async () => {},
+  } as unknown as PostStream;
+  const boards = new Map([["p2", [{ folderPath: "C:/lib/作品B", folderName: "作品B", isLibraryRoot: false, boardId: "b", boardName: "取材", nodeId: "n" }]]]);
+  return <main className="appShell" data-theme="newsroom-light">
+    <aside className="rightSidebar" style={{ width, position: "static" }}>
+      <PostStreamPane stream={stream} filter="all" onFilterChange={() => {}} onMakeNote={() => {}} boards={boards} onOpenBoard={() => {}} />
+    </aside>
+  </main>;
+}
+
+function measurePane() {
+  const row = document.querySelector<HTMLElement>(".postItem")!;
+  const rect = (selector: string) => row.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
+  const work = row.querySelector<HTMLElement>(".postWork")!;
+  return {
+    workWidth: rect(".postWork").width,
+    workTruncated: work.scrollWidth > work.clientWidth + 1,
+    boardWidth: rect(".postBoardTag").width,
+    headTop: rect(".postHead").top,
+    headBottom: rect(".postHead").bottom,
+    buttonsTop: rect(".ideaFragmentBtns").top,
+    buttonsRight: rect(".ideaFragmentBtns").right,
+    footRight: rect(".postFoot").right,
+  };
+}
+
 Object.assign(window, { __drop: {
+  measurePane,
   ready: () => Boolean(handle && document.querySelector(".pm-root")?.textContent),
   value: () => handle!.getValue(),
   selection: () => handle!.getSelection(),
@@ -87,4 +123,6 @@ Object.assign(window, { __drop: {
     new CompositionEvent(on ? "compositionstart" : "compositionend", { bubbles: true, data: "ふね" })),
   composing: () => handle!.isComposing(),
 } });
-createRoot(document.getElementById("root")!).render(<Harness />);
+createRoot(document.getElementById("root")!).render(options.has("pane")
+  ? <PaneHarness width={Number(options.get("pane"))} />
+  : <Harness />);

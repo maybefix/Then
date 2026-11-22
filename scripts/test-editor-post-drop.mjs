@@ -179,6 +179,29 @@ try {
       assert.equal(await value(), "朝の港外の文。\n船が出る。");
     });
   }
+  // ---- 狭いペイン（確認1の 4: 入らないときだけ、操作のボタンを次の行へ） ----
+  async function openPane(width) {
+    await send("Page.navigate", { url: `${appUrl}?pane=${width}&run=${++run}` });
+    for (let i = 0; i < 100; i++) {
+      try { if (await evaluate("!!document.querySelector('.postItem .postWork')")) { await sleep(150); return evaluate("__drop.measurePane()"); } }
+      catch (error) { if (!/context|navigat/i.test(error.message)) throw error; }
+      await sleep(50);
+    }
+    throw new Error("pane did not mount");
+  }
+  await check("N1: 狭いペイン（300 px）でも、ほかの作品の作品名とボードの札が切れずに読め、ボタンは次の行の右", async () => {
+    const pane = await openPane(300);
+    assert.ok(pane.workWidth > 0, `作品名の幅 ${pane.workWidth}`);
+    assert.equal(pane.workTruncated, false, "作品名は切れない");
+    assert.ok(pane.boardWidth > 24, `札の幅 ${pane.boardWidth}`);
+    assert.ok(pane.buttonsTop >= pane.headBottom - 1, "ボタンは次の行");
+    assert.ok(Math.abs(pane.buttonsRight - pane.footRight) < 2, "ボタンは右に寄せる");
+  });
+  await check("N3: 広いペイン（420 px）では今のまま1行", async () => {
+    const pane = await openPane(420);
+    assert.ok(pane.buttonsTop < pane.headBottom, `同じ行（${pane.headBottom} / ${pane.buttonsTop}）`);
+    assert.equal(pane.workTruncated, false);
+  });
   assert.deepEqual(errors, [], "no browser exceptions");
 } finally {
   socket?.close();
