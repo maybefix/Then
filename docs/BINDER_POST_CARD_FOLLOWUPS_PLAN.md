@@ -21,8 +21,8 @@
 | 4 | 影響範囲 | 済み |
 | 5 | 案 | 済み |
 | 6 | 人の確認（確認1） | 済み（2026-11-22、K8 を直す、ほかは勧め） |
-| 7 | 実施 | |
-| 8 | 自動テスト | |
+| 7 | 実施 | 済み |
+| 8 | 自動テスト | 済み |
 | 9 | 実機確認 | |
 | 10 | 完了（確認2） | |
 
@@ -276,3 +276,49 @@
 - 知らせを消すのは、次に利用者がボードを変えたとき（`pushHistory`・Ctrl+Z・やり直し）だけにする。時間で消さない。知らせを出した操作そのものの変更（`pushHistory` は知らせより前に呼ばれる）では消えないので、その保存では上書きされない。次の変更からは、今と同じく「保存中」「保存済み」が出る。
 
 決めた範囲のうち、これで変わること: Canvas の状態の欄だけ。メイン画面の通知、保存のしかた、文言は変えない。知らせのあとにボードを変えずにいると、その間の保存の状態は見えない（知らせのほうを出す）。保存に失敗したときは、失敗の文が知らせとして出る（今と同じ）。
+
+## 工程7: 実施
+
+| コミット | 中身 |
+|---|---|
+| `7c75709` | 回帰テスト `test:canvas-copy-to-post`（新規）を先に書き、今のコードで落ちることを確かめた（頼みが来ない） |
+| `07dbb1c` | 「投稿にする」の置き換え。メイン画面の部品 `canvasPostActions.ts`（新規。4-4 の `canvasManuscriptActions.ts` と同じ作り）がカードごとに投稿を書いて ID を返し、Canvas が書けたカードだけを投稿のカードに置き換える。別ウィンドウは `CANVAS_COPY_TO_POST_EVENT` とその答えの知らせ。置き換えと取り消しは `canvasToManuscript.ts` の 4-4 の作りを、置き換え先を原稿か投稿かで選べるようにして使う（`convertCardsToPosts` を足し、`CardConversion` の1枚を `file` か `post` にした）。`usePostStream` に `create`（書いた投稿を返す。書く前の一覧になかった同じ本文の投稿を探す。Rust は変えていない）と `discard`（作ったときのハッシュで消す。通知なし）を足した。K1・K5・K8 もここで直した |
+| `dcbf9a7` | U7。投稿の行の時刻と作品名に `draggable` と `dragstart`（`CANVAS_POST_DRAG_MIME` だけ）。Canvas の受け口は変えていない |
+| `edf6bf8` | Rust の `list_post_board_references`（`link_index.rs` の `post_board_references`）。ボードを読む部分を `board_references` と共通の `read_boards` にした。`library.rs` の `library_name` を `pub(super)` に |
+| `0fd83b4` | 置かれているボードの札。フック `usePostBoardReferences.ts`（新規）、`canvasBoardStore.ts` の `onCanvasBoardSaved`（この窓でボードを書けたときに呼ぶ）、ペインの札とメニュー、App の `openPostBoard`（ほかのフォルダは `openWorkspace` で開いてから。ノートの札と同じ流れ） |
+| `f0624fc` | テストの強化（わざと入れた不具合のうち、位置を写さないものを、カードが原点にあったので見逃した） |
+| `47406bf` | `test:right-sidebar` の手で並べた値に、新しい `postBoards` を足した（後の一式で見つけた。下の工程8） |
+
+- 変えた行（`4f855b4..47406bf` のコードとテスト）: 19 ファイル、+1263 / −130。うち `CanvasWindowApp.tsx` +169/−95（行の数え方は git の diff）、`link_index.rs` +216（テスト含む）、`PostStreamPane.tsx` +65。
+- 見込みとの違い:
+  - メイン画面の部品のテストは、新しいテストファイルにせず `test:post-stream` に足した（`usePostStream` を本物の入れ物で動かす束がすでにあるため）。
+  - 通知の「元に戻す」から Canvas に置き換えを外してもらう口は、4-4 の口（`onRegisterManuscriptRevert`・`CANVAS_MANUSCRIPT_REVERT_EVENT`）をそのまま使った。どちらも置き換えの ID で働くので、名前だけ原稿のまま。
+  - 使わなくなった `emitMainWindow`（Canvas）と、`App.tsx` の古い「投稿にする」の受け口を消した。
+- 待っているあいだにボードを切り替えたときに置き換えないことは、4-4 と同じ処理（`activeBoardIdRef`）で、自動テストは足していない。
+
+## 工程8: 自動テスト
+
+### 足した回帰テストと、効くことの確かめ方
+
+- `test:canvas-copy-to-post`（新規、8の場面）: 置き換え（ID・位置・大きさ・色・スレッドの子・線）、K8（置き換えの保存のあとも知らせが残る・次にボードを変えると保存の状態に戻る）、Ctrl+Z（テキストに戻り、消すのを1回頼む・やり直しても戻らない）、通知の「元に戻す」（1回だけ）、タイトル、K5（グループと外のカード）、書けなかったカード・断られた（K1）・直した投稿は残す、別ウィンドウの知らせ。
+- `test:post-stream`（26 → 30本）: `create`・`discard`、メイン画面の部品（ID を返す・書けなかったカード・通知の「元に戻す」・Canvas で戻せなければ消さない）、U7 のつかむ場所と運ぶデータ（D1〜D6）、置かれているボードの札とメニュー。
+- `test:canvas-post-cards`: アイデアのペインからのドラッグを、埋め込みの Canvas へ落とすと投稿のカードが置かれる。
+- `test:link-index-rust`（3 → 4本）: ライブラリ直下と全作品、ライブラリの並び、投稿の ID のない・空のカード、壊れたボード、ゴミ箱、ライブラリに入っていない作品。
+- わざと入れた不具合（入れて落ちることを見て、`git checkout` で戻した）:
+  1. 置き換えで位置を写さない → 1回目は通ってしまった（カードが原点にあった）。カードを (40,20) に置き直して `f0624fc`、落ちることを確かめた。
+  2. 消さずに残した投稿を「消した」に数える → `test:post-stream` が落ちた。
+  3. `pushHistory` で知らせを消さない（K8 の戻り）→ `test:canvas-copy-to-post` が落ちた。
+  4. ドラッグに `text/plain` も付ける → `test:post-stream` が落ちた。
+  5. 同じボードの2枚目のカードも数える → `test:post-stream` が落ちた。
+  6. Rust: ライブラリ直下を読まない → `test:link-index-rust` が落ちた。
+
+### 前後の比較
+
+「前」は `4f855b4`、「後」は `f0624fc`。どちらも build は成功。本体の束は 728,536 → 734,320 バイト。残ったプロセスはどちらも 0。
+
+| 区分 | テスト |
+|---|---|
+| どちらも通る | 131本 |
+| どちらも落ちる（元から） | `test:editor-selection`（一式の中で止まる）、`test:editor-text-edits`（`every icon draws its own picture`）、`test:v058-bundle`（500 kB 超えは元から） |
+| 後だけ（新規） | `test:canvas-copy-to-post`（通る） |
+| 新しく落ちた | `test:right-sidebar`: 右サイドバーに渡す値を手で並べたテストで、新しい `postBoards` がなかった（`Cannot read properties of undefined (reading 'places')`）。App はいつも渡すので、テストの値に足した（`47406bf`）。単独で2回通った |
