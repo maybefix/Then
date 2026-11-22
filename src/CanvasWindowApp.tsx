@@ -17,6 +17,7 @@ import { createLatestFrameScheduler } from "./utils/latestFrameScheduler";
 import { withIdeographicSpaceFont } from "./utils/fontStack";
 import { buildCanvasThemeStyle, canvasAppearanceAttributes } from "./canvasAppearance";
 import {
+  CANVAS_BOARD_SAVED_EVENT,
   CANVAS_COPY_TO_POST_EVENT,
   CANVAS_COPY_TO_POST_RESULT_EVENT,
   CANVAS_FILE_DRAG_MIME,
@@ -2268,6 +2269,7 @@ export default function CanvasWindowApp({
           if (generation !== boardLoadGenerationRef.current) return;
           setBoards(summaries);
           setSaveState(`保存済み ${formatSaveTime(Date.now())}`);
+          if (!embedded && isTauriRuntime()) void emitTo("main", CANVAS_BOARD_SAVED_EVENT, {}).catch(() => {});
         })
         .catch((error) => {
           if (generation === boardLoadGenerationRef.current) setStatus(String(error));
@@ -3408,6 +3410,7 @@ export default function CanvasWindowApp({
     stack.redo = stack.redo.map((item) => revertCardConversion(item, conversion));
     const next = revertCardConversion(current, conversion);
     if (next !== current) patchBoard(() => next);
+    setStatus(null);
     return true;
   }, [patchBoard]);
   useEffect(() => {

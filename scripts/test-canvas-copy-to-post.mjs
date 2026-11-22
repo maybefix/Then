@@ -207,6 +207,7 @@ await act(async () => { answer = revert(second); await settle(); });
 assert.equal(answer, true);
 await waitSave();
 assert.equal(nodeOf("s1").type, "text");
+assert.doesNotMatch(status(), /件を投稿にしました/, "通知から戻したら、Canvas の知らせも消す（工程9で見つけた）");
 assert.equal(revert(second), false, "2回目は外さない");
 const before = requests.length;
 await key("z", { ctrlKey: true });
@@ -274,5 +275,7 @@ const sent = emitted.find((item) => item.event === "then-canvas-copy-to-post");
 assert.equal(sent.target, "main", "メイン画面に頼む");
 assert.equal(sent.payload.request.kind, "cards");
 assert.equal(nodeOf("s1").type, "post", "答えを待って置き換える");
+assert.ok(emitted.some((item) => item.event === "then-canvas-board-saved" && item.target === "main"),
+  "別ウィンドウでボードを書けたら、メイン画面に知らせる（投稿の置かれているボードを読み直す。工程9で見つけた）");
 await unmount();
 console.log("PASS window: the separate window asks the main window by event and replaces the card after the answer");

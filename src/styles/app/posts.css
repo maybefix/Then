@@ -43,7 +43,12 @@
 
 /* 置かれているボードの札。一覧は札の下に出す（「その他の操作」と同じメニュー）。 */
 .postBoardHost {
-  min-width: 0;
+  flex-shrink: 0;
+  max-width: 60%;
+}
+
+.postBoardTag span {
+  min-width: 2em;
 }
 
 .postBoardHost .postBoardMenu {

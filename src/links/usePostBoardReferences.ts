@@ -1,11 +1,14 @@
 // 投稿の側の「置かれているボード」（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md の 2）。投稿はライブラリで共有なので、
 // ライブラリ直下と全作品のボードの投稿のカードを読む（Rust の list_post_board_references）。3-4 の
 // useBoardReferences と同じく、アイデアのペインを出しているあいだだけ読む: 出したとき、ファイル一覧が変わったとき、
-// アプリに戻ったとき（別ウィンドウの Canvas で置いた分）、この窓でボードを書けたとき（埋め込みの Canvas で置いた分）。
+// アプリに戻ったとき、この窓でボードを書けたとき（埋め込みの Canvas で置いた分）、別ウィンドウの Canvas がボードを
+// 書けたと知らせてきたとき（アイデアのペインから別ウィンドウへドラッグしても、メイン画面には戻らないため）。
 // 打鍵では読まない。
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
 import { onCanvasBoardSaved } from "../canvasBoardStore";
+import { CANVAS_BOARD_SAVED_EVENT } from "../canvasTypes";
 
 const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
 
@@ -77,8 +80,13 @@ export function usePostBoardReferences(scopePath: string | null, active: boolean
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onFocus);
     const stopSaved = onCanvasBoardSaved(read);
+    let stopWindowSaved: (() => void) | null = null;
+    void listen(CANVAS_BOARD_SAVED_EVENT, read)
+      .then((dispose) => { if (cancelled) dispose(); else stopWindowSaved = dispose; })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
+      stopWindowSaved?.();
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onFocus);
       stopSaved();

@@ -300,6 +300,13 @@ export type CanvasManuscriptRevertEvent = { requestId: string; conversionId: str
 export const CANVAS_MANUSCRIPT_REVERT_RESULT_EVENT = "then-canvas-manuscript-revert-result";
 export type CanvasManuscriptRevertResultEvent = { requestId: string; reverted: boolean };
 
+/**
+ * 別ウィンドウのキャンバス → メイン画面: ボードを書けた。メイン画面は投稿の側の「置かれているボード」を読み直す
+ * （docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md の 2-2。アイデアのペインから別ウィンドウへ投稿をドラッグすると、
+ * メイン画面は窓の切り替えを経ないので、アプリに戻ったときの読み直しでは間に合わない）。
+ */
+export const CANVAS_BOARD_SAVED_EVENT = "then-canvas-board-saved";
+
 /** 閉じる前に、別ウィンドウのキャンバスへ待っている保存を書き切ってもらう（BINDER 4-2 の確認1の 1）。 */
 export const CANVAS_FLUSH_EVENT = "then-canvas-flush";
 export const CANVAS_FLUSH_DONE_EVENT = "then-canvas-flush-done";
