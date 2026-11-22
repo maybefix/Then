@@ -13,6 +13,7 @@ import type {
 import type { FrontMatterParts } from "../../utils/frontmatter";
 
 import { PostStreamPane } from "../posts/PostStreamPane";
+import type { PostBoardPlace, PostBoardPlaces } from "../../links/usePostBoardReferences";
 import type { Post, PostFilter } from "../../posts/postModel";
 import type { PostStream } from "../../posts/usePostStream";
 import { PluginIcon } from "../plugins/PluginIcon";
@@ -136,6 +137,8 @@ export type RightSidebarProps = {
   setPostFilter: (filter: PostFilter) => void;
   /** 投稿 →「ノートにする」と、札からノートを開く（BINDER 2-3）。 */
   postNoteActions: { makeNote: (post: Post) => Promise<void>; openNote: (post: Post) => Promise<void> };
+  /** 投稿のカードが置かれているボードと、そのボードを開く（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md の 2）。 */
+  postBoards: { places: PostBoardPlaces; open: (place: PostBoardPlace) => void };
 };
 
 /**
@@ -153,7 +156,7 @@ export function RightSidebar(props: RightSidebarProps) {
     editorText, settings, updateSettings, revealEditorRange, replaceEditorRange, projectProofreadTerms,
     appState, setProjectProofreadTerms, setAppState, exportProofreadDictionary, importProofreadDictionary,
     projectProofreadIgnored, proofreadIgnoreKey, setProjectProofreadIgnored,
-    postStream, postFilter, setPostFilter, postNoteActions,
+    postStream, postFilter, setPostFilter, postNoteActions, postBoards,
   } = props;
   const rightPaneSwitcherItems: RightPaneSwitcherItem[] = [
     ...rightSidebarBuiltinTabs,
@@ -313,6 +316,8 @@ export function RightSidebar(props: RightSidebarProps) {
               onMakeNote={postStream.work ? (post) => void postNoteActions.makeNote(post) : undefined}
               onOpenNote={(post) => void postNoteActions.openNote(post)}
               reveal={postReveal}
+              boards={postBoards.places}
+              onOpenBoard={postBoards.open}
             />
           )}
         </div>

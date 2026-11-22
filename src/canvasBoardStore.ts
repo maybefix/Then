@@ -237,6 +237,16 @@ export function discardCanvasBoardSave(target: CanvasBoardTarget) {
   canvasBoardSaveQueue.discard(target);
 }
 
+/**
+ * この窓でボードを書けたときに呼ぶ（投稿の側の「置かれているボード」を読み直す。docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md の 2-2）。
+ * 別ウィンドウの Canvas の保存は、その窓の中でだけ呼ばれる（メイン画面はアプリに戻ったときに読み直す）。
+ */
+const boardSavedListeners = new Set<() => void>();
+export function onCanvasBoardSaved(listener: () => void) {
+  boardSavedListeners.add(listener);
+  return () => { boardSavedListeners.delete(listener); };
+}
+
 export async function saveBoard(
   scope: CanvasScope,
   rootPath: string | null,
@@ -251,6 +261,7 @@ export async function saveBoard(
     try {
       const hash = await invoke<string>("save_canvas_board", { scope, rootPath, boardId, board: stored, expectedHash });
       boardHashes.set(canvasBoardTargetKey(target), hash ?? null);
+      for (const listener of boardSavedListeners) listener();
     } catch (error) {
       if (!isSaveConflict(error)) throw error;
       boardConflictListener?.(target);

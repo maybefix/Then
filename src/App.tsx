@@ -250,6 +250,7 @@ import { usePostStream } from "./posts/usePostStream";
 import { createPostNoteActions, type PostNoteDeps } from "./posts/postNoteActions";
 import { createCanvasManuscriptActions, type CanvasManuscriptDeps } from "./canvasManuscriptActions";
 import { createCanvasPostActions, type CanvasPostDeps } from "./canvasPostActions";
+import { usePostBoardReferences, type PostBoardPlace } from "./links/usePostBoardReferences";
 import { StatusBar } from "./components/status/StatusBar";
 import { useCheckpointStatusInfo } from "./components/status/useCheckpointStatusInfo";
 import type {
@@ -3598,6 +3599,12 @@ export default function App() {
     () => ({ posts: postStream.posts, work: postStream.work }),
     [postStream.posts, postStream.work],
   );
+  // 投稿の側の置かれているボード（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md の 2）。アイデアのペインを出しているあいだだけ読む。
+  const postBoardPlaces = usePostBoardReferences(
+    projectFolder?.path ?? null,
+    rightSidebarTab === "idea" && !isRightSidebarCollapsed && appMode !== "plugin",
+    projectFolder,
+  );
   // 「つながり」の置かれているボード。ペインを出しているあいだだけ読む。
   const boardReferences = useBoardReferences(
     projectFolder?.path ?? null,
@@ -3831,6 +3838,26 @@ export default function App() {
       showToast("Idea Board を開けませんでした");
     }
   };
+
+  // 投稿の札から、そのボードとカードへ（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md の 2-3）。ほかのフォルダ（ほかの作品・
+  // ライブラリ直下）のボードは、そのフォルダを開いて（保存していない変更があれば今の確認を通る）、開けたら開く。
+  const pendingPostBoardRef = useRef<PostBoardPlace | null>(null);
+  const openPostBoard = async (place: PostBoardPlace) => {
+    if (projectFolder && isSamePath(projectFolder.path, place.folderPath)) {
+      pendingPostBoardRef.current = null;
+      await openIdeaCanvasBoard("project", place.boardId, place.nodeId);
+      return;
+    }
+    pendingPostBoardRef.current = place;
+    if (!(await openWorkspace(place.folderPath))) pendingPostBoardRef.current = null;
+  };
+  useEffect(() => {
+    const place = pendingPostBoardRef.current;
+    if (!place || !projectFolder || !isSamePath(projectFolder.path, place.folderPath)) return;
+    pendingPostBoardRef.current = null;
+    void openIdeaCanvasBoard("project", place.boardId, place.nodeId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectFolder]);
 
   /** 中央のキャンバスを別ウィンドウへ移す。待っている保存を書き切ってから開き、メイン画面は本文へ戻る（BINDER 4-3）。 */
   const moveCanvasToWindow = (boardId: string | null) =>
@@ -8003,6 +8030,7 @@ export default function App() {
                 setProjectProofreadTerms, setAppState, exportProofreadDictionary, importProofreadDictionary,
                 projectProofreadIgnored, proofreadIgnoreKey, setProjectProofreadIgnored,
                 postStream, postFilter, setPostFilter, postNoteActions,
+                postBoards: { places: postBoardPlaces, open: (place) => void openPostBoard(place) },
               }}
             />
           </div>

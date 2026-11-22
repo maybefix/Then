@@ -42,7 +42,8 @@ await build({
       import { createPostNoteActions } from "./src/posts/postNoteActions";
       export * from "./src/posts/postModel";
       export { createCanvasPostActions } from "./src/canvasPostActions";
-      export function Harness({ scope, initialFilter = "inbox", onFilter, showToast, noteDeps, onStream }) {
+      export { placesByPost } from "./src/links/usePostBoardReferences";
+      export function Harness({ scope, initialFilter = "inbox", onFilter, showToast, noteDeps, onStream, boards, onOpenBoard }) {
         const stream = usePostStream(scope, { showToast });
         onStream?.(stream);
         const [filter, setFilter] = useState(initialFilter);
@@ -55,6 +56,7 @@ await build({
           onFilterChange: (next) => { onFilter?.(next); setFilter(next); },
           onMakeNote: noteDeps && stream.work ? (post) => void noteActions.makeNote(post) : undefined,
           onOpenNote: (post) => void noteActions.openNote(post),
+          boards, onOpenBoard,
         });
       }`,
     resolveDir: path.resolve("."),
@@ -70,7 +72,7 @@ await build({
   plugins: [tauriStub],
 });
 const model = await import(`${pathToFileURL(path.join(dir, "post-stream.mjs")).href}?${Date.now()}`);
-const { Harness, createCanvasPostActions, arrangePosts, groupByDay, dayLabel, localIsoNow, normalizePostFilter, countInbox, noteThread, noteNameFromBody, noteTextFor, joinWorkPath, noteLabel } = model;
+const { Harness, createCanvasPostActions, placesByPost, arrangePosts, groupByDay, dayLabel, localIsoNow, normalizePostFilter, countInbox, noteThread, noteNameFromBody, noteTextFor, joinWorkPath, noteLabel } = model;
 
 const cases = [];
 const test = (name, fn) => cases.push([name, fn]);
@@ -610,6 +612,40 @@ test("ノートの札があれば、投稿のファイルが同じでもアプ�
   await settle();
   assert.equal(loads(), before + 1);
   assert.ok(item(container, "札").querySelector(".postNoteTag").classList.contains("isMissing"));
+  unmount();
+});
+
+// ---- 置かれているボード（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md の B1〜B5） ----
+test("投稿の行にボードの札。1枚はその名前で押すと開き、2枚以上は「構想 ほか2」で一覧から選ぶ。札のない投稿は今のまま", async () => {
+  fakeBackend({ initial: [
+    { id: "p1", at: "2026-11-14T09:00:00+09:00", body: "灯台の夢", work: A },
+    { id: "p2", at: "2026-11-14T09:30:00+09:00", body: "港で拾った言葉", work: B },
+    { id: "p3", at: "2026-11-14T10:00:00+09:00", body: "何もない", work: A },
+  ] });
+  const folder = (name, root = false) => ({ folderPath: root ? "C:/lib" : `C:/lib/${name}`, folderName: name, isLibraryRoot: root });
+  const boards = placesByPost([
+    { ...folder("本棚", true), id: "all", name: "全体", cards: [{ nodeId: "c1", postId: "p1" }] },
+    { ...folder("作品B"), id: "field", name: "取材", cards: [{ nodeId: "a", postId: "p2" }, { nodeId: "b", postId: "p1" }] },
+    { ...folder("作品A"), id: "plan", name: "構想", cards: [{ nodeId: "c1", postId: "p1" }, { nodeId: "c2", postId: "p1" }] },
+  ]);
+  assert.deepEqual(boards.get("p1").map((place) => [place.folderName, place.boardName, place.nodeId]),
+    [["本棚", "全体", "c1"], ["作品B", "取材", "b"], ["作品A", "構想", "c1"]], "同じボードの2枚目は数えない。開くと最初のカードを選ぶ");
+  const opened = [];
+  const { container, unmount } = await mount({ initialFilter: "all", boards, onOpenBoard: (place) => opened.push(place) });
+  const tag = (body) => item(container, body).querySelector(".postBoardTag");
+  assert.equal(tag("灯台の夢").textContent, "全体 ほか2");
+  assert.equal(tag("港で拾った言葉").textContent, "取材");
+  assert.equal(tag("何もない"), null, "置かれていない投稿には札を出さない");
+  await click(tag("港で拾った言葉"));
+  assert.deepEqual(opened.map((place) => [place.folderPath, place.boardId, place.nodeId]), [["C:/lib/作品B", "field", "a"]], "1枚なら、押すとそのボードを開く");
+  await click(tag("灯台の夢"));
+  const menu = item(container, "灯台の夢").querySelector('[role="menu"][aria-label="置かれているボード"]');
+  assert.ok(menu, "2枚以上なら一覧を出す");
+  assert.deepEqual([...menu.querySelectorAll("button")].map((button) => button.textContent), ["本棚 / 全体", "作品B / 取材", "作品A / 構想"]);
+  await click([...menu.querySelectorAll("button")][2]);
+  assert.deepEqual([opened.at(-1).folderPath, opened.at(-1).boardId], ["C:/lib/作品A", "plan"]);
+  assert.equal(item(container, "灯台の夢").querySelector('[role="menu"]'), null, "選んだら閉じる");
+  assert.equal(tag("灯台の夢").closest("[draggable=true]"), null, "札はつかむ場所でない");
   unmount();
 });
 
