@@ -711,6 +711,47 @@ async function choose(target, label) {
   await without.unmount();
 }
 
+// Q5: ライブラリ直下では、資料のフォルダ（`資料/`）とその中のフォルダに画像・PDF の行を出す。押すと開き、
+// 右クリックは素材の中と同じ。資料のフォルダの中へだけ落とせる（外のフォルダ・直下のファイルの行へは落ちない）。
+{
+  const rootTree = {
+    path: root,
+    name: "lib",
+    children: [
+      folderEntry("資料", [folderEntry("資料/表紙", [])]),
+      file("本編.md"),
+      folderEntry("下書き", []),
+    ],
+  };
+  const references = [{ path: p("資料/表紙案.png"), sourcePath: "資料/表紙案.png", name: "表紙案.png", kind: "image" }];
+  const rootLibrary = { path: root, name: "本棚", role: "root", projects: [], misplacedProjects: [] };
+  const view = await mount(props(rootTree, {
+    library: rootLibrary,
+    materialReferences: references,
+    libraryReferencesFolderPath: p("資料"),
+    onOpenReference: spy("onOpenReference"),
+    onRenameReference: spy("onRenameReference"),
+    onDeleteReference: spy("onDeleteReference"),
+    onMoveReference: spy("onMoveReference"),
+    onTransferEntries: spy("onTransferEntries"),
+  }));
+  takeCalls();
+  assert.ok(row(view.container, "資料/表紙案.png"), "直下の資料のフォルダに画像が出る");
+  await click(row(view.container, "資料/表紙案.png").querySelector(".treeItemPrimary"));
+  assert.deepEqual(takeCalls(), [["onOpenReference", "資料/表紙案.png"]]);
+  assert.deepEqual(await menuLabels(row(view.container, "資料/表紙案.png")), ["開く", "リネーム", "移動・コピー…", "削除"]);
+  await drag(row(view.container, "資料/表紙案.png"), row(view.container, "下書き"), 10);
+  await drag(row(view.container, "資料/表紙案.png"), row(view.container, "本編.md"), 10);
+  assert.deepEqual(takeCalls(), [], "資料のフォルダの外へは落ちない");
+  await drag(row(view.container, "資料/表紙案.png"), row(view.container, "資料/表紙"), 10);
+  assert.deepEqual(takeCalls(), [["onMoveReference", "資料/表紙案.png", "資料/表紙"]]);
+  await view.unmount();
+
+  const unknown = await mount(props(rootTree, { library: rootLibrary, materialReferences: references }));
+  assert.equal(row(unknown.container, "資料/表紙案.png"), undefined, "資料のフォルダが分からなければ出さない（今まで）");
+  await unknown.unmount();
+}
+
 // ライブラリ直下では段を出さない。
 {
   const library = { path: root, name: "ライブラリ", role: "root", projects: [], misplacedProjects: [] };

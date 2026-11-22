@@ -133,6 +133,7 @@ const baseValues = {
   libraryContext: mark("libraryContext"),
   libraryCorpus: { isLoading: true },
   starredNotePaths: mark("starredNotePaths"),
+  libraryReferencesFolderPath: mark("libraryReferencesFolderPath"),
 };
 
 const render = (overrides = {}) => LeftSidebar({ ...baseValues, ...spies, ...overrides });
@@ -246,6 +247,7 @@ const expectCalls = (label, action, expected) => {
   const expectedValues = {
     projectFolder: baseValues.projectFolder,
     starredNotePaths: mark("starredNotePaths"),
+    libraryReferencesFolderPath: mark("libraryReferencesFolderPath"),
     materialReferences: [{ path: "C:/work/素材/資料/map.png", sourcePath: "素材/資料/map.png", name: "map.png", kind: "image" }],
     currentFilePath: mark("currentFilePath"),
     currentFileName: mark("currentFileName"),

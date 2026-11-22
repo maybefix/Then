@@ -669,6 +669,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             undo_transfer_project_entries,
             load_note_stars,
             set_note_star,
+            library_references_folder,
             reorder_library_projects,
             load_library_property_types,
             save_library_property_type,
@@ -2197,6 +2198,21 @@ fn transfer_project_entries(
     entry_transfer::transfer_entries(Path::new(&source_root), Path::new(&target_root), &source_paths, move_entries)
 }
 
+/// Q5: ライブラリ直下の資料のフォルダ（画像・PDF を木に出す場所）。直下でない・フォルダがないときは None。
+#[tauri::command(async)]
+fn library_references_folder(root_path: String) -> Result<Option<String>, String> {
+    let root = PathBuf::from(&root_path);
+    if !library::is_library_root(&root) {
+        return Ok(None);
+    }
+    let config = load_project_config(&root)?;
+    // 画面のパスと突き合わせるので、直下のパスの綴りのまま返す（canonicalize の \\?\ を付けない）。
+    Ok(material_files::library_references_folder(&root, &config).and_then(|folder| {
+        let name = folder.file_name()?.to_os_string();
+        Some(root.join(name).to_string_lossy().to_string())
+    }))
+}
+
 /// U10: スターを付けたノートの絶対パス。
 #[tauri::command(async)]
 fn load_note_stars(root_path: String) -> Result<Vec<String>, String> {
@@ -2605,7 +2621,9 @@ fn rename_project_entry(path: String, name: String) -> Result<TextDocument, Stri
     let parent = path
         .parent()
         .ok_or_else(|| "entry parent does not exist".to_string())?;
-    let root = find_project_root(parent);
+    // まだ project.json のないライブラリ直下でも、直下の資料のフォルダの画像・PDF を改名できるように（Q5）。
+    let root = find_project_root(parent)
+        .or_else(|| parent.ancestors().find(|candidate| library::is_library_root(candidate)).map(Path::to_path_buf));
     // 素材の段の画像・PDF は、素材フォルダの中でだけ改名する。拡張子は変えず、中身は読まない（BINDER 2-6）。
     let is_material = path.is_file() && material_files::is_material_file(&path);
     if is_material

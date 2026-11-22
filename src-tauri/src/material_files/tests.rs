@@ -253,6 +253,26 @@ fn a_work_without_boards_or_materials_folder_renames_as_before() {
     assert!(rename_project_entry(work.s("素材/資料/地図.png"), "地図2".into()).is_err(), "素材フォルダがなければ画像は素材でない");
 }
 
+/// Q5: ライブラリ直下では、資料のフォルダ（`資料/`）の中で画像・PDF を改名・移動できる。外へは出さない。
+#[test]
+fn library_root_images_move_and_rename_inside_its_references_folder() {
+    let dir = std::env::temp_dir().join(format!("then-material-files-root-{}-{}", std::process::id(), super::super::now_millis()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let root = TempWork(dir.join("lib"));
+    std::fs::create_dir_all(&root.0).unwrap();
+    super::super::library::create_library(&root.0, "本棚").unwrap();
+    std::fs::create_dir_all(root.p("資料/表紙")).unwrap();
+    std::fs::write(root.p("資料/表紙案.png"), b"\x89PNG\r\n\x1a\ncover").unwrap();
+    std::fs::write(root.p("共通メモ.md"), "# 共通\n").unwrap();
+
+    let moved = move_project_entry(root.root(), root.s("資料/表紙案.png"), root.s("資料/表紙"), None, None).expect("inside 資料");
+    assert_eq!(moved.new_path, root.s("資料/表紙/表紙案.png"));
+    assert!(move_project_entry(root.root(), root.s("資料/表紙/表紙案.png"), root.root(), None, None).is_err(), "資料の外へは出さない");
+    let renamed = rename_project_entry(root.s("資料/表紙/表紙案.png"), "表紙".into()).expect("rename");
+    assert_eq!(renamed.name, "表紙.png", "拡張子を守る");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// Q4: まとめての移動に画像・PDF を入れられる（素材の中だけ）。ノートと混ぜてもよい。ボードの資料カードも付いていく。
 #[test]
 fn several_images_and_notes_move_together_inside_the_materials_folder() {

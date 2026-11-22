@@ -175,6 +175,11 @@ type WorkspaceSidebarProps = {
   starredNotePaths?: ReadonlySet<string>;
   /** ノートのスターを付ける・外す（U10）。渡さなければ、右クリックと見出しの星のボタンを出さない。 */
   onSetNoteStar?: (path: string, starred: boolean) => void;
+  /**
+   * ライブラリ直下の資料のフォルダ（Q5）。直下には素材の段がないので、このフォルダとその中のフォルダに画像・PDF を
+   * 並べ、素材の中と同じく画像・PDF を落とせる場所にする。
+   */
+  libraryReferencesFolderPath?: string | null;
 };
 
 export type MaterialReference = {
@@ -933,6 +938,7 @@ export function WorkspaceSidebar({
   onTransferEntries,
   starredNotePaths = NO_STARRED_PATHS,
   onSetNoteStar,
+  libraryReferencesFolderPath = null,
   onImportReferences,
 }: WorkspaceSidebarProps) {
   const [contextMenu, setContextMenu] = useState<TreeContextMenu>(null);
@@ -2335,8 +2341,17 @@ export function WorkspaceSidebar({
     const visibleChildren = isFolder
       ? entry.children.filter((child) => !filteredOutPaths.has(child.path))
       : [];
+    // 直下の資料のフォルダとその中（Q5）は、素材の中と同じく画像・PDF を並べ、落とせる場所にする。
+    const inLibraryReferences =
+      !binderTiers &&
+      libraryReferencesFolderPath !== null &&
+      isProjectEntry(entry) &&
+      (normalizeSidebarPath(entry.path) === normalizeSidebarPath(libraryReferencesFolderPath) ||
+        isSidebarPathInside(entry.path, libraryReferencesFolderPath));
     const folderReferences =
-      isFolder && isProjectEntry(entry) && entry.role === "material" ? referencesIn(entry.path) : [];
+      isFolder && isProjectEntry(entry) && (entry.role === "material" || inLibraryReferences)
+        ? referencesIn(entry.path)
+        : [];
     const hasChildren = visibleChildren.length > 0 || folderReferences.length > 0;
     const isFolderExpanded = isFolder && !collapsedFolderPaths.has(entry.path);
     const isCurrentFile = entry.path === currentFilePath;
@@ -2411,7 +2426,7 @@ export function WorkspaceSidebar({
           data-tree-entry-path={entry.path}
           data-tree-entry-kind={kind}
           data-tree-folder-path={parentFolderPath ?? undefined}
-          data-tree-entry-material={isMaterial ? "true" : undefined}
+          data-tree-entry-material={isMaterial || inLibraryReferences ? "true" : undefined}
           data-outline-file-row={!isFolder ? "true" : undefined}
           data-outline-file-path={!isFolder ? entry.path : undefined}
           style={

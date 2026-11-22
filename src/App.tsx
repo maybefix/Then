@@ -2610,6 +2610,27 @@ export default function App() {
     }
   };
 
+  // Q5: ライブラリ直下の資料のフォルダ。直下の木で、その中に画像・PDF を並べる。木が変わるたびに読み直す。
+  const [libraryReferencesFolderPath, setLibraryReferencesFolderPath] = useState<string | null>(null);
+  const isLibraryRootScope = projectFolder?.library?.role === "root";
+  useEffect(() => {
+    if (!isHydrated || !projectFolder || !isLibraryRootScope || !isTauriRuntime()) {
+      setLibraryReferencesFolderPath(null);
+      return;
+    }
+    let isCancelled = false;
+    invoke<string | null>("library_references_folder", { rootPath: projectFolder.path })
+      .then((path) => {
+        if (!isCancelled) setLibraryReferencesFolderPath(path);
+      })
+      .catch(() => {
+        if (!isCancelled) setLibraryReferencesFolderPath(null);
+      });
+    return () => {
+      isCancelled = true;
+    };
+  }, [isHydrated, isLibraryRootScope, projectFolder]);
+
   // The reference candidates are the project's files, so they follow the file tree.
   useEffect(() => {
     if (!isHydrated || !projectFolder) return;
@@ -7715,7 +7736,7 @@ export default function App() {
                 openReferenceCard,
                 handleDeleteImportedReference: (sourcePath: string) => handleDeleteImportedReference(sourcePath),
                 handleRenameMaterialReference, handleMoveMaterialReference, handleTransferEntries,
-                starredNotePaths, handleSetNoteStar,
+                starredNotePaths, handleSetNoteStar, libraryReferencesFolderPath,
                 // In the corkboard these open the file in the body (BINDER 1-5).
                 handleProjectFileSelect: selectBinderFile,
                 handleProjectSearchResultOpen: openSearchResultInBody,
