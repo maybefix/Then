@@ -29,6 +29,7 @@ import {
   CANVAS_MANUSCRIPT_RESULT_EVENT,
   CANVAS_MANUSCRIPT_REVERT_EVENT,
   CANVAS_MANUSCRIPT_REVERT_RESULT_EVENT,
+  CANVAS_BOARDS_REWRITTEN_EVENT,
   CANVAS_PATH_CHANGES_EVENT,
   createCanvasEdge,
   createCanvasFileNode,
@@ -49,6 +50,7 @@ import {
   type CanvasFileWriteResultEvent,
   type CanvasFlushEvent,
   type CanvasProjectFile,
+  type CanvasBoardsRewrittenEvent,
   type CanvasPathChangesEvent,
   type CanvasCopyToPostRequest,
   type CanvasEdgeConnector,
@@ -1606,6 +1608,28 @@ export default function CanvasWindowApp({
       dispose?.();
     };
   }, [payloadRootPath]);
+
+  // 作品を開くときの移行がボードを書き換えた（BINDER 4-5、確認1の 7）。開いているボードなら読み直す。
+  // 待っている保存は移行の前に書き切ってもらっているので、読み直しで捨てるものはない。
+  useEffect(() => {
+    if (!isTauriRuntime() || !payloadRootPath) return;
+    let disposed = false;
+    let dispose: (() => void) | undefined;
+    void listen<CanvasBoardsRewrittenEvent>(CANVAS_BOARDS_REWRITTEN_EVENT, (event) => {
+      const { rootPath, boardIds } = event.payload;
+      if (normalizedReferenceKey(rootPath) !== normalizedReferenceKey(payloadRootPath)) return;
+      const loadedTarget = loadedBoardTargetRef.current;
+      if (!loadedTarget || !boardIds.includes(loadedTarget.boardId)) return;
+      void loadBoardList(loadedTarget.scope, loadedTarget.boardId);
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else dispose = unlisten;
+    });
+    return () => {
+      disposed = true;
+      dispose?.();
+    };
+  }, [payloadRootPath, loadBoardList]);
 
   // ---- ファイルのカードの中身と書き戻し（BINDER 4-2） ----
   // ファイルへ書くのはメイン画面だけ。埋め込みはメイン画面の書き込み口を、別ウィンドウは知らせで頼む。

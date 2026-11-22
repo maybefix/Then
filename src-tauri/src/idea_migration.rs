@@ -112,7 +112,7 @@ fn checkpoint(step: &'static str) -> Result<(), String> {
 }
 
 /// 読み込みと同じ形の Idea（旧形式 `snippets` はスレッドにしたもの）。
-fn stored_threads(config: &ProjectConfig) -> Vec<IdeaThreadConfig> {
+pub(super) fn stored_threads(config: &ProjectConfig) -> Vec<IdeaThreadConfig> {
     if !config.idea_threads.is_empty() {
         config.idea_threads.clone()
     } else if !config.snippets.is_empty() {
