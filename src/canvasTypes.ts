@@ -278,6 +278,17 @@ export type CanvasPathChangesEvent = {
   changes: CanvasPathChange[];
 };
 
+/**
+ * 作品を開くときの移行（BINDER 4-5）が、ボードのファイルを書き換えた知らせ。そのボードを開いている Canvas
+ * （別ウィンドウ・埋め込み）は読み直す。ボードは ID（`.canvas` を除いたファイル名）。
+ */
+export const CANVAS_BOARDS_REWRITTEN_EVENT = "then-canvas-boards-rewritten";
+
+export type CanvasBoardsRewrittenEvent = {
+  rootPath: string;
+  boardIds: string[];
+};
+
 function canvasReferenceKind(path: string): ReferenceKind {
   const extension = path.split(".").pop()?.toLocaleLowerCase();
   if (extension === "txt") return "text";

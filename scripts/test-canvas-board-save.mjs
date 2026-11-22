@@ -379,6 +379,28 @@ console.log("PASS path changes: open board and history follow renames and moves 
 }
 console.log("PASS outside changes: a board changed outside is not written over; reload or overwrite; close-time refusals are asked next time; renames are not taken for outside changes");
 
+// ---- BINDER 4-5（確認1の 7）: 作品を開くときの移行がボードを書き換えたら、開いているボードを読み直す ----
+{
+  await mount();
+  const emitRewritten = async (payload) => { await act(async () => { for (const handler of globalThis.canvasTestListeners["then-canvas-boards-rewritten"] ?? []) handler({ payload }); await settle(); }); };
+  const k = key("project", "one", "a");
+  docs.get(k).nodes[0].text = "移行で書き換えた";
+  versions.set(k, (versions.get(k) ?? 0) + 1); // Rust の migrate_copy_cards が書いた
+  calls = [];
+  await emitRewritten({ rootPath: "two", boardIds: ["a"] });
+  assert.equal(shownText(), "A", "ほかの作品の知らせでは読み直さない");
+  await emitRewritten({ rootPath: "one", boardIds: ["b"] });
+  assert.equal(shownText(), "A", "開いていないボードの知らせでは読み直さない");
+  await emitRewritten({ rootPath: "one", boardIds: ["a"] });
+  assert.equal(shownText(), "移行で書き換えた", "開いているボードは読み直す");
+  assert.equal(calls.some((c) => c.command === "save_canvas_board"), false, "読み直すときに古い中身を書かない");
+  await edit("移行のあとに直す");
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 650)); });
+  assert.equal(textAt("project", "one", "a"), "移行のあとに直す", "読み直したあとの保存は外の変更と取り違えない");
+  await unmount();
+}
+console.log("PASS boards rewritten: the open board is read again after the opening migration rewrote it");
+
 // ---- BINDER 4-3（確認1の 4）: 中央の Canvas の「別ウィンドウで開く」 ----
 {
   await mount();

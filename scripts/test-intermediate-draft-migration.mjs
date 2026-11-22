@@ -103,7 +103,7 @@ const entry = (texts) => JSON.stringify({ expectedRevision: 1, history: { schema
   const order = ["migratePlotToNotes(rootPaths)", "migrateIdeas(rootPaths, profile)", "migrateIntermediateDrafts(rootPaths)"]
     .map((call) => body.indexOf(call));
   assert.ok(order.every((index) => index > 0) && order[0] < order[1] && order[1] < order[2], "Plot → Idea → 中間稿の順に移す");
-  assert.match(body, /\[plotMigrationMessage\(summary\), ideaMigrationMessage\(ideas\), draftMigrationMessage\(drafts\)\]/);
+  assert.match(body, /\[plotMigrationMessage\(summary\), ideaMigrationMessage\(ideas\), draftMigrationMessage\(drafts\),/);
   assert.match(body, /\|\| drafts\.migrated\.length > 0;/, "移したらファイル一覧を読み直す");
   console.log("PASS order: plot, ideas, then drafts, one toast");
 }

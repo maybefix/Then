@@ -163,6 +163,7 @@ import {
 import {
   CANVAS_COPY_TO_POST_EVENT,
   CANVAS_LIVE_DATA_EVENT,
+  CANVAS_BOARDS_REWRITTEN_EVENT,
   CANVAS_PATH_CHANGES_EVENT,
   type CanvasCopyToPostRequest,
   CANVAS_FILE_SAVED_EVENT,
@@ -186,6 +187,7 @@ import {
   type CanvasManuscriptResultEvent,
   type CanvasManuscriptRevertEvent,
   type CanvasManuscriptRevertResultEvent,
+  type CanvasBoardsRewrittenEvent,
   type CanvasPathChangesEvent,
   type CanvasProjectFile,
   type CanvasScope,
@@ -194,6 +196,7 @@ import {
 import { migratePlotToNotes, plotMigrationMessage } from "./plotMigration";
 import { ideaMigrationMessage, migrateIdeas, type ProfileIdeas } from "./ideaMigration";
 import { draftMigrationMessage, migrateIntermediateDrafts } from "./intermediateDraftMigration";
+import { copyCardMigrationMessage, migrateCopyCards } from "./copyCardMigration";
 import { localIsoNow } from "./posts/postModel";
 import { ReferenceLayer } from "./components/references/ReferenceLayer";
 
@@ -2750,7 +2753,7 @@ export default function App() {
 
   /**
    * Plot をノート「プロット（移行）」へ（BINDER 1-6）、Idea を投稿とノートへ、資料を素材フォルダへ（2-4・2-5）、
-   * 中間稿をノート「（ボード名）の中間稿」へ（4-4b）移してから開く。移したら true（ファイル一覧を読み直す）。Plot を先に移すので、ノート「プロット（移行）」の資料リンクも
+   * 中間稿をノート「（ボード名）の中間稿」へ（4-4b）、コピーのカードを元のノートのカードへ（4-5）移してから開く。移したら true（ファイル一覧を読み直す）。Plot を先に移すので、ノート「プロット（移行）」の資料リンクも
    * 書き換わる。失敗しても作品は開く。次に開いたときにやり直す。profile は起動時だけ渡す（アプリ側の Idea）。
    */
   const migratePlotBeforeOpening = async (rootPaths: string[], profile?: ProfileIdeas) => {
@@ -2776,8 +2779,21 @@ export default function App() {
       console.error("intermediate draft migration failed", failure.rootPath, failure.error);
       setLastError(String(failure.error));
     }
-    const message = [plotMigrationMessage(summary), ideaMigrationMessage(ideas), draftMigrationMessage(drafts)]
-      .filter(Boolean).join("。");
+    // コピーのカードを元のノートのカードへ置き換える（4-5）。開いている Canvas の待っている保存を先に書き切り、
+    // 書き換えたボードを開いていれば読み直してもらう（確認1の 7）。ファイルは増えないので一覧は読み直さない。
+    await Promise.allSettled([flushPendingSaves(), flushCanvasWindow(1500)]);
+    const cards = await migrateCopyCards(rootPaths);
+    for (const failure of cards.failed) {
+      console.error("copy card migration failed", failure.rootPath, failure.error);
+      setLastError(String(failure.error));
+    }
+    if (isTauriRuntime()) {
+      for (const { rootPath, boards } of cards.migrated) {
+        emit(CANVAS_BOARDS_REWRITTEN_EVENT, { rootPath, boardIds: boards } satisfies CanvasBoardsRewrittenEvent).catch(() => {});
+      }
+    }
+    const message = [plotMigrationMessage(summary), ideaMigrationMessage(ideas), draftMigrationMessage(drafts),
+      copyCardMigrationMessage(cards)].filter(Boolean).join("。");
     if (message) showToast(message);
     return summary.migrated.length > 0 || ideas.migrated.length > 0 || ideas.profileMigrated || drafts.migrated.length > 0;
   };

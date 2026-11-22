@@ -102,6 +102,8 @@
     "test:idea-migration-rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- idea_migration::",
     "test:draft-migration": "node scripts/test-intermediate-draft-migration.mjs",
     "test:draft-migration-rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- intermediate_draft_migration::",
+    "test:copy-card-migration": "node scripts/test-copy-card-migration.mjs",
+    "test:copy-card-migration-rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib -- copy_card_migration::",
     "test:property-type-store": "node scripts/test-property-type-store.mjs",
     "test:property-search": "node scripts/test-property-search.mjs",
     "test:markdown-table-ime": "node scripts/test-markdown-table-ime.mjs",
