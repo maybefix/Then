@@ -670,6 +670,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             load_note_stars,
             set_note_star,
             library_references_folder,
+            delete_trashed_canvas_boards,
             reorder_library_projects,
             load_library_property_types,
             save_library_property_type,
@@ -2907,6 +2908,12 @@ fn move_project_entry_to_app_trash(
     target: &Path,
 ) -> Result<PathBuf, String> {
     validate_project_delete_target(root, target)?;
+    move_path_to_app_trash(app, root, target)
+}
+
+/// アプリのデータフォルダのゴミ箱へ移す。確かめは呼び出し側が受け持つ（ボードのゴミ箱は `.then` の中なので、
+/// 作品のファイルの削除の確かめを通さない）。
+fn move_path_to_app_trash(app: &tauri::AppHandle, root: &Path, target: &Path) -> Result<PathBuf, String> {
     let app_data = app
         .path()
         .app_data_dir()
@@ -2942,8 +2949,14 @@ fn move_project_entry_to_app_trash(
     }
 }
 
-#[cfg(windows)]
 fn move_project_entry_to_system_trash(root: &Path, target: &Path) -> Result<(), String> {
+    validate_project_delete_target(root, target)?;
+    send_path_to_system_trash(target)
+}
+
+/// OS のゴミ箱へ送る（戻せる）。確かめは呼び出し側が受け持つ。
+#[cfg(windows)]
+fn send_path_to_system_trash(target: &Path) -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::HWND;
@@ -2952,7 +2965,6 @@ fn move_project_entry_to_system_trash(root: &Path, target: &Path) -> Result<(), 
         FOF_NOERRORUI, FOF_SILENT,
     };
 
-    validate_project_delete_target(root, target)?;
     let mut from = target
         .as_os_str()
         .encode_wide()
@@ -2978,7 +2990,7 @@ fn move_project_entry_to_system_trash(root: &Path, target: &Path) -> Result<(), 
 }
 
 #[cfg(not(windows))]
-fn move_project_entry_to_system_trash(_root: &Path, _target: &Path) -> Result<(), String> {
+fn send_path_to_system_trash(_target: &Path) -> Result<(), String> {
     Err("system trash is not implemented on this platform".to_string())
 }
 
@@ -4037,6 +4049,62 @@ fn list_trashed_canvas_boards(
     }
     boards.sort_by(|left, right| right.deleted_at.cmp(&left.deleted_at));
     Ok(boards)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeletedTrashedBoards {
+    /// 消したボードの数。
+    deleted: usize,
+    /// OS のゴミ箱が使えず、アプリのゴミ箱へ移した数。
+    app_trash: usize,
+}
+
+/// ゴミ箱のボードを完全に削除する（KNOWN_ISSUES 2026-11-21）。OS のゴミ箱へ送るので、そこから戻せる。
+/// 使えなければアプリのデータフォルダのゴミ箱へ移す。`trash_ids` は一覧の `trashId`。
+#[tauri::command(async)]
+fn delete_trashed_canvas_boards(
+    app: tauri::AppHandle,
+    scope: String,
+    root_path: Option<String>,
+    trash_ids: Vec<String>,
+) -> Result<DeletedTrashedBoards, String> {
+    let root = root_path.clone().map(PathBuf::from);
+    let dir = canvas_boards_dir(&app, &scope, root_path)?;
+    let mut app_trash = 0;
+    let deleted = delete_trashed_canvas_boards_in(&dir, &trash_ids, |path| {
+        if send_path_to_system_trash(path).is_ok() {
+            return Ok(());
+        }
+        let root = root.as_deref().ok_or_else(|| "project root is required".to_string())?;
+        move_path_to_app_trash(&app, root, path)?;
+        app_trash += 1;
+        Ok(())
+    })?;
+    Ok(DeletedTrashedBoards { deleted, app_trash })
+}
+
+/// ゴミ箱の `.canvas` だけを消す（`trash` に渡す）。ID は一覧と同じ形かを確かめ、`.trash` の外のものと、
+/// 移せなかった中間稿のフォルダ（`.draft`、K4）には触らない。ないものは数えずに飛ばす。
+fn delete_trashed_canvas_boards_in(
+    dir: &Path,
+    trash_ids: &[String],
+    mut trash: impl FnMut(&Path) -> Result<(), String>,
+) -> Result<usize, String> {
+    let trash_dir = canvas_board_trash_dir(dir);
+    let mut paths = Vec::new();
+    for trash_id in trash_ids {
+        let path = trashed_canvas_board_path(&trash_dir, trash_id)?;
+        if path.is_file() && !paths.contains(&path) {
+            paths.push(path);
+        }
+    }
+    let mut deleted = 0;
+    for path in paths {
+        trash(&path)?;
+        deleted += 1;
+    }
+    Ok(deleted)
 }
 
 #[tauri::command]
@@ -6296,4 +6364,35 @@ mod tests {
         assert!(super::restore_canvas_board_in(&dir, "project", &trash_id).is_err(), "同じものは2回戻せない");
         std::fs::remove_dir_all(&dir).expect("remove test directory");
     }
+    /// ゴミ箱を空にする（KNOWN_ISSUES 2026-11-21）。一覧の `.canvas` だけを渡し、生きているボード・中間稿のフォルダ
+    /// （`.draft`、K4）・形の違う ID・`.trash` の外は消さない。
+    #[test]
+    fn emptying_the_board_trash_sends_only_trashed_boards() {
+        let dir = std::env::temp_dir().join(format!("then-board-trash-empty-{}-{}", std::process::id(), super::now_millis()));
+        let trash = super::canvas_board_trash_dir(&dir);
+        std::fs::create_dir_all(trash.join("1700000000000--old.draft")).expect("create draft folder");
+        std::fs::write(dir.join("alive.canvas"), "{}").expect("write board");
+        std::fs::write(trash.join("1700000000001--old.canvas"), "{}").expect("write trashed");
+        std::fs::write(trash.join("1700000000002--plan.canvas"), "{}").expect("write trashed");
+        let mut sent = Vec::new();
+        let deleted = super::delete_trashed_canvas_boards_in(
+            &dir,
+            &["1700000000001--old".to_string(), "1700000000002--plan".to_string(), "1700000000001--old".to_string(), "1700000000009--gone".to_string()],
+            |path| {
+                sent.push(path.file_name().unwrap().to_string_lossy().to_string());
+                std::fs::remove_file(path).map_err(|error| error.to_string())
+            },
+        )
+        .expect("empty the trash");
+        assert_eq!(deleted, 2, "同じものは2回送らず、ないものは数えない");
+        assert_eq!(sent, vec!["1700000000001--old.canvas", "1700000000002--plan.canvas"]);
+        assert!(dir.join("alive.canvas").is_file());
+        assert!(trash.join("1700000000000--old.draft").is_dir(), "中間稿のフォルダは残す（K4）");
+        for bad in ["../alive", "alive", "1--../x", "1700000000000--old.draft"] {
+            assert!(super::delete_trashed_canvas_boards_in(&dir, &[bad.to_string()], |_| panic!("must not send")).is_err(), "{bad}");
+        }
+        assert!(dir.join("alive.canvas").is_file());
+        std::fs::remove_dir_all(&dir).expect("remove test directory");
+    }
 }
+

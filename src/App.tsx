@@ -3874,6 +3874,7 @@ export default function App() {
       manuscriptFolders: canvasManuscriptFolders,
       posts: canvasPosts,
       rightSidebarVisible: !isRightSidebarCollapsed,
+      isLibraryRoot: projectFolder.library?.role === "root",
     };
 
     // キャンバスはメイン画面の中央に開く。別ウィンドウが開いていれば、同じボードを2か所で直さないよう、

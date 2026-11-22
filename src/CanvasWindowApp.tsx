@@ -135,6 +135,7 @@ import {
   overwriteCanvasBoard,
   reorderBoards,
   restoreTrashedBoard,
+  deleteTrashedBoards,
   setCanvasBoardConflictListener,
   setCanvasFileWriteTransport,
   setCanvasPostWriteTransport,
@@ -1168,6 +1169,8 @@ export default function CanvasWindowApp({
   const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
   const [trashedBoards, setTrashedBoards] = useState<TrashedCanvasBoardSummary[]>([]);
   const [isTrashLoading, setIsTrashLoading] = useState(false);
+  // ゴミ箱のボードを完全に削除する前の確認（1枚、または全部）。
+  const [purgeTarget, setPurgeTarget] = useState<{ trashIds: string[]; name: string | null } | null>(null);
   // 別ウィンドウ表示のときだけ使う資料のサイドパネル。
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(true);
   // 「この順で原稿を作る」（BINDER 4-4）。並べ替えの画面と、「カードごと」で置き換えた回（元に戻すときに使う）。
@@ -2720,6 +2723,24 @@ export default function CanvasWindowApp({
       setTrashedBoards(await listTrashedBoards(scope, payload.rootPath));
       await loadBoardList(scope, activeBoardId ?? restored.id);
       setStatus("ボードを復元しました");
+    } catch (error) {
+      setStatus(String(error));
+    } finally {
+      setIsTrashLoading(false);
+    }
+  };
+
+  /** 確認のあと、ゴミ箱のボードを完全に削除する（OS のゴミ箱へ送る）。一覧を読み直す。 */
+  const purgeTrashedBoards = async () => {
+    if (!payload || !purgeTarget) return;
+    const { trashIds } = purgeTarget;
+    setPurgeTarget(null);
+    setIsTrashLoading(true);
+    setStatus("ボードを完全に削除中");
+    try {
+      const deleted = await deleteTrashedBoards(scope, payload.rootPath, trashIds);
+      setTrashedBoards(await listTrashedBoards(scope, payload.rootPath));
+      setStatus(deleted === 1 ? "ボードを完全に削除しました" : `${deleted}枚のボードを完全に削除しました`);
     } catch (error) {
       setStatus(String(error));
     } finally {
@@ -4728,7 +4749,7 @@ export default function CanvasWindowApp({
             <header>
               <div>
                 <h2 id="canvas-trash-title">ゴミ箱</h2>
-                <span>作品ボード</span>
+                <span>{payload?.isLibraryRoot ? "ライブラリ直下のボード" : "作品ボード"}</span>
               </div>
               <button
                 type="button"
@@ -4759,13 +4780,56 @@ export default function CanvasWindowApp({
                     >
                       復元
                     </button>
+                    <button
+                      className="dangerCanvasButton"
+                      type="button"
+                      disabled={isTrashLoading}
+                      onClick={() => setPurgeTarget({ trashIds: [item.trashId], name: item.name })}
+                    >
+                      完全に削除
+                    </button>
                   </article>
                 ))
               )}
             </div>
             <footer>
+              <button
+                className="dangerCanvasButton"
+                type="button"
+                disabled={isTrashLoading || trashedBoards.length === 0}
+                onClick={() => setPurgeTarget({ trashIds: trashedBoards.map((item) => item.trashId), name: null })}
+              >
+                ゴミ箱を空にする
+              </button>
               <button type="button" onClick={() => setIsTrashModalOpen(false)}>
                 閉じる
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
+      {purgeTarget && (
+        <div className="canvasModalBackdrop" role="presentation">
+          <section
+            className="canvasRenameModal canvasDeleteModal canvasPurgeModal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="canvas-purge-title"
+          >
+            <header>
+              <h2 id="canvas-purge-title">
+                {purgeTarget.name !== null ? `「${purgeTarget.name}」を完全に削除` : "ゴミ箱を空にする"}
+              </h2>
+              <button type="button" aria-label="閉じる" onClick={() => setPurgeTarget(null)}>
+                ×
+              </button>
+            </header>
+            <footer>
+              <button type="button" onClick={() => setPurgeTarget(null)}>
+                キャンセル
+              </button>
+              <button className="dangerCanvasButton" type="button" onClick={() => void purgeTrashedBoards()}>
+                {purgeTarget.trashIds.length === 1 ? "完全に削除" : `${purgeTarget.trashIds.length}枚を完全に削除`}
               </button>
             </footer>
           </section>

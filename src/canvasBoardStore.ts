@@ -375,6 +375,34 @@ export async function listTrashedBoards(
     .sort((left, right) => right.deletedAt - left.deletedAt);
 }
 
+/**
+ * ゴミ箱のボードを完全に削除する（KNOWN_ISSUES 2026-11-21）。Then の外では OS のゴミ箱へ送り、そこから戻せる。
+ * 消した数を返す。
+ */
+export async function deleteTrashedBoards(
+  scope: CanvasScope,
+  rootPath: string | null,
+  trashIds: string[],
+): Promise<number> {
+  if (isTauriRuntime()) {
+    const result = await invoke<{ deleted: number; appTrash: number }>("delete_trashed_canvas_boards", {
+      scope,
+      rootPath,
+      trashIds,
+    });
+    return result.deleted;
+  }
+  const trash = readLocalBoardTrash(scope, rootPath);
+  let deleted = 0;
+  for (const trashId of new Set(trashIds)) {
+    if (!trash[trashId]) continue;
+    delete trash[trashId];
+    deleted += 1;
+  }
+  writeLocalBoardTrash(scope, rootPath, trash);
+  return deleted;
+}
+
 export async function restoreTrashedBoard(
   scope: CanvasScope,
   rootPath: string | null,

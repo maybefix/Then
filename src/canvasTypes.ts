@@ -438,6 +438,8 @@ export type CanvasWindowPayload = {
   posts?: CanvasPosts;
   /** メイン画面の右サイドバー表示状態。別ウィンドウのサイドパネルへ引き継ぐ。 */
   rightSidebarVisible?: boolean;
+  /** ライブラリ直下のボードか（ゴミ箱の画面の見出しに使う。K5）。 */
+  isLibraryRoot?: boolean;
 };
 
 
