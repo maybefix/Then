@@ -220,6 +220,11 @@ type PointerDragState = {
   notes?: boolean;
   /** 動かしているのがノート・原稿（テキストファイル）だけのとき。埋め込みのキャンバスへも落とせる（BINDER 4-2）。 */
   files?: boolean;
+  /**
+   * 選んだものに素材の画像・PDF が入っているとき（Q4）。画像・PDF を1つだけ動かすとき（reference）と同じく、
+   * 素材の中のフォルダへだけ落とせる。
+   */
+  materialFiles?: boolean;
 };
 
 type TreeDropTarget =
@@ -1170,6 +1175,31 @@ export function WorkspaceSidebar({
       );
       return;
     }
+    // 選んだものに画像・PDF が入っているとき（Q4）。素材の段の見出しと素材の中の行だけを受け、その中へ入れる。
+    if (dragState.materialFiles) {
+      updateMaterialsDrop(null);
+      let folderPath: string | undefined;
+      if (sectionHeader) {
+        if (sectionHeader.dataset.binderSection === "materials") folderPath = sectionHeader.dataset.binderDropFolder;
+      } else {
+        const row = element?.closest<HTMLElement>("[data-tree-entry-path]");
+        if (row?.dataset.treeEntryMaterial === "true" && !dragState.entryPaths.includes(row.dataset.treeEntryPath ?? "")) {
+          folderPath =
+            row.dataset.treeEntryKind === "folder"
+              ? row.dataset.treeEntryPath
+              : row.dataset.treeFolderPath ?? row.dataset.treeReferenceFolder;
+        }
+      }
+      const alreadyThere =
+        folderPath !== undefined &&
+        dragState.sourceParentPaths.every((parentPath) => folderKey(parentPath) === folderKey(folderPath!));
+      const intoItself =
+        folderPath !== undefined && dragState.entryPaths.some((sourcePath) => isSidebarPathInside(folderPath!, sourcePath));
+      updateDropTarget(
+        folderPath && !alreadyThere && !intoItself ? { kind: "moveInto", folderPath, entryPath: folderPath } : null,
+      );
+      return;
+    }
     // ノートだけを「この場面」の素材の欄へ落とすと、素材リストに足す（BINDER 3-3）。ツリーの外なので、
     // ツリーの中の判定には当たらない。
     // ノート・原稿を埋め込みのキャンバスへ落とすと、ファイルのカードを置く（BINDER 4-2）。
@@ -1262,6 +1292,19 @@ export function WorkspaceSidebar({
     });
   };
 
+  /** 画像・PDF の行が置かれたフォルダ。 */
+  const parentOfReference = (path: string) => path.replace(/[\\/][^\\/]*$/, "");
+  /** 選んだもの（ファイルの行と画像・PDF の行）を表示の順に。隠れているものは入れない（Q4）。 */
+  const selectionInDisplayOrder = (selection: ReadonlySet<string>) =>
+    projectFolder
+      ? [
+          ...collectFilePathsInDisplayOrder(projectFolder).filter(
+            (path) => selection.has(path) && !filteredOutPaths.has(path),
+          ),
+          ...(starFilterActive ? [] : materialReferences.map((reference) => reference.path).filter((path) => selection.has(path))),
+        ]
+      : [];
+
   const handleTreePointerDown = (
     event: ReactPointerEvent<HTMLElement>,
     folderPath: string | null,
@@ -1286,13 +1329,12 @@ export function WorkspaceSidebar({
       !isFolder && (selectionAtPointerDown.has(entryPath) || isAdditiveSelection);
     const entryPaths =
       shouldDragSelection && projectFolder
-        ? collectFilePathsInDisplayOrder(projectFolder).filter(
-            (path) => dragSelection.has(path) && !filteredOutPaths.has(path),
-          )
+        ? selectionInDisplayOrder(dragSelection)
         : [entryPath];
+    const referencePaths = new Set(materialReferences.map((reference) => reference.path));
     const sourceParentPaths = projectFolder
       ? entryPaths
-          .map((path) => findParentPath(projectFolder, path))
+          .map((path) => (referencePaths.has(path) ? parentOfReference(path) : findParentPath(projectFolder, path)))
           .filter((path): path is string => Boolean(path))
       : [folderPath];
     const uniqueParentPaths = new Set(sourceParentPaths);
@@ -1323,6 +1365,7 @@ export function WorkspaceSidebar({
           const entry = findProjectEntry(projectFolder.children, path);
           return entry?.kind === "file" && /\.(md|txt)$/i.test(path);
         }),
+      materialFiles: entryPaths.some((path) => referencePaths.has(path)),
     };
     // Capture immediately so an ordinary drag keeps delivering pointer events
     // after the cursor leaves the narrow source row. Waiting for the first
@@ -1330,7 +1373,10 @@ export function WorkspaceSidebar({
     captureTarget.setPointerCapture(event.pointerId);
   };
 
-  /** 素材の段の画像・PDF の行を押したとき。1つずつ動かす（複数選択はしない）。 */
+  /**
+   * 素材の段の画像・PDF の行を押したとき。Ctrl を押しているか、選んだものの1つを押したなら、選んだものを
+   * まとめて動かす（Q4）。そうでなければ1つだけ。
+   */
   const handleReferencePointerDown = (
     event: ReactPointerEvent<HTMLElement>,
     reference: MaterialReference,
@@ -1338,6 +1384,34 @@ export function WorkspaceSidebar({
     if (event.button !== 0 || !onMoveReference) return;
     const eventTarget = event.target instanceof Element ? event.target : event.currentTarget;
     const captureTarget = eventTarget.closest<HTMLElement>("button") ?? event.currentTarget;
+    const selectionAtPointerDown = selectedFilePathsRef.current;
+    const isAdditiveSelection = event.ctrlKey || event.metaKey;
+    if (isAdditiveSelection || (selectionAtPointerDown.has(reference.path) && selectionAtPointerDown.size > 1)) {
+      const dragSelection = new Set(selectionAtPointerDown);
+      dragSelection.add(reference.path);
+      const entryPaths = selectionInDisplayOrder(dragSelection);
+      const referencePaths = new Set(materialReferences.map((item) => item.path));
+      const sourceParentPaths = projectFolder
+        ? entryPaths
+            .map((path) => (referencePaths.has(path) ? parentOfReference(path) : findParentPath(projectFolder, path)))
+            .filter((path): path is string => Boolean(path))
+        : [];
+      pointerDragRef.current = {
+        pointerId: event.pointerId,
+        entryPath: reference.path,
+        entryPaths,
+        sourceParentPaths,
+        reorderFolderPath: null,
+        replaceSelectionOnDrag: false,
+        captureTarget,
+        startX: event.clientX,
+        startY: event.clientY,
+        isDragging: false,
+        materialFiles: true,
+      };
+      captureTarget.setPointerCapture(event.pointerId);
+      return;
+    }
     pointerDragRef.current = {
       pointerId: event.pointerId,
       entryPath: reference.path,
@@ -1398,6 +1472,8 @@ export function WorkspaceSidebar({
         );
       } else if (dragState.reference) {
         if (activeDropTarget?.kind === "moveInto") onMoveReference?.(dragState.reference, activeDropTarget.folderPath);
+      } else if (dragState.materialFiles) {
+        if (activeDropTarget?.kind === "moveInto") onMoveEntry(dragState.entryPaths, activeDropTarget.folderPath);
       } else if (activeDropTarget?.kind === "reorder") {
         const isSameParent =
           dragState.reorderFolderPath !== null &&
@@ -2190,6 +2266,7 @@ export function WorkspaceSidebar({
         className={[
           "treeItem fileTreeItem materialReferenceItem",
           draggingEntryPaths.has(reference.path) ? "draggingTreeEntry" : "",
+          selectedFilePaths.has(reference.path) && selectedFilePaths.size > 1 ? "selectedTreeEntry" : "",
         ].filter(Boolean).join(" ")}
         data-tree-entry-path={reference.path}
         data-tree-entry-kind="file"
@@ -2222,11 +2299,21 @@ export function WorkspaceSidebar({
           className="treeItemPrimary fileTreeItemPrimary"
           type="button"
           title={reference.path}
+          aria-pressed={selectedFilePaths.has(reference.path) && selectedFilePaths.size > 1}
           onClick={(event) => {
             if (suppressNextClickRef.current) {
               event.preventDefault();
               return;
             }
+            // Ctrl で、ファイルの行と同じ選択に足す・外す（Q4）。
+            if (event.ctrlKey || event.metaKey) {
+              const next = new Set(selectedFilePathsRef.current);
+              if (next.has(reference.path)) next.delete(reference.path);
+              else next.add(reference.path);
+              replaceSelectedFilePaths(next);
+              return;
+            }
+            replaceSelectedFilePaths([reference.path]);
             onOpenReference?.(reference);
           }}
         >

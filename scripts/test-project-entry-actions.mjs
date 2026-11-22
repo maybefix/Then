@@ -1047,4 +1047,33 @@ function imageWorld(app) {
   assert.equal(app.multiInputs.length, asked);
 }
 
+// ---- Q4: まとめての移動に素材の画像・PDF（ファイルの一覧にないもの）を入れる ----
+{
+  const { app, actions } = setup();
+  imageWorld(app);
+  const image = p("素材", "資料", "地図.png");
+  const moved = p("素材", "年表", "地図.png");
+  app.commands.move_project_entries = () => ({
+    projectFolder: app.projectFolder,
+    moves: [
+      { movedDocument: null, oldPath: image, newPath: moved, oldParentPath: p("素材", "資料"), newParentPath: p("素材", "年表") },
+      { movedDocument: { path: p("素材", "年表", "c.txt"), name: "c.txt", content: "C" }, oldPath: p("c.txt"), newPath: p("素材", "年表", "c.txt"), oldParentPath: ROOT, newParentPath: p("素材", "年表") },
+    ],
+  });
+  await actions().handleMoveProjectEntriesToFolder([image, p("c.txt")], p("素材", "年表"));
+  const sent = app.log.find((entry) => entry.command === "move_project_entries");
+  assert.deepEqual(sent.args, { rootPath: ROOT, sourcePaths: [image, p("c.txt")], targetFolderPath: p("素材", "年表") });
+  assert.deepEqual(app.referenceLayout.cards.map((card) => card.sourcePath), ["素材/年表/地図.png", "素材/年表/c.txt"], "資料カードも付いていく");
+  assert.equal(app.toasts.at(-1), "2件のファイルを移動しました");
+
+  // 画像が同じフォルダにあれば外す。画像だけ1つになったら、画像の移動と同じ。
+  app.log.length = 0;
+  app.commands.move_project_entry = () => ({ projectFolder: app.projectFolder, movedDocument: null, oldPath: image, newPath: moved, oldParentPath: p("素材", "資料"), newParentPath: p("素材", "年表") });
+  await actions().handleMoveProjectEntriesToFolder([image], p("素材", "年表"));
+  assert.deepEqual(app.log.find((entry) => entry.command === "move_project_entry").args, { rootPath: ROOT, sourcePath: image, targetFolderPath: p("素材", "年表"), targetPath: null, position: null });
+  app.log.length = 0;
+  await actions().handleMoveProjectEntriesToFolder([image, p("素材", "資料", "設定.pdf")], p("素材", "資料"));
+  assert.deepEqual(commandsOf(app), [], "どれも同じフォルダにあれば何もしない");
+}
+
 console.log("project entry actions: ok");

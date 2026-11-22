@@ -611,7 +611,60 @@ async function choose(target, label) {
   await atRoot.unmount();
 }
 
-// ノートのスター（U10）: 行に星の印、右クリックで付ける・外す（素材のノートだけ）。素材の段の見出しの星のボタンで、
+// Q4: 画像・PDF の行もファイルの行と同じく Ctrl で選べ、選んだもの（ノートと混ぜてよい）をまとめて素材の中の
+// フォルダへドラッグできる。原稿の段へは落とせない。Ctrl なしで押すと、今までどおり開く。
+{
+  const references = [
+    { path: p("資料/年表/地図.png"), sourcePath: "資料/年表/地図.png", name: "地図.png", kind: "image" },
+    { path: p("資料/設定集.pdf"), sourcePath: "資料/設定集.pdf", name: "設定集.pdf", kind: "pdf" },
+  ];
+  const view = await mount(props(withMaterials, {
+    materialReferences: references,
+    onOpenReference: spy("onOpenReference"),
+    onMoveReference: spy("onMoveReference"),
+  }));
+  takeCalls();
+  const primary = (relative) => row(view.container, relative).querySelector(".treeItemPrimary");
+  // 画像を押して開き（選びはその1つになる）、Ctrl でほかを足す。
+  await click(primary("資料/設定集.pdf"));
+  assert.deepEqual(takeCalls(), [["onOpenReference", "資料/設定集.pdf"]]);
+  await click(primary("資料/年表/地図.png"), { ctrlKey: true });
+  await click(primary("資料/人物.md"), { ctrlKey: true });
+  assert.deepEqual(takeCalls(), [], "Ctrl では開かない");
+  assert.equal(primary("資料/設定集.pdf").getAttribute("aria-pressed"), "true");
+  assert.ok(row(view.container, "資料/年表/地図.png").classList.contains("selectedTreeEntry"));
+
+  await drag(row(view.container, "資料/設定集.pdf"), header(view.container, "manuscript"));
+  await drag(row(view.container, "資料/設定集.pdf"), row(view.container, "第一章"), 10);
+  assert.deepEqual(takeCalls(), [], "原稿の段へは落とせない");
+  await drag(row(view.container, "資料/設定集.pdf"), row(view.container, "資料/年表"), 10);
+  assert.deepEqual(
+    takeCalls(),
+    [["onMoveEntry", ["資料/人物.md", "資料/年表/地図.png", "資料/設定集.pdf"], "資料/年表"]],
+    "選んだもの全部を表示の順で、素材の中のフォルダへ",
+  );
+  // 落としたあとは、ファイルの行と同じく選びを外す。選び直して、ノートの行から動かす。
+  assert.equal(primary("資料/設定集.pdf").getAttribute("aria-pressed"), "false");
+  await click(primary("資料/設定集.pdf"));
+  await click(primary("資料/年表/地図.png"), { ctrlKey: true });
+  await click(primary("資料/人物.md"), { ctrlKey: true });
+  takeCalls();
+  await drag(row(view.container, "資料/人物.md"), header(view.container, "materials"));
+  assert.deepEqual(
+    takeCalls(),
+    [["onMoveEntry", ["資料/人物.md", "資料/年表/地図.png", "資料/設定集.pdf"], "資料"]],
+    "ノートの行から動かしても、選んだ画像も一緒に",
+  );
+
+  await click(primary("資料/設定集.pdf"));
+  assert.deepEqual(takeCalls(), [["onOpenReference", "資料/設定集.pdf"]], "Ctrl なしで押すと開き、選びは押した1つになる");
+  assert.equal(primary("資料/年表/地図.png").getAttribute("aria-pressed"), "false");
+  await drag(row(view.container, "資料/設定集.pdf"), row(view.container, "資料/年表"), 10);
+  assert.deepEqual(takeCalls(), [["onMoveReference", "資料/設定集.pdf", "資料/年表"]], "1つなら今までどおり");
+  await view.unmount();
+}
+
+// ノートのスター（U10）:行に星の印、右クリックで付ける・外す（素材のノートだけ）。素材の段の見出しの星のボタンで、
 // スターの付いたノートと、それを入れているフォルダだけを出す（画像・PDF も隠す）。もう一度押すと戻る。
 {
   localStorage.removeItem("then.sidebar.starFilter");

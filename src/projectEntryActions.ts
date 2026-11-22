@@ -1070,9 +1070,17 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     if (!projectFolder) return;
     const uniqueSourcePaths = [...new Set(sourcePaths)];
     if (uniqueSourcePaths.length === 0) return;
+    // 素材の画像・PDF はファイルの一覧に入っていない（Q4）。一覧にないパスは、画像・PDF ならそのまま受ける。
+    const isMaterialFilePath = (path: string) =>
+      !findProjectEntry(projectFolder.children, path) && /\.(png|jpe?g|webp|pdf)$/i.test(path);
     if (uniqueSourcePaths.length === 1) {
+      const [only] = uniqueSourcePaths;
+      if (isMaterialFilePath(only)) {
+        await handleMoveMaterialReference({ path: only, name: only.split(/[\\/]/).pop() ?? only }, targetFolderPath);
+        return;
+      }
       await handleMoveProjectEntryToFolder(
-        uniqueSourcePaths[0],
+        only,
         targetFolderPath,
         targetPath,
         position,
@@ -1083,13 +1091,14 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     const sourceEntries = uniqueSourcePaths.map((path) =>
       findProjectEntry(projectFolder.children, path),
     );
-    if (sourceEntries.some((entry) => !entry || entry.kind !== "file")) {
+    if (sourceEntries.some((entry, index) => (entry ? entry.kind !== "file" : !isMaterialFilePath(uniqueSourcePaths[index])))) {
       showToast("複数移動ではファイルだけを選択してください");
       return;
     }
     const movingPaths = uniqueSourcePaths.filter((path) => {
-      const parentPath =
-        findContainingFolderPath(projectFolder, path) ?? projectFolder.path;
+      const parentPath = isMaterialFilePath(path)
+        ? getParentPath(path) ?? projectFolder.path
+        : findContainingFolderPath(projectFolder, path) ?? projectFolder.path;
       return !isSamePath(parentPath, targetFolderPath);
     });
     if (movingPaths.length === 0) return;

@@ -1,6 +1,6 @@
 //! BINDER 2-6: 素材の段の画像・PDF の改名・移動と、ボードの資料カードの付け替え。
 
-use super::super::{move_project_entry, rename_project_entry};
+use super::super::{move_project_entries, move_project_entry, rename_project_entry};
 use super::fail_after_first_board;
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -251,4 +251,37 @@ fn a_work_without_boards_or_materials_folder_renames_as_before() {
     rename_project_entry(work.s("素材/資料/メモ.md"), "メモ2.md".into()).expect("no boards folder");
     std::fs::write(work.p(".then/project.json"), json!({ "schemaVersion": 1 }).to_string()).unwrap();
     assert!(rename_project_entry(work.s("素材/資料/地図.png"), "地図2".into()).is_err(), "素材フォルダがなければ画像は素材でない");
+}
+
+/// Q4: まとめての移動に画像・PDF を入れられる（素材の中だけ）。ノートと混ぜてもよい。ボードの資料カードも付いていく。
+#[test]
+fn several_images_and_notes_move_together_inside_the_materials_folder() {
+    let work = temp_work("multi");
+    let result = move_project_entries(
+        work.root(),
+        vec![work.s("素材/資料/地図.png"), work.s("素材/資料/設定.PDF"), work.s("素材/人物.md")],
+        work.s("素材/年表"),
+    )
+    .expect("move images and a note together");
+    assert_eq!(result.moves.len(), 3);
+    assert!(work.p("素材/年表/地図.png").is_file());
+    assert!(work.p("素材/年表/設定.PDF").is_file());
+    assert!(work.p("素材/年表/人物.md").is_file());
+    assert_eq!(node(&work.board("a"), "r1")["sourcePath"], "素材/年表/地図.png");
+    assert_eq!(node(&work.board("b"), "r3")["sourcePath"], "素材/年表/設定.PDF");
+    let order = config(&work)["order"].to_string();
+    assert!(!order.contains("地図.png"), "画像は並び順を持たない: {order}");
+    assert!(order.contains("人物.md"));
+}
+
+#[test]
+fn several_images_do_not_leave_the_materials_folder_and_nothing_moves() {
+    let work = temp_work("multi-out");
+    let result = move_project_entries(work.root(), vec![work.s("素材/人物.md"), work.s("素材/資料/地図.png")], work.s("第一章"));
+    assert!(result.is_err());
+    assert!(work.p("素材/人物.md").is_file(), "nothing moved");
+    assert!(work.p("素材/資料/地図.png").is_file());
+    assert!(move_project_entries(work.root(), vec![work.s("第一章/挿絵.png"), work.s("本編.md")], work.s("素材")).is_err());
+    assert!(work.p("第一章/挿絵.png").is_file());
+    assert!(work.p("本編.md").is_file());
 }

@@ -3318,12 +3318,18 @@ fn move_project_entries(
         return Err("entry move must stay inside the project root".to_string());
     }
 
+    // Q4: 素材の中の画像・PDF も、素材の中へならまとめて動かせる（1つずつの移動と同じ決まり）。
+    let materials = material_files::materials_folder(&root, &load_project_config(&root)?);
     let mut candidates = Vec::<String>::new();
     let mut destinations = Vec::<String>::new();
     for source_path in source_paths {
         let source = PathBuf::from(&source_path);
-        if !source.is_file() || !is_supported_text_extension(&source) {
-            return Err("multiple entry move supports only text files".to_string());
+        let is_material = source.is_file()
+            && material_files::is_material_file(&source)
+            && material_files::is_in(materials.as_deref(), &source)
+            && material_files::is_in(materials.as_deref(), &target_folder);
+        if !source.is_file() || !(is_supported_text_extension(&source) || is_material) {
+            return Err("multiple entry move supports only text files and material images".to_string());
         }
         let source_canonical = source
             .canonicalize()
