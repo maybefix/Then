@@ -41,6 +41,15 @@
   white-space: nowrap;
 }
 
+/* U7: 時刻と作品名をつかんで Canvas へドラッグする。 */
+.postDragHandle {
+  cursor: grab;
+}
+
+.postDragHandle:active {
+  cursor: grabbing;
+}
+
 .postMenuHost {
   position: relative;
 }

@@ -613,6 +613,47 @@ test("ノートの札があれば、投稿のファイルが同じでもアプ�
   unmount();
 });
 
+// ---- U7: 投稿を Canvas へドラッグする（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md の D1〜D6） ----
+test("下の段の時刻と作品名をつかむと、投稿の ID だけを運ぶ。本文・ボタン・札はつかむ場所でない", async () => {
+  fakeBackend({ initial: [
+    { id: "p1", at: "2026-11-14T09:00:00+09:00", body: "灯台の夢", work: B },
+    { id: "p2", at: "2026-11-14T09:30:00+09:00", body: "続き", work: A, replyTo: "p1" },
+    { id: "p3", at: "2026-11-14T10:00:00+09:00", body: "夜の郵便局", work: A,
+      note: { work: A.id, path: "素材/夜の郵便局.md", workRoot: "C:/lib/作品A", workName: "作品A" } },
+  ] });
+  const { container, unmount } = await mount({ initialFilter: "all" });
+  const drag = (element) => {
+    const data = new Map();
+    const event = new window.Event("dragstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: {
+      setData: (type, value) => data.set(type, value), effectAllowed: "all", setDragImage: () => {},
+    } });
+    element.dispatchEvent(event);
+    return { data, event };
+  };
+  const dream = item(container, "灯台の夢");
+  const time = dream.querySelector("time");
+  assert.equal(time.getAttribute("draggable"), "true", "D1: 時刻をつかめる");
+  let started;
+  await act(async () => { started = drag(time); });
+  assert.deepEqual([...started.data], [["application/x-then-canvas-post", "p1"]],
+    "D5: 投稿の ID だけを運ぶ（text/plain を付けないので、本文へ落としても文は入らない）");
+  assert.equal(started.event.dataTransfer.effectAllowed, "copy");
+  assert.equal(dream.querySelector(".postWork").getAttribute("draggable"), "true", "ほかの作品の作品名もつかめる");
+  assert.notEqual(dream.querySelector(".postBody").getAttribute("draggable"), "true", "D2: 本文はつかむ場所でない");
+  for (const button of dream.querySelectorAll("button")) {
+    assert.notEqual(button.closest("[draggable=true]"), button, "D6: ボタンはつかむ場所でない");
+  }
+  const reply = item(container, "続き");
+  await act(async () => { started = drag(reply.querySelector("time")); });
+  assert.deepEqual([...started.data], [["application/x-then-canvas-post", "p2"]], "D3: 返信もつかめる");
+  const noted = item(container, "夜の郵便局");
+  await act(async () => { started = drag(noted.querySelector("time")); });
+  assert.deepEqual([...started.data], [["application/x-then-canvas-post", "p3"]], "D3: ノートにした投稿もつかめる");
+  assert.equal(noted.querySelector(".postNoteTag").closest("[draggable=true]"), null, "ノートの札はつかむ場所でない");
+  unmount();
+});
+
 // ---- Canvas の「投稿にする」（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md） ----
 test("「投稿にする」の create は書いた投稿（ID とハッシュ）を返し、通知を出さない。書けなければ投げる", async () => {
   const backend = fakeBackend({ initial: [{ id: "p1", at: "2026-11-14T09:00:00+09:00", body: "潮の匂い", work: A }] });

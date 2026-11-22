@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
+import type { DragEvent, KeyboardEvent } from "react";
+import { CANVAS_POST_DRAG_MIME } from "../../canvasTypes";
 import { IdeaComposerBox } from "./IdeaComposerBox";
 import {
   arrangePosts,
@@ -30,6 +31,15 @@ type PostStreamPaneProps = {
 };
 
 const REVEAL_MS = 2400;
+
+/**
+ * U7（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md）: 下の段の時刻と作品名をつかんで、Canvas へ落とすと投稿のカードになる。
+ * 運ぶのは投稿の ID だけ（text/plain を付けないので、本文へ落としても文は入らない。U6 はやらない）。
+ */
+function startPostDrag(event: DragEvent<HTMLElement>, id: string) {
+  event.dataTransfer.setData(CANVAS_POST_DRAG_MIME, id);
+  event.dataTransfer.effectAllowed = "copy";
+}
 
 function PlusIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>;
@@ -177,8 +187,8 @@ export function PostStreamPane({ stream, filter, onFilterChange, onMakeNote, onO
           {/* 今の Idea の断片と同じく、左に時刻（と、ほかの作品なら作品名）、右に操作。 */}
           <div className="ideaFragmentFoot postFoot">
             <span className="postHead">
-              <time className="ideaFragmentDate" dateTime={entry.at}>{timeLabel(entry.at)}</time>
-              {otherWork && <span className="postWork">{otherWork}</span>}
+              <time className="ideaFragmentDate postDragHandle" dateTime={entry.at} draggable onDragStart={(event) => startPostDrag(event, entry.id)}>{timeLabel(entry.at)}</time>
+              {otherWork && <span className="postWork postDragHandle" draggable onDragStart={(event) => startPostDrag(event, entry.id)}>{otherWork}</span>}
               {entry.note && (() => {
                 const note = entry.note;
                 const label = noteLabel(note.path);
