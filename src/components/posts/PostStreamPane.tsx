@@ -107,9 +107,12 @@ export function PostStreamPane({ stream, filter, onFilterChange, onMakeNote, onO
   const { scoped, available, posts, work, add, editBody, setFiled, remove, refresh } = stream;
   const [text, setText] = useState("");
   // U9: 検索の文字。ペインの中だけで持ち、畳む・作品を切り替えると空にする。
+  // 欄の文字（searchText）と、絞り込みに使う文字（query）を分ける。IME の変換中は query を変えない（K7）。
+  const [searchText, setSearchText] = useState("");
   const [query, setQuery] = useState("");
-  useEffect(() => { if (!open) setQuery(""); }, [open]);
-  useEffect(() => { setQuery(""); }, [work?.id, work?.name]);
+  const clearSearch = () => { setSearchText(""); setQuery(""); };
+  useEffect(() => { if (!open) clearSearch(); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { clearSearch(); }, [work?.id, work?.name]); // eslint-disable-line react-hooks/exhaustive-deps
   // 検索の文字を変えるまでは、一度当たった投稿を残す（直して当たらなくなっても、目の前から消さない。確認1の 3-5）。
   const keptRef = useRef<{ query: string; ids: Set<string> }>({ query: "", ids: new Set() });
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -160,7 +163,7 @@ export function PostStreamPane({ stream, filter, onFilterChange, onMakeNote, onO
   const revealedRef = useRef<number | null>(null);
   const [revealedId, setRevealedId] = useState<string | null>(null);
   // 送られてきた投稿が検索に当たらないと並ばないので、送られたら検索欄を空にする。
-  useEffect(() => { if (reveal) setQuery(""); }, [reveal?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (reveal) clearSearch(); }, [reveal?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => markSearchHits(scrollRef.current, query), [days, query]);
   useEffect(() => {
     if (!reveal || revealedRef.current === reveal.nonce) return;
@@ -188,7 +191,7 @@ export function PostStreamPane({ stream, filter, onFilterChange, onMakeNote, onO
     if (await add(body)) {
       setText((current) => (current === body ? "" : current));
       // 検索中に投稿しても、書いた投稿が見えるように（確認1の 3-5）。
-      setQuery("");
+      clearSearch();
     }
   };
   const reply = async (parentId: string) => {
@@ -230,16 +233,20 @@ export function PostStreamPane({ stream, filter, onFilterChange, onMakeNote, onO
         <SearchIcon />
         <input
           type="search"
-          value={query}
+          value={searchText}
           placeholder="検索"
           aria-label="投稿を検索"
           spellCheck={false}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            setSearchText(event.target.value);
+            if (!(event.nativeEvent as InputEvent).isComposing) setQuery(event.target.value);
+          }}
+          onCompositionEnd={(event) => setQuery(event.currentTarget.value)}
           onKeyDown={(event) => {
-            if (event.key !== "Escape" || event.nativeEvent.isComposing || !query) return;
+            if (event.key !== "Escape" || event.nativeEvent.isComposing || !searchText) return;
             event.preventDefault();
             event.stopPropagation();
-            setQuery("");
+            clearSearch();
           }}
         />
       </label>

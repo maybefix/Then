@@ -785,6 +785,36 @@ test("送られてきた投稿・畳んだペインでは検索欄を空にす�
   unmount();
 });
 
+test("K7: 変換中は絞り込みを変えず、確定したら確定した文字で絞り込む", async () => {
+  fakeBackend({ initial: [
+    { id: "p1", at: "2026-11-14T09:00:00+09:00", body: "灯台の夢", work: A },
+    { id: "p2", at: "2026-11-14T09:10:00+09:00", body: "港で拾った言葉", work: A },
+  ] });
+  const { container, unmount } = await mount();
+  const search = container.querySelector('input[aria-label="投稿を検索"]');
+  const composeInput = (value) => act(async () => {
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(search), "value").set.call(search, value);
+    search.dispatchEvent(new window.InputEvent("input", { bubbles: true, isComposing: true, data: value }));
+  });
+  await act(async () => search.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true, data: "" })));
+  await composeInput("とうだい");
+  await settle();
+  assert.equal(search.value, "とうだい", "打っている文字は欄に出る");
+  assert.deepEqual(bodies(container), ["港で拾った言葉", "灯台の夢"], "変換中は並びを変えない");
+  await composeInput("灯台");
+  await act(async () => search.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "灯台" })));
+  await settle();
+  assert.deepEqual(bodies(container), ["灯台の夢"], "確定したら絞り込む");
+  await act(async () => search.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true, data: "" })));
+  await composeInput("灯台みなと");
+  await settle();
+  assert.deepEqual(bodies(container), ["灯台の夢"], "続けて変換しているあいだは、確定した「灯台」の並びのまま");
+  await act(async () => search.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "" })));
+  await settle();
+  assert.deepEqual(bodies(container), [], "確定した「灯台みなと」で絞り込む");
+  unmount();
+});
+
 // ---- Canvas の「投稿にする」（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md） ----
 test("「投稿にする」の create は書いた投稿（ID とハッシュ）を返し、通知を出さない。書けなければ投げる", async () => {
   const backend = fakeBackend({ initial: [{ id: "p1", at: "2026-11-14T09:00:00+09:00", body: "潮の匂い", work: A }] });
