@@ -133,16 +133,17 @@ try {
     });
     await check(`${mode} D3: 打鍵の直後に落としても、Ctrl+Z 1回で入れた文だけが消える`, async () => {
       await open(mode);
-      await evaluate("__drop.focus(); __drop.caretAt(10)");
+      await evaluate("__drop.focus(); __drop.caretAt(3)");
       await sleep(60);
       await send("Input.insertText", { text: "今" });
       await sleep(20);
-      assert.equal(await value(), "朝の港。\n船が出る。今");
-      await evaluate(`__drop.post(3, "p2")`);
+      assert.equal(await value(), "朝の港今。\n船が出る。");
+      // 打った「今」のすぐ後ろへ落とす（隣り合う変更は、区切らないと1回の元に戻すにまとまる）。
+      await evaluate(`__drop.post(4, "p2")`);
       await sleep(60);
-      assert.equal(await value(), "朝の港港で拾った言葉。\n船が出る。今");
+      assert.equal(await value(), "朝の港今港で拾った言葉。\n船が出る。");
       await undo();
-      assert.equal(await value(), "朝の港。\n船が出る。今", "only the dropped text is undone");
+      assert.equal(await value(), "朝の港今。\n船が出る。", "only the dropped text is undone");
     });
     await check(`${mode} D6: 変換中に落としても何も入らない`, async () => {
       await open(mode);
