@@ -29,6 +29,7 @@
     "test:canvas-file-nodes": "node scripts/test-canvas-file-nodes.mjs",
     "test:canvas-post-cards": "node scripts/test-canvas-post-cards.mjs",
     "test:canvas-copy-to-post": "node scripts/test-canvas-copy-to-post.mjs",
+    "test:editor-post-drop": "node scripts/test-editor-post-drop.mjs",
     "test:canvas-window-place": "node scripts/test-canvas-window-place.mjs",
     "test:canvas-card-order": "node scripts/test-canvas-card-order.mjs",
     "test:v064-canvas": "node scripts/test-v064-canvas-weje.mjs",
