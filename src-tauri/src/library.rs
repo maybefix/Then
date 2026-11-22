@@ -123,7 +123,7 @@ fn read_library_config(root: &Path) -> Result<LibraryConfig, String> {
     Ok(config)
 }
 
-fn library_name(root: &Path) -> String {
+pub(super) fn library_name(root: &Path) -> String {
     read_library_config(root)
         .ok()
         .map(|config| config.name)
