@@ -48,7 +48,8 @@ fn shelf(label: &str) -> Shelf {
     set_config(&a, json!({
         "schemaVersion": 1, "materialsFolder": "素材",
         "order": { "素材": ["灯台.md", "汐見.md", "資料"] },
-        "fileProgress": { "素材/灯台.md": { "status": "writing", "updatedAt": 1 } }
+        "fileProgress": { "素材/灯台.md": { "status": "writing", "updatedAt": 1 } },
+        "noteStars": { "素材/灯台.md": 5 }
     }));
     write(&a, "素材/灯台.md", "# 灯台\n[[汐見]]\n".as_bytes());
     write(&a, "素材/汐見.md", "# 汐見\n@[[素材/資料/地図.pdf]]\n".as_bytes());
@@ -86,6 +87,9 @@ fn moves_a_note_to_another_work_with_its_order_and_progress() {
     let progress_b = load_project_config(&shelf.b).unwrap().file_progress;
     assert!(!progress_a.contains_key("素材/灯台.md"));
     assert_eq!(progress_b.get("素材/灯台.md").map(|item| item.status.as_str()), Some("writing"));
+    // U10: スターも持っていく。
+    assert!(load_project_config(&shelf.a).unwrap().note_stars.is_empty());
+    assert_eq!(load_project_config(&shelf.b).unwrap().note_stars.get("素材/灯台.md"), Some(&5));
 }
 
 #[test]
@@ -177,6 +181,8 @@ fn undo_puts_a_move_back_where_it_was_unless_the_copy_was_edited() {
     assert!(!p(&shelf.b, "素材/灯台.md").exists());
     assert_eq!(order(&shelf.a, "素材"), vec!["灯台.md", "汐見.md", "資料"]);
     assert!(load_project_config(&shelf.a).unwrap().file_progress.contains_key("素材/灯台.md"));
+    assert_eq!(load_project_config(&shelf.a).unwrap().note_stars.get("素材/灯台.md"), Some(&5), "スターも戻る");
+    assert!(load_project_config(&shelf.b).unwrap().note_stars.is_empty());
     assert!(!order(&shelf.b, "素材").contains(&"灯台.md".to_string()));
 
     let again = transfer_entries(&shelf.a, &shelf.b, &[s(&shelf.a, "素材/灯台.md")], true).unwrap();

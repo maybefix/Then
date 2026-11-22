@@ -176,16 +176,37 @@ fn remove_order(root: &Path, config: &mut ProjectConfig, folder: &Path, name: &s
     Ok(())
 }
 
-fn take_progress(root: &Path, config: &mut ProjectConfig, path: &Path) -> Option<ProjectFileProgress> {
-    let relative = trusted_project_relative_path(root, path).ok()?;
-    let progress = config.file_progress.get(&relative).cloned();
-    remove_file_progress_path(config, &relative, false);
-    progress
+/// ファイルに付いている印（進捗と、U10 のスター）。
+#[derive(Default)]
+struct Marks {
+    progress: Option<ProjectFileProgress>,
+    star: Option<i64>,
 }
 
-fn put_progress(root: &Path, config: &mut ProjectConfig, path: &Path, progress: Option<ProjectFileProgress>) {
-    let (Some(progress), Ok(relative)) = (progress, trusted_project_relative_path(root, path)) else { return };
-    config.file_progress.insert(relative, progress);
+fn read_marks(root: &Path, config: &ProjectConfig, path: &Path) -> Marks {
+    let Ok(relative) = trusted_project_relative_path(root, path) else { return Marks::default() };
+    Marks {
+        progress: config.file_progress.get(&relative).cloned(),
+        star: config.note_stars.get(&relative).copied(),
+    }
+}
+
+fn take_marks(root: &Path, config: &mut ProjectConfig, path: &Path) -> Marks {
+    let marks = read_marks(root, config, path);
+    if let Ok(relative) = trusted_project_relative_path(root, path) {
+        remove_file_progress_path(config, &relative, false);
+    }
+    marks
+}
+
+fn put_marks(root: &Path, config: &mut ProjectConfig, path: &Path, marks: Marks) {
+    let Ok(relative) = trusted_project_relative_path(root, path) else { return };
+    if let Some(progress) = marks.progress {
+        config.file_progress.insert(relative.clone(), progress);
+    }
+    if let Some(star) = marks.star {
+        config.note_stars.insert(relative, star);
+    }
 }
 
 /// 送る。`move_entries` が偽ならコピー（元に残す）。
@@ -293,17 +314,15 @@ pub(super) fn transfer_entries(
             if item.kind != Kind::Text {
                 continue;
             }
-            let progress = if move_entries {
+            let marks = if move_entries {
                 let parent = item.source.parent().ok_or_else(|| "entry parent does not exist".to_string())?;
                 remove_order(source_root, &mut source_config, parent, &file_name(&item.source))?;
-                take_progress(source_root, &mut source_config, &item.source)
+                take_marks(source_root, &mut source_config, &item.source)
             } else {
-                trusted_project_relative_path(source_root, &item.source)
-                    .ok()
-                    .and_then(|relative| source_config.file_progress.get(&relative).cloned())
+                read_marks(source_root, &source_config, &item.source)
             };
             insert_order(target_root, &mut target_config, &notes_folder, &file_name(&item.target), None)?;
-            put_progress(target_root, &mut target_config, &item.target, progress);
+            put_marks(target_root, &mut target_config, &item.target, marks);
         }
         save_project_config_unlocked(target_root, &target_config)?;
         if move_entries {
@@ -367,14 +386,14 @@ pub(super) fn undo_transfer(
             }
             move_file(&sent, &original)?;
             if text {
-                let progress = take_progress(target_root, &mut target_config, &sent);
+                let marks = take_marks(target_root, &mut target_config, &sent);
                 if let Some(parent) = sent.parent() {
                     remove_order(target_root, &mut target_config, parent, &file_name(&sent))?;
                 }
                 if let Some(parent) = original.parent() {
                     insert_order(source_root, &mut source_config, parent, &file_name(&original), entry.source_order_index)?;
                 }
-                put_progress(source_root, &mut source_config, &original, progress);
+                put_marks(source_root, &mut source_config, &original, marks);
             }
         } else {
             if trash(target_root, &sent).is_err() {
@@ -382,7 +401,7 @@ pub(super) fn undo_transfer(
                 continue;
             }
             if text {
-                take_progress(target_root, &mut target_config, &sent);
+                take_marks(target_root, &mut target_config, &sent);
                 if let Some(parent) = sent.parent() {
                     remove_order(target_root, &mut target_config, parent, &file_name(&sent))?;
                 }

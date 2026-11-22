@@ -667,6 +667,8 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             library_transfer_destinations,
             transfer_project_entries,
             undo_transfer_project_entries,
+            load_note_stars,
+            set_note_star,
             reorder_library_projects,
             load_library_property_types,
             save_library_property_type,
@@ -2193,6 +2195,18 @@ fn transfer_project_entries(
         _ => return Err("unknown transfer mode".to_string()),
     };
     entry_transfer::transfer_entries(Path::new(&source_root), Path::new(&target_root), &source_paths, move_entries)
+}
+
+/// U10: スターを付けたノートの絶対パス。
+#[tauri::command(async)]
+fn load_note_stars(root_path: String) -> Result<Vec<String>, String> {
+    project_state::load_note_stars(Path::new(&root_path))
+}
+
+/// U10: ノートのスターを付ける・外す。返り値は付け直したあとの一覧。
+#[tauri::command(async)]
+fn set_note_star(root_path: String, path: String, starred: bool) -> Result<Vec<String>, String> {
+    project_state::set_note_star(Path::new(&root_path), Path::new(&path), starred, now_millis() as i64)
 }
 
 /// U5 の通知の「元に戻す」。コピーの写しは OS のゴミ箱へ（使えなければアプリのゴミ箱へ）。

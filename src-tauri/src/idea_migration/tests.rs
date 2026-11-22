@@ -252,13 +252,16 @@ fn idea_migration_moves_work_a_into_posts_notes_and_materials_once() {
     assert_eq!(record["moved"][3], json!({ "from": ".then/references/imports/資料a.md", "to": "素材/資料/資料a.md" }));
     let fragment = record["fragments"].as_array().unwrap().iter().find(|item| item["id"] == "a-s1").unwrap();
     assert_eq!(fragment["note"], "素材/場面： 港.md", "the record knows where each fragment went (for 4-5)");
+    // U10（3-3）: スターの付いていたスレッド「場面: 港」のノートにだけスターが付く。
+    let stars: Vec<&String> = after["noteStars"].as_object().unwrap().keys().collect();
+    assert_eq!(stars, vec!["素材/場面： 港.md"]);
     let reference = TempLibrary::new("work-a-reference");
     let reference_root = reference.work("作品A");
     give_work_id(&reference_root);
     save_project_snippets(reference_root.to_string_lossy().to_string(), Vec::new()).unwrap();
     let strip = |mut value: Value| {
         let object = value.as_object_mut().unwrap();
-        for key in ["ideaMigration", "materialsFolder", "revision"] {
+        for key in ["ideaMigration", "materialsFolder", "revision", "noteStars"] {
             object.remove(key);
         }
         value

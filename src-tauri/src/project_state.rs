@@ -76,6 +76,10 @@ pub(super) struct ProjectConfig {
     /// 作品の固定の ID（BINDER 2-1）。投稿に書いた作品を記録する。フォルダを改名・移動しても変わらない。
     #[serde(default, rename = "workId", skip_serializing_if = "Option::is_none")]
     pub(super) work_id: Option<String>,
+    /// スターを付けたノート（U10）。作品のフォルダからの相対パス（`/` 区切り）→ 付けた時刻（ミリ秒）。
+    /// 進捗と同じく、改名・移動で付いていき、削除で外れる。
+    #[serde(default, rename = "noteStars", skip_serializing_if = "BTreeMap::is_empty")]
+    pub(super) note_stars: BTreeMap<String, i64>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -207,6 +211,7 @@ impl Default for ProjectConfig {
             plot_migration: None,
             idea_migration: None,
             work_id: None,
+            note_stars: BTreeMap::new(),
         }
     }
 }
@@ -369,15 +374,16 @@ fn project_config_digest(config: &ProjectConfig) -> Result<String, String> {
     Ok(format!("{:x}", Sha256::digest(bytes)))
 }
 
+/// 進捗とスター（U10）を、消したパス（フォルダならその中も）から外す。
 pub(super) fn remove_file_progress_path(
     config: &mut ProjectConfig,
     relative_path: &str,
     is_directory: bool,
 ) {
     let prefix = format!("{relative_path}/");
-    config
-        .file_progress
-        .retain(|path, _| path != relative_path && !(is_directory && path.starts_with(&prefix)));
+    let keep = |path: &String| path != relative_path && !(is_directory && path.starts_with(&prefix));
+    config.file_progress.retain(|path, _| keep(path));
+    config.note_stars.retain(|path, _| keep(path));
 }
 
 pub(super) fn retarget_file_progress_path(
@@ -388,18 +394,52 @@ pub(super) fn retarget_file_progress_path(
 ) {
     let old_prefix = format!("{old_relative_path}/");
     let new_prefix = format!("{new_relative_path}/");
-    let mut next = BTreeMap::new();
-    for (path, progress) in std::mem::take(&mut config.file_progress) {
-        let path = if path == old_relative_path {
+    let retarget = |path: String| {
+        if path == old_relative_path {
             new_relative_path.to_string()
         } else if is_directory && path.starts_with(&old_prefix) {
             format!("{}{}", new_prefix, &path[old_prefix.len()..])
         } else {
             path
-        };
-        next.insert(path, progress);
+        }
+    };
+    let mut next = BTreeMap::new();
+    for (path, progress) in std::mem::take(&mut config.file_progress) {
+        next.insert(retarget(path), progress);
     }
     config.file_progress = next;
+    // スター（U10）も同じく付けていく。
+    let stars = std::mem::take(&mut config.note_stars);
+    config.note_stars = stars.into_iter().map(|(path, at)| (retarget(path), at)).collect();
+}
+
+/// スターを付けたノートの絶対パス（U10）。ないファイルのものは返さない（外で消されたもの）。
+pub(super) fn load_note_stars(root: &Path) -> Result<Vec<String>, String> {
+    let config = load_project_config(root)?;
+    Ok(config
+        .note_stars
+        .keys()
+        .map(|relative| relative.split('/').fold(root.to_path_buf(), |path, part| path.join(part)))
+        .filter(|path| path.is_file())
+        .map(|path| path.to_string_lossy().to_string())
+        .collect())
+}
+
+/// ノートのスターを付ける・外す（U10）。返り値は付け直したあとの一覧（load_note_stars と同じ形）。
+pub(super) fn set_note_star(root: &Path, path: &Path, starred: bool, now: i64) -> Result<Vec<String>, String> {
+    if !path.is_file() {
+        return Err("note does not exist".to_string());
+    }
+    let relative = existing_project_file_relative_path(root, path)?;
+    update_project_config(root, |config| {
+        if starred {
+            config.note_stars.entry(relative.clone()).or_insert(now);
+        } else {
+            config.note_stars.remove(&relative);
+        }
+        Ok(())
+    })?;
+    load_note_stars(root)
 }
 
 fn parse_project_config_content(path: &Path, content: &str) -> Result<ProjectConfig, String> {
@@ -1200,5 +1240,24 @@ mod tests {
 
         remove_file_progress_path(&mut moved, "archive/drafts", true);
         assert!(moved.file_progress.is_empty());
+    }
+
+    /// U10: スターも進捗と同じく、改名・移動で付いていき、削除で外れる。
+    #[test]
+    fn note_stars_follow_renames_and_go_with_deletes() {
+        let mut config = ProjectConfig::default();
+        config.note_stars.insert("素材/灯台.md".into(), 1);
+        config.note_stars.insert("素材/人物/汐見.md".into(), 2);
+        config.note_stars.insert("素材/人物たち.md".into(), 3);
+        retarget_file_progress_path(&mut config, "素材/灯台.md", "素材/灯台守.md", false);
+        retarget_file_progress_path(&mut config, "素材/人物", "設定/人物", true);
+        let keys: Vec<&str> = config.note_stars.keys().map(String::as_str).collect();
+        assert_eq!(keys, vec!["素材/人物たち.md", "素材/灯台守.md", "設定/人物/汐見.md"]);
+        assert_eq!(config.note_stars["素材/灯台守.md"], 1);
+        remove_file_progress_path(&mut config, "設定/人物", true);
+        remove_file_progress_path(&mut config, "素材/灯台守.md", false);
+        assert_eq!(config.note_stars.keys().collect::<Vec<_>>(), vec!["素材/人物たち.md"]);
+        let text = serde_json::to_string(&ProjectConfig::default()).unwrap();
+        assert!(!text.contains("noteStars"), "no stars, no key");
     }
 }
