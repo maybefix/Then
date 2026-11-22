@@ -168,6 +168,15 @@ import {
   type CanvasCopyToPostRequest,
   CANVAS_FILE_SAVED_EVENT,
   CANVAS_FILE_WRITE_EVENT,
+  CANVAS_OPEN_POST_EVENT,
+  CANVAS_POST_WRITE_EVENT,
+  CANVAS_POST_WRITE_RESULT_EVENT,
+  type CanvasOpenPostEvent,
+  type CanvasPosts,
+  type CanvasPostWriteEvent,
+  type CanvasPostWriteRequest,
+  type CanvasPostWriteResult,
+  type CanvasPostWriteResultEvent,
   CANVAS_FILE_WRITE_RESULT_EVENT,
   CANVAS_FLUSH_DONE_EVENT,
   CANVAS_FLUSH_EVENT,
@@ -3600,6 +3609,11 @@ export default function App() {
   }, []);
   // 「つながり」（BINDER 3-4）の元の投稿から、アイデアのペインのその投稿まで送る。
   const [postReveal, setPostReveal] = useState<{ id: string; nonce: number } | null>(null);
+  // Canvas の投稿のカード（docs/BINDER_POST_CARD_PLAN.md）へ渡す投稿の一覧。読むのはここ（usePostStream）だけ。
+  const canvasPosts = useMemo<CanvasPosts>(
+    () => ({ posts: postStream.posts, work: postStream.work }),
+    [postStream.posts, postStream.work],
+  );
   // 「つながり」の置かれているボード。ペインを出しているあいだだけ読む。
   const boardReferences = useBoardReferences(
     projectFolder?.path ?? null,
@@ -3809,6 +3823,7 @@ export default function App() {
       projectFiles: canvasProjectFiles,
       openTabPaths: canvasOpenTabPaths,
       manuscriptFolders: canvasManuscriptFolders,
+      posts: canvasPosts,
       rightSidebarVisible: !isRightSidebarCollapsed,
     };
 
@@ -6306,13 +6321,14 @@ export default function App() {
         projectFiles: canvasProjectFiles,
         openTabPaths: canvasOpenTabPaths,
         manuscriptFolders: canvasManuscriptFolders,
+        posts: canvasPosts,
       };
       emitTo("idea-canvas", CANVAS_LIVE_DATA_EVENT, payload).catch(() => {
         // 対象ウィンドウが無い・閉じた直後などは黙って捨てる
       });
     }, 400);
     return () => window.clearTimeout(timer);
-  }, [sortedReferenceCandidates, projectFolder, canvasProjectFiles, canvasOpenTabPaths, canvasManuscriptFolders]);
+  }, [sortedReferenceCandidates, projectFolder, canvasProjectFiles, canvasOpenTabPaths, canvasManuscriptFolders, canvasPosts]);
 
   // キャンバスのカードからノート・原稿へ書き戻す（BINDER 4-2）。ファイルへ書くのはメイン画面だけ。
   const writeCanvasFileRef = useRef<(request: CanvasFileWriteRequest) => ReturnType<typeof writeCanvasFileFromMain>>(
@@ -6330,6 +6346,45 @@ export default function App() {
         void writeCanvasFileRef.current(request)
           .then((result) => answer({ requestId, result }))
           .catch((error) => answer({ requestId, error: error instanceof Error ? error.message : String(error) }));
+      }),
+      (error) => setLastError(String(error)),
+    );
+  }, []);
+
+  // 投稿のカードで直した本文を投稿へ書き戻す（docs/BINDER_POST_CARD_PLAN.md）。投稿へ書くのもメイン画面だけ。
+  const writeCanvasPostRef = useRef(postStream.writeBody);
+  writeCanvasPostRef.current = postStream.writeBody;
+  const projectFolderPathRef = useRef(projectFolder?.path ?? null);
+  projectFolderPathRef.current = projectFolder?.path ?? null;
+  const writeCanvasPost = useCallback(async (request: CanvasPostWriteRequest): Promise<CanvasPostWriteResult> => {
+    // 別の作品を開き直したあとに届いた頼みは書かない（投稿のファイルが同じとは限らない）。
+    if (!projectFolderPathRef.current || !isSamePath(projectFolderPathRef.current, request.rootPath)) {
+      throw new Error("作品が切り替わったため、投稿へ書き戻せませんでした");
+    }
+    return writeCanvasPostRef.current(request.id, request.baseHash, request.text);
+  }, []);
+  // 投稿のカードの「開く」（右のペイン「アイデア」のその投稿）と、ノートの札。
+  const openPostFromCanvasRef = useRef<(id: string, target: CanvasOpenPostEvent["target"]) => void>(() => {});
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    return manageAsyncRegistration(
+      listen<CanvasPostWriteEvent>(CANVAS_POST_WRITE_EVENT, (event) => {
+        const { requestId, request } = event.payload;
+        const answer = (body: CanvasPostWriteResultEvent) =>
+          emitTo("idea-canvas", CANVAS_POST_WRITE_RESULT_EVENT, body).catch(() => {});
+        void writeCanvasPost(request)
+          .then((result) => answer({ requestId, result }))
+          .catch((error) => answer({ requestId, error: error instanceof Error ? error.message : String(error) }));
+      }),
+      (error) => setLastError(String(error)),
+    );
+  }, [writeCanvasPost]);
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    return manageAsyncRegistration(
+      listen<CanvasOpenPostEvent>(CANVAS_OPEN_POST_EVENT, (event) => {
+        // 前に出すのは頼んだ側（別ウィンドウ）が focus_main_window で行う。
+        openPostFromCanvasRef.current(event.payload.id, event.payload.target);
       }),
       (error) => setLastError(String(error)),
     );
@@ -6620,6 +6675,19 @@ export default function App() {
     trashFile: (path) => new Promise<boolean>((resolve) => setPendingNoteTrash({ path, resolve })),
   };
   const postNoteActions = useMemo(() => createPostNoteActions(postNoteDepsRef), []);
+  openPostFromCanvasRef.current = (id, target) => {
+    const post = postStream.posts.find((entry) => entry.id === id);
+    if (!post) return;
+    if (target === "note") {
+      void postNoteActions.openNote(post);
+      return;
+    }
+    // 受信箱から外れた投稿もあるので「すべて」で見せる（「つながり」の元の投稿と同じ）。
+    setPostFilter("all");
+    setRightSidebarTab("idea");
+    setIsRightSidebarCollapsed(false);
+    setPostReveal({ id: post.id, nonce: Date.now() });
+  };
   // Canvas の「この順で原稿を作る」（BINDER 4-4）。原稿を作り、書き、ゴミ箱へ移すのはメイン画面だけ。
   // 通知の「元に戻す」は、開いているキャンバス（埋め込みなら登録された処理、別ウィンドウなら知らせ）に置き換えを外してもらう。
   const canvasManuscriptRevertRef = useRef<((conversionId: string) => boolean) | null>(null);
@@ -7887,6 +7955,9 @@ export default function App() {
                   onManuscriptRequest={handleCanvasManuscriptRequest}
                   onRegisterManuscriptRevert={(revert) => { canvasManuscriptRevertRef.current = revert; }}
                   onWriteFile={(request) => writeCanvasFileRef.current(request)}
+                  livePosts={canvasPosts}
+                  onWritePost={writeCanvasPost}
+                  onOpenPost={(id, target) => openPostFromCanvasRef.current(id, target)}
                   onOpenFile={(path) => {
                     if (projectFolder) void openFromCorkboard(joinCanvasFilePath(projectFolder.path, path));
                   }}

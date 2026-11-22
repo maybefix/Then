@@ -24,7 +24,9 @@ globalThis.window = {
       if (command !== "migrate_copy_cards") throw new Error(`unexpected command ${command}`);
       if (failFor.has(args.rootPath)) throw new Error(`${args.rootPath}: cannot write`);
       if (args.rootPath.endsWith("empty")) return { status: "empty", replaced: 0, boards: [] };
-      return { status: "migrated", replaced: 2, boards: ["harbor", "night"], backupPath: ".then/backups/copy-cards-x" };
+      // 作品C は投稿のカードを1枚含む（docs/BINDER_POST_CARD_PLAN.md）。
+      const posts = args.rootPath.endsWith("作品C") ? 1 : 0;
+      return { status: "migrated", replaced: 2, posts, boards: ["harbor", "night"], backupPath: ".then/backups/copy-cards-x" };
     },
   },
 };
@@ -42,6 +44,7 @@ const { migrateCopyCards, copyCardMigrationMessage } = await bundle("src/copyCar
     { rootPath: "C:\\Lib\\作品C", boards: ["harbor", "night"] },
   ]);
   assert.equal(summary.replaced, 4);
+  assert.equal(summary.posts, 1, "post cards are counted across works");
   assert.deepEqual(summary.failed.map((item) => item.rootPath), ["C:\\Lib\\作品B"]);
   console.log("PASS migrate: each path once, boards to read again, failures do not stop the rest");
 }
@@ -52,6 +55,13 @@ const { migrateCopyCards, copyCardMigrationMessage } = await bundle("src/copyCar
   assert.equal(copyCardMigrationMessage({ migrated: [{ rootPath: "a", boards: ["b"] }], replaced: 1, failed: [] }),
     "コピーのカード1枚をノートのカードに置き換えました");
   assert.equal(copyCardMigrationMessage({ migrated: [{ rootPath: "a", boards: ["b"] }], replaced: 3, failed: [] }),
+    "コピーのカード3枚をノートのカードに置き換えました");
+  // 投稿のカード（docs/BINDER_POST_CARD_PLAN.md の確認1の 4）。投稿だけなら投稿、両方ならノートと投稿。
+  assert.equal(copyCardMigrationMessage({ migrated: [{ rootPath: "a", boards: ["b"] }], replaced: 2, posts: 2, failed: [] }),
+    "コピーのカード2枚を投稿のカードに置き換えました");
+  assert.equal(copyCardMigrationMessage({ migrated: [{ rootPath: "a", boards: ["b"] }], replaced: 3, posts: 1, failed: [] }),
+    "コピーのカード3枚をノートと投稿のカードに置き換えました");
+  assert.equal(copyCardMigrationMessage({ migrated: [{ rootPath: "a", boards: ["b"] }], replaced: 3, posts: 0, failed: [] }),
     "コピーのカード3枚をノートのカードに置き換えました");
   assert.equal(copyCardMigrationMessage({ migrated: [], replaced: 0, failed: [{ rootPath: "a", error: "x" }] }),
     "コピーのカードを置き換えられませんでした");

@@ -786,6 +786,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             load_canvas_board_with_hash,
             is_canvas_window_open,
             focus_canvas_window,
+            focus_main_window,
             canvas_board_hash,
             save_canvas_board,
             reorder_canvas_boards,
@@ -5592,6 +5593,19 @@ fn focus_canvas_window(app: tauri::AppHandle) -> Result<bool, String> {
     window.show().map_err(|error| format!("Canvas画面を表示できませんでした: {error}"))?;
     window.set_focus().map_err(|error| format!("Canvas画面を前面に移動できませんでした: {error}"))?;
     Ok(true)
+}
+
+/// Brings the main window to the front (the Canvas window's post card 「開く」, docs/BINDER_POST_CARD_PLAN.md).
+/// The page cannot do this itself: the window API needs a capability this app does not grant.
+#[tauri::command]
+fn focus_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "編集画面が見つかりませんでした".to_string())?;
+    let _ = window.unminimize();
+    window.show().map_err(|error| format!("編集画面を表示できませんでした: {error}"))?;
+    window.set_focus().map_err(|error| format!("編集画面を前面に移動できませんでした: {error}"))?;
+    Ok(())
 }
 
 /// The Canvas window has written what it was holding; it may close.

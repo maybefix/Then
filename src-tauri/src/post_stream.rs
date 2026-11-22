@@ -385,16 +385,16 @@ pub(super) fn append_migrated_while_locked(
     Ok(added.len())
 }
 
-/// 移行の投稿の ID。作品（またはライブラリ直下・アプリ側）の印と断片の ID から決まる。
-/// 投稿をノートにしていれば（2-3）、そのノートの作品の `workId` と作品からのパス（BINDER 4-5）。
-pub(super) fn note_of_post(scope: &Path, id: &str) -> Option<(String, String)> {
+/// 投稿がファイルにあるか。あれば、ノートにしていたときのそのノート（作品の `workId` と作品からのパス）も
+/// 返す（docs/BINDER_POST_CARD_PLAN.md の 4。コピーのカードを投稿のカードへ置き換えるとき）。
+pub(super) fn post_state(scope: &Path, id: &str) -> Option<Option<(String, String)>> {
     let place = place_for(scope).ok()?;
     let lines = read_lines(&place.file).ok()?;
     let (_, post) = find_latest(&lines, id)?;
-    let note = note::stored_note(&post)?;
-    Some((note.work, note.path))
+    Some(note::stored_note(&post).map(|note| (note.work, note.path)))
 }
 
+/// 移行の投稿の ID。作品（またはライブラリ直下・アプリ側）の印と断片の ID から決まる。
 pub(super) fn migrated_post_id(key: &str, fragment_id: &str) -> String {
     let digest = Sha256::digest(format!("{key}|{fragment_id}"));
     let hex: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();

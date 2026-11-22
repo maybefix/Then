@@ -1,5 +1,6 @@
 //! コピーのカードの移行（BINDER 4-5）を、一時フォルダに作ったライブラリで動かして確かめる。
-//! 場面の番号（S1〜S11）は docs/BINDER_COPY_CARD_MIGRATION_SCENARIOS.md と同じ。
+//! 場面の番号（S1〜S11）は docs/BINDER_COPY_CARD_MIGRATION_SCENARIOS.md、投稿のカードへの置き換え（M1〜M5）は
+//! docs/BINDER_POST_CARD_SCENARIOS.md と同じ。
 
 use super::{fail_at, migrate_cards};
 use serde_json::{json, Value};
@@ -167,8 +168,7 @@ fn cards_that_are_not_replaced_leave_the_board_file_byte_for_byte() {
     let nodes = json!([
         copy("s2", "港の場面の一（波止場で）", "f-1"), // S2: カードで直した
         copy("s3", "消した断片", "f-deleted"),         // S3: 記録にない
-        copy("s4", "灯台の夢", "f-dream"),            // S4: 投稿のまま
-        copy("used", "使用済みの断片", "f-used"),      // S4: 受信箱から外した投稿（手元の Books の2枚）
+        copy("m3", "灯台の夢（直した）", "f-dream"),    // M3: 元は投稿だが、カードで直した
         copy("gone", "消えたノートの断片", "f-gone-note"), // ノートが今はない
         // S11: ドラッグで作ったコピー（元の印がない）。文は断片と同じ。
         json!({ "id": "s11", "type": "text", "x": 0, "y": 0, "width": 260, "height": 150, "text": "港の場面の二" }),
@@ -196,13 +196,114 @@ fn s5_a_post_made_into_a_note_of_the_same_work_points_to_that_note() {
 }
 
 #[test]
-fn a_post_made_into_a_note_of_another_work_stays_text() {
+fn a_post_made_into_a_note_of_another_work_becomes_the_post_card() {
     let library = TempLibrary::new("s5-other");
     library.posts(Some("w-other"));
     let work = library.work();
     let board = library.board(&work, "b", json!([copy("s5", "灯台の夢", "f-dream")]), json!([]));
+    let result = migrate_cards(&work).unwrap();
+    assert_eq!((result.replaced, result.notes, result.posts), (1, 0, 1));
+    assert_eq!(read_json(&board)["nodes"][0]["post"], "p-dream", "the other work's note cannot be shown here");
+}
+
+#[test]
+fn m1_a_card_from_an_inbox_fragment_becomes_the_post_card_keeping_id_place_colour_and_arrows() {
+    let library = TempLibrary::new("m1");
+    library.posts(None);
+    let work = library.work();
+    let mut dream = copy("m1", "灯台の夢", "f-dream");
+    dream["color"] = json!("5");
+    // 受信箱から外した投稿（手元の Books の2枚）も同じ。
+    let used = copy("used", "使用済みの断片", "f-used");
+    let note = copy("n1", "港の場面の一", "f-1");
+    let edge = json!({ "id": "e1", "fromNode": "m1", "toNode": "used", "connector": "arrow" });
+    let board = library.board(&work, "inbox", json!([dream, used, note]), json!([edge]));
+
+    let result = migrate_cards(&work).expect("migrate");
+    assert_eq!((result.replaced, result.notes, result.posts), (3, 1, 2));
+    let after = read_json(&board);
+    assert_eq!(
+        after["nodes"][0],
+        json!({ "id": "m1", "type": "post", "x": 10, "y": 20, "width": 260, "height": 150, "post": "p-dream", "color": "5" }),
+        "same id, place, size and colour; text, writing mode and origin are not kept on the post card"
+    );
+    assert_eq!(after["nodes"][1]["post"], "p-used");
+    assert_eq!(after["nodes"][2]["file"], NOTE, "a thread fragment still becomes the note card");
+    assert_eq!(after["edges"], json!([edge]), "arrows stay");
+
+    let list = read_json(&backups(&work)[0].join("cards.json"));
+    assert_eq!(list["cards"][0], json!({ "board": "inbox.canvas", "card": "m1", "fragment": "f-dream", "post": "p-dream" }));
+    assert_eq!(list["cards"][2], json!({ "board": "inbox.canvas", "card": "n1", "fragment": "f-1", "file": NOTE }));
+
+    // 2回目は何もしない。
+    let after_first = std::fs::read(&board).unwrap();
+    assert_eq!(migrate_cards(&work).unwrap().status, "empty");
+    assert_eq!(std::fs::read(&board).unwrap(), after_first);
+}
+
+#[test]
+fn m5_a_card_whose_post_was_deleted_stays_text() {
+    let library = TempLibrary::new("m5");
+    // 投稿のファイルに p-dream がない（消した）。
+    write(&library.0.join(".then/posts.jsonl"), "{\"v\":1,\"id\":\"p-used\",\"at\":\"2026-07-01T10:00:00+09:00\",\"body\":\"使用済みの断片\"}\n");
+    let work = library.work();
+    let board = library.board(&work, "b", json!([copy("m5", "灯台の夢", "f-dream")]), json!([]));
     let before = std::fs::read(&board).unwrap();
     assert_eq!(migrate_cards(&work).unwrap().status, "empty");
+    assert_eq!(std::fs::read(&board).unwrap(), before);
+
+    // 投稿のファイルがなくても同じ。
+    let fresh = TempLibrary::new("m5-none");
+    let work = fresh.work();
+    let board = fresh.board(&work, "b", json!([copy("m5", "灯台の夢", "f-dream")]), json!([]));
+    let before = std::fs::read(&board).unwrap();
+    assert_eq!(migrate_cards(&work).unwrap().status, "empty");
+    assert_eq!(std::fs::read(&board).unwrap(), before);
+}
+
+#[test]
+fn a_board_that_already_has_a_card_for_the_post_keeps_the_copy_as_text() {
+    let library = TempLibrary::new("existing-post");
+    library.posts(None);
+    let work = library.work();
+    let existing = json!({ "id": "done", "type": "post", "x": 0, "y": 0, "width": 260, "height": 150, "post": "p-dream" });
+    let board = library.board(&work, "b", json!([existing, copy("again", "灯台の夢", "f-dream")]), json!([]));
+    let before = std::fs::read(&board).unwrap();
+    assert_eq!(migrate_cards(&work).unwrap().status, "empty");
+    assert_eq!(std::fs::read(&board).unwrap(), before, "the same post is not shown twice");
+}
+
+#[test]
+fn m2_a_library_root_board_finds_the_post_through_the_work_record() {
+    let library = TempLibrary::new("m2");
+    library.posts(Some("w-a"));
+    write(&library.0.join(".then/project.json"), &json!({}).to_string());
+    // 作品の断片から来たカード（手元の Books の直下のボード）。作品のノートにした投稿でも、直下では投稿のカード。
+    let nodes = json!([copy("root-dream", "灯台の夢", "f-dream"), copy("root-thread", "港の場面の一", "f-1")]);
+    let board = library.board(&library.0, "root", nodes, json!([]));
+    let result = migrate_cards(&library.0).unwrap();
+    assert_eq!((result.replaced, result.notes, result.posts), (1, 0, 1));
+    let after = read_json(&board);
+    assert_eq!(after["nodes"][0]["type"], "post");
+    assert_eq!(after["nodes"][0]["post"], "p-dream");
+    assert_eq!(after["nodes"][1]["type"], "text", "a thread fragment's note is in the work and cannot be shown here");
+    assert_eq!(backups(&library.0).len(), 1, "the backup is in the library root");
+}
+
+#[test]
+fn m2_a_fragment_found_in_two_works_is_not_decided() {
+    let library = TempLibrary::new("m2-two");
+    library.posts(None);
+    write(&library.0.join(".then/project.json"), &json!({}).to_string());
+    // 作品A を写した作品B に、同じ断片の記録がある。
+    let copy_work = library.0.join("作品B");
+    write(&copy_work.join(".then/backups/idea-1/project.json"),
+        &std::fs::read_to_string(library.work().join(".then/backups/idea-1/project.json")).unwrap());
+    write(&copy_work.join(".then/project.json"),
+        &std::fs::read_to_string(library.work().join(".then/project.json")).unwrap().replace("w-a", "w-b"));
+    let board = library.board(&library.0, "root", json!([copy("root-dream", "灯台の夢", "f-dream")]), json!([]));
+    let before = std::fs::read(&board).unwrap();
+    assert_eq!(migrate_cards(&library.0).unwrap().status, "empty");
     assert_eq!(std::fs::read(&board).unwrap(), before);
 }
 

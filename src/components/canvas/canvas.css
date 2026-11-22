@@ -1134,6 +1134,67 @@
   opacity: 0.6;
 }
 
+/* 投稿のカード（docs/BINDER_POST_CARD_PLAN.md）。ファイルのカードの枠で、題の行はなく本文だけを出す。 */
+.canvasPostNode {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.canvasPostNode header {
+  justify-content: flex-start;
+}
+
+.canvasPostNode .canvasFileOpenButton {
+  margin-left: auto;
+}
+
+.canvasPostNode header .canvasPostMeta {
+  display: inline-flex;
+  min-width: 0;
+  gap: 6px;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.canvasPostNode header .canvasPostMeta span {
+  overflow: hidden;
+  color: inherit;
+  text-overflow: ellipsis;
+}
+
+.canvasPostNoteTag {
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 20px;
+  overflow: hidden;
+  padding: 0 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--canvas-radius-control);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.canvasPostNoteTag:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.canvasPostNoteTag:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.canvasPostNode.isMissing header span {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
 .canvasReferencePreview {
   min-width: 0;
   min-height: 0;

@@ -52,6 +52,7 @@ assert.equal(recovered[3].then.name, "unsaved");
 console.log("PASS queue: immutable destinations and snapshots, serialized edits, separate projects, retry after failure");
 
 const fileQueueUrl = await compile("src/canvasFileWriteQueue.ts");
+const postQueueUrl = await compile("src/canvasPostWriteQueue.ts");
 const pendingSavesUrl = await compile("src/pendingSaves.ts");
 const canvasUrl = await compile("src/CanvasWindowApp.tsx", {
   react: pathToFileURL(require.resolve("react")).href,
@@ -77,6 +78,8 @@ const canvasUrl = await compile("src/CanvasWindowApp.tsx", {
   "./canvasBoardSaveQueue": queueUrl,
   // ファイルのカード（BINDER 4-2）の部品。このテストはボードの保存だけを見るので、概要の読み取りは空にする。
   "./canvasFileWriteQueue": fileQueueUrl,
+  "./canvasPostWriteQueue": postQueueUrl,
+  "./posts/postModel": await compile("src/posts/postModel.ts"),
   "./pendingSaves": pendingSavesUrl,
   "./utils/frontmatter": await compile("src/utils/frontmatter.ts"),
   "./corkboard/synopsis": url("export const readSynopsis = () => ({ kind: 'none' });"),
@@ -86,6 +89,7 @@ const canvasUrl = await compile("src/CanvasWindowApp.tsx", {
     "./canvasTypes": await compile("src/canvasTypes.ts"),
     "./canvasBoardSaveQueue": queueUrl,
     "./canvasFileWriteQueue": fileQueueUrl,
+    "./canvasPostWriteQueue": postQueueUrl,
   }),
 });
 const { default: Canvas } = await import(canvasUrl);

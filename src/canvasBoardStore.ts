@@ -6,11 +6,14 @@ import {
   type CanvasBoardSummary,
   type CanvasFileWriteRequest,
   type CanvasFileWriteResult,
+  type CanvasPostWriteRequest,
+  type CanvasPostWriteResult,
   type CanvasScope,
   type JsonCanvasDocument,
 } from "./canvasTypes";
 import { CanvasBoardSaveQueue, canvasBoardTargetKey, type CanvasBoardTarget } from "./canvasBoardSaveQueue";
 import { CanvasFileWriteQueue } from "./canvasFileWriteQueue";
+import { CanvasPostWriteQueue } from "./canvasPostWriteQueue";
 
 // Canvas のボードを読み書きする層。Tauri の中では Rust の命令を呼び、ブラウザで動かすときは localStorage に書く。
 // 遅延保存の時計や、どのボードへ書くかの判断は CanvasWindowApp.tsx が持つ。
@@ -286,6 +289,21 @@ export function setCanvasFileWriteTransport(transport: CanvasFileWriteTransport)
 export const canvasFileWriteQueue = new CanvasFileWriteQueue((request) => {
   if (!canvasFileWriteTransport) return Promise.reject(new Error("ファイルへ書き戻す相手がいません"));
   return canvasFileWriteTransport(request);
+});
+
+export type CanvasPostWriteTransport = (request: CanvasPostWriteRequest) => Promise<CanvasPostWriteResult>;
+
+let canvasPostWriteTransport: CanvasPostWriteTransport | null = null;
+
+/** 投稿へ書くのもメイン画面だけ（docs/BINDER_POST_CARD_PLAN.md）。渡し方はファイルの書き戻しと同じ。 */
+export function setCanvasPostWriteTransport(transport: CanvasPostWriteTransport) {
+  canvasPostWriteTransport = transport;
+}
+
+// 投稿のカードから投稿へ書き戻す順番待ち。窓ごとに1つ。
+export const canvasPostWriteQueue = new CanvasPostWriteQueue((request) => {
+  if (!canvasPostWriteTransport) return Promise.reject(new Error("投稿へ書き戻す相手がいません"));
+  return canvasPostWriteTransport(request);
 });
 
 export async function reorderBoards(

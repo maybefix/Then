@@ -31,8 +31,13 @@ import {
   CANVAS_MANUSCRIPT_REVERT_RESULT_EVENT,
   CANVAS_BOARDS_REWRITTEN_EVENT,
   CANVAS_PATH_CHANGES_EVENT,
+  CANVAS_OPEN_POST_EVENT,
+  CANVAS_POST_DRAG_MIME,
+  CANVAS_POST_WRITE_EVENT,
+  CANVAS_POST_WRITE_RESULT_EVENT,
   createCanvasEdge,
   createCanvasFileNode,
+  createCanvasPostNode,
   createCanvasGroupNode,
   createCanvasReferenceNode,
   createCanvasTextNode,
@@ -65,6 +70,13 @@ import {
   type CanvasManuscriptRevertEvent,
   type CanvasManuscriptRevertResultEvent,
   type CanvasNode,
+  type CanvasPostNode,
+  type CanvasPosts,
+  type CanvasPostWriteEvent,
+  type CanvasPostWriteRequest,
+  type CanvasPostWriteResult,
+  type CanvasPostWriteResultEvent,
+  type CanvasOpenPostEvent,
   type CanvasReferenceNode,
   type CanvasScope,
   type CanvasTextNode,
@@ -73,6 +85,8 @@ import {
 } from "./canvasTypes";
 import type { CanvasNodeFontSource, ReferenceFileInfo, TextDocument, WritingMode } from "./types";
 import { canvasFileWriteKey, type CanvasFileWriteOutcome } from "./canvasFileWriteQueue";
+import { canvasPostWriteKey, type CanvasPostWriteOutcome } from "./canvasPostWriteQueue";
+import { isFromWork, noteLabel, timeLabel, type Post, type PostWork } from "./posts/postModel";
 import { flushPendingSaves, setPendingSave } from "./pendingSaves";
 import { parseFrontMatter } from "./utils/frontmatter";
 import type { SynopsisState } from "./corkboard/synopsis";
@@ -103,6 +117,7 @@ import {
   boardName,
   canvasBoardSaveQueue,
   canvasFileWriteQueue,
+  canvasPostWriteQueue,
   createBoard,
   discardCanvasBoardSave,
   isTauriRuntime,
@@ -116,6 +131,7 @@ import {
   restoreTrashedBoard,
   setCanvasBoardConflictListener,
   setCanvasFileWriteTransport,
+  setCanvasPostWriteTransport,
   trashBoard,
   type TrashedCanvasBoardSummary,
 } from "./canvasBoardStore";
@@ -251,6 +267,12 @@ function isFileNode(node: CanvasNode): node is CanvasFileNode {
   return node.type === "file";
 }
 
+function isPostNode(node: CanvasNode): node is CanvasPostNode {
+  return node.type === "post";
+}
+
+const NO_POSTS: CanvasPosts = { posts: [] };
+
 // ---- ノート・原稿のファイルのカード（BINDER 4-2） ----
 
 const canvasFileKey = (path: string) => path.replace(/\\/g, "/").toLocaleLowerCase();
@@ -337,6 +359,47 @@ function requestFileWriteFromMain(request: CanvasFileWriteRequest) {
   });
 }
 
+/** 別ウィンドウのキャンバスは、投稿への書き戻しもメイン画面に頼み、答えを待つ（docs/BINDER_POST_CARD_PLAN.md）。 */
+function requestPostWriteFromMain(request: CanvasPostWriteRequest) {
+  return new Promise<CanvasPostWriteResult>((resolve, reject) => {
+    const requestId = nextCanvasId("post-write");
+    let finished = false;
+    let dispose: (() => void) | null = null;
+    const finish = (settle: () => void) => {
+      if (finished) return;
+      finished = true;
+      window.clearTimeout(timer);
+      dispose?.();
+      settle();
+    };
+    const timer = window.setTimeout(
+      () => finish(() => reject(new Error("メイン画面から答えがないため、書き戻せませんでした"))),
+      10_000,
+    );
+    listen<CanvasPostWriteResultEvent>(CANVAS_POST_WRITE_RESULT_EVENT, (event) => {
+      if (event.payload.requestId !== requestId) return;
+      const { result, error } = event.payload;
+      finish(() => (result ? resolve(result) : reject(new Error(error ?? "書き戻せませんでした"))));
+    })
+      .then((unlisten) => {
+        if (finished) {
+          unlisten();
+          return;
+        }
+        dispose = unlisten;
+        return emitTo("main", CANVAS_POST_WRITE_EVENT, { requestId, request } satisfies CanvasPostWriteEvent);
+      })
+      .catch((error) => finish(() => reject(error)));
+  });
+}
+
+/** 別ウィンドウのキャンバスから、「アイデア」のペインでその投稿を出す・投稿のノートを開くのを、メイン画面に頼む。 */
+async function openPostInMain(id: string, target: CanvasOpenPostEvent["target"]) {
+  await emitTo("main", CANVAS_OPEN_POST_EVENT, { id, target } satisfies CanvasOpenPostEvent);
+  // メイン画面を前に出す（ページの窓の API は許可がないので、Rust の命令で）。ノートを開くときも同じ。
+  await invoke("focus_main_window");
+}
+
 /** 別ウィンドウのキャンバスから、「この順で原稿を作る」をメイン画面に頼む（BINDER 4-4）。 */
 function requestManuscriptFromMain(request: CanvasManuscriptRequest) {
   return new Promise<CanvasManuscriptResult>((resolve, reject) => {
@@ -373,24 +436,51 @@ function requestManuscriptFromMain(request: CanvasManuscriptRequest) {
 
 type CanvasInsertItem =
   | { kind: "reference"; key: string; file: ReferenceFileInfo }
-  | { kind: "file"; key: string; file: CanvasProjectFile };
+  | { kind: "file"; key: string; file: CanvasProjectFile }
+  | { kind: "post"; key: string; post: Post; place: string };
 
 function canvasInsertItemLabel(item: CanvasInsertItem) {
   if (item.kind === "reference") return referenceKindLabel(item.file.kind);
+  if (item.kind === "post") return "投稿";
   return item.file.role === "note" ? "ノート" : "原稿";
 }
 
 function canvasInsertItemName(item: CanvasInsertItem) {
+  if (item.kind === "post") return canvasPostTitle(item.post.body);
   return item.kind === "reference" ? item.file.name : canvasFileTitle(item.file.path);
 }
 
 function canvasInsertItemPath(item: CanvasInsertItem) {
+  if (item.kind === "post") return item.place;
   return item.kind === "reference" ? item.file.sourcePath : item.file.path;
 }
 
-/** 資料のあとに、ノート、原稿の順で並べる。 */
-function canvasInsertItems(referenceFiles: ReferenceFileInfo[], projectFiles: CanvasProjectFile[], query: string) {
+/** 一覧の投稿の名前。書き出しの1行目を30字まで。 */
+function canvasPostTitle(body: string) {
+  const line = body.split(/\r?\n/).map((text) => text.trim()).find(Boolean) ?? "";
+  const chars = Array.from(line);
+  return chars.length > 30 ? `${chars.slice(0, 30).join("")}…` : line;
+}
+
+/** 投稿の日時と、ほかの作品で書いた投稿なら作品名。 */
+function canvasPostPlace(post: Post, work: PostWork | undefined) {
+  const date = new Date(post.at);
+  const when = Number.isNaN(date.getTime())
+    ? ""
+    : `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${timeLabel(post.at)}`;
+  const otherWork = post.work && !isFromWork(post, work) ? post.work.name : "";
+  return [when, otherWork].filter(Boolean).join(" · ");
+}
+
+/** 資料のあとに、ノート、原稿、投稿（新しい順）の順で並べる。投稿は本文でも当てる。 */
+function canvasInsertItems(
+  referenceFiles: ReferenceFileInfo[],
+  projectFiles: CanvasProjectFile[],
+  posts: CanvasPosts,
+  query: string,
+) {
   const normalized = query.trim().toLocaleLowerCase();
+  const newest = [...posts.posts].sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0));
   const items: CanvasInsertItem[] = [
     ...referenceFiles.map((file) => ({ kind: "reference" as const, key: `r:${file.sourcePath}`, file })),
     ...projectFiles
@@ -399,10 +489,12 @@ function canvasInsertItems(referenceFiles: ReferenceFileInfo[], projectFiles: Ca
     ...projectFiles
       .filter((file) => file.role === "manuscript")
       .map((file) => ({ kind: "file" as const, key: `f:${file.path}`, file })),
+    ...newest.map((post) => ({ kind: "post" as const, key: `p:${post.id}`, post, place: canvasPostPlace(post, posts.work) })),
   ];
   if (!normalized) return items;
   return items.filter((item) =>
-    `${canvasInsertItemName(item)} ${canvasInsertItemPath(item)}`.toLocaleLowerCase().includes(normalized),
+    `${item.kind === "post" ? item.post.body : canvasInsertItemName(item)} ${canvasInsertItemPath(item)}`
+      .toLocaleLowerCase().includes(normalized),
   );
 }
 
@@ -836,18 +928,22 @@ function CanvasGlyph({
 function CanvasSidePanel({
   referenceFiles,
   projectFiles,
+  posts,
   onInsertReference,
   onInsertFile,
+  onInsertPost,
   onClose,
 }: {
   referenceFiles: ReferenceFileInfo[];
   projectFiles: CanvasProjectFile[];
+  posts: CanvasPosts;
   onInsertReference: (file: ReferenceFileInfo) => void;
   onInsertFile: (path: string) => void;
+  onInsertPost: (id: string) => void;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
-  const visibleFiles = canvasInsertItems(referenceFiles, projectFiles, query);
+  const visibleFiles = canvasInsertItems(referenceFiles, projectFiles, posts, query);
 
   return (
     <aside className="canvasSidePanel" aria-label="資料">
@@ -890,13 +986,19 @@ function CanvasSidePanel({
                 event.dataTransfer.effectAllowed = "copy";
                 if (item.kind === "reference") {
                   event.dataTransfer.setData(REFERENCE_FILE_DRAG_MIME, JSON.stringify(item.file));
+                } else if (item.kind === "post") {
+                  event.dataTransfer.setData(CANVAS_POST_DRAG_MIME, item.post.id);
                 } else {
                   event.dataTransfer.setData(CANVAS_FILE_DRAG_MIME, item.file.path);
                 }
                 event.dataTransfer.setData("text/plain", canvasInsertItemName(item));
               }}
               onClick={() =>
-                item.kind === "reference" ? onInsertReference(item.file) : onInsertFile(item.file.path)
+                item.kind === "reference"
+                  ? onInsertReference(item.file)
+                  : item.kind === "post"
+                    ? onInsertPost(item.post.id)
+                    : onInsertFile(item.file.path)
               }
             >
               <span>{canvasInsertItemLabel(item)}</span>
@@ -937,6 +1039,12 @@ type CanvasWindowAppProps = {
   onManuscriptRequest?: (request: CanvasManuscriptRequest) => Promise<CanvasManuscriptResult>;
   /** embedded 時に、通知の「元に戻す」で置き換えを外す処理をメイン画面へ渡す（null で外す）。 */
   onRegisterManuscriptRevert?: (revert: ((conversionId: string) => boolean) | null) => void;
+  /** embedded 時の投稿の一覧（投稿のカード。docs/BINDER_POST_CARD_PLAN.md）。 */
+  livePosts?: CanvasPosts;
+  /** embedded 時に、投稿のカードで直した本文をメイン画面に書いてもらう。 */
+  onWritePost?: (request: CanvasPostWriteRequest) => Promise<CanvasPostWriteResult>;
+  /** embedded 時に、「アイデア」のペインでその投稿を出す（post）・投稿のノートを開く（note）。 */
+  onOpenPost?: (id: string, target: CanvasOpenPostEvent["target"]) => void;
 };
 
 export default function CanvasWindowApp({
@@ -951,6 +1059,9 @@ export default function CanvasWindowApp({
   liveManuscriptFolders,
   onManuscriptRequest,
   onRegisterManuscriptRevert,
+  livePosts,
+  onWritePost,
+  onOpenPost,
 }: CanvasWindowAppProps = {}) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
@@ -1105,10 +1216,17 @@ export default function CanvasWindowApp({
     [projectFiles],
   );
   const openTabKeys = useMemo(() => new Set(openTabPaths.map(canvasFileKey)), [openTabPaths]);
+  // 投稿の一覧（投稿のカード）。優先順は資料の一覧と同じ。
+  const posts =
+    livePosts ??
+    (payload?.rootPath ? livePanelData?.posts : undefined) ??
+    payload?.posts ??
+    NO_POSTS;
+  const postsById = useMemo(() => new Map(posts.posts.map((post) => [post.id, post] as const)), [posts]);
 
   const filteredInsertItems = useMemo(
-    () => canvasInsertItems(referenceFiles, projectFiles, referenceQuery),
-    [referenceFiles, projectFiles, referenceQuery],
+    () => canvasInsertItems(referenceFiles, projectFiles, posts, referenceQuery),
+    [referenceFiles, projectFiles, posts, referenceQuery],
   );
   const textNodesForPosts = useMemo(() => {
     if (!board) return [];
@@ -1426,10 +1544,35 @@ export default function CanvasWindowApp({
     setReferenceQuery("");
   };
 
+  /** 投稿のカードを置く（docs/BINDER_POST_CARD_PLAN.md）。ボードには投稿の ID だけを書く。 */
+  const insertPostNodeAt = (id: string, point: Point) => {
+    if (!board || !id) return;
+    const width = 280;
+    const height = 180;
+    const node = createCanvasPostNode(id, {
+      x: Math.max(0, point.x - width / 2),
+      y: Math.max(0, point.y - height / 2),
+      width,
+      height,
+    });
+    pushHistory();
+    patchBoard((current) => ({ ...current, nodes: [...current.nodes, node] }));
+    setSelectedIds(new Set([node.id]));
+    setSelectedEdgeId(null);
+  };
+
+  const addPostNode = (id: string) => {
+    insertPostNodeAt(id, viewportCenterWorld());
+    setTool("select");
+    setIsReferenceMenuOpen(false);
+    setReferenceQuery("");
+  };
+
   // 左の資料／サイドパネル（別ウィンドウ）から資料をドラッグしてキャンバスへ落とす。
   const canAcceptCanvasDrop = (event: ReactDragEvent<HTMLDivElement>) =>
     event.dataTransfer.types.includes(REFERENCE_FILE_DRAG_MIME) ||
-    event.dataTransfer.types.includes(CANVAS_FILE_DRAG_MIME);
+    event.dataTransfer.types.includes(CANVAS_FILE_DRAG_MIME) ||
+    event.dataTransfer.types.includes(CANVAS_POST_DRAG_MIME);
 
   const handleViewportDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
     if (!canAcceptCanvasDrop(event)) return;
@@ -1445,6 +1588,11 @@ export default function CanvasWindowApp({
     const filePath = event.dataTransfer.getData(CANVAS_FILE_DRAG_MIME);
     if (filePath) {
       insertFileNodeAt(filePath, point);
+      return;
+    }
+    const postId = event.dataTransfer.getData(CANVAS_POST_DRAG_MIME);
+    if (postId) {
+      insertPostNodeAt(postId, point);
       return;
     }
     try {
@@ -1869,6 +2017,150 @@ export default function CanvasWindowApp({
     );
   };
 
+  // ---- 投稿のカードの中身と書き戻し（docs/BINDER_POST_CARD_PLAN.md） ----
+  // 投稿はメイン画面が持つ一覧から映し、カードで直した本文はメイン画面に書いてもらう（ファイルのカードと同じ作り）。
+  const onWritePostRef = useRef(onWritePost);
+  onWritePostRef.current = onWritePost;
+  useEffect(() => {
+    if (embedded) {
+      setCanvasPostWriteTransport((request) => {
+        const write = onWritePostRef.current;
+        return write ? write(request) : Promise.reject(new Error("投稿へ書き戻す相手がいません"));
+      });
+    } else if (isTauriRuntime()) {
+      setCanvasPostWriteTransport(requestPostWriteFromMain);
+    }
+  }, [embedded]);
+
+  /** 書き戻す前・書いている途中の、カードで直した本文。canvasPostWriteKey ごと。 */
+  const [postDrafts, setPostDrafts] = useState<Map<string, string>>(() => new Map());
+  /**
+   * 書けた投稿と、自分の書き戻しで古くなった行のハッシュ。メイン画面の一覧がまだその古い行のどれかなら、こちらを
+   * 今の投稿とみなす（別ウィンドウには一覧が少し遅れて届くので、続けて打った本文が外の変更と取り違えられないように）。
+   */
+  const writtenPostsRef = useRef(new Map<string, { post: Post; superseded: Set<string> }>());
+  const [postConflict, setPostConflict] = useState<CanvasPostWriteOutcome | null>(null);
+  const postWriteTimerRef = useRef<number | null>(null);
+  const postRootRef = useRef(rootPath);
+  postRootRef.current = rootPath;
+
+  const currentPost = (id: string): Post | undefined => {
+    const listed = postsById.get(id);
+    const written = writtenPostsRef.current.get(id);
+    if (listed && written?.superseded.has(listed.hash)) return written.post;
+    return listed;
+  };
+
+  // 作品が変わったら、直しかけの本文を捨てる。
+  useEffect(() => {
+    writtenPostsRef.current = new Map();
+    setPostDrafts(new Map());
+    setPostConflict(null);
+  }, [rootPath]);
+
+  /** 書き戻しが済んだ（待っている分がない）カードの、直した本文を捨てる。text を渡すと、それと同じときだけ。 */
+  const settlePostDraft = useCallback((key: string, text?: string) => {
+    setPostDrafts((current) => {
+      if (!current.has(key) || canvasPostWriteQueue.has(key)) return current;
+      if (text !== undefined && current.get(key) !== text) return current;
+      const next = new Map(current);
+      next.delete(key);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    return canvasPostWriteQueue.subscribe(({ request, result }) => {
+      if (normalizedReferenceKey(request.rootPath) !== normalizedReferenceKey(postRootRef.current ?? "")) return;
+      const key = canvasPostWriteKey(request);
+      if (result.status === "saved") {
+        const superseded = new Set(writtenPostsRef.current.get(request.id)?.superseded ?? []);
+        superseded.add(request.baseHash);
+        writtenPostsRef.current.set(request.id, { post: result.post, superseded });
+        settlePostDraft(key, request.text);
+      } else if (result.status === "conflict") {
+        setPostConflict({ request, result });
+      } else {
+        settlePostDraft(key, request.text);
+      }
+    });
+  }, [settlePostDraft]);
+
+  const flushPostWrites = useCallback(
+    () => canvasPostWriteQueue.flush().catch((error) => setStatus(String(error))),
+    [],
+  );
+
+  /** カードで直した本文を、0.5 秒止まったら書き戻す。空のあいだは書かない（投稿は空にできない）。 */
+  const editPostCard = (node: CanvasPostNode, text: string) => {
+    const post = currentPost(node.post);
+    if (!rootPath || !post) return;
+    const key = canvasPostWriteKey({ rootPath, id: post.id });
+    setPostDrafts((current) => new Map(current).set(key, text));
+    if (!text.trim()) return;
+    canvasPostWriteQueue.enqueue({ rootPath, id: post.id, text, baseHash: post.hash });
+    setPendingSave("canvas-post-writes", () => canvasPostWriteQueue.flush());
+    if (postWriteTimerRef.current) window.clearTimeout(postWriteTimerRef.current);
+    postWriteTimerRef.current = window.setTimeout(() => {
+      postWriteTimerRef.current = null;
+      void flushPostWrites();
+    }, 500);
+  };
+
+  /** 直し終えたとき、空のまま（書いていない）なら、投稿の本文に戻す。 */
+  const finishPostCardEdit = (node: CanvasPostNode) => {
+    if (!rootPath) return;
+    const key = canvasPostWriteKey({ rootPath, id: node.post });
+    if (!postDrafts.get(key)?.trim()) settlePostDraft(key);
+  };
+
+  const resolvePostConflict = (choice: "reload" | "overwrite") => {
+    const conflict = postConflict;
+    if (!conflict || conflict.result.status !== "conflict") return;
+    setPostConflict(null);
+    const { request, result } = conflict;
+    const key = canvasPostWriteKey(request);
+    writtenPostsRef.current.delete(request.id);
+    if (choice === "reload" || !result.post) {
+      // 「投稿の内容を読み込む」: 直した本文を捨てる（メイン画面はもう読み直している）。
+      setPostDrafts((current) => {
+        if (!current.has(key)) return current;
+        const next = new Map(current);
+        next.delete(key);
+        return next;
+      });
+      return;
+    }
+    // 「この内容で上書きする」: 今の投稿の上に書く。
+    canvasPostWriteQueue.enqueue({ ...request, baseHash: result.post.hash });
+    void flushPostWrites();
+  };
+
+  /** 投稿のカードの見出しと本文と、直せるか。 */
+  const postCardView = (node: CanvasPostNode) => {
+    const post = currentPost(node.post);
+    const draft = rootPath ? postDrafts.get(canvasPostWriteKey({ rootPath, id: node.post })) : undefined;
+    const otherWork = post?.work && !isFromWork(post, posts.work) ? post.work.name : "";
+    return {
+      post,
+      missing: !post,
+      time: post ? timeLabel(post.at) : "",
+      otherWork,
+      note: post?.note,
+      editable: Boolean(post && rootPath),
+      text: draft ?? post?.body ?? "",
+    };
+  };
+
+  const openPost = (id: string, target: CanvasOpenPostEvent["target"]) => {
+    if (embedded) {
+      onOpenPost?.(id, target);
+      return;
+    }
+    if (!isTauriRuntime()) return;
+    void openPostInMain(id, target).catch((error) => setStatus(String(error)));
+  };
+
   // バインダーのノート・原稿の行を、埋め込みのキャンバスへ落とした（WorkspaceSidebar のポインタのドラッグ）。
   // 素材の画像・PDF の行は、「資料を追加」で置くのと同じ資料のカードにする（BINDER 4-3）。
   const fileDropRef = useRef<(detail: CanvasFileDropDetail) => void>(() => {});
@@ -1964,6 +2256,10 @@ export default function CanvasWindowApp({
       if (fileWriteTimerRef.current) window.clearTimeout(fileWriteTimerRef.current);
       fileWriteTimerRef.current = null;
       void canvasFileWriteQueue.flush().catch(() => {});
+      // 投稿のカードで直した本文も同じ（docs/BINDER_POST_CARD_PLAN.md）。
+      if (postWriteTimerRef.current) window.clearTimeout(postWriteTimerRef.current);
+      postWriteTimerRef.current = null;
+      void canvasPostWriteQueue.flush().catch(() => {});
     };
   }, [boardSaveQueue]);
 
@@ -2478,6 +2774,18 @@ export default function CanvasWindowApp({
       return;
     }
     if (!view.editable) return;
+    setTool("select");
+    setSelectedEdgeId(null);
+    setSelectedIds(new Set([node.id]));
+    setEditingNodeId(node.id);
+    setPendingFocusNodeId(node.id);
+  };
+
+  /** 投稿のカードは、その場で本文を直す。消えた投稿のカードは何もしない。 */
+  const handlePostNodeDoubleClick = (node: CanvasPostNode, event: ReactMouseEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!postCardView(node).editable) return;
     setTool("select");
     setSelectedEdgeId(null);
     setSelectedIds(new Set([node.id]));
@@ -3161,6 +3469,7 @@ export default function CanvasWindowApp({
   const groups = board?.nodes.filter(isGroupNode) ?? [];
   const referenceNodes = board?.nodes.filter(isReferenceNode) ?? [];
   const fileNodes = board?.nodes.filter(isFileNode) ?? [];
+  const postNodes = board?.nodes.filter(isPostNode) ?? [];
   const allTextNodes = board?.nodes.filter(isTextNode) ?? [];
   const textNodes = allTextNodes.filter((node) => !hiddenThreadIds.has(node.id));
 
@@ -3329,7 +3638,7 @@ export default function CanvasWindowApp({
               title="資料を追加"
               aria-label="資料を追加"
               aria-expanded={isReferenceMenuOpen}
-              disabled={referenceFiles.length === 0 && projectFiles.length === 0}
+              disabled={referenceFiles.length === 0 && projectFiles.length === 0 && posts.posts.length === 0}
               onClick={() => setIsReferenceMenuOpen((value) => !value)}
             >
               <CanvasGlyph name="reference" />
@@ -3353,7 +3662,11 @@ export default function CanvasWindowApp({
                         type="button"
                         title={canvasInsertItemPath(item)}
                         onClick={() =>
-                          item.kind === "reference" ? addReferenceNode(item.file) : addFileNode(item.file.path)
+                          item.kind === "reference"
+                            ? addReferenceNode(item.file)
+                            : item.kind === "post"
+                              ? addPostNode(item.post.id)
+                              : addFileNode(item.file.path)
                         }
                       >
                         <span>{canvasInsertItemLabel(item)}</span>
@@ -3611,6 +3924,94 @@ export default function CanvasWindowApp({
                       aria-label={view.kind === "body" ? "ノートの本文" : "概要"}
                       onFocus={() => handleNodeFocus(node.id)}
                       onChange={(event) => editFileCard(node, view.kind, event.target.value)}
+                      onWheel={(event) => event.stopPropagation()}
+                    />
+                  ) : (
+                    <div className="canvasFileText" onWheel={(event) => event.stopPropagation()}>
+                      {view.text}
+                    </div>
+                  )}
+                  {CANVAS_RESIZE_CORNERS.map((corner) => (
+                    <span
+                      key={corner}
+                      className={`canvasResizeHandle canvasResizeHandle-${corner}`}
+                      aria-hidden="true"
+                      onPointerDown={(event) => startResize(node, corner, event)}
+                    />
+                  ))}
+                </article>
+              );
+            })}
+            {postNodes.map((node) => {
+              const view = postCardView(node);
+              const isEditing = editingNodeId === node.id && view.editable;
+              const note = view.note;
+              return (
+                <article
+                  key={node.id}
+                  className={`canvasNode canvasFileNode canvasPostNode ${
+                    selectedIds.has(node.id) ? "isSelected" : ""
+                  } ${selectedGroupChildIds.has(node.id) ? "isInSelectedGroup" : ""} ${
+                    edgeFromId === node.id ? "isEdgeSource" : ""
+                  } ${isEditing ? "isEditing" : ""} ${view.missing ? "isMissing" : ""}`}
+                  style={{ left: node.x, top: node.y, width: node.width, height: node.height }}
+                  data-node-id={node.id}
+                  data-color={node.color || undefined}
+                  onPointerDown={(event) => handleNodePointerDown(node, event)}
+                  onDoubleClick={(event) => handlePostNodeDoubleClick(node, event)}
+                  onBlur={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                      setEditingNodeId((current) => current === node.id ? null : current);
+                      finishPostCardEdit(node);
+                    }
+                  }}
+                >
+                  <header>
+                    <span>投稿</span>
+                    {!view.missing && (
+                      <span className="canvasPostMeta">
+                        <time dateTime={view.post?.at}>{view.time}</time>
+                        {view.otherWork && <span>{view.otherWork}</span>}
+                      </span>
+                    )}
+                    {note && (
+                      <button
+                        className="canvasPostNoteTag"
+                        type="button"
+                        title={note.path}
+                        disabled={!note.exists}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onDoubleClick={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openPost(node.post, "note");
+                        }}
+                      >
+                        {noteLabel(note.path)}
+                      </button>
+                    )}
+                    {!view.missing && (
+                      <button
+                        className="canvasFileOpenButton"
+                        type="button"
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onDoubleClick={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openPost(node.post, "post");
+                        }}
+                      >
+                        開く
+                      </button>
+                    )}
+                  </header>
+                  {isEditing ? (
+                    <textarea
+                      value={view.text}
+                      spellCheck={false}
+                      aria-label="投稿の本文"
+                      onFocus={() => handleNodeFocus(node.id)}
+                      onChange={(event) => editPostCard(node, event.target.value)}
                       onWheel={(event) => event.stopPropagation()}
                     />
                   ) : (
@@ -3982,8 +4383,10 @@ export default function CanvasWindowApp({
           <CanvasSidePanel
             referenceFiles={referenceFiles}
             projectFiles={projectFiles}
+            posts={posts}
             onInsertReference={(file) => void insertReferenceNodeAt(file, viewportCenterWorld())}
             onInsertFile={(path) => insertFileNodeAt(path, viewportCenterWorld())}
+            onInsertPost={(id) => insertPostNodeAt(id, viewportCenterWorld())}
             onClose={() => setIsSidePanelOpen(false)}
           />
         )}
@@ -4201,6 +4604,34 @@ export default function CanvasWindowApp({
               <button type="button" onClick={() => resolveFileConflict("overwrite")}>
                 この内容で上書きする
               </button>
+            </footer>
+          </section>
+        </div>
+      )}
+      {postConflict && !fileConflict && postConflict.result.status === "conflict" && (
+        <div className="canvasModalBackdrop" role="presentation">
+          <section
+            className="canvasRenameModal canvasFileConflictModal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="canvas-post-conflict-title"
+            aria-describedby="canvas-post-conflict-description"
+          >
+            <header>
+              <h2 id="canvas-post-conflict-title">投稿がほかで変更されました</h2>
+            </header>
+            <p id="canvas-post-conflict-description">
+              「{canvasPostTitle(postConflict.result.post?.body ?? postConflict.request.text)}」
+            </p>
+            <footer>
+              <button type="button" onClick={() => resolvePostConflict("reload")}>
+                投稿の内容を読み込む
+              </button>
+              {postConflict.result.post && (
+                <button type="button" onClick={() => resolvePostConflict("overwrite")}>
+                  この内容で上書きする
+                </button>
+              )}
             </footer>
           </section>
         </div>
