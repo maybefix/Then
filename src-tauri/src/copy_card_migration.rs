@@ -3,7 +3,7 @@
 //! Idea の「Canvas へ送る」で作ったテキストカード（`thenOrigin` 付き）を、2-4・2-5 の移行の記録
 //! （`project.json` の `ideaMigration.fragments`）で元の断片の行き先を引き、そのノートを指すファイルのカード
 //! （4-2 の `file` ノード）に置き換える。置き換えるのは、行き先が同じ作品のノートで、カードの文が元の断片
-//! （移行のバックアップの本文）と同じで、同じノートへ行くカードがそのボードに1枚だけのとき（確認1の 1〜4）。
+//! （移行のバックアップの本文）と同じで、そのボードでそのノートを指すカードがこの1枚だけになるとき（確認1の 1〜4）。
 //! ID・位置・大きさ・色は保ち、線はカードの ID でつながるのでそのまま残る（5）。ゴミ箱のボードは触らない（8）。
 //! 順番: 置き換えるボードを全部バックアップ（写して読み直す）→ ボードを書く。途中で失敗したら、その回に書いた
 //! ボードを元の中身に戻す。置き換えたカードはテキストでなくなるので、何度呼んでも1回しか置き換えない。
@@ -140,7 +140,8 @@ impl Sources {
     }
 }
 
-/// ボードの置き換えの予定（カードの ID → 指すノート）。同じノートへ行くカードが2枚以上なら、どれも置き換えない（4）。
+/// ボードの置き換えの予定（カードの ID → 指すノート）。同じノートへ行くコピーのカードが2枚以上か、そのノートの
+/// ファイルのカードがすでにあれば、どれも置き換えない（4。同じノートのカードを並べない）。
 fn plan_board(root: &Path, sources: &Sources, nodes: &[Value]) -> Vec<(String, String, String)> {
     let mut resolved: Vec<(String, String, String, bool)> = Vec::new();
     for node in nodes {
@@ -151,9 +152,15 @@ fn plan_board(root: &Path, sources: &Sources, nodes: &[Value]) -> Vec<(String, S
         let same = comparable_text(text) == comparable_text(body);
         resolved.push((id.to_string(), fragment_id.to_string(), file, same));
     }
-    let mut counts: HashMap<&str, usize> = HashMap::new();
+    // ボードにすでにある同じノートのファイルのカード（置き換え済み・バインダーから置いたもの）も数える。
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for node in nodes.iter().filter(|node| node.get("type").and_then(Value::as_str) == Some("file")) {
+        if let Some(file) = node.get("file").and_then(Value::as_str) {
+            *counts.entry(file.replace('\\', "/")).or_default() += 1;
+        }
+    }
     for (_, _, file, _) in &resolved {
-        *counts.entry(file.as_str()).or_default() += 1;
+        *counts.entry(file.clone()).or_default() += 1;
     }
     resolved
         .iter()

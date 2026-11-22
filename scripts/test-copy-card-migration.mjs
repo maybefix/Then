@@ -93,3 +93,13 @@ const { migrateCopyCards, copyCardMigrationMessage } = await bundle("src/copyCar
   assert.doesNotMatch(body.slice(body.lastIndexOf("return ")), /cards\./, "ファイルの一覧は読み直さない");
   console.log("PASS order: plot, ideas, drafts, then copy cards after flushing the Canvas; one toast");
 }
+// 5. 置き換えたファイルのカードも、テキストカードと同じ色で出す（4-5 の実機確認で見つけた癖1）。
+{
+  const css = readFileSync("src/components/canvas/canvas.css", "utf8");
+  assert.match(css, /:is\(\.canvasTextNode, \.canvasFileNode\)\[data-color\] \{[^}]*background:[^}]*--canvas-card-color/, "色の地と枠をファイルのカードにも当てる");
+  for (let color = 1; color <= 6; color += 1) {
+    const rule = new RegExp(`\\.canvasFileNode\\[data-color="${color}"\\][^{]*\\{\\s*--canvas-card-color: #[0-9a-f]{6};`);
+    assert.match(css, rule, `色 ${color} の値をファイルのカードにも渡す`);
+  }
+  console.log("PASS colour: file cards take the same six colours as text cards");
+}

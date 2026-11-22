@@ -774,37 +774,44 @@
   background: var(--canvas-node-bg);
 }
 
-.canvasTextNode[data-color] {
+/* 色はテキストカードと、それを置き換えたファイルのカード（4-4 の「カードごと」、4-5 の移行）で同じに出す。 */
+:is(.canvasTextNode, .canvasFileNode)[data-color] {
   border-color: color-mix(in srgb, var(--canvas-card-color) 54%, var(--border-strong));
   background: color-mix(in srgb, var(--canvas-card-color) 16%, var(--canvas-node-bg));
 }
 
 .canvasTextNode[data-color="1"],
+.canvasFileNode[data-color="1"],
 .canvasColorChoice i[data-color="1"] {
   --canvas-card-color: #e06c75;
 }
 
 .canvasTextNode[data-color="2"],
+.canvasFileNode[data-color="2"],
 .canvasColorChoice i[data-color="2"] {
   --canvas-card-color: #dd8b46;
 }
 
 .canvasTextNode[data-color="3"],
+.canvasFileNode[data-color="3"],
 .canvasColorChoice i[data-color="3"] {
   --canvas-card-color: #d6b84c;
 }
 
 .canvasTextNode[data-color="4"],
+.canvasFileNode[data-color="4"],
 .canvasColorChoice i[data-color="4"] {
   --canvas-card-color: #63a76f;
 }
 
 .canvasTextNode[data-color="5"],
+.canvasFileNode[data-color="5"],
 .canvasColorChoice i[data-color="5"] {
   --canvas-card-color: #548dc7;
 }
 
 .canvasTextNode[data-color="6"],
+.canvasFileNode[data-color="6"],
 .canvasColorChoice i[data-color="6"] {
   --canvas-card-color: #9a72c7;
 }

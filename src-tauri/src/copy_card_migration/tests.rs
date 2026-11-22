@@ -219,6 +219,24 @@ fn s6_two_cards_going_to_the_same_note_both_stay_text() {
 }
 
 #[test]
+fn a_board_that_already_has_a_card_for_the_note_keeps_the_copy_as_text() {
+    let library = TempLibrary::new("existing");
+    let work = library.work();
+    // 置き換え済みのカード（区切りが \ でも同じノート）と、あとから戻ってきたコピーのカード（実機確認の c-new）。
+    let existing = json!({ "id": "done", "type": "file", "x": 0, "y": 0, "width": 260, "height": 150, "file": "素材\\場面： 港.md" });
+    let board = library.board(&work, "b", json!([existing, copy("again", "港の場面の二", "f-2")]), json!([]));
+    let before = std::fs::read(&board).unwrap();
+    assert_eq!(migrate_cards(&work).unwrap().status, "empty");
+    assert_eq!(std::fs::read(&board).unwrap(), before, "the same note is not shown twice");
+
+    // ほかのノートのファイルのカードは数えない。
+    let other = json!({ "id": "other", "type": "file", "x": 0, "y": 0, "width": 260, "height": 150, "file": "素材/別.md" });
+    let board = library.board(&work, "c", json!([other, copy("only", "港の場面の一", "f-1")]), json!([]));
+    assert_eq!(migrate_cards(&work).unwrap().replaced, 1);
+    assert_eq!(read_json(&board)["nodes"][1]["file"], NOTE);
+}
+
+#[test]
 fn each_board_is_judged_on_its_own() {
     let library = TempLibrary::new("boards");
     let work = library.work();
