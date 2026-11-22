@@ -173,6 +173,39 @@ try {
       await sleep(60);
       assert.equal(await value(), "朝の港。\n船が出る。");
     });
+    await check(`${mode} K2: 投稿を本文の上へ運ぶと、落とす位置に印が出る。離れる・落とすと消える。ほかのドラッグでは出ない`, async () => {
+      await open(mode);
+      assert.equal(await evaluate("__drop.marker()"), null, "はじめは出ていない");
+      await evaluate("__drop.dragOverPost(3)");
+      await sleep(30);
+      const mark = await evaluate("__drop.marker()");
+      const char = await evaluate("__drop.charRect(3)");
+      assert.ok(mark, "印が出る");
+      if (mode === "vertical-rl") {
+        assert.ok(mark.width > mark.height, "縦書きでは行を横切る線");
+        assert.ok(Math.abs(mark.top + mark.height / 2 - char.top) < 3, `「。」の上端（${char.top}）に出る（${mark.top}）`);
+        assert.ok(mark.left < char.right && mark.right > char.left, "その文字の列に重なる");
+      } else {
+        assert.ok(mark.height > mark.width, "横書きでは行に沿った縦の線");
+        assert.ok(Math.abs(mark.left + mark.width / 2 - char.left) < 3, `「。」の左端（${char.left}）に出る（${mark.left}）`);
+        assert.ok(mark.top < char.bottom && mark.bottom > char.top, "その文字の行に重なる");
+      }
+      await evaluate("__drop.dragOverPost(5)");
+      await sleep(30);
+      const moved = await evaluate("__drop.marker()");
+      assert.ok(moved && (moved.left !== mark.left || moved.top !== mark.top), "ポインタについて動く");
+      await evaluate("__drop.dragLeave()");
+      await sleep(30);
+      assert.equal(await evaluate("__drop.marker()"), null, "本文から離れると消える");
+      await evaluate("__drop.dragOverPost(3)");
+      await evaluate(`__drop.post(3, "p2")`);
+      await sleep(30);
+      assert.equal(await evaluate("__drop.marker()"), null, "落とすと消える");
+      await evaluate(`__drop.dragOver(3, { ${JSON.stringify(HEADING)}: "{}" })`);
+      await evaluate(`__drop.dragOver(3, { "text/plain": "外の文" })`);
+      await sleep(30);
+      assert.equal(await evaluate("__drop.marker()"), null, "見出し・ふつうの文のドラッグでは出ない");
+    });
     await check(`${mode}: ふつうの文（text/plain だけ）の drop は今のまま入る`, async () => {
       await open(mode);
       await evaluate(`__drop.drop(3, { "text/plain": "外の文" })`);

@@ -43,6 +43,37 @@ function pointBefore(offset: number) {
   throw new Error(`no character at ${offset}`);
 }
 
+/** offset の文字の箱（K2 の印の位置を比べる）。 */
+function charRect(offset: number) {
+  const { x, y } = pointBefore(offset);
+  const range = document.caretRangeFromPoint?.(x, y);
+  const node = range?.startContainer;
+  if (!node || node.nodeType !== Node.TEXT_NODE) return null;
+  const char = document.createRange();
+  char.setStart(node, range!.startOffset);
+  char.setEnd(node, range!.startOffset + 1);
+  const rect = char.getBoundingClientRect();
+  return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+}
+
+function dragEvent(type: string, offset: number | null, data: Record<string, string>) {
+  const { x, y } = offset === null ? { x: 2, y: 2 } : pointBefore(offset);
+  const transfer = new DataTransfer();
+  for (const [kind, value] of Object.entries(data)) transfer.setData(kind, value);
+  const target = offset === null ? document.querySelector(".pm-root")! : document.elementFromPoint(x, y) ?? document.querySelector(".pm-root")!;
+  const event = new DragEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, dataTransfer: transfer,
+    relatedTarget: offset === null ? document.body : null });
+  target.dispatchEvent(event);
+}
+
+/** K2: 落とす位置の印（見えていれば、その画面上の箱）。 */
+function marker() {
+  const element = document.querySelector<HTMLElement>(".editorDropMarker");
+  if (!element || getComputedStyle(element).display === "none") return null;
+  const rect = element.getBoundingClientRect();
+  return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height };
+}
+
 function drop(offset: number, data: Record<string, string>) {
   const { x, y } = pointBefore(offset);
   const transfer = new DataTransfer();
@@ -112,6 +143,11 @@ function measurePane() {
 
 Object.assign(window, { __drop: {
   measurePane,
+  charRect,
+  marker,
+  dragOverPost: (offset: number) => dragEvent("dragover", offset, { [CANVAS_POST_DRAG_MIME]: "p1" }),
+  dragOver: (offset: number, data: Record<string, string>) => dragEvent("dragover", offset, data),
+  dragLeave: () => dragEvent("dragleave", null, { [CANVAS_POST_DRAG_MIME]: "p1" }),
   ready: () => Boolean(handle && document.querySelector(".pm-root")?.textContent),
   value: () => handle!.getValue(),
   selection: () => handle!.getSelection(),
