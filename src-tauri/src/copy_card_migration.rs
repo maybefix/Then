@@ -7,11 +7,16 @@
 //! ID・位置・大きさ・色は保ち、線はカードの ID でつながるのでそのまま残る（5）。ゴミ箱のボードは触らない（8）。
 //! 順番: 置き換えるボードを全部バックアップ（写して読み直す）→ ボードを書く。途中で失敗したら、その回に書いた
 //! ボードを元の中身に戻す。置き換えたカードはテキストでなくなるので、何度呼んでも1回しか置き換えない。
+//!
+//! 元の断片が投稿になっていれば、投稿のカード（`{"type":"post","post":ID}`）に置き換える（docs/BINDER_POST_CARD_PLAN.md の
+//! 確認1の 4）。作品のボードでは、その投稿を同じ作品のノートにしていればノートのカード（4-5 のまま）。ライブラリ直下の
+//! ボードは、直下の記録に加えてライブラリの全作品の記録から元の断片を引き、1つの記録に決まるときだけ置き換える。
+//! 直下のボードから作品のノートは指せないので、作品の断片は投稿のカードにだけなる。
 
 use super::idea_migration::{copy_verified, stored_threads};
 use super::plot_migration::{backup_stamp, first_free_name, relative_slash_path, write_new_file};
 use super::project_state::{load_project_config, IdeaMigrationRecord, ProjectConfig};
-use super::{atomic_file, now_millis, post_stream};
+use super::{atomic_file, library, now_millis, post_stream};
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -24,6 +29,9 @@ pub(super) struct CopyCardMigrationResult {
     status: &'static str,
     /// 置き換えたカードの数。
     replaced: usize,
+    /// そのうちノートのカード・投稿のカードにした数（通知の文に使う）。
+    notes: usize,
+    posts: usize,
     /// 書き換えたボードの ID（`.canvas` を除いたファイル名）。
     boards: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -101,84 +109,152 @@ fn comparable_text(text: &str) -> String {
     text.replace("\r\n", "\n").replace('\r', "\n")
 }
 
-/// 置き換えに使う、作品の移行の記録。
-struct Sources {
+/// 置き換え先。ノートのカード（作品からのパス）か、投稿のカード（投稿の ID）。
+#[derive(Clone, Debug, PartialEq)]
+enum Target {
+    Note(String),
+    Post(String),
+}
+
+impl Target {
+    /// 同じものを指すカードを数えるときの鍵。
+    fn key(&self) -> String {
+        match self {
+            Target::Note(file) => format!("file:{}", file.replace('\\', "/")),
+            Target::Post(id) => format!("post:{id}"),
+        }
+    }
+}
+
+/// 1つの作品（またはライブラリ直下）の移行の記録と、移行の前の断片の本文。
+struct Record {
     record: IdeaMigrationRecord,
     bodies: HashMap<String, String>,
     work_id: Option<String>,
+    /// ボードと同じフォルダの記録か（その作品のノートを指せるのは、この記録だけ）。
+    own: bool,
+}
+
+/// 置き換えに使う移行の記録。作品のボードではその作品の記録だけ、ライブラリ直下ではライブラリの全作品の記録も。
+struct Sources {
+    records: Vec<Record>,
+}
+
+fn load_record(root: &Path, own: bool) -> Result<Option<Record>, String> {
+    let config = load_project_config(root)?;
+    let Some(record) = config.idea_migration.clone() else { return Ok(None) };
+    if record.fragments.is_empty() {
+        return Ok(None);
+    }
+    let bodies = fragment_bodies(root, &record);
+    Ok(Some(Record { record, bodies, work_id: config.work_id.clone(), own }))
 }
 
 impl Sources {
     fn load(root: &Path) -> Result<Option<Self>, String> {
-        let config = load_project_config(root)?;
-        let Some(record) = config.idea_migration.clone() else { return Ok(None) };
-        if record.fragments.is_empty() {
-            return Ok(None);
+        let mut records = Vec::new();
+        if let Some(record) = load_record(root, true)? {
+            records.push(record);
         }
-        let bodies = fragment_bodies(root, &record);
-        Ok(Some(Self { record, bodies, work_id: config.work_id.clone() }))
+        if library::is_library_root(root) {
+            // 読めない作品は飛ばす（その作品の断片から来たカードは置き換えない）。
+            for project in library::library_projects(root).unwrap_or_default() {
+                if let Ok(Some(record)) = load_record(Path::new(&project.path), false) {
+                    records.push(record);
+                }
+            }
+        }
+        Ok((!records.is_empty()).then_some(Self { records }))
     }
 
-    /// 断片の行き先のノート（作品からのパス）と、移行の前の本文。同じ作品のノートで、今もあるときだけ。
-    fn resolve(&self, root: &Path, fragment_id: &str) -> Option<(String, &str)> {
-        let fragment = self.record.fragments.iter().find(|item| item.id == fragment_id)?;
-        let body = self.bodies.get(fragment_id)?;
-        let note = match (&fragment.note, &fragment.post) {
-            (Some(note), _) => note.clone(),
-            // 投稿は、あとで同じ作品のノートにしたときだけ（確認1の 3）。
+    /// 断片の置き換え先と、移行の前の本文。ボードのフォルダ（`root`）から指せて、今もあるときだけ。
+    /// 同じ断片が2つ以上の記録にあれば、どれとも決めない。
+    fn resolve(&self, root: &Path, fragment_id: &str) -> Option<(Target, &str)> {
+        let mut found = self.records.iter().filter_map(|source| {
+            let fragment = source.record.fragments.iter().find(|item| item.id == fragment_id)?;
+            Some((source, fragment))
+        });
+        let (source, fragment) = found.next()?;
+        if found.next().is_some() {
+            return None;
+        }
+        let body = source.bodies.get(fragment_id)?;
+        let note_here = |note: &str| {
+            let relative = safe_relative(note)?;
+            root.join(relative).is_file().then(|| Target::Note(note.to_string()))
+        };
+        let target = match (&fragment.note, &fragment.post) {
+            (Some(note), _) if source.own => note_here(note)?,
+            (Some(_), _) => return None,
             (None, Some(post)) => {
-                let (work, path) = post_stream::note_of_post(root, post)?;
-                if self.work_id.as_deref() != Some(work.as_str()) {
-                    return None;
+                let noted = post_stream::post_state(root, post)?;
+                // 同じ作品のノートにしていれば、そのノートのカード（4-5 の確認1の 3）。それ以外は投稿のカード。
+                let same_work = |work: &str| source.own && source.work_id.as_deref() == Some(work);
+                match noted {
+                    Some((work, path)) if same_work(&work) => {
+                        note_here(&path).unwrap_or_else(|| Target::Post(post.clone()))
+                    }
+                    _ => Target::Post(post.clone()),
                 }
-                path
             }
             (None, None) => return None,
         };
-        let relative = safe_relative(&note)?;
-        root.join(relative).is_file().then_some((note, body.as_str()))
+        Some((target, body.as_str()))
     }
 }
 
-/// ボードの置き換えの予定（カードの ID → 指すノート）。同じノートへ行くコピーのカードが2枚以上か、そのノートの
-/// ファイルのカードがすでにあれば、どれも置き換えない（4。同じノートのカードを並べない）。
-fn plan_board(root: &Path, sources: &Sources, nodes: &[Value]) -> Vec<(String, String, String)> {
-    let mut resolved: Vec<(String, String, String, bool)> = Vec::new();
+/// ボードの置き換えの予定（カードの ID・元の断片・置き換え先）。同じものへ行くコピーのカードが2枚以上か、それを指す
+/// カードがすでにあれば、どれも置き換えない（4。同じノート・投稿のカードを並べない）。
+fn plan_board(root: &Path, sources: &Sources, nodes: &[Value]) -> Vec<(String, String, Target)> {
+    let mut resolved: Vec<(String, String, Target, bool)> = Vec::new();
     for node in nodes {
         let Some(fragment_id) = origin_fragment(node) else { continue };
         let Some(id) = node.get("id").and_then(Value::as_str) else { continue };
-        let Some((file, body)) = sources.resolve(root, fragment_id) else { continue };
+        let Some((target, body)) = sources.resolve(root, fragment_id) else { continue };
         let text = node.get("text").and_then(Value::as_str).unwrap_or("");
         let same = comparable_text(text) == comparable_text(body);
-        resolved.push((id.to_string(), fragment_id.to_string(), file, same));
+        resolved.push((id.to_string(), fragment_id.to_string(), target, same));
     }
-    // ボードにすでにある同じノートのファイルのカード（置き換え済み・バインダーから置いたもの）も数える。
+    // ボードにすでにある同じノートのファイルのカード・同じ投稿のカード（置き換え済み・あとから置いたもの）も数える。
     let mut counts: HashMap<String, usize> = HashMap::new();
-    for node in nodes.iter().filter(|node| node.get("type").and_then(Value::as_str) == Some("file")) {
-        if let Some(file) = node.get("file").and_then(Value::as_str) {
-            *counts.entry(file.replace('\\', "/")).or_default() += 1;
+    for node in nodes {
+        let existing = match node.get("type").and_then(Value::as_str) {
+            Some("file") => node.get("file").and_then(Value::as_str).map(|file| Target::Note(file.to_string())),
+            Some("post") => node.get("post").and_then(Value::as_str).map(|post| Target::Post(post.to_string())),
+            _ => None,
+        };
+        if let Some(existing) = existing {
+            *counts.entry(existing.key()).or_default() += 1;
         }
     }
-    for (_, _, file, _) in &resolved {
-        *counts.entry(file.clone()).or_default() += 1;
+    for (_, _, target, _) in &resolved {
+        *counts.entry(target.key()).or_default() += 1;
     }
     resolved
-        .iter()
-        .filter(|(_, _, file, same)| *same && counts.get(file.as_str()) == Some(&1))
-        .map(|(id, fragment, file, _)| (id.clone(), fragment.clone(), file.clone()))
+        .into_iter()
+        .filter(|(_, _, target, same)| *same && counts.get(&target.key()) == Some(&1))
+        .map(|(id, fragment, target, _)| (id, fragment, target))
         .collect()
 }
 
-/// カードをファイルのカードにする。ID・位置・大きさ・色だけを残す（4-4 の `convertCardsToFiles` と同じ形）。
-fn file_node(card: &Value, file: &str) -> Value {
+/// カードをファイルのカード・投稿のカードにする。ID・位置・大きさ・色だけを残す（4-4 の `convertCardsToFiles` と同じ形）。
+fn target_node(card: &Value, target: &Target) -> Value {
     let mut node = Map::new();
     for key in ["id", "type", "x", "y", "width", "height"] {
         if let Some(value) = card.get(key) {
             node.insert(key.to_string(), value.clone());
         }
     }
-    node.insert("type".to_string(), json!("file"));
-    node.insert("file".to_string(), json!(file));
+    match target {
+        Target::Note(file) => {
+            node.insert("type".to_string(), json!("file"));
+            node.insert("file".to_string(), json!(file));
+        }
+        Target::Post(post) => {
+            node.insert("type".to_string(), json!("post"));
+            node.insert("post".to_string(), json!(post));
+        }
+    }
     if let Some(color) = card.get("color").filter(|value| value.is_string()) {
         node.insert("color".to_string(), color.clone());
     }
@@ -186,13 +262,13 @@ fn file_node(card: &Value, file: &str) -> Value {
 }
 
 /// ボードのカードを置き換える。置き換えたカードを親にしていたスレッドの子は、その場に残してスレッドから外す。
-fn replace_cards(board: &mut Value, plan: &[(String, String, String)]) {
-    let files: HashMap<&str, &str> = plan.iter().map(|(id, _, file)| (id.as_str(), file.as_str())).collect();
+fn replace_cards(board: &mut Value, plan: &[(String, String, Target)]) {
+    let files: HashMap<&str, &Target> = plan.iter().map(|(id, _, target)| (id.as_str(), target)).collect();
     let Some(nodes) = board.get_mut("nodes").and_then(Value::as_array_mut) else { return };
     for node in nodes.iter_mut() {
         let id = node.get("id").and_then(Value::as_str).unwrap_or("").to_string();
-        if let Some(file) = files.get(id.as_str()) {
-            *node = file_node(node, file);
+        if let Some(target) = files.get(id.as_str()) {
+            *node = target_node(node, target);
             continue;
         }
         let parent = node.get("threadParentId").and_then(Value::as_str).unwrap_or("");
@@ -209,7 +285,7 @@ struct Planned {
     path: PathBuf,
     before: Vec<u8>,
     after: String,
-    cards: Vec<(String, String, String)>,
+    cards: Vec<(String, String, Target)>,
 }
 
 fn write_backup(root: &Path, planned: &[Planned], migrated_at: i64) -> Result<PathBuf, String> {
@@ -227,8 +303,13 @@ fn write_backup(root: &Path, planned: &[Planned], migrated_at: i64) -> Result<Pa
         if std::fs::read(dir.join("boards").join(file_name)).ok().as_deref() != Some(board.before.as_slice()) {
             return Err(format!("backup of {} does not match", board.path.display()));
         }
-        for (id, fragment, file) in &board.cards {
-            cards.push(json!({ "board": file_name.to_string_lossy(), "card": id, "fragment": fragment, "file": file }));
+        for (id, fragment, target) in &board.cards {
+            let mut entry = json!({ "board": file_name.to_string_lossy(), "card": id, "fragment": fragment });
+            match target {
+                Target::Note(file) => entry["file"] = json!(file),
+                Target::Post(post) => entry["post"] = json!(post),
+            }
+            cards.push(entry);
         }
     }
     let content = serde_json::to_string_pretty(&json!({ "migratedAt": migrated_at, "cards": cards }))
@@ -245,7 +326,8 @@ pub(super) fn migrate_cards(root: &Path) -> Result<CopyCardMigrationResult, Stri
     if !root.is_dir() {
         return Err("project root does not exist".to_string());
     }
-    let empty = || CopyCardMigrationResult { status: "empty", replaced: 0, boards: Vec::new(), backup_path: None };
+    let empty =
+        || CopyCardMigrationResult { status: "empty", replaced: 0, notes: 0, posts: 0, boards: Vec::new(), backup_path: None };
     let files = board_files(root);
     if files.is_empty() {
         return Ok(empty());
@@ -286,9 +368,18 @@ pub(super) fn migrate_cards(root: &Path) -> Result<CopyCardMigrationResult, Stri
         }
         written.push(board);
     }
+    let count = |post: bool| {
+        planned
+            .iter()
+            .flat_map(|board| &board.cards)
+            .filter(|(_, _, target)| matches!(target, Target::Post(_)) == post)
+            .count()
+    };
     Ok(CopyCardMigrationResult {
         status: "migrated",
         replaced: planned.iter().map(|board| board.cards.len()).sum(),
+        notes: count(false),
+        posts: count(true),
         boards: planned
             .iter()
             .map(|board| board.path.file_stem().unwrap_or_default().to_string_lossy().to_string())

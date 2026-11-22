@@ -43,7 +43,7 @@ const MAX_PROPERTY_NAME_BYTES: usize = 200;
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct LibraryProjectSummary {
-    path: String,
+    pub(super) path: String,
     name: String,
 }
 
