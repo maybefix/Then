@@ -36,6 +36,8 @@ import { Fragment, Slice, type Node as PMNode } from "@tiptap/pm/model";
 import { baseKeymap } from "@tiptap/pm/commands";
 import { closeHistory } from "@tiptap/pm/history";
 import { keymap } from "@tiptap/pm/keymap";
+import { dropPoint } from "@tiptap/pm/transform";
+import { CANVAS_POST_DRAG_MIME } from "./canvasTypes";
 import {
   Plugin,
   PluginKey,
@@ -170,6 +172,11 @@ type VerticalTextEditorProps = {
     target: string;
     rewriteTarget: (next: string) => void;
   }) => void;
+  /**
+   * U6（docs/BINDER_POST_DRAG_SEARCH_PLAN.md）: アイデアのペインの投稿を落としたとき、その投稿の本文を返す。
+   * 見つからなければ null（何も入れない）。ないときは投稿の drop を受けない。
+   */
+  postBodyForDrop?: (id: string) => string | null;
 };
 
 type AstPluginState = {
@@ -276,6 +283,80 @@ const astKey = new PluginKey<AstPluginState>("then-layout-ast");
 
 function normalizeText(text: string): string {
   return text.replace(/\r\n?/g, "\n");
+}
+
+/** 位置 pos の前後の文字（テキストノードと位置）。装飾の要素があれば、その中の文字まで降りる。 */
+function textAroundPos(view: EditorView, pos: number): { node: Text; offset: number } | null {
+  let found: { node: Node; offset: number };
+  try { found = view.domAtPos(pos); } catch { return null; }
+  if (found.node.nodeType === Node.TEXT_NODE) return { node: found.node as Text, offset: found.offset };
+  const textIn = (start: Node | undefined, last: boolean): Text | null => {
+    if (!start) return null;
+    if (start.nodeType === Node.TEXT_NODE) return start as Text;
+    const walker = document.createTreeWalker(start, NodeFilter.SHOW_TEXT);
+    let hit: Text | null = null;
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.textContent) continue;
+      hit = node as Text;
+      if (!last) break;
+    }
+    return hit;
+  };
+  const after = textIn(found.node.childNodes[found.offset], false);
+  if (after) return { node: after, offset: 0 };
+  const before = textIn(found.node.childNodes[found.offset - 1], true);
+  if (before) return { node: before, offset: before.length };
+  return null;
+}
+
+/**
+ * K2（docs/BINDER_POST_DRAG_SEARCH_PLAN.md）: 投稿を本文へ運んでいるあいだの、落とす位置の線（画面の座標）。
+ * 縦書きは文字の上端（下の文字がなければ前の文字の下端）を横切る線、横書きは文字の左端（右端）の縦の線。
+ */
+function dropMarkerRect(view: EditorView, pos: number, vertical: boolean): { left: number; top: number; width: number; height: number } | null {
+  const THICKNESS = 2;
+  const around = textAroundPos(view, pos);
+  let box: DOMRect | null = null;
+  let leading = true;
+  if (around) {
+    const range = document.createRange();
+    if (around.offset < around.node.length) {
+      range.setStart(around.node, around.offset);
+      range.setEnd(around.node, around.offset + 1);
+    } else if (around.offset > 0) {
+      range.setStart(around.node, around.offset - 1);
+      range.setEnd(around.node, around.offset);
+      leading = false;
+    }
+    const rect = range.getBoundingClientRect();
+    if (rect.width > 0 || rect.height > 0) box = rect;
+  }
+  if (!box) {
+    // 空の行: その行の箱の頭に出す。
+    const block = view.domAtPos(pos).node;
+    const element = block.nodeType === Node.ELEMENT_NODE ? block as Element : block.parentElement;
+    const rect = element?.closest(".pm-line, p")?.getBoundingClientRect() ?? null;
+    if (!rect) return null;
+    box = rect;
+  }
+  if (vertical) {
+    const y = leading ? box.top : box.bottom;
+    return { left: box.left, top: y - THICKNESS / 2, width: box.width, height: THICKNESS };
+  }
+  const x = leading ? box.left : box.right;
+  return { left: x - THICKNESS / 2, top: box.top, width: THICKNESS, height: box.height };
+}
+
+/** 文を、1行1段落の Slice にする（貼り付けと、投稿の drop で共通）。 */
+function plainTextSlice(schema: EditorState["schema"], text: string): Slice {
+  const nodes = normalizeText(text)
+    .split("\n")
+    .map((line) =>
+      line.length > 0
+        ? schema.nodes.paragraph.create(null, schema.text(line))
+        : schema.nodes.paragraph.create(),
+    );
+  return new Slice(Fragment.fromArray(nodes), 1, 1);
 }
 
 function textToDoc(text: string): JSONContent {
@@ -2862,6 +2943,7 @@ export function VerticalTextEditor({
   onManuscriptProgressChange,
   linkLookup = null,
   onLinkActivate,
+  postBodyForDrop,
 }: VerticalTextEditorProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
@@ -2903,6 +2985,47 @@ export function VerticalTextEditor({
   const linkLookupRef = useRef(linkLookup);
   const onLinkActivateRef = useRef(onLinkActivate);
   onLinkActivateRef.current = onLinkActivate;
+  const postBodyForDropRef = useRef(postBodyForDrop);
+  postBodyForDropRef.current = postBodyForDrop;
+  // K2: 投稿を本文へ運んでいるあいだの、落とす位置の線。描き直しを起こさないよう、要素を直接動かす。
+  const dropMarkerRef = useRef<HTMLDivElement | null>(null);
+  const hideDropMarker = () => {
+    if (dropMarkerRef.current) dropMarkerRef.current.style.display = "none";
+  };
+  const showDropMarker = (view: EditorView, event: DragEvent) => {
+    const shell = shellRef.current;
+    const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
+    const rect = at ? dropMarkerRect(view, at.pos, !isHorizontalWriting(writingModeRef.current)) : null;
+    if (!shell || !rect) { hideDropMarker(); return; }
+    let marker = dropMarkerRef.current;
+    if (!marker || marker.parentElement !== shell) {
+      marker = document.createElement("div");
+      marker.className = "editorDropMarker";
+      marker.setAttribute("aria-hidden", "true");
+      shell.appendChild(marker);
+      dropMarkerRef.current = marker;
+    }
+    const origin = shell.getBoundingClientRect();
+    marker.style.display = "block";
+    marker.style.left = `${rect.left - origin.left}px`;
+    marker.style.top = `${rect.top - origin.top}px`;
+    marker.style.width = `${rect.width}px`;
+    marker.style.height = `${rect.height}px`;
+  };
+  const isPostDrag = (event: DragEvent) =>
+    Boolean(postBodyForDropRef.current && event.dataTransfer?.types.includes(CANVAS_POST_DRAG_MIME));
+  useEffect(() => {
+    // 本文の外で落とした・やめたときも消す。
+    const hide = () => hideDropMarker();
+    document.addEventListener("dragend", hide, true);
+    document.addEventListener("drop", hide, true);
+    return () => {
+      document.removeEventListener("dragend", hide, true);
+      document.removeEventListener("drop", hide, true);
+      dropMarkerRef.current?.remove();
+      dropMarkerRef.current = null;
+    };
+  }, []);
   const highlightCurrentLineRef = useRef(highlightCurrentLine);
   const manuscriptActive = manuscript.layoutMode === "manuscript";
   const manuscriptRef = useRef(manuscript);
@@ -5300,16 +5423,43 @@ export function VerticalTextEditor({
         // between blocks, which is why copying spaced the lines out.
         clipboardTextSerializer: (slice) =>
           slice.content.textBetween(0, slice.content.size, "\n"),
-        clipboardTextParser: (text, _context, _plain, view) => {
-          const { schema } = view.state;
-          const nodes = normalizeText(text)
-            .split("\n")
-            .map((line) =>
-              line.length > 0
-                ? schema.nodes.paragraph.create(null, schema.text(line))
-                : schema.nodes.paragraph.create(),
-            );
-          return new Slice(Fragment.fromArray(nodes), 1, 1);
+        clipboardTextParser: (text, _context, _plain, view) => plainTextSlice(view.state.schema, text),
+        // U6（docs/BINDER_POST_DRAG_SEARCH_PLAN.md）: アイデアのペインの投稿（ID だけを運ぶ）を落としたら、
+        // 落とした位置に本文の写しを入れる。名前の text/plain が付いていても、投稿の形式を先に見る。
+        handleDOMEvents: {
+          dragover: (view, event) => {
+            if (isPostDrag(event)) showDropMarker(view, event);
+            else hideDropMarker();
+            return false;
+          },
+          dragleave: (view, event) => {
+            const next = event.relatedTarget;
+            if (!(next instanceof Node) || !view.dom.contains(next)) hideDropMarker();
+            return false;
+          },
+        },
+        handleDrop: (view, event) => {
+          hideDropMarker();
+          const transfer = event.dataTransfer;
+          const lookup = postBodyForDropRef.current;
+          if (!transfer || !lookup || !transfer.types.includes(CANVAS_POST_DRAG_MIME)) return false;
+          // 変換中・見つからない投稿は、何も入れずに受け取る（名前の文も入れない）。
+          if (isEditorComposing(tiptapRef.current, composingRef)) return true;
+          const body = lookup(transfer.getData(CANVAS_POST_DRAG_MIME));
+          const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
+          if (!body || !at) return true;
+          const slice = plainTextSlice(view.state.schema, body);
+          const insertAt = dropPoint(view.state.doc, at.pos, slice) ?? at.pos;
+          // 直前の打鍵と同じ1回の元に戻すにまとめない。
+          const tr = closeHistory(view.state.tr);
+          tr.replaceRange(insertAt, insertAt, slice);
+          let end = tr.mapping.map(insertAt);
+          tr.mapping.maps[tr.mapping.maps.length - 1].forEach((_from, _to, _newFrom, newTo) => { end = newTo; });
+          // 入れた文を選ばず、後ろにカーソルを置く（続けて打っても消えない）。
+          tr.setSelection(TextSelection.near(tr.doc.resolve(end), -1));
+          view.focus();
+          view.dispatch(tr.setMeta("uiEvent", "drop"));
+          return true;
         },
       },
       onTransaction: ({ editor: currentEditor, transaction }) => {

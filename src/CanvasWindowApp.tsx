@@ -1023,7 +1023,8 @@ function CanvasSidePanel({
                 } else {
                   event.dataTransfer.setData(CANVAS_FILE_DRAG_MIME, item.file.path);
                 }
-                event.dataTransfer.setData("text/plain", canvasInsertItemName(item));
+                // 名前を text/plain に付けない。メイン画面の本文へ落ちても名前の文が入らないように
+                // （docs/BINDER_POST_DRAG_SEARCH_PLAN.md の K1。投稿は本文の写しが入る）。
               }}
               onClick={() =>
                 item.kind === "reference"

@@ -463,6 +463,18 @@ assert.ok(emitted.some((item) => item.event === "then-canvas-open-post" && item.
   item.payload.id === P3 && item.payload.target === "post"), "「開く」はメイン画面に頼む");
 await act(async () => { await sleep(20); });
 assert.ok(calls.some((call) => call.command === "focus_main_window"), "メイン画面を前に出す（ページの窓の API は使えない）");
+{
+  // K1（docs/BINDER_POST_DRAG_SEARCH_PLAN.md）: サイドパネルの項目は名前を text/plain に付けない（本文へ名前の文が落ちない）。
+  const items = [...document.querySelectorAll(".canvasSidePanelFile")];
+  assert.ok(items.length > 0, "サイドパネルに投稿が並ぶ");
+  for (const element of items) {
+    const data = new Map();
+    const event = new dom.window.Event("dragstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: { setData: (kind, value) => data.set(kind, value), effectAllowed: "all" } });
+    await act(async () => { element.dispatchEvent(event); });
+    assert.deepEqual([...data.keys()], ["application/x-then-canvas-post"], "K1: 運ぶのは投稿の ID だけ");
+  }
+}
 await unmount();
 mainSide();
 console.log("PASS separate window: the list comes with the payload and live data; write-back and open go through the main window");

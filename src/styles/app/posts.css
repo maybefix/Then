@@ -25,6 +25,17 @@
   background: var(--accent-soft);
 }
 
+/* 狭いペインで左（時刻・作品名・札）が入りきらないときだけ、操作のボタンを次の行の右へ下げる
+   （docs/BINDER_POST_DRAG_SEARCH_PLAN.md の 4）。広ければ今のまま1行。 */
+.postStreamPane .postFoot {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
+.postStreamPane .postFoot > .ideaFragmentBtns {
+  margin-left: auto;
+}
+
 .postHead {
   display: flex;
   min-width: 0;
@@ -73,9 +84,59 @@
   margin-top: 6px;
 }
 
-.postStreamPane .ideaChips {
-  flex: 1 1 auto;
+.postStreamPane .ideaChipsRow {
   flex-wrap: wrap;
+  gap: 6px 8px;
+}
+
+.postStreamPane .ideaChips {
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+}
+
+/* U9: 投稿の検索欄。狭いペインでは絞り込みの次の行へ下がる。 */
+.postSearch {
+  display: inline-flex;
+  flex: 1 1 8em;
+  min-width: 6em;
+  height: 26px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: var(--radius-button, 6px);
+  color: var(--text-faint);
+}
+
+.postSearch:focus-within {
+  border-color: var(--border-strong);
+}
+
+.postSearch svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+}
+
+.postSearch input {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+/* 当たった文字（左の検索の結果の印と同じ色）。 */
+::highlight(then-post-search) {
+  background-color: color-mix(in srgb, var(--accent) 28%, transparent);
+  color: var(--text-primary);
 }
 
 .postChipCount {

@@ -2339,6 +2339,16 @@ html:not([data-window-fullscreen="true"])
   color: #e9e4d6;
 }
 
+/* 投稿を本文へ運んでいるあいだの、落とす位置の線（docs/BINDER_POST_DRAG_SEARCH_PLAN.md の K2）。カーソルと同じ色。 */
+.editorDropMarker {
+  position: absolute;
+  z-index: 5;
+  display: none;
+  border-radius: 1px;
+  background: var(--accent-strong, #e8b04b);
+  pointer-events: none;
+}
+
 .verticalTypewriterScroller {
   position: absolute;
   inset: 0;

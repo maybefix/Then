@@ -10,6 +10,8 @@ import {
   isFromWork,
   noteLabel,
   postFilterLabels,
+  postMatchesQuery,
+  queryRanges,
   postFilters,
   timeLabel,
   type Post,
@@ -32,13 +34,44 @@ type PostStreamPaneProps = {
   /** 投稿のカードが置かれているボード（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md の 2）。札を押すとそのボードへ。 */
   boards?: PostBoardPlaces;
   onOpenBoard?: (place: PostBoardPlace) => void;
+  /** 右のペインが出ているか。畳んだら検索欄を空にする（U9）。 */
+  open?: boolean;
 };
 
 const REVEAL_MS = 2400;
+/** U9: 当たった文字の印（CSS Custom Highlight。本文の欄の DOM は変えない）。 */
+const SEARCH_HIGHLIGHT = "then-post-search";
+
+type HighlightRegistry = { set: (name: string, value: unknown) => void; delete: (name: string) => void };
+
+function markSearchHits(container: HTMLElement | null, query: string): (() => void) | undefined {
+  const registry = (globalThis.CSS as unknown as { highlights?: HighlightRegistry } | undefined)?.highlights;
+  const HighlightType = (globalThis as unknown as { Highlight?: new (...ranges: Range[]) => unknown }).Highlight;
+  if (!registry || !HighlightType) return undefined;
+  if (!container || !query.trim()) {
+    registry.delete(SEARCH_HIGHLIGHT);
+    return undefined;
+  }
+  const ranges: Range[] = [];
+  for (const body of container.querySelectorAll<HTMLElement>(".postBody")) {
+    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      for (const hit of queryRanges(node.textContent ?? "", query)) {
+        const range = document.createRange();
+        range.setStart(node, hit.from);
+        range.setEnd(node, hit.to);
+        ranges.push(range);
+      }
+    }
+  }
+  registry.set(SEARCH_HIGHLIGHT, new HighlightType(...ranges));
+  return () => registry.delete(SEARCH_HIGHLIGHT);
+}
 
 /**
  * U7（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md）: 下の段の時刻と作品名をつかんで、Canvas へ落とすと投稿のカードになる。
- * 運ぶのは投稿の ID だけ（text/plain を付けないので、本文へ落としても文は入らない。U6 はやらない）。
+ * 運ぶのは投稿の ID だけ。本文（エディタ）へ落とすと、エディタがその ID の本文の写しを入れる（U6、
+ * docs/BINDER_POST_DRAG_SEARCH_PLAN.md）。text/plain は付けないので、入力欄やほかのアプリには文が落ちない。
  */
 function startPostDrag(event: DragEvent<HTMLElement>, id: string) {
   event.dataTransfer.setData(CANVAS_POST_DRAG_MIME, id);
@@ -63,13 +96,25 @@ function NoteIcon() {
 function BoardIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" /><rect x="6" y="7" width="5" height="4" /><rect x="13" y="12" width="5" height="4" /></svg>;
 }
+function SearchIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6" /><path d="m20 20-4.5-4.5" /></svg>;
+}
 function MoreIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="18" cy="12" r="1" /></svg>;
 }
 
-export function PostStreamPane({ stream, filter, onFilterChange, onMakeNote, onOpenNote, reveal = null, boards, onOpenBoard }: PostStreamPaneProps) {
+export function PostStreamPane({ stream, filter, onFilterChange, onMakeNote, onOpenNote, reveal = null, boards, onOpenBoard, open = true }: PostStreamPaneProps) {
   const { scoped, available, posts, work, add, editBody, setFiled, remove, refresh } = stream;
   const [text, setText] = useState("");
+  // U9: 検索の文字。ペインの中だけで持ち、畳む・作品を切り替えると空にする。
+  // 欄の文字（searchText）と、絞り込みに使う文字（query）を分ける。IME の変換中は query を変えない（K7）。
+  const [searchText, setSearchText] = useState("");
+  const [query, setQuery] = useState("");
+  const clearSearch = () => { setSearchText(""); setQuery(""); };
+  useEffect(() => { if (!open) clearSearch(); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { clearSearch(); }, [work?.id, work?.name]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 検索の文字を変えるまでは、一度当たった投稿を残す（直して当たらなくなっても、目の前から消さない。確認1の 3-5）。
+  const keptRef = useRef<{ query: string; ids: Set<string> }>({ query: "", ids: new Set() });
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
   const [menuId, setMenuId] = useState<string | null>(null);
@@ -98,16 +143,28 @@ export function PostStreamPane({ stream, filter, onFilterChange, onMakeNote, onO
     };
   }, [menuId]);
 
-  const days = useMemo(
-    () => groupByDay(arrangePosts(posts, effectiveFilter, work)),
-    [effectiveFilter, posts, work],
-  );
+  const days = useMemo(() => {
+    const searching = query.trim() ? query : "";
+    if (keptRef.current.query !== searching) keptRef.current = { query: searching, ids: new Set() };
+    const kept = keptRef.current.ids;
+    const match = searching
+      ? (entry: Post) => {
+        if (!postMatchesQuery(entry, searching)) return kept.has(entry.id);
+        kept.add(entry.id);
+        return true;
+      }
+      : undefined;
+    return groupByDay(arrangePosts(posts, effectiveFilter, work, match));
+  }, [effectiveFilter, posts, work, query]);
   const inboxCount = useMemo(() => countInbox(posts), [posts]);
 
   // 「つながり」から: 頼まれた投稿が並んだら、そこまで送って目立たせる（一度だけ）。
   const scrollRef = useRef<HTMLDivElement>(null);
   const revealedRef = useRef<number | null>(null);
   const [revealedId, setRevealedId] = useState<string | null>(null);
+  // 送られてきた投稿が検索に当たらないと並ばないので、送られたら検索欄を空にする。
+  useEffect(() => { if (reveal) clearSearch(); }, [reveal?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => markSearchHits(scrollRef.current, query), [days, query]);
   useEffect(() => {
     if (!reveal || revealedRef.current === reveal.nonce) return;
     const element = [...(scrollRef.current?.querySelectorAll<HTMLElement>("[data-post-id]") ?? [])]
@@ -131,7 +188,11 @@ export function PostStreamPane({ stream, filter, onFilterChange, onMakeNote, onO
   const post = async () => {
     const body = text;
     if (!body.trim()) return;
-    if (await add(body)) setText((current) => (current === body ? "" : current));
+    if (await add(body)) {
+      setText((current) => (current === body ? "" : current));
+      // 検索中に投稿しても、書いた投稿が見えるように（確認1の 3-5）。
+      clearSearch();
+    }
   };
   const reply = async (parentId: string) => {
     const body = replyText;
@@ -168,6 +229,27 @@ export function PostStreamPane({ stream, filter, onFilterChange, onMakeNote, onO
           </button>
         ))}
       </div>
+      <label className="postSearch">
+        <SearchIcon />
+        <input
+          type="search"
+          value={searchText}
+          placeholder="検索"
+          aria-label="投稿を検索"
+          spellCheck={false}
+          onChange={(event) => {
+            setSearchText(event.target.value);
+            if (!(event.nativeEvent as InputEvent).isComposing) setQuery(event.target.value);
+          }}
+          onCompositionEnd={(event) => setQuery(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || event.nativeEvent.isComposing || !searchText) return;
+            event.preventDefault();
+            event.stopPropagation();
+            clearSearch();
+          }}
+        />
+      </label>
     </div>
   );
 

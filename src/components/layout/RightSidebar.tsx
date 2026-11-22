@@ -318,6 +318,7 @@ export function RightSidebar(props: RightSidebarProps) {
               reveal={postReveal}
               boards={postBoards.places}
               onOpenBoard={postBoards.open}
+              open={!isRightSidebarCollapsed}
             />
           )}
         </div>

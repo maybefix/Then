@@ -43,7 +43,7 @@ await build({
       export * from "./src/posts/postModel";
       export { createCanvasPostActions } from "./src/canvasPostActions";
       export { placesByPost } from "./src/links/usePostBoardReferences";
-      export function Harness({ scope, initialFilter = "inbox", onFilter, showToast, noteDeps, onStream, boards, onOpenBoard }) {
+      export function Harness({ scope, initialFilter = "inbox", onFilter, showToast, noteDeps, onStream, boards, onOpenBoard, reveal, open }) {
         const stream = usePostStream(scope, { showToast });
         onStream?.(stream);
         const [filter, setFilter] = useState(initialFilter);
@@ -56,7 +56,7 @@ await build({
           onFilterChange: (next) => { onFilter?.(next); setFilter(next); },
           onMakeNote: noteDeps && stream.work ? (post) => void noteActions.makeNote(post) : undefined,
           onOpenNote: (post) => void noteActions.openNote(post),
-          boards, onOpenBoard,
+          boards, onOpenBoard, reveal, open,
         });
       }`,
     resolveDir: path.resolve("."),
@@ -72,7 +72,7 @@ await build({
   plugins: [tauriStub],
 });
 const model = await import(`${pathToFileURL(path.join(dir, "post-stream.mjs")).href}?${Date.now()}`);
-const { Harness, createCanvasPostActions, placesByPost, arrangePosts, groupByDay, dayLabel, localIsoNow, normalizePostFilter, countInbox, noteThread, noteNameFromBody, noteTextFor, joinWorkPath, noteLabel } = model;
+const { Harness, createCanvasPostActions, placesByPost, arrangePosts, postMatchesQuery, queryRanges, groupByDay, dayLabel, localIsoNow, normalizePostFilter, countInbox, noteThread, noteNameFromBody, noteTextFor, joinWorkPath, noteLabel } = model;
 
 const cases = [];
 const test = (name, fn) => cases.push([name, fn]);
@@ -673,7 +673,7 @@ test("下の段の時刻と作品名をつかむと、投稿の ID だけを運�
   let started;
   await act(async () => { started = drag(time); });
   assert.deepEqual([...started.data], [["application/x-then-canvas-post", "p1"]],
-    "D5: 投稿の ID だけを運ぶ（text/plain を付けないので、本文へ落としても文は入らない）");
+    "D5: 投稿の ID だけを運ぶ（text/plain を付けない。本文へ落としたときは、エディタが ID から本文の写しを入れる。U6）");
   assert.equal(started.event.dataTransfer.effectAllowed, "copy");
   assert.equal(dream.querySelector(".postWork").getAttribute("draggable"), "true", "ほかの作品の作品名もつかめる");
   assert.notEqual(dream.querySelector(".postBody").getAttribute("draggable"), "true", "D2: 本文はつかむ場所でない");
@@ -687,6 +687,131 @@ test("下の段の時刻と作品名をつかむと、投稿の ID だけを運�
   await act(async () => { started = drag(noted.querySelector("time")); });
   assert.deepEqual([...started.data], [["application/x-then-canvas-post", "p3"]], "D3: ノートにした投稿もつかめる");
   assert.equal(noted.querySelector(".postNoteTag").closest("[draggable=true]"), null, "ノートの札はつかむ場所でない");
+  unmount();
+});
+
+// ---- U9: 投稿の検索（docs/BINDER_POST_DRAG_SEARCH_PLAN.md の S1〜S8） ----
+test("検索は本文だけを、大文字小文字を区別せずに見る。当たった範囲を返す。返信が当たれば返信先を薄く添える", () => {
+  const entries = [
+    post("p1", "2026-11-14T09:00:00+09:00", { body: "灯台の夢 Lamp" }),
+    post("p2", "2026-11-14T09:30:00+09:00", { body: "続き：灯台守", replyTo: "p1" }),
+    post("p3", "2026-11-14T10:00:00+09:00", { body: "港", work: { id: "w-b", name: "灯台の作品" } }),
+  ];
+  assert.equal(postMatchesQuery(entries[0], "lamp"), true, "大文字小文字は区別しない");
+  assert.equal(postMatchesQuery(entries[2], "灯台"), false, "作品名では当たらない");
+  assert.equal(postMatchesQuery(entries[2], "  "), true, "空白だけはすべてに当たる");
+  assert.deepEqual(queryRanges("灯台と灯台", "灯台"), [{ from: 0, to: 2 }, { from: 3, to: 5 }]);
+  assert.deepEqual(queryRanges("ABC abc", "b"), [{ from: 1, to: 2 }, { from: 5, to: 6 }]);
+  assert.deepEqual(queryRanges("灯台", ""), []);
+  const onlyReply = arrangePosts(entries, "all", undefined, (entry) => entry.id === "p2");
+  assert.deepEqual(ids(onlyReply), ["p1(ctx)", "  p2"], "返信先までを薄く添える");
+  assert.deepEqual(ids(arrangePosts(entries, "all", undefined, (entry) => postMatchesQuery(entry, "灯台"))), ["p1", "  p2"]);
+});
+
+test("検索欄で、今の絞り込みの中から本文に当たる投稿だけを並べる。Esc と空で戻る", async () => {
+  fakeBackend({ initial: [
+    { id: "p1", at: "2026-11-14T09:00:00+09:00", body: "灯台の夢\n波の音が遠い", work: A },
+    { id: "p2", at: "2026-11-14T09:10:00+09:00", body: "港で拾った言葉", work: B },
+    { id: "p4", at: "2026-11-14T09:30:00+09:00", body: "続き：灯台守の話", work: A, replyTo: "p1", filed: true },
+  ] });
+  const { container, unmount } = await mount();
+  const search = container.querySelector('input[aria-label="投稿を検索"]');
+  assert.ok(search, "絞り込みの並びに検索欄がある");
+  assert.equal(search.closest(".ideaChipsRow") !== null, true);
+  assert.deepEqual(bodies(container), ["港で拾った言葉", "灯台の夢\n波の音が遠い"]);
+  await setValue(search, "灯台");
+  await settle();
+  assert.deepEqual(bodies(container), ["灯台の夢\n波の音が遠い"], "S1: 受信箱の中で探す（外した返信は出ない）");
+  await click(chip(container, "すべて"));
+  assert.deepEqual(bodies(container), ["灯台の夢\n波の音が遠い", "> 続き：灯台守の話"], "S2: すべてなら返信も");
+  await setValue(search, "作品B");
+  await settle();
+  assert.deepEqual(bodies(container), [], "S3: 作品名では当たらない");
+  await setValue(search, "灯台");
+  await key(search, "Escape", { isComposing: true });
+  await settle();
+  assert.equal(search.value, "灯台", "変換中の Esc では消さない");
+  await key(search, "Escape");
+  await settle();
+  assert.equal(search.value, "", "S6: Esc で空に");
+  assert.deepEqual(bodies(container), ["港で拾った言葉", "灯台の夢\n波の音が遠い", "> 続き：灯台守の話"], "元の並びに戻る");
+  unmount();
+});
+
+test("検索中に投稿すると欄を空にして新しい投稿を見せる。直して当たらなくなった行は、検索を変えるまで残す", async () => {
+  const backend = fakeBackend({ initial: [
+    { id: "p1", at: "2026-11-14T09:00:00+09:00", body: "灯台の夢", work: A },
+    { id: "p2", at: "2026-11-14T09:10:00+09:00", body: "港", work: A },
+  ] });
+  const { container, unmount } = await mount();
+  const search = container.querySelector('input[aria-label="投稿を検索"]');
+  await setValue(search, "灯台");
+  await settle();
+  const body = item(container, "灯台の夢").querySelector(".postBody");
+  body.textContent = "海の夢";
+  await act(async () => body.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true })));
+  await settle();
+  assert.equal(backend.lines()[0].body, "海の夢");
+  assert.deepEqual(bodies(container), ["海の夢"], "S5: 直して当たらなくなっても残る");
+  await setValue(search, "灯");
+  await settle();
+  assert.deepEqual(bodies(container), [], "検索を変えたら、そのとき当たるものだけ");
+  await setValue(composer(container), "海の色");
+  await key(composer(container), "Enter");
+  await settle();
+  assert.equal(search.value, "", "S4: 投稿したら検索欄を空にする");
+  assert.equal(bodies(container)[0], "海の色", "書いた投稿が見える");
+  unmount();
+});
+
+test("送られてきた投稿・畳んだペインでは検索欄を空にする", async () => {
+  window.HTMLElement.prototype.scrollIntoView ??= function scrollIntoView() {};
+  fakeBackend({ initial: [
+    { id: "p1", at: "2026-11-14T09:00:00+09:00", body: "灯台の夢", work: A },
+    { id: "p2", at: "2026-11-14T09:10:00+09:00", body: "港で拾った言葉", work: B },
+  ] });
+  const { container, render, unmount } = await mount({ initialFilter: "all" });
+  const search = container.querySelector('input[aria-label="投稿を検索"]');
+  await setValue(search, "灯台");
+  await settle();
+  assert.deepEqual(bodies(container), ["灯台の夢"]);
+  await render({ reveal: { id: "p2", nonce: 1 } });
+  assert.equal(search.value, "", "S7: 送られたら空にする");
+  assert.ok(item(container, "港で拾った言葉").classList.contains("isRevealed"), "送られた投稿が並び、目立つ");
+  await setValue(search, "灯台");
+  await settle();
+  await render({ open: false });
+  assert.equal(search.value, "", "畳んだら空にする");
+  unmount();
+});
+
+test("K7: 変換中は絞り込みを変えず、確定したら確定した文字で絞り込む", async () => {
+  fakeBackend({ initial: [
+    { id: "p1", at: "2026-11-14T09:00:00+09:00", body: "灯台の夢", work: A },
+    { id: "p2", at: "2026-11-14T09:10:00+09:00", body: "港で拾った言葉", work: A },
+  ] });
+  const { container, unmount } = await mount();
+  const search = container.querySelector('input[aria-label="投稿を検索"]');
+  const composeInput = (value) => act(async () => {
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(search), "value").set.call(search, value);
+    search.dispatchEvent(new window.InputEvent("input", { bubbles: true, isComposing: true, data: value }));
+  });
+  await act(async () => search.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true, data: "" })));
+  await composeInput("とうだい");
+  await settle();
+  assert.equal(search.value, "とうだい", "打っている文字は欄に出る");
+  assert.deepEqual(bodies(container), ["港で拾った言葉", "灯台の夢"], "変換中は並びを変えない");
+  await composeInput("灯台");
+  await act(async () => search.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "灯台" })));
+  await settle();
+  assert.deepEqual(bodies(container), ["灯台の夢"], "確定したら絞り込む");
+  await act(async () => search.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true, data: "" })));
+  await composeInput("灯台みなと");
+  await settle();
+  assert.deepEqual(bodies(container), ["灯台の夢"], "続けて変換しているあいだは、確定した「灯台」の並びのまま");
+  await act(async () => search.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "" })));
+  await settle();
+  assert.deepEqual(bodies(container), [], "確定した「灯台みなと」で絞り込む");
   unmount();
 });
 
