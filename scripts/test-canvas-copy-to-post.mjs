@@ -85,7 +85,7 @@ window.__TAURI_INTERNALS__ = {};
 const text = (id, x, y, body, extra = {}) => ({ id, type: "text", x, y, width: 200, height: 120, text: body, ...extra });
 const startBoard = () => ({
   nodes: [
-    text("s1", 0, 0, "潮の匂い", { color: "3" }),
+    text("s1", 40, 20, "潮の匂い", { color: "3" }),
     text("s2", 0, 300, "朝の港。", { title: "港" }),
     text("s3", 400, 0, "子のカード", { threadParentId: "s1", threadOrder: 0 }),
     { id: "g", type: "group", x: 800, y: 0, width: 600, height: 500, label: "まとめ" },
@@ -177,7 +177,7 @@ assert.deepEqual(requests[0], {
 }, "メイン画面に、カードの ID と本文を頼む");
 assert.match(status(), /1件を投稿にしました/);
 await waitSave();
-assert.deepEqual(plain(nodeOf("s1")), { id: "s1", type: "post", x: 0, y: 0, width: 200, height: 120, post: "p-new-1", color: "3" },
+assert.deepEqual(plain(nodeOf("s1")), { id: "s1", type: "post", x: 40, y: 20, width: 200, height: 120, post: "p-new-1", color: "3" },
   "C1: 投稿のカードに置き換わる（ID・位置・大きさ・色）");
 assert.equal(nodeOf("s3").threadParentId, undefined, "C6: 置き換えたカードの子は、その場に残ってスレッドから外れる");
 assert.deepEqual(plain(saved.edges), board.edges, "線は残る");
