@@ -370,7 +370,7 @@ Canvas に、投稿（右のペイン「アイデア」の1件）を指すカー
 
 | 作業 | 出どころ |
 |---|---|
-| 投稿の側に「置かれているボード」を出す（投稿はライブラリで共有なので、全作品とライブラリ直下のボードを読む） | 確認1の 5-7 |
-| U7: アイデアのペインの投稿を Canvas へドラッグする | 確認1の 3 の ② |
-| 「投稿にする」で、投稿にしたテキストカードを投稿のカードへ置き換える（あわせて K1 が直る） | 確認1の 3 の ③、K1 |
+| ~~投稿の側に「置かれているボード」を出す（投稿はライブラリで共有なので、全作品とライブラリ直下のボードを読む）~~ 2026-11-22 実施（[BINDER_POST_CARD_FOLLOWUPS_PLAN.md](BINDER_POST_CARD_FOLLOWUPS_PLAN.md)） | 確認1の 5-7 |
+| ~~U7: アイデアのペインの投稿を Canvas へドラッグする~~ 2026-11-22 実施（[BINDER_POST_CARD_FOLLOWUPS_PLAN.md](BINDER_POST_CARD_FOLLOWUPS_PLAN.md)） | 確認1の 3 の ② |
+| ~~「投稿にする」で、投稿にしたテキストカードを投稿のカードへ置き換える（あわせて K1 が直る）~~ 2026-11-22 実施（[BINDER_POST_CARD_FOLLOWUPS_PLAN.md](BINDER_POST_CARD_FOLLOWUPS_PLAN.md)） | 確認1の 3 の ③、K1 |
 | U6（投稿を本文へドラッグ）、U9（投稿の検索） | BINDER_REBUILD_PLAN.md の 7 章（今回の範囲外） |
