@@ -2033,10 +2033,10 @@ export default function CanvasWindowApp({
   /** 書き戻す前・書いている途中の、カードで直した本文。canvasPostWriteKey ごと。 */
   const [postDrafts, setPostDrafts] = useState<Map<string, string>>(() => new Map());
   /**
-   * 書けた投稿と、書く前の行のハッシュ。メイン画面の一覧がまだ書く前の行のままなら、こちらを今の投稿とみなす
-   * （別ウィンドウには一覧が少し遅れて届くので、続けて打った本文が外の変更と取り違えられないように）。
+   * 書けた投稿と、自分の書き戻しで古くなった行のハッシュ。メイン画面の一覧がまだその古い行のどれかなら、こちらを
+   * 今の投稿とみなす（別ウィンドウには一覧が少し遅れて届くので、続けて打った本文が外の変更と取り違えられないように）。
    */
-  const writtenPostsRef = useRef(new Map<string, { post: Post; previousHash: string }>());
+  const writtenPostsRef = useRef(new Map<string, { post: Post; superseded: Set<string> }>());
   const [postConflict, setPostConflict] = useState<CanvasPostWriteOutcome | null>(null);
   const postWriteTimerRef = useRef<number | null>(null);
   const postRootRef = useRef(rootPath);
@@ -2045,7 +2045,7 @@ export default function CanvasWindowApp({
   const currentPost = (id: string): Post | undefined => {
     const listed = postsById.get(id);
     const written = writtenPostsRef.current.get(id);
-    if (written && (!listed || listed.hash === written.previousHash)) return written.post;
+    if (listed && written?.superseded.has(listed.hash)) return written.post;
     return listed;
   };
 
@@ -2072,7 +2072,9 @@ export default function CanvasWindowApp({
       if (normalizedReferenceKey(request.rootPath) !== normalizedReferenceKey(postRootRef.current ?? "")) return;
       const key = canvasPostWriteKey(request);
       if (result.status === "saved") {
-        writtenPostsRef.current.set(request.id, { post: result.post, previousHash: request.baseHash });
+        const superseded = new Set(writtenPostsRef.current.get(request.id)?.superseded ?? []);
+        superseded.add(request.baseHash);
+        writtenPostsRef.current.set(request.id, { post: result.post, superseded });
         settlePostDraft(key, request.text);
       } else if (result.status === "conflict") {
         setPostConflict({ request, result });
