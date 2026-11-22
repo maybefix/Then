@@ -214,7 +214,17 @@ function setup(world = defaultWorld(), { tauri = true } = {}) {
         (app.saveStatusCalls ??= []).push(status);
       },
       setLastError: setter("lastError"),
-      showToast: (message) => app.toasts.push(message),
+      showToast: (message, action) => {
+        app.toasts.push(message);
+        (app.toastActions ??= []).push(action ?? null);
+      },
+      requestMultiInput: async (options) => {
+        (app.multiInputs ??= []).push(options);
+        return app.multiInputAnswer ?? null;
+      },
+      movePostNotes: async (sourceRoot, targetRoot, changes) => {
+        (app.postNoteMoves ??= []).push([sourceRoot, targetRoot, changes]);
+      },
       requestInput: async (options) => {
         app.inputs.push(options);
         return app.inputAnswers.shift() ?? null;
@@ -938,6 +948,103 @@ function imageWorld(app) {
     "[isHydrated, projectFolder]",
     "the reference candidates follow the file tree",
   );
+}
+
+// ---- U5: 素材のノート・画像・PDF をほかの作品へ送る（docs/BINDER_REMAINING_PLAN.md） ----
+// 聞く画面（送り先・方法）→ 直していないタブを保存 → Rust が送る → 一緒に送ったもの同士の @[[ ]] を書き換える →
+// 移動なら投稿の札を送り先へ付け替え、この作品のタブ・索引から外す → 通知の「元に戻す」。
+{
+  const LIB_B = "C:\\Lib\\作品B";
+  const note = p("素材", "灯台.md");
+  const image = p("素材", "資料", "港.png");
+  const world = {
+    projectFolder: projectFolder([
+      { ...folder(p("素材"), [{ ...file(note), role: "material" }]), role: "material" },
+      file(p("c.txt")),
+    ]),
+    openTabs: [tab(note, { markdown: "直した", savedMarkdown: "前", saveStatus: "dirty" }), tab(p("c.txt"))],
+    activeTabId: `file:${note}`,
+  };
+  const { app, refs, actions } = setup(world);
+  app.commands.library_transfer_destinations = () => [
+    { path: "C:\\Lib", label: "ライブラリ「本棚」の直下" },
+    { path: LIB_B, label: "作品「作品B」" },
+  ];
+  // 何も選ばずに閉じたら、何もしない。
+  await actions().handleTransferEntries([note, image]);
+  assert.deepEqual(commandsOf(app), ["library_transfer_destinations"]);
+  assert.equal(app.multiInputs[0].title, "2件を移動・コピー");
+  assert.deepEqual(app.multiInputs[0].fields.map((field) => [field.id, field.initialValue]), [["destination", "C:\\Lib"], ["mode", "copy"]]);
+  assert.equal(app.multiInputs[0].confirmLabel, "実行");
+  app.log.length = 0;
+
+  const sentNote = `${LIB_B}\\素材\\灯台.md`;
+  const sentImage = `${LIB_B}\\素材\\資料\\港-2.png`;
+  app.multiInputAnswer = { destination: LIB_B, mode: "move" };
+  app.commands.transfer_project_entries = () => ({
+    entries: [
+      { oldPath: note, newPath: sentNote, kind: "text", contentHash: "h1", sourceOrderIndex: 0 },
+      { oldPath: image, newPath: sentImage, kind: "material", contentHash: "img" },
+    ],
+  });
+  app.commands.read_text_file = ({ path: readPath }) => {
+    if (readPath === sentNote) return { path: readPath, name: "灯台.md", content: "@[[素材/資料/港.png]] と @[[素材/資料/地図.pdf]]", contentHash: "h1" };
+    return { path: readPath, name: "c.txt", content: "C", contentHash: "c" };
+  };
+  app.commands.save_text_file = ({ path: savedPath, content }) => ({ path: savedPath, name: "灯台.md", content, contentHash: "h2" });
+  await actions().handleTransferEntries([note, image]);
+
+  const commands = commandsOf(app);
+  assert.deepEqual(commands.slice(0, 3), ["library_transfer_destinations", "(save)", "transfer_project_entries"], "直していないタブを保存してから送る");
+  const sent = app.log.find((entry) => entry.command === "transfer_project_entries");
+  assert.deepEqual(sent.args, { sourceRoot: ROOT, targetRoot: LIB_B, sourcePaths: [note, image], mode: "move" });
+  assert.equal(sent.pathChanging, true, "送るあいだは自動保存を止める");
+  assert.equal(refs.projectEntryPathChangeInProgressRef.current, false);
+  const saved = app.log.find((entry) => entry.command === "save_text_file");
+  assert.deepEqual(saved.args, { path: sentNote, content: "@[[素材/資料/港-2.png]] と @[[素材/資料/地図.pdf]]", expectedHash: "h1" }, "一緒に送った画像だけを書き換える");
+  assert.deepEqual(app.postNoteMoves, [[ROOT, LIB_B, [{ oldPath: note, newPath: sentNote }, { oldPath: image, newPath: sentImage }]]]);
+  assert.deepEqual(app.openTabs.map((item) => item.path), [p("c.txt")], "送ったノートのタブは閉じる");
+  assert.equal(app.loaded.length, 1, "開いていた文書が外れたので、作品の最初のファイルを開く");
+  assert.ok(commands.includes("(refresh)"));
+  assert.equal(app.toasts.at(-1), "2件を作品「作品B」へ移動しました");
+  const undoAction = app.toastActions.at(-1);
+  assert.equal(undoAction.label, "元に戻す");
+
+  app.log.length = 0;
+  app.postNoteMoves = [];
+  app.commands.undo_transfer_project_entries = (args) => ({ undone: [args.entries[0]], skipped: 1 });
+  undoAction.onClick();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const undo = app.log.find((entry) => entry.command === "undo_transfer_project_entries");
+  assert.equal(undo.args.mode, "move");
+  assert.equal(undo.args.entries[0].contentHash, "h2", "書き換えたあとの中身と比べる");
+  assert.deepEqual(app.postNoteMoves, [[LIB_B, ROOT, [{ oldPath: sentNote, newPath: note }]]], "戻したノートの札も戻す");
+  assert.equal(app.toasts.at(-1), "元に戻しました（送り先で変更された1件は戻していません）");
+}
+{
+  // コピーは元に残し、タブも札も触らない。失敗は通知で知らせる。
+  const note = p("第一章", "a.txt");
+  const { app, actions } = setup();
+  app.commands.library_transfer_destinations = () => [{ path: "C:\\Lib", label: "ライブラリ「本棚」の直下" }];
+  app.multiInputAnswer = { destination: "C:\\Lib", mode: "copy" };
+  app.commands.transfer_project_entries = () => ({ entries: [{ oldPath: note, newPath: "C:\\Lib\\a.txt", kind: "text", contentHash: "h" }] });
+  app.commands.read_text_file = ({ path: readPath }) => ({ path: readPath, name: "a.txt", content: "本文", contentHash: "h" });
+  await actions().handleTransferEntries([note]);
+  assert.deepEqual(app.openTabs.map((item) => item.path), [note, p("c.txt")]);
+  assert.equal(app.postNoteMoves, undefined);
+  assert.ok(!commandsOf(app).includes("save_text_file"), "書き換えるリンクがなければ書かない");
+  assert.equal(app.toasts.at(-1), "「a」をライブラリ「本棚」の直下へコピーしました");
+
+  app.commands.transfer_project_entries = () => { throw new Error("only materials can be sent"); };
+  await actions().handleTransferEntries([note]);
+  assert.equal(app.toasts.at(-1), "移動・コピーできませんでした");
+  assert.match(app.lastError, /only materials/);
+
+  // 送り先がなければ（ライブラリの外）、聞かない。
+  app.commands.library_transfer_destinations = () => [];
+  const asked = app.multiInputs.length;
+  await actions().handleTransferEntries([note]);
+  assert.equal(app.multiInputs.length, asked);
 }
 
 console.log("project entry actions: ok");

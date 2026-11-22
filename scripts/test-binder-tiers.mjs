@@ -563,6 +563,54 @@ async function choose(target, label) {
   await view.unmount();
 }
 
+// 「移動・コピー…」（U5）: ライブラリの作品では、素材のノート・画像・PDF の右クリックに出る。原稿・フォルダには出ない。
+// 押した行が Ctrl で選んだものの1つなら、選んだもののうち送れるものを表示の順で渡す。ライブラリの外では出さない。
+{
+  const references = [
+    { path: p("資料/設定集.pdf"), sourcePath: "資料/設定集.pdf", name: "設定集.pdf", kind: "pdf" },
+  ];
+  const library = { path: "C:\\lib", name: "本棚", role: "project", projects: [], misplacedProjects: [] };
+  const view = await mount(props(withMaterials, {
+    library,
+    materialReferences: references,
+    onOpenReference: spy("onOpenReference"),
+    onRenameReference: spy("onRenameReference"),
+    onDeleteReference: spy("onDeleteReference"),
+    onTransferEntries: spy("onTransferEntries"),
+  }));
+  takeCalls();
+  assert.deepEqual(
+    await menuLabels(row(view.container, "資料/人物.md")),
+    ["開く", "リネーム", "移動・コピー…", "削除"],
+    "素材のノートは送れる",
+  );
+  assert.deepEqual(await menuLabels(row(view.container, "資料/設定集.pdf")), ["開く", "リネーム", "移動・コピー…", "削除"]);
+  assert.ok(!(await menuLabels(row(view.container, "本編.md"))).includes("移動・コピー…"), "原稿は送らない");
+  assert.ok(!(await menuLabels(row(view.container, "資料/年表"))).includes("移動・コピー…"), "フォルダは送らない");
+  await choose(row(view.container, "資料/人物.md"), "移動・コピー…");
+  assert.deepEqual(takeCalls(), [["onTransferEntries", ["資料/人物.md"]]]);
+
+  // Ctrl で選んだ2つ（と原稿）。押した行が選ばれていれば、送れるものだけを表示の順で。
+  await click(row(view.container, "資料/年表/年表.md").querySelector(".treeItemPrimary"), { ctrlKey: true });
+  await click(row(view.container, "本編.md").querySelector(".treeItemPrimary"), { ctrlKey: true });
+  await click(row(view.container, "資料/人物.md").querySelector(".treeItemPrimary"), { ctrlKey: true });
+  takeCalls();
+  await choose(row(view.container, "資料/年表/年表.md"), "移動・コピー…");
+  assert.deepEqual(takeCalls(), [["onTransferEntries", ["資料/人物.md", "資料/年表/年表.md"]]]);
+  await view.unmount();
+
+  const outside = await mount(props(withMaterials, { onTransferEntries: spy("onTransferEntries") }));
+  assert.ok(!(await menuLabels(row(outside.container, "資料/人物.md"))).includes("移動・コピー…"), "ライブラリの外では出さない");
+  await outside.unmount();
+
+  const rootLibrary = { path: root, name: "本棚", role: "root", projects: [], misplacedProjects: [] };
+  const atRoot = await mount(props(withMaterials, { library: rootLibrary, onTransferEntries: spy("onTransferEntries") }));
+  takeCalls();
+  await choose(row(atRoot.container, "本編.md"), "移動・コピー…");
+  assert.deepEqual(takeCalls(), [["onTransferEntries", ["本編.md"]]], "直下ではどのファイルも送れる");
+  await atRoot.unmount();
+}
+
 // ライブラリ直下では段を出さない。
 {
   const library = { path: root, name: "ライブラリ", role: "root", projects: [], misplacedProjects: [] };

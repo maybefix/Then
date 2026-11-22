@@ -9,6 +9,17 @@ import {
   type ClosedDocumentTab,
 } from "./editor/documentTabState";
 import { closeDocumentJournal, forgetDocumentJournal } from "./editor/saveJournal";
+import {
+  rewriteSentLinks,
+  transferDialogFields,
+  transferMessage,
+  transferTitle,
+  undoMessage,
+  type TransferDestination,
+  type TransferMode,
+  type TransferResult,
+  type TransferUndoResult,
+} from "./entryTransfer";
 import type { ThenPluginAnchor } from "./plugins/types";
 import {
   referenceCardPointsInside,
@@ -156,6 +167,14 @@ export type ProjectEntryActionDeps = {
    * 「…し、Nファイルのリンクを書き換えました」に替える。
    */
   rewriteLinksAfterPathChange?: (rootPath: string, changes: PathChange[], message: string) => void;
+  /** 選ぶ欄のある入力の画面（U5 の「移動・コピー…」）。 */
+  requestMultiInput?: (options: {
+    title: string;
+    fields: { id: string; label: string; initialValue: string; options?: { value: string; label: string }[] }[];
+    confirmLabel: string;
+  }) => Promise<Record<string, string> | null>;
+  /** ノートをほかの作品へ送ったとき、投稿の札を送り先の作品へ付け替える（U5）。 */
+  movePostNotes?: (sourceRoot: string, targetRoot: string, changes: PathChange[]) => Promise<void>;
 };
 
 /**
@@ -208,6 +227,8 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     retargetPostNotes,
     rewriteLinksAfterPathChange,
     notifyCanvasPathChanges,
+    requestMultiInput,
+    movePostNotes,
   } = deps;
 
   /**
@@ -682,6 +703,163 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
   };
 
   /**
+   * 作品から外れた項目（ゴミ箱へ移した・ほかの作品へ送った）を、パスを覚えている置き場所・索引・タブ・
+   * 選んでいるフォルダから外す。開いていた文書が外れたら、作品の最初のファイルを開く。
+   */
+  const forgetEntriesThatLeft = async (rootFolder: ProjectFolder, removedPaths: string[], deletedPaths: string[]) => {
+    if (!removedPaths.length) return;
+    const removedAt = (path: string) => removedPaths.find((removed) => isPathSameOrInside(path, removed)) ?? null;
+    for (const removed of removedPaths) removePathOwners(rootFolder.path, removed);
+    projectAstBuildIdRef.current += 1;
+    setProjectAst((current) =>
+      current ? removeProjectAstPaths(current, deletedPaths) : current,
+    );
+    const parentFolderPath =
+      findContainingFolderPath(rootFolder, removedPaths[0]) ?? rootFolder.path;
+    const refreshed = await refreshProjectFolder(parentFolderPath);
+    if (refreshed) {
+      setProjectAst((current) => createProjectAstSkeleton(refreshed, current));
+    }
+
+    const activeWasDeleted = currentFilePath ? removedAt(currentFilePath) !== null : false;
+    const parentOfRemoved = (path: string) => {
+      const removed = removedAt(path);
+      return removed === null ? path : getParentPath(removed) ?? rootFolder.path;
+    };
+    const nextFocusedFolder = focusedFolderPath ? parentOfRemoved(focusedFolderPath) : focusedFolderPath;
+    setFocusedFolderPath(nextFocusedFolder);
+    setActiveBreadcrumbPath((path) => (path ? parentOfRemoved(path) : path));
+    setBreadcrumbBrowsePath((path) => (path ? parentOfRemoved(path) : path));
+
+    const isDeletedTab = (tab: DocumentTab) => Boolean(tab.path && removedAt(tab.path) !== null);
+    // 次のファイルは、消したタブがあった場所に開く（並びは空のタブを除いて数える）。
+    const activeIndex = openTabs.findIndex((tab) => tab.id === activeTabIdRef.current);
+    const nextTabIndex = activeIndex >= 0
+      ? withoutEmptyTabs(openTabs.slice(0, activeIndex)).filter((tab) => !isDeletedTab(tab)).length
+      : undefined;
+    setOpenTabs((current) => current.filter((tab) => !isDeletedTab(tab)));
+    for (const tab of openTabs) {
+      if (isDeletedTab(tab)) forgetDocumentJournal(tab.id);
+    }
+    if (activeWasDeleted) {
+      const nextFile = refreshed ? findFirstTextFile(refreshed.children) : null;
+      if (nextFile) {
+        const document = await invoke<TextDocument>("read_text_file", {
+          path: nextFile.path,
+        });
+        // 置き換えでなく開く。消したタブはもう一覧にないので、置き換えると、同じファイルの
+        // タブがすでに開いているときに2つになっていた（docs/DELETE_DUPLICATE_TAB_PLAN.md）。
+        loadDocumentIntoEditor(document, { index: nextTabIndex });
+      } else {
+        didMountEditorRef.current = false;
+        setFocusedFolderPath(rootFolder.path);
+        replaceActiveTab(
+          createScratchDocumentTab("", {
+            documentKey: `workspace-empty-${Date.now()}`,
+            saveStatus: "saved",
+          }),
+        );
+        setAppState((current) => ({
+          ...current,
+          markdown: "",
+          lastFilePath: null,
+        }));
+        setLastError("");
+      }
+    }
+  };
+
+  /**
+   * U5: 素材のノート・画像・PDF（選んだ複数も）を、同じライブラリのほかの作品・直下へ送る。直していない
+   * タブは先に保存する。移動なら、送ったものをこの作品のタブ・索引から外す。通知の「元に戻す」で戻せる。
+   */
+  const handleTransferEntries = async (paths: string[]) => {
+    if (!projectFolder || !requestMultiInput || !isTauriRuntime()) return;
+    const sourceRoot = projectFolder.path;
+    const sourcePaths = [...new Set(paths)];
+    if (!sourcePaths.length) return;
+    let destinations: TransferDestination[];
+    try {
+      destinations = await invoke<TransferDestination[]>("library_transfer_destinations", { rootPath: sourceRoot });
+    } catch (error) {
+      setLastError(String(error));
+      return;
+    }
+    if (!destinations.length) return;
+    const values = await requestMultiInput({
+      title: transferTitle(sourcePaths),
+      fields: transferDialogFields(destinations),
+      confirmLabel: "実行",
+    });
+    const destination = destinations.find((item) => item.path === values?.destination);
+    if (!values || !destination) return;
+    const mode: TransferMode = values.mode === "move" ? "move" : "copy";
+    const targetRoot = destination.path;
+
+    projectEntryPathChangeInProgressRef.current = true;
+    try {
+      const isSent = (tab: DocumentTab) => Boolean(tab.path && sourcePaths.some((path) => isSamePath(tab.path!, path)));
+      await Promise.all(
+        openTabs
+          .filter(isSent)
+          .filter(isDirtyDocumentTab)
+          .map((tab) => enqueueDocumentSave({ tabId: tab.id, path: tab.path!, content: tab.markdown })),
+      );
+      if (mode === "move") await closeTabJournals(openTabs.filter(isSent));
+
+      const result = await invoke<TransferResult>("transfer_project_entries", {
+        sourceRoot,
+        targetRoot,
+        sourcePaths,
+        mode,
+      });
+      const entries = await rewriteSentLinks(sourceRoot, targetRoot, result.entries, {
+        readText: async (path) => {
+          const document = await invoke<TextDocument>("read_text_file", { path });
+          return { content: document.content, contentHash: document.contentHash ?? null };
+        },
+        writeText: async (path, content, expectedHash) =>
+          (await invoke<TextDocument>("save_text_file", { path, content, expectedHash })).contentHash ?? null,
+      });
+      const changes = entries.map((entry) => ({ oldPath: entry.oldPath, newPath: entry.newPath }));
+      if (mode === "move") {
+        await movePostNotes?.(sourceRoot, targetRoot, changes).catch(() => {});
+        await forgetEntriesThatLeft(projectFolder, entries.map((entry) => entry.oldPath), entries.map((entry) => entry.oldPath));
+      }
+      setLastError("");
+
+      const undo = async () => {
+        try {
+          const undone = await invoke<TransferUndoResult>("undo_transfer_project_entries", {
+            sourceRoot,
+            targetRoot,
+            entries,
+            mode,
+          });
+          if (mode === "move" && undone.undone.length) {
+            await movePostNotes?.(
+              targetRoot,
+              sourceRoot,
+              undone.undone.map((entry) => ({ oldPath: entry.newPath, newPath: entry.oldPath })),
+            ).catch(() => {});
+            await refreshProjectFolder(sourceRoot);
+          }
+          showToast(undoMessage(undone));
+        } catch (error) {
+          setLastError(String(error));
+          showToast("元に戻せませんでした");
+        }
+      };
+      showToast(transferMessage(sourcePaths, destination.label, mode), { label: "元に戻す", onClick: () => void undo() });
+    } catch (error) {
+      setLastError(String(error));
+      showToast("移動・コピーできませんでした");
+    } finally {
+      projectEntryPathChangeInProgressRef.current = false;
+    }
+  };
+
+  /**
    * 項目をゴミ箱へ移し、タブ・選んでいるフォルダ・索引から外す。確認は呼び出し側が受け持つ
    * （削除の確認のあと、または「ノートにする」の元に戻す。BINDER 2-3）。失敗したら null。
    */
@@ -692,73 +870,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
         rootPath: projectFolder.path,
         path: entry.path,
       });
-      removePathOwners(projectFolder.path, entry.path);
-      projectAstBuildIdRef.current += 1;
-      setProjectAst((current) =>
-        current ? removeProjectAstPaths(current, result.deletedPaths) : current,
-      );
-      const parentFolderPath =
-        findContainingFolderPath(projectFolder, entry.path) ?? projectFolder.path;
-      const refreshed = await refreshProjectFolder(parentFolderPath);
-      if (refreshed) {
-        setProjectAst((current) => createProjectAstSkeleton(refreshed, current));
-      }
-
-      const activeWasDeleted = currentFilePath
-        ? isPathSameOrInside(currentFilePath, entry.path)
-        : false;
-      const nextFocusedFolder =
-        focusedFolderPath && isPathSameOrInside(focusedFolderPath, entry.path)
-          ? getParentPath(entry.path) ?? projectFolder.path
-          : focusedFolderPath;
-      setFocusedFolderPath(nextFocusedFolder);
-      setActiveBreadcrumbPath((path) =>
-        path && isPathSameOrInside(path, entry.path)
-          ? getParentPath(entry.path) ?? projectFolder.path
-          : path,
-      );
-      setBreadcrumbBrowsePath((path) =>
-        path && isPathSameOrInside(path, entry.path)
-          ? getParentPath(entry.path) ?? projectFolder.path
-          : path,
-      );
-
-      const isDeletedTab = (tab: DocumentTab) => Boolean(tab.path && isPathSameOrInside(tab.path, entry.path));
-      // 次のファイルは、消したタブがあった場所に開く（並びは空のタブを除いて数える）。
-      const activeIndex = openTabs.findIndex((tab) => tab.id === activeTabIdRef.current);
-      const nextTabIndex = activeIndex >= 0
-        ? withoutEmptyTabs(openTabs.slice(0, activeIndex)).filter((tab) => !isDeletedTab(tab)).length
-        : undefined;
-      setOpenTabs((current) => current.filter((tab) => !isDeletedTab(tab)));
-      for (const tab of openTabs) {
-        if (tab.path && isPathSameOrInside(tab.path, entry.path)) forgetDocumentJournal(tab.id);
-      }
-      if (activeWasDeleted) {
-        const nextFile = refreshed ? findFirstTextFile(refreshed.children) : null;
-        if (nextFile) {
-          const document = await invoke<TextDocument>("read_text_file", {
-            path: nextFile.path,
-          });
-          // 置き換えでなく開く。消したタブはもう一覧にないので、置き換えると、同じファイルの
-          // タブがすでに開いているときに2つになっていた（docs/DELETE_DUPLICATE_TAB_PLAN.md）。
-          loadDocumentIntoEditor(document, { index: nextTabIndex });
-        } else {
-          didMountEditorRef.current = false;
-          setFocusedFolderPath(projectFolder.path);
-          replaceActiveTab(
-            createScratchDocumentTab("", {
-              documentKey: `workspace-empty-${Date.now()}`,
-              saveStatus: "saved",
-            }),
-          );
-          setAppState((current) => ({
-            ...current,
-            markdown: "",
-            lastFilePath: null,
-          }));
-          setLastError("");
-        }
-      }
+      await forgetEntriesThatLeft(projectFolder, [entry.path], result.deletedPaths);
       return result;
     } catch (error) {
       setLastError(String(error));
@@ -1207,6 +1319,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     handleMoveMaterialReference,
     handleDeleteProjectEntry,
     trashProjectEntry,
+    handleTransferEntries,
     handleMoveProjectEntriesToFolder,
     handleMoveProjectEntry,
     handleBreadcrumbEntryDragStart,

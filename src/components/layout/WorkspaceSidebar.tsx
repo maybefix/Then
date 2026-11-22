@@ -166,6 +166,11 @@ type WorkspaceSidebarProps = {
   onMoveReference?: (reference: MaterialReference, targetFolderPath: string) => void;
   /** 資料のファイルを取り込む（取り込み先は素材フォルダの「資料」）。 */
   onImportReferences?: () => void;
+  /**
+   * 素材のノート・画像・PDF（直下ではファイル）を、ほかの作品・直下へ送る（U5）。押した行が選ばれていれば、
+   * 選んだもののうち送れるものすべてを渡す。ライブラリの外では渡さない。
+   */
+  onTransferEntries?: (paths: string[]) => void;
 };
 
 export type MaterialReference = {
@@ -877,6 +882,7 @@ export function WorkspaceSidebar({
   onDeleteReference,
   onRenameReference,
   onMoveReference,
+  onTransferEntries,
   onImportReferences,
 }: WorkspaceSidebarProps) {
   const [contextMenu, setContextMenu] = useState<TreeContextMenu>(null);
@@ -1655,6 +1661,35 @@ export function WorkspaceSidebar({
     action();
   };
 
+  /** 「移動・コピー…」で送れるファイルか（U5）。作品では素材のファイル、直下ではどのファイルも。 */
+  const canTransferPath = (path: string) => {
+    if (!projectFolder || !library || !onTransferEntries) return false;
+    if (materialReferences.some((reference) => reference.path === path)) return true;
+    const entry = findProjectEntry(projectFolder.children, path);
+    if (!entry || entry.kind !== "file") return false;
+    return binderTiers ? entry.role === "material" : library.role === "root";
+  };
+  /** 押した行が選ばれていれば、選んだもののうち送れるもの（表示の順）。選ばれていなければ押した行だけ。 */
+  const transferPathsFor = (path: string) => {
+    const selected = selectedFilePathsRef.current;
+    if (!projectFolder || !selected.has(path) || selected.size < 2) return [path];
+    const ordered = [
+      ...collectFilePathsInDisplayOrder(projectFolder),
+      ...materialReferences.map((reference) => reference.path),
+    ];
+    return ordered.filter((item) => selected.has(item) && canTransferPath(item));
+  };
+  const renderTransferItem = (path: string) =>
+    canTransferPath(path) ? (
+      <button
+        type="button"
+        role="menuitem"
+        onClick={() => closeContextMenuAndRun(() => onTransferEntries?.(transferPathsFor(path)))}
+      >
+        移動・コピー…
+      </button>
+    ) : null;
+
   const renderContextMenu = (): JSX.Element | null => {
     if (!contextMenu) return null;
 
@@ -1702,6 +1737,7 @@ export function WorkspaceSidebar({
               リネーム
             </button>
           )}
+          {renderTransferItem(reference.path)}
           {onDeleteReference && (
             <button
               type="button"
@@ -1799,6 +1835,7 @@ export function WorkspaceSidebar({
             >
               リネーム
             </button>
+            {kind === "file" && renderTransferItem(entry.path)}
             {/* 素材フォルダそのものは段の見出しのメニューから消さない（決めてほしいこと 12）。 */}
             {isProjectEntry(entry) && section !== "materials" && (
               <button
@@ -2088,7 +2125,7 @@ export function WorkspaceSidebar({
           setHeadingContextMenu(null);
           const position = getScaledFixedMenuPosition(event.clientX, event.clientY, {
             width: TREE_CONTEXT_MENU_WIDTH,
-            height: 72,
+            height: 120,
           });
           setContextMenu({
             x: position.left,

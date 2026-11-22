@@ -6543,6 +6543,7 @@ export default function App() {
     handleMoveMaterialReference,
     handleDeleteProjectEntry,
     trashProjectEntry,
+    handleTransferEntries,
     handleMoveProjectEntriesToFolder,
     handleMoveProjectEntry,
     handleBreadcrumbEntryDragStart,
@@ -6602,6 +6603,13 @@ export default function App() {
     rewriteLinksAfterPathChange: (rootPath, changes, message) => {
       if (!isTauriRuntime()) return;
       setPendingLinkRewrites((current) => [...current, { rootPath, changes, message }]);
+    },
+    requestMultiInput,
+    // U5: 送ったノートを指す札を、送り先の作品へ付け替えてから読み直す。
+    movePostNotes: async (sourceRoot, targetRoot, changes) => {
+      if (!isTauriRuntime()) return;
+      await invoke("posts_move_notes", { scopePath: sourceRoot, targetRoot, changes });
+      await postStream.refresh();
     },
   });
 
@@ -7676,7 +7684,7 @@ export default function App() {
                 handleAddReference: () => handleAddReference(),
                 openReferenceCard,
                 handleDeleteImportedReference: (sourcePath: string) => handleDeleteImportedReference(sourcePath),
-                handleRenameMaterialReference, handleMoveMaterialReference,
+                handleRenameMaterialReference, handleMoveMaterialReference, handleTransferEntries,
                 // In the corkboard these open the file in the body (BINDER 1-5).
                 handleProjectFileSelect: selectBinderFile,
                 handleProjectSearchResultOpen: openSearchResultInBody,
