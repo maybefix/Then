@@ -333,6 +333,56 @@ pub(super) fn retarget_notes(scope: &Path, changes: &[PathChange]) -> Result<Opt
     Ok(Some(snapshot(&place, Some(work), 0)?))
 }
 
+/// U5: ノートをほかの作品へ送ったとき、そのノートを指す札を送り先の作品へ付け替える。`scope` は送り元の作品。
+/// 送り先がライブラリ直下（作品の ID がない）なら付け替えない（札はないものとして薄く出る）。
+pub(super) fn move_notes_to_work(scope: &Path, target: &Path, changes: &[PathChange]) -> Result<Option<PostsSnapshot>, String> {
+    let place = place_for(scope)?;
+    let Some(source_root) = place.work_root.clone() else { return Ok(None) };
+    if library::is_library_root(target) || !library::is_project_root(target) || !place.file.is_file() {
+        return Ok(None);
+    }
+    let source = current_work(&source_root, false)?;
+    if source.id.is_empty() {
+        return Ok(None);
+    }
+    let relative_changes: Vec<(String, String)> = changes
+        .iter()
+        .filter_map(|change| {
+            let old = Path::new(&change.old_path);
+            let new = Path::new(&change.new_path);
+            (old.strip_prefix(&source_root).is_ok() && new.strip_prefix(target).is_ok())
+                .then(|| (relative_slash_path(&source_root, old), relative_slash_path(target, new)))
+        })
+        .collect();
+    if relative_changes.is_empty() {
+        return Ok(None);
+    }
+    let destination = current_work(target, true)?;
+    let changed = atomic_file::with_lock(&place.file, || -> Result<bool, String> {
+        let mut lines = read_lines(&place.file)?;
+        let mut changed = false;
+        for (index, mut post) in latest_indexes(&lines) {
+            let Some(mut note) = stored_note(&post).filter(|note| note.work == source.id) else { continue };
+            let Some((_, new)) = relative_changes.iter().find(|(old, _)| old.to_lowercase() == note.path.to_lowercase()) else {
+                continue;
+            };
+            note.work = destination.id.clone();
+            note.path = new.clone();
+            post.extra.insert(NOTE_KEY.to_string(), serde_json::to_value(&note).map_err(|error| error.to_string())?);
+            lines[index] = serde_json::to_string(&post).map_err(|error| error.to_string())?;
+            changed = true;
+        }
+        if changed {
+            write_lines(&place.file, &lines)?;
+        }
+        Ok(changed)
+    })?;
+    if !changed {
+        return Ok(None);
+    }
+    Ok(Some(snapshot(&place, Some(source), 0)?))
+}
+
 #[tauri::command(async)]
 pub(crate) fn posts_make_note(
     scope_path: String,
@@ -356,6 +406,15 @@ pub(crate) fn posts_unlink_note(
 #[tauri::command(async)]
 pub(crate) fn posts_retarget_notes(scope_path: String, changes: Vec<PathChange>) -> Result<Option<PostsSnapshot>, String> {
     retarget_notes(Path::new(&scope_path), &changes)
+}
+
+#[tauri::command(async)]
+pub(crate) fn posts_move_notes(
+    scope_path: String,
+    target_root: String,
+    changes: Vec<PathChange>,
+) -> Result<Option<PostsSnapshot>, String> {
+    move_notes_to_work(Path::new(&scope_path), Path::new(&target_root), &changes)
 }
 
 #[cfg(test)]

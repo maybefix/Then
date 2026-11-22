@@ -11,6 +11,7 @@ mod atomic_file;
 mod checkpoint_store;
 mod close_gate;
 mod copy_card_migration;
+mod entry_transfer;
 mod export_front_matter;
 mod external_url;
 mod idea_migration;
@@ -664,6 +665,8 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             create_library_folder,
             transfer_reference_files,
             library_transfer_destinations,
+            transfer_project_entries,
+            undo_transfer_project_entries,
             reorder_library_projects,
             load_library_property_types,
             save_library_property_type,
@@ -755,6 +758,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             post_stream::note::posts_make_note,
             post_stream::note::posts_unlink_note,
             post_stream::note::posts_retarget_notes,
+            post_stream::note::posts_move_notes,
             load_project_proofread_terms,
             save_project_proofread_terms,
             load_project_proofread_ignored,
@@ -2173,6 +2177,43 @@ fn transfer_reference_files(
         }
     }
     Ok(transferred)
+}
+
+/// U5: 素材のノート・画像・PDF を、同じライブラリのほかの作品・直下へ送る。`mode` は "move" か "copy"。
+#[tauri::command(async)]
+fn transfer_project_entries(
+    source_root: String,
+    target_root: String,
+    source_paths: Vec<String>,
+    mode: String,
+) -> Result<entry_transfer::TransferResult, String> {
+    let move_entries = match mode.as_str() {
+        "move" => true,
+        "copy" => false,
+        _ => return Err("unknown transfer mode".to_string()),
+    };
+    entry_transfer::transfer_entries(Path::new(&source_root), Path::new(&target_root), &source_paths, move_entries)
+}
+
+/// U5 の通知の「元に戻す」。コピーの写しは OS のゴミ箱へ（使えなければアプリのゴミ箱へ）。
+#[tauri::command(async)]
+fn undo_transfer_project_entries(
+    app: tauri::AppHandle,
+    source_root: String,
+    target_root: String,
+    entries: Vec<entry_transfer::TransferredEntry>,
+    mode: String,
+) -> Result<entry_transfer::TransferUndoResult, String> {
+    entry_transfer::undo_transfer(
+        Path::new(&source_root),
+        Path::new(&target_root),
+        &entries,
+        mode == "move",
+        |root, path| {
+            move_project_entry_to_system_trash(root, path)
+                .or_else(|_| move_project_entry_to_app_trash(&app, root, path).map(|_| ()))
+        },
+    )
 }
 
 #[tauri::command]

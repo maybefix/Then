@@ -338,26 +338,28 @@ pub(super) struct TransferDestination {
 }
 
 /// Where items of a scope can be sent: a library root sends to its projects,
-/// a project sends to its library root.
+/// a project sends to its library root and then to the other projects of the
+/// library (BINDER U5・K3).
 pub(super) fn transfer_destinations(scope: &Path) -> Result<Vec<TransferDestination>, String> {
     let Some(context) = library_context_for(scope, Vec::new())? else {
         return Ok(Vec::new());
     };
-    Ok(if context.role == "root" {
-        context
-            .projects
-            .into_iter()
-            .map(|project| TransferDestination {
-                label: format!("作品「{}」", project.name),
-                path: project.path,
-            })
-            .collect()
-    } else {
-        vec![TransferDestination {
+    let is_self = |path: &str| {
+        let path = Path::new(path);
+        path == scope
+            || matches!((path.canonicalize(), scope.canonicalize()), (Ok(left), Ok(right)) if left == right)
+    };
+    let mut destinations = Vec::new();
+    if context.role != "root" {
+        destinations.push(TransferDestination {
             label: format!("ライブラリ「{}」の直下", context.name),
             path: context.path,
-        }]
-    })
+        });
+    }
+    destinations.extend(context.projects.into_iter().filter(|project| !is_self(&project.path)).map(
+        |project| TransferDestination { label: format!("作品「{}」", project.name), path: project.path },
+    ));
+    Ok(destinations)
 }
 
 pub(super) fn inspect_folder(path: &Path) -> Result<FolderInspection, String> {
@@ -828,6 +830,22 @@ mod tests {
         let from_project = transfer_destinations(&work).unwrap();
         assert_eq!(from_project[0].path, library.to_string_lossy());
         assert!(transfer_destinations(&dir.0).unwrap().is_empty());
+    }
+
+    /// U5・K3: 作品からは、直下のあとに同じライブラリのほかの作品も送り先になる（自分は入らない）。
+    #[test]
+    fn a_work_can_send_to_the_other_works_of_its_library() {
+        let dir = TestDirectory::new("dest-works");
+        let library = PathBuf::from(create_library_folder(&dir.0, "lib", "本棚").unwrap());
+        let first = PathBuf::from(create_library_project(&library, "作品A").unwrap());
+        let second = PathBuf::from(create_library_project(&library, "作品B").unwrap());
+        let labels: Vec<String> =
+            transfer_destinations(&first).unwrap().into_iter().map(|item| item.label).collect();
+        assert_eq!(labels, vec!["ライブラリ「本棚」の直下".to_string(), "作品「作品B」".to_string()]);
+        let paths: Vec<String> =
+            transfer_destinations(&second).unwrap().into_iter().map(|item| item.path).collect();
+        assert_eq!(paths, vec![library.to_string_lossy().to_string(), first.to_string_lossy().to_string()]);
+        assert!(ensure_same_library(&first, &second).is_ok());
     }
 
     #[test]
