@@ -10,6 +10,7 @@ use tauri_plugin_dialog::DialogExt;
 mod atomic_file;
 mod checkpoint_store;
 mod close_gate;
+mod copy_card_migration;
 mod export_front_matter;
 mod external_url;
 mod idea_migration;
@@ -744,6 +745,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             idea_migration::migrate_project_ideas,
             idea_migration::migrate_profile_snippets,
             intermediate_draft_migration::migrate_intermediate_drafts,
+            copy_card_migration::migrate_copy_cards,
             post_stream::posts_load,
             post_stream::posts_signature,
             post_stream::posts_add,
