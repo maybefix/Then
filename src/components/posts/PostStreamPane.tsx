@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
+import type { DragEvent, KeyboardEvent } from "react";
+import { CANVAS_POST_DRAG_MIME } from "../../canvasTypes";
 import { IdeaComposerBox } from "./IdeaComposerBox";
 import {
   arrangePosts,
@@ -15,6 +16,7 @@ import {
   type PostFilter,
 } from "../../posts/postModel";
 import type { PostStream } from "../../posts/usePostStream";
+import type { PostBoardPlace, PostBoardPlaces } from "../../links/usePostBoardReferences";
 
 type PostStreamPaneProps = {
   stream: PostStream;
@@ -27,9 +29,21 @@ type PostStreamPaneProps = {
   onOpenNote?: (post: Post) => void;
   /** その投稿まで送り、しばらく目立たせる（「つながり」の元の投稿を押したとき。BINDER 3-4）。nonce が変わるたびに。 */
   reveal?: { id: string; nonce: number } | null;
+  /** 投稿のカードが置かれているボード（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md の 2）。札を押すとそのボードへ。 */
+  boards?: PostBoardPlaces;
+  onOpenBoard?: (place: PostBoardPlace) => void;
 };
 
 const REVEAL_MS = 2400;
+
+/**
+ * U7（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md）: 下の段の時刻と作品名をつかんで、Canvas へ落とすと投稿のカードになる。
+ * 運ぶのは投稿の ID だけ（text/plain を付けないので、本文へ落としても文は入らない。U6 はやらない）。
+ */
+function startPostDrag(event: DragEvent<HTMLElement>, id: string) {
+  event.dataTransfer.setData(CANVAS_POST_DRAG_MIME, id);
+  event.dataTransfer.effectAllowed = "copy";
+}
 
 function PlusIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>;
@@ -46,11 +60,14 @@ function ReturnToInboxIcon() {
 function NoteIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z" /><path d="M14 3v4h4" /><path d="M10 12h5M10 16h5" /></svg>;
 }
+function BoardIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" /><rect x="6" y="7" width="5" height="4" /><rect x="13" y="12" width="5" height="4" /></svg>;
+}
 function MoreIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="18" cy="12" r="1" /></svg>;
 }
 
-export function PostStreamPane({ stream, filter, onFilterChange, onMakeNote, onOpenNote, reveal = null }: PostStreamPaneProps) {
+export function PostStreamPane({ stream, filter, onFilterChange, onMakeNote, onOpenNote, reveal = null, boards, onOpenBoard }: PostStreamPaneProps) {
   const { scoped, available, posts, work, add, editBody, setFiled, remove, refresh } = stream;
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -177,8 +194,8 @@ export function PostStreamPane({ stream, filter, onFilterChange, onMakeNote, onO
           {/* 今の Idea の断片と同じく、左に時刻（と、ほかの作品なら作品名）、右に操作。 */}
           <div className="ideaFragmentFoot postFoot">
             <span className="postHead">
-              <time className="ideaFragmentDate" dateTime={entry.at}>{timeLabel(entry.at)}</time>
-              {otherWork && <span className="postWork">{otherWork}</span>}
+              <time className="ideaFragmentDate postDragHandle" dateTime={entry.at} draggable onDragStart={(event) => startPostDrag(event, entry.id)}>{timeLabel(entry.at)}</time>
+              {otherWork && <span className="postWork postDragHandle" draggable onDragStart={(event) => startPostDrag(event, entry.id)}>{otherWork}</span>}
               {entry.note && (() => {
                 const note = entry.note;
                 const label = noteLabel(note.path);
@@ -195,6 +212,46 @@ export function PostStreamPane({ stream, filter, onFilterChange, onMakeNote, onO
                   >
                     <NoteIcon /><span>{shown}</span>
                   </button>
+                );
+              })()}
+              {(() => {
+                // 置かれているボード。1枚ならそのボードの名前、2枚以上は「構想 ほか2」で、押すと一覧から選ぶ。
+                const places = boards?.get(entry.id);
+                if (!places?.length || !onOpenBoard) return null;
+                const label = places.length === 1 ? places[0].boardName : `${places[0].boardName} ほか${places.length - 1}`;
+                const placeName = (place: PostBoardPlace) => `${place.folderName} / ${place.boardName}`;
+                const menuKey = `board:${entry.id}`;
+                return (
+                  <span className="postMenuHost postBoardHost">
+                    <button
+                      type="button"
+                      className="postNoteTag postBoardTag"
+                      title={places.map(placeName).join("\n")}
+                      aria-label={places.length === 1 ? `ボード「${placeName(places[0])}」を開く` : `置かれているボード（${places.length}枚）`}
+                      aria-haspopup={places.length > 1 ? "menu" : undefined}
+                      aria-expanded={places.length > 1 ? menuId === menuKey : undefined}
+                      onClick={() => {
+                        if (places.length === 1) onOpenBoard(places[0]);
+                        else setMenuId((current) => current === menuKey ? null : menuKey);
+                      }}
+                    >
+                      <BoardIcon /><span>{label}</span>
+                    </button>
+                    {menuId === menuKey && (
+                      <div className="referenceContextMenu ideaReferenceMenu ideaFragmentMenu postBoardMenu" role="menu" aria-label="置かれているボード">
+                        {places.map((place) => (
+                          <button
+                            key={`${place.folderPath}\n${place.boardId}`}
+                            type="button"
+                            role="menuitem"
+                            onClick={() => { setMenuId(null); onOpenBoard(place); }}
+                          >
+                            {placeName(place)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </span>
                 );
               })()}
             </span>

@@ -41,6 +41,30 @@
   white-space: nowrap;
 }
 
+/* 置かれているボードの札。一覧は札の下に出す（「その他の操作」と同じメニュー）。 */
+.postBoardHost {
+  flex-shrink: 0;
+  max-width: 60%;
+}
+
+.postBoardTag span {
+  min-width: 2em;
+}
+
+.postBoardHost .postBoardMenu {
+  left: 0;
+  right: auto;
+}
+
+/* U7: 時刻と作品名をつかんで Canvas へドラッグする。 */
+.postDragHandle {
+  cursor: grab;
+}
+
+.postDragHandle:active {
+  cursor: grabbing;
+}
+
 .postMenuHost {
   position: relative;
 }

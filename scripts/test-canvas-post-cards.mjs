@@ -400,6 +400,33 @@ assert.deepEqual(JSON.parse(JSON.stringify(sent.nodes.find((node) => node.id ===
 await unmount();
 console.log("PASS around: not in make-manuscript; a sent board keeps its post cards");
 
+// ---- 8b. U7（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md の D1）: アイデアのペインから、投稿の ID だけを運ぶドラッグを
+// 埋め込みの Canvas へ落とすと、落とした場所に投稿のカードが置かれる ----
+await mount();
+{
+  const viewport = document.querySelector(".canvasViewport");
+  const dataTransfer = {
+    types: ["application/x-then-canvas-post"], dropEffect: "none",
+    getData: (type) => (type === "application/x-then-canvas-post" ? P2 : ""),
+  };
+  const fire = (type) => {
+    const event = new dom.window.MouseEvent(type, { bubbles: true, cancelable: true, clientX: 400, clientY: 300 });
+    Object.defineProperty(event, "dataTransfer", { value: dataTransfer });
+    viewport.dispatchEvent(event);
+    return event;
+  };
+  let over;
+  await act(async () => { over = fire("dragover"); await settle(); });
+  assert.equal(over.defaultPrevented, true, "投稿のドラッグは受け取る");
+  await act(async () => { fire("drop"); await settle(); });
+  await waitWrites();
+  const dropped = savedBoard().nodes.filter((node) => node.type === "post" && node.post === P2);
+  assert.equal(dropped.length, 2, "もとの1枚に、落とした1枚が足される");
+  assert.deepEqual(Object.keys(JSON.parse(JSON.stringify(dropped[1]))).sort(), ["height", "id", "post", "type", "width", "x", "y"], "ボードには投稿の ID だけを書く");
+}
+await unmount();
+console.log("PASS drop: a post dragged from the idea pane lands as a post card on the embedded Canvas");
+
 // ---- 9. 閉じる前と、閉じたとき ----
 await mount();
 await dblclick("c1");

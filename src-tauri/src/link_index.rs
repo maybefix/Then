@@ -99,9 +99,28 @@ pub struct BoardReferences {
 /// `scope` が `project` かないもの。2-6 の付け替えと同じ範囲）を持つボード。並びはボードの一覧と同じ
 /// （並べ替えた順、なければ新しい順）。読むだけで、どのファイルにも書かない。壊れたボードは飛ばす。
 pub fn board_references(root: &Path) -> Vec<BoardReferences> {
+    read_boards(root)
+        .into_iter()
+        .filter_map(|board| {
+            let references = file_references(&board.content);
+            (!references.is_empty()).then_some(BoardReferences { id: board.id, name: board.name, references })
+        })
+        .collect()
+}
+
+/// 読めたボード1枚。`content` はボードのファイルの JSON。
+struct ReadBoard {
+    id: String,
+    name: String,
+    content: serde_json::Value,
+}
+
+/// フォルダ（作品・ライブラリ直下）の `.then/boards/*.canvas` を、ボードの一覧と同じ並び（並べ替えた順、なければ新しい順）で
+/// 読む。ゴミ箱（`.trash/`）はフォルダなので読まない。壊れたボードは飛ばす。読むだけで、どのファイルにも書かない。
+fn read_boards(root: &Path) -> Vec<ReadBoard> {
     let folder = super::project_canvas_boards_dir(root);
     let Ok(entries) = std::fs::read_dir(&folder) else { return Vec::new() };
-    let mut boards: Vec<(BoardReferences, i64)> = Vec::new();
+    let mut boards: Vec<(ReadBoard, i64)> = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
         let is_board = path.is_file()
@@ -115,7 +134,32 @@ pub fn board_references(root: &Path) -> Vec<BoardReferences> {
         let Some(id) = path.file_stem().and_then(|value| value.to_str()).map(str::to_string) else { continue };
         let Ok(content) = std::fs::read_to_string(&path) else { continue };
         let Ok(board) = serde_json::from_str::<serde_json::Value>(&content) else { continue };
-        let references: Vec<BoardReference> = board
+        let name = board
+            .pointer("/then/name")
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(&id)
+            .to_string();
+        let updated_at = board.pointer("/then/updatedAt").and_then(serde_json::Value::as_i64).unwrap_or(0);
+        boards.push((ReadBoard { id, name, content: board }, updated_at));
+    }
+    let order = super::read_canvas_board_order(&folder);
+    boards.sort_by(|(left, left_updated), (right, right_updated)| {
+        let left_position = order.iter().position(|id| id == &left.id);
+        let right_position = order.iter().position(|id| id == &right.id);
+        match (left_position, right_position) {
+            (Some(left_position), Some(right_position)) => left_position.cmp(&right_position),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => right_updated.cmp(left_updated).then_with(|| left.id.cmp(&right.id)),
+        }
+    });
+    boards.into_iter().map(|(board, _)| board).collect()
+}
+
+/// ボードの資料カードとファイルのカードのうち、作品の中のファイルを指すもの（3-4）。
+fn file_references(board: &serde_json::Value) -> Vec<BoardReference> {
+    board
             .get("nodes")
             .and_then(serde_json::Value::as_array)
             .map(|nodes| {
@@ -141,31 +185,83 @@ pub fn board_references(root: &Path) -> Vec<BoardReferences> {
                     })
                     .collect()
             })
-            .unwrap_or_default();
-        if references.is_empty() {
-            continue;
+        .unwrap_or_default()
+}
+
+/// 投稿のカード1枚（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md）。
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PostCard {
+    pub node_id: String,
+    pub post_id: String,
+}
+
+/// 投稿のカードを持つボード1枚と、そのボードがあるフォルダ（作品か、ライブラリ直下）。
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PostBoards {
+    /// ボードがあるフォルダ（作品・ライブラリ直下）のパス。開くときに、このフォルダを開く。
+    pub folder_path: String,
+    /// 作品のフォルダの名前か、ライブラリの名前。
+    pub folder_name: String,
+    pub is_library_root: bool,
+    pub id: String,
+    pub name: String,
+    pub cards: Vec<PostCard>,
+}
+
+/// 投稿の側の「置かれているボード」（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md の 2）。投稿はライブラリで共有なので、
+/// 開いているフォルダがライブラリの中なら、ライブラリ直下と全作品（ライブラリの並び）のボードを読む。ライブラリに
+/// 入っていない作品は、その作品のボードだけ。ゴミ箱のボードは読まない。読むだけで、どのファイルにも書かない。
+pub fn post_board_references(scope: &Path) -> Vec<PostBoards> {
+    let folders: Vec<(PathBuf, String, bool)> = match library::library_of_scope(scope) {
+        Some(root) => {
+            let mut folders = vec![(root.clone(), library::library_name(&root), true)];
+            for project in library::library_projects(&root).unwrap_or_default() {
+                let path = PathBuf::from(&project.path);
+                let name = path.file_name().and_then(|value| value.to_str()).unwrap_or_default().to_string();
+                folders.push((path, name, false));
+            }
+            folders
         }
-        let name = board
-            .pointer("/then/name")
-            .and_then(serde_json::Value::as_str)
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or(&id)
-            .to_string();
-        let updated_at = board.pointer("/then/updatedAt").and_then(serde_json::Value::as_i64).unwrap_or(0);
-        boards.push((BoardReferences { id, name, references }, updated_at));
+        None => {
+            let name = scope.file_name().and_then(|value| value.to_str()).unwrap_or_default().to_string();
+            vec![(scope.to_path_buf(), name, false)]
+        }
+    };
+    let mut found = Vec::new();
+    for (folder, folder_name, is_library_root) in folders {
+        for board in read_boards(&folder) {
+            let cards: Vec<PostCard> = board
+                .content
+                .get("nodes")
+                .and_then(serde_json::Value::as_array)
+                .map(|nodes| {
+                    nodes
+                        .iter()
+                        .filter(|node| node.get("type").and_then(serde_json::Value::as_str) == Some("post"))
+                        .filter_map(|node| {
+                            let node_id = node.get("id")?.as_str()?.to_string();
+                            let post_id = node.get("post")?.as_str()?.to_string();
+                            (!post_id.is_empty()).then_some(PostCard { node_id, post_id })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            if cards.is_empty() {
+                continue;
+            }
+            found.push(PostBoards {
+                folder_path: folder.to_string_lossy().to_string(),
+                folder_name: folder_name.clone(),
+                is_library_root,
+                id: board.id,
+                name: board.name,
+                cards,
+            });
+        }
     }
-    let order = super::read_canvas_board_order(&folder);
-    boards.sort_by(|(left, left_updated), (right, right_updated)| {
-        let left_position = order.iter().position(|id| id == &left.id);
-        let right_position = order.iter().position(|id| id == &right.id);
-        match (left_position, right_position) {
-            (Some(left_position), Some(right_position)) => left_position.cmp(&right_position),
-            (Some(_), None) => std::cmp::Ordering::Less,
-            (None, Some(_)) => std::cmp::Ordering::Greater,
-            (None, None) => right_updated.cmp(left_updated).then_with(|| left.id.cmp(&right.id)),
-        }
-    });
-    boards.into_iter().map(|(board, _)| board).collect()
+    found
 }
 
 /// 作品ごとの索引のファイル。作品のパスの綴りの大小は区別しない（Windows）。
@@ -313,5 +409,75 @@ mod tests {
         let ids: Vec<String> = board_references(&root).into_iter().map(|board| board.id).collect();
         assert_eq!(ids, vec!["older".to_string(), "main".to_string()]);
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn post_board_references_read_the_library_root_and_every_work_but_not_the_trash() {
+        let library = temp_dir("post-boards");
+        let write = |path: PathBuf, text: &str| {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        };
+        write(
+            library.join(".then").join("library.json"),
+            r#"{"schemaVersion":1,"id":"lib","name":"本棚","projectOrder":["作品B","作品A"]}"#,
+        );
+        for work in ["作品A", "作品B"] {
+            write(library.join(work).join(".then").join("project.json"), r#"{"version":1}"#);
+        }
+        let boards = |folder: &Path| folder.join(".then").join("boards");
+        write(
+            boards(&library).join("all.canvas"),
+            r#"{"nodes":[{"id":"c1","type":"post","post":"p1"}],"then":{"name":"全体"}}"#,
+        );
+        write(
+            boards(&library.join("作品A")).join("plan.canvas"),
+            r#"{"nodes":[
+                {"id":"c1","type":"post","post":"p1"},
+                {"id":"c2","type":"post","post":"p1"},
+                {"id":"t","type":"text","text":"p1"},
+                {"id":"empty","type":"post","post":""},
+                {"id":"none","type":"post"},
+                {"id":"f","type":"file","file":"素材/汐見.md"}
+            ],"then":{"name":"構想"}}"#,
+        );
+        write(boards(&library.join("作品A")).join("texts.canvas"), r#"{"nodes":[{"id":"t","type":"text","text":"x"}]}"#);
+        write(boards(&library.join("作品A")).join("broken.canvas"), "{");
+        write(
+            boards(&library.join("作品A")).join(".trash").join("1--old.canvas"),
+            r#"{"nodes":[{"id":"c","type":"post","post":"p1"}],"then":{"name":"古い構想"}}"#,
+        );
+        write(
+            boards(&library.join("作品B")).join("field.canvas"),
+            r#"{"nodes":[{"id":"a","type":"post","post":"p2"},{"id":"b","type":"post","post":"p1"}],"then":{"name":"取材"}}"#,
+        );
+        let card = |node: &str, post: &str| PostCard { node_id: node.to_string(), post_id: post.to_string() };
+        let place = |folder: &Path, folder_name: &str, root: bool, id: &str, name: &str, cards: Vec<PostCard>| PostBoards {
+            folder_path: folder.to_string_lossy().to_string(),
+            folder_name: folder_name.to_string(),
+            is_library_root: root,
+            id: id.to_string(),
+            name: name.to_string(),
+            cards,
+        };
+        let expected = vec![
+            place(&library, "本棚", true, "all", "全体", vec![card("c1", "p1")]),
+            place(&library.join("作品B"), "作品B", false, "field", "取材", vec![card("a", "p2"), card("b", "p1")]),
+            place(&library.join("作品A"), "作品A", false, "plan", "構想", vec![card("c1", "p1"), card("c2", "p1")]),
+        ];
+        assert_eq!(
+            post_board_references(&library.join("作品A")),
+            expected,
+            "作品から: ライブラリ直下 → 作品（ライブラリの並び）。投稿の ID のない・空のカード、テキスト、壊れたボード、ゴミ箱は飛ばす"
+        );
+        assert_eq!(post_board_references(&library), expected, "ライブラリ直下からでも同じ");
+
+        // ライブラリに入っていない作品は、その作品のボードだけ。
+        let alone = temp_dir("post-boards-alone").join("作品C");
+        write(alone.join(".then").join("project.json"), r#"{"version":1}"#);
+        write(boards(&alone).join("x.canvas"), r#"{"nodes":[{"id":"n","type":"post","post":"p9"}]}"#);
+        assert_eq!(post_board_references(&alone), vec![place(&alone, "作品C", false, "x", "x", vec![card("n", "p9")])]);
+        std::fs::remove_dir_all(library).unwrap();
+        std::fs::remove_dir_all(alone.parent().unwrap()).unwrap();
     }
 }

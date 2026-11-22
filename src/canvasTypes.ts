@@ -300,18 +300,40 @@ export type CanvasManuscriptRevertEvent = { requestId: string; conversionId: str
 export const CANVAS_MANUSCRIPT_REVERT_RESULT_EVENT = "then-canvas-manuscript-revert-result";
 export type CanvasManuscriptRevertResultEvent = { requestId: string; reverted: boolean };
 
+/**
+ * 別ウィンドウのキャンバス → メイン画面: ボードを書けた。メイン画面は投稿の側の「置かれているボード」を読み直す
+ * （docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md の 2-2。アイデアのペインから別ウィンドウへ投稿をドラッグすると、
+ * メイン画面は窓の切り替えを経ないので、アプリに戻ったときの読み直しでは間に合わない）。
+ */
+export const CANVAS_BOARD_SAVED_EVENT = "then-canvas-board-saved";
+
 /** 閉じる前に、別ウィンドウのキャンバスへ待っている保存を書き切ってもらう（BINDER 4-2 の確認1の 1）。 */
 export const CANVAS_FLUSH_EVENT = "then-canvas-flush";
 export const CANVAS_FLUSH_DONE_EVENT = "then-canvas-flush-done";
 export type CanvasFlushEvent = { requestId: string };
 
-/** キャンバス → メイン画面へ、選んだカードを投稿にしてもらうイベント（BINDER 2-4、確認1の 8）。 */
-export const CANVAS_COPY_TO_POST_EVENT = "then-canvas-copy-to-post";
+/**
+ * 「投稿にする」（BINDER 2-4、docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md）。キャンバス → メイン画面の頼み。投稿を書き、
+ * 消すのはメイン画面だけ。書けたカードは、キャンバスがその投稿のカードに置き換える。
+ */
+export type CanvasCopyToPostRequest =
+  /** カード1枚を投稿1件に。conversionId は、あとで元に戻すときの目印。text はタイトルを1行目に入れた本文。 */
+  | { kind: "cards"; rootPath: string; conversionId: string; cards: { id: string; text: string }[] }
+  /** Canvas で置き換えを戻した。作ったままの投稿を消してもらう。 */
+  | { kind: "undo"; rootPath: string; conversionId: string };
 
-export type CanvasCopyToPostRequest = {
-  /** カード1枚ずつの本文。1件ずつ投稿にする。 */
-  bodies: string[];
-};
+export type CanvasCopyToPostResult =
+  /** made: 書けた投稿（カードの ID と投稿の ID）。failed: 書けなかったカードの ID。 */
+  | { kind: "cards"; made: { id: string; post: string }[]; failed: string[] }
+  /** done: 今回消す処理をした（false なら、通知からすでに戻していた）。kept: 直してあったので残した数。 */
+  | { kind: "undo"; done: boolean; deleted: number; kept: number };
+
+/** 別ウィンドウのキャンバス → メイン画面。 */
+export const CANVAS_COPY_TO_POST_EVENT = "then-canvas-copy-to-post";
+export type CanvasCopyToPostEvent = { requestId: string; request: CanvasCopyToPostRequest };
+/** メイン画面 → 別ウィンドウのキャンバス。error はできなかった理由。 */
+export const CANVAS_COPY_TO_POST_RESULT_EVENT = "then-canvas-copy-to-post-result";
+export type CanvasCopyToPostResultEvent = { requestId: string; result?: CanvasCopyToPostResult; error?: string };
 
 /**
  * メイン画面 → 開いているキャンバス（別ウィンドウ・埋め込み）へ、作品の中のファイル・フォルダの改名・移動を知らせる

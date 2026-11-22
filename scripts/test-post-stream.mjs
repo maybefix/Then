@@ -41,8 +41,11 @@ await build({
       import { usePostStream } from "./src/posts/usePostStream";
       import { createPostNoteActions } from "./src/posts/postNoteActions";
       export * from "./src/posts/postModel";
-      export function Harness({ scope, initialFilter = "inbox", onFilter, showToast, noteDeps }) {
+      export { createCanvasPostActions } from "./src/canvasPostActions";
+      export { placesByPost } from "./src/links/usePostBoardReferences";
+      export function Harness({ scope, initialFilter = "inbox", onFilter, showToast, noteDeps, onStream, boards, onOpenBoard }) {
         const stream = usePostStream(scope, { showToast });
+        onStream?.(stream);
         const [filter, setFilter] = useState(initialFilter);
         // App と同じく、描画のたびに deps を入れ替える（BINDER 2-3）。
         const depsRef = useRef(null);
@@ -53,6 +56,7 @@ await build({
           onFilterChange: (next) => { onFilter?.(next); setFilter(next); },
           onMakeNote: noteDeps && stream.work ? (post) => void noteActions.makeNote(post) : undefined,
           onOpenNote: (post) => void noteActions.openNote(post),
+          boards, onOpenBoard,
         });
       }`,
     resolveDir: path.resolve("."),
@@ -68,7 +72,7 @@ await build({
   plugins: [tauriStub],
 });
 const model = await import(`${pathToFileURL(path.join(dir, "post-stream.mjs")).href}?${Date.now()}`);
-const { Harness, arrangePosts, groupByDay, dayLabel, localIsoNow, normalizePostFilter, countInbox, noteThread, noteNameFromBody, noteTextFor, joinWorkPath, noteLabel } = model;
+const { Harness, createCanvasPostActions, placesByPost, arrangePosts, groupByDay, dayLabel, localIsoNow, normalizePostFilter, countInbox, noteThread, noteNameFromBody, noteTextFor, joinWorkPath, noteLabel } = model;
 
 const cases = [];
 const test = (name, fn) => cases.push([name, fn]);
@@ -609,6 +613,160 @@ test("ノートの札があれば、投稿のファイルが同じでもアプ�
   assert.equal(loads(), before + 1);
   assert.ok(item(container, "札").querySelector(".postNoteTag").classList.contains("isMissing"));
   unmount();
+});
+
+// ---- 置かれているボード（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md の B1〜B5） ----
+test("投稿の行にボードの札。1枚はその名前で押すと開き、2枚以上は「構想 ほか2」で一覧から選ぶ。札のない投稿は今のまま", async () => {
+  fakeBackend({ initial: [
+    { id: "p1", at: "2026-11-14T09:00:00+09:00", body: "灯台の夢", work: A },
+    { id: "p2", at: "2026-11-14T09:30:00+09:00", body: "港で拾った言葉", work: B },
+    { id: "p3", at: "2026-11-14T10:00:00+09:00", body: "何もない", work: A },
+  ] });
+  const folder = (name, root = false) => ({ folderPath: root ? "C:/lib" : `C:/lib/${name}`, folderName: name, isLibraryRoot: root });
+  const boards = placesByPost([
+    { ...folder("本棚", true), id: "all", name: "全体", cards: [{ nodeId: "c1", postId: "p1" }] },
+    { ...folder("作品B"), id: "field", name: "取材", cards: [{ nodeId: "a", postId: "p2" }, { nodeId: "b", postId: "p1" }] },
+    { ...folder("作品A"), id: "plan", name: "構想", cards: [{ nodeId: "c1", postId: "p1" }, { nodeId: "c2", postId: "p1" }] },
+  ]);
+  assert.deepEqual(boards.get("p1").map((place) => [place.folderName, place.boardName, place.nodeId]),
+    [["本棚", "全体", "c1"], ["作品B", "取材", "b"], ["作品A", "構想", "c1"]], "同じボードの2枚目は数えない。開くと最初のカードを選ぶ");
+  const opened = [];
+  const { container, unmount } = await mount({ initialFilter: "all", boards, onOpenBoard: (place) => opened.push(place) });
+  const tag = (body) => item(container, body).querySelector(".postBoardTag");
+  assert.equal(tag("灯台の夢").textContent, "全体 ほか2");
+  assert.equal(tag("港で拾った言葉").textContent, "取材");
+  assert.equal(tag("何もない"), null, "置かれていない投稿には札を出さない");
+  await click(tag("港で拾った言葉"));
+  assert.deepEqual(opened.map((place) => [place.folderPath, place.boardId, place.nodeId]), [["C:/lib/作品B", "field", "a"]], "1枚なら、押すとそのボードを開く");
+  await click(tag("灯台の夢"));
+  const menu = item(container, "灯台の夢").querySelector('[role="menu"][aria-label="置かれているボード"]');
+  assert.ok(menu, "2枚以上なら一覧を出す");
+  assert.deepEqual([...menu.querySelectorAll("button")].map((button) => button.textContent), ["本棚 / 全体", "作品B / 取材", "作品A / 構想"]);
+  await click([...menu.querySelectorAll("button")][2]);
+  assert.deepEqual([opened.at(-1).folderPath, opened.at(-1).boardId], ["C:/lib/作品A", "plan"]);
+  assert.equal(item(container, "灯台の夢").querySelector('[role="menu"]'), null, "選んだら閉じる");
+  assert.equal(tag("灯台の夢").closest("[draggable=true]"), null, "札はつかむ場所でない");
+  unmount();
+});
+
+// ---- U7: 投稿を Canvas へドラッグする（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md の D1〜D6） ----
+test("下の段の時刻と作品名をつかむと、投稿の ID だけを運ぶ。本文・ボタン・札はつかむ場所でない", async () => {
+  fakeBackend({ initial: [
+    { id: "p1", at: "2026-11-14T09:00:00+09:00", body: "灯台の夢", work: B },
+    { id: "p2", at: "2026-11-14T09:30:00+09:00", body: "続き", work: A, replyTo: "p1" },
+    { id: "p3", at: "2026-11-14T10:00:00+09:00", body: "夜の郵便局", work: A,
+      note: { work: A.id, path: "素材/夜の郵便局.md", workRoot: "C:/lib/作品A", workName: "作品A" } },
+  ] });
+  const { container, unmount } = await mount({ initialFilter: "all" });
+  const drag = (element) => {
+    const data = new Map();
+    const event = new window.Event("dragstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: {
+      setData: (type, value) => data.set(type, value), effectAllowed: "all", setDragImage: () => {},
+    } });
+    element.dispatchEvent(event);
+    return { data, event };
+  };
+  const dream = item(container, "灯台の夢");
+  const time = dream.querySelector("time");
+  assert.equal(time.getAttribute("draggable"), "true", "D1: 時刻をつかめる");
+  let started;
+  await act(async () => { started = drag(time); });
+  assert.deepEqual([...started.data], [["application/x-then-canvas-post", "p1"]],
+    "D5: 投稿の ID だけを運ぶ（text/plain を付けないので、本文へ落としても文は入らない）");
+  assert.equal(started.event.dataTransfer.effectAllowed, "copy");
+  assert.equal(dream.querySelector(".postWork").getAttribute("draggable"), "true", "ほかの作品の作品名もつかめる");
+  assert.notEqual(dream.querySelector(".postBody").getAttribute("draggable"), "true", "D2: 本文はつかむ場所でない");
+  for (const button of dream.querySelectorAll("button")) {
+    assert.notEqual(button.closest("[draggable=true]"), button, "D6: ボタンはつかむ場所でない");
+  }
+  const reply = item(container, "続き");
+  await act(async () => { started = drag(reply.querySelector("time")); });
+  assert.deepEqual([...started.data], [["application/x-then-canvas-post", "p2"]], "D3: 返信もつかめる");
+  const noted = item(container, "夜の郵便局");
+  await act(async () => { started = drag(noted.querySelector("time")); });
+  assert.deepEqual([...started.data], [["application/x-then-canvas-post", "p3"]], "D3: ノートにした投稿もつかめる");
+  assert.equal(noted.querySelector(".postNoteTag").closest("[draggable=true]"), null, "ノートの札はつかむ場所でない");
+  unmount();
+});
+
+// ---- Canvas の「投稿にする」（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md） ----
+test("「投稿にする」の create は書いた投稿（ID とハッシュ）を返し、通知を出さない。書けなければ投げる", async () => {
+  const backend = fakeBackend({ initial: [{ id: "p1", at: "2026-11-14T09:00:00+09:00", body: "潮の匂い", work: A }] });
+  let stream;
+  const { toasts, unmount } = await mount({ onStream: (value) => { stream = value; } });
+  let made;
+  await act(async () => { made = await stream.create("  潮の匂い  "); });
+  await settle();
+  assert.equal(made.id, "p-new-1", "同じ本文の投稿がすでにあっても、いま書いた投稿を返す");
+  assert.equal(made.body, "潮の匂い");
+  assert.equal(made.hash, stream.posts.find((entry) => entry.id === "p-new-1").hash, "ハッシュは一覧の行と同じ");
+  assert.equal(toasts.length, 0, "通知は出さない（Canvas とメイン画面の部品が出す）");
+  globalThis.__invoke = async () => { throw new Error("disk full"); };
+  await assert.rejects(() => stream.create("二件目"), /disk full/);
+  await assert.rejects(() => stream.create("   "), /空/);
+  unmount();
+});
+
+test("「投稿にする」の元に戻す discard は、作ったときのままなら消し、外で直されていれば残し、もうなければ missing", async () => {
+  const backend = fakeBackend({ initial: [] });
+  let stream;
+  const { toasts, unmount } = await mount({ onStream: (value) => { stream = value; } });
+  const made = [];
+  for (const body of ["一", "二", "三"]) await act(async () => { made.push(await stream.create(body)); });
+  backend.editOutside(made[1].id, "二（直した）");
+  backend.lines().splice(2, 1);
+  const results = [];
+  for (const post of made) await act(async () => { results.push(await stream.discard(post.id, post.hash)); });
+  await settle();
+  assert.deepEqual(results, ["deleted", "kept", "missing"]);
+  assert.deepEqual(backend.lines().map((entry) => entry.body), ["二（直した）"], "直した投稿だけが残る");
+  assert.equal(toasts.length, 0, "消しても「投稿を削除しました」は出さない");
+  unmount();
+});
+
+test("メイン画面の「投稿にする」: カードごとに投稿の ID を返し、書けなかったカードを分け、通知の「元に戻す」は一度だけ働く", async () => {
+  const toasts = [];
+  const created = [];
+  const discarded = [];
+  let reverted = true;
+  const depsRef = { current: {
+    scopePath: "C:/lib/作品A",
+    createPost: async (body) => {
+      if (body === "だめ") throw new Error("disk full");
+      created.push(body);
+      return { id: `p-${created.length}`, hash: `h-${created.length}`, body };
+    },
+    discardPost: async (id, hash) => { discarded.push([id, hash]); return id === "p-2" ? "kept" : "deleted"; },
+    showToast: (message, action) => toasts.push({ message, action }),
+    revertOnCanvas: async () => reverted,
+  } };
+  const actions = createCanvasPostActions(depsRef);
+  await assert.rejects(() => actions.handle({ kind: "cards", rootPath: "C:/lib/作品B", conversionId: "v0", cards: [] }), /開いていない/);
+  const result = await actions.handle({ kind: "cards", rootPath: "C:/lib/作品A", conversionId: "v1",
+    cards: [{ id: "a", text: "一" }, { id: "b", text: "だめ" }, { id: "c", text: "三" }] });
+  assert.deepEqual(result, { kind: "cards", made: [{ id: "a", post: "p-1" }, { id: "c", post: "p-2" }], failed: ["b"] });
+  assert.equal(toasts.at(-1).message, "2件を投稿にしました（1件は投稿にできませんでした）");
+  assert.equal(toasts.at(-1).action.label, "元に戻す");
+  reverted = false;
+  toasts.at(-1).action.onClick();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(toasts.at(-1).message, "Canvas でそのボードを開いていないため、元に戻せませんでした");
+  assert.deepEqual(discarded, [], "Canvas で戻せなければ消さない");
+  reverted = true;
+  toasts.at(-2).action.onClick();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepEqual(discarded, [["p-1", "h-1"], ["p-2", "h-2"]], "作ったときのハッシュで消すのを頼む");
+  assert.equal(toasts.at(-1).message, "カードを元に戻しました（投稿 1 件は直してあるので残しました）");
+  assert.deepEqual(await actions.handle({ kind: "undo", rootPath: "C:/lib/作品A", conversionId: "v1" }),
+    { kind: "undo", done: false, deleted: 0, kept: 0 }, "通知から戻したあとの Ctrl+Z は何もしない");
+  await assert.rejects(() => actions.handle({ kind: "cards", rootPath: "C:/lib/作品A", conversionId: "v2", cards: [{ id: "x", text: "だめ" }] }),
+    /disk full/, "1件も書けなければ断る");
+  await actions.handle({ kind: "cards", rootPath: "C:/lib/作品A", conversionId: "v3", cards: [{ id: "y", text: "四" }] });
+  assert.equal(toasts.at(-1).message, "1件を投稿にしました");
+  assert.deepEqual(await actions.handle({ kind: "undo", rootPath: "C:/lib/作品A", conversionId: "v3" }),
+    { kind: "undo", done: true, deleted: 1, kept: 0 });
+  assert.equal(toasts.at(-1).message, "カードを元に戻し、投稿 1 件を消しました");
 });
 
 let failed = 0;

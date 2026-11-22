@@ -774,6 +774,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             list_reference_candidates,
             list_link_stamps,
             list_board_references,
+            list_post_board_references,
             read_link_index_cache,
             write_link_index_cache,
             delete_imported_reference,
@@ -4085,6 +4086,12 @@ fn list_link_stamps(root_path: String) -> Result<Vec<link_index::LinkStamp>, Str
 #[tauri::command(async)]
 fn list_board_references(root_path: String) -> Vec<link_index::BoardReferences> {
     link_index::board_references(Path::new(&root_path))
+}
+
+/// 投稿の側の「置かれているボード」（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md）: ライブラリ直下と全作品のボードの投稿のカード。読むだけ。
+#[tauri::command(async)]
+fn list_post_board_references(scope_path: String) -> Vec<link_index::PostBoards> {
+    link_index::post_board_references(Path::new(&scope_path))
 }
 
 fn link_index_cache_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {

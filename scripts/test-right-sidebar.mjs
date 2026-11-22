@@ -65,6 +65,8 @@ const values = {
   // 投稿の流れ（BINDER 2-1）。
   postStream: { scoped: true, available: true, posts: [], work: undefined, add: async () => true, editBody: async () => true, setFiled: async () => {}, remove: async () => {}, refresh: async () => {} },
   postFilter: "inbox",
+  // 投稿の側の置かれているボード（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md）。
+  postBoards: { places: new Map(), open: () => {} },
 };
 const render = (overrides = {}) => {
   const props = new Proxy({ ...values, ...overrides }, {
