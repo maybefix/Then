@@ -18,7 +18,7 @@ Idea から Canvas へ送ってできた「コピーのカード」（テキス�
 | 7 | 実施 | 済み（2026-11-22） |
 | 8 | 自動テスト | 済み（2026-11-22） |
 | 9 | 実機確認 | 済み（2026-11-22） |
-| 10 | 完了（確認2） | 待ち |
+| 10 | 完了（確認2） | 済（2026-11-22、PR #73 で main へ。merge `ae13a46`） |
 
 行番号は、断りがなければ `cd78e37`（＝ main `69012cd`）の時点のもの。
 
@@ -420,6 +420,8 @@ release の `src-tauri/target/release/Then.exe`（識別子 `local.then.qa.links
 - 起動時と作品を開いたときに、Plot → Idea → 中間稿のあとで、コピーのカードを元のノートのカードに置き換える（Rust の `migrate_copy_cards`、`src/copyCardMigration.ts`、`App.tsx`）。
 - 開いている Canvas（埋め込み・別ウィンドウ）は、知らせ `then-canvas-boards-rewritten` で読み直す。
 - テスト `test:copy-card-migration`・`test:copy-card-migration-rust` を足し、`test:canvas-save` に読み直しを足した。
+
+2026-11-22、確認2で見つけた癖2つを直してから、PR #73 で main に取り込んだ（merge `ae13a46`）。
 
 ### 残っている別の作業
 
