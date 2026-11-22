@@ -394,8 +394,10 @@ function requestPostWriteFromMain(request: CanvasPostWriteRequest) {
 }
 
 /** 別ウィンドウのキャンバスから、「アイデア」のペインでその投稿を出す・投稿のノートを開くのを、メイン画面に頼む。 */
-function openPostInMain(id: string, target: CanvasOpenPostEvent["target"]) {
-  return emitTo("main", CANVAS_OPEN_POST_EVENT, { id, target } satisfies CanvasOpenPostEvent);
+async function openPostInMain(id: string, target: CanvasOpenPostEvent["target"]) {
+  await emitTo("main", CANVAS_OPEN_POST_EVENT, { id, target } satisfies CanvasOpenPostEvent);
+  // メイン画面を前に出す（ページの窓の API は許可がないので、Rust の命令で）。ノートを開くときも同じ。
+  await invoke("focus_main_window");
 }
 
 /** 別ウィンドウのキャンバスから、「この順で原稿を作る」をメイン画面に頼む（BINDER 4-4）。 */

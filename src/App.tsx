@@ -6383,7 +6383,7 @@ export default function App() {
     if (!isTauriRuntime()) return;
     return manageAsyncRegistration(
       listen<CanvasOpenPostEvent>(CANVAS_OPEN_POST_EVENT, (event) => {
-        void getCurrentWindow().setFocus().catch(() => {});
+        // 前に出すのは頼んだ側（別ウィンドウ）が focus_main_window で行う。
         openPostFromCanvasRef.current(event.payload.id, event.payload.target);
       }),
       (error) => setLastError(String(error)),

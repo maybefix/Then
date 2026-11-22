@@ -93,7 +93,7 @@ globalThis.postTest = {
     if (command === "read_text_file") throw new Error("not found");
     if (command === "library_transfer_destinations") return [{ path: "/library", label: "ライブラリ「本棚」の直下" }];
     if (command === "get_canvas_window_payload") return structuredClone(globalThis.postTest.windowPayload);
-    if (command === "finish_canvas_close_preparation") return;
+    if (command === "finish_canvas_close_preparation" || command === "focus_main_window") return;
     throw new Error(`Unexpected command ${command}`);
   },
   listen: (event, handler) => {
@@ -434,6 +434,8 @@ assert.ok(emitted.some((item) => item.event === "then-canvas-flush-done" && item
 await click(card("c3").querySelector(".canvasFileOpenButton"));
 assert.ok(emitted.some((item) => item.event === "then-canvas-open-post" && item.target === "main" &&
   item.payload.id === P3 && item.payload.target === "post"), "「開く」はメイン画面に頼む");
+await act(async () => { await sleep(20); });
+assert.ok(calls.some((call) => call.command === "focus_main_window"), "メイン画面を前に出す（ページの窓の API は使えない）");
 await unmount();
 mainSide();
 console.log("PASS separate window: the list comes with the payload and live data; write-back and open go through the main window");
