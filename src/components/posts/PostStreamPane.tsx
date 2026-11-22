@@ -38,7 +38,8 @@ const REVEAL_MS = 2400;
 
 /**
  * U7（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md）: 下の段の時刻と作品名をつかんで、Canvas へ落とすと投稿のカードになる。
- * 運ぶのは投稿の ID だけ（text/plain を付けないので、本文へ落としても文は入らない。U6 はやらない）。
+ * 運ぶのは投稿の ID だけ。本文（エディタ）へ落とすと、エディタがその ID の本文の写しを入れる（U6、
+ * docs/BINDER_POST_DRAG_SEARCH_PLAN.md）。text/plain は付けないので、入力欄やほかのアプリには文が落ちない。
  */
 function startPostDrag(event: DragEvent<HTMLElement>, id: string) {
   event.dataTransfer.setData(CANVAS_POST_DRAG_MIME, id);

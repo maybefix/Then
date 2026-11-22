@@ -36,6 +36,8 @@ import { Fragment, Slice, type Node as PMNode } from "@tiptap/pm/model";
 import { baseKeymap } from "@tiptap/pm/commands";
 import { closeHistory } from "@tiptap/pm/history";
 import { keymap } from "@tiptap/pm/keymap";
+import { dropPoint } from "@tiptap/pm/transform";
+import { CANVAS_POST_DRAG_MIME } from "./canvasTypes";
 import {
   Plugin,
   PluginKey,
@@ -170,6 +172,11 @@ type VerticalTextEditorProps = {
     target: string;
     rewriteTarget: (next: string) => void;
   }) => void;
+  /**
+   * U6（docs/BINDER_POST_DRAG_SEARCH_PLAN.md）: アイデアのペインの投稿を落としたとき、その投稿の本文を返す。
+   * 見つからなければ null（何も入れない）。ないときは投稿の drop を受けない。
+   */
+  postBodyForDrop?: (id: string) => string | null;
 };
 
 type AstPluginState = {
@@ -276,6 +283,18 @@ const astKey = new PluginKey<AstPluginState>("then-layout-ast");
 
 function normalizeText(text: string): string {
   return text.replace(/\r\n?/g, "\n");
+}
+
+/** 文を、1行1段落の Slice にする（貼り付けと、投稿の drop で共通）。 */
+function plainTextSlice(schema: EditorState["schema"], text: string): Slice {
+  const nodes = normalizeText(text)
+    .split("\n")
+    .map((line) =>
+      line.length > 0
+        ? schema.nodes.paragraph.create(null, schema.text(line))
+        : schema.nodes.paragraph.create(),
+    );
+  return new Slice(Fragment.fromArray(nodes), 1, 1);
 }
 
 function textToDoc(text: string): JSONContent {
@@ -2862,6 +2881,7 @@ export function VerticalTextEditor({
   onManuscriptProgressChange,
   linkLookup = null,
   onLinkActivate,
+  postBodyForDrop,
 }: VerticalTextEditorProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
@@ -2903,6 +2923,8 @@ export function VerticalTextEditor({
   const linkLookupRef = useRef(linkLookup);
   const onLinkActivateRef = useRef(onLinkActivate);
   onLinkActivateRef.current = onLinkActivate;
+  const postBodyForDropRef = useRef(postBodyForDrop);
+  postBodyForDropRef.current = postBodyForDrop;
   const highlightCurrentLineRef = useRef(highlightCurrentLine);
   const manuscriptActive = manuscript.layoutMode === "manuscript";
   const manuscriptRef = useRef(manuscript);
@@ -5300,16 +5322,30 @@ export function VerticalTextEditor({
         // between blocks, which is why copying spaced the lines out.
         clipboardTextSerializer: (slice) =>
           slice.content.textBetween(0, slice.content.size, "\n"),
-        clipboardTextParser: (text, _context, _plain, view) => {
-          const { schema } = view.state;
-          const nodes = normalizeText(text)
-            .split("\n")
-            .map((line) =>
-              line.length > 0
-                ? schema.nodes.paragraph.create(null, schema.text(line))
-                : schema.nodes.paragraph.create(),
-            );
-          return new Slice(Fragment.fromArray(nodes), 1, 1);
+        clipboardTextParser: (text, _context, _plain, view) => plainTextSlice(view.state.schema, text),
+        // U6（docs/BINDER_POST_DRAG_SEARCH_PLAN.md）: アイデアのペインの投稿（ID だけを運ぶ）を落としたら、
+        // 落とした位置に本文の写しを入れる。名前の text/plain が付いていても、投稿の形式を先に見る。
+        handleDrop: (view, event) => {
+          const transfer = event.dataTransfer;
+          const lookup = postBodyForDropRef.current;
+          if (!transfer || !lookup || !transfer.types.includes(CANVAS_POST_DRAG_MIME)) return false;
+          // 変換中・見つからない投稿は、何も入れずに受け取る（名前の文も入れない）。
+          if (isEditorComposing(tiptapRef.current, composingRef)) return true;
+          const body = lookup(transfer.getData(CANVAS_POST_DRAG_MIME));
+          const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
+          if (!body || !at) return true;
+          const slice = plainTextSlice(view.state.schema, body);
+          const insertAt = dropPoint(view.state.doc, at.pos, slice) ?? at.pos;
+          // 直前の打鍵と同じ1回の元に戻すにまとめない。
+          const tr = closeHistory(view.state.tr);
+          tr.replaceRange(insertAt, insertAt, slice);
+          let end = tr.mapping.map(insertAt);
+          tr.mapping.maps[tr.mapping.maps.length - 1].forEach((_from, _to, _newFrom, newTo) => { end = newTo; });
+          // 入れた文を選ばず、後ろにカーソルを置く（続けて打っても消えない）。
+          tr.setSelection(TextSelection.near(tr.doc.resolve(end), -1));
+          view.focus();
+          view.dispatch(tr.setMeta("uiEvent", "drop"));
+          return true;
         },
       },
       onTransaction: ({ editor: currentEditor, transaction }) => {

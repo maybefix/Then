@@ -3599,6 +3599,13 @@ export default function App() {
     () => ({ posts: postStream.posts, work: postStream.work }),
     [postStream.posts, postStream.work],
   );
+  // U6（docs/BINDER_POST_DRAG_SEARCH_PLAN.md）: 本文へ落とされた投稿の本文。エディタを描き直さないよう、関数は作り直さない。
+  const postsForDropRef = useRef(postStream.posts);
+  postsForDropRef.current = postStream.posts;
+  const postBodyForDrop = useCallback(
+    (id: string) => postsForDropRef.current.find((post) => post.id === id)?.body ?? null,
+    [],
+  );
   // 投稿の側の置かれているボード（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md の 2）。アイデアのペインを出しているあいだだけ読む。
   const postBoardPlaces = usePostBoardReferences(
     projectFolder?.path ?? null,
@@ -7804,6 +7811,7 @@ export default function App() {
                             ].join("|")}
                             linkLookup={linkLookup}
                             onLinkActivate={linkOpenActions.activate}
+                            postBodyForDrop={postBodyForDrop}
                             manuscript={editorSettings.manuscript}
                             onManuscriptProgressChange={editorManuscriptProgress.setSnapshot}
                             initialSelectionOffset={initialSelectionOffset}

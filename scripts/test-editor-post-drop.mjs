@@ -133,7 +133,7 @@ try {
     });
     await check(`${mode} D3: 打鍵の直後に落としても、Ctrl+Z 1回で入れた文だけが消える`, async () => {
       await open(mode);
-      await evaluate("__drop.focus(); __drop.caretAt(9)");
+      await evaluate("__drop.focus(); __drop.caretAt(10)");
       await sleep(60);
       await send("Input.insertText", { text: "今" });
       await sleep(20);

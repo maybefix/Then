@@ -673,7 +673,7 @@ test("下の段の時刻と作品名をつかむと、投稿の ID だけを運�
   let started;
   await act(async () => { started = drag(time); });
   assert.deepEqual([...started.data], [["application/x-then-canvas-post", "p1"]],
-    "D5: 投稿の ID だけを運ぶ（text/plain を付けないので、本文へ落としても文は入らない）");
+    "D5: 投稿の ID だけを運ぶ（text/plain を付けない。本文へ落としたときは、エディタが ID から本文の写しを入れる。U6）");
   assert.equal(started.event.dataTransfer.effectAllowed, "copy");
   assert.equal(dream.querySelector(".postWork").getAttribute("draggable"), "true", "ほかの作品の作品名もつかめる");
   assert.notEqual(dream.querySelector(".postBody").getAttribute("draggable"), "true", "D2: 本文はつかむ場所でない");
