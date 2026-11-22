@@ -23,6 +23,7 @@ const store = await import(await compile("src/canvasBoardStore.ts", {
   "./canvasTypes": await compile("src/canvasTypes.ts"),
   "./canvasBoardSaveQueue": await compile("src/canvasBoardSaveQueue.ts"),
   "./canvasFileWriteQueue": await compile("src/canvasFileWriteQueue.ts"),
+  "./canvasPostWriteQueue": await compile("src/canvasPostWriteQueue.ts"),
 }));
 
 const board = (name, updatedAt, nodes = 0) => ({

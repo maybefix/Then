@@ -10,6 +10,7 @@ import {
   type PostsSnapshot,
   type UnlinkedNote,
 } from "./postModel";
+import type { CanvasPostWriteResult } from "../canvasTypes";
 
 const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
 
@@ -28,6 +29,11 @@ export type PostStream = {
   add: (body: string, replyTo?: string) => Promise<boolean>;
   /** 直せなかった（外で直されていた）ときは偽。 */
   editBody: (post: Post, body: string) => Promise<boolean>;
+  /**
+   * Canvas の投稿のカードで直した本文を書く（docs/BINDER_POST_CARD_PLAN.md）。外で直されていれば書かずに読み直し、
+   * 今の投稿を返す（通知は出さない。カードが選ぶ画面を出す）。命令の失敗は投げる。
+   */
+  writeBody: (id: string, baseHash: string, body: string) => Promise<CanvasPostWriteResult>;
   setFiled: (post: Post, filed: boolean) => Promise<void>;
   remove: (post: Post) => Promise<void>;
   /** 投稿（とその下の返信）をノートにする（2-3）。書けなかったときは null。 */
@@ -154,6 +160,26 @@ export function usePostStream(scopePath: string | null, { showToast }: Options):
     return Boolean(next);
   }, [accept, run]);
 
+  const writeBody = useCallback(async (id: string, baseHash: string, body: string): Promise<CanvasPostWriteResult> => {
+    const scope = scopeRef.current;
+    const text = body.trim();
+    if (!scope || !isTauriRuntime()) throw new Error("投稿を書く場所がありません");
+    if (!text) return { status: "unchanged" };
+    try {
+      const next = await invoke<PostsSnapshot>("posts_update", {
+        scopePath: scope, id, expectedHash: baseHash, body: text, editedAt: localIsoNow(), filed: null,
+      });
+      accept(scope, next);
+      const post = next.posts.find((entry) => entry.id === id);
+      return post ? { status: "saved", post } : { status: "conflict" };
+    } catch (error) {
+      if (!isPostConflict(error)) throw error;
+      const current = await invoke<PostsSnapshot>("posts_load", { scopePath: scope }).catch(() => null);
+      if (current) accept(scope, current);
+      return { status: "conflict", post: current?.posts.find((entry) => entry.id === id) };
+    }
+  }, [accept]);
+
   const setFiled = useCallback(async (post: Post, filed: boolean) => {
     const scope = scopeRef.current;
     if (!scope) return;
@@ -221,6 +247,7 @@ export function usePostStream(scopePath: string | null, { showToast }: Options):
     work: snapshot?.work,
     add,
     editBody,
+    writeBody,
     setFiled,
     remove,
     makeNote,

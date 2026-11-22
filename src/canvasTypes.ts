@@ -5,6 +5,7 @@ import type {
   ReferenceKind,
   WritingMode,
 } from "./types";
+import type { Post, PostWork } from "./posts/postModel";
 
 export type { CanvasScope } from "./types";
 
@@ -83,7 +84,23 @@ export type CanvasFileNode = {
   color?: string;
 };
 
-export type CanvasNode = CanvasTextNode | CanvasGroupNode | CanvasReferenceNode | CanvasFileNode;
+/**
+ * 投稿を指すカード（Then 固有。BINDER 7章の1、docs/BINDER_POST_CARD_PLAN.md）。投稿の ID だけを持ち、本文・日時・作品は
+ * ボードに書かない。開くたびにメイン画面の投稿の一覧から引く。投稿はライブラリで共有なので、ライブラリ直下のボードにも置ける。
+ */
+export type CanvasPostNode = {
+  id: string;
+  type: "post";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** 投稿の ID（`posts.jsonl` の `id`）。 */
+  post: string;
+  color?: string;
+};
+
+export type CanvasNode = CanvasTextNode | CanvasGroupNode | CanvasReferenceNode | CanvasFileNode | CanvasPostNode;
 
 /**
  * Then が読めない種類のカード（Obsidian の link など）と、それにつながる線。画面には出さず、保存のときに
@@ -156,6 +173,9 @@ export const REFERENCE_FILE_DRAG_MIME = "application/x-then-reference-file";
 /** 別ウィンドウのサイドパネル→キャンバスで、ノート・原稿（作品からの相対パス）を運ぶ MIME。 */
 export const CANVAS_FILE_DRAG_MIME = "application/x-then-canvas-file";
 
+/** 別ウィンドウのサイドパネル→キャンバスで、投稿の ID を運ぶ MIME。 */
+export const CANVAS_POST_DRAG_MIME = "application/x-then-canvas-post";
+
 /**
  * メイン画面 → 別ウィンドウキャンバスへ資料の最新一覧だけを届けるイベント。
  * then-canvas-payload と違いボードの再読込（選択・undo履歴のリセット）を起こさない。
@@ -170,7 +190,12 @@ export type CanvasLiveDataEvent = {
   openTabPaths?: string[];
   /** 「この順で原稿を作る」の作る先に選べるフォルダ（BINDER 4-4）。 */
   manuscriptFolders?: CanvasManuscriptFolders;
+  /** 投稿の一覧と、いま開いている作品（投稿のカードと、置く一覧に使う）。 */
+  posts?: CanvasPosts;
 };
+
+/** メイン画面が持つ投稿の一覧（ライブラリで共有）。work はいま開いている作品で、ライブラリ直下ではない。 */
+export type CanvasPosts = { posts: Post[]; work?: PostWork };
 
 /** 作品のノート・原稿の1つ。path は作品からの相対パス（`/` 区切り）。 */
 export type CanvasProjectFile = { path: string; role: "note" | "manuscript" };
@@ -209,6 +234,30 @@ export type CanvasFileWriteResult =
   | { status: "open-in-tab" }
   /** 読んだあとで外で変わっていた。書いていない。content はファイルの今の中身。 */
   | { status: "conflict"; content: string; contentHash: string | null };
+
+/** キャンバスが投稿のカードで直した本文を、メイン画面に書いてもらう頼み（投稿へ書くのもメイン画面だけ）。 */
+export type CanvasPostWriteRequest = {
+  rootPath: string;
+  id: string;
+  text: string;
+  /** キャンバスが読んだときの投稿の行のハッシュ。外で直されていれば書かない。 */
+  baseHash: string;
+};
+
+export type CanvasPostWriteResult =
+  | { status: "saved"; post: Post }
+  | { status: "unchanged" }
+  /** 読んだあとで外で直されていた。書いていない。post は今の投稿（消えていればない）。 */
+  | { status: "conflict"; post?: Post };
+
+export const CANVAS_POST_WRITE_EVENT = "then-canvas-post-write";
+export type CanvasPostWriteEvent = { requestId: string; request: CanvasPostWriteRequest };
+export const CANVAS_POST_WRITE_RESULT_EVENT = "then-canvas-post-write-result";
+export type CanvasPostWriteResultEvent = { requestId: string; result?: CanvasPostWriteResult; error?: string };
+
+/** 別ウィンドウのキャンバス → メイン画面へ、投稿のカードの「開く」（右のペインのその投稿へ）とノートの札。 */
+export const CANVAS_OPEN_POST_EVENT = "then-canvas-open-post";
+export type CanvasOpenPostEvent = { id: string; target: "post" | "note" };
 
 /** 別ウィンドウのキャンバス → メイン画面。 */
 export const CANVAS_FILE_WRITE_EVENT = "then-canvas-file-write";
@@ -364,6 +413,7 @@ export type CanvasWindowPayload = {
   projectFiles?: CanvasProjectFile[];
   manuscriptFolders?: CanvasManuscriptFolders;
   openTabPaths?: string[];
+  posts?: CanvasPosts;
   /** メイン画面の右サイドバー表示状態。別ウィンドウのサイドパネルへ引き継ぐ。 */
   rightSidebarVisible?: boolean;
 };
@@ -467,6 +517,22 @@ export function createCanvasFileNode(
     width: options.width ?? 300,
     height: options.height ?? 240,
     file,
+    color: options.color,
+  };
+}
+
+export function createCanvasPostNode(
+  post: string,
+  options: Partial<Omit<CanvasPostNode, "id" | "type" | "post">> = {},
+): CanvasPostNode {
+  return {
+    id: nextCanvasId("post"),
+    type: "post",
+    x: options.x ?? 140,
+    y: options.y ?? 140,
+    width: options.width ?? 280,
+    height: options.height ?? 180,
+    post,
     color: options.color,
   };
 }
@@ -586,6 +652,11 @@ function normalizeNode(value: unknown): CanvasNode | null {
     };
   }
 
+  if (node.type === "post") {
+    // post の欄が読めないカードは isForeignNode が知らない種類として取っておくので、ここには来ない。
+    return { id, type: "post", x, y, width, height, post: (node as CanvasPostNode).post, color };
+  }
+
   if (node.type === "text") {
     const textNode = node as Partial<CanvasTextNode>;
     const writingMode =
@@ -625,14 +696,18 @@ function normalizeNode(value: unknown): CanvasNode | null {
   return null;
 }
 
-const KNOWN_NODE_TYPES = new Set(["text", "group", "reference", "file"]);
+const KNOWN_NODE_TYPES = new Set(["text", "group", "reference", "file", "post"]);
 
-/** id と種類があり、その種類を Then が知らないカード。 */
+/**
+ * id と種類があり、その種類を Then が知らないカード。投稿のカードで、指す投稿の ID が読めないものも
+ * ここに入れ、画面には出さずにそのまま書き戻す（落とさない）。
+ */
 function isForeignNode(value: unknown): value is Record<string, unknown> {
   if (!value || typeof value !== "object") return false;
-  const node = value as { id?: unknown; type?: unknown };
-  return typeof node.id === "string" && node.id !== "" &&
-    typeof node.type === "string" && !KNOWN_NODE_TYPES.has(node.type);
+  const node = value as { id?: unknown; type?: unknown; post?: unknown };
+  if (typeof node.id !== "string" || node.id === "" || typeof node.type !== "string") return false;
+  if (node.type === "post") return typeof node.post !== "string" || !node.post.trim();
+  return !KNOWN_NODE_TYPES.has(node.type);
 }
 
 function normalizeEdge(value: unknown, nodeIds: Set<string>): CanvasEdge | null {
