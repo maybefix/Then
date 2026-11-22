@@ -2580,6 +2580,36 @@ export default function App() {
     return () => observer.disconnect();
   }, [referenceLayoutFitRoot, startupView]);
 
+  // U10: スターを付けたノート。ファイルの木が変わるたび（改名・移動・削除・送る）に読み直す。
+  const [starredNotePaths, setStarredNotePaths] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    if (!isHydrated || !projectFolder || !isTauriRuntime()) {
+      setStarredNotePaths(new Set());
+      return;
+    }
+    let isCancelled = false;
+    invoke<string[]>("load_note_stars", { rootPath: projectFolder.path })
+      .then((paths) => {
+        if (!isCancelled) setStarredNotePaths(new Set(paths));
+      })
+      .catch((error) => {
+        if (!isCancelled) setLastError(String(error));
+      });
+    return () => {
+      isCancelled = true;
+    };
+  }, [isHydrated, projectFolder]);
+  const handleSetNoteStar = async (path: string, starred: boolean) => {
+    if (!projectFolder || !isTauriRuntime()) return;
+    try {
+      const paths = await invoke<string[]>("set_note_star", { rootPath: projectFolder.path, path, starred });
+      setStarredNotePaths(new Set(paths));
+    } catch (error) {
+      setLastError(String(error));
+      showToast(starred ? "スターを付けられませんでした" : "スターを外せませんでした");
+    }
+  };
+
   // The reference candidates are the project's files, so they follow the file tree.
   useEffect(() => {
     if (!isHydrated || !projectFolder) return;
@@ -7685,6 +7715,7 @@ export default function App() {
                 openReferenceCard,
                 handleDeleteImportedReference: (sourcePath: string) => handleDeleteImportedReference(sourcePath),
                 handleRenameMaterialReference, handleMoveMaterialReference, handleTransferEntries,
+                starredNotePaths, handleSetNoteStar,
                 // In the corkboard these open the file in the body (BINDER 1-5).
                 handleProjectFileSelect: selectBinderFile,
                 handleProjectSearchResultOpen: openSearchResultInBody,

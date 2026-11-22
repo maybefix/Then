@@ -127,6 +127,9 @@ export type LeftSidebarProps = {
   handleMoveMaterialReference: ProjectEntryActions["handleMoveMaterialReference"];
   /** 素材のノート・画像・PDF をほかの作品・直下へ送る（U5）。 */
   handleTransferEntries: ProjectEntryActions["handleTransferEntries"];
+  /** スターを付けたノートと、付け外し（U10）。 */
+  starredNotePaths: ReadonlySet<string>;
+  handleSetNoteStar: (path: string, starred: boolean) => Promise<void>;
 };
 
 /** 作品のフォルダと、そこからの相対パス（`/` 区切り）をつなぐ。区切りは作品のフォルダに合わせる。 */
@@ -157,7 +160,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
     handleImportProjectIntoLibrary, reorderLibraryProjects, libraryCorpus, openIdeaPane, postInboxCount,
     handleCreateMaterialsFolder, handleSetMaterialsFolder, handleAddReference, openReferenceCard,
     handleDeleteImportedReference, handleRenameMaterialReference, handleMoveMaterialReference,
-    handleTransferEntries,
+    handleTransferEntries, starredNotePaths, handleSetNoteStar,
   } = props;
   // 素材の段に並べる画像・PDF（ファイルの一覧には入らない。BINDER 2-5、確認1の 7）。
   const materialReferences = projectFolder
@@ -406,6 +409,8 @@ export function LeftSidebar(props: LeftSidebarProps) {
             onMoveReference={(reference, targetFolderPath) => void handleMoveMaterialReference(reference, targetFolderPath)}
             onImportReferences={() => void handleAddReference()}
             onTransferEntries={libraryContext ? (paths) => void handleTransferEntries(paths) : undefined}
+            starredNotePaths={starredNotePaths}
+            onSetNoteStar={(path, starred) => void handleSetNoteStar(path, starred)}
         />
         )}
     </div>

@@ -171,6 +171,10 @@ type WorkspaceSidebarProps = {
    * 選んだもののうち送れるものすべてを渡す。ライブラリの外では渡さない。
    */
   onTransferEntries?: (paths: string[]) => void;
+  /** スターを付けたノートの絶対パス（U10）。 */
+  starredNotePaths?: ReadonlySet<string>;
+  /** ノートのスターを付ける・外す（U10）。渡さなければ、右クリックと見出しの星のボタンを出さない。 */
+  onSetNoteStar?: (path: string, starred: boolean) => void;
 };
 
 export type MaterialReference = {
@@ -448,6 +452,38 @@ function findParentPath(root: ProjectFolder, targetPath: string): string | null 
   return visit(root.path, root.children);
 }
 
+const NO_STARRED_PATHS: ReadonlySet<string> = new Set();
+const STAR_FILTER_STORAGE_KEY = "then.sidebar.starFilter";
+
+function readStoredStarFilter(): boolean {
+  try {
+    return window.localStorage.getItem(STAR_FILTER_STORAGE_KEY) === "starred";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * スターだけを出すとき（U10）に隠す素材のファイルとフォルダ。スターの付いていないファイルと、中にスターの
+ * 付いたファイルのないフォルダ。
+ */
+function collectUnstarredMaterialPaths(materials: ProjectEntry[], starred: ReadonlySet<string>): Set<string> {
+  const hidden = new Set<string>();
+  const visit = (entry: ProjectEntry): boolean => {
+    if (entry.kind === "file") {
+      const shown = starred.has(entry.path);
+      if (!shown) hidden.add(entry.path);
+      return shown;
+    }
+    let anyShown = false;
+    for (const child of entry.children) anyShown = visit(child) || anyShown;
+    if (!anyShown) hidden.add(entry.path);
+    return anyShown;
+  };
+  materials.forEach(visit);
+  return hidden;
+}
+
 function collectFilePathsInDisplayOrder(root: ProjectFolder): string[] {
   const paths: string[] = [];
   const visit = (entries: ProjectEntry[]) => {
@@ -564,7 +600,8 @@ type SidebarIconName =
   | "note"
   | "plus"
   | "post"
-  | "search";
+  | "search"
+  | "star";
 
 function SidebarIcon({ name, className = "" }: { name: SidebarIconName; className?: string }) {
   const common = {
@@ -654,6 +691,12 @@ function SidebarIcon({ name, className = "" }: { name: SidebarIconName; classNam
         <svg {...common}>
           <circle cx="10.5" cy="10.5" r="7.25" />
           <path d="m16 16 5 5" />
+        </svg>
+      );
+    case "star":
+      return (
+        <svg {...common}>
+          <polygon points="12 3 15 9 22 9.8 17 14.5 18.2 21.4 12 18.1 5.8 21.4 7 14.5 2 9.8 9 9" />
         </svg>
       );
     default:
@@ -883,6 +926,8 @@ export function WorkspaceSidebar({
   onRenameReference,
   onMoveReference,
   onTransferEntries,
+  starredNotePaths = NO_STARRED_PATHS,
+  onSetNoteStar,
   onImportReferences,
 }: WorkspaceSidebarProps) {
   const [contextMenu, setContextMenu] = useState<TreeContextMenu>(null);
@@ -942,13 +987,29 @@ export function WorkspaceSidebar({
     () => (projectFolder && library?.role !== "root" ? splitBinderTiers(projectFolder) : null),
     [library?.role, projectFolder],
   );
-  const filteredOutPaths = useMemo(
-    () =>
-      projectFolder
-        ? collectFilteredOutPaths(projectFolder, fileProgress, progressFilter)
-        : new Set<string>(),
-    [fileProgress, progressFilter, projectFolder],
-  );
+  // スターの付いたノートだけを素材の段に出す（U10）。素材フォルダのある作品で、付け外しを受け取るときだけ。
+  const [isStarFilterOn, setIsStarFilterOn] = useState(readStoredStarFilter);
+  const starFilterActive = Boolean(isStarFilterOn && onSetNoteStar && binderTiers?.materialsFolder);
+  const toggleStarFilter = () => {
+    const next = !isStarFilterOn;
+    setIsStarFilterOn(next);
+    try {
+      window.localStorage.setItem(STAR_FILTER_STORAGE_KEY, next ? "starred" : "all");
+    } catch {
+      // 覚えられなくても、今の画面では効く。
+    }
+  };
+  const filteredOutPaths = useMemo(() => {
+    const hidden = new Set<string>(
+      projectFolder ? collectFilteredOutPaths(projectFolder, fileProgress, progressFilter) : [],
+    );
+    if (starFilterActive && binderTiers?.materialsFolder) {
+      collectUnstarredMaterialPaths(binderTiers.materialsFolder.children, starredNotePaths).forEach((item) =>
+        hidden.add(item),
+      );
+    }
+    return hidden;
+  }, [binderTiers, fileProgress, progressFilter, projectFolder, starFilterActive, starredNotePaths]);
   const changeProgressFilter = (filter: FileProgressFilter) => {
     setProgressFilter(filter);
     try {
@@ -1679,6 +1740,13 @@ export function WorkspaceSidebar({
     ];
     return ordered.filter((item) => selected.has(item) && canTransferPath(item));
   };
+  /** スターを付けられるノートか（U10）。作品では素材のノート、直下ではどのファイルも。 */
+  const canStarPath = (path: string) => {
+    if (!projectFolder || !onSetNoteStar) return false;
+    const entry = findProjectEntry(projectFolder.children, path);
+    if (!entry || entry.kind !== "file") return false;
+    return binderTiers ? entry.role === "material" : library?.role === "root";
+  };
   const renderTransferItem = (path: string) =>
     canTransferPath(path) ? (
       <button
@@ -1836,6 +1904,17 @@ export function WorkspaceSidebar({
               リネーム
             </button>
             {kind === "file" && renderTransferItem(entry.path)}
+            {kind === "file" && canStarPath(entry.path) && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() =>
+                  closeContextMenuAndRun(() => onSetNoteStar?.(entry.path, !starredNotePaths.has(entry.path)))
+                }
+              >
+                {starredNotePaths.has(entry.path) ? "スターを外す" : "スターを付ける"}
+              </button>
+            )}
             {/* 素材フォルダそのものは段の見出しのメニューから消さない（決めてほしいこと 12）。 */}
             {isProjectEntry(entry) && section !== "materials" && (
               <button
@@ -2099,6 +2178,8 @@ export function WorkspaceSidebar({
 
   /** そのフォルダの中にじかに置かれた、素材の画像・PDF。 */
   const referencesIn = (folderPath: string) => {
+    // スターだけを出すあいだは、画像・PDF も出さない（スターはノートにだけ付く）。
+    if (starFilterActive) return [];
     const key = folderKey(folderPath);
     return materialReferences.filter((reference) => parentKey(reference.path) === key);
   };
@@ -2342,6 +2423,11 @@ export function WorkspaceSidebar({
                 <span className={fileStatus ? `treeItemName treeItemName-${fileStatus}` : "treeItemName"}>
                   {entryDisplayName}
                 </span>
+                {starredNotePaths.has(entry.path) && (
+                  <span className="treeItemStar" aria-label="スター">
+                    <SidebarIcon name="star" className="treeItemStarIcon" />
+                  </span>
+                )}
                 {charCountLabel && (
                   <span className="treeItemCharCount">{charCountLabel}</span>
                 )}
@@ -2446,6 +2532,7 @@ export function WorkspaceSidebar({
     menuEntry,
     action,
     importOnly,
+    extra,
   }: {
     section: "manuscript" | "materials" | "posts";
     label: string;
@@ -2456,6 +2543,8 @@ export function WorkspaceSidebar({
     action?: JSX.Element;
     /** 素材フォルダのない作品で、右クリックに「資料を取り込む…」だけを出す。 */
     importOnly?: boolean;
+    /** 字数の前に置く部品（素材の段のスターのボタン。U10）。 */
+    extra?: JSX.Element;
   }) => {
     const isCollapsed = collapsePath ? collapsedFolderPaths.has(collapsePath) : false;
     // 段ごとのアイコンを開閉の印の場所に置き、名前はフォルダの行より濃い文字にする（2026-11-12 に E 案に決めた）。
@@ -2506,6 +2595,7 @@ export function WorkspaceSidebar({
             <span className="binderSectionLabel">{label}</span>
           </span>
         )}
+        {extra}
         {action ?? (count ? <span className="binderSectionCount">{count}</span> : null)}
       </div>
     );
@@ -2555,6 +2645,18 @@ export function WorkspaceSidebar({
                   count: materialsCharCount === null ? null : formatTreeCharCount(materialsCharCount),
                   dropFolderPath: materialsFolder.path,
                   menuEntry: materialsFolder,
+                  extra: onSetNoteStar ? (
+                    <button
+                      className={["binderSectionStarFilter", starFilterActive ? "isOn" : ""].filter(Boolean).join(" ")}
+                      type="button"
+                      aria-label="スター"
+                      aria-pressed={starFilterActive}
+                      title="スター"
+                      onClick={toggleStarFilter}
+                    >
+                      <SidebarIcon name="star" className="binderSectionStarIcon" />
+                    </button>
+                  ) : undefined,
                 })
               : renderBinderSectionHeader({
                   section: "materials",

@@ -611,6 +611,53 @@ async function choose(target, label) {
   await atRoot.unmount();
 }
 
+// ノートのスター（U10）: 行に星の印、右クリックで付ける・外す（素材のノートだけ）。素材の段の見出しの星のボタンで、
+// スターの付いたノートと、それを入れているフォルダだけを出す（画像・PDF も隠す）。もう一度押すと戻る。
+{
+  localStorage.removeItem("then.sidebar.starFilter");
+  const references = [
+    { path: p("資料/設定集.pdf"), sourcePath: "資料/設定集.pdf", name: "設定集.pdf", kind: "pdf" },
+  ];
+  const starred = new Set([p("資料/年表/年表.md")]);
+  const view = await mount(props(withMaterials, {
+    materialReferences: references,
+    onOpenReference: spy("onOpenReference"),
+    starredNotePaths: starred,
+    onSetNoteStar: spy("onSetNoteStar"),
+  }));
+  takeCalls();
+  const stars = () => [...view.container.querySelectorAll(".treeItemStar")].map((mark) => rel(mark.closest("[data-tree-entry-path]").dataset.treeEntryPath));
+  assert.deepEqual(stars(), ["資料/年表/年表.md"]);
+  assert.ok((await menuLabels(row(view.container, "資料/人物.md"))).includes("スターを付ける"));
+  assert.ok((await menuLabels(row(view.container, "資料/年表/年表.md"))).includes("スターを外す"));
+  assert.ok(!(await menuLabels(row(view.container, "本編.md"))).some((label) => label.startsWith("スター")), "原稿には付けない");
+  await choose(row(view.container, "資料/人物.md"), "スターを付ける");
+  await choose(row(view.container, "資料/年表/年表.md"), "スターを外す");
+  assert.deepEqual(takeCalls(), [["onSetNoteStar", "資料/人物.md", true], ["onSetNoteStar", "資料/年表/年表.md", false]]);
+
+  const filter = header(view.container, "materials").querySelector(".binderSectionStarFilter");
+  assert.equal(filter.getAttribute("aria-pressed"), "false");
+  await click(filter);
+  assert.equal(filter.getAttribute("aria-pressed"), "true");
+  assert.deepEqual(
+    sections(view.container)[1].rows.map(([path]) => path),
+    ["資料/年表", "資料/年表/年表.md"],
+    "スターのノートと、それを入れているフォルダだけ",
+  );
+  assert.equal(localStorage.getItem("then.sidebar.starFilter"), "starred", "次に開いたときも覚えている");
+  await click(filter);
+  assert.deepEqual(
+    sections(view.container)[1].rows.map(([path]) => path),
+    ["資料/人物.md", "資料/年表", "資料/年表/年表.md", "資料/設定集.pdf"],
+    "もう一度押すと全部",
+  );
+  await view.unmount();
+
+  const without = await mount(props(withMaterials));
+  assert.equal(header(without.container, "materials").querySelector(".binderSectionStarFilter"), null, "付け外しを受け取らなければ出さない");
+  await without.unmount();
+}
+
 // ライブラリ直下では段を出さない。
 {
   const library = { path: root, name: "ライブラリ", role: "root", projects: [], misplacedProjects: [] };
