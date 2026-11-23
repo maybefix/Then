@@ -5268,9 +5268,14 @@ fn resolve_reference_absolute_path(root: &Path, path: &Path) -> Result<PathBuf, 
     let root = root
         .canonicalize()
         .map_err(|error| format!("failed to resolve project root: {error}"))?;
-    let path = path
-        .canonicalize()
-        .map_err(|error| format!("failed to resolve reference path: {error}"))?;
+    // ないファイルは、下の is_file の確かめと同じ文にする（画面が「見つからない」と見分ける。K7）。
+    let path = path.canonicalize().map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            "reference file does not exist".to_string()
+        } else {
+            format!("failed to resolve reference path: {error}")
+        }
+    })?;
     if !path.starts_with(&root) {
         return Err("reference file must be inside the project folder".to_string());
     }

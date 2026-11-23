@@ -67,7 +67,8 @@ const canvasUrl = await compile("src/CanvasWindowApp.tsx", {
   "./canvasThreads": await compile("src/canvasThreads.ts"),
   "./canvasResize": await compile("src/canvasResize.ts"),
   "./utils/latestFrameScheduler": await compile("src/utils/latestFrameScheduler.ts"),
-  "./components/references/ReferenceLayer": url("export const ReferenceReadOnlyPreview = () => null;"),
+  // 資料のプレビューは空にする。ファイルが見つからないこと（K7）は、テストが決めたパスについて知らせる。
+  "./components/references/ReferenceLayer": url("export const ReferenceReadOnlyPreview = (props) => { queueMicrotask(() => props.onMissingChange?.(Boolean(globalThis.canvasTestMissingPaths?.has(props.sourcePath)))); return null; };"),
   // 「この順で原稿を作る」（BINDER 4-4）。このテストはボードの保存だけを見るので、画面は空にする。
   "./components/canvas/CanvasToManuscriptDialog": url("export default () => null;"),
   "./canvasToManuscript": await compile("src/canvasToManuscript.ts", {
@@ -486,30 +487,21 @@ console.log("PASS open in window: the centre Canvas hands its board to the windo
   globalThis.canvasTestInvoke = before;
 }
 console.log("PASS board trash: delete one or empty all after a confirmation, the list is read again, root heading");
-// K7: 見つからない資料のカードは、ファイルのカードと同じく「見つからない」の表示（isMissing）にし、Rust のエラーの文を
-// 出さない。見つからないこと以外の失敗（読めない）は、今までどおり文を出す。
+// K7: 見つからない資料のカードは、ファイルのカードと同じく「見つからない」の表示（isMissing）にする。中身の欄（エラーの文を
+// 出さないこと）は test:reference-preview が本物のプレビューで確かめる。
 {
-  const before = globalThis.canvasTestInvoke;
-  globalThis.canvasTestInvoke = async (command, args) => {
-    if (command === "read_reference_binary") {
-      if (args.sourcePath === "素材/資料/港.png") throw "reference file does not exist";
-      throw "failed to read reference file: access denied";
-    }
-    return before(command, args);
-  };
+  globalThis.canvasTestMissingPaths = new Set(["素材/資料/港.png"]);
   await mount();
   const reference = (id, sourcePath, x) => ({ id, type: "reference", x, y: 0, width: 260, height: 200, scope: "project", sourcePath, name: sourcePath.split("/").pop(), kind: "image" });
-  docs.set(key("project", "one", "b"), { nodes: [reference("gone", "素材/資料/港.png", 0), reference("locked", "素材/資料/鍵.png", 300)], edges: [], then: { name: "B" } });
+  docs.set(key("project", "one", "b"), { nodes: [reference("gone", "素材/資料/港.png", 0), reference("here", "素材/資料/地図.png", 300)], edges: [], then: { name: "B" } });
   await select("B");
   await act(async () => { await settle(); await settle(); });
   const card = (id) => document.querySelector(`.canvasReferenceNode[data-node-id="${id}"]`);
   assert.ok(card("gone").classList.contains("isMissing"), "見つからない資料のカードは isMissing");
-  assert.equal(card("gone").querySelector(".referenceError"), null, "エラーの文は出さない");
   assert.equal(card("gone").querySelector(".canvasReferenceTitle").textContent, "港.png", "名前は出す");
-  assert.ok(!card("locked").classList.contains("isMissing"), "ほかの失敗は見つからない扱いにしない");
-  assert.match(card("locked").querySelector(".referenceError").textContent, /access denied/);
+  assert.ok(!card("here").classList.contains("isMissing"), "あるファイルのカードは今までどおり");
   await unmount();
-  globalThis.canvasTestInvoke = before;
+  globalThis.canvasTestMissingPaths = null;
 }
 console.log("PASS missing reference: a reference card whose file is gone is drawn like a missing file card, without the error text");
 dom.window.close();

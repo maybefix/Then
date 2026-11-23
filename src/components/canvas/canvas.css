@@ -1129,7 +1129,9 @@
   color: var(--text-secondary);
 }
 
-.canvasFileNode.isMissing .canvasFileTitle {
+.canvasFileNode.isMissing .canvasFileTitle,
+.canvasReferenceNode.isMissing .canvasReferenceTitle,
+.canvasReferenceNode.isMissing header span {
   color: var(--text-secondary);
   opacity: 0.6;
 }

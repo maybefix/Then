@@ -23,6 +23,7 @@
     "test:checkpoint-diff": "node --experimental-strip-types scripts/test-checkpoint-diff.mjs",
     "test:checkpoint-ui": "node scripts/test-checkpoint-ui.mjs",
     "test:canvas-save": "node scripts/test-canvas-board-save.mjs",
+    "test:reference-preview": "node scripts/test-reference-preview-missing.mjs",
     "test:canvas-store": "node scripts/test-canvas-board-store.mjs",
     "test:canvas-to-manuscript": "node scripts/test-canvas-to-manuscript.mjs && node scripts/test-canvas-to-manuscript-ui.mjs",
     "test:canvas-palette-labels": "node scripts/test-canvas-palette-labels.mjs",

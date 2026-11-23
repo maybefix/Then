@@ -1169,6 +1169,17 @@ export default function CanvasWindowApp({
   const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
   const [trashedBoards, setTrashedBoards] = useState<TrashedCanvasBoardSummary[]>([]);
   const [isTrashLoading, setIsTrashLoading] = useState(false);
+  // ファイルが見つからない資料のカード（K7）。カードは「見つからない」の表示にする。
+  const [missingReferenceIds, setMissingReferenceIds] = useState<ReadonlySet<string>>(() => new Set());
+  const setReferenceMissing = useCallback((nodeId: string, missing: boolean) => {
+    setMissingReferenceIds((current) => {
+      if (current.has(nodeId) === missing) return current;
+      const next = new Set(current);
+      if (missing) next.add(nodeId);
+      else next.delete(nodeId);
+      return next;
+    });
+  }, []);
   // ゴミ箱のボードを完全に削除する前の確認（1枚、または全部）。
   const [purgeTarget, setPurgeTarget] = useState<{ trashIds: string[]; name: string | null } | null>(null);
   // 別ウィンドウ表示のときだけ使う資料のサイドパネル。
@@ -3929,7 +3940,7 @@ export default function CanvasWindowApp({
                   selectedIds.has(node.id) ? "isSelected" : ""
                 } ${selectedGroupChildIds.has(node.id) ? "isInSelectedGroup" : ""} ${
                   edgeFromId === node.id ? "isEdgeSource" : ""
-                }`}
+                } ${missingReferenceIds.has(node.id) ? "isMissing" : ""}`}
                 style={{ left: node.x, top: node.y, width: node.width, height: node.height }}
                 data-node-id={node.id}
                 onPointerDown={(event) => handleNodePointerDown(node, event)}
@@ -3952,6 +3963,7 @@ export default function CanvasWindowApp({
                       scope={node.scope}
                       kind={node.kind}
                       title={node.name}
+                      onMissingChange={(missing) => setReferenceMissing(node.id, missing)}
                     />
                   ) : (
                     <div className="referenceReadOnlyPreview referencePlaceholder">
