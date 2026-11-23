@@ -6369,6 +6369,16 @@ mod tests {
         assert!(super::restore_canvas_board_in(&dir, "project", &trash_id).is_err(), "同じものは2回戻せない");
         std::fs::remove_dir_all(&dir).expect("remove test directory");
     }
+    /// K7: 資料のパスが見つからないときは、画面が見分ける決まった文を返す。
+    #[test]
+    fn a_missing_reference_says_it_does_not_exist() {
+        let dir = std::env::temp_dir().join(format!("then-missing-reference-{}-{}", std::process::id(), super::now_millis()));
+        std::fs::create_dir_all(&dir).expect("create directory");
+        let error = super::resolve_reference_absolute_path(&dir, &dir.join("ない.png")).expect_err("missing");
+        assert_eq!(error, "reference file does not exist");
+        std::fs::remove_dir_all(&dir).expect("remove test directory");
+    }
+
     /// ゴミ箱を空にする（KNOWN_ISSUES 2026-11-21）。一覧の `.canvas` だけを渡し、生きているボード・中間稿のフォルダ
     /// （`.draft`、K4）・形の違う ID・`.trash` の外は消さない。
     #[test]
