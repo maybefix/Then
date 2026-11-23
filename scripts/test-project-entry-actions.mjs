@@ -1076,4 +1076,39 @@ function imageWorld(app) {
   assert.deepEqual(commandsOf(app), [], "どれも同じフォルダにあれば何もしない");
 }
 
+// ---- K9: 開いていたノートを消す・送ると、バインダーに見えている並び（原稿の段が先）の最初のファイルを開く ----
+// ファイルの一覧はフォルダが先なので、素材フォルダが原稿のファイルより前にある。見えている並びでは原稿が先。
+{
+  const note = p("素材", "汐見.md");
+  const materials = (children) => ({ ...folder(p("素材"), children), role: "material" });
+  const world = {
+    projectFolder: projectFolder([materials([{ ...file(note), role: "material" }, { ...file(p("素材", "潮.md")), role: "material" }]), file(p("本文.md"))]),
+    openTabs: [tab(p("本文.md")), tab(note)],
+    activeTabId: `file:${note}`,
+  };
+  const { app, actions } = setup(world);
+  app.refreshedFolder = projectFolder([materials([{ ...file(p("素材", "潮.md")), role: "material" }]), file(p("本文.md"))]);
+  app.commands.plan_delete_project_entry = () => ({ rootKind: "file", textFileCount: 1, nonTextFileCount: 0, folderCount: 0, warnings: [] });
+  app.commands.delete_project_entry_to_trash = () => ({ deletedPaths: [note], fallbackUsed: "none" });
+  app.commands.read_text_file = ({ path }) => ({ path, name: path.split("\\").pop(), content: "x" });
+  app.confirmAnswers.push(true);
+  await actions().handleDeleteProjectEntry({ ...file(note), role: "material" });
+  assert.deepEqual(app.log.find((entry) => entry.command === "read_text_file").args, { path: p("本文.md") }, "素材の潮ではなく原稿の本文を開く");
+
+  // 送る（移動）のあとも同じ。
+  const sentWorld = {
+    projectFolder: projectFolder([materials([{ ...file(note), role: "material" }, { ...file(p("素材", "潮.md")), role: "material" }]), file(p("本文.md"))]),
+    openTabs: [tab(note)],
+    activeTabId: `file:${note}`,
+  };
+  const sent = setup(sentWorld);
+  sent.app.refreshedFolder = projectFolder([materials([{ ...file(p("素材", "潮.md")), role: "material" }]), file(p("本文.md"))]);
+  sent.app.commands.library_transfer_destinations = () => [{ path: "C:\Lib\B", label: "作品「B」" }];
+  sent.app.multiInputAnswer = { destination: "C:\Lib\B", mode: "move" };
+  sent.app.commands.transfer_project_entries = () => ({ entries: [{ oldPath: note, newPath: "C:\Lib\B\素材\汐見.md", kind: "text", contentHash: "h" }] });
+  sent.app.commands.read_text_file = ({ path }) => ({ path, name: path.split("\\").pop(), content: "x", contentHash: "h" });
+  await sent.actions().handleTransferEntries([note]);
+  assert.deepEqual(sent.app.loaded.map((item) => item.document.path), [p("本文.md")]);
+}
+
 console.log("project entry actions: ok");
