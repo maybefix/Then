@@ -446,6 +446,44 @@ assert.ok(sent.nodes.some((node) => node.id === "l1"), "読めないカードも
 await unmount();
 console.log("PASS flush points: board switch, unmount, trash and transfer write the card edits first");
 
+// K8: 「送り先へ資料もコピーする」で送るとき、送り元で見つからず写せなかった資料のカードは、「資料のカードを外す」と同じく
+// 外す（線も）。パスのまま送ると、送り先の同じパスの別のファイルを指してしまう。写せたカードは写しを指す。
+{
+  await mount();
+  const referenceNode = (id, sourcePath, x) => ({ id, type: "reference", x, y: 0, width: 200, height: 160, scope: "project", sourcePath, name: sourcePath.split("/").pop(), kind: "image" });
+  docs.set(boardKey(ROOT, "b"), {
+    nodes: [referenceNode("here", "素材/資料/地図.png", 0), referenceNode("gone", "素材/資料/港.png", 300), { id: "t", type: "text", x: 600, y: 0, width: 200, height: 100, text: "メモ" }],
+    edges: [{ id: "e1", fromNode: "gone", toNode: "t" }, { id: "e2", fromNode: "here", toNode: "t" }],
+    then: { version: 1, name: "B", updatedAt: 1 },
+  });
+  const before = globalThis.fileTest.invoke;
+  globalThis.fileTest.invoke = async (command, args = {}) => {
+    if (command === "transfer_reference_files") {
+      calls.push({ command, ...structuredClone(args) });
+      // 地図.png だけがある。港.png は送り元にないので写せない（Rust は飛ばす）。
+      return args.sourcePaths.filter((path) => path.endsWith("地図.png")).map((from) => ({
+        from,
+        file: { scope: "project", sourcePath: "素材/資料/地図-2.png", name: "地図-2.png", kind: "image", size: 1, imported: true },
+      }));
+    }
+    return before(command, args);
+  };
+  await click('[aria-label="ボードを切り替え"]');
+  await click('[aria-label="「B」を移動・コピー"]');
+  await act(async () => { await sleep(20); });
+  await act(async () => {
+    document.querySelector(".canvasRenameModal").dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true }));
+    await sleep(50);
+  });
+  globalThis.fileTest.invoke = before;
+  const sentBoard = [...docs].filter(([id]) => JSON.parse(id)[0] === "/other").map(([, doc]) => doc).find((doc) => doc.then.name === "B");
+  assert.ok(sentBoard, "送り先にボードを作る");
+  assert.deepEqual(sentBoard.nodes.map((node) => [node.id, node.type, node.sourcePath ?? null]), [["here", "reference", "素材/資料/地図-2.png"], ["t", "text", null]], "写せなかった港.png のカードは外す");
+  assert.deepEqual(sentBoard.edges.map((edge) => edge.id), ["e2"], "外したカードの線も外す");
+  await unmount();
+}
+console.log("PASS transfer: reference cards whose files could not be copied are dropped, not sent with their old path");
+
 // ---- 8. 閉じる前の書き切り（癖1）: 0.5 秒を待たずに、ボードと書き戻しの両方を書く ----
 await mount();
 await dblclick("f1");
