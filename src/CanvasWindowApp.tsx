@@ -2641,6 +2641,11 @@ export default function CanvasWindowApp({
           },
         );
         for (const item of transferred) rewrite.copied.set(normalizedReferenceKey(item.from), item.file);
+        // 送り元で見つからず写せなかった資料のカードは外す（K8）。パスのまま送ると、送り先の同じパスの別のファイルを指す。
+        for (const path of referencedPaths) {
+          const key = normalizedReferenceKey(path);
+          if (!rewrite.copied.has(key)) rewrite.dropped.add(key);
+        }
       } else if (referencedPaths.length) {
         for (const path of referencedPaths) rewrite.dropped.add(normalizedReferenceKey(path));
       }
