@@ -8,6 +8,7 @@ import {
   withoutEmptyTabs,
   type ClosedDocumentTab,
 } from "./editor/documentTabState";
+import { orderRootEntriesByTier } from "./components/layout/binderTiers";
 import { closeDocumentJournal, forgetDocumentJournal } from "./editor/saveJournal";
 import {
   rewriteSentLinks,
@@ -742,7 +743,9 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
       if (isDeletedTab(tab)) forgetDocumentJournal(tab.id);
     }
     if (activeWasDeleted) {
-      const nextFile = refreshed ? findFirstTextFile(refreshed.children) : null;
+      // バインダーに見えている並び（原稿の段が先、素材の段があと）の最初のファイル（K9）。ファイルの一覧は
+      // フォルダが先なので、そのままでは素材のノートが原稿より先になる。
+      const nextFile = refreshed ? findFirstTextFile(orderRootEntriesByTier(refreshed)) : null;
       if (nextFile) {
         const document = await invoke<TextDocument>("read_text_file", {
           path: nextFile.path,
