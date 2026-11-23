@@ -71,6 +71,13 @@ if ($Focus) {
   # F24, not ALT: a lone ALT tap opened Then's window menu, which holds the page until it closes (2026-11-21).
   [Os]::Key(0x87, 0, 0, $false) | Out-Null; [Os]::Key(0x87, 0, 0, $true) | Out-Null
   [Os]::ShowWindow($hwnd, 9) | Out-Null; [Os]::SetForegroundWindow($hwnd) | Out-Null; Start-Sleep -Milliseconds 300; "foreground=$([Os]::GetForegroundWindow() -eq $hwnd)" }
+# 入力はいつも前面の窓へ届く。相手の窓（-WindowPid / -Title）が前面になければ、ほかの窓へ入らないよう何も送らない。
+# 文字・キーは相手の窓を決めてから送ること（2026-11-23: 前面でないまま送ったキーが別のアプリへ入った）。
+$sendsInput = $ClickCss -or $RightClickCss -or $DblClickCss -or $DragCss -or $Text -or $Keys
+if ($sendsInput) {
+  if ($hwnd -eq [IntPtr]::Zero) { "refused: give -WindowPid or -Title so input cannot reach another window"; exit 5 }
+  if ([Os]::GetForegroundWindow() -ne $hwnd) { "refused: the target window is not the foreground window (add -Focus)"; exit 5 }
+}
 $modKeys = @{ CTRL = 0x11; SHIFT = 0x10; ALT = 0x12 }
 $heldMods = @($Mods.Split("+") | Where-Object { $_ })
 if ($ClickCss) {
