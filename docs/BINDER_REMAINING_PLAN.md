@@ -20,8 +20,8 @@
 | 3 | 依存関係 | 済み |
 | 4 | 影響範囲 | 済み（4-4 は「前」の一式の結果） |
 | 5 | 案 | 済み |
-| 6 | 人の確認（確認1） | 確認1 待ち |
-| 7 | 実施 | |
+| 6 | 人の確認（確認1） | 済み（2026-11-23、すべて勧め） |
+| 7 | 実施 | 済み |
 | 8 | 自動テスト | |
 | 9 | 実機確認 | |
 | 10 | 完了（確認2） | |
@@ -340,7 +340,76 @@
 
 ## 工程7: 実施
 
+| コミット | 内容 |
+|---|---|
+| `38a69dc` | U5 の Rust。`entry_transfer.rs` に送る命令（`transfer_project_entries`）と元に戻す（`undo_transfer_project_entries`）。送り先（`transfer_destinations`）に作品⇄作品（K3 もこの関数）。投稿の札の付け替え（`posts_move_notes`） |
+| `d754fd1` | U5 の画面。バインダーの右クリック「移動・コピー…」、聞く画面、`src/entryTransfer.ts`（一緒に送ったもの同士の `@[[ ]]` の書き換え・通知の文）、`projectEntryActions.ts` の `handleTransferEntries`。削除のあとの片付けを `forgetEntriesThatLeft` に切り出し、削除と送るで使う |
+| `ef0af75` | U10 の Rust。`project.json` の `noteStars`、進捗と同じ付け替え・外し、送るときの持ち運び、命令（`load_note_stars`・`set_note_star`）、Idea の移行でスターを引き継ぐ（3-3） |
+| `b1c5451` | U10 の画面。行の星の印、右クリック「スターを付ける」「スターを外す」、素材の段の見出しの星のボタン（`then.sidebar.starFilter` に覚える） |
+| `c6397a0` | Q4。画像・PDF の行を Ctrl で選ぶ、混ぜたドラッグ、`move_project_entries` を素材の中の画像・PDF に広げる |
+| `521cb44` | Q5。直下では資料のフォルダを画像・PDF の置き場とし（`materials_folder`）、`library_references_folder` で場所を画面へ渡して、その中に行を出す |
+| `0119c3d` | ボードのゴミ箱を空にする（`delete_trashed_canvas_boards`、行ごとの「完全に削除」・「ゴミ箱を空にする」・確認の画面）と K5 |
+| `7d4046f` | USER_MANUAL・LIBRARY_SPEC・KNOWN_ISSUES・計画書 7 章 |
+
+31 ファイル、+3041 行・−133 行（`checkpoint/before-binder-remaining..7d4046f`。手順書を含む）。
+
+### 手順書の案から変えたところ・決めたところ
+
+- **送ったノートの本文のリンクの書き換えは画面の側**: Rust にはリンクの読み方（`linkSyntax.ts`）がないので、送ったあとに画面の側が送り先のファイルを読み、一緒に送ったもの同士の `@[[ ]]` だけを書き換えて、元に戻すときの比べる相手（`contentHash`）を書いたあとのものにする。
+- **元に戻す位置**: 移動を元に戻すと、送り元のフォルダの並びの元の位置へ戻す（送るときに位置を覚える）。
+- **選びの始まり**: ファイルの行と同じく、開いている文書は最初から選ばれていて、Ctrl はそこへ足していく。画像・PDF を Ctrl なしで押すと、開いて選びはその1つになる。落としたあとは選びを外す（ファイルの行の今の動き）。
+- **直下の改名**: まだ `project.json` のないライブラリ直下でも資料のフォルダの画像を改名できるよう、改名で作品のフォルダが見つからなければライブラリ直下を使う。
+- **OS のゴミ箱へ送る部分**: ボードのゴミ箱は `.then` の中なので、作品のファイルの削除の確かめ（`.then` を断る）から送る部分を切り離した（`send_path_to_system_trash`・`move_path_to_app_trash`）。作品のファイルの削除は今までどおり確かめてから送る。
+- **説明書の古い一文**: 素材の改名・移動で本文の `@[[…]]` は 3-1 から書き換わっているのに、説明書は「書き換わりません」のままだったので直した。
+
+### 期待を変えたテスト（コミットの本文に理由を書いた）
+
+| テスト | 変えたところ |
+|---|---|
+| `test:left-sidebar` | WorkspaceSidebar に渡す名前に `onTransferEntries`・`starredNotePaths`・`onSetNoteStar`・`libraryReferencesFolderPath` が増えたので、確かめる表に足した |
+| `test:idea-migration-rust` | 「ほかの設定は変わらない」で `noteStars` を比べる対象から外し、スターの付いていたスレッドのノートにスターが付くことを確かめる行を足した（3-3） |
+
 ## 工程8: 自動テスト
+
+### 足したテスト
+
+| テスト | 確かめること |
+|---|---|
+| Rust `entry_transfer::tests`（8本） | 作品へ移動（並び・進捗・スター）、同じ名前は -2（コピーは元に残す）、画像は資料のフォルダへ・素材フォルダがなければ作る、直下⇄作品、原稿・フォルダ・`.then`・ほかの作品のファイル・直下の資料の外の画像を断る、途中で落ちたら全部戻す、元に戻す（移動は元の位置へ、直されていたら戻さない、コピーは写しをゴミ箱へ） |
+| Rust `library::tests::a_work_can_send_to_the_other_works_of_its_library` | 送り先に直下とほかの作品（自分は入らない） |
+| Rust `post_stream::note::tests::sending_a_note_to_another_work_moves_the_link_with_it` | 札が送り先の作品のノートを指す、戻す、直下へは付け替えない |
+| Rust `project_state::tests::note_stars_follow_renames_and_go_with_deletes` | スターの改名・フォルダの移動・削除、なければ鍵を書かない |
+| Rust `material_files::tests`（3本） | 画像・PDF とノートのまとめての移動、原稿の段へは何も動かさない、直下の資料のフォルダの中での移動・改名 |
+| Rust `tests::emptying_the_board_trash_sends_only_trashed_boards` | ゴミ箱の `.canvas` だけ、同じものは1回、`.draft` は残す、形の違う ID・`.trash` の外は断る |
+| `test:project-entry-actions` | 送る流れ（聞く画面、保存してから送る、`@[[ ]]` の書き換え、札、タブを閉じる、元に戻す、コピー、失敗、送り先なし）、まとめての移動に画像 |
+| `test:binder-tiers` | 「移動・コピー…」の出る行・選んだもの・直下、スター（印・右クリック・見出しのボタン）、Q4（Ctrl の選び・混ぜたドラッグ・原稿の段へ落ちない）、Q5（直下の資料のフォルダの行・落とせる場所） |
+| `test:canvas-save` | ゴミ箱の画面（行の「完全に削除」・確認でやめる・1枚・全部・空なら押せない・読み直す）、K5 |
+
+### 効くことの確かめ
+
+わざと不具合を入れてテストが落ちることを見て、`git checkout --` で戻した（`scratchpad/mutations.mjs`。8つとも落ち、戻したあとの `git status` は空）。
+
+| 入れた不具合 | 落ちたテスト |
+|---|---|
+| 移動で送り元の並びから外さない | Rust `entry_transfer::` |
+| 元に戻すで送り先の中身を比べない | Rust `entry_transfer::` |
+| 一緒に送ったもの同士の `@[[ ]]` を書き換えない | `test:project-entry-actions` |
+| 原稿にも「移動・コピー…」を出す | `test:binder-tiers` |
+| 改名でスターを付け替えない | Rust `project_state::` |
+| 画像を混ぜた選びを原稿の段へも落とせる | `test:binder-tiers` |
+| ゴミ箱で同じ ID を2回送る | Rust `tests::emptying` |
+| ゴミ箱で確認なしで消す | `test:canvas-save` |
+
+### 「後」の一式（`7d4046f`、2026-11-23）
+
+build 0、本体の束 747,463 バイト（前 739,022 から +8,441）、137本。残ったプロセスはすべて 0。
+
+| 区分 | テスト |
+|---|---|
+| どちらも通る | 132本 |
+| どちらも落ちる（元から） | `test:editor-selection`（一式の中で止まる）、`test:editor-text-edits`（`every icon draws its own picture`。前後で同じ文）、`test:v058-bundle`（500 kB 超えは元から） |
+| 前だけ落ちた | `test:window-controls`・`test:tree-row-contrast`（「前」の一式の中でだけ止まり、単独では通っていた。触っていない） |
+| 新しく落ちた | なし |
 
 ## 工程9: 実機確認
 
