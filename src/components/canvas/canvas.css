@@ -1129,7 +1129,9 @@
   color: var(--text-secondary);
 }
 
-.canvasFileNode.isMissing .canvasFileTitle {
+.canvasFileNode.isMissing .canvasFileTitle,
+.canvasReferenceNode.isMissing .canvasReferenceTitle,
+.canvasReferenceNode.isMissing header span {
   color: var(--text-secondary);
   opacity: 0.6;
 }
@@ -1697,7 +1699,8 @@
   line-height: 1.7;
 }
 
-.canvasDeleteModal button.dangerCanvasButton {
+.canvasDeleteModal button.dangerCanvasButton,
+.canvasTrashModal button.dangerCanvasButton:not(:disabled) {
   border-color: color-mix(in srgb, var(--danger) 60%, var(--canvas-toolbar-border));
   background: color-mix(in srgb, var(--danger) 14%, var(--canvas-toolbar-control));
   color: var(--danger);
@@ -1746,6 +1749,7 @@
 .canvasTrashList article > div {
   display: grid;
   min-width: 0;
+  flex: 1 1 auto;
   gap: 3px;
 }
 

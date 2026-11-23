@@ -166,6 +166,20 @@ type WorkspaceSidebarProps = {
   onMoveReference?: (reference: MaterialReference, targetFolderPath: string) => void;
   /** 資料のファイルを取り込む（取り込み先は素材フォルダの「資料」）。 */
   onImportReferences?: () => void;
+  /**
+   * 素材のノート・画像・PDF（直下ではファイル）を、ほかの作品・直下へ送る（U5）。押した行が選ばれていれば、
+   * 選んだもののうち送れるものすべてを渡す。ライブラリの外では渡さない。
+   */
+  onTransferEntries?: (paths: string[]) => void;
+  /** スターを付けたノートの絶対パス（U10）。 */
+  starredNotePaths?: ReadonlySet<string>;
+  /** ノートのスターを付ける・外す（U10）。渡さなければ、右クリックと見出しの星のボタンを出さない。 */
+  onSetNoteStar?: (path: string, starred: boolean) => void;
+  /**
+   * ライブラリ直下の資料のフォルダ（Q5）。直下には素材の段がないので、このフォルダとその中のフォルダに画像・PDF を
+   * 並べ、素材の中と同じく画像・PDF を落とせる場所にする。
+   */
+  libraryReferencesFolderPath?: string | null;
 };
 
 export type MaterialReference = {
@@ -211,6 +225,11 @@ type PointerDragState = {
   notes?: boolean;
   /** 動かしているのがノート・原稿（テキストファイル）だけのとき。埋め込みのキャンバスへも落とせる（BINDER 4-2）。 */
   files?: boolean;
+  /**
+   * 選んだものに素材の画像・PDF が入っているとき（Q4）。画像・PDF を1つだけ動かすとき（reference）と同じく、
+   * 素材の中のフォルダへだけ落とせる。
+   */
+  materialFiles?: boolean;
 };
 
 type TreeDropTarget =
@@ -443,6 +462,38 @@ function findParentPath(root: ProjectFolder, targetPath: string): string | null 
   return visit(root.path, root.children);
 }
 
+const NO_STARRED_PATHS: ReadonlySet<string> = new Set();
+const STAR_FILTER_STORAGE_KEY = "then.sidebar.starFilter";
+
+function readStoredStarFilter(): boolean {
+  try {
+    return window.localStorage.getItem(STAR_FILTER_STORAGE_KEY) === "starred";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * スターだけを出すとき（U10）に隠す素材のファイルとフォルダ。スターの付いていないファイルと、中にスターの
+ * 付いたファイルのないフォルダ。
+ */
+function collectUnstarredMaterialPaths(materials: ProjectEntry[], starred: ReadonlySet<string>): Set<string> {
+  const hidden = new Set<string>();
+  const visit = (entry: ProjectEntry): boolean => {
+    if (entry.kind === "file") {
+      const shown = starred.has(entry.path);
+      if (!shown) hidden.add(entry.path);
+      return shown;
+    }
+    let anyShown = false;
+    for (const child of entry.children) anyShown = visit(child) || anyShown;
+    if (!anyShown) hidden.add(entry.path);
+    return anyShown;
+  };
+  materials.forEach(visit);
+  return hidden;
+}
+
 function collectFilePathsInDisplayOrder(root: ProjectFolder): string[] {
   const paths: string[] = [];
   const visit = (entries: ProjectEntry[]) => {
@@ -559,7 +610,8 @@ type SidebarIconName =
   | "note"
   | "plus"
   | "post"
-  | "search";
+  | "search"
+  | "star";
 
 function SidebarIcon({ name, className = "" }: { name: SidebarIconName; className?: string }) {
   const common = {
@@ -649,6 +701,12 @@ function SidebarIcon({ name, className = "" }: { name: SidebarIconName; classNam
         <svg {...common}>
           <circle cx="10.5" cy="10.5" r="7.25" />
           <path d="m16 16 5 5" />
+        </svg>
+      );
+    case "star":
+      return (
+        <svg {...common}>
+          <polygon points="12 3 15 9 22 9.8 17 14.5 18.2 21.4 12 18.1 5.8 21.4 7 14.5 2 9.8 9 9" />
         </svg>
       );
     default:
@@ -877,6 +935,10 @@ export function WorkspaceSidebar({
   onDeleteReference,
   onRenameReference,
   onMoveReference,
+  onTransferEntries,
+  starredNotePaths = NO_STARRED_PATHS,
+  onSetNoteStar,
+  libraryReferencesFolderPath = null,
   onImportReferences,
 }: WorkspaceSidebarProps) {
   const [contextMenu, setContextMenu] = useState<TreeContextMenu>(null);
@@ -936,13 +998,29 @@ export function WorkspaceSidebar({
     () => (projectFolder && library?.role !== "root" ? splitBinderTiers(projectFolder) : null),
     [library?.role, projectFolder],
   );
-  const filteredOutPaths = useMemo(
-    () =>
-      projectFolder
-        ? collectFilteredOutPaths(projectFolder, fileProgress, progressFilter)
-        : new Set<string>(),
-    [fileProgress, progressFilter, projectFolder],
-  );
+  // スターの付いたノートだけを素材の段に出す（U10）。素材フォルダのある作品で、付け外しを受け取るときだけ。
+  const [isStarFilterOn, setIsStarFilterOn] = useState(readStoredStarFilter);
+  const starFilterActive = Boolean(isStarFilterOn && onSetNoteStar && binderTiers?.materialsFolder);
+  const toggleStarFilter = () => {
+    const next = !isStarFilterOn;
+    setIsStarFilterOn(next);
+    try {
+      window.localStorage.setItem(STAR_FILTER_STORAGE_KEY, next ? "starred" : "all");
+    } catch {
+      // 覚えられなくても、今の画面では効く。
+    }
+  };
+  const filteredOutPaths = useMemo(() => {
+    const hidden = new Set<string>(
+      projectFolder ? collectFilteredOutPaths(projectFolder, fileProgress, progressFilter) : [],
+    );
+    if (starFilterActive && binderTiers?.materialsFolder) {
+      collectUnstarredMaterialPaths(binderTiers.materialsFolder.children, starredNotePaths).forEach((item) =>
+        hidden.add(item),
+      );
+    }
+    return hidden;
+  }, [binderTiers, fileProgress, progressFilter, projectFolder, starFilterActive, starredNotePaths]);
   const changeProgressFilter = (filter: FileProgressFilter) => {
     setProgressFilter(filter);
     try {
@@ -1103,6 +1181,31 @@ export function WorkspaceSidebar({
       );
       return;
     }
+    // 選んだものに画像・PDF が入っているとき（Q4）。素材の段の見出しと素材の中の行だけを受け、その中へ入れる。
+    if (dragState.materialFiles) {
+      updateMaterialsDrop(null);
+      let folderPath: string | undefined;
+      if (sectionHeader) {
+        if (sectionHeader.dataset.binderSection === "materials") folderPath = sectionHeader.dataset.binderDropFolder;
+      } else {
+        const row = element?.closest<HTMLElement>("[data-tree-entry-path]");
+        if (row?.dataset.treeEntryMaterial === "true" && !dragState.entryPaths.includes(row.dataset.treeEntryPath ?? "")) {
+          folderPath =
+            row.dataset.treeEntryKind === "folder"
+              ? row.dataset.treeEntryPath
+              : row.dataset.treeFolderPath ?? row.dataset.treeReferenceFolder;
+        }
+      }
+      const alreadyThere =
+        folderPath !== undefined &&
+        dragState.sourceParentPaths.every((parentPath) => folderKey(parentPath) === folderKey(folderPath!));
+      const intoItself =
+        folderPath !== undefined && dragState.entryPaths.some((sourcePath) => isSidebarPathInside(folderPath!, sourcePath));
+      updateDropTarget(
+        folderPath && !alreadyThere && !intoItself ? { kind: "moveInto", folderPath, entryPath: folderPath } : null,
+      );
+      return;
+    }
     // ノートだけを「この場面」の素材の欄へ落とすと、素材リストに足す（BINDER 3-3）。ツリーの外なので、
     // ツリーの中の判定には当たらない。
     // ノート・原稿を埋め込みのキャンバスへ落とすと、ファイルのカードを置く（BINDER 4-2）。
@@ -1195,6 +1298,19 @@ export function WorkspaceSidebar({
     });
   };
 
+  /** 画像・PDF の行が置かれたフォルダ。 */
+  const parentOfReference = (path: string) => path.replace(/[\\/][^\\/]*$/, "");
+  /** 選んだもの（ファイルの行と画像・PDF の行）を表示の順に。隠れているものは入れない（Q4）。 */
+  const selectionInDisplayOrder = (selection: ReadonlySet<string>) =>
+    projectFolder
+      ? [
+          ...collectFilePathsInDisplayOrder(projectFolder).filter(
+            (path) => selection.has(path) && !filteredOutPaths.has(path),
+          ),
+          ...(starFilterActive ? [] : materialReferences.map((reference) => reference.path).filter((path) => selection.has(path))),
+        ]
+      : [];
+
   const handleTreePointerDown = (
     event: ReactPointerEvent<HTMLElement>,
     folderPath: string | null,
@@ -1219,13 +1335,12 @@ export function WorkspaceSidebar({
       !isFolder && (selectionAtPointerDown.has(entryPath) || isAdditiveSelection);
     const entryPaths =
       shouldDragSelection && projectFolder
-        ? collectFilePathsInDisplayOrder(projectFolder).filter(
-            (path) => dragSelection.has(path) && !filteredOutPaths.has(path),
-          )
+        ? selectionInDisplayOrder(dragSelection)
         : [entryPath];
+    const referencePaths = new Set(materialReferences.map((reference) => reference.path));
     const sourceParentPaths = projectFolder
       ? entryPaths
-          .map((path) => findParentPath(projectFolder, path))
+          .map((path) => (referencePaths.has(path) ? parentOfReference(path) : findParentPath(projectFolder, path)))
           .filter((path): path is string => Boolean(path))
       : [folderPath];
     const uniqueParentPaths = new Set(sourceParentPaths);
@@ -1256,6 +1371,7 @@ export function WorkspaceSidebar({
           const entry = findProjectEntry(projectFolder.children, path);
           return entry?.kind === "file" && /\.(md|txt)$/i.test(path);
         }),
+      materialFiles: entryPaths.some((path) => referencePaths.has(path)),
     };
     // Capture immediately so an ordinary drag keeps delivering pointer events
     // after the cursor leaves the narrow source row. Waiting for the first
@@ -1263,7 +1379,10 @@ export function WorkspaceSidebar({
     captureTarget.setPointerCapture(event.pointerId);
   };
 
-  /** 素材の段の画像・PDF の行を押したとき。1つずつ動かす（複数選択はしない）。 */
+  /**
+   * 素材の段の画像・PDF の行を押したとき。Ctrl を押しているか、選んだものの1つを押したなら、選んだものを
+   * まとめて動かす（Q4）。そうでなければ1つだけ。
+   */
   const handleReferencePointerDown = (
     event: ReactPointerEvent<HTMLElement>,
     reference: MaterialReference,
@@ -1271,6 +1390,34 @@ export function WorkspaceSidebar({
     if (event.button !== 0 || !onMoveReference) return;
     const eventTarget = event.target instanceof Element ? event.target : event.currentTarget;
     const captureTarget = eventTarget.closest<HTMLElement>("button") ?? event.currentTarget;
+    const selectionAtPointerDown = selectedFilePathsRef.current;
+    const isAdditiveSelection = event.ctrlKey || event.metaKey;
+    if (isAdditiveSelection || (selectionAtPointerDown.has(reference.path) && selectionAtPointerDown.size > 1)) {
+      const dragSelection = new Set(selectionAtPointerDown);
+      dragSelection.add(reference.path);
+      const entryPaths = selectionInDisplayOrder(dragSelection);
+      const referencePaths = new Set(materialReferences.map((item) => item.path));
+      const sourceParentPaths = projectFolder
+        ? entryPaths
+            .map((path) => (referencePaths.has(path) ? parentOfReference(path) : findParentPath(projectFolder, path)))
+            .filter((path): path is string => Boolean(path))
+        : [];
+      pointerDragRef.current = {
+        pointerId: event.pointerId,
+        entryPath: reference.path,
+        entryPaths,
+        sourceParentPaths,
+        reorderFolderPath: null,
+        replaceSelectionOnDrag: false,
+        captureTarget,
+        startX: event.clientX,
+        startY: event.clientY,
+        isDragging: false,
+        materialFiles: true,
+      };
+      captureTarget.setPointerCapture(event.pointerId);
+      return;
+    }
     pointerDragRef.current = {
       pointerId: event.pointerId,
       entryPath: reference.path,
@@ -1331,6 +1478,8 @@ export function WorkspaceSidebar({
         );
       } else if (dragState.reference) {
         if (activeDropTarget?.kind === "moveInto") onMoveReference?.(dragState.reference, activeDropTarget.folderPath);
+      } else if (dragState.materialFiles) {
+        if (activeDropTarget?.kind === "moveInto") onMoveEntry(dragState.entryPaths, activeDropTarget.folderPath);
       } else if (activeDropTarget?.kind === "reorder") {
         const isSameParent =
           dragState.reorderFolderPath !== null &&
@@ -1655,6 +1804,42 @@ export function WorkspaceSidebar({
     action();
   };
 
+  /** 「移動・コピー…」で送れるファイルか（U5）。作品では素材のファイル、直下ではどのファイルも。 */
+  const canTransferPath = (path: string) => {
+    if (!projectFolder || !library || !onTransferEntries) return false;
+    if (materialReferences.some((reference) => reference.path === path)) return true;
+    const entry = findProjectEntry(projectFolder.children, path);
+    if (!entry || entry.kind !== "file") return false;
+    return binderTiers ? entry.role === "material" : library.role === "root";
+  };
+  /** 押した行が選ばれていれば、選んだもののうち送れるもの（表示の順）。選ばれていなければ押した行だけ。 */
+  const transferPathsFor = (path: string) => {
+    const selected = selectedFilePathsRef.current;
+    if (!projectFolder || !selected.has(path) || selected.size < 2) return [path];
+    const ordered = [
+      ...collectFilePathsInDisplayOrder(projectFolder),
+      ...materialReferences.map((reference) => reference.path),
+    ];
+    return ordered.filter((item) => selected.has(item) && canTransferPath(item));
+  };
+  /** スターを付けられるノートか（U10）。作品では素材のノート、直下ではどのファイルも。 */
+  const canStarPath = (path: string) => {
+    if (!projectFolder || !onSetNoteStar) return false;
+    const entry = findProjectEntry(projectFolder.children, path);
+    if (!entry || entry.kind !== "file") return false;
+    return binderTiers ? entry.role === "material" : library?.role === "root";
+  };
+  const renderTransferItem = (path: string) =>
+    canTransferPath(path) ? (
+      <button
+        type="button"
+        role="menuitem"
+        onClick={() => closeContextMenuAndRun(() => onTransferEntries?.(transferPathsFor(path)))}
+      >
+        移動・コピー…
+      </button>
+    ) : null;
+
   const renderContextMenu = (): JSX.Element | null => {
     if (!contextMenu) return null;
 
@@ -1702,6 +1887,7 @@ export function WorkspaceSidebar({
               リネーム
             </button>
           )}
+          {renderTransferItem(reference.path)}
           {onDeleteReference && (
             <button
               type="button"
@@ -1799,6 +1985,18 @@ export function WorkspaceSidebar({
             >
               リネーム
             </button>
+            {kind === "file" && renderTransferItem(entry.path)}
+            {kind === "file" && canStarPath(entry.path) && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() =>
+                  closeContextMenuAndRun(() => onSetNoteStar?.(entry.path, !starredNotePaths.has(entry.path)))
+                }
+              >
+                {starredNotePaths.has(entry.path) ? "スターを外す" : "スターを付ける"}
+              </button>
+            )}
             {/* 素材フォルダそのものは段の見出しのメニューから消さない（決めてほしいこと 12）。 */}
             {isProjectEntry(entry) && section !== "materials" && (
               <button
@@ -2062,6 +2260,8 @@ export function WorkspaceSidebar({
 
   /** そのフォルダの中にじかに置かれた、素材の画像・PDF。 */
   const referencesIn = (folderPath: string) => {
+    // スターだけを出すあいだは、画像・PDF も出さない（スターはノートにだけ付く）。
+    if (starFilterActive) return [];
     const key = folderKey(folderPath);
     return materialReferences.filter((reference) => parentKey(reference.path) === key);
   };
@@ -2072,6 +2272,7 @@ export function WorkspaceSidebar({
         className={[
           "treeItem fileTreeItem materialReferenceItem",
           draggingEntryPaths.has(reference.path) ? "draggingTreeEntry" : "",
+          selectedFilePaths.has(reference.path) && selectedFilePaths.size > 1 ? "selectedTreeEntry" : "",
         ].filter(Boolean).join(" ")}
         data-tree-entry-path={reference.path}
         data-tree-entry-kind="file"
@@ -2088,7 +2289,7 @@ export function WorkspaceSidebar({
           setHeadingContextMenu(null);
           const position = getScaledFixedMenuPosition(event.clientX, event.clientY, {
             width: TREE_CONTEXT_MENU_WIDTH,
-            height: 72,
+            height: 120,
           });
           setContextMenu({
             x: position.left,
@@ -2104,11 +2305,21 @@ export function WorkspaceSidebar({
           className="treeItemPrimary fileTreeItemPrimary"
           type="button"
           title={reference.path}
+          aria-pressed={selectedFilePaths.has(reference.path) && selectedFilePaths.size > 1}
           onClick={(event) => {
             if (suppressNextClickRef.current) {
               event.preventDefault();
               return;
             }
+            // Ctrl で、ファイルの行と同じ選択に足す・外す（Q4）。
+            if (event.ctrlKey || event.metaKey) {
+              const next = new Set(selectedFilePathsRef.current);
+              if (next.has(reference.path)) next.delete(reference.path);
+              else next.add(reference.path);
+              replaceSelectedFilePaths(next);
+              return;
+            }
+            replaceSelectedFilePaths([reference.path]);
             onOpenReference?.(reference);
           }}
         >
@@ -2130,8 +2341,17 @@ export function WorkspaceSidebar({
     const visibleChildren = isFolder
       ? entry.children.filter((child) => !filteredOutPaths.has(child.path))
       : [];
+    // 直下の資料のフォルダとその中（Q5）は、素材の中と同じく画像・PDF を並べ、落とせる場所にする。
+    const inLibraryReferences =
+      !binderTiers &&
+      libraryReferencesFolderPath !== null &&
+      isProjectEntry(entry) &&
+      (normalizeSidebarPath(entry.path) === normalizeSidebarPath(libraryReferencesFolderPath) ||
+        isSidebarPathInside(entry.path, libraryReferencesFolderPath));
     const folderReferences =
-      isFolder && isProjectEntry(entry) && entry.role === "material" ? referencesIn(entry.path) : [];
+      isFolder && isProjectEntry(entry) && (entry.role === "material" || inLibraryReferences)
+        ? referencesIn(entry.path)
+        : [];
     const hasChildren = visibleChildren.length > 0 || folderReferences.length > 0;
     const isFolderExpanded = isFolder && !collapsedFolderPaths.has(entry.path);
     const isCurrentFile = entry.path === currentFilePath;
@@ -2206,7 +2426,7 @@ export function WorkspaceSidebar({
           data-tree-entry-path={entry.path}
           data-tree-entry-kind={kind}
           data-tree-folder-path={parentFolderPath ?? undefined}
-          data-tree-entry-material={isMaterial ? "true" : undefined}
+          data-tree-entry-material={isMaterial || inLibraryReferences ? "true" : undefined}
           data-outline-file-row={!isFolder ? "true" : undefined}
           data-outline-file-path={!isFolder ? entry.path : undefined}
           style={
@@ -2305,6 +2525,11 @@ export function WorkspaceSidebar({
                 <span className={fileStatus ? `treeItemName treeItemName-${fileStatus}` : "treeItemName"}>
                   {entryDisplayName}
                 </span>
+                {starredNotePaths.has(entry.path) && (
+                  <span className="treeItemStar" aria-label="スター">
+                    <SidebarIcon name="star" className="treeItemStarIcon" />
+                  </span>
+                )}
                 {charCountLabel && (
                   <span className="treeItemCharCount">{charCountLabel}</span>
                 )}
@@ -2409,6 +2634,7 @@ export function WorkspaceSidebar({
     menuEntry,
     action,
     importOnly,
+    extra,
   }: {
     section: "manuscript" | "materials" | "posts";
     label: string;
@@ -2419,6 +2645,8 @@ export function WorkspaceSidebar({
     action?: JSX.Element;
     /** 素材フォルダのない作品で、右クリックに「資料を取り込む…」だけを出す。 */
     importOnly?: boolean;
+    /** 字数の前に置く部品（素材の段のスターのボタン。U10）。 */
+    extra?: JSX.Element;
   }) => {
     const isCollapsed = collapsePath ? collapsedFolderPaths.has(collapsePath) : false;
     // 段ごとのアイコンを開閉の印の場所に置き、名前はフォルダの行より濃い文字にする（2026-11-12 に E 案に決めた）。
@@ -2469,6 +2697,7 @@ export function WorkspaceSidebar({
             <span className="binderSectionLabel">{label}</span>
           </span>
         )}
+        {extra}
         {action ?? (count ? <span className="binderSectionCount">{count}</span> : null)}
       </div>
     );
@@ -2518,6 +2747,18 @@ export function WorkspaceSidebar({
                   count: materialsCharCount === null ? null : formatTreeCharCount(materialsCharCount),
                   dropFolderPath: materialsFolder.path,
                   menuEntry: materialsFolder,
+                  extra: onSetNoteStar ? (
+                    <button
+                      className={["binderSectionStarFilter", starFilterActive ? "isOn" : ""].filter(Boolean).join(" ")}
+                      type="button"
+                      aria-label="スター"
+                      aria-pressed={starFilterActive}
+                      title="スター"
+                      onClick={toggleStarFilter}
+                    >
+                      <SidebarIcon name="star" className="binderSectionStarIcon" />
+                    </button>
+                  ) : undefined,
                 })
               : renderBinderSectionHeader({
                   section: "materials",

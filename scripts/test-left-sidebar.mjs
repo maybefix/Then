@@ -71,7 +71,7 @@ const functionNames = [
   // BINDER 2-5: 素材の段の資料（取り込む・資料カードで開く・消す）。
   "handleAddReference", "openReferenceCard", "handleDeleteImportedReference",
   // BINDER 2-6: 素材の段の画像・PDF の改名・移動。
-  "handleRenameMaterialReference", "handleMoveMaterialReference",
+  "handleRenameMaterialReference", "handleMoveMaterialReference", "handleTransferEntries", "handleSetNoteStar",
 ];
 const spies = Object.fromEntries(
   functionNames.map((name) => [name, (...args) => {
@@ -132,6 +132,8 @@ const baseValues = {
   currentWorkspaceSnapshots: mark("currentWorkspaceSnapshots"),
   libraryContext: mark("libraryContext"),
   libraryCorpus: { isLoading: true },
+  starredNotePaths: mark("starredNotePaths"),
+  libraryReferencesFolderPath: mark("libraryReferencesFolderPath"),
 };
 
 const render = (overrides = {}) => LeftSidebar({ ...baseValues, ...spies, ...overrides });
@@ -244,6 +246,8 @@ const expectCalls = (label, action, expected) => {
 
   const expectedValues = {
     projectFolder: baseValues.projectFolder,
+    starredNotePaths: mark("starredNotePaths"),
+    libraryReferencesFolderPath: mark("libraryReferencesFolderPath"),
     materialReferences: [{ path: "C:/work/素材/資料/map.png", sourcePath: "素材/資料/map.png", name: "map.png", kind: "image" }],
     currentFilePath: mark("currentFilePath"),
     currentFileName: mark("currentFileName"),
@@ -359,6 +363,10 @@ const expectCalls = (label, action, expected) => {
       args: [{ path: "C:/work/素材/資料/map.png", sourcePath: "素材/資料/map.png", name: "map.png", kind: "image" }, "C:/work/素材/年表"],
       name: "handleMoveMaterialReference",
     },
+    // U5: 素材のノート・画像・PDF をほかの作品・直下へ送る（ライブラリの中でだけ渡す）。
+    onTransferEntries: { args: [["C:/work/素材/人物.md"]], name: "handleTransferEntries" },
+    // U10: ノートのスターを付ける・外す。
+    onSetNoteStar: { args: ["C:/work/素材/人物.md", true], name: "handleSetNoteStar" },
     // BINDER 1-5: コルクボード中のフォルダの行のクリック。
     onFolderClick: { args: ["C:/work/第一部"], name: "handleCorkboardFolderClick" },
   };

@@ -67,7 +67,8 @@ const canvasUrl = await compile("src/CanvasWindowApp.tsx", {
   "./canvasThreads": await compile("src/canvasThreads.ts"),
   "./canvasResize": await compile("src/canvasResize.ts"),
   "./utils/latestFrameScheduler": await compile("src/utils/latestFrameScheduler.ts"),
-  "./components/references/ReferenceLayer": url("export const ReferenceReadOnlyPreview = () => null;"),
+  // 資料のプレビューは空にする。ファイルが見つからないこと（K7）は、テストが決めたパスについて知らせる。
+  "./components/references/ReferenceLayer": url("export const ReferenceReadOnlyPreview = (props) => { queueMicrotask(() => props.onMissingChange?.(Boolean(globalThis.canvasTestMissingPaths?.has(props.sourcePath)))); return null; };"),
   // 「この順で原稿を作る」（BINDER 4-4）。このテストはボードの保存だけを見るので、画面は空にする。
   "./components/canvas/CanvasToManuscriptDialog": url("export default () => null;"),
   "./canvasToManuscript": await compile("src/canvasToManuscript.ts", {
@@ -420,4 +421,87 @@ console.log("PASS boards rewritten: the open board is read again after the openi
   extraProps = {};
 }
 console.log("PASS open in window: the centre Canvas hands its board to the window");
+// ボードのゴミ箱を空にする（KNOWN_ISSUES 2026-11-21）: 行ごとの「完全に削除」と、下の「ゴミ箱を空にする」。
+// どちらも確認の画面（ボタンは「完全に削除」「N枚を完全に削除」）のあとで送り、一覧を読み直す。K5: 直下の見出し。
+{
+  let trashed = [
+    { trashId: "1700000000002--plan", boardId: "plan", name: "下書きの図", scope: "project", deletedAt: 1700000000002, nodeCount: 1, edgeCount: 0 },
+    { trashId: "1700000000001--old", boardId: "old", name: "古い構想", scope: "project", deletedAt: 1700000000001, nodeCount: 3, edgeCount: 0 },
+  ];
+  const before = globalThis.canvasTestInvoke;
+  globalThis.canvasTestInvoke = async (command, args) => {
+    if (command === "list_trashed_canvas_boards") { calls.push({ command, ...args }); return structuredClone(trashed); }
+    if (command === "delete_trashed_canvas_boards") {
+      calls.push({ command, ...structuredClone(args) });
+      const ids = new Set(args.trashIds);
+      const deleted = trashed.filter((item) => ids.has(item.trashId)).length;
+      trashed = trashed.filter((item) => !ids.has(item.trashId));
+      return { deleted, appTrash: 0 };
+    }
+    return before(command, args);
+  };
+  await mount();
+  await click('[aria-label="ボードを切り替え"]');
+  await click('[aria-label="キャンバスボードのゴミ箱を開く"]');
+  const rows = () => [...document.querySelectorAll(".canvasTrashList article")];
+  const buttons = (element) => [...element.querySelectorAll("button")].map((button) => button.textContent.trim());
+  assert.deepEqual(rows().map(buttons), [["復元", "完全に削除"], ["復元", "完全に削除"]]);
+  assert.equal(document.querySelector(".canvasTrashModal header span").textContent, "作品ボード");
+  const footerButton = (label) => [...document.querySelectorAll(".canvasTrashModal footer button")].find((button) => button.textContent.trim() === label);
+  assert.ok(footerButton("ゴミ箱を空にする"));
+
+  // 1枚。確認でやめれば何もしない。
+  await act(async () => { rows()[1].querySelectorAll("button")[1].click(); await settle(); });
+  assert.equal(document.querySelector("#canvas-purge-title").textContent, "「古い構想」を完全に削除");
+  assert.equal(document.querySelector(".canvasPurgeModal p"), null, "説明の文は足さない");
+  await click(".canvasPurgeModal footer button:not(.dangerCanvasButton)");
+  assert.equal(calls.filter((call) => call.command === "delete_trashed_canvas_boards").length, 0);
+  await act(async () => { rows()[1].querySelectorAll("button")[1].click(); await settle(); });
+  assert.equal(document.querySelector(".canvasPurgeModal .dangerCanvasButton").textContent, "完全に削除");
+  await click(".canvasPurgeModal .dangerCanvasButton");
+  assert.deepEqual(calls.filter((call) => call.command === "delete_trashed_canvas_boards").map((call) => call.trashIds), [["1700000000001--old"]]);
+  assert.deepEqual(rows().map((row) => row.querySelector("strong").textContent), ["下書きの図"], "一覧を読み直す");
+
+  // 全部。
+  trashed.push({ trashId: "1700000000000--x", boardId: "x", name: "X", scope: "project", deletedAt: 1700000000000, nodeCount: 0, edgeCount: 0 });
+  await click('.canvasTrashModal header button[aria-label="閉じる"]');
+  await click('[aria-label="ボードを切り替え"]');
+  await click('[aria-label="キャンバスボードのゴミ箱を開く"]');
+  await act(async () => { footerButton("ゴミ箱を空にする").click(); await settle(); });
+  assert.equal(document.querySelector("#canvas-purge-title").textContent, "ゴミ箱を空にする");
+  assert.equal(document.querySelector(".canvasPurgeModal .dangerCanvasButton").textContent, "2枚を完全に削除");
+  await click(".canvasPurgeModal .dangerCanvasButton");
+  assert.deepEqual(calls.filter((call) => call.command === "delete_trashed_canvas_boards").at(-1).trashIds, ["1700000000002--plan", "1700000000000--x"]);
+  assert.equal(document.querySelector(".canvasTrashList > p").textContent, "ゴミ箱は空です。");
+  assert.equal(footerButton("ゴミ箱を空にする").disabled, true, "空なら押せない");
+  await unmount();
+
+  // K5: ライブラリ直下のボード。
+  await mount();
+  payload = { ...payload, isLibraryRoot: true };
+  await render();
+  await click('[aria-label="ボードを切り替え"]');
+  await click('[aria-label="キャンバスボードのゴミ箱を開く"]');
+  assert.equal(document.querySelector(".canvasTrashModal header span").textContent, "ライブラリ直下のボード");
+  await unmount();
+  globalThis.canvasTestInvoke = before;
+}
+console.log("PASS board trash: delete one or empty all after a confirmation, the list is read again, root heading");
+// K7: 見つからない資料のカードは、ファイルのカードと同じく「見つからない」の表示（isMissing）にする。中身の欄（エラーの文を
+// 出さないこと）は test:reference-preview が本物のプレビューで確かめる。
+{
+  globalThis.canvasTestMissingPaths = new Set(["素材/資料/港.png"]);
+  await mount();
+  const reference = (id, sourcePath, x) => ({ id, type: "reference", x, y: 0, width: 260, height: 200, scope: "project", sourcePath, name: sourcePath.split("/").pop(), kind: "image" });
+  docs.set(key("project", "one", "b"), { nodes: [reference("gone", "素材/資料/港.png", 0), reference("here", "素材/資料/地図.png", 300)], edges: [], then: { name: "B" } });
+  await select("B");
+  await act(async () => { await settle(); await settle(); });
+  const card = (id) => document.querySelector(`.canvasReferenceNode[data-node-id="${id}"]`);
+  assert.ok(card("gone").classList.contains("isMissing"), "見つからない資料のカードは isMissing");
+  assert.equal(card("gone").querySelector(".canvasReferenceTitle").textContent, "港.png", "名前は出す");
+  assert.ok(!card("here").classList.contains("isMissing"), "あるファイルのカードは今までどおり");
+  await unmount();
+  globalThis.canvasTestMissingPaths = null;
+}
+console.log("PASS missing reference: a reference card whose file is gone is drawn like a missing file card, without the error text");
 dom.window.close();

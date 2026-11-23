@@ -44,14 +44,25 @@ pub(super) fn is_material_file(path: &Path) -> bool {
     )
 }
 
-/// 作品の素材フォルダ（実際の綴りに直したもの）。ライブラリ直下と、素材フォルダのない作品は None。
+/// 作品の素材フォルダ（実際の綴りに直したもの）。素材フォルダのない作品は None。
+/// ライブラリ直下は三段がないので、資料のフォルダ（`資料/`、Q5）を画像・PDF の置き場とする（なければ None）。
 /// project.json の錠を持っているとき（移動）は、錠を取らずに読んだ設定を渡す。
 pub(super) fn materials_folder(root: &Path, config: &ProjectConfig) -> Option<PathBuf> {
     if library::is_library_root(root) {
-        return None;
+        return library_references_folder(root, config);
     }
     let folder = root.join(config.materials_folder_name()?);
     folder.canonicalize().ok().filter(|path| path.is_dir())
+}
+
+/// ライブラリ直下の資料のフォルダ（2-5 の移行で決めた名前。なければ「資料」）。あるときだけ。
+pub(super) fn library_references_folder(root: &Path, config: &ProjectConfig) -> Option<PathBuf> {
+    let name = config
+        .idea_migration
+        .as_ref()
+        .and_then(|record| record.references_folder.clone())
+        .unwrap_or_else(|| super::idea_migration::REFERENCES_FOLDER_NAME.to_string());
+    root.join(name).canonicalize().ok().filter(|path| path.is_dir())
 }
 
 /// `path` が素材フォルダ `materials`（materials_folder の結果）そのものか、その中か。

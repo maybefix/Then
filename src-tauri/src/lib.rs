@@ -11,6 +11,7 @@ mod atomic_file;
 mod checkpoint_store;
 mod close_gate;
 mod copy_card_migration;
+mod entry_transfer;
 mod export_front_matter;
 mod external_url;
 mod idea_migration;
@@ -664,6 +665,12 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             create_library_folder,
             transfer_reference_files,
             library_transfer_destinations,
+            transfer_project_entries,
+            undo_transfer_project_entries,
+            load_note_stars,
+            set_note_star,
+            library_references_folder,
+            delete_trashed_canvas_boards,
             reorder_library_projects,
             load_library_property_types,
             save_library_property_type,
@@ -755,6 +762,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             post_stream::note::posts_make_note,
             post_stream::note::posts_unlink_note,
             post_stream::note::posts_retarget_notes,
+            post_stream::note::posts_move_notes,
             load_project_proofread_terms,
             save_project_proofread_terms,
             load_project_proofread_ignored,
@@ -2175,6 +2183,70 @@ fn transfer_reference_files(
     Ok(transferred)
 }
 
+/// U5: 素材のノート・画像・PDF を、同じライブラリのほかの作品・直下へ送る。`mode` は "move" か "copy"。
+#[tauri::command(async)]
+fn transfer_project_entries(
+    source_root: String,
+    target_root: String,
+    source_paths: Vec<String>,
+    mode: String,
+) -> Result<entry_transfer::TransferResult, String> {
+    let move_entries = match mode.as_str() {
+        "move" => true,
+        "copy" => false,
+        _ => return Err("unknown transfer mode".to_string()),
+    };
+    entry_transfer::transfer_entries(Path::new(&source_root), Path::new(&target_root), &source_paths, move_entries)
+}
+
+/// Q5: ライブラリ直下の資料のフォルダ（画像・PDF を木に出す場所）。直下でない・フォルダがないときは None。
+#[tauri::command(async)]
+fn library_references_folder(root_path: String) -> Result<Option<String>, String> {
+    let root = PathBuf::from(&root_path);
+    if !library::is_library_root(&root) {
+        return Ok(None);
+    }
+    let config = load_project_config(&root)?;
+    // 画面のパスと突き合わせるので、直下のパスの綴りのまま返す（canonicalize の \\?\ を付けない）。
+    Ok(material_files::library_references_folder(&root, &config).and_then(|folder| {
+        let name = folder.file_name()?.to_os_string();
+        Some(root.join(name).to_string_lossy().to_string())
+    }))
+}
+
+/// U10: スターを付けたノートの絶対パス。
+#[tauri::command(async)]
+fn load_note_stars(root_path: String) -> Result<Vec<String>, String> {
+    project_state::load_note_stars(Path::new(&root_path))
+}
+
+/// U10: ノートのスターを付ける・外す。返り値は付け直したあとの一覧。
+#[tauri::command(async)]
+fn set_note_star(root_path: String, path: String, starred: bool) -> Result<Vec<String>, String> {
+    project_state::set_note_star(Path::new(&root_path), Path::new(&path), starred, now_millis() as i64)
+}
+
+/// U5 の通知の「元に戻す」。コピーの写しは OS のゴミ箱へ（使えなければアプリのゴミ箱へ）。
+#[tauri::command(async)]
+fn undo_transfer_project_entries(
+    app: tauri::AppHandle,
+    source_root: String,
+    target_root: String,
+    entries: Vec<entry_transfer::TransferredEntry>,
+    mode: String,
+) -> Result<entry_transfer::TransferUndoResult, String> {
+    entry_transfer::undo_transfer(
+        Path::new(&source_root),
+        Path::new(&target_root),
+        &entries,
+        mode == "move",
+        |root, path| {
+            move_project_entry_to_system_trash(root, path)
+                .or_else(|_| move_project_entry_to_app_trash(&app, root, path).map(|_| ()))
+        },
+    )
+}
+
 #[tauri::command]
 fn library_transfer_destinations(
     root_path: String,
@@ -2550,7 +2622,9 @@ fn rename_project_entry(path: String, name: String) -> Result<TextDocument, Stri
     let parent = path
         .parent()
         .ok_or_else(|| "entry parent does not exist".to_string())?;
-    let root = find_project_root(parent);
+    // まだ project.json のないライブラリ直下でも、直下の資料のフォルダの画像・PDF を改名できるように（Q5）。
+    let root = find_project_root(parent)
+        .or_else(|| parent.ancestors().find(|candidate| library::is_library_root(candidate)).map(Path::to_path_buf));
     // 素材の段の画像・PDF は、素材フォルダの中でだけ改名する。拡張子は変えず、中身は読まない（BINDER 2-6）。
     let is_material = path.is_file() && material_files::is_material_file(&path);
     if is_material
@@ -2834,6 +2908,12 @@ fn move_project_entry_to_app_trash(
     target: &Path,
 ) -> Result<PathBuf, String> {
     validate_project_delete_target(root, target)?;
+    move_path_to_app_trash(app, root, target)
+}
+
+/// アプリのデータフォルダのゴミ箱へ移す。確かめは呼び出し側が受け持つ（ボードのゴミ箱は `.then` の中なので、
+/// 作品のファイルの削除の確かめを通さない）。
+fn move_path_to_app_trash(app: &tauri::AppHandle, root: &Path, target: &Path) -> Result<PathBuf, String> {
     let app_data = app
         .path()
         .app_data_dir()
@@ -2869,8 +2949,14 @@ fn move_project_entry_to_app_trash(
     }
 }
 
-#[cfg(windows)]
 fn move_project_entry_to_system_trash(root: &Path, target: &Path) -> Result<(), String> {
+    validate_project_delete_target(root, target)?;
+    send_path_to_system_trash(target)
+}
+
+/// OS のゴミ箱へ送る（戻せる）。確かめは呼び出し側が受け持つ。
+#[cfg(windows)]
+fn send_path_to_system_trash(target: &Path) -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::HWND;
@@ -2879,7 +2965,6 @@ fn move_project_entry_to_system_trash(root: &Path, target: &Path) -> Result<(), 
         FOF_NOERRORUI, FOF_SILENT,
     };
 
-    validate_project_delete_target(root, target)?;
     let mut from = target
         .as_os_str()
         .encode_wide()
@@ -2905,7 +2990,7 @@ fn move_project_entry_to_system_trash(root: &Path, target: &Path) -> Result<(), 
 }
 
 #[cfg(not(windows))]
-fn move_project_entry_to_system_trash(_root: &Path, _target: &Path) -> Result<(), String> {
+fn send_path_to_system_trash(_target: &Path) -> Result<(), String> {
     Err("system trash is not implemented on this platform".to_string())
 }
 
@@ -3263,12 +3348,18 @@ fn move_project_entries(
         return Err("entry move must stay inside the project root".to_string());
     }
 
+    // Q4: 素材の中の画像・PDF も、素材の中へならまとめて動かせる（1つずつの移動と同じ決まり）。
+    let materials = material_files::materials_folder(&root, &load_project_config(&root)?);
     let mut candidates = Vec::<String>::new();
     let mut destinations = Vec::<String>::new();
     for source_path in source_paths {
         let source = PathBuf::from(&source_path);
-        if !source.is_file() || !is_supported_text_extension(&source) {
-            return Err("multiple entry move supports only text files".to_string());
+        let is_material = source.is_file()
+            && material_files::is_material_file(&source)
+            && material_files::is_in(materials.as_deref(), &source)
+            && material_files::is_in(materials.as_deref(), &target_folder);
+        if !source.is_file() || !(is_supported_text_extension(&source) || is_material) {
+            return Err("multiple entry move supports only text files and material images".to_string());
         }
         let source_canonical = source
             .canonicalize()
@@ -3958,6 +4049,62 @@ fn list_trashed_canvas_boards(
     }
     boards.sort_by(|left, right| right.deleted_at.cmp(&left.deleted_at));
     Ok(boards)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeletedTrashedBoards {
+    /// 消したボードの数。
+    deleted: usize,
+    /// OS のゴミ箱が使えず、アプリのゴミ箱へ移した数。
+    app_trash: usize,
+}
+
+/// ゴミ箱のボードを完全に削除する（KNOWN_ISSUES 2026-11-21）。OS のゴミ箱へ送るので、そこから戻せる。
+/// 使えなければアプリのデータフォルダのゴミ箱へ移す。`trash_ids` は一覧の `trashId`。
+#[tauri::command(async)]
+fn delete_trashed_canvas_boards(
+    app: tauri::AppHandle,
+    scope: String,
+    root_path: Option<String>,
+    trash_ids: Vec<String>,
+) -> Result<DeletedTrashedBoards, String> {
+    let root = root_path.clone().map(PathBuf::from);
+    let dir = canvas_boards_dir(&app, &scope, root_path)?;
+    let mut app_trash = 0;
+    let deleted = delete_trashed_canvas_boards_in(&dir, &trash_ids, |path| {
+        if send_path_to_system_trash(path).is_ok() {
+            return Ok(());
+        }
+        let root = root.as_deref().ok_or_else(|| "project root is required".to_string())?;
+        move_path_to_app_trash(&app, root, path)?;
+        app_trash += 1;
+        Ok(())
+    })?;
+    Ok(DeletedTrashedBoards { deleted, app_trash })
+}
+
+/// ゴミ箱の `.canvas` だけを消す（`trash` に渡す）。ID は一覧と同じ形かを確かめ、`.trash` の外のものと、
+/// 移せなかった中間稿のフォルダ（`.draft`、K4）には触らない。ないものは数えずに飛ばす。
+fn delete_trashed_canvas_boards_in(
+    dir: &Path,
+    trash_ids: &[String],
+    mut trash: impl FnMut(&Path) -> Result<(), String>,
+) -> Result<usize, String> {
+    let trash_dir = canvas_board_trash_dir(dir);
+    let mut paths = Vec::new();
+    for trash_id in trash_ids {
+        let path = trashed_canvas_board_path(&trash_dir, trash_id)?;
+        if path.is_file() && !paths.contains(&path) {
+            paths.push(path);
+        }
+    }
+    let mut deleted = 0;
+    for path in paths {
+        trash(&path)?;
+        deleted += 1;
+    }
+    Ok(deleted)
 }
 
 #[tauri::command]
@@ -5121,9 +5268,14 @@ fn resolve_reference_absolute_path(root: &Path, path: &Path) -> Result<PathBuf, 
     let root = root
         .canonicalize()
         .map_err(|error| format!("failed to resolve project root: {error}"))?;
-    let path = path
-        .canonicalize()
-        .map_err(|error| format!("failed to resolve reference path: {error}"))?;
+    // ないファイルは、下の is_file の確かめと同じ文にする（画面が「見つからない」と見分ける。K7）。
+    let path = path.canonicalize().map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            "reference file does not exist".to_string()
+        } else {
+            format!("failed to resolve reference path: {error}")
+        }
+    })?;
     if !path.starts_with(&root) {
         return Err("reference file must be inside the project folder".to_string());
     }
@@ -6217,4 +6369,45 @@ mod tests {
         assert!(super::restore_canvas_board_in(&dir, "project", &trash_id).is_err(), "同じものは2回戻せない");
         std::fs::remove_dir_all(&dir).expect("remove test directory");
     }
+    /// K7: 資料のパスが見つからないときは、画面が見分ける決まった文を返す。
+    #[test]
+    fn a_missing_reference_says_it_does_not_exist() {
+        let dir = std::env::temp_dir().join(format!("then-missing-reference-{}-{}", std::process::id(), super::now_millis()));
+        std::fs::create_dir_all(&dir).expect("create directory");
+        let error = super::resolve_reference_absolute_path(&dir, &dir.join("ない.png")).expect_err("missing");
+        assert_eq!(error, "reference file does not exist");
+        std::fs::remove_dir_all(&dir).expect("remove test directory");
+    }
+
+    /// ゴミ箱を空にする（KNOWN_ISSUES 2026-11-21）。一覧の `.canvas` だけを渡し、生きているボード・中間稿のフォルダ
+    /// （`.draft`、K4）・形の違う ID・`.trash` の外は消さない。
+    #[test]
+    fn emptying_the_board_trash_sends_only_trashed_boards() {
+        let dir = std::env::temp_dir().join(format!("then-board-trash-empty-{}-{}", std::process::id(), super::now_millis()));
+        let trash = super::canvas_board_trash_dir(&dir);
+        std::fs::create_dir_all(trash.join("1700000000000--old.draft")).expect("create draft folder");
+        std::fs::write(dir.join("alive.canvas"), "{}").expect("write board");
+        std::fs::write(trash.join("1700000000001--old.canvas"), "{}").expect("write trashed");
+        std::fs::write(trash.join("1700000000002--plan.canvas"), "{}").expect("write trashed");
+        let mut sent = Vec::new();
+        let deleted = super::delete_trashed_canvas_boards_in(
+            &dir,
+            &["1700000000001--old".to_string(), "1700000000002--plan".to_string(), "1700000000001--old".to_string(), "1700000000009--gone".to_string()],
+            |path| {
+                sent.push(path.file_name().unwrap().to_string_lossy().to_string());
+                std::fs::remove_file(path).map_err(|error| error.to_string())
+            },
+        )
+        .expect("empty the trash");
+        assert_eq!(deleted, 2, "同じものは2回送らず、ないものは数えない");
+        assert_eq!(sent, vec!["1700000000001--old.canvas", "1700000000002--plan.canvas"]);
+        assert!(dir.join("alive.canvas").is_file());
+        assert!(trash.join("1700000000000--old.draft").is_dir(), "中間稿のフォルダは残す（K4）");
+        for bad in ["../alive", "alive", "1--../x", "1700000000000--old.draft"] {
+            assert!(super::delete_trashed_canvas_boards_in(&dir, &[bad.to_string()], |_| panic!("must not send")).is_err(), "{bad}");
+        }
+        assert!(dir.join("alive.canvas").is_file());
+        std::fs::remove_dir_all(&dir).expect("remove test directory");
+    }
 }
+

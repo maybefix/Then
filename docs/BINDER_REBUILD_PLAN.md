@@ -252,8 +252,8 @@ D-1〜D-7 はすべて 2026-11-09 に決めた。
 | 作業 | 出どころ |
 | --- | --- |
 | ~~Canvas に投稿を指すカード（3.4 の「カードはノート・投稿・原稿を参照する」のうち投稿）~~ 2026-11-22 実施。投稿の ID だけを持つ Then 固有のカード（`type: "post"`）を「資料を追加」の一覧から置き、カードで直すと投稿へ書き戻す。ライブラリ直下のボードにも置け、送っても投稿のカードのまま。元が投稿のコピーのカードも移行で投稿のカードにした（直下のボードは全作品の記録から引く）。残りの3つ（投稿の側の「置かれているボード」、U7、「投稿にする」で置き換える）も 2026-11-22 実施（[BINDER_POST_CARD_PLAN.md](BINDER_POST_CARD_PLAN.md)、[BINDER_POST_CARD_FOLLOWUPS_PLAN.md](BINDER_POST_CARD_FOLLOWUPS_PLAN.md)） | 4-5（[BINDER_COPY_CARD_MIGRATION_PLAN.md](BINDER_COPY_CARD_MIGRATION_PLAN.md)） |
-| ~~投稿の検索（U9）、投稿を本文へドラッグ（U6）~~ 2026-11-22 実施（[BINDER_POST_DRAG_SEARCH_PLAN.md](BINDER_POST_DRAG_SEARCH_PLAN.md)。Canvas へのドラッグ U7 も 2026-11-22 実施）。残りはノート・資料ファイルの作品間の移動（U5）、ノートのスター（U10） | 2-4・2-5 で「今回やらない」とした操作（[BINDER_IDEA_MIGRATION_PLAN.md](BINDER_IDEA_MIGRATION_PLAN.md)） |
-| 素材の画像・PDF の複数選択とまとめての移動（Q4）、ライブラリ直下の資料の画像・PDF を木に出す（Q5） | 2-6（[BINDER_MATERIAL_FILES_PLAN.md](BINDER_MATERIAL_FILES_PLAN.md)） |
-| ボードのゴミ箱を空にする操作 | 4-4b（KNOWN_ISSUES 2026-11-21） |
+| ~~投稿の検索（U9）、投稿を本文へドラッグ（U6）~~ 2026-11-22 実施（[BINDER_POST_DRAG_SEARCH_PLAN.md](BINDER_POST_DRAG_SEARCH_PLAN.md)。Canvas へのドラッグ U7 も 2026-11-22 実施）。~~ノート・資料ファイルの作品間の移動（U5）、ノートのスター（U10）~~ 2026-11-23 実施（素材のノート・画像・PDF の右クリック「移動・コピー…」で直下・同じライブラリのほかの作品へ。ボードの送り先も作品⇄作品に広げた（K3）。スターは作品の `project.json` の `noteStars`、行の星の印・右クリック・素材の段の見出しの星のボタン。[BINDER_REMAINING_PLAN.md](BINDER_REMAINING_PLAN.md)） | 2-4・2-5 で「今回やらない」とした操作（[BINDER_IDEA_MIGRATION_PLAN.md](BINDER_IDEA_MIGRATION_PLAN.md)） |
+| ~~素材の画像・PDF の複数選択とまとめての移動（Q4）、ライブラリ直下の資料の画像・PDF を木に出す（Q5）~~ 2026-11-23 実施（Ctrl で選び、ノートと一緒にまとめて動かす。直下の `資料/` に画像・PDF を出す。[BINDER_REMAINING_PLAN.md](BINDER_REMAINING_PLAN.md)） | 2-6（[BINDER_MATERIAL_FILES_PLAN.md](BINDER_MATERIAL_FILES_PLAN.md)） |
+| ~~ボードのゴミ箱を空にする操作~~ 2026-11-23 実施（行ごとの「完全に削除」と「ゴミ箱を空にする」。確認のあと OS のゴミ箱へ。[BINDER_REMAINING_PLAN.md](BINDER_REMAINING_PLAN.md)） | 4-4b（KNOWN_ISSUES 2026-11-21） |
 | 本体の束の分割（`test:v058-bundle` は 500 kB の上限を元から超えている。2026-11-22 で 726,755 バイト） | 各段で少しずつ増えた |
 | 4-4 の実機確認でゴミ箱へ移したテスト用の原稿（「港」「夜の郵便局。」など）が OS のゴミ箱に残っている | 4-4・4-4b。消すかどうかは利用者が決める |

@@ -214,7 +214,17 @@ function setup(world = defaultWorld(), { tauri = true } = {}) {
         (app.saveStatusCalls ??= []).push(status);
       },
       setLastError: setter("lastError"),
-      showToast: (message) => app.toasts.push(message),
+      showToast: (message, action) => {
+        app.toasts.push(message);
+        (app.toastActions ??= []).push(action ?? null);
+      },
+      requestMultiInput: async (options) => {
+        (app.multiInputs ??= []).push(options);
+        return app.multiInputAnswer ?? null;
+      },
+      movePostNotes: async (sourceRoot, targetRoot, changes) => {
+        (app.postNoteMoves ??= []).push([sourceRoot, targetRoot, changes]);
+      },
       requestInput: async (options) => {
         app.inputs.push(options);
         return app.inputAnswers.shift() ?? null;
@@ -938,6 +948,167 @@ function imageWorld(app) {
     "[isHydrated, projectFolder]",
     "the reference candidates follow the file tree",
   );
+}
+
+// ---- U5: 素材のノート・画像・PDF をほかの作品へ送る（docs/BINDER_REMAINING_PLAN.md） ----
+// 聞く画面（送り先・方法）→ 直していないタブを保存 → Rust が送る → 一緒に送ったもの同士の @[[ ]] を書き換える →
+// 移動なら投稿の札を送り先へ付け替え、この作品のタブ・索引から外す → 通知の「元に戻す」。
+{
+  const LIB_B = "C:\\Lib\\作品B";
+  const note = p("素材", "灯台.md");
+  const image = p("素材", "資料", "港.png");
+  const world = {
+    projectFolder: projectFolder([
+      { ...folder(p("素材"), [{ ...file(note), role: "material" }]), role: "material" },
+      file(p("c.txt")),
+    ]),
+    openTabs: [tab(note, { markdown: "直した", savedMarkdown: "前", saveStatus: "dirty" }), tab(p("c.txt"))],
+    activeTabId: `file:${note}`,
+  };
+  const { app, refs, actions } = setup(world);
+  app.commands.library_transfer_destinations = () => [
+    { path: "C:\\Lib", label: "ライブラリ「本棚」の直下" },
+    { path: LIB_B, label: "作品「作品B」" },
+  ];
+  // 何も選ばずに閉じたら、何もしない。
+  await actions().handleTransferEntries([note, image]);
+  assert.deepEqual(commandsOf(app), ["library_transfer_destinations"]);
+  assert.equal(app.multiInputs[0].title, "2件を移動・コピー");
+  assert.deepEqual(app.multiInputs[0].fields.map((field) => [field.id, field.initialValue]), [["destination", "C:\\Lib"], ["mode", "copy"]]);
+  assert.equal(app.multiInputs[0].confirmLabel, "実行");
+  app.log.length = 0;
+
+  const sentNote = `${LIB_B}\\素材\\灯台.md`;
+  const sentImage = `${LIB_B}\\素材\\資料\\港-2.png`;
+  app.multiInputAnswer = { destination: LIB_B, mode: "move" };
+  app.commands.transfer_project_entries = () => ({
+    entries: [
+      { oldPath: note, newPath: sentNote, kind: "text", contentHash: "h1", sourceOrderIndex: 0 },
+      { oldPath: image, newPath: sentImage, kind: "material", contentHash: "img" },
+    ],
+  });
+  app.commands.read_text_file = ({ path: readPath }) => {
+    if (readPath === sentNote) return { path: readPath, name: "灯台.md", content: "@[[素材/資料/港.png]] と @[[素材/資料/地図.pdf]]", contentHash: "h1" };
+    return { path: readPath, name: "c.txt", content: "C", contentHash: "c" };
+  };
+  app.commands.save_text_file = ({ path: savedPath, content }) => ({ path: savedPath, name: "灯台.md", content, contentHash: "h2" });
+  await actions().handleTransferEntries([note, image]);
+
+  const commands = commandsOf(app);
+  assert.deepEqual(commands.slice(0, 3), ["library_transfer_destinations", "(save)", "transfer_project_entries"], "直していないタブを保存してから送る");
+  const sent = app.log.find((entry) => entry.command === "transfer_project_entries");
+  assert.deepEqual(sent.args, { sourceRoot: ROOT, targetRoot: LIB_B, sourcePaths: [note, image], mode: "move" });
+  assert.equal(sent.pathChanging, true, "送るあいだは自動保存を止める");
+  assert.equal(refs.projectEntryPathChangeInProgressRef.current, false);
+  const saved = app.log.find((entry) => entry.command === "save_text_file");
+  assert.deepEqual(saved.args, { path: sentNote, content: "@[[素材/資料/港-2.png]] と @[[素材/資料/地図.pdf]]", expectedHash: "h1" }, "一緒に送った画像だけを書き換える");
+  assert.deepEqual(app.postNoteMoves, [[ROOT, LIB_B, [{ oldPath: note, newPath: sentNote }, { oldPath: image, newPath: sentImage }]]]);
+  assert.deepEqual(app.openTabs.map((item) => item.path), [p("c.txt")], "送ったノートのタブは閉じる");
+  assert.equal(app.loaded.length, 1, "開いていた文書が外れたので、作品の最初のファイルを開く");
+  assert.ok(commands.includes("(refresh)"));
+  assert.equal(app.toasts.at(-1), "2件を作品「作品B」へ移動しました");
+  const undoAction = app.toastActions.at(-1);
+  assert.equal(undoAction.label, "元に戻す");
+
+  app.log.length = 0;
+  app.postNoteMoves = [];
+  app.commands.undo_transfer_project_entries = (args) => ({ undone: [args.entries[0]], skipped: 1 });
+  undoAction.onClick();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const undo = app.log.find((entry) => entry.command === "undo_transfer_project_entries");
+  assert.equal(undo.args.mode, "move");
+  assert.equal(undo.args.entries[0].contentHash, "h2", "書き換えたあとの中身と比べる");
+  assert.deepEqual(app.postNoteMoves, [[LIB_B, ROOT, [{ oldPath: sentNote, newPath: note }]]], "戻したノートの札も戻す");
+  assert.equal(app.toasts.at(-1), "元に戻しました（送り先で変更された1件は戻していません）");
+}
+{
+  // コピーは元に残し、タブも札も触らない。失敗は通知で知らせる。
+  const note = p("第一章", "a.txt");
+  const { app, actions } = setup();
+  app.commands.library_transfer_destinations = () => [{ path: "C:\\Lib", label: "ライブラリ「本棚」の直下" }];
+  app.multiInputAnswer = { destination: "C:\\Lib", mode: "copy" };
+  app.commands.transfer_project_entries = () => ({ entries: [{ oldPath: note, newPath: "C:\\Lib\\a.txt", kind: "text", contentHash: "h" }] });
+  app.commands.read_text_file = ({ path: readPath }) => ({ path: readPath, name: "a.txt", content: "本文", contentHash: "h" });
+  await actions().handleTransferEntries([note]);
+  assert.deepEqual(app.openTabs.map((item) => item.path), [note, p("c.txt")]);
+  assert.equal(app.postNoteMoves, undefined);
+  assert.ok(!commandsOf(app).includes("save_text_file"), "書き換えるリンクがなければ書かない");
+  assert.equal(app.toasts.at(-1), "「a」をライブラリ「本棚」の直下へコピーしました");
+
+  app.commands.transfer_project_entries = () => { throw new Error("only materials can be sent"); };
+  await actions().handleTransferEntries([note]);
+  assert.equal(app.toasts.at(-1), "移動・コピーできませんでした");
+  assert.match(app.lastError, /only materials/);
+
+  // 送り先がなければ（ライブラリの外）、聞かない。
+  app.commands.library_transfer_destinations = () => [];
+  const asked = app.multiInputs.length;
+  await actions().handleTransferEntries([note]);
+  assert.equal(app.multiInputs.length, asked);
+}
+
+// ---- Q4: まとめての移動に素材の画像・PDF（ファイルの一覧にないもの）を入れる ----
+{
+  const { app, actions } = setup();
+  imageWorld(app);
+  const image = p("素材", "資料", "地図.png");
+  const moved = p("素材", "年表", "地図.png");
+  app.commands.move_project_entries = () => ({
+    projectFolder: app.projectFolder,
+    moves: [
+      { movedDocument: null, oldPath: image, newPath: moved, oldParentPath: p("素材", "資料"), newParentPath: p("素材", "年表") },
+      { movedDocument: { path: p("素材", "年表", "c.txt"), name: "c.txt", content: "C" }, oldPath: p("c.txt"), newPath: p("素材", "年表", "c.txt"), oldParentPath: ROOT, newParentPath: p("素材", "年表") },
+    ],
+  });
+  await actions().handleMoveProjectEntriesToFolder([image, p("c.txt")], p("素材", "年表"));
+  const sent = app.log.find((entry) => entry.command === "move_project_entries");
+  assert.deepEqual(sent.args, { rootPath: ROOT, sourcePaths: [image, p("c.txt")], targetFolderPath: p("素材", "年表") });
+  assert.deepEqual(app.referenceLayout.cards.map((card) => card.sourcePath), ["素材/年表/地図.png", "素材/年表/c.txt"], "資料カードも付いていく");
+  assert.equal(app.toasts.at(-1), "2件のファイルを移動しました");
+
+  // 画像が同じフォルダにあれば外す。画像だけ1つになったら、画像の移動と同じ。
+  app.log.length = 0;
+  app.commands.move_project_entry = () => ({ projectFolder: app.projectFolder, movedDocument: null, oldPath: image, newPath: moved, oldParentPath: p("素材", "資料"), newParentPath: p("素材", "年表") });
+  await actions().handleMoveProjectEntriesToFolder([image], p("素材", "年表"));
+  assert.deepEqual(app.log.find((entry) => entry.command === "move_project_entry").args, { rootPath: ROOT, sourcePath: image, targetFolderPath: p("素材", "年表"), targetPath: null, position: null });
+  app.log.length = 0;
+  await actions().handleMoveProjectEntriesToFolder([image, p("素材", "資料", "設定.pdf")], p("素材", "資料"));
+  assert.deepEqual(commandsOf(app), [], "どれも同じフォルダにあれば何もしない");
+}
+
+// ---- K9: 開いていたノートを消す・送ると、バインダーに見えている並び（原稿の段が先）の最初のファイルを開く ----
+// ファイルの一覧はフォルダが先なので、素材フォルダが原稿のファイルより前にある。見えている並びでは原稿が先。
+{
+  const note = p("素材", "汐見.md");
+  const materials = (children) => ({ ...folder(p("素材"), children), role: "material" });
+  const world = {
+    projectFolder: projectFolder([materials([{ ...file(note), role: "material" }, { ...file(p("素材", "潮.md")), role: "material" }]), file(p("本文.md"))]),
+    openTabs: [tab(p("本文.md")), tab(note)],
+    activeTabId: `file:${note}`,
+  };
+  const { app, actions } = setup(world);
+  app.refreshedFolder = projectFolder([materials([{ ...file(p("素材", "潮.md")), role: "material" }]), file(p("本文.md"))]);
+  app.commands.plan_delete_project_entry = () => ({ rootKind: "file", textFileCount: 1, nonTextFileCount: 0, folderCount: 0, warnings: [] });
+  app.commands.delete_project_entry_to_trash = () => ({ deletedPaths: [note], fallbackUsed: "none" });
+  app.commands.read_text_file = ({ path }) => ({ path, name: path.split("\\").pop(), content: "x" });
+  app.confirmAnswers.push(true);
+  await actions().handleDeleteProjectEntry({ ...file(note), role: "material" });
+  assert.deepEqual(app.log.find((entry) => entry.command === "read_text_file").args, { path: p("本文.md") }, "素材の潮ではなく原稿の本文を開く");
+
+  // 送る（移動）のあとも同じ。
+  const sentWorld = {
+    projectFolder: projectFolder([materials([{ ...file(note), role: "material" }, { ...file(p("素材", "潮.md")), role: "material" }]), file(p("本文.md"))]),
+    openTabs: [tab(note)],
+    activeTabId: `file:${note}`,
+  };
+  const sent = setup(sentWorld);
+  sent.app.refreshedFolder = projectFolder([materials([{ ...file(p("素材", "潮.md")), role: "material" }]), file(p("本文.md"))]);
+  sent.app.commands.library_transfer_destinations = () => [{ path: "C:\Lib\B", label: "作品「B」" }];
+  sent.app.multiInputAnswer = { destination: "C:\Lib\B", mode: "move" };
+  sent.app.commands.transfer_project_entries = () => ({ entries: [{ oldPath: note, newPath: "C:\Lib\B\素材\汐見.md", kind: "text", contentHash: "h" }] });
+  sent.app.commands.read_text_file = ({ path }) => ({ path, name: path.split("\\").pop(), content: "x", contentHash: "h" });
+  await sent.actions().handleTransferEntries([note]);
+  assert.deepEqual(sent.app.loaded.map((item) => item.document.path), [p("本文.md")]);
 }
 
 console.log("project entry actions: ok");

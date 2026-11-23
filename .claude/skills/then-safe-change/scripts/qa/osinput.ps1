@@ -9,9 +9,11 @@
 #   -Pid <pid> -DragCss "x1,y1;x2,y2" -Dpr 1.25  press at the first point, move there in steps, release at the second
 #                                               (more points "x1,y1;x2,y2;x3,y3" move through each in turn, release at the last)
 #   -Pid <pid> -Move "x,y,w,h"                   place and size the window (physical px)
+#   -Pid <pid> -RightClickCss "x,y" -Dpr 1.25   right click at CSS px (opens the page's context menu)
+#   -Mods "CTRL" with -ClickCss                  hold modifier keys (CTRL, SHIFT, ALT; "+" between) during the click
 #   -Title "Then - Idea Board" ...               target the top-level window with this exact title instead of the main window
 #                                               (all actions above work with -Title in place of -Pid)
-param([int]$WindowPid = 0, [string]$Title = "", [switch]$Info, [switch]$Focus, [string]$ClickCss = "", [string]$DblClickCss = "", [string]$DragCss = "", [string]$Move = "", [double]$Dpr = 1, [string]$Text = "", [string]$Keys = "", [string]$Shot = "")
+param([int]$WindowPid = 0, [string]$Title = "", [switch]$Info, [switch]$Focus, [string]$ClickCss = "", [string]$RightClickCss = "", [string]$Mods = "", [string]$DblClickCss = "", [string]$DragCss = "", [string]$Move = "", [double]$Dpr = 1, [string]$Text = "", [string]$Keys = "", [string]$Shot = "")
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
@@ -44,6 +46,12 @@ public static class Os {
     var u = new INPUT { type = 0 }; u.u.mi.dwFlags = 4;
     return Send(new[] { d, u });
   }
+  public static uint RightClick(int x, int y) {
+    SetCursorPos(x, y);
+    var d = new INPUT { type = 0 }; d.u.mi.dwFlags = 8;
+    var u = new INPUT { type = 0 }; u.u.mi.dwFlags = 16;
+    return Send(new[] { d, u });
+  }
   public static uint Key(ushort vk, ushort scan, uint flags, bool up) {
     var k = new INPUT { type = 1 }; k.u.ki = new KEYBDINPUT { wVk = vk, wScan = scan, dwFlags = flags | (up ? 2u : 0u) };
     return Send(new[] { k });
@@ -63,10 +71,29 @@ if ($Focus) {
   # F24, not ALT: a lone ALT tap opened Then's window menu, which holds the page until it closes (2026-11-21).
   [Os]::Key(0x87, 0, 0, $false) | Out-Null; [Os]::Key(0x87, 0, 0, $true) | Out-Null
   [Os]::ShowWindow($hwnd, 9) | Out-Null; [Os]::SetForegroundWindow($hwnd) | Out-Null; Start-Sleep -Milliseconds 300; "foreground=$([Os]::GetForegroundWindow() -eq $hwnd)" }
+# 入力はいつも前面の窓へ届く。相手の窓（-WindowPid / -Title）が前面になければ、ほかの窓へ入らないよう何も送らない。
+# 文字・キーは相手の窓を決めてから送ること（2026-11-23: 前面でないまま送ったキーが別のアプリへ入った）。
+$sendsInput = $ClickCss -or $RightClickCss -or $DblClickCss -or $DragCss -or $Text -or $Keys
+if ($sendsInput) {
+  if ($hwnd -eq [IntPtr]::Zero) { "refused: give -WindowPid or -Title so input cannot reach another window"; exit 5 }
+  if ([Os]::GetForegroundWindow() -ne $hwnd) { "refused: the target window is not the foreground window (add -Focus)"; exit 5 }
+}
+$modKeys = @{ CTRL = 0x11; SHIFT = 0x10; ALT = 0x12 }
+$heldMods = @($Mods.Split("+") | Where-Object { $_ })
 if ($ClickCss) {
   $c = $ClickCss.Split(","); $o = Origin
   $x = [int]($o.X + [double]$c[0] * $Dpr); $y = [int]($o.Y + [double]$c[1] * $Dpr)
-  $sent = [Os]::Click($x, $y); "click screen $x,$y sent=$sent"
+  foreach ($m in $heldMods) { [Os]::Key([uint16]$modKeys[$m], 0, 0, $false) | Out-Null }
+  if ($heldMods.Count) { Start-Sleep -Milliseconds 40 }
+  $sent = [Os]::Click($x, $y)
+  if ($heldMods.Count) { Start-Sleep -Milliseconds 40 }
+  foreach ($m in $heldMods) { [Os]::Key([uint16]$modKeys[$m], 0, 0, $true) | Out-Null }
+  "click screen $x,$y mods=$Mods sent=$sent"
+}
+if ($RightClickCss) {
+  $c = $RightClickCss.Split(","); $o = Origin
+  $x = [int]($o.X + [double]$c[0] * $Dpr); $y = [int]($o.Y + [double]$c[1] * $Dpr)
+  $sent = [Os]::RightClick($x, $y); "right click screen $x,$y sent=$sent"
 }
 if ($DblClickCss) {
   $c = $DblClickCss.Split(","); $o = Origin

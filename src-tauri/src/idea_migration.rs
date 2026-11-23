@@ -662,6 +662,19 @@ fn migrate_locked(
     if let Some(name) = &applied.created_materials {
         config.materials_folder = Some(name.clone());
     }
+    // U10: スターの付いていたスレッドから作ったノートに、スターを付ける（3-3）。
+    let starred: std::collections::HashSet<&str> =
+        config.idea_threads.iter().filter(|thread| thread.starred).map(|thread| thread.id.as_str()).collect();
+    let stars: Vec<String> = applied
+        .record
+        .notes
+        .iter()
+        .filter(|note| starred.contains(note.thread_id.as_str()))
+        .map(|note| note.path.clone())
+        .collect();
+    for path in stars {
+        config.note_stars.entry(path).or_insert(migrated_at);
+    }
     config.idea_threads.clear();
     config.snippets.clear();
     let notes = applied.record.notes.iter().map(|note| note.path.clone()).collect();

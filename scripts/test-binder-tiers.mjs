@@ -563,6 +563,195 @@ async function choose(target, label) {
   await view.unmount();
 }
 
+// 「移動・コピー…」（U5）: ライブラリの作品では、素材のノート・画像・PDF の右クリックに出る。原稿・フォルダには出ない。
+// 押した行が Ctrl で選んだものの1つなら、選んだもののうち送れるものを表示の順で渡す。ライブラリの外では出さない。
+{
+  const references = [
+    { path: p("資料/設定集.pdf"), sourcePath: "資料/設定集.pdf", name: "設定集.pdf", kind: "pdf" },
+  ];
+  const library = { path: "C:\\lib", name: "本棚", role: "project", projects: [], misplacedProjects: [] };
+  const view = await mount(props(withMaterials, {
+    library,
+    materialReferences: references,
+    onOpenReference: spy("onOpenReference"),
+    onRenameReference: spy("onRenameReference"),
+    onDeleteReference: spy("onDeleteReference"),
+    onTransferEntries: spy("onTransferEntries"),
+  }));
+  takeCalls();
+  assert.deepEqual(
+    await menuLabels(row(view.container, "資料/人物.md")),
+    ["開く", "リネーム", "移動・コピー…", "削除"],
+    "素材のノートは送れる",
+  );
+  assert.deepEqual(await menuLabels(row(view.container, "資料/設定集.pdf")), ["開く", "リネーム", "移動・コピー…", "削除"]);
+  assert.ok(!(await menuLabels(row(view.container, "本編.md"))).includes("移動・コピー…"), "原稿は送らない");
+  assert.ok(!(await menuLabels(row(view.container, "資料/年表"))).includes("移動・コピー…"), "フォルダは送らない");
+  await choose(row(view.container, "資料/人物.md"), "移動・コピー…");
+  assert.deepEqual(takeCalls(), [["onTransferEntries", ["資料/人物.md"]]]);
+
+  // Ctrl で選んだ2つ（と原稿）。押した行が選ばれていれば、送れるものだけを表示の順で。
+  await click(row(view.container, "資料/年表/年表.md").querySelector(".treeItemPrimary"), { ctrlKey: true });
+  await click(row(view.container, "本編.md").querySelector(".treeItemPrimary"), { ctrlKey: true });
+  await click(row(view.container, "資料/人物.md").querySelector(".treeItemPrimary"), { ctrlKey: true });
+  takeCalls();
+  await choose(row(view.container, "資料/年表/年表.md"), "移動・コピー…");
+  assert.deepEqual(takeCalls(), [["onTransferEntries", ["資料/人物.md", "資料/年表/年表.md"]]]);
+  await view.unmount();
+
+  const outside = await mount(props(withMaterials, { onTransferEntries: spy("onTransferEntries") }));
+  assert.ok(!(await menuLabels(row(outside.container, "資料/人物.md"))).includes("移動・コピー…"), "ライブラリの外では出さない");
+  await outside.unmount();
+
+  const rootLibrary = { path: root, name: "本棚", role: "root", projects: [], misplacedProjects: [] };
+  const atRoot = await mount(props(withMaterials, { library: rootLibrary, onTransferEntries: spy("onTransferEntries") }));
+  takeCalls();
+  await choose(row(atRoot.container, "本編.md"), "移動・コピー…");
+  assert.deepEqual(takeCalls(), [["onTransferEntries", ["本編.md"]]], "直下ではどのファイルも送れる");
+  await atRoot.unmount();
+}
+
+// Q4: 画像・PDF の行もファイルの行と同じく Ctrl で選べ、選んだもの（ノートと混ぜてよい）をまとめて素材の中の
+// フォルダへドラッグできる。原稿の段へは落とせない。Ctrl なしで押すと、今までどおり開く。
+{
+  const references = [
+    { path: p("資料/年表/地図.png"), sourcePath: "資料/年表/地図.png", name: "地図.png", kind: "image" },
+    { path: p("資料/設定集.pdf"), sourcePath: "資料/設定集.pdf", name: "設定集.pdf", kind: "pdf" },
+  ];
+  const view = await mount(props(withMaterials, {
+    materialReferences: references,
+    onOpenReference: spy("onOpenReference"),
+    onMoveReference: spy("onMoveReference"),
+  }));
+  takeCalls();
+  const primary = (relative) => row(view.container, relative).querySelector(".treeItemPrimary");
+  // 画像を押して開き（選びはその1つになる）、Ctrl でほかを足す。
+  await click(primary("資料/設定集.pdf"));
+  assert.deepEqual(takeCalls(), [["onOpenReference", "資料/設定集.pdf"]]);
+  await click(primary("資料/年表/地図.png"), { ctrlKey: true });
+  await click(primary("資料/人物.md"), { ctrlKey: true });
+  assert.deepEqual(takeCalls(), [], "Ctrl では開かない");
+  assert.equal(primary("資料/設定集.pdf").getAttribute("aria-pressed"), "true");
+  assert.ok(row(view.container, "資料/年表/地図.png").classList.contains("selectedTreeEntry"));
+
+  await drag(row(view.container, "資料/設定集.pdf"), header(view.container, "manuscript"));
+  await drag(row(view.container, "資料/設定集.pdf"), row(view.container, "第一章"), 10);
+  assert.deepEqual(takeCalls(), [], "原稿の段へは落とせない");
+  await drag(row(view.container, "資料/設定集.pdf"), row(view.container, "資料/年表"), 10);
+  assert.deepEqual(
+    takeCalls(),
+    [["onMoveEntry", ["資料/人物.md", "資料/年表/地図.png", "資料/設定集.pdf"], "資料/年表"]],
+    "選んだもの全部を表示の順で、素材の中のフォルダへ",
+  );
+  // 落としたあとは、ファイルの行と同じく選びを外す。選び直して、ノートの行から動かす。
+  assert.equal(primary("資料/設定集.pdf").getAttribute("aria-pressed"), "false");
+  await click(primary("資料/設定集.pdf"));
+  await click(primary("資料/年表/地図.png"), { ctrlKey: true });
+  await click(primary("資料/人物.md"), { ctrlKey: true });
+  takeCalls();
+  await drag(row(view.container, "資料/人物.md"), header(view.container, "materials"));
+  assert.deepEqual(
+    takeCalls(),
+    [["onMoveEntry", ["資料/人物.md", "資料/年表/地図.png", "資料/設定集.pdf"], "資料"]],
+    "ノートの行から動かしても、選んだ画像も一緒に",
+  );
+
+  await click(primary("資料/設定集.pdf"));
+  assert.deepEqual(takeCalls(), [["onOpenReference", "資料/設定集.pdf"]], "Ctrl なしで押すと開き、選びは押した1つになる");
+  assert.equal(primary("資料/年表/地図.png").getAttribute("aria-pressed"), "false");
+  await drag(row(view.container, "資料/設定集.pdf"), row(view.container, "資料/年表"), 10);
+  assert.deepEqual(takeCalls(), [["onMoveReference", "資料/設定集.pdf", "資料/年表"]], "1つなら今までどおり");
+  await view.unmount();
+}
+
+// ノートのスター（U10）:行に星の印、右クリックで付ける・外す（素材のノートだけ）。素材の段の見出しの星のボタンで、
+// スターの付いたノートと、それを入れているフォルダだけを出す（画像・PDF も隠す）。もう一度押すと戻る。
+{
+  localStorage.removeItem("then.sidebar.starFilter");
+  const references = [
+    { path: p("資料/設定集.pdf"), sourcePath: "資料/設定集.pdf", name: "設定集.pdf", kind: "pdf" },
+  ];
+  const starred = new Set([p("資料/年表/年表.md")]);
+  const view = await mount(props(withMaterials, {
+    materialReferences: references,
+    onOpenReference: spy("onOpenReference"),
+    starredNotePaths: starred,
+    onSetNoteStar: spy("onSetNoteStar"),
+  }));
+  takeCalls();
+  const stars = () => [...view.container.querySelectorAll(".treeItemStar")].map((mark) => rel(mark.closest("[data-tree-entry-path]").dataset.treeEntryPath));
+  assert.deepEqual(stars(), ["資料/年表/年表.md"]);
+  assert.ok((await menuLabels(row(view.container, "資料/人物.md"))).includes("スターを付ける"));
+  assert.ok((await menuLabels(row(view.container, "資料/年表/年表.md"))).includes("スターを外す"));
+  assert.ok(!(await menuLabels(row(view.container, "本編.md"))).some((label) => label.startsWith("スター")), "原稿には付けない");
+  await choose(row(view.container, "資料/人物.md"), "スターを付ける");
+  await choose(row(view.container, "資料/年表/年表.md"), "スターを外す");
+  assert.deepEqual(takeCalls(), [["onSetNoteStar", "資料/人物.md", true], ["onSetNoteStar", "資料/年表/年表.md", false]]);
+
+  const filter = header(view.container, "materials").querySelector(".binderSectionStarFilter");
+  assert.equal(filter.getAttribute("aria-pressed"), "false");
+  await click(filter);
+  assert.equal(filter.getAttribute("aria-pressed"), "true");
+  assert.deepEqual(
+    sections(view.container)[1].rows.map(([path]) => path),
+    ["資料/年表", "資料/年表/年表.md"],
+    "スターのノートと、それを入れているフォルダだけ",
+  );
+  assert.equal(localStorage.getItem("then.sidebar.starFilter"), "starred", "次に開いたときも覚えている");
+  await click(filter);
+  assert.deepEqual(
+    sections(view.container)[1].rows.map(([path]) => path),
+    ["資料/人物.md", "資料/年表", "資料/年表/年表.md", "資料/設定集.pdf"],
+    "もう一度押すと全部",
+  );
+  await view.unmount();
+
+  const without = await mount(props(withMaterials));
+  assert.equal(header(without.container, "materials").querySelector(".binderSectionStarFilter"), null, "付け外しを受け取らなければ出さない");
+  await without.unmount();
+}
+
+// Q5: ライブラリ直下では、資料のフォルダ（`資料/`）とその中のフォルダに画像・PDF の行を出す。押すと開き、
+// 右クリックは素材の中と同じ。資料のフォルダの中へだけ落とせる（外のフォルダ・直下のファイルの行へは落ちない）。
+{
+  const rootTree = {
+    path: root,
+    name: "lib",
+    children: [
+      folderEntry("資料", [folderEntry("資料/表紙", [])]),
+      file("本編.md"),
+      folderEntry("下書き", []),
+    ],
+  };
+  const references = [{ path: p("資料/表紙案.png"), sourcePath: "資料/表紙案.png", name: "表紙案.png", kind: "image" }];
+  const rootLibrary = { path: root, name: "本棚", role: "root", projects: [], misplacedProjects: [] };
+  const view = await mount(props(rootTree, {
+    library: rootLibrary,
+    materialReferences: references,
+    libraryReferencesFolderPath: p("資料"),
+    onOpenReference: spy("onOpenReference"),
+    onRenameReference: spy("onRenameReference"),
+    onDeleteReference: spy("onDeleteReference"),
+    onMoveReference: spy("onMoveReference"),
+    onTransferEntries: spy("onTransferEntries"),
+  }));
+  takeCalls();
+  assert.ok(row(view.container, "資料/表紙案.png"), "直下の資料のフォルダに画像が出る");
+  await click(row(view.container, "資料/表紙案.png").querySelector(".treeItemPrimary"));
+  assert.deepEqual(takeCalls(), [["onOpenReference", "資料/表紙案.png"]]);
+  assert.deepEqual(await menuLabels(row(view.container, "資料/表紙案.png")), ["開く", "リネーム", "移動・コピー…", "削除"]);
+  await drag(row(view.container, "資料/表紙案.png"), row(view.container, "下書き"), 10);
+  await drag(row(view.container, "資料/表紙案.png"), row(view.container, "本編.md"), 10);
+  assert.deepEqual(takeCalls(), [], "資料のフォルダの外へは落ちない");
+  await drag(row(view.container, "資料/表紙案.png"), row(view.container, "資料/表紙"), 10);
+  assert.deepEqual(takeCalls(), [["onMoveReference", "資料/表紙案.png", "資料/表紙"]]);
+  await view.unmount();
+
+  const unknown = await mount(props(rootTree, { library: rootLibrary, materialReferences: references }));
+  assert.equal(row(unknown.container, "資料/表紙案.png"), undefined, "資料のフォルダが分からなければ出さない（今まで）");
+  await unknown.unmount();
+}
+
 // ライブラリ直下では段を出さない。
 {
   const library = { path: root, name: "ライブラリ", role: "root", projects: [], misplacedProjects: [] };

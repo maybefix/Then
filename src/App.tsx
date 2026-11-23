@@ -2580,6 +2580,57 @@ export default function App() {
     return () => observer.disconnect();
   }, [referenceLayoutFitRoot, startupView]);
 
+  // U10: スターを付けたノート。ファイルの木が変わるたび（改名・移動・削除・送る）に読み直す。
+  const [starredNotePaths, setStarredNotePaths] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    if (!isHydrated || !projectFolder || !isTauriRuntime()) {
+      setStarredNotePaths(new Set());
+      return;
+    }
+    let isCancelled = false;
+    invoke<string[]>("load_note_stars", { rootPath: projectFolder.path })
+      .then((paths) => {
+        if (!isCancelled) setStarredNotePaths(new Set(paths));
+      })
+      .catch((error) => {
+        if (!isCancelled) setLastError(String(error));
+      });
+    return () => {
+      isCancelled = true;
+    };
+  }, [isHydrated, projectFolder]);
+  const handleSetNoteStar = async (path: string, starred: boolean) => {
+    if (!projectFolder || !isTauriRuntime()) return;
+    try {
+      const paths = await invoke<string[]>("set_note_star", { rootPath: projectFolder.path, path, starred });
+      setStarredNotePaths(new Set(paths));
+    } catch (error) {
+      setLastError(String(error));
+      showToast(starred ? "スターを付けられませんでした" : "スターを外せませんでした");
+    }
+  };
+
+  // Q5: ライブラリ直下の資料のフォルダ。直下の木で、その中に画像・PDF を並べる。木が変わるたびに読み直す。
+  const [libraryReferencesFolderPath, setLibraryReferencesFolderPath] = useState<string | null>(null);
+  const isLibraryRootScope = projectFolder?.library?.role === "root";
+  useEffect(() => {
+    if (!isHydrated || !projectFolder || !isLibraryRootScope || !isTauriRuntime()) {
+      setLibraryReferencesFolderPath(null);
+      return;
+    }
+    let isCancelled = false;
+    invoke<string | null>("library_references_folder", { rootPath: projectFolder.path })
+      .then((path) => {
+        if (!isCancelled) setLibraryReferencesFolderPath(path);
+      })
+      .catch(() => {
+        if (!isCancelled) setLibraryReferencesFolderPath(null);
+      });
+    return () => {
+      isCancelled = true;
+    };
+  }, [isHydrated, isLibraryRootScope, projectFolder]);
+
   // The reference candidates are the project's files, so they follow the file tree.
   useEffect(() => {
     if (!isHydrated || !projectFolder) return;
@@ -3823,6 +3874,7 @@ export default function App() {
       manuscriptFolders: canvasManuscriptFolders,
       posts: canvasPosts,
       rightSidebarVisible: !isRightSidebarCollapsed,
+      isLibraryRoot: projectFolder.library?.role === "root",
     };
 
     // キャンバスはメイン画面の中央に開く。別ウィンドウが開いていれば、同じボードを2か所で直さないよう、
@@ -6543,6 +6595,7 @@ export default function App() {
     handleMoveMaterialReference,
     handleDeleteProjectEntry,
     trashProjectEntry,
+    handleTransferEntries,
     handleMoveProjectEntriesToFolder,
     handleMoveProjectEntry,
     handleBreadcrumbEntryDragStart,
@@ -6602,6 +6655,13 @@ export default function App() {
     rewriteLinksAfterPathChange: (rootPath, changes, message) => {
       if (!isTauriRuntime()) return;
       setPendingLinkRewrites((current) => [...current, { rootPath, changes, message }]);
+    },
+    requestMultiInput,
+    // U5: 送ったノートを指す札を、送り先の作品へ付け替えてから読み直す。
+    movePostNotes: async (sourceRoot, targetRoot, changes) => {
+      if (!isTauriRuntime()) return;
+      await invoke("posts_move_notes", { scopePath: sourceRoot, targetRoot, changes });
+      await postStream.refresh();
     },
   });
 
@@ -7676,7 +7736,8 @@ export default function App() {
                 handleAddReference: () => handleAddReference(),
                 openReferenceCard,
                 handleDeleteImportedReference: (sourcePath: string) => handleDeleteImportedReference(sourcePath),
-                handleRenameMaterialReference, handleMoveMaterialReference,
+                handleRenameMaterialReference, handleMoveMaterialReference, handleTransferEntries,
+                starredNotePaths, handleSetNoteStar, libraryReferencesFolderPath,
                 // In the corkboard these open the file in the body (BINDER 1-5).
                 handleProjectFileSelect: selectBinderFile,
                 handleProjectSearchResultOpen: openSearchResultInBody,

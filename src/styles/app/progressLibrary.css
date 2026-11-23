@@ -532,6 +532,65 @@ button.binderSectionToggle {
   color: var(--text-primary);
 }
 
+/* 素材の段の見出しの星のボタン（U10）。押しているあいだは、スターの付いたノートだけを出す。 */
+.binderSectionStarFilter {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.binderSectionStarFilter:hover {
+  background: var(--control-hover);
+  color: var(--text-primary);
+}
+
+.binderSectionStarFilter.isOn {
+  color: var(--text-primary);
+}
+
+.binderSectionStarIcon {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+}
+
+.binderSectionStarFilter.isOn .binderSectionStarIcon {
+  fill: currentColor;
+}
+
+/* スターを付けたノートの行の印（U10）。 */
+.fileTreeItemPrimary:has(> .treeItemStar) {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.treeItemStar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.treeItemStarIcon {
+  width: 10px;
+  height: 10px;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
 .binderPostItemPrimary {
   width: 100%;
   min-height: 28px;

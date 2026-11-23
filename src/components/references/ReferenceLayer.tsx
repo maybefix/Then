@@ -326,23 +326,55 @@ export function ReferenceReadOnlyPreview({
   scope,
   kind,
   title,
+  onMissingChange,
 }: {
   rootPath: string | null;
   sourcePath: string;
   scope: ReferenceScope;
   kind: ReferenceKind;
   title?: string;
+  /** ファイルが見つからないか（K7）。見つからないときは中身の欄を空にし、カードの側が「見つからない」の表示にする。 */
+  onMissingChange?: (missing: boolean) => void;
 }) {
   if (isTextualReference(kind)) {
-    return <ReadOnlyTextReferencePreview rootPath={rootPath} sourcePath={sourcePath} scope={scope} kind={kind} />;
+    return <ReadOnlyTextReferencePreview rootPath={rootPath} sourcePath={sourcePath} scope={scope} kind={kind} onMissingChange={onMissingChange} />;
   }
   if (kind === "image") {
-    return <ReadOnlyImageReferencePreview rootPath={rootPath} sourcePath={sourcePath} scope={scope} title={title} />;
+    return <ReadOnlyImageReferencePreview rootPath={rootPath} sourcePath={sourcePath} scope={scope} title={title} onMissingChange={onMissingChange} />;
   }
   if (kind === "pdf") {
-    return <ReadOnlyPdfReferencePreview rootPath={rootPath} sourcePath={sourcePath} scope={scope} />;
+    return <ReadOnlyPdfReferencePreview rootPath={rootPath} sourcePath={sourcePath} scope={scope} onMissingChange={onMissingChange} />;
   }
   return <div className="referenceReadOnlyPreview referencePlaceholder">未対応の資料です</div>;
+}
+
+/** 読み取り専用のプレビューで、ファイルが見つからないことを表す印（Rust の文「reference file does not exist」。K7）。 */
+const MISSING_REFERENCE = "\u0000missing";
+
+function isMissingReferenceError(reason: unknown): boolean {
+  return String(reason).includes("reference file does not exist");
+}
+
+/**
+ * プレビューのエラーの値。見つからないときは MISSING_REFERENCE にして、onMissingChange で知らせる。
+ * 渡す関数が描くたびに変わっても、同じ値を2回知らせない。
+ */
+function useMissingAwareError(onMissingChange?: (missing: boolean) => void) {
+  const [error, setErrorState] = useState("");
+  const callbackRef = useRef(onMissingChange);
+  callbackRef.current = onMissingChange;
+  const missing = error === MISSING_REFERENCE;
+  useEffect(() => {
+    callbackRef.current?.(missing);
+  }, [missing]);
+  const setError = (reason: unknown) => {
+    if (reason === "") {
+      setErrorState("");
+      return;
+    }
+    setErrorState(isMissingReferenceError(reason) ? MISSING_REFERENCE : String(reason));
+  };
+  return [error, setError] as const;
 }
 
 function ReadOnlyTextReferencePreview({
@@ -350,15 +382,17 @@ function ReadOnlyTextReferencePreview({
   sourcePath,
   scope,
   kind,
+  onMissingChange,
 }: {
   rootPath: string | null;
   sourcePath: string;
   scope: ReferenceScope;
   kind: ReferenceKind;
+  onMissingChange?: (missing: boolean) => void;
 }) {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useMissingAwareError(onMissingChange);
 
   useEffect(() => {
     let cancelled = false;
@@ -386,6 +420,9 @@ function ReadOnlyTextReferencePreview({
   if (loading) {
     return <div className="referenceReadOnlyPreview referencePlaceholder">読み込み中...</div>;
   }
+  if (error === MISSING_REFERENCE) {
+    return <div className="referenceReadOnlyPreview referenceMissing" />;
+  }
   if (error) {
     return <div className="referenceReadOnlyPreview referenceError">{error}</div>;
   }
@@ -406,14 +443,16 @@ function ReadOnlyImageReferencePreview({
   sourcePath,
   scope,
   title,
+  onMissingChange,
 }: {
   rootPath: string | null;
   sourcePath: string;
   scope: ReferenceScope;
   title?: string;
+  onMissingChange?: (missing: boolean) => void;
 }) {
   const [src, setSrc] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useMissingAwareError(onMissingChange);
 
   useEffect(() => {
     let cancelled = false;
@@ -435,6 +474,9 @@ function ReadOnlyImageReferencePreview({
     };
   }, [rootPath, scope, sourcePath]);
 
+  if (error === MISSING_REFERENCE) {
+    return <div className="referenceReadOnlyPreview referenceMissing" />;
+  }
   if (error) {
     return <div className="referenceReadOnlyPreview referenceError">{error}</div>;
   }
@@ -450,15 +492,17 @@ function ReadOnlyPdfReferencePreview({
   rootPath,
   sourcePath,
   scope,
+  onMissingChange,
 }: {
   rootPath: string | null;
   sourcePath: string;
   scope: ReferenceScope;
+  onMissingChange?: (missing: boolean) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [page, setPage] = useState(1);
-  const [error, setError] = useState("");
+  const [error, setError] = useMissingAwareError(onMissingChange);
 
   useEffect(() => {
     let cancelled = false;
@@ -513,6 +557,9 @@ function ReadOnlyPdfReferencePreview({
     };
   }, [pdf, page]);
 
+  if (error === MISSING_REFERENCE) {
+    return <div className="referenceReadOnlyPreview referenceMissing" />;
+  }
   if (error) {
     return <div className="referenceReadOnlyPreview referenceError">{error}</div>;
   }

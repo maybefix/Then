@@ -306,6 +306,40 @@ fn renaming_or_moving_inside_then_follows_the_link() {
     assert_eq!(std::fs::read_to_string(posts_file(&root)).unwrap(), text);
 }
 
+/// U5: ノートをほかの作品へ送ったら、札はその作品のノートを指す。直下へ送ったら付け替えない（札は薄くなる）。
+#[test]
+fn sending_a_note_to_another_work_moves_the_link_with_it() {
+    let dir = TestDirectory::new("send");
+    let (root, a, b) = library(&dir);
+    let id = post_id(&add(&a, AT, "Aの投稿", None).unwrap(), "Aの投稿");
+    make_note(&a, &hashes(&a, &[&id]), "手紙", NOTE).unwrap();
+    let work_a = line_of(&root, &id)["note"]["work"].as_str().unwrap().to_string();
+    let change = |old: PathBuf, new: PathBuf| PathChange {
+        old_path: old.to_string_lossy().to_string(),
+        new_path: new.to_string_lossy().to_string(),
+    };
+
+    let after = move_notes_to_work(&a, &b, &[change(a.join("素材").join("手紙.md"), b.join("素材").join("手紙-2.md"))]).unwrap();
+    assert!(after.is_some());
+    let note = &line_of(&root, &id)["note"];
+    assert_ne!(note["work"].as_str().unwrap(), work_a);
+    assert_eq!(note["work"], load_project_config(&b).unwrap().work_id.unwrap().as_str());
+    assert_eq!(note["path"], "素材/手紙-2.md");
+    let snapshot = load(&a).unwrap();
+    let view = snapshot.posts.iter().find(|post| post.id == id).unwrap().note.as_ref().unwrap();
+    assert_eq!(view.work_name.as_deref(), Some("作品B"));
+
+    // 戻す（元に戻す）。
+    move_notes_to_work(&b, &a, &[change(b.join("素材").join("手紙-2.md"), a.join("素材").join("手紙.md"))]).unwrap();
+    assert_eq!(line_of(&root, &id)["note"]["work"], work_a.as_str());
+    assert_eq!(line_of(&root, &id)["note"]["path"], "素材/手紙.md");
+
+    // 直下へは付け替えない。
+    let text = std::fs::read_to_string(posts_file(&root)).unwrap();
+    assert!(move_notes_to_work(&a, &root, &[change(a.join("素材").join("手紙.md"), root.join("手紙.md"))]).unwrap().is_none());
+    assert_eq!(std::fs::read_to_string(posts_file(&root)).unwrap(), text);
+}
+
 #[test]
 fn a_note_in_another_work_or_gone_missing_is_shown_as_such() {
     let dir = TestDirectory::new("view");
