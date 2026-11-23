@@ -486,4 +486,30 @@ console.log("PASS open in window: the centre Canvas hands its board to the windo
   globalThis.canvasTestInvoke = before;
 }
 console.log("PASS board trash: delete one or empty all after a confirmation, the list is read again, root heading");
+// K7: 見つからない資料のカードは、ファイルのカードと同じく「見つからない」の表示（isMissing）にし、Rust のエラーの文を
+// 出さない。見つからないこと以外の失敗（読めない）は、今までどおり文を出す。
+{
+  const before = globalThis.canvasTestInvoke;
+  globalThis.canvasTestInvoke = async (command, args) => {
+    if (command === "read_reference_binary") {
+      if (args.sourcePath === "素材/資料/港.png") throw "reference file does not exist";
+      throw "failed to read reference file: access denied";
+    }
+    return before(command, args);
+  };
+  await mount();
+  const reference = (id, sourcePath, x) => ({ id, type: "reference", x, y: 0, width: 260, height: 200, scope: "project", sourcePath, name: sourcePath.split("/").pop(), kind: "image" });
+  docs.set(key("project", "one", "b"), { nodes: [reference("gone", "素材/資料/港.png", 0), reference("locked", "素材/資料/鍵.png", 300)], edges: [], then: { name: "B" } });
+  await select("B");
+  await act(async () => { await settle(); await settle(); });
+  const card = (id) => document.querySelector(`.canvasReferenceNode[data-node-id="${id}"]`);
+  assert.ok(card("gone").classList.contains("isMissing"), "見つからない資料のカードは isMissing");
+  assert.equal(card("gone").querySelector(".referenceError"), null, "エラーの文は出さない");
+  assert.equal(card("gone").querySelector(".canvasReferenceTitle").textContent, "港.png", "名前は出す");
+  assert.ok(!card("locked").classList.contains("isMissing"), "ほかの失敗は見つからない扱いにしない");
+  assert.match(card("locked").querySelector(".referenceError").textContent, /access denied/);
+  await unmount();
+  globalThis.canvasTestInvoke = before;
+}
+console.log("PASS missing reference: a reference card whose file is gone is drawn like a missing file card, without the error text");
 dom.window.close();
