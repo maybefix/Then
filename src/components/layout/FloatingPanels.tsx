@@ -109,10 +109,13 @@ export type PanelTask = {
   status: PanelStatus;
 };
 
-export function PanelTaskbar({ taskbar, fixed, documents, onLaunch, onTaskClick, onToggleAll, allMinimized, canToggle }: {
+type PanelLauncherCommand = Pick<PanelTask, "id" | "label" | "icon"> & { run: () => void };
+
+export function PanelTaskbar({ taskbar, fixed, documents, commands, onLaunch, onTaskClick, onToggleAll, allMinimized, canToggle }: {
   taskbar: RefObject<HTMLElement>;
   fixed: PanelTask[];
   documents: PanelTask[];
+  commands: PanelLauncherCommand[];
   onLaunch: (id: string) => void;
   onTaskClick: (id: string) => void;
   onToggleAll: () => void;
@@ -187,6 +190,7 @@ export function PanelTaskbar({ taskbar, fixed, documents, onLaunch, onTaskClick,
         type="button"
         className="panelLauncherButton"
         aria-label="パネルを開く"
+        title="パネルを開く"
         aria-controls={launcherId}
         aria-expanded={launcherOpen}
         onMouseDown={(event) => event.preventDefault()}
@@ -201,26 +205,25 @@ export function PanelTaskbar({ taskbar, fixed, documents, onLaunch, onTaskClick,
           <rect x="4" y="14" width="6" height="6" rx="1" />
           <rect x="14" y="14" width="6" height="6" rx="1" />
         </svg>
-        <span>パネル</span>
       </button>
       {launcherOpen && (
         <section ref={launcher} id={launcherId} className="panelLauncher" aria-label="パネルを開く">
-          {fixed.map((panel) => (
+          {[...fixed.map((panel) => ({ ...panel, run: () => onLaunch(panel.id) })), ...commands].map((tile) => (
             <button
-              key={panel.id}
+              key={tile.id}
               type="button"
               className="panelLauncherTile"
-              data-panel-launch={panel.id}
-              title={panel.label}
+              data-panel-launch={tile.id}
+              title={tile.label}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => {
                 if (launcher.current?.contains(document.activeElement)) launcherButton.current?.focus();
                 setLauncherOpen(false);
-                onLaunch(panel.id);
+                tile.run();
               }}
             >
-              {panel.icon}
-              <span>{panel.label}</span>
+              {tile.icon}
+              <span>{tile.label}</span>
             </button>
           ))}
         </section>
@@ -254,7 +257,7 @@ export function PanelTaskbar({ taskbar, fixed, documents, onLaunch, onTaskClick,
 
 export function FloatingPanel({
   id, label, icon, status, visible, area, frame, zIndex, taskbar,
-  onFocus, onMinimize, onClose, onFrameChange, headerActions, children,
+  onFocus, onMinimize, onClose, onFrameChange, titleControl, headerActions, children,
 }: {
   id: string;
   label: string;
@@ -269,6 +272,7 @@ export function FloatingPanel({
   onMinimize: () => void;
   onClose: () => void;
   onFrameChange: (frame: PanelFrame) => void;
+  titleControl?: ReactNode;
   headerActions?: ReactNode;
   children: ReactNode;
 }) {
@@ -344,9 +348,14 @@ export function FloatingPanel({
       onFocusCapture={onFocus}
     >
       <header className="floatingPanelHeader">
-        <div className="floatingPanelGrip" onPointerDown={(event) => begin(event, "move")} {...dragHandlers}>
-          {icon}
-          <strong>{label}</strong>
+        <div
+          className="floatingPanelGrip"
+          onPointerDown={(event) => {
+            if (!(event.target instanceof Element) || !event.target.closest("button")) begin(event, "move");
+          }}
+          {...dragHandlers}
+        >
+          {titleControl ?? <>{icon}<strong>{label}</strong></>}
         </div>
         {headerActions}
         <button

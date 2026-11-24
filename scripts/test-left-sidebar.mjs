@@ -1,6 +1,6 @@
 // 左サイドバー（LeftSidebar）が、App から受け取った値と関数を、正しい相手に正しく渡すかを確かめる。
 // LeftSidebar はフックを使わないので、関数として呼んで返ってきた要素の木をたどる。
-// WorkspaceSidebar と OpenCardsPane は、受け取った props を見るだけの代わりの部品に差し替える。
+// WorkspaceSidebar は、受け取った props を見るだけの代わりの部品に差し替える。
 // 値は名前ごとに違う目印にし、関数は呼ばれた名前と引数を記録する入れ物にして、
 // 取り違え（たとえば「名前の変更」に削除の関数をつなぐこと）を、どの組でも見つけられるようにする。
 import assert from "node:assert/strict";
@@ -14,8 +14,8 @@ import ts from "typescript";
 const stubPanes = {
   name: "stub-panes",
   setup(pluginBuild) {
-    pluginBuild.onResolve({ filter: /^(\.\/WorkspaceSidebar|\.\.\/binder\/OpenCardsPane)$/ }, (args) => ({
-      path: args.path.endsWith("WorkspaceSidebar") ? "WorkspaceSidebar" : "OpenCardsPane",
+    pluginBuild.onResolve({ filter: /^\.\/WorkspaceSidebar$/ }, () => ({
+      path: "WorkspaceSidebar",
       namespace: "stub-pane",
     }));
     pluginBuild.onLoad({ filter: /.*/, namespace: "stub-pane" }, (args) => ({
@@ -33,7 +33,6 @@ const bundled = await build({
     contents: [
       'export { LeftSidebar } from "./LeftSidebar";',
       'export { WorkspaceSidebar } from "./WorkspaceSidebar";',
-      'export { OpenCardsPane } from "../binder/OpenCardsPane";',
     ].join("\n"),
     resolveDir: path.join(process.cwd(), "src/components/layout"),
     loader: "ts",
@@ -49,14 +48,13 @@ const bundled = await build({
   logLevel: "error",
 });
 await writeFile(compiledPath, bundled.outputFiles[0].text);
-const { LeftSidebar, WorkspaceSidebar, OpenCardsPane } = await import(pathToFileURL(compiledPath).href)
+const { LeftSidebar, WorkspaceSidebar } = await import(pathToFileURL(compiledPath).href)
   .finally(() => unlink(compiledPath));
 
 // App の関数の代わり。呼ばれた名前と引数を順に記録する。
 const calls = [];
 const functionNames = [
-  "onOutlineScopeChange", "onAddToCanvas", "setLeftSidebarView", "handleNewDocument", "handleCreateProjectFolder",
-  "handleOpenProjectFolder", "focusReferenceCard", "closeReferenceCard", "pinReferenceCard", "collapseReferenceCard",
+  "onAddToCanvas", "handleCreateProjectFolder", "handleOpenProjectFolder",
   "handleSetFileProgress", "handleFolderCollapsedChange", "handleOutlineCollapsedChange",
   "handleOutlineHeadingCollapsedChange", "jumpToOutlineItem", "handleProjectOutlineJump", "handleHeadingMove",
   "handleHeadingExtract", "handleCreateProjectFile", "handleProjectFileSelect",
@@ -83,10 +81,8 @@ const mark = (name) => `<${name}>`;
 const baseValues = {
   outlineScope: "all",
   panelVisible: true,
-  leftSidebarView: "files",
   projectFolder: { path: "C:/work", name: "work", children: [] },
   focusedFolderPath: "C:/work/第一部",
-  referenceLayout: { cards: mark("referenceLayout.cards") },
   // BINDER 2-1: 投稿の段に出すのは、受信箱の投稿の数。
   postInboxCount: 3,
   // 素材の段には、画像・PDF だけを置かれたフォルダの中に並べる（BINDER 2-5、確認1の 7）。
@@ -120,86 +116,23 @@ const baseValues = {
 
 const render = (overrides = {}) => LeftSidebar({ ...baseValues, ...spies, ...overrides });
 
-// 要素の木を深さ優先でたどる。
-const elementsOf = (node) => {
-  const found = [];
-  const visit = (current) => {
-    if (Array.isArray(current)) {
-      current.forEach(visit);
-      return;
-    }
-    if (!current || typeof current !== "object" || !("props" in current)) return;
-    found.push(current);
-    visit(current.props.children);
-  };
-  visit(node);
-  return found;
-};
-const findOne = (tree, predicate, label) => {
-  const matches = elementsOf(tree).filter(predicate);
-  assert.equal(matches.length, 1, `${label} must appear exactly once`);
-  return matches[0];
-};
-const button = (tree, label) =>
-  findOne(tree, (element) => element.type === "button" && element.props["aria-label"] === label, `button ${label}`);
-
 // 1つの操作で、決めた App の関数が、決めた引数で1回だけ呼ばれることを確かめる。
 const expectCall = (label, action, name, args) => {
   calls.length = 0;
   action();
   assert.deepEqual(calls, [{ name, args }], `${label} must call ${name} once`);
 };
-const expectCalls = (label, action, expected) => {
-  calls.length = 0;
-  action();
-  assert.deepEqual(calls, expected, `${label} must call ${expected.map((call) => call.name).join(", ")}`);
-};
-
-// --- 左の枠と、左端のボタン列 ---
 {
-  const tree = render();
-  assert.equal(tree.type, "div");
-  assert.equal(tree.props.className, "filePanelBody");
-  const nav = findOne(tree, (element) => element.type === "nav", "activity bar");
-  assert.equal(nav.props["aria-label"], "ファイル・見出しの操作");
-  assert.deepEqual(
-    elementsOf(nav).filter((element) => element.type === "button").map((element) => element.props["aria-label"]),
-    ["ファイル・見出し", "開いているカード", "新規ファイル", "新規フォルダ"],
-  );
-  assert.equal(button(tree, "ファイル・見出し").props["aria-pressed"], true);
-  assert.equal(button(tree, "開いているカード").props["aria-pressed"], false);
-
-  for (const [label, view] of [["ファイル・見出し", "files"], ["開いているカード", "reference"]]) {
-    expectCalls(label, () => button(tree, label).props.onClick(), [
-      { name: "setLeftSidebarView", args: [view] },
-    ]);
-  }
-  assert.equal(button(tree, "新規ファイル").props.onClick, spies.handleNewDocument);
-  expectCall("新規フォルダ（選んだフォルダ）", () => button(tree, "新規フォルダ").props.onClick(),
-    "handleCreateProjectFolder", ["C:/work/第一部"]);
-  expectCall("新規フォルダ（選んだフォルダなし）",
-    () => button(render({ focusedFolderPath: null }), "新規フォルダ").props.onClick(),
-    "handleCreateProjectFolder", ["C:/work"]);
-  expectCall("新規フォルダ（作品なし）",
-    () => button(render({ projectFolder: null }), "新規フォルダ").props.onClick(),
-    "handleOpenProjectFolder", []);
-}
-
-{
-  const tree = render({ outlineScope: "current", panelVisible: false });
-  const outlineSwitch = findOne(tree, (element) => element.type === "button" && element.props.children === "現在の文書", "outline scope");
-  assert.equal(outlineSwitch.props["aria-pressed"], true);
-  expectCall("現在の文書", () => outlineSwitch.props.onClick(), "onOutlineScopeChange", ["current"]);
-  const pane = findOne(tree, (element) => element.type === WorkspaceSidebar, "WorkspaceSidebar");
+  const pane = render({ outlineScope: "current", panelVisible: false });
+  assert.equal(pane.type, WorkspaceSidebar);
   assert.equal(pane.props.outlineScope, "current");
   assert.equal(pane.props.panelHidden, true);
 }
 
 // --- ファイルツリー（WorkspaceSidebar）へのつなぎ ---
 {
-  const tree = render();
-  assert.equal(elementsOf(tree).some((element) => element.type === OpenCardsPane), false);
-  const sidebar = findOne(tree, (element) => element.type === WorkspaceSidebar, "WorkspaceSidebar");
+  const sidebar = render();
+  assert.equal(sidebar.type, WorkspaceSidebar);
   const props = sidebar.props;
 
   const expectedValues = {
@@ -288,7 +221,7 @@ const expectCalls = (label, action, expected) => {
     onOpenReference: {
       args: [{ path: "C:/work/素材/資料/map.png", sourcePath: "素材/資料/map.png", name: "map.png", kind: "image" }],
       name: "openReferenceCard",
-      expectedArgs: ["素材/資料/map.png", baseValues.sortedReferenceCandidates[0], { switchToReferenceTab: false }],
+      expectedArgs: ["素材/資料/map.png", baseValues.sortedReferenceCandidates[0]],
     },
     onDeleteReference: {
       args: [{ path: "C:/work/素材/資料/map.png", sourcePath: "素材/資料/map.png", name: "map.png", kind: "image" }],
@@ -323,33 +256,8 @@ const expectCalls = (label, action, expected) => {
   }
   expectCall("WorkspaceSidebar.onOpenSnapshot(null)", () => props.onOpenSnapshot(null), "openCheckpointStudio", [undefined]);
 
-  const noOutline = findOne(render({ activeOutlineChain: [] }), (element) => element.type === WorkspaceSidebar,
-    "WorkspaceSidebar without an active heading");
+  const noOutline = render({ activeOutlineChain: [] });
   assert.equal(noOutline.props.activeOutlineBlockId, null);
-}
-
-// --- 開いているカード（OpenCardsPane）へのつなぎ ---
-{
-  const tree = render({ leftSidebarView: "reference" });
-  assert.equal(findOne(tree, (element) => element.type === WorkspaceSidebar, "files pane").props.panelHidden, true);
-  assert.equal(button(tree, "開いているカード").props["aria-pressed"], true);
-  const aside = findOne(tree, (element) => element.type === "aside", "reference sidebar");
-  assert.equal(aside.props.className, "workspaceSidebar referenceWorkspaceSidebar");
-  assert.equal(aside.props["aria-label"], "開いているカード");
-
-  const pane = findOne(tree, (element) => element.type === OpenCardsPane, "OpenCardsPane");
-  assert.deepEqual(Object.keys(pane.props).sort(),
-    ["candidates", "cards", "onCloseCard", "onCollapseCard", "onFocusCard", "onPinCard"]);
-  assert.equal(pane.props.cards, mark("referenceLayout.cards"));
-  assert.equal(pane.props.candidates, baseValues.sortedReferenceCandidates);
-  for (const [key, args, name] of [
-    ["onFocusCard", ["card-1"], "focusReferenceCard"],
-    ["onCloseCard", ["card-2"], "closeReferenceCard"],
-    ["onPinCard", ["card-3", true], "pinReferenceCard"],
-    ["onCollapseCard", ["card-4", false], "collapseReferenceCard"],
-  ]) {
-    expectCall(`OpenCardsPane.${key}`, () => pane.props[key](...args), name, args);
-  }
 }
 
 // --- ビューと畳みの保存と復元（再起動しても戻る。右サイドバーのタブと同じく、アプリ全体で1つ） ---
@@ -393,11 +301,8 @@ const expectCalls = (label, action, expected) => {
   ].join("\n");
   assert.match(app, /leftSidebarView: normalizeLeftSidebarView\(value\?\.leftSidebarView\)/);
   assert.match(app, /leftSidebarCollapsed: normalizeLeftSidebarCollapsed\(value\?\.leftSidebarCollapsed\)/);
-  assert.match(app, /setLeftSidebarViewState\(state\.leftSidebarView === "reference" \? "reference" : "files"\)/);
   assert.match(app, /state\.leftSidebarCollapsed \? null : "files"/);
-  assert.match(app, /current\.leftSidebarView === view/);
   // 画面の値を直接書くのは、保存もする関数と起動時の復元の2か所だけ（ほかの変更は全部、保存する関数を通る）。
-  assert.equal(app.match(/setLeftSidebarViewState\(/g)?.length, 2, "only the saving setter and the restore set the view");
   assert.match(app, /canvasLeftSidebarCollapsed: normalizeCanvasLeftSidebarCollapsed\(value\?\.canvasLeftSidebarCollapsed\)/);
 }
 

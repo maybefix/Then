@@ -8,8 +8,8 @@
     ],
     "filters": {
       "all": {
-        "header": "ファイル字数",
-        "libraryBack": "見本ライブラリライブラリ",
+        "header": "すべての進捗",
+        "libraryBack": "見本ライブラリ",
         "empty": null,
         "rows": [
           {
@@ -133,8 +133,8 @@
         "libraryProjects": null
       },
       "todo": {
-        "header": "未未着手字数",
-        "libraryBack": "見本ライブラリライブラリ",
+        "header": "未未着手",
+        "libraryBack": "見本ライブラリ",
         "empty": null,
         "rows": [
           {
@@ -199,8 +199,8 @@
         "libraryProjects": null
       },
       "writing": {
-        "header": "執執筆中字数",
-        "libraryBack": "見本ライブラリライブラリ",
+        "header": "執執筆中",
+        "libraryBack": "見本ライブラリ",
         "empty": null,
         "rows": [
           {
@@ -257,8 +257,8 @@
         "libraryProjects": null
       },
       "revising": {
-        "header": "推推敲中字数",
-        "libraryBack": "見本ライブラリライブラリ",
+        "header": "推推敲中",
+        "libraryBack": "見本ライブラリ",
         "empty": "推敲中のファイルはありません",
         "rows": [],
         "snapshotDock": true,
@@ -266,8 +266,8 @@
         "libraryProjects": null
       },
       "done": {
-        "header": "完完了字数",
-        "libraryBack": "見本ライブラリライブラリ",
+        "header": "完完了",
+        "libraryBack": "見本ライブラリ",
         "empty": null,
         "rows": [
           {
@@ -302,8 +302,8 @@
         "libraryProjects": null
       },
       "archived": {
-        "header": "アアーカイブ字数",
-        "libraryBack": "見本ライブラリライブラリ",
+        "header": "アアーカイブ",
+        "libraryBack": "見本ライブラリ",
         "empty": "アーカイブのファイルはありません",
         "rows": [],
         "snapshotDock": true,
@@ -785,8 +785,8 @@
     ],
     "filters": {
       "all": {
-        "header": "ファイル字数",
-        "libraryBack": "見本ライブラリライブラリ",
+        "header": "すべての進捗",
+        "libraryBack": "見本ライブラリ",
         "empty": null,
         "rows": [
           {
@@ -908,8 +908,8 @@
         "libraryProjects": null
       },
       "todo": {
-        "header": "未未着手字数",
-        "libraryBack": "見本ライブラリライブラリ",
+        "header": "未未着手",
+        "libraryBack": "見本ライブラリ",
         "empty": null,
         "rows": [
           {
@@ -974,8 +974,8 @@
         "libraryProjects": null
       },
       "writing": {
-        "header": "執執筆中字数",
-        "libraryBack": "見本ライブラリライブラリ",
+        "header": "執執筆中",
+        "libraryBack": "見本ライブラリ",
         "empty": null,
         "rows": [
           {
@@ -1032,8 +1032,8 @@
         "libraryProjects": null
       },
       "revising": {
-        "header": "推推敲中字数",
-        "libraryBack": "見本ライブラリライブラリ",
+        "header": "推推敲中",
+        "libraryBack": "見本ライブラリ",
         "empty": null,
         "rows": [
           {
@@ -1066,8 +1066,8 @@
         "libraryProjects": null
       },
       "done": {
-        "header": "完完了字数",
-        "libraryBack": "見本ライブラリライブラリ",
+        "header": "完完了",
+        "libraryBack": "見本ライブラリ",
         "empty": "完了のファイルはありません",
         "rows": [],
         "snapshotDock": true,
@@ -1075,8 +1075,8 @@
         "libraryProjects": null
       },
       "archived": {
-        "header": "アアーカイブ字数",
-        "libraryBack": "見本ライブラリライブラリ",
+        "header": "アアーカイブ",
+        "libraryBack": "見本ライブラリ",
         "empty": "アーカイブのファイルはありません",
         "rows": [],
         "snapshotDock": true,
@@ -1491,8 +1491,8 @@
     ],
     "filters": {
       "all": {
-        "header": "ファイル字数",
-        "libraryBack": "見本ライブラリライブラリ",
+        "header": "すべての進捗",
+        "libraryBack": "見本ライブラリ",
         "empty": null,
         "rows": [
           {
@@ -1527,8 +1527,8 @@
         "libraryProjects": null
       },
       "todo": {
-        "header": "未未着手字数",
-        "libraryBack": "見本ライブラリライブラリ",
+        "header": "未未着手",
+        "libraryBack": "見本ライブラリ",
         "empty": null,
         "rows": [
           {
@@ -1563,8 +1563,8 @@
         "libraryProjects": null
       },
       "writing": {
-        "header": "執執筆中字数",
-        "libraryBack": "見本ライブラリライブラリ",
+        "header": "執執筆中",
+        "libraryBack": "見本ライブラリ",
         "empty": "執筆中のファイルはありません",
         "rows": [],
         "snapshotDock": true,
@@ -1572,8 +1572,8 @@
         "libraryProjects": null
       },
       "revising": {
-        "header": "推推敲中字数",
-        "libraryBack": "見本ライブラリライブラリ",
+        "header": "推推敲中",
+        "libraryBack": "見本ライブラリ",
         "empty": "推敲中のファイルはありません",
         "rows": [],
         "snapshotDock": true,
@@ -1581,8 +1581,8 @@
         "libraryProjects": null
       },
       "done": {
-        "header": "完完了字数",
-        "libraryBack": "見本ライブラリライブラリ",
+        "header": "完完了",
+        "libraryBack": "見本ライブラリ",
         "empty": "完了のファイルはありません",
         "rows": [],
         "snapshotDock": true,
@@ -1590,8 +1590,8 @@
         "libraryProjects": null
       },
       "archived": {
-        "header": "アアーカイブ字数",
-        "libraryBack": "見本ライブラリライブラリ",
+        "header": "アアーカイブ",
+        "libraryBack": "見本ライブラリ",
         "empty": "アーカイブのファイルはありません",
         "rows": [],
         "snapshotDock": true,
@@ -1678,7 +1678,7 @@
     ]
   },
   "ライブラリ直下": {
-    "header": "ファイル字数",
+    "header": "すべての進捗",
     "libraryBack": null,
     "empty": null,
     "rows": [
@@ -1714,7 +1714,7 @@
     "libraryProjects": "作品3作品A作品B作品C＋ 新しい作品既存の作品を取り込む…"
   },
   "フォルダなし": {
-    "header": "ファイル",
+    "header": null,
     "libraryBack": null,
     "empty": "見出しがありません",
     "rows": [],

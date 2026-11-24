@@ -112,7 +112,7 @@ export function RightPaneSwitcher({
           }
         }}
       >
-        <span className="rightPaneSwitcherIcon" aria-hidden="true">{active.icon}</span>
+        {active.icon && <span className="rightPaneSwitcherIcon" aria-hidden="true">{active.icon}</span>}
         <span className="rightPaneSwitcherLabel">{active.label}</span>
         <svg className="rightPaneSwitcherChevron" aria-hidden="true" focusable="false" viewBox="0 0 24 24">
           <polyline points="6 9 12 15 18 9" />
@@ -138,7 +138,7 @@ export function RightPaneSwitcher({
                 onSelect(item.id);
               }}
             >
-              <span className="rightPaneSwitcherIcon" aria-hidden="true">{item.icon}</span>
+              {item.icon && <span className="rightPaneSwitcherIcon" aria-hidden="true">{item.icon}</span>}
               <span className="rightPaneSwitcherItemLabel">{item.label}</span>
             </button>
           ))}

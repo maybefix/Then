@@ -56,8 +56,7 @@
 }
 
 .panelTaskbar button,
-.floatingPanelHeader button,
-.filePanelScope button {
+.floatingPanelHeader > button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -97,23 +96,19 @@
 
 .panelTaskbar button:hover,
 .panelTaskbar button[data-panel-status="open"],
-.floatingPanelHeader button:hover,
-.filePanelScope button:hover,
-.filePanelTools button:hover {
+.floatingPanelHeader > button:hover {
   background: var(--bg-panel-strong);
 }
 
 .panelTaskbar button:focus-visible,
-.floatingPanelHeader button:focus-visible,
-.filePanelScope button:focus-visible {
+.floatingPanelHeader button:focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: -2px;
 }
 
 .panelTaskbar .panelLauncherButton {
-  gap: 6px;
-  border-inline-end: 1px solid var(--border-subtle);
-  padding-inline: 6px 10px;
+  width: 28px;
+  padding: 0;
   color: var(--text-primary);
 }
 
@@ -182,8 +177,7 @@
 }
 
 .panelTaskbar svg,
-.floatingPanelHeader svg,
-.filePanelTools svg {
+.floatingPanelHeader svg {
   width: 14px;
   height: 14px;
   flex: 0 0 14px;
@@ -215,8 +209,7 @@
 
 .floatingPanelLayer[hidden],
 .floatingPanel[hidden],
-.floatingPanelLayer .referenceCard[hidden],
-.filePanelWorkspace[hidden] {
+.floatingPanelLayer .referenceCard[hidden] {
   display: none;
 }
 
@@ -271,7 +264,7 @@
   cursor: grabbing;
 }
 
-.floatingPanelHeader button {
+.floatingPanelHeader > button {
   width: 25px;
   height: 25px;
   padding: 0;
@@ -279,8 +272,7 @@
   color: var(--text-secondary);
 }
 
-.floatingPanelContent,
-.filePanelBody {
+.floatingPanelContent {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -312,41 +304,70 @@
   content: "";
 }
 
-.filePanelTools,
-.filePanelScope {
+.floatingPanel[data-floating-panel="files"] .floatingPanelHeader {
+  flex-basis: 35px;
+  border-bottom: 0;
+  background: var(--bg-panel);
+}
+
+.filePanelViewControl {
+  min-width: 0;
+}
+
+.filePanelViewControl .rightPaneSwitcherButton {
+  max-width: 100%;
+  padding-inline: 5px;
+  font-size: inherit;
+  font-weight: 650;
+}
+
+.filePanelViewControl .rightPaneSwitcherIcon {
+  color: var(--text-muted);
+}
+
+.floatingPanel[data-floating-panel="files"] .workspaceSidebar {
+  background: var(--bg-panel);
+}
+
+.filePanelListTools {
   display: flex;
+  min-height: 30px;
   flex: 0 0 auto;
   align-items: center;
+  gap: 8px;
+  padding: 0 9px 3px;
+  color: var(--text-muted);
+}
+
+.filePanelListTools .libraryBackButton {
+  width: auto;
+  min-width: 0;
+  flex: 0 1 auto;
   gap: 3px;
-  padding: 4px 7px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--sidebar-bg, var(--bg-panel));
-  color: var(--text-secondary);
-}
-
-.filePanelTools .workspaceActivityButton {
-  width: 27px;
-  height: 25px;
   margin: 0;
+  padding: 0 5px 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
 }
 
-.filePanelTools button[aria-pressed="true"],
-.filePanelScope button[aria-pressed="true"] {
-  background: var(--bg-panel-strong);
+.filePanelListTools .libraryBackButton:hover {
   color: var(--text-primary);
-  box-shadow: inset 0 -1px var(--accent);
 }
 
-.filePanelScope button {
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 11px;
+.filePanelProgressFilter {
+  min-width: 0;
+  margin-inline-start: auto;
 }
 
-.filePanelWorkspace {
-  display: flex;
-  flex: 1;
-  min-height: 0;
+.filePanelProgressFilter .rightPaneSwitcherButton {
+  max-width: 100%;
+  color: var(--text-muted);
+}
+
+.filePanelProgressFilter .rightPaneSwitcherPopover {
+  right: 0;
+  left: auto;
 }
 
 .floatingPanelLayer .workspaceSidebar {
@@ -366,11 +387,6 @@
 
 .floatingPanelContent > .floatingAuxiliaryBody {
   width: 100%;
-  min-height: 0;
-}
-
-.floatingPanelLayer .leftReferenceSidebarBody {
-  flex: 1;
   min-height: 0;
 }
 

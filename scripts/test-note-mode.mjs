@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync } from "node:fs";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -113,7 +113,7 @@ const appUrl = `http://127.0.0.1:${server.address().port}/`;
 const WORK = "C:/qa/library/作品A";
 
 /* Rust の代わり。作品Aに原稿2本（1本は「資料/素材.md」で、パスに「素材」が入るが role はない）と素材のノート1本。 */
-function installMock({ work, settings, leftSidebarView }) {
+function installMock({ work, settings, leftSidebarView, withReference }) {
   const file = (relative, extra = {}) => ({ path: `${work}/${relative}`, name: relative.split("/").pop(), kind: "file", children: [],
     fileId: `${work}/${relative}`, contentHash: null, modifiedAt: 1, ...extra });
   const folder = (relative, children, extra = {}) => ({ path: `${work}/${relative}`, name: relative.split("/").pop(), kind: "folder", children, ...extra });
@@ -153,7 +153,12 @@ function installMock({ work, settings, leftSidebarView }) {
     is_canvas_window_open: () => false,
     list_canvas_boards: () => [{ id: "qa", name: "QA", scope: "project", path: "qa.canvas", nodeCount: 0, edgeCount: 0, updatedAt: 1 }],
     load_canvas_board_with_hash: () => ({ board: { nodes: [], edges: [], then: { name: "QA", scope: "project", version: 1 } }, hash: null }),
-    load_reference_layout: () => ({ version: 3, name: "default", cards: [], recent: [], ideaThreads: [] }),
+    load_reference_layout: () => ({
+      version: 3, name: "default", recent: [], ideaThreads: [],
+      cards: withReference ? [{ id: "qa-reference", scope: "project", sourcePath: "参考メモ.txt", kind: "text",
+        x: 480, y: 220, width: 320, height: 200, zIndex: 1, collapsed: false, pinned: false }] : [],
+    }),
+    read_reference_text: () => "資料カードの確認用テキスト",
     get_system_fonts: () => [],
     list_installed_plugins: () => ({ plugins: [], errors: [] }),
     "plugin:event|unlisten": () => null,
@@ -296,10 +301,10 @@ try {
   await send("Emulation.setDeviceMetricsOverride", { width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false });
 
   let mockScript = null;
-  async function start(settings, preservePanels = false, leftSidebarView = "files") {
+  async function start(settings, preservePanels = false, leftSidebarView = "files", withReference = false) {
     if (mockScript) await send("Page.removeScriptToEvaluateOnNewDocument", { identifier: mockScript });
     ({ identifier: mockScript } = await send("Page.addScriptToEvaluateOnNewDocument", {
-      source: `${preservePanels ? "" : "localStorage.clear();"} (${installMock})(${JSON.stringify({ work: WORK, settings, leftSidebarView })})`,
+      source: `${preservePanels ? "" : "localStorage.clear();"} (${installMock})(${JSON.stringify({ work: WORK, settings, leftSidebarView, withReference })})`,
     }));
     await send("Page.navigate", { url: appUrl });
     await sleep(1500);
@@ -381,6 +386,11 @@ try {
     await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: x + dx, y: y + dy, button: "left", clickCount: 1 });
   };
   const launcherButton = ".panelLauncherButton";
+  const viewControl = ".filePanelViewControl .rightPaneSwitcherButton";
+  assert.deepEqual(await evaluate(`(() => {
+    const button = document.querySelector("${launcherButton}");
+    return [button.textContent.trim(), button.getAttribute("aria-label")];
+  })()`), ["", "パネルを開く"]);
   const launch = async (id) => {
     await click(launcherButton);
     await waitFor(`Boolean(document.querySelector(${JSON.stringify(tile(id))}))`);
@@ -390,11 +400,22 @@ try {
   await waitFor(visible("files"));
   assert.equal(await evaluate(`document.querySelectorAll("[data-panel-task]").length`), 2, "only the restored panels are in the taskbar");
   await click(launcherButton);
-  assert.equal(await evaluate(`document.querySelectorAll("[data-panel-launch]").length`), 7);
+  assert.equal(await evaluate(`document.querySelectorAll("[data-panel-launch]").length`), 9);
   await evaluate(`document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
   await waitFor(`!document.querySelector(".panelLauncher")`);
   assert.equal((await rect(".panelTaskbar")).height, 24);
   assert.equal((await rect(".statusbar")).height, 26);
+  assert.equal(await evaluate(`document.querySelector(${JSON.stringify(viewControl)}).textContent.trim()`), "ファイルツリー");
+  assert.equal(await evaluate(`Boolean(document.querySelector(".filePanelTools,.filePanelScope,.openCardsPane"))`), false);
+  for (const [id, title] of [["add-file", "新規ファイルを作成"], ["add-folder", "新規フォルダを作成"]]) {
+    await click(launcherButton);
+    await click(tile(id));
+    const dialog = `[role="dialog"][aria-label="${title}"]`;
+    await waitFor(`Boolean(document.querySelector(${JSON.stringify(dialog)}))`);
+    await click(`${dialog} .modalClose`);
+    await waitFor(`!document.querySelector(${JSON.stringify(dialog)})`);
+    assert.equal(await evaluate(`Boolean(document.querySelector(${JSON.stringify(task(id))}))`), false);
+  }
   const editorRect = await rect(".editorColumn");
   await evaluate(`(() => {
     window.originalEditor = document.querySelector(".pm-root");
@@ -419,14 +440,15 @@ try {
   assert.equal(await evaluate(visible("scene")), true);
 
   let frame = await rect(panel("files"));
-  await drag(frame.x + 35, frame.y + 15, 80, 50);
+  await drag(frame.right - 100, frame.y + 15, 80, 50);
   const moved = await rect(panel("files"));
   assert.deepEqual([moved.x - frame.x, moved.y - frame.y], [80, 50]);
   const handle = await rect(`${panel("files")} .floatingPanelResize`);
   await drag(handle.x + handle.width / 2, handle.y + handle.height / 2, 70, 30);
   frame = await rect(panel("files"));
   assert.deepEqual([frame.width - moved.width, frame.height - moved.height], [70, 30]);
-  await evaluate(`[...document.querySelectorAll(".filePanelScope button")].find(button => button.textContent === "現在の文書").click()`);
+  await click(viewControl);
+  await click('.filePanelViewControl [role="menuitemradio"]:last-child');
   await waitFor(`document.querySelector(".outlineExplorerSection").textContent.includes("章の見出し")`);
   assert.deepEqual(await rect(panel("files")), frame);
   assert.equal(await evaluate(`document.querySelectorAll(".outlineExplorerSection .fileTreeItem").length`), 0);
@@ -477,7 +499,7 @@ try {
   await waitFor(`document.querySelector(".canvasViewport")?.hasAttribute("data-canvas-file-drop")`);
   const canvasFrame = await rect(panel("files"));
   assert.deepEqual(canvasFrame, frame);
-  assert.equal(await evaluate(`document.querySelector(".filePanelScope button[aria-pressed=true]").textContent`), "現在の文書");
+  assert.equal(await evaluate(`document.querySelector(${JSON.stringify(viewControl)}).textContent.trim()`), "この文書の見出し");
   assert.equal(await evaluate(visible("connections")), true);
   assert.equal(await evaluate(`Boolean(document.querySelector(".canvasTopbarRight .canvasReferencePopover"))`), false);
   await evaluate(`(() => {
@@ -496,7 +518,7 @@ try {
 
   await start(MANUSCRIPT_SETTINGS, true);
   assert.deepEqual(await rect(panel("files")), frame);
-  assert.equal(await evaluate(`document.querySelector(".filePanelScope button[aria-pressed=true]").textContent`), "現在の文書");
+  assert.equal(await evaluate(`document.querySelector(${JSON.stringify(viewControl)}).textContent.trim()`), "この文書の見出し");
   await send("Emulation.setDeviceMetricsOverride", { width: 720, height: 620, deviceScaleFactor: 1, mobile: false });
   await sleep(300);
   const compactFrame = await rect(panel("files"));
@@ -521,6 +543,25 @@ try {
   await click(task("search"));
   await waitFor(visible("search"));
   assert.equal(await evaluate(`!(${visible("files")})`), true);
+
+  await send("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await start({ ...MANUSCRIPT_SETTINGS, theme: "dark", uiFontScale: 1.25 }, false, "files", true);
+  const reference = task("reference:qa-reference");
+  await waitFor(`Boolean(document.querySelector(${JSON.stringify(reference)}))`);
+  assert.match(await evaluate(`document.querySelector(${JSON.stringify(reference)}).textContent`), /参考メモ.txt/);
+  await click(reference);
+  await waitFor(`document.querySelector(".referenceCard").hidden`);
+  await click(reference);
+  await waitFor(`!document.querySelector(".referenceCard").hidden`);
+  await sleep(250);
+  await click('.referenceCard button[aria-label="閉じる"]');
+  await waitFor(`!document.querySelector(${JSON.stringify(reference)})`);
+
+  if (process.env.THEN_FILE_PANEL_QA_SCREENSHOT) {
+    await click(viewControl);
+    const { data } = await send("Page.captureScreenshot", { format: "png" });
+    await writeFile(process.env.THEN_FILE_PANEL_QA_SCREENSHOT, Buffer.from(data, "base64"));
+  }
 
   assert.deepEqual(pageErrors, [], "the page throws no errors");
   socket.close();

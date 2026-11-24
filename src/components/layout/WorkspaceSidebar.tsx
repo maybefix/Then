@@ -698,7 +698,6 @@ function LibraryBackButton({
     >
       <SidebarIcon name="chevronLeft" className="libraryBackIcon" />
       <span className="libraryBackName">{library.name}</span>
-      <small>ライブラリ</small>
     </button>
   );
 }
@@ -975,7 +974,7 @@ export function WorkspaceSidebar({
     }
   };
   const progressFilterItems: RightPaneSwitcherItem[] = [
-    { id: "all", label: "ファイル", icon: <SidebarIcon name="file" /> },
+    { id: "all", label: "すべての進捗", icon: null },
     ...fileProgressStatuses.map((status) => ({
       id: status,
       label: fileProgressLabels[status],
@@ -3022,39 +3021,27 @@ export function WorkspaceSidebar({
       className={`workspaceSidebar ${showOutlineGuides ? "showOutlineGuides" : ""}`}
       aria-label="ファイル・見出し"
     >
-      {!showCurrentOutline && <div className="sidebarHeader">
-        {projectFolder ? (
-          <RightPaneSwitcher
-            items={progressFilterItems}
-            activeId={progressFilter}
-            menuLabel="表示するファイル"
-            onSelect={(id) => changeProgressFilter(id as FileProgressFilter)}
-          />
-        ) : (
-          <span className="sidebarHeaderLabel">
-            ファイル
-          </span>
-        )}
-        {projectFolder && (
-          <span className="sidebarHeaderUnit" title="各行の数字は字数（単位：字）">
-            字数
-          </span>
-        )}
-        {onCollapse && <div className="sidebarHeaderActions">
-          <button
-            className="sidebarIconButton"
-            type="button"
-            aria-label="左サイドバーを畳む"
-            title="左サイドバーを畳む"
-            onClick={onCollapse}
-          >
-            <SidebarIcon name="chevronLeft" className="sidebarButtonSvg" />
-          </button>
-        </div>}
-      </div>}
-
-      {!showCurrentOutline && library?.role === "project" && (
-        <LibraryBackButton library={library} onEnterLibraryRoot={onEnterLibraryRoot} />
+      {!showCurrentOutline && (projectFolder || onCollapse) && (
+        <div className="filePanelListTools">
+          {library?.role === "project" && (
+            <LibraryBackButton library={library} onEnterLibraryRoot={onEnterLibraryRoot} />
+          )}
+          {projectFolder && (
+            <div className="filePanelProgressFilter">
+              <RightPaneSwitcher
+                items={progressFilterItems}
+                activeId={progressFilter}
+                menuLabel="進捗で絞り込む"
+                onSelect={(id) => changeProgressFilter(id as FileProgressFilter)}
+              />
+            </div>
+          )}
+          {onCollapse && (
+            <button className="sidebarIconButton" type="button" aria-label="ファイル一覧を閉じる" onClick={onCollapse}>
+              <SidebarIcon name="chevronLeft" className="sidebarButtonSvg" />
+            </button>
+          )}
+        </div>
       )}
 
       <div className={`sidebarScroll ${!showCurrentOutline && library?.role === "root" ? "hasLibraryProjects" : ""}`}>

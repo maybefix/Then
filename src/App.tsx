@@ -54,7 +54,8 @@ import { ManuscriptTidyModal } from "./components/dialogs/ManuscriptTidyModal";
 import { RightSidebar, auxiliaryPanelItems } from "./components/layout/RightSidebar";
 import { FloatingPanel, PanelTaskbar, usePanelArea, type PanelTask } from "./components/layout/FloatingPanels";
 import { panelStatus, referencePanelId, useFloatingPanels, type PanelFrame } from "./components/layout/floatingPanelState";
-import { LeftSidebar, type FilePanelView } from "./components/layout/LeftSidebar";
+import { LeftSidebar } from "./components/layout/LeftSidebar";
+import { RightPaneSwitcher } from "./components/layout/RightPaneSwitcher";
 import { ProjectSearchPanel, type WorkspaceSearchScope } from "./components/layout/ProjectSearchPanel";
 import type { ManuscriptTidyLineRange, ManuscriptTidyResult } from "./editor/manuscriptTidy";
 import type { PropertyType, PropertyTypeSettings } from "./properties/propertyModel";
@@ -1026,7 +1027,6 @@ export default function App() {
   const [projectSearchMatchCase, setProjectSearchMatchCase] = useState(false);
   const [projectReplaceValue, setProjectReplaceValue] = useState("");
   const [isProjectReplacing, setIsProjectReplacing] = useState(false);
-  const [leftSidebarView, setLeftSidebarViewState] = useState<FilePanelView>("files");
   const [editorFind, setEditorFind] = useState<EditorFindState>({
     open: false,
     query: "",
@@ -1138,13 +1138,6 @@ export default function App() {
   const activePluginPanelId = [...panelLayout.order].reverse().find(
     (id) => id.startsWith("plugin:") && panelStatus(panelLayout, id) === "open",
   ) ?? null;
-  const setLeftSidebarView = useCallback((view: FilePanelView) => {
-    setLeftSidebarViewState(view);
-    setAppState((current) =>
-      current.leftSidebarView === view ? current : { ...current, leftSidebarView: view },
-    );
-  }, []);
-
   const {
     pluginRuntimeHostRef,
     pluginAnchorsRef,
@@ -1202,23 +1195,6 @@ export default function App() {
     [],
   );
 
-  const focusReferenceCard = useCallback((cardId: string) => {
-    openPanel(referencePanelId(cardId));
-    setReferenceLayout((current) => {
-      return {
-        ...current,
-        cards: current.cards.map((card) => {
-          if (card.id !== cardId) return card;
-          return {
-            ...card,
-            collapsed: false,
-            zIndex: nextReferenceZIndex(current.cards, card.pinned),
-          };
-        }),
-      };
-    });
-  }, [openPanel]);
-
   const closeReferenceCard = useCallback((cardId: string) => {
     forgetReference(referencePanelId(cardId));
     setReferenceLayout((current) => ({
@@ -1227,33 +1203,11 @@ export default function App() {
     }));
   }, [forgetReference]);
 
-  const pinReferenceCard = useCallback((cardId: string, pinned: boolean) => {
-    setReferenceLayout((current) => ({
-      ...current,
-      cards: current.cards.map((card) =>
-        card.id === cardId
-          ? { ...card, pinned, zIndex: nextReferenceZIndex(current.cards, pinned) }
-          : card,
-      ),
-    }));
-  }, []);
-
-  const collapseReferenceCard = useCallback((cardId: string, collapsed: boolean) => {
-    setReferenceLayout((current) => ({
-      ...current,
-      cards: current.cards.map((card) =>
-        card.id === cardId ? { ...card, collapsed } : card,
-      ),
-    }));
-  }, []);
-
   const openReferenceCard = useCallback(
     (
       sourcePath: string,
       fileInfo?: ReferenceFileInfo,
-      options: { switchToReferenceTab?: boolean } = {},
     ) => {
-      const { switchToReferenceTab = true } = options;
       if (!projectFolder) {
         showToast("先にフォルダを開いてください");
         return;
@@ -1314,13 +1268,9 @@ export default function App() {
         );
         return { ...nextLayout, cards: [...nextLayout.cards, card] };
       });
-      if (switchToReferenceTab) {
-        setLeftSidebarView("reference");
-        openPanel("files");
-      }
       openPanel(referencePanelId(cardId));
     },
-    [projectFolder, openPanel, setLeftSidebarView],
+    [projectFolder, openPanel],
   );
 
   const handleAddReference = useCallback(async (scope: ReferenceScope = "project") => {
@@ -1350,7 +1300,7 @@ export default function App() {
       // 取り込み先は素材フォルダの「資料」（BINDER 2-5）。素材フォルダを作ったときもあるので一覧を読み直す。
       void refreshProjectFolderRef.current();
       if (result.files[0]) {
-        openReferenceCard(result.files[0].sourcePath, result.files[0], { switchToReferenceTab: false });
+        openReferenceCard(result.files[0].sourcePath, result.files[0]);
       }
       if (result.failures.length) {
         setLastError(result.failures.map((failure) => `${failure.path}: ${failure.message}`).join("\n"));
@@ -2978,7 +2928,6 @@ export default function App() {
       .then(async (state) => {
         if (isCancelled) return;
         const wasSearch = state.leftSidebarView === "search";
-        setLeftSidebarViewState(state.leftSidebarView === "reference" ? "reference" : "files");
         migratePanels(
           state.leftSidebarCollapsed ? null : "files",
           state.rightSidebarCollapsed ? null : state.rightSidebarTab,
@@ -7507,6 +7456,21 @@ export default function App() {
 
   const filePanel = { id: "files", label: "ファイル・見出し", icon: <AppIcon name="files" /> };
   const searchPanel = { id: "search", label: "検索", icon: <AppIcon name="search" /> };
+  const fileScopes = [
+    { id: "all", label: "ファイルツリー", icon: <AppIcon name="files" /> },
+    { id: "current", label: "この文書の見出し", icon: <AppIcon name="write" /> },
+  ];
+  const launcherCommands = [
+    { id: "add-file", label: "ファイルを追加", icon: <AppIcon name="filePlus" />, run: () => void handleNewDocument() },
+    {
+      id: "add-folder",
+      label: "フォルダを追加",
+      icon: <AppIcon name="folderPlus" />,
+      run: () => void (projectFolder
+        ? handleCreateProjectFolder(focusedFolderPath ?? projectFolder.path)
+        : handleOpenProjectFolder()),
+    },
+  ];
   const auxiliaryItems = auxiliaryPanelItems(pluginViews, loadedPlugins);
   const panelTasks: PanelTask[] = [filePanel, searchPanel, ...auxiliaryItems].map((item) => ({
     ...item,
@@ -8004,10 +7968,7 @@ export default function App() {
                   onOpenFile={(path, heading) => {
                     if (projectFolder) openCanvasSourceRef.current(joinCanvasFilePath(projectFolder.path, path), heading?.line);
                   }}
-                  onOpenFilePanel={() => {
-                    setLeftSidebarView("files");
-                    openPanel("files");
-                  }}
+                  onOpenFilePanel={() => openPanel("files")}
                   onOpenInWindow={isTauriRuntime() ? (boardId) => void moveCanvasToWindow(boardId) : undefined}
                 />
               </div>
@@ -8028,18 +7989,26 @@ export default function App() {
               ref={panelLayerRef}
               data-panel-tab-offset={appMode !== "write" && settings.showDocumentTabs ? settings.documentTabsDisplayMode : undefined}
             >
-              <FloatingPanel {...getPanelProps(filePanel, { x: 16, y: 16, width: 360, height: 500 })}>
+              <FloatingPanel
+                {...getPanelProps(filePanel, { x: 16, y: 16, width: 360, height: 500 })}
+                titleControl={(
+                  <div className="filePanelViewControl">
+                    <RightPaneSwitcher
+                      items={fileScopes}
+                      activeId={panelLayout.outline}
+                      menuLabel="ファイル・見出しの表示"
+                      onSelect={(id) => panels.setOutline(id === "current" ? "current" : "all")}
+                    />
+                  </div>
+                )}
+              >
                 <LeftSidebar
                   {...{
-                    leftSidebarView,
                     outlineScope: panelLayout.outline,
-                    onOutlineScopeChange: panels.setOutline,
                     onAddToCanvas: appMode === "canvas" ? addBinderItemsToCanvas : undefined,
                     panelVisible: panelsVisible && panelStatus(panelLayout, "files") === "open",
-                    setLeftSidebarView, handleNewDocument, projectFolder, handleCreateProjectFolder,
-                    focusedFolderPath, handleOpenProjectFolder, referenceLayout,
-                    sortedReferenceCandidates, focusReferenceCard, closeReferenceCard, pinReferenceCard,
-                    collapseReferenceCard, currentFilePath, currentFileName, charCount, outlineItems,
+                    projectFolder, handleCreateProjectFolder, focusedFolderPath, handleOpenProjectFolder,
+                    sortedReferenceCandidates, currentFilePath, currentFileName, charCount, outlineItems,
                     activeOutlineIds, activeOutlineChain, projectAst, settings, appState, handleSetFileProgress,
                     collapsedTreeFolderPaths, handleFolderCollapsedChange, collapsedTreeOutlinePaths,
                     handleOutlineCollapsedChange, collapsedTreeOutlineHeadingKeys,
@@ -8169,6 +8138,7 @@ export default function App() {
                   taskbar={panelTaskbarRef}
                   fixed={panelTasks}
                   documents={referenceTasks}
+                  commands={launcherCommands}
                   onLaunch={launchPanel}
                   onTaskClick={(id) => panelStatus(panelLayout, id) === "open" ? panels.minimize(id) : openPanel(id)}
                   onToggleAll={() => panels.toggleAll(taskIds)}
