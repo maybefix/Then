@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
-import { createServer } from "vite";
+import { loadSettingsTestComponents } from "./lib/settings-test-components.mjs";
 
 const dom = new JSDOM("<!doctype html><html><body><button id='opener'>設定</button><div id='root'></div></body></html>", {
   url: "http://localhost/",
@@ -15,26 +15,15 @@ Object.assign(globalThis, {
   IS_REACT_ACT_ENVIRONMENT: true,
 });
 Object.defineProperty(globalThis, "navigator", { configurable: true, value: dom.window.navigator });
-dom.window.HTMLElement.prototype.getClientRects = () => [{ width: 1, height: 1 }];
+dom.window.HTMLElement.prototype.getClientRects = function () {
+  return this.closest("[hidden]") ? [] : [{ width: 1, height: 1 }];
+};
 
 const { createElement, useState, act } = await import("react");
 const { createRoot } = await import("react-dom/client");
-const server = await createServer({ server: { middlewareMode: true }, appType: "custom" });
 
 try {
-  const { BoundedNumberInput } = await server.ssrLoadModule(
-    "/src/components/dialogs/BoundedNumberInput.tsx",
-  );
-  const { SettingsModal } = await server.ssrLoadModule(
-    "/src/components/dialogs/SettingsModal.tsx",
-  );
-  const { SettingsFontSelect } = await server.ssrLoadModule(
-    "/src/components/dialogs/SettingsFontSelect.tsx",
-  );
-  const { ThemePickerModal } = await server.ssrLoadModule(
-    "/src/components/dialogs/ThemePickerModal.tsx",
-  );
-  const { createDefaultState } = await server.ssrLoadModule("/src/storedStateModel.ts");
+  const { BoundedNumberInput, SettingsModal, SettingsFontSelect, ThemePickerModal, createDefaultState } = await loadSettingsTestComponents();
   const rootElement = document.getElementById("root");
   const root = createRoot(rootElement);
   const updates = [];
@@ -70,12 +59,18 @@ try {
   await setInput("");
   await act(async () => input.blur());
   assert.equal(input.value, "20", "an empty draft must restore the last valid value on blur");
+  await act(async () => input.focus());
+  await setInput("99");
+  assert.equal(updates.at(-1), 20, "out of range values must not be previewed");
+  await act(async () => input.blur());
+  assert.equal(input.value, "24", "blur clamps to the allowed maximum");
+  assert.equal(updates.at(-1), 24);
 
   await act(async () => root.render(null));
   const opener = document.getElementById("opener");
   opener.focus();
   const settings = {
-    ...createDefaultState().settings,
+    ...structuredClone(createDefaultState().settings),
     theme: "dark",
     uiFontFamily: '"Segoe UI"',
     uiFontScale: 1,
@@ -91,25 +86,24 @@ try {
           onClose: () => setOpen(false),
           onOpenThemePicker: () => {},
           onUpdateSettings: () => {},
-          onSnippetStorageModeChange: () => {},
         })
       : null;
   }
 
   await act(async () => root.render(createElement(ModalHarness)));
   assert.equal(document.activeElement?.getAttribute("aria-label"), "閉じる");
-  for (const tab of ["appearance", "body", "files", "canvas", "export"]) {
+  for (const tab of ["appearance", "files", "body", "manuscript", "writing", "canvas", "export"]) {
     assert.ok(document.getElementById(`settings-panel-${tab}`));
   }
   assert.doesNotMatch(document.getElementById("settings-panel-appearance").textContent, /サイドペインの表示/);
   const appearanceTab = document.getElementById("settings-tab-appearance");
   await act(async () => appearanceTab.focus());
   await act(async () => appearanceTab.dispatchEvent(new dom.window.KeyboardEvent("keydown", {
-    key: "ArrowRight",
+    key: "ArrowDown",
     bubbles: true,
   })));
-  assert.equal(document.activeElement?.id, "settings-tab-body");
-  assert.equal(document.getElementById("settings-panel-body").hidden, false);
+  assert.equal(document.activeElement?.id, "settings-tab-files");
+  assert.equal(document.getElementById("settings-panel-files").hidden, false);
   assert.equal(document.getElementById("settings-panel-appearance").hidden, true);
 
   const footerClose = rootElement.querySelector(".settingsModal .modalActions button");
@@ -128,6 +122,10 @@ try {
   })));
   assert.equal(document.querySelector(".settingsModal"), null);
   assert.equal(document.activeElement, opener, "closing the modal must restore focus");
+  await act(async () => root.render(createElement(ModalHarness, { key: "footer-close" })));
+  await act(async () => rootElement.querySelector(".settingsModal .modalActions button").click());
+  assert.equal(document.querySelector(".settingsModal"), null, "footer button closes settings");
+  assert.equal(document.activeElement, opener);
 
   await act(async () => root.render(createElement(SettingsFontSelect, {
     value: '"Missing Font"',
@@ -156,7 +154,6 @@ try {
       onClose: () => setScreen("closed"),
       onOpenThemePicker: () => setScreen("theme"),
       onUpdateSettings: () => {},
-      onSnippetStorageModeChange: () => {},
     });
   }
   await act(async () => root.render(createElement(ThemeRoundTrip)));
@@ -170,6 +167,5 @@ try {
   await act(async () => root.unmount());
   console.log("settings modal interaction tests passed");
 } finally {
-  await server.close();
   dom.window.close();
 }

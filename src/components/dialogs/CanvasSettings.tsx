@@ -1,11 +1,12 @@
 import type { EditorSettings } from "../../types";
 import type { SettingsPanelProps } from "./SettingsPanelTypes";
+import { SettingsGroup } from "./SettingsGroup";
 
 export function CanvasSettings({ settings, onUpdateSettings }: SettingsPanelProps) {
   return (
-    <>
+    <SettingsGroup title="新しいカードの既定値">
       <label>
-        <span>Canvas node 既定方向</span>
+        <span>カードの既定方向</span>
         <select
           value={settings.canvasDefaultWritingMode}
           onChange={(event) =>
@@ -20,7 +21,7 @@ export function CanvasSettings({ settings, onUpdateSettings }: SettingsPanelProp
         </select>
       </label>
       <label>
-        <span>Canvas node 既定フォント</span>
+        <span>カードの既定フォント</span>
         <select
           value={settings.canvasDefaultFontSource}
           onChange={(event) =>
@@ -34,6 +35,6 @@ export function CanvasSettings({ settings, onUpdateSettings }: SettingsPanelProp
           <option value="editor">本文フォント</option>
         </select>
       </label>
-    </>
+    </SettingsGroup>
   );
 }

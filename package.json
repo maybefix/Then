@@ -38,6 +38,8 @@
     "test:window-controls": "node scripts/test-window-controls-contrast.mjs",
     "test:app-shell-style": "node scripts/test-app-shell-style.mjs",
     "test:appearance": "node scripts/test-appearance.mjs",
+    "test:settings": "node scripts/test-settings-modal.mjs && node scripts/test-settings-navigation.mjs",
+    "test:settings-layout": "node scripts/test-settings-layout.mjs",
     "test:tree-row-contrast": "node scripts/test-tree-row-contrast.mjs",
     "audit:typewriter-guides": "node scripts/audit-typewriter-guides.mjs",
     "audit:shuboku": "node scripts/audit-shuboku-contracts.mjs",

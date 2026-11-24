@@ -280,10 +280,7 @@ const [appSource, editorSource, settingsSource, appCss, foundationsCss] = await 
     readFile("src/storedStateModel.ts", "utf8"),
   ]).then((sources) => sources.join("\n")),
   readFile("src/VerticalTextEditor.tsx", "utf8"),
-  Promise.all([
-    readFile("src/components/dialogs/AppearanceSettings.tsx", "utf8"),
-    readFile("src/components/dialogs/BodySettings.tsx", "utf8"),
-  ]).then((sources) => sources.join("\n")),
+  readFile("src/components/dialogs/WritingSettings.tsx", "utf8"),
   readAppCss(),
   readFile("src/styles/themes/foundations.css", "utf8"),
 ]);
