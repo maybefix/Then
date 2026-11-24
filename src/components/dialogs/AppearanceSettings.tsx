@@ -71,26 +71,6 @@ export function AppearanceSettings({ settings, systemFonts, onOpenThemePicker, o
           <small>タイトルバーとWindowsのタスクバーも隠します</small>
         </span>
       </label>
-      <label>
-        <span>サイドペインの表示</span>
-        <select
-          value={settings.sidebarHoverMode}
-          onChange={(event) =>
-            onUpdateSettings(
-              "sidebarHoverMode",
-              event.target.value as EditorSettings["sidebarHoverMode"],
-            )
-          }
-        >
-          <option value="none">左右とも常に表示</option>
-          <option value="both">左右ともホバー表示</option>
-          <option value="left">左側のみホバー表示</option>
-          <option value="right">右側のみホバー表示</option>
-        </select>
-        <small className="dialogFieldHint">
-          ホバー表示にしたペインは画面端へ隠れ、マウスを移すと本文の上へ表示されます
-        </small>
-      </label>
     </>
   );
 }

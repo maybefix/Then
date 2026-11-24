@@ -6,7 +6,6 @@ import type { PropertySet } from "../../properties/propertySets";
 
 import type {
   AppState,
-  CanvasScope,
   EditorSettings,
   ProjectFolder,
 } from "../../types";
@@ -21,10 +20,7 @@ import ProofreadPane from "../proofread/ProofreadPane";
 import { PropertiesPanel } from "../properties/PropertiesPanel";
 import { ScenePane, type ScenePaneProps } from "../scene/ScenePane";
 import { ConnectionsPane, type ConnectionsPaneProps } from "../connections/ConnectionsPane";
-import { AppIcon } from "./AppIcon";
-import { RightPaneSwitcher, type RightPaneSwitcherItem } from "./RightPaneSwitcher";
-
-type AppMode = "write" | "corkboard" | "canvas" | "export" | "checkpoint" | "plugin";
+import type { RightPaneSwitcherItem } from "./RightPaneSwitcher";
 
 
 type ProofreadIgnoredByPath = Record<string, string[]>;
@@ -88,19 +84,9 @@ const rightSidebarBuiltinTabs: Array<{ id: string; label: string; icon: ReactNod
 ];
 
 export type RightSidebarProps = {
-  isRightSidebarWide: boolean;
-  isRightSidebarCollapsed: boolean;
-  appMode: AppMode;
-  isEditorFocusMode: boolean;
-  pluginViews: ThenPluginView[];
-  loadedPlugins: LoadedThenPlugin[];
-  rightSidebarTab: string;
-  setRightSidebarTab: (tab: string) => void;
-  openIdeaCanvasBoard: (scope?: CanvasScope, boardId?: string, selectNodeId?: string) => Promise<void>;
-  setIsRightSidebarWide: (wide: boolean) => void;
-  setIsRightSidebarCollapsed: (collapsed: boolean) => void;
+  panelId: string;
+  active: boolean;
   setSidebarPluginRuntimeAnchor: Dispatch<SetStateAction<HTMLDivElement | null>>;
-  isDockedPluginRuntimeVisible: boolean;
   projectFolder: ProjectFolder | null;
   activePluginView: ThenPluginView | null;
   documentKey: string;
@@ -141,24 +127,8 @@ export type RightSidebarProps = {
   postBoards: { places: PostBoardPlaces; open: (place: PostBoardPlace) => void };
 };
 
-/**
- * 右サイドバー（補助ペイン）。値と、それを保存・復元する処理は App が持ち、
- * 描画のたびにその時点の値と操作を受け取る。
- */
-export function RightSidebar(props: RightSidebarProps) {
-  const {
-    isRightSidebarWide, isRightSidebarCollapsed, appMode, isEditorFocusMode, pluginViews, loadedPlugins,
-    rightSidebarTab, setRightSidebarTab,
-    openIdeaCanvasBoard, setIsRightSidebarWide, setIsRightSidebarCollapsed, setSidebarPluginRuntimeAnchor,
-    isDockedPluginRuntimeVisible, projectFolder,
-    activePluginView, documentKey, scene, connections, postReveal, frontMatter, updateFrontMatter, handleClearFrontMatter,
-    propertyTypeSettings, rememberPropertyType, returnFocusFromProperties, loadPropertySets, searchByProperty,
-    editorText, settings, updateSettings, revealEditorRange, replaceEditorRange, projectProofreadTerms,
-    appState, setProjectProofreadTerms, setAppState, exportProofreadDictionary, importProofreadDictionary,
-    projectProofreadIgnored, proofreadIgnoreKey, setProjectProofreadIgnored,
-    postStream, postFilter, setPostFilter, postNoteActions, postBoards,
-  } = props;
-  const rightPaneSwitcherItems: RightPaneSwitcherItem[] = [
+export function auxiliaryPanelItems(pluginViews: ThenPluginView[], loadedPlugins: LoadedThenPlugin[]): RightPaneSwitcherItem[] {
+  return [
     ...rightSidebarBuiltinTabs,
     ...pluginViews.map((view) => {
       const icon = view.icon ?? loadedPlugins.find(
@@ -176,77 +146,35 @@ export function RightSidebar(props: RightSidebarProps) {
     }),
   ];
 
+}
+
+export function RightSidebar(props: RightSidebarProps) {
+  const {
+    panelId, active, setSidebarPluginRuntimeAnchor, projectFolder,
+    activePluginView, documentKey, scene, connections, postReveal, frontMatter, updateFrontMatter, handleClearFrontMatter,
+    propertyTypeSettings, rememberPropertyType, returnFocusFromProperties, loadPropertySets, searchByProperty,
+    editorText, settings, updateSettings, revealEditorRange, replaceEditorRange, projectProofreadTerms,
+    appState, setProjectProofreadTerms, setAppState, exportProofreadDictionary, importProofreadDictionary,
+    projectProofreadIgnored, proofreadIgnoreKey, setProjectProofreadIgnored,
+    postStream, postFilter, setPostFilter, postNoteActions, postBoards,
+  } = props;
+
   return (
-    <aside
-      className={`rightSidebar ${isRightSidebarWide ? "wideRightSidebar" : ""}${
-        isRightSidebarCollapsed ? " collapsedRightSidebar" : ""
-      }`}
-      aria-label="補助ペイン"
-      aria-hidden={appMode === "plugin" || isRightSidebarCollapsed || isEditorFocusMode}
-      {...(
-        appMode === "plugin" || isRightSidebarCollapsed || isEditorFocusMode
-          ? { inert: "" }
-          : {}
-      )}
-    >
-        <div className="rightSidebarHeader">
-          <RightPaneSwitcher
-            items={rightPaneSwitcherItems}
-            activeId={rightSidebarTab}
-            onSelect={setRightSidebarTab}
-          />
-          {rightSidebarTab === "idea" && (
-            <div className="plotPaneHeaderActions" aria-label="アイデア操作">
-              <button
-                className="sidebarIconButton plotHeaderActionButton"
-                type="button"
-                aria-label="Idea Board を開く"
-                title="Idea Board を開く"
-                onClick={() => void openIdeaCanvasBoard("project")}
-              >
-                <AppIcon name="canvas" />
-              </button>
-            </div>
+    <div className="rightSidebarBody floatingAuxiliaryBody">
+          {activePluginView && (
+            <div
+              ref={active ? setSidebarPluginRuntimeAnchor : undefined}
+              className="pluginRuntimeAnchor visiblePluginRuntimeAnchor"
+              aria-hidden="true"
+            />
           )}
-          <div className="rightSidebarChromeActions">
-            <button
-              className="sidebarIconButton"
-              type="button"
-              aria-label={isRightSidebarWide ? "ペイン幅を戻す" : "ペイン幅を拡張"}
-              title={isRightSidebarWide ? "ペイン幅を戻す" : "ペイン幅を拡張"}
-              onClick={() => setIsRightSidebarWide(!isRightSidebarWide)}
-            >
-              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-                <polyline points={isRightSidebarWide ? "9 18 15 12 9 6" : "15 18 9 12 15 6"} />
-              </svg>
-            </button>
-            <button
-              className="sidebarIconButton"
-              type="button"
-              aria-label="右サイドバーを畳む"
-              title="右サイドバーを畳む"
-              onClick={() => setIsRightSidebarCollapsed(true)}
-            >
-              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          </div>
-        </div>
-        <div className="rightSidebarBody">
-          <div
-            ref={setSidebarPluginRuntimeAnchor}
-            className={`pluginRuntimeAnchor${isDockedPluginRuntimeVisible ? " visiblePluginRuntimeAnchor" : ""}`}
-            aria-hidden="true"
-          />
           {activePluginView ? (
             <div className="pluginViewBody" aria-label={activePluginView.title} />
-          ) : rightSidebarTab === "scene" ? (
+          ) : panelId === "scene" ? (
             <ScenePane documentKey={documentKey} {...scene} onExit={returnFocusFromProperties} />
-          ) : rightSidebarTab === "connections" ? (
+          ) : panelId === "connections" ? (
             <ConnectionsPane {...connections} />
-          ) : rightSidebarTab === "properties" ? (
+          ) : panelId === "properties" ? (
             <PropertiesPanel
               documentKey={documentKey}
               metadata={frontMatter.metadata}
@@ -259,11 +187,11 @@ export function RightSidebar(props: RightSidebarProps) {
               loadPropertySets={loadPropertySets}
               onSearchProperty={searchByProperty}
             />
-          ) : rightSidebarTab === "proof" ? (
+          ) : panelId === "proof" ? (
             <ProofreadPane
               text={editorText}
               documentKey={documentKey}
-              active={!isRightSidebarCollapsed && !isEditorFocusMode && appMode !== "plugin"}
+              active={active}
               options={settings.proofread}
               onOptionsChange={(next) =>
                 updateSettings("proofread", {
@@ -318,10 +246,9 @@ export function RightSidebar(props: RightSidebarProps) {
               reveal={postReveal}
               boards={postBoards.places}
               onOpenBoard={postBoards.open}
-              open={!isRightSidebarCollapsed}
+              open={active}
             />
           )}
-        </div>
-    </aside>
+    </div>
   );
 }

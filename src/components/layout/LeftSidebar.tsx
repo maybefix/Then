@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
+import type { CanvasFileDropDetail } from "../../canvasFileDrop";
 import type { HeadingDropPosition } from "../../editor/ast/headingMove";
 import type {
   DocumentOutlineItem,
@@ -23,18 +24,16 @@ import { OpenCardsPane } from "../binder/OpenCardsPane";
 import { AppIcon } from "./AppIcon";
 import { WorkspaceSidebar, type SidebarHeadingSelection } from "./WorkspaceSidebar";
 
-type AppMode = "write" | "corkboard" | "canvas" | "export" | "checkpoint" | "plugin";
-
 type WorkspaceSearchScope = "file" | "project" | "library";
 
 type ProjectEntryActions = ReturnType<typeof createProjectEntryActions>;
 
 export type LeftSidebarProps = {
-  appMode: AppMode;
-  isLeftSidebarCollapsed: boolean;
-  isEditorFocusMode: boolean;
   leftSidebarView: LeftSidebarView;
-  setIsLeftSidebarCollapsed: (collapsed: boolean) => void;
+  outlineScope: "all" | "current";
+  panelVisible: boolean;
+  onAddToCanvas?: (items: CanvasFileDropDetail) => void;
+  onOutlineScopeChange: (scope: "all" | "current") => void;
   setLeftSidebarView: (view: LeftSidebarView) => void;
   handleNewDocument: () => Promise<void>;
   projectFolder: ProjectFolder | null;
@@ -142,7 +141,7 @@ const joinRootPath = (root: string, relative: string) => {
 
 export function LeftSidebar(props: LeftSidebarProps) {
   const {
-    appMode, isLeftSidebarCollapsed, isEditorFocusMode, leftSidebarView, setIsLeftSidebarCollapsed,
+    leftSidebarView, outlineScope, onOutlineScopeChange, panelVisible, onAddToCanvas,
     setLeftSidebarView, handleNewDocument, projectFolder, handleCreateProjectFolder, focusedFolderPath,
     handleOpenProjectFolder, referenceLayout, sortedReferenceCandidates, focusReferenceCard,
     closeReferenceCard, pinReferenceCard, collapseReferenceCard, currentFilePath, currentFileName, charCount,
@@ -178,70 +177,25 @@ export function LeftSidebar(props: LeftSidebarProps) {
   const isProjectSearchMode = leftSidebarView === "search";
 
   return (
-    <div
-      className={`leftWorkspaceCluster ${
-        // The corkboard shows the binder too: its folder is chosen there (BINDER 1-5).
-        // So does the Canvas: notes and manuscripts are dragged from it onto the board (BINDER 4-3).
-        appMode !== "write" && appMode !== "plugin" && appMode !== "corkboard" && appMode !== "canvas"
-          ? "modeHiddenPane"
-          : ""
-      }`}
-      data-sidebar-collapsed={isLeftSidebarCollapsed}
-      aria-hidden={isEditorFocusMode || appMode === "plugin"}
-      {...(isEditorFocusMode || appMode === "plugin" ? { inert: "" } : {})}
-    >
-        <nav className="workspaceActivityBar" aria-label="左サイドバー操作">
+    <div className="filePanelBody">
+      <nav className="filePanelTools" aria-label="ファイル・見出しの操作">
+        {([
+          ["files", "ファイル・見出し", "files"],
+          ["search", "プロジェクト検索", "search"],
+          ["reference", "開いているカード", "reference"],
+        ] as const).map(([view, label, icon]) => (
           <button
-            className={`workspaceActivityButton ${
-              leftSidebarView === "files" && !isLeftSidebarCollapsed
-                ? "activeWorkspaceActivityButton"
-                : ""
-            }`}
+            key={view}
+            className="workspaceActivityButton"
             type="button"
-            aria-label="ファイルツリー"
-            title="ファイルツリー"
-            aria-pressed={leftSidebarView === "files" && !isLeftSidebarCollapsed}
-            onClick={() => {
-              setIsLeftSidebarCollapsed(false);
-              setLeftSidebarView("files");
-            }}
+            aria-label={label}
+            title={label}
+            aria-pressed={leftSidebarView === view}
+            onClick={() => setLeftSidebarView(view)}
           >
-            <AppIcon name="files" className="workspaceActivityIcon" />
+            <AppIcon name={icon} className="workspaceActivityIcon" />
           </button>
-          <button
-            className={`workspaceActivityButton ${
-              leftSidebarView === "search" && !isLeftSidebarCollapsed
-                ? "activeWorkspaceActivityButton"
-                : ""
-            }`}
-            type="button"
-            aria-label="プロジェクト検索"
-            title="プロジェクト検索"
-            aria-pressed={leftSidebarView === "search" && !isLeftSidebarCollapsed}
-            onClick={() => {
-              setIsLeftSidebarCollapsed(false);
-              setLeftSidebarView("search");
-            }}
-          >
-            <AppIcon name="search" className="workspaceActivityIcon" />
-          </button>
-          <button
-            className={`workspaceActivityButton ${
-              leftSidebarView === "reference" && !isLeftSidebarCollapsed
-                ? "activeWorkspaceActivityButton"
-                : ""
-            }`}
-            type="button"
-            aria-label="開いているカード"
-            title="開いているカード"
-            aria-pressed={leftSidebarView === "reference" && !isLeftSidebarCollapsed}
-            onClick={() => {
-              setIsLeftSidebarCollapsed(false);
-              setLeftSidebarView("reference");
-            }}
-          >
-            <AppIcon name="reference" className="workspaceActivityIcon" />
-          </button>
+        ))}
           <button
             className="workspaceActivityButton"
             type="button"
@@ -265,25 +219,17 @@ export function LeftSidebar(props: LeftSidebarProps) {
             <AppIcon name="folderPlus" className="workspaceActivityIcon" />
           </button>
         </nav>
-        {leftSidebarView === "reference" ? (
+        {leftSidebarView === "files" && (
+          <div className="filePanelScope" role="group" aria-label="表示範囲">
+            <button type="button" aria-pressed={outlineScope === "all"} onClick={() => onOutlineScopeChange("all")}>全体表示</button>
+            <button type="button" aria-pressed={outlineScope === "current"} onClick={() => onOutlineScopeChange("current")}>現在の文書</button>
+          </div>
+        )}
+        {leftSidebarView === "reference" && (
           <aside
             className="workspaceSidebar referenceWorkspaceSidebar"
             aria-label="開いているカード"
           >
-            <div className="sidebarHeader">
-              <span className="sidebarHeaderLabel">開いているカード</span>
-              <div className="sidebarHeaderActions">
-                <button
-                  className="sidebarIconButton"
-                  type="button"
-                  aria-label="左サイドバーを畳む"
-                  title="左サイドバーを畳む"
-                  onClick={() => setIsLeftSidebarCollapsed(true)}
-                >
-                  <AppIcon name="panelLeft" className="sidebarButtonSvg" />
-                </button>
-              </div>
-            </div>
             <div className="leftReferenceSidebarBody">
               <OpenCardsPane
                 cards={referenceLayout.cards}
@@ -295,8 +241,12 @@ export function LeftSidebar(props: LeftSidebarProps) {
               />
             </div>
           </aside>
-        ) : (
+        )}
+        <div className="filePanelWorkspace" hidden={leftSidebarView === "reference"}>
         <WorkspaceSidebar
+        onAddToCanvas={onAddToCanvas}
+        outlineScope={outlineScope}
+        panelHidden={!panelVisible || leftSidebarView === "reference"}
         projectFolder={projectFolder}
         currentFilePath={currentFilePath}
         currentFileName={currentFileName}
@@ -389,7 +339,6 @@ export function LeftSidebar(props: LeftSidebarProps) {
         onEditSnapshotDetails={(snapshot) => void handleEditManuscriptSnapshotDetails(snapshot)}
         onRestoreSnapshot={(snapshot) => void handleRestoreManuscriptSnapshot(snapshot)}
         onDeleteSnapshot={(snapshot) => void handleDeleteManuscriptSnapshot(snapshot)}
-            onCollapse={() => setIsLeftSidebarCollapsed(true)}
             library={libraryContext}
             onEnterLibraryRoot={enterLibraryRoot}
             onEnterProject={enterProject}
@@ -415,7 +364,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
             onSetNoteStar={(path, starred) => void handleSetNoteStar(path, starred)}
             libraryReferencesFolderPath={libraryReferencesFolderPath}
         />
-        )}
+        </div>
     </div>
   );
 }

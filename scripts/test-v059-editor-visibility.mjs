@@ -491,22 +491,6 @@ assert.doesNotMatch(
 );
 assert.match(appCss, /data-colorize-japanese-quotes="true"[\s\S]*?\.japanese-quote/);
 assert.match(
-  foundationsCss,
-  /data-zone-mode="true"\]\[data-zone-left="true"\][\s\S]*?> \.leftWorkspaceCluster\s*> \.workspaceSidebar[\s\S]*?position: absolute/,
-  "the left panel must leave normal layout flow only when left hover display is selected",
-);
-assert.doesNotMatch(
-  foundationsCss,
-  /> \.leftWorkspaceCluster\s*\{[^}]*position: absolute/,
-  "left hover display must keep the activity rail docked at the window edge",
-);
-assert.match(
-  foundationsCss,
-  /data-zone-mode="true"\]\[data-zone-right="true"\][\s\S]*?> \.rightSidebar[\s\S]*?position: absolute/,
-  "the right sidebar must leave normal layout flow only when right hover display is selected",
-);
-assert.match(foundationsCss, /translateX\(calc\(100% - 7px\)\)/);
-assert.match(
   appCss,
   /\.appShell\s*\{[\s\S]*?min-width:\s*0;/,
   "the editor shell must fit the native 720px minimum window instead of overflowing at 920px",
@@ -516,71 +500,12 @@ assert.doesNotMatch(
   /\.appShell\s*\{[^}]*min-width:\s*(?:920|980)px;/,
   "no later shell rule may restore the obsolete desktop-only minimum width",
 );
-assert.match(
-  appSource,
-  /className="zoneRightSidebarHoverTarget"/,
-  "zone mode needs a viewport-edge hover target independent of the scaled sidebar",
-);
-assert.match(appSource, /data-zone-left=/);
-assert.match(appSource, /data-zone-right=/);
+const panelCss = await readFile("src/styles/app/floatingPanels.css", "utf8");
+assert.match(appSource, /<FloatingPanel[\s\S]*?<LeftSidebar/);
+assert.match(panelCss, /\.floatingPanel\s*\{\s*position:\s*absolute/);
+assert.match(panelCss, /\.panelTaskbar\s*\{[^}]*height:\s*24px/);
+assert.doesNotMatch(appSource, /zoneRightSidebarHoverTarget|data-zone-left|data-zone-right/);
 assert.match(appSource, /legacyZoneMode === true[\s\S]*?\? "both"/);
-assert.match(appSource, /sidebarHoverMode !== "none"/);
-assert.match(appSource, /settings\.sidebarHoverMode === "both" \|\| settings\.sidebarHoverMode === "left"/);
-assert.match(appSource, /settings\.sidebarHoverMode === "both" \|\| settings\.sidebarHoverMode === "right"/);
-assert.match(settingsSource, /<option value="none">左右とも常に表示<\/option>/);
-assert.match(settingsSource, /<option value="both">左右ともホバー表示<\/option>/);
-assert.match(settingsSource, /<option value="left">左側のみホバー表示<\/option>/);
-assert.match(settingsSource, /<option value="right">右側のみホバー表示<\/option>/);
-assert.match(
-  foundationsCss,
-  /> \.zoneRightSidebarHoverTarget:hover\s*\+ \.rightSidebar/,
-  "hovering the fixed right-edge target must reveal the right sidebar",
-);
-assert.match(
-  foundationsCss,
-  /workspace:is\(\[data-app-mode="write"\], \[data-app-mode="plugin"\]\)[\s\S]*?> \.rightSidebar[\s\S]*?transform:\s*translateX\(calc\(100% - 7px\)\)/,
-  "a Zone sidebar must keep its final editor position while covered by a plugin screen",
-);
-assert.match(
-  foundationsCss,
-  /data-zone-right="true"[\s\S]*?\.pluginRuntimeDetachedHost:not\(\.pluginModalRuntimeHost\)[\s\S]*?pointer-events:\s*none/,
-  "a parked detached plugin frame must not cover the right-edge hover target",
-);
-assert.match(
-  foundationsCss,
-  /data-zone-right="true"\]\[data-shell-app-mode="write"\][\s\S]*?\.pluginRuntimeDetachedHost:not\(\.pluginModalRuntimeHost\)[\s\S]*?opacity:\s*0/,
-  "Zone hiding must apply only to a plugin docked beside the editor, never to a full plugin screen",
-);
-assert.doesNotMatch(
-  foundationsCss,
-  /data-zone-right="true"\]\s+\.pluginRuntimeDetachedHost:not\(\.pluginModalRuntimeHost\)[\s\S]*?opacity:\s*0/,
-  "a full plugin screen must stay visible when the pointer enters the breadcrumb bar",
-);
-assert.match(
-  foundationsCss,
-  /\[data-zone-right-active="true"\][\s\S]*?\.activePluginRuntimeFrame[\s\S]*?pointer-events:\s*auto/,
-  "revealing the Zone sidebar must restore interaction with its active plugin frame",
-);
-assert.match(
-  foundationsCss,
-  /\[data-zone-plugin-hover="true"\][\s\S]*?> \.rightSidebar[\s\S]*?transform:\s*translateX\(0\)/,
-  "moving from the sidebar into its detached plugin frame must keep the sidebar revealed",
-);
-assert.doesNotMatch(
-  foundationsCss,
-  /:has\(\.pluginRuntimeDetachedHost:hover\)\s*\r?\n\s*\.workspace\[data-app-mode="write"\]\s*\r?\n\s*> \.rightSidebar\s*\{/,
-  "a full-window plugin modal must not reveal the right sidebar merely because the modal is hovered",
-);
-
-// The hover/focus state behind those rules is tracked in script, not with
-// .appShell:has(...): a :has() whose subject is the app root made every
-// insertion into the manuscript invalidate styles across the whole app.
-const zoneHoverSource = await readFile("src/utils/zoneRightHover.ts", "utf8");
-assert.doesNotMatch((foundationsCss + appCss).replace(/\/\*[\s\S]*?\*\//g, ""), /\.appShell[^{,]*:has\(/, "no :has() may take the app root as its subject");
-assert.match(zoneHoverSource, /\.zoneRightSidebarHoverTarget, \.rightSidebar, \.pluginRuntimeDetachedHost:not\(\.pluginModalRuntimeHost\)/,
-  "the edge target, the sidebar and a docked (not modal) plugin frame reveal the sidebar");
-assert.match(zoneHoverSource, /closest\("\.rightSidebar"\)/, "focus inside the sidebar keeps it revealed");
-assert.match(appSource, /trackZoneRightHover\(shell\)/);
-assert.match(appSource, /data-shell-app-mode=\{appMode\}/);
+assert.doesNotMatch((foundationsCss + appCss + panelCss).replace(/\/\*[\s\S]*?\*\//g, ""), /\.appShell[^{,]*:has\(/, "typing should not invalidate styles across the app root");
 
 console.log("v0.5.9 editor visibility tests passed");

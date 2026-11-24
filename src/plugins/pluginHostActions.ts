@@ -29,8 +29,7 @@ type PluginHostActionDeps = {
   editorInstanceRef: MutableRefObject<TextEditorHandle | null>;
   handleProjectFileSelect: (path: string) => Promise<void>;
   setAppMode: (mode: "write" | "plugin") => void;
-  setIsRightSidebarCollapsed: (collapsed: boolean) => void;
-  setRightSidebarTab: (tab: string) => void;
+  openPanel: (id: string) => void;
   loadedPlugins: LoadedThenPlugin[];
   pluginAnchorsRef: MutableRefObject<ThenPluginAnchor[]>;
   persistPluginAnchors: (anchors: ThenPluginAnchor[]) => void;
@@ -69,8 +68,7 @@ export function createPluginHostActions(deps: PluginHostActionDeps) {
     editorInstanceRef,
     handleProjectFileSelect,
     setAppMode,
-    setIsRightSidebarCollapsed,
-    setRightSidebarTab,
+    openPanel,
     loadedPlugins,
     pluginAnchorsRef,
     persistPluginAnchors,
@@ -407,9 +405,7 @@ export function createPluginHostActions(deps: PluginHostActionDeps) {
         (item) => item.pluginId === pluginId && item.id === id,
       );
       if (view) {
-        setAppMode("write");
-        setIsRightSidebarCollapsed(false);
-        setRightSidebarTab(`plugin:${pluginId}:${id}`);
+        openPanel(`plugin:${pluginId}:${id}`);
         return true;
       }
       throw new Error(`登録されていないviewです: ${id}`);

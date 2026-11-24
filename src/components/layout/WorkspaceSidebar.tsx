@@ -39,7 +39,7 @@ import { orderRootEntriesByTier, splitBinderTiers } from "./binderTiers";
 import { findProjectEntry } from "../../utils/projectTree";
 import { MATERIALS_DROP_ATTRIBUTE, MATERIALS_DROP_EVENT, type MaterialsDropDetail } from "../scene/materialsDrop";
 import {
-  BINDER_DRAG_ON_CANVAS_ATTRIBUTE,
+  CANVAS_HEADING_DRAG_MIME,
   CANVAS_FILE_DROP_ATTRIBUTE,
   CANVAS_FILE_DROP_EVENT,
   type CanvasFileDropDetail,
@@ -135,7 +135,10 @@ type WorkspaceSidebarProps = {
   onEditSnapshotDetails: (snapshot: ManuscriptSnapshot) => void;
   onRestoreSnapshot: (snapshot: ManuscriptSnapshot) => void;
   onDeleteSnapshot: (snapshot: ManuscriptSnapshot) => void;
-  onCollapse: () => void;
+  onCollapse?: () => void;
+  outlineScope?: "all" | "current";
+  panelHidden?: boolean;
+  onAddToCanvas?: (items: CanvasFileDropDetail) => void;
   /** 開いているフォルダがライブラリ直下かライブラリ内の作品のとき。 */
   library: LibraryContext | null;
   onEnterLibraryRoot: () => void;
@@ -284,7 +287,6 @@ type HeadingDropTarget =
 
 type WorkspaceSearchScope = "file" | "project" | "library";
 
-const HEADING_DRAG_MIME = "application/x-then-heading";
 const TREE_CONTEXT_MENU_WIDTH = 180;
 const TREE_CONTEXT_MENU_HEIGHT = 164;
 
@@ -919,6 +921,9 @@ export function WorkspaceSidebar({
   onRestoreSnapshot,
   onDeleteSnapshot,
   onCollapse,
+  outlineScope = "all",
+  panelHidden = false,
+  onAddToCanvas,
   library,
   onEnterLibraryRoot,
   onEnterProject,
@@ -980,7 +985,6 @@ export function WorkspaceSidebar({
   // ドラッグ中に上にあるあいだだけ強調する。
   const materialsDropRef = useRef<HTMLElement | null>(null);
   /** The left cluster marked while a dragged row is over the Canvas (BINDER 4-3). */
-  const canvasDragClusterRef = useRef<HTMLElement | null>(null);
   const suppressNextClickRef = useRef(false);
   const selectedFilePathsRef = useRef(selectedFilePaths);
   const replaceSelectedFilePaths = (paths: Iterable<string>) => {
@@ -1087,6 +1091,13 @@ export function WorkspaceSidebar({
     menu.style.top = `${Math.max(margin, Math.min(snapshotMenu.y, maxTop))}px`;
   }, [snapshotMenu]);
 
+  useEffect(() => {
+    if (!panelHidden) return;
+    setContextMenu(null);
+    setHeadingContextMenu(null);
+    setSnapshotMenu(null);
+  }, [panelHidden]);
+
   // プロジェクトフォルダが切り替わったら選択を開いているファイルだけに戻す。
   useEffect(() => {
     replaceSelectedFilePaths(currentFilePath ? [currentFilePath] : []);
@@ -1110,8 +1121,6 @@ export function WorkspaceSidebar({
     ) {
       dragState.captureTarget.releasePointerCapture(dragState.pointerId);
     }
-    canvasDragClusterRef.current?.removeAttribute(BINDER_DRAG_ON_CANVAS_ATTRIBUTE);
-    canvasDragClusterRef.current = null;
     pointerDragRef.current = null;
     setDraggingEntryPaths(new Set());
     dropTargetRef.current = null;
@@ -1130,16 +1139,6 @@ export function WorkspaceSidebar({
     current?.removeAttribute("data-drop-active");
     next?.setAttribute("data-drop-active", "true");
     materialsDropRef.current = next;
-    // Once a row is over the Canvas, a binder floating over it (the left hover
-    // setting) steps aside until the drag ends, so the whole board takes the drop.
-    // The row holds the pointer capture, which would otherwise keep it hovered (BINDER 4-3).
-    const cluster = next?.hasAttribute(CANVAS_FILE_DROP_ATTRIBUTE)
-      ? pointerDragRef.current?.captureTarget.closest<HTMLElement>(".leftWorkspaceCluster")
-      : null;
-    if (cluster) {
-      cluster.setAttribute(BINDER_DRAG_ON_CANVAS_ATTRIBUTE, "true");
-      canvasDragClusterRef.current = cluster;
-    }
   };
 
   const updateDropTargetFromPoint = (
@@ -1148,18 +1147,18 @@ export function WorkspaceSidebar({
     dragState: PointerDragState,
   ) => {
     const element = document.elementFromPoint(clientX, clientY);
+    const canvasDrop = element?.closest<HTMLElement>(`[${CANVAS_FILE_DROP_ATTRIBUTE}]`) ?? null;
+    if (canvasDrop && (dragState.files || dragState.reference || dragState.materialFiles)) {
+      updateMaterialsDrop(canvasDrop);
+      updateDropTarget(null);
+      return;
+    }
     // 段の見出し（原稿＝作品直下、素材＝素材フォルダ）へ落とすと、その段のいちばん上のフォルダの中へ移す。
     const sectionHeader = element?.closest<HTMLElement>("[data-binder-drop-folder]");
     // 画像・PDF は素材の中だけで動かす（BINDER 2-6）。素材の段の見出しと素材の中の行だけを受け、
     // 前・後の並べ替えはせず、そのフォルダ（ファイルの行ならその行のフォルダ）の中へ入れる。
     if (dragState.reference) {
-      // 画像・PDF を埋め込みのキャンバスへ落とすと、資料のカードを置く（BINDER 4-3）。
-      const canvasDrop = element?.closest<HTMLElement>(`[${CANVAS_FILE_DROP_ATTRIBUTE}]`) ?? null;
-      updateMaterialsDrop(canvasDrop);
-      if (canvasDrop) {
-        updateDropTarget(null);
-        return;
-      }
+      updateMaterialsDrop(null);
       const sourceParentKey = parentKey(dragState.reference.path);
       let folderPath: string | undefined;
       if (sectionHeader) {
@@ -1208,10 +1207,8 @@ export function WorkspaceSidebar({
     }
     // ノートだけを「この場面」の素材の欄へ落とすと、素材リストに足す（BINDER 3-3）。ツリーの外なので、
     // ツリーの中の判定には当たらない。
-    // ノート・原稿を埋め込みのキャンバスへ落とすと、ファイルのカードを置く（BINDER 4-2）。
     const materialsDrop =
       (dragState.notes ? element?.closest<HTMLElement>(`[${MATERIALS_DROP_ATTRIBUTE}]`) : null) ??
-      (dragState.files ? element?.closest<HTMLElement>(`[${CANVAS_FILE_DROP_ATTRIBUTE}]`) : null) ??
       null;
     updateMaterialsDrop(materialsDrop);
     if (materialsDrop) {
@@ -1464,6 +1461,7 @@ export function WorkspaceSidebar({
       window.setTimeout(() => {
         suppressNextClickRef.current = false;
       }, 0);
+      updateDropTargetFromPoint(event.clientX, event.clientY, dragState);
       const activeDropTarget = dropTargetRef.current;
       const materialsDrop = materialsDropRef.current;
       if (materialsDrop?.hasAttribute(CANVAS_FILE_DROP_ATTRIBUTE)) {
@@ -1630,9 +1628,9 @@ export function WorkspaceSidebar({
     setDraggingHeadingKeys(new Set(sources.map(headingSelectionKey)));
     setHeadingDropTarget(null);
     suppressNextClickRef.current = true;
-    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.effectAllowed = "copyMove";
     event.dataTransfer.setData(
-      HEADING_DRAG_MIME,
+      CANVAS_HEADING_DRAG_MIME,
       JSON.stringify({ sources }),
     );
     logHeadingDnd("dragstart", {
@@ -1791,7 +1789,7 @@ export function WorkspaceSidebar({
     setContextMenu(null);
     const position = getScaledFixedMenuPosition(event.clientX, event.clientY, {
       width: TREE_CONTEXT_MENU_WIDTH,
-      height: 72,
+      height: onAddToCanvas ? 100 : 72,
     });
     setHeadingContextMenu({
       x: position.left,
@@ -1840,6 +1838,12 @@ export function WorkspaceSidebar({
       </button>
     ) : null;
 
+  const renderAddToCanvas = (path: string) => onAddToCanvas && (
+    <button type="button" role="menuitem" onClick={() => closeContextMenuAndRun(() => onAddToCanvas({ paths: [path] }))}>
+      キャンバスに置く
+    </button>
+  );
+
   const renderContextMenu = (): JSX.Element | null => {
     if (!contextMenu) return null;
 
@@ -1878,6 +1882,7 @@ export function WorkspaceSidebar({
           >
             開く
           </button>
+          {renderAddToCanvas(reference.path)}
           {onRenameReference && (
             <button
               type="button"
@@ -1940,6 +1945,7 @@ export function WorkspaceSidebar({
             開く
           </button>
         )}
+        {kind === "file" && renderAddToCanvas(entry.path)}
         {kind === "folder" && (
           <>
             <button
@@ -2044,6 +2050,14 @@ export function WorkspaceSidebar({
         >
           別ファイルへ切り出す…
         </button>
+        {onAddToCanvas && selected.length > 0 && (
+          <button type="button" role="menuitem" onClick={() => {
+            setHeadingContextMenu(null);
+            onAddToCanvas({ paths: [], headings: selected });
+          }}>
+            キャンバスに置く
+          </button>
+        )}
         {!canExtract && (
           <span className="contextMenuHint">複数選択時は切り出せません</span>
         )}
@@ -2800,10 +2814,20 @@ export function WorkspaceSidebar({
     );
   };
 
+  const showCurrentOutline = outlineScope === "current" && !isProjectSearchMode;
+
   const renderOutlineMode = () => (
     <section className="sidebarSection outlineExplorerSection" aria-label="アウトライン">
       <div className="tree outlineTree">
-        {projectFolder && binderTiers ? (
+        {showCurrentOutline ? (
+          activeDocumentOutline.length > 0 ? (
+            <div className="outlineTreeChildren">
+              {renderOutlineItems(currentFilePath, activeDocumentOutline, 0)}
+            </div>
+          ) : (
+            <div className="outlineEmptyState">見出しがありません</div>
+          )
+        ) : projectFolder && binderTiers ? (
           renderBinderTiers(projectFolder, binderTiers)
         ) : projectFolder ? (
           visibleRootEntries.length > 0 ? (
@@ -3292,7 +3316,7 @@ export function WorkspaceSidebar({
       className={`workspaceSidebar ${showOutlineGuides ? "showOutlineGuides" : ""}`}
       aria-label="ファイルと検索"
     >
-      <div className="sidebarHeader">
+      {!showCurrentOutline && <div className="sidebarHeader">
         {!isProjectSearchMode && projectFolder ? (
           <RightPaneSwitcher
             items={progressFilterItems}
@@ -3310,7 +3334,7 @@ export function WorkspaceSidebar({
             字数
           </span>
         )}
-        <div className="sidebarHeaderActions">
+        {onCollapse && <div className="sidebarHeaderActions">
           <button
             className="sidebarIconButton"
             type="button"
@@ -3320,10 +3344,10 @@ export function WorkspaceSidebar({
           >
             <SidebarIcon name="chevronLeft" className="sidebarButtonSvg" />
           </button>
-        </div>
-      </div>
+        </div>}
+      </div>}
 
-      {!isProjectSearchMode && library?.role === "project" && (
+      {!showCurrentOutline && !isProjectSearchMode && library?.role === "project" && (
         <LibraryBackButton library={library} onEnterLibraryRoot={onEnterLibraryRoot} />
       )}
 
@@ -3337,7 +3361,7 @@ export function WorkspaceSidebar({
         ) : (
           renderOutlineMode()
         )}
-        {!isProjectSearchMode && library?.role === "root" && (
+        {!showCurrentOutline && !isProjectSearchMode && library?.role === "root" && (
           <LibraryProjectList
             library={library}
             onEnterProject={onEnterProject}
@@ -3348,13 +3372,13 @@ export function WorkspaceSidebar({
         )}
       </div>
 
-      {showSnapshotSection && !isProjectSearchMode && projectFolder && library?.role !== "root" && (
+      {showSnapshotSection && !showCurrentOutline && !isProjectSearchMode && projectFolder && library?.role !== "root" && (
         <div className={`snapshotDock ${isSnapshotSectionCollapsed ? "collapsedSnapshotDock" : ""}`}>
           {renderSnapshotSection()}
         </div>
       )}
 
-      {!isProjectSearchMode && projectFolder && (
+      {!showCurrentOutline && !isProjectSearchMode && projectFolder && (
         <footer className="fileViewSummary">
           <span className="progressLegend" aria-label="状態記号の凡例">
             {(["writing", "revising", "done", "todo"] as const).map((status) => (
@@ -3375,8 +3399,8 @@ export function WorkspaceSidebar({
         </footer>
       )}
 
-      {renderContextMenu()}
-      {renderHeadingContextMenu()}
+      {!panelHidden && renderContextMenu()}
+      {!panelHidden && renderHeadingContextMenu()}
     </aside>
   );
 }

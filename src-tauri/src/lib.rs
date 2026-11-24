@@ -1472,13 +1472,18 @@ fn open_export_location(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn focus_source_in_main(app: tauri::AppHandle, path: String) -> Result<(), String> {
+fn focus_source_in_main(app: tauri::AppHandle, path: String, line: Option<u32>) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "編集画面が見つかりませんでした".to_string())?;
-    window
-        .emit("then-open-export-source", path)
-        .map_err(|error| format!("本文ファイルを編集画面へ渡せませんでした: {error}"))?;
+    let emitted = match line {
+        Some(line) => window.emit(
+            "then-open-export-source",
+            serde_json::json!({ "path": path, "line": line }),
+        ),
+        None => window.emit("then-open-export-source", path),
+    };
+    emitted.map_err(|error| format!("本文ファイルを編集画面へ渡せませんでした: {error}"))?;
     window
         .show()
         .map_err(|error| format!("編集画面を表示できませんでした: {error}"))?;

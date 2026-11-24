@@ -55,7 +55,7 @@ const { LeftSidebar, WorkspaceSidebar, OpenCardsPane } = await import(pathToFile
 // App の関数の代わり。呼ばれた名前と引数を順に記録する。
 const calls = [];
 const functionNames = [
-  "setIsLeftSidebarCollapsed", "setLeftSidebarView", "handleNewDocument", "handleCreateProjectFolder",
+  "onOutlineScopeChange", "onAddToCanvas", "setLeftSidebarView", "handleNewDocument", "handleCreateProjectFolder",
   "handleOpenProjectFolder", "focusReferenceCard", "closeReferenceCard", "pinReferenceCard", "collapseReferenceCard",
   "handleSetFileProgress", "handleFolderCollapsedChange", "handleOutlineCollapsedChange",
   "handleOutlineHeadingCollapsedChange", "jumpToOutlineItem", "handleProjectOutlineJump", "handleHeadingMove",
@@ -83,9 +83,8 @@ const spies = Object.fromEntries(
 // 値は、名前ごとに違う目印にする（真偽値も文字列の目印にして、2つの値の入れ替えを見分ける）。
 const mark = (name) => `<${name}>`;
 const baseValues = {
-  appMode: "write",
-  isLeftSidebarCollapsed: false,
-  isEditorFocusMode: false,
+  outlineScope: "all",
+  panelVisible: true,
   leftSidebarView: "files",
   projectFolder: { path: "C:/work", name: "work", children: [] },
   focusedFolderPath: "C:/work/第一部",
@@ -177,25 +176,19 @@ const expectCalls = (label, action, expected) => {
 {
   const tree = render();
   assert.equal(tree.type, "div");
-  assert.match(tree.props.className, /^leftWorkspaceCluster /);
-  assert.doesNotMatch(tree.props.className, /modeHiddenPane/);
-  assert.equal(tree.props["data-sidebar-collapsed"], false);
-  assert.equal(tree.props["aria-hidden"], false);
-  assert.equal("inert" in tree.props, false);
+  assert.equal(tree.props.className, "filePanelBody");
   const nav = findOne(tree, (element) => element.type === "nav", "activity bar");
-  assert.equal(nav.props["aria-label"], "左サイドバー操作");
+  assert.equal(nav.props["aria-label"], "ファイル・見出しの操作");
   assert.deepEqual(
     elementsOf(nav).filter((element) => element.type === "button").map((element) => element.props["aria-label"]),
-    ["ファイルツリー", "プロジェクト検索", "開いているカード", "新規ファイル", "新規フォルダ"],
+    ["ファイル・見出し", "プロジェクト検索", "開いているカード", "新規ファイル", "新規フォルダ"],
   );
-  assert.equal(button(tree, "ファイルツリー").props["aria-pressed"], true);
+  assert.equal(button(tree, "ファイル・見出し").props["aria-pressed"], true);
   assert.equal(button(tree, "プロジェクト検索").props["aria-pressed"], false);
   assert.equal(button(tree, "開いているカード").props["aria-pressed"], false);
-  assert.match(button(tree, "ファイルツリー").props.className, /activeWorkspaceActivityButton/);
 
-  for (const [label, view] of [["ファイルツリー", "files"], ["プロジェクト検索", "search"], ["開いているカード", "reference"]]) {
+  for (const [label, view] of [["ファイル・見出し", "files"], ["プロジェクト検索", "search"], ["開いているカード", "reference"]]) {
     expectCalls(label, () => button(tree, label).props.onClick(), [
-      { name: "setIsLeftSidebarCollapsed", args: [false] },
       { name: "setLeftSidebarView", args: [view] },
     ]);
   }
@@ -210,31 +203,14 @@ const expectCalls = (label, action, expected) => {
     "handleOpenProjectFolder", []);
 }
 
-// 畳んだとき、ほかの画面、集中モード、プラグイン画面。
 {
-  const collapsed = render({ isLeftSidebarCollapsed: true });
-  assert.equal(collapsed.props["data-sidebar-collapsed"], true);
-  for (const label of ["ファイルツリー", "プロジェクト検索", "開いているカード"]) {
-    assert.equal(button(collapsed, label).props["aria-pressed"], false, `${label} is not pressed while collapsed`);
-    assert.doesNotMatch(button(collapsed, label).props.className, /activeWorkspaceActivityButton/);
-  }
-  for (const appMode of ["export", "checkpoint"]) {
-    assert.match(render({ appMode }).props.className, /modeHiddenPane/, `${appMode} hides the left cluster`);
-  }
-  // BINDER 4-3: コルクボードと同じく、Canvas でもバインダーを出す（ノート・原稿をボードへドラッグするため）。
-  for (const appMode of ["corkboard", "canvas"]) {
-    const shown = render({ appMode });
-    assert.doesNotMatch(shown.props.className, /modeHiddenPane/, `${appMode} shows the left cluster`);
-    assert.equal(shown.props["aria-hidden"], false);
-    assert.equal("inert" in shown.props, false);
-  }
-  const plugin = render({ appMode: "plugin" });
-  assert.doesNotMatch(plugin.props.className, /modeHiddenPane/);
-  assert.equal(plugin.props["aria-hidden"], true);
-  assert.equal(plugin.props.inert, "");
-  const focus = render({ isEditorFocusMode: true });
-  assert.equal(focus.props["aria-hidden"], true);
-  assert.equal(focus.props.inert, "");
+  const tree = render({ outlineScope: "current", panelVisible: false });
+  const outlineSwitch = findOne(tree, (element) => element.type === "button" && element.props.children === "現在の文書", "outline scope");
+  assert.equal(outlineSwitch.props["aria-pressed"], true);
+  expectCall("現在の文書", () => outlineSwitch.props.onClick(), "onOutlineScopeChange", ["current"]);
+  const pane = findOne(tree, (element) => element.type === WorkspaceSidebar, "WorkspaceSidebar");
+  assert.equal(pane.props.outlineScope, "current");
+  assert.equal(pane.props.panelHidden, true);
 }
 
 // --- ファイルツリーと検索（WorkspaceSidebar）へのつなぎ ---
@@ -277,6 +253,8 @@ const expectCalls = (label, action, expected) => {
     projectReplaceValue: mark("projectReplaceValue"),
     isProjectReplacing: mark("isProjectReplacing"),
     isProjectSearchMode: false,
+    outlineScope: "all",
+    panelHidden: false,
     snapshots: mark("currentWorkspaceSnapshots"),
     isSnapshotSectionCollapsed: mark("settings.checkpointSectionCollapsed"),
     showSnapshotSection: mark("settings.showCheckpointSection"),
@@ -290,6 +268,7 @@ const expectCalls = (label, action, expected) => {
   const snapshot = { id: "snapshot-1" };
   const heading = { path: "C:/work/a.md", line: 3, blockId: "h3", title: "見出し" };
   const expectedFunctions = {
+    onAddToCanvas: { args: [{ paths: ["C:/work/a.md"] }], name: "onAddToCanvas" },
     onSetFileProgress: { args: ["C:/work/a.md", "done"], name: "handleSetFileProgress" },
     onFolderCollapsedChange: { args: ["C:/work/第一部", true], name: "handleFolderCollapsedChange" },
     onOutlineCollapsedChange: { args: ["C:/work/a.md", false], name: "handleOutlineCollapsedChange" },
@@ -335,7 +314,6 @@ const expectCalls = (label, action, expected) => {
     onEditSnapshotDetails: { args: [snapshot], name: "handleEditManuscriptSnapshotDetails" },
     onRestoreSnapshot: { args: [snapshot], name: "handleRestoreManuscriptSnapshot" },
     onDeleteSnapshot: { args: [snapshot], name: "handleDeleteManuscriptSnapshot" },
-    onCollapse: { args: [], name: "setIsLeftSidebarCollapsed", expectedArgs: [true] },
     onEnterLibraryRoot: { args: [], name: "enterLibraryRoot" },
     onEnterProject: { args: ["C:/library/作品2"], name: "enterProject" },
     onCreateLibraryProject: { args: [], name: "handleCreateLibraryProject" },
@@ -401,13 +379,11 @@ const expectCalls = (label, action, expected) => {
 // --- 開いているカード（OpenCardsPane）へのつなぎ ---
 {
   const tree = render({ leftSidebarView: "reference" });
-  assert.equal(elementsOf(tree).some((element) => element.type === WorkspaceSidebar), false);
+  assert.equal(findOne(tree, (element) => element.type === WorkspaceSidebar, "files pane").props.panelHidden, true);
   assert.equal(button(tree, "開いているカード").props["aria-pressed"], true);
   const aside = findOne(tree, (element) => element.type === "aside", "reference sidebar");
   assert.equal(aside.props.className, "workspaceSidebar referenceWorkspaceSidebar");
   assert.equal(aside.props["aria-label"], "開いているカード");
-  expectCall("左サイドバーを畳む", () => button(tree, "左サイドバーを畳む").props.onClick(),
-    "setIsLeftSidebarCollapsed", [true]);
 
   const pane = findOne(tree, (element) => element.type === OpenCardsPane, "OpenCardsPane");
   assert.deepEqual(Object.keys(pane.props).sort(),
@@ -466,16 +442,11 @@ const expectCalls = (label, action, expected) => {
   assert.match(app, /leftSidebarView: normalizeLeftSidebarView\(value\?\.leftSidebarView\)/);
   assert.match(app, /leftSidebarCollapsed: normalizeLeftSidebarCollapsed\(value\?\.leftSidebarCollapsed\)/);
   assert.match(app, /setLeftSidebarViewState\(state\.leftSidebarView\)/);
-  assert.match(app, /setIsLeftSidebarCollapsedState\(state\.leftSidebarCollapsed\)/);
+  assert.match(app, /state\.leftSidebarCollapsed \? null : "files"/);
   assert.match(app, /current\.leftSidebarView === view/);
-  assert.match(app, /current\.leftSidebarCollapsed === collapsed/);
   // 画面の値を直接書くのは、保存もする関数と起動時の復元の2か所だけ（ほかの変更は全部、保存する関数を通る）。
   assert.equal(app.match(/setLeftSidebarViewState\(/g)?.length, 2, "only the saving setter and the restore set the view");
-  assert.equal(app.match(/setIsLeftSidebarCollapsedState\(/g)?.length, 2, "only the saving setter and the restore set the collapse");
   assert.match(app, /canvasLeftSidebarCollapsed: normalizeCanvasLeftSidebarCollapsed\(value\?\.canvasLeftSidebarCollapsed\)/);
-  assert.match(app, /setIsCanvasLeftSidebarCollapsedState\(state\.canvasLeftSidebarCollapsed\)/);
-  assert.match(app, /current\.canvasLeftSidebarCollapsed === collapsed/);
-  assert.equal(app.match(/setIsCanvasLeftSidebarCollapsedState\(/g)?.length, 2, "only the saving setter and the restore set the Canvas collapse");
 }
 
 console.log("left sidebar tests passed");

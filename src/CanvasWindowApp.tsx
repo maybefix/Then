@@ -45,11 +45,13 @@ import {
   createCanvasTextNode,
   nextCanvasId,
   normalizeCanvasDocument,
+  normalizeCanvasHeading,
   REFERENCE_FILE_DRAG_MIME,
   retargetCanvasReferenceNodes,
   serializeCanvasDocument,
   type CanvasBoardSummary,
   type CanvasFileNode,
+  type CanvasHeadingLocation,
   type CanvasFileSavedEvent,
   type CanvasFileWriteEvent,
   type CanvasFileWriteRequest,
@@ -95,7 +97,10 @@ import { isFromWork, noteLabel, timeLabel, type Post, type PostWork } from "./po
 import { flushPendingSaves, setPendingSave } from "./pendingSaves";
 import { parseFrontMatter } from "./utils/frontmatter";
 import type { SynopsisState } from "./corkboard/synopsis";
-import { CANVAS_FILE_DROP_ATTRIBUTE, CANVAS_FILE_DROP_EVENT, type CanvasFileDropDetail } from "./canvasFileDrop";
+import { CANVAS_FILE_DROP_ATTRIBUTE, CANVAS_FILE_DROP_EVENT, CANVAS_HEADING_DRAG_MIME, type CanvasFileDropDetail } from "./canvasFileDrop";
+import { resolveCanvasHeading } from "./canvasHeadingReference";
+import { createDocumentAst } from "./editor/ast/documentAst";
+import type { DocumentAst, DocumentOutlineItem } from "./editor/ast/types";
 import { ReferenceReadOnlyPreview } from "./components/references/ReferenceLayer";
 import CanvasToManuscriptDialog from "./components/canvas/CanvasToManuscriptDialog";
 import {
@@ -1064,7 +1069,8 @@ type CanvasWindowAppProps = {
   /** embedded 時に、カードで直した中身をメイン画面に書いてもらう。 */
   onWriteFile?: (request: CanvasFileWriteRequest) => Promise<CanvasFileWriteResult>;
   /** embedded 時に、ファイルのカードのファイルをタブで開く（作品からの相対パス）。 */
-  onOpenFile?: (path: string) => void;
+  onOpenFile?: (path: string, heading?: DocumentOutlineItem) => void;
+  onOpenFilePanel?: () => void;
   /** embedded 時に、このボードを別ウィンドウへ移す（メイン画面は本文へ戻る。BINDER 4-3）。 */
   onOpenInWindow?: (boardId: string | null) => void;
   /** embedded 時の「この順で原稿を作る」の作る先（BINDER 4-4）。 */
@@ -1091,6 +1097,7 @@ export default function CanvasWindowApp({
   liveOpenTabPaths,
   onWriteFile,
   onOpenFile,
+  onOpenFilePanel,
   onOpenInWindow,
   liveManuscriptFolders,
   onManuscriptRequest,
@@ -1282,9 +1289,10 @@ export default function CanvasWindowApp({
   const postsById = useMemo(() => new Map(posts.posts.map((post) => [post.id, post] as const)), [posts]);
 
   const filteredInsertItems = useMemo(
-    () => canvasInsertItems(referenceFiles, projectFiles, posts, referenceQuery),
-    [referenceFiles, projectFiles, posts, referenceQuery],
+    () => canvasInsertItems(embedded ? [] : referenceFiles, embedded ? [] : projectFiles, posts, referenceQuery),
+    [embedded, referenceFiles, projectFiles, posts, referenceQuery],
   );
+  const referenceMenuLabel = embedded ? "投稿を追加" : "資料を追加";
   // 「投稿にする」の対象: 選んだカードと、選んだグループの中のカードの和（「この順で原稿を作る」「表示設定」と同じ。K5）。
   const textNodesForPosts = useMemo(
     () => (board ? sortCanvasItems(manuscriptSourceCards(board, selectedIds)) : []),
@@ -1569,12 +1577,14 @@ export default function CanvasWindowApp({
   };
 
   /** ノート・原稿を指すファイルのカードを置く（BINDER 4-2）。paths は作品からの相対パス。 */
-  const insertFileNodesAt = (paths: string[], point: Point) => {
-    if (!board || paths.length === 0) return;
+  const insertFileNodesAt = (files: { path: string; heading?: CanvasHeadingLocation }[], point: Point) => {
+    if (!board || files.length === 0) return;
     const width = 300;
     const height = 240;
-    const nodes = paths.map((path, index) =>
+    const nodes = files.map(({ path, heading }, index) =>
       createCanvasFileNode(path, {
+        subpath: heading ? `#${heading.title}` : undefined,
+        thenHeading: heading,
         x: Math.max(0, point.x - width / 2 + index * 36),
         y: Math.max(0, point.y - height / 2 + index * 36),
         width,
@@ -1587,7 +1597,7 @@ export default function CanvasWindowApp({
     setSelectedEdgeId(null);
   };
 
-  const insertFileNodeAt = (path: string, point: Point) => insertFileNodesAt([path], point);
+  const insertFileNodeAt = (path: string, point: Point) => insertFileNodesAt([{ path }], point);
 
   const addFileNode = (path: string) => {
     insertFileNodeAt(path, viewportCenterWorld());
@@ -1624,7 +1634,8 @@ export default function CanvasWindowApp({
   const canAcceptCanvasDrop = (event: ReactDragEvent<HTMLDivElement>) =>
     event.dataTransfer.types.includes(REFERENCE_FILE_DRAG_MIME) ||
     event.dataTransfer.types.includes(CANVAS_FILE_DRAG_MIME) ||
-    event.dataTransfer.types.includes(CANVAS_POST_DRAG_MIME);
+    event.dataTransfer.types.includes(CANVAS_POST_DRAG_MIME) ||
+    (embedded && event.dataTransfer.types.includes(CANVAS_HEADING_DRAG_MIME));
 
   const handleViewportDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
     if (!canAcceptCanvasDrop(event)) return;
@@ -1637,6 +1648,23 @@ export default function CanvasWindowApp({
     event.preventDefault();
     event.stopPropagation();
     const point = screenToWorld(event.clientX, event.clientY);
+    const headingData = event.dataTransfer.getData(CANVAS_HEADING_DRAG_MIME);
+    if (headingData && embedded && rootPath) {
+      try {
+        const { sources } = JSON.parse(headingData) as { sources?: unknown[] };
+        if (!Array.isArray(sources)) return;
+        const headings = sources.flatMap((source) => {
+          const heading = normalizeCanvasHeading(source);
+          return heading && source && typeof source === "object" && "path" in source && typeof source.path === "string"
+            ? [{ ...heading, path: source.path }]
+            : [];
+        });
+        fileDropRef.current({ paths: [], headings, clientX: event.clientX, clientY: event.clientY });
+      } catch {
+        // Ignore malformed drag data.
+      }
+      return;
+    }
     const filePath = event.dataTransfer.getData(CANVAS_FILE_DRAG_MIME);
     if (filePath) {
       insertFileNodeAt(filePath, point);
@@ -2023,6 +2051,21 @@ export default function CanvasWindowApp({
     void flushFileWrites();
   };
 
+  const headingFileKeys = [...new Set((board?.nodes ?? []).flatMap(
+    (node) => isFileNode(node) && node.thenHeading ? [canvasFileKey(node.file)] : [],
+  ))].join("\n");
+  const headingDocuments = useMemo(() => {
+    const documents = new Map<string, DocumentAst>();
+    if (!headingFileKeys) return documents;
+    for (const key of headingFileKeys.split("\n")) {
+      const source = fileStates.get(key);
+      if (source?.status === "loaded") {
+        documents.set(key, createDocumentAst({ path: key, text: parseFrontMatter(source.content).body }));
+      }
+    }
+    return documents;
+  }, [headingFileKeys, fileStates]);
+
   /** ファイルのカードの見出し・本文と、直せるか。 */
   const fileCardView = (node: CanvasFileNode) => {
     const key = canvasFileKey(node.file);
@@ -2045,26 +2088,31 @@ export default function CanvasWindowApp({
       }
     }
     const draft = rootPath ? fileDrafts.get(canvasFileWriteKey({ rootPath, path: node.file, kind })) : undefined;
+    const headingDocument = node.thenHeading ? headingDocuments.get(key) : undefined;
+    const section = node.thenHeading && headingDocument ? resolveCanvasHeading(headingDocument, node.thenHeading) : null;
     return {
       role,
       kind,
       missing,
       loaded: Boolean(loaded),
       openInTab,
-      editable,
-      title: canvasFileTitle(node.file),
-      text: draft ?? text,
+      editable: !node.thenHeading && editable,
+      heading: section?.item,
+      title: section?.item.title ?? node.thenHeading?.title ?? canvasFileTitle(node.file),
+      text: node.thenHeading
+        ? section?.text ?? (loaded ? "見出しが見つかりません" : "")
+        : draft ?? text,
     };
   };
 
-  const openFileInTab = (path: string) => {
+  const openFileInTab = (path: string, heading?: DocumentOutlineItem) => {
     if (!rootPath) return;
     if (embedded) {
-      onOpenFile?.(path);
+      onOpenFile?.(path, heading);
       return;
     }
     if (!isTauriRuntime()) return;
-    void invoke("focus_source_in_main", { path: joinCanvasFilePath(rootPath, path) }).catch((error) =>
+    void invoke("focus_source_in_main", { path: joinCanvasFilePath(rootPath, path), line: heading?.line }).catch((error) =>
       setStatus(String(error)),
     );
   };
@@ -2217,18 +2265,24 @@ export default function CanvasWindowApp({
   // 素材の画像・PDF の行は、「資料を追加」で置くのと同じ資料のカードにする（BINDER 4-3）。
   const fileDropRef = useRef<(detail: CanvasFileDropDetail) => void>(() => {});
   fileDropRef.current = (detail) => {
-    if (!rootPath) return;
-    const point = screenToWorld(detail.clientX, detail.clientY);
-    const paths: string[] = [];
+    if (!rootPath || !board) return;
+    const point = detail.clientX !== undefined && detail.clientY !== undefined
+      ? screenToWorld(detail.clientX, detail.clientY)
+      : viewportCenterWorld();
+    const files: { path: string; heading?: CanvasHeadingLocation }[] = [];
     for (const path of detail.paths) {
       const relative = canvasRelativePath(rootPath, path);
       if (!relative) continue;
       const reference = referenceFiles.find((file) =>
         (file.kind === "image" || file.kind === "pdf") && canvasFileKey(file.sourcePath) === canvasFileKey(relative));
       if (reference) void insertReferenceNodeAt(reference, point);
-      else paths.push(relative);
+      else if (projectFileRoles.has(canvasFileKey(relative))) files.push({ path: relative });
     }
-    insertFileNodesAt(paths, point);
+    for (const { path, ...heading } of detail.headings ?? []) {
+      const relative = canvasRelativePath(rootPath, path);
+      if (relative && projectFileRoles.has(canvasFileKey(relative))) files.push({ path: relative, heading });
+    }
+    insertFileNodesAt(files, point);
   };
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -2845,8 +2899,8 @@ export default function CanvasWindowApp({
     event.stopPropagation();
     const view = fileCardView(node);
     if (view.missing) return;
-    if (view.kind === "body" && view.openInTab) {
-      openFileInTab(node.file);
+    if (node.thenHeading || (view.kind === "body" && view.openInTab)) {
+      openFileInTab(node.file, view.heading);
       return;
     }
     if (!view.editable) return;
@@ -3749,54 +3803,61 @@ export default function CanvasWindowApp({
           </button>
         </div>
         <div className="canvasTopbarRight">
-          <div className="canvasReferenceHost">
-            <button
-              className={`canvasIconButton ${isReferenceMenuOpen ? "isActive" : ""}`}
-              type="button"
-              title="資料を追加"
-              aria-label="資料を追加"
-              aria-expanded={isReferenceMenuOpen}
-              disabled={referenceFiles.length === 0 && projectFiles.length === 0 && posts.posts.length === 0}
-              onClick={() => setIsReferenceMenuOpen((value) => !value)}
-            >
+          {embedded && (
+            <button className="canvasIconButton" type="button" title="ファイル・見出し" aria-label="ファイル・見出しを開く" onClick={onOpenFilePanel}>
               <CanvasGlyph name="reference" />
             </button>
-            {isReferenceMenuOpen && (
-              <div className="canvasReferencePopover" role="dialog" aria-label="資料を追加">
-                <h2>資料を追加</h2>
-                <input
-                  value={referenceQuery}
-                  placeholder="資料を検索"
-                  aria-label="資料を検索"
-                  onChange={(event) => setReferenceQuery(event.target.value)}
-                />
-                <div className="canvasReferenceList">
-                  {filteredInsertItems.length === 0 ? (
-                    <p>該当する資料はありません</p>
-                  ) : (
-                    filteredInsertItems.slice(0, 40).map((item) => (
-                      <button
-                        key={item.key}
-                        type="button"
-                        title={canvasInsertItemPath(item)}
-                        onClick={() =>
-                          item.kind === "reference"
-                            ? addReferenceNode(item.file)
-                            : item.kind === "post"
-                              ? addPostNode(item.post.id)
-                              : addFileNode(item.file.path)
-                        }
-                      >
-                        <span>{canvasInsertItemLabel(item)}</span>
-                        <strong>{canvasInsertItemName(item)}</strong>
-                        <small>{canvasInsertItemPath(item)}</small>
-                      </button>
-                    ))
-                  )}
+          )}
+          {(!embedded || posts.posts.length > 0) && (
+            <div className="canvasReferenceHost">
+              <button
+                className={`canvasIconButton ${isReferenceMenuOpen ? "isActive" : ""}`}
+                type="button"
+                title={referenceMenuLabel}
+                aria-label={referenceMenuLabel}
+                aria-expanded={isReferenceMenuOpen}
+                disabled={referenceFiles.length === 0 && projectFiles.length === 0 && posts.posts.length === 0}
+                onClick={() => setIsReferenceMenuOpen((value) => !value)}
+              >
+                <CanvasGlyph name="reference" />
+              </button>
+              {isReferenceMenuOpen && (
+                <div className="canvasReferencePopover" role="dialog" aria-label={referenceMenuLabel}>
+                  <h2>{referenceMenuLabel}</h2>
+                  <input
+                    value={referenceQuery}
+                    placeholder={embedded ? "投稿を検索" : "資料を検索"}
+                    aria-label={embedded ? "投稿を検索" : "資料を検索"}
+                    onChange={(event) => setReferenceQuery(event.target.value)}
+                  />
+                  <div className="canvasReferenceList">
+                    {filteredInsertItems.length === 0 ? (
+                      <p>{embedded ? "該当する投稿はありません" : "該当する資料はありません"}</p>
+                    ) : (
+                      filteredInsertItems.slice(0, 40).map((item) => (
+                        <button
+                          key={item.key}
+                          type="button"
+                          title={canvasInsertItemPath(item)}
+                          onClick={() =>
+                            item.kind === "reference"
+                              ? addReferenceNode(item.file)
+                              : item.kind === "post"
+                                ? addPostNode(item.post.id)
+                                : addFileNode(item.file.path)
+                          }
+                        >
+                          <span>{canvasInsertItemLabel(item)}</span>
+                          <strong>{canvasInsertItemName(item)}</strong>
+                          <small>{canvasInsertItemPath(item)}</small>
+                        </button>
+                      ))
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
           <button
             className="canvasIconButton"
             type="button"
@@ -4007,6 +4068,7 @@ export default function CanvasWindowApp({
                   data-node-id={node.id}
                   data-color={node.color || undefined}
                   data-file-role={view.role}
+                  data-heading-reference={node.thenHeading ? "" : undefined}
                   onPointerDown={(event) => handleNodePointerDown(node, event)}
                   onDoubleClick={(event) => handleFileNodeDoubleClick(node, event)}
                   onBlur={(event) => {
@@ -4016,7 +4078,7 @@ export default function CanvasWindowApp({
                   }}
                 >
                   <header>
-                    <span>{view.missing ? "" : view.role === "note" ? "ノート" : "原稿"}</span>
+                    <span>{view.missing ? "" : node.thenHeading ? "見出し" : view.role === "note" ? "ノート" : "原稿"}</span>
                     {!view.missing && (
                       <button
                         className="canvasFileOpenButton"
@@ -4026,7 +4088,7 @@ export default function CanvasWindowApp({
                         onDoubleClick={(event) => event.stopPropagation()}
                         onClick={(event) => {
                           event.stopPropagation();
-                          openFileInTab(node.file);
+                          openFileInTab(node.file, view.heading);
                         }}
                       >
                         開く

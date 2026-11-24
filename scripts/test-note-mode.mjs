@@ -118,8 +118,8 @@ function installMock({ work, settings }) {
     fileId: `${work}/${relative}`, contentHash: null, modifiedAt: 1, ...extra });
   const folder = (relative, children, extra = {}) => ({ path: `${work}/${relative}`, name: relative.split("/").pop(), kind: "folder", children, ...extra });
   const texts = {
-    [`${work}/本文.md`]: "原稿の本文です。",
-    [`${work}/資料/素材.md`]: "原稿の資料です。",
+    [`${work}/本文.md`]: "# 章の見出し\n原稿の本文です。",
+    [`${work}/資料/素材.md`]: "# 資料の見出し\n原稿の資料です。",
     [`${work}/素材/人物.md`]: "人物のノートです。",
   };
   const projectFolder = {
@@ -149,6 +149,9 @@ function installMock({ work, settings }) {
     load_project_checkpoints: () => ({ snapshots: [], warnings: [], migratedCount: 0, migrationComplete: true }),
     load_project_snippets: () => [],
     load_project_plot_cards: () => [],
+    is_canvas_window_open: () => false,
+    list_canvas_boards: () => [{ id: "qa", name: "QA", scope: "project", path: "qa.canvas", nodeCount: 0, edgeCount: 0, updatedAt: 1 }],
+    load_canvas_board_with_hash: () => ({ board: { nodes: [], edges: [], then: { name: "QA", scope: "project", version: 1 } }, hash: null }),
     load_reference_layout: () => ({ version: 3, name: "default", cards: [], recent: [], ideaThreads: [] }),
     get_system_fonts: () => [],
     list_installed_plugins: () => ({ plugins: [], errors: [] }),
@@ -196,7 +199,7 @@ function pageHelpers() {
       const row = [...document.querySelectorAll("[data-tree-entry-path]")]
         .find((element) => element.dataset.treeEntryPath.replace(/\\/g, "/").endsWith(`/${relative}`));
       if (!row) throw new Error(`tree row ${relative}`);
-      (row.matches("button") ? row : row.querySelector("button")).click();
+      (row.matches("button") ? row : row.querySelector(".treeItemPrimary")).click();
       await t.waitFor(() => t.body().includes(expectedText), `body of ${relative}`);
       await sleep(400);
     },
@@ -292,10 +295,10 @@ try {
   await send("Emulation.setDeviceMetricsOverride", { width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false });
 
   let mockScript = null;
-  async function start(settings) {
+  async function start(settings, preservePanels = false) {
     if (mockScript) await send("Page.removeScriptToEvaluateOnNewDocument", { identifier: mockScript });
     ({ identifier: mockScript } = await send("Page.addScriptToEvaluateOnNewDocument", {
-      source: `localStorage.clear(); (${installMock})(${JSON.stringify({ work: WORK, settings })})`,
+      source: `${preservePanels ? "" : "localStorage.clear();"} (${installMock})(${JSON.stringify({ work: WORK, settings })})`,
     }));
     await send("Page.navigate", { url: appUrl });
     await sleep(1500);
@@ -360,6 +363,109 @@ try {
   assert.equal(pagedNote.display, "continuous", "ノートはページ表示を使わない");
   assert.equal(pagedNote.appShell, "horizontal-tb");
   assert.doesNotMatch(pagedNote.statusBar, /ページ/, "ノートではページ数を出さない");
+
+  // ---- 2-3. 共通パネルを動かしても本文の DOM、寸法、編集位置は変わらない ----
+  await start(MANUSCRIPT_SETTINGS);
+  const panel = (id) => `[data-floating-panel="${id}"]`;
+  const task = (id) => `[data-panel-task="${id}"]`;
+  const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+  const waitFor = (condition) => evaluate(`t.waitFor(() => ${condition}, ${JSON.stringify(condition)})`);
+  const rect = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect().toJSON()`);
+  const visible = (id) => `!document.querySelector(${JSON.stringify(panel(id))}).hidden`;
+  const drag = async (x, y, dx, dy) => {
+    await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+    await send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", buttons: 1, clickCount: 1 });
+    await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: x + dx, y: y + dy, button: "left", buttons: 1 });
+    await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: x + dx, y: y + dy, button: "left", clickCount: 1 });
+  };
+  await waitFor(visible("files"));
+  assert.equal((await rect(".panelTaskbar")).height, 24);
+  assert.equal((await rect(".statusbar")).height, 26);
+  const editorRect = await rect(".editorColumn");
+  await evaluate(`(() => {
+    window.originalEditor = document.querySelector(".pm-root");
+    const text = document.createTreeWalker(originalEditor, NodeFilter.SHOW_TEXT).nextNode();
+    originalEditor.focus();
+    getSelection().collapse(text, 1);
+  })()`);
+  await sleep(300);
+  const selection = () => evaluate(`({ focused: document.activeElement === originalEditor,
+    offset: getSelection().anchorOffset, text: getSelection().anchorNode?.textContent,
+    scroll: document.querySelector(".verticalTypewriterScroller").scrollLeft })`);
+  const caret = await selection();
+  const sceneTask = await rect(task("scene"));
+  await drag(sceneTask.x + 5, sceneTask.y + 8, 0, 0);
+  await waitFor(visible("scene"));
+  assert.deepEqual(await selection(), caret);
+  assert.equal(await evaluate(`document.querySelector(".pm-root") === originalEditor`), true);
+  assert.deepEqual(await rect(".editorColumn"), editorRect);
+  await click(task("connections"));
+  await waitFor(visible("connections"));
+  assert.equal(await evaluate(visible("scene")), true);
+
+  let frame = await rect(panel("files"));
+  await drag(frame.x + 35, frame.y + 15, 80, 50);
+  const moved = await rect(panel("files"));
+  assert.deepEqual([moved.x - frame.x, moved.y - frame.y], [80, 50]);
+  const handle = await rect(`${panel("files")} .floatingPanelResize`);
+  await drag(handle.x + handle.width / 2, handle.y + handle.height / 2, 70, 30);
+  frame = await rect(panel("files"));
+  assert.deepEqual([frame.width - moved.width, frame.height - moved.height], [70, 30]);
+  await evaluate(`[...document.querySelectorAll(".filePanelScope button")].find(button => button.textContent === "現在の文書").click()`);
+  await waitFor(`document.querySelector(".outlineExplorerSection").textContent.includes("章の見出し")`);
+  assert.deepEqual(await rect(panel("files")), frame);
+  assert.equal(await evaluate(`document.querySelectorAll(".outlineExplorerSection .fileTreeItem").length`), 0);
+
+  await click(`${panel("files")} button[title="最小化"]`);
+  await waitFor(`!(${visible("files")})`);
+  assert.equal(await evaluate(`document.querySelector(${JSON.stringify(task("files"))}).dataset.panelStatus`), "minimized");
+  await click(task("files"));
+  await waitFor(visible("files"));
+  await sleep(250);
+  assert.deepEqual(await rect(panel("files")), frame);
+  await click(`${panel("scene")} button[title="閉じる"]`);
+  assert.equal(await evaluate(`document.querySelector(${JSON.stringify(task("scene"))}).dataset.panelStatus`), "closed");
+  await click(".panelTaskbarToggle");
+  await waitFor(`!(${visible("files")})`);
+  await click(task("proof"));
+  await waitFor(visible("proof"));
+  await click(".panelTaskbarToggle");
+  await waitFor(visible("files"));
+  await sleep(250);
+  assert.equal(await evaluate(visible("connections")), true);
+  assert.equal(await evaluate(visible("scene")), false);
+  assert.deepEqual(await rect(".editorColumn"), editorRect);
+  assert.deepEqual(await rect(panel("files")), frame);
+
+  await click(`${panel("idea")} button[title="Idea Board を開く"]`);
+  await waitFor(`document.querySelector(".canvasViewport")?.hasAttribute("data-canvas-file-drop")`);
+  const canvasFrame = await rect(panel("files"));
+  assert.deepEqual(canvasFrame, frame);
+  assert.equal(await evaluate(`document.querySelector(".filePanelScope button[aria-pressed=true]").textContent`), "現在の文書");
+  assert.equal(await evaluate(visible("connections")), true);
+  assert.equal(await evaluate(`Boolean(document.querySelector(".canvasTopbarRight .canvasReferencePopover"))`), false);
+  await evaluate(`(() => {
+    const heading = document.querySelector(".outlineTreeItem[data-outline-heading-line]");
+    const canvas = document.querySelector(".canvasViewport");
+    const dataTransfer = new DataTransfer();
+    heading.dispatchEvent(new DragEvent("dragstart", { bubbles: true, cancelable: true, dataTransfer }));
+    canvas.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer }));
+    canvas.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer, clientX: 800, clientY: 360 }));
+    heading.dispatchEvent(new DragEvent("dragend", { bubbles: true, dataTransfer }));
+  })()`);
+  await waitFor(`document.querySelector("[data-heading-reference] .canvasFileText")?.textContent.includes("原稿の本文です。")`);
+  await click("[data-heading-reference] .canvasFileOpenButton");
+  await waitFor(`document.querySelector(".appFrame").dataset.appMode === "write"`);
+  assert.deepEqual(await rect(panel("files")), frame);
+
+  await start(MANUSCRIPT_SETTINGS, true);
+  assert.deepEqual(await rect(panel("files")), frame);
+  assert.equal(await evaluate(`document.querySelector(".filePanelScope button[aria-pressed=true]").textContent`), "現在の文書");
+  await send("Emulation.setDeviceMetricsOverride", { width: 720, height: 620, deviceScaleFactor: 1, mobile: false });
+  await sleep(300);
+  const compactFrame = await rect(panel("files"));
+  assert.ok(compactFrame.right <= 720 && compactFrame.bottom <= (await rect(".panelTaskbar")).top);
+  assert.equal((await rect(".statusbar")).height, 26);
 
   assert.deepEqual(pageErrors, [], "the page throws no errors");
   socket.close();

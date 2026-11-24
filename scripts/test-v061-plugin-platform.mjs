@@ -97,36 +97,13 @@ assert.match(runtimeSource, /useLayoutEffect\(\(\) => \{[\s\S]*?"view\.activate"
 assert.match(runtimeSource, /setItem: \(definition\) => request\("statusbar\.set"/);
 assert.match(runtimeSource, /sandbox="allow-scripts"/);
 assert.match(runtimeSource, /connect-src 'none'/);
-assert.match(runtimeSource, /closest\("\.rightSidebar"\)/, "the detached plugin host must track its sidebar anchor");
-assert.match(
-  runtimeSource,
-  /requestAnimationFrame\(trackTransition\)[\s\S]*?addEventListener\("transitionrun"/,
-  "the detached plugin host must follow the Zone sidebar during its transform transition",
-);
-assert.match(runtimeSource, /addEventListener\("transitioncancel"/, "interrupted Zone transitions must stop host position tracking");
+assert.match(runtimeSource, /closest<HTMLElement>\("\.floatingPanel"\)/);
+assert.match(runtimeSource, /panelObserver\?\.observe\(panel, \{ attributes: true, attributeFilter: \["style", "data-panel-animating"\] \}\)/);
 assert.match(runtimeSource, /"--then-background": "--sidebar-bg"/, "plugin frames must receive Then theme tokens");
 assert.match(runtimeSource, /sendEvent\(runtime\.plugin\.manifest\.id, "theme\.change", theme\)/, "theme changes must be sent into every plugin frame");
-const rightSidebarAsideStart = rightSidebarSource.search(/<aside\r?\n\s+className=\{`rightSidebar/);
-const rightSidebarAsideEnd = rightSidebarSource.indexOf("</aside>", rightSidebarAsideStart);
-const sidebarRuntimeAnchorPosition = rightSidebarSource.indexOf("ref={setSidebarPluginRuntimeAnchor}", rightSidebarAsideStart);
-const rightSidebarStart = appSource.indexOf("<RightSidebar");
-const rightSidebarEnd = appSource.indexOf("/>", rightSidebarStart);
-const screenPanePosition = appSource.indexOf('className="pluginScreenPane"');
-const screenRuntimeAnchorPosition = appSource.indexOf("ref={setScreenPluginRuntimeAnchor}", screenPanePosition);
-const runtimeHostPosition = appSource.indexOf("<ThenPluginRuntimeHost", rightSidebarStart);
-const referenceLayerPosition = appSource.indexOf("<ReferenceLayer", rightSidebarStart);
-assert.ok(
-  rightSidebarStart >= 0 &&
-    rightSidebarAsideStart >= 0 &&
-    sidebarRuntimeAnchorPosition > rightSidebarAsideStart &&
-    sidebarRuntimeAnchorPosition < rightSidebarAsideEnd &&
-    screenPanePosition >= 0 &&
-    screenRuntimeAnchorPosition > screenPanePosition &&
-    screenRuntimeAnchorPosition < rightSidebarStart &&
-    runtimeHostPosition > rightSidebarEnd &&
-    referenceLayerPosition > runtimeHostPosition,
-  "plugin screens and sidebar views must use separate anchors without reusing the sidebar as a full-screen pane",
-);
+assert.match(rightSidebarSource, /ref=\{active \? setSidebarPluginRuntimeAnchor : undefined\}/);
+assert.match(appSource, /className="pluginScreenPane"[\s\S]*?ref=\{setScreenPluginRuntimeAnchor\}/);
+assert.match(appSource, /className="floatingPanelLayer"[\s\S]*?<RightSidebar[\s\S]*?<ReferenceLayer[\s\S]*?<ThenPluginRuntimeHost/);
 assert.doesNotMatch(appCssSource.match(/\.pluginRuntimeHost \{[\s\S]*?\}/)?.[0] ?? "", /position:\s*absolute/, "plugin views must not float above the workspace");
 assert.match(appCssSource, /\.pluginRuntimeDetachedHost[\s\S]*?position:\s*fixed/, "one stable iframe host must dock by measured bounds outside clipped sidebar ancestors");
 assert.match(
@@ -134,22 +111,8 @@ assert.match(
   /\.pluginRuntimeDetachedHost\s*\{[^}]*z-index:\s*0/,
   "normal plugin screens must remain below Then's native modal layer",
 );
-assert.match(
-  appCssSource,
-  /\.referenceLayer\s*\{[^}]*top:\s*calc\(var\(--documentbar-height\) \* var\(--ui-font-scale, 1\)\)[^}]*z-index:\s*5/,
-  "the detached reference layer must keep workspace coordinates above docked plugin frames",
-);
-assert.match(
-  appCssSource,
-  /\.appFrame\[data-editor-focus="true"\] > \.referenceLayer\s*\{[^}]*top:\s*0/,
-  "the detached reference layer must follow the workspace when focus mode hides the topbar",
-);
-assert.match(appSource, /className="appFrame"[\s\S]*?data-app-mode=\{appMode\}/);
-assert.match(
-  appCssSource,
-  /\.appFrame:not\(\[data-app-mode="write"\]\) > \.referenceLayer\s*\{[^}]*display:\s*none/,
-  "reference cards must stay hidden on Canvas, full plugin screens, Export, and Checkpoint",
-);
+assert.match(appSource, /className="appFrame floatingPanelWorkspace"[\s\S]*?data-app-mode=\{appMode\}/);
+assert.match(appSource, /className="floatingPanelLayer" hidden=\{!panelsVisible\}/);
 assert.match(appCssSource, /\.topbar\s*\{[^}]*z-index:\s*6/, "topbar popovers must remain above reference cards");
 // The toast was raised above the Plot manager modal (z-index 10) so its undo
 // stays clickable there; only its order relative to the cards matters here.
@@ -160,16 +123,6 @@ assert.match(appCssSource, /\.topbar\s*\{[^}]*z-index:\s*6/, "topbar popovers mu
 assert.match(appCssSource, /\.modalBackdrop\s*\{[^}]*z-index:\s*10/, "native dialogs must remain above reference cards");
 assert.doesNotMatch(appSource, /pluginScreenRightSidebar/, "a full plugin screen must never resize the right sidebar");
 assert.match(appCssSource, /\.pluginScreenPane\s*\{[^}]*position:\s*absolute[^}]*inset:\s*0[^}]*overflow:\s*hidden/, "full plugin screens need an independent overlay that cannot resize the editor workspace");
-assert.match(
-  leftSidebarSource,
-  /className=\{`leftWorkspaceCluster \$\{[\s\S]*?appMode !== "write" && appMode !== "plugin"/,
-  "the editor workspace must remain laid out behind a plugin screen",
-);
-assert.match(
-  leftSidebarSource,
-  /aria-hidden=\{isEditorFocusMode \|\| appMode === "plugin"\}[\s\S]*?inert/,
-  "the preserved editor chrome must not remain interactive behind a plugin screen",
-);
 assert.match(
   appCssSource,
   /workspace\[data-app-mode="plugin"\][\s\S]*?\.editorColumn[\s\S]*?visibility:\s*hidden/,

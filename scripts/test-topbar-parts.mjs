@@ -203,7 +203,7 @@ const expectExercised = (label, names) => {
 // --- 右のアイコンと画面モード ---
 {
   const functionNames = [
-    "toggleEditorFocusMode", "setIsRightSidebarCollapsed", "handleQuickCreateManuscriptSnapshot", "updateSettings",
+    "toggleEditorFocusMode", "handleQuickCreateManuscriptSnapshot", "updateSettings",
     "setShouldReturnToSettingsAfterThemePicker", "setIsThemePickerModalOpen", "setIsSettingsModalOpen",
     "setIsModeMenuOpen", "handleModeMenuKeyDown",
   ];
@@ -218,7 +218,6 @@ const expectExercised = (label, names) => {
     appMode: "write",
     isEditorFocusMode: false,
     settings: { focusModeUsesNativeFullscreen: false, writingMode: "vertical-rl" },
-    isRightSidebarCollapsed: true,
     projectFolder: { path: "C:/work", name: "work", children: [] },
     modeMenuRef,
     modeMenuButtonRef,
@@ -249,26 +248,21 @@ const expectExercised = (label, names) => {
   const nativeTree = render({ settings: { ...base.settings, focusModeUsesNativeFullscreen: true } });
   assert.equal(button(nativeTree, "エディタを完全フルスクリーン表示").props.title, "エディタを完全フルスクリーン表示");
 
-  // 右サイドバー、保存点
-  expectCalls("右サイドバーを表示", () => button(tree, "右サイドバーを表示").props.onClick(), [
-    { name: "setIsRightSidebarCollapsed", args: [false] },
-  ]);
+  // 保存点
   expectCalls("保存点", () => button(tree, "今の状態を保存点にする（Ctrl+Shift+S）").props.onClick(), [
     { name: "handleQuickCreateManuscriptSnapshot", args: [] },
   ]);
-  assert.equal(hasButton(render({ isRightSidebarCollapsed: false }), "右サイドバーを表示"), false);
   assert.equal(hasButton(render({ projectFolder: null }), "今の状態を保存点にする（Ctrl+Shift+S）"), false);
   const visibility = {
-    write: [true, true, true],
-    canvas: [false, true, true],
-    export: [false, false, true],
-    checkpoint: [false, false, false],
-    plugin: [false, false, true],
+    write: [true, true],
+    canvas: [false, true],
+    export: [false, true],
+    checkpoint: [false, false],
+    plugin: [false, true],
   };
-  for (const [appMode, [focus, rightSidebar, checkpoint]] of Object.entries(visibility)) {
+  for (const [appMode, [focus, checkpoint]] of Object.entries(visibility)) {
     const modeTree = render({ appMode });
     assert.equal(hasButton(modeTree, "エディタをフルスクリーン表示"), focus, `focus mode button in ${appMode}`);
-    assert.equal(hasButton(modeTree, "右サイドバーを表示"), rightSidebar, `right sidebar button in ${appMode}`);
     assert.equal(hasButton(modeTree, "今の状態を保存点にする（Ctrl+Shift+S）"), checkpoint, `checkpoint button in ${appMode}`);
   }
 

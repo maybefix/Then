@@ -34,6 +34,7 @@ try {
   const { ThemePickerModal } = await server.ssrLoadModule(
     "/src/components/dialogs/ThemePickerModal.tsx",
   );
+  const { createDefaultState } = await server.ssrLoadModule("/src/storedStateModel.ts");
   const rootElement = document.getElementById("root");
   const root = createRoot(rootElement);
   const updates = [];
@@ -74,10 +75,10 @@ try {
   const opener = document.getElementById("opener");
   opener.focus();
   const settings = {
+    ...createDefaultState().settings,
     theme: "dark",
     uiFontFamily: '"Segoe UI"',
     uiFontScale: 1,
-    sidebarHoverMode: "none",
     focusModeUsesNativeFullscreen: false,
   };
   function ModalHarness() {
@@ -100,6 +101,7 @@ try {
   for (const tab of ["appearance", "body", "files", "canvas", "export"]) {
     assert.ok(document.getElementById(`settings-panel-${tab}`));
   }
+  assert.doesNotMatch(document.getElementById("settings-panel-appearance").textContent, /サイドペインの表示/);
   const appearanceTab = document.getElementById("settings-tab-appearance");
   await act(async () => appearanceTab.focus());
   await act(async () => appearanceTab.dispatchEvent(new dom.window.KeyboardEvent("keydown", {

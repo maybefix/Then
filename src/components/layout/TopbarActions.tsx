@@ -21,8 +21,6 @@ export type TopbarActionsProps = {
   /** ノート（素材）を開いているあいだは横書きに決まっているので、本文方向のボタンを押せなくする（BINDER 2-2）。 */
   isNoteDocument?: boolean;
   toggleEditorFocusMode: () => void;
-  isRightSidebarCollapsed: boolean;
-  setIsRightSidebarCollapsed: (collapsed: boolean) => void;
   projectFolder: ProjectFolder | null;
   handleQuickCreateManuscriptSnapshot: () => Promise<unknown>;
   updateSettings: <Key extends keyof EditorSettings>(key: Key, value: EditorSettings[Key]) => void;
@@ -40,8 +38,8 @@ export type TopbarActionsProps = {
 
 export function TopbarActions(props: TopbarActionsProps) {
   const {
-    appMode, isEditorFocusMode, settings, isNoteDocument = false, toggleEditorFocusMode, isRightSidebarCollapsed,
-    setIsRightSidebarCollapsed, projectFolder, handleQuickCreateManuscriptSnapshot, updateSettings,
+    appMode, isEditorFocusMode, settings, isNoteDocument = false, toggleEditorFocusMode,
+    projectFolder, handleQuickCreateManuscriptSnapshot, updateSettings,
     setShouldReturnToSettingsAfterThemePicker, setIsThemePickerModalOpen, setIsSettingsModalOpen,
     modeMenuRef, modeMenuButtonRef, isModeMenuOpen, activeModeMenuEntry, setIsModeMenuOpen,
     handleModeMenuKeyDown, modeMenuEntries,
@@ -73,17 +71,6 @@ export function TopbarActions(props: TopbarActionsProps) {
           onClick={toggleEditorFocusMode}
         >
           <AppIcon name="fullscreen" className="topbarSvgIcon" />
-        </button>
-      )}
-      {isRightSidebarCollapsed && (appMode === "write" || appMode === "corkboard" || appMode === "canvas") && (
-        <button
-          className="iconButton"
-          type="button"
-          aria-label="右サイドバーを表示"
-          title="右サイドバーを表示"
-          onClick={() => setIsRightSidebarCollapsed(false)}
-        >
-          <AppIcon name="panelRight" className="topbarSvgIcon" />
         </button>
       )}
       {projectFolder && appMode !== "checkpoint" && (
