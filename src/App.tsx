@@ -6406,6 +6406,52 @@ export default function App() {
     editorInstanceRef.current?.restoreFocus();
   };
 
+  const swapDocumentPanes = () => {
+    if (!besideTab) return;
+    openBesideRequestRef.current++;
+    const focused = document.activeElement;
+    const editorHadFocus = editorShellRef.current?.contains(focused);
+    flushSync(() => {
+      setDocumentSplit((split) => split && {
+        ...split,
+        activeSide: split.activeSide === "left" ? "right" : "left",
+      });
+      // 左右を動かしても各文書の表示幅を保つ。
+      setLeftPaneWidth((width) => 100 - width);
+    });
+    if (editorHadFocus) {
+      editorInstanceRef.current?.restoreFocus();
+    } else if (focused instanceof HTMLElement && focused.isConnected && document.activeElement !== focused) {
+      focused.focus({ preventScroll: true });
+    }
+  };
+
+  const openTabBeside = (tab: DocumentTab) => {
+    openBesideRequestRef.current++;
+    if (tab.id === besideTab?.id) {
+      if (activateDocumentTab(tab.id)) focusPaneOnActivateRef.current = tab.id;
+      return;
+    }
+    if (tab.id !== activeTabIdRef.current) {
+      showTabBeside(tab);
+      return;
+    }
+    if (besideTab) {
+      swapDocumentPanes();
+      editorInstanceRef.current?.restoreFocus();
+      return;
+    }
+    const next = withoutEmptyTabs(openTabsRef.current).find((item) =>
+      item.id !== tab.id && (item.name !== newTabName || Boolean(item.markdown.trim())));
+    if (next) {
+      showTabBeside(next);
+      return;
+    }
+    const scratch = createScratchDocumentTab();
+    setOpenTabs((current) => insertTabAfter(current, scratch, tab.id));
+    showTabBeside(scratch);
+  };
+
   const openFileBeside = async (path: string) => {
     const requestWorkspace = workspaceSwitchGenerationRef.current;
     const request = ++openBesideRequestRef.current;
@@ -6432,25 +6478,7 @@ export default function App() {
         return;
       }
     }
-    showTabBeside(tab);
-  };
-
-  const openTabBeside = (tab: DocumentTab) => {
-    openBesideRequestRef.current++;
-    if (tab.id !== activeTabId) {
-      showTabBeside(tab);
-      return;
-    }
-    if (besideTab) return;
-    const next = withoutEmptyTabs(openTabs).find((item) =>
-      item.id !== tab.id && (item.name !== newTabName || Boolean(item.markdown.trim())));
-    if (next) {
-      showTabBeside(next);
-      return;
-    }
-    const scratch = createScratchDocumentTab();
-    setOpenTabs((current) => insertTabAfter(current, scratch, tab.id));
-    showTabBeside(scratch);
+    openTabBeside(tab);
   };
 
   const closeDocumentSplit = () => {
@@ -8112,7 +8140,18 @@ export default function App() {
                               {paneTab?.name}
                             </button>
                             {paneActive && (
-                              <button type="button" aria-label="分割表示を解除" title="分割表示を解除" onClick={closeDocumentSplit}>×</button>
+                              <>
+                                <button
+                                  className="documentPaneSwap"
+                                  type="button"
+                                  aria-label="左右のペインを入れ替える"
+                                  title="左右のペインを入れ替える"
+                                  onClick={swapDocumentPanes}
+                                >
+                                  <AppIcon name="swapHorizontal" />
+                                </button>
+                                <button type="button" aria-label="分割表示を解除" title="分割表示を解除" onClick={closeDocumentSplit}>×</button>
+                              </>
                             )}
                           </div>
                         )}

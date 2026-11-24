@@ -71,6 +71,17 @@
   background: var(--hover-bg, var(--border-subtle));
 }
 
+.documentPaneSwap svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .documentPaneTitle {
   flex: 1;
   overflow: hidden;

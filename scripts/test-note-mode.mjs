@@ -570,17 +570,22 @@ try {
     await writeFile(process.env.THEN_FILE_PANEL_QA_SCREENSHOT, Buffer.from(data, "base64"));
   }
 
-  // ---- 左右分割. 左右に並べた原稿とノートを切り替えて編集 ----
+  // ---- 開いているタブの左右分割と入れ替え ----
   await start({ ...MANUSCRIPT_SETTINGS, typewriterScroll: false, manuscript: { layoutMode: "normal" } });
+  await evaluate(`t.open("素材/人物.md", "人物のノートです。")`);
+  await evaluate(`t.activateTab("本文.md")`);
   await evaluate(`(async () => {
-    const row = [...document.querySelectorAll("[data-tree-entry-path]")]
-      .find((element) => element.dataset.treeEntryPath.endsWith("/素材/人物.md"));
-    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 250, clientY: 350 }));
-    const item = () => [...document.querySelectorAll('[role="menuitem"]')]
-      .find((element) => element.textContent.trim() === "隣のペインで開く");
-    await t.waitFor(item, "open beside menu");
-    item().click();
-    await t.waitFor(() => document.querySelectorAll(".documentPane .pm-root").length === 2, "two editors");
+    window.openBesideFromTree = async (relative) => {
+      const row = [...document.querySelectorAll("[data-tree-entry-path]")]
+        .find((element) => element.dataset.treeEntryPath.endsWith("/" + relative));
+      row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 250, clientY: 350 }));
+      const item = () => [...document.querySelectorAll('[role="menuitem"]')]
+        .find((element) => element.textContent.trim() === "隣のペインで開く");
+      await t.waitFor(item, "open beside menu");
+      item().click();
+    };
+    await openBesideFromTree("本文.md");
+    await t.waitFor(() => document.querySelectorAll(".documentPane .pm-root").length === 2, "split the active file from its tree row");
     window.splitEditors = [...document.querySelectorAll(".documentPane .pm-root")];
     window.activatePane = async (side) => {
       const pane = document.querySelector('[data-pane-side="' + side + '"]');
@@ -614,11 +619,38 @@ try {
     const divider = document.querySelector(".documentPaneDivider");
     divider.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
     await t.waitFor(() => divider.getAttribute("aria-valuenow") === "55", "resized split");
+    splitEditors[0].editor.commands.setTextSelection({ from: 2, to: 5 });
+    window.paneSelections = splitEditors.map(({ editor }) => [editor.state.selection.from, editor.state.selection.to]);
+    window.swapButton = document.querySelector(".documentPaneSwap");
+    swapButton.focus();
+  })()`);
+  const enterKey = { key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 };
+  await send("Input.dispatchKeyEvent", { type: "keyDown", ...enterKey, text: "\r", unmodifiedText: "\r" });
+  await send("Input.dispatchKeyEvent", { type: "keyUp", ...enterKey });
+  await evaluate(`t.waitFor(() => document.querySelector('[data-pane-side="right"] .pm-root') === splitEditors[0], "swap the panes with the keyboard")`);
+  assert.equal(await evaluate(`document.querySelector('[data-pane-side="left"] .pm-root') === splitEditors[1]`), true);
+  assert.equal(await evaluate(`document.querySelector('[data-pane-side="right"]').dataset.paneActive`), "true");
+  assert.equal(await evaluate('document.activeElement === swapButton'), true, "the swap button keeps keyboard focus");
+  assert.equal(await evaluate(`document.querySelector(".documentPaneDivider").getAttribute("aria-valuenow")`), "45");
+  assert.equal(await evaluate(`JSON.stringify(splitEditors.map(({ editor }) => [editor.state.selection.from, editor.state.selection.to])) === JSON.stringify(paneSelections)`), true, "both editor selections survive the swap");
+
+  await evaluate(`(async () => {
+    await openBesideFromTree("本文.md");
+    await t.waitFor(() => document.querySelector('[data-pane-side="left"] .pm-root') === splitEditors[0], "move the active file to the opposite pane");
+    await openBesideFromTree("素材/人物.md");
+    await t.waitFor(() => document.activeElement === splitEditors[1], "focus the file already in the other pane");
+    await activatePane("left");
     document.querySelector('[aria-label="分割表示を解除"]').click();
     await t.waitFor(() => document.querySelectorAll(".documentPane .pm-root").length === 1, "close split");
   })()`);
   assert.equal(await evaluate("document.querySelector('.pm-root') === splitEditors[0]"), true, "closing split keeps the active editor");
   assert.equal(await evaluate("document.querySelectorAll('.documentTabButton').length"), 2, "closing split keeps both tabs");
+
+  await evaluate(`(async () => {
+    await openBesideFromTree("素材/人物.md");
+    await t.waitFor(() => document.querySelector('[data-pane-side="right"] .pm-root')?.textContent.includes("ノートへの追記"), "reopen an existing tab with its edits");
+  })()`);
+  assert.equal(await evaluate("document.querySelectorAll('.documentTabButton').length"), 2, "opening beside reuses the existing tab");
 
   assert.deepEqual(pageErrors, [], "the page throws no errors");
   socket.close();
