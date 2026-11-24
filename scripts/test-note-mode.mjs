@@ -113,7 +113,7 @@ const appUrl = `http://127.0.0.1:${server.address().port}/`;
 const WORK = "C:/qa/library/作品A";
 
 /* Rust の代わり。作品Aに原稿2本（1本は「資料/素材.md」で、パスに「素材」が入るが role はない）と素材のノート1本。 */
-function installMock({ work, settings }) {
+function installMock({ work, settings, leftSidebarView }) {
   const file = (relative, extra = {}) => ({ path: `${work}/${relative}`, name: relative.split("/").pop(), kind: "file", children: [],
     fileId: `${work}/${relative}`, contentHash: null, modifiedAt: 1, ...extra });
   const folder = (relative, children, extra = {}) => ({ path: `${work}/${relative}`, name: relative.split("/").pop(), kind: "folder", children, ...extra });
@@ -132,6 +132,7 @@ function installMock({ work, settings }) {
     library: { path: "C:/qa/library", name: "library", role: "project", projects: [{ path: work, name: "作品A" }], misplacedProjects: [] },
   };
   const state = {
+    leftSidebarView,
     lastWorkspacePath: work,
     lastFilePath: `${work}/本文.md`,
     recentWorkspaces: [{ path: work, name: "作品A", lastOpenedAt: 1 }],
@@ -295,10 +296,10 @@ try {
   await send("Emulation.setDeviceMetricsOverride", { width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false });
 
   let mockScript = null;
-  async function start(settings, preservePanels = false) {
+  async function start(settings, preservePanels = false, leftSidebarView = "files") {
     if (mockScript) await send("Page.removeScriptToEvaluateOnNewDocument", { identifier: mockScript });
     ({ identifier: mockScript } = await send("Page.addScriptToEvaluateOnNewDocument", {
-      source: `${preservePanels ? "" : "localStorage.clear();"} (${installMock})(${JSON.stringify({ work: WORK, settings })})`,
+      source: `${preservePanels ? "" : "localStorage.clear();"} (${installMock})(${JSON.stringify({ work: WORK, settings, leftSidebarView })})`,
     }));
     await send("Page.navigate", { url: appUrl });
     await sleep(1500);
@@ -368,6 +369,7 @@ try {
   await start(MANUSCRIPT_SETTINGS);
   const panel = (id) => `[data-floating-panel="${id}"]`;
   const task = (id) => `[data-panel-task="${id}"]`;
+  const tile = (id) => `[data-panel-launch="${id}"]`;
   const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
   const waitFor = (condition) => evaluate(`t.waitFor(() => ${condition}, ${JSON.stringify(condition)})`);
   const rect = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect().toJSON()`);
@@ -378,7 +380,19 @@ try {
     await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: x + dx, y: y + dy, button: "left", buttons: 1 });
     await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: x + dx, y: y + dy, button: "left", clickCount: 1 });
   };
+  const launcherButton = ".panelLauncherButton";
+  const launch = async (id) => {
+    await click(launcherButton);
+    await waitFor(`Boolean(document.querySelector(${JSON.stringify(tile(id))}))`);
+    await click(tile(id));
+    await waitFor(visible(id));
+  };
   await waitFor(visible("files"));
+  assert.equal(await evaluate(`document.querySelectorAll("[data-panel-task]").length`), 2, "only the restored panels are in the taskbar");
+  await click(launcherButton);
+  assert.equal(await evaluate(`document.querySelectorAll("[data-panel-launch]").length`), 7);
+  await evaluate(`document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+  await waitFor(`!document.querySelector(".panelLauncher")`);
   assert.equal((await rect(".panelTaskbar")).height, 24);
   assert.equal((await rect(".statusbar")).height, 26);
   const editorRect = await rect(".editorColumn");
@@ -393,14 +407,15 @@ try {
     offset: getSelection().anchorOffset, text: getSelection().anchorNode?.textContent,
     scroll: document.querySelector(".verticalTypewriterScroller").scrollLeft })`);
   const caret = await selection();
-  const sceneTask = await rect(task("scene"));
-  await drag(sceneTask.x + 5, sceneTask.y + 8, 0, 0);
+  const launcherRect = await rect(launcherButton);
+  await drag(launcherRect.x + 5, launcherRect.y + 8, 0, 0);
+  const sceneTile = await rect(tile("scene"));
+  await drag(sceneTile.x + 10, sceneTile.y + 15, 0, 0);
   await waitFor(visible("scene"));
   assert.deepEqual(await selection(), caret);
   assert.equal(await evaluate(`document.querySelector(".pm-root") === originalEditor`), true);
   assert.deepEqual(await rect(".editorColumn"), editorRect);
-  await click(task("connections"));
-  await waitFor(visible("connections"));
+  await launch("connections");
   assert.equal(await evaluate(visible("scene")), true);
 
   let frame = await rect(panel("files"));
@@ -416,7 +431,29 @@ try {
   assert.deepEqual(await rect(panel("files")), frame);
   assert.equal(await evaluate(`document.querySelectorAll(".outlineExplorerSection .fileTreeItem").length`), 0);
 
-  await click(`${panel("files")} button[title="最小化"]`);
+  const headingRow = `${panel("files")} .outlineTreeItem`;
+  const headingTitle = await rect(`${headingRow} .outlineItemTitle`);
+  const headingCount = await rect(`${headingRow} .treeItemCharCount`);
+  assert.ok(headingCount.x >= headingTitle.right, "the count is to the right of the heading title");
+  assert.ok(Math.abs(headingTitle.y + headingTitle.height / 2 - headingCount.y - headingCount.height / 2) <= 1, "the title and count share a line");
+
+  await launch("search");
+  assert.equal(await evaluate(visible("files")), true, "the file panel remains open when searching");
+  await waitFor(`document.activeElement === document.querySelector(".projectSearchInputShell input")`);
+  await send("Input.insertText", { text: "原稿" });
+  await waitFor(`document.querySelector(".projectSearchResultItem")?.textContent.includes("原稿")`);
+  await click(task("search"));
+  await waitFor(`!(${visible("search")})`);
+  assert.equal(await evaluate(`document.querySelector(${JSON.stringify(task("search"))}).dataset.panelStatus`), "minimized");
+  await click(task("search"));
+  await waitFor(visible("search"));
+  assert.equal(await evaluate(`document.querySelector(".projectSearchInputShell input").value`), "原稿");
+  await sleep(250);
+  await click(`${panel("search")} button[title="閉じる"]`);
+  assert.equal(await evaluate(`Boolean(document.querySelector(${JSON.stringify(task("search"))}))`), false);
+  assert.equal(await evaluate(visible("files")), true);
+
+  await click(task("files"));
   await waitFor(`!(${visible("files")})`);
   assert.equal(await evaluate(`document.querySelector(${JSON.stringify(task("files"))}).dataset.panelStatus`), "minimized");
   await click(task("files"));
@@ -424,11 +461,10 @@ try {
   await sleep(250);
   assert.deepEqual(await rect(panel("files")), frame);
   await click(`${panel("scene")} button[title="閉じる"]`);
-  assert.equal(await evaluate(`document.querySelector(${JSON.stringify(task("scene"))}).dataset.panelStatus`), "closed");
+  assert.equal(await evaluate(`Boolean(document.querySelector(${JSON.stringify(task("scene"))}))`), false);
   await click(".panelTaskbarToggle");
   await waitFor(`!(${visible("files")})`);
-  await click(task("proof"));
-  await waitFor(visible("proof"));
+  await launch("proof");
   await click(".panelTaskbarToggle");
   await waitFor(visible("files"));
   await sleep(250);
@@ -466,6 +502,25 @@ try {
   const compactFrame = await rect(panel("files"));
   assert.ok(compactFrame.right <= 720 && compactFrame.bottom <= (await rect(".panelTaskbar")).top);
   assert.equal((await rect(".statusbar")).height, 26);
+
+  // The first preview stored search as a view of the file panel.
+  await evaluate(`(() => {
+    const key = "then:floating-panels:v1";
+    const layout = JSON.parse(localStorage.getItem(key));
+    delete layout.entries.search;
+    layout.entries.files.status = "minimized";
+    layout.order = layout.order.filter(id => id !== "search");
+    layout.restore = ["files"];
+    localStorage.setItem(key, JSON.stringify(layout));
+  })()`);
+  await start(MANUSCRIPT_SETTINGS, true, "search");
+  assert.deepEqual(await evaluate(`[
+    document.querySelector(${JSON.stringify(task("files"))})?.dataset.panelStatus ?? null,
+    document.querySelector(${JSON.stringify(task("search"))})?.dataset.panelStatus ?? null,
+  ]`), [null, "minimized"]);
+  await click(task("search"));
+  await waitFor(visible("search"));
+  assert.equal(await evaluate(`!(${visible("files")})`), true);
 
   assert.deepEqual(pageErrors, [], "the page throws no errors");
   socket.close();

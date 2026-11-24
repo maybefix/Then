@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type PointerEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type PointerEvent, type ReactNode, type RefObject } from "react";
 import type { PanelFrame, PanelStatus } from "./floatingPanelState";
 
 type Size = { width: number; height: number };
@@ -107,17 +107,52 @@ export type PanelTask = {
   label: string;
   icon: ReactNode;
   status: PanelStatus;
-  onClick: () => void;
 };
 
-export function PanelTaskbar({ taskbar, fixed, documents, onToggleAll, allMinimized, canToggle }: {
+export function PanelTaskbar({ taskbar, fixed, documents, onLaunch, onTaskClick, onToggleAll, allMinimized, canToggle }: {
   taskbar: RefObject<HTMLElement>;
   fixed: PanelTask[];
   documents: PanelTask[];
+  onLaunch: (id: string) => void;
+  onTaskClick: (id: string) => void;
   onToggleAll: () => void;
   allMinimized: boolean;
   canToggle: boolean;
 }) {
+  const [launcherOpen, setLauncherOpen] = useState(false);
+  const launcherId = useId();
+  const launcher = useRef<HTMLElement>(null);
+  const launcherButton = useRef<HTMLButtonElement>(null);
+  const focusTile = useRef(false);
+  const activeTasks = fixed.filter((task) => task.status !== "closed");
+
+  useLayoutEffect(() => {
+    if (launcherOpen && focusTile.current) launcher.current?.querySelector("button")?.focus();
+  }, [launcherOpen]);
+
+  useEffect(() => {
+    if (!launcherOpen) return;
+    function dismissOnOutsidePress(event: globalThis.PointerEvent) {
+      const path = event.composedPath();
+      if ((launcher.current && path.includes(launcher.current)) ||
+          (launcherButton.current && path.includes(launcherButton.current))) return;
+      setLauncherOpen(false);
+    }
+    function dismissOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (launcher.current?.contains(document.activeElement)) launcherButton.current?.focus();
+      setLauncherOpen(false);
+    }
+    document.addEventListener("pointerdown", dismissOnOutsidePress, true);
+    document.addEventListener("keydown", dismissOnEscape, true);
+    return () => {
+      document.removeEventListener("pointerdown", dismissOnOutsidePress, true);
+      document.removeEventListener("keydown", dismissOnEscape, true);
+    };
+  }, [launcherOpen]);
+
   function scrollTasks(event: React.WheelEvent<HTMLDivElement>) {
     if (!event.deltaX && event.currentTarget.scrollWidth > event.currentTarget.clientWidth) {
       event.currentTarget.scrollLeft += event.deltaY;
@@ -125,7 +160,7 @@ export function PanelTaskbar({ taskbar, fixed, documents, onToggleAll, allMinimi
   }
 
   function renderTask(task: PanelTask) {
-    const detail = task.status === "open" ? "表示中" : task.status === "minimized" ? "最小化中" : "閉じています";
+    const detail = task.status === "open" ? "表示中" : "最小化中";
     return (
       <button
         key={task.id}
@@ -136,7 +171,7 @@ export function PanelTaskbar({ taskbar, fixed, documents, onToggleAll, allMinimi
         data-panel-task={task.id}
         data-panel-status={task.status}
         onMouseDown={(event) => event.preventDefault()}
-        onClick={task.onClick}
+        onClick={() => onTaskClick(task.id)}
       >
         {task.icon}
         <span>{task.label}</span>
@@ -147,9 +182,54 @@ export function PanelTaskbar({ taskbar, fixed, documents, onToggleAll, allMinimi
   const action = allMinimized ? "パネルを一括復元" : "パネルを一括最小化";
   return (
     <nav ref={taskbar} className="panelTaskbar" aria-label="タスクバー">
-      <div className="panelTaskGroup" onWheel={scrollTasks} role="group" aria-label="機能パネル">
-        {fixed.map(renderTask)}
-      </div>
+      <button
+        ref={launcherButton}
+        type="button"
+        className="panelLauncherButton"
+        aria-label="パネルを開く"
+        aria-controls={launcherId}
+        aria-expanded={launcherOpen}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={(event) => {
+          focusTile.current = event.detail === 0;
+          setLauncherOpen((open) => !open);
+        }}
+      >
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <rect x="4" y="4" width="6" height="6" rx="1" />
+          <rect x="14" y="4" width="6" height="6" rx="1" />
+          <rect x="4" y="14" width="6" height="6" rx="1" />
+          <rect x="14" y="14" width="6" height="6" rx="1" />
+        </svg>
+        <span>パネル</span>
+      </button>
+      {launcherOpen && (
+        <section ref={launcher} id={launcherId} className="panelLauncher" aria-label="パネルを開く">
+          {fixed.map((panel) => (
+            <button
+              key={panel.id}
+              type="button"
+              className="panelLauncherTile"
+              data-panel-launch={panel.id}
+              title={panel.label}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                if (launcher.current?.contains(document.activeElement)) launcherButton.current?.focus();
+                setLauncherOpen(false);
+                onLaunch(panel.id);
+              }}
+            >
+              {panel.icon}
+              <span>{panel.label}</span>
+            </button>
+          ))}
+        </section>
+      )}
+      {activeTasks.length > 0 && (
+        <div className="panelTaskGroup" onWheel={scrollTasks} role="group" aria-label="機能パネル">
+          {activeTasks.map(renderTask)}
+        </div>
+      )}
       {documents.length > 0 && (
         <div className="panelTaskGroup documentPanelTasks" onWheel={scrollTasks} role="group" aria-label="開いている資料">
           {documents.map(renderTask)}

@@ -35,7 +35,6 @@ import { useVerticalMetricFontFamily } from "./utils/verticalMetricFonts";
 import { buildAppShellAppearance } from "./appShellStyle";
 import { canvasAppearanceSettings } from "./canvasAppearance";
 import { EditorContextMenu, type EditorContextMenuState } from "./components/editor/EditorContextMenu";
-import type { LeftSidebarView } from "./utils/leftSidebarState";
 import {
   getBreadcrumbLayout,
   isBreadcrumbTrailItemVisible,
@@ -55,7 +54,8 @@ import { ManuscriptTidyModal } from "./components/dialogs/ManuscriptTidyModal";
 import { RightSidebar, auxiliaryPanelItems } from "./components/layout/RightSidebar";
 import { FloatingPanel, PanelTaskbar, usePanelArea, type PanelTask } from "./components/layout/FloatingPanels";
 import { panelStatus, referencePanelId, useFloatingPanels, type PanelFrame } from "./components/layout/floatingPanelState";
-import { LeftSidebar } from "./components/layout/LeftSidebar";
+import { LeftSidebar, type FilePanelView } from "./components/layout/LeftSidebar";
+import { ProjectSearchPanel, type WorkspaceSearchScope } from "./components/layout/ProjectSearchPanel";
 import type { ManuscriptTidyLineRange, ManuscriptTidyResult } from "./editor/manuscriptTidy";
 import type { PropertyType, PropertyTypeSettings } from "./properties/propertyModel";
 import { loadPropertyTypes, savePropertyType } from "./properties/propertyTypeStore";
@@ -435,7 +435,6 @@ const defaultReferenceLayout: ReferenceLayout = {
 };
 const PROJECT_AST_INDEX_BATCH_SIZE = 12;
 
-type WorkspaceSearchScope = "file" | "project" | "library";
 
 type BreadcrumbOverflowItem =
   | { kind: "folder" | "file"; name: string; path: string }
@@ -1027,7 +1026,7 @@ export default function App() {
   const [projectSearchMatchCase, setProjectSearchMatchCase] = useState(false);
   const [projectReplaceValue, setProjectReplaceValue] = useState("");
   const [isProjectReplacing, setIsProjectReplacing] = useState(false);
-  const [leftSidebarView, setLeftSidebarViewState] = useState<LeftSidebarView>("files");
+  const [leftSidebarView, setLeftSidebarViewState] = useState<FilePanelView>("files");
   const [editorFind, setEditorFind] = useState<EditorFindState>({
     open: false,
     query: "",
@@ -1112,6 +1111,7 @@ export default function App() {
    */
   const [appMode, setAppMode] = useState<AppMode>("write");
   const panelTaskbarRef = useRef<HTMLElement>(null);
+  const searchPanelInputRef = useRef<HTMLInputElement>(null);
   const panelLayerRef = useRef<HTMLDivElement>(null);
   // サイドバー・ステータスバー・通知から、特定の保存点を選んだ状態でチェックポイント画面を開く。
   const [checkpointFocusRequest, setCheckpointFocusRequest] = useState<{ id: string; nonce: number } | null>(null);
@@ -1138,7 +1138,7 @@ export default function App() {
   const activePluginPanelId = [...panelLayout.order].reverse().find(
     (id) => id.startsWith("plugin:") && panelStatus(panelLayout, id) === "open",
   ) ?? null;
-  const setLeftSidebarView = useCallback((view: LeftSidebarView) => {
+  const setLeftSidebarView = useCallback((view: FilePanelView) => {
     setLeftSidebarViewState(view);
     setAppState((current) =>
       current.leftSidebarView === view ? current : { ...current, leftSidebarView: view },
@@ -2977,11 +2977,13 @@ export default function App() {
     loadStoredState()
       .then(async (state) => {
         if (isCancelled) return;
-        setLeftSidebarViewState(state.leftSidebarView);
+        const wasSearch = state.leftSidebarView === "search";
+        setLeftSidebarViewState(state.leftSidebarView === "reference" ? "reference" : "files");
         migratePanels(
           state.leftSidebarCollapsed ? null : "files",
           state.rightSidebarCollapsed ? null : state.rightSidebarTab,
           state.rightSidebarWide,
+          wasSearch,
         );
 
         if (
@@ -3518,9 +3520,8 @@ export default function App() {
     setProjectSearchQuery(propertyConditionQuery(key, value));
     setProjectSearchUseRegex(false);
     setSearchScope((current) => (current === "file" && projectFolder ? "project" : current));
-    setLeftSidebarView("search");
-    openPanel("files");
-  }, [projectFolder]);
+    openPanel("search");
+  }, [openPanel, projectFolder]);
   // Sets the properties pane can add (FM-27): the built-in article set (FM-25),
   // then every template, of this work or of the profile, that has properties.
   const loadPropertySets = useCallback(async (): Promise<PropertySet[]> => {
@@ -6895,9 +6896,7 @@ export default function App() {
     // The editor was only hidden; give it the focus back where its caret is.
     window.requestAnimationFrame(() => editorInstanceRef.current?.focus());
   };
-  // A file, heading or search result picked in the left sidebar opens in the
-  // body, as it does from the body.
-  // The Canvas shows the binder too and follows the same rule (BINDER 4-3).
+  // ファイル・見出しパネルから、本文と Canvas の間を行き来する。
   const addBinderItemsToCanvas = (detail: CanvasFileDropDetail) => {
     const canvas = workspaceRef.current?.querySelector(`[${CANVAS_FILE_DROP_ATTRIBUTE}]`);
     if (!canvas) {
@@ -7507,21 +7506,24 @@ export default function App() {
   }), [linkIndex.version, linkIndex.peek, projectFolder?.path, connectionsPath, connectionsIsNote, postStream.posts, boardReferences]);
 
   const filePanel = { id: "files", label: "ファイル・見出し", icon: <AppIcon name="files" /> };
+  const searchPanel = { id: "search", label: "検索", icon: <AppIcon name="search" /> };
   const auxiliaryItems = auxiliaryPanelItems(pluginViews, loadedPlugins);
-  const panelTasks: PanelTask[] = [filePanel, ...auxiliaryItems].map((item) => ({
+  const panelTasks: PanelTask[] = [filePanel, searchPanel, ...auxiliaryItems].map((item) => ({
     ...item,
     status: panelStatus(panelLayout, item.id),
-    onClick: () => openPanel(item.id),
   }));
   const referenceTasks: PanelTask[] = projectFolder ? referenceLayout.cards.filter(isReferenceBinderCard).map((card) => ({
     id: referencePanelId(card.id),
     label: card.sourcePath.split(/[\\/]/).pop() ?? card.sourcePath,
     icon: <AppIcon name="reference" />,
     status: panelStatus(panelLayout, referencePanelId(card.id)),
-    onClick: () => openPanel(referencePanelId(card.id)),
   })) : [];
   const taskIds = [...panelTasks, ...referenceTasks].map((task) => task.id);
   const anyPanelOpen = taskIds.some((id) => panelStatus(panelLayout, id) === "open");
+  const launchPanel = (id: string) => {
+    openPanel(id);
+    if (id === "search") window.requestAnimationFrame(() => searchPanelInputRef.current?.focus());
+  };
   const panelOrder = panelLayout.order.filter((id) => taskIds.includes(id));
   const panelZIndex = (id: string) => 8 + panelOrder.indexOf(id);
   const canRestorePanels = panelLayout.restore.some((id) => taskIds.includes(id));
@@ -8041,23 +8043,19 @@ export default function App() {
                     activeOutlineIds, activeOutlineChain, projectAst, settings, appState, handleSetFileProgress,
                     collapsedTreeFolderPaths, handleFolderCollapsedChange, collapsedTreeOutlinePaths,
                     handleOutlineCollapsedChange, collapsedTreeOutlineHeadingKeys,
-                    handleOutlineHeadingCollapsedChange, projectSearchQuery, workspaceSearchOutcome,
-                    projectSearchUseRegex, projectSearchMatchCase, searchIncludeComments, searchScope,
-                    projectReplaceValue, isProjectReplacing,
+                    handleOutlineHeadingCollapsedChange,
                     jumpToOutlineItem: (item) => {
                       if (appMode === "canvas" || appMode === "corkboard") setAppMode("write");
                       jumpToOutlineItem(item);
                     },
-                    handleHeadingMove, handleHeadingExtract, setProjectSearchQuery, setProjectSearchUseRegex,
-                    setProjectSearchMatchCase, setSearchIncludeComments, setSearchScope, setProjectReplaceValue,
-                    handleReplaceInCurrentFile, handleReplaceInProject,
+                    handleHeadingMove, handleHeadingExtract,
                     handleCreateProjectFile, handleProjectFolderSelect,
                     handleRenameProjectEntry, handleDeleteProjectEntry, handleMoveProjectEntriesToFolder,
                     handleSidebarEntryReorder, currentWorkspaceSnapshots, updateSettings,
                     handleQuickCreateManuscriptSnapshot, openCheckpointStudio, handleEditManuscriptSnapshotDetails,
                     handleRestoreManuscriptSnapshot, handleDeleteManuscriptSnapshot, libraryContext,
                     enterLibraryRoot, enterProject, handleCreateLibraryProject, handleImportProjectIntoLibrary,
-                    reorderLibraryProjects, libraryCorpus, openIdeaPane, postInboxCount, handleCreateMaterialsFolder,
+                    reorderLibraryProjects, openIdeaPane, postInboxCount, handleCreateMaterialsFolder,
                     handleSetMaterialsFolder, handleCorkboardFolderClick,
                     handleAddReference: () => handleAddReference(),
                     openReferenceCard,
@@ -8066,9 +8064,34 @@ export default function App() {
                     starredNotePaths, handleSetNoteStar, libraryReferencesFolderPath,
                     // In the corkboard these open the file in the body (BINDER 1-5).
                     handleProjectFileSelect: selectBinderFile,
-                    handleProjectSearchResultOpen: openSearchResultInBody,
                     handleProjectOutlineJump: jumpToProjectOutlineInBody,
                   }}
+                />
+              </FloatingPanel>
+              <FloatingPanel {...getPanelProps(searchPanel, { x: -1, y: 24, width: 420, height: 530 })}>
+                <ProjectSearchPanel
+                  inputRef={searchPanelInputRef}
+                  hasProject={Boolean(projectFolder)}
+                  projectAst={projectAst}
+                  library={libraryContext}
+                  isLibrarySearchLoading={Boolean(libraryCorpus?.isLoading)}
+                  projectSearchQuery={projectSearchQuery}
+                  outcome={workspaceSearchOutcome}
+                  projectSearchUseRegex={projectSearchUseRegex}
+                  projectSearchMatchCase={projectSearchMatchCase}
+                  projectSearchIncludeComments={searchIncludeComments}
+                  searchScope={searchScope}
+                  projectReplaceValue={projectReplaceValue}
+                  isProjectReplacing={isProjectReplacing}
+                  onProjectSearchQueryChange={setProjectSearchQuery}
+                  onProjectSearchUseRegexChange={setProjectSearchUseRegex}
+                  onProjectSearchMatchCaseChange={setProjectSearchMatchCase}
+                  onProjectSearchIncludeCommentsChange={setSearchIncludeComments}
+                  onSearchScopeChange={setSearchScope}
+                  onProjectReplaceValueChange={setProjectReplaceValue}
+                  onOpenProjectSearchResult={(result) => void openSearchResultInBody(result)}
+                  onReplaceInCurrentFile={handleReplaceInCurrentFile}
+                  onReplaceInProject={() => void handleReplaceInProject()}
                 />
               </FloatingPanel>
               {auxiliaryItems.map((item, index) => {
@@ -8146,6 +8169,8 @@ export default function App() {
                   taskbar={panelTaskbarRef}
                   fixed={panelTasks}
                   documents={referenceTasks}
+                  onLaunch={launchPanel}
+                  onTaskClick={(id) => panelStatus(panelLayout, id) === "open" ? panels.minimize(id) : openPanel(id)}
                   onToggleAll={() => panels.toggleAll(taskIds)}
                   allMinimized={canRestorePanels}
                   canToggle={anyPanelOpen || canRestorePanels}

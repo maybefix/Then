@@ -59,9 +59,7 @@ const functionNames = [
   "handleOpenProjectFolder", "focusReferenceCard", "closeReferenceCard", "pinReferenceCard", "collapseReferenceCard",
   "handleSetFileProgress", "handleFolderCollapsedChange", "handleOutlineCollapsedChange",
   "handleOutlineHeadingCollapsedChange", "jumpToOutlineItem", "handleProjectOutlineJump", "handleHeadingMove",
-  "handleHeadingExtract", "setProjectSearchQuery", "setProjectSearchUseRegex", "setProjectSearchMatchCase",
-  "setSearchIncludeComments", "setSearchScope", "setProjectReplaceValue", "handleProjectSearchResultOpen",
-  "handleReplaceInCurrentFile", "handleReplaceInProject", "handleCreateProjectFile", "handleProjectFileSelect",
+  "handleHeadingExtract", "handleCreateProjectFile", "handleProjectFileSelect",
   "handleProjectFolderSelect", "handleRenameProjectEntry", "handleDeleteProjectEntry",
   "handleMoveProjectEntriesToFolder", "handleSidebarEntryReorder", "updateSettings",
   "handleQuickCreateManuscriptSnapshot", "openCheckpointStudio", "handleEditManuscriptSnapshotDetails",
@@ -114,23 +112,8 @@ const baseValues = {
   collapsedTreeFolderPaths: mark("collapsedTreeFolderPaths"),
   collapsedTreeOutlinePaths: mark("collapsedTreeOutlinePaths"),
   collapsedTreeOutlineHeadingKeys: mark("collapsedTreeOutlineHeadingKeys"),
-  projectSearchQuery: mark("projectSearchQuery"),
-  workspaceSearchOutcome: {
-    results: mark("outcome.results"),
-    total: mark("outcome.total"),
-    matchedFileCount: mark("outcome.matchedFileCount"),
-    truncated: mark("outcome.truncated"),
-    error: mark("outcome.error"),
-  },
-  projectSearchUseRegex: mark("projectSearchUseRegex"),
-  projectSearchMatchCase: mark("projectSearchMatchCase"),
-  searchIncludeComments: mark("searchIncludeComments"),
-  searchScope: mark("searchScope"),
-  projectReplaceValue: mark("projectReplaceValue"),
-  isProjectReplacing: mark("isProjectReplacing"),
   currentWorkspaceSnapshots: mark("currentWorkspaceSnapshots"),
   libraryContext: mark("libraryContext"),
-  libraryCorpus: { isLoading: true },
   starredNotePaths: mark("starredNotePaths"),
   libraryReferencesFolderPath: mark("libraryReferencesFolderPath"),
 };
@@ -181,13 +164,12 @@ const expectCalls = (label, action, expected) => {
   assert.equal(nav.props["aria-label"], "ファイル・見出しの操作");
   assert.deepEqual(
     elementsOf(nav).filter((element) => element.type === "button").map((element) => element.props["aria-label"]),
-    ["ファイル・見出し", "プロジェクト検索", "開いているカード", "新規ファイル", "新規フォルダ"],
+    ["ファイル・見出し", "開いているカード", "新規ファイル", "新規フォルダ"],
   );
   assert.equal(button(tree, "ファイル・見出し").props["aria-pressed"], true);
-  assert.equal(button(tree, "プロジェクト検索").props["aria-pressed"], false);
   assert.equal(button(tree, "開いているカード").props["aria-pressed"], false);
 
-  for (const [label, view] of [["ファイル・見出し", "files"], ["プロジェクト検索", "search"], ["開いているカード", "reference"]]) {
+  for (const [label, view] of [["ファイル・見出し", "files"], ["開いているカード", "reference"]]) {
     expectCalls(label, () => button(tree, label).props.onClick(), [
       { name: "setLeftSidebarView", args: [view] },
     ]);
@@ -213,7 +195,7 @@ const expectCalls = (label, action, expected) => {
   assert.equal(pane.props.panelHidden, true);
 }
 
-// --- ファイルツリーと検索（WorkspaceSidebar）へのつなぎ ---
+// --- ファイルツリー（WorkspaceSidebar）へのつなぎ ---
 {
   const tree = render();
   assert.equal(elementsOf(tree).some((element) => element.type === OpenCardsPane), false);
@@ -240,26 +222,12 @@ const expectCalls = (label, action, expected) => {
     collapsedFolderPaths: mark("collapsedTreeFolderPaths"),
     collapsedOutlinePaths: mark("collapsedTreeOutlinePaths"),
     collapsedOutlineHeadingKeys: mark("collapsedTreeOutlineHeadingKeys"),
-    projectSearchQuery: mark("projectSearchQuery"),
-    projectSearchResults: mark("outcome.results"),
-    projectSearchTotal: mark("outcome.total"),
-    projectSearchMatchedFileCount: mark("outcome.matchedFileCount"),
-    projectSearchTruncated: mark("outcome.truncated"),
-    projectSearchError: mark("outcome.error"),
-    projectSearchUseRegex: mark("projectSearchUseRegex"),
-    projectSearchMatchCase: mark("projectSearchMatchCase"),
-    projectSearchIncludeComments: mark("searchIncludeComments"),
-    searchScope: mark("searchScope"),
-    projectReplaceValue: mark("projectReplaceValue"),
-    isProjectReplacing: mark("isProjectReplacing"),
-    isProjectSearchMode: false,
     outlineScope: "all",
     panelHidden: false,
     snapshots: mark("currentWorkspaceSnapshots"),
     isSnapshotSectionCollapsed: mark("settings.checkpointSectionCollapsed"),
     showSnapshotSection: mark("settings.showCheckpointSection"),
     library: mark("libraryContext"),
-    isLibrarySearchLoading: true,
     postInboxCount: 3,
   };
 
@@ -280,15 +248,6 @@ const expectCalls = (label, action, expected) => {
       name: "handleHeadingMove",
     },
     onExtractHeading: { args: [heading], name: "handleHeadingExtract" },
-    onProjectSearchQueryChange: { args: ["語"], name: "setProjectSearchQuery" },
-    onProjectSearchUseRegexChange: { args: ["regex-flag"], name: "setProjectSearchUseRegex" },
-    onProjectSearchMatchCaseChange: { args: ["case-flag"], name: "setProjectSearchMatchCase" },
-    onProjectSearchIncludeCommentsChange: { args: ["comment-flag"], name: "setSearchIncludeComments" },
-    onSearchScopeChange: { args: ["project"], name: "setSearchScope" },
-    onProjectReplaceValueChange: { args: ["新しい語"], name: "setProjectReplaceValue" },
-    onOpenProjectSearchResult: { args: [{ path: "C:/work/c.md", line: 4 }], name: "handleProjectSearchResultOpen" },
-    onReplaceInCurrentFile: { args: [], name: "handleReplaceInCurrentFile" },
-    onReplaceInProject: { args: [], name: "handleReplaceInProject" },
     onOpenProjectFolder: { args: [], name: "handleOpenProjectFolder" },
     onCreateFile: { args: ["C:/work/第二部"], name: "handleCreateProjectFile" },
     onCreateFolder: { args: ["C:/work/第三部"], name: "handleCreateProjectFolder" },
@@ -364,16 +323,9 @@ const expectCalls = (label, action, expected) => {
   }
   expectCall("WorkspaceSidebar.onOpenSnapshot(null)", () => props.onOpenSnapshot(null), "openCheckpointStudio", [undefined]);
 
-  const searching = findOne(render({ leftSidebarView: "search" }), (element) => element.type === WorkspaceSidebar,
-    "WorkspaceSidebar while searching");
-  assert.equal(searching.props.isProjectSearchMode, true);
-  assert.equal(button(render({ leftSidebarView: "search" }), "プロジェクト検索").props["aria-pressed"], true);
   const noOutline = findOne(render({ activeOutlineChain: [] }), (element) => element.type === WorkspaceSidebar,
     "WorkspaceSidebar without an active heading");
   assert.equal(noOutline.props.activeOutlineBlockId, null);
-  const notLoading = findOne(render({ libraryCorpus: null }), (element) => element.type === WorkspaceSidebar,
-    "WorkspaceSidebar without a library corpus");
-  assert.equal(notLoading.props.isLibrarySearchLoading, false);
 }
 
 // --- 開いているカード（OpenCardsPane）へのつなぎ ---
@@ -441,7 +393,7 @@ const expectCalls = (label, action, expected) => {
   ].join("\n");
   assert.match(app, /leftSidebarView: normalizeLeftSidebarView\(value\?\.leftSidebarView\)/);
   assert.match(app, /leftSidebarCollapsed: normalizeLeftSidebarCollapsed\(value\?\.leftSidebarCollapsed\)/);
-  assert.match(app, /setLeftSidebarViewState\(state\.leftSidebarView\)/);
+  assert.match(app, /setLeftSidebarViewState\(state\.leftSidebarView === "reference" \? "reference" : "files"\)/);
   assert.match(app, /state\.leftSidebarCollapsed \? null : "files"/);
   assert.match(app, /current\.leftSidebarView === view/);
   // 画面の値を直接書くのは、保存もする関数と起動時の復元の2か所だけ（ほかの変更は全部、保存する関数を通る）。

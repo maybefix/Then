@@ -62,14 +62,27 @@ export function useFloatingPanels() {
     }
   }, [stored]);
 
-  const migrate = useCallback((left: string | null, right: string | null, rightWide: boolean) => {
+  const migrate = useCallback((left: string | null, right: string | null, rightWide: boolean, wasSearch: boolean) => {
     setStored((current) => {
-      if (current) return current;
+      if (current) {
+        if (!wasSearch || current.entries.search) return current;
+        const files = current.entries.files ?? { status: "closed" as const };
+        const replaceFiles = (id: string) => id === "files" ? "search" : id;
+        return {
+          ...current,
+          entries: { ...current.entries, files: { ...files, status: "closed" }, search: files },
+          order: current.order.map(replaceFiles),
+          restore: current.restore.map(replaceFiles),
+        };
+      }
       const entries: PanelLayout["entries"] = {};
       const order: string[] = [];
       if (left) {
-        entries[left] = { status: "open" };
-        order.push(left);
+        const id = wasSearch ? "search" : left;
+        entries[id] = { status: "open" };
+        order.push(id);
+      } else if (wasSearch) {
+        entries.search = { status: "closed" };
       }
       if (right) {
         entries[right] = {

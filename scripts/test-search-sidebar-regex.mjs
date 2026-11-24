@@ -66,10 +66,12 @@ const literalReplacement = search.replaceTextSearchMatches(
 assert.equal(literalReplacement.text, "$&-$1", "literal replacement keeps dollar tokens literal");
 
 const appSource = await readFile("src/App.tsx", "utf8");
-const sidebarSource = await readFile("src/components/layout/WorkspaceSidebar.tsx", "utf8");
+const searchPanelSource = await readFile("src/components/layout/ProjectSearchPanel.tsx", "utf8");
 assert.match(appSource, /useState<WorkspaceSearchScope>\("file"\)/);
-assert.match(sidebarSource, /name: "現在の本文"/);
-assert.match(sidebarSource, /正規表現を使用/);
-assert.match(sidebarSource, /projectSearchResultGroup/);
+assert.match(searchPanelSource, /name: "現在の本文"/);
+assert.match(searchPanelSource, /正規表現を使用/);
+assert.match(searchPanelSource, /projectSearchResultGroup/);
+assert.match(appSource, /<FloatingPanel[^>]*getPanelProps\(searchPanel[\s\S]*?<ProjectSearchPanel/);
+assert.match(appSource, /openPanel\("search"\);/);
 
 console.log("PASS search sidebar: exact whitespace, regex, case, captures, zero-width matches");

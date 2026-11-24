@@ -1,11 +1,8 @@
-import type { Dispatch, SetStateAction } from "react";
 import type { CanvasFileDropDetail } from "../../canvasFileDrop";
 import type { HeadingDropPosition } from "../../editor/ast/headingMove";
 import type {
   DocumentOutlineItem,
   ProjectAst,
-  ProjectSearchOutcome,
-  ProjectSearchResult,
 } from "../../editor/ast/types";
 import type { createProjectEntryActions } from "../../projectEntryActions";
 import type { LeftSidebarView } from "../../utils/leftSidebarState";
@@ -24,17 +21,17 @@ import { OpenCardsPane } from "../binder/OpenCardsPane";
 import { AppIcon } from "./AppIcon";
 import { WorkspaceSidebar, type SidebarHeadingSelection } from "./WorkspaceSidebar";
 
-type WorkspaceSearchScope = "file" | "project" | "library";
+export type FilePanelView = Exclude<LeftSidebarView, "search">;
 
 type ProjectEntryActions = ReturnType<typeof createProjectEntryActions>;
 
 export type LeftSidebarProps = {
-  leftSidebarView: LeftSidebarView;
+  leftSidebarView: FilePanelView;
   outlineScope: "all" | "current";
   panelVisible: boolean;
   onAddToCanvas?: (items: CanvasFileDropDetail) => void;
   onOutlineScopeChange: (scope: "all" | "current") => void;
-  setLeftSidebarView: (view: LeftSidebarView) => void;
+  setLeftSidebarView: (view: FilePanelView) => void;
   handleNewDocument: () => Promise<void>;
   projectFolder: ProjectFolder | null;
   handleCreateProjectFolder: ProjectEntryActions["handleCreateProjectFolder"];
@@ -62,14 +59,6 @@ export type LeftSidebarProps = {
   handleOutlineCollapsedChange: (path: string, collapsed: boolean) => void;
   collapsedTreeOutlineHeadingKeys: ReadonlySet<string>;
   handleOutlineHeadingCollapsedChange: (key: string, collapsed: boolean) => void;
-  projectSearchQuery: string;
-  workspaceSearchOutcome: ProjectSearchOutcome;
-  projectSearchUseRegex: boolean;
-  projectSearchMatchCase: boolean;
-  searchIncludeComments: boolean;
-  searchScope: WorkspaceSearchScope;
-  projectReplaceValue: string;
-  isProjectReplacing: boolean;
   jumpToOutlineItem: (item: OutlineItem) => void;
   handleProjectOutlineJump: (path: string, item: DocumentOutlineItem) => Promise<void>;
   handleHeadingMove: (
@@ -80,15 +69,6 @@ export type LeftSidebarProps = {
     position: HeadingDropPosition,
   ) => Promise<void>;
   handleHeadingExtract: (source: SidebarHeadingSelection) => Promise<void>;
-  setProjectSearchQuery: Dispatch<SetStateAction<string>>;
-  setProjectSearchUseRegex: Dispatch<SetStateAction<boolean>>;
-  setProjectSearchMatchCase: Dispatch<SetStateAction<boolean>>;
-  setSearchIncludeComments: Dispatch<SetStateAction<boolean>>;
-  setSearchScope: Dispatch<SetStateAction<WorkspaceSearchScope>>;
-  setProjectReplaceValue: Dispatch<SetStateAction<string>>;
-  handleProjectSearchResultOpen: (result: ProjectSearchResult) => Promise<void>;
-  handleReplaceInCurrentFile: () => void;
-  handleReplaceInProject: () => Promise<void>;
   handleCreateProjectFile: ProjectEntryActions["handleCreateProjectFile"];
   handleProjectFileSelect: (path: string) => Promise<void>;
   handleProjectFolderSelect: (path: string) => Promise<void>;
@@ -111,7 +91,6 @@ export type LeftSidebarProps = {
   handleCreateLibraryProject: () => Promise<void>;
   handleImportProjectIntoLibrary: () => Promise<void>;
   reorderLibraryProjects: (orderedPaths: string[]) => Promise<void>;
-  libraryCorpus: { isLoading: boolean } | null;
   openIdeaPane: () => void;
   /** 受信箱の投稿の数（BINDER 2-1）。 */
   postInboxCount: number;
@@ -148,17 +127,13 @@ export function LeftSidebar(props: LeftSidebarProps) {
     outlineItems, activeOutlineIds, activeOutlineChain, projectAst, settings, appState, handleSetFileProgress,
     collapsedTreeFolderPaths, handleFolderCollapsedChange, collapsedTreeOutlinePaths,
     handleOutlineCollapsedChange, collapsedTreeOutlineHeadingKeys, handleOutlineHeadingCollapsedChange,
-    projectSearchQuery, workspaceSearchOutcome, projectSearchUseRegex, projectSearchMatchCase,
-    searchIncludeComments, searchScope, projectReplaceValue, isProjectReplacing, jumpToOutlineItem,
-    handleProjectOutlineJump, handleHeadingMove, handleHeadingExtract, setProjectSearchQuery,
-    setProjectSearchUseRegex, setProjectSearchMatchCase, setSearchIncludeComments, setSearchScope,
-    setProjectReplaceValue, handleProjectSearchResultOpen, handleReplaceInCurrentFile, handleReplaceInProject,
+    jumpToOutlineItem, handleProjectOutlineJump, handleHeadingMove, handleHeadingExtract,
     handleCreateProjectFile, handleProjectFileSelect, handleProjectFolderSelect, handleRenameProjectEntry,
     handleDeleteProjectEntry, handleMoveProjectEntriesToFolder, handleSidebarEntryReorder, handleCorkboardFolderClick,
     currentWorkspaceSnapshots, updateSettings, handleQuickCreateManuscriptSnapshot, openCheckpointStudio,
     handleEditManuscriptSnapshotDetails, handleRestoreManuscriptSnapshot, handleDeleteManuscriptSnapshot,
     libraryContext, enterLibraryRoot, enterProject, handleCreateLibraryProject,
-    handleImportProjectIntoLibrary, reorderLibraryProjects, libraryCorpus, openIdeaPane, postInboxCount,
+    handleImportProjectIntoLibrary, reorderLibraryProjects, openIdeaPane, postInboxCount,
     handleCreateMaterialsFolder, handleSetMaterialsFolder, handleAddReference, openReferenceCard,
     handleDeleteImportedReference, handleRenameMaterialReference, handleMoveMaterialReference,
     handleTransferEntries, starredNotePaths, handleSetNoteStar, libraryReferencesFolderPath,
@@ -174,14 +149,11 @@ export function LeftSidebar(props: LeftSidebarProps) {
           kind: file.kind,
         }))
     : [];
-  const isProjectSearchMode = leftSidebarView === "search";
-
   return (
     <div className="filePanelBody">
       <nav className="filePanelTools" aria-label="ファイル・見出しの操作">
         {([
           ["files", "ファイル・見出し", "files"],
-          ["search", "プロジェクト検索", "search"],
           ["reference", "開いているカード", "reference"],
         ] as const).map(([view, label, icon]) => (
           <button
@@ -269,19 +241,6 @@ export function LeftSidebar(props: LeftSidebarProps) {
         onOutlineCollapsedChange={handleOutlineCollapsedChange}
         collapsedOutlineHeadingKeys={collapsedTreeOutlineHeadingKeys}
         onOutlineHeadingCollapsedChange={handleOutlineHeadingCollapsedChange}
-        projectSearchQuery={projectSearchQuery}
-        projectSearchResults={workspaceSearchOutcome.results}
-        projectSearchTotal={workspaceSearchOutcome.total}
-        projectSearchMatchedFileCount={workspaceSearchOutcome.matchedFileCount}
-        projectSearchTruncated={workspaceSearchOutcome.truncated}
-        projectSearchError={workspaceSearchOutcome.error}
-        projectSearchUseRegex={projectSearchUseRegex}
-        projectSearchMatchCase={projectSearchMatchCase}
-        projectSearchIncludeComments={searchIncludeComments}
-        searchScope={searchScope}
-        projectReplaceValue={projectReplaceValue}
-        isProjectReplacing={isProjectReplacing}
-        isProjectSearchMode={isProjectSearchMode}
         onJumpOutline={jumpToOutlineItem}
         onJumpProjectOutline={(path, item) => void handleProjectOutlineJump(path, item)}
         onMoveHeadings={(
@@ -300,15 +259,6 @@ export function LeftSidebar(props: LeftSidebarProps) {
           )
         }
         onExtractHeading={(source) => void handleHeadingExtract(source)}
-        onProjectSearchQueryChange={setProjectSearchQuery}
-        onProjectSearchUseRegexChange={setProjectSearchUseRegex}
-        onProjectSearchMatchCaseChange={setProjectSearchMatchCase}
-        onProjectSearchIncludeCommentsChange={setSearchIncludeComments}
-        onSearchScopeChange={setSearchScope}
-        onProjectReplaceValueChange={setProjectReplaceValue}
-        onOpenProjectSearchResult={(result) => void handleProjectSearchResultOpen(result)}
-        onReplaceInCurrentFile={handleReplaceInCurrentFile}
-        onReplaceInProject={() => void handleReplaceInProject()}
         onOpenProjectFolder={handleOpenProjectFolder}
         onCreateFile={(folderPath) => void handleCreateProjectFile(folderPath)}
         onCreateFolder={(folderPath) => void handleCreateProjectFolder(folderPath)}
@@ -345,7 +295,6 @@ export function LeftSidebar(props: LeftSidebarProps) {
             onCreateLibraryProject={() => void handleCreateLibraryProject()}
             onImportProject={() => void handleImportProjectIntoLibrary()}
             onReorderLibraryProjects={(paths) => void reorderLibraryProjects(paths)}
-            isLibrarySearchLoading={Boolean(libraryCorpus?.isLoading)}
             postInboxCount={postInboxCount}
             onOpenIdeas={openIdeaPane}
             onCreateMaterialsFolder={() => void handleCreateMaterialsFolder()}
