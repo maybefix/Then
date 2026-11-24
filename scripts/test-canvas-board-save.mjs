@@ -85,6 +85,8 @@ const canvasUrl = await compile("src/CanvasWindowApp.tsx", {
   "./utils/frontmatter": await compile("src/utils/frontmatter.ts"),
   "./corkboard/synopsis": url("export const readSynopsis = () => ({ kind: 'none' });"),
   "./canvasFileDrop": await compile("src/canvasFileDrop.ts"),
+  "./canvasHeadingReference": url("export const resolveCanvasHeading = () => null;"),
+  "./editor/ast/documentAst": url("export const createDocumentAst = () => ({ outline: [], blocks: [] });"),
   "./canvasBoardStore": await compile("src/canvasBoardStore.ts", {
     "@tauri-apps/api/core": url("export const invoke = (...args) => globalThis.canvasTestInvoke(...args);"),
     "./canvasTypes": await compile("src/canvasTypes.ts"),

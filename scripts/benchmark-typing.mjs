@@ -430,7 +430,7 @@ try {
   if (flag("webview-exe") && flag("typewriter")) {
     await evaluate(`document.querySelector('button[aria-label="設定"]').click();true`);
     await sleep(100);
-    await evaluate(`document.getElementById('settings-tab-body').click();true`);
+    await evaluate(`document.getElementById('settings-tab-writing').click();true`);
     await evaluate(`(async()=>{
       const desired=${JSON.stringify({ "タイプライタースクロール":true,"行番号を表示":flag("line-numbers"),"現在行をハイライト":flag("highlight-line"),"改行記号を表示":flag("line-breaks") })};
       for(const [text,checked] of Object.entries(desired)){

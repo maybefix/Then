@@ -70,6 +70,8 @@ export type CanvasReferenceNode = {
  * ノート・原稿を指すカード（JSON Canvas の file ノード、BINDER 4-2）。ファイルの場所だけを持ち、中身はボードに書かない。
  * ノートか原稿かも書かず、開くたびに作品のファイル一覧から決める。
  */
+export type CanvasHeadingLocation = { line: number; blockId: string; title: string };
+
 export type CanvasFileNode = {
   id: string;
   type: "file";
@@ -79,8 +81,10 @@ export type CanvasFileNode = {
   height: number;
   /** 作品からの相対パス（`/` 区切り）。 */
   file: string;
-  /** JSON Canvas の見出しへの飛び先。Then は使わないが、読んだものはそのまま書き戻す。 */
+  /** JSON Canvas の見出しへの飛び先。 */
   subpath?: string;
+  /** Then の見出し照合用。原稿本文はボードに保存しない。 */
+  thenHeading?: CanvasHeadingLocation;
   color?: string;
 };
 
@@ -541,6 +545,8 @@ export function createCanvasFileNode(
     width: options.width ?? 300,
     height: options.height ?? 240,
     file,
+    subpath: options.subpath,
+    thenHeading: options.thenHeading,
     color: options.color,
   };
 }
@@ -598,6 +604,14 @@ function normalizeOriginRef(value: unknown): CanvasNodeOriginRef | undefined {
     sourceWorkspacePath: origin.sourceWorkspacePath,
     copiedAt: isFiniteNumber(origin.copiedAt) ? origin.copiedAt : Date.now(),
   };
+}
+
+export function normalizeCanvasHeading(value: unknown): CanvasHeadingLocation | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const { line, blockId, title } = value as Partial<CanvasHeadingLocation>;
+  if (typeof line !== "number" || !Number.isInteger(line) || line < 1 ||
+      typeof blockId !== "string" || !blockId || typeof title !== "string" || !title) return undefined;
+  return { line, blockId, title };
 }
 
 function normalizeNode(value: unknown): CanvasNode | null {
@@ -672,6 +686,7 @@ function normalizeNode(value: unknown): CanvasNode | null {
       height,
       file: fileNode.file.replace(/\\/g, "/"),
       subpath: typeof fileNode.subpath === "string" ? fileNode.subpath : undefined,
+      thenHeading: normalizeCanvasHeading(fileNode.thenHeading),
       color,
     };
   }

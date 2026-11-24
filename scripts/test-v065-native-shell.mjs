@@ -56,8 +56,8 @@ assert.equal(sidebarState.normalizeRightSidebarTab("plot"), "idea");
 // 「中間稿」は 4-4b でなくなった。保存されている "draft" も「アイデア」で開く。
 assert.equal(sidebarState.normalizeRightSidebarTab("draft"), "idea");
 assert.equal(sidebarState.normalizeRightSidebarTab("plugin:missing:view"), "idea");
-assert.match(app, /setRightSidebarTabState\(state\.rightSidebarTab\)/);
-assert.match(app, /current\.rightSidebarTab === tab/);
+assert.match(app, /state\.rightSidebarCollapsed \? null : state\.rightSidebarTab/);
+assert.match(app, /migratePanels\([\s\S]*?state\.rightSidebarWide/);
 
 const capability = JSON.parse(
   await readFile("src-tauri/capabilities/main-window-controls.json", "utf8"),

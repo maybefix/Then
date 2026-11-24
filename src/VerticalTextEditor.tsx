@@ -94,6 +94,7 @@ export type TextEditorHandle = {
   focus: () => void;
   /** 選択もスクロールも動かさずにフォーカスだけ戻す（ダイアログを閉じたときなど）。 */
   restoreFocus: () => void;
+  setEditable: (editable: boolean) => void;
   getValue: () => string;
   getSelection: () => TextEditorSelection;
   selectRange: (from: number, to: number) => void;
@@ -138,6 +139,7 @@ type VerticalTextEditorProps = {
   initialSelectionOffset?: number;
   /** 同じタブを再表示するときに復元する論理的な表示位置。 */
   initialViewportState?: TextEditorViewportState | null;
+  focusOnMount?: boolean;
   /**
    * エディタのスクロール領域の内寸（クライアントサイズ, px）と、本文ルート
    * (.pm-root) の上下パディング実測値を通知する。文字表示幅設定の上限算出に
@@ -2934,6 +2936,7 @@ export function VerticalTextEditor({
   textLayoutSignature,
   initialSelectionOffset,
   initialViewportState,
+  focusOnMount = true,
   onViewportSizeChange,
   onReady,
   onTextChange,
@@ -2960,6 +2963,7 @@ export function VerticalTextEditor({
   );
   // マウント時だけ参照し、表示中のタブ状態更新では再適用しない。
   const initialViewportRef = useRef(initialViewportState ?? null);
+  const focusOnMountRef = useRef(focusOnMount);
   const onTextChangeRef = useRef(onTextChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
   const onPageMetricsChangeRef = useRef(onPageMetricsChange);
@@ -3033,6 +3037,9 @@ export function VerticalTextEditor({
   const onManuscriptProgressChangeRef = useRef(onManuscriptProgressChange);
   onManuscriptProgressChangeRef.current = onManuscriptProgressChange;
   const manuscriptProgressRef = useRef<ManuscriptProgress | null>(null);
+  useEffect(() => {
+    onManuscriptProgressChange?.(manuscriptProgressRef.current);
+  }, [onManuscriptProgressChange]);
   const manuscriptBoundaryLayerRef = useRef<HTMLDivElement | null>(null);
   const latinMetricsRef = useRef<LatinRunMetrics | null>(null);
   // 原稿用紙：段落の最終的な行数（ページ表示のページ割りでも使う）と、その更新世代。
@@ -3968,6 +3975,7 @@ export function VerticalTextEditor({
         // view.focus() はフォーカスと同時に状態の選択を DOM へ書き戻す。
         editor.view.focus();
       },
+      setEditable: (editable) => { tiptapRef.current?.setEditable(editable, false); },
       getValue: () => {
         const editor = tiptapRef.current;
         return editor ? editorTextOf(editor.state) : textRef.current;
@@ -5951,12 +5959,8 @@ export function VerticalTextEditor({
     }
 
     const initialOffset = Math.min(initialSelectionRef.current, docToText(editor.state.doc).length);
-    if (initialOffset > 0) {
-      setSelectionByTextOffset(editor, initialOffset);
-      editor.commands.focus();
-    } else {
-      editor.commands.focus("start");
-    }
+    if (initialOffset > 0) setSelectionByTextOffset(editor, initialOffset);
+    if (focusOnMountRef.current) editor.commands.focus(initialOffset > 0 ? undefined : "start");
     initialAdjustmentDeadline = performance.now() + INITIAL_CENTER_SETTLE_MS;
     if (initialViewportToRestore) {
       startInitialViewportRestore();

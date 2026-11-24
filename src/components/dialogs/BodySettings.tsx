@@ -1,15 +1,10 @@
-import type { EditorSettings, ManuscriptSettings } from "../../types";
+import type { EditorSettings } from "../../types";
 import {
   EDITOR_MEASURE_PERCENT_MAX,
   EDITOR_MEASURE_PERCENT_MIN,
-  MANUSCRIPT_CHARACTERS_MAX,
-  MANUSCRIPT_CHARACTERS_MIN,
-  MANUSCRIPT_FONT_SIZE_MAX,
-  MANUSCRIPT_FONT_SIZE_MIN,
-  MANUSCRIPT_LINES_MAX,
-  MANUSCRIPT_LINES_MIN,
 } from "../../types";
 import { BoundedNumberInput } from "./BoundedNumberInput";
+import { SettingsGroup } from "./SettingsGroup";
 import { SettingsFontSelect } from "./SettingsFontSelect";
 import type { FontSettingsPanelProps } from "./SettingsPanelTypes";
 
@@ -26,306 +21,133 @@ export function BodySettings({ settings, systemFonts, editorMeasureLimit, onUpda
     : Math.round((editorMeasureLimit * editorMeasureValue) / 100);
   const manuscript = settings.manuscript;
   const manuscriptOn = manuscript.layoutMode === "manuscript";
-  const updateManuscript = <Key extends keyof ManuscriptSettings>(key: Key, value: ManuscriptSettings[Key]) =>
-    onUpdateSettings("manuscript", { ...manuscript, [key]: value });
   return (
     <>
-      <label>
-        <span>本文フォント</span>
-        <SettingsFontSelect
-          value={settings.editorFontFamily}
-          systemFonts={systemFonts}
-          onChange={(value) => onUpdateSettings("editorFontFamily", value)}
-        />
-      </label>
-      <label>
-        <span>見出し・太字フォント</span>
-        <select
-          value={settings.headingFontSource}
-          onChange={(event) =>
-            onUpdateSettings(
-              "headingFontSource",
-              event.target.value as EditorSettings["headingFontSource"],
-            )
-          }
-        >
-          <option value="body">本文フォントを使う</option>
-          <option value="custom">別フォントを指定</option>
-        </select>
-      </label>
-      {settings.headingFontSource === "custom" && (
+      <SettingsGroup title="フォント">
         <label>
-          <span>見出し・太字の指定フォント</span>
+          <span>本文フォント</span>
           <SettingsFontSelect
-            value={settings.headingFontFamily}
+            value={settings.editorFontFamily}
             systemFonts={systemFonts}
-            onChange={(value) => onUpdateSettings("headingFontFamily", value)}
+            onChange={(value) => onUpdateSettings("editorFontFamily", value)}
           />
         </label>
-      )}
-      <label>
-        <span>本文方向</span>
-        <select
-          value={settings.writingMode}
-          onChange={(event) =>
-            onUpdateSettings(
-              "writingMode",
-              event.target.value as EditorSettings["writingMode"],
-            )
-          }
-        >
-          <option value="vertical-rl">縦書き</option>
-          <option value="horizontal-tb">横書き</option>
-        </select>
-      </label>
-      <label>
-        <span>編集表示</span>
-        <select
-          value={settings.editorDisplayMode}
-          onChange={(event) =>
-            onUpdateSettings(
-              "editorDisplayMode",
-              event.target.value as EditorSettings["editorDisplayMode"],
-            )
-          }
-        >
-          <option value="continuous">連続表示</option>
-          <option value="paged">ページ表示</option>
-        </select>
-      </label>
-      {settings.editorDisplayMode === "paged" && (
         <label>
-          <span>ページ送り</span>
+          <span>見出し・太字フォント</span>
           <select
-            value={settings.pageFlowDirection}
+            value={settings.headingFontSource}
             onChange={(event) =>
               onUpdateSettings(
-                "pageFlowDirection",
-                event.target.value as EditorSettings["pageFlowDirection"],
+                "headingFontSource",
+                event.target.value as EditorSettings["headingFontSource"],
               )
             }
           >
-            <option value="horizontal-rtl">横（右から左）</option>
-            <option value="vertical">縦（上から下）</option>
+            <option value="body">本文フォントを使う</option>
+            <option value="custom">別フォントを指定</option>
           </select>
         </label>
-      )}
-      <label>
-        <span>原稿用紙</span>
-        <select
-          value={manuscript.layoutMode}
-          onChange={(event) =>
-            updateManuscript("layoutMode", event.target.value as ManuscriptSettings["layoutMode"])
-          }
-        >
-          <option value="normal">使用しない</option>
-          <option value="manuscript">使用する</option>
-        </select>
-      </label>
-      {manuscriptOn && (
-        <>
-          <div className="modalFormGrid">
-            <label>
-              <span>1行の字数</span>
-              <BoundedNumberInput
-                min={MANUSCRIPT_CHARACTERS_MIN}
-                max={MANUSCRIPT_CHARACTERS_MAX}
-                step={1}
-                value={manuscript.charactersPerLine}
-                onChange={(value) => updateManuscript("charactersPerLine", Math.round(value))}
-              />
-            </label>
-            <label>
-              <span>1ページの行数</span>
-              <BoundedNumberInput
-                min={MANUSCRIPT_LINES_MIN}
-                max={MANUSCRIPT_LINES_MAX}
-                step={1}
-                value={manuscript.linesPerPage}
-                onChange={(value) => updateManuscript("linesPerPage", Math.round(value))}
-              />
-            </label>
-          </div>
-          <label className="checkSetting">
-            <input
-              checked={manuscript.showGrid}
-              type="checkbox"
-              onChange={(event) => updateManuscript("showGrid", event.target.checked)}
+        {settings.headingFontSource === "custom" && (
+          <label>
+            <span>見出し・太字の指定フォント</span>
+            <SettingsFontSelect
+              value={settings.headingFontFamily}
+              systemFonts={systemFonts}
+              onChange={(value) => onUpdateSettings("headingFontFamily", value)}
             />
-            <span>罫線を表示</span>
           </label>
-          <label className="checkSetting">
-            <input
-              checked={manuscript.showPageBoundaries}
-              disabled={settings.editorDisplayMode === "paged"}
-              type="checkbox"
-              onChange={(event) => updateManuscript("showPageBoundaries", event.target.checked)}
-            />
-            <span>ページ境界を表示</span>
-          </label>
-        </>
-      )}
-      <div className="modalFormGrid">
+        )}
+      </SettingsGroup>
+      <SettingsGroup title="文字組みとページ">
         <label>
-          <span>文字サイズ</span>
-          {manuscriptOn ? (
+          <span>本文方向</span>
+          <select
+            value={settings.writingMode}
+            onChange={(event) =>
+              onUpdateSettings(
+                "writingMode",
+                event.target.value as EditorSettings["writingMode"],
+              )
+            }
+          >
+            <option value="vertical-rl">縦書き</option>
+            <option value="horizontal-tb">横書き</option>
+          </select>
+        </label>
+        <label>
+          <span>編集表示</span>
+          <select
+            value={settings.editorDisplayMode}
+            onChange={(event) =>
+              onUpdateSettings(
+                "editorDisplayMode",
+                event.target.value as EditorSettings["editorDisplayMode"],
+              )
+            }
+          >
+            <option value="continuous">連続表示</option>
+            <option value="paged">ページ表示</option>
+          </select>
+        </label>
+        {settings.editorDisplayMode === "paged" && (
+          <label>
+            <span>ページ送り</span>
+            <select
+              value={settings.pageFlowDirection}
+              onChange={(event) =>
+                onUpdateSettings(
+                  "pageFlowDirection",
+                  event.target.value as EditorSettings["pageFlowDirection"],
+                )
+              }
+            >
+              <option value="horizontal-rtl">横（右から左）</option>
+              <option value="vertical">縦（上から下）</option>
+            </select>
+          </label>
+        )}
+        <div className="modalFormGrid">
+          <label>
+            <span>文字サイズ</span>
             <BoundedNumberInput
-              key="manuscript-font-size"
-              min={MANUSCRIPT_FONT_SIZE_MIN}
-              max={MANUSCRIPT_FONT_SIZE_MAX}
-              step={1}
-              value={manuscript.fontSize}
-              onChange={(value) => updateManuscript("fontSize", Math.round(value))}
-            />
-          ) : (
-            <BoundedNumberInput
-              key="body-font-size"
               min={12}
               max={24}
               step={1}
               value={settings.fontSize}
               onChange={(value) => onUpdateSettings("fontSize", value)}
             />
-          )}
-        </label>
-        <label>
-          <span>行間</span>
-          <BoundedNumberInput
-            min={1.4}
-            max={2.4}
-            step={0.05}
-            value={settings.lineHeight}
-            onChange={(value) => onUpdateSettings("lineHeight", value)}
+            {manuscriptOn && <small className="dialogFieldHint">原稿用紙では「原稿用紙の文字サイズ」を使用します</small>}
+          </label>
+          <label>
+            <span>行間</span>
+            <BoundedNumberInput
+              min={1.4}
+              max={2.4}
+              step={0.05}
+              value={settings.lineHeight}
+              onChange={(value) => onUpdateSettings("lineHeight", value)}
+            />
+          </label>
+        </div>
+        <label className="rangeSetting">
+          <span>
+            文字表示幅（{isHorizontalWriting ? "横幅" : "縦幅"}）{" "}
+            {editorMeasureValue}%
+            {editorMeasurePx !== null && `（${editorMeasurePx}px）`}
+          </span>
+          <input
+            disabled={manuscriptOn}
+            min={EDITOR_MEASURE_PERCENT_MIN}
+            max={EDITOR_MEASURE_PERCENT_MAX}
+            step="1"
+            type="range"
+            value={editorMeasureValue}
+            onChange={(event) =>
+              onUpdateSettings(editorMeasureKey, Number(event.target.value))
+            }
           />
         </label>
-      </div>
-      <label className="rangeSetting">
-        <span>
-          文字表示幅（{isHorizontalWriting ? "横幅" : "縦幅"}）{" "}
-          {editorMeasureValue}%
-          {editorMeasurePx !== null && `（${editorMeasurePx}px）`}
-        </span>
-        <input
-          disabled={manuscriptOn}
-          min={EDITOR_MEASURE_PERCENT_MIN}
-          max={EDITOR_MEASURE_PERCENT_MAX}
-          step="1"
-          type="range"
-          value={editorMeasureValue}
-          onChange={(event) =>
-            onUpdateSettings(editorMeasureKey, Number(event.target.value))
-          }
-        />
-      </label>
-      <label className="checkSetting">
-        <input
-          checked={settings.typewriterScroll}
-          type="checkbox"
-          onChange={(event) =>
-            onUpdateSettings("typewriterScroll", event.target.checked)
-          }
-        />
-        <span>タイプライタースクロール</span>
-      </label>
-      <label className="rangeSetting">
-        <span>固定位置 {settings.typewriterOffset}%</span>
-        <input
-          disabled={!settings.typewriterScroll}
-          min="30"
-          max="65"
-          type="range"
-          value={settings.typewriterOffset}
-          onChange={(event) =>
-            onUpdateSettings("typewriterOffset", Number(event.target.value))
-          }
-        />
-      </label>
-      <label className="checkSetting">
-        <input
-          checked={settings.showTypewriterGuide}
-          disabled={!settings.typewriterScroll}
-          type="checkbox"
-          onChange={(event) =>
-            onUpdateSettings("showTypewriterGuide", event.target.checked)
-          }
-        />
-        <span>タイプライター中央線を表示</span>
-      </label>
-      <label className="checkSetting">
-        <input
-          checked={settings.showLineBreakMarks}
-          type="checkbox"
-          onChange={(event) =>
-            onUpdateSettings("showLineBreakMarks", event.target.checked)
-          }
-        />
-        <span>改行記号を表示</span>
-      </label>
-      <label className="checkSetting">
-        <input
-          checked={settings.showLineNumbers}
-          type="checkbox"
-          onChange={(event) =>
-            onUpdateSettings("showLineNumbers", event.target.checked)
-          }
-        />
-        <span>行番号を表示</span>
-      </label>
-      <label className="checkSetting">
-        <input
-          checked={settings.highlightCurrentLine}
-          type="checkbox"
-          onChange={(event) =>
-            onUpdateSettings("highlightCurrentLine", event.target.checked)
-          }
-        />
-        <span>現在行をハイライト</span>
-      </label>
-      <label className="checkSetting descriptiveCheckSetting">
-        <input
-          checked={settings.colorizeJapaneseQuotes}
-          type="checkbox"
-          onChange={(event) =>
-            onUpdateSettings("colorizeJapaneseQuotes", event.target.checked)
-          }
-        />
-        <span className="checkSettingCopy">
-          <span>「」内を色分け</span>
-          <small>鉤括弧を含む会話文を落ち着いた色で表示します</small>
-        </span>
-      </label>
-      <label className="checkSetting descriptiveCheckSetting">
-        <input
-          checked={settings.showComments}
-          type="checkbox"
-          onChange={(event) =>
-            onUpdateSettings("showComments", event.target.checked)
-          }
-        />
-        <span className="checkSettingCopy">
-          <span>コメントを表示</span>
-          <small>行頭が // の行と &lt;!-- --&gt; で囲んだ行。オフにすると畳みます（Ctrl+Shift+/）</small>
-        </span>
-      </label>
-      <label className="checkSetting">
-        <input
-          checked={settings.countWhitespace}
-          type="checkbox"
-          onChange={(event) => onUpdateSettings("countWhitespace", event.target.checked)}
-        />
-        <span>文字数に空白を含める</span>
-      </label>
-      <label className="checkSetting descriptiveCheckSetting">
-        <input
-          checked={settings.countCode}
-          type="checkbox"
-          onChange={(event) => onUpdateSettings("countCode", event.target.checked)}
-        />
-        <span className="checkSettingCopy">
-          <span>文字数にコードを含める</span>
-          <small>``` で囲んだコードブロックと ` で囲んだ行内コード</small>
-        </span>
-      </label>
+      </SettingsGroup>
     </>
   );
 }

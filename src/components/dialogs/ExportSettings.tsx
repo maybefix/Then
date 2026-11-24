@@ -1,9 +1,10 @@
 import { exportFontFamilies, type ExportFontFamily } from "../../export/types";
 import type { SettingsPanelProps } from "./SettingsPanelTypes";
+import { SettingsGroup } from "./SettingsGroup";
 
 export function ExportSettings({ settings, onUpdateSettings }: SettingsPanelProps) {
   return (
-    <>
+    <SettingsGroup title="エクスポート">
       <label>
         <span>DOCX・PDF出力フォント</span>
         <select
@@ -29,6 +30,6 @@ export function ExportSettings({ settings, onUpdateSettings }: SettingsPanelProp
         />
         <span>エクスポートを別ウィンドウで開く</span>
       </label>
-    </>
+    </SettingsGroup>
   );
 }

@@ -193,8 +193,7 @@ function setupActions({ plugins = [plugin("p", ALL)], projectFolder = novel(), c
     anchors: [],
     persisted: [],
     appModes: [],
-    rightSidebarTabs: [],
-    collapsed: [],
+    openedPanels: [],
     opened: [],
     toasts: [],
     errors: [],
@@ -217,8 +216,7 @@ function setupActions({ plugins = [plugin("p", ALL)], projectFolder = novel(), c
       app.currentFilePath = path;
     },
     setAppMode: (mode) => app.appModes.push(mode),
-    setIsRightSidebarCollapsed: (collapsed) => app.collapsed.push(collapsed),
-    setRightSidebarTab: (tab) => app.rightSidebarTabs.push(tab),
+    openPanel: (id) => app.openedPanels.push(id),
     loadedPlugins: app.loadedPlugins,
     pluginAnchorsRef,
     persistPluginAnchors: (anchors) => {
@@ -294,12 +292,11 @@ function setupActions({ plugins = [plugin("p", ALL)], projectFolder = novel(), c
   assert.deepEqual(app.pluginScreens, [{ pluginId: "q", id: "full", title: "全面", icon: undefined }]);
 
   await request("views.open", { id: "side" });
-  assert.deepEqual(app.appModes, ["write"]);
-  assert.deepEqual(app.collapsed, [false]);
-  assert.deepEqual(app.rightSidebarTabs, ["plugin:p:side"]);
+  assert.deepEqual(app.appModes, []);
+  assert.deepEqual(app.openedPanels, ["plugin:p:side"]);
   await request("views.open", { id: "full" }, "q");
   assert.equal(app.activePluginScreenKey, "q:full");
-  assert.deepEqual(app.appModes, ["write", "plugin"]);
+  assert.deepEqual(app.appModes, ["plugin"]);
   await assert.rejects(request("views.open", { id: "none" }), /登録されていないviewです: none/);
 
   await request("views.unregister", { id: "side" });
@@ -508,9 +505,8 @@ function mountHost({ projectFolder = novel() } = {}) {
   const app = {
     projectFolder,
     appMode: "write",
-    rightSidebarTab: "idea",
-    isRightSidebarCollapsed: false,
-    isEditorFocusMode: false,
+    activePanelId: null,
+    panelsVisible: true,
     errors: [],
   };
   let host = null;
@@ -529,13 +525,8 @@ function mountHost({ projectFolder = novel() } = {}) {
           app.appMode = mode;
           hooks.dirty = true;
         },
-        rightSidebarTab: app.rightSidebarTab,
-        setRightSidebarTab: (tab) => {
-          app.rightSidebarTab = tab;
-          hooks.dirty = true;
-        },
-        isRightSidebarCollapsed: app.isRightSidebarCollapsed,
-        isEditorFocusMode: app.isEditorFocusMode,
+        activePanelId: app.activePanelId,
+        panelsVisible: app.panelsVisible,
       });
       const pending = hooks.pending.splice(0);
       for (const { hook } of pending) hook.cleanup?.();
@@ -601,12 +592,13 @@ function mountHost({ projectFolder = novel() } = {}) {
   view.render();
   assert.equal(view.app.appMode, "write", "a removed screen must send the app back to writing");
 
-  view.app.rightSidebarTab = "plugin:p:v";
+  view.app.activePanelId = "plugin:p:v";
   view.render();
   assert.equal(view.host.activePluginView?.id, "v");
   view.host.setPluginViews([]);
   view.render();
-  assert.equal(view.app.rightSidebarTab, "idea");
+  assert.equal(view.host.activePluginView, null);
+  assert.equal(view.host.isDockedPluginRuntimeVisible, false);
 
   view.host.setPluginModals([{ pluginId: "p", id: "m", title: "M" }]);
   view.host.setActivePluginModalKey("p:m");

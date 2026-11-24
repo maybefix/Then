@@ -3,6 +3,7 @@ import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import {
   PointerEvent as ReactPointerEvent,
+  type RefObject,
   useEffect,
   useMemo,
   useRef,
@@ -19,10 +20,23 @@ import type {
 } from "../../types";
 import { isReferenceBinderCard } from "../../types";
 import { binaryDataUrl, MarkdownLite } from "../markdown/MarkdownLite";
+import { usePanelAnimation } from "../layout/FloatingPanels";
+import type { PanelStatus } from "../layout/floatingPanelState";
+import { clampReferenceCardToStage } from "../../storedStateModel";
+
+type ReferencePanelState = { id: string; status: PanelStatus; zIndex: number };
+type PanelArea = { width: number; height: number };
 
 type ReferenceLayerProps = {
   rootPath: string | null;
   layout: ReferenceLayout;
+  taskbar: RefObject<HTMLElement>;
+  panelsVisible: boolean;
+  area: PanelArea;
+  getPanelState: (cardId: string) => ReferencePanelState;
+  onFocus: (cardId: string) => void;
+  onMinimize: (cardId: string) => void;
+  onClose: (cardId: string) => void;
   onLayoutChange: (updater: (layout: ReferenceLayout) => ReferenceLayout) => void;
   onReturnFocusToEditor: () => void;
   onTextSaved: (sourcePath: string, scope: ReferenceScope, text: string) => void;
@@ -32,6 +46,11 @@ type ReferenceCardProps = {
   rootPath: string;
   card: ReferenceCardState;
   isFocused: boolean;
+  panel: ReferencePanelState;
+  taskbar: RefObject<HTMLElement>;
+  panelsVisible: boolean;
+  area: PanelArea;
+  onMinimize: () => void;
   onPatch: (patch: BinderCardPatch) => void;
   onClose: () => void;
   onBringToFront: () => void;
@@ -103,13 +122,6 @@ function patchCard(
   };
 }
 
-function removeCard(layout: ReferenceLayout, cardId: string): ReferenceLayout {
-  return {
-    ...layout,
-    cards: layout.cards.filter((card) => card.id !== cardId),
-  };
-}
-
 function bringCardToFront(layout: ReferenceLayout, cardId: string): ReferenceLayout {
   const target = layout.cards.find((card) => card.id === cardId);
   if (!target) return layout;
@@ -127,6 +139,7 @@ export function ReferenceLayer({
   onLayoutChange,
   onReturnFocusToEditor,
   onTextSaved,
+  taskbar, panelsVisible, area, getPanelState, onFocus, onMinimize, onClose,
 }: ReferenceLayerProps) {
   const maxZ = useMemo(
     () => layout.cards.reduce((max, card) => Math.max(max, card.zIndex), 0),
@@ -145,9 +158,15 @@ export function ReferenceLayer({
           rootPath={rootPath ?? ""}
           card={card}
           isFocused={card.zIndex === maxZ}
+          panel={getPanelState(card.id)}
+          {...{ taskbar, panelsVisible, area }}
+          onMinimize={() => onMinimize(card.id)}
           onPatch={(patch) => onLayoutChange((current) => patchCard(current, card.id, patch))}
-          onClose={() => onLayoutChange((current) => removeCard(current, card.id))}
-          onBringToFront={() => onLayoutChange((current) => bringCardToFront(current, card.id))}
+          onClose={() => onClose(card.id)}
+          onBringToFront={() => {
+            onFocus(card.id);
+            onLayoutChange((current) => bringCardToFront(current, card.id));
+          }}
           onTextSaved={onTextSaved}
         />
       ))}
@@ -163,7 +182,12 @@ function BinderCard({
   onClose,
   onBringToFront,
   onTextSaved,
+  panel, taskbar, panelsVisible, area, onMinimize,
 }: ReferenceCardProps) {
+  const element = useRef<HTMLElement>(null);
+  usePanelAnimation(element, taskbar, panel.id, panel.status, panelsVisible);
+  const interactive = panelsVisible && panel.status === "open";
+  const displayed = area.width ? clampReferenceCardToStage(card, area.width, area.height) : card;
   const [dragMode, setDragMode] = useState<DragMode | null>(null);
 
   const startMove = (event: ReactPointerEvent) => {
@@ -173,9 +197,8 @@ function BinderCard({
       kind: "move",
       startX: event.clientX,
       startY: event.clientY,
-      original: card,
+      original: displayed,
     });
-    onBringToFront();
   };
 
   const startResize = (event: ReactPointerEvent) => {
@@ -186,9 +209,8 @@ function BinderCard({
       kind: "resize",
       startX: event.clientX,
       startY: event.clientY,
-      original: card,
+      original: displayed,
     });
-    onBringToFront();
   };
 
   const updateDrag = (event: ReactPointerEvent) => {
@@ -217,16 +239,22 @@ function BinderCard({
 
   return (
     <article
+      ref={element}
+      aria-hidden={!interactive}
+      {...(!interactive ? { inert: "" } : {})}
+      data-panel-status={panel.status}
       className={`referenceCard ${isFocused ? "focusedReferenceCard" : ""} ${
         card.collapsed ? "collapsedReferenceCard" : ""
       } ${card.pinned ? "pinnedReferenceCard" : ""}`}
       style={{
-        transform: `translate(${card.x}px, ${card.y}px)`,
-        width: card.width,
-        height: card.collapsed ? undefined : card.height,
-        zIndex: card.zIndex,
+        left: displayed.x,
+        top: displayed.y,
+        width: displayed.width,
+        height: card.collapsed ? undefined : displayed.height,
+        zIndex: card.pinned ? PINNED_REFERENCE_Z_BASE + panel.zIndex : panel.zIndex,
       }}
       onPointerDown={onBringToFront}
+      onFocusCapture={onBringToFront}
     >
       <header
         className="referenceCardHeader"
@@ -259,6 +287,9 @@ function BinderCard({
             <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
               <path d={card.collapsed ? "M6 12h12M12 6v12" : "M6 12h12"} />
             </svg>
+          </button>
+          <button type="button" aria-label="最小化" title="最小化" onMouseDown={(event) => event.preventDefault()} onClick={onMinimize}>
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 17h12" /></svg>
           </button>
           <button type="button" aria-label="閉じる" title="閉じる" onClick={onClose}>
             <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">

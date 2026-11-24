@@ -8,6 +8,7 @@ import PagedOpenQaApp from "./PagedOpenQaApp";
 import NativeImeQaApp from "./NativeImeQaApp";
 import "./App.css";
 import "./styles/themes/index.css";
+import "./styles/app/floatingPanels.css";
 
 function installWebviewNativeShortcutGuards(): void {
   window.addEventListener(

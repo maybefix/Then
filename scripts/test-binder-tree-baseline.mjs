@@ -283,7 +283,7 @@ function snapshotTree(work, container) {
     });
   }
   return {
-    header: text(container.querySelector(".sidebarHeader")),
+    header: text(container.querySelector(".filePanelProgressFilter")),
     libraryBack: text(container.querySelector(".libraryBackButton")),
     empty: text(container.querySelector(".outlineEmptyState")),
     rows,

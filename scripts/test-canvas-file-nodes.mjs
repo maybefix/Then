@@ -45,6 +45,7 @@ export { canvasFileWriteQueue, canvasBoardSaveQueue } from "./src/canvasBoardSto
 export { CanvasFileWriteQueue, canvasFileWriteKey } from "./src/canvasFileWriteQueue.ts";
 export { writeCanvasFile } from "./src/canvasFileWriter.ts";
 export { flushPendingSaves } from "./src/pendingSaves.ts";
+export { createDocumentAst } from "./src/editor/ast/documentAst.ts";
 export { normalizeCanvasDocument, serializeCanvasDocument, retargetCanvasReferenceNodes } from "./src/canvasTypes.ts";
 export { boardFilePaths, fileCardsToTextCards } from "./src/utils/libraryTransfer.ts";
 `;
@@ -147,7 +148,7 @@ const NOTE = "素材/汐見.md";
 const NOTE_TEXT = "---\ntags: [人物]\n---\n本文の一行目\n";
 const LAMP = "素材/灯.md";
 const SCENE = "第一章/港.md";
-const SCENE_TEXT = "---\nsynopsis: 港の場面\n---\n港の本文\n";
+const SCENE_TEXT = "---\nsynopsis: 港の場面\n---\n# 港\n港の本文\n## 船\n船の本文\n# 翌朝\n翌朝の本文\n";
 const projectFiles = [
   { path: NOTE, role: "note" },
   { path: LAMP, role: "note" },
@@ -172,7 +173,7 @@ const boardA = () => ({
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const settle = () => sleep(0);
-let root, props;
+let root, props, openedHeadings;
 async function render() {
   await act(async () => {
     root.render(React.createElement(Canvas, props));
@@ -180,17 +181,20 @@ async function render() {
   });
   await act(async () => { await settle(); await settle(); });
 }
-async function mount({ embedded = true } = {}) {
+async function mount({ embedded = true, empty = false } = {}) {
   files = new Map([[abs(NOTE), NOTE_TEXT], [abs(LAMP), "灯の本文\n"], [abs(SCENE), SCENE_TEXT]]);
-  docs = new Map([[boardKey(ROOT, "a"), boardA()],
+  docs = empty ? new Map() : new Map([[boardKey(ROOT, "a"), boardA()],
     [boardKey(ROOT, "b"), { nodes: [fileNode("fb", NOTE)], edges: [], then: { version: 1, name: "B", updatedAt: 1 } }]]);
-  calls = []; emitted = []; openTabs = new Map(); activeTab = null; writeRequests = []; openedFiles = []; writeGate = null;
+  calls = []; emitted = []; openTabs = new Map(); activeTab = null; writeRequests = []; openedFiles = []; openedHeadings = []; writeGate = null;
   const payload = { requestId: `r${Date.now()}`, scope: "project", rootPath: ROOT, boardId: "a", workspaceName: "作品A",
     theme: "light", uiFontScale: 1, referenceFiles: [], projectFiles, openTabPaths: [] };
   props = embedded
     ? { embedded: true, embeddedPayload: payload, liveProjectFiles: projectFiles, liveOpenTabPaths: [],
       liveReferenceFiles: referenceFiles,
-      onWriteFile, onOpenFile: (file) => openedFiles.push(file) }
+      onWriteFile, onOpenFile: (file, heading) => {
+        openedFiles.push(file);
+        if (heading) openedHeadings.push(heading);
+      } }
     : {};
   if (!embedded) globalThis.fileTest.windowPayload = payload;
   root = createRoot(document.getElementById("root"));
@@ -237,8 +241,14 @@ assert.equal(card("gone").querySelector(".canvasFileOpenButton"), null);
 await dblclick("gone");
 assert.equal(card("gone").querySelector("textarea"), null, "消えたファイルのカードは直せない");
 
-await click('[aria-label="資料を追加"]');
-await click(buttonWithText("灯"));
+assert.equal(document.querySelector('[aria-label="資料を追加"]'), null);
+assert.ok(document.querySelector('[aria-label="ファイル・見出しを開く"]'));
+await act(async () => {
+  document.querySelector(".canvasViewport").dispatchEvent(new dom.window.CustomEvent("then-canvas-file-drop", {
+    detail: { paths: [abs(LAMP)] },
+  }));
+  await settle();
+});
 await act(async () => { await sleep(650); });
 const added = savedBoard().nodes.find((node) => node.type === "file" && node.file === LAMP);
 assert.ok(added, "資料を追加の一覧からノートを選ぶと、ファイルのカードを置く");
@@ -272,6 +282,42 @@ console.log("PASS show: note body, manuscript synopsis, missing file; placing wr
   const picture = dropped.find((node) => node.type !== "file");
   assert.ok(picture && JSON.stringify(picture).includes(MAP), "素材の画像は資料のカード");
   assert.equal(dropped.some((node) => node.type === "file" && node.file === MAP), false, "画像をファイルのカードにはしない");
+
+  const original = files.get(abs(SCENE));
+  const [heading] = lib.createDocumentAst({ text: original.split("---\n").at(-1) }).outline;
+  const dragData = JSON.stringify({ sources: [{ path: abs(SCENE), line: heading.line, blockId: heading.blockId, title: heading.title }] });
+  await act(async () => {
+    const event = new dom.window.MouseEvent("drop", { bubbles: true, cancelable: true, clientX: 350, clientY: 250 });
+    Object.defineProperty(event, "dataTransfer", { value: {
+      types: ["application/x-then-heading"],
+      getData: (type) => type === "application/x-then-heading" ? dragData : "",
+    } });
+    viewport.dispatchEvent(event);
+    await settle();
+  });
+  await waitWrites();
+  const headingNode = savedBoard().nodes.find((node) => node.thenHeading);
+  assert.equal(headingNode.file, SCENE);
+  assert.equal(headingNode.subpath, "#港");
+  assert.equal(shown(headingNode.id), "港の本文\n## 船\n船の本文");
+  assert.equal(files.get(abs(SCENE)), original, "adding a heading card never writes the manuscript");
+  assert.equal(writeRequests.length, 0);
+  const normalized = lib.normalizeCanvasDocument(savedBoard(), "A", "project");
+  assert.deepEqual(normalized.nodes.find((node) => node.id === headingNode.id).thenHeading, headingNode.thenHeading);
+  await dblclick(headingNode.id);
+  assert.equal(card(headingNode.id).querySelector("textarea"), null);
+  assert.deepEqual(openedFiles.splice(0), [SCENE]);
+  assert.deepEqual(openedHeadings.map(({ line }) => line), [1]);
+  const shifted = original.replace("# 港", "前置き\n\n# 港");
+  files.set(abs(SCENE), shifted);
+  globalThis.fileTest.emit("then-canvas-file-saved", { rootPath: ROOT, path: SCENE, content: shifted, contentHash: hashOf(shifted) });
+  await act(async () => { await settle(); });
+  await dblclick(headingNode.id);
+  assert.deepEqual(openedFiles.splice(0), [SCENE]);
+  assert.deepEqual(openedHeadings.map(({ line }) => line), [1, 3], "the reference follows an unchanged heading when lines shift");
+  files.set(abs(SCENE), original);
+  globalThis.fileTest.emit("then-canvas-file-saved", { rootPath: ROOT, path: SCENE, content: original, contentHash: hashOf(original) });
+  await act(async () => { await settle(); });
 }
 console.log("PASS binder drop: a note or manuscript becomes a file card, a material image a reference card");
 
@@ -341,7 +387,7 @@ assert.equal(card("f2").querySelector("textarea").getAttribute("aria-label"), "�
 await type("f2", "新しい概要");
 await waitWrites();
 assert.equal(writeRequests.at(-1).kind, "synopsis");
-assert.equal(files.get(abs(SCENE)), "---\nsynopsis: 新しい概要\n---\n港の本文\n", "タブで開いていなければファイルのフロントマターへ");
+assert.equal(files.get(abs(SCENE)), SCENE_TEXT.replace("港の場面", "新しい概要"), "タブで開いていなければファイルのフロントマターへ");
 openTabs.set(abs(SCENE), files.get(abs(SCENE)));
 activeTab = abs(SCENE);
 props = { ...props, liveOpenTabPaths: [SCENE] };
@@ -351,7 +397,7 @@ assert.ok(card("f2").querySelector("textarea"), "原稿はタブで開いてい�
 const fileBeforeTab = files.get(abs(SCENE));
 await type("f2", "タブへ入る概要");
 await waitWrites();
-assert.equal(openTabs.get(abs(SCENE)), "---\nsynopsis: タブへ入る概要\n---\n港の本文\n", "開いているタブのフロントマターへ入れる");
+assert.equal(openTabs.get(abs(SCENE)), SCENE_TEXT.replace("港の場面", "タブへ入る概要"), "開いているタブのフロントマターへ入れる");
 assert.equal(files.get(abs(SCENE)), fileBeforeTab, "ファイルへはタブの保存が書く");
 assert.equal(shown("f2"), "タブへ入る概要", "タブが保存するまで、直した概要を出しておく");
 openTabs.delete(abs(SCENE));
@@ -528,6 +574,34 @@ await unmount();
 mainSide();
 globalThis.fileTest.invoke = originalInvoke;
 console.log("PASS separate window: write-back goes through the main window; the close flush answers both waits");
+
+await mount({ empty: true });
+{
+  const viewport = document.querySelector(".canvasViewport");
+  assert.ok(viewport.hasAttribute("data-canvas-file-drop"), "an empty project can accept the first drop");
+  const drop = (paths, headings = []) => viewport.dispatchEvent(new dom.window.CustomEvent("then-canvas-file-drop", {
+    detail: { paths, headings, clientX: 350, clientY: 250 },
+  }));
+  await act(async () => { drop(["C:/Outside/foreign.txt"]); await settle(); });
+  assert.equal(docs.size, 0, "an invalid drop does not create a board");
+  const original = files.get(abs(SCENE));
+  const [heading] = lib.createDocumentAst({ text: original.split("---\n").at(-1) }).outline;
+  await act(async () => {
+    drop([abs(MAP)], [{ path: abs(SCENE), line: heading.line, blockId: heading.blockId, title: heading.title }]);
+    drop([abs(NOTE)]);
+    await settle();
+  });
+  await waitWrites();
+  const [board] = docs.values();
+  assert.equal(docs.size, 1);
+  assert.equal(calls.filter((call) => call.command === "create_canvas_board").length, 1);
+  assert.equal(board.nodes.length, 2);
+  assert.ok(board.nodes.some((node) => node.type === "file" && node.file === SCENE && node.subpath === "#港"));
+  assert.ok(board.nodes.some((node) => node.type !== "file" && JSON.stringify(node).includes(MAP)));
+  assert.equal(files.get(abs(SCENE)), original);
+}
+await unmount();
+console.log("PASS first drop: an empty project creates one board and saves the dropped references");
 
 // ---- 10. 順番待ちそのもの ----
 {

@@ -1,6 +1,6 @@
 // 左サイドバー（LeftSidebar）が、App から受け取った値と関数を、正しい相手に正しく渡すかを確かめる。
 // LeftSidebar はフックを使わないので、関数として呼んで返ってきた要素の木をたどる。
-// WorkspaceSidebar と OpenCardsPane は、受け取った props を見るだけの代わりの部品に差し替える。
+// WorkspaceSidebar は、受け取った props を見るだけの代わりの部品に差し替える。
 // 値は名前ごとに違う目印にし、関数は呼ばれた名前と引数を記録する入れ物にして、
 // 取り違え（たとえば「名前の変更」に削除の関数をつなぐこと）を、どの組でも見つけられるようにする。
 import assert from "node:assert/strict";
@@ -14,8 +14,8 @@ import ts from "typescript";
 const stubPanes = {
   name: "stub-panes",
   setup(pluginBuild) {
-    pluginBuild.onResolve({ filter: /^(\.\/WorkspaceSidebar|\.\.\/binder\/OpenCardsPane)$/ }, (args) => ({
-      path: args.path.endsWith("WorkspaceSidebar") ? "WorkspaceSidebar" : "OpenCardsPane",
+    pluginBuild.onResolve({ filter: /^\.\/WorkspaceSidebar$/ }, () => ({
+      path: "WorkspaceSidebar",
       namespace: "stub-pane",
     }));
     pluginBuild.onLoad({ filter: /.*/, namespace: "stub-pane" }, (args) => ({
@@ -33,7 +33,6 @@ const bundled = await build({
     contents: [
       'export { LeftSidebar } from "./LeftSidebar";',
       'export { WorkspaceSidebar } from "./WorkspaceSidebar";',
-      'export { OpenCardsPane } from "../binder/OpenCardsPane";',
     ].join("\n"),
     resolveDir: path.join(process.cwd(), "src/components/layout"),
     loader: "ts",
@@ -49,19 +48,16 @@ const bundled = await build({
   logLevel: "error",
 });
 await writeFile(compiledPath, bundled.outputFiles[0].text);
-const { LeftSidebar, WorkspaceSidebar, OpenCardsPane } = await import(pathToFileURL(compiledPath).href)
+const { LeftSidebar, WorkspaceSidebar } = await import(pathToFileURL(compiledPath).href)
   .finally(() => unlink(compiledPath));
 
 // App の関数の代わり。呼ばれた名前と引数を順に記録する。
 const calls = [];
 const functionNames = [
-  "setIsLeftSidebarCollapsed", "setLeftSidebarView", "handleNewDocument", "handleCreateProjectFolder",
-  "handleOpenProjectFolder", "focusReferenceCard", "closeReferenceCard", "pinReferenceCard", "collapseReferenceCard",
+  "onAddToCanvas", "handleCreateProjectFolder", "handleOpenProjectFolder",
   "handleSetFileProgress", "handleFolderCollapsedChange", "handleOutlineCollapsedChange",
   "handleOutlineHeadingCollapsedChange", "jumpToOutlineItem", "handleProjectOutlineJump", "handleHeadingMove",
-  "handleHeadingExtract", "setProjectSearchQuery", "setProjectSearchUseRegex", "setProjectSearchMatchCase",
-  "setSearchIncludeComments", "setSearchScope", "setProjectReplaceValue", "handleProjectSearchResultOpen",
-  "handleReplaceInCurrentFile", "handleReplaceInProject", "handleCreateProjectFile", "handleProjectFileSelect",
+  "handleHeadingExtract", "handleCreateProjectFile", "handleProjectFileSelect",
   "handleProjectFolderSelect", "handleRenameProjectEntry", "handleDeleteProjectEntry",
   "handleMoveProjectEntriesToFolder", "handleSidebarEntryReorder", "updateSettings",
   "handleQuickCreateManuscriptSnapshot", "openCheckpointStudio", "handleEditManuscriptSnapshotDetails",
@@ -83,13 +79,10 @@ const spies = Object.fromEntries(
 // 値は、名前ごとに違う目印にする（真偽値も文字列の目印にして、2つの値の入れ替えを見分ける）。
 const mark = (name) => `<${name}>`;
 const baseValues = {
-  appMode: "write",
-  isLeftSidebarCollapsed: false,
-  isEditorFocusMode: false,
-  leftSidebarView: "files",
+  outlineScope: "all",
+  panelVisible: true,
   projectFolder: { path: "C:/work", name: "work", children: [] },
   focusedFolderPath: "C:/work/第一部",
-  referenceLayout: { cards: mark("referenceLayout.cards") },
   // BINDER 2-1: 投稿の段に出すのは、受信箱の投稿の数。
   postInboxCount: 3,
   // 素材の段には、画像・PDF だけを置かれたフォルダの中に並べる（BINDER 2-5、確認1の 7）。
@@ -115,51 +108,13 @@ const baseValues = {
   collapsedTreeFolderPaths: mark("collapsedTreeFolderPaths"),
   collapsedTreeOutlinePaths: mark("collapsedTreeOutlinePaths"),
   collapsedTreeOutlineHeadingKeys: mark("collapsedTreeOutlineHeadingKeys"),
-  projectSearchQuery: mark("projectSearchQuery"),
-  workspaceSearchOutcome: {
-    results: mark("outcome.results"),
-    total: mark("outcome.total"),
-    matchedFileCount: mark("outcome.matchedFileCount"),
-    truncated: mark("outcome.truncated"),
-    error: mark("outcome.error"),
-  },
-  projectSearchUseRegex: mark("projectSearchUseRegex"),
-  projectSearchMatchCase: mark("projectSearchMatchCase"),
-  searchIncludeComments: mark("searchIncludeComments"),
-  searchScope: mark("searchScope"),
-  projectReplaceValue: mark("projectReplaceValue"),
-  isProjectReplacing: mark("isProjectReplacing"),
   currentWorkspaceSnapshots: mark("currentWorkspaceSnapshots"),
   libraryContext: mark("libraryContext"),
-  libraryCorpus: { isLoading: true },
   starredNotePaths: mark("starredNotePaths"),
   libraryReferencesFolderPath: mark("libraryReferencesFolderPath"),
 };
 
 const render = (overrides = {}) => LeftSidebar({ ...baseValues, ...spies, ...overrides });
-
-// 要素の木を深さ優先でたどる。
-const elementsOf = (node) => {
-  const found = [];
-  const visit = (current) => {
-    if (Array.isArray(current)) {
-      current.forEach(visit);
-      return;
-    }
-    if (!current || typeof current !== "object" || !("props" in current)) return;
-    found.push(current);
-    visit(current.props.children);
-  };
-  visit(node);
-  return found;
-};
-const findOne = (tree, predicate, label) => {
-  const matches = elementsOf(tree).filter(predicate);
-  assert.equal(matches.length, 1, `${label} must appear exactly once`);
-  return matches[0];
-};
-const button = (tree, label) =>
-  findOne(tree, (element) => element.type === "button" && element.props["aria-label"] === label, `button ${label}`);
 
 // 1つの操作で、決めた App の関数が、決めた引数で1回だけ呼ばれることを確かめる。
 const expectCall = (label, action, name, args) => {
@@ -167,81 +122,17 @@ const expectCall = (label, action, name, args) => {
   action();
   assert.deepEqual(calls, [{ name, args }], `${label} must call ${name} once`);
 };
-const expectCalls = (label, action, expected) => {
-  calls.length = 0;
-  action();
-  assert.deepEqual(calls, expected, `${label} must call ${expected.map((call) => call.name).join(", ")}`);
-};
-
-// --- 左の枠と、左端のボタン列 ---
 {
-  const tree = render();
-  assert.equal(tree.type, "div");
-  assert.match(tree.props.className, /^leftWorkspaceCluster /);
-  assert.doesNotMatch(tree.props.className, /modeHiddenPane/);
-  assert.equal(tree.props["data-sidebar-collapsed"], false);
-  assert.equal(tree.props["aria-hidden"], false);
-  assert.equal("inert" in tree.props, false);
-  const nav = findOne(tree, (element) => element.type === "nav", "activity bar");
-  assert.equal(nav.props["aria-label"], "左サイドバー操作");
-  assert.deepEqual(
-    elementsOf(nav).filter((element) => element.type === "button").map((element) => element.props["aria-label"]),
-    ["ファイルツリー", "プロジェクト検索", "開いているカード", "新規ファイル", "新規フォルダ"],
-  );
-  assert.equal(button(tree, "ファイルツリー").props["aria-pressed"], true);
-  assert.equal(button(tree, "プロジェクト検索").props["aria-pressed"], false);
-  assert.equal(button(tree, "開いているカード").props["aria-pressed"], false);
-  assert.match(button(tree, "ファイルツリー").props.className, /activeWorkspaceActivityButton/);
-
-  for (const [label, view] of [["ファイルツリー", "files"], ["プロジェクト検索", "search"], ["開いているカード", "reference"]]) {
-    expectCalls(label, () => button(tree, label).props.onClick(), [
-      { name: "setIsLeftSidebarCollapsed", args: [false] },
-      { name: "setLeftSidebarView", args: [view] },
-    ]);
-  }
-  assert.equal(button(tree, "新規ファイル").props.onClick, spies.handleNewDocument);
-  expectCall("新規フォルダ（選んだフォルダ）", () => button(tree, "新規フォルダ").props.onClick(),
-    "handleCreateProjectFolder", ["C:/work/第一部"]);
-  expectCall("新規フォルダ（選んだフォルダなし）",
-    () => button(render({ focusedFolderPath: null }), "新規フォルダ").props.onClick(),
-    "handleCreateProjectFolder", ["C:/work"]);
-  expectCall("新規フォルダ（作品なし）",
-    () => button(render({ projectFolder: null }), "新規フォルダ").props.onClick(),
-    "handleOpenProjectFolder", []);
+  const pane = render({ outlineScope: "current", panelVisible: false });
+  assert.equal(pane.type, WorkspaceSidebar);
+  assert.equal(pane.props.outlineScope, "current");
+  assert.equal(pane.props.panelHidden, true);
 }
 
-// 畳んだとき、ほかの画面、集中モード、プラグイン画面。
+// --- ファイルツリー（WorkspaceSidebar）へのつなぎ ---
 {
-  const collapsed = render({ isLeftSidebarCollapsed: true });
-  assert.equal(collapsed.props["data-sidebar-collapsed"], true);
-  for (const label of ["ファイルツリー", "プロジェクト検索", "開いているカード"]) {
-    assert.equal(button(collapsed, label).props["aria-pressed"], false, `${label} is not pressed while collapsed`);
-    assert.doesNotMatch(button(collapsed, label).props.className, /activeWorkspaceActivityButton/);
-  }
-  for (const appMode of ["export", "checkpoint"]) {
-    assert.match(render({ appMode }).props.className, /modeHiddenPane/, `${appMode} hides the left cluster`);
-  }
-  // BINDER 4-3: コルクボードと同じく、Canvas でもバインダーを出す（ノート・原稿をボードへドラッグするため）。
-  for (const appMode of ["corkboard", "canvas"]) {
-    const shown = render({ appMode });
-    assert.doesNotMatch(shown.props.className, /modeHiddenPane/, `${appMode} shows the left cluster`);
-    assert.equal(shown.props["aria-hidden"], false);
-    assert.equal("inert" in shown.props, false);
-  }
-  const plugin = render({ appMode: "plugin" });
-  assert.doesNotMatch(plugin.props.className, /modeHiddenPane/);
-  assert.equal(plugin.props["aria-hidden"], true);
-  assert.equal(plugin.props.inert, "");
-  const focus = render({ isEditorFocusMode: true });
-  assert.equal(focus.props["aria-hidden"], true);
-  assert.equal(focus.props.inert, "");
-}
-
-// --- ファイルツリーと検索（WorkspaceSidebar）へのつなぎ ---
-{
-  const tree = render();
-  assert.equal(elementsOf(tree).some((element) => element.type === OpenCardsPane), false);
-  const sidebar = findOne(tree, (element) => element.type === WorkspaceSidebar, "WorkspaceSidebar");
+  const sidebar = render();
+  assert.equal(sidebar.type, WorkspaceSidebar);
   const props = sidebar.props;
 
   const expectedValues = {
@@ -264,24 +155,12 @@ const expectCalls = (label, action, expected) => {
     collapsedFolderPaths: mark("collapsedTreeFolderPaths"),
     collapsedOutlinePaths: mark("collapsedTreeOutlinePaths"),
     collapsedOutlineHeadingKeys: mark("collapsedTreeOutlineHeadingKeys"),
-    projectSearchQuery: mark("projectSearchQuery"),
-    projectSearchResults: mark("outcome.results"),
-    projectSearchTotal: mark("outcome.total"),
-    projectSearchMatchedFileCount: mark("outcome.matchedFileCount"),
-    projectSearchTruncated: mark("outcome.truncated"),
-    projectSearchError: mark("outcome.error"),
-    projectSearchUseRegex: mark("projectSearchUseRegex"),
-    projectSearchMatchCase: mark("projectSearchMatchCase"),
-    projectSearchIncludeComments: mark("searchIncludeComments"),
-    searchScope: mark("searchScope"),
-    projectReplaceValue: mark("projectReplaceValue"),
-    isProjectReplacing: mark("isProjectReplacing"),
-    isProjectSearchMode: false,
+    outlineScope: "all",
+    panelHidden: false,
     snapshots: mark("currentWorkspaceSnapshots"),
     isSnapshotSectionCollapsed: mark("settings.checkpointSectionCollapsed"),
     showSnapshotSection: mark("settings.showCheckpointSection"),
     library: mark("libraryContext"),
-    isLibrarySearchLoading: true,
     postInboxCount: 3,
   };
 
@@ -290,6 +169,7 @@ const expectCalls = (label, action, expected) => {
   const snapshot = { id: "snapshot-1" };
   const heading = { path: "C:/work/a.md", line: 3, blockId: "h3", title: "見出し" };
   const expectedFunctions = {
+    onAddToCanvas: { args: [{ paths: ["C:/work/a.md"] }], name: "onAddToCanvas" },
     onSetFileProgress: { args: ["C:/work/a.md", "done"], name: "handleSetFileProgress" },
     onFolderCollapsedChange: { args: ["C:/work/第一部", true], name: "handleFolderCollapsedChange" },
     onOutlineCollapsedChange: { args: ["C:/work/a.md", false], name: "handleOutlineCollapsedChange" },
@@ -301,15 +181,6 @@ const expectCalls = (label, action, expected) => {
       name: "handleHeadingMove",
     },
     onExtractHeading: { args: [heading], name: "handleHeadingExtract" },
-    onProjectSearchQueryChange: { args: ["語"], name: "setProjectSearchQuery" },
-    onProjectSearchUseRegexChange: { args: ["regex-flag"], name: "setProjectSearchUseRegex" },
-    onProjectSearchMatchCaseChange: { args: ["case-flag"], name: "setProjectSearchMatchCase" },
-    onProjectSearchIncludeCommentsChange: { args: ["comment-flag"], name: "setSearchIncludeComments" },
-    onSearchScopeChange: { args: ["project"], name: "setSearchScope" },
-    onProjectReplaceValueChange: { args: ["新しい語"], name: "setProjectReplaceValue" },
-    onOpenProjectSearchResult: { args: [{ path: "C:/work/c.md", line: 4 }], name: "handleProjectSearchResultOpen" },
-    onReplaceInCurrentFile: { args: [], name: "handleReplaceInCurrentFile" },
-    onReplaceInProject: { args: [], name: "handleReplaceInProject" },
     onOpenProjectFolder: { args: [], name: "handleOpenProjectFolder" },
     onCreateFile: { args: ["C:/work/第二部"], name: "handleCreateProjectFile" },
     onCreateFolder: { args: ["C:/work/第三部"], name: "handleCreateProjectFolder" },
@@ -335,7 +206,6 @@ const expectCalls = (label, action, expected) => {
     onEditSnapshotDetails: { args: [snapshot], name: "handleEditManuscriptSnapshotDetails" },
     onRestoreSnapshot: { args: [snapshot], name: "handleRestoreManuscriptSnapshot" },
     onDeleteSnapshot: { args: [snapshot], name: "handleDeleteManuscriptSnapshot" },
-    onCollapse: { args: [], name: "setIsLeftSidebarCollapsed", expectedArgs: [true] },
     onEnterLibraryRoot: { args: [], name: "enterLibraryRoot" },
     onEnterProject: { args: ["C:/library/作品2"], name: "enterProject" },
     onCreateLibraryProject: { args: [], name: "handleCreateLibraryProject" },
@@ -351,7 +221,7 @@ const expectCalls = (label, action, expected) => {
     onOpenReference: {
       args: [{ path: "C:/work/素材/資料/map.png", sourcePath: "素材/資料/map.png", name: "map.png", kind: "image" }],
       name: "openReferenceCard",
-      expectedArgs: ["素材/資料/map.png", baseValues.sortedReferenceCandidates[0], { switchToReferenceTab: false }],
+      expectedArgs: ["素材/資料/map.png", baseValues.sortedReferenceCandidates[0]],
     },
     onDeleteReference: {
       args: [{ path: "C:/work/素材/資料/map.png", sourcePath: "素材/資料/map.png", name: "map.png", kind: "image" }],
@@ -386,42 +256,8 @@ const expectCalls = (label, action, expected) => {
   }
   expectCall("WorkspaceSidebar.onOpenSnapshot(null)", () => props.onOpenSnapshot(null), "openCheckpointStudio", [undefined]);
 
-  const searching = findOne(render({ leftSidebarView: "search" }), (element) => element.type === WorkspaceSidebar,
-    "WorkspaceSidebar while searching");
-  assert.equal(searching.props.isProjectSearchMode, true);
-  assert.equal(button(render({ leftSidebarView: "search" }), "プロジェクト検索").props["aria-pressed"], true);
-  const noOutline = findOne(render({ activeOutlineChain: [] }), (element) => element.type === WorkspaceSidebar,
-    "WorkspaceSidebar without an active heading");
+  const noOutline = render({ activeOutlineChain: [] });
   assert.equal(noOutline.props.activeOutlineBlockId, null);
-  const notLoading = findOne(render({ libraryCorpus: null }), (element) => element.type === WorkspaceSidebar,
-    "WorkspaceSidebar without a library corpus");
-  assert.equal(notLoading.props.isLibrarySearchLoading, false);
-}
-
-// --- 開いているカード（OpenCardsPane）へのつなぎ ---
-{
-  const tree = render({ leftSidebarView: "reference" });
-  assert.equal(elementsOf(tree).some((element) => element.type === WorkspaceSidebar), false);
-  assert.equal(button(tree, "開いているカード").props["aria-pressed"], true);
-  const aside = findOne(tree, (element) => element.type === "aside", "reference sidebar");
-  assert.equal(aside.props.className, "workspaceSidebar referenceWorkspaceSidebar");
-  assert.equal(aside.props["aria-label"], "開いているカード");
-  expectCall("左サイドバーを畳む", () => button(tree, "左サイドバーを畳む").props.onClick(),
-    "setIsLeftSidebarCollapsed", [true]);
-
-  const pane = findOne(tree, (element) => element.type === OpenCardsPane, "OpenCardsPane");
-  assert.deepEqual(Object.keys(pane.props).sort(),
-    ["candidates", "cards", "onCloseCard", "onCollapseCard", "onFocusCard", "onPinCard"]);
-  assert.equal(pane.props.cards, mark("referenceLayout.cards"));
-  assert.equal(pane.props.candidates, baseValues.sortedReferenceCandidates);
-  for (const [key, args, name] of [
-    ["onFocusCard", ["card-1"], "focusReferenceCard"],
-    ["onCloseCard", ["card-2"], "closeReferenceCard"],
-    ["onPinCard", ["card-3", true], "pinReferenceCard"],
-    ["onCollapseCard", ["card-4", false], "collapseReferenceCard"],
-  ]) {
-    expectCall(`OpenCardsPane.${key}`, () => pane.props[key](...args), name, args);
-  }
 }
 
 // --- ビューと畳みの保存と復元（再起動しても戻る。右サイドバーのタブと同じく、アプリ全体で1つ） ---
@@ -465,17 +301,9 @@ const expectCalls = (label, action, expected) => {
   ].join("\n");
   assert.match(app, /leftSidebarView: normalizeLeftSidebarView\(value\?\.leftSidebarView\)/);
   assert.match(app, /leftSidebarCollapsed: normalizeLeftSidebarCollapsed\(value\?\.leftSidebarCollapsed\)/);
-  assert.match(app, /setLeftSidebarViewState\(state\.leftSidebarView\)/);
-  assert.match(app, /setIsLeftSidebarCollapsedState\(state\.leftSidebarCollapsed\)/);
-  assert.match(app, /current\.leftSidebarView === view/);
-  assert.match(app, /current\.leftSidebarCollapsed === collapsed/);
+  assert.match(app, /state\.leftSidebarCollapsed \? null : "files"/);
   // 画面の値を直接書くのは、保存もする関数と起動時の復元の2か所だけ（ほかの変更は全部、保存する関数を通る）。
-  assert.equal(app.match(/setLeftSidebarViewState\(/g)?.length, 2, "only the saving setter and the restore set the view");
-  assert.equal(app.match(/setIsLeftSidebarCollapsedState\(/g)?.length, 2, "only the saving setter and the restore set the collapse");
   assert.match(app, /canvasLeftSidebarCollapsed: normalizeCanvasLeftSidebarCollapsed\(value\?\.canvasLeftSidebarCollapsed\)/);
-  assert.match(app, /setIsCanvasLeftSidebarCollapsedState\(state\.canvasLeftSidebarCollapsed\)/);
-  assert.match(app, /current\.canvasLeftSidebarCollapsed === collapsed/);
-  assert.equal(app.match(/setIsCanvasLeftSidebarCollapsedState\(/g)?.length, 2, "only the saving setter and the restore set the Canvas collapse");
 }
 
 console.log("left sidebar tests passed");

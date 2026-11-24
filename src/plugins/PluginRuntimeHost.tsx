@@ -41,6 +41,7 @@ type ThenPluginRuntimeHostProps = {
   visible: boolean;
   modal: boolean;
   anchorElement: HTMLElement | null;
+  onFocus?: () => void;
   themeKey: string;
   onRequest: (request: ThenPluginHostRequest) => Promise<unknown>;
   onError: (pluginName: string, message: string) => void;
@@ -284,7 +285,7 @@ export const ThenPluginRuntimeHost = forwardRef<
   ThenPluginRuntimeHostHandle,
   ThenPluginRuntimeHostProps
 >(function ThenPluginRuntimeHost(
-  { plugins, activeView, workspace, visible, modal, anchorElement, themeKey, onRequest, onError },
+  { plugins, activeView, workspace, visible, modal, anchorElement, onFocus, themeKey, onRequest, onError },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -427,7 +428,11 @@ export const ThenPluginRuntimeHost = forwardRef<
   useLayoutEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+    const panel = anchorElement?.closest<HTMLElement>(".floatingPanel");
+    const panelLayer = panel?.parentElement;
     const syncBounds = () => {
+      host.style.zIndex = panel && !modal ? panel.style.zIndex : "";
+      host.style.visibility = panel && !modal && panel.hasAttribute("data-panel-animating") ? "hidden" : "";
       if (modal) {
         host.style.top = "0";
         host.style.right = "0";
@@ -451,42 +456,16 @@ export const ThenPluginRuntimeHost = forwardRef<
       ? new ResizeObserver(syncBounds)
       : null;
     if (anchorElement) observer?.observe(anchorElement);
+    if (panelLayer) observer?.observe(panelLayer);
     window.addEventListener("resize", syncBounds);
     const frame = window.requestAnimationFrame(syncBounds);
-    const sidebar = anchorElement?.closest(".rightSidebar");
-    let trackingFrame: number | null = null;
-    let isTrackingTransition = false;
-    const trackTransition = () => {
-      syncBounds();
-      if (isTrackingTransition) {
-        trackingFrame = window.requestAnimationFrame(trackTransition);
-      }
-    };
-    const startTransitionTracking = (event: Event) => {
-      if (!(event instanceof TransitionEvent) || event.propertyName !== "transform") return;
-      if (isTrackingTransition) return;
-      isTrackingTransition = true;
-      trackTransition();
-    };
-    const stopTransitionTracking = (event: Event) => {
-      if (!(event instanceof TransitionEvent) || event.propertyName !== "transform") return;
-      isTrackingTransition = false;
-      if (trackingFrame !== null) window.cancelAnimationFrame(trackingFrame);
-      trackingFrame = null;
-      syncBounds();
-    };
-    sidebar?.addEventListener("transitionrun", startTransitionTracking);
-    sidebar?.addEventListener("transitionend", stopTransitionTracking);
-    sidebar?.addEventListener("transitioncancel", stopTransitionTracking);
+    const panelObserver = panel ? new MutationObserver(syncBounds) : null;
+    if (panel) panelObserver?.observe(panel, { attributes: true, attributeFilter: ["style", "data-panel-animating"] });
     return () => {
       observer?.disconnect();
       window.removeEventListener("resize", syncBounds);
       window.cancelAnimationFrame(frame);
-      isTrackingTransition = false;
-      if (trackingFrame !== null) window.cancelAnimationFrame(trackingFrame);
-      sidebar?.removeEventListener("transitionrun", startTransitionTracking);
-      sidebar?.removeEventListener("transitionend", stopTransitionTracking);
-      sidebar?.removeEventListener("transitioncancel", stopTransitionTracking);
+      panelObserver?.disconnect();
     };
   }, [anchorElement, modal, visible]);
 
@@ -500,6 +479,7 @@ export const ThenPluginRuntimeHost = forwardRef<
       ref={hostRef}
       className={`pluginRuntimeHost pluginRuntimeDetachedHost${visible ? " visiblePluginRuntimeHost" : ""}${modal ? " pluginModalRuntimeHost" : ""}`}
       aria-hidden={!visible}
+      onFocusCapture={onFocus}
     >
       {runtimes.map((runtime) => {
         const pluginId = runtime.plugin.manifest.id;

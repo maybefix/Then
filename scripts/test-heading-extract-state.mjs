@@ -36,6 +36,8 @@ const savedSource = {
   path: sourceTab.path,
   name: sourceTab.name,
   content: "# Source\n",
+  fileId: "stable-id",
+  contentHash: "updated-hash",
 };
 const extractionViewport = {
   textLength: savedSource.content.length,
@@ -63,6 +65,8 @@ assert.deepEqual(
     savedMarkdown: savedSource.content,
     editorRevision: null,
     saveStatus: "saved",
+    fileId: savedSource.fileId,
+    contentHash: savedSource.contentHash,
     viewportState: extractionViewport,
   },
 );

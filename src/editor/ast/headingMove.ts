@@ -1,4 +1,5 @@
 import { parseFrontMatter, updateMarkdownBody } from "../../utils/frontmatter";
+import { classifyLines } from "./documentAst";
 
 export type HeadingDropPosition = "before" | "after" | "append";
 
@@ -72,13 +73,15 @@ function parseHeading(line: string): { level: number; title: string } | null {
 
 function getHeadingSection(lines: string[], line: number, label: string): HeadingSection {
   const start = line - 1;
-  const heading = Number.isInteger(line) && line > 0 ? parseHeading(lines[start] ?? "") : null;
+  const roles = classifyLines(lines);
+  const heading = Number.isInteger(line) && line > 0 && !roles[start] ? parseHeading(lines[start] ?? "") : null;
   if (!heading) {
     throw new Error(`${label}の見出し位置が更新されています。アウトラインを確認して再操作してください。`);
   }
 
   let end = lines.length;
   for (let index = start + 1; index < lines.length; index += 1) {
+    if (roles[index]) continue;
     const nextHeading = parseHeading(lines[index]);
     if (nextHeading && nextHeading.level <= heading.level) {
       end = index;
@@ -298,8 +301,9 @@ export function extractHeadingSection({
   const fullSection = getHeadingSection(sourceBody.lines, sourceLine, "切り出し元");
   let end = fullSection.end;
   if (!includeChildren) {
+    const roles = classifyLines(sourceBody.lines);
     for (let index = fullSection.start + 1; index < fullSection.end; index += 1) {
-      if (parseHeading(sourceBody.lines[index])) {
+      if (!roles[index] && parseHeading(sourceBody.lines[index])) {
         end = index;
         break;
       }

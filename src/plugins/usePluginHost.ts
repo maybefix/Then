@@ -25,10 +25,8 @@ type PluginHostDeps = {
   setLastError: Dispatch<SetStateAction<string>>;
   appMode: string;
   setAppMode: (mode: "write") => void;
-  rightSidebarTab: string;
-  setRightSidebarTab: (tab: string) => void;
-  isRightSidebarCollapsed: boolean;
-  isEditorFocusMode: boolean;
+  activePanelId: string | null;
+  panelsVisible: boolean;
 };
 
 // プラグインの値（読み込んだプラグインと、プラグインが登録したもの・開いているもの）、
@@ -38,10 +36,8 @@ export function usePluginHost({
   setLastError,
   appMode,
   setAppMode,
-  rightSidebarTab,
-  setRightSidebarTab,
-  isRightSidebarCollapsed,
-  isEditorFocusMode,
+  activePanelId,
+  panelsVisible,
 }: PluginHostDeps) {
   const pluginRuntimeHostRef = useRef<ThenPluginRuntimeHostHandle | null>(null);
   const pluginWorkspacePathRef = useRef<string | null>(null);
@@ -69,7 +65,7 @@ export function usePluginHost({
   const [screenPluginRuntimeAnchor, setScreenPluginRuntimeAnchor] = useState<HTMLDivElement | null>(null);
   const [pluginAnchors, setPluginAnchors] = useState<ThenPluginAnchor[]>([]);
   const activePluginView = pluginViews.find(
-    (view) => rightSidebarTab === `plugin:${view.pluginId}:${view.id}`,
+    (view) => activePanelId === `plugin:${view.pluginId}:${view.id}`,
   ) ?? null;
   const pluginSelectionCommands = pluginCommands.filter(
     (command) => command.menus?.includes("editor.selection"),
@@ -87,7 +83,7 @@ export function usePluginHost({
       : null;
   const isDockedPluginRuntimeVisible = appMode === "plugin"
     ? Boolean(activePluginScreen)
-    : Boolean(activePluginView) && !isRightSidebarCollapsed && !isEditorFocusMode;
+    : Boolean(activePluginView) && panelsVisible;
   const pluginRuntimeAnchor = appMode === "plugin"
     ? screenPluginRuntimeAnchor
     : sidebarPluginRuntimeAnchor;
@@ -99,11 +95,6 @@ export function usePluginHost({
       setAppMode("write");
     }
   }, [activePluginScreen, appMode]);
-  useEffect(() => {
-    if (rightSidebarTab.startsWith("plugin:") && !activePluginView) {
-      setRightSidebarTab("idea");
-    }
-  }, [activePluginView, rightSidebarTab]);
   useEffect(() => {
     if (activePluginModalKey && !activePluginModal) setActivePluginModalKey(null);
   }, [activePluginModal, activePluginModalKey]);

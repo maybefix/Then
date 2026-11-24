@@ -61,7 +61,7 @@ for (const modulePath of [
   );
 }
 
-for (const modulePath of ["../binder/OpenCardsPane"]) {
+for (const modulePath of ["./WorkspaceSidebar"]) {
   assert.equal(
     leftSidebarImports.has(modulePath),
     true,

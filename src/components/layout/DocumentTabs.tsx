@@ -23,6 +23,8 @@ type DocumentTabsProps = {
   onReopenClosedTab: () => void;
   onCopyTabPath: (tab: DocumentTab) => void;
   onRevealTab: (tab: DocumentTab) => void;
+  onOpenBeside?: (tab: DocumentTab) => void;
+  canSplitActiveTab?: boolean;
 };
 
 /** この距離を超えて動かしたら、クリックではなくドラッグとして扱う。 */
@@ -31,7 +33,7 @@ const DRAG_START_DISTANCE = 4;
 const DRAG_AUTO_SCROLL_EDGE = 32;
 const DRAG_AUTO_SCROLL_MAX_STEP = 14;
 const TAB_CONTEXT_MENU_WIDTH = 188;
-const TAB_CONTEXT_MENU_HEIGHT = 268;
+const TAB_CONTEXT_MENU_HEIGHT = 304;
 
 type TabDrag = {
   tabId: string;
@@ -77,6 +79,8 @@ export function DocumentTabs({
   onReopenClosedTab,
   onCopyTabPath,
   onRevealTab,
+  onOpenBeside,
+  canSplitActiveTab,
 }: DocumentTabsProps) {
   const isHoverMode = displayMode === "hover";
   const visibleTabs = openTabs.filter((tab) => tab.kind !== "empty");
@@ -326,6 +330,14 @@ export function DocumentTabs({
         onPointerDown={(event) => event.stopPropagation()}
         onContextMenu={(event) => event.preventDefault()}
       >
+        {onOpenBeside && (tab.id !== activeTabId || canSplitActiveTab) && (
+          <>
+            <button type="button" role="menuitem" onClick={() => runMenuAction(() => onOpenBeside(tab))}>
+              {tab.id === activeTabId ? "左右に分割" : "隣のペインで開く"}
+            </button>
+            <div className="contextMenuDivider" role="separator" />
+          </>
+        )}
         <button type="button" role="menuitem" onClick={() => runMenuAction(() => onCloseTabs([tab.id]))}>
           閉じる
           <kbd>Ctrl+W</kbd>

@@ -34,6 +34,8 @@ export function reconcileSavedDocumentTabs(
       savedMarkdown: document.content,
       editorRevision: null,
       name: document.name,
+      fileId: document.fileId ?? tab.fileId,
+      contentHash: document.contentHash ?? tab.contentHash,
       saveStatus: "saved" as const,
       ...(options.viewportState === undefined
         ? {}

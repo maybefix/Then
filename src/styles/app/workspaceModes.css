@@ -492,7 +492,3 @@
 .modeHiddenPane {
   display: none !important;
 }
-
-.appFrame:not([data-app-mode="write"]) > .referenceLayer {
-  display: none;
-}

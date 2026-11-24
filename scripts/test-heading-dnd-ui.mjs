@@ -726,7 +726,7 @@ assert.deepEqual(
   };
   const movedReferences = [];
   const cluster = document.createElement("div");
-  cluster.className = "leftWorkspaceCluster";
+  cluster.className = "floatingPanel";
   const canvasHost = document.createElement("div");
   canvasHost.setAttribute("data-canvas-file-drop", "");
   const drops = [];
@@ -755,13 +755,11 @@ assert.deepEqual(
       source.dispatchEvent(pointerEvent("pointerdown", pointerId, 10, 10));
       source.dispatchEvent(pointerEvent("pointermove", pointerId, 400, 300));
     });
-    assert.equal(cluster.getAttribute("data-binder-drag-on-canvas"), "true",
-      `dragging the ${label} onto the Canvas marks the left cluster`);
     assert.equal(canvasHost.getAttribute("data-drop-active"), "true", `the Canvas shows it takes the ${label}`);
     await act(async () => {
       source.dispatchEvent(pointerEvent("pointerup", pointerId, 400, 300));
     });
-    assert.equal(cluster.hasAttribute("data-binder-drag-on-canvas"), false, `dropping the ${label} clears the mark`);
+    assert.equal(canvasHost.hasAttribute("data-drop-active"), false, `dropping the ${label} clears the drop target`);
     assert.deepEqual(drops.at(-1), { paths: [entryPath], clientX: 400, clientY: 300 },
       `the ${label} reaches the Canvas with where it was dropped`);
   }

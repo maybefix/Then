@@ -250,15 +250,15 @@ await click(card("c3").querySelector(".canvasPostNoteTag"));
 assert.deepEqual(opened, [[P1, "post"], [P3, "note"]], "「開く」はアイデアのペインのその投稿、札はノート");
 console.log("PASS show: body, time, other work, note tag, reply body only, a deleted post is a faint card; open and note tag");
 
-// ---- 3. 置く（T1）: 「資料を追加」の一覧に投稿が新しい順で並び、本文で当たる ----
-await click('[aria-label="資料を追加"]');
+// ---- 3. 置く（T1）: 「投稿を追加」の一覧に投稿が新しい順で並び、本文で当たる ----
+await click('[aria-label="投稿を追加"]');
 const popover = document.querySelector(".canvasReferencePopover");
 const postRows = [...popover.querySelectorAll("button")].filter((button) => button.querySelector("span")?.textContent === "投稿");
 assert.deepEqual(postRows.map((button) => button.querySelector("strong").textContent),
   ["続き：波の音", "灯台の夢", "港で拾った言葉", "夜の郵便局"], "投稿は新しい順。名前は書き出しの1行目");
 assert.equal(postRows[2].querySelector("small").textContent, "2026/11/19 21:30 · 作品B");
 await act(async () => {
-  const input = popover.querySelector('input[aria-label="資料を検索"]');
+  const input = popover.querySelector('input[aria-label="投稿を検索"]');
   Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value").set.call(input, "二行目");
   input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
   await settle();

@@ -11,6 +11,7 @@ import {
   recordRestoredText,
   recoveryDestination,
   saveThroughJournal,
+  closeDocumentJournal,
   scanRecovery,
   type RecoveryItem,
 } from "./editor/saveJournal";
@@ -21,6 +22,7 @@ import {
   DragEvent,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
+  type ComponentProps,
   type ReactNode,
   useCallback,
   useEffect,
@@ -29,14 +31,13 @@ import {
   useRef,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 import { manageAsyncRegistration } from "./utils/asyncRegistration";
 import { flushPendingSaves, schedulePendingSave } from "./pendingSaves";
 import { useVerticalMetricFontFamily } from "./utils/verticalMetricFonts";
 import { buildAppShellAppearance } from "./appShellStyle";
 import { canvasAppearanceSettings } from "./canvasAppearance";
 import { EditorContextMenu, type EditorContextMenuState } from "./components/editor/EditorContextMenu";
-import { isRestorableRightSidebarTab } from "./utils/rightSidebarState";
-import { isLeftSidebarCollapsedIn, type LeftSidebarView } from "./utils/leftSidebarState";
 import {
   getBreadcrumbLayout,
   isBreadcrumbTrailItemVisible,
@@ -53,8 +54,12 @@ import { SettingsModal } from "./components/dialogs/SettingsModal";
 import { HelpModal } from "./components/dialogs/HelpModal";
 import { ThemePickerModal } from "./components/dialogs/ThemePickerModal";
 import { ManuscriptTidyModal } from "./components/dialogs/ManuscriptTidyModal";
-import { RightSidebar } from "./components/layout/RightSidebar";
+import { RightSidebar, auxiliaryPanelItems } from "./components/layout/RightSidebar";
+import { FloatingPanel, PanelTaskbar, usePanelArea, type PanelTask } from "./components/layout/FloatingPanels";
+import { panelStatus, referencePanelId, useFloatingPanels, type PanelFrame } from "./components/layout/floatingPanelState";
 import { LeftSidebar } from "./components/layout/LeftSidebar";
+import { RightPaneSwitcher } from "./components/layout/RightPaneSwitcher";
+import { ProjectSearchPanel, type WorkspaceSearchScope } from "./components/layout/ProjectSearchPanel";
 import type { ManuscriptTidyLineRange, ManuscriptTidyResult } from "./editor/manuscriptTidy";
 import type { PropertyType, PropertyTypeSettings } from "./properties/propertyModel";
 import { loadPropertyTypes, savePropertyType } from "./properties/propertyTypeStore";
@@ -215,7 +220,7 @@ import { ReferenceLayer } from "./components/references/ReferenceLayer";
 import { createProjectEntryActions, type PathChange } from "./projectEntryActions";
 import { createWorkspaceTreeActions } from "./workspaceTreeActions";
 import { createProjectSearchActions } from "./projectSearchActions";
-import { createHeadingMoveActions } from "./headingMoveActions";
+import { createHeadingMoveActions, type HeadingWriteDocument } from "./headingMoveActions";
 import { collectMaterialPaths, documentModeFor, editorSettingsFor } from "./editor/noteMode";
 import { createTemplateActions } from "./templateActions";
 import { createSystemFontLoader } from "./systemFonts";
@@ -288,7 +293,6 @@ import type {
   WorkspaceDocumentTabs,
 } from "./types";
 import { isReferenceBinderCard, workStatusLabels } from "./types";
-import { trackZoneRightHover } from "./utils/zoneRightHover";
 import {
   parseFrontMatter,
   replaceFrontMatter,
@@ -306,11 +310,13 @@ import {
   isSamePath,
   toProjectRelativePath,
   recordOpenedWorkspace,
+  retargetFilesystemPath,
   scopeDisplayName,
 } from "./utils/projectTree";
 import type { LoadedExportSource } from "./export/types";
 import { createLoadedExportSource } from "./export/exportSource";
 import CanvasWindowApp from "./CanvasWindowApp";
+import { CANVAS_FILE_DROP_ATTRIBUTE, CANVAS_FILE_DROP_EVENT, type CanvasFileDropDetail } from "./canvasFileDrop";
 import { canvasBoardSaveQueue, canvasFileWriteQueue, isCanvasWindowOpen } from "./canvasBoardStore";
 import { chooseCanvasMode, moveCanvasToWindow as moveCanvasToWindowWith } from "./canvasWindowPlace";
 import { LinkedExportScreen } from "./components/export/LinkedExportScreen";
@@ -434,7 +440,6 @@ const defaultReferenceLayout: ReferenceLayout = {
 };
 const PROJECT_AST_INDEX_BATCH_SIZE = 12;
 
-type WorkspaceSearchScope = "file" | "project" | "library";
 
 type BreadcrumbOverflowItem =
   | { kind: "folder" | "file"; name: string; path: string }
@@ -919,6 +924,34 @@ async function listReferenceCandidates(folderPath: string): Promise<ReferenceFil
   });
 }
 
+type DocumentSplit = {
+  workspacePath: string | null;
+  otherTabId: string;
+  activeSide: "left" | "right";
+};
+
+function DocumentPaneEditor({
+  tabId,
+  registerEditor,
+  onPaneTextChange,
+  onPaneSelectionChange,
+  ...props
+}: Omit<ComponentProps<typeof VerticalTextEditor>, "onReady" | "onTextChange" | "onSelectionChange"> & {
+  tabId: string;
+  registerEditor: (tabId: string, editor: TextEditorHandle | null) => void;
+  onPaneTextChange: (tabId: string, text: string, revision: number, change?: TextSplice | null) => void;
+  onPaneSelectionChange: (tabId: string) => void;
+}) {
+  const onReady = useCallback((editor: TextEditorHandle | null) => {
+    registerEditor(tabId, editor);
+  }, [registerEditor, tabId]);
+  const onTextChange = useCallback((text: string, revision: number, change?: TextSplice | null) => {
+    onPaneTextChange(tabId, text, revision, change);
+  }, [onPaneTextChange, tabId]);
+  const onSelectionChange = useCallback(() => onPaneSelectionChange(tabId), [onPaneSelectionChange, tabId]);
+  return <VerticalTextEditor {...props} onReady={onReady} onTextChange={onTextChange} onSelectionChange={onSelectionChange} />;
+}
+
 export default function App() {
   const referenceLayoutLoadedRootRef = useRef<string | null>(null);
   // 資料を取り込んだ・消したあとでファイル一覧を読み直す（素材の段に出るため。BINDER 2-5）。定義より前の処理から呼ぶ。
@@ -949,6 +982,11 @@ export default function App() {
   const nativeFullscreenRequestIdRef = useRef(0);
   const restoreMaximizedAfterFullscreenRef = useRef(false);
   const editorInstanceRef = useRef<TextEditorHandle | null>(null);
+  const paneEditorsRef = useRef(new Map<string, TextEditorHandle>());
+  const headingWritePathsRef = useRef<string[]>([]);
+  const focusPaneOnActivateRef = useRef<string | null>(null);
+  const saveSplitOutgoingRef = useRef<(tabId: string) => void>(() => {});
+  const openBesideRequestRef = useRef(0);
   const editorShellRef = useRef<HTMLDivElement | null>(null);
   const editorContextMenuRef = useRef<HTMLDivElement | null>(null);
   const editorFindInputRef = useRef<HTMLInputElement | null>(null);
@@ -961,6 +999,7 @@ export default function App() {
   const breadcrumbMenuRef = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const didMountEditorRef = useRef(false);
+  const openCanvasSourceRef = useRef<(path: string, line?: number) => void>(() => {});
   const handleProjectFileSelectRef = useRef<(path: string) => Promise<void>>(
     async () => undefined,
   );
@@ -992,6 +1031,10 @@ export default function App() {
   ]);
   const [activeTabId, setActiveTabId] = useState("initial-document-tab");
   activeTabIdRef.current = activeTabId;
+  const [documentSplit, setDocumentSplit] = useState<DocumentSplit | null>(null);
+  const documentSplitRef = useRef(documentSplit);
+  documentSplitRef.current = documentSplit;
+  const [leftPaneWidth, setLeftPaneWidth] = useState(50);
   // 確認ダイアログを待つ間にタブの状態が進むため、閉じる処理は最新の一覧を参照する。
   const openTabsRef = useRef(openTabs);
   openTabsRef.current = openTabs;
@@ -1025,7 +1068,6 @@ export default function App() {
   const [projectSearchMatchCase, setProjectSearchMatchCase] = useState(false);
   const [projectReplaceValue, setProjectReplaceValue] = useState("");
   const [isProjectReplacing, setIsProjectReplacing] = useState(false);
-  const [leftSidebarView, setLeftSidebarViewState] = useState<LeftSidebarView>("files");
   const [editorFind, setEditorFind] = useState<EditorFindState>({
     open: false,
     query: "",
@@ -1103,19 +1145,15 @@ export default function App() {
     chooseAppDialogOption,
     chooseAppDialog,
   } = useAppDialog();
-  const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsedState] = useState(false);
-  // Canvas の画面の左サイドバーは、本文・コルクボードと別に覚え、既定は畳む（BINDER 4-3）。
-  const [isCanvasLeftSidebarCollapsed, setIsCanvasLeftSidebarCollapsedState] = useState(true);
-  const [isRightSidebarCollapsed, setIsRightSidebarCollapsedState] = useState(false);
-  const [isRightSidebarWide, setIsRightSidebarWideState] = useState(false);
   const [isEditorFocusMode, setIsEditorFocusMode] = useState(false);
   /**
-   * メイン画面のモード。write=本文（左右サイドバー）、canvas=キャンバス（右のみ）、
-   * export=エクスポート、checkpoint=チェックポイント（いずれもサイドバーなし）。canvas/export は設定により別ウィンドウ
+   * 本文、コルクボード、埋め込み Canvas はパネル配置を共有する。Canvas と書き出しは設定により別ウィンドウ
    * 起動へ切り替わる。
    */
   const [appMode, setAppMode] = useState<AppMode>("write");
-  const appShellRef = useRef<HTMLElement | null>(null);
+  const panelTaskbarRef = useRef<HTMLElement>(null);
+  const searchPanelInputRef = useRef<HTMLInputElement>(null);
+  const panelLayerRef = useRef<HTMLDivElement>(null);
   // サイドバー・ステータスバー・通知から、特定の保存点を選んだ状態でチェックポイント画面を開く。
   const [checkpointFocusRequest, setCheckpointFocusRequest] = useState<{ id: string; nonce: number } | null>(null);
   const openCheckpointStudio = useCallback((snapshotId?: string) => {
@@ -1133,49 +1171,14 @@ export default function App() {
     sources: LoadedExportSource[];
     sourceError?: string;
   } | null>(null);
-  const [rightSidebarTab, setRightSidebarTabState] = useState<string>("idea");
-
-  const setRightSidebarTab = useCallback((tab: string) => {
-    setRightSidebarTabState(tab);
-    if (!isRestorableRightSidebarTab(tab)) return;
-    setAppState((current) =>
-      current.rightSidebarTab === tab ? current : { ...current, rightSidebarTab: tab },
-    );
-  }, []);
-  // 右サイドバーの畳みと幅も、タブと同じく画面とアプリの状態の両方へ書き、次回起動時に戻す。
-  const setIsRightSidebarCollapsed = useCallback((collapsed: boolean) => {
-    setIsRightSidebarCollapsedState(collapsed);
-    setAppState((current) =>
-      current.rightSidebarCollapsed === collapsed ? current : { ...current, rightSidebarCollapsed: collapsed },
-    );
-  }, []);
-  const setIsRightSidebarWide = useCallback((wide: boolean) => {
-    setIsRightSidebarWideState(wide);
-    setAppState((current) =>
-      current.rightSidebarWide === wide ? current : { ...current, rightSidebarWide: wide },
-    );
-  }, []);
-  // 左サイドバーのビューと畳みも、右サイドバーのタブと同じく画面とアプリの状態の両方へ書き、次回起動時に戻す。
-  const setLeftSidebarView = useCallback((view: LeftSidebarView) => {
-    setLeftSidebarViewState(view);
-    setAppState((current) =>
-      current.leftSidebarView === view ? current : { ...current, leftSidebarView: view },
-    );
-  }, []);
-  const setIsLeftSidebarCollapsed = useCallback((collapsed: boolean) => {
-    setIsLeftSidebarCollapsedState(collapsed);
-    setAppState((current) =>
-      current.leftSidebarCollapsed === collapsed ? current : { ...current, leftSidebarCollapsed: collapsed },
-    );
-  }, []);
-  const setIsCanvasLeftSidebarCollapsed = useCallback((collapsed: boolean) => {
-    setIsCanvasLeftSidebarCollapsedState(collapsed);
-    setAppState((current) =>
-      current.canvasLeftSidebarCollapsed === collapsed
-        ? current
-        : { ...current, canvasLeftSidebarCollapsed: collapsed },
-    );
-  }, []);
+  const panels = useFloatingPanels();
+  const { layout: panelLayout, migrate: migratePanels, open: openPanel, forgetReference } = panels;
+  const panelWorkspace = appMode === "write" || appMode === "corkboard" || appMode === "canvas";
+  const panelsVisible = panelWorkspace && !isEditorFocusMode;
+  const panelArea = usePanelArea(panelLayerRef, panelsVisible && startupView === "editor");
+  const activePluginPanelId = [...panelLayout.order].reverse().find(
+    (id) => id.startsWith("plugin:") && panelStatus(panelLayout, id) === "open",
+  ) ?? null;
   const {
     pluginRuntimeHostRef,
     pluginAnchorsRef,
@@ -1214,14 +1217,14 @@ export default function App() {
     setLastError,
     appMode,
     setAppMode,
-    rightSidebarTab,
-    setRightSidebarTab,
-    isRightSidebarCollapsed,
-    isEditorFocusMode,
+    activePanelId: activePluginPanelId,
+    panelsVisible,
   });
 
   const [referenceLayout, setReferenceLayout] =
     useState<ReferenceLayout>(() => defaultReferenceLayout);
+  const referenceLayoutRef = useRef(referenceLayout);
+  referenceLayoutRef.current = referenceLayout;
   // 資料のカードを本文の枠へまだ収めていない作品（枠を測れるようになるまで待つ）。
   const [referenceLayoutFitRoot, setReferenceLayoutFitRoot] = useState<string | null>(null);
   const [referenceCandidates, setReferenceCandidates] = useState<ReferenceFileInfo[]>([]);
@@ -1233,65 +1236,32 @@ export default function App() {
     [],
   );
 
-  const focusReferenceCard = useCallback((cardId: string) => {
-    setReferenceLayout((current) => {
-      return {
-        ...current,
-        cards: current.cards.map((card) => {
-          if (card.id !== cardId) return card;
-          return {
-            ...card,
-            collapsed: false,
-            zIndex: nextReferenceZIndex(current.cards, card.pinned),
-          };
-        }),
-      };
-    });
-  }, []);
-
   const closeReferenceCard = useCallback((cardId: string) => {
+    forgetReference(referencePanelId(cardId));
     setReferenceLayout((current) => ({
       ...current,
       cards: current.cards.filter((card) => card.id !== cardId),
     }));
-  }, []);
-
-  const pinReferenceCard = useCallback((cardId: string, pinned: boolean) => {
-    setReferenceLayout((current) => ({
-      ...current,
-      cards: current.cards.map((card) =>
-        card.id === cardId
-          ? { ...card, pinned, zIndex: nextReferenceZIndex(current.cards, pinned) }
-          : card,
-      ),
-    }));
-  }, []);
-
-  const collapseReferenceCard = useCallback((cardId: string, collapsed: boolean) => {
-    setReferenceLayout((current) => ({
-      ...current,
-      cards: current.cards.map((card) =>
-        card.id === cardId ? { ...card, collapsed } : card,
-      ),
-    }));
-  }, []);
+  }, [forgetReference]);
 
   const openReferenceCard = useCallback(
     (
       sourcePath: string,
       fileInfo?: ReferenceFileInfo,
-      options: { switchToReferenceTab?: boolean } = {},
     ) => {
-      const { switchToReferenceTab = true } = options;
       if (!projectFolder) {
         showToast("先にフォルダを開いてください");
         return;
       }
 
+      const file = fileInfo ?? makeReferenceFileInfo(sourcePath);
+      const fileKey = referenceFileKey(file);
+      const existingCard = referenceLayoutRef.current.cards.find(
+        (card) => isReferenceBinderCard(card) && referenceCardKey(card) === fileKey,
+      );
+      const cardId = existingCard?.id ?? `ref-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
       setReferenceLayout((current) => {
-        const file = fileInfo ?? makeReferenceFileInfo(sourcePath);
         const nextLayout = upsertRecentReference(current, file);
-        const fileKey = referenceFileKey(file);
         const existing = current.cards.find(
           (card) => isReferenceBinderCard(card) && referenceCardKey(card) === fileKey,
         );
@@ -1313,13 +1283,13 @@ export default function App() {
         const index = nextLayout.cards.length;
         const kind = file.kind;
         const size = referenceInitialSize(kind);
-        const stageRect = workspaceRef.current?.getBoundingClientRect();
+        const stageRect = panelLayerRef.current?.getBoundingClientRect();
         const editorRect = editorShellRef.current?.getBoundingClientRect();
-        const originX = editorRect && stageRect ? editorRect.left - stageRect.left : 0;
-        const originY = editorRect && stageRect ? editorRect.top - stageRect.top : 0;
+        const originX = editorRect?.width && stageRect ? editorRect.left - stageRect.left : 0;
+        const originY = editorRect?.height && stageRect ? editorRect.top - stageRect.top : 0;
         const card = clampReferenceCardToStage(
           {
-            id: `ref-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+            id: cardId,
             sourceType: "reference",
             scope: file.scope,
             sourcePath,
@@ -1339,12 +1309,9 @@ export default function App() {
         );
         return { ...nextLayout, cards: [...nextLayout.cards, card] };
       });
-      if (switchToReferenceTab) {
-        setLeftSidebarView("reference");
-        setIsLeftSidebarCollapsed(false);
-      }
+      openPanel(referencePanelId(cardId));
     },
-    [projectFolder],
+    [projectFolder, openPanel],
   );
 
   const handleAddReference = useCallback(async (scope: ReferenceScope = "project") => {
@@ -1374,7 +1341,7 @@ export default function App() {
       // 取り込み先は素材フォルダの「資料」（BINDER 2-5）。素材フォルダを作ったときもあるので一覧を読み直す。
       void refreshProjectFolderRef.current();
       if (result.files[0]) {
-        openReferenceCard(result.files[0].sourcePath, result.files[0], { switchToReferenceTab: false });
+        openReferenceCard(result.files[0].sourcePath, result.files[0]);
       }
       if (result.failures.length) {
         setLastError(result.failures.map((failure) => `${failure.path}: ${failure.message}`).join("\n"));
@@ -1478,6 +1445,13 @@ export default function App() {
     () => openTabs.find((tab) => tab.id === activeTabId) ?? openTabs[0] ?? null,
     [activeTabId, openTabs],
   );
+  const workspacePath = projectFolder?.path ?? null;
+  const besideTab = documentSplit && documentSplit.workspacePath === workspacePath && activeTab?.kind !== "empty"
+    ? openTabs.find((tab) => tab.id === documentSplit.otherTabId && tab.id !== activeTabId) ?? null
+    : null;
+  useEffect(() => {
+    if (documentSplit && !besideTab) setDocumentSplit(null);
+  }, [besideTab, documentSplit]);
   const workspaceTabSessionSignature = useMemo(
     () => JSON.stringify({
       activeTabId,
@@ -1599,6 +1573,21 @@ export default function App() {
     const previousDocument = activeDocumentSnapshotRef.current;
     const previousSelection = editorInstanceRef.current?.getSelection() ?? null;
     if (tab.id !== previousTabId) {
+      // Tab shortcuts can activate an already-mounted editor. Follow the active
+      // tab when the keyboard was in the old editor, leaving tab-bar focus alone.
+      focusPaneOnActivateRef.current = paneEditorsRef.current.has(tab.id) &&
+        editorShellRef.current?.contains(document.activeElement) ? tab.id : null;
+      if (documentSplitRef.current) {
+        saveSplitOutgoingRef.current(previousTabId);
+        setDocumentSplit((split) => {
+          if (!split || split.otherTabId !== tab.id) return split;
+          return {
+            ...split,
+            otherTabId: previousTabId,
+            activeSide: split.activeSide === "left" ? "right" : "left",
+          };
+        });
+      }
       const viewportState = editorInstanceRef.current?.getViewportState() ?? null;
       setOpenTabs((current) =>
         current.map((item) =>
@@ -1629,12 +1618,13 @@ export default function App() {
   }, []);
   const activateDocumentTab = useCallback(
     (tabId: string): boolean => {
-      const tab = openTabs.find((item) => item.id === tabId);
+      if (tabId === activeTabIdRef.current) return true;
+      const tab = openTabsRef.current.find((item) => item.id === tabId);
       if (!tab) return false;
       syncDocumentTabToEditor(tab);
       return true;
     },
-    [openTabs, syncDocumentTabToEditor],
+    [syncDocumentTabToEditor],
   );
   const openDocumentInTab = useCallback(
     (
@@ -1699,8 +1689,9 @@ export default function App() {
   const setActiveMarkdown = useCallback(
     (nextMarkdown: string, editorRevision: number | null | "keep" = null, change: TextSplice | null = null) => {
       const previousMarkdown = activeMarkdownRef.current;
-      activeMarkdownRef.current = nextMarkdown;
       const activeFile = openTabsRef.current.find((tab) => tab.id === activeTabId);
+      if (activeFile?.path && headingWritePathsRef.current.some((path) => isSamePath(path, activeFile.path!))) return;
+      activeMarkdownRef.current = nextMarkdown;
       if (activeFile?.path && previousMarkdown !== nextMarkdown) {
         // Every change of a saved document reaches its recovery journal.
         recordDocumentChange(
@@ -1847,13 +1838,6 @@ export default function App() {
   }, []);
 
   const { settings } = appState;
-  const zoneRightEnabled = settings.sidebarHoverMode === "both" || settings.sidebarHoverMode === "right";
-  // Zoneモードの右ペインの表示判定は .appShell の属性で行う（zoneRightHover.ts）。
-  useEffect(() => {
-    const shell = appShellRef.current;
-    if (!shell || !zoneRightEnabled) return undefined;
-    return trackZoneRightHover(shell);
-  }, [zoneRightEnabled]);
   useEffect(() => {
     if (!isTauriRuntime()) return;
 
@@ -2552,16 +2536,14 @@ export default function App() {
     };
   }, [isHydrated, projectFolder?.path]);
 
-  // The cards are fitted into the editor frame once it can be measured. While the startup screen
-  // is up there is no frame yet (it is drawn with the editor view, hence startupView), and in the
-  // canvas mode it is hidden (0×0), so fitting waits.
+  // Fit saved reference cards once the shared workspace can be measured.
   useEffect(() => {
     const rootPath = referenceLayoutFitRoot;
-    const editorShell = editorShellRef.current;
-    if (!rootPath || !editorShell) return;
+    const stage = panelLayerRef.current;
+    if (!rootPath || !stage) return;
 
     const fit = () => {
-      const rect = editorShell.getBoundingClientRect();
+      const rect = stage.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return false;
       setReferenceLayoutFitRoot(null);
       if (referenceLayoutLoadedRootRef.current === rootPath) {
@@ -2576,7 +2558,7 @@ export default function App() {
     const observer = new ResizeObserver(() => {
       if (fit()) observer.disconnect();
     });
-    observer.observe(editorShell);
+    observer.observe(stage);
     return () => observer.disconnect();
   }, [referenceLayoutFitRoot, startupView]);
 
@@ -3010,12 +2992,13 @@ export default function App() {
     loadStoredState()
       .then(async (state) => {
         if (isCancelled) return;
-        setRightSidebarTabState(state.rightSidebarTab);
-        setIsRightSidebarCollapsedState(state.rightSidebarCollapsed);
-        setIsRightSidebarWideState(state.rightSidebarWide);
-        setLeftSidebarViewState(state.leftSidebarView);
-        setIsLeftSidebarCollapsedState(state.leftSidebarCollapsed);
-        setIsCanvasLeftSidebarCollapsedState(state.canvasLeftSidebarCollapsed);
+        const wasSearch = state.leftSidebarView === "search";
+        migratePanels(
+          state.leftSidebarCollapsed ? null : "files",
+          state.rightSidebarCollapsed ? null : state.rightSidebarTab,
+          state.rightSidebarWide,
+          wasSearch,
+        );
 
         if (
           isTauriRuntime() &&
@@ -3208,7 +3191,7 @@ export default function App() {
 
     setSaveStatus("dirty");
     const timer = window.setTimeout(() => {
-      if (projectEntryPathChangeInProgressRef.current) return;
+      if (projectEntryPathChangeInProgressRef.current || headingWritePathsRef.current.some((path) => isSamePath(path, currentFilePath))) return;
       void enqueueDocumentSave({
         tabId: activeTabId,
         path: currentFilePath,
@@ -3324,6 +3307,26 @@ export default function App() {
     },
     [updateSelectionCharCount],
   );
+  const handleEditorReadyRef = useRef(handleEditorReady);
+  handleEditorReadyRef.current = handleEditorReady;
+  const registerPaneEditor = useCallback((tabId: string, editor: TextEditorHandle | null) => {
+    if (editor) {
+      paneEditorsRef.current.set(tabId, editor);
+      const path = openTabsRef.current.find((tab) => tab.id === tabId)?.path;
+      if (path && headingWritePathsRef.current.some((target) => isSamePath(target, path))) {
+        editor.setEditable(false);
+      }
+    } else paneEditorsRef.current.delete(tabId);
+    if (tabId === activeTabIdRef.current) handleEditorReadyRef.current(editor);
+  }, []);
+  useLayoutEffect(() => {
+    const editor = paneEditorsRef.current.get(activeTabId) ?? null;
+    handleEditorReady(editor);
+    if (focusPaneOnActivateRef.current === activeTabId) {
+      focusPaneOnActivateRef.current = null;
+      editor?.restoreFocus();
+    }
+  }, [activeTabId, handleEditorReady]);
 
   const handleEditorViewportSizeChange = useCallback(
     (size: { width: number; height: number; verticalPadding: number } | null) => {
@@ -3481,6 +3484,42 @@ export default function App() {
     setSaveStatus,
   ]);
 
+  const handleActiveTextChangeRef = useRef(handleTextChange);
+  handleActiveTextChangeRef.current = handleTextChange;
+  const saveEditedPane = useCallback((tab: DocumentTab, content: string) => {
+    if (!tab.path || headingWritePathsRef.current.some((path) => isSamePath(path, tab.path!)) || content === tab.savedMarkdown ||
+      conflictTabIdsRef.current.has(tab.id) || projectEntryPathChangeInProgressRef.current ||
+      workspaceSwitchInProgressRef.current) return;
+    void enqueueDocumentSave({
+      tabId: tab.id,
+      path: tab.path,
+      content,
+      journalPosition: journalPositionOf(tab.id, content),
+    }).catch(() => undefined);
+  }, [enqueueDocumentSave]);
+
+  const handlePaneTextChange = useCallback((tabId: string, text: string, revision: number, change?: TextSplice | null) => {
+    if (tabId === activeTabIdRef.current) {
+      handleActiveTextChangeRef.current(text, revision, change);
+      return;
+    }
+    // IME can finish a composition just after focus moved to the other pane.
+    const tab = openTabsRef.current.find((item) => item.id === tabId);
+    if (!tab || (tab.path && headingWritePathsRef.current.some((path) => isSamePath(path, tab.path!)))) return;
+    const layout = updateMarkdownBodyDetailed(tab.markdown, text);
+    const content = layout.markdown;
+    if (content === tab.markdown) return;
+    if (tab.path) {
+      recordDocumentChange(tabId, tab.path, tab.markdown, content, placeBodyChange(tab.markdown, layout, text, change), tab.contentHash);
+    }
+    const apply = (tabs: DocumentTab[]) => tabs.map((item) => item.id === tabId
+      ? { ...item, markdown: content, editorRevision: revision, saveStatus: "dirty" as const }
+      : item);
+    openTabsRef.current = apply(openTabsRef.current);
+    setOpenTabs(apply);
+    saveEditedPane(tab, content);
+  }, [saveEditedPane]);
+
   useEffect(() => {
     updateSelectionCharCount(editorInstanceRef.current);
   }, [updateSelectionCharCount]);
@@ -3539,16 +3578,20 @@ export default function App() {
   }, []);
   // Escape in the properties: back to the body at the caret it had (FM-16).
   const returnFocusFromProperties = useCallback(() => {
-    editorInstanceRef.current?.focus();
-  }, []);
+    if (appMode === "write") {
+      editorInstanceRef.current?.focus();
+    } else {
+      setAppMode("write");
+      window.requestAnimationFrame(() => editorInstanceRef.current?.focus());
+    }
+  }, [appMode]);
   // A list item in the properties pane searches the work for that value (FM-28).
   const searchByProperty = useCallback((key: string, value: string) => {
     setProjectSearchQuery(propertyConditionQuery(key, value));
     setProjectSearchUseRegex(false);
     setSearchScope((current) => (current === "file" && projectFolder ? "project" : current));
-    setLeftSidebarView("search");
-    setIsLeftSidebarCollapsed(false);
-  }, [projectFolder]);
+    openPanel("search");
+  }, [openPanel, projectFolder]);
   // Sets the properties pane can add (FM-27): the built-in article set (FM-25),
   // then every template, of this work or of the profile, that has properties.
   const loadPropertySets = useCallback(async (): Promise<PropertySet[]> => {
@@ -3612,6 +3655,11 @@ export default function App() {
     // 選択変化に伴うタイプライター再センタリングはエディタ内部に一本化した。
     // App 側の scheduleTypewriterScroll は設定・オフセット変更時の再適用専用に残す。
   }, [currentFilePath, projectFolder, updateSelectionCharCount]);
+  const handleSelectionChangeRef = useRef(handleSelectionChange);
+  handleSelectionChangeRef.current = handleSelectionChange;
+  const handlePaneSelectionChange = useCallback((tabId: string) => {
+    if (tabId === activeTabIdRef.current) handleSelectionChangeRef.current();
+  }, []);
 
   const showToast = (message: string, action: ToastAction | null = null) => {
     setToast(message);
@@ -3660,13 +3708,13 @@ export default function App() {
   // 投稿の側の置かれているボード（docs/BINDER_POST_CARD_FOLLOWUPS_PLAN.md の 2）。アイデアのペインを出しているあいだだけ読む。
   const postBoardPlaces = usePostBoardReferences(
     projectFolder?.path ?? null,
-    rightSidebarTab === "idea" && !isRightSidebarCollapsed && appMode !== "plugin",
+    panelsVisible && panelStatus(panelLayout, "idea") === "open",
     projectFolder,
   );
   // 「つながり」の置かれているボード。ペインを出しているあいだだけ読む。
   const boardReferences = useBoardReferences(
     projectFolder?.path ?? null,
-    rightSidebarTab === "connections" && !isRightSidebarCollapsed && appMode !== "plugin",
+    panelsVisible && panelStatus(panelLayout, "connections") === "open",
     projectFolder,
   );
 
@@ -3873,7 +3921,6 @@ export default function App() {
       openTabPaths: canvasOpenTabPaths,
       manuscriptFolders: canvasManuscriptFolders,
       posts: canvasPosts,
-      rightSidebarVisible: !isRightSidebarCollapsed,
       isLibraryRoot: projectFolder.library?.role === "root",
     };
 
@@ -4435,6 +4482,7 @@ export default function App() {
 
     setOpenTabs(remainingTabs.length ? remainingTabs : [fallbackTab]);
     for (const tab of targets) forgetDocumentJournal(tab.id);
+    if (isClosingActiveTab) didMountEditorRef.current = false;
     if (isClosingActiveTab) syncDocumentTabToEditor(fallbackTab);
     showToast(
       targets.length === 1
@@ -5432,8 +5480,7 @@ export default function App() {
 
   // 左のバインダーの投稿の段から、右のアイデアのペインを開く（BINDER 1-4）。
   const openIdeaPane = () => {
-    setRightSidebarTab("idea");
-    setIsRightSidebarCollapsed(false);
+    openPanel("idea");
   };
 
   const handleNewDocument = async () => {
@@ -6319,6 +6366,128 @@ export default function App() {
 
   handleProjectFileSelectRef.current = handleProjectFileSelect;
 
+  saveSplitOutgoingRef.current = (tabId) => {
+    const tab = openTabsRef.current.find((item) => item.id === tabId);
+    if (tab && didMountEditorRef.current) saveEditedPane(tab, activeMarkdownRef.current);
+  };
+
+  const rememberBesidePosition = () => {
+    const otherId = documentSplitRef.current?.otherTabId;
+    const tab = openTabsRef.current.find((item) => item.id === otherId);
+    const editor = tab && paneEditorsRef.current.get(tab.id);
+    if (!tab || !editor) return;
+    const viewportState = editor.getViewportState();
+    setOpenTabs((current) => current.map((item) => item.id === tab.id ? { ...item, viewportState } : item));
+    const path = tab.path;
+    if (path) {
+      const offset = editor.getSelection().head;
+      const length = editor.getValue().length;
+      setAppState((current) => ({
+        ...current,
+        cursorPositions: { ...current.cursorPositions, [path]: { offset, length } },
+      }));
+    }
+  };
+
+  const showTabBeside = (tab: DocumentTab) => {
+    const current = openTabsRef.current.find((item) => item.id === activeTabIdRef.current);
+    if (!current || current.kind === "empty" || (current.name === newTabName && !current.markdown.trim())) {
+      syncDocumentTabToEditor(tab);
+      return;
+    }
+    if (current.id === tab.id) return;
+    if (documentSplitRef.current?.otherTabId !== tab.id) rememberBesidePosition();
+    setAppMode("write");
+    setDocumentSplit((split) => ({
+      workspacePath,
+      otherTabId: tab.id,
+      activeSide: split?.workspacePath === workspacePath ? split.activeSide : "left",
+    }));
+    editorInstanceRef.current?.restoreFocus();
+  };
+
+  const swapDocumentPanes = () => {
+    if (!besideTab) return;
+    openBesideRequestRef.current++;
+    const focused = document.activeElement;
+    const editorHadFocus = editorShellRef.current?.contains(focused);
+    flushSync(() => {
+      setDocumentSplit((split) => split && {
+        ...split,
+        activeSide: split.activeSide === "left" ? "right" : "left",
+      });
+      // 左右を動かしても各文書の表示幅を保つ。
+      setLeftPaneWidth((width) => 100 - width);
+    });
+    if (editorHadFocus) {
+      editorInstanceRef.current?.restoreFocus();
+    } else if (focused instanceof HTMLElement && focused.isConnected && document.activeElement !== focused) {
+      focused.focus({ preventScroll: true });
+    }
+  };
+
+  const openTabBeside = (tab: DocumentTab) => {
+    openBesideRequestRef.current++;
+    if (tab.id === besideTab?.id) {
+      if (activateDocumentTab(tab.id)) focusPaneOnActivateRef.current = tab.id;
+      return;
+    }
+    if (tab.id !== activeTabIdRef.current) {
+      showTabBeside(tab);
+      return;
+    }
+    if (besideTab) {
+      swapDocumentPanes();
+      editorInstanceRef.current?.restoreFocus();
+      return;
+    }
+    const next = withoutEmptyTabs(openTabsRef.current).find((item) =>
+      item.id !== tab.id && (item.name !== newTabName || Boolean(item.markdown.trim())));
+    if (next) {
+      showTabBeside(next);
+      return;
+    }
+    const scratch = createScratchDocumentTab();
+    setOpenTabs((current) => insertTabAfter(current, scratch, tab.id));
+    showTabBeside(scratch);
+  };
+
+  const openFileBeside = async (path: string) => {
+    const requestWorkspace = workspaceSwitchGenerationRef.current;
+    const request = ++openBesideRequestRef.current;
+    const isCurrent = () => request === openBesideRequestRef.current &&
+      requestWorkspace === workspaceSwitchGenerationRef.current && !workspaceSwitchInProgressRef.current;
+    const matchingTab = () => openTabsRef.current.find((tab) => tab.path && isSamePath(tab.path, path));
+    let tab = matchingTab();
+    if (!tab) {
+      try {
+        const document = await invoke<TextDocument>("read_text_file", { path });
+        if (!isCurrent()) return;
+        tab = matchingTab();
+        if (!tab) {
+          tab = createFileDocumentTab(document);
+          const newTab = tab;
+          setOpenTabs((current) => current.some((item) => item.id === newTab.id)
+            ? current
+            : insertTabAfter(current, newTab, activeTabIdRef.current));
+        }
+      } catch (error) {
+        if (!isCurrent()) return;
+        setLastError(String(error));
+        showToast("ファイルを開けませんでした");
+        return;
+      }
+    }
+    openTabBeside(tab);
+  };
+
+  const closeDocumentSplit = () => {
+    openBesideRequestRef.current++;
+    rememberBesidePosition();
+    setDocumentSplit(null);
+    editorInstanceRef.current?.restoreFocus();
+  };
+
   const { handlePluginRequest, handleInstallPlugin, handleUninstallPlugin } = createPluginHostActions({
     projectFolder,
     currentFilePath,
@@ -6326,8 +6495,10 @@ export default function App() {
     editorInstanceRef,
     handleProjectFileSelect,
     setAppMode,
-    setIsRightSidebarCollapsed,
-    setRightSidebarTab,
+    openPanel: (id) => {
+      if (!panelWorkspace) setAppMode("write");
+      openPanel(id);
+    },
     loadedPlugins,
     pluginAnchorsRef,
     persistPluginAnchors,
@@ -6353,8 +6524,9 @@ export default function App() {
   useEffect(() => {
     if (!isTauriRuntime()) return;
     return manageAsyncRegistration(
-      listen<string>("then-open-export-source", (event) => {
-        void handleProjectFileSelectRef.current(event.payload);
+      listen<string | { path: string; line: number }>("then-open-export-source", ({ payload }) => {
+        if (typeof payload === "string") void handleProjectFileSelectRef.current(payload);
+        else openCanvasSourceRef.current(payload.path, payload.line);
       }),
       (error) => setLastError(String(error)),
     );
@@ -6512,6 +6684,7 @@ export default function App() {
 
   /** 校正の指摘位置を本文で選択して見せる。 */
   const revealEditorRange = (from: number, to: number) => {
+    if (appMode !== "write") setAppMode("write");
     window.requestAnimationFrame(() => {
       editorInstanceRef.current?.selectRange(from, to);
     });
@@ -6522,6 +6695,7 @@ export default function App() {
     const editor = editorInstanceRef.current;
     if (!editor) return;
     editor.replaceRange(from, to, insert, from + insert.length);
+    if (appMode !== "write") setAppMode("write");
     showToast(insert ? `「${insert}」に置き換えました` : "該当箇所を削除しました");
   };
 
@@ -6647,6 +6821,15 @@ export default function App() {
     setClosedDocumentTabs,
     retargetPostNotes: (_rootPath, changes) => void postStream.retargetNotes(changes),
     // 別ウィンドウと埋め込みの Canvas の両方が受ける（BINDER 2-6）。
+    onPathsChanged: (rootPath, changes) => {
+      setDocumentSplit((split) => {
+        if (!split || split.workspacePath !== rootPath || !split.otherTabId.startsWith("file:")) return split;
+        const path = split.otherTabId.slice("file:".length);
+        const nextPath = changes.reduce((current, change) =>
+          retargetFilesystemPath(current, change.oldPath, change.newPath) ?? current, path);
+        return nextPath === path ? split : { ...split, otherTabId: `file:${nextPath}` };
+      });
+    },
     notifyCanvasPathChanges: (rootPath, changes) => {
       if (!isTauriRuntime()) return;
       const payload: CanvasPathChangesEvent = { rootPath, changes };
@@ -6762,8 +6945,7 @@ export default function App() {
     }
     // 受信箱から外れた投稿もあるので「すべて」で見せる（「つながり」の元の投稿と同じ）。
     setPostFilter("all");
-    setRightSidebarTab("idea");
-    setIsRightSidebarCollapsed(false);
+    openPanel("idea");
     setPostReveal({ id: post.id, nonce: Date.now() });
   };
   // Canvas の「この順で原稿を作る」（BINDER 4-4）。原稿を作り、書き、ゴミ箱へ移すのはメイン画面だけ。
@@ -6921,9 +7103,15 @@ export default function App() {
     // The editor was only hidden; give it the focus back where its caret is.
     window.requestAnimationFrame(() => editorInstanceRef.current?.focus());
   };
-  // A file, heading or search result picked in the left sidebar opens in the
-  // body, as it does from the body.
-  // The Canvas shows the binder too and follows the same rule (BINDER 4-3).
+  // ファイル・見出しパネルから、本文と Canvas の間を行き来する。
+  const addBinderItemsToCanvas = (detail: CanvasFileDropDetail) => {
+    const canvas = workspaceRef.current?.querySelector(`[${CANVAS_FILE_DROP_ATTRIBUTE}]`);
+    if (!canvas) {
+      showToast("キャンバスのボードを開いてください");
+      return;
+    }
+    canvas.dispatchEvent(new CustomEvent<CanvasFileDropDetail>(CANVAS_FILE_DROP_EVENT, { detail }));
+  };
   const selectBinderFile = (path: string) => {
     if (appMode === "corkboard" || appMode === "canvas") return openFromCorkboard(path);
     return handleProjectFileSelect(path);
@@ -6936,16 +7124,11 @@ export default function App() {
     if (appMode === "corkboard" || appMode === "canvas") setAppMode("write");
     return handleProjectOutlineJump(path, item);
   };
-  // In the Canvas the binder keeps its own open state, folded at first, so the
-  // cards keep their room (BINDER 4-3).
-  const isModeLeftSidebarCollapsed = isLeftSidebarCollapsedIn(appMode, {
-    collapsed: isLeftSidebarCollapsed,
-    canvasCollapsed: isCanvasLeftSidebarCollapsed,
-    hoverSidebar: settings.sidebarHoverMode === "both" || settings.sidebarHoverMode === "left",
-  });
-  const setIsModeLeftSidebarCollapsed = appMode === "canvas"
-    ? setIsCanvasLeftSidebarCollapsed
-    : setIsLeftSidebarCollapsed;
+  openCanvasSourceRef.current = (path, line) => {
+    void openFromCorkboard(path).then(() => {
+      if (line) jumpToEditorLine(line);
+    });
+  };
 
   const corkboardCharCountOf = (path: string): number | null => {
     const file = getProjectAstFile(projectAst, path);
@@ -7046,10 +7229,74 @@ export default function App() {
     );
   };
 
+  const withHeadingWrite = async <Result,>(
+    paths: string[],
+    operation: (documents: HeadingWriteDocument[]) => Promise<Result>,
+  ): Promise<Result> => {
+    const workspaceGeneration = workspaceSwitchGenerationRef.current;
+    if (workspaceSwitchInProgressRef.current || projectEntryPathChangeInProgressRef.current ||
+      (projectFolder?.path ?? null) !== openProjectPathRef.current) {
+      throw new Error("作品の切り替えやファイル操作の完了後に再操作してください");
+    }
+    const tabs = paths.map((path) => openTabWithPath(path));
+    const editors = tabs.flatMap((tab) => {
+      const editor = tab && paneEditorsRef.current.get(tab.id);
+      return editor ? [editor] : [];
+    });
+    if (editors.some((editor) => editor.isComposing()) ||
+      tabs.some((tab) => tab && conflictTabIdsRef.current.has(tab.id))) {
+      throw new Error("文字入力や保存の確認を完了してから再操作してください");
+    }
+
+    headingWritePathsRef.current = paths;
+    editors.forEach((editor) => editor.setEditable(false));
+    try {
+      const prepared = await Promise.allSettled(paths.map(async (path, index): Promise<HeadingWriteDocument> => {
+        const tab = tabs[index];
+        const markdown = tab?.id === activeTabIdRef.current ? activeMarkdownRef.current : tab?.markdown;
+        if (tab && markdown !== undefined) {
+          if (markdown !== tab.savedMarkdown || documentSaveQueuesRef.current.has(tab.id)) {
+            const saved = await enqueueDocumentSave({
+              tabId: tab.id, path, content: markdown,
+              journalPosition: journalPositionOf(tab.id, markdown),
+            });
+            await closeDocumentJournal(tab.id);
+            if (saved.contentHash) return { path, markdown, expectedHash: saved.contentHash };
+          } else {
+            await closeDocumentJournal(tab.id);
+            if (tab.contentHash) return { path, markdown, expectedHash: tab.contentHash };
+          }
+        }
+        const saved = await invoke<TextDocument>("read_text_file", { path });
+        if (!saved.contentHash || (markdown !== undefined && markdown !== saved.content)) {
+          throw new Error(`「${saved.name}」の保存状態が変わりました。読み込み直してください`);
+        }
+        return { path, markdown: saved.content, expectedHash: saved.contentHash };
+      }));
+      if (workspaceGeneration !== workspaceSwitchGenerationRef.current ||
+        projectEntryPathChangeInProgressRef.current) {
+        throw new Error("作品またはファイルの位置が変わりました。再操作してください");
+      }
+      const documents = prepared.map((result) => {
+        if (result.status === "rejected") throw result.reason;
+        return result.value;
+      });
+      return await operation(documents);
+    } finally {
+      headingWritePathsRef.current = [];
+      for (const tab of openTabsRef.current) {
+        const path = tab.path;
+        if (path && paths.some((target) => isSamePath(path, target))) {
+          paneEditorsRef.current.get(tab.id)?.setEditable(true);
+        }
+      }
+    }
+  };
+
   const { handleHeadingMove, handleHeadingExtract } = createHeadingMoveActions({
     projectFolder,
-    currentFilePath,
-    openTabs,
+    getOpenTabs: () => openTabsRef.current,
+    withHeadingWrite,
     setOpenTabs,
     settings: editorSettings,
     headingMoveInProgressRef,
@@ -7508,45 +7755,158 @@ export default function App() {
   // 打鍵では中身が変わらないので、索引の version・文書・投稿・ボードが変わったときだけ作り直す。
   const connectionsPath = scene.markdown !== null && sceneEntry?.kind === "file" ? sceneEntry.path : null;
   const connectionsIsNote = sceneEntry?.kind === "file" && sceneEntry.role === "material";
-  const connectionsActionsRef = useRef({ openIdeaCanvasBoard, setRightSidebarTab, setPostFilter });
-  connectionsActionsRef.current = { openIdeaCanvasBoard, setRightSidebarTab, setPostFilter };
+  const connectionsActionsRef = useRef({ openIdeaCanvasBoard, openPanel, setPostFilter });
+  connectionsActionsRef.current = { openIdeaCanvasBoard, openPanel, setPostFilter };
   const connections = useMemo(() => ({
     index: linkIndex.peek(),
     version: linkIndex.version,
     document: connectionsPath ? { path: connectionsPath, isNote: connectionsIsNote } : null,
     posts: postStream.posts,
     boards: boardReferences,
-    onOpenFile: (path: string) => void handleProjectFileSelectRef.current(path),
+    onOpenFile: (path: string) => openCanvasSourceRef.current(path),
     onOpenBoard: (boardId: string, nodeId: string) =>
       void connectionsActionsRef.current.openIdeaCanvasBoard("project", boardId, nodeId),
     onOpenPost: (post: Post) => {
       const actions = connectionsActionsRef.current;
       // ノートにした投稿は受信箱から外れているので「すべて」で見せる（確認1の決定5）。
       actions.setPostFilter("all");
-      actions.setRightSidebarTab("idea");
+      actions.openPanel("idea");
       setPostReveal({ id: post.id, nonce: Date.now() });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [linkIndex.version, linkIndex.peek, projectFolder?.path, connectionsPath, connectionsIsNote, postStream.posts, boardReferences]);
 
+  const filePanel = { id: "files", label: "ファイル・見出し", icon: <AppIcon name="files" /> };
+  const searchPanel = { id: "search", label: "検索", icon: <AppIcon name="search" /> };
+  const besideMode = documentModeFor(besideTab?.path ?? null, materialPaths);
+  const besideSettings = useMemo(() => editorSettingsFor(settings, besideMode), [settings, besideMode]);
+  const besideLinkLookup = useLinkLookup(linkIndex, workspacePath, besideMode === "note");
+  const besideIsVertical = besideSettings.writingMode === "vertical-rl";
+  const besideFont = useVerticalMetricFontFamily(settings.editorFontFamily, besideIsVertical);
+  const besideHeadingFont = useVerticalMetricFontFamily(
+    settings.headingFontSource === "custom" ? settings.headingFontFamily : settings.editorFontFamily,
+    besideIsVertical,
+  );
+  const besideAppearance = useMemo(
+    () => buildAppShellAppearance(settings, besideFont, besideHeadingFont).style,
+    [settings, besideFont, besideHeadingFont],
+  );
+  // キーは位置でなく文書の ID。左右のフォーカスを移しても、選択や履歴を持つエディタは残る。
+  const editorPanes = besideTab && activeTab
+    ? documentSplit?.activeSide === "right" ? [besideTab, activeTab] : [activeTab, besideTab]
+    : [activeTab];
+
+  const renderPaneEditor = (paneTab: DocumentTab, paneActive: boolean) => {
+    const paneSettings = paneActive ? editorSettings : besideSettings;
+    const paneText = paneActive ? editorText : parseFrontMatter(paneTab.markdown).body.replace(/\r\n?/g, "\n");
+    const savedCursor = paneTab.path ? appState.cursorPositions[paneTab.path] : undefined;
+    const paneSelection = paneActive
+      ? initialSelectionOffset
+      : savedCursor?.length === paneText.length ? savedCursor.offset : 0;
+    return (
+      <DocumentPaneEditor
+        key={paneTab.documentKey}
+        tabId={paneTab.id}
+        registerEditor={registerPaneEditor}
+        focusOnMount={paneActive}
+        text={paneText}
+        editorRevision={paneTab.editorRevision ?? null}
+        writingMode={paneSettings.writingMode}
+        editorDisplayMode={paneSettings.editorDisplayMode}
+        pageFlowDirection={paneSettings.pageFlowDirection}
+        typewriterScroll={paneSettings.typewriterScroll}
+        showTypewriterGuide={paneSettings.showTypewriterGuide}
+        typewriterOffset={settings.typewriterOffset}
+        showLineBreakMarks={settings.showLineBreakMarks}
+        showLineNumbers={settings.showLineNumbers}
+        highlightCurrentLine={settings.highlightCurrentLine}
+        documentPath={paneTab.path}
+        colorizeJapaneseQuotes={settings.colorizeJapaneseQuotes}
+        showComments={settings.showComments}
+        textLayoutSignature={[
+          settings.editorFontFamily,
+          settings.headingFontSource,
+          settings.headingFontFamily,
+          settings.fontSize,
+          settings.lineHeight,
+          settings.editorMeasureHorizontal,
+          settings.editorMeasureVertical,
+          paneSettings.manuscript.layoutMode,
+          settings.manuscript.charactersPerLine,
+          settings.manuscript.linesPerPage,
+          settings.manuscript.fontSize,
+        ].join("|")}
+        linkLookup={paneActive ? linkLookup : besideLinkLookup}
+        onLinkActivate={linkOpenActions.activate}
+        postBodyForDrop={postBodyForDrop}
+        manuscript={paneSettings.manuscript}
+        onManuscriptProgressChange={paneActive ? editorManuscriptProgress.setSnapshot : undefined}
+        initialSelectionOffset={paneSelection}
+        initialViewportState={paneTab.viewportState}
+        onViewportSizeChange={paneActive ? handleEditorViewportSizeChange : undefined}
+        onPaneTextChange={handlePaneTextChange}
+        onPaneSelectionChange={handlePaneSelectionChange}
+        onPageMetricsChange={paneActive ? setEditorPageMetrics : undefined}
+      />
+    );
+  };
+
+  const fileScopes = [
+    { id: "all", label: "ファイルツリー", icon: <AppIcon name="files" /> },
+    { id: "current", label: "この文書の見出し", icon: <AppIcon name="write" /> },
+  ];
+  const launcherCommands = [
+    { id: "add-file", label: "ファイルを追加", icon: <AppIcon name="filePlus" />, run: () => void handleNewDocument() },
+    {
+      id: "add-folder",
+      label: "フォルダを追加",
+      icon: <AppIcon name="folderPlus" />,
+      run: () => void (projectFolder
+        ? handleCreateProjectFolder(focusedFolderPath ?? projectFolder.path)
+        : handleOpenProjectFolder()),
+    },
+  ];
+  const auxiliaryItems = auxiliaryPanelItems(pluginViews, loadedPlugins);
+  const panelTasks: PanelTask[] = [filePanel, searchPanel, ...auxiliaryItems].map((item) => ({
+    ...item,
+    status: panelStatus(panelLayout, item.id),
+  }));
+  const referenceTasks: PanelTask[] = projectFolder ? referenceLayout.cards.filter(isReferenceBinderCard).map((card) => ({
+    id: referencePanelId(card.id),
+    label: card.sourcePath.split(/[\\/]/).pop() ?? card.sourcePath,
+    icon: <AppIcon name="reference" />,
+    status: panelStatus(panelLayout, referencePanelId(card.id)),
+  })) : [];
+  const taskIds = [...panelTasks, ...referenceTasks].map((task) => task.id);
+  const anyPanelOpen = taskIds.some((id) => panelStatus(panelLayout, id) === "open");
+  const launchPanel = (id: string) => {
+    openPanel(id);
+    if (id === "search") window.requestAnimationFrame(() => searchPanelInputRef.current?.focus());
+  };
+  const panelOrder = panelLayout.order.filter((id) => taskIds.includes(id));
+  const panelZIndex = (id: string) => 8 + panelOrder.indexOf(id);
+  const canRestorePanels = panelLayout.restore.some((id) => taskIds.includes(id));
+  const getPanelProps = (item: { id: string; label: string; icon: React.ReactNode }, frame: PanelFrame) => ({
+    ...item,
+    visible: panelsVisible,
+    status: panelStatus(panelLayout, item.id),
+    zIndex: panelZIndex(item.id),
+    area: panelArea,
+    frame: panelLayout.entries[item.id]?.frame ?? frame,
+    taskbar: panelTaskbarRef,
+    onFocus: () => openPanel(item.id),
+    onMinimize: () => panels.minimize(item.id),
+    onClose: () => panels.close(item.id),
+    onFrameChange: (next: PanelFrame) => panels.setFrame(item.id, next),
+  });
+
   return (
       <main
-        ref={appShellRef}
         className="appShell"
         data-shell-app-mode={appMode}
         {...buildAppShellAppearance(settings, editorFontFamily, editorHeadingFontFamily)}
         data-writing-mode={editorSettings.writingMode}
-        data-zone-mode={settings.sidebarHoverMode !== "none" ? "true" : undefined}
-        data-zone-left={
-          settings.sidebarHoverMode === "both" || settings.sidebarHoverMode === "left"
-            ? "true"
-            : undefined
-        }
-        data-zone-right={
-          settings.sidebarHoverMode === "both" || settings.sidebarHoverMode === "right"
-            ? "true"
-            : undefined
-        }
+        data-editor-split={besideTab ? true : undefined}
         data-startup-view={startupView}
         data-native-window={isTauriRuntime() ? "true" : undefined}
       >
@@ -7614,7 +7974,7 @@ export default function App() {
           </>
         ) : (
           <section
-            className="appFrame"
+            className="appFrame floatingPanelWorkspace"
             aria-label="Then"
             data-app-mode={appMode}
             data-editor-focus={isEditorFocusMode ? "true" : undefined}
@@ -7638,19 +7998,6 @@ export default function App() {
                 canRegisterTemplate: !(isNewTabStartPage || activeTab?.kind === "empty"),
               }}
             />
-            {isModeLeftSidebarCollapsed && (appMode === "write" || appMode === "corkboard" || appMode === "canvas") && (
-              <button
-                className="iconButton"
-                type="button"
-                aria-label="左サイドバーを表示"
-                aria-hidden={isEditorFocusMode}
-                tabIndex={isEditorFocusMode ? -1 : 0}
-                title="左サイドバーを表示"
-                onClick={() => setIsModeLeftSidebarCollapsed(false)}
-              >
-                <AppIcon name="panelLeft" className="topbarSvgIcon" />
-              </button>
-            )}
             <TopbarBreadcrumbs
               {...{
                 breadcrumbLayout, breadcrumbMenuRef, handleBreadcrumbKeyDown, breadcrumbOverflowItems,
@@ -7672,9 +8019,9 @@ export default function App() {
             />
             <TopbarActions
               {...{
-                appMode, isEditorFocusMode, settings, toggleEditorFocusMode, isRightSidebarCollapsed,
+                appMode, isEditorFocusMode, settings, toggleEditorFocusMode,
                 isNoteDocument: documentMode === "note",
-                setIsRightSidebarCollapsed, projectFolder, handleQuickCreateManuscriptSnapshot, updateSettings,
+                projectFolder, handleQuickCreateManuscriptSnapshot, updateSettings,
                 setShouldReturnToSettingsAfterThemePicker, setIsThemePickerModalOpen, setIsSettingsModalOpen,
                 modeMenuRef, modeMenuButtonRef, isModeMenuOpen, activeModeMenuEntry, setIsModeMenuOpen,
                 handleModeMenuKeyDown, modeMenuEntries,
@@ -7699,6 +8046,8 @@ export default function App() {
               onReopenClosedTab={() => void reopenClosedDocumentTab()}
               onCopyTabPath={(tab) => void copyDocumentTabPath(tab)}
               onRevealTab={revealDocumentTab}
+              onOpenBeside={openTabBeside}
+              canSplitActiveTab={!besideTab && !isNewTabStartPage}
             />
           )}
 
@@ -7706,51 +8055,19 @@ export default function App() {
             className={`workspace ${appMode === "export" || appMode === "checkpoint" ? "modeHiddenPane" : ""}`}
             ref={workspaceRef}
             data-app-mode={appMode}
+            data-plugin-modal={activePluginModal ? "" : undefined}
           >
-            <LeftSidebar
-              {...{
-                appMode, isEditorFocusMode, leftSidebarView,
-                isLeftSidebarCollapsed: isModeLeftSidebarCollapsed,
-                setIsLeftSidebarCollapsed: setIsModeLeftSidebarCollapsed,
-                setLeftSidebarView, handleNewDocument, projectFolder, handleCreateProjectFolder,
-                focusedFolderPath, handleOpenProjectFolder, referenceLayout,
-                sortedReferenceCandidates, focusReferenceCard, closeReferenceCard, pinReferenceCard,
-                collapseReferenceCard, currentFilePath, currentFileName, charCount, outlineItems,
-                activeOutlineIds, activeOutlineChain, projectAst, settings, appState, handleSetFileProgress,
-                collapsedTreeFolderPaths, handleFolderCollapsedChange, collapsedTreeOutlinePaths,
-                handleOutlineCollapsedChange, collapsedTreeOutlineHeadingKeys,
-                handleOutlineHeadingCollapsedChange, projectSearchQuery, workspaceSearchOutcome,
-                projectSearchUseRegex, projectSearchMatchCase, searchIncludeComments, searchScope,
-                projectReplaceValue, isProjectReplacing, jumpToOutlineItem,
-                handleHeadingMove, handleHeadingExtract, setProjectSearchQuery, setProjectSearchUseRegex,
-                setProjectSearchMatchCase, setSearchIncludeComments, setSearchScope, setProjectReplaceValue,
-                handleReplaceInCurrentFile, handleReplaceInProject,
-                handleCreateProjectFile, handleProjectFolderSelect,
-                handleRenameProjectEntry, handleDeleteProjectEntry, handleMoveProjectEntriesToFolder,
-                handleSidebarEntryReorder, currentWorkspaceSnapshots, updateSettings,
-                handleQuickCreateManuscriptSnapshot, openCheckpointStudio, handleEditManuscriptSnapshotDetails,
-                handleRestoreManuscriptSnapshot, handleDeleteManuscriptSnapshot, libraryContext,
-                enterLibraryRoot, enterProject, handleCreateLibraryProject, handleImportProjectIntoLibrary,
-                reorderLibraryProjects, libraryCorpus, openIdeaPane, postInboxCount, handleCreateMaterialsFolder,
-                handleSetMaterialsFolder, handleCorkboardFolderClick,
-                handleAddReference: () => handleAddReference(),
-                openReferenceCard,
-                handleDeleteImportedReference: (sourcePath: string) => handleDeleteImportedReference(sourcePath),
-                handleRenameMaterialReference, handleMoveMaterialReference, handleTransferEntries,
-                starredNotePaths, handleSetNoteStar, libraryReferencesFolderPath,
-                // In the corkboard these open the file in the body (BINDER 1-5).
-                handleProjectFileSelect: selectBinderFile,
-                handleProjectSearchResultOpen: openSearchResultInBody,
-                handleProjectOutlineJump: jumpToProjectOutlineInBody,
-              }}
-            />
             <div className={`editorColumn ${
               appMode !== "write" && appMode !== "plugin" ? "modeHiddenPane" : ""
             }`}
               aria-hidden={appMode === "plugin"}
               {...(appMode === "plugin" ? { inert: "" } : {})}
             >
-              <div className="editorFrame">
+              <div
+                className="editorFrame"
+                data-split={Boolean(besideTab && !isEditorFocusMode)}
+                style={besideTab ? { gridTemplateColumns: `minmax(0, ${leftPaneWidth}fr) minmax(0, ${100 - leftPaneWidth}fr)` } : undefined}
+              >
                 <button
                   className={`editorFocusExitButton ${isEditorFocusMode ? "isVisible" : ""}`}
                   type="button"
@@ -7762,269 +8079,300 @@ export default function App() {
                 >
                   <AppIcon name="fullscreenExit" />
                 </button>
-                <div
-                  ref={editorShellRef}
-                  className="editor"
-                  onContextMenu={handleEditorContextMenu}
-
-                >
-                  <div className="editorContent">
-                    {workspaceAlert && (
-                      <section className="workspaceAlert" role="alert">
-                        <div>
-                          <strong>{workspaceAlert.message}</strong>
-                          <span>{workspaceAlert.path}</span>
-                        </div>
-                        <div className="workspaceAlertActions">
-                          <button type="button" onClick={handleRetryWorkspaceRestore}>
-                            再試行
-                          </button>
-                          <button type="button" onClick={handleOpenProjectFolder}>
-                            別のフォルダを選択
-                          </button>
-                          <button type="button" onClick={handleForgetWorkspace}>
-                            履歴から削除
-                          </button>
-                          <button type="button" onClick={() => setWorkspaceAlert(null)}>
-                            閉じる
-                          </button>
-                        </div>
-                      </section>
-                    )}
-                    {activeTab?.kind === "empty" && libraryContext?.role === "root" ? (
-                      <LibraryHome
-                        libraryName={libraryContext.name}
-                        items={
-                          libraryHome?.libraryPath === libraryContext.path
-                            ? libraryHome.items
-                            : libraryContext.projects.map((project) => ({
-                                path: project.path,
-                                name: project.name,
-                                work: null,
-                                stats: null,
-                              }))
-                        }
-                        isLoading={libraryHome?.libraryPath !== libraryContext.path || libraryHome.isLoading}
-                        onOpenProject={enterProject}
-                        onEditWork={(item) => void editWorkInfo(item.path, item.name, item.work)}
-                        onCreateProject={() => void handleCreateLibraryProject()}
-                        onRefresh={() => void refreshLibraryHome(libraryContext.path, true)}
-                      />
-                    ) : activeTab?.kind === "empty" && projectFolder ? (
-                      <ScopeStartPage
-                        onEditWork={
-                          libraryContext?.role === "project" ? () => void editCurrentWorkInfo() : undefined
-                        }
-                        folder={projectFolder}
-                        onOpenFile={(path) => void handleProjectFileSelect(path)}
-                        onCreateFile={() => void handleCreateProjectFile(projectFolder.path)}
-                        onOpenCanvas={() => void openIdeaCanvasBoard("project")}
-                      />
-                    ) : isNewTabStartPage || activeTab?.kind === "empty" ? (
-                      <section className="newTabStart" aria-label="新しいタブ">
-                        <div>
-                          <p className="newTabEyebrow">New tab</p>
-                          <h1>フォルダを開いて書き始める</h1>
-                          <p>
-                            作業するフォルダを選ぶと、テキストファイルとスニペットをこのタブで扱えます。
-                          </p>
-                        </div>
-                        <div className="newTabActions">
-                          <button type="button" onClick={handleOpenProjectFolder}>
-                            フォルダを開く
-                          </button>
-                          <button type="button" onClick={handleOpenTextFile}>
-                            テキストファイルを開く
-                          </button>
-                        </div>
-                      </section>
-                    ) : (
-                      <>
-                        {isHydrated && (
-                          <VerticalTextEditor
-                            key={documentKey}
-                            text={editorText}
-                            editorRevision={activeTab?.editorRevision ?? null}
-                            writingMode={editorSettings.writingMode}
-                            editorDisplayMode={editorSettings.editorDisplayMode}
-                            pageFlowDirection={editorSettings.pageFlowDirection}
-                            typewriterScroll={editorSettings.typewriterScroll}
-                            showTypewriterGuide={editorSettings.showTypewriterGuide}
-                            typewriterOffset={settings.typewriterOffset}
-                            showLineBreakMarks={settings.showLineBreakMarks}
-                            showLineNumbers={settings.showLineNumbers}
-                            highlightCurrentLine={settings.highlightCurrentLine}
-                            documentPath={currentFilePath}
-                            colorizeJapaneseQuotes={settings.colorizeJapaneseQuotes}
-                            showComments={settings.showComments}
-                            textLayoutSignature={[
-                              settings.editorFontFamily,
-                              settings.headingFontSource,
-                              settings.headingFontFamily,
-                              settings.fontSize,
-                              settings.lineHeight,
-                              settings.editorMeasureHorizontal,
-                              settings.editorMeasureVertical,
-                              editorSettings.manuscript.layoutMode,
-                              settings.manuscript.charactersPerLine,
-                              settings.manuscript.linesPerPage,
-                              settings.manuscript.fontSize,
-                            ].join("|")}
-                            linkLookup={linkLookup}
-                            onLinkActivate={linkOpenActions.activate}
-                            postBodyForDrop={postBodyForDrop}
-                            manuscript={editorSettings.manuscript}
-                            onManuscriptProgressChange={editorManuscriptProgress.setSnapshot}
-                            initialSelectionOffset={initialSelectionOffset}
-                            initialViewportState={activeTab?.viewportState ?? null}
-                            onViewportSizeChange={handleEditorViewportSizeChange}
-                            onReady={handleEditorReady}
-                            onTextChange={handleTextChange}
-                            onSelectionChange={handleSelectionChange}
-                            onPageMetricsChange={setEditorPageMetrics}
-                          />
-                        )}
-                        {editorFind.open && (
-                          <section
-                            className="editorFindPopover"
-                            aria-label="ファイル内検索と置換"
-                            onMouseDown={(event) => event.stopPropagation()}
-                          >
-                            <div className="editorFindRow">
-                              <input
-                                ref={editorFindInputRef}
-                                value={editorFind.query}
-                                type="search"
-                                aria-label="検索語句"
-                                placeholder="検索"
-                                onChange={(event) => handleEditorFindQueryChange(event.target.value)}
-                                onKeyDown={handleEditorFindKeyDown}
-                              />
-                              <span className="editorFindCount">
-                                {editorFind.query.length > 0
-                                  ? editorFindMatches.length
-                                    ? `${activeEditorFindIndex + 1}/${editorFindMatches.length}`
-                                    : "0/0"
-                                  : ""}
-                              </span>
-                              <button
-                                type="button"
-                                title="前の一致"
-                                aria-label="前の一致"
-                                disabled={editorFindMatches.length === 0}
-                                onClick={() => moveEditorFindMatch(-1)}
-                              >
-                                ↑
-                              </button>
-                              <button
-                                type="button"
-                                title="次の一致"
-                                aria-label="次の一致"
-                                disabled={editorFindMatches.length === 0}
-                                onClick={() => moveEditorFindMatch(1)}
-                              >
-                                ↓
-                              </button>
-                              <button
-                                type="button"
-                                title="コメント行も検索・置換の対象にする"
-                                aria-label="コメントを含む"
-                                aria-pressed={searchIncludeComments}
-                                onClick={() => setSearchIncludeComments((current) => !current)}
-                              >
-                                //
-                              </button>
-                              <button
-                                type="button"
-                                title={editorFind.showReplace ? "置換を隠す" : "置換を表示"}
-                                aria-label={editorFind.showReplace ? "置換を隠す" : "置換を表示"}
-                                aria-pressed={editorFind.showReplace}
-                                onClick={() =>
-                                  setEditorFind((current) => ({
-                                    ...current,
-                                    showReplace: !current.showReplace,
-                                  }))
-                                }
-                              >
-                                ≡
-                              </button>
-                              <button
-                                type="button"
-                                title="閉じる"
-                                aria-label="閉じる"
-                                onClick={closeEditorFind}
-                              >
-                                ×
-                              </button>
-                            </div>
-                            {editorFind.showReplace && (
-                              <div className="editorFindRow editorReplaceRow">
-                                <input
-                                  value={editorFind.replaceValue}
-                                  aria-label="置換後"
-                                  placeholder="置換"
-                                  onChange={(event) =>
-                                    setEditorFind((current) => ({
-                                      ...current,
-                                      replaceValue: event.target.value,
-                                    }))
-                                  }
-                                  onKeyDown={(event) => {
-                                    if (event.key === "Escape") {
-                                      event.preventDefault();
-                                      closeEditorFind();
-                                    }
-                                  }}
-                                />
+                {editorPanes.map((paneTab, paneIndex) => {
+                  const paneActive = paneTab === activeTab;
+                  const activatePane = () => {
+                    if (paneTab && paneTab.id !== activeTabIdRef.current) activateDocumentTab(paneTab.id);
+                  };
+                  return (
+                    <div
+                      className="documentPaneSlot"
+                      key={paneTab?.id ?? "empty"}
+                      hidden={isEditorFocusMode && !paneActive}
+                    >
+                      {besideTab && paneIndex === 1 && !isEditorFocusMode && (
+                        <div
+                          className="documentPaneDivider"
+                          role="separator"
+                          aria-label="ペインの幅"
+                          aria-orientation="vertical"
+                          aria-valuemin={25}
+                          aria-valuemax={75}
+                          aria-valuenow={Math.round(leftPaneWidth)}
+                          tabIndex={0}
+                          onKeyDown={(event) => {
+                            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                            event.preventDefault();
+                            setLeftPaneWidth((width) => Math.max(25, Math.min(75, width + (event.key === "ArrowLeft" ? -5 : 5))));
+                          }}
+                          onPointerDown={(event) => {
+                            if (event.button !== 0) return;
+                            event.preventDefault();
+                            event.currentTarget.setPointerCapture(event.pointerId);
+                          }}
+                          onPointerMove={(event) => {
+                            if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+                            const frame = event.currentTarget.closest(".editorFrame")?.getBoundingClientRect();
+                            if (frame?.width) setLeftPaneWidth(Math.max(25, Math.min(75, (event.clientX - frame.left) / frame.width * 100)));
+                          }}
+                          onDoubleClick={() => setLeftPaneWidth(50)}
+                        />
+                      )}
+                      <div
+                        className="documentPane"
+                        data-pane-active={paneActive}
+                        data-pane-side={paneIndex === 0 ? "left" : "right"}
+                        data-writing-mode={(paneActive ? editorSettings : besideSettings).writingMode}
+                        style={paneActive ? undefined : besideAppearance}
+                      >
+                        {besideTab && !isEditorFocusMode && (
+                          <div className="documentPaneHeader">
+                            <button
+                              type="button"
+                              className="documentPaneTitle"
+                              title={paneTab?.path ?? paneTab?.name}
+                              onClick={() => {
+                                const editor = paneTab && paneEditorsRef.current.get(paneTab.id);
+                                if (editor) editor.restoreFocus();
+                                else activatePane();
+                              }}
+                            >
+                              {paneTab?.name}
+                            </button>
+                            {paneActive && (
+                              <>
                                 <button
+                                  className="documentPaneSwap"
                                   type="button"
-                                  disabled={activeEditorFindIndex < 0}
-                                  onClick={replaceActiveEditorFindMatch}
+                                  aria-label="左右のペインを入れ替える"
+                                  title="左右のペインを入れ替える"
+                                  onClick={swapDocumentPanes}
                                 >
-                                  置換
+                                  <AppIcon name="swapHorizontal" />
                                 </button>
-                                <button
-                                  type="button"
-                                  disabled={editorFindMatches.length === 0}
-                                  onClick={replaceAllEditorFindMatches}
-                                >
-                                  すべて
-                                </button>
-                              </div>
+                                <button type="button" aria-label="分割表示を解除" title="分割表示を解除" onClick={closeDocumentSplit}>×</button>
+                              </>
                             )}
-                          </section>
+                          </div>
                         )}
-                      </>
-                    )}
-                  </div>
-                  {editorContextMenu && (
-                    <EditorContextMenu
-                      {...{
-                        editorContextMenu, editorContextMenuRef, pluginSelectionCommands, pluginRuntimeHostRef,
-                        copyEditorSelection, cutEditorSelection, pasteIntoEditorSelection,
-                        closeEditorContextMenu, openRubyNotationModal, applyInlineNotation, clearSelectionNotation,
-                        openDirectionNotationModal, openManuscriptTidy,
-                      }}
-                    />
-                  )}
-                </div>
+                        <div
+                          ref={paneActive ? editorShellRef : undefined}
+                          className="editor"
+                          onFocusCapture={activatePane}
+                          onDropCapture={paneActive ? undefined : () => flushSync(activatePane)}
+                          onPointerDownCapture={paneActive ? undefined : (event) => {
+                            if (event.button === 2) flushSync(activatePane);
+                          }}
+                          onContextMenu={paneActive ? handleEditorContextMenu : undefined}
+                        >
+                          <div className="editorContent">
+                            {isHydrated && paneTab && paneTab.kind !== "empty" &&
+                              !(paneActive && isNewTabStartPage) && renderPaneEditor(paneTab, paneActive)}
+                            {paneActive && (
+                              <>
+
+                                {workspaceAlert && (
+                                  <section className="workspaceAlert" role="alert">
+                                    <div>
+                                      <strong>{workspaceAlert.message}</strong>
+                                      <span>{workspaceAlert.path}</span>
+                                    </div>
+                                    <div className="workspaceAlertActions">
+                                      <button type="button" onClick={handleRetryWorkspaceRestore}>
+                                        再試行
+                                      </button>
+                                      <button type="button" onClick={handleOpenProjectFolder}>
+                                        別のフォルダを選択
+                                      </button>
+                                      <button type="button" onClick={handleForgetWorkspace}>
+                                        履歴から削除
+                                      </button>
+                                      <button type="button" onClick={() => setWorkspaceAlert(null)}>
+                                        閉じる
+                                      </button>
+                                    </div>
+                                  </section>
+                                )}
+                                {activeTab?.kind === "empty" && libraryContext?.role === "root" ? (
+                                  <LibraryHome
+                                    libraryName={libraryContext.name}
+                                    items={
+                                      libraryHome?.libraryPath === libraryContext.path
+                                        ? libraryHome.items
+                                        : libraryContext.projects.map((project) => ({
+                                            path: project.path,
+                                            name: project.name,
+                                            work: null,
+                                            stats: null,
+                                          }))
+                                    }
+                                    isLoading={libraryHome?.libraryPath !== libraryContext.path || libraryHome.isLoading}
+                                    onOpenProject={enterProject}
+                                    onEditWork={(item) => void editWorkInfo(item.path, item.name, item.work)}
+                                    onCreateProject={() => void handleCreateLibraryProject()}
+                                    onRefresh={() => void refreshLibraryHome(libraryContext.path, true)}
+                                  />
+                                ) : activeTab?.kind === "empty" && projectFolder ? (
+                                  <ScopeStartPage
+                                    onEditWork={
+                                      libraryContext?.role === "project" ? () => void editCurrentWorkInfo() : undefined
+                                    }
+                                    folder={projectFolder}
+                                    onOpenFile={(path) => void handleProjectFileSelect(path)}
+                                    onCreateFile={() => void handleCreateProjectFile(projectFolder.path)}
+                                    onOpenCanvas={() => void openIdeaCanvasBoard("project")}
+                                  />
+                                ) : isNewTabStartPage || activeTab?.kind === "empty" ? (
+                                  <section className="newTabStart" aria-label="新しいタブ">
+                                    <div>
+                                      <p className="newTabEyebrow">New tab</p>
+                                      <h1>フォルダを開いて書き始める</h1>
+                                      <p>
+                                        作業するフォルダを選ぶと、テキストファイルとスニペットをこのタブで扱えます。
+                                      </p>
+                                    </div>
+                                    <div className="newTabActions">
+                                      <button type="button" onClick={handleOpenProjectFolder}>
+                                        フォルダを開く
+                                      </button>
+                                      <button type="button" onClick={handleOpenTextFile}>
+                                        テキストファイルを開く
+                                      </button>
+                                    </div>
+                                  </section>
+                                ) : (
+                                  <>
+                                    {editorFind.open && (
+                                      <section
+                                        className="editorFindPopover"
+                                        aria-label="ファイル内検索と置換"
+                                        onMouseDown={(event) => event.stopPropagation()}
+                                      >
+                                        <div className="editorFindRow">
+                                          <input
+                                            ref={editorFindInputRef}
+                                            value={editorFind.query}
+                                            type="search"
+                                            aria-label="検索語句"
+                                            placeholder="検索"
+                                            onChange={(event) => handleEditorFindQueryChange(event.target.value)}
+                                            onKeyDown={handleEditorFindKeyDown}
+                                          />
+                                          <span className="editorFindCount">
+                                            {editorFind.query.length > 0
+                                              ? editorFindMatches.length
+                                                ? `${activeEditorFindIndex + 1}/${editorFindMatches.length}`
+                                                : "0/0"
+                                              : ""}
+                                          </span>
+                                          <button
+                                            type="button"
+                                            title="前の一致"
+                                            aria-label="前の一致"
+                                            disabled={editorFindMatches.length === 0}
+                                            onClick={() => moveEditorFindMatch(-1)}
+                                          >
+                                            ↑
+                                          </button>
+                                          <button
+                                            type="button"
+                                            title="次の一致"
+                                            aria-label="次の一致"
+                                            disabled={editorFindMatches.length === 0}
+                                            onClick={() => moveEditorFindMatch(1)}
+                                          >
+                                            ↓
+                                          </button>
+                                          <button
+                                            type="button"
+                                            title="コメント行も検索・置換の対象にする"
+                                            aria-label="コメントを含む"
+                                            aria-pressed={searchIncludeComments}
+                                            onClick={() => setSearchIncludeComments((current) => !current)}
+                                          >
+                                            //
+                                          </button>
+                                          <button
+                                            type="button"
+                                            title={editorFind.showReplace ? "置換を隠す" : "置換を表示"}
+                                            aria-label={editorFind.showReplace ? "置換を隠す" : "置換を表示"}
+                                            aria-pressed={editorFind.showReplace}
+                                            onClick={() =>
+                                              setEditorFind((current) => ({
+                                                ...current,
+                                                showReplace: !current.showReplace,
+                                              }))
+                                            }
+                                          >
+                                            ≡
+                                          </button>
+                                          <button
+                                            type="button"
+                                            title="閉じる"
+                                            aria-label="閉じる"
+                                            onClick={closeEditorFind}
+                                          >
+                                            ×
+                                          </button>
+                                        </div>
+                                        {editorFind.showReplace && (
+                                          <div className="editorFindRow editorReplaceRow">
+                                            <input
+                                              value={editorFind.replaceValue}
+                                              aria-label="置換後"
+                                              placeholder="置換"
+                                              onChange={(event) =>
+                                                setEditorFind((current) => ({
+                                                  ...current,
+                                                  replaceValue: event.target.value,
+                                                }))
+                                              }
+                                              onKeyDown={(event) => {
+                                                if (event.key === "Escape") {
+                                                  event.preventDefault();
+                                                  closeEditorFind();
+                                                }
+                                              }}
+                                            />
+                                            <button
+                                              type="button"
+                                              disabled={activeEditorFindIndex < 0}
+                                              onClick={replaceActiveEditorFindMatch}
+                                            >
+                                              置換
+                                            </button>
+                                            <button
+                                              type="button"
+                                              disabled={editorFindMatches.length === 0}
+                                              onClick={replaceAllEditorFindMatches}
+                                            >
+                                              すべて
+                                            </button>
+                                          </div>
+                                        )}
+                                      </section>
+                                    )}
+                                  </>
+                                )}
+                              </>
+                            )}
+                          </div>
+                          {paneActive && editorContextMenu && (
+                            <EditorContextMenu
+                              {...{
+                                editorContextMenu, editorContextMenuRef, pluginSelectionCommands, pluginRuntimeHostRef,
+                                copyEditorSelection, cutEditorSelection, pasteIntoEditorSelection,
+                                closeEditorContextMenu, openRubyNotationModal, applyInlineNotation, clearSelectionNotation,
+                                openDirectionNotationModal, openManuscriptTidy,
+                              }}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <StatusBar
-                saveStatus={saveStatus}
-                currentFilePath={currentFilePath}
-                showFilePath={settings.showStatusFilePath}
-                lastError={lastError}
-                charCount={charCount}
-                isNote={documentMode === "note"}
-                selectionCharCount={selectionCharCount}
-                pageMetrics={editorSettings.editorDisplayMode === "paged" ? editorPageMetrics : null}
-                manuscriptProgress={editorSettings.manuscript.layoutMode === "manuscript" ? editorManuscriptProgress : null}
-                checkpoint={checkpointStatus}
-                pluginItems={pluginStatusItems}
-                onPluginItemClick={(pluginId, commandId) =>
-                  pluginRuntimeHostRef.current?.executeCommand(pluginId, commandId)
-                }
-              />
             </div>
 
             {appMode === "corkboard" && projectFolder && corkboardFolder && (
@@ -8066,9 +8414,10 @@ export default function App() {
                   livePosts={canvasPosts}
                   onWritePost={writeCanvasPost}
                   onOpenPost={(id, target) => openPostFromCanvasRef.current(id, target)}
-                  onOpenFile={(path) => {
-                    if (projectFolder) void openFromCorkboard(joinCanvasFilePath(projectFolder.path, path));
+                  onOpenFile={(path, heading) => {
+                    if (projectFolder) openCanvasSourceRef.current(joinCanvasFilePath(projectFolder.path, path), heading?.line);
                   }}
+                  onOpenFilePanel={() => openPanel("files")}
                   onOpenInWindow={isTauriRuntime() ? (boardId) => void moveCanvasToWindow(boardId) : undefined}
                 />
               </div>
@@ -8084,52 +8433,188 @@ export default function App() {
               </main>
             )}
 
-            {appMode !== "plugin" && !isRightSidebarCollapsed && !isEditorFocusMode && (
-              <div className="zoneRightSidebarHoverTarget" aria-hidden="true" />
-            )}
-            <RightSidebar
-              {...{
-                isRightSidebarWide, isRightSidebarCollapsed, appMode, isEditorFocusMode, pluginViews,
-                loadedPlugins, rightSidebarTab, setRightSidebarTab, openIdeaCanvasBoard, setIsRightSidebarWide, setIsRightSidebarCollapsed,
-                setSidebarPluginRuntimeAnchor, isDockedPluginRuntimeVisible, projectFolder,
-                activePluginView, documentKey, scene, connections, postReveal, frontMatter,
-                updateFrontMatter, handleClearFrontMatter, propertyTypeSettings, rememberPropertyType,
-                returnFocusFromProperties, loadPropertySets, searchByProperty, editorText, settings,
-                updateSettings, revealEditorRange, replaceEditorRange, projectProofreadTerms, appState,
-                setProjectProofreadTerms, setAppState, exportProofreadDictionary, importProofreadDictionary,
-                projectProofreadIgnored, proofreadIgnoreKey, setProjectProofreadIgnored,
-                postStream, postFilter, setPostFilter, postNoteActions,
-                postBoards: { places: postBoardPlaces, open: (place) => void openPostBoard(place) },
+            <div
+              className="floatingPanelLayer" hidden={!panelsVisible}
+              ref={panelLayerRef}
+              data-panel-tab-offset={appMode !== "write" && settings.showDocumentTabs ? settings.documentTabsDisplayMode : undefined}
+            >
+              <FloatingPanel
+                {...getPanelProps(filePanel, { x: 16, y: 16, width: 360, height: 500 })}
+                titleControl={(
+                  <div className="filePanelViewControl">
+                    <RightPaneSwitcher
+                      items={fileScopes}
+                      activeId={panelLayout.outline}
+                      menuLabel="ファイル・見出しの表示"
+                      onSelect={(id) => panels.setOutline(id === "current" ? "current" : "all")}
+                    />
+                  </div>
+                )}
+              >
+                <LeftSidebar
+                  {...{
+                    outlineScope: panelLayout.outline,
+                    onAddToCanvas: appMode === "canvas" ? addBinderItemsToCanvas : undefined,
+                    panelVisible: panelsVisible && panelStatus(panelLayout, "files") === "open",
+                    projectFolder, handleCreateProjectFolder, focusedFolderPath, handleOpenProjectFolder,
+                    sortedReferenceCandidates, currentFilePath, currentFileName, charCount, outlineItems,
+                    activeOutlineIds, activeOutlineChain, projectAst, settings, appState, handleSetFileProgress,
+                    collapsedTreeFolderPaths, handleFolderCollapsedChange, collapsedTreeOutlinePaths,
+                    handleOutlineCollapsedChange, collapsedTreeOutlineHeadingKeys,
+                    handleOutlineHeadingCollapsedChange,
+                    jumpToOutlineItem: (item) => {
+                      if (appMode === "canvas" || appMode === "corkboard") setAppMode("write");
+                      jumpToOutlineItem(item);
+                    },
+                    handleHeadingMove, handleHeadingExtract,
+                    handleCreateProjectFile, handleProjectFolderSelect,
+                    handleRenameProjectEntry, handleDeleteProjectEntry, handleMoveProjectEntriesToFolder,
+                    handleSidebarEntryReorder, currentWorkspaceSnapshots, updateSettings,
+                    handleQuickCreateManuscriptSnapshot, openCheckpointStudio, handleEditManuscriptSnapshotDetails,
+                    handleRestoreManuscriptSnapshot, handleDeleteManuscriptSnapshot, libraryContext,
+                    enterLibraryRoot, enterProject, handleCreateLibraryProject, handleImportProjectIntoLibrary,
+                    reorderLibraryProjects, openIdeaPane, postInboxCount, handleCreateMaterialsFolder,
+                    handleSetMaterialsFolder, handleCorkboardFolderClick,
+                    handleAddReference: () => handleAddReference(),
+                    openReferenceCard,
+                    handleDeleteImportedReference: (sourcePath: string) => handleDeleteImportedReference(sourcePath),
+                    handleRenameMaterialReference, handleMoveMaterialReference, handleTransferEntries,
+                    starredNotePaths, handleSetNoteStar, libraryReferencesFolderPath,
+                    // In the corkboard these open the file in the body (BINDER 1-5).
+                    handleProjectFileSelect: selectBinderFile,
+                    openFileBeside: appMode === "write" ? openFileBeside : undefined,
+                    handleProjectOutlineJump: jumpToProjectOutlineInBody,
+                  }}
+                />
+              </FloatingPanel>
+              <FloatingPanel {...getPanelProps(searchPanel, { x: -1, y: 24, width: 420, height: 530 })}>
+                <ProjectSearchPanel
+                  inputRef={searchPanelInputRef}
+                  hasProject={Boolean(projectFolder)}
+                  projectAst={projectAst}
+                  library={libraryContext}
+                  isLibrarySearchLoading={Boolean(libraryCorpus?.isLoading)}
+                  projectSearchQuery={projectSearchQuery}
+                  outcome={workspaceSearchOutcome}
+                  projectSearchUseRegex={projectSearchUseRegex}
+                  projectSearchMatchCase={projectSearchMatchCase}
+                  projectSearchIncludeComments={searchIncludeComments}
+                  searchScope={searchScope}
+                  projectReplaceValue={projectReplaceValue}
+                  isProjectReplacing={isProjectReplacing}
+                  onProjectSearchQueryChange={setProjectSearchQuery}
+                  onProjectSearchUseRegexChange={setProjectSearchUseRegex}
+                  onProjectSearchMatchCaseChange={setProjectSearchMatchCase}
+                  onProjectSearchIncludeCommentsChange={setSearchIncludeComments}
+                  onSearchScopeChange={setSearchScope}
+                  onProjectReplaceValueChange={setProjectReplaceValue}
+                  onOpenProjectSearchResult={(result) => void openSearchResultInBody(result)}
+                  onReplaceInCurrentFile={handleReplaceInCurrentFile}
+                  onReplaceInProject={() => void handleReplaceInProject()}
+                />
+              </FloatingPanel>
+              {auxiliaryItems.map((item, index) => {
+                const plugin = pluginViews.find((view) => item.id === `plugin:${view.pluginId}:${view.id}`);
+                return (
+                  <FloatingPanel
+                    key={item.id}
+                    {...getPanelProps(item, { x: -1, y: 16 + index * 26, width: 340, height: 460 })}
+                    headerActions={item.id === "idea" && (
+                      <button type="button" aria-label="Idea Board を開く" title="Idea Board を開く" onClick={() => void openIdeaCanvasBoard("project")}>
+                        <AppIcon name="canvas" />
+                      </button>
+                    )}
+                  >
+                    <RightSidebar
+                      {...{
+                        panelId: item.id, active: panelsVisible && panelStatus(panelLayout, item.id) === "open",
+                        setSidebarPluginRuntimeAnchor, projectFolder, activePluginView: plugin ?? null,
+                        documentKey, scene, connections, postReveal, frontMatter,
+                        updateFrontMatter, handleClearFrontMatter, propertyTypeSettings, rememberPropertyType,
+                        returnFocusFromProperties, loadPropertySets, searchByProperty, editorText, settings,
+                        updateSettings, revealEditorRange, replaceEditorRange, projectProofreadTerms, appState,
+                        setProjectProofreadTerms, setAppState, exportProofreadDictionary, importProofreadDictionary,
+                        projectProofreadIgnored, proofreadIgnoreKey, setProjectProofreadIgnored,
+                        postStream, postFilter, setPostFilter, postNoteActions,
+                        postBoards: { places: postBoardPlaces, open: (place) => void openPostBoard(place) },
+                      }}
+                    />
+                  </FloatingPanel>
+                );
+              })}
+              <ReferenceLayer
+                rootPath={projectFolder?.path ?? null}
+                layout={referenceLayout}
+                onLayoutChange={patchReferenceLayout}
+                onReturnFocusToEditor={returnFocusToEditor}
+                onTextSaved={handleReferenceTextSaved}
+                taskbar={panelTaskbarRef}
+                panelsVisible={panelsVisible}
+                area={panelArea}
+                getPanelState={(id) => {
+                  const key = referencePanelId(id);
+                  return { id: key, status: panelStatus(panelLayout, key), zIndex: panelZIndex(key) };
+                }}
+                onFocus={(id) => openPanel(referencePanelId(id))}
+                onMinimize={(id) => panels.minimize(referencePanelId(id))}
+                onClose={closeReferenceCard}
+              />
+            </div>
+            <ThenPluginRuntimeHost
+              ref={pluginRuntimeHostRef}
+              plugins={loadedPlugins}
+              activeView={pluginRuntimeActiveView}
+              workspace={{
+                name: projectFolder?.name ?? null,
+                hasProject: Boolean(projectFolder),
+              }}
+              visible={Boolean(activePluginModal) || isDockedPluginRuntimeVisible}
+              modal={Boolean(activePluginModal)}
+              anchorElement={pluginRuntimeAnchor}
+              onFocus={activePluginPanelId && !activePluginModal ? () => openPanel(activePluginPanelId) : undefined}
+              themeKey={`${settings.theme}:${settings.uiFontFamily}`}
+              onRequest={handlePluginRequest}
+              onError={(pluginName, message) => {
+                setLastError(`${pluginName}: ${message}`);
+                showToast(`プラグイン「${pluginName}」でエラーが発生しました`);
               }}
             />
           </div>
 
-          <ThenPluginRuntimeHost
-            ref={pluginRuntimeHostRef}
-            plugins={loadedPlugins}
-            activeView={pluginRuntimeActiveView}
-            workspace={{
-              name: projectFolder?.name ?? null,
-              hasProject: Boolean(projectFolder),
-            }}
-            visible={Boolean(activePluginModal) || isDockedPluginRuntimeVisible}
-            modal={Boolean(activePluginModal)}
-            anchorElement={pluginRuntimeAnchor}
-            themeKey={`${settings.theme}:${settings.uiFontFamily}`}
-            onRequest={handlePluginRequest}
-            onError={(pluginName, message) => {
-              setLastError(`${pluginName}: ${message}`);
-              showToast(`プラグイン「${pluginName}」でエラーが発生しました`);
-            }}
-          />
+          {panelWorkspace && (
+            <div className="workspaceFooter">
+              {panelsVisible && (
+                <PanelTaskbar
+                  taskbar={panelTaskbarRef}
+                  fixed={panelTasks}
+                  documents={referenceTasks}
+                  commands={launcherCommands}
+                  onLaunch={launchPanel}
+                  onTaskClick={(id) => panelStatus(panelLayout, id) === "open" ? panels.minimize(id) : openPanel(id)}
+                  onToggleAll={() => panels.toggleAll(taskIds)}
+                  allMinimized={canRestorePanels}
+                  canToggle={anyPanelOpen || canRestorePanels}
+                />
+              )}
+              <StatusBar
+                saveStatus={saveStatus}
+                currentFilePath={currentFilePath}
+                showFilePath={settings.showStatusFilePath}
+                lastError={lastError}
+                charCount={charCount}
+                isNote={documentMode === "note"}
+                selectionCharCount={selectionCharCount}
+                pageMetrics={editorSettings.editorDisplayMode === "paged" ? editorPageMetrics : null}
+                manuscriptProgress={editorSettings.manuscript.layoutMode === "manuscript" ? editorManuscriptProgress : null}
+                checkpoint={checkpointStatus}
+                pluginItems={pluginStatusItems}
+                onPluginItemClick={(pluginId, commandId) =>
+                  pluginRuntimeHostRef.current?.executeCommand(pluginId, commandId)
+                }
+              />
+            </div>
+          )}
 
-          <ReferenceLayer
-            rootPath={projectFolder?.path ?? null}
-            layout={referenceLayout}
-            onLayoutChange={patchReferenceLayout}
-            onReturnFocusToEditor={returnFocusToEditor}
-            onTextSaved={handleReferenceTextSaved}
-          />
 
           {appMode === "export" && exportEmbedPayload && (
             <div className="exportEmbeddedHost">

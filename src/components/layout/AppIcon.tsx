@@ -29,6 +29,7 @@ export type AppIconName =
   | "save"
   | "saveAs"
   | "settings"
+  | "swapHorizontal"
   | "theme"
   | "template"
   | "vertical"
@@ -59,6 +60,8 @@ export function AppIcon({ name, className = "" }: { name: AppIconName; className
       return <svg {...common}><circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="m8.5 7.5 12 13M8.5 16.5 20.5 3.5M11 12l-2.5 3" /></svg>;
     case "paste":
       return <svg {...common}><path d="M9 5H5v16h14V5h-4" /><rect x="9" y="2" width="6" height="5" rx="1" /><path d="M8 12h8M8 16h6" /></svg>;
+    case "swapHorizontal":
+      return <svg {...common}><path d="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4" /></svg>;
     case "book":
       return (
         <svg {...common}>

@@ -13,7 +13,6 @@ import { createPortal } from "react-dom";
 import type {
   DocumentOutlineItem,
   ProjectAst,
-  ProjectSearchResult,
 } from "../../editor/ast/types";
 import type {
   FileProgressFilter,
@@ -39,7 +38,7 @@ import { orderRootEntriesByTier, splitBinderTiers } from "./binderTiers";
 import { findProjectEntry } from "../../utils/projectTree";
 import { MATERIALS_DROP_ATTRIBUTE, MATERIALS_DROP_EVENT, type MaterialsDropDetail } from "../scene/materialsDrop";
 import {
-  BINDER_DRAG_ON_CANVAS_ATTRIBUTE,
+  CANVAS_HEADING_DRAG_MIME,
   CANVAS_FILE_DROP_ATTRIBUTE,
   CANVAS_FILE_DROP_EVENT,
   type CanvasFileDropDetail,
@@ -68,28 +67,6 @@ type WorkspaceSidebarProps = {
   onOutlineCollapsedChange: (path: string, collapsed: boolean) => void;
   collapsedOutlineHeadingKeys: ReadonlySet<string>;
   onOutlineHeadingCollapsedChange: (key: string, collapsed: boolean) => void;
-  projectSearchQuery: string;
-  projectSearchResults: ProjectSearchResult[];
-  projectSearchTotal: number;
-  projectSearchMatchedFileCount: number;
-  projectSearchTruncated: boolean;
-  projectSearchError: string | null;
-  projectSearchUseRegex: boolean;
-  projectSearchMatchCase: boolean;
-  projectSearchIncludeComments: boolean;
-  searchScope: WorkspaceSearchScope;
-  projectReplaceValue: string;
-  isProjectReplacing: boolean;
-  isProjectSearchMode: boolean;
-  onProjectSearchQueryChange: (value: string) => void;
-  onProjectSearchUseRegexChange: (value: boolean) => void;
-  onProjectSearchMatchCaseChange: (value: boolean) => void;
-  onProjectSearchIncludeCommentsChange: (value: boolean) => void;
-  onSearchScopeChange: (value: WorkspaceSearchScope) => void;
-  onProjectReplaceValueChange: (value: string) => void;
-  onOpenProjectSearchResult: (result: ProjectSearchResult) => void;
-  onReplaceInCurrentFile: () => void;
-  onReplaceInProject: () => void;
   onJumpOutline: (item: OutlineItem) => void;
   onJumpProjectOutline: (path: string, item: DocumentOutlineItem) => void;
   onMoveHeadings: (
@@ -104,6 +81,7 @@ type WorkspaceSidebarProps = {
   onCreateFile: (folderPath?: string) => void;
   onCreateFolder: (folderPath?: string) => void;
   onSelectFile: (path: string) => void;
+  onOpenFileBeside?: (path: string) => void;
   onSelectFolder: (path: string) => void;
   /**
    * A click on a folder row. Returns true when it was taken (the corkboard shows
@@ -135,7 +113,10 @@ type WorkspaceSidebarProps = {
   onEditSnapshotDetails: (snapshot: ManuscriptSnapshot) => void;
   onRestoreSnapshot: (snapshot: ManuscriptSnapshot) => void;
   onDeleteSnapshot: (snapshot: ManuscriptSnapshot) => void;
-  onCollapse: () => void;
+  onCollapse?: () => void;
+  outlineScope?: "all" | "current";
+  panelHidden?: boolean;
+  onAddToCanvas?: (items: CanvasFileDropDetail) => void;
   /** 開いているフォルダがライブラリ直下かライブラリ内の作品のとき。 */
   library: LibraryContext | null;
   onEnterLibraryRoot: () => void;
@@ -143,8 +124,6 @@ type WorkspaceSidebarProps = {
   onCreateLibraryProject: () => void;
   onImportProject: () => void;
   onReorderLibraryProjects: (orderedPaths: string[]) => void;
-  /** ライブラリ全体の検索で、ほかの作品の索引を読み込んでいる間 true。 */
-  isLibrarySearchLoading: boolean;
   /** 投稿の段に出す、受信箱の投稿の数（BINDER 2-1）。 */
   postInboxCount?: number;
   /** 投稿の段から、右のアイデアのペインを開く。 */
@@ -282,9 +261,7 @@ type HeadingDropTarget =
     }
   | null;
 
-type WorkspaceSearchScope = "file" | "project" | "library";
 
-const HEADING_DRAG_MIME = "application/x-then-heading";
 const TREE_CONTEXT_MENU_WIDTH = 180;
 const TREE_CONTEXT_MENU_HEIGHT = 164;
 
@@ -294,15 +271,6 @@ function isProjectEntry(entry: ProjectFolder | ProjectEntry): entry is ProjectEn
 
 function getEntryKind(entry: ProjectFolder | ProjectEntry): ProjectEntry["kind"] | "folder" {
   return isProjectEntry(entry) ? entry.kind : "folder";
-}
-
-function getProjectAstStatusLabel(projectAst: ProjectAst | null): string | null {
-  if (!projectAst || projectAst.status === "empty" || projectAst.status === "ready") return null;
-  if (projectAst.status === "indexing") {
-    return `索引作成中 ${projectAst.indexedCount}/${projectAst.files.length}`;
-  }
-  if (projectAst.status === "partial") return `索引エラー ${projectAst.errorCount}件`;
-  return null;
 }
 
 const charCountFormatter = new Intl.NumberFormat("ja-JP");
@@ -731,7 +699,6 @@ function LibraryBackButton({
     >
       <SidebarIcon name="chevronLeft" className="libraryBackIcon" />
       <span className="libraryBackName">{library.name}</span>
-      <small>ライブラリ</small>
     </button>
   );
 }
@@ -873,28 +840,6 @@ export function WorkspaceSidebar({
   onOutlineCollapsedChange,
   collapsedOutlineHeadingKeys,
   onOutlineHeadingCollapsedChange,
-  projectSearchQuery,
-  projectSearchResults,
-  projectSearchTotal,
-  projectSearchMatchedFileCount,
-  projectSearchTruncated,
-  projectSearchError,
-  projectSearchUseRegex,
-  projectSearchMatchCase,
-  projectSearchIncludeComments,
-  searchScope,
-  projectReplaceValue,
-  isProjectReplacing,
-  isProjectSearchMode,
-  onProjectSearchQueryChange,
-  onProjectSearchUseRegexChange,
-  onProjectSearchMatchCaseChange,
-  onProjectSearchIncludeCommentsChange,
-  onSearchScopeChange,
-  onProjectReplaceValueChange,
-  onOpenProjectSearchResult,
-  onReplaceInCurrentFile,
-  onReplaceInProject,
   onJumpOutline,
   onJumpProjectOutline,
   onMoveHeadings,
@@ -903,6 +848,7 @@ export function WorkspaceSidebar({
   onCreateFile,
   onCreateFolder,
   onSelectFile,
+  onOpenFileBeside,
   onSelectFolder,
   onFolderClick,
   onRenameEntry,
@@ -919,13 +865,15 @@ export function WorkspaceSidebar({
   onRestoreSnapshot,
   onDeleteSnapshot,
   onCollapse,
+  outlineScope = "all",
+  panelHidden = false,
+  onAddToCanvas,
   library,
   onEnterLibraryRoot,
   onEnterProject,
   onCreateLibraryProject,
   onImportProject,
   onReorderLibraryProjects,
-  isLibrarySearchLoading,
   postInboxCount = 0,
   onOpenIdeas,
   onCreateMaterialsFolder,
@@ -960,7 +908,6 @@ export function WorkspaceSidebar({
   const [collapsedScratchOutlineHeadingKeys, setCollapsedScratchOutlineHeadingKeys] = useState<
     ReadonlySet<string>
   >(() => new Set());
-  const [isReplaceExpanded, setIsReplaceExpanded] = useState(false);
   const [isShelterListExpanded, setIsShelterListExpanded] = useState(false);
   const [progressFilter, setProgressFilter] = useState<FileProgressFilter>(
     readStoredProgressFilter,
@@ -980,7 +927,6 @@ export function WorkspaceSidebar({
   // ドラッグ中に上にあるあいだだけ強調する。
   const materialsDropRef = useRef<HTMLElement | null>(null);
   /** The left cluster marked while a dragged row is over the Canvas (BINDER 4-3). */
-  const canvasDragClusterRef = useRef<HTMLElement | null>(null);
   const suppressNextClickRef = useRef(false);
   const selectedFilePathsRef = useRef(selectedFilePaths);
   const replaceSelectedFilePaths = (paths: Iterable<string>) => {
@@ -1030,7 +976,7 @@ export function WorkspaceSidebar({
     }
   };
   const progressFilterItems: RightPaneSwitcherItem[] = [
-    { id: "all", label: "ファイル", icon: <SidebarIcon name="file" /> },
+    { id: "all", label: "すべての進捗", icon: null },
     ...fileProgressStatuses.map((status) => ({
       id: status,
       label: fileProgressLabels[status],
@@ -1087,6 +1033,13 @@ export function WorkspaceSidebar({
     menu.style.top = `${Math.max(margin, Math.min(snapshotMenu.y, maxTop))}px`;
   }, [snapshotMenu]);
 
+  useEffect(() => {
+    if (!panelHidden) return;
+    setContextMenu(null);
+    setHeadingContextMenu(null);
+    setSnapshotMenu(null);
+  }, [panelHidden]);
+
   // プロジェクトフォルダが切り替わったら選択を開いているファイルだけに戻す。
   useEffect(() => {
     replaceSelectedFilePaths(currentFilePath ? [currentFilePath] : []);
@@ -1110,8 +1063,6 @@ export function WorkspaceSidebar({
     ) {
       dragState.captureTarget.releasePointerCapture(dragState.pointerId);
     }
-    canvasDragClusterRef.current?.removeAttribute(BINDER_DRAG_ON_CANVAS_ATTRIBUTE);
-    canvasDragClusterRef.current = null;
     pointerDragRef.current = null;
     setDraggingEntryPaths(new Set());
     dropTargetRef.current = null;
@@ -1130,16 +1081,6 @@ export function WorkspaceSidebar({
     current?.removeAttribute("data-drop-active");
     next?.setAttribute("data-drop-active", "true");
     materialsDropRef.current = next;
-    // Once a row is over the Canvas, a binder floating over it (the left hover
-    // setting) steps aside until the drag ends, so the whole board takes the drop.
-    // The row holds the pointer capture, which would otherwise keep it hovered (BINDER 4-3).
-    const cluster = next?.hasAttribute(CANVAS_FILE_DROP_ATTRIBUTE)
-      ? pointerDragRef.current?.captureTarget.closest<HTMLElement>(".leftWorkspaceCluster")
-      : null;
-    if (cluster) {
-      cluster.setAttribute(BINDER_DRAG_ON_CANVAS_ATTRIBUTE, "true");
-      canvasDragClusterRef.current = cluster;
-    }
   };
 
   const updateDropTargetFromPoint = (
@@ -1148,18 +1089,18 @@ export function WorkspaceSidebar({
     dragState: PointerDragState,
   ) => {
     const element = document.elementFromPoint(clientX, clientY);
+    const canvasDrop = element?.closest<HTMLElement>(`[${CANVAS_FILE_DROP_ATTRIBUTE}]`) ?? null;
+    if (canvasDrop && (dragState.files || dragState.reference || dragState.materialFiles)) {
+      updateMaterialsDrop(canvasDrop);
+      updateDropTarget(null);
+      return;
+    }
     // 段の見出し（原稿＝作品直下、素材＝素材フォルダ）へ落とすと、その段のいちばん上のフォルダの中へ移す。
     const sectionHeader = element?.closest<HTMLElement>("[data-binder-drop-folder]");
     // 画像・PDF は素材の中だけで動かす（BINDER 2-6）。素材の段の見出しと素材の中の行だけを受け、
     // 前・後の並べ替えはせず、そのフォルダ（ファイルの行ならその行のフォルダ）の中へ入れる。
     if (dragState.reference) {
-      // 画像・PDF を埋め込みのキャンバスへ落とすと、資料のカードを置く（BINDER 4-3）。
-      const canvasDrop = element?.closest<HTMLElement>(`[${CANVAS_FILE_DROP_ATTRIBUTE}]`) ?? null;
-      updateMaterialsDrop(canvasDrop);
-      if (canvasDrop) {
-        updateDropTarget(null);
-        return;
-      }
+      updateMaterialsDrop(null);
       const sourceParentKey = parentKey(dragState.reference.path);
       let folderPath: string | undefined;
       if (sectionHeader) {
@@ -1208,10 +1149,8 @@ export function WorkspaceSidebar({
     }
     // ノートだけを「この場面」の素材の欄へ落とすと、素材リストに足す（BINDER 3-3）。ツリーの外なので、
     // ツリーの中の判定には当たらない。
-    // ノート・原稿を埋め込みのキャンバスへ落とすと、ファイルのカードを置く（BINDER 4-2）。
     const materialsDrop =
       (dragState.notes ? element?.closest<HTMLElement>(`[${MATERIALS_DROP_ATTRIBUTE}]`) : null) ??
-      (dragState.files ? element?.closest<HTMLElement>(`[${CANVAS_FILE_DROP_ATTRIBUTE}]`) : null) ??
       null;
     updateMaterialsDrop(materialsDrop);
     if (materialsDrop) {
@@ -1464,6 +1403,7 @@ export function WorkspaceSidebar({
       window.setTimeout(() => {
         suppressNextClickRef.current = false;
       }, 0);
+      updateDropTargetFromPoint(event.clientX, event.clientY, dragState);
       const activeDropTarget = dropTargetRef.current;
       const materialsDrop = materialsDropRef.current;
       if (materialsDrop?.hasAttribute(CANVAS_FILE_DROP_ATTRIBUTE)) {
@@ -1630,9 +1570,9 @@ export function WorkspaceSidebar({
     setDraggingHeadingKeys(new Set(sources.map(headingSelectionKey)));
     setHeadingDropTarget(null);
     suppressNextClickRef.current = true;
-    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.effectAllowed = "copyMove";
     event.dataTransfer.setData(
-      HEADING_DRAG_MIME,
+      CANVAS_HEADING_DRAG_MIME,
       JSON.stringify({ sources }),
     );
     logHeadingDnd("dragstart", {
@@ -1767,7 +1707,7 @@ export function WorkspaceSidebar({
     setHeadingContextMenu(null);
     const position = getScaledFixedMenuPosition(event.clientX, event.clientY, {
       width: TREE_CONTEXT_MENU_WIDTH,
-      height: TREE_CONTEXT_MENU_HEIGHT,
+      height: TREE_CONTEXT_MENU_HEIGHT + (onOpenFileBeside && getEntryKind(entry) === "file" ? 30 : 0),
     });
     setContextMenu({
       x: position.left,
@@ -1791,7 +1731,7 @@ export function WorkspaceSidebar({
     setContextMenu(null);
     const position = getScaledFixedMenuPosition(event.clientX, event.clientY, {
       width: TREE_CONTEXT_MENU_WIDTH,
-      height: 72,
+      height: onAddToCanvas ? 100 : 72,
     });
     setHeadingContextMenu({
       x: position.left,
@@ -1840,6 +1780,12 @@ export function WorkspaceSidebar({
       </button>
     ) : null;
 
+  const renderAddToCanvas = (path: string) => onAddToCanvas && (
+    <button type="button" role="menuitem" onClick={() => closeContextMenuAndRun(() => onAddToCanvas({ paths: [path] }))}>
+      キャンバスに置く
+    </button>
+  );
+
   const renderContextMenu = (): JSX.Element | null => {
     if (!contextMenu) return null;
 
@@ -1878,6 +1824,7 @@ export function WorkspaceSidebar({
           >
             開く
           </button>
+          {renderAddToCanvas(reference.path)}
           {onRenameReference && (
             <button
               type="button"
@@ -1940,6 +1887,16 @@ export function WorkspaceSidebar({
             開く
           </button>
         )}
+        {!section && kind === "file" && onOpenFileBeside && (
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => closeContextMenuAndRun(() => onOpenFileBeside(entry.path))}
+          >
+            隣のペインで開く
+          </button>
+        )}
+        {kind === "file" && renderAddToCanvas(entry.path)}
         {kind === "folder" && (
           <>
             <button
@@ -2044,6 +2001,14 @@ export function WorkspaceSidebar({
         >
           別ファイルへ切り出す…
         </button>
+        {onAddToCanvas && selected.length > 0 && (
+          <button type="button" role="menuitem" onClick={() => {
+            setHeadingContextMenu(null);
+            onAddToCanvas({ paths: [], headings: selected });
+          }}>
+            キャンバスに置く
+          </button>
+        )}
         {!canExtract && (
           <span className="contextMenuHint">複数選択時は切り出せません</span>
         )}
@@ -2800,10 +2765,20 @@ export function WorkspaceSidebar({
     );
   };
 
+  const showCurrentOutline = outlineScope === "current";
+
   const renderOutlineMode = () => (
     <section className="sidebarSection outlineExplorerSection" aria-label="アウトライン">
       <div className="tree outlineTree">
-        {projectFolder && binderTiers ? (
+        {showCurrentOutline ? (
+          activeDocumentOutline.length > 0 ? (
+            <div className="outlineTreeChildren">
+              {renderOutlineItems(currentFilePath, activeDocumentOutline, 0)}
+            </div>
+          ) : (
+            <div className="outlineEmptyState">見出しがありません</div>
+          )
+        ) : projectFolder && binderTiers ? (
           renderBinderTiers(projectFolder, binderTiers)
         ) : projectFolder ? (
           visibleRootEntries.length > 0 ? (
@@ -2846,40 +2821,6 @@ export function WorkspaceSidebar({
       </div>
     </section>
   );
-
-  const groupedProjectSearchResults = useMemo(() => {
-    const groups: { path: string; name: string; count: number; results: ProjectSearchResult[] }[] = [];
-    const byPath = new Map<string, (typeof groups)[number]>();
-    for (const result of projectSearchResults) {
-      const key = result.path || "__current_document__";
-      let group = byPath.get(key);
-      if (!group) {
-        group = {
-          path: result.path,
-          name: result.name,
-          count: result.fileMatchCount ?? 0,
-          results: [],
-        };
-        byPath.set(key, group);
-        groups.push(group);
-      }
-      group.results.push(result);
-      group.count = Math.max(group.count, result.fileMatchCount ?? group.results.length);
-    }
-    return groups;
-  }, [projectSearchResults]);
-
-  const emptyProjectSearchMessage = projectSearchQuery.length === 0
-      ? "検索語句を入力"
-      : searchScope === "project" && !projectFolder
-        ? "プロジェクトを開いてください"
-        : searchScope === "project" &&
-            projectAst?.status === "indexing" &&
-            !projectSearchResults.length
-          ? "検索用の索引を作成中"
-          : searchScope === "file"
-            ? "現在の本文に一致がありません"
-            : "プロジェクト内に一致がありません";
 
   // サイドバーは最近の数件だけ。全件はチェックポイント画面で見る。
   const allManualSnapshots = snapshots.filter((snapshot) => snapshot.reason === "manual");
@@ -3011,207 +2952,6 @@ export function WorkspaceSidebar({
     );
   };
 
-  // 範囲ボタンは一行に収まる短い名前にし、正式な名前は読み上げとツールチップで示す。
-  const searchScopeOptions: { scope: WorkspaceSearchScope; label: string; name: string; title: string }[] =
-    library
-      ? [
-          { scope: "file", label: "文書", name: "現在の本文", title: "開いている文書だけを検索" },
-          library.role === "root"
-            ? { scope: "project", label: "直下", name: "ライブラリ直下", title: "ライブラリ直下の文書を検索（作品は含まない）" }
-            : { scope: "project", label: "作品", name: "この作品", title: "この作品の文書を検索" },
-          {
-            scope: "library",
-            label: "ライブラリ",
-            name: "ライブラリ全体",
-            title: "ライブラリ直下とすべての作品を検索（置換はできません）",
-          },
-        ]
-      : [
-          { scope: "file", label: "現在の本文", name: "現在の本文", title: "開いている文書だけを検索" },
-          { scope: "project", label: "プロジェクト", name: "プロジェクト", title: "プロジェクトの文書を検索" },
-        ];
-  const activeScopeOption =
-    searchScopeOptions.find((option) => option.scope === searchScope) ?? searchScopeOptions[0];
-
-  const renderProjectSearchMode = () => {
-    const indexStatus = searchScope === "project" ? getProjectAstStatusLabel(projectAst) : null;
-    const hasQuery = projectSearchQuery.length > 0;
-    const replaceCount = projectSearchTotal;
-
-    return (
-    <section className="sidebarSection projectSearchModeSection" aria-label="検索と置換">
-      <div className={`projectSearchInputShell ${projectSearchError ? "projectSearchInputError" : ""}`}>
-        <SidebarIcon name="search" className="searchSvgIcon" />
-        <input
-          value={projectSearchQuery}
-          onChange={(event) => onProjectSearchQueryChange(event.target.value)}
-          placeholder="本文を検索"
-          aria-label="検索語句"
-          type="text"
-          spellCheck={false}
-        />
-        <div className="projectSearchOptions" role="group" aria-label="検索オプション">
-          <button
-            className={projectSearchMatchCase ? "activeSearchOption" : ""}
-            type="button"
-            title="大文字と小文字を区別"
-            aria-label="大文字と小文字を区別"
-            aria-pressed={projectSearchMatchCase}
-            onClick={() => onProjectSearchMatchCaseChange(!projectSearchMatchCase)}
-          >
-            Aa
-          </button>
-          <button
-            className={projectSearchUseRegex ? "activeSearchOption" : ""}
-            type="button"
-            title="正規表現を使用（^ と $ は各行の先頭・末尾）"
-            aria-label="正規表現を使用"
-            aria-pressed={projectSearchUseRegex}
-            onClick={() => onProjectSearchUseRegexChange(!projectSearchUseRegex)}
-          >
-            .*
-          </button>
-          <button
-            className={projectSearchIncludeComments ? "activeSearchOption" : ""}
-            type="button"
-            title="コメント行も検索・置換の対象にする"
-            aria-label="コメントを含む"
-            aria-pressed={projectSearchIncludeComments}
-            onClick={() => onProjectSearchIncludeCommentsChange(!projectSearchIncludeComments)}
-          >
-            //
-          </button>
-        </div>
-      </div>
-      {projectSearchError && (
-        <p className="projectSearchError" role="alert">
-          正規表現に誤りがあります：{projectSearchError}
-        </p>
-      )}
-      <div className="projectSearchScopeRow">
-        <span>範囲</span>
-        <div className="projectSearchModes" role="group" aria-label="検索範囲">
-          {searchScopeOptions.map((option) => (
-            <button
-              key={option.scope}
-              className={searchScope === option.scope ? "activeProjectSearchMode" : ""}
-              type="button"
-              aria-pressed={searchScope === option.scope}
-              aria-label={option.name}
-              title={option.title}
-              disabled={option.scope !== "file" && !projectFolder}
-              onClick={() => onSearchScopeChange(option.scope)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="projectReplaceDisclosure">
-        <button
-          className="projectReplaceToggle"
-          type="button"
-          aria-expanded={isReplaceExpanded}
-          onClick={() => setIsReplaceExpanded((current) => !current)}
-        >
-          <span>置換</span>
-          <SidebarIcon
-            name={isReplaceExpanded ? "chevronDown" : "chevronRight"}
-            className="projectReplaceToggleIcon"
-          />
-        </button>
-        {isReplaceExpanded && (
-          <div className="projectReplacePanel">
-            <label>
-              <span>{projectSearchUseRegex ? "置換後（$1 などを使用可）" : "置換後"}</span>
-              <input
-                value={projectReplaceValue}
-                onChange={(event) => onProjectReplaceValueChange(event.target.value)}
-                placeholder="置換する文字列"
-              />
-            </label>
-            <div className="projectReplaceActions">
-              <button
-                type="button"
-                disabled={
-                  isProjectReplacing ||
-                  !hasQuery ||
-                  Boolean(projectSearchError) ||
-                  replaceCount === 0 ||
-                  searchScope === "library" ||
-                  (searchScope === "project" && !projectFolder)
-                }
-                onClick={searchScope === "file" ? onReplaceInCurrentFile : onReplaceInProject}
-              >
-                {isProjectReplacing
-                  ? "置換中…"
-                  : searchScope === "library"
-                    ? "ライブラリ全体は置換できません"
-                    : searchScope === "file"
-                      ? `${replaceCount}件を置換`
-                      : `${projectSearchMatchedFileCount}ファイル・${replaceCount}件を置換`}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-      <div className="projectSearchSummary" aria-live="polite">
-        <span title="本文が対象です。メタデータ（フロントマター）は検索しません。">
-          {hasQuery && !projectSearchError
-            ? searchScope === "file"
-              ? `${activeScopeOption.name} · ${projectSearchTotal}件`
-              : `${activeScopeOption.name} · ${projectSearchTotal}件・${projectSearchMatchedFileCount}ファイル`
-            : activeScopeOption.name}
-        </span>
-        {indexStatus && <span>{indexStatus}</span>}
-        {searchScope === "library" && isLibrarySearchLoading && <span>ほかの作品を読み込み中</span>}
-      </div>
-      <div className="projectSearchList">
-        {groupedProjectSearchResults.length ? (
-          groupedProjectSearchResults.map((group) => (
-            <section className="projectSearchResultGroup" key={group.path || group.name}>
-              <header className="projectSearchResultGroupHeader" title={group.path}>
-                <span>{group.name}</span>
-                <span>{group.count}件</span>
-              </header>
-              {group.results.map((result) => (
-                <button
-                  className="projectSearchResultItem"
-                  key={result.id}
-                  type="button"
-                  title={`${result.path || result.name} ${result.line}行 ${result.column}列`}
-                  onClick={() => onOpenProjectSearchResult(result)}
-                >
-                  <span className="projectSearchResultMeta">
-                    <span>{result.title ?? "本文"}</span>
-                    <span>{result.line}行 {result.column}列</span>
-                  </span>
-                  <span className="projectSearchResultExcerpt">
-                    {result.excerptBefore ?? result.excerpt}
-                    {result.excerptMatch !== undefined && (
-                      <mark className={result.matchLength === 0 ? "zeroLengthSearchMatch" : ""}>
-                        {result.excerptMatch || "│"}
-                      </mark>
-                    )}
-                    {result.excerptAfter ?? ""}
-                  </span>
-                </button>
-              ))}
-            </section>
-          ))
-        ) : projectSearchError ? null : (
-          <div className="outlineEmptyState">{emptyProjectSearchMessage}</div>
-        )}
-        {projectSearchTruncated && (
-          <div className="projectSearchLimitNotice">
-            先頭{projectSearchResults.length}件を表示しています
-          </div>
-        )}
-      </div>
-    </section>
-    );
-  };
-
   const renderSnapshotSection = () => (
     <section className="sidebarSection snapshotSection" aria-label="スナップショット">
       <div className="snapshotSectionHeader">
@@ -3290,54 +3030,34 @@ export function WorkspaceSidebar({
   return (
     <aside
       className={`workspaceSidebar ${showOutlineGuides ? "showOutlineGuides" : ""}`}
-      aria-label="ファイルと検索"
+      aria-label="ファイル・見出し"
     >
-      <div className="sidebarHeader">
-        {!isProjectSearchMode && projectFolder ? (
-          <RightPaneSwitcher
-            items={progressFilterItems}
-            activeId={progressFilter}
-            menuLabel="表示するファイル"
-            onSelect={(id) => changeProgressFilter(id as FileProgressFilter)}
-          />
-        ) : (
-          <span className="sidebarHeaderLabel">
-            {isProjectSearchMode ? "検索" : "ファイル"}
-          </span>
-        )}
-        {!isProjectSearchMode && projectFolder && (
-          <span className="sidebarHeaderUnit" title="各行の数字は字数（単位：字）">
-            字数
-          </span>
-        )}
-        <div className="sidebarHeaderActions">
-          <button
-            className="sidebarIconButton"
-            type="button"
-            aria-label="左サイドバーを畳む"
-            title="左サイドバーを畳む"
-            onClick={onCollapse}
-          >
-            <SidebarIcon name="chevronLeft" className="sidebarButtonSvg" />
-          </button>
+      {!showCurrentOutline && (projectFolder || onCollapse) && (
+        <div className="filePanelListTools">
+          {library?.role === "project" && (
+            <LibraryBackButton library={library} onEnterLibraryRoot={onEnterLibraryRoot} />
+          )}
+          {projectFolder && (
+            <div className="filePanelProgressFilter">
+              <RightPaneSwitcher
+                items={progressFilterItems}
+                activeId={progressFilter}
+                menuLabel="進捗で絞り込む"
+                onSelect={(id) => changeProgressFilter(id as FileProgressFilter)}
+              />
+            </div>
+          )}
+          {onCollapse && (
+            <button className="sidebarIconButton" type="button" aria-label="ファイル一覧を閉じる" onClick={onCollapse}>
+              <SidebarIcon name="chevronLeft" className="sidebarButtonSvg" />
+            </button>
+          )}
         </div>
-      </div>
-
-      {!isProjectSearchMode && library?.role === "project" && (
-        <LibraryBackButton library={library} onEnterLibraryRoot={onEnterLibraryRoot} />
       )}
 
-      <div
-        className={`sidebarScroll ${
-          isProjectSearchMode ? "projectSearchSidebarScroll" : ""
-        } ${!isProjectSearchMode && library?.role === "root" ? "hasLibraryProjects" : ""}`}
-      >
-        {isProjectSearchMode ? (
-          renderProjectSearchMode()
-        ) : (
-          renderOutlineMode()
-        )}
-        {!isProjectSearchMode && library?.role === "root" && (
+      <div className={`sidebarScroll ${!showCurrentOutline && library?.role === "root" ? "hasLibraryProjects" : ""}`}>
+        {renderOutlineMode()}
+        {!showCurrentOutline && library?.role === "root" && (
           <LibraryProjectList
             library={library}
             onEnterProject={onEnterProject}
@@ -3348,13 +3068,13 @@ export function WorkspaceSidebar({
         )}
       </div>
 
-      {showSnapshotSection && !isProjectSearchMode && projectFolder && library?.role !== "root" && (
+      {showSnapshotSection && !showCurrentOutline && projectFolder && library?.role !== "root" && (
         <div className={`snapshotDock ${isSnapshotSectionCollapsed ? "collapsedSnapshotDock" : ""}`}>
           {renderSnapshotSection()}
         </div>
       )}
 
-      {!isProjectSearchMode && projectFolder && (
+      {!showCurrentOutline && projectFolder && (
         <footer className="fileViewSummary">
           <span className="progressLegend" aria-label="状態記号の凡例">
             {(["writing", "revising", "done", "todo"] as const).map((status) => (
@@ -3375,8 +3095,8 @@ export function WorkspaceSidebar({
         </footer>
       )}
 
-      {renderContextMenu()}
-      {renderHeadingContextMenu()}
+      {!panelHidden && renderContextMenu()}
+      {!panelHidden && renderHeadingContextMenu()}
     </aside>
   );
 }

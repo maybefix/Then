@@ -670,7 +670,7 @@ for (const [oldName, answer, expected] of [
 {
   const { app, actions } = setup();
   await actions().handleMoveProjectEntriesToFolder([p("第一章", "a.txt"), p("第一章")], ROOT);
-  assert.deepEqual(app.toasts, ["複数移動ではファイルだけを選択してください"]);
+  assert.deepEqual(app.toasts, [], "the selected folder already contains the selected file");
   assert.deepEqual(app.log, []);
 }
 {
@@ -679,7 +679,7 @@ for (const [oldName, answer, expected] of [
     throw new Error("move failed");
   };
   await actions().handleMoveProjectEntriesToFolder([p("c.txt"), p("c.txt")], p("第一章"));
-  assert.deepEqual(commandsOf(app), ["move_project_entry"], "one source goes through the single move");
+  assert.deepEqual(commandsOf(app), ["move_project_entry", "(refresh)"], "one source goes through the single move and refreshes after failure");
   assert.equal(app.lastError, "Error: move failed");
   assertSaveMarkUntouched(app, "move failure");
   assert.deepEqual(app.toasts, ["移動できませんでした"]);
@@ -690,6 +690,7 @@ for (const [oldName, answer, expected] of [
     throw new Error("moves failed");
   };
   await actions().handleMoveProjectEntriesToFolder([p("c.txt"), p("第一章", "b.txt")], p("第二部"));
+  assert.deepEqual(commandsOf(app), ["move_project_entries", "(refresh)"]);
   assert.equal(app.lastError, "Error: moves failed");
   assertSaveMarkUntouched(app, "multiple move failure");
   assert.deepEqual(app.toasts, ["選択したファイルを移動できませんでした"]);
