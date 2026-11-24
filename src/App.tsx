@@ -11,6 +11,7 @@ import {
   recordRestoredText,
   recoveryDestination,
   saveThroughJournal,
+  closeDocumentJournal,
   scanRecovery,
   type RecoveryItem,
 } from "./editor/saveJournal";
@@ -21,6 +22,7 @@ import {
   DragEvent,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
+  type ComponentProps,
   type ReactNode,
   useCallback,
   useEffect,
@@ -29,6 +31,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 import { manageAsyncRegistration } from "./utils/asyncRegistration";
 import { flushPendingSaves, schedulePendingSave } from "./pendingSaves";
 import { useVerticalMetricFontFamily } from "./utils/verticalMetricFonts";
@@ -217,7 +220,7 @@ import { ReferenceLayer } from "./components/references/ReferenceLayer";
 import { createProjectEntryActions, type PathChange } from "./projectEntryActions";
 import { createWorkspaceTreeActions } from "./workspaceTreeActions";
 import { createProjectSearchActions } from "./projectSearchActions";
-import { createHeadingMoveActions } from "./headingMoveActions";
+import { createHeadingMoveActions, type HeadingWriteDocument } from "./headingMoveActions";
 import { collectMaterialPaths, documentModeFor, editorSettingsFor } from "./editor/noteMode";
 import { createTemplateActions } from "./templateActions";
 import { createSystemFontLoader } from "./systemFonts";
@@ -307,6 +310,7 @@ import {
   isSamePath,
   toProjectRelativePath,
   recordOpenedWorkspace,
+  retargetFilesystemPath,
   scopeDisplayName,
 } from "./utils/projectTree";
 import type { LoadedExportSource } from "./export/types";
@@ -920,6 +924,34 @@ async function listReferenceCandidates(folderPath: string): Promise<ReferenceFil
   });
 }
 
+type DocumentSplit = {
+  workspacePath: string | null;
+  otherTabId: string;
+  activeSide: "left" | "right";
+};
+
+function DocumentPaneEditor({
+  tabId,
+  registerEditor,
+  onPaneTextChange,
+  onPaneSelectionChange,
+  ...props
+}: Omit<ComponentProps<typeof VerticalTextEditor>, "onReady" | "onTextChange" | "onSelectionChange"> & {
+  tabId: string;
+  registerEditor: (tabId: string, editor: TextEditorHandle | null) => void;
+  onPaneTextChange: (tabId: string, text: string, revision: number, change?: TextSplice | null) => void;
+  onPaneSelectionChange: (tabId: string) => void;
+}) {
+  const onReady = useCallback((editor: TextEditorHandle | null) => {
+    registerEditor(tabId, editor);
+  }, [registerEditor, tabId]);
+  const onTextChange = useCallback((text: string, revision: number, change?: TextSplice | null) => {
+    onPaneTextChange(tabId, text, revision, change);
+  }, [onPaneTextChange, tabId]);
+  const onSelectionChange = useCallback(() => onPaneSelectionChange(tabId), [onPaneSelectionChange, tabId]);
+  return <VerticalTextEditor {...props} onReady={onReady} onTextChange={onTextChange} onSelectionChange={onSelectionChange} />;
+}
+
 export default function App() {
   const referenceLayoutLoadedRootRef = useRef<string | null>(null);
   // 資料を取り込んだ・消したあとでファイル一覧を読み直す（素材の段に出るため。BINDER 2-5）。定義より前の処理から呼ぶ。
@@ -950,6 +982,11 @@ export default function App() {
   const nativeFullscreenRequestIdRef = useRef(0);
   const restoreMaximizedAfterFullscreenRef = useRef(false);
   const editorInstanceRef = useRef<TextEditorHandle | null>(null);
+  const paneEditorsRef = useRef(new Map<string, TextEditorHandle>());
+  const headingWritePathsRef = useRef<string[]>([]);
+  const focusPaneOnActivateRef = useRef<string | null>(null);
+  const saveSplitOutgoingRef = useRef<(tabId: string) => void>(() => {});
+  const openBesideRequestRef = useRef(0);
   const editorShellRef = useRef<HTMLDivElement | null>(null);
   const editorContextMenuRef = useRef<HTMLDivElement | null>(null);
   const editorFindInputRef = useRef<HTMLInputElement | null>(null);
@@ -994,6 +1031,10 @@ export default function App() {
   ]);
   const [activeTabId, setActiveTabId] = useState("initial-document-tab");
   activeTabIdRef.current = activeTabId;
+  const [documentSplit, setDocumentSplit] = useState<DocumentSplit | null>(null);
+  const documentSplitRef = useRef(documentSplit);
+  documentSplitRef.current = documentSplit;
+  const [leftPaneWidth, setLeftPaneWidth] = useState(50);
   // 確認ダイアログを待つ間にタブの状態が進むため、閉じる処理は最新の一覧を参照する。
   const openTabsRef = useRef(openTabs);
   openTabsRef.current = openTabs;
@@ -1404,6 +1445,13 @@ export default function App() {
     () => openTabs.find((tab) => tab.id === activeTabId) ?? openTabs[0] ?? null,
     [activeTabId, openTabs],
   );
+  const workspacePath = projectFolder?.path ?? null;
+  const besideTab = documentSplit && documentSplit.workspacePath === workspacePath && activeTab?.kind !== "empty"
+    ? openTabs.find((tab) => tab.id === documentSplit.otherTabId && tab.id !== activeTabId) ?? null
+    : null;
+  useEffect(() => {
+    if (documentSplit && !besideTab) setDocumentSplit(null);
+  }, [besideTab, documentSplit]);
   const workspaceTabSessionSignature = useMemo(
     () => JSON.stringify({
       activeTabId,
@@ -1525,6 +1573,21 @@ export default function App() {
     const previousDocument = activeDocumentSnapshotRef.current;
     const previousSelection = editorInstanceRef.current?.getSelection() ?? null;
     if (tab.id !== previousTabId) {
+      // Tab shortcuts can activate an already-mounted editor. Follow the active
+      // tab when the keyboard was in the old editor, leaving tab-bar focus alone.
+      focusPaneOnActivateRef.current = paneEditorsRef.current.has(tab.id) &&
+        editorShellRef.current?.contains(document.activeElement) ? tab.id : null;
+      if (documentSplitRef.current) {
+        saveSplitOutgoingRef.current(previousTabId);
+        setDocumentSplit((split) => {
+          if (!split || split.otherTabId !== tab.id) return split;
+          return {
+            ...split,
+            otherTabId: previousTabId,
+            activeSide: split.activeSide === "left" ? "right" : "left",
+          };
+        });
+      }
       const viewportState = editorInstanceRef.current?.getViewportState() ?? null;
       setOpenTabs((current) =>
         current.map((item) =>
@@ -1555,12 +1618,13 @@ export default function App() {
   }, []);
   const activateDocumentTab = useCallback(
     (tabId: string): boolean => {
-      const tab = openTabs.find((item) => item.id === tabId);
+      if (tabId === activeTabIdRef.current) return true;
+      const tab = openTabsRef.current.find((item) => item.id === tabId);
       if (!tab) return false;
       syncDocumentTabToEditor(tab);
       return true;
     },
-    [openTabs, syncDocumentTabToEditor],
+    [syncDocumentTabToEditor],
   );
   const openDocumentInTab = useCallback(
     (
@@ -1625,8 +1689,9 @@ export default function App() {
   const setActiveMarkdown = useCallback(
     (nextMarkdown: string, editorRevision: number | null | "keep" = null, change: TextSplice | null = null) => {
       const previousMarkdown = activeMarkdownRef.current;
-      activeMarkdownRef.current = nextMarkdown;
       const activeFile = openTabsRef.current.find((tab) => tab.id === activeTabId);
+      if (activeFile?.path && headingWritePathsRef.current.some((path) => isSamePath(path, activeFile.path!))) return;
+      activeMarkdownRef.current = nextMarkdown;
       if (activeFile?.path && previousMarkdown !== nextMarkdown) {
         // Every change of a saved document reaches its recovery journal.
         recordDocumentChange(
@@ -3126,7 +3191,7 @@ export default function App() {
 
     setSaveStatus("dirty");
     const timer = window.setTimeout(() => {
-      if (projectEntryPathChangeInProgressRef.current) return;
+      if (projectEntryPathChangeInProgressRef.current || headingWritePathsRef.current.some((path) => isSamePath(path, currentFilePath))) return;
       void enqueueDocumentSave({
         tabId: activeTabId,
         path: currentFilePath,
@@ -3242,6 +3307,26 @@ export default function App() {
     },
     [updateSelectionCharCount],
   );
+  const handleEditorReadyRef = useRef(handleEditorReady);
+  handleEditorReadyRef.current = handleEditorReady;
+  const registerPaneEditor = useCallback((tabId: string, editor: TextEditorHandle | null) => {
+    if (editor) {
+      paneEditorsRef.current.set(tabId, editor);
+      const path = openTabsRef.current.find((tab) => tab.id === tabId)?.path;
+      if (path && headingWritePathsRef.current.some((target) => isSamePath(target, path))) {
+        editor.setEditable(false);
+      }
+    } else paneEditorsRef.current.delete(tabId);
+    if (tabId === activeTabIdRef.current) handleEditorReadyRef.current(editor);
+  }, []);
+  useLayoutEffect(() => {
+    const editor = paneEditorsRef.current.get(activeTabId) ?? null;
+    handleEditorReady(editor);
+    if (focusPaneOnActivateRef.current === activeTabId) {
+      focusPaneOnActivateRef.current = null;
+      editor?.restoreFocus();
+    }
+  }, [activeTabId, handleEditorReady]);
 
   const handleEditorViewportSizeChange = useCallback(
     (size: { width: number; height: number; verticalPadding: number } | null) => {
@@ -3399,6 +3484,42 @@ export default function App() {
     setSaveStatus,
   ]);
 
+  const handleActiveTextChangeRef = useRef(handleTextChange);
+  handleActiveTextChangeRef.current = handleTextChange;
+  const saveEditedPane = useCallback((tab: DocumentTab, content: string) => {
+    if (!tab.path || headingWritePathsRef.current.some((path) => isSamePath(path, tab.path!)) || content === tab.savedMarkdown ||
+      conflictTabIdsRef.current.has(tab.id) || projectEntryPathChangeInProgressRef.current ||
+      workspaceSwitchInProgressRef.current) return;
+    void enqueueDocumentSave({
+      tabId: tab.id,
+      path: tab.path,
+      content,
+      journalPosition: journalPositionOf(tab.id, content),
+    }).catch(() => undefined);
+  }, [enqueueDocumentSave]);
+
+  const handlePaneTextChange = useCallback((tabId: string, text: string, revision: number, change?: TextSplice | null) => {
+    if (tabId === activeTabIdRef.current) {
+      handleActiveTextChangeRef.current(text, revision, change);
+      return;
+    }
+    // IME can finish a composition just after focus moved to the other pane.
+    const tab = openTabsRef.current.find((item) => item.id === tabId);
+    if (!tab || (tab.path && headingWritePathsRef.current.some((path) => isSamePath(path, tab.path!)))) return;
+    const layout = updateMarkdownBodyDetailed(tab.markdown, text);
+    const content = layout.markdown;
+    if (content === tab.markdown) return;
+    if (tab.path) {
+      recordDocumentChange(tabId, tab.path, tab.markdown, content, placeBodyChange(tab.markdown, layout, text, change), tab.contentHash);
+    }
+    const apply = (tabs: DocumentTab[]) => tabs.map((item) => item.id === tabId
+      ? { ...item, markdown: content, editorRevision: revision, saveStatus: "dirty" as const }
+      : item);
+    openTabsRef.current = apply(openTabsRef.current);
+    setOpenTabs(apply);
+    saveEditedPane(tab, content);
+  }, [saveEditedPane]);
+
   useEffect(() => {
     updateSelectionCharCount(editorInstanceRef.current);
   }, [updateSelectionCharCount]);
@@ -3534,6 +3655,11 @@ export default function App() {
     // 選択変化に伴うタイプライター再センタリングはエディタ内部に一本化した。
     // App 側の scheduleTypewriterScroll は設定・オフセット変更時の再適用専用に残す。
   }, [currentFilePath, projectFolder, updateSelectionCharCount]);
+  const handleSelectionChangeRef = useRef(handleSelectionChange);
+  handleSelectionChangeRef.current = handleSelectionChange;
+  const handlePaneSelectionChange = useCallback((tabId: string) => {
+    if (tabId === activeTabIdRef.current) handleSelectionChangeRef.current();
+  }, []);
 
   const showToast = (message: string, action: ToastAction | null = null) => {
     setToast(message);
@@ -4356,6 +4482,7 @@ export default function App() {
 
     setOpenTabs(remainingTabs.length ? remainingTabs : [fallbackTab]);
     for (const tab of targets) forgetDocumentJournal(tab.id);
+    if (isClosingActiveTab) didMountEditorRef.current = false;
     if (isClosingActiveTab) syncDocumentTabToEditor(fallbackTab);
     showToast(
       targets.length === 1
@@ -6239,6 +6366,100 @@ export default function App() {
 
   handleProjectFileSelectRef.current = handleProjectFileSelect;
 
+  saveSplitOutgoingRef.current = (tabId) => {
+    const tab = openTabsRef.current.find((item) => item.id === tabId);
+    if (tab && didMountEditorRef.current) saveEditedPane(tab, activeMarkdownRef.current);
+  };
+
+  const rememberBesidePosition = () => {
+    const otherId = documentSplitRef.current?.otherTabId;
+    const tab = openTabsRef.current.find((item) => item.id === otherId);
+    const editor = tab && paneEditorsRef.current.get(tab.id);
+    if (!tab || !editor) return;
+    const viewportState = editor.getViewportState();
+    setOpenTabs((current) => current.map((item) => item.id === tab.id ? { ...item, viewportState } : item));
+    const path = tab.path;
+    if (path) {
+      const offset = editor.getSelection().head;
+      const length = editor.getValue().length;
+      setAppState((current) => ({
+        ...current,
+        cursorPositions: { ...current.cursorPositions, [path]: { offset, length } },
+      }));
+    }
+  };
+
+  const showTabBeside = (tab: DocumentTab) => {
+    const current = openTabsRef.current.find((item) => item.id === activeTabIdRef.current);
+    if (!current || current.kind === "empty" || (current.name === newTabName && !current.markdown.trim())) {
+      syncDocumentTabToEditor(tab);
+      return;
+    }
+    if (current.id === tab.id) return;
+    if (documentSplitRef.current?.otherTabId !== tab.id) rememberBesidePosition();
+    setAppMode("write");
+    setDocumentSplit((split) => ({
+      workspacePath,
+      otherTabId: tab.id,
+      activeSide: split?.workspacePath === workspacePath ? split.activeSide : "left",
+    }));
+    editorInstanceRef.current?.restoreFocus();
+  };
+
+  const openFileBeside = async (path: string) => {
+    const requestWorkspace = workspaceSwitchGenerationRef.current;
+    const request = ++openBesideRequestRef.current;
+    const isCurrent = () => request === openBesideRequestRef.current &&
+      requestWorkspace === workspaceSwitchGenerationRef.current && !workspaceSwitchInProgressRef.current;
+    const matchingTab = () => openTabsRef.current.find((tab) => tab.path && isSamePath(tab.path, path));
+    let tab = matchingTab();
+    if (!tab) {
+      try {
+        const document = await invoke<TextDocument>("read_text_file", { path });
+        if (!isCurrent()) return;
+        tab = matchingTab();
+        if (!tab) {
+          tab = createFileDocumentTab(document);
+          const newTab = tab;
+          setOpenTabs((current) => current.some((item) => item.id === newTab.id)
+            ? current
+            : insertTabAfter(current, newTab, activeTabIdRef.current));
+        }
+      } catch (error) {
+        if (!isCurrent()) return;
+        setLastError(String(error));
+        showToast("ファイルを開けませんでした");
+        return;
+      }
+    }
+    showTabBeside(tab);
+  };
+
+  const openTabBeside = (tab: DocumentTab) => {
+    openBesideRequestRef.current++;
+    if (tab.id !== activeTabId) {
+      showTabBeside(tab);
+      return;
+    }
+    if (besideTab) return;
+    const next = withoutEmptyTabs(openTabs).find((item) =>
+      item.id !== tab.id && (item.name !== newTabName || Boolean(item.markdown.trim())));
+    if (next) {
+      showTabBeside(next);
+      return;
+    }
+    const scratch = createScratchDocumentTab();
+    setOpenTabs((current) => insertTabAfter(current, scratch, tab.id));
+    showTabBeside(scratch);
+  };
+
+  const closeDocumentSplit = () => {
+    openBesideRequestRef.current++;
+    rememberBesidePosition();
+    setDocumentSplit(null);
+    editorInstanceRef.current?.restoreFocus();
+  };
+
   const { handlePluginRequest, handleInstallPlugin, handleUninstallPlugin } = createPluginHostActions({
     projectFolder,
     currentFilePath,
@@ -6572,6 +6793,15 @@ export default function App() {
     setClosedDocumentTabs,
     retargetPostNotes: (_rootPath, changes) => void postStream.retargetNotes(changes),
     // 別ウィンドウと埋め込みの Canvas の両方が受ける（BINDER 2-6）。
+    onPathsChanged: (rootPath, changes) => {
+      setDocumentSplit((split) => {
+        if (!split || split.workspacePath !== rootPath || !split.otherTabId.startsWith("file:")) return split;
+        const path = split.otherTabId.slice("file:".length);
+        const nextPath = changes.reduce((current, change) =>
+          retargetFilesystemPath(current, change.oldPath, change.newPath) ?? current, path);
+        return nextPath === path ? split : { ...split, otherTabId: `file:${nextPath}` };
+      });
+    },
     notifyCanvasPathChanges: (rootPath, changes) => {
       if (!isTauriRuntime()) return;
       const payload: CanvasPathChangesEvent = { rootPath, changes };
@@ -6971,10 +7201,74 @@ export default function App() {
     );
   };
 
+  const withHeadingWrite = async <Result,>(
+    paths: string[],
+    operation: (documents: HeadingWriteDocument[]) => Promise<Result>,
+  ): Promise<Result> => {
+    const workspaceGeneration = workspaceSwitchGenerationRef.current;
+    if (workspaceSwitchInProgressRef.current || projectEntryPathChangeInProgressRef.current ||
+      (projectFolder?.path ?? null) !== openProjectPathRef.current) {
+      throw new Error("作品の切り替えやファイル操作の完了後に再操作してください");
+    }
+    const tabs = paths.map((path) => openTabWithPath(path));
+    const editors = tabs.flatMap((tab) => {
+      const editor = tab && paneEditorsRef.current.get(tab.id);
+      return editor ? [editor] : [];
+    });
+    if (editors.some((editor) => editor.isComposing()) ||
+      tabs.some((tab) => tab && conflictTabIdsRef.current.has(tab.id))) {
+      throw new Error("文字入力や保存の確認を完了してから再操作してください");
+    }
+
+    headingWritePathsRef.current = paths;
+    editors.forEach((editor) => editor.setEditable(false));
+    try {
+      const prepared = await Promise.allSettled(paths.map(async (path, index): Promise<HeadingWriteDocument> => {
+        const tab = tabs[index];
+        const markdown = tab?.id === activeTabIdRef.current ? activeMarkdownRef.current : tab?.markdown;
+        if (tab && markdown !== undefined) {
+          if (markdown !== tab.savedMarkdown || documentSaveQueuesRef.current.has(tab.id)) {
+            const saved = await enqueueDocumentSave({
+              tabId: tab.id, path, content: markdown,
+              journalPosition: journalPositionOf(tab.id, markdown),
+            });
+            await closeDocumentJournal(tab.id);
+            if (saved.contentHash) return { path, markdown, expectedHash: saved.contentHash };
+          } else {
+            await closeDocumentJournal(tab.id);
+            if (tab.contentHash) return { path, markdown, expectedHash: tab.contentHash };
+          }
+        }
+        const saved = await invoke<TextDocument>("read_text_file", { path });
+        if (!saved.contentHash || (markdown !== undefined && markdown !== saved.content)) {
+          throw new Error(`「${saved.name}」の保存状態が変わりました。読み込み直してください`);
+        }
+        return { path, markdown: saved.content, expectedHash: saved.contentHash };
+      }));
+      if (workspaceGeneration !== workspaceSwitchGenerationRef.current ||
+        projectEntryPathChangeInProgressRef.current) {
+        throw new Error("作品またはファイルの位置が変わりました。再操作してください");
+      }
+      const documents = prepared.map((result) => {
+        if (result.status === "rejected") throw result.reason;
+        return result.value;
+      });
+      return await operation(documents);
+    } finally {
+      headingWritePathsRef.current = [];
+      for (const tab of openTabsRef.current) {
+        const path = tab.path;
+        if (path && paths.some((target) => isSamePath(path, target))) {
+          paneEditorsRef.current.get(tab.id)?.setEditable(true);
+        }
+      }
+    }
+  };
+
   const { handleHeadingMove, handleHeadingExtract } = createHeadingMoveActions({
     projectFolder,
-    currentFilePath,
-    openTabs,
+    getOpenTabs: () => openTabsRef.current,
+    withHeadingWrite,
     setOpenTabs,
     settings: editorSettings,
     headingMoveInProgressRef,
@@ -7456,6 +7750,79 @@ export default function App() {
 
   const filePanel = { id: "files", label: "ファイル・見出し", icon: <AppIcon name="files" /> };
   const searchPanel = { id: "search", label: "検索", icon: <AppIcon name="search" /> };
+  const besideMode = documentModeFor(besideTab?.path ?? null, materialPaths);
+  const besideSettings = useMemo(() => editorSettingsFor(settings, besideMode), [settings, besideMode]);
+  const besideLinkLookup = useLinkLookup(linkIndex, workspacePath, besideMode === "note");
+  const besideIsVertical = besideSettings.writingMode === "vertical-rl";
+  const besideFont = useVerticalMetricFontFamily(settings.editorFontFamily, besideIsVertical);
+  const besideHeadingFont = useVerticalMetricFontFamily(
+    settings.headingFontSource === "custom" ? settings.headingFontFamily : settings.editorFontFamily,
+    besideIsVertical,
+  );
+  const besideAppearance = useMemo(
+    () => buildAppShellAppearance(settings, besideFont, besideHeadingFont).style,
+    [settings, besideFont, besideHeadingFont],
+  );
+  // キーは位置でなく文書の ID。左右のフォーカスを移しても、選択や履歴を持つエディタは残る。
+  const editorPanes = besideTab && activeTab
+    ? documentSplit?.activeSide === "right" ? [besideTab, activeTab] : [activeTab, besideTab]
+    : [activeTab];
+
+  const renderPaneEditor = (paneTab: DocumentTab, paneActive: boolean) => {
+    const paneSettings = paneActive ? editorSettings : besideSettings;
+    const paneText = paneActive ? editorText : parseFrontMatter(paneTab.markdown).body.replace(/\r\n?/g, "\n");
+    const savedCursor = paneTab.path ? appState.cursorPositions[paneTab.path] : undefined;
+    const paneSelection = paneActive
+      ? initialSelectionOffset
+      : savedCursor?.length === paneText.length ? savedCursor.offset : 0;
+    return (
+      <DocumentPaneEditor
+        key={paneTab.documentKey}
+        tabId={paneTab.id}
+        registerEditor={registerPaneEditor}
+        focusOnMount={paneActive}
+        text={paneText}
+        editorRevision={paneTab.editorRevision ?? null}
+        writingMode={paneSettings.writingMode}
+        editorDisplayMode={paneSettings.editorDisplayMode}
+        pageFlowDirection={paneSettings.pageFlowDirection}
+        typewriterScroll={paneSettings.typewriterScroll}
+        showTypewriterGuide={paneSettings.showTypewriterGuide}
+        typewriterOffset={settings.typewriterOffset}
+        showLineBreakMarks={settings.showLineBreakMarks}
+        showLineNumbers={settings.showLineNumbers}
+        highlightCurrentLine={settings.highlightCurrentLine}
+        documentPath={paneTab.path}
+        colorizeJapaneseQuotes={settings.colorizeJapaneseQuotes}
+        showComments={settings.showComments}
+        textLayoutSignature={[
+          settings.editorFontFamily,
+          settings.headingFontSource,
+          settings.headingFontFamily,
+          settings.fontSize,
+          settings.lineHeight,
+          settings.editorMeasureHorizontal,
+          settings.editorMeasureVertical,
+          paneSettings.manuscript.layoutMode,
+          settings.manuscript.charactersPerLine,
+          settings.manuscript.linesPerPage,
+          settings.manuscript.fontSize,
+        ].join("|")}
+        linkLookup={paneActive ? linkLookup : besideLinkLookup}
+        onLinkActivate={linkOpenActions.activate}
+        postBodyForDrop={postBodyForDrop}
+        manuscript={paneSettings.manuscript}
+        onManuscriptProgressChange={paneActive ? editorManuscriptProgress.setSnapshot : undefined}
+        initialSelectionOffset={paneSelection}
+        initialViewportState={paneTab.viewportState}
+        onViewportSizeChange={paneActive ? handleEditorViewportSizeChange : undefined}
+        onPaneTextChange={handlePaneTextChange}
+        onPaneSelectionChange={handlePaneSelectionChange}
+        onPageMetricsChange={paneActive ? setEditorPageMetrics : undefined}
+      />
+    );
+  };
+
   const fileScopes = [
     { id: "all", label: "ファイルツリー", icon: <AppIcon name="files" /> },
     { id: "current", label: "この文書の見出し", icon: <AppIcon name="write" /> },
@@ -7511,6 +7878,7 @@ export default function App() {
         data-shell-app-mode={appMode}
         {...buildAppShellAppearance(settings, editorFontFamily, editorHeadingFontFamily)}
         data-writing-mode={editorSettings.writingMode}
+        data-editor-split={besideTab ? true : undefined}
         data-startup-view={startupView}
         data-native-window={isTauriRuntime() ? "true" : undefined}
       >
@@ -7650,6 +8018,8 @@ export default function App() {
               onReopenClosedTab={() => void reopenClosedDocumentTab()}
               onCopyTabPath={(tab) => void copyDocumentTabPath(tab)}
               onRevealTab={revealDocumentTab}
+              onOpenBeside={openTabBeside}
+              canSplitActiveTab={!besideTab && !isNewTabStartPage}
             />
           )}
 
@@ -7665,7 +8035,11 @@ export default function App() {
               aria-hidden={appMode === "plugin"}
               {...(appMode === "plugin" ? { inert: "" } : {})}
             >
-              <div className="editorFrame">
+              <div
+                className="editorFrame"
+                data-split={Boolean(besideTab && !isEditorFocusMode)}
+                style={besideTab ? { gridTemplateColumns: `minmax(0, ${leftPaneWidth}fr) minmax(0, ${100 - leftPaneWidth}fr)` } : undefined}
+              >
                 <button
                   className={`editorFocusExitButton ${isEditorFocusMode ? "isVisible" : ""}`}
                   type="button"
@@ -7677,252 +8051,288 @@ export default function App() {
                 >
                   <AppIcon name="fullscreenExit" />
                 </button>
-                <div
-                  ref={editorShellRef}
-                  className="editor"
-                  onContextMenu={handleEditorContextMenu}
-
-                >
-                  <div className="editorContent">
-                    {workspaceAlert && (
-                      <section className="workspaceAlert" role="alert">
-                        <div>
-                          <strong>{workspaceAlert.message}</strong>
-                          <span>{workspaceAlert.path}</span>
-                        </div>
-                        <div className="workspaceAlertActions">
-                          <button type="button" onClick={handleRetryWorkspaceRestore}>
-                            再試行
-                          </button>
-                          <button type="button" onClick={handleOpenProjectFolder}>
-                            別のフォルダを選択
-                          </button>
-                          <button type="button" onClick={handleForgetWorkspace}>
-                            履歴から削除
-                          </button>
-                          <button type="button" onClick={() => setWorkspaceAlert(null)}>
-                            閉じる
-                          </button>
-                        </div>
-                      </section>
-                    )}
-                    {activeTab?.kind === "empty" && libraryContext?.role === "root" ? (
-                      <LibraryHome
-                        libraryName={libraryContext.name}
-                        items={
-                          libraryHome?.libraryPath === libraryContext.path
-                            ? libraryHome.items
-                            : libraryContext.projects.map((project) => ({
-                                path: project.path,
-                                name: project.name,
-                                work: null,
-                                stats: null,
-                              }))
-                        }
-                        isLoading={libraryHome?.libraryPath !== libraryContext.path || libraryHome.isLoading}
-                        onOpenProject={enterProject}
-                        onEditWork={(item) => void editWorkInfo(item.path, item.name, item.work)}
-                        onCreateProject={() => void handleCreateLibraryProject()}
-                        onRefresh={() => void refreshLibraryHome(libraryContext.path, true)}
-                      />
-                    ) : activeTab?.kind === "empty" && projectFolder ? (
-                      <ScopeStartPage
-                        onEditWork={
-                          libraryContext?.role === "project" ? () => void editCurrentWorkInfo() : undefined
-                        }
-                        folder={projectFolder}
-                        onOpenFile={(path) => void handleProjectFileSelect(path)}
-                        onCreateFile={() => void handleCreateProjectFile(projectFolder.path)}
-                        onOpenCanvas={() => void openIdeaCanvasBoard("project")}
-                      />
-                    ) : isNewTabStartPage || activeTab?.kind === "empty" ? (
-                      <section className="newTabStart" aria-label="新しいタブ">
-                        <div>
-                          <p className="newTabEyebrow">New tab</p>
-                          <h1>フォルダを開いて書き始める</h1>
-                          <p>
-                            作業するフォルダを選ぶと、テキストファイルとスニペットをこのタブで扱えます。
-                          </p>
-                        </div>
-                        <div className="newTabActions">
-                          <button type="button" onClick={handleOpenProjectFolder}>
-                            フォルダを開く
-                          </button>
-                          <button type="button" onClick={handleOpenTextFile}>
-                            テキストファイルを開く
-                          </button>
-                        </div>
-                      </section>
-                    ) : (
-                      <>
-                        {isHydrated && (
-                          <VerticalTextEditor
-                            key={documentKey}
-                            text={editorText}
-                            editorRevision={activeTab?.editorRevision ?? null}
-                            writingMode={editorSettings.writingMode}
-                            editorDisplayMode={editorSettings.editorDisplayMode}
-                            pageFlowDirection={editorSettings.pageFlowDirection}
-                            typewriterScroll={editorSettings.typewriterScroll}
-                            showTypewriterGuide={editorSettings.showTypewriterGuide}
-                            typewriterOffset={settings.typewriterOffset}
-                            showLineBreakMarks={settings.showLineBreakMarks}
-                            showLineNumbers={settings.showLineNumbers}
-                            highlightCurrentLine={settings.highlightCurrentLine}
-                            documentPath={currentFilePath}
-                            colorizeJapaneseQuotes={settings.colorizeJapaneseQuotes}
-                            showComments={settings.showComments}
-                            textLayoutSignature={[
-                              settings.editorFontFamily,
-                              settings.headingFontSource,
-                              settings.headingFontFamily,
-                              settings.fontSize,
-                              settings.lineHeight,
-                              settings.editorMeasureHorizontal,
-                              settings.editorMeasureVertical,
-                              editorSettings.manuscript.layoutMode,
-                              settings.manuscript.charactersPerLine,
-                              settings.manuscript.linesPerPage,
-                              settings.manuscript.fontSize,
-                            ].join("|")}
-                            linkLookup={linkLookup}
-                            onLinkActivate={linkOpenActions.activate}
-                            postBodyForDrop={postBodyForDrop}
-                            manuscript={editorSettings.manuscript}
-                            onManuscriptProgressChange={editorManuscriptProgress.setSnapshot}
-                            initialSelectionOffset={initialSelectionOffset}
-                            initialViewportState={activeTab?.viewportState ?? null}
-                            onViewportSizeChange={handleEditorViewportSizeChange}
-                            onReady={handleEditorReady}
-                            onTextChange={handleTextChange}
-                            onSelectionChange={handleSelectionChange}
-                            onPageMetricsChange={setEditorPageMetrics}
-                          />
-                        )}
-                        {editorFind.open && (
-                          <section
-                            className="editorFindPopover"
-                            aria-label="ファイル内検索と置換"
-                            onMouseDown={(event) => event.stopPropagation()}
-                          >
-                            <div className="editorFindRow">
-                              <input
-                                ref={editorFindInputRef}
-                                value={editorFind.query}
-                                type="search"
-                                aria-label="検索語句"
-                                placeholder="検索"
-                                onChange={(event) => handleEditorFindQueryChange(event.target.value)}
-                                onKeyDown={handleEditorFindKeyDown}
-                              />
-                              <span className="editorFindCount">
-                                {editorFind.query.length > 0
-                                  ? editorFindMatches.length
-                                    ? `${activeEditorFindIndex + 1}/${editorFindMatches.length}`
-                                    : "0/0"
-                                  : ""}
-                              </span>
-                              <button
-                                type="button"
-                                title="前の一致"
-                                aria-label="前の一致"
-                                disabled={editorFindMatches.length === 0}
-                                onClick={() => moveEditorFindMatch(-1)}
-                              >
-                                ↑
-                              </button>
-                              <button
-                                type="button"
-                                title="次の一致"
-                                aria-label="次の一致"
-                                disabled={editorFindMatches.length === 0}
-                                onClick={() => moveEditorFindMatch(1)}
-                              >
-                                ↓
-                              </button>
-                              <button
-                                type="button"
-                                title="コメント行も検索・置換の対象にする"
-                                aria-label="コメントを含む"
-                                aria-pressed={searchIncludeComments}
-                                onClick={() => setSearchIncludeComments((current) => !current)}
-                              >
-                                //
-                              </button>
-                              <button
-                                type="button"
-                                title={editorFind.showReplace ? "置換を隠す" : "置換を表示"}
-                                aria-label={editorFind.showReplace ? "置換を隠す" : "置換を表示"}
-                                aria-pressed={editorFind.showReplace}
-                                onClick={() =>
-                                  setEditorFind((current) => ({
-                                    ...current,
-                                    showReplace: !current.showReplace,
-                                  }))
-                                }
-                              >
-                                ≡
-                              </button>
-                              <button
-                                type="button"
-                                title="閉じる"
-                                aria-label="閉じる"
-                                onClick={closeEditorFind}
-                              >
-                                ×
-                              </button>
-                            </div>
-                            {editorFind.showReplace && (
-                              <div className="editorFindRow editorReplaceRow">
-                                <input
-                                  value={editorFind.replaceValue}
-                                  aria-label="置換後"
-                                  placeholder="置換"
-                                  onChange={(event) =>
-                                    setEditorFind((current) => ({
-                                      ...current,
-                                      replaceValue: event.target.value,
-                                    }))
-                                  }
-                                  onKeyDown={(event) => {
-                                    if (event.key === "Escape") {
-                                      event.preventDefault();
-                                      closeEditorFind();
-                                    }
-                                  }}
-                                />
-                                <button
-                                  type="button"
-                                  disabled={activeEditorFindIndex < 0}
-                                  onClick={replaceActiveEditorFindMatch}
-                                >
-                                  置換
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={editorFindMatches.length === 0}
-                                  onClick={replaceAllEditorFindMatches}
-                                >
-                                  すべて
-                                </button>
-                              </div>
+                {editorPanes.map((paneTab, paneIndex) => {
+                  const paneActive = paneTab === activeTab;
+                  const activatePane = () => {
+                    if (paneTab && paneTab.id !== activeTabIdRef.current) activateDocumentTab(paneTab.id);
+                  };
+                  return (
+                    <div
+                      className="documentPaneSlot"
+                      key={paneTab?.id ?? "empty"}
+                      hidden={isEditorFocusMode && !paneActive}
+                    >
+                      {besideTab && paneIndex === 1 && !isEditorFocusMode && (
+                        <div
+                          className="documentPaneDivider"
+                          role="separator"
+                          aria-label="ペインの幅"
+                          aria-orientation="vertical"
+                          aria-valuemin={25}
+                          aria-valuemax={75}
+                          aria-valuenow={Math.round(leftPaneWidth)}
+                          tabIndex={0}
+                          onKeyDown={(event) => {
+                            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                            event.preventDefault();
+                            setLeftPaneWidth((width) => Math.max(25, Math.min(75, width + (event.key === "ArrowLeft" ? -5 : 5))));
+                          }}
+                          onPointerDown={(event) => {
+                            if (event.button !== 0) return;
+                            event.preventDefault();
+                            event.currentTarget.setPointerCapture(event.pointerId);
+                          }}
+                          onPointerMove={(event) => {
+                            if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+                            const frame = event.currentTarget.closest(".editorFrame")?.getBoundingClientRect();
+                            if (frame?.width) setLeftPaneWidth(Math.max(25, Math.min(75, (event.clientX - frame.left) / frame.width * 100)));
+                          }}
+                          onDoubleClick={() => setLeftPaneWidth(50)}
+                        />
+                      )}
+                      <div
+                        className="documentPane"
+                        data-pane-active={paneActive}
+                        data-pane-side={paneIndex === 0 ? "left" : "right"}
+                        data-writing-mode={(paneActive ? editorSettings : besideSettings).writingMode}
+                        style={paneActive ? undefined : besideAppearance}
+                      >
+                        {besideTab && !isEditorFocusMode && (
+                          <div className="documentPaneHeader">
+                            <button
+                              type="button"
+                              className="documentPaneTitle"
+                              title={paneTab?.path ?? paneTab?.name}
+                              onClick={() => {
+                                const editor = paneTab && paneEditorsRef.current.get(paneTab.id);
+                                if (editor) editor.restoreFocus();
+                                else activatePane();
+                              }}
+                            >
+                              {paneTab?.name}
+                            </button>
+                            {paneActive && (
+                              <button type="button" aria-label="分割表示を解除" title="分割表示を解除" onClick={closeDocumentSplit}>×</button>
                             )}
-                          </section>
+                          </div>
                         )}
-                      </>
-                    )}
-                  </div>
-                  {editorContextMenu && (
-                    <EditorContextMenu
-                      {...{
-                        editorContextMenu, editorContextMenuRef, pluginSelectionCommands, pluginRuntimeHostRef,
-                        copyEditorSelection, cutEditorSelection, pasteIntoEditorSelection,
-                        closeEditorContextMenu, openRubyNotationModal, applyInlineNotation, clearSelectionNotation,
-                        openDirectionNotationModal, openManuscriptTidy,
-                      }}
-                    />
-                  )}
-                </div>
+                        <div
+                          ref={paneActive ? editorShellRef : undefined}
+                          className="editor"
+                          onFocusCapture={activatePane}
+                          onDropCapture={paneActive ? undefined : () => flushSync(activatePane)}
+                          onPointerDownCapture={paneActive ? undefined : (event) => {
+                            if (event.button === 2) flushSync(activatePane);
+                          }}
+                          onContextMenu={paneActive ? handleEditorContextMenu : undefined}
+                        >
+                          <div className="editorContent">
+                            {isHydrated && paneTab && paneTab.kind !== "empty" &&
+                              !(paneActive && isNewTabStartPage) && renderPaneEditor(paneTab, paneActive)}
+                            {paneActive && (
+                              <>
+
+                                {workspaceAlert && (
+                                  <section className="workspaceAlert" role="alert">
+                                    <div>
+                                      <strong>{workspaceAlert.message}</strong>
+                                      <span>{workspaceAlert.path}</span>
+                                    </div>
+                                    <div className="workspaceAlertActions">
+                                      <button type="button" onClick={handleRetryWorkspaceRestore}>
+                                        再試行
+                                      </button>
+                                      <button type="button" onClick={handleOpenProjectFolder}>
+                                        別のフォルダを選択
+                                      </button>
+                                      <button type="button" onClick={handleForgetWorkspace}>
+                                        履歴から削除
+                                      </button>
+                                      <button type="button" onClick={() => setWorkspaceAlert(null)}>
+                                        閉じる
+                                      </button>
+                                    </div>
+                                  </section>
+                                )}
+                                {activeTab?.kind === "empty" && libraryContext?.role === "root" ? (
+                                  <LibraryHome
+                                    libraryName={libraryContext.name}
+                                    items={
+                                      libraryHome?.libraryPath === libraryContext.path
+                                        ? libraryHome.items
+                                        : libraryContext.projects.map((project) => ({
+                                            path: project.path,
+                                            name: project.name,
+                                            work: null,
+                                            stats: null,
+                                          }))
+                                    }
+                                    isLoading={libraryHome?.libraryPath !== libraryContext.path || libraryHome.isLoading}
+                                    onOpenProject={enterProject}
+                                    onEditWork={(item) => void editWorkInfo(item.path, item.name, item.work)}
+                                    onCreateProject={() => void handleCreateLibraryProject()}
+                                    onRefresh={() => void refreshLibraryHome(libraryContext.path, true)}
+                                  />
+                                ) : activeTab?.kind === "empty" && projectFolder ? (
+                                  <ScopeStartPage
+                                    onEditWork={
+                                      libraryContext?.role === "project" ? () => void editCurrentWorkInfo() : undefined
+                                    }
+                                    folder={projectFolder}
+                                    onOpenFile={(path) => void handleProjectFileSelect(path)}
+                                    onCreateFile={() => void handleCreateProjectFile(projectFolder.path)}
+                                    onOpenCanvas={() => void openIdeaCanvasBoard("project")}
+                                  />
+                                ) : isNewTabStartPage || activeTab?.kind === "empty" ? (
+                                  <section className="newTabStart" aria-label="新しいタブ">
+                                    <div>
+                                      <p className="newTabEyebrow">New tab</p>
+                                      <h1>フォルダを開いて書き始める</h1>
+                                      <p>
+                                        作業するフォルダを選ぶと、テキストファイルとスニペットをこのタブで扱えます。
+                                      </p>
+                                    </div>
+                                    <div className="newTabActions">
+                                      <button type="button" onClick={handleOpenProjectFolder}>
+                                        フォルダを開く
+                                      </button>
+                                      <button type="button" onClick={handleOpenTextFile}>
+                                        テキストファイルを開く
+                                      </button>
+                                    </div>
+                                  </section>
+                                ) : (
+                                  <>
+                                    {editorFind.open && (
+                                      <section
+                                        className="editorFindPopover"
+                                        aria-label="ファイル内検索と置換"
+                                        onMouseDown={(event) => event.stopPropagation()}
+                                      >
+                                        <div className="editorFindRow">
+                                          <input
+                                            ref={editorFindInputRef}
+                                            value={editorFind.query}
+                                            type="search"
+                                            aria-label="検索語句"
+                                            placeholder="検索"
+                                            onChange={(event) => handleEditorFindQueryChange(event.target.value)}
+                                            onKeyDown={handleEditorFindKeyDown}
+                                          />
+                                          <span className="editorFindCount">
+                                            {editorFind.query.length > 0
+                                              ? editorFindMatches.length
+                                                ? `${activeEditorFindIndex + 1}/${editorFindMatches.length}`
+                                                : "0/0"
+                                              : ""}
+                                          </span>
+                                          <button
+                                            type="button"
+                                            title="前の一致"
+                                            aria-label="前の一致"
+                                            disabled={editorFindMatches.length === 0}
+                                            onClick={() => moveEditorFindMatch(-1)}
+                                          >
+                                            ↑
+                                          </button>
+                                          <button
+                                            type="button"
+                                            title="次の一致"
+                                            aria-label="次の一致"
+                                            disabled={editorFindMatches.length === 0}
+                                            onClick={() => moveEditorFindMatch(1)}
+                                          >
+                                            ↓
+                                          </button>
+                                          <button
+                                            type="button"
+                                            title="コメント行も検索・置換の対象にする"
+                                            aria-label="コメントを含む"
+                                            aria-pressed={searchIncludeComments}
+                                            onClick={() => setSearchIncludeComments((current) => !current)}
+                                          >
+                                            //
+                                          </button>
+                                          <button
+                                            type="button"
+                                            title={editorFind.showReplace ? "置換を隠す" : "置換を表示"}
+                                            aria-label={editorFind.showReplace ? "置換を隠す" : "置換を表示"}
+                                            aria-pressed={editorFind.showReplace}
+                                            onClick={() =>
+                                              setEditorFind((current) => ({
+                                                ...current,
+                                                showReplace: !current.showReplace,
+                                              }))
+                                            }
+                                          >
+                                            ≡
+                                          </button>
+                                          <button
+                                            type="button"
+                                            title="閉じる"
+                                            aria-label="閉じる"
+                                            onClick={closeEditorFind}
+                                          >
+                                            ×
+                                          </button>
+                                        </div>
+                                        {editorFind.showReplace && (
+                                          <div className="editorFindRow editorReplaceRow">
+                                            <input
+                                              value={editorFind.replaceValue}
+                                              aria-label="置換後"
+                                              placeholder="置換"
+                                              onChange={(event) =>
+                                                setEditorFind((current) => ({
+                                                  ...current,
+                                                  replaceValue: event.target.value,
+                                                }))
+                                              }
+                                              onKeyDown={(event) => {
+                                                if (event.key === "Escape") {
+                                                  event.preventDefault();
+                                                  closeEditorFind();
+                                                }
+                                              }}
+                                            />
+                                            <button
+                                              type="button"
+                                              disabled={activeEditorFindIndex < 0}
+                                              onClick={replaceActiveEditorFindMatch}
+                                            >
+                                              置換
+                                            </button>
+                                            <button
+                                              type="button"
+                                              disabled={editorFindMatches.length === 0}
+                                              onClick={replaceAllEditorFindMatches}
+                                            >
+                                              すべて
+                                            </button>
+                                          </div>
+                                        )}
+                                      </section>
+                                    )}
+                                  </>
+                                )}
+                              </>
+                            )}
+                          </div>
+                          {paneActive && editorContextMenu && (
+                            <EditorContextMenu
+                              {...{
+                                editorContextMenu, editorContextMenuRef, pluginSelectionCommands, pluginRuntimeHostRef,
+                                copyEditorSelection, cutEditorSelection, pasteIntoEditorSelection,
+                                closeEditorContextMenu, openRubyNotationModal, applyInlineNotation, clearSelectionNotation,
+                                openDirectionNotationModal, openManuscriptTidy,
+                              }}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -8033,6 +8443,7 @@ export default function App() {
                     starredNotePaths, handleSetNoteStar, libraryReferencesFolderPath,
                     // In the corkboard these open the file in the body (BINDER 1-5).
                     handleProjectFileSelect: selectBinderFile,
+                    openFileBeside: appMode === "write" ? openFileBeside : undefined,
                     handleProjectOutlineJump: jumpToProjectOutlineInBody,
                   }}
                 />

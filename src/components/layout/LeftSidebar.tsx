@@ -56,6 +56,7 @@ export type LeftSidebarProps = {
   handleHeadingExtract: (source: SidebarHeadingSelection) => Promise<void>;
   handleCreateProjectFile: ProjectEntryActions["handleCreateProjectFile"];
   handleProjectFileSelect: (path: string) => Promise<void>;
+  openFileBeside?: (path: string) => Promise<void>;
   handleProjectFolderSelect: (path: string) => Promise<void>;
   handleRenameProjectEntry: ProjectEntryActions["handleRenameProjectEntry"];
   handleDeleteProjectEntry: ProjectEntryActions["handleDeleteProjectEntry"];
@@ -105,7 +106,7 @@ const joinRootPath = (root: string, relative: string) => {
 
 export function LeftSidebar(props: LeftSidebarProps) {
   const {
-    outlineScope, panelVisible, onAddToCanvas, projectFolder, handleCreateProjectFolder,
+    outlineScope, panelVisible, onAddToCanvas, openFileBeside, projectFolder, handleCreateProjectFolder,
     focusedFolderPath, handleOpenProjectFolder, sortedReferenceCandidates, currentFilePath, currentFileName, charCount,
     outlineItems, activeOutlineIds, activeOutlineChain, projectAst, settings, appState, handleSetFileProgress,
     collapsedTreeFolderPaths, handleFolderCollapsedChange, collapsedTreeOutlinePaths,
@@ -181,6 +182,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
       onCreateFile={(folderPath) => void handleCreateProjectFile(folderPath)}
       onCreateFolder={(folderPath) => void handleCreateProjectFolder(folderPath)}
       onSelectFile={(path) => void handleProjectFileSelect(path)}
+      onOpenFileBeside={openFileBeside}
       onSelectFolder={(path) => void handleProjectFolderSelect(path)}
       onFolderClick={handleCorkboardFolderClick}
       onRenameEntry={(entry) => void handleRenameProjectEntry(entry)}

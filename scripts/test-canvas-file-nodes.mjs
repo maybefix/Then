@@ -181,9 +181,9 @@ async function render() {
   });
   await act(async () => { await settle(); await settle(); });
 }
-async function mount({ embedded = true } = {}) {
+async function mount({ embedded = true, empty = false } = {}) {
   files = new Map([[abs(NOTE), NOTE_TEXT], [abs(LAMP), "灯の本文\n"], [abs(SCENE), SCENE_TEXT]]);
-  docs = new Map([[boardKey(ROOT, "a"), boardA()],
+  docs = empty ? new Map() : new Map([[boardKey(ROOT, "a"), boardA()],
     [boardKey(ROOT, "b"), { nodes: [fileNode("fb", NOTE)], edges: [], then: { version: 1, name: "B", updatedAt: 1 } }]]);
   calls = []; emitted = []; openTabs = new Map(); activeTab = null; writeRequests = []; openedFiles = []; openedHeadings = []; writeGate = null;
   const payload = { requestId: `r${Date.now()}`, scope: "project", rootPath: ROOT, boardId: "a", workspaceName: "作品A",
@@ -574,6 +574,34 @@ await unmount();
 mainSide();
 globalThis.fileTest.invoke = originalInvoke;
 console.log("PASS separate window: write-back goes through the main window; the close flush answers both waits");
+
+await mount({ empty: true });
+{
+  const viewport = document.querySelector(".canvasViewport");
+  assert.ok(viewport.hasAttribute("data-canvas-file-drop"), "an empty project can accept the first drop");
+  const drop = (paths, headings = []) => viewport.dispatchEvent(new dom.window.CustomEvent("then-canvas-file-drop", {
+    detail: { paths, headings, clientX: 350, clientY: 250 },
+  }));
+  await act(async () => { drop(["C:/Outside/foreign.txt"]); await settle(); });
+  assert.equal(docs.size, 0, "an invalid drop does not create a board");
+  const original = files.get(abs(SCENE));
+  const [heading] = lib.createDocumentAst({ text: original.split("---\n").at(-1) }).outline;
+  await act(async () => {
+    drop([abs(MAP)], [{ path: abs(SCENE), line: heading.line, blockId: heading.blockId, title: heading.title }]);
+    drop([abs(NOTE)]);
+    await settle();
+  });
+  await waitWrites();
+  const [board] = docs.values();
+  assert.equal(docs.size, 1);
+  assert.equal(calls.filter((call) => call.command === "create_canvas_board").length, 1);
+  assert.equal(board.nodes.length, 2);
+  assert.ok(board.nodes.some((node) => node.type === "file" && node.file === SCENE && node.subpath === "#港"));
+  assert.ok(board.nodes.some((node) => node.type !== "file" && JSON.stringify(node).includes(MAP)));
+  assert.equal(files.get(abs(SCENE)), original);
+}
+await unmount();
+console.log("PASS first drop: an empty project creates one board and saves the dropped references");
 
 // ---- 10. 順番待ちそのもの ----
 {

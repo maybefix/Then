@@ -2561,14 +2561,14 @@ html:not([data-window-fullscreen="true"])
   widows: 2;
 }
 
-.appShell[data-writing-mode="horizontal-tb"]
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"]
   .verticalTypewriterShell[data-editor-display="paged"]
   .verticalTypewriterEditor
   .pm-root {
   direction: ltr;
 }
 
-.appShell[data-writing-mode="horizontal-tb"]
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"]
   .verticalTypewriterShell[data-editor-display="paged"]
   .verticalTypewriterEditor
   .pm-root
@@ -2849,7 +2849,7 @@ html:not([data-window-fullscreen="true"])
   display: none;
 }
 
-.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.pm-table-row {
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.pm-table-row {
   inline-size: min(var(--table-extent, 100%), 100%);
 }
 
@@ -3352,19 +3352,19 @@ html:not([data-window-fullscreen="true"])
   pointer-events: none;
 }
 
-.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterScroller {
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"] .verticalTypewriterScroller {
   writing-mode: horizontal-tb;
   overflow-x: hidden;
   overflow-y: auto;
 }
 
-.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor {
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor {
   min-width: 100%;
   height: auto;
   min-height: 100%;
 }
 
-.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root {
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root {
   box-sizing: border-box;
   /* 文字表示幅は編集領域（100% - 左右ガター）に対する比率。比率なので
      ウィンドウを縮めても余白の割合が保たれ、はみ出しもしない。 */
@@ -3387,20 +3387,20 @@ html:not([data-window-fullscreen="true"])
   padding: 0 max(48px, 4vw);
 }
 
-.appShell[data-writing-mode="horizontal-tb"]
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"]
   .verticalTypewriterShell[data-typewriter="off"]
   .verticalTypewriterEditor
   .pm-root {
   padding: max(48px, 6vh) 0 max(96px, 20vh);
 }
 
-.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root[data-empty="true"]::before {
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root[data-empty="true"]::before {
   /* 横書きは .pm-root 自体が幅制御・中央寄せされ段落はずれないため、
      プレースホルダの中央寄せオフセットは不要。 */
   inset-inline-start: auto;
 }
 
-.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p {
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p {
   /* 横書きの横幅は .pm-root の width で制御する（縦書き用の縦幅キャップと
      中央寄せマージンを解除）。 */
   max-inline-size: none;
@@ -3408,7 +3408,7 @@ html:not([data-window-fullscreen="true"])
   text-justify: auto;
 }
 
-.appShell[data-writing-mode="horizontal-tb"]
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"]
   .verticalTypewriterShell[data-show-line-numbers="true"]
   .verticalTypewriterEditor
   .pm-root
@@ -3416,43 +3416,43 @@ html:not([data-window-fullscreen="true"])
   max-inline-size: none;
 }
 
-.appShell[data-writing-mode="horizontal-tb"]
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"]
   .visibleLineNumber {
   min-width: 24px;
   text-align: right;
   transform: translate(-100%, -50%);
 }
 
-.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.jitsuki,
-.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.align-start,
-.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.align-center,
-.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.align-end {
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.jitsuki,
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.align-start,
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.align-center,
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .pm-root p.align-end {
   min-inline-size: 0;
 }
 
-.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .ruby-base::after {
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .ruby-base::after {
   transform: none;
   writing-mode: horizontal-tb;
   text-orientation: mixed;
 }
 
-.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .em-goma,
-.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .em-auto,
-.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .em-dot {
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .em-goma,
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .em-auto,
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .em-dot {
   text-emphasis-position: over;
   -webkit-text-emphasis-position: over;
 }
 
-.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .tcy,
-.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .tcy-rejected,
-.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .tcy-boundary {
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .tcy,
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .tcy-rejected,
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"] .verticalTypewriterEditor .tcy-boundary {
   margin-inline: 0;
   padding-inline: 0;
   text-combine-upright: none;
   -webkit-text-combine: none;
 }
 
-.appShell[data-writing-mode="horizontal-tb"] .verticalTypewriterGuide {
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"] .verticalTypewriterGuide {
   left: 0;
   right: 0;
   top: var(--typewriter-guide-position, 50%);
@@ -3607,7 +3607,7 @@ html:not([data-window-fullscreen="true"])
   box-decoration-break: slice;
 }
 
-.appShell[data-writing-mode="horizontal-tb"]
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"]
   .verticalTypewriterShell[data-manuscript="true"]
   .verticalTypewriterEditor
   :is(.em-goma, .em-auto, .em-dot) {
@@ -3648,14 +3648,14 @@ html:not([data-window-fullscreen="true"])
   padding-inline: 0;
 }
 
-.appShell[data-writing-mode="horizontal-tb"]
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"]
   .verticalTypewriterShell[data-manuscript="true"]
   .verticalTypewriterEditor
   .pm-root {
   width: var(--ms-measure);
 }
 
-.appShell[data-writing-mode="horizontal-tb"]
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"]
   .verticalTypewriterShell[data-manuscript="true"]
   .verticalTypewriterEditor
   .pm-root
@@ -3696,7 +3696,7 @@ html:not([data-window-fullscreen="true"])
   background-clip: content-box;
 }
 
-.appShell[data-writing-mode="horizontal-tb"]
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"]
   .verticalTypewriterShell[data-manuscript="true"][data-manuscript-grid="true"]
   .verticalTypewriterEditor
   .pm-root {
@@ -3759,7 +3759,7 @@ html:not([data-window-fullscreen="true"])
   background-origin: border-box;
 }
 
-.appShell[data-writing-mode="horizontal-tb"]
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"]
   .verticalTypewriterShell[data-manuscript="true"][data-manuscript-grid="true"][data-editor-display="paged"]
   .pagedEditorSheet {
   background-image:
@@ -3787,7 +3787,7 @@ html:not([data-window-fullscreen="true"])
   overflow-y: auto;
 }
 
-.appShell[data-writing-mode="horizontal-tb"]
+:is(.appShell:not([data-editor-split]), .documentPane)[data-writing-mode="horizontal-tb"]
   .verticalTypewriterShell[data-manuscript="true"][data-editor-display="continuous"]
   .verticalTypewriterScroller {
   overflow-x: auto;

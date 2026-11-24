@@ -163,6 +163,7 @@ export type ProjectEntryActionDeps = {
    * （BINDER 2-6）。
    */
   notifyCanvasPathChanges: (rootPath: string, changes: PathChange[]) => void;
+  onPathsChanged?: (rootPath: string, changes: PathChange[]) => void;
   /**
    * 改名・移動のあと、そのファイルを指すリンクを書き換える（BINDER 3-1）。書き換えたら、通知を
    * 「…し、Nファイルのリンクを書き換えました」に替える。
@@ -228,6 +229,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     retargetPostNotes,
     rewriteLinksAfterPathChange,
     notifyCanvasPathChanges,
+    onPathsChanged,
     requestMultiInput,
     movePostNotes,
   } = deps;
@@ -250,6 +252,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     };
 
     retargetPostNotes(rootPath, changes);
+    onPathsChanged?.(rootPath, changes);
     const referenceChanges: PathChange[] = [];
     for (const change of changes) {
       retargetPluginAnchors(change.oldPath, change.newPath);
@@ -928,6 +931,10 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     targetFolderPath: string,
   ) => {
     if (!projectFolder) return;
+    if (projectEntryPathChangeInProgressRef.current) {
+      showToast("別のファイル操作の完了を待ってください");
+      return;
+    }
     const parentPath = reference.path.replace(/[\\/][^\\/]*$/, "");
     if (isSamePath(parentPath, targetFolderPath)) return;
 
@@ -941,6 +948,7 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
         position: null,
       });
       retargetPathOwners(projectFolder.path, [{ oldPath: result.oldPath, newPath: result.newPath }]);
+      setProjectFolder(result.projectFolder);
       setFocusedFolderPath(result.newParentPath);
       setLastError("");
       const message = `「${reference.name}」を移動しました`;
@@ -949,6 +957,9 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     } catch (error) {
       setLastError(String(error));
       showToast("移動できませんでした");
+      await refreshProjectFolder(projectFolder.path).catch(() => null);
+      projectAstBuildIdRef.current += 1;
+      setProjectAst(null);
     } finally {
       projectEntryPathChangeInProgressRef.current = false;
     }
@@ -961,6 +972,10 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     position?: "before" | "after",
   ) => {
     if (!projectFolder) return;
+    if (projectEntryPathChangeInProgressRef.current) {
+      showToast("別のファイル操作の完了を待ってください");
+      return;
+    }
     const sourceEntry = findProjectEntry(projectFolder.children, sourcePath);
     if (!sourceEntry) return;
 
@@ -1059,6 +1074,9 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     } catch (error) {
       setLastError(String(error));
       showToast("移動できませんでした");
+      await refreshProjectFolder(projectFolder.path).catch(() => null);
+      projectAstBuildIdRef.current += 1;
+      setProjectAst(null);
     } finally {
       projectEntryPathChangeInProgressRef.current = false;
     }
@@ -1071,7 +1089,14 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     position?: "before" | "after",
   ) => {
     if (!projectFolder) return;
-    const uniqueSourcePaths = [...new Set(sourcePaths)];
+    if (projectEntryPathChangeInProgressRef.current) {
+      showToast("別のファイル操作の完了を待ってください");
+      return;
+    }
+    const selectedFolders = sourcePaths.filter((path) => findProjectEntry(projectFolder.children, path)?.kind === "folder");
+    const uniqueSourcePaths = [...new Set(sourcePaths)].filter((path) =>
+      !selectedFolders.some((parent) => !isSamePath(path, parent) && isPathInsideFolder(path, parent)),
+    );
     if (uniqueSourcePaths.length === 0) return;
     // 素材の画像・PDF はファイルの一覧に入っていない（Q4）。一覧にないパスは、画像・PDF ならそのまま受ける。
     const isMaterialFilePath = (path: string) =>
@@ -1094,8 +1119,12 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     const sourceEntries = uniqueSourcePaths.map((path) =>
       findProjectEntry(projectFolder.children, path),
     );
-    if (sourceEntries.some((entry, index) => (entry ? entry.kind !== "file" : !isMaterialFilePath(uniqueSourcePaths[index])))) {
-      showToast("複数移動ではファイルだけを選択してください");
+    if (sourceEntries.some((entry, index) => !entry && !isMaterialFilePath(uniqueSourcePaths[index]))) {
+      showToast("移動元が見つかりません");
+      return;
+    }
+    if (sourceEntries.some((entry) => entry?.kind === "folder" && isPathSameOrInside(targetFolderPath, entry.path))) {
+      showToast("フォルダを自分自身の中へ移動できません");
       return;
     }
     const movingPaths = uniqueSourcePaths.filter((path) => {
@@ -1108,24 +1137,13 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
 
     projectEntryPathChangeInProgressRef.current = true;
     try {
-      const movingPathSet = new Set(movingPaths);
-      await Promise.all(
-        openTabs
-          .filter(
-            (tab): tab is DocumentTab & { path: string } =>
-              Boolean(tab.path && movingPathSet.has(tab.path)),
-          )
-          .filter(isDirtyDocumentTab)
-          .map((tab) =>
-            enqueueDocumentSave({
-              tabId: tab.id,
-              path: tab.path,
-              content: tab.markdown,
-            }),
-          ),
+      const affectedTabs = openTabs.filter((tab): tab is DocumentTab & { path: string } =>
+        Boolean(tab.path && movingPaths.some((path) => isPathSameOrInside(tab.path!, path))),
       );
-
-      await closeTabJournals(openTabs.filter((tab) => Boolean(tab.path && movingPathSet.has(tab.path))));
+      await Promise.all(affectedTabs.filter(isDirtyDocumentTab).map((tab) =>
+        enqueueDocumentSave({ tabId: tab.id, path: tab.path, content: tab.markdown }),
+      ));
+      await closeTabJournals(affectedTabs);
 
       const result = await invoke<MoveProjectEntriesResult>("move_project_entries", {
         rootPath: projectFolder.path,
@@ -1187,13 +1205,11 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
       if (activeNewPath) {
         const activeMovedDocument = movedDocumentByPath.get(activeNewPath);
         setActiveTabId(`file:${activeNewPath}`);
-        lastSavedMarkdownRef.current =
-          activeMovedDocument?.content ??
-          activeTab?.savedMarkdown ??
-          lastSavedMarkdownRef.current;
+        lastSavedMarkdownRef.current = activeMovedDocument?.content ?? lastSavedMarkdownRef.current;
         setAppState((current) => ({
           ...current,
           markdown: activeMovedDocument?.content ?? current.markdown,
+          lastFilePath: activeNewPath,
         }));
       }
       setFocusedFolderPath(targetFolderPath);
@@ -1207,6 +1223,9 @@ export function createProjectEntryActions(deps: ProjectEntryActionDeps) {
     } catch (error) {
       setLastError(String(error));
       showToast("選択したファイルを移動できませんでした");
+      await refreshProjectFolder(projectFolder.path).catch(() => null);
+      projectAstBuildIdRef.current += 1;
+      setProjectAst(null);
     } finally {
       projectEntryPathChangeInProgressRef.current = false;
     }

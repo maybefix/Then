@@ -169,9 +169,12 @@ struct HeadingMoveDocuments {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct HeadingDocumentWrite {
     path: String,
     content: String,
+    #[serde(default)]
+    expected_hash: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -1929,6 +1932,17 @@ async fn export_pdf(
     }
 }
 
+fn ensure_heading_source_unchanged(path: &Path, content: &str, expected_hash: Option<&str>) -> Result<(), String> {
+    if let Some(expected_hash) = expected_hash {
+        let expected = save_journal::parse_hash(Some(expected_hash))
+            .ok_or_else(|| "invalid heading document hash".to_string())?;
+        if Sha256::digest(content.as_bytes()).as_slice() != expected {
+            return Err(format!("{}: {} は外部で変更されています。読み込み直してください", save_journal::CONFLICT, path.display()));
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command(async)]
 fn save_heading_move(
     documents: Vec<HeadingDocumentWrite>,
@@ -1951,6 +1965,7 @@ fn save_heading_move(
         }
         let original = std::fs::read_to_string(&path)
             .map_err(|error| format!("failed to back up heading move document: {error}"))?;
+        ensure_heading_source_unchanged(&path, &original, document.expected_hash.as_deref())?;
         originals.insert(path, original);
     }
 
@@ -1985,12 +2000,48 @@ fn save_heading_move(
     })
 }
 
+#[cfg(test)]
+mod navigation_write_tests {
+    use super::*;
+    fn directory() -> PathBuf {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let serial = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!("then-navigation-{}-{}-{serial}", std::process::id(), now_millis()));
+        std::fs::create_dir_all(&path).unwrap();
+        path
+    }
+    #[test]
+    fn guarded_batch_rejects_external_changes_before_writing_any_document() {
+        let root = directory();
+        let a = root.join("a.md"); let b = root.join("b.md");
+        std::fs::write(&a, "first").unwrap(); std::fs::write(&b, "external").unwrap();
+        let result = save_heading_move(vec![
+            HeadingDocumentWrite { path: a.to_string_lossy().into_owned(), content: "changed".into(), expected_hash: Some(content_hash(b"first")) },
+            HeadingDocumentWrite { path: b.to_string_lossy().into_owned(), content: "changed".into(), expected_hash: Some(content_hash(b"old")) },
+        ]);
+        assert!(result.err().unwrap().contains(save_journal::CONFLICT));
+        assert_eq!(std::fs::read_to_string(&a).unwrap(), "first");
+        assert_eq!(std::fs::read_to_string(&b).unwrap(), "external");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn guarded_batch_returns_current_hashes_for_undo() {
+        let root = directory(); let a = root.join("a.md");
+        std::fs::write(&a, "first").unwrap();
+        let result = save_heading_move(vec![HeadingDocumentWrite { path: a.to_string_lossy().into_owned(), content: "changed".into(), expected_hash: Some(content_hash(b"first")) }]).unwrap();
+        assert_eq!(result.documents[0].content, "changed");
+        assert_eq!(result.documents[0].content_hash, Some(content_hash(b"changed")));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
 #[tauri::command]
 fn extract_heading_to_file(
     source_path: String,
     file_name: String,
     source_content: String,
     extracted_content: String,
+    expected_hash: Option<String>,
 ) -> Result<HeadingExtractDocuments, String> {
     let source = PathBuf::from(source_path);
     if !source.is_file() || !is_supported_text_extension(&source) {
@@ -2011,9 +2062,14 @@ fn extract_heading_to_file(
 
     let original_source = std::fs::read_to_string(&source)
         .map_err(|error| format!("failed to back up heading extraction source: {error}"))?;
-    if let Err(error) = write_text_file(&target, &extracted_content) {
+    ensure_heading_source_unchanged(&source, &original_source, expected_hash.as_deref())?;
+    let mut extracted = std::fs::OpenOptions::new().write(true).create_new(true).open(&target)
+        .map_err(|error| format!("failed to create extracted heading file: {error}"))?;
+    let write_result = extracted.write_all(extracted_content.as_bytes());
+    drop(extracted);
+    if let Err(error) = write_result {
         let _ = std::fs::remove_file(&target);
-        return Err(format!("failed to create extracted heading file: {error}"));
+        return Err(format!("failed to write extracted heading file: {error}"));
     }
     if let Err(save_error) = write_text_file(&source, &source_content) {
         let source_rollback = write_text_file(&source, &original_source);
@@ -3223,6 +3279,9 @@ fn move_project_entry_unlocked(
     if source_canonical == root_canonical {
         return Err("project root cannot be moved".to_string());
     }
+    if materials.as_ref().and_then(|folder| folder.canonicalize().ok()).as_ref() == Some(&source_canonical) {
+        return Err("the configured materials folder cannot be moved".to_string());
+    }
 
     let old_parent = source
         .parent()
@@ -3315,7 +3374,9 @@ fn move_project_entry_unlocked(
         }
     }
     let moved_document = if next_path.is_file() && !source_is_material {
-        Some(read_text_document(&next_path)?)
+        // A committed rename must not be reported as a failed move merely
+        // because this file cannot be displayed as UTF-8 (e.g. Shift-JIS).
+        read_text_document(&next_path).ok()
     } else {
         None
     };
@@ -3354,23 +3415,42 @@ fn move_project_entries(
     }
 
     // Q4: 素材の中の画像・PDF も、素材の中へならまとめて動かせる（1つずつの移動と同じ決まり）。
-    let materials = material_files::materials_folder(&root, &load_project_config(&root)?);
+    let _project_config_guard = lock_project_config()?;
+    let original_config = load_project_config_unlocked(&root)?;
+    let materials = material_files::materials_folder(&root, &original_config);
     let mut candidates = Vec::<String>::new();
     let mut destinations = Vec::<String>::new();
+    let mut sources = Vec::<(String, PathBuf)>::new();
     for source_path in source_paths {
+        let canonical = PathBuf::from(&source_path).canonicalize()
+            .map_err(|error| format!("failed to resolve entry path: {error}"))?;
+        if canonical == root_canonical || !canonical.starts_with(&root_canonical) {
+            return Err("project root or outside entry cannot be moved".into());
+        }
+        if !sources.iter().any(|(_, existing)| existing == &canonical) {
+            sources.push((source_path, canonical));
+        }
+    }
+    let sources = sources.iter().filter(|(_, path)| !sources.iter().any(|(_, parent)| parent != path && parent.is_dir() && path.starts_with(parent))).cloned().collect::<Vec<_>>();
+    for (source_path, source_canonical) in sources {
         let source = PathBuf::from(&source_path);
         let is_material = source.is_file()
             && material_files::is_material_file(&source)
             && material_files::is_in(materials.as_deref(), &source)
             && material_files::is_in(materials.as_deref(), &target_folder);
-        if !source.is_file() || !(is_supported_text_extension(&source) || is_material) {
-            return Err("multiple entry move supports only text files and material images".to_string());
+        if !source.is_dir() && !(source.is_file() && (is_supported_text_extension(&source) || is_material)) {
+            return Err("multiple entry move supports folders, text files and material images".to_string());
         }
-        let source_canonical = source
-            .canonicalize()
-            .map_err(|error| format!("failed to resolve entry path: {error}"))?;
-        if !source_canonical.starts_with(&root_canonical) {
-            return Err("entry move must stay inside the project root".to_string());
+        if source.is_dir() && target_canonical.starts_with(&source_canonical) {
+            return Err("folder cannot be moved into itself or its descendants".into());
+        }
+        if source.is_dir() && material_files::is_in(materials.as_deref(), &source)
+            && !material_files::is_in(materials.as_deref(), &target_folder)
+            && material_files::folder_has_material_files(&source) {
+            return Err("a folder with images or PDFs stays inside the materials folder".into());
+        }
+        if materials.as_ref().is_some_and(|folder| folder.canonicalize().ok().as_ref() == Some(&source_canonical)) {
+            return Err("the configured materials folder cannot be moved".to_string());
         }
         let parent_canonical = source
             .parent()
@@ -3396,8 +3476,6 @@ fn move_project_entries(
         destinations.push(destination_key);
     }
 
-    let _project_config_guard = lock_project_config()?;
-    let original_config = load_project_config_unlocked(&root)?;
     let mut completed = Vec::<MovedProjectEntry>::new();
     for source_path in candidates {
         match move_project_entry_unlocked(
@@ -3464,6 +3542,60 @@ fn move_project_entries(
         project_folder: list_project_folder(&root)?,
         moves: completed,
     })
+}
+
+#[cfg(test)]
+mod navigator_move_tests {
+    use super::*;
+    struct Fixture(PathBuf);
+    impl Fixture {
+        fn new() -> Self {
+            let root = std::env::temp_dir().join(format!("then-nav-move-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+            std::fs::create_dir_all(root.join("materials/target")).unwrap();
+            std::fs::create_dir_all(root.join("chapter/nested")).unwrap();
+            std::fs::write(root.join("chapter/nested/a.md"), "# Draft\n\nunsaved text already flushed").unwrap();
+            std::fs::write(root.join("materials/note.md"), "note").unwrap();
+            std::fs::write(root.join("materials/picture.png"), b"image bytes").unwrap();
+            update_project_config(&root, |config| { config.materials_folder = Some("materials".into()); Ok(()) }).unwrap();
+            Self(root)
+        }
+        fn path(&self, relative: &str) -> String { self.0.join(relative).to_string_lossy().into_owned() }
+    }
+    impl Drop for Fixture {
+        fn drop(&mut self) { assert!(self.0.canonicalize().unwrap().starts_with(std::env::temp_dir().canonicalize().unwrap())); let _ = std::fs::remove_dir_all(&self.0); }
+    }
+    #[test]
+    fn folders_text_and_images_move_as_one_batch() {
+        let fixture = Fixture::new();
+        let result = move_project_entries(fixture.path(""), vec![fixture.path("chapter"), fixture.path("chapter/nested/a.md"), fixture.path("materials/note.md"), fixture.path("materials/picture.png")], fixture.path("materials/target")).unwrap();
+        assert_eq!(result.moves.len(), 3, "selected descendants are covered by their parent once");
+        assert!(!fixture.0.join("chapter").exists());
+        assert!(fixture.0.join("materials/target/chapter/nested/a.md").is_file());
+        assert_eq!(std::fs::read(fixture.0.join("materials/target/picture.png")).unwrap(), b"image bytes");
+    }
+    #[test]
+    fn collision_or_descendant_target_changes_nothing() {
+        let fixture = Fixture::new();
+        std::fs::write(fixture.0.join("materials/target/picture.png"), "existing").unwrap();
+        assert!(move_project_entries(fixture.path(""), vec![fixture.path("materials/note.md"), fixture.path("materials/picture.png")], fixture.path("materials/target")).is_err());
+        assert!(fixture.0.join("materials/note.md").is_file());
+        assert!(fixture.0.join("materials/picture.png").is_file());
+        assert!(move_project_entries(fixture.path(""), vec![fixture.path("chapter"), fixture.path("materials/note.md")], fixture.path("chapter/nested")).is_err());
+        assert!(fixture.0.join("chapter/nested/a.md").is_file());
+    }
+    #[test]
+    fn protected_materials_root_and_non_utf8_files_are_consistent() {
+        let fixture = Fixture::new();
+        std::fs::remove_file(fixture.0.join("materials/picture.png")).unwrap();
+        assert!(move_project_entry(fixture.path(""), fixture.path("materials"), fixture.path("chapter"), None, None).is_err());
+        assert!(fixture.0.join("materials/note.md").is_file());
+        std::fs::write(fixture.0.join("legacy.txt"), [0x82, 0xa0, 0x82, 0xa2]).unwrap();
+        let result = move_project_entries(fixture.path(""), vec![fixture.path("legacy.txt"), fixture.path("materials/note.md")], fixture.path("materials/target")).unwrap();
+        assert_eq!(result.moves.len(), 2);
+        assert!(result.moves.iter().find(|entry| entry.new_path.ends_with("legacy.txt")).unwrap().moved_document.is_none());
+        assert!(fixture.0.join("materials/target/legacy.txt").is_file());
+        assert!(!fixture.0.join("legacy.txt").exists());
+    }
 }
 
 #[tauri::command]
@@ -6415,4 +6547,3 @@ mod tests {
         std::fs::remove_dir_all(&dir).expect("remove test directory");
     }
 }
-

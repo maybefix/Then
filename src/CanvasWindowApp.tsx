@@ -1113,6 +1113,8 @@ export default function CanvasWindowApp({
   const boardSaveQueue = canvasBoardSaveQueue;
   const loadedBoardTargetRef = useRef<CanvasBoardTarget | null>(null);
   const boardLoadGenerationRef = useRef(0);
+  const emptyBoardTargetRef = useRef<{ scope: CanvasScope; rootPath: string | null } | null>(null);
+  const creatingBoardRef = useRef(false);
   const boardOrderSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const suppressNextSaveRef = useRef(false);
   const boardRef = useRef<JsonCanvasDocument | null>(null);
@@ -1513,13 +1515,16 @@ export default function CanvasWindowApp({
 
   const submitCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!payload) return;
+    if (!payload || creatingBoardRef.current) return;
+    creatingBoardRef.current = true;
     setIsCreateModalOpen(false);
     try {
       const created = await createBoard(scope, payload.rootPath, createDraft.trim() || defaultBoardName());
       await loadBoardList(scope, created.id);
     } catch (error) {
       setStatus(String(error));
+    } finally {
+      creatingBoardRef.current = false;
     }
   };
 
@@ -1576,28 +1581,27 @@ export default function CanvasWindowApp({
     setReferenceQuery("");
   };
 
-  /** ノート・原稿を指すファイルのカードを置く（BINDER 4-2）。paths は作品からの相対パス。 */
-  const insertFileNodesAt = (files: { path: string; heading?: CanvasHeadingLocation }[], point: Point) => {
-    if (!board || files.length === 0) return;
-    const width = 300;
-    const height = 240;
-    const nodes = files.map(({ path, heading }, index) =>
-      createCanvasFileNode(path, {
-        subpath: heading ? `#${heading.title}` : undefined,
-        thenHeading: heading,
-        x: Math.max(0, point.x - width / 2 + index * 36),
-        y: Math.max(0, point.y - height / 2 + index * 36),
-        width,
-        height,
-      }),
-    );
+  const placeFileCards = (nodes: (CanvasFileNode | CanvasReferenceNode)[]) => {
+    if (!nodes.length) return;
     pushHistory();
     patchBoard((current) => ({ ...current, nodes: [...current.nodes, ...nodes] }));
     setSelectedIds(new Set(nodes.map((node) => node.id)));
     setSelectedEdgeId(null);
   };
 
-  const insertFileNodeAt = (path: string, point: Point) => insertFileNodesAt([{ path }], point);
+  const createFileCardAt = (path: string, point: Point, heading?: CanvasHeadingLocation) =>
+    createCanvasFileNode(path, {
+      subpath: heading ? `#${heading.title}` : undefined,
+      thenHeading: heading,
+      x: Math.max(0, point.x - 150),
+      y: Math.max(0, point.y - 120),
+      width: 300,
+      height: 240,
+    });
+
+  const insertFileNodeAt = (path: string, point: Point) => {
+    if (board) placeFileCards([createFileCardAt(path, point)]);
+  };
 
   const addFileNode = (path: string) => {
     insertFileNodeAt(path, viewportCenterWorld());
@@ -1631,11 +1635,15 @@ export default function CanvasWindowApp({
   };
 
   // 左の資料／サイドパネル（別ウィンドウ）から資料をドラッグしてキャンバスへ落とす。
+  const isLoadedBoard = boardReadyRef.current && loadedBoardTargetRef.current?.rootPath === rootPath &&
+    loadedBoardTargetRef.current.scope === scope;
+  const canCreateFirstBoard = Boolean(rootPath && emptyBoardTargetRef.current?.rootPath === rootPath &&
+    emptyBoardTargetRef.current.scope === scope && !board);
   const canAcceptCanvasDrop = (event: ReactDragEvent<HTMLDivElement>) =>
-    event.dataTransfer.types.includes(REFERENCE_FILE_DRAG_MIME) ||
-    event.dataTransfer.types.includes(CANVAS_FILE_DRAG_MIME) ||
-    event.dataTransfer.types.includes(CANVAS_POST_DRAG_MIME) ||
-    (embedded && event.dataTransfer.types.includes(CANVAS_HEADING_DRAG_MIME));
+    (embedded && (isLoadedBoard || canCreateFirstBoard) && event.dataTransfer.types.includes(CANVAS_HEADING_DRAG_MIME)) ||
+    Boolean(board && (event.dataTransfer.types.includes(REFERENCE_FILE_DRAG_MIME) ||
+      event.dataTransfer.types.includes(CANVAS_FILE_DRAG_MIME) ||
+      event.dataTransfer.types.includes(CANVAS_POST_DRAG_MIME)));
 
   const handleViewportDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
     if (!canAcceptCanvasDrop(event)) return;
@@ -1644,7 +1652,7 @@ export default function CanvasWindowApp({
   };
 
   const handleViewportDrop = (event: ReactDragEvent<HTMLDivElement>) => {
-    if (!canAcceptCanvasDrop(event) || !board) return;
+    if (!canAcceptCanvasDrop(event)) return;
     event.preventDefault();
     event.stopPropagation();
     const point = screenToWorld(event.clientX, event.clientY);
@@ -1692,6 +1700,7 @@ export default function CanvasWindowApp({
       if (!payload) return;
       const generation = ++boardLoadGenerationRef.current;
       boardReadyRef.current = false;
+      emptyBoardTargetRef.current = null;
       if (saveTimerRef.current) {
         window.clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
@@ -1711,6 +1720,7 @@ export default function CanvasWindowApp({
         const summaries = await listBoards(nextScope, payload.rootPath);
         if (generation !== boardLoadGenerationRef.current) return;
         if (summaries.length === 0) {
+          emptyBoardTargetRef.current = { scope: nextScope, rootPath: payload.rootPath };
           setBoards(summaries);
           setScope(nextScope);
           loadedBoardTargetRef.current = null;
@@ -1739,6 +1749,7 @@ export default function CanvasWindowApp({
         setSelectedIds(selectNodeId ? new Set([selectNodeId]) : new Set());
         clearHistory();
         setSaveState("保存済み");
+        return loadedBoardTargetRef.current;
       } catch (error) {
         if (generation === boardLoadGenerationRef.current) setStatus(String(error));
       }
@@ -2265,24 +2276,59 @@ export default function CanvasWindowApp({
   // 素材の画像・PDF の行は、「資料を追加」で置くのと同じ資料のカードにする（BINDER 4-3）。
   const fileDropRef = useRef<(detail: CanvasFileDropDetail) => void>(() => {});
   fileDropRef.current = (detail) => {
-    if (!rootPath || !board) return;
+    if (!rootPath || (!isLoadedBoard && !canCreateFirstBoard) || creatingBoardRef.current) return;
     const point = detail.clientX !== undefined && detail.clientY !== undefined
       ? screenToWorld(detail.clientX, detail.clientY)
       : viewportCenterWorld();
-    const files: { path: string; heading?: CanvasHeadingLocation }[] = [];
+    const cards: (CanvasFileNode | CanvasReferenceNode)[] = [];
+    const nextPoint = () => ({ x: point.x + cards.length * 36, y: point.y + cards.length * 36 });
     for (const path of detail.paths) {
       const relative = canvasRelativePath(rootPath, path);
       if (!relative) continue;
-      const reference = referenceFiles.find((file) =>
+      const reference = referenceFiles.find((file) => file.scope === "project" &&
         (file.kind === "image" || file.kind === "pdf") && canvasFileKey(file.sourcePath) === canvasFileKey(relative));
-      if (reference) void insertReferenceNodeAt(reference, point);
-      else if (projectFileRoles.has(canvasFileKey(relative))) files.push({ path: relative });
+      if (reference) {
+        const { x, y } = nextPoint();
+        cards.push(createCanvasReferenceNode(reference, {
+          x: Math.max(0, x - 190), y: Math.max(0, y - 130), width: 380, height: 260,
+        }));
+      } else if (projectFileRoles.has(canvasFileKey(relative))) {
+        cards.push(createFileCardAt(relative, nextPoint()));
+      }
     }
     for (const { path, ...heading } of detail.headings ?? []) {
       const relative = canvasRelativePath(rootPath, path);
-      if (relative && projectFileRoles.has(canvasFileKey(relative))) files.push({ path: relative, heading });
+      if (relative && projectFileRoles.has(canvasFileKey(relative))) {
+        cards.push(createFileCardAt(relative, nextPoint(), heading));
+      }
     }
-    insertFileNodesAt(files, point);
+    if (!cards.length) return;
+    if (isLoadedBoard) {
+      placeFileCards(cards);
+      return;
+    }
+
+    creatingBoardRef.current = true;
+    const generation = boardLoadGenerationRef.current;
+    const viewport = viewportRef.current;
+    void (async () => {
+      try {
+        const created = await createBoard(scope, rootPath, defaultBoardName());
+        if (!viewport?.isConnected || generation !== boardLoadGenerationRef.current) return;
+        const target = await loadBoardList(scope, created.id);
+        if (!viewport.isConnected || target !== loadedBoardTargetRef.current ||
+          target?.boardId !== created.id || !boardReadyRef.current) return;
+        // The empty load and the first placement can render together.
+        suppressNextSaveRef.current = false;
+        placeFileCards(cards);
+      } catch (error) {
+        if (viewport?.isConnected && generation === boardLoadGenerationRef.current) {
+          setStatus(`ボードを作成できませんでした。${String(error)}`);
+        }
+      } finally {
+        creatingBoardRef.current = false;
+      }
+    })();
   };
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -2290,7 +2336,7 @@ export default function CanvasWindowApp({
     const onDrop = (event: Event) => fileDropRef.current((event as CustomEvent<CanvasFileDropDetail>).detail);
     viewport.addEventListener(CANVAS_FILE_DROP_EVENT, onDrop);
     return () => viewport.removeEventListener(CANVAS_FILE_DROP_EVENT, onDrop);
-  }, [embedded, board === null]);
+  }, [embedded]);
 
   // メイン画面が閉じる前・この窓が閉じる前に、待っている保存と書き戻しを書き切る（別ウィンドウ）。
   useEffect(() => {
@@ -2768,6 +2814,7 @@ export default function CanvasWindowApp({
         } else {
           setActiveBoardId(null);
           loadedBoardTargetRef.current = null;
+          emptyBoardTargetRef.current = { scope, rootPath: payload.rootPath };
           boardRef.current = null;
           suppressNextSaveRef.current = true;
           setBoard(null);
@@ -3933,7 +3980,7 @@ export default function CanvasWindowApp({
         <div
           ref={viewportRef}
           className={`canvasViewport canvasViewport-${tool}`}
-          {...(embedded && board ? { [CANVAS_FILE_DROP_ATTRIBUTE]: "" } : {})}
+          {...(embedded && (isLoadedBoard || canCreateFirstBoard) ? { [CANVAS_FILE_DROP_ATTRIBUTE]: "" } : {})}
           onPointerDown={handleViewportPointerDown}
           onDoubleClick={handleViewportDoubleClick}
           onPointerMove={handleViewportPointerMove}

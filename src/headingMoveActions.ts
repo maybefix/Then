@@ -16,6 +16,8 @@ import { getParentPath } from "./utils/projectTree";
 import { sourceTextExtension, withSourceTextExtension } from "./utils/textFileName";
 import type { TextEditorHandle } from "./VerticalTextEditor";
 
+export type HeadingWriteDocument = { path: string; markdown: string; expectedHash: string };
+
 type ToastAction = {
   label: string;
   onClick: () => void;
@@ -43,8 +45,8 @@ function suggestedHeadingFileName(title: string, sourcePath: string): string {
 
 export type HeadingMoveActionDeps = {
   projectFolder: ProjectFolder | null;
-  currentFilePath: string | null;
-  openTabs: DocumentTab[];
+  getOpenTabs: () => DocumentTab[];
+  withHeadingWrite: <Result>(paths: string[], operation: (documents: HeadingWriteDocument[]) => Promise<Result>) => Promise<Result>;
   setOpenTabs: Dispatch<SetStateAction<DocumentTab[]>>;
   settings: EditorSettings;
   headingMoveInProgressRef: MutableRefObject<boolean>;
@@ -88,8 +90,8 @@ export type HeadingMoveActionDeps = {
 export function createHeadingMoveActions(deps: HeadingMoveActionDeps) {
   const {
     projectFolder,
-    currentFilePath,
-    openTabs,
+    getOpenTabs,
+    withHeadingWrite,
     setOpenTabs,
     settings,
     headingMoveInProgressRef,
@@ -126,7 +128,7 @@ export function createHeadingMoveActions(deps: HeadingMoveActionDeps) {
       return;
     }
     const affectedPaths = new Set([...sources.map((source) => source.path), targetPath]);
-    const affectedTabs = openTabs.filter(
+    const affectedTabs = getOpenTabs().filter(
       (tab) => tab.path && affectedPaths.has(tab.path),
     );
     if (affectedTabs.some((tab) => tab.saveStatus === "saving")) {
@@ -135,58 +137,48 @@ export function createHeadingMoveActions(deps: HeadingMoveActionDeps) {
     }
     headingMoveInProgressRef.current = true;
 
-    const readMarkdown = async (path: string) => {
-      const openTab = openTabs.find((tab) => tab.path === path);
-      if (openTab) return openTab.markdown;
-      return (await invoke<TextDocument>("read_text_file", { path })).content;
-    };
-
     try {
-      const originalDocuments = await Promise.all(
-        [...affectedPaths].map(async (path) => ({
-          path,
-          markdown: await readMarkdown(path),
-        })),
-      );
-      const originalByPath = new Map(
-        originalDocuments.map((document) => [document.path, document.markdown] as const),
-      );
-      const move = moveHeadingSections({
-        documents: originalDocuments,
-        sources: sources.map((source) => ({
-          path: source.path,
-          line: source.line,
-        })),
-        targetPath,
-        targetLine,
-        position,
-      });
-      logHeadingDnd("reorder-transform-complete", {
-        sourceBlockIds: sources.map((source) => source.blockId),
-        targetBlockId,
-        changed: move.changed,
-        movedTitles: move.movedTitles,
+      const { move, savedDocuments } = await withHeadingWrite([...affectedPaths], async (originalDocuments) => {
+        const originalByPath = new Map(originalDocuments.map((document) => [document.path, document] as const));
+        const move = moveHeadingSections({
+          documents: originalDocuments,
+          sources: sources.map((source) => ({
+            path: source.path,
+            line: source.line,
+          })),
+          targetPath,
+          targetLine,
+          position,
+        });
+        logHeadingDnd("reorder-transform-complete", {
+          sourceBlockIds: sources.map((source) => source.blockId),
+          targetBlockId,
+          changed: move.changed,
+          movedTitles: move.movedTitles,
+        });
+        if (!move.changed) return { move, savedDocuments: [] };
+
+        const changedDocuments = move.documents.filter(
+          (document) => document.markdown !== originalByPath.get(document.path)?.markdown,
+        );
+        logHeadingDnd("reorder-save-start", {
+          sourceBlockIds: sources.map((source) => source.blockId),
+          targetBlockId,
+          paths: changedDocuments.map((document) => document.path),
+        });
+        const saved = await invoke<HeadingMoveDocuments>("save_heading_move", {
+          documents: changedDocuments.map((document) => ({
+            path: document.path,
+            content: document.markdown,
+            expectedHash: originalByPath.get(document.path)?.expectedHash,
+          })),
+        });
+        return { move, savedDocuments: saved.documents };
       });
       if (!move.changed) {
         showToast("見出しの移動先が同じため変更はありません");
         return;
       }
-
-      const changedDocuments = move.documents.filter(
-        (document) => document.markdown !== originalByPath.get(document.path),
-      );
-      logHeadingDnd("reorder-save-start", {
-        sourceBlockIds: sources.map((source) => source.blockId),
-        targetBlockId,
-        paths: changedDocuments.map((document) => document.path),
-      });
-      const saved = await invoke<HeadingMoveDocuments>("save_heading_move", {
-        documents: changedDocuments.map((document) => ({
-          path: document.path,
-          content: document.markdown,
-        })),
-      });
-      const savedDocuments = saved.documents;
       logHeadingDnd("reorder-save-complete", {
         sourceBlockIds: sources.map((source) => source.blockId),
         targetBlockId,
@@ -207,6 +199,8 @@ export function createHeadingMoveActions(deps: HeadingMoveActionDeps) {
             savedMarkdown: document.content,
             editorRevision: null,
             name: document.name,
+            fileId: document.fileId ?? tab.fileId,
+            contentHash: document.contentHash ?? tab.contentHash,
             saveStatus: "saved",
           };
         }),
@@ -224,7 +218,8 @@ export function createHeadingMoveActions(deps: HeadingMoveActionDeps) {
         );
       });
 
-      const activeDocument = currentFilePath ? savedByPath.get(currentFilePath) : null;
+      const activePath = getOpenTabs().find((tab) => tab.id === activeTabIdRef.current)?.path ?? null;
+      const activeDocument = activePath ? savedByPath.get(activePath) : null;
       if (activeDocument) {
         lastSavedMarkdownRef.current = activeDocument.content;
         setAppState((current) => ({
@@ -283,7 +278,7 @@ export function createHeadingMoveActions(deps: HeadingMoveActionDeps) {
       showToast("見出しを移動中です");
       return;
     }
-    const openSourceTab = openTabs.find((tab) => tab.path === source.path);
+    const openSourceTab = getOpenTabs().find((tab) => tab.path === source.path);
     if (openSourceTab?.saveStatus === "saving") {
       showToast("保存完了後に見出しを切り出してください");
       return;
@@ -305,35 +300,38 @@ export function createHeadingMoveActions(deps: HeadingMoveActionDeps) {
       confirmLabel: "切り出す",
       placeholder: "例: 第一章.md",
     });
-    if (!fileName) return;
+    if (!fileName || headingMoveInProgressRef.current) return;
+    const latestSourceTab = getOpenTabs().find((tab) => tab.path === source.path);
 
     const sourceViewportBeforeExtract =
-      openSourceTab?.id === activeTabIdRef.current
-        ? editorInstanceRef.current?.getViewportState() ?? openSourceTab.viewportState
-        : openSourceTab?.viewportState ?? null;
+      latestSourceTab?.id === activeTabIdRef.current
+        ? editorInstanceRef.current?.getViewportState() ?? latestSourceTab.viewportState
+        : latestSourceTab?.viewportState ?? null;
     headingMoveInProgressRef.current = true;
     try {
-      const sourceMarkdown =
-        openSourceTab?.markdown ??
-        (await invoke<TextDocument>("read_text_file", { path: source.path })).content;
-      const extraction = extractHeadingSection({
-        sourceMarkdown,
-        sourceLine: source.line,
-        includeChildren: childChoice === "primary",
+      const result = await withHeadingWrite([source.path], async ([document]) => {
+        const extraction = extractHeadingSection({
+          sourceMarkdown: document.markdown,
+          sourceLine: source.line,
+          includeChildren: childChoice === "primary",
+        });
+        if (!extraction.changed || !extraction.extractedMarkdown) return null;
+        const saved = await invoke<HeadingExtractDocuments>("extract_heading_to_file", {
+          sourcePath: source.path,
+          fileName: withSourceTextExtension(fileName, source.path),
+          sourceContent: extraction.sourceMarkdown,
+          extractedContent: extraction.extractedMarkdown,
+          expectedHash: document.expectedHash,
+        });
+        return { saved, extraction };
       });
-      if (!extraction.changed || !extraction.extractedMarkdown) {
+      if (!result) {
         showToast("切り出せる内容がありません");
         return;
       }
-
-      const saved = await invoke<HeadingExtractDocuments>("extract_heading_to_file", {
-        sourcePath: source.path,
-        fileName: withSourceTextExtension(fileName, source.path),
-        sourceContent: extraction.sourceMarkdown,
-        extractedContent: extraction.extractedMarkdown,
-      });
+      const { saved, extraction } = result;
       const reconciledSource = reconcileSavedDocumentTabs(
-        openTabs,
+        getOpenTabs(),
         activeTabIdRef.current,
         saved.sourceDocument,
       );

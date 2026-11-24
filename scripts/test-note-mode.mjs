@@ -141,11 +141,18 @@ function installMock({ work, settings, leftSidebarView, withReference }) {
   // 素材には進捗が残っていることがある（1-3b: 素材へ移しても進捗は消さない）。タブに色を付けないこと。
   const fileProgress = { [`${work}/本文.md`]: "writing", [`${work}/素材/人物.md`]: "writing" };
   window.__unknownCommands = new Set();
+  window.__documentSaves = [];
   let callbackId = 1;
   const responses = {
     load_app_state: () => state,
     list_project_text_files: () => projectFolder,
     read_text_file: ({ path }) => ({ path, name: path.split("/").pop(), content: texts[path] ?? "", fileId: path, contentHash: null }),
+    journal_edits: () => null,
+    journal_save: ({ path, content }) => {
+      texts[path] = content;
+      window.__documentSaves.push({ path, content });
+      return { path, name: path.split("/").pop(), content, fileId: path, contentHash: String(window.__documentSaves.length) };
+    },
     load_project_file_progress: () => ({ fileProgress, revision: 1, migratedCount: 0, contentHash: "", rebased: false }),
     load_project_checkpoints: () => ({ snapshots: [], warnings: [], migratedCount: 0, migrationComplete: true }),
     load_project_snippets: () => [],
@@ -562,6 +569,56 @@ try {
     const { data } = await send("Page.captureScreenshot", { format: "png" });
     await writeFile(process.env.THEN_FILE_PANEL_QA_SCREENSHOT, Buffer.from(data, "base64"));
   }
+
+  // ---- 左右分割. 左右に並べた原稿とノートを切り替えて編集 ----
+  await start({ ...MANUSCRIPT_SETTINGS, typewriterScroll: false, manuscript: { layoutMode: "normal" } });
+  await evaluate(`(async () => {
+    const row = [...document.querySelectorAll("[data-tree-entry-path]")]
+      .find((element) => element.dataset.treeEntryPath.endsWith("/素材/人物.md"));
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 250, clientY: 350 }));
+    const item = () => [...document.querySelectorAll('[role="menuitem"]')]
+      .find((element) => element.textContent.trim() === "隣のペインで開く");
+    await t.waitFor(item, "open beside menu");
+    item().click();
+    await t.waitFor(() => document.querySelectorAll(".documentPane .pm-root").length === 2, "two editors");
+    window.splitEditors = [...document.querySelectorAll(".documentPane .pm-root")];
+    window.activatePane = async (side) => {
+      const pane = document.querySelector('[data-pane-side="' + side + '"]');
+      pane.querySelector(".documentPaneTitle").click();
+      await t.waitFor(() => pane.dataset.paneActive === "true", "active " + side);
+    };
+  })()`);
+  const splitModes = await evaluate("splitEditors.map((editor) => getComputedStyle(editor).writingMode)");
+  assert.deepEqual(splitModes, ["vertical-rl", "horizontal-tb"]);
+  await evaluate("activatePane('left')");
+  await send("Input.insertText", { text: "原稿への追記" });
+  await send("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "PageDown", code: "PageDown", modifiers: 2 });
+  await send("Input.dispatchKeyEvent", { type: "keyUp", key: "PageDown", code: "PageDown", modifiers: 2 });
+  await evaluate(`t.waitFor(() => document.activeElement === splitEditors[1], "keyboard switches editor focus")`);
+  await send("Input.insertText", { text: "ノートへの追記" });
+  // 前のペインの変換が遅れて確定した場合と同じく、非選択側から編集を通知する。
+  await evaluate("splitEditors[0].editor.commands.insertContent('遅れて確定')");
+  await evaluate("activatePane('left')");
+  await evaluate(`t.waitFor(() => __documentSaves.some((save) => save.content.includes("遅れて確定")) &&
+    __documentSaves.some((save) => save.content.includes("ノートへの追記")), "save both documents")`);
+  const splitSaves = await evaluate("__documentSaves");
+  const latest = (name) => splitSaves.filter(({ path }) => path.endsWith(name)).at(-1)?.content;
+  assert.match(latest("/本文.md"), /原稿への追記/);
+  assert.match(latest("/本文.md"), /遅れて確定/);
+  assert.doesNotMatch(latest("/本文.md"), /ノートへの追記/);
+  assert.match(latest("/素材/人物.md"), /ノートへの追記/);
+  assert.doesNotMatch(latest("/素材/人物.md"), /原稿への追記|遅れて確定/);
+  assert.equal(await evaluate(`[...document.querySelectorAll(".documentPane .pm-root")]
+    .every((editor, index) => editor === splitEditors[index])`), true, "switching focus keeps both editors mounted");
+  await evaluate(`(async () => {
+    const divider = document.querySelector(".documentPaneDivider");
+    divider.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    await t.waitFor(() => divider.getAttribute("aria-valuenow") === "55", "resized split");
+    document.querySelector('[aria-label="分割表示を解除"]').click();
+    await t.waitFor(() => document.querySelectorAll(".documentPane .pm-root").length === 1, "close split");
+  })()`);
+  assert.equal(await evaluate("document.querySelector('.pm-root') === splitEditors[0]"), true, "closing split keeps the active editor");
+  assert.equal(await evaluate("document.querySelectorAll('.documentTabButton').length"), 2, "closing split keeps both tabs");
 
   assert.deepEqual(pageErrors, [], "the page throws no errors");
   socket.close();

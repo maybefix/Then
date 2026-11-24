@@ -81,6 +81,7 @@ type WorkspaceSidebarProps = {
   onCreateFile: (folderPath?: string) => void;
   onCreateFolder: (folderPath?: string) => void;
   onSelectFile: (path: string) => void;
+  onOpenFileBeside?: (path: string) => void;
   onSelectFolder: (path: string) => void;
   /**
    * A click on a folder row. Returns true when it was taken (the corkboard shows
@@ -847,6 +848,7 @@ export function WorkspaceSidebar({
   onCreateFile,
   onCreateFolder,
   onSelectFile,
+  onOpenFileBeside,
   onSelectFolder,
   onFolderClick,
   onRenameEntry,
@@ -1705,7 +1707,7 @@ export function WorkspaceSidebar({
     setHeadingContextMenu(null);
     const position = getScaledFixedMenuPosition(event.clientX, event.clientY, {
       width: TREE_CONTEXT_MENU_WIDTH,
-      height: TREE_CONTEXT_MENU_HEIGHT,
+      height: TREE_CONTEXT_MENU_HEIGHT + (onOpenFileBeside && getEntryKind(entry) === "file" ? 30 : 0),
     });
     setContextMenu({
       x: position.left,
@@ -1883,6 +1885,15 @@ export function WorkspaceSidebar({
             }
           >
             開く
+          </button>
+        )}
+        {!section && kind === "file" && onOpenFileBeside && (
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => closeContextMenuAndRun(() => onOpenFileBeside(entry.path))}
+          >
+            隣のペインで開く
           </button>
         )}
         {kind === "file" && renderAddToCanvas(entry.path)}

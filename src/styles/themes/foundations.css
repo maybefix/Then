@@ -100,7 +100,8 @@
   border-left-color: var(--typewriter-guide-color, var(--accent-soft));
 }
 
-.appShell[data-theme][data-writing-mode="horizontal-tb"] .verticalTypewriterGuide {
+.appShell[data-theme]:not([data-editor-split])[data-writing-mode="horizontal-tb"] .verticalTypewriterGuide,
+.appShell[data-theme] .documentPane[data-writing-mode="horizontal-tb"] .verticalTypewriterGuide {
   border-top-color: var(--typewriter-guide-color, var(--accent-soft));
 }
 

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 // ファイルツリーの見出しの移動と切り出し（createHeadingMoveActions）を実際に動かして確かめる。
 // invoke はメモリの中のファイルに読み書きする入れ物に差し替え、App の値の代わりの入れ物を用意する。
 // App の描画と同じく、操作のたびにその時点の値で createHeadingMoveActions を作り直す。
@@ -69,6 +70,8 @@ const tab = (id, filePath, markdown, extra = {}) => ({
 });
 const heading = (filePath, line, title, blockId = `${title}-block`) => ({ path: filePath, line, blockId, title });
 
+const hashOf = (text) => createHash("sha256").update(text).digest("hex");
+
 let s;
 const reset = (overrides = {}) => {
   frames = [];
@@ -138,8 +141,12 @@ const reset = (overrides = {}) => {
 const actions = () =>
   createHeadingMoveActions({
     projectFolder: s.projectFolder,
-    currentFilePath: s.currentFilePath,
-    openTabs: s.openTabs,
+    getOpenTabs: () => s.openTabs,
+    withHeadingWrite: async (paths, operation) => operation(await Promise.all(paths.map(async (path) => {
+      const open = s.openTabs.find((item) => item.path === path);
+      const markdown = open?.markdown ?? (await globalThis.__invoke("read_text_file", { path })).content;
+      return { path, markdown, expectedHash: hashOf(s.disk[path]) };
+    }))),
     setOpenTabs: (update) => { s.openTabs = typeof update === "function" ? update(s.openTabs) : update; },
     settings: s.settings,
     headingMoveInProgressRef: s.headingMoveInProgressRef,
@@ -206,7 +213,7 @@ const crossFile = moveHeadingSections({
 });
 // 開いているファイルはタブの本文（未保存の編集を含む）を読み、ディスクからは読まない。
 assert.deepEqual(s.invokes.map((call) => call.command), ["save_heading_move"]);
-assert.deepEqual(saves()[0].args.documents, crossFile.documents.map((document) => ({ path: document.path, content: document.markdown })));
+assert.deepEqual(saves()[0].args.documents, crossFile.documents.map((document) => ({ path: document.path, content: document.markdown, expectedHash: hashOf(document.path === A ? "# A\nA本文\n## A1\nA1本文\n## A2\nA2本文\n" : "# B\nB本文\n") })));
 assert.match(s.disk[B], /## A1\nA1本文/);
 assert.doesNotMatch(s.disk[A], /A1/);
 assert.match(s.disk[A], /A本文（編集中）/, "the unsaved edit of the open file is saved with the move");
@@ -345,6 +352,7 @@ assert.deepEqual(s.invokes[0].args, {
   fileName: "切り出し.md",
   sourceContent: withChildren.sourceMarkdown,
   extractedContent: withChildren.extractedMarkdown,
+  expectedHash: hashOf("# A\nA本文\n## A1\nA1本文\n## A2\nA2本文\n"),
 });
 assert.deepEqual(s.flagDuringSave, [true]);
 assert.equal(s.headingMoveInProgressRef.current, false);

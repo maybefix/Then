@@ -1,19 +1,8 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import ts from "typescript";
+import { build } from "esbuild";
 
-const asModuleUrl = (source) =>
-  `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
-const transpile = (source) =>
-  ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-const frontmatterSource = await readFile("src/utils/frontmatter.ts", "utf8");
-const frontmatterUrl = asModuleUrl(transpile(frontmatterSource));
-const headingMoveSource = (
-  await readFile("src/editor/ast/headingMove.ts", "utf8")
-).replace('"../../utils/frontmatter"', `"${frontmatterUrl}"`);
-const moduleUrl = asModuleUrl(transpile(headingMoveSource));
+const bundle = await build({ entryPoints: ["src/editor/ast/headingMove.ts"], bundle: true, write: false, platform: "node", format: "esm", logLevel: "silent" });
+const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString("base64")}`;
 const {
   extractHeadingSection,
   moveHeadingSection,
