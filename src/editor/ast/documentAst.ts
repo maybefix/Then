@@ -138,13 +138,14 @@ export function detectCommentLines(lines: readonly string[]): Array<CommentSynta
 
 /** Offsets of each comment line (without its line break), in ascending order. */
 export function findCommentLineRanges(text: string): Array<{ from: number; to: number }> {
-  const lines = text.split("\n");
+  const lines = text.split(/\r\n?|\n/);
   const comments = detectCommentLines(lines);
   const ranges: Array<{ from: number; to: number }> = [];
   let offset = 0;
   lines.forEach((line, index) => {
-    if (comments[index]) ranges.push({ from: offset, to: offset + line.length });
-    offset += line.length + 1;
+    const to = offset + line.length;
+    if (comments[index]) ranges.push({ from: offset, to });
+    offset = to + (text.startsWith("\r\n", to) ? 2 : 1);
   });
   return ranges;
 }

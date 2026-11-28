@@ -30,6 +30,8 @@ export type TextSearchReplacement = {
   error: string | null;
 };
 
+type TextSearchEdit = TextSearchRange & { insert: string };
+
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export function compileTextSearchPattern(
@@ -68,15 +70,10 @@ export function findTextSearchMatches(
 
   const matches: TextSearchMatch[] = [];
   let total = 0;
-  let skipIndex = 0;
-  for (const match of text.matchAll(compiled.pattern)) {
-    const index = match.index ?? 0;
-    while (skipIndex < skip.length && skip[skipIndex].to < index) skipIndex += 1;
-    const skipped = skip[skipIndex];
-    if (skipped && skipped.from <= index + match[0].length && index <= skipped.to) continue;
+  for (const match of includedMatches(text, compiled.pattern, skip)) {
     total += 1;
     if (matches.length < maxResults) {
-      matches.push({ index, length: match[0].length, text: match[0] });
+      matches.push({ index: match.index, length: match[0].length, text: match[0] });
     }
   }
 
@@ -88,6 +85,61 @@ export function findTextSearchMatches(
   };
 }
 
+function* includedMatches(text: string, pattern: RegExp, skip: readonly TextSearchRange[]) {
+  let skipIndex = 0;
+  for (const match of text.matchAll(pattern) as Iterable<RegExpExecArray>) {
+    const { index } = match;
+    while (skipIndex < skip.length && skip[skipIndex].to < index) skipIndex += 1;
+    const skipped = skip[skipIndex];
+    if (skipped && skipped.from <= index + match[0].length && index <= skipped.to) continue;
+    yield match;
+  }
+}
+
+/** Expand the same replacement tokens as String.replace, in the full body's context. */
+function expandReplacement(replacement: string, text: string, match: RegExpExecArray): string {
+  const tokens = match.groups ? /\$([$&`']|[0-9]{1,2}|<[^>]*>)/g : /\$([$&`']|[0-9]{1,2})/g;
+  return replacement.replace(tokens, (token, key: string) => {
+    switch (key) {
+      case "$": return "$";
+      case "&": return match[0];
+      case "`": return text.slice(0, match.index);
+      case "'": return text.slice(match.index + match[0].length);
+    }
+    if (key.startsWith("<")) {
+      return match.groups?.[key.slice(1, -1)] ?? "";
+    }
+    const capture = Number(key);
+    if (capture > 0 && capture < match.length) return match[capture] ?? "";
+    const firstDigit = Number(key[0]);
+    if (key.length === 2 && firstDigit > 0 && firstDigit < match.length) {
+      return (match[firstDigit] ?? "") + key[1];
+    }
+    return token;
+  });
+}
+
+export function findTextSearchEdits(
+  text: string,
+  query: string,
+  replacement: string,
+  options: TextSearchOptions,
+  skip: readonly TextSearchRange[] = [],
+): { edits: TextSearchEdit[]; error: string | null } {
+  const { pattern, error } = compileTextSearchPattern(query, options);
+  const edits: TextSearchEdit[] = [];
+  if (!pattern) return { edits, error };
+
+  for (const match of includedMatches(text, pattern, skip)) {
+    edits.push({
+      from: match.index,
+      to: match.index + match[0].length,
+      insert: options.useRegex ? expandReplacement(replacement, text, match) : replacement,
+    });
+  }
+  return { edits, error: null };
+}
+
 export function replaceTextSearchMatches(
   text: string,
   query: string,
@@ -95,34 +147,14 @@ export function replaceTextSearchMatches(
   options: TextSearchOptions,
   skip: readonly TextSearchRange[] = [],
 ): TextSearchReplacement {
-  const compiled = compileTextSearchPattern(query, options);
-  if (!compiled.pattern) {
-    return { text, count: 0, error: compiled.error };
+  const { edits, error } = findTextSearchEdits(text, query, replacement, options, skip);
+  if (edits.length === 0) return { text, count: 0, error };
+  const chunks: string[] = [];
+  let cursor = 0;
+  for (const { from, to, insert } of edits) {
+    chunks.push(text.slice(cursor, from), insert);
+    cursor = to;
   }
-
-  if (skip.length > 0) {
-    // 外す範囲は行単位なので、その間の区間ごとに置換すれば ^ $ の意味も保たれる。
-    const chunks: string[] = [];
-    let count = 0;
-    let cursor = 0;
-    for (const range of [...skip, { from: text.length, to: text.length }]) {
-      const segment = replaceTextSearchMatches(text.slice(cursor, range.from), query, replacement, options);
-      chunks.push(segment.text, text.slice(range.from, range.to));
-      count += segment.count;
-      cursor = range.to;
-    }
-    return { text: count > 0 ? chunks.join("") : text, count, error: null };
-  }
-
-  let count = 0;
-  for (const _match of text.matchAll(compiled.pattern)) count += 1;
-  if (count === 0) return { text, count: 0, error: null };
-
-  return {
-    text: options.useRegex
-      ? text.replace(compiled.pattern, replacement)
-      : text.replace(compiled.pattern, () => replacement),
-    count,
-    error: null,
-  };
+  chunks.push(text.slice(cursor));
+  return { text: chunks.join(""), count: edits.length, error: null };
 }

@@ -248,7 +248,7 @@ function createExcerptParts(text: string, index: number, length: number) {
   };
 }
 
-function documentAstText(documentAst: DocumentAst): string {
+export function documentAstText(documentAst: DocumentAst): string {
   return documentAst.blocks.map((block) => block.source).join("\n");
 }
 
@@ -317,17 +317,23 @@ export function searchDocumentAstFullText(
   };
 }
 
+export type ProjectFullTextSearchOutcome = ProjectSearchOutcome & {
+  /** Includes matches beyond the display limit, in the indexed version of each file. */
+  matchedDocuments: ReadonlyMap<string, DocumentAst>;
+};
+
 export function searchProjectAstFullTextWithOptions(
   projectAst: ProjectAst | null,
   rawQuery: string,
   options: TextSearchOptions,
   maxResults = DEFAULT_MAX_PROJECT_SEARCH_RESULTS,
-): ProjectSearchOutcome {
-  if (!projectAst || rawQuery.length === 0) return EMPTY_SEARCH_OUTCOME;
+): ProjectFullTextSearchOutcome {
+  const matchedDocuments = new Map<string, DocumentAst>();
+  const empty = { ...EMPTY_SEARCH_OUTCOME, matchedDocuments };
+  if (!projectAst || rawQuery.length === 0) return empty;
 
   const results: ProjectSearchResult[] = [];
   let total = 0;
-  let matchedFileCount = 0;
 
   for (const file of projectAst.files) {
     if (!file.documentAst) continue;
@@ -339,9 +345,9 @@ export function searchProjectAstFullTextWithOptions(
       options,
       Math.max(0, maxResults - results.length),
     );
-    if (outcome.error) return { ...EMPTY_SEARCH_OUTCOME, error: outcome.error };
+    if (outcome.error) return { ...empty, error: outcome.error };
     total += outcome.total;
-    matchedFileCount += outcome.matchedFileCount;
+    if (outcome.total > 0) matchedDocuments.set(file.path, file.documentAst);
     results.push(...outcome.results);
   }
 
@@ -355,7 +361,8 @@ export function searchProjectAstFullTextWithOptions(
   return {
     results: results.slice(0, maxResults),
     total,
-    matchedFileCount,
+    matchedFileCount: matchedDocuments.size,
+    matchedDocuments,
     truncated: total > maxResults,
     error: null,
   };
