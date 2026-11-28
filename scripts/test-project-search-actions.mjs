@@ -22,7 +22,14 @@ const tmpDir = path.join(process.cwd(), ".tmp");
 await mkdir(tmpDir, { recursive: true });
 const compiledPath = path.join(tmpDir, `project-search-actions-${process.pid}.mjs`);
 const bundled = await build({
-  entryPoints: ["src/projectSearchActions.ts"],
+  stdin: {
+    contents: [
+      'export { createProjectSearchActions } from "./src/projectSearchActions";',
+      'export { collectProjectTextFiles, createProjectAstSkeleton, upsertProjectAstDocument, searchProjectAstFullTextWithOptions } from "./src/editor/ast/projectAst";',
+      'export { parseFrontMatter } from "./src/utils/frontmatter";',
+    ].join("\n"),
+    resolveDir: process.cwd(),
+  },
   bundle: true,
   format: "esm",
   platform: "node",
@@ -33,7 +40,14 @@ const bundled = await build({
 });
 await writeFile(compiledPath, bundled.outputFiles[0].text);
 globalThis.window ??= globalThis;
-const { createProjectSearchActions } = await import(pathToFileURL(compiledPath).href)
+const {
+  collectProjectTextFiles,
+  createProjectAstSkeleton,
+  createProjectSearchActions,
+  parseFrontMatter,
+  searchProjectAstFullTextWithOptions,
+  upsertProjectAstDocument,
+} = await import(pathToFileURL(compiledPath).href)
   .finally(() => unlink(compiledPath));
 
 // requestAnimationFrame は、呼ばれた順にためて、あとでまとめて流す。
@@ -67,6 +81,8 @@ const tab = (name, markdown, extra = {}) => ({
   editorRevision: 7,
   ...extra,
 });
+const search = (ast = s.projectAst, maxResults) =>
+  searchProjectAstFullTextWithOptions(ast, s.projectSearchQuery, s.projectSearchOptions, maxResults);
 
 // App の値の代わり。
 let s;
@@ -86,10 +102,10 @@ const reset = (overrides = {}) => {
       children: [file("a.md"), file("b.md"), folder("章", [{ ...file("c.md"), path: `${ROOT}/章/c.md` }]), file("d.md")],
     },
     currentFilePath: `${ROOT}/a.md`,
-    // a.md は編集中（未保存）、b.md は開いているだけ（ディスクと違う本文を持つ）、c.md と d.md は開いていない。
+    // a.md と b.md は編集中（未保存）、c.md と d.md は開いていない。
     openTabs: [
       tab("a.md", "# A\n照合語がある。\n", { saveStatus: "dirty" }),
-      tab("b.md", "# B\n照合語と照合語。追記\n"),
+      tab("b.md", "# B\n照合語と照合語。追記\n", { saveStatus: "dirty" }),
       tab("other.md", "# 他\n照合語\n"),
     ],
     markdown: "# A\n照合語がある。編集中\n",
@@ -97,14 +113,12 @@ const reset = (overrides = {}) => {
     projectReplaceValue: "照合済",
     projectSearchOptions: { useRegex: false, matchCase: false },
     hasPropertyConditions: false,
-    projectSearchOutcome: { results: [], total: 4, matchedFileCount: 3, truncated: false, error: null },
     pendingSearchJumpRef: { current: null },
     editorCalls: [],
     lastSavedMarkdownRef: { current: "# A\n照合語がある。\n" },
     // 文書を開いた直後は、エディタが変更を知らせるまで自動保存が閉じている。
     didMountEditorRef: { current: false },
     appState: { markdown: "# A\n照合語がある。編集中\n", lastFilePath: `${ROOT}/a.md`, other: "keep" },
-    projectAst: { rootPath: ROOT, files: [] },
     activeMarkdowns: [],
     saveStatuses: [],
     replacing: [],
@@ -124,6 +138,14 @@ const reset = (overrides = {}) => {
     expectedHashes: {},
     ...overrides,
   };
+  const indexed = s.projectFolder && collectProjectTextFiles(s.projectFolder).reduce((ast, { path, name }) => {
+    const markdown = path === s.currentFilePath
+      ? s.markdown
+      : s.openTabs.find((tab) => tab.path === path)?.markdown ?? s.disk[path];
+    return upsertProjectAstDocument(ast, { path, name, text: parseFrontMatter(markdown).body });
+  }, createProjectAstSkeleton(s.projectFolder));
+  s.projectAst ??= indexed;
+  s.projectSearchOutcome ??= search(indexed);
   globalThis.__invoke = async (command, args) => {
     s.invokes.push({ command, path: args.path });
     if (command === "read_text_file") {
@@ -173,6 +195,7 @@ const actions = () =>
     showToast: (message) => s.toasts.push(message),
     requestConfirm: async (options) => {
       s.confirms.push(options);
+      s.onConfirm?.();
       return s.confirmAnswer;
     },
     openWorkspace: async (workspacePath) => {
@@ -205,6 +228,8 @@ assert.equal(s.invokes.length, 0);
 
 // 確認の文と、断ったとき。
 reset({ confirmAnswer: false });
+const diskBeforeCancel = { ...s.disk };
+const tabsBeforeCancel = structuredClone(s.openTabs);
 await actions().handleReplaceInProject();
 assert.deepEqual(s.confirms, [{
   title: "プロジェクト全体を置換",
@@ -214,6 +239,10 @@ assert.deepEqual(s.confirms, [{
   danger: true,
 }]);
 assert.equal(s.invokes.length, 0, "declining writes nothing");
+assert.deepEqual(s.disk, diskBeforeCancel);
+assert.deepEqual(s.openTabs, tabsBeforeCancel);
+assert.equal(search().total, 4);
+assert.deepEqual(s.openTabs.slice(0, 2).map((tab) => tab.saveStatus), ["dirty", "dirty"]);
 assert.deepEqual(s.replacing, []);
 assert.deepEqual(s.toasts, []);
 
@@ -233,7 +262,6 @@ assert.deepEqual(s.invokes, [
   { command: "save_text_file", path: `${ROOT}/b.md` },
   { command: "read_text_file", path: `${ROOT}/章/c.md` },
   { command: "save_text_file", path: `${ROOT}/章/c.md` },
-  { command: "read_text_file", path: `${ROOT}/d.md` },
 ]);
 assert.equal(s.disk[`${ROOT}/a.md`], "# A\n照合済がある。編集中\n");
 assert.equal(s.disk[`${ROOT}/b.md`], "# B\n照合済と照合済。追記\n");
@@ -245,7 +273,7 @@ assert.deepEqual(s.openTabs.map((item) => [item.name, item.markdown, item.savedM
   ["b.md", "# B\n照合済と照合済。追記\n", "# B\n照合済と照合済。追記\n", "saved", null],
   ["other.md", "# 他\n照合語\n", "# 他\n照合語\n", "saved", 7],
 ]);
-assert.deepEqual(s.projectAst.files.map((item) => item.path).sort(), [`${ROOT}/a.md`, `${ROOT}/b.md`, `${ROOT}/章/c.md`]);
+assert.equal(search().total, 0);
 assert.equal(s.lastSavedMarkdownRef.current, "# A\n照合済がある。編集中\n");
 assert.deepEqual(s.appState, { markdown: "# A\n照合済がある。編集中\n", lastFilePath: `${ROOT}/a.md`, other: "keep" });
 assert.deepEqual(s.saveStatuses, ["saved"]);
@@ -264,6 +292,61 @@ assert.deepEqual(s.toasts, ["3件をプロジェクト全体で置換しまし�
 reset({ projectSearchQuery: "照合(語)", projectReplaceValue: "[$1]", projectSearchOptions: { useRegex: true, matchCase: false } });
 await actions().handleReplaceInProject();
 assert.equal(s.disk[`${ROOT}/b.md`], "# B\n[語]と[語]。追記\n");
+
+// LF と CRLF のどちらでも、検索に出た本文だけを書き換える。
+for (const newline of ["\n", "\r\n"]) {
+  const manuscript = (...lines) => lines.join(newline) + newline;
+  const header = ["\uFEFF---", "title: Harbor", "---"];
+  const comments = ["　// Harbor", "<!--", "Harbor", "  -->  "];
+  const original = manuscript(...header, "Harbor harbor HARBOR", ...comments, "Harbor!");
+  reset({
+    markdown: original,
+    projectSearchQuery: "Harbor",
+    projectReplaceValue: "",
+    projectSearchOptions: { useRegex: false, matchCase: false, includeComments: false },
+  });
+  // 表示上限の外にある一致も、確認と置換には含める。
+  s.projectSearchOutcome = search(s.projectAst, 1);
+  assert.equal(s.projectSearchOutcome.truncated, true);
+  assert.equal(s.projectSearchOutcome.total, 4);
+  await actions().handleReplaceInProject();
+  assert.equal(s.confirms[0].message, "1ファイルの4件を置換します。");
+  assert.equal(s.toasts[0], "4件をプロジェクト全体で置換しました");
+  assert.deepEqual(
+    Buffer.from(s.disk[`${ROOT}/a.md`]),
+    Buffer.from(manuscript(...header, "  ", ...comments, "!")),
+  );
+  assert.equal(search().total, 0);
+
+  reset({
+    markdown: original,
+    projectSearchQuery: "(?<first>Har)(bor)",
+    projectReplaceValue: "$2$<first>$$",
+    projectSearchOptions: { useRegex: true, matchCase: true, includeComments: true },
+  });
+  assert.equal(search().total, 4);
+  await actions().handleReplaceInProject();
+  assert.equal(s.toasts[0], "4件をプロジェクト全体で置換しました");
+  assert.deepEqual(
+    Buffer.from(s.disk[`${ROOT}/a.md`]),
+    Buffer.from(manuscript(...header, "borHar$ harbor HARBOR", "　// borHar$", "<!--", "borHar$", "  -->  ", "borHar$!")),
+  );
+  assert.equal(search().total, 0);
+}
+
+reset({
+  markdown: "\uFEFF---\r\ntitle: Harbor\r\n---\r\nHarbor\r\nfin\n// Harbor\r<!--\r\nHarbor\n-->\r尾",
+  projectSearchQuery: "(Harbor)\\nfin",
+  projectReplaceValue: "$1!",
+  projectSearchOptions: { useRegex: true, matchCase: true },
+});
+assert.equal(search().total, 1);
+await actions().handleReplaceInProject();
+assert.equal(s.toasts[0], "1件をプロジェクト全体で置換しました");
+assert.deepEqual(
+  Buffer.from(s.disk[`${ROOT}/a.md`]),
+  Buffer.from("\uFEFF---\r\ntitle: Harbor\r\n---\r\nHarbor!\n// Harbor\r<!--\r\nHarbor\n-->\r尾"),
+);
 
 // ほかのアプリで変わったファイルは置換しない（BINDER 1-3a）。開いているタブは開いたときのハッシュ、
 // 開いていないファイルは今読んだハッシュで比べ、ほかのファイルは置換して、置換しなかった数を知らせる。
@@ -293,6 +376,18 @@ assert.deepEqual(
 );
 assert.deepEqual(s.lastErrors, [""]);
 assert.deepEqual(s.toasts, ["2件をプロジェクト全体で置換しました（ほかのアプリで変更された1ファイルは置換していません）"]);
+assert.deepEqual(search().results.map((item) => item.path), [`${ROOT}/b.md`, `${ROOT}/b.md`]);
+
+// 未開封の原稿が確認後に変わった場合、同じ件数でも別の位置は置換しない。
+const unopened = `${ROOT}/章/c.md`;
+const externalBody = "# C\n他の人が書いた照合語。\n";
+reset({ onConfirm: () => { s.disk[unopened] = externalBody; } });
+await actions().handleReplaceInProject();
+assert.equal(s.disk[unopened], externalBody);
+assert.equal(s.invokes.some((call) => call.command === "save_text_file" && call.path === unopened), false);
+assert.equal(s.toasts[0], "3件をプロジェクト全体で置換しました（ほかのアプリで変更された1ファイルは置換していません）");
+assert.equal(search().results.length, 1);
+assert.match(search().results[0].excerpt, /他の人が書いた照合語/);
 
 reset({ changedOutsidePaths: [`${ROOT}/a.md`, `${ROOT}/b.md`, `${ROOT}/章/c.md`] });
 await actions().handleReplaceInProject();
@@ -303,7 +398,8 @@ assert.deepEqual(s.saveStatuses, []);
 reset({ projectSearchQuery: "存在しない語" });
 await actions().handleReplaceInProject();
 assert.deepEqual(s.toasts, ["置換できる一致がありません"]);
-assert.deepEqual(s.replacing, [true, false]);
+assert.deepEqual(s.replacing, []);
+assert.equal(s.confirms.length, 0);
 assert.equal(s.invokes.filter((call) => call.command === "save_text_file").length, 0);
 
 // 保存に失敗したとき: 誤りを残し、通知で知らせ、置換中の印を下ろす。
@@ -333,7 +429,7 @@ assert.deepEqual(
 );
 assert.equal(s.lastSavedMarkdownRef.current, "# A\n照合済がある。編集中\n", "the open file's saved text is what was written");
 assert.deepEqual(s.appState, { markdown: "# A\n照合済がある。編集中\n", lastFilePath: `${ROOT}/a.md`, other: "keep" });
-assert.deepEqual(s.projectAst.files.map((item) => item.path).sort(), [`${ROOT}/a.md`, `${ROOT}/b.md`]);
+assert.deepEqual(search().results.map((item) => item.path), [`${ROOT}/章/c.md`]);
 assert.deepEqual(s.lastErrors, ["", `Error: disk full: ${ROOT}/章/c.md`]);
 assert.deepEqual(s.saveStatuses, ["saved"]);
 assert.deepEqual(s.replacing, [true, false]);

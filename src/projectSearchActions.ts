@@ -1,10 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import { collectProjectTextFiles, upsertProjectAstDocument } from "./editor/ast/projectAst";
+import { normalizeText } from "./editor/ast/documentAst";
+import {
+  collectProjectTextFiles,
+  documentAstText,
+  upsertProjectAstDocument,
+  type ProjectFullTextSearchOutcome,
+} from "./editor/ast/projectAst";
 import type {
   DocumentOutlineItem,
   ProjectAst,
-  ProjectSearchOutcome,
   ProjectSearchResult,
 } from "./editor/ast/types";
 import { isDocumentConflict } from "./editor/saveJournal";
@@ -32,7 +37,7 @@ export type ProjectSearchActionDeps = {
   projectReplaceValue: string;
   projectSearchOptions: TextSearchOptions;
   hasPropertyConditions: boolean;
-  projectSearchOutcome: ProjectSearchOutcome;
+  projectSearchOutcome: ProjectFullTextSearchOutcome;
   pendingSearchJumpRef: MutableRefObject<ProjectSearchResult | null>;
   editorInstanceRef: MutableRefObject<TextEditorHandle | null>;
   lastSavedMarkdownRef: MutableRefObject<string>;
@@ -173,6 +178,10 @@ export function createProjectSearchActions(deps: ProjectSearchActionDeps) {
       showToast("正規表現に誤りがあります");
       return;
     }
+    if (projectSearchOutcome.total === 0) {
+      showToast("置換できる一致がありません");
+      return;
+    }
 
     const shouldReplace = await requestConfirm({
       title: "プロジェクト全体を置換",
@@ -223,23 +232,44 @@ export function createProjectSearchActions(deps: ProjectSearchActionDeps) {
     let processingPath: string | null = null;
     // ほかのアプリで変わっていたので置換しなかったファイルの数。
     let changedOutsideCount = 0;
+    const updateSearchIndex = (document: TextDocument) => {
+      setProjectAst((current) =>
+        current && current.rootPath === projectFolder.path
+          ? upsertProjectAstDocument(current, {
+              path: document.path,
+              name: document.name,
+              text: parseFrontMatter(document.content).body,
+            })
+          : current,
+      );
+    };
     try {
       const files = collectProjectTextFiles(projectFolder);
       let totalCount = 0;
 
       for (const file of files) {
+        const matchedDocument = projectSearchOutcome.matchedDocuments.get(file.path);
+        if (!matchedDocument) continue;
         processingPath = file.path;
         const openTab = openTabs.find((tab) => tab.path === file.path);
         // 書くのは、置換の元にしたファイル（タブなら開いたときの、ほかは今読んだ中身）の上だけ。
         let sourceMarkdown: string;
         let expectedHash: string | null;
+        let diskDocument: TextDocument | null = null;
         if (openTab) {
           sourceMarkdown = openTab.path === currentFilePath ? markdown : openTab.markdown;
           expectedHash = openTab.contentHash;
         } else {
-          const read = await invoke<TextDocument>("read_text_file", { path: file.path });
-          sourceMarkdown = read.content;
-          expectedHash = read.contentHash ?? null;
+          diskDocument = await invoke<TextDocument>("read_text_file", { path: file.path });
+          sourceMarkdown = diskDocument.content;
+          expectedHash = diskDocument.contentHash ?? null;
+        }
+        // The confirmation refers to the indexed text. A newer version can
+        // contain different matches even when the total is unchanged.
+        if (normalizeText(parseFrontMatter(sourceMarkdown).body) !== documentAstText(matchedDocument)) {
+          changedOutsideCount += 1;
+          if (diskDocument) updateSearchIndex(diskDocument);
+          continue;
         }
         const result = replaceMarkdownBodyMatches(
           sourceMarkdown,
@@ -265,15 +295,7 @@ export function createProjectSearchActions(deps: ProjectSearchActionDeps) {
         savedDocuments.push(document);
         noteDocumentSaved?.(document.path, document.content);
         totalCount += result.count;
-        setProjectAst((current) =>
-          current && current.rootPath === projectFolder.path
-            ? upsertProjectAstDocument(current, {
-                path: document.path,
-                name: document.name,
-                text: parseFrontMatter(document.content).body,
-              })
-            : current,
-        );
+        updateSearchIndex(document);
       }
 
       const changedOutsideNote = changedOutsideCount

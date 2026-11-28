@@ -65,6 +65,34 @@ const literalReplacement = search.replaceTextSearchMatches(
 );
 assert.equal(literalReplacement.text, "$&-$1", "literal replacement keeps dollar tokens literal");
 
+const withComment = "Harbor\n// Harbor\nHarbor";
+const skipComment = [{ from: 7, to: 16 }];
+for (const [query, expected] of [
+  ["(?<=// Harbor\\n)Harbor", "Harbor\n// Harbor\nBeacon"],
+  ["^Harbor$(?!\\n//)", "Harbor\n// Harbor\nBeacon"],
+  ["Harbor\\n// Harbor", withComment],
+  ["(?=Harbor)", "BeaconHarbor\n// Harbor\nBeaconHarbor"],
+]) {
+  const found = search.findTextSearchMatches(withComment, query, regexOptions, Infinity, skipComment);
+  const replaced = search.replaceTextSearchMatches(withComment, query, "Beacon", regexOptions, skipComment);
+  assert.equal(replaced.count, found.total, query);
+  assert.equal(replaced.text, expected, query);
+}
+assert.equal(
+  search.replaceTextSearchMatches(withComment, "(?<=// Harbor\\n)Harbor", "$`<$&>$'", regexOptions, skipComment).text,
+  "Harbor\n// Harbor\nHarbor\n// Harbor\n<Harbor>",
+  "replacement tokens see the original body across skipped lines",
+);
+for (const query of ["(?<first>Har)(bor)?", "(Har)(bor)?"]) {
+  const text = "Harbor Har";
+  const replacement = "$$|$&|$`|$'|$01|$0|$12|$99|$2|$<first>|$<missing$&>";
+  assert.equal(
+    search.replaceTextSearchMatches(text, query, replacement, regexOptions).text,
+    text.replace(new RegExp(query, "gmui"), replacement),
+    "regex replacements follow the native numbered, named and context token rules",
+  );
+}
+
 const appSource = await readFile("src/App.tsx", "utf8");
 const searchPanelSource = await readFile("src/components/layout/ProjectSearchPanel.tsx", "utf8");
 assert.match(appSource, /useState<WorkspaceSearchScope>\("file"\)/);

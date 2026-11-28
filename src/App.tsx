@@ -2158,13 +2158,11 @@ export default function App() {
   }, [editorFind.activeIndex, editorFind.open, editorFindMatches.length]);
   const projectSearchOutcome = useMemo(
     () =>
-      hasPropertyConditions
-        ? EMPTY_WORKSPACE_SEARCH
-        : searchProjectAstFullTextWithOptions(
-            projectAst,
-            projectSearchQuery,
-            projectSearchOptions,
-          ),
+      searchProjectAstFullTextWithOptions(
+        hasPropertyConditions ? null : projectAst,
+        projectSearchQuery,
+        projectSearchOptions,
+      ),
     [hasPropertyConditions, projectAst, projectSearchOptions, projectSearchQuery],
   );
   // ライブラリ全体の検索。開いている範囲は編集中の内容を、ほかの範囲はディスクから読んだ索引を使う。

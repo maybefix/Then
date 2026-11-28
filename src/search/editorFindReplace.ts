@@ -1,7 +1,7 @@
-import { findCommentLineRanges } from "../editor/ast/documentAst";
+import { findCommentLineRanges, normalizeText } from "../editor/ast/documentAst";
 import type { DocumentAst } from "../editor/ast/types";
 import { parseFrontMatter, updateMarkdownBody } from "../utils/frontmatter";
-import { compileTextSearchPattern, replaceTextSearchMatches, type TextSearchOptions } from "./textSearch";
+import { compileTextSearchPattern, findTextSearchEdits, replaceTextSearchMatches, type TextSearchOptions } from "./textSearch";
 
 export type EditorFindMatch = {
   id: string;
@@ -37,18 +37,35 @@ export function replaceMarkdownBodyMatches(
   replacement: string,
   options: TextSearchOptions,
 ): { markdown: string; count: number; error: string | null } {
-  const frontMatter = parseFrontMatter(markdown);
-  const result = replaceTextSearchMatches(
-    frontMatter.body,
+  const { body } = parseFrontMatter(markdown);
+  const searchText = normalizeText(body);
+  const { edits, error } = findTextSearchEdits(
+    searchText,
     query,
     replacement,
     options,
-    options.includeComments ? [] : findCommentLineRanges(frontMatter.body),
+    options.includeComments ? [] : findCommentLineRanges(searchText),
   );
-  if (result.count === 0) return { markdown, count: 0, error: result.error };
+  if (edits.length === 0) return { markdown, count: 0, error };
+
+  // Search uses the editor's LF offsets. Apply edits to the original body so
+  // untouched bytes, including mixed line endings, survive the replacement.
+  const crlfOffsets = Array.from(body.matchAll(/\r\n/g), (match) => match.index);
+  let removed = 0;
+  const originalOffset = (offset: number) => {
+    while (removed < crlfOffsets.length && crlfOffsets[removed] - removed < offset) removed += 1;
+    return offset + removed;
+  };
+  const chunks: string[] = [];
+  let cursor = 0;
+  for (const { from, to, insert } of edits) {
+    chunks.push(body.slice(cursor, originalOffset(from)), insert);
+    cursor = originalOffset(to);
+  }
+  chunks.push(body.slice(cursor));
   return {
-    markdown: updateMarkdownBody(markdown, result.text),
-    count: result.count,
+    markdown: updateMarkdownBody(markdown, chunks.join("")),
+    count: edits.length,
     error: null,
   };
 }
